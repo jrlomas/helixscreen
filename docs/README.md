@@ -99,6 +99,7 @@ Welcome to the HelixScreen documentation. Choose your path:
 | [**Snapmaker U1 Support**](devel/printers/SNAPMAKER_U1_SUPPORT.md) | Snapmaker U1 toolchanger platform guide |
 | [**Creality K2 Support**](devel/printers/CREALITY_K2_SUPPORT.md) | Creality K2 series platform guide |
 | [**FlashForge AD5X Support**](devel/printers/FLASHFORGE_AD5X_SUPPORT.md) | FlashForge Adventurer 5X (MIPS, ZMOD) |
+| [**FlashForge Creator 5 Pro Support**](devel/printers/FLASHFORGE_CREATOR5_PRO_SUPPORT.md) | FlashForge Creator 5 Pro (Ingenic X2000 MIPS, unified `mips` target) |
 
 ---
 
