@@ -2,7 +2,7 @@
   "preset": "creator5",
   "wizard_completed": false,
   "display": {
-    "rotate": 270,
+    "rotate": 90,
     "rotation_probed": true,
     "animations_enabled": false
   },
