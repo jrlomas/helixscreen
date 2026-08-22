@@ -32,10 +32,30 @@
     "filament_sensors": {
       "master_enabled": true,
       "sensors": [
-        { "enabled": true, "klipper_name": "filament_switch_sensor fd_ex0", "role": "runout", "type": "switch" },
-        { "enabled": true, "klipper_name": "filament_switch_sensor fd_ex1", "role": "runout", "type": "switch" },
-        { "enabled": true, "klipper_name": "filament_switch_sensor fd_ex2", "role": "runout", "type": "switch" },
-        { "enabled": true, "klipper_name": "filament_switch_sensor fd_ex3", "role": "runout", "type": "switch" }
+        {
+          "enabled": true,
+          "klipper_name": "filament_switch_sensor fd_ex0",
+          "role": "runout",
+          "type": "switch"
+        },
+        {
+          "enabled": true,
+          "klipper_name": "filament_switch_sensor fd_ex1",
+          "role": "runout",
+          "type": "switch"
+        },
+        {
+          "enabled": true,
+          "klipper_name": "filament_switch_sensor fd_ex2",
+          "role": "runout",
+          "type": "switch"
+        },
+        {
+          "enabled": true,
+          "klipper_name": "filament_switch_sensor fd_ex3",
+          "role": "runout",
+          "type": "switch"
+        }
       ]
     },
     "hardware": {
@@ -53,7 +73,15 @@
       ]
     },
     "default_macros": {
-      "cooldown": "SET_HEATER_TEMPERATURE HEATER=extruder TARGET=0\nSET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=0\nSET_HEATER_TEMPERATURE HEATER=extruder2 TARGET=0\nSET_HEATER_TEMPERATURE HEATER=extruder3 TARGET=0\nSET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0\nSET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET=0"
+      "cooldown": "SET_HEATER_TEMPERATURE HEATER=extruder TARGET=0\nSET_HEATER_TEMPERATURE HEATER=extruder1 TARGET=0\nSET_HEATER_TEMPERATURE HEATER=extruder2 TARGET=0\nSET_HEATER_TEMPERATURE HEATER=extruder3 TARGET=0\nSET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0\nSET_HEATER_TEMPERATURE HEATER=chamber_heater TARGET=0",
+      "macro_1": {
+        "label": "Park Tool",
+        "gcode": "TOOLCHANGE_PARK"
+      },
+      "macro_2": {
+        "label": "Bed Mesh",
+        "gcode": "BED_MESH_CALIBRATE"
+      }
     }
   }
 }
