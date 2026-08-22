@@ -20,7 +20,7 @@ ENOEXEC (see "NaN encoding").
 | SoC | Ingenic X2000 (XBurst2, MIPS32r2, 2× 1.2 GHz) — same family as the Creality K1's X2000E |
 | FPU / ABI | Hard float, 64-bit FPU (`-mfp64`), **NaN2008** (`/lib/ld-linux-mipsn8.so.1`) |
 | RAM | 128–256 MB |
-| Display | 800×480 landscape, fbdev `/dev/fb0`, no X11/Wayland/DRM |
+| Display | 800×480 panel; the framebuffer is exposed **portrait (480×800)**, so the preset sets `display.rotate = 270` (same as the K1's X2000E); fbdev `/dev/fb0`, no X11/Wayland/DRM |
 | Touch | evdev, `/dev/input/event2` (auto-detected; override with `HELIX_TOUCH_DEVICE`) |
 | Stock UI | `firmwareExe` — LVGL 8 on fbdev. **Also** hosts the port-8898 REST API, the MQTT cloud link, and the tool-pickup orchestration for UI-started prints |
 | C library | glibc 2.33, built with Ingenic "MIPS Linux Tools GCC12.1 Release6.0.1 xburst2" (`mips-gcc1210-glibc233`), min kernel 3.10.14 |
@@ -83,6 +83,8 @@ The unified binary ships as the `mips` release asset: `make release-mips` builds
 the release workflow's mips matrix entry publishes it. Same layout as every other platform
 tarball (`bin/`, `ui_xml/`, `assets/`, `config/`, `certs/`, `install.sh`); needs the
 prerendered images first (`make venv-setup && make gen-all-images`, as `release.yml` does).
+No preset is baked in: first boot runs the hardware wizard, whose detection applies
+`assets/config/presets/creator5.json`.
 
 The binary locates its data root relative to itself (`<root>/bin/helix-screen` →
 `<root>/ui_xml`), so unpack the tarball as a whole (e.g. to `/usr/data/helixscreen/`)
@@ -126,11 +128,19 @@ HelixScreen data root". `HELIX_DATA_DIR` overrides the lookup.
    set: it would swap already-correct axes.
 4. **Moonraker** — HelixScreen talks to Moonraker (not `/tmp/uds`). The Moonraker instance
    that Mainsail uses is the one to point at (port 7125 unless `moonraker.conf` says otherwise).
-5. **Toolchanger model** — 4 extruders (`extruder`, `extruder1..3`), 4 filament switch +
+5. **Detection + preset** — `printer_database.json` entry `flashforge_creator_5_pro`
+   (fingerprint: `ff_toolchange` / `gcode_button extruder_grab1`, 4 extruders) and preset
+   `creator5.json` (4 hotends, chamber heater, part/chamber fans, LED, `fd_ex*` runout
+   switches, rotate 270). Without it the detector picked the AD5X (same hostname, MIPS,
+   4 tools); the AD5X entry excludes on `MOTOR_GRAB`. Uses the `generic-corexy` image.
+6. **Toolchanger model** — 4 extruders (`extruder`, `extruder1..3`), 4 filament switch +
    4 motion sensors (`fd_ex0..3`, `fm_ex0..3`), `heater_generic chamber_heater`,
    `fan_generic fanM106` (part), `heater_fan heat_fan*`, `fan_generic chamber_*_fan`,
    `led chamber_led`.
-6. **Memory** — 128–256 MB shared with Klipper, Moonraker, `firmwareExe`. HelixScreen's
+7. **Memory** — 128–256 MB shared with Klipper, Moonraker, `firmwareExe`. HelixScreen's
    ~15 MB footprint is fine, but check `free` with the stock stack running.
-7. **Init** — no systemd; the stock stack is started from BusyBox init scripts. An init.d
+8. **Init** — no systemd; the stock stack is started from BusyBox init scripts. An init.d
    script modeled on the AD5X/ZMOD `S80guppyscreen` pattern is the likely shape.
+9. **Runout on an empty docked head** — the preset enables `fd_ex0..3` as runout-role
+   switches; whether an empty docked head trips the runout and pre-print warnings needs
+   hardware verification.

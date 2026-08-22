@@ -692,6 +692,51 @@
           "pattern": "corexy",
           "confidence": 30,
           "reason": "CoreXY kinematics"
+        },
+        {
+          "type": "macro_exclude",
+          "field": "macros",
+          "pattern": "MOTOR_GRAB",
+          "confidence": 0,
+          "reason": "Exclude FlashForge Creator 5 Pro (4-head tool changer with MOTOR_GRAB dock macros; separate entry)"
+        }
+      ]
+    },
+    {
+      "id": "flashforge_creator_5_pro",
+      "name": "FlashForge Creator 5 Pro",
+      "manufacturer": "FlashForge",
+      "image": "generic-corexy.png",
+      "preset": "creator5",
+      "z_offset_calibration_strategy": "firmware_managed",
+      "heuristics": [
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "ff_toolchange",
+          "confidence": 99,
+          "reason": "[ff_toolchange] tool-changer extra (Klipper4Creator5 port)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "gcode_button extruder_grab1",
+          "confidence": 95,
+          "reason": "Head-dock grab sensor (stock FlashForge 4-head changer)"
+        },
+        {
+          "type": "tool_count",
+          "field": "heaters",
+          "pattern": "tool_count_4",
+          "confidence": 70,
+          "reason": "4 extruders"
+        },
+        {
+          "type": "macro_exclude",
+          "field": "macros",
+          "pattern": "SET_EXTRUDER_SLOT",
+          "confidence": 0,
+          "reason": "Exclude AD5X (IFS, not a head changer)"
         }
       ],
       "toolhead_style": "default"
