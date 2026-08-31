@@ -646,7 +646,7 @@ Select which printer the mock Moonraker client impersonates. Drives the mock's r
 
 | Property | Value |
 |----------|-------|
-| **Values** | `voron_24`, `voron_trident`, `k1`, `k1max`, `ad5m`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta` |
+| **Values** | `voron_24`, `voron_trident`, `k1`, `k1max`, `ad5m`, `creator5`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta` |
 | **Default** | `voron_24` (Voron 2.4) |
 | **File** | `src/application/moonraker_manager.cpp` |
 
@@ -659,9 +659,36 @@ HELIX_MOCK_PRINTER=multi_extruder ./build/bin/helix-screen --test -vv
 
 # Linear delta: reports kinematics=delta, so per-axis homing is hidden
 HELIX_MOCK_PRINTER=delta ./build/bin/helix-screen --test -vv
+
+# FlashForge Creator 5 Pro mock (4-head tool changer)
+HELIX_MOCK_PRINTER=creator5 ./build/bin/helix-screen --test -vv
 ```
 
 The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 235x235x250 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
+
+#### The `creator5` persona
+
+Mirrors `assets/config/presets/creator5.json`, so the mock and the shipped preset
+describe the same machine: 4 extruders (`extruder`, `extruder1..3`), chamber heater
+`heater_generic chamber_heater`, fans `heater_fan heat_fan` / `fan_generic fanM106`
+/ `fan_generic chamber_fan` / `fan_generic chamber_loop_fan`, LED `led chamber_led`,
+and one runout switch per head (`fd_ex0..fd_ex3`).
+
+It also advertises the Creator 5 fingerprint in `printer.objects.list`
+(`ff_toolchange`, `gcode_button extruder_grab0..3`, `gcode_macro TOOLCHANGE_PARK`,
+`gcode_macro BED_MESH_CALIBRATE`), so `PrinterDetector` resolves it to
+**FlashForge Creator 5 Pro** at 99% confidence rather than a generic CoreXY.
+
+The **tool/AMS axis stays separate** — the persona does not imply a toolchanger
+backend. For the full 4-tool experience combine them:
+
+```bash
+HELIX_MOCK_PRINTER=creator5 HELIX_MOCK_AMS=toolchanger ./build/bin/helix-screen --test -vv
+```
+
+Build volume is deliberately left at the generic mock value: the Creator 5 Pro's
+real travel limits are not documented in this repo, and detection keys off
+`ff_toolchange`, not the volume.
 
 **Unrecognized values fall back to Voron 2.4** with a warning listing the valid set — they are not fatal. K2 and CC1 have no dedicated mock type yet and hit that fallback.
 

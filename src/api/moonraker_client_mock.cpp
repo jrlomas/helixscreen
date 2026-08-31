@@ -904,6 +904,19 @@ void MoonrakerClientMock::populate_capabilities() {
         mock_objects.push_back("gcode_macro CLEAN_NOZZLE");
         mock_objects.push_back("gcode_macro PRINT_START");
         break;
+    case PrinterType::FLASHFORGE_CREATOR5:
+        // Creator 5 Pro fingerprint. The database entry keys off [ff_toolchange]
+        // (99%) and the head-dock grab sensor (95%); see the
+        // flashforge_creator_5_pro heuristics in printer_database.json. Without
+        // these in printer.objects.list the persona would be detected as a
+        // generic CoreXY.
+        mock_objects.push_back("ff_toolchange");
+        for (int i = 0; i < 4; ++i) {
+            mock_objects.push_back("gcode_button extruder_grab" + std::to_string(i));
+        }
+        mock_objects.push_back("gcode_macro TOOLCHANGE_PARK");
+        mock_objects.push_back("gcode_macro BED_MESH_CALIBRATE");
+        break;
     default:
         // Other printers may not have these features
         break;
@@ -1013,6 +1026,12 @@ void MoonrakerClientMock::populate_capabilities() {
             sensors_str.erase(0, pos + 1);
         }
         spdlog::debug("[MoonrakerClientMock] Custom filament sensors from env: {}", sensor_env);
+    } else if (printer_type_ == PrinterType::FLASHFORGE_CREATOR5) {
+        // One runout switch per head, named as in assets/config/presets/creator5.json.
+        for (int i = 0; i < 4; ++i) {
+            mock_objects.push_back("filament_switch_sensor fd_ex" + std::to_string(i));
+        }
+        spdlog::debug("[MoonrakerClientMock] Creator 5 filament sensors: fd_ex0..fd_ex3");
     } else {
         // Default: one switch sensor (typical Voron setup)
         mock_objects.push_back("filament_switch_sensor runout_sensor");
@@ -1135,6 +1154,7 @@ void MoonrakerClientMock::populate_capabilities() {
         break;
     case PrinterType::CREALITY_K1:
     case PrinterType::CREALITY_K1_MAX:
+    case PrinterType::FLASHFORGE_CREATOR5:
         default_kinematics = "corexy";
         break;
     case PrinterType::DELTA:
@@ -2066,6 +2086,24 @@ void MoonrakerClientMock::populate_hardware() {
                                 "extruder", // Hotend thermistor (Klipper naming: bare heater name)
                                 "temperature_sensor chamber", "temperature_sensor mcu_temp"};
         discovery_.fans() = {"heater_fan hotend_fan", "fan", "fan_generic chamber_fan"};
+        discovery_.leds() = {"led chamber_led"};
+        break;
+
+    case PrinterType::FLASHFORGE_CREATOR5:
+        // FlashForge Creator 5 Pro — 4-head tool changer, enclosed, heated chamber.
+        // Object names mirror assets/config/presets/creator5.json so the mock and
+        // the shipped preset describe the same machine.
+        discovery_.heaters() = {"heater_bed", "extruder",  "extruder1",
+                                "extruder2",  "extruder3", "heater_generic chamber_heater"};
+        discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
+                                "extruder",   // Hotend thermistors, one per head
+                                "extruder1",
+                                "extruder2",
+                                "extruder3",
+                                "heater_generic chamber_heater",
+                                "temperature_sensor mcu_temp"};
+        discovery_.fans() = {"heater_fan heat_fan", "fan_generic fanM106",
+                             "fan_generic chamber_fan", "fan_generic chamber_loop_fan"};
         discovery_.leds() = {"led chamber_led"};
         break;
 

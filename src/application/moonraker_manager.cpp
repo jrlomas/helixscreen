@@ -374,8 +374,9 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
         // Through the shared accessor so the logged figure is the one the mock
         // will actually run at, clamp included.
         double speedup = helix::sim::SimSpeed::global().factor();
-        // HELIX_MOCK_PRINTER=voron_24|voron_trident|k1|k1max|ad5m|generic_corexy|
-        // generic_bedslinger|multi_extruder|delta — defaults to Voron 2.4. K2 and
+        // HELIX_MOCK_PRINTER=voron_24|voron_trident|k1|k1max|ad5m|creator5|
+        // generic_corexy|generic_bedslinger|multi_extruder|delta — defaults to
+        // Voron 2.4. K2 and
         // CC1 don't have dedicated mock types yet; they fall through to the
         // default with a warning.
         const char* type_env = std::getenv("HELIX_MOCK_PRINTER");
@@ -398,6 +399,9 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
             } else if (t == "ad5m") {
                 type = MoonrakerClientMock::PrinterType::FLASHFORGE_AD5M;
                 type_name = "Flashforge AD5M";
+            } else if (t == "creator5") {
+                type = MoonrakerClientMock::PrinterType::FLASHFORGE_CREATOR5;
+                type_name = "FlashForge Creator 5 Pro";
             } else if (t == "generic_corexy") {
                 type = MoonrakerClientMock::PrinterType::GENERIC_COREXY;
                 type_name = "Generic CoreXY";
@@ -410,8 +414,8 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
             } else if (t != "voron_24") {
                 spdlog::warn("[MoonrakerManager] HELIX_MOCK_PRINTER='{}' not recognised "
                              "— falling back to Voron 2.4. Valid: voron_24, voron_trident, "
-                             "k1, k1max, ad5m, generic_corexy, generic_bedslinger, multi_extruder, "
-                             "delta.",
+                             "k1, k1max, ad5m, creator5, generic_corexy, generic_bedslinger, "
+                             "multi_extruder, delta.",
                              t);
             }
         }

@@ -61,15 +61,16 @@ using MethodHandler =
 class MoonrakerClientMock : public helix::MoonrakerClient {
   public:
     enum class PrinterType {
-        VORON_24,           // Voron 2.4 (CoreXY, chamber heating)
-        VORON_TRIDENT,      // Voron Trident (3Z, CoreXY)
-        CREALITY_K1,        // Creality K1/K1C (bed slinger style)
-        CREALITY_K1_MAX,    // Creality K1 Max (the #1282 CFS capture machine)
-        FLASHFORGE_AD5M,    // FlashForge Adventurer 5M (enclosed)
-        GENERIC_COREXY,     // Generic CoreXY printer
-        GENERIC_BEDSLINGER, // Generic i3-style printer
-        MULTI_EXTRUDER,     // Multi-extruder test case (2 extruders)
-        DELTA               // Generic linear delta (every axis homes together)
+        VORON_24,            // Voron 2.4 (CoreXY, chamber heating)
+        VORON_TRIDENT,       // Voron Trident (3Z, CoreXY)
+        CREALITY_K1,         // Creality K1/K1C (bed slinger style)
+        CREALITY_K1_MAX,     // Creality K1 Max (the #1282 CFS capture machine)
+        FLASHFORGE_AD5M,     // FlashForge Adventurer 5M (enclosed)
+        FLASHFORGE_CREATOR5, // FlashForge Creator 5 Pro (4-head tool changer)
+        GENERIC_COREXY,      // Generic CoreXY printer
+        GENERIC_BEDSLINGER,  // Generic i3-style printer
+        MULTI_EXTRUDER,      // Multi-extruder test case (2 extruders)
+        DELTA                // Generic linear delta (every axis homes together)
     };
 
     /**
