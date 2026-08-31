@@ -1491,17 +1491,24 @@ void MoonrakerClientMock::discover_printer(
     });
 }
 
-bool MoonrakerClientMock::is_mock_toolchanger() const {
-    // Mirror the HELIX_MOCK_AMS parsing in ams_backend.cpp: toolchanger mode is
-    // selected by "toolchanger", "tool_changer", or "tc" (case-insensitive).
+bool MoonrakerClientMock::mock_toolchanger_selected() {
+    // Toolchanger mode is selected by "toolchanger", "tool_changer", or "tc"
+    // (case-insensitive), matching the HELIX_MOCK_AMS parsing in ams_backend.cpp.
     const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (!ams_env || !ams_env[0]) {
-        return false;
+    if (ams_env && ams_env[0]) {
+        std::string ams_type(ams_env);
+        std::transform(ams_type.begin(), ams_type.end(), ams_type.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        return ams_type == "toolchanger" || ams_type == "tool_changer" || ams_type == "tc";
     }
-    std::string ams_type(ams_env);
-    std::transform(ams_type.begin(), ams_type.end(), ams_type.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    return ams_type == "toolchanger" || ams_type == "tool_changer" || ams_type == "tc";
+    // No explicit topology: fall back to the persona. A Creator 5 Pro is a
+    // 4-head changer, so the generic Happy Hare default would misrepresent it.
+    const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
+    return printer_env && std::string(printer_env) == "creator5";
+}
+
+bool MoonrakerClientMock::is_mock_toolchanger() const {
+    return mock_toolchanger_selected();
 }
 
 MoonrakerClientMock::MedusaVariant MoonrakerClientMock::mock_medusa_variant() {

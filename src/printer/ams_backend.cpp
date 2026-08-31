@@ -581,6 +581,15 @@ create_mock_with_features(int gate_count, IMoonrakerClient* mock_client = nullpt
         ams_type = to_lower(mock_ams_env);
     }
 
+    // No explicit topology: let the printer persona choose one. A Creator 5 Pro
+    // is a 4-head tool changer, so the generic Happy Hare default would
+    // misrepresent it. MoonrakerClientMock owns the rule so this and
+    // is_mock_toolchanger() cannot disagree about what the mock is presenting.
+    if (ams_type.empty() && MoonrakerClientMock::mock_toolchanger_selected()) {
+        ams_type = "toolchanger";
+        spdlog::info("[AMS Backend] Persona implies a tool changer (no HELIX_MOCK_AMS set)");
+    }
+
     if (!ams_type.empty()) {
         if (ams_type == "afc" || ams_type == "box_turtle" || ams_type == "boxturtle") {
             mock->set_afc_mode(true);

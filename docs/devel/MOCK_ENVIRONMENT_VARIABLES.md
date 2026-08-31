@@ -679,12 +679,24 @@ It also advertises the Creator 5 fingerprint in `printer.objects.list`
 `gcode_macro BED_MESH_CALIBRATE`), so `PrinterDetector` resolves it to
 **FlashForge Creator 5 Pro** at 99% confidence rather than a generic CoreXY.
 
-The **tool/AMS axis stays separate** — the persona does not imply a toolchanger
-backend. For the full 4-tool experience combine them:
+**The persona implies a tool changer.** A Creator 5 Pro is a 4-head changer, so
+with no `HELIX_MOCK_AMS` set it selects the toolchanger backend rather than
+falling back to the generic Happy Hare default — you get 4 tools mapped to
+`extruder`/`extruder1..3` from `HELIX_MOCK_PRINTER=creator5` alone. An explicit
+`HELIX_MOCK_AMS` always wins, so other topologies stay testable against the
+persona:
 
 ```bash
-HELIX_MOCK_PRINTER=creator5 HELIX_MOCK_AMS=toolchanger ./build/bin/helix-screen --test -vv
+# Tool changer, implied by the persona
+HELIX_MOCK_PRINTER=creator5 ./build/bin/helix-screen --test -vv
+
+# Force a different topology on the same persona
+HELIX_MOCK_PRINTER=creator5 HELIX_MOCK_AMS=afc ./build/bin/helix-screen --test -vv
 ```
+
+The rule lives in `MoonrakerClientMock::mock_toolchanger_selected()`, which both
+the mock client and `ams_backend.cpp` consult so they cannot disagree about what
+the mock is presenting.
 
 Build volume is deliberately left at the generic mock value: the Creator 5 Pro's
 real travel limits are not documented in this repo, and detection keys off
