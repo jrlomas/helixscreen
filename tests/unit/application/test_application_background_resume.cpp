@@ -29,6 +29,7 @@
 
 #include "ui_nav_manager.h"
 #include "ui_panel_base.h"
+#include "ui_test_utils.h"
 #include "ui_update_queue.h"
 
 #include "app_globals.h"
@@ -103,19 +104,10 @@ class BackgroundResumeFixture : public ApplicationTestFixture {
         get_runtime_config()->disable_sound = true;
 
         // on_enter_foreground() ends in lv_refr_now(nullptr), which refreshes EVERY
-        // display. Several unrelated test translation units create a bare
-        // lv_display_create() in a static initialiser (test_helix_print_api.cpp,
-        // test_metadata_and_usb_symlink.cpp, test_moonraker_api_domain.cpp, ...) with
-        // no buffers and no flush callback, so their disp->flushing is set and never
-        // cleared and lv_refr.c's wait_for_flushing() busy-waits forever — the hang
-        // tests/test_helpers/display_manager_test_access.h warns about. Giving every
-        // display a no-op flush_wait_cb takes the branch that clears the flag instead
-        // of spinning, so the real production repaint runs here rather than being
-        // stubbed out of the test.
-        for (lv_display_t* d = lv_display_get_next(nullptr); d != nullptr;
-             d = lv_display_get_next(d)) {
-            lv_display_set_flush_wait_cb(d, [](lv_display_t*) {});
-        }
+        // display, including the ones other translation units create with no flush
+        // callback. Re-assert the guarantee here so the real production repaint runs
+        // rather than being stubbed out of the test.
+        ensure_displays_never_block_on_flush();
 
         display_ = lv_display_get_default();
         REQUIRE(display_ != nullptr);
@@ -149,10 +141,6 @@ class BackgroundResumeFixture : public ApplicationTestFixture {
     ~BackgroundResumeFixture() override {
         // Never leave a test with rendering suppressed for the next one.
         lv_display_enable_invalidation(nullptr, true);
-        for (lv_display_t* d = lv_display_get_next(nullptr); d != nullptr;
-             d = lv_display_get_next(d)) {
-            lv_display_set_flush_wait_cb(d, nullptr);
-        }
         auto& nav = NavigationManager::instance();
         // Leave the suspend latch cleared for the next test, whatever this one did.
         nav.resume_active();
