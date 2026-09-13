@@ -40,4 +40,13 @@ class NetworkSettingsOverlayTestAccess {
     static lv_subject_t& wifi_connected(NetworkSettingsOverlay& o) {
         return o.wifi_connected_;
     }
+    /// Open the hidden-network modal, exactly as the "Add other network"
+    /// button does.
+    static void add_other_clicked(NetworkSettingsOverlay& o) {
+        o.handle_add_other_clicked();
+    }
+    /// Drive the hidden-network modal's Connect button.
+    static void hidden_connect_clicked(NetworkSettingsOverlay& o) {
+        o.handle_hidden_connect_clicked();
+    }
 };

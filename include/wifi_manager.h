@@ -113,9 +113,13 @@ class WiFiManager {
      * @param ssid Network name
      * @param password Network password (empty for open networks)
      * @param on_complete Callback with (success, error_message)
+     * @param is_hidden true when the SSID was typed rather than picked from the
+     *        scan list; forwarded to the backend, which must not require the
+     *        network to be present in its scan cache
      */
     void connect(const std::string& ssid, const std::string& password,
-                 std::function<void(bool success, const std::string& error)> on_complete);
+                 std::function<void(bool success, const std::string& error)> on_complete,
+                 bool is_hidden = false);
 
     /**
      * @brief Disconnect from current network
