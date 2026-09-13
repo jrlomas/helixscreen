@@ -503,7 +503,8 @@ void WiFiManager::scan_timer_callback(lv_timer_t* timer) {
 // ============================================================================
 
 void WiFiManager::connect(const std::string& ssid, const std::string& password,
-                          std::function<void(bool success, const std::string& error)> on_complete) {
+                          std::function<void(bool success, const std::string& error)> on_complete,
+                          bool is_hidden) {
     if (!backend_) {
         NOTIFY_ERROR("WiFi unavailable. Cannot connect to network.");
         if (on_complete) {
@@ -531,7 +532,7 @@ void WiFiManager::connect(const std::string& ssid, const std::string& password,
     spdlog::debug("[WiFiManager] Connect callback registered for '{}'", helix::redact::ssid(ssid));
 
     // Use backend's connect method
-    WiFiError result = backend_->connect_network(ssid, password);
+    WiFiError result = backend_->connect_network(ssid, password, is_hidden);
     if (!result.success()) {
         NOTIFY_ERROR("Failed to connect to WiFi network '{}'", helix::redact::ssid(ssid));
         // Clear in-progress + take the callback under the lock, then invoke the
