@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -110,6 +111,10 @@ class Config;
  */
 class ThermalRateManager {
   public:
+    /// Heaters whose rates load_from_config() reads back between sessions; a
+    /// rate kept under any other name is never used again.
+    static constexpr std::array<const char*, 2> PERSISTED_HEATERS = {"extruder", "heater_bed"};
+
     static ThermalRateManager& instance();
     ThermalRateModel& get_model(const std::string& heater_name);
     float estimate_heating_seconds(const std::string& heater_name, float current_temp,

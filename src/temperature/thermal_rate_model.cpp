@@ -134,7 +134,7 @@ float ThermalRateManager::estimate_heating_seconds(const std::string& heater_nam
 }
 
 void ThermalRateManager::load_from_config(helix::Config& config) {
-    for (const auto& heater : {"extruder", "heater_bed"}) {
+    for (const char* heater : PERSISTED_HEATERS) {
         std::string path = std::string("/thermal/rates/") + heater + "/heat_rate";
         float rate = config.get<float>(path, 0.0f);
         if (rate > 0.0f) {
