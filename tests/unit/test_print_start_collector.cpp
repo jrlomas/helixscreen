@@ -1665,11 +1665,11 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
 // ============================================================================
 
 TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
-                 "Fallback completion: layer count no longer triggers COMPLETE",
+                 "Fallback completion: layer count does not trigger COMPLETE",
                  "[print][collector][fallback][completion]") {
-    // Layer count heuristic has been removed — authoritative signals (RESPOND match
-    // and Moonraker state=printing) now handle dismissal. These sections verify the
-    // heuristic no longer fires.
+    // Layer count is not a completion signal: authoritative signals (a RESPOND
+    // match and Moonraker state=printing) handle dismissal. These sections
+    // verify a layer count alone never completes the pre-print.
 
     // Initialize temps to prevent proactive detection
     set_all_temps(0, 0, 0, 0);
@@ -1768,10 +1768,11 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
 }
 
 TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
-                 "Fallback completion: progress threshold no longer triggers COMPLETE",
+                 "Fallback completion: progress threshold does not trigger COMPLETE",
                  "[print][collector][fallback][completion]") {
-    // Progress-threshold heuristic has been removed — authoritative signals handle
-    // dismissal. These sections verify the heuristic no longer fires.
+    // Print progress is not a completion signal: authoritative signals handle
+    // dismissal. These sections verify a progress threshold alone never
+    // completes the pre-print.
 
     // Initialize temps to prevent proactive detection
     set_all_temps(0, 0, 0, 0);
@@ -2853,11 +2854,10 @@ TEST_CASE_METHOD(K2TagStreamFixture, "Stock Klipper purge-line text falls throug
 }
 
 // ============================================================================
-// QGL / bed-mesh conflation regression — Voron 2.4 PRINT_START runs
-// QUAD_GANTRY_LEVEL before BED_MESH_CALIBRATE. QGL probes 4 pads with
-// `samples: 3` (default) = 12 `probe at X,Y is z=Z` lines. The collector
-// previously entered BED_MESH on the 3rd probe line and counted QGL pads
-// against the bed_mesh probe total, throwing the "X/Y" count off.
+// QGL / bed-mesh conflation — Voron 2.4 PRINT_START runs QUAD_GANTRY_LEVEL
+// before BED_MESH_CALIBRATE. QGL probes 4 pads with `samples: 3` (default) =
+// 12 `probe at X,Y is z=Z` lines, which must neither enter BED_MESH nor count
+// against the bed_mesh probe total and throw the "X/Y" count off.
 // ============================================================================
 
 namespace {
@@ -3096,8 +3096,8 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     feed_gcode("// Success: Set action code PRINT_SWITCH_CHECKING");
     REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
 
-    // Bed and nozzle both well below target — pre-fix this would have driven
-    // the phase to HEATING_BED. It must NOT: the firmware phase stands.
+    // Bed and nozzle both well below target, which alone reads as HEATING_BED.
+    // The firmware phase stands.
     set_all_temps(/*bed*/ 200, 600, /*ext*/ 1000, 2000);
     collector().check_fallback_completion();
     drain_async_updates();
@@ -3482,7 +3482,7 @@ TEST_CASE_METHOD(K2PrintStartReplayFixture,
     settle();
     collector().enable_fallbacks();
 
-    // 12:18:50 — G28. The old profile matched nothing here.
+    // 12:18:50 — G28, announced only by a debug line.
     send_gcode_response("// [DEBUG]_handle_home_rails_begin");
     settle();
     REQUIRE(get_current_phase() == PrintStartPhase::HOMING);
@@ -3551,7 +3551,8 @@ TEST_CASE_METHOD(K2PrintStartReplayFixture,
     const std::string expected = "Bed Mesh (" + std::to_string(g.size()) + ")";
     REQUIRE(get_current_message() == expected);
 
-    // 12:34:39 — CFS purge. The old BOX_MATERIAL_FLUSH pattern never matched.
+    // 12:34:39 — CFS purge, announced by its flush temperature; no
+    // BOX_MATERIAL_FLUSH line appears.
     send_gcode_response("// flush_temp: 220");
     settle();
     REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
@@ -3638,8 +3639,8 @@ TEST_CASE_METHOD(K1CPrintStartReplayFixture,
     REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
     REQUIRE(PrintStartCollectorTestAccess::get_mesh_probe_total(collector()) == 25);
 
-    // The rest of the sweep. Every line here used to re-match the profile's
-    // BED_MESH pattern and reset the counters, losing the denominator.
+    // The rest of the sweep. Re-matched against the profile's BED_MESH pattern,
+    // each line would reset the counters and lose the denominator.
     for (double y : {57.5, 110.0, 162.5, 215.0}) {
         for (double x : c) {
             point(x, y);
