@@ -793,7 +793,6 @@
   <translation tag="Enter WiFi Password" en="Enter WiFi Password"/>
   <translation tag="Enter a name for this profile" en="Enter a name for this profile"/>
   <translation tag="Enter a name for your custom theme:" en="Enter a name for your custom theme:"/>
-  <translation tag="Enter a name to save this profile" en="Enter a name to save this profile"/>
   <translation tag="Enter network name" en="Enter network name"/>
   <translation tag="Enter password" en="Enter password"/>
   <translation tag="Enter printer IP address first" en="Enter printer IP address first"/>
@@ -931,7 +930,6 @@
   <translation tag="Failed to save fan configuration" en="Failed to save fan configuration"/>
   <translation tag="Failed to save heater configuration" en="Failed to save heater configuration"/>
   <translation tag="Failed to save printer configuration" en="Failed to save printer configuration"/>
-  <translation tag="Failed to save profile" en="Failed to save profile"/>
   <translation tag="Failed to save setup completion" en="Failed to save setup completion"/>
   <translation tag="Failed to save spool" en="Failed to save spool"/>
   <translation tag="Failed to save theme file" en="Failed to save theme file"/>
@@ -1436,7 +1434,6 @@
   <translation tag="Memory" en="Memory"/>
   <translation tag="Memory (MB)" en="Memory (MB)"/>
   <translation tag="Memory Snapshot" en="Memory Snapshot"/>
-  <translation tag="Mesh Complete" en="Mesh Complete"/>
   <translation tag="Mesh saved as &apos;{}&apos;" en="Mesh saved as &apos;{}&apos;"/>
   <translation tag="Method" en="Method"/>
   <translation tag="Min" en="Min"/>
@@ -2008,7 +2005,6 @@
   <translation tag="Rename Mesh Profile" en="Rename Mesh Profile"/>
   <translation tag="Rename failed at load step" en="Rename failed at load step"/>
   <translation tag="Rename failed at remove step" en="Rename failed at remove step"/>
-  <translation tag="Rename failed at save step" en="Rename failed at save step"/>
   <translation tag="Render Now" en="Render Now"/>
   <translation tag="Rendering timelapse..." en="Rendering timelapse..."/>
   <translation tag="Replace" en="Replace"/>

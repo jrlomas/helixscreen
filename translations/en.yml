@@ -857,7 +857,6 @@ translations:
   Enter WiFi Password: Enter WiFi Password
   Enter a name for this profile: Enter a name for this profile
   'Enter a name for your custom theme:': 'Enter a name for your custom theme:'
-  Enter a name to save this profile: Enter a name to save this profile
   Enter network name: Enter network name
   Enter password: Enter password
   Enter printer IP address first: Enter printer IP address first
@@ -1006,7 +1005,6 @@ translations:
   Failed to save fan configuration: Failed to save fan configuration
   Failed to save heater configuration: Failed to save heater configuration
   Failed to save printer configuration: Failed to save printer configuration
-  Failed to save profile: Failed to save profile
   Failed to save setup completion: Failed to save setup completion
   Failed to save spool: Failed to save spool
   Failed to save theme file: Failed to save theme file
@@ -1564,7 +1562,6 @@ translations:
   Memory: Memory
   Memory (MB): Memory (MB)
   Memory Snapshot: Memory Snapshot
-  Mesh Complete: Mesh Complete
   Mesh saved as '{}': Mesh saved as '{}'
   Method: Method
   Min: Min
@@ -2181,7 +2178,6 @@ translations:
   Rename Mesh Profile: Rename Mesh Profile
   Rename failed at load step: Rename failed at load step
   Rename failed at remove step: Rename failed at remove step
-  Rename failed at save step: Rename failed at save step
   Render Now: Render Now
   Rendering timelapse...: Rendering timelapse...
   Replace: Replace
