@@ -145,8 +145,13 @@ stop_k1_stock_competing_uis() {
         found_any=true
     fi
 
-    # Kill any remaining stock Creality UI processes
-    for proc in display-server Monitor master-server audio-server wifi-server app-server upgrade-server web-server; do
+    # Kill any remaining stock Creality UI processes. web-server is spared:
+    # it serves Creality Cloud and the camera stream (webrtc_local), and the
+    # runtime hook's app disable takes it down anyway — the carve-out starter
+    # (prestonbrown/helixscreen#1617) brings it back at the end of the
+    # install. Killing it here leaves it dead for the whole install and,
+    # if the install aborts early, past that too.
+    for proc in display-server Monitor master-server audio-server wifi-server app-server upgrade-server; do
         if kill_process_by_name "$proc"; then
             log_info "Killed remaining $proc process"
             found_any=true

@@ -156,9 +156,10 @@ Deploy directory: `/opt/helixscreen` (override with `K2_DEPLOY_DIR`). SSH creden
 3. Transfers binaries, assets, XML layouts, and config
 4. Installs SysV init script at `/etc/init.d/S99helixscreen` for boot persistence
 5. Ensures `/opt/helixscreen` symlink points to `/mnt/UDISK/helixscreen`
-6. Platform hooks stop the stock Creality UI (`display-server`, `Monitor`, etc.) via procd
-7. Platform hooks start `wpa_supplicant` to replace the stock `wifi-server`
-8. Starts HelixScreen on the framebuffer
+6. Installs the web-server carve-out at `/etc/init.d/helix-k2-webserver` (`config/k2-webserver.init`). Boot liveness rides the platform hook, not the procd boot iterator: the hook's `/etc/init.d/app` stop+disable take a running `web-server` down at every start, and procd's iterator has been observed to skip our S99 while dispatching the helixscreen shim — so `platform_stop_competing_uis` restores `web-server` at its end, through this script (prestonbrown/helixscreen#1617)
+7. Platform hooks stop the stock Creality UI (`display-server`, `Monitor`, etc.) via procd
+8. Platform hooks start `wpa_supplicant` to replace the stock `wifi-server`
+9. Starts HelixScreen on the framebuffer
 
 ### Reverting to Stock UI
 
@@ -167,6 +168,11 @@ To restore the stock Creality touchscreen:
 ```bash
 ssh root@<printer-ip>
 killall helix-screen helix-splash helix-watchdog 2>/dev/null
+killall web-server 2>/dev/null            # Free port 80 for the stock instance
+/etc/init.d/helix-k2-webserver disable    # Drop the carve-out's boot symlink (NOT the
+                                          # /etc/rc.d/S99... spelling: rc.common derives
+                                          # link names from basename $0, so that one
+                                          # computes S99S99... and removes nothing)
 /etc/init.d/app enable   # Re-enable stock UI on boot
 /etc/init.d/app start    # Start stock UI now
 ```
