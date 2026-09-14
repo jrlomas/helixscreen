@@ -47,6 +47,22 @@ void lv_init_safe();
  */
 void ensure_headless_display();
 
+/**
+ * @brief Let a flush wait return on every display registered so far.
+ *
+ * A test display renders into a buffer nobody reads, so a flush is finished the
+ * moment it is issued. LVGL cannot know that: `wait_for_flushing()` busy-waits
+ * on `disp->flushing` whenever a display has no flush_wait_cb, and a display
+ * with no flush callback never clears that flag, so the next refresh of it
+ * spins at 100% CPU with no way out. A no-op flush_wait_cb takes the branch
+ * that clears the flag instead.
+ *
+ * Idempotent and cheap. Called from HelixTestFixture::reset_all(), so it covers
+ * every display a fixture, a TEST_CASE or a static initialiser has created by
+ * then.
+ */
+void ensure_displays_never_block_on_flush();
+
 // Install a real TemperatureHistoryManager for get_temperature_history_manager()
 // to return (tests default to nullptr). Lets a test exercise history backfill
 // paths; pass nullptr to restore the default. See #1124.

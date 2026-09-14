@@ -81,15 +81,15 @@ class DisplayManagerTestAccess {
 
     // The wake-touch gate wake_display() engages (#1245). Private on the
     // manager and normally only reachable through a full wake, which also
-    // calls lv_refr_now() — that infinite-loops under the headless test
-    // display, so the gate is driven directly here.
+    // repaints; the gate is driven directly here so the assertions are about
+    // the gate alone.
     static void disable_input_briefly(DisplayManager& dm) {
         dm.disable_input_briefly();
     }
 
     // Exercises the wake-side panel restore (power-on / unblank / overlay removal)
-    // WITHOUT the post-wake lv_refr_now(), which infinite-loops under the headless
-    // test display. Production wake_display() runs this then lv_refr_now().
+    // WITHOUT the post-wake repaint. Production wake_display() runs this then
+    // lv_refr_now().
     static void restore_display_output(DisplayManager& dm) {
         dm.m_display_sleeping = false;
         dm.restore_display_output();

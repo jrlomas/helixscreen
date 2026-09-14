@@ -52,6 +52,15 @@ void ensure_headless_display() {
     created = true;
 }
 
+void ensure_displays_never_block_on_flush() {
+    if (!lv_is_initialized()) {
+        return;
+    }
+    for (lv_display_t* d = lv_display_get_next(nullptr); d != nullptr; d = lv_display_get_next(d)) {
+        lv_display_set_flush_wait_cb(d, [](lv_display_t*) {});
+    }
+}
+
 uint32_t lv_timer_handler_safe() {
     // Drain the UpdateQueue — executes pending callbacks which set subjects.
     // Subject observers fire synchronously during drain, propagating bindings.

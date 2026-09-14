@@ -207,6 +207,14 @@ void HelixTestFixture::reset_all() {
     // fixture's destructor shut it down. Safe to call from non-LVGL tests.
     lv_init_safe();
 
+    // A display with no flush callback latches disp->flushing on its first
+    // refresh and never clears it; lv_refr.c then busy-waits on that flag for
+    // the rest of the process. Several test translation units create the
+    // process's default display that way in a static initialiser, so this has
+    // to be re-asserted from a place every test passes through rather than at
+    // any one creation site.
+    ensure_displays_never_block_on_flush();
+
     // BEFORE the drain, not after: EmergencyStopOverlay is a process-wide
     // singleton holding raw init() pointers to a PrinterState that in tests is a
     // stack local or fixture member. By the time a fixture destructor reaches
