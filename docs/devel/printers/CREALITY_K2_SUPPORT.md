@@ -154,7 +154,7 @@ Deploy directory: `/opt/helixscreen` (override with `K2_DEPLOY_DIR`). SSH creden
 1. Stops any running HelixScreen processes
 2. Deploys platform hooks (`assets/config/platform/hooks-k2.sh` → /opt/helixscreen/platform/hooks.sh)
 3. Transfers binaries, assets, XML layouts, and config
-4. Installs SysV init script at `/etc/init.d/S99helixscreen` for boot persistence
+4. Installs the SysV init script at `/etc/init.d/S99helixscreen` and the procd shim at `/etc/init.d/helixscreen` (`config/helixscreen-k2-procd-shim.sh`), then verifies the shim's `S99`/`K01` boot links. procd's boot iterator dispatches only rc.common scripts that declare `DEPEND`, so at boot it runs the shim, which delegates every action to `S99helixscreen`. The installer does the same in `scripts/lib/installer/service.sh#install_procd_shim_k2`
 5. Installs the web-server carve-out at `/etc/init.d/helix-k2-webserver` (`config/k2-webserver.init`), verifies its `S99` boot link and starts it. Why the platform hook carries its liveness: **Web-server carve-out** under [Platform](#platform)
 6. Creates `/opt/helixscreen` as a symlink to `K2_DEPLOY_DIR` when nothing exists at that path. With the default `K2_DEPLOY_DIR` of `/opt/helixscreen` the directory is already there, so this step changes nothing
 7. Platform hooks stop the stock Creality UI (`display-server`, `Monitor`, etc.) via procd
