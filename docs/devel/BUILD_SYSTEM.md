@@ -2097,13 +2097,15 @@ worker reports by pushing a short status file early and a full report at the end
 triggers in `.github/workflows/build.yml` and `quality.yml` exclude that branch pattern, so status
 pushes cost no CI.
 
-**Tell a worker the formatter rule explicitly.** `scripts/quality-checks.sh` prefers the pinned
-`clang-format` in `.venv` and otherwise falls back to `clang-format-18` or `clang-format` on `PATH`,
-so a worker runs `make venv-setup` before its first commit and formats with exactly the pinned
-version. A worker formats only the files its own diff touched: `--auto-fix` on a full sweep rewrites
-every file under `src/` and `include/` that the formatter finds dirty, which puts unrelated files in
-the worker's diff, and nothing requires it, since `make quality`, pre-push and CI report unformatted
-files without failing.
+**Tell a worker the formatter rule explicitly.** `scripts/quality-checks.sh` takes `$CLANG_FORMAT`
+if set, then the pinned `.venv/bin/clang-format`, then `clang-format-18` or `clang-format` on `PATH`
+(step 1 under [Pre-commit Integration](#pre-commit-integration)), so a worker runs `make venv-setup`
+and leaves `CLANG_FORMAT` unset to format with exactly the pinned version. A worker formats only the
+files its own diff touched: `--auto-fix` on a full sweep rewrites every file under `src/` and
+`include/` that clang-format finds dirty, and every unformatted layout under `ui_xml/` outside
+`ui_xml/translations/` through `scripts/format-xml.py`, which puts unrelated files in the worker's
+diff. The sweep itself only reports formatting, but an unformatted `ui_xml/` file still fails CI's
+shell tests through `tests/shell/test_format_xml_gate.bats`.
 
 **A push to a work branch costs a full CI run.** Build, Code Quality and XML Lint all fire on the
 `claude/**` namespace, and Build alone budgets 200 minutes. Push when the gates are green locally,
