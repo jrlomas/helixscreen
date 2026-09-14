@@ -7,6 +7,7 @@
 #include "ui_subscription_guard.h"
 
 #include "async_lifetime_guard.h"
+#include "bed_mesh_probe_temp.h"
 #include "i_moonraker_api.h"
 #include "moonraker_types.h" // For BedMeshProfile
 #include "operation_timeout_guard.h"
@@ -226,8 +227,9 @@ class BedMeshPanel : public OverlayBase {
         120000; // load, save_config (Klipper restart)
     static constexpr uint32_t CALIBRATION_TIMEOUT_MS = 300000; // 5 min for BED_MESH_CALIBRATE
     static constexpr double PROBE_NOZZLE_TEMP =
-        150.0;                                     // °C — warm nozzle prevents ooze interference
-    static constexpr double PROBE_BED_TEMP = 60.0; // °C — thermal expansion for accurate mesh
+        150.0; // °C — warm nozzle prevents ooze interference
+    static constexpr double PROBE_BED_TEMP =
+        helix::bed_mesh::DEFAULT_PROBE_BED_TEMP_C; // °C — thermal expansion for accurate mesh
 
     // RAII subscription guard - auto-unsubscribes from Moonraker on destruction
     SubscriptionGuard subscription_;
@@ -253,6 +255,9 @@ class BedMeshPanel : public OverlayBase {
 
     lv_obj_t* parent_screen_ = nullptr;
     bool callbacks_registered_ = false;
+
+    /// What start_calibration() resolved; launch_calibration() sends it.
+    IAdvancedAPI::BedMeshCommand calibration_command_;
 
     // Preheat tracking — true when we turned on a heater that was off before probing
     bool preheat_turned_on_nozzle_ = false;

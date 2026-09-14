@@ -29,6 +29,7 @@
 
 #include "app_globals.h"
 #include "bed_mesh_portrait_layout.h"
+#include "bed_mesh_probe_temp.h"
 #include "bed_mesh_profile_name.h"
 #include "display_settings_manager.h"
 #include "format_utils.h"
@@ -1297,6 +1298,16 @@ void BedMeshPanel::start_calibration() {
         return;
     }
 
+    calibration_command_ = resolve_calibration_command();
+    if (calibration_command_.self_prepares) {
+        // The sequence heats and homes the printer itself. Anything sent from here
+        // would run ahead of it, and a panel preheat could disagree with the bed
+        // temperature the sequence was given.
+        spdlog::info("[BedMeshPanel] Sequence prepares the printer itself; no preheat or homing");
+        start_calibration_probing();
+        return;
+    }
+
     // Preheat nozzle and bed for probing (respects existing targets)
     preheat_for_probing();
 
@@ -1439,18 +1450,19 @@ void BedMeshPanel::start_calibration_probing() {
 }
 
 IAdvancedAPI::BedMeshCommand BedMeshPanel::resolve_calibration_command() {
-    // One ladder, StandardMacros': configured > shipped > detected > fallback.
-    // The Elegoo Centauri Carbon arrives through the shipped tier, whose sequence
-    // tares the load cell and runs the vendor wipe wrapper first; a plain
-    // BED_MESH_CALIBRATE probes untared there. The probe_preparation tare rule
-    // does not cover it either — that keys on LOAD_CELL_TARE and this machine
-    // spells it LOAD_CELL_SAVE_TARE.
+    // One ladder, StandardMacros': configured > shipped > detected > fallback. A
+    // printer-shipped sequence calls the firmware's own mesh macro with the
+    // parameters it takes, and brings its own heating and homing.
     const auto& info = StandardMacros::instance().get(StandardMacroSlot::BedMesh);
+    auto& state = get_printer_state();
+    const int bed_temp_c =
+        helix::bed_mesh::probe_bed_temp_c(lv_subject_get_int(state.get_bed_target_subject()),
+                                          lv_subject_get_int(state.get_bed_temp_subject()));
     // accept_fallback=false: HELIX_BED_MESH_IF_NEEDED returns without probing
     // when a recent mesh exists, so a Calibrate button resolving to it would
     // advance the modal to naming and offer to save a mesh nothing re-measured.
-    ResolvedMacroScript resolved =
-        resolve_macro_script(info, TEMP_PROFILE, /*accept_fallback=*/false);
+    ResolvedMacroScript resolved = resolve_macro_script(
+        info, {.profile = TEMP_PROFILE, .bed_temp_c = bed_temp_c}, /*accept_fallback=*/false);
     if (resolved.script.empty()) {
         resolved = {"BED_MESH_CALIBRATE", /*self_prepares=*/false};
     }
@@ -1464,7 +1476,7 @@ void BedMeshPanel::launch_calibration(IMoonrakerAPI* api, int expected_probes, i
     // WebSocket thread; bg_cb defers the body to main and re-checks the lifetime
     // generation atomically before invoking.
     api->advanced().start_bed_mesh_calibrate(
-        resolve_calibration_command(),
+        calibration_command_,
         lifetime_.bg_cb("BedMeshPanel::probe_progress",
                         [this](int current, int total) { on_probe_progress(current, total); }),
         lifetime_.bg_cb("BedMeshPanel::calibrate_done", [this]() { on_calibration_complete(); }),

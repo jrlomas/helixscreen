@@ -2,14 +2,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Mesh calibration over the mock client, through the real MoonrakerAdvancedAPI
-// collector.
+// collector and BedMeshPanel's start sequence, judged by the gcode actually sent.
+
+#include "ui_panel_bed_mesh.h"
 
 #include "../lvgl_test_fixture.h"
+#include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
+#include "app_globals.h"
 #include "moonraker_advanced_api.h"
 #include "moonraker_api.h"
 #include "moonraker_client_mock.h"
+#include "printer_discovery.h"
 #include "printer_state.h"
+#include "standard_macros.h"
 
 #include <algorithm>
 #include <string>
@@ -31,6 +37,13 @@ void drain() {
 
 bool mentions(const std::string& haystack, const char* needle) {
     return haystack.find(needle) != std::string::npos;
+}
+
+/// Index of the first sent script containing @p needle, or -1.
+long first_sent(const std::vector<std::string>& history, const char* needle) {
+    const auto it = std::find_if(history.begin(), history.end(),
+                                 [needle](const std::string& s) { return mentions(s, needle); });
+    return it == history.end() ? -1 : static_cast<long>(it - history.begin());
 }
 
 class CalibrationCollectorFixture : public LVGLTestFixture {
@@ -63,6 +76,38 @@ class CalibrationCollectorFixture : public LVGLTestFixture {
         REQUIRE(client.gcode_script_history().size() == 1);
         REQUIRE(completions == 0);
         REQUIRE(errors.empty());
+    }
+};
+
+class BedMeshPanelFlowFixture : public LVGLTestFixture {
+  public:
+    MoonrakerClientMock client{MoonrakerClientMock::PrinterType::VORON_24};
+    helix::PrinterState state;
+    MoonrakerAPI api{client, state};
+
+    BedMeshPanelFlowFixture() {
+        state.init_subjects(false);
+        set_moonraker_api(&api);
+        client.clear_gcode_script_history();
+        // The panel reads bed temperatures and homing from the process-wide state,
+        // whose subjects no base fixture creates.
+        helix::PrinterStateTestAccess::reset(get_printer_state());
+        get_printer_state().init_subjects(false);
+        get_printer_state().update_from_status({{"toolhead", {{"homed_axes", ""}}}});
+    }
+    ~BedMeshPanelFlowFixture() override {
+        set_moonraker_api(nullptr);
+        StandardMacros::instance().init(helix::PrinterDiscovery{}, "");
+        drain();
+    }
+
+    static void use_printer(const std::string& printer_name) {
+        StandardMacros::instance().init(helix::PrinterDiscovery{}, printer_name);
+    }
+
+    static void set_bed(double temperature, double target) {
+        get_printer_state().update_from_status(
+            {{"heater_bed", {{"temperature", temperature}, {"target", target}}}});
     }
 };
 
@@ -107,4 +152,68 @@ TEST_CASE_METHOD(CalibrationCollectorFixture,
     client.dispatch_gcode_response("// Mesh Bed Leveling Complete");
     CHECK(errors.empty());
     CHECK(completions == 1);
+}
+
+// ============================================================================
+// Panel: what goes out in front of the mesh command
+// ============================================================================
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a self-preparing mesh sequence is sent alone, at the bed temperature it needs",
+                 "[bed_mesh_flow][cc1]") {
+    use_printer("Elegoo Centauri Carbon");
+    REQUIRE(StandardMacros::instance().get(StandardMacroSlot::BedMesh).get_source() ==
+            MacroSource::SHIPPED);
+
+    SECTION("a set bed target is the probe temperature") {
+        set_bed(87.4, 70.0);
+        REQUIRE(lv_subject_get_int(get_printer_state().get_bed_target_subject()) == 700);
+
+        BedMeshPanel panel;
+        panel.start_calibration();
+        drain();
+
+        const auto& hist = client.gcode_script_history();
+        // No preheat wait and no G28 ahead of it: the sequence does both itself.
+        REQUIRE(hist.size() == 1);
+        CHECK(hist[0].rfind("BED_MESH_CALIBRATE", 0) == 0);
+        CHECK(mentions(hist[0], "BED_TEMP=70"));
+        CHECK_FALSE(mentions(hist[0], "{"));
+    }
+
+    SECTION("an idle bed still hot is probed at the temperature it has") {
+        set_bed(87.4, 0.0);
+        REQUIRE(lv_subject_get_int(get_printer_state().get_bed_temp_subject()) == 874);
+
+        BedMeshPanel panel;
+        panel.start_calibration();
+        drain();
+
+        const auto& hist = client.gcode_script_history();
+        REQUIRE(hist.size() == 1);
+        CHECK(mentions(hist[0], "BED_TEMP=87"));
+    }
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a plain BED_MESH_CALIBRATE still gets the panel's preheat and homing",
+                 "[bed_mesh_flow]") {
+    use_printer("");
+    REQUIRE(StandardMacros::instance().get(StandardMacroSlot::BedMesh).get_source() !=
+            MacroSource::SHIPPED);
+    set_bed(24.0, 0.0);
+
+    BedMeshPanel panel;
+    panel.start_calibration();
+    drain();
+
+    const auto& hist = client.gcode_script_history();
+    const long wait = first_sent(hist, "TEMPERATURE_WAIT");
+    const long home = first_sent(hist, "G28");
+    const long mesh = first_sent(hist, "BED_MESH_CALIBRATE");
+    REQUIRE(mesh >= 0);
+    CHECK(wait >= 0);
+    CHECK(home >= 0);
+    CHECK(wait < home);
+    CHECK(home < mesh);
 }

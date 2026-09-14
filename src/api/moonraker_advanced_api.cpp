@@ -1847,7 +1847,7 @@ void MoonrakerAdvancedAPI::calculate_screws_tilt(ScrewTiltCallback on_success,
     // make the slot a silent no-op. Falls back to the stock command when the slot
     // is empty, which is every printer that predates this setting.
     const StandardMacroInfo& slot = StandardMacros::instance().get(StandardMacroSlot::ScrewsTilt);
-    const ResolvedMacroScript resolved = resolve_macro_script(slot, /*profile=*/"");
+    const ResolvedMacroScript resolved = resolve_macro_script(slot, {});
     const std::string command = resolved.script.empty() ? "SCREWS_TILT_CALCULATE" : resolved.script;
     spdlog::info("[Moonraker API] Starting {}", command);
 

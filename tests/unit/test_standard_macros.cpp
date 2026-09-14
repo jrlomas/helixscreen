@@ -626,9 +626,9 @@ TEST_CASE("StandardMacros - init fills the shipped tier from the printer databas
         macros.init(hardware, "Elegoo Centauri Carbon");
         const auto& info = macros.get(StandardMacroSlot::BedMesh);
         REQUIRE_FALSE(info.shipped_macro.empty());
-        // The tare is the whole point: mainline-Klipper load_cell_probe aborts
-        // on a stale one, and probing plain BED_MESH_CALIBRATE never tares.
-        CHECK(info.shipped_macro.find("LOAD_CELL_SAVE_TARE") != std::string::npos);
+        // The firmware's own mesh macro prepares the machine and takes the bed
+        // temperature as a parameter.
+        CHECK(info.shipped_macro.find("BED_TEMP={bed_temp}") != std::string::npos);
         CHECK(info.get_source() == MacroSource::SHIPPED);
         CHECK(info.get_macro() == info.shipped_macro);
     }
@@ -642,7 +642,7 @@ TEST_CASE("resolve_macro_script - substitution and self-preparation",
 
     SECTION("a plain macro name passes through and prepares nothing itself") {
         info.detected_macro = "BED_MESH_CALIBRATE";
-        const auto r = resolve_macro_script(info, "_hs_temp");
+        const auto r = resolve_macro_script(info, {.profile = "_hs_temp"});
         CHECK(r.script == "BED_MESH_CALIBRATE");
         // Not self-preparing: probe_preparation still gets to prepend its tare,
         // which is the whole reason ZMOD machines probe successfully.
@@ -652,22 +652,48 @@ TEST_CASE("resolve_macro_script - substitution and self-preparation",
     SECTION("a shipped sequence keeps its own preparation") {
         info.detected_macro = "BED_MESH_CALIBRATE";
         info.shipped_macro = "LOAD_CELL_SAVE_TARE\nBED_MESH_CALIBRATE_WITH_WIPE";
-        const auto r = resolve_macro_script(info, "_hs_temp");
+        const auto r = resolve_macro_script(info, {.profile = "_hs_temp"});
         CHECK(r.script == "LOAD_CELL_SAVE_TARE\nBED_MESH_CALIBRATE_WITH_WIPE");
         CHECK(r.self_prepares);
     }
 
     SECTION("{profile} is substituted everywhere it appears") {
         info.shipped_macro = "BED_MESH_PROFILE LOAD={profile}\nBED_MESH_PROFILE SAVE={profile}";
-        const auto r = resolve_macro_script(info, "_hs_temp");
+        const auto r = resolve_macro_script(info, {.profile = "_hs_temp"});
         CHECK(r.script == "BED_MESH_PROFILE LOAD=_hs_temp\nBED_MESH_PROFILE SAVE=_hs_temp");
         CHECK(r.script.find("{profile}") == std::string::npos);
     }
 
     SECTION("a profile name containing the placeholder does not loop forever") {
         info.shipped_macro = "SAVE={profile}";
-        const auto r = resolve_macro_script(info, "{profile}x");
+        const auto r = resolve_macro_script(info, {.profile = "{profile}x"});
         CHECK(r.script == "SAVE={profile}x");
+    }
+
+    SECTION("{bed_temp} is substituted with the whole-degree temperature") {
+        info.shipped_macro = "BED_MESH_CALIBRATE BED_TEMP={bed_temp}";
+        const auto r = resolve_macro_script(info, {.profile = "_hs_temp", .bed_temp_c = 105});
+        CHECK(r.script == "BED_MESH_CALIBRATE BED_TEMP=105");
+    }
+
+    SECTION("both placeholders are substituted everywhere they appear") {
+        info.shipped_macro =
+            "M140 S{bed_temp}\nBED_MESH_CALIBRATE PROFILE={profile} BED_TEMP={bed_temp}";
+        const auto r = resolve_macro_script(info, {.profile = "_hs_temp", .bed_temp_c = 72});
+        CHECK(r.script == "M140 S72\nBED_MESH_CALIBRATE PROFILE=_hs_temp BED_TEMP=72");
+    }
+
+    SECTION("a profile name that spells a placeholder is inserted verbatim") {
+        info.shipped_macro = "SAVE={profile} BED_TEMP={bed_temp}";
+        const auto r = resolve_macro_script(info, {.profile = "{bed_temp}", .bed_temp_c = 60});
+        CHECK(r.script == "SAVE={bed_temp} BED_TEMP=60");
+    }
+
+    SECTION("a caller that names no temperature gets the default probe temperature") {
+        info.shipped_macro = "BED_MESH_CALIBRATE BED_TEMP={bed_temp}";
+        const auto r = resolve_macro_script(info, {});
+        CHECK(r.script == "BED_MESH_CALIBRATE BED_TEMP=" +
+                              std::to_string(helix::bed_mesh::DEFAULT_PROBE_BED_TEMP_C));
     }
 
     SECTION("a user override is never treated as self-preparing") {
@@ -675,13 +701,13 @@ TEST_CASE("resolve_macro_script - substitution and self-preparation",
         // preparation their machine still needs.
         info.shipped_macro = "LOAD_CELL_SAVE_TARE\nBED_MESH_CALIBRATE_WITH_WIPE";
         info.configured_macro = "MY_MESH";
-        const auto r = resolve_macro_script(info, "_hs_temp");
+        const auto r = resolve_macro_script(info, {.profile = "_hs_temp"});
         CHECK(r.script == "MY_MESH");
         CHECK_FALSE(r.self_prepares);
     }
 
     SECTION("an empty slot resolves to nothing, and the caller decides") {
-        const auto r = resolve_macro_script(info, "_hs_temp");
+        const auto r = resolve_macro_script(info, {.profile = "_hs_temp"});
         CHECK(r.script.empty());
         CHECK_FALSE(r.self_prepares);
     }
@@ -696,17 +722,17 @@ TEST_CASE("resolve_macro_script - a conditional fallback is refused when the op 
     StandardMacroInfo info;
     info.fallback_macro = "HELIX_BED_MESH_IF_NEEDED";
 
-    CHECK(resolve_macro_script(info, "", /*accept_fallback=*/true).script ==
+    CHECK(resolve_macro_script(info, {}, /*accept_fallback=*/true).script ==
           "HELIX_BED_MESH_IF_NEEDED");
-    CHECK(resolve_macro_script(info, "", /*accept_fallback=*/false).script.empty());
+    CHECK(resolve_macro_script(info, {}, /*accept_fallback=*/false).script.empty());
 
     SECTION("refusing the fallback does not refuse the tiers above it") {
         info.detected_macro = "BED_MESH_CALIBRATE";
-        CHECK(resolve_macro_script(info, "", /*accept_fallback=*/false).script ==
+        CHECK(resolve_macro_script(info, {}, /*accept_fallback=*/false).script ==
               "BED_MESH_CALIBRATE");
 
         info.shipped_macro = "LOAD_CELL_SAVE_TARE\nBED_MESH_CALIBRATE_WITH_WIPE";
-        const auto r = resolve_macro_script(info, "", /*accept_fallback=*/false);
+        const auto r = resolve_macro_script(info, {}, /*accept_fallback=*/false);
         CHECK(r.script == "LOAD_CELL_SAVE_TARE\nBED_MESH_CALIBRATE_WITH_WIPE");
         CHECK(r.self_prepares);
     }
