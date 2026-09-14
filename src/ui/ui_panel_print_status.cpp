@@ -113,6 +113,41 @@ static lv_obj_t* s_cached_panel = nullptr;
 // panel-destroy callback to prevent calls into a destroyed singleton.
 static helix::MemoryMonitor::PressureResponderId s_memory_responder_id = 0;
 
+// Each print status tree this process creates takes the next number, so every
+// creation and destruction line names its tree, and a repeat creation can say
+// how the tree before it died.
+static int s_tree_number = 0;
+static int s_last_destroyed_tree = 0;
+static const char* s_last_destroy_reason = "";
+static PrintState s_last_destroy_state = PrintState::Idle;
+
+static void log_tree_destroyed(const char* reason, PrintState state) {
+    s_last_destroyed_tree = s_tree_number;
+    s_last_destroy_reason = reason;
+    s_last_destroy_state = state;
+    spdlog::info("[PrintStatusPanel] Print status tree #{} destroyed: {} while {}", s_tree_number,
+                 reason, print_state_name(state));
+}
+
+// A repeat creation is WARN: on a device logging at WARN it is the only trace
+// that the preview was rebuilt, and it carries the cause.
+static void log_tree_created(PrintState state, size_t available_mb) {
+    ++s_tree_number;
+    if (s_tree_number == 1) {
+        spdlog::info("[PrintStatusPanel] Print status tree #1 created while {} ({}MB available)",
+                     print_state_name(state), available_mb);
+    } else if (s_last_destroyed_tree == s_tree_number - 1) {
+        spdlog::warn("[PrintStatusPanel] Print status tree #{} created while {} ({}MB available); "
+                     "tree #{} was destroyed: {} while {}",
+                     s_tree_number, print_state_name(state), available_mb, s_last_destroyed_tree,
+                     s_last_destroy_reason, print_state_name(s_last_destroy_state));
+    } else {
+        spdlog::warn("[PrintStatusPanel] Print status tree #{} created while {} ({}MB available); "
+                     "tree #{} has no recorded destruction",
+                     s_tree_number, print_state_name(state), available_mb, s_tree_number - 1);
+    }
+}
+
 // Observer factory pattern
 using helix::ui::observe_int_sync;
 using helix::ui::observe_print_state;
@@ -127,9 +162,7 @@ PrintStatusPanel& get_global_print_status_panel() {
                 helix::MemoryMonitor::instance().remove_pressure_responder(s_memory_responder_id);
                 s_memory_responder_id = 0;
             }
-            if (s_cached_panel && g_print_status_panel) {
-                g_print_status_panel->destroy_overlay_ui(s_cached_panel);
-            }
+            PrintStatusPanel::destroy_cached_overlay("panel registry teardown");
             s_cached_panel = nullptr;
             g_print_status_panel.reset();
         });
@@ -155,9 +188,8 @@ static void try_reclaim_cached_print_status() {
             return;
         }
         spdlog::warn("[PrintStatusPanel] Pressure response: destroying cached overlay tree");
-        g_print_status_panel->destroy_overlay_ui(s_cached_panel);
-        // destroy_overlay_ui() nulls s_cached_panel via its by-ref parameter;
-        // next push_overlay() will lazily recreate.
+        // Nulls s_cached_panel; the next push_overlay() recreates the tree.
+        PrintStatusPanel::destroy_cached_overlay("memory reclaim");
     });
 }
 
@@ -872,6 +904,13 @@ lv_obj_t* PrintStatusPanel::create(lv_obj_t* parent) {
         return nullptr;
     }
 
+    // The hook still on a previous root means that tree is alive and this
+    // create() replaces it.
+    if (delete_hook_root_ != nullptr) {
+        log_tree_destroyed("replaced by a rebuild", printer_state_.get_print_lifecycle());
+    }
+    log_tree_created(printer_state_.get_print_lifecycle(), memory_info_source_().available_mb());
+
     // A rebuild reaches create() with the hook still on the previous root:
     // OverlayBase::rebuild() condemns that tree only AFTER create() has pointed
     // the panel at the successor, and safe_delete_subtree() defers the actual
@@ -1354,7 +1393,7 @@ void PrintStatusPanel::on_root_deleted(lv_event_t* e) {
     if (s_cached_panel == dying) {
         s_cached_panel = nullptr;
     }
-    spdlog::debug("[{}] Widget tree deleted - cached pointers dropped", self->get_name());
+    log_tree_destroyed("widget tree deleted", self->printer_state_.get_print_lifecycle());
 }
 
 void PrintStatusPanel::forget_cached_widgets() {
@@ -1377,6 +1416,16 @@ void PrintStatusPanel::forget_cached_widgets() {
 
 lv_obj_t* PrintStatusPanel::get_cached_overlay() {
     return s_cached_panel;
+}
+
+helix::MemoryInfo (*PrintStatusPanel::memory_info_source_)() = helix::get_system_memory_info;
+
+void PrintStatusPanel::destroy_cached_overlay(const char* reason) {
+    if (!s_cached_panel || !g_print_status_panel) {
+        return;
+    }
+    log_tree_destroyed(reason, g_print_status_panel->printer_state_.get_print_lifecycle());
+    g_print_status_panel->destroy_overlay_ui(s_cached_panel);
 }
 
 bool PrintStatusPanel::push_overlay(lv_obj_t* parent_screen) {
@@ -1403,33 +1452,10 @@ bool PrintStatusPanel::push_overlay(lv_obj_t* parent_screen) {
         // so the registration survives navbar panel switches while cached)
         NavigationManager::instance().register_overlay_instance(s_cached_panel, &panel, true);
 
-        // Decide whether to destroy the widget tree when the overlay closes.
-        // On memory-constrained devices or when currently under pressure, destroy
-        // on close to free ~400-800KB. On devices with plenty of available RAM,
-        // keep the widget tree alive so re-opening is instant — no thumbnail→3D
-        // rebuild jump (issue #618).
-        auto mem = helix::get_system_memory_info();
-        bool should_destroy = mem.is_low_memory();
-        if (should_destroy) {
-            NavigationManager::instance().register_overlay_close_callback(s_cached_panel, []() {
-                auto& p = get_global_print_status_panel();
-                p.destroy_overlay_ui(s_cached_panel);
-            });
-            spdlog::info("[PrintStatusPanel] Print status overlay created (destroy-on-close, "
-                         "{}MB available, {}MB total)",
-                         mem.available_mb(), mem.total_mb());
-        } else {
-            spdlog::info("[PrintStatusPanel] Print status overlay created (persistent, "
-                         "{}MB available, {}MB total)",
-                         mem.available_mb(), mem.total_mb());
-        }
-
-        // Register pressure responder once. The persistent branch above keeps the
-        // widget tree alive across overlay closes to avoid the thumbnail→3D
-        // rebuild jump — but that decision assumed plenty of RAM at startup.
-        // If pressure builds up later (slow leak, second connection, heavy file
-        // selection), drop the cached tree to reclaim memory even in persistent
-        // mode. No-op if the overlay is currently visible.
+        // Register the pressure responder once. A close keeps the tree whenever
+        // memory is plentiful or a job holds the machine; this is what drops a
+        // hidden tree once memory actually runs short. No-op while the overlay
+        // is in the navigation stack.
         if (s_memory_responder_id == 0) {
             s_memory_responder_id = helix::MemoryMonitor::instance().add_pressure_responder(
                 [](helix::MemoryPressureLevel level) {
@@ -1445,6 +1471,26 @@ bool PrintStatusPanel::push_overlay(lv_obj_t* parent_screen) {
                 });
         }
     }
+
+    // Whether a close destroys the tree is decided when the close happens: the
+    // print and available memory both move while the overlay is open.
+    // NavigationManager consumes the callback when it fires, and a tree that
+    // close kept comes back through here without being re-created, so it is
+    // registered on every push.
+    NavigationManager::instance().register_overlay_close_callback(s_cached_panel, []() {
+        if (!s_cached_panel || !g_print_status_panel) {
+            return;
+        }
+        const PrintState lifecycle = g_print_status_panel->printer_state_.get_print_lifecycle();
+        const helix::MemoryInfo mem = memory_info_source_();
+        if (!helix::ui::print_status_destroy_on_close(mem.is_low_memory(), lifecycle)) {
+            spdlog::debug(
+                "[PrintStatusPanel] Print status tree #{} kept on close while {} ({}MB available)",
+                s_tree_number, print_state_name(lifecycle), mem.available_mb());
+            return;
+        }
+        destroy_cached_overlay("overlay close");
+    });
 
     NavigationManager::instance().push_overlay(s_cached_panel);
     return true;

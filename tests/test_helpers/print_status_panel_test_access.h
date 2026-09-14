@@ -32,6 +32,12 @@
 // adding _for_testing() accessors to the production API.
 class PrintStatusPanelTestAccess {
   public:
+    /// Stand in the memory reading the close-time decision samples. Pass
+    /// helix::get_system_memory_info to put the real one back.
+    static void set_memory_info_source(helix::MemoryInfo (*source)()) {
+        PrintStatusPanel::memory_info_source_ = source;
+    }
+
     static void recompute_aux_composites(PrintStatusPanel& panel, int density, bool aux_present) {
         panel.recompute_aux_composites_for_measurement(density, aux_present);
     }

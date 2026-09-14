@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "print_lifecycle_state.h"
+
 #include <string>
 #include <utility>
 
@@ -150,6 +152,27 @@ inline PreviewAction decide_preview_action(const std::string& thumbnail_displaye
     }
 
     return action;
+}
+
+/**
+ * @brief Should closing the print status overlay destroy its widget tree?
+ *
+ * Destroying the tree gives a low-memory host back ~400-800KB, and costs the
+ * preview: the next open rebuilds the thumbnail and re-renders the G-code from
+ * nothing. While a job holds the machine the user comes back to that preview,
+ * so the tree is kept; the memory monitor's pressure responder is what drops a
+ * hidden tree when memory actually runs out.
+ *
+ * Asked when the overlay closes, not when the tree is created: both the print
+ * and available memory move in between.
+ *
+ * @param low_memory MemoryInfo::is_low_memory() sampled at close time.
+ * @param lifecycle  The derived lifecycle, not the wire state. A host-side
+ *                   pre-start block is Preparing while print_stats still
+ *                   reports the previous job's state.
+ */
+constexpr bool print_status_destroy_on_close(bool low_memory, PrintState lifecycle) {
+    return low_memory && !job_holds_machine(lifecycle);
 }
 
 } // namespace helix::ui

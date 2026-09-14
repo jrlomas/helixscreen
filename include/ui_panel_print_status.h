@@ -14,6 +14,7 @@
 #include "ui_print_tune_overlay.h"
 #include "ui_save_z_offset_modal.h"
 
+#include "memory_utils.h"
 #include "overlay_base.h"
 #include "print_control_buttons.h"
 #include "print_lifecycle_state.h"
@@ -126,9 +127,10 @@ class PrintStatusPanel : public OverlayBase {
      * @brief Push the print status overlay with lazy creation and destroy-on-close
      *
      * All call sites should use this instead of manually pushing the overlay.
-     * Handles lazy creation, NavigationManager registration, and destroy-on-close
-     * callback registration. The widget tree is destroyed when the overlay closes
-     * to free memory (~400-800KB); subjects survive for re-creation.
+     * Handles lazy creation, NavigationManager registration, and the close
+     * callback. That callback asks print_status_destroy_on_close() when the
+     * close happens whether to destroy the widget tree (~400-800KB) or keep it;
+     * subjects survive either way.
      *
      * @param parent_screen Parent screen for overlay creation
      * @return true if overlay was pushed successfully
@@ -147,6 +149,17 @@ class PrintStatusPanel : public OverlayBase {
      * @return cached overlay root, or nullptr
      */
     static lv_obj_t* get_cached_overlay();
+
+    /**
+     * @brief Destroy the cached widget tree, if there is one, and log why
+     *
+     * Every path that drops the cached tree goes through here, so each
+     * destruction leaves one log line naming its cause. Subjects and observers
+     * survive; the next push_overlay() creates a fresh tree.
+     *
+     * @param reason Short cause for the log line (a string literal)
+     */
+    static void destroy_cached_overlay(const char* reason);
 
   protected:
     /**
@@ -286,6 +299,10 @@ class PrintStatusPanel : public OverlayBase {
 
   private:
     friend class PrintStatusPanelTestAccess;
+
+    /// Where the close-time decision and the creation log read system memory.
+    /// A function pointer so a test can stand in a low-memory host.
+    static helix::MemoryInfo (*memory_info_source_)();
 
     //
     // === Injected Dependencies ===

@@ -345,3 +345,30 @@ TEST_CASE("preview_build_size - nothing laid out yet reports no size", "[print_s
     CHECK(w2 == 0);
     CHECK(h2 == 0);
 }
+
+TEST_CASE("print_status_destroy_on_close - a job holding the machine keeps the tree",
+          "[print_status][preview][destroy_on_close]") {
+    for (PrintState state : {PrintState::Preparing, PrintState::Printing, PrintState::Paused}) {
+        CAPTURE(helix::print_state_name(state));
+        CHECK_FALSE(helix::ui::print_status_destroy_on_close(/*low_memory*/ true, state));
+    }
+}
+
+TEST_CASE("print_status_destroy_on_close - low memory with no job destroys the tree",
+          "[print_status][preview][destroy_on_close]") {
+    for (PrintState state :
+         {PrintState::Idle, PrintState::Complete, PrintState::Cancelled, PrintState::Error}) {
+        CAPTURE(helix::print_state_name(state));
+        CHECK(helix::ui::print_status_destroy_on_close(/*low_memory*/ true, state));
+    }
+}
+
+TEST_CASE("print_status_destroy_on_close - plenty of memory keeps the tree in every state",
+          "[print_status][preview][destroy_on_close]") {
+    for (PrintState state :
+         {PrintState::Idle, PrintState::Preparing, PrintState::Printing, PrintState::Paused,
+          PrintState::Complete, PrintState::Cancelled, PrintState::Error}) {
+        CAPTURE(helix::print_state_name(state));
+        CHECK_FALSE(helix::ui::print_status_destroy_on_close(/*low_memory*/ false, state));
+    }
+}
