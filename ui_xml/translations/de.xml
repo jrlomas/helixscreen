@@ -1905,6 +1905,7 @@
   <translation tag="Processing..." de="Wird verarbeitet..."/>
   <translation tag="Profile deleted" de="Profil gelöscht"/>
   <translation tag="Profile name (e.g., default)" de="Profilname (z.B. Standard)"/>
+  <translation tag="Profile names cannot contain &apos;;&apos;"/>
   <translation tag="Profile renamed" de="Profil umbenannt"/>
   <translation tag="Profiles" de="Profile"/>
   <translation tag="Prompt before running this macro" de="Vor dem Ausführen dieses Makros nachfragen"/>

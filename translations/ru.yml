@@ -2098,6 +2098,7 @@ translations:
   Processing...: 'Обработка...'
   Profile deleted: Профиль удалён
   Profile name (e.g., default): Имя профиля (например, default)
+  Profile names cannot contain ';': ''
   Profile renamed: Профиль переименован
   Profiles: Профили
   Prompt before running this macro: Спрашивать перед запуском этого макроса

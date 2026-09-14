@@ -1955,6 +1955,7 @@ translations:
   Processing...: '処理中...'
   Profile deleted: プロファイルを削除しました
   Profile name (e.g., default): 'プロファイル名（例: default）'
+  Profile names cannot contain ';': ''
   Profile renamed: プロファイル名を変更しました
   Profiles: プロファイル
   Prompt before running this macro: このマクロの実行前に確認する

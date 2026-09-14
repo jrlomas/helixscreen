@@ -68,6 +68,21 @@ TEST_CASE("calibration plan: a detected or configured BED_MESH_CALIBRATE takes t
         CHECK(plan.copy_to.empty());
     }
 
+    SECTION("configured with a quoted PROFILE, read as the name Klipper stores") {
+        slot.configured_macro = "BED_MESH_CALIBRATE PROFILE=\"PEI Sheet\" ADAPTIVE=1";
+        auto plan = plan_calibration(slot, "cold", 60);
+        CHECK(plan.writes_profile == "PEI Sheet");
+        CHECK(plan.copy_to == "cold");
+
+        slot.configured_macro = "BED_MESH_CALIBRATE PROFILE='a b'";
+        plan = plan_calibration(slot, "cold", 60);
+        CHECK(plan.writes_profile == "a b");
+
+        slot.configured_macro = "BED_MESH_CALIBRATE PROFILE=\"say \\\"hi\\\"\"";
+        plan = plan_calibration(slot, "cold", 60);
+        CHECK(plan.writes_profile == "say \"hi\"");
+    }
+
     SECTION("configured with a PROFILE of its own: stored there, then copied") {
         slot.configured_macro = "BED_MESH_CALIBRATE PROFILE=pei";
         const auto plan = plan_calibration(slot, "cold", 60);
@@ -138,6 +153,12 @@ TEST_CASE("calibration plan: the Centauri Carbon template, default and named",
         CHECK(plan.writes_profile == "cold");
         CHECK(plan.copy_to.empty());
     }
+}
+
+TEST_CASE("profile commands carry the name as one parameter", "[bed_mesh][calibration_plan]") {
+    using helix::bed_mesh::profile_command;
+    CHECK(profile_command("LOAD", "cold") == "BED_MESH_PROFILE LOAD=cold");
+    CHECK(profile_command("REMOVE", "PEI Sheet") == "BED_MESH_PROFILE REMOVE=\"PEI Sheet\"");
 }
 
 TEST_CASE("gcode_param_value quotes only what Klipper would split",

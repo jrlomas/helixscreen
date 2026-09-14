@@ -1160,7 +1160,7 @@ void BedMeshPanel::load_profile(int index) {
             pending_operation_ = PendingOperation::None;
             NOTIFY_WARNING(lv_tr("Bed mesh operation timed out"));
         });
-        std::string cmd = "BED_MESH_PROFILE LOAD=" + name;
+        const std::string cmd = helix::bed_mesh::profile_command("LOAD", name);
         api->execute_gcode(
             cmd,
             lifetime_.bg_cb("BedMeshPanel::load_refresh",
@@ -1314,6 +1314,10 @@ void BedMeshPanel::submit_calibration_name(std::string_view typed) {
         // Leave the dialog up: an empty field is not "default"
         // (prestonbrown/helixscreen#1360).
         NOTIFY_WARNING(lv_tr("Enter a name for this profile"));
+        return;
+    }
+    if (check.verdict == helix::ui::bed_mesh::ProfileNameVerdict::Unusable) {
+        NOTIFY_WARNING(lv_tr("Profile names cannot contain ';'"));
         return;
     }
 
@@ -1657,7 +1661,7 @@ void BedMeshPanel::execute_delete_profile(const std::string& name) {
         NOTIFY_WARNING(lv_tr("Bed mesh operation timed out"));
     });
 
-    std::string cmd = "BED_MESH_PROFILE REMOVE=" + name;
+    const std::string cmd = helix::bed_mesh::profile_command("REMOVE", name);
     api->execute_gcode(
         cmd,
         lifetime_.bg_cb("BedMeshPanel::delete_done",
@@ -1692,9 +1696,8 @@ void BedMeshPanel::execute_rename_profile(const std::string& old_name,
     // LOAD -> SAVE (new name) -> REMOVE (old name). The old profile goes only once
     // the save is known to have stored the mesh: until then it is the only copy.
     // Each success body runs on the main thread (via bg_cb).
-    using helix::bed_mesh::gcode_param_value;
     api->execute_gcode(
-        "BED_MESH_PROFILE LOAD=" + gcode_param_value(old_name),
+        helix::bed_mesh::profile_command("LOAD", old_name),
         lifetime_.bg_cb(
             "BedMeshPanel::rename_load_done",
             [this, old_name, new_name]() {
@@ -1707,7 +1710,7 @@ void BedMeshPanel::execute_rename_profile(const std::string& old_name,
                             return;
                         }
                         api3->execute_gcode(
-                            "BED_MESH_PROFILE REMOVE=" + gcode_param_value(old_name),
+                            helix::bed_mesh::profile_command("REMOVE", old_name),
                             lifetime_.bg_cb("BedMeshPanel::rename_done",
                                             [this, old_name, new_name]() {
                                                 operation_guard_.end();
@@ -1878,7 +1881,7 @@ void BedMeshPanel::copy_calibrated_mesh(const std::string& from, const std::stri
         fail("API not available");
         return;
     }
-    api->execute_gcode("BED_MESH_PROFILE LOAD=" + helix::bed_mesh::gcode_param_value(from),
+    api->execute_gcode(helix::bed_mesh::profile_command("LOAD", from),
                        lifetime_.bg_cb("BedMeshPanel::copy_load_done",
                                        [this, to, fail]() {
                                            save_profile_as(
@@ -1938,7 +1941,7 @@ void BedMeshPanel::save_profile_as(const std::string& name, std::function<void()
                         [on_failed](const MoonrakerError& err) { on_failed(err.message); });
 
     api->execute_gcode(
-        "BED_MESH_PROFILE SAVE=" + helix::bed_mesh::gcode_param_value(name),
+        helix::bed_mesh::profile_command("SAVE", name),
         [api, watch, saved]() mutable {
             api->unregister_method_callback("notify_gcode_response", watch);
             saved();
@@ -2042,6 +2045,9 @@ void BedMeshPanel::rename_profile_checked(std::string_view typed) {
     case helix::ui::bed_mesh::ProfileNameVerdict::Empty:
         // The old callback returned silently here, so the button looked broken.
         NOTIFY_WARNING(lv_tr("Enter a name for this profile"));
+        return;
+    case helix::ui::bed_mesh::ProfileNameVerdict::Unusable:
+        NOTIFY_WARNING(lv_tr("Profile names cannot contain ';'"));
         return;
     case helix::ui::bed_mesh::ProfileNameVerdict::Overwrite:
         if (check.name == pending_rename_old_) {

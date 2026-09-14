@@ -1905,6 +1905,7 @@
   <translation tag="Processing..." ja="処理中..."/>
   <translation tag="Profile deleted" ja="プロファイルを削除しました"/>
   <translation tag="Profile name (e.g., default)" ja="プロファイル名（例: default）"/>
+  <translation tag="Profile names cannot contain &apos;;&apos;"/>
   <translation tag="Profile renamed" ja="プロファイル名を変更しました"/>
   <translation tag="Profiles" ja="プロファイル"/>
   <translation tag="Prompt before running this macro" ja="このマクロの実行前に確認する"/>

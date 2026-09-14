@@ -1905,6 +1905,7 @@
   <translation tag="Processing..." ru="Обработка..."/>
   <translation tag="Profile deleted" ru="Профиль удалён"/>
   <translation tag="Profile name (e.g., default)" ru="Имя профиля (например, default)"/>
+  <translation tag="Profile names cannot contain &apos;;&apos;"/>
   <translation tag="Profile renamed" ru="Профиль переименован"/>
   <translation tag="Profiles" ru="Профили"/>
   <translation tag="Prompt before running this macro" ru="Спрашивать перед запуском этого макроса"/>

@@ -1946,6 +1946,7 @@ translations:
   Processing...: '处理中...'
   Profile deleted: 配置文件已删除
   Profile name (e.g., default): 配置名称（例如：default）
+  Profile names cannot contain ';': ''
   Profile renamed: 配置文件已重命名
   Profiles: 配置
   Prompt before running this macro: 运行此宏前询问

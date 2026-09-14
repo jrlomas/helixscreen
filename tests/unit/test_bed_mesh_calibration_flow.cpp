@@ -9,6 +9,7 @@
 
 #include "../lvgl_test_fixture.h"
 #include "../lvgl_ui_test_fixture.h"
+#include "../test_helpers/bed_mesh_panel_test_access.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
@@ -560,6 +561,37 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
         REQUIRE(successes.size() == 1);
         CHECK(mentions(successes[0], "'default'"));
     }
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture, "loading and deleting a profile quote its name",
+                 "[bed_mesh_flow]") {
+    BedMeshPanel panel;
+
+    SECTION("load") {
+        helix::ui::BedMeshPanelTestAccess::set_profile_name(panel, 0, "PEI Sheet");
+        panel.load_profile(0);
+        drain();
+        REQUIRE(sent().size() == 1);
+        CHECK(sent()[0] == "BED_MESH_PROFILE LOAD=\"PEI Sheet\"");
+    }
+
+    SECTION("delete") {
+        panel.show_delete_confirm_modal("PEI Sheet");
+        panel.confirm_delete_profile();
+        drain();
+        REQUIRE(sent().size() == 1);
+        CHECK(sent()[0] == "BED_MESH_PROFILE REMOVE=\"PEI Sheet\"");
+    }
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a name Klipper would cut short is refused before probing", "[bed_mesh_flow]") {
+    BedMeshPanel panel;
+    panel.start_calibration();
+    drain();
+    panel.submit_calibration_name("cold;hot");
+    drain();
+    CHECK(sent().empty());
 }
 
 TEST_CASE_METHOD(BedMeshPanelFlowFixture,

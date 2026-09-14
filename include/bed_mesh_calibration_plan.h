@@ -50,10 +50,12 @@ struct CalibrationPlan {
 };
 
 /// @p name as a single gcode parameter value. Klipper splits a command's
-/// parameters the way a shell does, with `#` and `;` starting a comment, so a name
-/// holding whitespace, quotes or either of those is quoted.
+/// parameters the way a shell does, with `#` starting a comment, so a name holding
+/// whitespace, a quote, a backslash or `#` is quoted. Quoting cannot carry a `;`:
+/// Klipper cuts the line there before its parameters are read, so such a name is
+/// refused where it is typed (helix::ui::bed_mesh::check_profile_name()).
 [[nodiscard]] inline std::string gcode_param_value(const std::string& name) {
-    if (name.find_first_of(" \t\"'\\#;") == std::string::npos) {
+    if (name.find_first_of(" \t\"'\\#") == std::string::npos) {
         return name;
     }
     std::string quoted = "\"";
@@ -65,6 +67,11 @@ struct CalibrationPlan {
     }
     quoted += '"';
     return quoted;
+}
+
+/// `BED_MESH_PROFILE <verb>=<name>`, the name as one parameter value.
+[[nodiscard]] inline std::string profile_command(const char* verb, const std::string& name) {
+    return std::string("BED_MESH_PROFILE ") + verb + "=" + gcode_param_value(name);
 }
 
 /// ` PROFILE=<name>` for a named profile, empty for the default one, which is
@@ -104,7 +111,7 @@ inline std::string single_command_word(const std::string& script) {
     return word;
 }
 
-/// The value of a PROFILE= parameter already on @p command, or empty.
+/// The value of a PROFILE= parameter already on @p command, unquoted, or empty.
 inline std::string named_profile(const std::string& command) {
     std::string upper = command;
     std::transform(upper.begin(), upper.end(), upper.begin(),
@@ -113,9 +120,30 @@ inline std::string named_profile(const std::string& command) {
     if (at == std::string::npos) {
         return {};
     }
-    const size_t start = at + 9;
-    const size_t end = command.find_first_of(" \t", start);
-    return command.substr(start, end == std::string::npos ? end : end - start);
+    // Read as Klipper's shell-style parameter parsing reads it: quotes group, and
+    // inside double quotes a backslash escapes a quote or a backslash.
+    std::string value;
+    char quote = 0;
+    for (size_t i = at + 9; i < command.size(); ++i) {
+        const char c = command[i];
+        if (quote != 0) {
+            if (c == quote) {
+                quote = 0;
+            } else if (quote == '"' && c == '\\' && i + 1 < command.size() &&
+                       (command[i + 1] == '"' || command[i + 1] == '\\')) {
+                value += command[++i];
+            } else {
+                value += c;
+            }
+        } else if (c == '"' || c == '\'') {
+            quote = c;
+        } else if (c == ' ' || c == '\t') {
+            break;
+        } else {
+            value += c;
+        }
+    }
+    return value;
 }
 
 } // namespace detail

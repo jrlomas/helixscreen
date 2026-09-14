@@ -2070,6 +2070,7 @@ translations:
   Processing...: Processing...
   Profile deleted: Profile deleted
   Profile name (e.g., default): Profile name (e.g., default)
+  Profile names cannot contain ';': Profile names cannot contain ';'
   Profile renamed: Profile renamed
   Profiles: Profiles
   Prompt before running this macro: Prompt before running this macro

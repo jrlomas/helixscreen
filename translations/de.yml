@@ -2132,6 +2132,7 @@ translations:
   Processing...: 'Wird verarbeitet...'
   Profile deleted: Profil gelöscht
   Profile name (e.g., default): Profilname (z.B. Standard)
+  Profile names cannot contain ';': ''
   Profile renamed: Profil umbenannt
   Profiles: Profile
   Prompt before running this macro: Vor dem Ausführen dieses Makros nachfragen

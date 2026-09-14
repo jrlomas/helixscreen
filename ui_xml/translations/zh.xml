@@ -1905,6 +1905,7 @@
   <translation tag="Processing..." zh="处理中..."/>
   <translation tag="Profile deleted" zh="配置文件已删除"/>
   <translation tag="Profile name (e.g., default)" zh="配置名称（例如：default）"/>
+  <translation tag="Profile names cannot contain &apos;;&apos;"/>
   <translation tag="Profile renamed" zh="配置文件已重命名"/>
   <translation tag="Profiles" zh="配置"/>
   <translation tag="Prompt before running this macro" zh="运行此宏前询问"/>
