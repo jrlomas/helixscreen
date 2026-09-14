@@ -266,8 +266,9 @@ class AmsOperationSidebar {
     /// nor the external spool names a material.
     std::optional<int> material_load_temp_for_slot(int slot_index);
     /// Nozzle-temperature parameter values for @p op's macro acting on @p slot_index,
-    /// from the live extruder target and material_load_temp_for_slot(), held to the
-    /// printer's minimum extrusion temperature (helix::ui::nozzle_temp_prefill()).
+    /// from the live extruder target and material_load_temp_for_slot(), held above the
+    /// printer's extrusion minimum and at most the hotend's max_temp
+    /// (helix::ui::nozzle_temp_prefill()).
     std::map<std::string, std::string> macro_temp_prefill(helix::ui::FilamentMacroOp op,
                                                           int slot_index);
     void check_pending_load();

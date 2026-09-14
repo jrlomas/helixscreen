@@ -10,8 +10,9 @@
  * Run with: ./build/bin/helix-tests "[filament][prefill]"
  *
  * The temperature is the hotter of the live extruder target and the material the
- * panel would preheat for, and never one below the printer's minimum extrusion
- * temperature. When the known values cover every parameter the macro takes, the
+ * panel would preheat for, never one at or below the printer's minimum extrusion
+ * temperature, and never one above the hotend's max_temp. When the known values
+ * cover every parameter the macro takes, the
  * macro runs with no dialog; otherwise the dialog opens with them typed in.
  */
 
@@ -147,9 +148,13 @@ struct PrefillPanelHarness {
         state.update_from_status({{"extruder", {{"target", degrees}}}});
     }
 
-    /// Klipper's min_extrude_temp, as the panel is told it.
-    void set_min_extrude_temp(int degrees) {
-        panel->set_limits(0, 500, degrees);
+    /// The printer's safety limits as discovery hands them to the panel: Klipper's
+    /// min_extrude_temp and the hotend's max_temp.
+    void set_safety_limits(double min_extrude_c, double nozzle_max_c = 300.0) {
+        SafetyLimits limits;
+        limits.min_extrude_temp_celsius = min_extrude_c;
+        limits.set_max_temp_for("extruder", nozzle_max_c);
+        panel->set_limits(limits);
     }
 
     /// An external spool whose material heats to exactly @p nozzle_c: a name the
@@ -300,7 +305,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "Load never sends a live target below the ex
                  "[filament][prefill]") {
     PrefillPanelHarness h;
     h.cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
-    h.set_min_extrude_temp(180);
+    h.set_safety_limits(180.0);
     // A paused printer holds its nozzle at a standby temperature below the minimum.
     h.set_extruder_target(140.0);
     TA::set_selected_material(*h.panel, -1);
@@ -317,7 +322,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "[filament][prefill]") {
     PrefillPanelHarness h;
     h.cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
-    h.set_min_extrude_temp(180);
+    h.set_safety_limits(180.0);
     h.set_extruder_target(140.0);
     TA::set_selected_material(*h.panel, -1);
     h.set_external_spool(240);
@@ -326,6 +331,41 @@ TEST_CASE_METHOD(LVGLUITestFixture,
 
     CHECK(h.prompt_count == 0);
     CHECK(h.sent_for("LOAD_FILAMENT") == Scripts{"LOAD_FILAMENT EXTRUDER_TEMP=240"});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Load of a material hotter than the hotend allows opens the dialog",
+                 "[filament][prefill]") {
+    PrefillPanelHarness h;
+    h.cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
+    h.set_safety_limits(180.0, 280.0);
+    h.set_extruder_target(0.0);
+    TA::set_selected_material(*h.panel, -1);
+    h.set_external_spool(290);
+
+    TA::execute_load(*h.panel);
+
+    CHECK(h.prompt_count == 1);
+    CHECK(h.prompted_prefill.empty());
+    CHECK(h.sent_for("LOAD_FILAMENT").empty());
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Load holds a fractional extrusion minimum to the next whole degree",
+                 "[filament][prefill]") {
+    PrefillPanelHarness h;
+    h.cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
+    // Klipper refuses 180 against a 180.5 minimum, so the whole-degree minimum is
+    // 181, and a target at the minimum is not offered.
+    h.set_safety_limits(180.5);
+    h.set_extruder_target(181.0);
+    TA::set_selected_material(*h.panel, -1);
+
+    TA::execute_load(*h.panel);
+
+    CHECK(h.prompt_count == 1);
+    CHECK(h.prompted_prefill.empty());
+    CHECK(h.sent_for("LOAD_FILAMENT").empty());
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture,

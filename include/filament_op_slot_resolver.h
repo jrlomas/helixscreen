@@ -291,7 +291,8 @@ struct PreheatTarget {
  *
  * A nozzle held above the incoming material stays there, so the filament already
  * in the melt zone still flows out ahead of it. AmsOperationSidebar's backend
- * load preheat and nozzle_temp_prefill() both decide by this.
+ * load preheat decides by this with @p held_c as the latched last non-zero target;
+ * nozzle_temp_prefill() decides by it with the live target.
  */
 [[nodiscard]] inline int filament_op_nozzle_temp(int material_c, int held_c) {
     return std::max(material_c, held_c);

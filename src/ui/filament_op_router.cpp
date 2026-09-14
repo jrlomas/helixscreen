@@ -104,9 +104,9 @@ bool dispatch_filament_macro(const std::string& macro_name, ParamPolicy policy,
 
 std::map<std::string, std::string> nozzle_temp_prefill(FilamentMacroOp op, int extruder_target_c,
                                                        std::optional<int> material_temp_c,
-                                                       int min_extrude_c) {
+                                                       int min_extrude_c, int max_nozzle_c) {
     const int temp_c = filament_op_nozzle_temp(material_temp_c.value_or(0), extruder_target_c);
-    if (temp_c <= 0 || temp_c < min_extrude_c) {
+    if (temp_c <= 0 || temp_c <= min_extrude_c || temp_c > max_nozzle_c) {
         return {};
     }
     const std::string value = std::to_string(temp_c);

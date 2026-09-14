@@ -1298,16 +1298,17 @@ std::map<std::string, std::string>
 AmsOperationSidebar::macro_temp_prefill(helix::ui::FilamentMacroOp op, int slot_index) {
     IMoonrakerAPI* api = get_moonraker_api();
     if (!api) {
-        // No printer connection: no extrusion minimum to hold a temperature to.
+        // No printer connection: no extrusion minimum or hotend maximum to hold a
+        // temperature between.
         spdlog::debug("[AmsSidebar] No API — no temperature prefilled for slot {}", slot_index);
         return {};
     }
     const int target_c = temperature::deci_to_degrees(
         lv_subject_get_int(printer_state_.get_active_extruder_target_subject()));
-    const int min_extrude_c =
-        static_cast<int>(std::ceil(api->get_safety_limits().min_extrude_temp_celsius));
+    const SafetyLimits& limits = api->get_safety_limits();
     return helix::ui::nozzle_temp_prefill(op, target_c, material_load_temp_for_slot(slot_index),
-                                          min_extrude_c);
+                                          temperature::extrusion_floor_c(limits),
+                                          temperature::nozzle_max_temp_c(limits));
 }
 
 void AmsOperationSidebar::handle_load_with_preheat(int slot_index) {

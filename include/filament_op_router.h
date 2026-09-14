@@ -134,19 +134,28 @@ enum class FilamentMacroOp { Load, Unload, Purge };
  * @brief The nozzle temperature a filament surface can hand @p op's macro, keyed
  *        by the parameter names that kind of macro reads it under.
  *
- * The temperature is filament_op_nozzle_temp() of @p material_temp_c and
- * @p extruder_target_c, the rule a backend load preheats by. Nothing is offered
- * when that is below @p min_extrude_c: a macro handed such a temperature cools
- * the nozzle to it, and Klipper then refuses to extrude, so the dialog asks
- * instead.
+ * The temperature is filament_op_nozzle_temp() of @p material_temp_c and the LIVE
+ * @p extruder_target_c. A backend load shares that rule but raises the material to
+ * the latched last non-zero target instead (AmsOperationSidebar::handle_load_with_preheat),
+ * so a nozzle whose target has dropped to 0 still reheats there to purge, while a
+ * prefill offers the material temperature alone.
+ *
+ * Nothing is offered at or below @p min_extrude_c, or above @p max_nozzle_c; the
+ * dialog asks instead. M109 returns within a degree of its target and Klipper checks
+ * its smoothed temperature against the minimum, so a macro heated to exactly the
+ * minimum can still be refused extrusion. Klipper rejects a target above the hotend's
+ * max_temp outright, and a macro sent with no dialog leaves the user no way to lower it.
  *
  * Load and Unload offer EXTRUDER_TEMP, NOZZLE_TEMP and TEMP; Purge offers only
  * PURGE_TEMP. A load macro that also reads PURGE_TEMP is left an unfilled
  * parameter, so it prompts rather than having its purge temperature replaced.
+ *
+ * @param min_extrude_c Whole-degree extrusion minimum, from temperature::extrusion_floor_c()
+ * @param max_nozzle_c  Whole-degree hotend ceiling, from temperature::nozzle_max_temp_c()
  */
 [[nodiscard]] std::map<std::string, std::string>
 nozzle_temp_prefill(FilamentMacroOp op, int extruder_target_c, std::optional<int> material_temp_c,
-                    int min_extrude_c);
+                    int min_extrude_c, int max_nozzle_c);
 
 /**
  * @brief Tier 3 load fallback: fast move through the bowden, then a slow push

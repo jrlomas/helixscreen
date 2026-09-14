@@ -1291,11 +1291,18 @@ shared modal.
 
 The known values the Filament panel and the AMS sidebar pass are
 `nozzle_temp_prefill()`: the hotter of the live extruder target and the material the surface
-would preheat for (`filament_op_nozzle_temp()`, the rule the sidebar's backend load preheats
-by), offered as `EXTRUDER_TEMP` / `NOZZLE_TEMP` / `TEMP` to Load and Unload and as
-`PURGE_TEMP` to Purge. Nothing is offered below the printer's minimum extrusion temperature, so
-a nozzle parked at a standby temperature opens the dialog instead of handing the macro a
-temperature Klipper will refuse to extrude at.
+would preheat for, offered as `EXTRUDER_TEMP` / `NOZZLE_TEMP` / `TEMP` to Load and Unload and
+as `PURGE_TEMP` to Purge. It shares `filament_op_nozzle_temp()` with the sidebar's backend load,
+but not the temperature that rule is fed: the backend load raises the material to the latched
+last non-zero target (Swap Preheat, below), while the prefill raises it only to the live target,
+so a nozzle whose target is 0 is offered the material temperature alone.
+
+Nothing is offered at or below the printer's minimum extrusion temperature
+(`temperature::extrusion_floor_c()`, rounded up to a whole degree), or above the hotend's
+`max_temp` (`temperature::nozzle_max_temp_c()`). M109 returns within a degree of its target and
+Klipper compares its smoothed temperature with the minimum, so a nozzle heated to exactly the
+minimum can still be refused; a target above `max_temp` is refused outright. A nozzle parked at a
+standby temperature, or a material hotter than the hotend allows, opens the dialog instead.
 
 ### Rules for contributors
 
