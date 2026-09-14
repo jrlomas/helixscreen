@@ -1859,7 +1859,14 @@ class AmsState {
 
     // String subjects (need buffers)
     lv_subject_t ams_action_detail_;
-    char action_detail_buf_[64];
+    // Sized for the longest known translated composition any producer hands
+    // this subject: the CFS load-failure verdict message
+    // (AmsBackendCfs::phase_verdict_message), worst case ru at 364 bytes, with
+    // margin for future translation growth. That is a floor, not a ceiling:
+    // some producers (AFC's message.message) forward a raw firmware string
+    // with no length bound at all, so recompute_action_detail() truncates on
+    // a UTF-8 boundary before the copy rather than relying on this size alone.
+    char action_detail_buf_[512];
     lv_subject_t ams_system_name_;
     char system_name_buf_[32];
     lv_subject_t ams_system_logo_;
