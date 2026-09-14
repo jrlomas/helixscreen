@@ -350,7 +350,7 @@ For printers that don't emit any G-code layer markers (like Forge-X), the collec
 |----------|-----------|------|
 | Layer count | `current_layer >= 1` | Most reliable when slicer outputs layer info |
 | Progress + temps | `progress >= 2%` AND temps at target | File past preamble/macros |
-| Timeout + temps | Elapsed past the adaptive deadline AND both heaters at target (within 2°C) AND 90s without pre-print activity | Last resort; the absolute ceiling (1800s, or 2.5x the prediction) ignores temps and activity. Details in PRINT_START_INTEGRATION.md |
+| Timeout + temps | Elapsed past the adaptive deadline AND both heaters at target (within 2°C) AND 90s without pre-print activity | Last resort; the ceiling (1800s, or 2.5x the prediction) ignores temps and climbing heaters but waits for 90s without a matched or probe line, and the backstop at twice the ceiling ignores everything. Details in PRINT_START_INTEGRATION.md |
 | Macro variables | `_START_PRINT.print_started`, `START_PRINT.preparation_done`, `_HELIX_STATE.print_started` | Subscribed via Moonraker |
 
 ---

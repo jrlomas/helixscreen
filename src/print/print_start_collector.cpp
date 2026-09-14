@@ -43,24 +43,22 @@ std::string trim_trailing_ellipsis(const std::string& s) {
     return s.substr(0, end);
 }
 
-/// Whether a heater still short of its target has gained a whole degree since
-/// it last counted. Temperatures are decidegrees. `reference` is a low-water
-/// mark, -1 before the first sample: it follows the heater down, and moves to
-/// the current reading whenever the heater counts, reaches its target, or has
-/// no target at all.
-bool heater_climbed(int temp, int target, int& reference) {
-    constexpr int CLIMB_DECIDEGREES = 10;
-    if (reference < 0 || target <= 0 || temp >= target || temp < reference) {
-        reference = temp;
-        return false;
-    }
-    if (temp - reference < CLIMB_DECIDEGREES) {
-        return false;
-    }
-    reference = temp;
-    return true;
-}
 } // namespace
+
+bool PrintStartCollector::heater_climbed(int temp, int target, HeaterHighWater& mark) {
+    constexpr int CLIMB_DECIDEGREES = 10;
+    if (target <= 0 || mark.high < 0 || target != mark.target) {
+        mark.high = temp;
+        mark.target = target;
+        return false;
+    }
+    if (temp < mark.high + CLIMB_DECIDEGREES) {
+        return false;
+    }
+    mark.high = temp;
+    // At or past the target the heater has arrived; the at-target test owns it.
+    return temp < target;
+}
 
 // ============================================================================
 // STATIC PATTERN DEFINITIONS
@@ -121,7 +119,8 @@ void PrintStartCollector::start() {
         std::lock_guard<std::mutex> lock(state_mutex_);
         // Record start time for timeout fallback
         printing_state_start_ = std::chrono::steady_clock::now();
-        last_activity_time_ = printing_state_start_;
+        last_signal_time_ = printing_state_start_;
+        last_heater_climb_time_ = printing_state_start_;
         // Assume the narrower window until something says otherwise.
         window_ = helix::PreprintWindow::PrinterEdge;
         detected_phases_.clear();
@@ -176,9 +175,9 @@ void PrintStartCollector::start() {
                              std::memory_order_relaxed);
     last_remaining_ = 0;
     fallback_completion_ = false;
-    // A reference left from the last print would count its climb since then as activity.
-    bed_climb_ref_ = -1;
-    ext_climb_ref_ = -1;
+    // A mark left from the last print would count its climb since then as activity.
+    bed_climb_ = {};
+    ext_climb_ = {};
 
     // Position inference starts with a clean slate and a fresh sample clock
     position_classifier_.reset();
@@ -361,7 +360,8 @@ void PrintStartCollector::reset() {
         print_start_detected_ = false;
         max_sequential_progress_ = 0;
         printing_state_start_ = std::chrono::steady_clock::now();
-        last_activity_time_ = printing_state_start_;
+        last_signal_time_ = printing_state_start_;
+        last_heater_climb_time_ = printing_state_start_;
         phase_enter_times_.clear();
         mesh_probe_current_ = 0;
         mesh_probe_total_ = 0;
@@ -566,10 +566,30 @@ void PrintStartCollector::check_fallback_completion() {
     // A heater still climbing toward its target is the printer working even
     // when the console is silent: M190 and M109 print nothing a profile can
     // match, and they spend their last degree or two inside the at-target band.
-    const bool bed_climbed = heater_climbed(bed_temp, bed_target, bed_climb_ref_);
-    const bool ext_climbed = heater_climbed(ext_temp, ext_target, ext_climb_ref_);
+    const bool bed_climbed = heater_climbed(bed_temp, bed_target, bed_climb_);
+    const bool ext_climbed = heater_climbed(ext_temp, ext_target, ext_climb_);
     if (bed_climbed || ext_climbed) {
-        note_activity();
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        last_heater_climb_time_ = std::chrono::steady_clock::now();
+    }
+
+    // The ceiling this pre-print is measured against: ABSOLUTE_MAX_TIMEOUT,
+    // stretched for a long prediction. The backstop, a multiple of it, runs
+    // before any branch below can return, so nothing the heaters or the
+    // console do holds Preparing open forever.
+    std::chrono::seconds ceiling = ABSOLUTE_MAX_TIMEOUT;
+    if (predicted_total > 0) {
+        ceiling = std::max(ceiling, std::chrono::seconds(static_cast<int>(
+                                        predicted_total * ABSOLUTE_TIMEOUT_MARGIN)));
+    }
+    const auto elapsed = std::chrono::steady_clock::now() - start_time;
+    const auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
+    if (elapsed > ceiling * BACKSTOP_CEILING_MULTIPLE) {
+        spdlog::warn("[PrintStartCollector] Fallback: backstop ({} sec, ceiling={}s)", elapsed_sec,
+                     ceiling.count());
+        fallback_completion_ = true;
+        update_phase(PrintStartPhase::COMPLETE, lv_tr("Starting Print..."));
+        return;
     }
 
     // Recompute predicted weights when heater targets increase from 0.
@@ -775,74 +795,45 @@ void PrintStartCollector::check_fallback_completion() {
                           heating_target_reached_locked(PrintStartPhase::HEATING_BED);
     }
 
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed = now - start_time;
-    auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
-
     // A pre-print that is still narrating itself is not stuck, however long it
-    // runs. Every timeout below therefore requires the printer to have gone
-    // quiet as well as the clock to have run out; only the absolute ceilings
-    // fire unconditionally. Keying purely on elapsed time made the collector
-    // give up mid-sequence on any printer that meshes after heating, and
-    // because a timeout completion skips the prediction save, the too-small
-    // estimate that set the deadline could never grow.
+    // runs, and a timeout that ends it saves no phase timings, so a deadline
+    // set by a short prediction could not grow. Every timeout therefore waits
+    // for 90s without activity as well as for the clock. The ceiling ignores
+    // temperatures and climbing heaters, since a heater that never settles
+    // must not hold Preparing open, but still waits for 90s without a matched
+    // line or probe line.
+    const auto now = std::chrono::steady_clock::now();
     std::chrono::steady_clock::duration quiet_for;
+    std::chrono::steady_clock::duration signal_quiet_for;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        quiet_for = now - last_activity_time_;
+        signal_quiet_for = now - last_signal_time_;
+        quiet_for = now - std::max(last_signal_time_, last_heater_climb_time_);
     }
     const bool quiet = quiet_for >= PREPRINT_QUIET_TIMEOUT;
     const auto quiet_sec = std::chrono::duration_cast<std::chrono::seconds>(quiet_for).count();
 
-    // Determine effective timeout: use prediction data when available,
-    // FALLBACK_TIMEOUT only when we have no information at all
-    if (predicted_total > 0) {
-        // Adaptive timeout from prediction data (with margin for variance)
-        auto adaptive_timeout =
-            std::chrono::seconds(static_cast<int>(predicted_total * ADAPTIVE_TIMEOUT_MARGIN));
+    // A prediction sets the deadline; FALLBACK_TIMEOUT stands in without one.
+    const std::chrono::seconds deadline =
+        predicted_total > 0
+            ? std::chrono::seconds(static_cast<int>(predicted_total * ADAPTIVE_TIMEOUT_MARGIN))
+            : FALLBACK_TIMEOUT;
+    if (elapsed > deadline && temps_at_target && quiet) {
+        spdlog::info("[PrintStartCollector] Fallback: timeout ({} sec, predicted={:.0f}s, "
+                     "quiet={}s)",
+                     elapsed_sec, predicted_total, quiet_sec);
+        fallback_completion_ = true;
+        update_phase(PrintStartPhase::COMPLETE, lv_tr("Starting Print..."));
+        return;
+    }
 
-        if (elapsed > adaptive_timeout && temps_at_target && quiet) {
-            spdlog::info("[PrintStartCollector] Fallback: adaptive timeout ({} sec, "
-                         "predicted={:.0f}s, quiet={}s)",
-                         elapsed_sec, predicted_total, quiet_sec);
-            fallback_completion_ = true;
-            update_phase(PrintStartPhase::COMPLETE, lv_tr("Starting Print..."));
-            return;
-        }
-
-        // Absolute ceiling, stretched for a long prediction. Ungated: a
-        // climbing heater or a chattering firmware holds the quiet gate open,
-        // and neither may hold Preparing open forever.
-        auto absolute_timeout =
-            std::chrono::seconds(static_cast<int>(predicted_total * ABSOLUTE_TIMEOUT_MARGIN));
-        absolute_timeout = std::max(absolute_timeout, ABSOLUTE_MAX_TIMEOUT);
-        if (elapsed > absolute_timeout) {
-            spdlog::warn("[PrintStartCollector] Fallback: absolute timeout ({} sec, "
-                         "predicted={:.0f}s)",
-                         elapsed_sec, predicted_total);
-            fallback_completion_ = true;
-            update_phase(PrintStartPhase::COMPLETE, lv_tr("Starting Print..."));
-            return;
-        }
-    } else {
-        // No prediction data — FALLBACK_TIMEOUT is the last resort
-        if (elapsed > FALLBACK_TIMEOUT && temps_at_target && quiet) {
-            spdlog::info("[PrintStartCollector] Fallback: timeout ({} sec, no predictions)",
-                         elapsed_sec);
-            fallback_completion_ = true;
-            update_phase(PrintStartPhase::COMPLETE, lv_tr("Starting Print..."));
-            return;
-        }
-
-        // Hard ceiling when we have no predictions AND nozzle target unknown
-        if (elapsed > ABSOLUTE_MAX_TIMEOUT) {
-            spdlog::warn("[PrintStartCollector] Fallback: absolute timeout ({} sec, "
-                         "no predictions, nozzle_target_set={})",
-                         elapsed_sec, nozzle_target_set);
-            fallback_completion_ = true;
-            update_phase(PrintStartPhase::COMPLETE, lv_tr("Starting Print..."));
-            return;
-        }
+    if (elapsed > ceiling && signal_quiet_for >= PREPRINT_QUIET_TIMEOUT) {
+        spdlog::warn("[PrintStartCollector] Fallback: ceiling ({} sec, ceiling={}s, "
+                     "nozzle_target_set={})",
+                     elapsed_sec, ceiling.count(), nozzle_target_set);
+        fallback_completion_ = true;
+        update_phase(PrintStartPhase::COMPLETE, lv_tr("Starting Print..."));
+        return;
     }
 }
 
@@ -951,7 +942,7 @@ void PrintStartCollector::on_gcode_response(const json& msg) {
     // matches no profile pattern, so without this the quiet gate would expire
     // mid-sweep on exactly the printers that need it most.
     if (helix::is_probe_result_line(line) || helix::parse_probe_progress(line)) {
-        note_activity();
+        note_signal();
     }
 
     // Check for bed mesh probe progress (sub-phase tracking within BED_MESH).
@@ -1158,9 +1149,9 @@ void PrintStartCollector::on_gcode_response(const json& msg) {
     check_phase_patterns(line);
 }
 
-void PrintStartCollector::note_activity() {
+void PrintStartCollector::note_signal() {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    last_activity_time_ = std::chrono::steady_clock::now();
+    last_signal_time_ = std::chrono::steady_clock::now();
 }
 
 void PrintStartCollector::check_display_narration(const json& status) {
@@ -1201,7 +1192,7 @@ void PrintStartCollector::check_phase_patterns(const std::string& line) {
     PrintStartProfile::MatchResult match;
     if (profile_->try_match_pattern(line, match)) {
         real_signal_seen_.store(true, std::memory_order_relaxed);
-        note_activity();
+        note_signal();
         // match.message arrives already translated: try_match_pattern
         // resolves the template through the loaded pack before substituting
         // $1 capture groups.
@@ -2042,8 +2033,8 @@ void PrintStartCollector::compute_predicted_weights() {
         // swings in BOTH directions: it under-counts when regexes miss phases,
         // but it also grossly OVER-counts when the thermal model overshoots
         // heating time — on the Snapmaker U1 it computed ~900s against a true
-        // ~300s pre-print whose clean history sits at 295-375s. The old max()
-        // assumed only under-counting and so latched onto the 900s overshoot.
+        // ~300s pre-print whose clean history sits at 295-375s. Taking the larger
+        // of the two would latch onto that overshoot.
         // durations_sum still drives the per-phase WEIGHTS (relative shape)
         // above; only the absolute total comes from history. No history → fall
         // back to the theoretical sum.
