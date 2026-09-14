@@ -145,13 +145,11 @@ stop_k1_stock_competing_uis() {
         found_any=true
     fi
 
-    # Kill any remaining stock Creality UI processes. web-server is spared:
-    # it serves Creality Cloud and the camera stream (webrtc_local), and
-    # killing it mid-install leaves Creality Cloud dead for the rest of the
-    # install, and past it if the install aborts. The K1 runtime hook's
-    # kill list takes it down at every HelixScreen start regardless
-    # (prestonbrown/helixscreen#1468 tracks keeping it alive).
-    for proc in display-server Monitor master-server audio-server wifi-server app-server upgrade-server; do
+    # Kill any remaining stock Creality processes. S99start_app runs the
+    # display stack and the backend Creality Print and Creality Cloud reach
+    # (master-server, app-server, web-server), and the whole set stops here:
+    # the same list hooks-k1.sh kills at every HelixScreen start.
+    for proc in display-server Monitor master-server audio-server wifi-server app-server upgrade-server web-server; do
         if kill_process_by_name "$proc"; then
             log_info "Killed remaining $proc process"
             found_any=true
