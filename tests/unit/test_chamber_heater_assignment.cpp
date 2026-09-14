@@ -94,7 +94,7 @@ TEST_CASE("a named heater Klipper does not report is not the chamber heater",
     }
     SECTION("nothing counts before Klipper has reported its objects") {
         const PrinterDiscovery hw;
-        REQUIRE_FALSE(hw.objects_reported());
+        REQUIRE(hw.printer_objects().empty());
         CHECK(resolve_heater(PRESET_CHAMBER_HEATER, hw).empty());
     }
 }

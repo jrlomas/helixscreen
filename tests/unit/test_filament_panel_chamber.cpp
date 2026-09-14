@@ -46,7 +46,7 @@ struct ChamberPanelHarness {
 
     ChamberPanelHarness() {
         ToolState::instance().init_subjects(true);
-        helix::AmsState::instance().init_subjects(true);
+        AmsState::instance().init_subjects(true);
         state.init_subjects(false);
         panel = std::make_unique<FilamentPanel>(state, &api);
         panel->init_subjects();
@@ -54,7 +54,7 @@ struct ChamberPanelHarness {
 
     ~ChamberPanelHarness() {
         panel.reset();
-        helix::AmsState::instance().deinit_subjects();
+        AmsState::instance().deinit_subjects();
         ToolState::instance().deinit_subjects();
         helix::SettingsManager::instance().set_chamber_heater_assignment("auto");
     }
