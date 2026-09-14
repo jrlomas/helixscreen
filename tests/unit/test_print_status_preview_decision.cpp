@@ -372,3 +372,42 @@ TEST_CASE("print_status_destroy_on_close - plenty of memory keeps the tree in ev
         CHECK_FALSE(helix::ui::print_status_destroy_on_close(/*low_memory*/ false, state));
     }
 }
+
+TEST_CASE("print_status_recreation_warns - a job holding the machine at either end warns",
+          "[print_status][preview][destroy_on_close]") {
+    using helix::ui::PrintStatusTreeDestroyCause;
+    for (PrintState holding : {PrintState::Preparing, PrintState::Printing, PrintState::Paused}) {
+        CAPTURE(helix::print_state_name(holding));
+        CHECK(helix::ui::print_status_recreation_warns(holding, /*destruction_recorded*/ true,
+                                                       PrintStatusTreeDestroyCause::OverlayClose,
+                                                       PrintState::Complete));
+        CHECK(helix::ui::print_status_recreation_warns(
+            PrintState::Idle, /*destruction_recorded*/ true,
+            PrintStatusTreeDestroyCause::MemoryReclaim, holding));
+    }
+}
+
+TEST_CASE("print_status_recreation_warns - no job at either end logs at INFO",
+          "[print_status][preview][destroy_on_close]") {
+    using helix::ui::PrintStatusTreeDestroyCause;
+    for (PrintState idle :
+         {PrintState::Idle, PrintState::Complete, PrintState::Cancelled, PrintState::Error}) {
+        CAPTURE(helix::print_state_name(idle));
+        CHECK_FALSE(helix::ui::print_status_recreation_warns(
+            idle, /*destruction_recorded*/ true, PrintStatusTreeDestroyCause::OverlayClose, idle));
+    }
+}
+
+TEST_CASE("print_status_recreation_warns - a tree with no recorded destruction warns",
+          "[print_status][preview][destroy_on_close]") {
+    CHECK(helix::ui::print_status_recreation_warns(
+        PrintState::Idle, /*destruction_recorded*/ false,
+        helix::ui::PrintStatusTreeDestroyCause::PanelRegistryTeardown, PrintState::Idle));
+}
+
+TEST_CASE("print_status_recreation_warns - a panel registry teardown logs at INFO mid-print",
+          "[print_status][preview][destroy_on_close]") {
+    CHECK_FALSE(helix::ui::print_status_recreation_warns(
+        PrintState::Printing, /*destruction_recorded*/ true,
+        helix::ui::PrintStatusTreeDestroyCause::PanelRegistryTeardown, PrintState::Printing));
+}

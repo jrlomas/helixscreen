@@ -8,10 +8,13 @@
  * overlay closes, to give back its ~400-800KB. While a job holds the machine
  * that trade is wrong: the user comes back to a preview rebuilt from nothing.
  * These cases open the real overlay through PrintStatusPanel::push_overlay(),
- * close it through NavigationManager::go_back() (animations off, so the close
- * callback runs inside the drain), and read what the panel kept.
+ * close it through NavigationManager's close paths (back, navbar, overlay stack
+ * clear; animations off), and read what the panel kept. A close callback that
+ * runs a tick late is modelled by taking it off the widget and calling it after
+ * the tree was pushed again.
  */
 
+#include "ui_gcode_viewer.h"
 #include "ui_nav_manager.h"
 #include "ui_panel_print_status.h"
 #include "ui_update_queue.h"
@@ -79,6 +82,33 @@ class LogCapture {
         return sink_->last_formatted(kCapacity);
     }
 
+    /// The number of the last tree whose destruction line reads
+    /// "destroyed: <cause_while>", or 0 when there is none. Tree numbers are
+    /// process-wide, so cases read them back rather than assume them.
+    [[nodiscard]] int destroyed_tree_number(const std::string& cause_while) const {
+        const std::regex destroyed(R"(\[info\] \[PrintStatusPanel\] Print status tree #(\d+) )"
+                                   R"(destroyed: )" +
+                                   cause_while);
+        int number = 0;
+        for (const auto& line : lines()) {
+            std::smatch m;
+            if (std::regex_search(line, m, destroyed)) {
+                number = std::stoi(m[1].str());
+            }
+        }
+        return number;
+    }
+
+    [[nodiscard]] int count_containing(const std::string& text) const {
+        int matches = 0;
+        for (const auto& line : lines()) {
+            if (line.find(text) != std::string::npos) {
+                ++matches;
+            }
+        }
+        return matches;
+    }
+
   private:
     static constexpr size_t kCapacity = 4096;
     std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> sink_;
@@ -103,9 +133,11 @@ class PrintStatusCloseFixture : public LVGLUITestFixture {
     }
 
     ~PrintStatusCloseFixture() override {
-        // The cached tree is process-wide: leave none behind for the next case.
+        // The cached tree is process-wide: leave none behind for the next case,
+        // which starts from a torn-down panel the way a printer switch leaves it.
         NavigationManagerTestAccess::set_panel_stack(NavigationManager::instance(), {home_widget_});
-        PrintStatusPanel::destroy_cached_overlay("test teardown");
+        PrintStatusPanel::destroy_cached_overlay(
+            helix::ui::PrintStatusTreeDestroyCause::PanelRegistryTeardown);
         drain();
         process_lvgl(20);
         set_wire_state(PrintJobState::STANDBY);
@@ -126,13 +158,21 @@ class PrintStatusCloseFixture : public LVGLUITestFixture {
         PrintStatusPanelTestAccess::set_memory_info_source(source);
     }
 
+    static PrintStatusPanel& panel() {
+        return get_global_print_status_panel();
+    }
+
+    static bool in_stack(lv_obj_t* tree) {
+        return NavigationManager::instance().is_panel_in_stack(tree);
+    }
+
     /// Open print status over Home and settle.
     lv_obj_t* open_print_status() {
         REQUIRE(PrintStatusPanel::push_overlay(test_screen()));
         drain();
         lv_obj_t* tree = PrintStatusPanel::get_cached_overlay();
         REQUIRE(tree != nullptr);
-        REQUIRE(NavigationManager::instance().is_panel_in_stack(tree));
+        REQUIRE(in_stack(tree));
         return tree;
     }
 
@@ -140,9 +180,26 @@ class PrintStatusCloseFixture : public LVGLUITestFixture {
     /// any deferred deletion run.
     void close_print_status(lv_obj_t* tree) {
         NavigationManager::instance().go_back();
+        settle();
+        REQUIRE_FALSE(in_stack(tree));
+    }
+
+    /// Run queued updates, then LVGL ticks: deferred close callbacks, deferred
+    /// deletions, and the updates those queue.
+    void settle() {
         drain();
         process_lvgl(20);
-        REQUIRE_FALSE(NavigationManager::instance().is_panel_in_stack(tree));
+        drain();
+    }
+
+    /// The close callback print status registered on its last push, taken off
+    /// the widget so the case can decide when it runs.
+    static helix::OverlayCloseCallback take_close_callback(lv_obj_t* tree) {
+        helix::OverlayCloseCallback callback =
+            NavigationManagerTestAccess::take_overlay_close_callback(NavigationManager::instance(),
+                                                                     tree);
+        REQUIRE(callback);
+        return callback;
     }
 
   private:
@@ -207,7 +264,193 @@ TEST_CASE_METHOD(PrintStatusCloseFixture, "Print status decides from available m
 }
 
 TEST_CASE_METHOD(PrintStatusCloseFixture,
-                 "A repeat print status tree logs WARN naming how the last one died",
+                 "A navbar close deactivates the print status tree it keeps",
+                 "[print_status][destroy_on_close][navigation]") {
+    set_wire_state(PrintJobState::PRINTING);
+    lv_obj_t* tree = open_print_status();
+    REQUIRE(PrintStatusPanelTestAccess::is_active(panel()));
+    lv_obj_t* viewer = PrintStatusPanelTestAccess::gcode_viewer(panel());
+    REQUIRE(viewer != nullptr);
+    // A print on screen has its viewer rendering.
+    ui_gcode_viewer_set_paused(viewer, false);
+
+    NavigationManagerTestAccess::switch_to_panel(NavigationManager::instance(), PanelId::Home);
+    settle();
+
+    REQUIRE_FALSE(in_stack(tree));
+    CHECK(PrintStatusPanel::get_cached_overlay() == tree);
+    // A hidden viewer left rendering stalls its 2D catch-up, and the stall
+    // watchdog then reports a failed preview load on whatever screen is showing.
+    CHECK_FALSE(PrintStatusPanelTestAccess::is_active(panel()));
+    CHECK(ui_gcode_viewer_is_paused(viewer));
+}
+
+TEST_CASE_METHOD(PrintStatusCloseFixture, "A connection-loss close decides like any other close",
+                 "[print_status][destroy_on_close][navigation]") {
+    SECTION("a job holds the machine: kept") {
+        set_wire_state(PrintJobState::PRINTING);
+        lv_obj_t* tree = open_print_status();
+
+        NavigationManagerTestAccess::clear_overlay_stack(NavigationManager::instance());
+        settle();
+
+        REQUIRE_FALSE(in_stack(tree));
+        CHECK(PrintStatusPanel::get_cached_overlay() == tree);
+        CHECK(lv_obj_is_valid(tree));
+    }
+
+    SECTION("no job: destroyed") {
+        set_wire_state(PrintJobState::COMPLETE);
+        lv_obj_t* tree = open_print_status();
+
+        NavigationManagerTestAccess::clear_overlay_stack(NavigationManager::instance());
+        settle();
+
+        REQUIRE_FALSE(in_stack(tree));
+        CHECK(PrintStatusPanel::get_cached_overlay() == nullptr);
+        CHECK_FALSE(lv_obj_is_valid(tree));
+    }
+}
+
+TEST_CASE_METHOD(PrintStatusCloseFixture,
+                 "A close callback landing after the tree was pushed again leaves it on screen",
+                 "[print_status][destroy_on_close]") {
+    // A slide-out close takes the widget's close callback when the animation
+    // completes. Pushed again before then, the callback it takes is the one
+    // that push registered, and it runs against the re-shown tree.
+    auto reopen_with_late_close = [this](lv_obj_t* tree) {
+        (void)take_close_callback(tree); // the slide-out has not completed yet
+        close_print_status(tree);
+        REQUIRE(open_print_status() == tree);
+        helix::OverlayCloseCallback late_close = take_close_callback(tree);
+        late_close();
+        settle();
+    };
+
+    SECTION("no job: the tree stays, and its next close still decides") {
+        set_wire_state(PrintJobState::COMPLETE);
+        lv_obj_t* tree = open_print_status();
+        reopen_with_late_close(tree);
+
+        REQUIRE(PrintStatusPanel::get_cached_overlay() == tree);
+        REQUIRE(in_stack(tree));
+        CHECK(PrintStatusPanelTestAccess::is_active(panel()));
+
+        close_print_status(tree);
+        CHECK(PrintStatusPanel::get_cached_overlay() == nullptr);
+    }
+
+    SECTION("a job holds the machine: the tree stays active") {
+        set_wire_state(PrintJobState::PRINTING);
+        lv_obj_t* tree = open_print_status();
+        reopen_with_late_close(tree);
+
+        REQUIRE(PrintStatusPanel::get_cached_overlay() == tree);
+        REQUIRE(in_stack(tree));
+        CHECK(PrintStatusPanelTestAccess::is_active(panel()));
+    }
+}
+
+TEST_CASE_METHOD(PrintStatusCloseFixture,
+                 "A tree kept through a close is released when the job ends while it is hidden",
+                 "[print_status][destroy_on_close]") {
+    set_wire_state(PrintJobState::PRINTING);
+    lv_obj_t* tree = open_print_status();
+    close_print_status(tree);
+    REQUIRE(PrintStatusPanel::get_cached_overlay() == tree);
+
+    set_wire_state(PrintJobState::COMPLETE);
+    settle();
+
+    CHECK(PrintStatusPanel::get_cached_overlay() == nullptr);
+    CHECK_FALSE(lv_obj_is_valid(tree));
+}
+
+TEST_CASE_METHOD(PrintStatusCloseFixture, "A job ending keeps a kept tree that is on screen",
+                 "[print_status][destroy_on_close]") {
+    set_wire_state(PrintJobState::PRINTING);
+    lv_obj_t* tree = open_print_status();
+
+    // The close's callback runs a tick late and lands after the tree was pushed
+    // again, but before that push reached the navigation stack: the close
+    // keeps the tree as a hidden one.
+    helix::OverlayCloseCallback late_close = take_close_callback(tree);
+    close_print_status(tree);
+    REQUIRE(PrintStatusPanel::push_overlay(test_screen()));
+    late_close();
+    drain();
+    REQUIRE(in_stack(tree));
+
+    set_wire_state(PrintJobState::COMPLETE);
+    settle();
+
+    CHECK(PrintStatusPanel::get_cached_overlay() == tree);
+    CHECK(lv_obj_is_valid(tree));
+}
+
+TEST_CASE_METHOD(PrintStatusCloseFixture,
+                 "A job ending keeps a hidden kept tree on a host with memory to spare",
+                 "[print_status][destroy_on_close]") {
+    use_memory(roomy_host);
+    set_wire_state(PrintJobState::PRINTING);
+    lv_obj_t* tree = open_print_status();
+    close_print_status(tree);
+    REQUIRE(PrintStatusPanel::get_cached_overlay() == tree);
+
+    set_wire_state(PrintJobState::COMPLETE);
+    settle();
+
+    CHECK(PrintStatusPanel::get_cached_overlay() == tree);
+    CHECK(lv_obj_is_valid(tree));
+}
+
+TEST_CASE_METHOD(PrintStatusCloseFixture,
+                 "Print status opened while a job-end release is queued keeps its tree",
+                 "[print_status][destroy_on_close]") {
+    // Kept on this close because memory was plentiful; by the time the job-end
+    // release is queued, memory has run short.
+    use_memory(roomy_host);
+    set_wire_state(PrintJobState::COMPLETE);
+    lv_obj_t* tree = open_print_status();
+    close_print_status(tree);
+    REQUIRE(PrintStatusPanel::get_cached_overlay() == tree);
+
+    use_memory(low_memory_host);
+    PrintStatusPanelTestAccess::queue_job_end_release();
+    // Opened before the release lands. The push is queued behind it, so the
+    // tree is not in the navigation stack when the release checks.
+    REQUIRE(PrintStatusPanel::push_overlay(test_screen()));
+    settle();
+
+    CHECK(PrintStatusPanel::get_cached_overlay() == tree);
+    CHECK(in_stack(tree));
+}
+
+TEST_CASE_METHOD(PrintStatusCloseFixture,
+                 "A repeat print status tree logs WARN when a job holds the machine",
+                 "[print_status][destroy_on_close][logging]") {
+    set_wire_state(PrintJobState::COMPLETE);
+    LogCapture capture;
+
+    lv_obj_t* first = open_print_status();
+    close_print_status(first);
+    REQUIRE(PrintStatusPanel::get_cached_overlay() == nullptr);
+    set_wire_state(PrintJobState::PRINTING);
+    open_print_status();
+
+    const int first_number = capture.destroyed_tree_number("overlay close while Complete");
+    REQUIRE(first_number > 0);
+
+    const std::string expected =
+        "[warning] [PrintStatusPanel] Print status tree #" + std::to_string(first_number + 1) +
+        " created while Printing (18MB available); tree #" + std::to_string(first_number) +
+        " was destroyed: overlay close while Complete";
+    CAPTURE(expected);
+    CHECK(capture.count_containing(expected) == 1);
+}
+
+TEST_CASE_METHOD(PrintStatusCloseFixture,
+                 "Reopening print status with no job logs the rebuild at INFO",
                  "[print_status][destroy_on_close][logging]") {
     set_wire_state(PrintJobState::COMPLETE);
     LogCapture capture;
@@ -217,29 +460,14 @@ TEST_CASE_METHOD(PrintStatusCloseFixture,
     REQUIRE(PrintStatusPanel::get_cached_overlay() == nullptr);
     open_print_status();
 
-    // Tree numbers are process-wide, so read the first one back rather than
-    // assume it.
-    const std::regex destroyed(R"(\[info\] \[PrintStatusPanel\] Print status tree #(\d+) )"
-                               R"(destroyed: overlay close while Complete)");
-    int first_number = 0;
-    for (const auto& line : capture.lines()) {
-        std::smatch m;
-        if (std::regex_search(line, m, destroyed)) {
-            first_number = std::stoi(m[1].str());
-        }
-    }
+    const int first_number = capture.destroyed_tree_number("overlay close while Complete");
     REQUIRE(first_number > 0);
 
     const std::string expected =
-        "[warning] [PrintStatusPanel] Print status tree #" + std::to_string(first_number + 1) +
+        "[info] [PrintStatusPanel] Print status tree #" + std::to_string(first_number + 1) +
         " created while Complete (18MB available); tree #" + std::to_string(first_number) +
         " was destroyed: overlay close while Complete";
-    int matches = 0;
-    for (const auto& line : capture.lines()) {
-        if (line.find(expected) != std::string::npos) {
-            ++matches;
-        }
-    }
     CAPTURE(expected);
-    CHECK(matches == 1);
+    CHECK(capture.count_containing(expected) == 1);
+    CHECK(capture.count_containing("[warning] [PrintStatusPanel] Print status tree #") == 0);
 }

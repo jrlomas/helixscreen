@@ -59,4 +59,22 @@ class NavigationManagerTestAccess {
     static void switch_to_panel(NavigationManager& nav, helix::PanelId panel_id) {
         nav.switch_to_panel_impl(static_cast<int>(panel_id));
     }
+
+    /// Take the close callback registered for `widget` off it, as a close path
+    /// does when it defers the callback to a later tick. Empty if there is none.
+    static helix::OverlayCloseCallback take_overlay_close_callback(NavigationManager& nav,
+                                                                   lv_obj_t* widget) {
+        auto it = nav.overlay_close_callbacks_.find(widget);
+        if (it == nav.overlay_close_callbacks_.end()) {
+            return {};
+        }
+        helix::OverlayCloseCallback callback = std::move(it->second);
+        nav.overlay_close_callbacks_.erase(it);
+        return callback;
+    }
+
+    /// The close path taken on connection loss or Klippy leaving READY.
+    static void clear_overlay_stack(NavigationManager& nav) {
+        nav.clear_overlay_stack();
+    }
 };

@@ -38,6 +38,22 @@ class PrintStatusPanelTestAccess {
         PrintStatusPanel::memory_info_source_ = source;
     }
 
+    /// Queue what the kept tree's job watch queues when the job lets go of the
+    /// machine. The release checks everything again when it lands.
+    static void queue_job_end_release() {
+        PrintStatusPanel::release_kept_tree_after_job();
+    }
+
+    /// True between on_activate() and the next on_deactivate().
+    static bool is_active(const PrintStatusPanel& panel) {
+        return panel.is_active_;
+    }
+
+    /// The G-code viewer the XML build found, or null once the tree is gone.
+    static lv_obj_t* gcode_viewer(const PrintStatusPanel& panel) {
+        return panel.gcode_viewer_;
+    }
+
     static void recompute_aux_composites(PrintStatusPanel& panel, int density, bool aux_present) {
         panel.recompute_aux_composites_for_measurement(density, aux_present);
     }

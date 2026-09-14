@@ -5,6 +5,7 @@
 
 #include "print_lifecycle_state.h"
 
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -173,6 +174,60 @@ inline PreviewAction decide_preview_action(const std::string& thumbnail_displaye
  */
 constexpr bool print_status_destroy_on_close(bool low_memory, PrintState lifecycle) {
     return low_memory && !job_holds_machine(lifecycle);
+}
+
+/// How a print status widget tree came to be destroyed.
+enum class PrintStatusTreeDestroyCause : uint8_t {
+    OverlayClose,          ///< A close print_status_destroy_on_close() said destroys it
+    JobEndedWhileHidden,   ///< A tree a close kept, released once the job let go
+    MemoryReclaim,         ///< The memory monitor's pressure responder
+    ReplacedByRebuild,     ///< OverlayBase::rebuild() built its successor
+    WidgetTreeDeleted,     ///< LVGL deleted the tree without the panel asking
+    PanelRegistryTeardown, ///< StaticPanelRegistry teardown (printer switch, restart)
+};
+
+/// The cause as the destruction log line spells it.
+constexpr const char* print_status_tree_destroy_cause_name(PrintStatusTreeDestroyCause cause) {
+    switch (cause) {
+    case PrintStatusTreeDestroyCause::OverlayClose:
+        return "overlay close";
+    case PrintStatusTreeDestroyCause::JobEndedWhileHidden:
+        return "job ended while hidden";
+    case PrintStatusTreeDestroyCause::MemoryReclaim:
+        return "memory reclaim";
+    case PrintStatusTreeDestroyCause::ReplacedByRebuild:
+        return "replaced by a rebuild";
+    case PrintStatusTreeDestroyCause::WidgetTreeDeleted:
+        return "widget tree deleted";
+    case PrintStatusTreeDestroyCause::PanelRegistryTeardown:
+        return "panel registry teardown";
+    }
+    return "unknown";
+}
+
+/**
+ * @brief Should a print status tree created after an earlier one log at WARN?
+ *
+ * A device logging at WARN sees only these lines, so WARN is kept for a rebuild
+ * the user may have lost a preview to: a job holds the machine now, or held it
+ * when the previous tree went, or nothing recorded how that tree went. A rebuild
+ * after a panel registry teardown is expected whatever the print is doing.
+ *
+ * @param created_while        Lifecycle as the new tree is created.
+ * @param destruction_recorded Whether the previous tree's destruction was logged.
+ * @param cause                How the previous tree went; read only when recorded.
+ * @param destroyed_while      Lifecycle when it went; read only when recorded.
+ */
+constexpr bool print_status_recreation_warns(PrintState created_while, bool destruction_recorded,
+                                             PrintStatusTreeDestroyCause cause,
+                                             PrintState destroyed_while) {
+    if (!destruction_recorded) {
+        return true;
+    }
+    if (cause == PrintStatusTreeDestroyCause::PanelRegistryTeardown) {
+        return false;
+    }
+    return job_holds_machine(created_while) || job_holds_machine(destroyed_while);
 }
 
 } // namespace helix::ui
