@@ -3334,13 +3334,11 @@ stop_k1_stock_competing_uis() {
         found_any=true
     fi
 
-    # Kill any remaining stock Creality UI processes. web-server is spared:
-    # it serves Creality Cloud and the camera stream (webrtc_local), and
-    # killing it mid-install leaves Creality Cloud dead for the rest of the
-    # install, and past it if the install aborts. The K1 runtime hook's
-    # kill list takes it down at every HelixScreen start regardless
-    # (prestonbrown/helixscreen#1468 tracks keeping it alive).
-    for proc in display-server Monitor master-server audio-server wifi-server app-server upgrade-server; do
+    # Kill any remaining stock Creality processes. S99start_app runs the
+    # display stack and the backend Creality Print and Creality Cloud reach
+    # (master-server, app-server, web-server), and the whole set stops here:
+    # the same list hooks-k1.sh kills at every HelixScreen start.
+    for proc in display-server Monitor master-server audio-server wifi-server app-server upgrade-server web-server; do
         if kill_process_by_name "$proc"; then
             log_info "Killed remaining $proc process"
             found_any=true
@@ -9356,11 +9354,15 @@ undo_seeded_settings() {
 # firmware's overlay-wipe disabled for good.
 #
 # Communicates results through HELIX_RESTORED_UI / HELIX_RESTORED_XORG rather
-# than a return value, because callers need both.
+# than a return value, because callers need both. HELIX_RESTORE_WARNED is
+# non-empty when a restore this function attempted is incomplete, and holds
+# what the user has to do about it: a caller's closing summary prints it in
+# place of "no previous UI found", which would contradict the warning.
 restore_previous_ui_platform() {
     local platform="${1:-}"
     local restored_ui=""
     local restored_xorg=""
+    local restore_warned=""
 
     if [ "$AD5M_FIRMWARE" = "klipper_mod" ] || [ -f "/etc/init.d/S80klipperscreen" ]; then
         # Klipper Mod - restore Xorg and KlipperScreen
@@ -9390,14 +9392,14 @@ restore_previous_ui_platform() {
         # instance app start is about to spawn can bind its port.
         kill_process_by_name web-server || true
         $SUDO /etc/init.d/app enable 2>/dev/null || true
-        # rc.common's `enable` exits 0 even when it produced no symlink, so
-        # the boot entry is verified by link — the same check
-        # install_procd_shim_k2 makes. The link's S-slot comes from the
-        # stock script's own START directive, so accept any slot pointing
-        # at ../init.d/app. Without the check this block reports the stock
-        # UI restored while the K2 next boots to the logo with no UI at all.
-        local app_link app_target=""
-        for app_link in /etc/rc.d/*app; do
+        # rc.common's `enable` writes an S (boot) link and a K (shutdown) link
+        # and reports success if either was made, so its status says nothing
+        # about boot. Only the S link starts a service at boot, and the K link
+        # sorts ahead of it, so the glob admits S links alone; the slot number
+        # comes from the stock script's own START directive. A restore claimed
+        # without an S link leaves the K2 booting to the logo with no UI.
+        local app_link app_target="" start_fix
+        for app_link in /etc/rc.d/S[0-9][0-9]app; do
             [ -L "$app_link" ] || continue
             if [ "$(readlink "$app_link" 2>/dev/null || true)" = "../init.d/app" ]; then
                 app_target="$app_link"
@@ -9405,14 +9407,24 @@ restore_previous_ui_platform() {
             fi
         done
         if [ -z "$app_target" ]; then
-            log_warn "Stock UI boot symlink missing or wrong (no /etc/rc.d/*app -> ../init.d/app); run: /etc/init.d/app enable"
+            log_warn "Stock UI boot symlink missing or wrong (no /etc/rc.d/S<nn>app -> ../init.d/app); run: /etc/init.d/app enable"
+            restore_warned="Creality stock UI will not start at boot; run: /etc/init.d/app enable"
         else
             restored_ui="Creality stock UI (/etc/init.d/app, boot via $app_target)"
         fi
         # Start runs in both branches: the kill above already took the
         # carve-out's web-server down, so a missing boot symlink must leave
-        # the session's UI restored, not just warned about.
-        $SUDO /etc/init.d/app start 2>/dev/null || true
+        # the session's UI restored, not just warned about. A failed start
+        # leaves nothing serving port 80 until app next starts.
+        if ! $SUDO /etc/init.d/app start 2>/dev/null; then
+            # A reboot starts the stock UI only through a verified S link.
+            start_fix="run: /etc/init.d/app start"
+            if [ -n "$app_target" ]; then
+                start_fix="$start_fix, or reboot"
+            fi
+            log_warn "Creality stock UI failed to start: the stock screen, Creality Cloud and web-server (port 80) stay down until it starts; $start_fix"
+            restore_warned="${restore_warned:+$restore_warned; }Creality stock UI failed to start, so the stock screen, Creality Cloud and web-server (port 80) are down; $start_fix"
+        fi
     fi
 
     # Check for K1/Simple AF GuppyScreen
@@ -9529,6 +9541,7 @@ restore_previous_ui_platform() {
 
     HELIX_RESTORED_UI="$restored_ui"
     HELIX_RESTORED_XORG="$restored_xorg"
+    HELIX_RESTORE_WARNED="$restore_warned"
 }
 
 uninstall() {
@@ -9673,6 +9686,7 @@ uninstall() {
     restore_previous_ui_platform "$platform"
     local restored_ui="$HELIX_RESTORED_UI"
     local restored_xorg="$HELIX_RESTORED_XORG"
+    local restore_warned="$HELIX_RESTORE_WARNED"
 
     # Clean up helixscreen cache directories
     for cache_dir in /root/.cache/helix /tmp/helix_thumbs /.cache/helix /data/helixscreen/cache /usr/data/helixscreen/cache; do
@@ -9724,8 +9738,11 @@ uninstall() {
     if [ -n "$restored_ui" ]; then
         log_info "Re-enabled: $restored_ui"
         log_info "Reboot to start the previous UI"
-    else
+    elif [ -z "$restore_warned" ]; then
         log_info "Note: No previous UI found to restore"
+    fi
+    if [ -n "$restore_warned" ]; then
+        log_warn "Previous UI restore incomplete: $restore_warned"
     fi
 }
 

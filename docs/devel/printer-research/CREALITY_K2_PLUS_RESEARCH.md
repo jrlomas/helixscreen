@@ -523,7 +523,7 @@ make k2-ssh K2_HOST=192.168.1.100          # SSH into the printer
 | musl userland | Device is **glibc 2.29**. Irrelevant: the binary is fully static |
 | Framebuffer already landscape | **No.** 480x800 portrait; rotated 270 degrees in software |
 | Deploy dir `/opt/helixscreen` | Correct, as a symlink to `/mnt/UDISK/helixscreen` |
-| Stock UI is `display-server` | Correct; `hooks-k2.sh` also stops `Monitor`, `master-server`, `app-server`, `audio-server`, `wifi-server`, `upgrade-server` and the `boot-play` animation, and deliberately leaves `web-server` running |
+| Stock UI is `display-server` | Correct; `hooks-k2.sh` also stops `Monitor`, `master-server`, `app-server`, `audio-server`, `wifi-server`, `upgrade-server` and the `boot-play` animation; the `/etc/init.d/app stop` it runs kills `web-server` too, and `platform_stop_competing_uis` restores it at its end |
 | BusyBox, no rsync | Correct; deploy uses tar over ssh |
 
 ### Still open
