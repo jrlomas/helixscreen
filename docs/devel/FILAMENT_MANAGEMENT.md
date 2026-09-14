@@ -1282,10 +1282,20 @@ already owns a dialog. A `MacroParamModal` raised from the runout dialog would s
 a live modal whose observers keep firing underneath it.
 
 `dispatch_filament_macro()` returns **true when a prompt was raised**, which is exactly the
-"your callback outlived this call" signal: `false` means `run` already executed with an empty
-`MacroParamResult`. Tests reach the prompt branch without a screen via
+"your callback outlived this call" signal. `false` means `run` already executed, before the
+call returned: with an empty `MacroParamResult` (Suppress, or a macro that takes no
+parameters), or with the surface's known values when they fill every parameter a
+`KNOWN_PARAMS` macro takes, and no prompt. Tests reach the prompt branch without a screen via
 `set_filament_param_prompter()`; pass a default-constructed `ParamPrompter` to restore the
 shared modal.
+
+The known values the Filament panel and the AMS sidebar pass are
+`nozzle_temp_prefill()`: the hotter of the live extruder target and the material the surface
+would preheat for (`filament_op_nozzle_temp()`, the rule the sidebar's backend load preheats
+by), offered as `EXTRUDER_TEMP` / `NOZZLE_TEMP` / `TEMP` to Load and Unload and as
+`PURGE_TEMP` to Purge. Nothing is offered below the printer's minimum extrusion temperature, so
+a nozzle parked at a standby temperature opens the dialog instead of handing the macro a
+temperature Klipper will refuse to extrude at.
 
 ### Rules for contributors
 

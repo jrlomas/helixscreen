@@ -155,8 +155,9 @@ std::vector<MacroParam> helix::parse_macro_params(const std::string& gcode_templ
 
         MacroParam param;
         param.name = name;
-        const std::string_view rest(&*match.suffix().first,
-                                    static_cast<size_t>(match.suffix().length()));
+        const std::string_view rest =
+            std::string_view(gcode_template)
+                .substr(static_cast<size_t>(match.position(0) + match.length(0)));
         if (auto argument = default_filter_argument(rest)) {
             std::string_view text = trim(*argument);
             param.default_kind = classify_default(text);
@@ -250,6 +251,7 @@ void MacroParamModal::show_for_unknown_params(lv_obj_t* parent, const std::strin
                                               MacroExecuteCallback on_execute) {
     macro_name_ = macro_name;
     params_.clear();
+    prefill_.clear();
     on_execute_ = std::move(on_execute);
     raw_mode_ = true;
     show_common(parent);
@@ -339,6 +341,9 @@ void MacroParamModal::populate_param_fields() {
         lv_obj_t* field = static_cast<lv_obj_t*>(lv_xml_create(param_list, "form_field", attrs));
         if (!field) {
             spdlog::warn("[MacroParamModal] Failed to create form_field for {}", param.name);
+            // An empty slot keeps every later field at its parameter's index;
+            // collect_values() skips it.
+            textareas_.push_back(nullptr);
             continue;
         }
 

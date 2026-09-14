@@ -12,6 +12,8 @@
 
 namespace helix {
 
+struct MacroParamModalTestAccess; // test-only friend (tests/test_helpers/)
+
 /// What a parameter's |default(...) filter holds.
 enum class MacroDefaultKind {
     Absent,     ///< No |default(...) filter
@@ -95,11 +97,14 @@ class MacroParamModal : public Modal {
     void on_cancel() override;
 
   private:
+    friend struct MacroParamModalTestAccess;
+
     std::string macro_name_;
     std::vector<MacroParam> params_;
     std::map<std::string, std::string> prefill_; ///< Initial field text, by parameter name
     MacroExecuteCallback on_execute_;
-    std::vector<lv_obj_t*> textareas_; ///< One textarea per param, in order
+    /// textareas_[i] is params_[i]'s field, nullptr when it could not be built.
+    std::vector<lv_obj_t*> textareas_;
     bool raw_mode_ = false;            ///< True when showing raw text input (UNKNOWN macros)
     lv_obj_t* raw_textarea_ = nullptr; ///< Textarea for raw param input
 

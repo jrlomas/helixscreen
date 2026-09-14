@@ -1499,7 +1499,7 @@ void FilamentPanel::execute_purge() {
             [this, macro_name](const MacroParamResult& result) {
                 run_filament_macro(macro_name, "Purg", result);
             },
-            macro_temp_prefill(PreheatOp::PURGE));
+            macro_temp_prefill(helix::ui::FilamentMacroOp::Purge));
         return;
     }
 
@@ -2485,10 +2485,24 @@ FilamentPanel::PreheatTempResult FilamentPanel::resolve_preheat_temp(int target_
     return {min_extrude_temp_, ""};
 }
 
-std::map<std::string, std::string> FilamentPanel::macro_temp_prefill(PreheatOp op) const {
-    const auto material = resolve_material_preheat_temp(preheat_slot_for_op(op));
+std::map<std::string, std::string>
+FilamentPanel::macro_temp_prefill(helix::ui::FilamentMacroOp op) const {
+    PreheatOp preheat_op = PreheatOp::LOAD;
+    switch (op) {
+    case helix::ui::FilamentMacroOp::Load:
+        preheat_op = PreheatOp::LOAD;
+        break;
+    case helix::ui::FilamentMacroOp::Unload:
+        preheat_op = PreheatOp::UNLOAD;
+        break;
+    case helix::ui::FilamentMacroOp::Purge:
+        preheat_op = PreheatOp::PURGE;
+        break;
+    }
+    const auto material = resolve_material_preheat_temp(preheat_slot_for_op(preheat_op));
     return helix::ui::nozzle_temp_prefill(
-        current_extruder_target(), material ? std::optional<int>(material->temp) : std::nullopt);
+        op, current_extruder_target(), material ? std::optional<int>(material->temp) : std::nullopt,
+        min_extrude_temp_);
 }
 
 const char* FilamentPanel::preheat_op_name(PreheatOp op) {
@@ -2852,7 +2866,7 @@ void FilamentPanel::execute_load() {
             [this, macro_name](const MacroParamResult& result) {
                 run_filament_macro(macro_name, "Load", result);
             },
-            macro_temp_prefill(PreheatOp::LOAD));
+            macro_temp_prefill(helix::ui::FilamentMacroOp::Load));
         return;
     }
 
@@ -2978,7 +2992,7 @@ void FilamentPanel::execute_unload() {
             [this, macro_name](const MacroParamResult& result) {
                 run_filament_macro(macro_name, "Unload", result);
             },
-            macro_temp_prefill(PreheatOp::UNLOAD));
+            macro_temp_prefill(helix::ui::FilamentMacroOp::Unload));
         return;
     }
 

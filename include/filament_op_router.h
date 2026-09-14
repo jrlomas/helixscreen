@@ -100,33 +100,53 @@ void request_home_confirmation(std::function<void()> on_confirm, std::function<v
 /**
  * @brief Tier 2: dispatch the user's configured macro.
  *
- * Resolves @p macro_name against MacroParamCache. Under ParamPolicy::Prompt a
- * macro with KNOWN_PARAMS or UNKNOWN parameters raises the prompter and @p run
- * fires only if the user confirms; under ParamPolicy::Suppress @p run always
- * fires immediately with an empty MacroParamResult.
+ * Resolves @p macro_name against MacroParamCache. Under ParamPolicy::Suppress
+ * @p run always fires immediately with an empty MacroParamResult. Under
+ * ParamPolicy::Prompt:
+ *   - a macro with no parameters runs immediately with an empty result;
+ *   - a KNOWN_PARAMS macro whose every parameter @p known_values names runs
+ *     immediately with exactly those values, and no prompt;
+ *   - otherwise the prompter is raised, with the @p known_values the macro reads
+ *     typed in, and @p run fires only if the user confirms. An UNKNOWN macro
+ *     always prompts, with nothing typed in.
  *
- * @warning Under ParamPolicy::Prompt, @p run outlives this call and is retained
+ * @param known_values Values the surface already knows, keyed by parameter name.
+ *        Names the macro does not read are never sent.
+ *
+ * @warning When a prompt is raised, @p run outlives this call and is retained
  *          by the shared modal past dismissal. Callers that are not immortal
  *          must capture an AsyncLifetimeGuard token in @p run, not a bare
  *          `this`.
  *
- * @return true if a prompt was raised (@p run fires later, or never), false if
- *         @p run was invoked synchronously with no parameters.
+ * @return true if a prompt was raised (@p run fires later, or never). false if
+ *         @p run already ran synchronously, before this call returned: with no
+ *         parameters, or with @p known_values filling every parameter.
  */
 bool dispatch_filament_macro(const std::string& macro_name, ParamPolicy policy,
                              helix::MacroExecuteCallback run,
                              const std::map<std::string, std::string>& known_values = {});
 
+/// The filament macro a nozzle-temperature prefill is for. Each reads the
+/// temperature under its own parameter names.
+enum class FilamentMacroOp { Load, Unload, Purge };
+
 /**
- * @brief The nozzle temperature a filament surface can hand its macro, under
- *        every parameter name filament macros use for it.
+ * @brief The nozzle temperature a filament surface can hand @p op's macro, keyed
+ *        by the parameter names that kind of macro reads it under.
  *
- * @p extruder_target_c when above zero, else @p material_temp_c when above zero,
- * else nothing. Keyed by parameter name for dispatch_filament_macro(), which
- * sends only the names the macro reads.
+ * The temperature is filament_op_nozzle_temp() of @p material_temp_c and
+ * @p extruder_target_c, the rule a backend load preheats by. Nothing is offered
+ * when that is below @p min_extrude_c: a macro handed such a temperature cools
+ * the nozzle to it, and Klipper then refuses to extrude, so the dialog asks
+ * instead.
+ *
+ * Load and Unload offer EXTRUDER_TEMP, NOZZLE_TEMP and TEMP; Purge offers only
+ * PURGE_TEMP. A load macro that also reads PURGE_TEMP is left an unfilled
+ * parameter, so it prompts rather than having its purge temperature replaced.
  */
 [[nodiscard]] std::map<std::string, std::string>
-nozzle_temp_prefill(int extruder_target_c, std::optional<int> material_temp_c);
+nozzle_temp_prefill(FilamentMacroOp op, int extruder_target_c, std::optional<int> material_temp_c,
+                    int min_extrude_c);
 
 /**
  * @brief Tier 3 load fallback: fast move through the bowden, then a slow push

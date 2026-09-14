@@ -1294,10 +1294,20 @@ int AmsOperationSidebar::get_load_temp_for_slot(int slot_index) {
         .value_or(AppConstants::Ams::DEFAULT_LOAD_PREHEAT_TEMP);
 }
 
-std::map<std::string, std::string> AmsOperationSidebar::macro_temp_prefill(int slot_index) {
+std::map<std::string, std::string>
+AmsOperationSidebar::macro_temp_prefill(helix::ui::FilamentMacroOp op, int slot_index) {
+    IMoonrakerAPI* api = get_moonraker_api();
+    if (!api) {
+        // No printer connection: no extrusion minimum to hold a temperature to.
+        spdlog::debug("[AmsSidebar] No API — no temperature prefilled for slot {}", slot_index);
+        return {};
+    }
     const int target_c = temperature::deci_to_degrees(
         lv_subject_get_int(printer_state_.get_active_extruder_target_subject()));
-    return helix::ui::nozzle_temp_prefill(target_c, material_load_temp_for_slot(slot_index));
+    const int min_extrude_c =
+        static_cast<int>(std::ceil(api->get_safety_limits().min_extrude_temp_celsius));
+    return helix::ui::nozzle_temp_prefill(op, target_c, material_load_temp_for_slot(slot_index),
+                                          min_extrude_c);
 }
 
 void AmsOperationSidebar::handle_load_with_preheat(int slot_index) {
@@ -1381,7 +1391,7 @@ void AmsOperationSidebar::handle_load_with_preheat(int slot_index) {
     // (against latch AND actual) when we send, via keep_previous_hot.
     int latch =
         static_cast<int>(std::lround(printer_state_.get_active_extruder_last_nonzero_target()));
-    int effective_target = std::max(target, latch);
+    int effective_target = helix::ui::filament_op_nozzle_temp(target, latch);
 
     constexpr int TEMP_THRESHOLD = 5;
     if (current >= (effective_target - TEMP_THRESHOLD)) {
@@ -1570,7 +1580,7 @@ void AmsOperationSidebar::dispatch_load_outside_backend(const helix::ui::Filamen
                 send_standard_filament_macro(/*is_load=*/true, params);
             });
         },
-        macro_temp_prefill(slot_index));
+        macro_temp_prefill(helix::ui::FilamentMacroOp::Load, slot_index));
 }
 
 void AmsOperationSidebar::dispatch_unload_outside_backend(const helix::ui::FilamentOpPlan& plan,
@@ -1591,7 +1601,7 @@ void AmsOperationSidebar::dispatch_unload_outside_backend(const helix::ui::Filam
                 send_standard_filament_macro(/*is_load=*/false, params);
             });
         },
-        macro_temp_prefill(slot_index));
+        macro_temp_prefill(helix::ui::FilamentMacroOp::Unload, slot_index));
 }
 
 void AmsOperationSidebar::send_standard_filament_macro(

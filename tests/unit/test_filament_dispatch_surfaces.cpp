@@ -35,6 +35,7 @@
 
 #include "../lvgl_test_fixture.h"
 #include "../test_helpers/filament_runout_handler_test_access.h"
+#include "../test_helpers/lane_material_backend.h"
 #include "../test_helpers/load_filament_expression_default.h"
 #include "ams_state.h"
 #include "app_globals.h"
@@ -62,6 +63,7 @@ using helix::CachedMacroInfo;
 using helix::MacroExecuteCallback;
 using helix::MacroParamResult;
 using helix::ui::AmsOperationSidebar;
+using helix::ui::FilamentMacroOp;
 using helix::ui::FilamentRunoutHandler;
 using helix::ui::FilamentRunoutHandlerTestAccess;
 using helix::ui::ParamPolicy;
@@ -510,28 +512,61 @@ TEST_CASE_METHOD(DispatchSurfaceFixture, "Runout purge with no macro falls back 
 // they cover every parameter the macro takes
 // =============================================================================
 
-TEST_CASE("nozzle_temp_prefill offers the live extruder target under every temperature name",
-          "[filament][params][prefill]") {
-    const ParamValues values = helix::ui::nozzle_temp_prefill(260, 220);
+namespace {
 
-    CHECK(values == ParamValues{{"EXTRUDER_TEMP", "260"},
-                                {"NOZZLE_TEMP", "260"},
-                                {"PURGE_TEMP", "260"},
-                                {"TEMP", "260"}});
+/// The EXTRUDER_TEMP a load macro is offered, or empty when it is offered none.
+std::string offered_load_temp(int target_c, std::optional<int> material_c, int min_extrude_c) {
+    const ParamValues values =
+        helix::ui::nozzle_temp_prefill(FilamentMacroOp::Load, target_c, material_c, min_extrude_c);
+    auto it = values.find("EXTRUDER_TEMP");
+    return it == values.end() ? std::string{} : it->second;
 }
 
-TEST_CASE("nozzle_temp_prefill falls back to the material temperature with the heater off",
-          "[filament][params][prefill]") {
-    const ParamValues values = helix::ui::nozzle_temp_prefill(0, 220);
+} // namespace
 
-    CHECK(values.at("EXTRUDER_TEMP") == "220");
-    CHECK(values.size() == 4);
+TEST_CASE("nozzle_temp_prefill offers load and unload macros EXTRUDER_TEMP, NOZZLE_TEMP and TEMP",
+          "[filament][params][prefill]") {
+    const ParamValues expected{{"EXTRUDER_TEMP", "260"}, {"NOZZLE_TEMP", "260"}, {"TEMP", "260"}};
+
+    CHECK(helix::ui::nozzle_temp_prefill(FilamentMacroOp::Load, 260, 220, 170) == expected);
+    CHECK(helix::ui::nozzle_temp_prefill(FilamentMacroOp::Unload, 260, 220, 170) == expected);
+}
+
+TEST_CASE("nozzle_temp_prefill offers a purge macro its temperature only as PURGE_TEMP",
+          "[filament][params][prefill]") {
+    CHECK(helix::ui::nozzle_temp_prefill(FilamentMacroOp::Purge, 260, 220, 170) ==
+          ParamValues{{"PURGE_TEMP", "260"}});
+}
+
+TEST_CASE("nozzle_temp_prefill offers the hotter of the live target and the material",
+          "[filament][params][prefill]") {
+    CHECK(offered_load_temp(260, 240, 180) == "260");
+    CHECK(offered_load_temp(200, 240, 180) == "240");
+    CHECK(offered_load_temp(0, 220, 170) == "220");
+}
+
+TEST_CASE("nozzle_temp_prefill never offers a temperature below the extrusion minimum",
+          "[filament][params][prefill]") {
+    SECTION("a standby target with no material offers nothing") {
+        CHECK(
+            helix::ui::nozzle_temp_prefill(FilamentMacroOp::Load, 140, std::nullopt, 180).empty());
+    }
+    SECTION("a standby target gives way to a material above the minimum") {
+        CHECK(offered_load_temp(140, 240, 180) == "240");
+    }
+    SECTION("a material below the minimum offers nothing") {
+        CHECK(helix::ui::nozzle_temp_prefill(FilamentMacroOp::Purge, 0, 170, 180).empty());
+    }
+    SECTION("the minimum itself is a temperature Klipper extrudes at") {
+        CHECK(offered_load_temp(180, std::nullopt, 180) == "180");
+    }
 }
 
 TEST_CASE("nozzle_temp_prefill knows nothing with the heater off and no material",
           "[filament][params][prefill]") {
-    CHECK(helix::ui::nozzle_temp_prefill(0, std::nullopt).empty());
-    CHECK(helix::ui::nozzle_temp_prefill(0, 0).empty());
+    CHECK(helix::ui::nozzle_temp_prefill(FilamentMacroOp::Load, 0, std::nullopt, 170).empty());
+    // A printer reporting no minimum still has no temperature to offer.
+    CHECK(helix::ui::nozzle_temp_prefill(FilamentMacroOp::Load, 0, 0, 0).empty());
 }
 
 TEST_CASE_METHOD(DispatchSurfaceFixture,
@@ -603,6 +638,8 @@ TEST_CASE_METHOD(DispatchSurfaceFixture,
     CHECK(prompted);
     CHECK(prompt_count == 1);
     CHECK_FALSE(ran);
+    // Nor is it typed into the free-text prompt, which reads no parameter names.
+    CHECK(prompted_prefill.empty());
 }
 
 TEST_CASE_METHOD(DispatchSurfaceFixture,
@@ -634,4 +671,79 @@ TEST_CASE_METHOD(DispatchSurfaceFixture,
 
     CHECK(prompt_count == 0);
     CHECK(gcode_sent_containing("UNLOAD_FILAMENT TEMP=250"));
+}
+
+namespace {
+
+/// AmsState as a sidebar test needs it: subjects up, no external spool, and
+/// optionally a backend, all undone at scope exit.
+struct AmsScope {
+    explicit AmsScope(std::unique_ptr<AmsBackend> backend = nullptr) {
+        AmsState::instance().init_subjects(true);
+        AmsState::instance().clear_external_spool_info();
+        if (backend) {
+            AmsState::instance().set_backend(std::move(backend));
+        }
+    }
+    ~AmsScope() {
+        AmsState::instance().set_backend(nullptr);
+        AmsState::instance().deinit_subjects();
+    }
+    AmsScope(const AmsScope&) = delete;
+    AmsScope& operator=(const AmsScope&) = delete;
+};
+
+} // namespace
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "Sidebar load with the heater off sends the lane's material temperature",
+                 "[filament][dispatch][wiring][ams][prefill]") {
+    configure_filament_macros();
+    cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
+    set_extruder_target(0.0);
+    AmsScope ams(std::make_unique<helix::test::LaneMaterialBackend>(/*lane=*/1, 240));
+
+    AmsOperationSidebar sidebar(state);
+    sidebar.handle_load_with_preheat(1);
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(prompt_count == 0);
+    CHECK(gcode_sent_containing("LOAD_FILAMENT EXTRUDER_TEMP=240"));
+}
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "Sidebar load never sends a live target below the extrusion minimum",
+                 "[filament][dispatch][wiring][ams][prefill]") {
+    configure_filament_macros();
+    cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
+    auto limits = api->get_safety_limits();
+    limits.min_extrude_temp_celsius = 180.0;
+    api->set_safety_limits(limits);
+    // A paused printer holds its nozzle at a standby temperature below the minimum.
+    set_extruder_target(140.0);
+    AmsScope ams;
+
+    AmsOperationSidebar sidebar(state);
+    sidebar.handle_load_with_preheat(0);
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(prompt_count == 1);
+    CHECK(prompted_prefill.empty());
+    CHECK_FALSE(gcode_sent_containing("LOAD_FILAMENT"));
+}
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "Sidebar with no printer connection offers its macro no temperature",
+                 "[filament][dispatch][wiring][ams][prefill]") {
+    configure_filament_macros();
+    cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
+    set_extruder_target(260.0);
+    AmsScope ams;
+    set_moonraker_api(nullptr);
+
+    AmsOperationSidebar sidebar(state);
+    sidebar.handle_load_with_preheat(0);
+
+    CHECK(prompt_count == 1);
+    CHECK(prompted_prefill.empty());
 }

@@ -23,6 +23,7 @@
 #include "filament_op_dispatch.h" // EXTERNAL_SPOOL_SLOT — the bypass sentinel both headers key on
 #include "print_lifecycle_state.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 
@@ -282,6 +283,18 @@ struct PreheatTarget {
  */
 [[nodiscard]] inline int load_preheat_temp(const filament::MaterialInfo& mat) {
     return mat.nozzle_recommended();
+}
+
+/**
+ * @brief The nozzle temperature a filament operation heats to: @p material_c,
+ *        raised to @p held_c when the nozzle is already set hotter.
+ *
+ * A nozzle held above the incoming material stays there, so the filament already
+ * in the melt zone still flows out ahead of it. AmsOperationSidebar's backend
+ * load preheat and nozzle_temp_prefill() both decide by this.
+ */
+[[nodiscard]] inline int filament_op_nozzle_temp(int material_c, int held_c) {
+    return std::max(material_c, held_c);
 }
 
 /**

@@ -3,6 +3,8 @@
 
 #include "filament_op_router.h"
 
+#include "filament_op_slot_resolver.h"
+
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
@@ -100,20 +102,22 @@ bool dispatch_filament_macro(const std::string& macro_name, ParamPolicy policy,
     return true;
 }
 
-std::map<std::string, std::string> nozzle_temp_prefill(int extruder_target_c,
-                                                       std::optional<int> material_temp_c) {
-    int temp_c = 0;
-    if (extruder_target_c > 0) {
-        temp_c = extruder_target_c;
-    } else if (material_temp_c && *material_temp_c > 0) {
-        temp_c = *material_temp_c;
-    } else {
+std::map<std::string, std::string> nozzle_temp_prefill(FilamentMacroOp op, int extruder_target_c,
+                                                       std::optional<int> material_temp_c,
+                                                       int min_extrude_c) {
+    const int temp_c = filament_op_nozzle_temp(material_temp_c.value_or(0), extruder_target_c);
+    if (temp_c <= 0 || temp_c < min_extrude_c) {
         return {};
     }
-    // The names filament macros use for the temperature they heat the nozzle to.
     const std::string value = std::to_string(temp_c);
-    return {
-        {"EXTRUDER_TEMP", value}, {"NOZZLE_TEMP", value}, {"PURGE_TEMP", value}, {"TEMP", value}};
+    switch (op) {
+    case FilamentMacroOp::Purge:
+        return {{"PURGE_TEMP", value}};
+    case FilamentMacroOp::Load:
+    case FilamentMacroOp::Unload:
+        break;
+    }
+    return {{"EXTRUDER_TEMP", value}, {"NOZZLE_TEMP", value}, {"TEMP", value}};
 }
 
 void set_home_confirm_prompter(HomeConfirmPrompter prompter) {

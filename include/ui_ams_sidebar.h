@@ -32,6 +32,8 @@ class PrinterState;
 
 namespace helix::ui {
 
+enum class FilamentMacroOp;
+
 /**
  * @brief Shared AMS sidebar component for operation status and controls
  *
@@ -263,9 +265,11 @@ class AmsOperationSidebar {
     /// get_load_temp_for_slot() without its default: nullopt when neither the slot
     /// nor the external spool names a material.
     std::optional<int> material_load_temp_for_slot(int slot_index);
-    /// Nozzle-temperature parameter values for a filament macro acting on
-    /// @p slot_index: the live extruder target, else material_load_temp_for_slot().
-    std::map<std::string, std::string> macro_temp_prefill(int slot_index);
+    /// Nozzle-temperature parameter values for @p op's macro acting on @p slot_index,
+    /// from the live extruder target and material_load_temp_for_slot(), held to the
+    /// printer's minimum extrusion temperature (helix::ui::nozzle_temp_prefill()).
+    std::map<std::string, std::string> macro_temp_prefill(helix::ui::FilamentMacroOp op,
+                                                          int slot_index);
     void check_pending_load();
     void handle_load_complete();
     void show_preheat_feedback(int slot_index, int target_temp);
