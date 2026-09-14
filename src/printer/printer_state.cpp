@@ -18,6 +18,7 @@
 #include "accel_sensor_manager.h"
 #include "async_helpers.h"
 #include "capability_overrides.h"
+#include "chamber_heater_assignment.h"
 #include "color_sensor_manager.h"
 #include "connection_state.h" // For ConnectionState enum
 #include "device_display_name.h"
@@ -801,7 +802,8 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
         set_kinematics(discovery_.kinematics());
     }
 
-    // Resolve chamber assignments: manual override > auto-detection
+    // Resolve chamber assignments. A named sensor overrides auto-detection; a named
+    // heater counts only while Klipper reports it (chamber::resolve_heater).
     auto& settings = helix::SettingsManager::instance();
 
     std::string chamber_sensor = settings.get_chamber_sensor_assignment();
@@ -811,12 +813,8 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
         chamber_sensor = "";
     }
 
-    std::string chamber_heater = settings.get_chamber_heater_assignment();
-    if (chamber_heater == "auto") {
-        chamber_heater = discovery_.chamber_heater_name();
-    } else if (chamber_heater == "none") {
-        chamber_heater = "";
-    }
+    const std::string chamber_heater =
+        chamber::resolve_heater(settings.get_chamber_heater_assignment(), discovery_);
 
     spdlog::debug("[PrinterState] Chamber resolved: sensor='{}' heater='{}'", chamber_sensor,
                   chamber_heater);
