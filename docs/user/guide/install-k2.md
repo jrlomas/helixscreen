@@ -31,7 +31,7 @@ After installation, the setup wizard runs on the touchscreen. Moonraker is alrea
 ## What the Installer Does Here
 
 - Installs to `/opt/helixscreen/`, with a boot service at `/etc/init.d/S99helixscreen`
-- Stops and persistently disables the stock Creality UI service (`/etc/init.d/app`). Creality's `web-server` is intentionally left running and restored at every boot, so the Creality Cloud app and its camera stream keep working
+- Stops and persistently disables the stock Creality UI service (`/etc/init.d/app`), then brings Creality's `web-server` back up every time HelixScreen starts, so the printer's stock local-network status connection (port 9999) keeps answering. The Creality Cloud app and its camera stream do not work while HelixScreen is installed; the chamber camera is HelixScreen's
 - Stages the download, caches, and logs on `/mnt/UDISK` (the large user partition): `/opt` sits on a small system overlay that a release archive would fill
 - Waits up to two minutes for Moonraker during boot, then starts the UI anyway; it reconnects on its own
 
