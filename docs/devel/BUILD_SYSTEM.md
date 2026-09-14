@@ -936,7 +936,7 @@ make format-staged
 
 Formatting is automatically checked by the pre-commit hook (`.git/hooks/pre-commit`), which calls `scripts/quality-checks.sh --staged-only`:
 
-1. **Resolves the pinned formatter**: the `clang-format` wheel pinned in `requirements.txt`, installed into `.venv` by `make venv-setup` (`scripts/quality-checks.sh#qc_resolve_clang_format`). Nothing on `PATH` is consulted, and a tree without the wheel cannot commit C++ until it runs `make venv-setup` - one formatter everywhere is what keeps files from ping-ponging between machines
+1. **Resolves the formatter** (`scripts/quality-checks.sh#qc_phase2`): `$CLANG_FORMAT` if set, then `.venv/bin/clang-format` (the wheel pinned in `requirements.txt`, installed by `make venv-setup`), then `clang-format-18`, then `clang-format` on `PATH`. The first 18.x candidate wins, and files are auto-formatted only with an 18.x binary, so another version on `PATH` can report differences but never reflows a file. With no formatter at all the check is skipped with a warning
 2. **Checks staged files** with it and auto-formats the ones that need it
 3. **Prevents commit** if a formatted file could not be re-staged (partially staged hunks)
 4. **Full sweeps (pre-push, CI) fail** on any unformatted file outside `CLANG_FORMAT_BASELINE`, the list of files that predate the gate; an entry leaves the list once the file is auto-formatted on its next staging
