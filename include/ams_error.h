@@ -427,15 +427,20 @@ class AmsErrorHelper {
     /**
      * @brief Create an invalid slot error
      * @param slot Invalid slot index
-     * @param max_slot Maximum valid slot index
+     * @param max_slot Maximum valid slot index, -1 when the backend has
+     *        reported no positions at all
      * @return AmsError configured for UI display
      */
     static AmsError invalid_slot(int slot, int max_slot) {
+        // A backend that has reported zero positions has no span to offer;
+        // naming one (even "(0--1)") would claim a slot exists when none do.
+        const std::string suggestion =
+            max_slot >= 0 ? "Select a valid slot (0-" + std::to_string(max_slot) + ")"
+                          : "Select a valid slot";
         return AmsError(AmsResult::INVALID_SLOT,
                         "Slot " + std::to_string(slot) + " out of range (0-" +
                             std::to_string(max_slot) + ")",
-                        "Invalid slot number",
-                        "Select a valid slot (0-" + std::to_string(max_slot) + ")", slot);
+                        "Invalid slot number", suggestion, slot);
     }
 
     /**
