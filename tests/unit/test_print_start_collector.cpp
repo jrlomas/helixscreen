@@ -4311,6 +4311,35 @@ TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
 }
 
 TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
+                 "PrintStartCollector: a COSMOS pre-print learns the heating rates it took",
+                 "[print][collector][cosmos][thermal_rate]") {
+    if (!have_profile_) {
+        SKIP("cosmos_cc1.json not available");
+    }
+    // The bed took ~484s from 24.5C to 105C, about 6 s/C. The nozzle climbed
+    // to 140C in ~30s, held there for eight minutes, then took ~45s from 140C
+    // to 260C, about 0.38 s/C.
+    ThermalRateManager::instance().apply_archetype_defaults(256.0f, "Elegoo Centauri Carbon");
+
+    const Result result = replay();
+    REQUIRE(result.completed_at_ms == 618500);
+
+    auto& rates = ThermalRateManager::instance();
+    const float bed = rates.get_model("heater_bed").blended_rate_for_save();
+    const float nozzle = rates.get_model("extruder").blended_rate_for_save();
+    CAPTURE(bed, nozzle);
+    CHECK(bed >= 5.0f);
+    CHECK(bed <= 7.0f);
+    CHECK(nozzle >= 0.3f);
+    CHECK(nozzle <= 0.6f);
+
+    // The completion saved those rates for the next print.
+    Config* cfg = Config::get_instance();
+    CHECK(cfg->get<float>("/thermal/rates/heater_bed/heat_rate", 0.0f) == Catch::Approx(bed));
+    CHECK(cfg->get<float>("/thermal/rates/extruder/heat_rate", 0.0f) == Catch::Approx(nozzle));
+}
+
+TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
                  "PrintStartCollector: a long COSMOS heat soak holds the pre-print open",
                  "[print][collector][cosmos][integration]") {
     if (!have_profile_) {

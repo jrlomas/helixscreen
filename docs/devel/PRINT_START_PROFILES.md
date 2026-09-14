@@ -232,7 +232,7 @@ In `assets/config/printer_database.json`, add the `print_start_profile` field to
 
 The value must match the JSON filename without the `.json` extension.
 
-Two more fields give a printer's first print a measured estimate instead of a generic one. The printer's own history replaces both once a print completes:
+Two more fields give a printer's first print a measured estimate instead of a generic one. The printer's own history replaces them: its phase timings from the next print on, its heating rates once saved rates are loaded again. A completed pre-print saves the rates it measured, but the app loads saved rates only at startup and when PID calibration starts, so until one of those the database rates stay in use:
 
 ```json
 {
@@ -241,7 +241,7 @@ Two more fields give a printer's first print a measured estimate instead of a ge
 }
 ```
 
-`print_start_default_phases` is seconds per non-heating phase (HOMING, QGL, Z_TILT, BED_MESH, CLEANING, PURGING). `thermal_rates` is seconds per degree C per heater, used by `ThermalRateManager::apply_archetype_defaults()` in place of its guess from the bed size.
+`print_start_default_phases` is seconds per non-heating phase (HOMING, QGL, Z_TILT, BED_MESH, CLEANING, PURGING). `thermal_rates` is seconds per degree C per heater, used by `ThermalRateManager::apply_archetype_defaults()` in place of its guess from the bed size. The rate a print saves is its whole measured climb, seconds over degrees, with a hold between two climbs (a probing temperature, then the print temperature) left out, blended 70/30 with the saved rate loaded at startup.
 
 If a printer has no `print_start_profile` field, or the profile fails to load, the system falls back to `default.json`, then to built-in hardcoded patterns (identical to `default.json`). This three-level fallback chain means nothing ever breaks.
 
