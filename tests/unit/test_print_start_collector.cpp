@@ -4013,6 +4013,12 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
  * Klipper echoes nothing from inside the macro: the M190 wait is eight minutes
  * of temperature reports and nothing else.
  */
+/// How a COSMOS replay departs from the recorded print.
+struct CosmosReplayVariant {
+    /// The heat soak as COSMOS prints it (cosmos.conf heatsoak, 0-30 minutes).
+    const char* heatsoak_minutes = "1.0";
+};
+
 class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
   public:
     struct Result {
@@ -4038,7 +4044,7 @@ class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
 
     bool have_profile_ = false;
 
-    Result replay() {
+    Result replay(const CosmosReplayVariant& variant = CosmosReplayVariant{}) {
         struct Sample {
             int t_s;
             int bed, bed_target, ext, ext_target; // decidegrees
@@ -4082,30 +4088,52 @@ class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
 
         struct Narration {
             int t_ms;
-            const char* console;
-            const char* display; ///< SET_DISPLAY_TEXT also lands in display_status
+            std::string console;
+            std::string display; ///< SET_DISPLAY_TEXT also lands in display_status
         };
-        static constexpr Narration NARRATION[] = {
-            {484400, "// Heatsoak: 1.0m", "Heatsoak: 1.0m"},
-            {542500, "// Using default bed mesh", "Using default bed mesh"},
-            {542600, "// Smart Park location: 41.0714,33.0046.", nullptr},
-            {605600,
+        // The recorded soak narrates at 484.4s and holds the heaters through the
+        // 540s sample; a longer soak moves everything after it later.
+        constexpr int SOAK_NARRATION_MS = 484400;
+        constexpr int SOAK_HELD_THROUGH_S = 540;
+        const int extra_s =
+            static_cast<int>(std::lround((std::stod(variant.heatsoak_minutes) - 1.0) * 60.0));
+        const int extra_ms = extra_s * 1000;
+        const std::string soak = std::string("Heatsoak: ") + variant.heatsoak_minutes + "m";
+        const std::vector<Narration> narration = {
+            {SOAK_NARRATION_MS, "// " + soak, soak},
+            {542500 + extra_ms, "// Using default bed mesh", "Using default bed mesh"},
+            {542600 + extra_ms, "// Smart Park location: 41.0714,33.0046.", ""},
+            {605600 + extra_ms,
              "// KAMP purge is not using firmware retraction, it is recommended to configure it.",
-             nullptr},
-            {605700,
+             ""},
+            {605700 + extra_ms,
              "// KAMP purge starting at 113.0002, 33.0046 and purging 30.0mm of filament, "
              "requested flow rate is 12.0mm3/s.",
-             nullptr},
-            {618500,
+             ""},
+            {618500 + extra_ms,
              "Info: No skew profile defined. If skew correction is desired, create "
              "'my_skew_profile' in printer.cfg",
-             nullptr},
+             ""},
         };
+        // Through the extra soak time the heaters read what they read at 540s.
+        std::vector<Sample> timeline;
+        for (const Sample& s : SAMPLES) {
+            if (s.t_s > SOAK_HELD_THROUGH_S) {
+                timeline.push_back({s.t_s + extra_s, s.bed, s.bed_target, s.ext, s.ext_target});
+                continue;
+            }
+            timeline.push_back(s);
+            if (s.t_s == SOAK_HELD_THROUGH_S) {
+                for (int t = s.t_s + 5; t <= s.t_s + extra_s; t += 5) {
+                    timeline.push_back({t, s.bed, s.bed_target, s.ext, s.ext_target});
+                }
+            }
+        }
         // The M190 wait releases just before the heat soak narration; M109
         // starts with the smart park and reports until the nozzle arrives.
         constexpr int BED_WAIT_END_MS = 484400;
-        constexpr int NOZZLE_WAIT_START_MS = 543600;
-        constexpr int NOZZLE_WAIT_END_MS = 587600;
+        const int nozzle_wait_start_ms = 543600 + extra_ms;
+        const int nozzle_wait_end_ms = 587600 + extra_ms;
 
         Result result;
         int now_ms = 0;
@@ -4138,12 +4166,12 @@ class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
         note_phase();
 
         size_t next = 0;
-        for (const Sample& s : SAMPLES) {
-            while (next < std::size(NARRATION) && NARRATION[next].t_ms <= s.t_s * 1000) {
-                const Narration& n = NARRATION[next++];
+        for (const Sample& s : timeline) {
+            while (next < narration.size() && narration[next].t_ms <= s.t_s * 1000) {
+                const Narration& n = narration[next++];
                 advance_to(n.t_ms);
                 send_gcode_response(n.console);
-                if (n.display != nullptr) {
+                if (!n.display.empty()) {
                     client().dispatch_status_update({{"display_status", {{"message", n.display}}}});
                 }
                 note_phase();
@@ -4155,7 +4183,7 @@ class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
             advance_to(s.t_s * 1000);
             set_all_temps(s.bed, s.bed_target, s.ext, s.ext_target);
             const bool waiting = (s.bed_target > 0 && now_ms < BED_WAIT_END_MS) ||
-                                 (now_ms >= NOZZLE_WAIT_START_MS && now_ms <= NOZZLE_WAIT_END_MS);
+                                 (now_ms >= nozzle_wait_start_ms && now_ms <= nozzle_wait_end_ms);
             if (waiting) {
                 char report[64];
                 std::snprintf(report, sizeof(report), "B:%.1f /%.1f T0:%.1f /%.1f", s.bed / 10.0,
@@ -4235,4 +4263,24 @@ TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
         "0:INITIALIZING 5:HEATING_BED 542:BED_MESH 542:HEATING_NOZZLE 605:PURGING 618:COMPLETE");
     REQUIRE(result.completed_at_ms == 618500);
     REQUIRE(result.first_prediction_s >= min_prediction_s);
+}
+
+TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
+                 "PrintStartCollector: a long COSMOS heat soak holds the pre-print open",
+                 "[print][collector][cosmos][integration]") {
+    if (!have_profile_) {
+        SKIP("cosmos_cc1.json not available");
+    }
+    // The soak is one "Heatsoak: 10.0m" line, then ten silent minutes of G4
+    // with both heaters already at target: nothing the collector can see says
+    // the printer is still working.
+    ThermalRateManager::instance().apply_archetype_defaults(256.0f, "Elegoo Centauri Carbon");
+
+    CosmosReplayVariant variant;
+    variant.heatsoak_minutes = "10.0";
+    const Result result = replay(variant);
+    CAPTURE(result.trace);
+    REQUIRE(result.trace == "0:INITIALIZING 5:HEATING_BED 1082:BED_MESH 1082:HEATING_NOZZLE "
+                            "1145:PURGING 1158:COMPLETE");
+    REQUIRE(result.completed_at_ms == 618500 + 540000);
 }

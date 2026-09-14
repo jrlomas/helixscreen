@@ -121,6 +121,8 @@ void PrintStartCollector::start() {
         printing_state_start_ = std::chrono::steady_clock::now();
         last_signal_time_ = printing_state_start_;
         last_heater_climb_time_ = printing_state_start_;
+        hold_until_ = {};
+        held_for_ = {};
         // Assume the narrower window until something says otherwise.
         window_ = helix::PreprintWindow::PrinterEdge;
         detected_phases_.clear();
@@ -362,6 +364,8 @@ void PrintStartCollector::reset() {
         printing_state_start_ = std::chrono::steady_clock::now();
         last_signal_time_ = printing_state_start_;
         last_heater_climb_time_ = printing_state_start_;
+        hold_until_ = {};
+        held_for_ = {};
         phase_enter_times_.clear();
         mesh_probe_current_ = 0;
         mesh_probe_total_ = 0;
@@ -535,6 +539,7 @@ void PrintStartCollector::check_fallback_completion() {
     PrintStartPhase current;
     bool print_start_was_detected;
     float predicted_total;
+    std::chrono::steady_clock::duration held_for;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         // Already complete - nothing to do
@@ -545,6 +550,7 @@ void PrintStartCollector::check_fallback_completion() {
         print_start_was_detected = print_start_detected_;
         start_time = printing_state_start_;
         predicted_total = predicted_total_seconds_;
+        held_for = held_for_;
     }
 
     // Get temperature data for proactive and completion fallback checks
@@ -576,7 +582,8 @@ void PrintStartCollector::check_fallback_completion() {
     // The ceiling this pre-print is measured against: ABSOLUTE_MAX_TIMEOUT,
     // stretched for a long prediction. The backstop, a multiple of it, runs
     // before any branch below can return, so nothing the heaters or the
-    // console do holds Preparing open forever.
+    // console do holds Preparing open forever. Both leave out time a declared
+    // hold covered: that is the printer doing what it said it would.
     std::chrono::seconds ceiling = ABSOLUTE_MAX_TIMEOUT;
     if (predicted_total > 0) {
         ceiling = std::max(ceiling, std::chrono::seconds(static_cast<int>(
@@ -584,7 +591,8 @@ void PrintStartCollector::check_fallback_completion() {
     }
     const auto elapsed = std::chrono::steady_clock::now() - start_time;
     const auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
-    if (elapsed > ceiling * BACKSTOP_CEILING_MULTIPLE) {
+    const auto unheld = elapsed - held_for;
+    if (unheld > ceiling * BACKSTOP_CEILING_MULTIPLE) {
         spdlog::warn("[PrintStartCollector] Fallback: backstop ({} sec, ceiling={}s)", elapsed_sec,
                      ceiling.count());
         fallback_completion_ = true;
@@ -807,8 +815,9 @@ void PrintStartCollector::check_fallback_completion() {
     std::chrono::steady_clock::duration signal_quiet_for;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        signal_quiet_for = now - last_signal_time_;
-        quiet_for = now - std::max(last_signal_time_, last_heater_climb_time_);
+        const auto last_signal = std::max(last_signal_time_, hold_until_);
+        signal_quiet_for = now - last_signal;
+        quiet_for = now - std::max(last_signal, last_heater_climb_time_);
     }
     const bool quiet = quiet_for >= PREPRINT_QUIET_TIMEOUT;
     const auto quiet_sec = std::chrono::duration_cast<std::chrono::seconds>(quiet_for).count();
@@ -827,7 +836,7 @@ void PrintStartCollector::check_fallback_completion() {
         return;
     }
 
-    if (elapsed > ceiling && signal_quiet_for >= PREPRINT_QUIET_TIMEOUT) {
+    if (unheld > ceiling && signal_quiet_for >= PREPRINT_QUIET_TIMEOUT) {
         spdlog::warn("[PrintStartCollector] Fallback: ceiling ({} sec, ceiling={}s, "
                      "nozzle_target_set={})",
                      elapsed_sec, ceiling.count(), nozzle_target_set);
@@ -1149,9 +1158,28 @@ void PrintStartCollector::on_gcode_response(const json& msg) {
     check_phase_patterns(line);
 }
 
-void PrintStartCollector::note_signal() {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    last_signal_time_ = std::chrono::steady_clock::now();
+void PrintStartCollector::note_signal(std::chrono::seconds hold) {
+    std::chrono::seconds extended{0};
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        const auto now = std::chrono::steady_clock::now();
+        last_signal_time_ = now;
+        if (hold <= std::chrono::seconds::zero()) {
+            return;
+        }
+        // The console line and its display_status copy announce the same hold
+        // milliseconds apart; only time beyond the standing hold extends it.
+        const auto until = now + hold;
+        const auto from = std::max(hold_until_, now);
+        if (until - from < std::chrono::seconds(1)) {
+            return;
+        }
+        held_for_ += until - from;
+        hold_until_ = until;
+        extended = std::chrono::duration_cast<std::chrono::seconds>(until - from);
+    }
+    spdlog::info("[PrintStartCollector] Printer announced {}s of silent pre-print work",
+                 extended.count());
 }
 
 void PrintStartCollector::check_display_narration(const json& status) {
@@ -1192,7 +1220,7 @@ void PrintStartCollector::check_phase_patterns(const std::string& line) {
     PrintStartProfile::MatchResult match;
     if (profile_->try_match_pattern(line, match)) {
         real_signal_seen_.store(true, std::memory_order_relaxed);
-        note_signal();
+        note_signal(std::chrono::seconds(match.hold_seconds));
         // match.message arrives already translated: try_match_pattern
         // resolves the template through the loaded pack before substituting
         // $1 capture groups.

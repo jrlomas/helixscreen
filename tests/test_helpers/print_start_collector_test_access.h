@@ -44,6 +44,7 @@ class PrintStartCollectorTestAccess {
         age(c.printing_state_start_);
         age(c.last_signal_time_);
         age(c.last_heater_climb_time_);
+        age(c.hold_until_);
         age(c.temps_ready_time_);
         age(c.mesh_first_probe_time_);
         age(c.mesh_last_probe_time_);

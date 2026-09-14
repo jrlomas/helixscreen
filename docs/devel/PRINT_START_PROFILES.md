@@ -136,7 +136,11 @@ Profiles live in `assets/config/print_start_profiles/{name}.json`.
       "message": "Homing...",
 
       // Weight for weighted mode. In sequential mode this field is ignored.
-      "weight": 10
+      "weight": 10,
+
+      // OPTIONAL: Capture group holding minutes the printer stays silent
+      // after this line (e.g. "Heatsoak: ([0-9.]+)m" followed by a G4).
+      "hold_minutes_group": 1
     }
   ],
 
@@ -155,6 +159,8 @@ Profiles live in `assets/config/print_start_profiles/{name}.json`.
 **`signal_formats`** — Best for firmware that outputs structured state lines (like Forge-X's `// State: HOMING...`). The prefix is matched with `string::find()`, not regex, so it works even if the line has other content before the prefix. The value after the prefix must match a mapping key **exactly** (case-sensitive, including trailing punctuation like `...`).
 
 **`response_patterns`** — Best for catching G-code commands and freeform console output. Patterns are compiled with `std::regex::icase`. Capture groups (`$1`, `$2`, etc.) in the message template are substituted with matched groups. Each pattern is checked via `std::regex_search` (partial match, not full line).
+
+**`hold_minutes_group`** — For a line that announces a wait the console will not narrate, such as a heat soak printed before a silent `G4`. The named capture group must hold a number of minutes (`.` decimal, e.g. `10.0`); a group the pattern does not have is ignored with a warning, and a zero or unparseable capture holds nothing. Until the hold ends the printer counts as talking, so no timeout fires, and the held time is left out of the elapsed time the ceiling and backstop measure. Declare it only for a wait of known length: a wait on a sensor (`M191`, `TEMPERATURE_WAIT`) has none.
 
 **`phase_weights`** — Only meaningful in `weighted` mode. If omitted, phases matched by response_patterns use their individual `weight` field. If provided, this map is used by `calculate_progress_locked()` to sum detected phase weights.
 

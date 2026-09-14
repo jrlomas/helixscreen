@@ -296,9 +296,10 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
 
     /// Record that the printer said something about its pre-print: a matched
     /// pattern or a probe line. Feeds the quiet gate of every timeout, the
-    /// ceiling included. Takes state_mutex_ itself, so do not call it while
-    /// already holding the lock.
-    void note_signal();
+    /// ceiling included. `hold` is silent time the line announces (a heat
+    /// soak's G4): the printer counts as talking until it ends. Takes
+    /// state_mutex_ itself, so do not call it while already holding the lock.
+    void note_signal(std::chrono::seconds hold = std::chrono::seconds::zero());
 
     /**
      * @brief Check for HELIX:PHASE:* signals from plugin/macros
@@ -428,6 +429,13 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     /// carries them through a silent M190 or M109. The ceiling ignores it: a
     /// heater that never settles must not hold Preparing open.
     std::chrono::steady_clock::time_point last_heater_climb_time_;
+
+    /// End of the silent time a matched line announced, {} when none. Until
+    /// then the printer counts as talking. held_for_ is the time holds have
+    /// covered, which the ceiling and the backstop leave out of the elapsed
+    /// time, so a long soak does not spend them.
+    std::chrono::steady_clock::time_point hold_until_;
+    std::chrono::steady_clock::duration held_for_{};
 
     // Profile for signal/pattern matching (set via set_profile() or loaded by start())
     std::shared_ptr<PrintStartProfile> profile_;
