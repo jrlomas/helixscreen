@@ -94,7 +94,6 @@ using helix::ui::temperature::get_heating_state_color;
 // the same instance and the same sequences.
 using helix::ui::filament_load_fallback_gcode;
 using helix::ui::filament_unload_fallback_gcode;
-using helix::ui::get_filament_param_modal;
 
 // ============================================================================
 // CONSTRUCTOR
@@ -1493,56 +1492,14 @@ void FilamentPanel::execute_purge() {
     const auto& info = StandardMacros::instance().get(StandardMacroSlot::Purge);
     if (!info.is_empty()) {
         std::string macro_name = info.get_macro();
-        auto cached = MacroParamCache::instance().get(macro_name);
-
-        // Pre-fill PURGE_TEMP from active material if available
-        std::string purge_temp_default;
-        auto active = helix::get_active_material();
-        if (active) {
-            int recommended = active->material_info.nozzle_recommended();
-            if (recommended > 0) {
-                purge_temp_default = std::to_string(recommended);
-                spdlog::info("[{}] Active material '{}' recommends PURGE_TEMP={}", get_name(),
-                             active->display_name, recommended);
-            }
-        }
-
-        if (cached.knowledge == MacroParamKnowledge::KNOWN_PARAMS) {
-            // Override PURGE_TEMP default with active material temp
-            auto params = cached.params;
-            if (!purge_temp_default.empty()) {
-                for (auto& p : params) {
-                    if (p.name == "PURGE_TEMP") {
-                        p.default_value = purge_temp_default;
-                        break;
-                    }
-                }
-            }
-            spdlog::info("[{}] Purge macro '{}' has params, showing modal", get_name(), macro_name);
-            get_filament_param_modal().show_for_macro(
-                lv_screen_active(), macro_name, params,
-                [this, macro_name](const MacroParamResult& result) {
-                    run_filament_macro(macro_name, "Purg", result);
-                });
-            return;
-        }
-
-        if (cached.knowledge == MacroParamKnowledge::UNKNOWN) {
-            spdlog::info("[{}] Purge macro '{}' params unknown, showing raw input", get_name(),
-                         macro_name);
-            get_filament_param_modal().show_for_unknown_params(
-                lv_screen_active(), macro_name, [this, macro_name](const MacroParamResult& result) {
-                    run_filament_macro(macro_name, "Purg", result);
-                });
-            return;
-        }
-
-        // KNOWN_NO_PARAMS — auto-pass PURGE_TEMP and execute directly
-        MacroParamResult result;
-        if (!purge_temp_default.empty()) {
-            result.params["PURGE_TEMP"] = purge_temp_default;
-        }
-        run_filament_macro(macro_name, "Purg", result);
+        // See execute_load(): [this] is safe here only because the panel is
+        // immortal [L012].
+        helix::ui::dispatch_filament_macro(
+            macro_name, helix::ui::ParamPolicy::Prompt,
+            [this, macro_name](const MacroParamResult& result) {
+                run_filament_macro(macro_name, "Purg", result);
+            },
+            macro_temp_prefill(PreheatOp::PURGE));
         return;
     }
 
@@ -2481,7 +2438,8 @@ int FilamentPanel::preheat_slot_for_op(PreheatOp op) const {
     }
 }
 
-FilamentPanel::PreheatTempResult FilamentPanel::resolve_preheat_temp(int target_slot) const {
+std::optional<FilamentPanel::PreheatTempResult>
+FilamentPanel::resolve_material_preheat_temp(int target_slot) const {
     // Priorities 1 and 2 (target slot, then the external spool as the fallback
     // for a load with no lane of its own) are shared with
     // AmsOperationSidebar::get_load_temp_for_slot() via
@@ -2501,7 +2459,7 @@ FilamentPanel::PreheatTempResult FilamentPanel::resolve_preheat_temp(int target_
     auto ext = AmsState::instance().get_external_spool_info();
     if (auto resolved = helix::ui::resolve_load_preheat_material(
             target_slot, slot_ptr, ext.has_value() ? &ext.value() : nullptr)) {
-        return {resolved->temp_c, resolved->material_name};
+        return PreheatTempResult{resolved->temp_c, resolved->material_name};
     }
 
     // Priority 3: the panel's selected material preset. The sidebar has no
@@ -2511,12 +2469,26 @@ FilamentPanel::PreheatTempResult FilamentPanel::resolve_preheat_temp(int target_
     if (selected_material_ >= 0 && selected_material_ < PRESET_COUNT) {
         auto mat = filament::find_material(helix::presets::name(selected_material_));
         if (mat) {
-            return {helix::ui::load_preheat_temp(*mat), helix::presets::name(selected_material_)};
+            return PreheatTempResult{helix::ui::load_preheat_temp(*mat),
+                                     helix::presets::name(selected_material_)};
         }
     }
 
+    return std::nullopt;
+}
+
+FilamentPanel::PreheatTempResult FilamentPanel::resolve_preheat_temp(int target_slot) const {
+    if (auto material = resolve_material_preheat_temp(target_slot)) {
+        return *material;
+    }
     // Priority 4: Fallback to min_extrude_temp_
     return {min_extrude_temp_, ""};
+}
+
+std::map<std::string, std::string> FilamentPanel::macro_temp_prefill(PreheatOp op) const {
+    const auto material = resolve_material_preheat_temp(preheat_slot_for_op(op));
+    return helix::ui::nozzle_temp_prefill(
+        current_extruder_target(), material ? std::optional<int>(material->temp) : std::nullopt);
 }
 
 const char* FilamentPanel::preheat_op_name(PreheatOp op) {
@@ -2875,10 +2847,12 @@ void FilamentPanel::execute_load() {
         // FilamentPanel is a global singleton, so `this` survives any modal
         // dismissal the shared param modal outlives [L012]. Surfaces with a
         // bounded lifetime must guard this callback with a LifetimeToken.
-        helix::ui::dispatch_filament_macro(macro_name, helix::ui::ParamPolicy::Prompt,
-                                           [this, macro_name](const MacroParamResult& result) {
-                                               run_filament_macro(macro_name, "Load", result);
-                                           });
+        helix::ui::dispatch_filament_macro(
+            macro_name, helix::ui::ParamPolicy::Prompt,
+            [this, macro_name](const MacroParamResult& result) {
+                run_filament_macro(macro_name, "Load", result);
+            },
+            macro_temp_prefill(PreheatOp::LOAD));
         return;
     }
 
@@ -2999,10 +2973,12 @@ void FilamentPanel::execute_unload() {
         std::string macro_name = info.get_macro();
         // See execute_load(): [this] is safe here only because the panel is
         // immortal [L012].
-        helix::ui::dispatch_filament_macro(macro_name, helix::ui::ParamPolicy::Prompt,
-                                           [this, macro_name](const MacroParamResult& result) {
-                                               run_filament_macro(macro_name, "Unload", result);
-                                           });
+        helix::ui::dispatch_filament_macro(
+            macro_name, helix::ui::ParamPolicy::Prompt,
+            [this, macro_name](const MacroParamResult& result) {
+                run_filament_macro(macro_name, "Unload", result);
+            },
+            macro_temp_prefill(PreheatOp::UNLOAD));
         return;
     }
 

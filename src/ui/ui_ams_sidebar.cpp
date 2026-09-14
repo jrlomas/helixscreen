@@ -1174,7 +1174,7 @@ void AmsOperationSidebar::handle_unload(int slot_index) {
     printer_state_.clear_nozzle_load_latch();
 
     if (plan.tier != helix::ui::FilamentTier::AmsBackend) {
-        dispatch_unload_outside_backend(plan);
+        dispatch_unload_outside_backend(plan, target_slot);
         return;
     }
 
@@ -1266,7 +1266,7 @@ void AmsOperationSidebar::handle_bypass_toggle() {
 // Preheat Logic
 // ============================================================================
 
-int AmsOperationSidebar::get_load_temp_for_slot(int slot_index) {
+std::optional<int> AmsOperationSidebar::material_load_temp_for_slot(int slot_index) {
     // The slot-vs-external-spool precedence and the nozzle_recommended() choice
     // both come from resolve_load_preheat_material(), shared with
     // FilamentPanel::resolve_preheat_temp(). The two surfaces preheating the
@@ -1286,7 +1286,18 @@ int AmsOperationSidebar::get_load_temp_for_slot(int slot_index) {
     if (resolved) {
         return resolved->temp_c;
     }
-    return AppConstants::Ams::DEFAULT_LOAD_PREHEAT_TEMP;
+    return std::nullopt;
+}
+
+int AmsOperationSidebar::get_load_temp_for_slot(int slot_index) {
+    return material_load_temp_for_slot(slot_index)
+        .value_or(AppConstants::Ams::DEFAULT_LOAD_PREHEAT_TEMP);
+}
+
+std::map<std::string, std::string> AmsOperationSidebar::macro_temp_prefill(int slot_index) {
+    const int target_c = temperature::deci_to_degrees(
+        lv_subject_get_int(printer_state_.get_active_extruder_target_subject()));
+    return helix::ui::nozzle_temp_prefill(target_c, material_load_temp_for_slot(slot_index));
 }
 
 void AmsOperationSidebar::handle_load_with_preheat(int slot_index) {
@@ -1326,7 +1337,7 @@ void AmsOperationSidebar::handle_load_with_preheat(int slot_index) {
     }
 
     if (plan.tier != helix::ui::FilamentTier::AmsBackend) {
-        dispatch_load_outside_backend(plan);
+        dispatch_load_outside_backend(plan, slot_index);
         return;
     }
 
@@ -1537,7 +1548,8 @@ constexpr const char* LOAD_MACRO_TAG = "AmsOperationSidebar::load_macro";
 constexpr const char* UNLOAD_MACRO_TAG = "AmsOperationSidebar::unload_macro";
 } // namespace
 
-void AmsOperationSidebar::dispatch_load_outside_backend(const helix::ui::FilamentOpPlan& plan) {
+void AmsOperationSidebar::dispatch_load_outside_backend(const helix::ui::FilamentOpPlan& plan,
+                                                        int slot_index) {
     if (plan.tier == helix::ui::FilamentTier::RawGcode) {
         spdlog::info("[AmsSidebar] No backend and no load macro — raw gcode fallback");
         send_filament_fallback_gcode(/*is_load=*/true);
@@ -1557,10 +1569,12 @@ void AmsOperationSidebar::dispatch_load_outside_backend(const helix::ui::Filamen
             token.defer(LOAD_MACRO_TAG, [this, params = result.params]() {
                 send_standard_filament_macro(/*is_load=*/true, params);
             });
-        });
+        },
+        macro_temp_prefill(slot_index));
 }
 
-void AmsOperationSidebar::dispatch_unload_outside_backend(const helix::ui::FilamentOpPlan& plan) {
+void AmsOperationSidebar::dispatch_unload_outside_backend(const helix::ui::FilamentOpPlan& plan,
+                                                          int slot_index) {
     if (plan.tier == helix::ui::FilamentTier::RawGcode) {
         spdlog::info("[AmsSidebar] No backend and no unload macro — raw gcode fallback");
         send_filament_fallback_gcode(/*is_load=*/false);
@@ -1576,7 +1590,8 @@ void AmsOperationSidebar::dispatch_unload_outside_backend(const helix::ui::Filam
             token.defer(UNLOAD_MACRO_TAG, [this, params = result.params]() {
                 send_standard_filament_macro(/*is_load=*/false, params);
             });
-        });
+        },
+        macro_temp_prefill(slot_index));
 }
 
 void AmsOperationSidebar::send_standard_filament_macro(

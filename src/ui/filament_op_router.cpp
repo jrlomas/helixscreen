@@ -26,10 +26,11 @@ HomeConfirmPrompter& home_confirm_prompter_slot() {
 }
 
 void show_shared_param_modal(const std::string& macro_name, const helix::CachedMacroInfo& cached,
+                             const std::map<std::string, std::string>& prefill,
                              helix::MacroExecuteCallback on_execute) {
     if (cached.knowledge == helix::MacroParamKnowledge::KNOWN_PARAMS) {
         get_filament_param_modal().show_for_macro(lv_screen_active(), macro_name, cached.params,
-                                                  std::move(on_execute));
+                                                  std::move(on_execute), prefill);
         return;
     }
     get_filament_param_modal().show_for_unknown_params(lv_screen_active(), macro_name,
@@ -48,7 +49,8 @@ void set_filament_param_prompter(ParamPrompter prompter) {
 }
 
 bool dispatch_filament_macro(const std::string& macro_name, ParamPolicy policy,
-                             helix::MacroExecuteCallback run) {
+                             helix::MacroExecuteCallback run,
+                             const std::map<std::string, std::string>& known_values) {
     if (!run) {
         spdlog::error("[FilamentRouter] No run callback for macro '{}'", macro_name);
         return false;
@@ -67,14 +69,51 @@ bool dispatch_filament_macro(const std::string& macro_name, ParamPolicy policy,
         return false;
     }
 
-    spdlog::info("[FilamentRouter] Macro '{}' takes parameters — prompting", macro_name);
+    // Only a macro whose parameters are known can be filled: an UNKNOWN macro may
+    // read none of these names, so it always asks.
+    std::map<std::string, std::string> prefill;
+    if (cached.knowledge == helix::MacroParamKnowledge::KNOWN_PARAMS) {
+        for (const auto& param : cached.params) {
+            if (auto it = known_values.find(param.name); it != known_values.end()) {
+                prefill.emplace(param.name, it->second);
+            }
+        }
+        if (prefill.size() == cached.params.size()) {
+            spdlog::info("[FilamentRouter] Every parameter of '{}' is known — running without a "
+                         "prompt",
+                         macro_name);
+            helix::MacroParamResult result;
+            result.params = std::move(prefill);
+            run(result);
+            return false;
+        }
+    }
+
+    spdlog::info("[FilamentRouter] Macro '{}' takes parameters — prompting ({} prefilled)",
+                 macro_name, prefill.size());
     const ParamPrompter& prompter = prompter_slot();
     if (prompter) {
-        prompter(macro_name, cached, std::move(run));
+        prompter(macro_name, cached, prefill, std::move(run));
     } else {
-        show_shared_param_modal(macro_name, cached, std::move(run));
+        show_shared_param_modal(macro_name, cached, prefill, std::move(run));
     }
     return true;
+}
+
+std::map<std::string, std::string> nozzle_temp_prefill(int extruder_target_c,
+                                                       std::optional<int> material_temp_c) {
+    int temp_c = 0;
+    if (extruder_target_c > 0) {
+        temp_c = extruder_target_c;
+    } else if (material_temp_c && *material_temp_c > 0) {
+        temp_c = *material_temp_c;
+    } else {
+        return {};
+    }
+    // The names filament macros use for the temperature they heat the nozzle to.
+    const std::string value = std::to_string(temp_c);
+    return {
+        {"EXTRUDER_TEMP", value}, {"NOZZLE_TEMP", value}, {"PURGE_TEMP", value}, {"TEMP", value}};
 }
 
 void set_home_confirm_prompter(HomeConfirmPrompter prompter) {

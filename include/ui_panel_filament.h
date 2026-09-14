@@ -19,6 +19,8 @@
 #include "ui/temperature_observer_bundle.h"
 
 #include <array>
+#include <map>
+#include <optional>
 #include <string>
 
 // Forward declarations
@@ -570,6 +572,12 @@ class FilamentPanel : public PanelBase {
     /// the panel's material preset > min_extrude_temp_. The first two tiers are
     /// helix::ui::resolve_load_preheat_material(), shared with the AMS sidebar.
     PreheatTempResult resolve_preheat_temp(int target_slot) const;
+    /// resolve_preheat_temp() without the min_extrude_temp_ tail: nullopt when no
+    /// slot, external spool or preset names a material.
+    std::optional<PreheatTempResult> resolve_material_preheat_temp(int target_slot) const;
+    /// Nozzle-temperature parameter values for a filament macro run by @p op: the
+    /// live extruder target, else the material resolve_material_preheat_temp() names.
+    std::map<std::string, std::string> macro_temp_prefill(PreheatOp op) const;
     /// Which slot's material a given op should heat for. Load/Unload follow the
     /// dropdown selection (selected_op_slot); Extrude/Retract/Purge follow the
     /// LOADED lane, since they push what is already in the melt zone.

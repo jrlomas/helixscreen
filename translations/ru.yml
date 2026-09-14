@@ -2045,6 +2045,7 @@ translations:
     прошивки=0x{:02X} ошибка=0x{:02X})
   Printer database format error: Ошибка формата базы данных принтеров
   Printer database is corrupt: База данных принтеров повреждена
+  Printer default: По умолчанию для принтера
   Printer didn't respond — make sure it's on and in range: Принтер не ответил — убедитесь,
     что он включён и в зоне доступа
   Printer doesn't expose the expected service — wrong device?: Принтер не предоставляет

@@ -20,6 +20,8 @@
 #include "macro_param_modal.h"
 
 #include <functional>
+#include <map>
+#include <optional>
 #include <string>
 
 namespace helix::ui {
@@ -60,9 +62,9 @@ enum class ParamPolicy {
  * screen, and so a future surface can present parameters its own way without
  * forking dispatch_filament_macro().
  */
-using ParamPrompter =
-    std::function<void(const std::string& macro_name, const helix::CachedMacroInfo& cached,
-                       helix::MacroExecuteCallback on_execute)>;
+using ParamPrompter = std::function<void(
+    const std::string& macro_name, const helix::CachedMacroInfo& cached,
+    const std::map<std::string, std::string>& prefill, helix::MacroExecuteCallback on_execute)>;
 
 /// Install a prompter. Pass a default-constructed ParamPrompter to restore the
 /// shared-modal default.
@@ -112,7 +114,19 @@ void request_home_confirmation(std::function<void()> on_confirm, std::function<v
  *         @p run was invoked synchronously with no parameters.
  */
 bool dispatch_filament_macro(const std::string& macro_name, ParamPolicy policy,
-                             helix::MacroExecuteCallback run);
+                             helix::MacroExecuteCallback run,
+                             const std::map<std::string, std::string>& known_values = {});
+
+/**
+ * @brief The nozzle temperature a filament surface can hand its macro, under
+ *        every parameter name filament macros use for it.
+ *
+ * @p extruder_target_c when above zero, else @p material_temp_c when above zero,
+ * else nothing. Keyed by parameter name for dispatch_filament_macro(), which
+ * sends only the names the macro reads.
+ */
+[[nodiscard]] std::map<std::string, std::string>
+nozzle_temp_prefill(int extruder_target_c, std::optional<int> material_temp_c);
 
 /**
  * @brief Tier 3 load fallback: fast move through the bowden, then a slow push

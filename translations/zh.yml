@@ -1899,6 +1899,7 @@ translations:
     — 请检查盖板、纸张和标签类型 (firmware status=0x{:02X} error=0x{:02X})
   Printer database format error: 打印机数据库格式错误
   Printer database is corrupt: 打印机数据库已损坏
+  Printer default: 打印机默认
   Printer didn't respond — make sure it's on and in range: 打印机无响应 — 请确保已开机且在范围内
   Printer doesn't expose the expected service — wrong device?: 打印机未提供预期的服务 — 设备是否有误？
   Printer hardware detected: 检测到打印机硬件

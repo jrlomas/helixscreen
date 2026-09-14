@@ -35,10 +35,12 @@
 
 #include "../lvgl_test_fixture.h"
 #include "../test_helpers/filament_runout_handler_test_access.h"
+#include "../test_helpers/load_filament_expression_default.h"
 #include "ams_state.h"
 #include "app_globals.h"
 #include "async_lifetime_guard.h"
 #include "filament_op_router.h"
+#include "macro_executor.h"
 #include "macro_param_cache.h"
 #include "moonraker_api.h"
 #include "moonraker_client_mock.h"
@@ -46,8 +48,13 @@
 #include "printer_state.h"
 #include "standard_macros.h"
 
+#include <initializer_list>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <unordered_set>
+#include <utility>
 
 #include "../catch_amalgamated.hpp"
 
@@ -58,6 +65,7 @@ using helix::ui::AmsOperationSidebar;
 using helix::ui::FilamentRunoutHandler;
 using helix::ui::FilamentRunoutHandlerTestAccess;
 using helix::ui::ParamPolicy;
+using ParamValues = std::map<std::string, std::string>;
 
 namespace {
 
@@ -85,13 +93,14 @@ class DispatchSurfaceFixture : public LVGLTestFixture {
 
         // Record prompts instead of raising a real modal — the prompt branch has
         // to be reachable in a binary with no screen.
-        helix::ui::set_filament_param_prompter([this](const std::string& macro,
-                                                      const CachedMacroInfo&,
-                                                      MacroExecuteCallback on_execute) {
-            ++prompt_count;
-            prompted_macro = macro;
-            pending_execute = std::move(on_execute);
-        });
+        helix::ui::set_filament_param_prompter(
+            [this](const std::string& macro, const CachedMacroInfo&, const ParamValues& prefill,
+                   MacroExecuteCallback on_execute) {
+                ++prompt_count;
+                prompted_macro = macro;
+                prompted_prefill = prefill;
+                pending_execute = std::move(on_execute);
+            });
 
         // Start each test with an empty skip-counter window.
         helix::async_lifetime::take_snapshot();
@@ -150,6 +159,24 @@ class DispatchSurfaceFixture : public LVGLTestFixture {
         REQUIRE(StandardMacros::instance().get(StandardMacroSlot::Purge).is_empty());
     }
 
+    /// Seed MacroParamCache with gcode_macro bodies. populate_from_configfile()
+    /// replaces the cache, so every macro a test needs goes in one call.
+    static void cache_macros(std::initializer_list<std::pair<const char*, const char*>> macros) {
+        nlohmann::json config;
+        std::unordered_set<std::string> names;
+        for (const auto& [name, gcode] : macros) {
+            config[std::string("gcode_macro ") + name]["gcode"] = gcode;
+            names.insert(name);
+        }
+        helix::MacroParamCache::instance().populate_from_configfile(config, names);
+    }
+
+    /// The extruder target Klipper reports, in degrees.
+    void set_extruder_target(double degrees) {
+        state.init_extruders({"extruder"});
+        state.update_from_status({{"extruder", {{"target", degrees}}}});
+    }
+
     [[nodiscard]] bool gcode_sent_containing(const std::string& needle) const {
         for (const auto& script : mock_client.gcode_script_history()) {
             if (script.find(needle) != std::string::npos) {
@@ -187,6 +214,7 @@ class DispatchSurfaceFixture : public LVGLTestFixture {
 
     int prompt_count = 0;
     std::string prompted_macro;
+    ParamValues prompted_prefill;
     MacroExecuteCallback pending_execute;
 
   private:
@@ -475,4 +503,135 @@ TEST_CASE_METHOD(DispatchSurfaceFixture, "Runout purge with no macro falls back 
 
     CHECK(prompt_count == 0);
     CHECK(gcode_sent_containing("G1 E50"));
+}
+
+// =============================================================================
+// Values the surface already knows: prefilled, and sent without a prompt when
+// they cover every parameter the macro takes
+// =============================================================================
+
+TEST_CASE("nozzle_temp_prefill offers the live extruder target under every temperature name",
+          "[filament][params][prefill]") {
+    const ParamValues values = helix::ui::nozzle_temp_prefill(260, 220);
+
+    CHECK(values == ParamValues{{"EXTRUDER_TEMP", "260"},
+                                {"NOZZLE_TEMP", "260"},
+                                {"PURGE_TEMP", "260"},
+                                {"TEMP", "260"}});
+}
+
+TEST_CASE("nozzle_temp_prefill falls back to the material temperature with the heater off",
+          "[filament][params][prefill]") {
+    const ParamValues values = helix::ui::nozzle_temp_prefill(0, 220);
+
+    CHECK(values.at("EXTRUDER_TEMP") == "220");
+    CHECK(values.size() == 4);
+}
+
+TEST_CASE("nozzle_temp_prefill knows nothing with the heater off and no material",
+          "[filament][params][prefill]") {
+    CHECK(helix::ui::nozzle_temp_prefill(0, std::nullopt).empty());
+    CHECK(helix::ui::nozzle_temp_prefill(0, 0).empty());
+}
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "A macro whose every parameter is known runs with those values and no prompt",
+                 "[filament][dispatch][wiring][params][prefill]") {
+    cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
+
+    bool ran = false;
+    MacroParamResult seen;
+    const bool prompted = helix::ui::dispatch_filament_macro(
+        "LOAD_FILAMENT", ParamPolicy::Prompt,
+        [&](const MacroParamResult& r) {
+            ran = true;
+            seen = r;
+        },
+        ParamValues{{"EXTRUDER_TEMP", "260"}, {"PURGE_TEMP", "260"}});
+
+    CHECK_FALSE(prompted);
+    CHECK(prompt_count == 0);
+    REQUIRE(ran);
+    // Only what the macro reads is sent: PURGE_TEMP is not one of its parameters.
+    CHECK(seen.params == ParamValues{{"EXTRUDER_TEMP", "260"}});
+    CHECK(helix::build_macro_gcode("LOAD_FILAMENT", seen) == "LOAD_FILAMENT EXTRUDER_TEMP=260");
+}
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "A parameter nothing fills still prompts, with the known ones prefilled",
+                 "[filament][dispatch][wiring][params][prefill]") {
+    cache_macros({{"LOAD_FILAMENT", "{% set t = params.EXTRUDER_TEMP|default(220)|int %}\n"
+                                    "{% set l = params.LENGTH|default(100)|float %}\n"
+                                    "M109 S{t}\nG1 E{l} F300"}});
+
+    bool ran = false;
+    const bool prompted = helix::ui::dispatch_filament_macro(
+        "LOAD_FILAMENT", ParamPolicy::Prompt, [&](const MacroParamResult&) { ran = true; },
+        ParamValues{{"EXTRUDER_TEMP", "260"}});
+
+    CHECK(prompted);
+    CHECK(prompt_count == 1);
+    CHECK_FALSE(ran);
+    CHECK(prompted_prefill == ParamValues{{"EXTRUDER_TEMP", "260"}});
+}
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "With nothing known a params-taking macro prompts with nothing prefilled",
+                 "[filament][dispatch][wiring][params][prefill]") {
+    cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
+
+    bool ran = false;
+    const bool prompted = helix::ui::dispatch_filament_macro(
+        "LOAD_FILAMENT", ParamPolicy::Prompt, [&](const MacroParamResult&) { ran = true; }, {});
+
+    CHECK(prompted);
+    CHECK(prompt_count == 1);
+    CHECK_FALSE(ran);
+    CHECK(prompted_prefill.empty());
+}
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "Known values never skip the prompt for a macro whose parameters are unknown",
+                 "[filament][dispatch][wiring][params][prefill]") {
+    // Empty cache: nothing says the macro reads EXTRUDER_TEMP, so sending it
+    // unasked would be a guess.
+    bool ran = false;
+    const bool prompted = helix::ui::dispatch_filament_macro(
+        "LOAD_FILAMENT", ParamPolicy::Prompt, [&](const MacroParamResult&) { ran = true; },
+        ParamValues{{"EXTRUDER_TEMP", "260"}});
+
+    CHECK(prompted);
+    CHECK(prompt_count == 1);
+    CHECK_FALSE(ran);
+}
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "Sidebar load sends the live nozzle target to a temperature-only macro",
+                 "[filament][dispatch][wiring][ams][prefill]") {
+    configure_filament_macros();
+    cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
+    set_extruder_target(260.0);
+
+    AmsOperationSidebar sidebar(state);
+    sidebar.handle_load_with_preheat(0);
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(prompt_count == 0);
+    CHECK(gcode_sent_containing("LOAD_FILAMENT EXTRUDER_TEMP=260"));
+}
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "Sidebar unload sends the live nozzle target to a temperature-only macro",
+                 "[filament][dispatch][wiring][ams][prefill]") {
+    configure_filament_macros();
+    cache_macros({{"UNLOAD_FILAMENT",
+                   "{% set t = params.TEMP|default(200)|int %}\nM109 S{t}\nG1 E-60 F600"}});
+    set_extruder_target(250.0);
+
+    AmsOperationSidebar sidebar(state);
+    sidebar.handle_unload(1);
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(prompt_count == 0);
+    CHECK(gcode_sent_containing("UNLOAD_FILAMENT TEMP=250"));
 }
