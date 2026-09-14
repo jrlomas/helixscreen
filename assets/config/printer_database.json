@@ -2350,9 +2350,9 @@
       "manufacturer": "Elegoo",
       "image": "elegoo-centauri-carbon.png",
       "preset": "cc1",
-      "_calibration_comment": "COSMOS's BED_MESH_CALIBRATE is a macro that heats the bed to BED_TEMP, homes, cleans the nozzle, tares the load cell, probes, then measures the Z offset. It needs nothing sent ahead of it; its M190/M109 wait for a hot bed to cool, so BED_TEMP never asks for less than the bed already has unless a target is set.",
+      "_calibration_comment": "COSMOS's BED_MESH_CALIBRATE is a macro that heats the bed to BED_TEMP, homes, cleans the nozzle, tares the load cell, probes, then measures the Z offset. It needs nothing sent ahead of it; its M190/M109 wait for a hot bed to cool, so BED_TEMP never asks for less than the bed already has unless a target is set. {profile_arg} stores the mesh under the chosen name as it completes; the Z-offset step clears the active mesh right after, so it cannot be saved from there.",
       "calibration": {
-        "bed_mesh_gcode": "BED_MESH_CALIBRATE BED_TEMP={bed_temp}"
+        "bed_mesh_gcode": "BED_MESH_CALIBRATE{profile_arg} BED_TEMP={bed_temp}"
       },
       "_print_start_default_phases_comment": "CC1's slicer start-gcode only heats + G28 + loads a stored BED_MESH_PROFILE (<1s). No QGL/Z_TILT/mesh-calibrate/wipe. Loadcell homing is slower than endstop homing, so 30s covers G28 alone.",
       "print_start_default_phases": {

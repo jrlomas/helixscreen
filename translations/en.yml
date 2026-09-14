@@ -646,6 +646,7 @@ translations:
   Could not read the screw adjustments from the printer: Could not read the screw adjustments from the printer
   Could not resolve printer RFCOMM channel: Could not resolve printer RFCOMM channel
   Could not save filament: Could not save filament
+  "Could not save the mesh as '{}': {}": "Could not save the mesh as '{}': {}"
   Could not start Bluetooth discovery: Could not start Bluetooth discovery
   Could not update filaments: Could not update filaments
   Could not verify Spoolman status. Moonraker may still be restarting.: Could not
@@ -1379,6 +1380,7 @@ translations:
   Klipper has entered shutdown state. This may be due to an emergency stop, thermal runaway, or configuration error.: Klipper
     has entered shutdown state. This may be due to an emergency stop, thermal runaway,
     or configuration error.
+  Klipper reserves 'default' for new calibrations. Choose another name.: Klipper reserves 'default' for new calibrations. Choose another name.
   Klipper will restart to apply changes: Klipper will restart to apply changes
   Klipper will restart to apply changes.: Klipper will restart to apply changes.
   Klipper will restart to apply new settings.: Klipper will restart to apply new settings.

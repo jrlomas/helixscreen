@@ -7,6 +7,7 @@
 #include "ui_subscription_guard.h"
 
 #include "async_lifetime_guard.h"
+#include "bed_mesh_calibration_plan.h"
 #include "bed_mesh_probe_temp.h"
 #include "i_moonraker_api.h"
 #include "moonraker_types.h" // For BedMeshProfile
@@ -16,6 +17,7 @@
 #include "subject_managed_panel.h"
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -48,7 +50,7 @@ constexpr int BED_MESH_MAX_PROFILES = 5;
 enum class BedMeshCalibrationState {
     IDLE = 0,    ///< Modal not shown
     PROBING = 1, ///< Actively probing (progress shown)
-    NAMING = 2,  ///< Probing complete, awaiting profile name
+    NAMING = 2,  ///< Awaiting the name of the profile to probe into
     ERROR = 3    ///< Error occurred
 };
 
@@ -105,18 +107,21 @@ class BedMeshPanel : public OverlayBase {
     void on_calibration_complete();
     void on_calibration_error(const std::string& message);
     void handle_emergency_stop();
-    void save_profile_with_name(const std::string& name);
     void start_calibration_probing();
 
     // Name-field entry points. Each validates what was typed before acting, so
     // an untouched field cannot silently resolve to "default" and overwrite a
     // stored mesh (prestonbrown/helixscreen#1360). The modal callbacks read the
-    // textarea and call these; the policy lives here, the decision in
+    // field and call these; the policy lives here, the decision in
     // helix::ui::bed_mesh::check_profile_name().
-    void save_profile_checked(std::string_view typed);
+    /// The calibrate dialog's name: the profile the new mesh is probed into.
+    void submit_calibration_name(std::string_view typed);
     void rename_profile_checked(std::string_view typed);
 
-    /// Profiles the printer currently stores, minus the internal "_hs_temp".
+    /// The calibrate dialog's name field, as its Start button submits it.
+    void submit_calibration_name_field();
+
+    /// Profiles the printer currently stores.
     std::vector<std::string> stored_profile_names() const;
 
     /// Confirmation answers (called from the overwrite dialog's callbacks).
@@ -124,10 +129,21 @@ class BedMeshPanel : public OverlayBase {
     void cancel_overwrite();
 
   private:
-    /// The gcode this printer's mesh calibration runs, resolved through
-    /// StandardMacros so a printer-shipped sequence, a user's Settings override
-    /// and a plain BED_MESH_CALIBRATE are all reached the same way.
-    [[nodiscard]] IAdvancedAPI::BedMeshCommand resolve_calibration_command();
+    /// Plan a calibration into @p name through StandardMacros, so a
+    /// printer-shipped sequence, a user's Settings override and a plain
+    /// BED_MESH_CALIBRATE are all reached the same way.
+    [[nodiscard]] helix::bed_mesh::CalibrationPlan
+    plan_calibration_into(const std::string& name) const;
+
+    void begin_calibration(const std::string& name);
+    void copy_calibrated_mesh(const std::string& from, const std::string& to);
+    void finish_calibration(const std::string& profile);
+
+    /// BED_MESH_PROFILE SAVE under @p name. Klipper declines a save on the console
+    /// and still answers the request ok, so a refusal there is reported through
+    /// @p on_failed, never as success.
+    void save_profile_as(const std::string& name, std::function<void()> on_saved,
+                         std::function<void(const std::string&)> on_failed);
 
     void launch_calibration(IMoonrakerAPI* api, int expected_probes, int probe_samples = 1);
     // ========== Subject Manager (RAII cleanup) ==========
@@ -178,9 +194,11 @@ class BedMeshPanel : public OverlayBase {
     lv_subject_t bed_mesh_probe_text_;          ///< "Probing point 5 of 25"
     lv_subject_t bed_mesh_probe_indeterminate_; ///< 1 = spinner (total unknown), 0 = progress bar
     lv_subject_t bed_mesh_error_message_;       ///< Error message if failed
+    lv_subject_t bed_mesh_calibrate_name_;      ///< Profile name field of the calibrate dialog
 
     char probe_text_buf_[64];     ///< Buffer for probe_text_ subject
     char error_message_buf_[256]; ///< Buffer for error_message_ subject
+    char calibrate_name_buf_[64]; ///< Buffer for calibrate_name_ subject
 
     // ========== Modal Widget Pointers (uses ui_modal_show pattern) ==========
     lv_obj_t* calibrate_modal_widget_ = nullptr;
@@ -207,7 +225,7 @@ class BedMeshPanel : public OverlayBase {
     std::string pending_rename_new_;
 
     /// Which action the overwrite confirmation is holding, and under what name.
-    enum class OverwriteTarget { None, Save, Rename };
+    enum class OverwriteTarget { None, Calibrate, Rename };
     OverwriteTarget pending_overwrite_ = OverwriteTarget::None;
     std::string pending_overwrite_name_;
 
@@ -256,8 +274,9 @@ class BedMeshPanel : public OverlayBase {
     lv_obj_t* parent_screen_ = nullptr;
     bool callbacks_registered_ = false;
 
-    /// What start_calibration() resolved; launch_calibration() sends it.
-    IAdvancedAPI::BedMeshCommand calibration_command_;
+    /// What begin_calibration() planned: launch_calibration() sends its command,
+    /// and on_calibration_complete() finishes where it says the mesh went.
+    helix::bed_mesh::CalibrationPlan calibration_plan_;
 
     // Preheat tracking — true when we turned on a heater that was off before probing
     bool preheat_turned_on_nozzle_ = false;

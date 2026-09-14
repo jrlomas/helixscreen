@@ -1310,6 +1310,25 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
         return true;
     }
 
+    /// Test helper: when the next printer.gcode.script containing @p script_substr
+    /// runs, emit @p line as a gcode response before its RPC answers, the way
+    /// Klipper declines a command on the console and still answers `ok`. One-shot.
+    void force_next_gcode_console_reply(const std::string& script_substr, const std::string& line) {
+        std::lock_guard<std::mutex> lock(forced_gcode_error_mutex_);
+        forced_console_reply_ = std::make_pair(script_substr, line);
+    }
+
+    /// Consume a pending forced console reply if it matches @p script.
+    std::optional<std::string> take_forced_console_reply(const std::string& script) {
+        std::lock_guard<std::mutex> lock(forced_gcode_error_mutex_);
+        if (!forced_console_reply_ ||
+            script.find(forced_console_reply_->first) == std::string::npos)
+            return std::nullopt;
+        std::string line = forced_console_reply_->second;
+        forced_console_reply_.reset();
+        return line;
+    }
+
     /// Test inspection: every gcode script string passed through the
     /// printer.gcode.script handler, in order. Lets tests assert multi-step
     /// gcode sequences (e.g. the #991 split config-reassert + heat/feed chain).
@@ -1369,6 +1388,9 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     // One-shot forced response-drop for printer.gcode.script (test helper). Holds the
     // script substring filter; empty string matches any script. Shares the mutex above.
     std::optional<std::string> forced_gcode_drop_;
+    // One-shot console reply for a matching printer.gcode.script: {script substring,
+    // line}. Shares the mutex below.
+    std::optional<std::pair<std::string, std::string>> forced_console_reply_;
     mutable std::mutex forced_gcode_error_mutex_;
 
     // Temperature simulation state

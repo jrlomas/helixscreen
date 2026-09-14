@@ -679,6 +679,7 @@ translations:
   Could not resolve printer RFCOMM channel: Impossible de résoudre le canal RFCOMM
     de limprimante
   Could not save filament: 'Impossible d''enregistrer le filament'
+  "Could not save the mesh as '{}': {}": ''
   Could not start Bluetooth discovery: Impossible de démarrer la découverte Bluetooth
   Could not update filaments: Impossible de mettre à jour les filaments
   Could not verify Spoolman status. Moonraker may still be restarting.: Impossible
@@ -1432,6 +1433,7 @@ translations:
   Klipper has entered shutdown state. This may be due to an emergency stop, thermal runaway, or configuration error.: Klipper
     est passé en état d'arrêt. Cela peut être dû à un arrêt d'urgence, à un emballement
     thermique ou à une erreur de configuration.
+  Klipper reserves 'default' for new calibrations. Choose another name.: ''
   Klipper will restart to apply changes: Klipper redémarrera pour appliquer les modifications
   Klipper will restart to apply changes.: Klipper redémarrera pour appliquer les modifications.
   Klipper will restart to apply new settings.: Klipper va redémarrer pour appliquer

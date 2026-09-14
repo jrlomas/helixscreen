@@ -595,6 +595,7 @@ translations:
   Could not read the screw adjustments from the printer: 无法从打印机读取螺丝调整数据
   Could not resolve printer RFCOMM channel: 无法解析打印机 RFCOMM 通道
   Could not save filament: 无法保存耗材
+  "Could not save the mesh as '{}': {}": ''
   Could not start Bluetooth discovery: 无法启动蓝牙发现
   Could not update filaments: 无法更新耗材
   Could not verify Spoolman status. Moonraker may still be restarting.: 无法验证 Spoolman
@@ -1286,6 +1287,7 @@ translations:
   : Klipper 已进入错误状态。这通常是由 MCU 连接失败或配置错误引起的。请尝试固件重启。
   Klipper has entered shutdown state. This may be due to an emergency stop, thermal runaway, or configuration error.: Klipper
     已进入关机状态。这可能是由于紧急停止、热失控或配置错误引起的。
+  Klipper reserves 'default' for new calibrations. Choose another name.: ''
   Klipper will restart to apply changes: Klipper 将重启以应用更改
   Klipper will restart to apply changes.: Klipper 将重启以应用更改。
   Klipper will restart to apply new settings.: Klipper 将重启以应用新设置。

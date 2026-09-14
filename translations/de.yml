@@ -677,6 +677,7 @@ translations:
   Could not resolve printer RFCOMM channel: RFCOMM-Kanal des Druckers konnte nicht
     ermittelt werden
   Could not save filament: Filament konnte nicht gespeichert werden
+  "Could not save the mesh as '{}': {}": ''
   Could not start Bluetooth discovery: Bluetooth-Erkennung konnte nicht gestartet
     werden
   Could not update filaments: Filamente konnten nicht aktualisiert werden
@@ -1428,6 +1429,7 @@ translations:
   Klipper has entered shutdown state. This may be due to an emergency stop, thermal runaway, or configuration error.: Klipper
     ist in den Shutdown-Zustand gewechselt. Dies kann auf einen Notaus, thermisches
     Durchgehen oder einen Konfigurationsfehler zurückzuführen sein.
+  Klipper reserves 'default' for new calibrations. Choose another name.: ''
   Klipper will restart to apply changes: Klipper wird neu starten, um Änderungen anzuwenden
   Klipper will restart to apply changes.: Klipper wird neu starten, um Änderungen
     anzuwenden.

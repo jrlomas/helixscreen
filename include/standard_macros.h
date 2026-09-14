@@ -188,8 +188,9 @@ namespace helix {
 
 /// Values a shipped sequence may reference by placeholder.
 struct MacroScriptValues {
-    /// Replaces `{profile}`: the bed mesh profile the sequence probes into.
-    std::string profile;
+    /// Replaces `{profile_arg}`: the bed mesh profile argument with its leading
+    /// space (` PROFILE=cold`), or empty to leave the firmware's default profile.
+    std::string profile_arg;
 
     /// Replaces `{bed_temp}`, in whole degrees C: the bed temperature to probe at.
     int bed_temp_c = bed_mesh::DEFAULT_PROBE_BED_TEMP_C;
@@ -207,6 +208,10 @@ struct ResolvedMacroScript {
     /// shipped tier: those sequences are authored per machine, and the
     /// database's name-based skip rules cannot recognise a script.
     bool self_prepares = false;
+
+    /// The script marks where a profile argument goes, so whatever it stores lands
+    /// in the profile the caller named.
+    bool takes_profile_arg = false;
 };
 
 /**

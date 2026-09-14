@@ -589,6 +589,7 @@
   <translation tag="Could not read the screw adjustments from the printer" es="No se pudieron leer los ajustes de los tornillos desde la impresora"/>
   <translation tag="Could not resolve printer RFCOMM channel" es="No se pudo resolver el canal RFCOMM de la impresora"/>
   <translation tag="Could not save filament" es="No se pudo guardar el filamento"/>
+  <translation tag="Could not save the mesh as &apos;{}&apos;: {}"/>
   <translation tag="Could not start Bluetooth discovery" es="No se pudo iniciar el descubrimiento Bluetooth"/>
   <translation tag="Could not update filaments" es="No se pudieron actualizar los filamentos"/>
   <translation tag="Could not verify Spoolman status. Moonraker may still be restarting." es="No se pudo verificar el estado de Spoolman. Moonraker puede estar reiniciándose."/>
@@ -1256,6 +1257,7 @@
   <translation tag="Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart." es="El firmware de Klipper se ha desconectado del host. Intente reiniciar Klipper o realizar un reinicio de firmware."/>
   <translation tag="Klipper has entered an error state. This is typically caused by an MCU connection failure or configuration error. Try a firmware restart." es="Klipper ha entrado en un estado de error. Esto generalmente es causado por un fallo de conexión del MCU o un error de configuración. Intente un reinicio de firmware."/>
   <translation tag="Klipper has entered shutdown state. This may be due to an emergency stop, thermal runaway, or configuration error." es="Klipper ha entrado en estado de apagado. Esto puede ser debido a una parada de emergencia, descontrol térmico o error de configuración."/>
+  <translation tag="Klipper reserves &apos;default&apos; for new calibrations. Choose another name."/>
   <translation tag="Klipper will restart to apply changes" es="Klipper se reiniciará para aplicar los cambios"/>
   <translation tag="Klipper will restart to apply changes." es="Klipper se reiniciará para aplicar los cambios."/>
   <translation tag="Klipper will restart to apply new settings." es="Klipper se reiniciará para aplicar la nueva configuración."/>

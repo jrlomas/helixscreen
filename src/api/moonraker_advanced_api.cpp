@@ -1806,8 +1806,7 @@ void MoonrakerAdvancedAPI::start_bed_mesh_calibrate(const BedMeshCommand& comman
 
     collector->start();
 
-    // No PROFILE= parameter — the user names the mesh after completion, and
-    // save_profile_with_name() writes it then.
+    // command.script already names the profile the finished mesh is stored in.
     uint32_t prep_timeout_ms = 0;
     const std::string script =
         command.self_prepares

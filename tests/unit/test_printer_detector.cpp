@@ -4500,6 +4500,9 @@ TEST_CASE("Bed mesh calibration gcode override", "[printer_detector]") {
         }
         CHECK(gcode.rfind("BED_MESH_CALIBRATE", 0) == 0);
         CHECK(gcode.find("BED_TEMP={bed_temp}") != std::string::npos);
+        // The chosen profile rides on the calibration itself: its Z-offset step
+        // clears the active mesh, so nothing could be saved from it afterwards.
+        CHECK(gcode.find("BED_MESH_CALIBRATE{profile_arg} ") == 0);
     }
 
     SECTION("Printer without override returns empty") {

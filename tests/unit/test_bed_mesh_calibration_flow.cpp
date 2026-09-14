@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Mesh calibration over the mock client, through the real MoonrakerAdvancedAPI
-// collector and BedMeshPanel's start sequence, judged by the gcode actually sent.
+// collector and BedMeshPanel's flow, judged by the gcode actually sent.
 
 #include "ui_panel_bed_mesh.h"
 
 #include "../lvgl_test_fixture.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
+#include "../ui_test_utils.h"
 #include "app_globals.h"
 #include "moonraker_advanced_api.h"
 #include "moonraker_api.h"
@@ -44,6 +45,10 @@ long first_sent(const std::vector<std::string>& history, const char* needle) {
     const auto it = std::find_if(history.begin(), history.end(),
                                  [needle](const std::string& s) { return mentions(s, needle); });
     return it == history.end() ? -1 : static_cast<long>(it - history.begin());
+}
+
+bool any_sent(const std::vector<std::string>& history, const char* needle) {
+    return first_sent(history, needle) >= 0;
 }
 
 class CalibrationCollectorFixture : public LVGLTestFixture {
@@ -85,6 +90,9 @@ class BedMeshPanelFlowFixture : public LVGLTestFixture {
     helix::PrinterState state;
     MoonrakerAPI api{client, state};
 
+    std::vector<std::string> errors;
+    std::vector<std::string> successes;
+
     BedMeshPanelFlowFixture() {
         state.init_subjects(false);
         set_moonraker_api(&api);
@@ -94,8 +102,14 @@ class BedMeshPanelFlowFixture : public LVGLTestFixture {
         helix::PrinterStateTestAccess::reset(get_printer_state());
         get_printer_state().init_subjects(false);
         get_printer_state().update_from_status({{"toolhead", {{"homed_axes", ""}}}});
+        helix::ui::set_test_notification_error_hook(
+            [this](const std::string& m) { errors.push_back(m); });
+        helix::ui::set_test_notification_success_hook(
+            [this](const std::string& m) { successes.push_back(m); });
     }
     ~BedMeshPanelFlowFixture() override {
+        helix::ui::set_test_notification_error_hook(nullptr);
+        helix::ui::set_test_notification_success_hook(nullptr);
         set_moonraker_api(nullptr);
         StandardMacros::instance().init(helix::PrinterDiscovery{}, "");
         drain();
@@ -105,9 +119,27 @@ class BedMeshPanelFlowFixture : public LVGLTestFixture {
         StandardMacros::instance().init(helix::PrinterDiscovery{}, printer_name);
     }
 
+    static void detect_macros(const json& objects) {
+        helix::PrinterDiscovery hardware;
+        hardware.parse_objects(objects);
+        StandardMacros::instance().init(hardware, "");
+    }
+
     static void set_bed(double temperature, double target) {
         get_printer_state().update_from_status(
             {{"heater_bed", {{"temperature", temperature}, {"target", target}}}});
+    }
+
+    /// Open the calibrate dialog, give the mesh a name, and let the flow run out.
+    void calibrate_as(BedMeshPanel& panel, const char* name) {
+        panel.start_calibration();
+        drain();
+        panel.submit_calibration_name(name);
+        drain();
+    }
+
+    const std::vector<std::string>& sent() const {
+        return client.gcode_script_history();
     }
 };
 
@@ -155,8 +187,56 @@ TEST_CASE_METHOD(CalibrationCollectorFixture,
 }
 
 // ============================================================================
-// Panel: what goes out in front of the mesh command
+// Panel: the name comes first, and decides what is sent
 // ============================================================================
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture, "the mesh is named before any calibration gcode is sent",
+                 "[bed_mesh_flow]") {
+    use_printer("");
+    BedMeshPanel panel;
+
+    panel.start_calibration();
+    drain();
+    CHECK(sent().empty());
+
+    panel.submit_calibration_name("default");
+    drain();
+    CHECK(any_sent(sent(), "BED_MESH_CALIBRATE"));
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a mesh kept as default is probed with no PROFILE and never saved to default",
+                 "[bed_mesh_flow]") {
+    use_printer("");
+    set_bed(24.0, 0.0);
+    BedMeshPanel panel;
+    calibrate_as(panel, "default");
+
+    const long mesh = first_sent(sent(), "BED_MESH_CALIBRATE");
+    REQUIRE(mesh >= 0);
+    CHECK_FALSE(mentions(sent()[mesh], "PROFILE"));
+    // Klipper stores it in default itself, and refuses a SAVE there.
+    CHECK_FALSE(any_sent(sent(), "BED_MESH_PROFILE"));
+    CHECK(errors.empty());
+    REQUIRE(successes.size() == 1);
+    CHECK(mentions(successes[0], "'default'"));
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture, "a named mesh is probed straight into that profile",
+                 "[bed_mesh_flow]") {
+    use_printer("");
+    BedMeshPanel panel;
+    calibrate_as(panel, "cold");
+
+    const long mesh = first_sent(sent(), "BED_MESH_CALIBRATE");
+    REQUIRE(mesh >= 0);
+    CHECK(mentions(sent()[mesh], "PROFILE=cold"));
+    // Nothing to copy and nothing to clean up.
+    CHECK_FALSE(any_sent(sent(), "BED_MESH_PROFILE"));
+    CHECK(errors.empty());
+    REQUIRE(successes.size() == 1);
+    CHECK(mentions(successes[0], "'cold'"));
+}
 
 TEST_CASE_METHOD(BedMeshPanelFlowFixture,
                  "a self-preparing mesh sequence is sent alone, at the bed temperature it needs",
@@ -170,15 +250,11 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
         REQUIRE(lv_subject_get_int(get_printer_state().get_bed_target_subject()) == 700);
 
         BedMeshPanel panel;
-        panel.start_calibration();
-        drain();
+        calibrate_as(panel, "default");
 
-        const auto& hist = client.gcode_script_history();
         // No preheat wait and no G28 ahead of it: the sequence does both itself.
-        REQUIRE(hist.size() == 1);
-        CHECK(hist[0].rfind("BED_MESH_CALIBRATE", 0) == 0);
-        CHECK(mentions(hist[0], "BED_TEMP=70"));
-        CHECK_FALSE(mentions(hist[0], "{"));
+        REQUIRE(sent().size() == 1);
+        CHECK(sent()[0] == "BED_MESH_CALIBRATE BED_TEMP=70");
     }
 
     SECTION("an idle bed still hot is probed at the temperature it has") {
@@ -186,12 +262,23 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
         REQUIRE(lv_subject_get_int(get_printer_state().get_bed_temp_subject()) == 874);
 
         BedMeshPanel panel;
-        panel.start_calibration();
-        drain();
+        calibrate_as(panel, "default");
 
-        const auto& hist = client.gcode_script_history();
-        REQUIRE(hist.size() == 1);
-        CHECK(mentions(hist[0], "BED_TEMP=87"));
+        REQUIRE(sent().size() == 1);
+        CHECK(sent()[0] == "BED_MESH_CALIBRATE BED_TEMP=87");
+    }
+
+    SECTION("a named mesh reaches the firmware's macro as PROFILE") {
+        set_bed(24.0, 0.0);
+
+        BedMeshPanel panel;
+        calibrate_as(panel, "cold");
+
+        REQUIRE(sent().size() == 1);
+        CHECK(sent()[0] == "BED_MESH_CALIBRATE PROFILE=cold BED_TEMP=60");
+        CHECK(errors.empty());
+        REQUIRE(successes.size() == 1);
+        CHECK(mentions(successes[0], "'cold'"));
     }
 }
 
@@ -204,16 +291,85 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
     set_bed(24.0, 0.0);
 
     BedMeshPanel panel;
-    panel.start_calibration();
-    drain();
+    calibrate_as(panel, "default");
 
-    const auto& hist = client.gcode_script_history();
-    const long wait = first_sent(hist, "TEMPERATURE_WAIT");
-    const long home = first_sent(hist, "G28");
-    const long mesh = first_sent(hist, "BED_MESH_CALIBRATE");
+    const long wait = first_sent(sent(), "TEMPERATURE_WAIT");
+    const long home = first_sent(sent(), "G28");
+    const long mesh = first_sent(sent(), "BED_MESH_CALIBRATE");
     REQUIRE(mesh >= 0);
     CHECK(wait >= 0);
     CHECK(home >= 0);
     CHECK(wait < home);
     CHECK(home < mesh);
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a command that cannot be named is copied into the chosen profile afterwards",
+                 "[bed_mesh_flow]") {
+    detect_macros({"gcode_macro G29"});
+    REQUIRE(StandardMacros::instance().get(StandardMacroSlot::BedMesh).get_macro() == "G29");
+
+    BedMeshPanel panel;
+    calibrate_as(panel, "cold");
+
+    const long mesh = first_sent(sent(), "G29");
+    const long load = first_sent(sent(), "BED_MESH_PROFILE LOAD=default");
+    const long save = first_sent(sent(), "BED_MESH_PROFILE SAVE=cold");
+    REQUIRE(mesh >= 0);
+    REQUIRE(load >= 0);
+    REQUIRE(save >= 0);
+    CHECK(mesh < load);
+    CHECK(load < save);
+    CHECK_FALSE(any_sent(sent(), "REMOVE"));
+    CHECK(errors.empty());
+    REQUIRE(successes.size() == 1);
+    CHECK(mentions(successes[0], "'cold'"));
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a refused save is an error, and the only copy of the mesh is not removed",
+                 "[bed_mesh_flow]") {
+    detect_macros({"gcode_macro G29"});
+    client.force_next_gcode_console_reply(
+        "BED_MESH_PROFILE SAVE=",
+        "// Unable to save to profile [cold], the bed has not been probed");
+
+    BedMeshPanel panel;
+    calibrate_as(panel, "cold");
+
+    REQUIRE(any_sent(sent(), "BED_MESH_PROFILE SAVE=cold")); // the save was attempted
+    CHECK_FALSE(any_sent(sent(), "REMOVE"));
+    CHECK(successes.empty());
+    REQUIRE(errors.size() == 1);
+    CHECK(mentions(errors[0], "cold"));
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "renaming a profile to default is refused before anything is sent",
+                 "[bed_mesh_flow]") {
+    BedMeshPanel panel;
+    panel.show_rename_modal("cold");
+    panel.rename_profile_checked("default");
+    drain();
+
+    CHECK(sent().empty());
+    REQUIRE(errors.size() == 1);
+    CHECK(mentions(errors[0], "default"));
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a rename whose save is refused keeps the original profile", "[bed_mesh_flow]") {
+    client.force_next_gcode_console_reply(
+        "BED_MESH_PROFILE SAVE=",
+        "// Unable to save to profile [warm], the bed has not been probed");
+
+    BedMeshPanel panel;
+    panel.show_rename_modal("cold");
+    panel.rename_profile_checked("warm");
+    drain();
+
+    REQUIRE(any_sent(sent(), "BED_MESH_PROFILE SAVE=warm")); // the save was attempted
+    CHECK_FALSE(any_sent(sent(), "REMOVE"));
+    REQUIRE(errors.size() == 1);
+    CHECK(mentions(errors[0], "warm"));
 }

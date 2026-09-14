@@ -191,9 +191,11 @@ ResolvedMacroScript resolve_macro_script(const StandardMacroInfo& info,
     out.script = info.get_macro();
     out.self_prepares = source == MacroSource::SHIPPED;
 
+    out.takes_profile_arg = out.script.find("{profile_arg}") != std::string::npos;
+
     // The temperature first: a profile name is free text and may spell a placeholder.
     substitute(out.script, "{bed_temp}", std::to_string(values.bed_temp_c));
-    substitute(out.script, "{profile}", values.profile);
+    substitute(out.script, "{profile_arg}", values.profile_arg);
     return out;
 }
 
