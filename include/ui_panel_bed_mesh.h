@@ -109,10 +109,11 @@ class BedMeshPanel : public OverlayBase {
     void handle_emergency_stop();
     void start_calibration_probing();
 
-    // Name-field entry points. Each validates what was typed before acting, so
-    // an untouched field cannot silently resolve to "default" and overwrite a
-    // stored mesh (prestonbrown/helixscreen#1360). The modal callbacks read the
-    // field and call these; the policy lives here, the decision in
+    // Name-field entry points. Each validates what was typed before acting: an
+    // emptied field is refused rather than read as "default"
+    // (prestonbrown/helixscreen#1360), and a stored profile other than default is
+    // replaced only once the user confirms. The modal callbacks read the field and
+    // call these; the policy lives here, the decision in
     // helix::ui::bed_mesh::check_profile_name().
     /// The calibrate dialog's name: the profile the new mesh is probed into.
     void submit_calibration_name(std::string_view typed);
@@ -134,6 +135,10 @@ class BedMeshPanel : public OverlayBase {
     /// BED_MESH_CALIBRATE are all reached the same way.
     [[nodiscard]] helix::bed_mesh::CalibrationPlan
     plan_calibration_into(const std::string& name) const;
+
+    /// The calibrate dialog is on screen. A backdrop tap or ESC closes it without
+    /// telling the panel, so the calibration state alone cannot say.
+    [[nodiscard]] bool calibration_dialog_is_open() const;
 
     void begin_calibration(const std::string& name);
     void copy_calibrated_mesh(const std::string& from, const std::string& to);
@@ -216,7 +221,6 @@ class BedMeshPanel : public OverlayBase {
     // Nulled by on_content_deleted_cb, same dangling guard as canvas_.
     lv_obj_t* content_ = nullptr;
     lv_obj_t* profile_dropdown_ = nullptr;
-    lv_obj_t* calibrate_name_input_ = nullptr;
     lv_obj_t* rename_name_input_ = nullptr;
 
     // ========== State ==========

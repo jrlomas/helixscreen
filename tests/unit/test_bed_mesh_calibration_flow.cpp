@@ -4,9 +4,11 @@
 // Mesh calibration over the mock client, through the real MoonrakerAdvancedAPI
 // collector and BedMeshPanel's flow, judged by the gcode actually sent.
 
+#include "ui_modal.h"
 #include "ui_panel_bed_mesh.h"
 
 #include "../lvgl_test_fixture.h"
+#include "../lvgl_ui_test_fixture.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
@@ -372,4 +374,197 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
     CHECK_FALSE(any_sent(sent(), "REMOVE"));
     REQUIRE(errors.size() == 1);
     CHECK(mentions(errors[0], "warm"));
+}
+
+// ============================================================================
+// Dialogs: the real calibrate and confirmation modals, built from their XML
+// ============================================================================
+
+namespace {
+
+class BedMeshDialogFixture : public LVGLUITestFixture {
+  public:
+    MoonrakerClientMock client{MoonrakerClientMock::PrinterType::VORON_24};
+    MoonrakerAPI api{client, get_printer_state()};
+    BedMeshPanel panel;
+
+    BedMeshDialogFixture() {
+        set_moonraker_api(&api);
+        StandardMacros::instance().init(helix::PrinterDiscovery{}, "");
+        // The dialog binds the panel's calibration subjects by name.
+        panel.init_subjects();
+        client.clear_gcode_script_history();
+    }
+    ~BedMeshDialogFixture() override {
+        while (lv_obj_t* top = Modal::get_top()) {
+            Modal::hide(top);
+            settle();
+        }
+        settle();
+        set_moonraker_api(nullptr);
+    }
+
+    /// Let a close finish: the deferred widget delete and any dismissal report.
+    void settle() {
+        drain();
+        process_lvgl(50);
+        drain();
+    }
+
+    /// The printer stores default and adaptive, as the mock starts, plus @p extra.
+    void store_profiles_on_printer(std::initializer_list<const char*> extra) {
+        api.execute_gcode("BED_MESH_PROFILE LOAD=default", nullptr, nullptr);
+        for (const char* name : extra) {
+            api.execute_gcode(std::string("BED_MESH_PROFILE SAVE=") + name, nullptr, nullptr);
+        }
+        settle();
+        client.clear_gcode_script_history();
+        const auto stored = api.advanced().get_bed_mesh_profiles();
+        REQUIRE(std::find(stored.begin(), stored.end(), "default") != stored.end());
+    }
+
+    static void tap_backdrop(lv_obj_t* dialog) {
+        lv_obj_t* backdrop = ModalStack::instance().backdrop_for(dialog);
+        REQUIRE(backdrop != nullptr);
+        lv_obj_send_event(backdrop, LV_EVENT_CLICKED, nullptr);
+    }
+
+    static void press_esc(lv_obj_t* dialog) {
+        lv_obj_t* backdrop = ModalStack::instance().backdrop_for(dialog);
+        REQUIRE(backdrop != nullptr);
+        uint32_t key = LV_KEY_ESC;
+        lv_obj_send_event(backdrop, LV_EVENT_KEY, &key);
+    }
+
+    static void click(lv_obj_t* dialog, const char* button) {
+        lv_obj_t* btn = lv_obj_find_by_name(dialog, button);
+        REQUIRE(btn != nullptr);
+        lv_obj_send_event(btn, LV_EVENT_CLICKED, nullptr);
+    }
+
+    /// The calibrate dialog's profile name field.
+    static lv_obj_t* name_field(lv_obj_t* dialog) {
+        REQUIRE(dialog != nullptr);
+        lv_obj_t* field = lv_obj_find_by_name(dialog, "calibrate_profile_name_input");
+        REQUIRE(field != nullptr);
+        return field;
+    }
+
+    const std::vector<std::string>& sent() const {
+        return client.gcode_script_history();
+    }
+};
+
+} // namespace
+
+TEST_CASE_METHOD(BedMeshDialogFixture, "dismissing the naming dialog leaves Probe working",
+                 "[bed_mesh_flow][bed_mesh_dialog]") {
+    panel.start_calibration();
+    settle();
+    lv_obj_t* dialog = Modal::get_top();
+    REQUIRE(dialog != nullptr);
+
+    SECTION("by a backdrop tap") {
+        tap_backdrop(dialog);
+    }
+    SECTION("by ESC") {
+        press_esc(dialog);
+    }
+    settle();
+    REQUIRE(Modal::get_top() == nullptr);
+
+    panel.start_calibration();
+    settle();
+    CHECK(Modal::get_top() != nullptr);
+    CHECK(sent().empty());
+}
+
+TEST_CASE_METHOD(BedMeshDialogFixture,
+                 "the name typed into the dialog is the profile the mesh is probed into",
+                 "[bed_mesh_flow][bed_mesh_dialog]") {
+    panel.start_calibration();
+    settle();
+    lv_obj_t* field = name_field(Modal::get_top());
+    CHECK(std::string(lv_textarea_get_text(field)) == "default");
+
+    lv_textarea_set_text(field, "cold");
+    panel.submit_calibration_name_field();
+    settle();
+
+    const long mesh = first_sent(sent(), "BED_MESH_CALIBRATE");
+    REQUIRE(mesh >= 0);
+    CHECK(mentions(sent()[mesh], "PROFILE=cold"));
+}
+
+TEST_CASE_METHOD(BedMeshDialogFixture, "the naming dialog opens on default every time",
+                 "[bed_mesh_flow][bed_mesh_dialog]") {
+    panel.start_calibration();
+    settle();
+    lv_textarea_set_text(name_field(Modal::get_top()), "cold");
+
+    // Its Cancel button.
+    panel.hide_all_modals();
+    settle();
+    REQUIRE(Modal::get_top() == nullptr);
+
+    panel.start_calibration();
+    settle();
+    CHECK(std::string(lv_textarea_get_text(name_field(Modal::get_top()))) == "default");
+}
+
+TEST_CASE_METHOD(BedMeshDialogFixture, "keeping the name default replaces that mesh without asking",
+                 "[bed_mesh_flow][bed_mesh_dialog]") {
+    store_profiles_on_printer({});
+    panel.start_calibration();
+    settle();
+    lv_obj_t* naming = Modal::get_top();
+
+    panel.submit_calibration_name("default");
+    settle();
+
+    CHECK(any_sent(sent(), "BED_MESH_CALIBRATE"));
+    CHECK(Modal::get_top() != naming); // no Replace dialog in its place
+}
+
+TEST_CASE_METHOD(BedMeshDialogFixture, "replacing any other stored profile asks first",
+                 "[bed_mesh_flow][bed_mesh_dialog]") {
+    store_profiles_on_printer({"cold"});
+    panel.start_calibration();
+    settle();
+    lv_obj_t* naming = Modal::get_top();
+    REQUIRE(naming != nullptr);
+
+    panel.submit_calibration_name("cold");
+    settle();
+    lv_obj_t* confirm = Modal::get_top();
+    REQUIRE(confirm != nullptr);
+    REQUIRE(confirm != naming);
+    REQUIRE_FALSE(any_sent(sent(), "BED_MESH_CALIBRATE"));
+
+    SECTION("Replace probes into it") {
+        click(confirm, "btn_primary");
+        settle();
+        const long mesh = first_sent(sent(), "BED_MESH_CALIBRATE");
+        REQUIRE(mesh >= 0);
+        CHECK(mentions(sent()[mesh], "PROFILE=cold"));
+    }
+
+    SECTION("Cancel goes back to the name and forgets the replacement") {
+        click(confirm, "btn_secondary");
+        settle();
+        CHECK(Modal::get_top() == naming);
+        // Nothing is left pending for a later answer to act on.
+        panel.confirm_overwrite();
+        settle();
+        CHECK_FALSE(any_sent(sent(), "BED_MESH_CALIBRATE"));
+    }
+
+    SECTION("a dismissal is a Cancel") {
+        tap_backdrop(confirm);
+        settle();
+        CHECK(Modal::get_top() == naming);
+        panel.confirm_overwrite();
+        settle();
+        CHECK_FALSE(any_sent(sent(), "BED_MESH_CALIBRATE"));
+    }
 }

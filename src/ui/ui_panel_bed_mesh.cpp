@@ -156,7 +156,6 @@ BedMeshPanel::~BedMeshPanel() {
     // Clear widget pointers (LVGL owns the objects)
     canvas_ = nullptr;
     content_ = nullptr;
-    calibrate_name_input_ = nullptr;
     rename_name_input_ = nullptr;
 }
 
@@ -757,7 +756,6 @@ void BedMeshPanel::on_deactivate() {
 void BedMeshPanel::on_ui_destroyed() {
     canvas_ = nullptr;
     profile_dropdown_ = nullptr;
-    calibrate_name_input_ = nullptr;
     rename_name_input_ = nullptr;
     calibrate_modal_widget_ = nullptr;
     rename_modal_widget_ = nullptr;
@@ -1269,11 +1267,14 @@ void BedMeshPanel::cooldown_after_probing() {
 }
 
 void BedMeshPanel::start_calibration() {
-    // The dialog is already up, naming or probing.
     auto current_state =
         static_cast<BedMeshCalibrationState>(lv_subject_get_int(&bed_mesh_calibrate_state_));
-    if (current_state == BedMeshCalibrationState::PROBING ||
-        current_state == BedMeshCalibrationState::NAMING) {
+    if (current_state == BedMeshCalibrationState::NAMING && !calibration_dialog_is_open()) {
+        // Dismissed from outside: nothing was sent, so naming starts over.
+        spdlog::debug("[BedMeshPanel] Naming dialog was dismissed; opening it again");
+        calibrate_modal_widget_ = nullptr;
+    } else if (current_state == BedMeshCalibrationState::PROBING ||
+               current_state == BedMeshCalibrationState::NAMING) {
         spdlog::debug("[BedMeshPanel] Calibration dialog already open, ignoring");
         return;
     }
@@ -1285,6 +1286,17 @@ void BedMeshPanel::start_calibration() {
                        static_cast<int>(BedMeshCalibrationState::NAMING));
     calibrate_modal_widget_ = helix::ui::modal_show("bed_mesh_calibrate_modal");
     spdlog::debug("[BedMeshPanel] Calibration dialog shown, awaiting a profile name");
+}
+
+bool BedMeshPanel::calibration_dialog_is_open() const {
+    if (!calibrate_modal_widget_) {
+        return false;
+    }
+    // The stack matches entries by pointer, so a dialog already freed is simply
+    // not found.
+    const auto& stack = ModalStack::instance();
+    lv_obj_t* backdrop = stack.backdrop_for(calibrate_modal_widget_);
+    return backdrop && !stack.is_exiting(backdrop);
 }
 
 void BedMeshPanel::submit_calibration_name_field() {
@@ -1300,6 +1312,11 @@ void BedMeshPanel::submit_calibration_name(std::string_view typed) {
         NOTIFY_WARNING(lv_tr("Enter a name for this profile"));
         return;
     case helix::ui::bed_mesh::ProfileNameVerdict::Overwrite:
+        if (check.name == helix::bed_mesh::DEFAULT_PROFILE) {
+            // Re-probing default is the ordinary case the field opens on.
+            begin_calibration(check.name);
+            return;
+        }
         ask_before_overwrite(OverwriteTarget::Calibrate, check.name);
         return;
     case helix::ui::bed_mesh::ProfileNameVerdict::New:
