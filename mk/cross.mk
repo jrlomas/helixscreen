@@ -2577,13 +2577,20 @@ deploy-k2:
 	@# K2 (procd) silently skips plain SysV scripts at boot ([L086]) — only
 	@# scripts with `#!/bin/sh /etc/rc.common` + DEPEND= are invoked. The
 	@# shim at /etc/init.d/helixscreen is what procd's boot iterator picks up;
-	@# it delegates to the SysV script. Single source of truth for the shim
-	@# is config/helixscreen-k2-procd-shim.sh — also used by
-	@# install_procd_shim_k2() in scripts/lib/installer/service.sh. One ssh
-	@# (set -e) so any failure aborts the deploy; rc.d symlinks are verified
-	@# post-enable because `enable` exits 0 even when the symlinks are wrong.
-	@echo "$(DIM)Installing init script + procd shim...$(RESET)"
-	@COPYFILE_DISABLE=1 tar -cf - -C config helixscreen.init helixscreen-k2-procd-shim.sh \
+	@# it delegates to the SysV script. Single sources of truth are
+	@# config/helixscreen-k2-procd-shim.sh and config/k2-webserver.init —
+	@# also used by install_procd_shim_k2() and install_k2_webserver_backend()
+	@# in scripts/lib/installer/service.sh. The web-server carve-out
+	@# (prestonbrown/helixscreen#1617) is deployed here too: the runtime
+	@# hook's app stop+disable take web-server down at every start, so the
+	@# hook itself restores it through /etc/init.d/helix-k2-webserver (the
+	@# service-shaped starter; procd's iterator has been observed to skip
+	@# our S99 while dispatching the shim, hence the hook-based restore).
+	@# One ssh (set -e) so any failure aborts the deploy; rc.d symlinks are
+	@# verified post-enable because `enable` exits 0 even when the symlinks
+	@# are wrong.
+	@echo "$(DIM)Installing init script + procd shim + web-server carve-out...$(RESET)"
+	@COPYFILE_DISABLE=1 tar -cf - -C config helixscreen.init helixscreen-k2-procd-shim.sh k2-webserver.init \
 		| ssh $(K2_SSH_TARGET) 'set -e; \
 			cd /tmp && tar -xof - && \
 			cp helixscreen.init /etc/init.d/S99helixscreen && \
@@ -2599,8 +2606,18 @@ deploy-k2:
 				echo "ERROR: rc.d symlinks not pointing at shim (S99=$$s99 K01=$$k01)" >&2; \
 				exit 1; \
 			fi; \
-			rm -f /tmp/helixscreen.init /tmp/helixscreen-k2-procd-shim.sh; \
-			echo "Init script + procd shim installed (boot symlinks verified)"'
+			cp k2-webserver.init /etc/init.d/helix-k2-webserver && \
+			chmod +x /etc/init.d/helix-k2-webserver && \
+			rm -f /etc/rc.d/S99helix-k2-webserver /etc/rc.d/K01helix-k2-webserver && \
+			/etc/init.d/helix-k2-webserver enable && \
+			ws99=$$(readlink /etc/rc.d/S99helix-k2-webserver 2>/dev/null || true); \
+			if [ "$$ws99" != "../init.d/helix-k2-webserver" ]; then \
+				echo "ERROR: web-server carve-out rc.d symlink wrong (S99=$$ws99)" >&2; \
+				exit 1; \
+			fi; \
+			/etc/init.d/helix-k2-webserver start || true; \
+			rm -f /tmp/helixscreen.init /tmp/helixscreen-k2-procd-shim.sh /tmp/k2-webserver.init; \
+			echo "Init script + procd shim + web-server carve-out installed (boot symlinks verified)"'
 	@# Ensure /opt/helixscreen symlink exists (points to UDISK for storage)
 	@ssh $(K2_SSH_TARGET) '\
 		if [ ! -e /opt/helixscreen ]; then \

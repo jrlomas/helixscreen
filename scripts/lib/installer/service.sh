@@ -135,6 +135,76 @@ install_procd_shim_k2() {
     log_success "Installed K2 procd shim at $shim_dest (boot symlink verified)"
 }
 
+# The K2 web-server carve-out (prestonbrown/helixscreen#1617). The stock
+# /etc/init.d/app service starts the whole Creality set, and procd disables a
+# service as a whole — its stop+disable also take a RUNNING web-server down —
+# so Creality Cloud and the camera stream need web-server started outside the
+# disabled stock service. Installs config/k2-webserver.init as
+# /etc/init.d/helix-k2-webserver, the service-shaped starter; runtime
+# liveness is restored by hooks-k2.sh's platform_stop_competing_uis at the
+# end of every HelixScreen start.
+install_k2_webserver_backend() {
+    [ "${1:-}" = "k2" ] || return 0
+
+    if [ ! -f /etc/init.d/app ]; then
+        log_info "No stock /etc/init.d/app on this host; skipping web-server carve-out"
+        return 0
+    fi
+
+    if [ ! -x /etc/rc.common ]; then
+        log_warn "K2 web-server carve-out: /etc/rc.common not found — skipping"
+        return 0
+    fi
+
+    local src="${INSTALL_DIR}/config/k2-webserver.init"
+    local dest="/etc/init.d/helix-k2-webserver"
+
+    if [ ! -f "$src" ]; then
+        log_warn "k2-webserver.init missing from ${INSTALL_DIR}/config (the payload being installed may predate prestonbrown/helixscreen#1617); the web-server carve-out will not survive reboot"
+        return 0
+    fi
+
+    cp "$src" "$dest" 2>/dev/null || $SUDO cp "$src" "$dest" 2>/dev/null || {
+        log_warn "Could not install $dest; the web-server carve-out will not survive reboot"
+        return 0
+    }
+    chmod +x "$dest" 2>/dev/null || $SUDO chmod +x "$dest" 2>/dev/null || true
+
+    # Record the script for uninstall BEFORE any step below can fail: a
+    # carve-out left on disk without its ledger entry survives uninstall as
+    # an orphan competing with the restored stock UI.
+    record_disabled_service "sysv-created" "$dest"
+
+    # Drop any existing rc.d entry before enabling — `enable` exits 0 even
+    # when it produced no symlink, so the boot entry is verified by link
+    # the same way install_procd_shim_k2 does. enable and start go through
+    # $SUDO for the same reason the shim's do: a non-root caller must not
+    # leave the carve-out half-installed.
+    $SUDO rm -f /etc/rc.d/S99helix-k2-webserver /etc/rc.d/K01helix-k2-webserver 2>/dev/null || true
+    if ! $SUDO "$dest" enable; then
+        log_error "K2 web-server carve-out: enable failed — web-server will not start at boot"
+        log_error "Manual fix: $SUDO $dest enable"
+        return 1
+    fi
+    local ws_target
+    ws_target=$(readlink /etc/rc.d/S99helix-k2-webserver 2>/dev/null || true)
+    if [ "$ws_target" != "../init.d/helix-k2-webserver" ]; then
+        log_error "K2 web-server carve-out: /etc/rc.d/S99helix-k2-webserver -> '$ws_target' (expected '../init.d/helix-k2-webserver')"
+        log_error "web-server will not start at boot (see [L086])."
+        return 1
+    fi
+
+    log_success "Installed K2 web-server carve-out: $dest (boot symlink verified)"
+    # Bring web-server up now — the stock instance died with the app stop
+    # the service start just ran. A failed start is logged, not fatal: the
+    # boot entry above is already verified, so the carve-out comes up at
+    # the next reboot regardless.
+    if ! $SUDO "$dest" start 2>/dev/null; then
+        log_warn "K2 web-server carve-out: start failed; it will start at the next boot"
+    fi
+    return 0
+}
+
 install_service_snapmaker_u1() {
     log_info "Configuring Snapmaker U1 autostart..."
 

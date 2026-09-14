@@ -32,13 +32,44 @@ platform_stop_competing_uis() {
     # respawn it (no respawn param), so a one-shot kill here is sufficient.
     killall boot-play 2>/dev/null || true
 
-    # Note: web-server is intentionally NOT killed — it serves the
-    # Creality Cloud integration and camera stream (webrtc_local).
-    # Stopping it would break remote monitoring via Creality app.
+    # web-server is intentionally NOT killed by the sweep above — it serves
+    # the Creality Cloud integration and camera stream (webrtc_local).
+    # Stopping it would break remote monitoring via the Creality app.
 
-    # Persistently disable the stock UI service (reversible)
+    # Persistently disable the stock UI service (reversible). On this
+    # Tina/procd box `stop` and `disable` also take the service's running
+    # instances down, so a live web-server dies right here — at every boot
+    # and on every service restart.
     if [ -x /etc/init.d/app ]; then
         /etc/init.d/app disable 2>/dev/null || true
+    fi
+
+    # The disable just took a live web-server down, and the dying pid lingers
+    # in the table for seconds; a pidof sampled right now reads it as "the
+    # port is served". Both restore paths below are pidof-guarded against
+    # double-launching, so each would decline to relaunch and the carve-out
+    # would stay down until the next HelixScreen start. Poll until the pid
+    # leaves the table; on timeout a survivor really is serving, and the
+    # guards below leave a live server alone.
+    _ws_wait=0
+    while pidof web-server >/dev/null 2>&1 && [ "$_ws_wait" -lt 10 ]; do
+        sleep 1
+        _ws_wait=$((_ws_wait + 1))
+    done
+    unset _ws_wait
+
+    # The carve-out's liveness is guaranteed HERE, after the disable, not by
+    # a boot script beside it: procd's boot iterator dispatches this hook's
+    # own S99helixscreen every boot but does not dispatch
+    # S99helix-k2-webserver, so this is the one path that provably runs at
+    # boot and at every restart. Restore web-server through our init script
+    # when it is installed (pidof-guarded inside), else with a guarded
+    # direct launch. After every HelixScreen start on K2, the carve-out is
+    # serving (prestonbrown/helixscreen#1617).
+    if [ -x /etc/init.d/helix-k2-webserver ]; then
+        /etc/init.d/helix-k2-webserver start 2>/dev/null || true
+    elif ! pidof web-server >/dev/null 2>&1 && [ -x /usr/bin/web-server ]; then
+        /usr/bin/web-server >/dev/null 2>&1 &
     fi
 }
 

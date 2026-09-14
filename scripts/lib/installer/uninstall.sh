@@ -83,6 +83,23 @@ reenable_disabled_services() {
                     $SUDO chmod +x "$target" 2>/dev/null || true
                 fi
                 ;;
+            sysv-created)
+                # An init script HelixScreen itself wrote (the K2 web-server
+                # carve-out, prestonbrown/helixscreen#1617). Stopping and
+                # removing it is the only correct reversal: chmod +x would
+                # leave our script competing with the restored stock one.
+                # An rc.common script must also be disabled, or its rc.d
+                # boot symlinks outlive the script they point at.
+                if [ -f "$target" ]; then
+                    log_info "Removing HelixScreen init script: $target"
+                    if [ -x /etc/rc.common ] && \
+                       awk 'NR==1 {exit !/\/etc\/rc\.common/}' "$target" 2>/dev/null; then
+                        $SUDO "$target" disable 2>/dev/null || true
+                    fi
+                    $SUDO "$target" stop 2>/dev/null || true
+                    $SUDO rm -f "$target"
+                fi
+                ;;
         esac
     done < "$state_file"
 }
@@ -210,9 +227,30 @@ restore_previous_ui_platform() {
     if [ -z "$restored_ui" ] && [ -f /etc/init.d/app ] && \
        { [ "$platform" = "k2" ] || [ -f /mnt/UDISK/printer_data/config/printer.cfg ]; }; then
         log_info "Re-enabling Creality stock UI (/etc/init.d/app)..."
+        # Drop any web-server the carve-out left running so the stock
+        # instance app start is about to spawn can bind its port.
+        killall web-server 2>/dev/null || true
         $SUDO /etc/init.d/app enable 2>/dev/null || true
-        $SUDO /etc/init.d/app start 2>/dev/null || true
-        restored_ui="Creality stock UI (/etc/init.d/app)"
+        # rc.common's `enable` exits 0 even when it produced no symlink, so
+        # the boot entry is verified by link — the same check
+        # install_procd_shim_k2 makes. The link's S-slot comes from the
+        # stock script's own START directive, so accept any slot pointing
+        # at ../init.d/app. Without the check this block reports the stock
+        # UI restored while the K2 next boots to the logo with no UI at all.
+        local app_link app_target=""
+        for app_link in /etc/rc.d/*app; do
+            [ -L "$app_link" ] || continue
+            if [ "$(readlink "$app_link" 2>/dev/null || true)" = "../init.d/app" ]; then
+                app_target="$app_link"
+                break
+            fi
+        done
+        if [ -z "$app_target" ]; then
+            log_warn "Stock UI boot symlink missing or wrong (no /etc/rc.d/*app -> ../init.d/app); run: /etc/init.d/app enable"
+        else
+            $SUDO /etc/init.d/app start 2>/dev/null || true
+            restored_ui="Creality stock UI (/etc/init.d/app, boot via $app_link)"
+        fi
     fi
 
     # Check for K1/Simple AF GuppyScreen
