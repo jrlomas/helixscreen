@@ -176,6 +176,7 @@ void PrintStartCollector::start() {
                              std::memory_order_relaxed);
     last_remaining_ = 0;
     fallback_completion_ = false;
+    // A reference left from the last print would count its climb since then as activity.
     bed_climb_ref_ = -1;
     ext_climb_ref_ = -1;
 
@@ -381,8 +382,6 @@ void PrintStartCollector::reset() {
         layer_advanced_.store(false, std::memory_order_relaxed);
     }
     fallbacks_enabled_.store(false);
-    bed_climb_ref_ = -1;
-    ext_climb_ref_ = -1;
 
     if (active_.load()) {
         state_.set_print_start_state(PrintStartPhase::INITIALIZING, lv_tr("Preparing Print..."), 0);
