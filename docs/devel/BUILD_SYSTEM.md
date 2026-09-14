@@ -934,12 +934,12 @@ make format-staged
 
 ### Pre-commit Integration
 
-Formatting is automatically checked by the pre-commit hook (`.git/hooks/pre-commit`), which calls `scripts/quality-checks.sh --staged-only`:
+Formatting is automatically checked by the pre-commit hook (`.githooks/pre-commit`), which calls `scripts/quality-checks.sh --staged-only --auto-fix`:
 
 1. **Resolves the formatter** (`scripts/quality-checks.sh#qc_phase2`): `$CLANG_FORMAT` if set, then `.venv/bin/clang-format` (the wheel pinned in `requirements.txt`, installed by `make venv-setup`), then `clang-format-18`, then `clang-format` on `PATH`. The first 18.x candidate wins, and files are auto-formatted only with an 18.x binary, so another version on `PATH` can report differences but never reflows a file. With no formatter at all the check is skipped with a warning
 2. **Checks staged files** with it and auto-formats the ones that need it
-3. **Prevents commit** if a formatted file could not be re-staged (partially staged hunks)
-4. **Full sweeps (pre-push, CI) fail** on any unformatted file outside `CLANG_FORMAT_BASELINE`, the list of files that predate the gate; an entry leaves the list once the file is auto-formatted on its next staging
+3. **Does not block the commit** when a formatted file cannot be re-staged because it also has unstaged hunks: the file is formatted on disk and named, and the commit carries its unformatted staged copy
+4. **Full sweeps (pre-push, CI) report unformatted files but never fail on them**: they run without `--auto-fix`, and the formatting check leaves the exit code alone
 
 To bypass (not recommended):
 ```bash
@@ -2097,10 +2097,13 @@ worker reports by pushing a short status file early and a full report at the end
 triggers in `.github/workflows/build.yml` and `quality.yml` exclude that branch pattern, so status
 pushes cost no CI.
 
-**Tell a worker the formatter rule explicitly.** `scripts/quality-checks.sh` accepts only the
-pinned `clang-format` from `.venv`, so a worker runs `make venv-setup` before `make quality` and
-formats only the files its own diff touched. The sweep's `--auto-fix` reformats every file in
-`CLANG_FORMAT_BASELINE`, which belong to whoever is retiring them, not to the worker.
+**Tell a worker the formatter rule explicitly.** `scripts/quality-checks.sh` prefers the pinned
+`clang-format` in `.venv` and otherwise falls back to `clang-format-18` or `clang-format` on `PATH`,
+so a worker runs `make venv-setup` before its first commit and formats with exactly the pinned
+version. A worker formats only the files its own diff touched: `--auto-fix` on a full sweep rewrites
+every file under `src/` and `include/` that the formatter finds dirty, which puts unrelated files in
+the worker's diff, and nothing requires it, since `make quality`, pre-push and CI report unformatted
+files without failing.
 
 **A push to a work branch costs a full CI run.** Build, Code Quality and XML Lint all fire on the
 `claude/**` namespace, and Build alone budgets 200 minutes. Push when the gates are green locally,
