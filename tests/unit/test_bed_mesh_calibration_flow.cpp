@@ -15,6 +15,7 @@
 #include "app_globals.h"
 #include "moonraker_advanced_api.h"
 #include "moonraker_api.h"
+#include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "panel_widget_manager.h"
 #include "printer_discovery.h"
@@ -35,7 +36,7 @@ using json = nlohmann::json;
 namespace {
 
 void drain() {
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 32; ++i) {
         helix::ui::UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
     }
 }
@@ -53,6 +54,13 @@ long first_sent(const std::vector<std::string>& history, const char* needle) {
 
 bool any_sent(const std::vector<std::string>& history, const char* needle) {
     return first_sent(history, needle) >= 0;
+}
+
+/// Let the bed mesh slot resolve from macros detected among @p objects.
+void detect_macros_in(const json& objects) {
+    helix::PrinterDiscovery hardware;
+    hardware.parse_objects(objects);
+    StandardMacros::instance().init(hardware, "");
 }
 
 class CalibrationCollectorFixture : public LVGLTestFixture {
@@ -112,6 +120,8 @@ class BedMeshPanelFlowFixture : public LVGLTestFixture {
 
     std::vector<std::string> errors;
     std::vector<std::string> successes;
+    /// How many scripts had been sent when each success was reported.
+    std::vector<size_t> sent_at_success;
 
     BedMeshPanelFlowFixture() {
         state.init_subjects(false);
@@ -124,8 +134,10 @@ class BedMeshPanelFlowFixture : public LVGLTestFixture {
         get_printer_state().update_from_status({{"toolhead", {{"homed_axes", ""}}}});
         helix::ui::set_test_notification_error_hook(
             [this](const std::string& m) { errors.push_back(m); });
-        helix::ui::set_test_notification_success_hook(
-            [this](const std::string& m) { successes.push_back(m); });
+        helix::ui::set_test_notification_success_hook([this](const std::string& m) {
+            successes.push_back(m);
+            sent_at_success.push_back(sent().size());
+        });
     }
     ~BedMeshPanelFlowFixture() override {
         helix::ui::set_test_notification_error_hook(nullptr);
@@ -140,9 +152,7 @@ class BedMeshPanelFlowFixture : public LVGLTestFixture {
     }
 
     static void detect_macros(const json& objects) {
-        helix::PrinterDiscovery hardware;
-        hardware.parse_objects(objects);
-        StandardMacros::instance().init(hardware, "");
+        detect_macros_in(objects);
     }
 
     static void set_bed(double temperature, double target) {
@@ -368,6 +378,7 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
                  "[bed_mesh_flow]") {
     detect_macros({"gcode_macro G29"});
     REQUIRE(StandardMacros::instance().get(StandardMacroSlot::BedMesh).get_macro() == "G29");
+    client.force_next_mesh_calibration("G29", "default");
 
     BedMeshPanel panel;
     calibrate_as(panel, "cold");
@@ -390,6 +401,7 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
                  "a refused save is an error, and the only copy of the mesh is not removed",
                  "[bed_mesh_flow]") {
     detect_macros({"gcode_macro G29"});
+    client.force_next_mesh_calibration("G29", "default");
     client.force_next_gcode_console_reply(
         "BED_MESH_PROFILE SAVE=",
         "// Unable to save to profile [cold], the bed has not been probed");
@@ -402,6 +414,104 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
     CHECK(successes.empty());
     REQUIRE(errors.size() == 1);
     CHECK(mentions(errors[0], "cold"));
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a BED_MESH_CALIBRATE that drops its PROFILE is copied from default",
+                 "[bed_mesh_flow]") {
+    detect_macros({"gcode_macro BED_MESH_CALIBRATE"});
+    client.force_next_mesh_calibration("BED_MESH_CALIBRATE", "default");
+
+    BedMeshPanel panel;
+    calibrate_as(panel, "cold");
+
+    const long mesh = first_sent(sent(), "BED_MESH_CALIBRATE");
+    REQUIRE(mesh >= 0);
+    REQUIRE(mentions(sent()[mesh], "PROFILE=cold"));
+    const long load = first_sent(sent(), "BED_MESH_PROFILE LOAD=default");
+    const long save = first_sent(sent(), "BED_MESH_PROFILE SAVE=cold");
+    CHECK(mesh < load);
+    CHECK(load < save);
+    CHECK(errors.empty());
+    REQUIRE(successes.size() == 1);
+    CHECK(mentions(successes[0], "'cold'"));
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a calibration that stored no new mesh is an error, never a success",
+                 "[bed_mesh_flow]") {
+    SECTION("the copy plan, whose default did not change") {
+        detect_macros({"gcode_macro G29"});
+        BedMeshPanel panel;
+        calibrate_as(panel, "cold");
+        REQUIRE(any_sent(sent(), "G29"));
+        // The default already there is not this calibration's mesh.
+        CHECK_FALSE(any_sent(sent(), "BED_MESH_PROFILE"));
+    }
+
+    SECTION("stored under a profile nobody chose") {
+        detect_macros({"gcode_macro BED_MESH_CALIBRATE"});
+        client.force_next_mesh_calibration("BED_MESH_CALIBRATE", "adaptive");
+        BedMeshPanel panel;
+        calibrate_as(panel, "cold");
+        REQUIRE(any_sent(sent(), "BED_MESH_CALIBRATE"));
+        CHECK_FALSE(any_sent(sent(), "BED_MESH_PROFILE"));
+    }
+
+    CHECK(successes.empty());
+    REQUIRE(errors.size() == 1);
+    CHECK(mentions(errors[0], "cold"));
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a Complete line while the calibration still runs starts the copy, and the "
+                 "SAVE_CONFIG prompt follows it",
+                 "[bed_mesh_flow]") {
+    detect_macros({"gcode_macro G29"});
+    client.force_next_mesh_calibration("G29", "default");
+    // The command keeps running after its console reports the mesh, as a macro
+    // that goes on to measure a Z offset does.
+    client.force_next_gcode_dropped_response("G29");
+
+    BedMeshPanel panel;
+    calibrate_as(panel, "cold");
+    const long mesh = first_sent(sent(), "G29");
+    REQUIRE(mesh >= 0);
+    REQUIRE_FALSE(any_sent(sent(), "BED_MESH_PROFILE"));
+    REQUIRE(successes.empty());
+
+    client.dispatch_gcode_response("// Mesh Bed Leveling Complete");
+    drain();
+
+    const long load = first_sent(sent(), "BED_MESH_PROFILE LOAD=default");
+    const long save = first_sent(sent(), "BED_MESH_PROFILE SAVE=cold");
+    CHECK(mesh < load);
+    CHECK(load < save);
+    REQUIRE(successes.size() == 1);
+    CHECK(mentions(successes[0], "'cold'"));
+    // Reported, with the prompt that follows, only once the copy is stored...
+    CHECK(sent_at_success[0] > static_cast<size_t>(save));
+    // ...and SAVE_CONFIG waits for the user's answer.
+    CHECK_FALSE(any_sent(sent(), "SAVE_CONFIG"));
+    CHECK(errors.empty());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "the mock printer's calibration runs the command it was given",
+                 "[bed_mesh_flow]") {
+    MoonrakerClientMock client{MoonrakerClientMock::PrinterType::VORON_24};
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    bool done = false;
+    api.advanced().start_bed_mesh_calibrate(
+        {"BED_MESH_CALIBRATE PROFILE=cold", /*self_prepares=*/false}, nullptr,
+        [&done]() { done = true; }, nullptr, /*expected_probes=*/0, /*probe_samples=*/1);
+    REQUIRE(wait_until([&done]() { return done; }, 20000));
+
+    CHECK(any_sent(client.gcode_script_history(), "BED_MESH_CALIBRATE PROFILE=cold"));
+    const auto& profiles = client.get_bed_mesh_profiles();
+    CHECK(std::find(profiles.begin(), profiles.end(), "cold") != profiles.end());
 }
 
 TEST_CASE_METHOD(BedMeshPanelFlowFixture,
@@ -624,5 +734,64 @@ TEST_CASE_METHOD(BedMeshDialogFixture, "replacing any other stored profile asks 
         panel.confirm_overwrite();
         settle();
         CHECK_FALSE(any_sent(sent(), "BED_MESH_CALIBRATE"));
+    }
+}
+
+namespace {
+
+/// Whether any label under @p obj shows text containing @p needle.
+bool shows_text(lv_obj_t* obj, const char* needle) {
+    if (lv_obj_check_type(obj, &lv_label_class) &&
+        std::string(lv_label_get_text(obj)).find(needle) != std::string::npos) {
+        return true;
+    }
+    for (uint32_t i = 0; i < lv_obj_get_child_count(obj); ++i) {
+        if (shows_text(lv_obj_get_child(obj, static_cast<int32_t>(i)), needle)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+TEST_CASE_METHOD(BedMeshDialogFixture,
+                 "a command that stores in default first asks before replacing default",
+                 "[bed_mesh_flow][bed_mesh_dialog]") {
+    store_profiles_on_printer({"cold"});
+    detect_macros_in({"gcode_macro G29"});
+    panel.start_calibration();
+    settle();
+    lv_obj_t* naming = Modal::get_top();
+    REQUIRE(naming != nullptr);
+
+    SECTION("under a new name") {
+        panel.submit_calibration_name("warm");
+        settle();
+        lv_obj_t* confirm = Modal::get_top();
+        REQUIRE(confirm != naming);
+        CHECK(shows_text(confirm, "'default'"));
+        CHECK_FALSE(any_sent(sent(), "G29"));
+
+        click(confirm, "btn_primary");
+        settle();
+        CHECK(any_sent(sent(), "G29"));
+    }
+
+    SECTION("under a stored name, both in one question") {
+        panel.submit_calibration_name("cold");
+        settle();
+        lv_obj_t* confirm = Modal::get_top();
+        REQUIRE(confirm != naming);
+        CHECK(shows_text(confirm, "'cold'"));
+        CHECK(shows_text(confirm, "'default'"));
+        CHECK_FALSE(any_sent(sent(), "G29"));
+    }
+
+    SECTION("as default itself") {
+        panel.submit_calibration_name("default");
+        settle();
+        CHECK(Modal::get_top() != naming);
+        CHECK(any_sent(sent(), "G29"));
     }
 }

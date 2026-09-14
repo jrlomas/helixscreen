@@ -1308,25 +1308,25 @@ void BedMeshPanel::submit_calibration_name_field() {
 }
 
 void BedMeshPanel::submit_calibration_name(std::string_view typed) {
-    const auto check = helix::ui::bed_mesh::check_profile_name(typed, stored_profile_names());
-    switch (check.verdict) {
-    case helix::ui::bed_mesh::ProfileNameVerdict::Empty:
+    const std::vector<std::string> stored = stored_profile_names();
+    const auto check = helix::ui::bed_mesh::check_profile_name(typed, stored);
+    if (check.verdict == helix::ui::bed_mesh::ProfileNameVerdict::Empty) {
         // Leave the dialog up: an empty field is not "default"
         // (prestonbrown/helixscreen#1360).
         NOTIFY_WARNING(lv_tr("Enter a name for this profile"));
         return;
-    case helix::ui::bed_mesh::ProfileNameVerdict::Overwrite:
-        if (check.name == helix::bed_mesh::DEFAULT_PROFILE) {
-            // Re-probing default is the ordinary case the field opens on.
-            begin_calibration(check.name);
-            return;
-        }
-        ask_before_overwrite(OverwriteTarget::Calibrate, check.name);
-        return;
-    case helix::ui::bed_mesh::ProfileNameVerdict::New:
+    }
+
+    // Only where the command stores is read here, so the probe temperature is moot.
+    const auto plan = helix::bed_mesh::plan_calibration(
+        StandardMacros::instance().get(StandardMacroSlot::BedMesh), check.name,
+        helix::bed_mesh::DEFAULT_PROBE_BED_TEMP_C);
+    const auto replaced = helix::bed_mesh::profiles_replaced_by(plan, stored);
+    if (replaced.empty()) {
         begin_calibration(check.name);
         return;
     }
+    ask_before_overwrite(OverwriteTarget::Calibrate, check.name, replaced);
 }
 
 void BedMeshPanel::begin_calibration(const std::string& name) {
@@ -1343,6 +1343,24 @@ void BedMeshPanel::begin_calibration(const std::string& name) {
     }
 
     calibration_plan_ = plan_calibration_into(name);
+    // What the printer stores now, so completion can tell what the calibration stored.
+    read_stored_meshes(
+        [this](helix::bed_mesh::StoredMeshes before) {
+            meshes_before_ = std::move(before);
+            prepare_and_probe();
+        },
+        [this](const std::string& why) {
+            on_calibration_error("Could not read the stored meshes: " + why);
+        });
+}
+
+void BedMeshPanel::prepare_and_probe() {
+    IMoonrakerAPI* api = get_moonraker_api();
+    if (!api) {
+        on_calibration_error("API not available");
+        return;
+    }
+
     if (calibration_plan_.self_prepares) {
         // The sequence heats and homes the printer itself. Anything sent from here
         // would run ahead of it, and a panel preheat could disagree with the bed
@@ -1778,13 +1796,65 @@ void BedMeshPanel::on_probe_progress(int current, int total) {
 
 void BedMeshPanel::on_calibration_complete() {
     cooldown_after_probing();
-    if (calibration_plan_.copy_to.empty()) {
-        finish_calibration(calibration_plan_.writes_profile);
+    // A command reporting success proves nothing was stored where it was asked to
+    // store it: judge by what the printer's profiles now hold.
+    read_stored_meshes(
+        [this](const helix::bed_mesh::StoredMeshes& after) {
+            const auto result =
+                helix::bed_mesh::check_calibration(calibration_plan_, meshes_before_, after);
+            switch (result.outcome) {
+            case helix::bed_mesh::CalibrationOutcome::Stored:
+                finish_calibration(result.to);
+                return;
+            case helix::bed_mesh::CalibrationOutcome::Copy:
+                spdlog::info("[BedMeshPanel] Mesh stored in '{}'; copying it to '{}'", result.from,
+                             result.to);
+                copy_calibrated_mesh(result.from, result.to);
+                return;
+            case helix::bed_mesh::CalibrationOutcome::NotStored:
+                spdlog::error("[BedMeshPanel] Calibration finished, but no stored profile holds a "
+                              "new mesh (expected '{}')",
+                              calibration_plan_.writes_profile);
+                NOTIFY_ERROR(lv_tr("No new mesh was stored as '{}'"), calibration_plan_.name);
+                hide_all_modals();
+                return;
+            }
+        },
+        [this](const std::string& why) {
+            spdlog::error("[BedMeshPanel] Could not read the stored meshes after calibrating: {}",
+                          why);
+            NOTIFY_ERROR(lv_tr("Could not save the mesh as '{}': {}"), calibration_plan_.name, why);
+            hide_all_modals();
+        });
+}
+
+void BedMeshPanel::read_stored_meshes(std::function<void(helix::bed_mesh::StoredMeshes)> on_read,
+                                      std::function<void(const std::string&)> on_failed) {
+    IMoonrakerAPI* api = get_moonraker_api();
+    if (!api) {
+        on_failed("API not available");
         return;
     }
-    spdlog::info("[BedMeshPanel] Mesh stored in '{}'; copying it to '{}'",
-                 calibration_plan_.writes_profile, calibration_plan_.copy_to);
-    copy_calibrated_mesh(calibration_plan_.writes_profile, calibration_plan_.copy_to);
+
+    auto token = lifetime_.token();
+    json params = {{"objects", json::object({{"bed_mesh", json::array({"profiles"})}})}};
+    api->get_client().send_jsonrpc(
+        "printer.objects.query", params,
+        [token, on_read](json response) {
+            // BG: parse here, hand the result to the main thread.
+            auto meshes = std::make_shared<helix::bed_mesh::StoredMeshes>();
+            if (response.contains("result") && response["result"].contains("status") &&
+                response["result"]["status"].contains("bed_mesh")) {
+                *meshes = helix::bed_mesh::stored_meshes_from_status(
+                    response["result"]["status"]["bed_mesh"]);
+            }
+            token.defer("BedMeshPanel::stored_meshes_read",
+                        [on_read, meshes]() { on_read(std::move(*meshes)); });
+        },
+        [token, on_failed](const MoonrakerError& err) {
+            token.defer("BedMeshPanel::stored_meshes_error",
+                        [on_failed, message = err.message]() { on_failed(message); });
+        });
 }
 
 void BedMeshPanel::finish_calibration(const std::string& profile) {
@@ -1978,7 +2048,7 @@ void BedMeshPanel::rename_profile_checked(std::string_view typed) {
             hide_all_modals();
             return;
         }
-        ask_before_overwrite(OverwriteTarget::Rename, check.name);
+        ask_before_overwrite(OverwriteTarget::Rename, check.name, {check.name});
         return;
     case helix::ui::bed_mesh::ProfileNameVerdict::New:
         confirm_rename(check.name);
@@ -1986,11 +2056,17 @@ void BedMeshPanel::rename_profile_checked(std::string_view typed) {
     }
 }
 
-void BedMeshPanel::ask_before_overwrite(OverwriteTarget target, const std::string& name) {
+void BedMeshPanel::ask_before_overwrite(OverwriteTarget target, const std::string& name,
+                                        const std::vector<std::string>& replaced) {
     pending_overwrite_ = target;
     pending_overwrite_name_ = name;
 
-    std::string msg = fmt::format(lv_tr("'{}' already exists. Replace the stored mesh?"), name);
+    const std::string msg =
+        replaced.size() > 1
+            ? fmt::format(lv_tr("'{}' and '{}' already exist. Replace the stored meshes?"),
+                          replaced[0], replaced[1])
+            : fmt::format(lv_tr("'{}' already exists. Replace the stored mesh?"),
+                          replaced.empty() ? name : replaced[0]);
     // Cancel and a dismissal resolve the same pending overwrite state.
     auto cancel = [this] { cancel_overwrite(); };
     helix::ui::ConfirmOptions opts;

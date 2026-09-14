@@ -20,6 +20,7 @@ translations:
   '%zu events queued': '%zu 个事件已排队'
   '%zu plugins failed to load': '%zu 个插件加载失败'
   "'{}' already exists. Replace the stored mesh?": "'{}' 已存在。替换已保存的网格？"
+  "'{}' and '{}' already exist. Replace the stored meshes?": ''
   (different grade): （等级不同）
   (incompatible): (不兼容)
   (multi-tool): (多工具)
@@ -1591,6 +1592,7 @@ translations:
   No mesh loaded: 未加载网格
   No network. Scan QR code to report on your phone.: 无网络。扫描二维码在手机上报告。
   No networks found: 未找到网络
+  No new mesh was stored as '{}': ''
   No notifications: 无通知
   No objects defined for this print: 此次打印未定义对象
   No plugins: 无插件

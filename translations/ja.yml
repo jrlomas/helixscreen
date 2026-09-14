@@ -20,6 +20,7 @@ translations:
   '%zu events queued': '%zu 件のイベントを待機中'
   '%zu plugins failed to load': '%zu 個のプラグインの読み込みに失敗しました'
   "'{}' already exists. Replace the stored mesh?": "'{}' は既に存在します。保存されたメッシュを置き換えますか？"
+  "'{}' and '{}' already exist. Replace the stored meshes?": ''
   (different grade): (グレード違い)
   (incompatible): (非対応)
   (multi-tool): (マルチツール)
@@ -1599,6 +1600,7 @@ translations:
   No mesh loaded: メッシュが読み込まれていません
   No network. Scan QR code to report on your phone.: ネットワークなし。QR コードをスキャンしてスマホから報告してください。
   No networks found: ネットワークが見つかりません
+  No new mesh was stored as '{}': ''
   No notifications: 通知なし
   No objects defined for this print: この印刷にはオブジェクトが定義されていません
   No plugins: プラグインなし

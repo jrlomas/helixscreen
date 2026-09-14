@@ -21,6 +21,7 @@ translations:
   '%zu events queued': '%zu событий в очереди'
   '%zu plugins failed to load': Не удалось загрузить %zu плагинов
   "'{}' already exists. Replace the stored mesh?": "'{}' уже существует. Заменить сохранённую сетку?"
+  "'{}' and '{}' already exist. Replace the stored meshes?": ''
   (different grade): (другая марка)
   (incompatible): (несовместимо)
   (multi-tool): (мультиинструмент)
@@ -1725,6 +1726,7 @@ translations:
   No network. Scan QR code to report on your phone.: Нет сети. Отсканируйте QR-код,
     чтобы отправить отчёт с телефона.
   No networks found: Сети не найдены
+  No new mesh was stored as '{}': ''
   No notifications: Нет уведомлений
   No objects defined for this print: Для этой печати не определены объекты
   No plugins: Нет плагинов

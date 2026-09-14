@@ -20,6 +20,7 @@
   <translation tag="%zu events queued" de="%zu Ereignisse in Warteschlange"/>
   <translation tag="%zu plugins failed to load" de="%zu Plugins konnten nicht geladen werden"/>
   <translation tag="&apos;{}&apos; already exists. Replace the stored mesh?" de="&apos;{}&apos; existiert bereits. Gespeichertes Netz ersetzen?"/>
+  <translation tag="&apos;{}&apos; and &apos;{}&apos; already exist. Replace the stored meshes?"/>
   <translation tag="(different grade)" de="(andere Klasse)"/>
   <translation tag="(incompatible)" de="(inkompatibel)"/>
   <translation tag="(multi-tool)" de="(Multi-Werkzeug)"/>
@@ -1561,6 +1562,7 @@
   <translation tag="No mesh loaded" de="Kein Netz geladen"/>
   <translation tag="No network. Scan QR code to report on your phone." de="Kein Netzwerk. QR-Code scannen, um auf dem Handy zu melden."/>
   <translation tag="No networks found" de="Keine Netzwerke gefunden"/>
+  <translation tag="No new mesh was stored as &apos;{}&apos;"/>
   <translation tag="No notifications" de="Keine Benachrichtigungen"/>
   <translation tag="No objects defined for this print" de="Keine Objekte für diesen Druck definiert"/>
   <translation tag="No plugins" de="Keine Plugins"/>

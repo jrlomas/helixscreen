@@ -7,7 +7,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <map>
 #include <string>
+#include <vector>
+
+#include "hv/json.hpp"
 
 namespace helix {
 namespace bed_mesh {
@@ -20,6 +24,9 @@ inline constexpr const char* DEFAULT_PROFILE = "default";
 /// What to send for a calibration the user named before probing, and where the
 /// finished mesh ends up.
 struct CalibrationPlan {
+    /// The profile the user chose.
+    std::string name;
+
     /// Gcode to send.
     std::string command;
 
@@ -136,6 +143,7 @@ inline std::string named_profile(const std::string& command) {
     }
 
     CalibrationPlan plan;
+    plan.name = name;
     plan.self_prepares = resolved.self_prepares;
     plan.command = resolved.script;
 
@@ -160,6 +168,93 @@ inline std::string named_profile(const std::string& command) {
         plan.copy_to = name;
     }
     return plan;
+}
+
+/// Each stored profile's points as the bed_mesh object reports them; a profile
+/// reported without points maps to null.
+using StoredMeshes = std::map<std::string, nlohmann::json>;
+
+/// The stored profiles in a `bed_mesh` status object.
+[[nodiscard]] inline StoredMeshes stored_meshes_from_status(const nlohmann::json& bed_mesh) {
+    StoredMeshes meshes;
+    if (!bed_mesh.is_object() || !bed_mesh.contains("profiles") ||
+        !bed_mesh["profiles"].is_object()) {
+        return meshes;
+    }
+    for (const auto& [name, profile] : bed_mesh["profiles"].items()) {
+        meshes[name] = profile.is_object() && profile.contains("points") ? profile["points"]
+                                                                         : nlohmann::json();
+    }
+    return meshes;
+}
+
+/// Where a finished calibration's mesh turned out to be.
+enum class CalibrationOutcome {
+    Stored,   ///< In `to`, the profile the user chose. Nothing more to do.
+    Copy,     ///< In `from`; load it and save it as `to`.
+    NotStored ///< No profile holds a new mesh.
+};
+
+struct CalibrationCheck {
+    CalibrationOutcome outcome = CalibrationOutcome::NotStored;
+    std::string from;
+    std::string to;
+};
+
+/**
+ * @brief Judge a finished calibration by the stored profiles before and after it.
+ *
+ * A command is trusted to have stored a mesh only where one changed. A macro that
+ * drops the PROFILE it was given stores in `default` instead, so a new mesh there
+ * is copied to the chosen name; anything else is a calibration that stored nothing,
+ * and whatever the profiles already held is never passed off as its result.
+ */
+[[nodiscard]] inline CalibrationCheck check_calibration(const CalibrationPlan& plan,
+                                                        const StoredMeshes& before,
+                                                        const StoredMeshes& after) {
+    const auto changed = [&before, &after](const std::string& profile) {
+        const auto now = after.find(profile);
+        if (now == after.end()) {
+            return false;
+        }
+        const auto was = before.find(profile);
+        return was == before.end() || was->second != now->second;
+    };
+
+    if (changed(plan.writes_profile)) {
+        if (plan.copy_to.empty()) {
+            return {CalibrationOutcome::Stored, {}, plan.writes_profile};
+        }
+        return {CalibrationOutcome::Copy, plan.writes_profile, plan.copy_to};
+    }
+    if (plan.writes_profile != DEFAULT_PROFILE && changed(DEFAULT_PROFILE)) {
+        if (save_is_refused_for(plan.name)) {
+            return {CalibrationOutcome::Stored, {}, DEFAULT_PROFILE};
+        }
+        return {CalibrationOutcome::Copy, DEFAULT_PROFILE, plan.name};
+    }
+    return {CalibrationOutcome::NotStored, {}, {}};
+}
+
+/**
+ * @brief Stored profiles a calibration planned by @p plan replaces, to confirm first.
+ *
+ * The chosen profile, unless it is `default`, which the dialog opens on; and the
+ * profile the command stores in when that is not the chosen one.
+ */
+[[nodiscard]] inline std::vector<std::string>
+profiles_replaced_by(const CalibrationPlan& plan, const std::vector<std::string>& stored) {
+    const auto is_stored = [&stored](const std::string& profile) {
+        return std::find(stored.begin(), stored.end(), profile) != stored.end();
+    };
+    std::vector<std::string> replaced;
+    if (plan.name != DEFAULT_PROFILE && is_stored(plan.name)) {
+        replaced.push_back(plan.name);
+    }
+    if (plan.writes_profile != plan.name && is_stored(plan.writes_profile)) {
+        replaced.push_back(plan.writes_profile);
+    }
+    return replaced;
 }
 
 } // namespace bed_mesh

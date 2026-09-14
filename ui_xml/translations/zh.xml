@@ -20,6 +20,7 @@
   <translation tag="%zu events queued" zh="%zu 个事件已排队"/>
   <translation tag="%zu plugins failed to load" zh="%zu 个插件加载失败"/>
   <translation tag="&apos;{}&apos; already exists. Replace the stored mesh?" zh="&apos;{}&apos; 已存在。替换已保存的网格？"/>
+  <translation tag="&apos;{}&apos; and &apos;{}&apos; already exist. Replace the stored meshes?"/>
   <translation tag="(different grade)" zh="（等级不同）"/>
   <translation tag="(incompatible)" zh="(不兼容)"/>
   <translation tag="(multi-tool)" zh="(多工具)"/>
@@ -1561,6 +1562,7 @@
   <translation tag="No mesh loaded" zh="未加载网格"/>
   <translation tag="No network. Scan QR code to report on your phone." zh="无网络。扫描二维码在手机上报告。"/>
   <translation tag="No networks found" zh="未找到网络"/>
+  <translation tag="No new mesh was stored as &apos;{}&apos;"/>
   <translation tag="No notifications" zh="无通知"/>
   <translation tag="No objects defined for this print" zh="此次打印未定义对象"/>
   <translation tag="No plugins" zh="无插件"/>

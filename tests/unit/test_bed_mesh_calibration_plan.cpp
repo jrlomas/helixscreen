@@ -9,9 +9,14 @@
 
 #include "../catch_amalgamated.hpp"
 
+using helix::bed_mesh::CalibrationOutcome;
+using helix::bed_mesh::check_calibration;
 using helix::bed_mesh::gcode_param_value;
 using helix::bed_mesh::is_profile_save_refusal;
 using helix::bed_mesh::plan_calibration;
+using helix::bed_mesh::profiles_replaced_by;
+using helix::bed_mesh::stored_meshes_from_status;
+using helix::bed_mesh::StoredMeshes;
 
 TEST_CASE("calibration plan: the panel's own BED_MESH_CALIBRATE takes the name",
           "[bed_mesh][calibration_plan]") {
@@ -150,4 +155,117 @@ TEST_CASE("profile save refusals are recognised in the firmware's own words",
         "// Profile 'default' is reserved, please choose another profile name."));
     CHECK_FALSE(is_profile_save_refusal("// Bed Mesh state has been saved to profile [cold]"));
     CHECK_FALSE(is_profile_save_refusal("// Mesh Bed Leveling Complete"));
+}
+
+TEST_CASE("stored meshes are read from the bed_mesh status object",
+          "[bed_mesh][calibration_plan]") {
+    const auto status = nlohmann::json::parse(R"({
+        "profile_name": "default",
+        "profiles": {
+            "default": {"points": [[0.1, 0.2], [0.3, 0.4]], "mesh_params": {"x_count": 2}},
+            "cold": {"mesh_params": {"x_count": 2}}
+        }
+    })");
+    const StoredMeshes meshes = stored_meshes_from_status(status);
+    REQUIRE(meshes.size() == 2);
+    CHECK(meshes.at("default") == nlohmann::json::parse("[[0.1, 0.2], [0.3, 0.4]]"));
+    CHECK(meshes.at("cold").is_null());
+
+    CHECK(stored_meshes_from_status(nlohmann::json::object()).empty());
+    CHECK(stored_meshes_from_status(nlohmann::json()).empty());
+}
+
+namespace {
+
+const nlohmann::json OLD_POINTS = nlohmann::json::parse("[[0.1, 0.2]]");
+const nlohmann::json NEW_POINTS = nlohmann::json::parse("[[0.15, 0.25]]");
+
+helix::bed_mesh::CalibrationPlan plan_for(const char* detected, const char* configured,
+                                          const char* name) {
+    StandardMacroInfo slot;
+    slot.detected_macro = detected;
+    slot.configured_macro = configured;
+    return plan_calibration(slot, name, 60);
+}
+
+} // namespace
+
+TEST_CASE("calibration check: a mesh is trusted only where a profile changed",
+          "[bed_mesh][calibration_plan]") {
+    SECTION("probed straight into the chosen profile, new or re-probed") {
+        const auto plan = plan_for("BED_MESH_CALIBRATE", "", "cold");
+        REQUIRE(plan.writes_profile == "cold");
+
+        auto r = check_calibration(plan, {}, {{"cold", NEW_POINTS}});
+        CHECK(r.outcome == CalibrationOutcome::Stored);
+        CHECK(r.to == "cold");
+
+        r = check_calibration(plan, {{"cold", OLD_POINTS}}, {{"cold", NEW_POINTS}});
+        CHECK(r.outcome == CalibrationOutcome::Stored);
+        CHECK(r.to == "cold");
+    }
+
+    SECTION("a command that dropped its PROFILE stored in default, which is copied") {
+        const auto plan = plan_for("BED_MESH_CALIBRATE", "", "cold");
+        const StoredMeshes before{{"default", OLD_POINTS}, {"cold", OLD_POINTS}};
+        const StoredMeshes after{{"default", NEW_POINTS}, {"cold", OLD_POINTS}};
+        const auto r = check_calibration(plan, before, after);
+        CHECK(r.outcome == CalibrationOutcome::Copy);
+        CHECK(r.from == "default");
+        CHECK(r.to == "cold");
+    }
+
+    SECTION("the copy plan copies only a default that changed") {
+        const auto plan = plan_for("G29", "", "cold");
+        REQUIRE(plan.copy_to == "cold");
+
+        auto r = check_calibration(plan, {{"default", OLD_POINTS}}, {{"default", NEW_POINTS}});
+        CHECK(r.outcome == CalibrationOutcome::Copy);
+        CHECK(r.from == "default");
+        CHECK(r.to == "cold");
+
+        r = check_calibration(plan, {{"default", OLD_POINTS}}, {{"default", OLD_POINTS}});
+        CHECK(r.outcome == CalibrationOutcome::NotStored);
+    }
+
+    SECTION("nothing changed anywhere: not stored, whatever the profiles hold") {
+        const auto plan = plan_for("BED_MESH_CALIBRATE", "", "cold");
+        const StoredMeshes same{{"default", OLD_POINTS}, {"cold", OLD_POINTS}};
+        CHECK(check_calibration(plan, same, same).outcome == CalibrationOutcome::NotStored);
+        CHECK(check_calibration(plan, {}, {}).outcome == CalibrationOutcome::NotStored);
+    }
+
+    SECTION("a profile that vanished is not a stored mesh") {
+        const auto plan = plan_for("BED_MESH_CALIBRATE", "", "cold");
+        CHECK(check_calibration(plan, {{"cold", OLD_POINTS}}, {}).outcome ==
+              CalibrationOutcome::NotStored);
+    }
+
+    SECTION("chosen default, command stores elsewhere but dropped that: it is in default") {
+        const auto plan = plan_for("", "BED_MESH_CALIBRATE PROFILE=pei", "default");
+        REQUIRE(plan.writes_profile == "pei");
+        const auto r = check_calibration(plan, {{"pei", OLD_POINTS}, {"default", OLD_POINTS}},
+                                         {{"pei", OLD_POINTS}, {"default", NEW_POINTS}});
+        CHECK(r.outcome == CalibrationOutcome::Stored);
+        CHECK(r.to == "default");
+    }
+}
+
+TEST_CASE("replacement check: default is re-probed freely, anything else is asked about",
+          "[bed_mesh][calibration_plan]") {
+    const std::vector<std::string> stored{"default", "cold"};
+
+    CHECK(profiles_replaced_by(plan_for("BED_MESH_CALIBRATE", "", "default"), stored).empty());
+    CHECK(profiles_replaced_by(plan_for("BED_MESH_CALIBRATE", "", "warm"), stored).empty());
+    CHECK(profiles_replaced_by(plan_for("BED_MESH_CALIBRATE", "", "cold"), stored) ==
+          std::vector<std::string>{"cold"});
+
+    // A command that stores in default first replaces it on the way to the chosen name.
+    CHECK(profiles_replaced_by(plan_for("G29", "", "warm"), stored) ==
+          std::vector<std::string>{"default"});
+    CHECK(profiles_replaced_by(plan_for("G29", "", "cold"), stored) ==
+          (std::vector<std::string>{"cold", "default"}));
+    CHECK(profiles_replaced_by(plan_for("G29", "", "default"), stored).empty());
+    // Nothing stored there yet, nothing to replace.
+    CHECK(profiles_replaced_by(plan_for("G29", "", "warm"), {}).empty());
 }

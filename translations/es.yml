@@ -20,6 +20,7 @@ translations:
   '%zu events queued': '%zu eventos en cola'
   '%zu plugins failed to load': '%zu plugins no se cargaron'
   "'{}' already exists. Replace the stored mesh?": "'{}' ya existe. ¿Reemplazar la malla guardada?"
+  "'{}' and '{}' already exist. Replace the stored meshes?": ''
   (different grade): (grado diferente)
   (incompatible): (incompatible)
   (multi-tool): (multiherramienta)
@@ -1746,6 +1747,7 @@ translations:
   No network. Scan QR code to report on your phone.: Sin red. Escanee el código QR
     para reportar desde su teléfono.
   No networks found: No se encontraron redes
+  No new mesh was stored as '{}': ''
   No notifications: Sin notificaciones
   No objects defined for this print: No hay objetos definidos para esta impresión
   No plugins: Sin plugins

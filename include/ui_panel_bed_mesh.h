@@ -141,6 +141,11 @@ class BedMeshPanel : public OverlayBase {
     [[nodiscard]] bool calibration_dialog_is_open() const;
 
     void begin_calibration(const std::string& name);
+    /// Heat and home as the plan needs, then probe.
+    void prepare_and_probe();
+    /// Query the profiles the printer stores. Both callbacks run on the main thread.
+    void read_stored_meshes(std::function<void(helix::bed_mesh::StoredMeshes)> on_read,
+                            std::function<void(const std::string&)> on_failed);
     void copy_calibrated_mesh(const std::string& from, const std::string& to);
     void finish_calibration(const std::string& profile);
 
@@ -233,8 +238,10 @@ class BedMeshPanel : public OverlayBase {
     OverwriteTarget pending_overwrite_ = OverwriteTarget::None;
     std::string pending_overwrite_name_;
 
-    /// Ask before replacing a stored profile, then run the held action.
-    void ask_before_overwrite(OverwriteTarget target, const std::string& name);
+    /// Ask before replacing the stored profiles @p replaced (one or two), then run
+    /// the held action under @p name.
+    void ask_before_overwrite(OverwriteTarget target, const std::string& name,
+                              const std::vector<std::string>& replaced);
     enum class PendingOperation { None, Delete, Rename, Calibrate };
     PendingOperation pending_operation_ = PendingOperation::None;
 
@@ -281,6 +288,9 @@ class BedMeshPanel : public OverlayBase {
     /// What begin_calibration() planned: launch_calibration() sends its command,
     /// and on_calibration_complete() finishes where it says the mesh went.
     helix::bed_mesh::CalibrationPlan calibration_plan_;
+
+    /// The profiles the printer stored when the calibration began.
+    helix::bed_mesh::StoredMeshes meshes_before_;
 
     // True for a heater that was off when probing began. The panel's preheat or a
     // self-preparing sequence turns it on; cooldown_after_probing() turns it off.

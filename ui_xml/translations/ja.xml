@@ -20,6 +20,7 @@
   <translation tag="%zu events queued" ja="%zu 件のイベントを待機中"/>
   <translation tag="%zu plugins failed to load" ja="%zu 個のプラグインの読み込みに失敗しました"/>
   <translation tag="&apos;{}&apos; already exists. Replace the stored mesh?" ja="&apos;{}&apos; は既に存在します。保存されたメッシュを置き換えますか？"/>
+  <translation tag="&apos;{}&apos; and &apos;{}&apos; already exist. Replace the stored meshes?"/>
   <translation tag="(different grade)" ja="(グレード違い)"/>
   <translation tag="(incompatible)" ja="(非対応)"/>
   <translation tag="(multi-tool)" ja="(マルチツール)"/>
@@ -1561,6 +1562,7 @@
   <translation tag="No mesh loaded" ja="メッシュが読み込まれていません"/>
   <translation tag="No network. Scan QR code to report on your phone." ja="ネットワークなし。QR コードをスキャンしてスマホから報告してください。"/>
   <translation tag="No networks found" ja="ネットワークが見つかりません"/>
+  <translation tag="No new mesh was stored as &apos;{}&apos;"/>
   <translation tag="No notifications" ja="通知なし"/>
   <translation tag="No objects defined for this print" ja="この印刷にはオブジェクトが定義されていません"/>
   <translation tag="No plugins" ja="プラグインなし"/>

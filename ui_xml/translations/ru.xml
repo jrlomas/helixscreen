@@ -20,6 +20,7 @@
   <translation tag="%zu events queued" ru="%zu событий в очереди"/>
   <translation tag="%zu plugins failed to load" ru="Не удалось загрузить %zu плагинов"/>
   <translation tag="&apos;{}&apos; already exists. Replace the stored mesh?" ru="&apos;{}&apos; уже существует. Заменить сохранённую сетку?"/>
+  <translation tag="&apos;{}&apos; and &apos;{}&apos; already exist. Replace the stored meshes?"/>
   <translation tag="(different grade)" ru="(другая марка)"/>
   <translation tag="(incompatible)" ru="(несовместимо)"/>
   <translation tag="(multi-tool)" ru="(мультиинструмент)"/>
@@ -1561,6 +1562,7 @@
   <translation tag="No mesh loaded" ru="Сетка не загружена"/>
   <translation tag="No network. Scan QR code to report on your phone." ru="Нет сети. Отсканируйте QR-код, чтобы отправить отчёт с телефона."/>
   <translation tag="No networks found" ru="Сети не найдены"/>
+  <translation tag="No new mesh was stored as &apos;{}&apos;"/>
   <translation tag="No notifications" ru="Нет уведомлений"/>
   <translation tag="No objects defined for this print" ru="Для этой печати не определены объекты"/>
   <translation tag="No plugins" ru="Нет плагинов"/>
