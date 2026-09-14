@@ -416,8 +416,8 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     int max_sequential_progress_ = 0; // Monotonic progress guard for sequential mode
     std::chrono::steady_clock::time_point printing_state_start_;
 
-    /// When the printer last said anything about its pre-print: a profile
-    /// pattern matched, a probe line arrived, or the phase advanced.
+    /// When the printer last showed pre-print work: a profile pattern matched,
+    /// a probe line arrived, or a heater climbed a degree toward its target.
     ///
     /// The timeouts key off THIS, not off elapsed-since-start. A pre-print that
     /// is still narrating itself is not stuck however long it runs, and keying
@@ -438,8 +438,10 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     static constexpr auto FALLBACK_TIMEOUT =
         std::chrono::seconds(300); ///< Last resort when no predictions
     /// Ungated final backstop. Every other timeout also requires the printer to
-    /// have gone quiet; this one fires regardless, so a firmware that chatters
-    /// forever still leaves Preparing. Must therefore sit above the longest
+    /// have gone quiet; the ceiling fires regardless, so a firmware that
+    /// chatters forever, or a heater that never settles, still leaves
+    /// Preparing. With a prediction the ceiling is the larger of this and
+    /// predicted x ABSOLUTE_TIMEOUT_MARGIN. Must therefore sit above the longest
     /// legitimate pre-print: the K2 Plus runs ~1140s (heat, ~390s mesh, purge),
     /// and a cold-start ASA soak pushes that further.
     static constexpr auto ABSOLUTE_MAX_TIMEOUT =
@@ -554,6 +556,12 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     // and weights need recomputing to include the new heating phase.
     int weights_ext_target_ = 0;
     int weights_bed_target_ = 0;
+
+    // Low-water marks for the climbing-heater activity check, in decidegrees;
+    // -1 until a fallback tick samples the heater. Main thread only, like the
+    // targets above.
+    int bed_climb_ref_ = -1;
+    int ext_climb_ref_ = -1;
 
     // Silent-phase progression (firmwares with silent cleaning/purge macros).
     // temps_ready_time_ is set the first time temps become ready (and remains

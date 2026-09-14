@@ -25,6 +25,30 @@ class PrintStartCollectorTestAccess {
         c.last_activity_time_ = std::chrono::steady_clock::now() - std::chrono::seconds(seconds);
     }
 
+    /// Age every clock stamp the collector holds by `ms`, as though that much
+    /// time had passed. A replay drives a recorded timeline this way: the
+    /// collector's own activity and phase stamps age with it, so the test
+    /// never restates which lines count as activity.
+    static void advance_clock_ms(PrintStartCollector& c, int ms) {
+        std::lock_guard<std::mutex> lock(c.state_mutex_);
+        const auto d = std::chrono::milliseconds(ms);
+        const auto age = [d](std::chrono::steady_clock::time_point& when) {
+            if (when.time_since_epoch().count() != 0) {
+                when -= d;
+            }
+        };
+        age(c.printing_state_start_);
+        age(c.last_activity_time_);
+        age(c.temps_ready_time_);
+        age(c.mesh_first_probe_time_);
+        age(c.mesh_last_probe_time_);
+        age(c.pre_mesh_last_probe_time_);
+        age(c.position_clock_start_);
+        for (auto& entry : c.phase_enter_times_) {
+            age(entry.second);
+        }
+    }
+
     /// Set predicted_total_seconds_ directly for timeout threshold tests
     static void set_predicted_total(PrintStartCollector& c, float seconds) {
         std::lock_guard<std::mutex> lock(c.state_mutex_);
