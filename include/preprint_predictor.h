@@ -128,6 +128,18 @@ class PreprintPredictor {
     [[nodiscard]] int remaining_seconds(const std::set<int>& completed_phases, int current_phase,
                                         int elapsed_in_current_phase_seconds) const;
 
+    /// Homing estimate floor. A macro that goes straight from G28 into its
+    /// next narrated step records a homing phase of a few seconds or none.
+    static constexpr int MIN_HOMING_SECONDS = 20;
+
+    /**
+     * @brief Predicted homing seconds, never below MIN_HOMING_SECONDS
+     *
+     * The one homing estimate the pre-print collector and the print details
+     * estimate share.
+     */
+    [[nodiscard]] int predicted_homing_seconds() const;
+
     /**
      * @brief Whether any predictions can be made
      */

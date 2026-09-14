@@ -11,6 +11,7 @@
 #include "wizard_config_paths.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
@@ -19,6 +20,7 @@
 #include <unistd.h>
 
 #include "../catch_amalgamated.hpp"
+#include "hv/json.hpp"
 
 using namespace helix;
 // ============================================================================
@@ -4484,17 +4486,23 @@ TEST_CASE("Z-offset calibration strategy lookup", "[printer_detector]") {
 TEST_CASE("Bed mesh calibration gcode override", "[printer_detector]") {
     PrinterDetector::reload();
 
-    SECTION("Elegoo Centauri Carbon returns loadcell template") {
+    SECTION("Elegoo Centauri Carbon delegates to the firmware's own mesh macro") {
         std::string gcode = PrinterDetector::get_bed_mesh_calibrate_gcode("Elegoo Centauri Carbon");
-        // Mirrors COSMOS _FULL_CALIBRATION minus PID/shaper: move to tray, heat
-        // to printing temp, scrub (M729) so nothing on the nozzle pre-loads the
-        // load cells, home, tare, then hand to the COSMOS-tuned wipe wrapper.
-        REQUIRE(gcode.find("MOVE_TO_TRAY") != std::string::npos);
-        REQUIRE(gcode.find("M109 S220") != std::string::npos);
-        REQUIRE(gcode.find("M729") != std::string::npos);
-        REQUIRE(gcode.find("LOAD_CELL_SAVE_TARE") != std::string::npos);
-        REQUIRE(gcode.find("BED_MESH_CALIBRATE_WITH_WIPE") != std::string::npos);
-        REQUIRE(gcode.find("BED_MESH_PROFILE SAVE={profile}") != std::string::npos);
+        REQUIRE_FALSE(gcode.empty());
+        // COSMOS's BED_MESH_CALIBRATE heats, homes, cleans, tares and probes by
+        // itself. Its M729 and M8213 are emergency stops, the wipe and tare
+        // wrappers do not exist, and its M190/M109 also wait for a hot bed to
+        // cool, so none of them belongs in front of it.
+        for (const char* absent :
+             {"M729", "M8213", "M190", "M109", "TEMPERATURE_WAIT", "WITH_WIPE", "SAVE_TARE"}) {
+            INFO("template contains " << absent);
+            CHECK(gcode.find(absent) == std::string::npos);
+        }
+        CHECK(gcode.rfind("BED_MESH_CALIBRATE", 0) == 0);
+        CHECK(gcode.find("BED_TEMP={bed_temp}") != std::string::npos);
+        // The chosen profile rides on the calibration itself: its Z-offset step
+        // clears the active mesh, so nothing could be saved from it afterwards.
+        CHECK(gcode.find("BED_MESH_CALIBRATE{profile_arg} ") == 0);
     }
 
     SECTION("Printer without override returns empty") {
@@ -4510,8 +4518,42 @@ TEST_CASE("Bed mesh calibration gcode override", "[printer_detector]") {
 
     SECTION("Case insensitive lookup") {
         std::string gcode = PrinterDetector::get_bed_mesh_calibrate_gcode("elegoo centauri carbon");
-        REQUIRE(gcode.find("LOAD_CELL_SAVE_TARE") != std::string::npos);
+        REQUIRE(gcode.find("BED_TEMP={bed_temp}") != std::string::npos);
     }
+}
+
+TEST_CASE("Centauri Carbon preset buttons name only commands COSMOS defines",
+          "[printer_detector][cc1]") {
+    // What COSMOS 26.08 lacks, or defines as an emergency stop (M729, M8213).
+    constexpr std::array<const char*, 6> ABSENT = {"WIPE_NOZZLE",
+                                                   "BED_MESH_CALIBRATE_WITH_WIPE",
+                                                   "FULL_CALIBRATION",
+                                                   "LOAD_CELL_SAVE_TARE",
+                                                   "M729",
+                                                   "M8213"};
+
+    const std::string path = "assets/config/presets/cc1.json";
+    INFO("reading " << path << " (tests must run from the repo root)");
+    std::ifstream in(path);
+    REQUIRE(in.good());
+    const auto preset = nlohmann::json::parse(in);
+    const auto& macros = preset.at("printer").at("default_macros");
+
+    int buttons = 0;
+    for (const auto& [slot, value] : macros.items()) {
+        const std::string gcode =
+            value.is_string() ? value.get<std::string>() : value.value("gcode", std::string{});
+        if (gcode.empty()) {
+            continue;
+        }
+        ++buttons;
+        for (const char* absent : ABSENT) {
+            INFO(slot << " sends " << gcode);
+            CHECK(gcode.find(absent) == std::string::npos);
+        }
+    }
+    // The loop must have looked at the macro buttons, not an empty object.
+    REQUIRE(buttons >= 3);
 }
 
 // ============================================================================
@@ -4867,13 +4909,20 @@ TEST_CASE("PrinterDetector: loads printer_database.json from HELIX_DATA_DIR/asse
 
 TEST_CASE("PrinterDetector: print_start_default_phases returns CC1 override",
           "[printer][preprint]") {
+    // Measured COSMOS PRINT_START: G28 ~23s, stored mesh load under 1s, KAMP
+    // purge ~13s. No QGL, Z tilt or wipe; heating belongs to the thermal model.
     auto phases = PrinterDetector::get_print_start_default_phases("Elegoo Centauri Carbon");
-    REQUIRE(phases.size() == 1);
-    REQUIRE(phases[static_cast<int>(helix::PrintStartPhase::HOMING)] == 30);
-    // Not in map (CC1 doesn't run these in its slicer start-gcode):
-    REQUIRE(phases.count(static_cast<int>(helix::PrintStartPhase::BED_MESH)) == 0);
+    REQUIRE(phases.size() == 3);
+    REQUIRE(phases[static_cast<int>(helix::PrintStartPhase::HOMING)] == 25);
+    REQUIRE(phases[static_cast<int>(helix::PrintStartPhase::BED_MESH)] == 2);
+    REQUIRE(phases[static_cast<int>(helix::PrintStartPhase::PURGING)] == 15);
     REQUIRE(phases.count(static_cast<int>(helix::PrintStartPhase::QGL)) == 0);
     REQUIRE(phases.count(static_cast<int>(helix::PrintStartPhase::Z_TILT)) == 0);
+}
+
+TEST_CASE("PrinterDetector: Centauri Carbon uses the COSMOS pre-print profile",
+          "[printer][preprint]") {
+    REQUIRE(PrinterDetector::get_print_start_profile("Elegoo Centauri Carbon") == "cosmos_cc1");
 }
 
 TEST_CASE("PrinterDetector: print_start_default_phases empty for unknown printer",

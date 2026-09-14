@@ -1790,6 +1790,47 @@ PrinterDetector::get_print_start_default_phases(const std::string& printer_name)
     return result;
 }
 
+namespace {
+/// The database entry named `printer_name` (case-insensitive), or nullptr.
+const json* find_printer_entry(const std::string& printer_name) {
+    if (!g_database.load() || !g_database.data.contains("printers") ||
+        !g_database.data["printers"].is_array()) {
+        return nullptr;
+    }
+    const auto lower = [](std::string s) {
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        return s;
+    };
+    const std::string wanted = lower(printer_name);
+    for (const auto& printer : g_database.data["printers"]) {
+        if (lower(printer.value("name", "")) == wanted) {
+            return &printer;
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
+std::map<std::string, float> PrinterDetector::get_thermal_rates(const std::string& printer_name) {
+    std::map<std::string, float> rates;
+    const json* printer = find_printer_entry(printer_name);
+    if (printer == nullptr || !printer->contains("thermal_rates") ||
+        !(*printer)["thermal_rates"].is_object()) {
+        return rates;
+    }
+    for (const auto& [heater, rate] : (*printer)["thermal_rates"].items()) {
+        if (!rate.is_number() || rate.get<float>() <= 0.0f) {
+            spdlog::warn("[PrinterDetector] Ignoring thermal rate '{}' for '{}': not a positive "
+                         "number",
+                         heater, printer_name);
+            continue;
+        }
+        rates[heater] = rate.get<float>();
+    }
+    return rates;
+}
+
 // ============================================================================
 // Toolhead Style Lookup
 // ============================================================================

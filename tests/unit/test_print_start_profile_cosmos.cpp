@@ -1,0 +1,134 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "print_start_profile.h"
+
+#include <string>
+
+#include "../catch_amalgamated.hpp"
+
+using namespace helix;
+
+// ============================================================================
+// COSMOS (Elegoo Centauri Carbon) Profile Tests
+//
+// Console lines are verbatim from klippy.log of a CC1 print on COSMOS 26.08
+// (2026-09-14): RESPOND and SET_DISPLAY_TEXT output reaches gcode_response
+// with the "// " prefix. The skew line comes from LOAD_SKEW_IF_EXISTS, whose
+// RESPOND PREFIX="Info:" goes out raw, so it carries no "// ". Lines for
+// branches that print did not take (chamber wait, adaptive mesh, cancels) are
+// the SET_DISPLAY_TEXT messages in COSMOS macros.cfg.
+// ============================================================================
+
+static std::shared_ptr<PrintStartProfile> get_cosmos_profile() {
+    return PrintStartProfile::load("cosmos_cc1");
+}
+
+static constexpr const char* NO_SKEW_LINE =
+    "Info: No skew profile defined. If skew correction is desired, create 'my_skew_profile' "
+    "in printer.cfg";
+
+TEST_CASE("PrintStartProfile: cosmos_cc1 maps the PRINT_START narration",
+          "[profile][print][cosmos]") {
+    auto profile = get_cosmos_profile();
+    REQUIRE(profile != nullptr);
+    REQUIRE_FALSE(profile->is_default());
+    REQUIRE(profile->name().find("COSMOS") != std::string::npos);
+
+    PrintStartProfile::MatchResult result;
+
+    SECTION("Heat soak is part of heating the bed") {
+        REQUIRE(profile->try_match_pattern("// Heatsoak: 1.0m", result));
+        REQUIRE(result.phase == PrintStartPhase::HEATING_BED);
+        REQUIRE(result.message == "Heat Soak");
+    }
+
+    SECTION("Chamber wait is a soak too") {
+        REQUIRE(profile->try_match_pattern("Chamber: 45c", result));
+        REQUIRE(result.phase == PrintStartPhase::HEATING_BED);
+        REQUIRE(result.message == "Heat Soak");
+    }
+
+    SECTION("Stored mesh load") {
+        REQUIRE(profile->try_match_pattern("// Using default bed mesh", result));
+        REQUIRE(result.phase == PrintStartPhase::BED_MESH);
+    }
+
+    SECTION("Adaptive mesh probing") {
+        REQUIRE(profile->try_match_pattern("Creating adaptive bed mesh", result));
+        REQUIRE(result.phase == PrintStartPhase::BED_MESH);
+        REQUIRE(result.message == "Probing Bed Mesh...");
+    }
+
+    SECTION("Smart park precedes the print-temperature M109") {
+        REQUIRE(profile->try_match_pattern("// Smart Park location: 41.0714,33.0046.", result));
+        REQUIRE(result.phase == PrintStartPhase::HEATING_NOZZLE);
+    }
+
+    SECTION("KAMP line purge") {
+        REQUIRE(profile->try_match_pattern(
+            "// KAMP purge starting at 113.0002, 33.0046 and purging 30.0mm of filament, "
+            "requested flow rate is 12.0mm3/s.",
+            result));
+        REQUIRE(result.phase == PrintStartPhase::PURGING);
+    }
+
+    SECTION("Skew check completes the pre-print whether or not a profile exists") {
+        REQUIRE(profile->try_match_pattern(NO_SKEW_LINE, result));
+        REQUIRE(result.phase == PrintStartPhase::COMPLETE);
+
+        PrintStartProfile::MatchResult found;
+        REQUIRE(profile->try_match_pattern("// Skew profile 'my_skew_profile' found. Loading...",
+                                           found));
+        REQUIRE(found.phase == PrintStartPhase::COMPLETE);
+    }
+}
+
+TEST_CASE("PrintStartProfile: cosmos_cc1 ignores lines that are not a step",
+          "[profile][print][cosmos][negative]") {
+    auto profile = get_cosmos_profile();
+    REQUIRE(profile != nullptr);
+    REQUIRE_FALSE(profile->is_default());
+
+    PrintStartProfile::MatchResult result;
+
+    SECTION("M190 and M109 wait reports") {
+        // The heater waits print one of these a second for minutes; matching
+        // any phase here would pin the display to whatever the regex says.
+        REQUIRE_FALSE(profile->try_match_pattern("B:94.5 /105.0 T0:140.1 /140.0", result));
+        REQUIRE_FALSE(profile->try_match_pattern("B:105.0 /105.0 T0:212.4 /260.0", result));
+    }
+
+    SECTION("KAMP chatter ahead of the purge") {
+        REQUIRE_FALSE(profile->try_match_pattern(
+            "// KAMP purge is not using firmware retraction, it is recommended to configure it.",
+            result));
+        REQUIRE_FALSE(profile->try_match_pattern("// Moving filament tip 5.0mms", result));
+    }
+
+    SECTION("Cancel paths announce no phase") {
+        REQUIRE_FALSE(profile->try_match_pattern("NO BED MESH!", result));
+        REQUIRE_FALSE(profile->try_match_pattern("NO FILAMENT LOADED!", result));
+        REQUIRE_FALSE(profile->try_match_pattern(
+            "Calibration process not completed. Please complete initial calibration first",
+            result));
+        REQUIRE_FALSE(profile->try_match_pattern(
+            "Adaptive bed mesh requires nozzle z homing. Please enable nozzle z homing.", result));
+    }
+}
+
+TEST_CASE("PrintStartProfile: cosmos_cc1 weights put the time in bed heating",
+          "[profile][print][cosmos]") {
+    auto profile = get_cosmos_profile();
+    REQUIRE(profile != nullptr);
+    REQUIRE_FALSE(profile->is_default());
+
+    const int bed = profile->get_phase_weight(PrintStartPhase::HEATING_BED);
+    int others = 0;
+    for (auto phase : {PrintStartPhase::HOMING, PrintStartPhase::BED_MESH,
+                       PrintStartPhase::HEATING_NOZZLE, PrintStartPhase::PURGING}) {
+        REQUIRE(profile->get_phase_weight(phase) > 0);
+        others += profile->get_phase_weight(phase);
+    }
+    REQUIRE(bed > others);
+}

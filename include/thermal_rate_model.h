@@ -97,7 +97,10 @@ class ThermalRateManager {
                                    float target_temp) const;
     void load_from_config(helix::Config& config);
     void save_to_config(helix::Config& config);
-    void apply_archetype_defaults(float bed_x_max);
+    /// Default heating rates for a printer with no learned history: the
+    /// database entry's measured `thermal_rates` where it has them, otherwise
+    /// a guess from the bed's X extent.
+    void apply_archetype_defaults(float bed_x_max, const std::string& printer_type);
     void reset(); // For testing
 
     ThermalRateManager() = default;

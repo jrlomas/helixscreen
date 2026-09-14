@@ -42,6 +42,24 @@ std::string trim_trailing_ellipsis(const std::string& s) {
     }
     return s.substr(0, end);
 }
+
+/// Whether a heater still short of its target has gained a whole degree since
+/// it last counted. Temperatures are decidegrees. `reference` is a low-water
+/// mark, -1 before the first sample: it follows the heater down, and moves to
+/// the current reading whenever the heater counts, reaches its target, or has
+/// no target at all.
+bool heater_climbed(int temp, int target, int& reference) {
+    constexpr int CLIMB_DECIDEGREES = 10;
+    if (reference < 0 || target <= 0 || temp >= target || temp < reference) {
+        reference = temp;
+        return false;
+    }
+    if (temp - reference < CLIMB_DECIDEGREES) {
+        return false;
+    }
+    reference = temp;
+    return true;
+}
 } // namespace
 
 // ============================================================================
@@ -158,6 +176,9 @@ void PrintStartCollector::start() {
                              std::memory_order_relaxed);
     last_remaining_ = 0;
     fallback_completion_ = false;
+    // A reference left from the last print would count its climb since then as activity.
+    bed_climb_ref_ = -1;
+    ext_climb_ref_ = -1;
 
     // Position inference starts with a clean slate and a fresh sample clock
     position_classifier_.reset();
@@ -542,6 +563,15 @@ void PrintStartCollector::check_fallback_completion() {
     cached_bed_target_.store(helix::ui::temperature::deci_to_degrees(bed_target),
                              std::memory_order_relaxed);
 
+    // A heater still climbing toward its target is the printer working even
+    // when the console is silent: M190 and M109 print nothing a profile can
+    // match, and they spend their last degree or two inside the at-target band.
+    const bool bed_climbed = heater_climbed(bed_temp, bed_target, bed_climb_ref_);
+    const bool ext_climbed = heater_climbed(ext_temp, ext_target, ext_climb_ref_);
+    if (bed_climbed || ext_climbed) {
+        note_activity();
+    }
+
     // Recompute predicted weights when heater targets increase from 0.
     // This handles macros that heat bed first, then issue M109 later —
     // at start() time the nozzle target is 0, so HEATING_NOZZLE gets no weight.
@@ -714,7 +744,7 @@ void PrintStartCollector::check_fallback_completion() {
 
     // Suppress timeout while mesh probing is actively progressing.
     // During mesh, the nozzle target may be 0 (macro cleared it for cooldown),
-    // making temps_near unreliable. Active probing = we're making real progress.
+    // making the temperature check unreliable. Active probing = we're making real progress.
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         if (current_phase_ == PrintStartPhase::BED_MESH &&
@@ -732,12 +762,18 @@ void PrintStartCollector::check_fallback_completion() {
     // hasn't been issued yet — NOT that no nozzle heating is needed. Bed-first
     // macros (common on AD5M with ABS) heat bed, then home + mesh, then heat
     // nozzle. Treating ext_target=0 as "nozzle satisfied" causes premature timeout.
+    //
+    // Temps count only at target, the same 2C test that completes a heating
+    // phase: a bed at 90% of its target can be minutes short of it. An unknown
+    // nozzle target (ext_target=0) cannot be confirmed, so it never counts.
     bool nozzle_target_set = ext_target > 0;
-    bool nozzle_near = nozzle_target_set && ext_temp >= static_cast<int>(ext_target * 0.9);
-    bool bed_near = bed_target <= 0 || bed_temp >= static_cast<int>(bed_target * 0.9);
-    // temps_near requires nozzle target to be set AND near — unknown nozzle
-    // target (ext_target=0) means we can't confirm temps are ready
-    bool temps_near = nozzle_near && bed_near;
+    bool temps_at_target;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        temps_at_target = nozzle_target_set &&
+                          heating_target_reached_locked(PrintStartPhase::HEATING_NOZZLE) &&
+                          heating_target_reached_locked(PrintStartPhase::HEATING_BED);
+    }
 
     auto now = std::chrono::steady_clock::now();
     auto elapsed = now - start_time;
@@ -745,8 +781,8 @@ void PrintStartCollector::check_fallback_completion() {
 
     // A pre-print that is still narrating itself is not stuck, however long it
     // runs. Every timeout below therefore requires the printer to have gone
-    // quiet as well as the clock to have run out; only ABSOLUTE_MAX_TIMEOUT
-    // fires unconditionally. Keying purely on elapsed time made the collector
+    // quiet as well as the clock to have run out; only the absolute ceilings
+    // fire unconditionally. Keying purely on elapsed time made the collector
     // give up mid-sequence on any printer that meshes after heating, and
     // because a timeout completion skips the prediction save, the too-small
     // estimate that set the deadline could never grow.
@@ -765,7 +801,7 @@ void PrintStartCollector::check_fallback_completion() {
         auto adaptive_timeout =
             std::chrono::seconds(static_cast<int>(predicted_total * ADAPTIVE_TIMEOUT_MARGIN));
 
-        if (elapsed > adaptive_timeout && temps_near && quiet) {
+        if (elapsed > adaptive_timeout && temps_at_target && quiet) {
             spdlog::info("[PrintStartCollector] Fallback: adaptive timeout ({} sec, "
                          "predicted={:.0f}s, quiet={}s)",
                          elapsed_sec, predicted_total, quiet_sec);
@@ -774,11 +810,13 @@ void PrintStartCollector::check_fallback_completion() {
             return;
         }
 
-        // Absolute ceiling based on predictions (something is seriously wrong)
+        // Absolute ceiling, stretched for a long prediction. Ungated: a
+        // climbing heater or a chattering firmware holds the quiet gate open,
+        // and neither may hold Preparing open forever.
         auto absolute_timeout =
             std::chrono::seconds(static_cast<int>(predicted_total * ABSOLUTE_TIMEOUT_MARGIN));
         absolute_timeout = std::max(absolute_timeout, ABSOLUTE_MAX_TIMEOUT);
-        if (elapsed > absolute_timeout && quiet) {
+        if (elapsed > absolute_timeout) {
             spdlog::warn("[PrintStartCollector] Fallback: absolute timeout ({} sec, "
                          "predicted={:.0f}s)",
                          elapsed_sec, predicted_total);
@@ -788,7 +826,7 @@ void PrintStartCollector::check_fallback_completion() {
         }
     } else {
         // No prediction data — FALLBACK_TIMEOUT is the last resort
-        if (elapsed > FALLBACK_TIMEOUT && temps_near && quiet) {
+        if (elapsed > FALLBACK_TIMEOUT && temps_at_target && quiet) {
             spdlog::info("[PrintStartCollector] Fallback: timeout ({} sec, no predictions)",
                          elapsed_sec);
             fallback_completion_ = true;
@@ -1972,15 +2010,8 @@ void PrintStartCollector::compute_predicted_weights() {
             }
         }
 
-        // Ensure homing has at least a default. History often records
-        // HOMING=0 on printers whose PRINT_START macros don't emit a
-        // distinct "Homing..." message before the next phase starts, so
-        // check both "missing" and "zero" cases.
-        int homing = static_cast<int>(PrintStartPhase::HOMING);
-        auto homing_it = durations.find(homing);
-        if (homing_it == durations.end() || homing_it->second < 20.0f) {
-            durations[homing] = 20.0f;
-        }
+        durations[static_cast<int>(PrintStartPhase::HOMING)] =
+            static_cast<float>(predictor_.predicted_homing_seconds());
 
         // When nozzle target is unknown (common with bed-first macros that
         // issue M109 after homing/mesh), include a placeholder so progress
@@ -2168,11 +2199,16 @@ void PrintStartCollector::query_mesh_probe_count() {
 }
 
 void PrintStartCollector::save_prediction_entry() {
-    // Don't save timing data from fallback timeout completions — phases may be
-    // interrupted or incomplete, producing misleading predictions
+    // A timeout completion cuts phases short wherever they stood, so its
+    // timings would teach the predictor a shorter pre-print than the real one.
+    // The heating rates came from real samples along the way and stay valid.
     if (fallback_completion_) {
-        spdlog::debug(
-            "[PrintStartCollector] Skipping prediction save (fallback timeout completion)");
+        spdlog::debug("[PrintStartCollector] Timeout completion: saving heating rates only");
+        helix::ui::queue_update([]() {
+            if (auto* cfg = Config::get_instance()) {
+                ThermalRateManager::instance().save_to_config(*cfg);
+            }
+        });
         return;
     }
 

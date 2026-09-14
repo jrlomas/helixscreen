@@ -285,10 +285,10 @@ If the home panel stays on "Preparing Print" indefinitely:
 
 1. **Check console output**: Run your print and look at the Klipper console. Do you see any layer markers?
 2. **Verify macro variables**: Query `gcode_macro _HELIX_STATE` via Moonraker to see if `print_started` is being set
-3. **Check whether the printer is still talking.** Every timeout except the 1800s
-   absolute ceiling also requires the printer to have gone quiet for 90 seconds. A
-   pre-print that is still narrating itself is not considered stuck, however long it
-   runs - that is deliberate, and it is why a slow bed mesh no longer gets cut off
+3. **Check whether the printer is still talking.** Every timeout except the absolute
+   ceiling also requires the printer to have gone quiet for 90 seconds. A pre-print
+   that is still narrating itself, or whose bed or nozzle is still climbing toward its
+   target, is not considered stuck, however long it runs - that is deliberate, and it is why a slow bed mesh no longer gets cut off
    mid-sequence.
 4. **Check for a host-side pre-start block.** If the printer is commit-armed and a
    forced bed mesh or setup macro is running in front of the job, `print_stats` will
@@ -368,9 +368,9 @@ For printers that don't emit G-code layer markers, HelixScreen has additional fa
 | **Macro Variables** | `_HELIX_STATE.print_started`, `_START_PRINT.print_started`, or `START_PRINT.preparation_done` becomes True |
 | **Layer Count** | `print_stats.info.current_layer` becomes ≥ 1 |
 | **Progress + Temps** | Print progress ≥ 2% AND temperatures within 5°C of target |
-| **Timeout (adaptive)** | Elapsed > 1.5x the predicted total, **and** temps ≥ 90% of target, **and** the printer has said nothing for 90s |
+| **Timeout (adaptive)** | Elapsed > 1.5x the predicted total, **and** both heaters at target (within 2°C), **and** 90s without pre-print activity (a matched line, a probe line, or a heater gaining a degree toward its target) |
 | **Timeout (no history)** | Elapsed > 300s, with the same temp and quiet requirements |
-| **Absolute ceiling** | Elapsed > 1800s. The only fallback that ignores the quiet requirement. |
+| **Absolute ceiling** | Elapsed > 1800s, or 2.5x the predicted total when that is longer. The only fallback that ignores the temperature and quiet requirements. |
 
 ### Files
 

@@ -97,6 +97,8 @@ input changes.
 | Flap during CLEANING enters Bed Meshing | `test_print_start_collector.cpp` - flap test |
 | ETA re-baselines on heater-target arrival and staged rise | `test_print_start_collector.cpp` - `[eta]` tests |
 | A heating phase completes at its target, not when the chain's marker passes (concurrent-heat firmware) | `test_print_start_collector.cpp` - "Remaining keeps unfinished heating work" |
+| Timeouts wait for both heaters at target (2°C), a climbing heater is activity, and the absolute ceiling ignores both | `test_print_start_collector.cpp` - "Timeout fallback waits for the heaters to reach their targets", "A heater still closing on its target counts as activity", "The absolute ceiling ends a pre-print that is still active" |
+| A real COSMOS pre-print completes at its skew check, not on a timeout | `test_print_start_collector.cpp` - COSMOS replay fixture (2026-09-14 CC1 klippy.log) |
 | Entering a phase releases the monotonic anchor (no frozen countdown through a long mesh) | `test_print_start_collector.cpp` - "Entering a phase releases the monotonic countdown anchor" |
 | Sweep-march promotion credits the buffered pre-mesh probes (count matches the physical taps) | `test_print_start_collector.cpp` - "Buffered pre-mesh probes are credited" |
 | Position chain wipe → centre → corners → sweep on real captures | `test_print_start_position_classifier.cpp` (corpus: `tests/fixtures/print_start_position_corpus.json`, extracted from the 2026-08-19 K1C klippy.log capture) |

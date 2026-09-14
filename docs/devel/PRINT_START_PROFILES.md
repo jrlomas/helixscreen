@@ -226,6 +226,17 @@ In `assets/config/printer_database.json`, add the `print_start_profile` field to
 
 The value must match the JSON filename without the `.json` extension.
 
+Two more fields give a printer's first print a measured estimate instead of a generic one. The printer's own history replaces both once a print completes:
+
+```json
+{
+  "print_start_default_phases": { "HOMING": 25, "BED_MESH": 2, "PURGING": 15 },
+  "thermal_rates": { "heater_bed": 6.0, "extruder": 0.4 }
+}
+```
+
+`print_start_default_phases` is seconds per non-heating phase (HOMING, QGL, Z_TILT, BED_MESH, CLEANING, PURGING). `thermal_rates` is seconds per degree C per heater, used by `ThermalRateManager::apply_archetype_defaults()` in place of its guess from the bed size.
+
 If a printer has no `print_start_profile` field, or the profile fails to load, the system falls back to `default.json`, then to built-in hardcoded patterns (identical to `default.json`). This three-level fallback chain means nothing ever breaks.
 
 ### Step 4: Add to PrinterDetector (if new printer)
@@ -339,7 +350,7 @@ For printers that don't emit any G-code layer markers (like Forge-X), the collec
 |----------|-----------|------|
 | Layer count | `current_layer >= 1` | Most reliable when slicer outputs layer info |
 | Progress + temps | `progress >= 2%` AND temps at target | File past preamble/macros |
-| Timeout + temps | Elapsed > 45s AND temps >= 90% of target | Last resort |
+| Timeout + temps | Elapsed past the adaptive deadline AND both heaters at target (within 2°C) AND 90s without pre-print activity | Last resort; the absolute ceiling (1800s, or 2.5x the prediction) ignores temps and activity. Details in PRINT_START_INTEGRATION.md |
 | Macro variables | `_START_PRINT.print_started`, `START_PRINT.preparation_done`, `_HELIX_STATE.print_started` | Subscribed via Moonraker |
 
 ---
