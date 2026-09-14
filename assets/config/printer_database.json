@@ -2350,7 +2350,7 @@
       "manufacturer": "Elegoo",
       "image": "elegoo-centauri-carbon.png",
       "preset": "cc1",
-      "_calibration_comment": "COSMOS's BED_MESH_CALIBRATE is a macro that heats the bed to BED_TEMP, homes, cleans the nozzle, tares the load cell, probes, then measures the Z offset. It needs nothing sent ahead of it; its M190/M109 wait for a hot bed to cool, so BED_TEMP never asks for less than the bed already has unless a target is set. {profile_arg} stores the mesh under the chosen name as it completes; the Z-offset step clears the active mesh right after, so it cannot be saved from there.",
+      "_calibration_comment": "COSMOS's BED_MESH_CALIBRATE is a macro that heats the bed to BED_TEMP, homes, cleans the nozzle, tares the load cell, probes, then measures the Z offset. It needs nothing sent ahead of it; its M190/M109 wait for a hot bed to cool, so BED_TEMP never asks for less than a bed above 60C already has, even when a lower target is set. {profile_arg} stores the mesh under the chosen name as it completes; the Z-offset step clears the active mesh right after, so it cannot be saved from there.",
       "calibration": {
         "bed_mesh_gcode": "BED_MESH_CALIBRATE{profile_arg} BED_TEMP={bed_temp}"
       },

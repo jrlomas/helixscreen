@@ -16,10 +16,21 @@ TEST_CASE("probe bed temp: a set target wins", "[bed_mesh][probe_temp]") {
     CHECK(probe_bed_temp_c(/*target_deci=*/1050, /*current_deci=*/240) == 105);
     // Below the default is honoured, not raised to it.
     CHECK(probe_bed_temp_c(450, 200) == 45);
-    // A target below the current temperature is still the one the user set.
-    CHECK(probe_bed_temp_c(700, 950) == 70);
     // Whole degrees, never above what was asked.
     CHECK(probe_bed_temp_c(1059, 240) == 105);
+}
+
+TEST_CASE("probe bed temp: a target below a hot bed does not make it cool",
+          "[bed_mesh][probe_temp]") {
+    // The heat-and-wait also waits for cooling, so a bed above the default is
+    // probed at the temperature it already has whatever lower target is set.
+    CHECK(probe_bed_temp_c(/*target_deci=*/600, /*current_deci=*/1000) == 100);
+    CHECK(probe_bed_temp_c(700, 950) == 95);
+    // "Above 60" is the reading itself, not its floor: 60.5 with a 45 target
+    // asks for 60, which the bed already satisfies.
+    CHECK(probe_bed_temp_c(450, 605) == 60);
+    // A hotter target still wins.
+    CHECK(probe_bed_temp_c(1050, 950) == 105);
 }
 
 TEST_CASE("probe bed temp: an idle bed still hot is not left to cool", "[bed_mesh][probe_temp]") {

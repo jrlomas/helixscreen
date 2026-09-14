@@ -16,9 +16,11 @@
 #include "moonraker_advanced_api.h"
 #include "moonraker_api.h"
 #include "moonraker_client_mock.h"
+#include "panel_widget_manager.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
 #include "standard_macros.h"
+#include "temperature_controller.h"
 
 #include <algorithm>
 #include <string>
@@ -84,6 +86,22 @@ class CalibrationCollectorFixture : public LVGLTestFixture {
         REQUIRE(completions == 0);
         REQUIRE(errors.empty());
     }
+};
+
+/// A TemperatureController the panel's heater sends reach, for as long as it lives.
+class ScopedTemperatureController {
+  public:
+    ScopedTemperatureController(helix::PrinterState& state, IMoonrakerAPI* api)
+        : controller_(state, api) {
+        helix::PanelWidgetManager::instance().register_shared_resource(&controller_);
+    }
+    ~ScopedTemperatureController() {
+        helix::PanelWidgetManager::instance().register_shared_resource(
+            static_cast<helix::TemperatureController*>(nullptr));
+    }
+
+  private:
+    helix::TemperatureController controller_;
 };
 
 class BedMeshPanelFlowFixture : public LVGLTestFixture {
@@ -248,7 +266,7 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
             MacroSource::SHIPPED);
 
     SECTION("a set bed target is the probe temperature") {
-        set_bed(87.4, 70.0);
+        set_bed(24.0, 70.0);
         REQUIRE(lv_subject_get_int(get_printer_state().get_bed_target_subject()) == 700);
 
         BedMeshPanel panel;
@@ -257,6 +275,16 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
         // No preheat wait and no G28 ahead of it: the sequence does both itself.
         REQUIRE(sent().size() == 1);
         CHECK(sent()[0] == "BED_MESH_CALIBRATE BED_TEMP=70");
+    }
+
+    SECTION("a target below a hot bed is not a temperature to cool to") {
+        set_bed(100.4, 60.0);
+
+        BedMeshPanel panel;
+        calibrate_as(panel, "default");
+
+        REQUIRE(sent().size() == 1);
+        CHECK(sent()[0] == "BED_MESH_CALIBRATE BED_TEMP=100");
     }
 
     SECTION("an idle bed still hot is probed at the temperature it has") {
@@ -281,6 +309,36 @@ TEST_CASE_METHOD(BedMeshPanelFlowFixture,
         CHECK(errors.empty());
         REQUIRE(successes.size() == 1);
         CHECK(mentions(successes[0], "'cold'"));
+    }
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "a self-preparing sequence turns off afterwards the heaters that were off",
+                 "[bed_mesh_flow][cc1]") {
+    use_printer("Elegoo Centauri Carbon");
+    ScopedTemperatureController heaters(get_printer_state(), &api);
+    get_printer_state().update_from_status(
+        {{"extruder", {{"temperature", 25.0}, {"target", 0.0}}}});
+
+    SECTION("bed and nozzle both off") {
+        set_bed(24.0, 0.0);
+        BedMeshPanel panel;
+        calibrate_as(panel, "default");
+
+        // Nothing goes out ahead of the sequence: it heats the printer itself.
+        REQUIRE(first_sent(sent(), "BED_MESH_CALIBRATE") == 0);
+        CHECK(first_sent(sent(), "HEATER=extruder TARGET=0") > 0);
+        CHECK(first_sent(sent(), "HEATER=heater_bed TARGET=0") > 0);
+    }
+
+    SECTION("a bed the user was heating stays on") {
+        set_bed(24.0, 70.0);
+        BedMeshPanel panel;
+        calibrate_as(panel, "default");
+
+        REQUIRE(first_sent(sent(), "BED_MESH_CALIBRATE") == 0);
+        CHECK(first_sent(sent(), "HEATER=extruder TARGET=0") > 0);
+        CHECK_FALSE(any_sent(sent(), "HEATER=heater_bed TARGET=0"));
     }
 }
 

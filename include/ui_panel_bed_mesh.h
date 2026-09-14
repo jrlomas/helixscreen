@@ -282,11 +282,14 @@ class BedMeshPanel : public OverlayBase {
     /// and on_calibration_complete() finishes where it says the mesh went.
     helix::bed_mesh::CalibrationPlan calibration_plan_;
 
-    // Preheat tracking — true when we turned on a heater that was off before probing
+    // True for a heater that was off when probing began. The panel's preheat or a
+    // self-preparing sequence turns it on; cooldown_after_probing() turns it off.
     bool preheat_turned_on_nozzle_ = false;
     bool preheat_turned_on_bed_ = false;
 
     // ========== Private Methods ==========
+    /// Record which heaters are off now, for cooldown_after_probing() to restore.
+    void remember_heaters_probing_turns_on();
     void preheat_for_probing();
     void cooldown_after_probing();
     void start_home_and_probe();

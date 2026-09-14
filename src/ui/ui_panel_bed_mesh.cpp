@@ -1201,13 +1201,19 @@ void BedMeshPanel::rename_profile(int index) {
     show_rename_modal(name);
 }
 
+void BedMeshPanel::remember_heaters_probing_turns_on() {
+    auto& state = get_printer_state();
+    // A target of 0 means the heater is off.
+    preheat_turned_on_nozzle_ = lv_subject_get_int(state.get_active_extruder_target_subject()) == 0;
+    preheat_turned_on_bed_ = lv_subject_get_int(state.get_bed_target_subject()) == 0;
+}
+
 void BedMeshPanel::preheat_for_probing() {
-    preheat_turned_on_nozzle_ = false;
-    preheat_turned_on_bed_ = false;
+    remember_heaters_probing_turns_on();
 
     auto& state = get_printer_state();
 
-    // Subject values are decidegrees (value * 10) — target of 0 means heater is off
+    // Subject values are decidegrees (value * 10)
     int nozzle_target = lv_subject_get_int(state.get_active_extruder_target_subject());
     int bed_target = lv_subject_get_int(state.get_bed_target_subject());
 
@@ -1221,8 +1227,7 @@ void BedMeshPanel::preheat_for_probing() {
         }
     };
 
-    if (nozzle_target == 0) {
-        preheat_turned_on_nozzle_ = true;
+    if (preheat_turned_on_nozzle_) {
         spdlog::info("[BedMeshPanel] Preheating nozzle to {}°C for probing", PROBE_NOZZLE_TEMP);
         set_temp(state.active_extruder_name(), PROBE_NOZZLE_TEMP, "nozzle");
     } else {
@@ -1230,8 +1235,7 @@ void BedMeshPanel::preheat_for_probing() {
                      helix::units::from_decidegrees(nozzle_target));
     }
 
-    if (bed_target == 0) {
-        preheat_turned_on_bed_ = true;
+    if (preheat_turned_on_bed_) {
         spdlog::info("[BedMeshPanel] Preheating bed to {}°C for probing", PROBE_BED_TEMP);
         set_temp("heater_bed", PROBE_BED_TEMP, "bed");
     } else {
@@ -1344,6 +1348,9 @@ void BedMeshPanel::begin_calibration(const std::string& name) {
         // would run ahead of it, and a panel preheat could disagree with the bed
         // temperature the sequence was given.
         spdlog::info("[BedMeshPanel] Sequence prepares the printer itself; no preheat or homing");
+        // What it heats stays on after it, so the heaters that were off are
+        // turned off again once probing is done.
+        remember_heaters_probing_turns_on();
         start_calibration_probing();
         return;
     }
