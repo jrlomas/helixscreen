@@ -2477,6 +2477,45 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
     REQUIRE(get_current_phase() == PrintStartPhase::COMPLETE);
 }
 
+TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
+                 "A timeout completion keeps the heating rates it measured",
+                 "[print][collector][timeout][thermal]") {
+    struct ManagerReset {
+        ManagerReset() {
+            ThermalRateManager::instance().reset();
+        }
+        ~ManagerReset() {
+            ThermalRateManager::instance().reset();
+        }
+    } manager_reset;
+
+    set_all_temps(300, 1050, 1400, 1400);
+    collector().start();
+    drain_async_updates();
+
+    // A bed that climbed 60C in 360s measured 6 s/C along the way.
+    ThermalRateModel& bed = ThermalRateManager::instance().get_model("heater_bed");
+    bed.record_sample(30.0f, 1000);
+    bed.record_sample(90.0f, 361000);
+    REQUIRE(bed.measured_rate().has_value());
+
+    reset_collector_to_idle();
+    collector().enable_fallbacks();
+    set_all_temps(1050, 1050, 1400, 1400);
+    PrintStartCollectorTestAccess::set_predicted_total(collector(), 180.0f);
+    PrintStartCollectorTestAccess::set_elapsed_seconds(collector(), 400);
+
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::COMPLETE);
+
+    Config* cfg = Config::get_instance();
+    REQUIRE(cfg->get<float>("/thermal/rates/heater_bed/heat_rate", 0.0f) == Catch::Approx(6.0f));
+    // Phases a timeout cut short are not history.
+    REQUIRE(helix::PreprintPredictor::load_entries_from_config().empty());
+}
+
 // ============================================================================
 // PREDICTION SAVE/LOAD TESTS
 // ============================================================================
@@ -3799,8 +3838,9 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
 class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
   public:
     struct Result {
-        std::string trace;       ///< "second:PHASE" for every phase change
-        int completed_at_ms{-1}; ///< timeline position of COMPLETE, -1 if never
+        std::string trace;           ///< "second:PHASE" for every phase change
+        int completed_at_ms{-1};     ///< timeline position of COMPLETE, -1 if never
+        float first_prediction_s{0}; ///< prediction once the heater targets are set
     };
 
     CosmosPrintStartReplayFixture() {
@@ -3945,6 +3985,11 @@ class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
                 send_gcode_response(report);
             }
             collector().check_fallback_completion();
+            // Before any heating is measured, the prediction is the defaults'.
+            if (s.bed_target > 0 && result.first_prediction_s == 0.0f) {
+                result.first_prediction_s =
+                    PrintStartCollectorTestAccess::get_predicted_total(collector());
+            }
             PrintStartCollectorTestAccess::run_eta_update(collector());
             note_phase();
         }
@@ -3988,16 +4033,28 @@ TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
         SKIP("cosmos_cc1.json not available");
     }
 
-    // The rates this printer shipped with: bed_x_max 256 reads as a medium bed
-    // at 1.5 s/C, and the prediction came out near 190s for a ~620s pre-print,
-    // so every elapsed-time threshold short of the ceiling is spent by the time
-    // the bed nears its target.
-    ThermalRateManager::instance().apply_archetype_defaults(256.0f);
+    // bed_x_max 256 reads as a medium bed to the size guess.
+    constexpr float BED_X_MAX = 256.0f;
+    float min_prediction_s = 0.0f;
+
+    SECTION("with the size-guess heating rates") {
+        // 1.5 s/C predicts about a third of the real pre-print, so every
+        // elapsed-time threshold short of the ceiling is spent before the bed
+        // nears its target.
+        ThermalRateManager::instance().apply_archetype_defaults(BED_X_MAX, "");
+    }
+    SECTION("with the heating rates from the printer database") {
+        ThermalRateManager::instance().apply_archetype_defaults(BED_X_MAX,
+                                                                "Elegoo Centauri Carbon");
+        // The first print is predicted within 10% of the 618s it took.
+        min_prediction_s = 618.0f * 0.9f;
+    }
 
     const Result result = replay();
-    CAPTURE(result.trace);
+    CAPTURE(result.trace, result.first_prediction_s);
     REQUIRE(
         result.trace ==
         "0:INITIALIZING 5:HEATING_BED 542:BED_MESH 542:HEATING_NOZZLE 605:PURGING 618:COMPLETE");
     REQUIRE(result.completed_at_ms == 618500);
+    REQUIRE(result.first_prediction_s >= min_prediction_s);
 }
