@@ -9,6 +9,10 @@
 #include "printer_discovery.h"
 #include "printer_state.h"
 #include "settings_manager.h"
+#include "temperature_sensor_manager.h"
+
+#include <optional>
+#include <string>
 
 #include "../catch_amalgamated.hpp"
 #include "hv/json.hpp"
@@ -1838,6 +1842,70 @@ TEST_CASE("PrinterState::set_hardware: a named chamber sensor the printer report
 
     CHECK(state.temperature_state().chamber_sensor_name() == "temperature_sensor external_bme");
     CHECK(has_chamber_sensor(state) == 1);
+}
+
+TEST_CASE("PrinterState::set_hardware: a named chamber sensor counts from the discovery that "
+          "reports it",
+          "[state][hardware][chamber]") {
+    ChamberAssignmentsRestore restore;
+    PrinterState& state = state_before_discovery("auto", "temperature_sensor external_bme");
+
+    // Discovery lands without the named sensor: discovery's pick stands.
+    state.set_hardware(
+        discovered_objects({"temperature_sensor chamber", "extruder", "heater_bed"}));
+    CHECK(state.temperature_state().chamber_sensor_name() == "temperature_sensor chamber");
+    CHECK(has_chamber_sensor(state) == 1);
+
+    // A later discovery that reports it makes the saved name the chamber sensor.
+    state.set_hardware(
+        discovered_objects({"temperature_sensor external_bme", "temperature_sensor chamber",
+                            "extruder", "heater_bed"}));
+    CHECK(state.temperature_state().chamber_sensor_name() == "temperature_sensor external_bme");
+    CHECK(has_chamber_sensor(state) == 1);
+
+    // One that reports neither leaves the printer no chamber sensor.
+    state.set_hardware(discovered_objects({"extruder", "heater_bed"}));
+    CHECK(state.temperature_state().chamber_sensor_name().empty());
+    CHECK(has_chamber_sensor(state) == 0);
+}
+
+TEST_CASE("PrinterState::set_hardware: a stale chamber sensor name leaves the reported sensor in "
+          "the sensor list's chamber role",
+          "[state][hardware][chamber]") {
+    using helix::sensors::TemperatureSensorManager;
+    using helix::sensors::TemperatureSensorRole;
+
+    ChamberAssignmentsRestore restore;
+    PrinterState& state = state_before_discovery("auto", STALE_CHAMBER_SENSOR);
+
+    auto& sensors = TemperatureSensorManager::instance();
+    sensors.init_subjects();
+    // The manager is a singleton: leave it holding no sensors for later cases.
+    struct SensorsForget {
+        ~SensorsForget() {
+            TemperatureSensorManager::instance().discover({});
+        }
+    } forget;
+
+    const auto role_of = [&sensors](const std::string& klipper_name) {
+        for (const auto& sensor : sensors.get_sensors_sorted()) {
+            if (sensor.klipper_name == klipper_name) {
+                return std::optional<TemperatureSensorRole>(sensor.role);
+            }
+        }
+        return std::optional<TemperatureSensorRole>{};
+    };
+
+    // Hardware discovery hands the manager the printer's sensors before discovery
+    // completes and PrinterState resolves the chamber.
+    PrinterDiscovery hw = centauri_carbon_objects();
+    sensors.discover(hw.sensors());
+    REQUIRE(role_of("temperature_sensor chamber") == TemperatureSensorRole::CHAMBER);
+
+    state.set_hardware(std::move(hw));
+
+    REQUIRE(state.temperature_state().chamber_sensor_name() == "temperature_sensor chamber");
+    CHECK(role_of("temperature_sensor chamber") == TemperatureSensorRole::CHAMBER);
 }
 
 // ============================================================================

@@ -29,9 +29,11 @@ std::string resolve(const std::string& assignment, const std::string& discovered
         return assignment;
     }
 
-    spdlog::info("[ChamberAssignment] Assigned chamber {} '{}' is not a Klipper object on this "
-                 "printer; using the discovered one ('{}')",
-                 role, assignment, discovered);
+    // Every discovery pass (each klippy ready and reconnect) lands here while the saved
+    // name stays stale, so it is not news each time.
+    spdlog::debug("[ChamberAssignment] Assigned chamber {} '{}' is not a Klipper object on this "
+                  "printer; using the discovered one ('{}')",
+                  role, assignment, discovered);
     return discovered;
 }
 

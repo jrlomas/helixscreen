@@ -44,7 +44,8 @@ std::string resolve_heater(const std::string& assignment, const PrinterDiscovery
  * resolve_heater()'s rule against discovery's chamber sensor. PrinterState publishes
  * the result as the resolved chamber sensor name and the printer_has_chamber_sensor
  * capability; every other consumer reads what it published rather than discovery's
- * own pick.
+ * own pick, except the sensor settings dropdown, whose "Auto" entry names the sensor
+ * auto takes.
  *
  * A named sensor counts only while Klipper reports that object. A saved name the
  * printer's configuration no longer has, such as one a model preset seeded, falls
