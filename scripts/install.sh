@@ -3335,11 +3335,11 @@ stop_k1_stock_competing_uis() {
     fi
 
     # Kill any remaining stock Creality UI processes. web-server is spared:
-    # it serves Creality Cloud and the camera stream (webrtc_local), and the
-    # runtime hook's app disable takes it down anyway — the carve-out starter
-    # (prestonbrown/helixscreen#1617) brings it back at the end of the
-    # install. Killing it here leaves it dead for the whole install and,
-    # if the install aborts early, past that too.
+    # it serves Creality Cloud and the camera stream (webrtc_local), and
+    # killing it mid-install leaves Creality Cloud dead for the rest of the
+    # install, and past it if the install aborts. The K1 runtime hook's
+    # kill list takes it down at every HelixScreen start regardless
+    # (prestonbrown/helixscreen#1468 tracks keeping it alive).
     for proc in display-server Monitor master-server audio-server wifi-server app-server upgrade-server; do
         if kill_process_by_name "$proc"; then
             log_info "Killed remaining $proc process"
@@ -9407,9 +9407,12 @@ restore_previous_ui_platform() {
         if [ -z "$app_target" ]; then
             log_warn "Stock UI boot symlink missing or wrong (no /etc/rc.d/*app -> ../init.d/app); run: /etc/init.d/app enable"
         else
-            $SUDO /etc/init.d/app start 2>/dev/null || true
             restored_ui="Creality stock UI (/etc/init.d/app, boot via $app_link)"
         fi
+        # Start runs in both branches: the killall above already took the
+        # carve-out's web-server down, so a missing boot symlink must leave
+        # the session's UI restored, not just warned about.
+        $SUDO /etc/init.d/app start 2>/dev/null || true
     fi
 
     # Check for K1/Simple AF GuppyScreen
