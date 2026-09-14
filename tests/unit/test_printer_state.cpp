@@ -1594,9 +1594,10 @@ PrinterDiscovery discovered_objects(std::initializer_list<const char*> objects) 
     return hw;
 }
 
-/// The PrinterState singleton as a fresh session finds it: the assignment is
+/// The PrinterState singleton as a fresh session finds it: the assignments are
 /// loaded and no discovery has landed yet.
-PrinterState& state_before_discovery(const char* heater_assignment) {
+PrinterState& state_before_discovery(const char* heater_assignment,
+                                     const char* sensor_assignment = "auto") {
     lv_init_safe();
     PrinterState& state = get_printer_state();
     PrinterStateTestAccess::reset(state);
@@ -1604,13 +1605,66 @@ PrinterState& state_before_discovery(const char* heater_assignment) {
 
     auto& settings = helix::SettingsManager::instance();
     settings.init_subjects();
-    settings.set_chamber_sensor_assignment("auto");
+    settings.set_chamber_sensor_assignment(sensor_assignment);
     settings.set_chamber_heater_assignment(heater_assignment);
     return state;
 }
 
 int has_chamber_heater(PrinterState& state) {
     return lv_subject_get_int(state.get_printer_has_chamber_heater_subject());
+}
+
+int has_chamber_sensor(PrinterState& state) {
+    return lv_subject_get_int(PrinterStateTestAccess::has_chamber_sensor_subject(state));
+}
+
+/// Every object an Elegoo Centauri Carbon on COSMOS reports apart from its gcode
+/// macros: one chamber sensor, and neither a chamber heater nor a chamber-named fan.
+PrinterDiscovery centauri_carbon_objects() {
+    return discovered_objects({"gcode",
+                               "webhooks",
+                               "configfile",
+                               "mcu",
+                               "mcu bed",
+                               "mcu hotend",
+                               "gcode_button extruder_board_detect",
+                               "gcode_move",
+                               "print_stats",
+                               "virtual_sdcard",
+                               "pause_resume",
+                               "display_status",
+                               "exclude_object",
+                               "idle_timeout",
+                               "stepper_enable",
+                               "tmc2209 stepper_x",
+                               "tmc2209 stepper_y",
+                               "tmc2209 stepper_z",
+                               "tmc2209 extruder",
+                               "heaters",
+                               "heater_fan extruder",
+                               "fan",
+                               "heater_bed",
+                               "bed_mesh",
+                               "probe",
+                               "load_cell_probe",
+                               "filament_switch_sensor filament_sensor",
+                               "led case",
+                               "led hotend",
+                               "temperature_sensor chamber",
+                               "fan_generic aux_fan",
+                               "fan_generic case_fan",
+                               "temperature_sensor mcu_toolhead",
+                               "temperature_sensor mcu_bed",
+                               "temperature_host mainboard",
+                               "temperature_fan mainboard",
+                               "screws_tilt_adjust",
+                               "telemetry",
+                               "motion_report",
+                               "query_endstops",
+                               "system_stats",
+                               "manual_probe",
+                               "toolhead",
+                               "extruder"});
 }
 
 } // namespace
@@ -1730,6 +1784,60 @@ TEST_CASE("PrinterState: chamber heater presence follows each discovery, never t
         discovered_objects({"temperature_sensor chamber_temp", "extruder", "heater_bed"}));
     CHECK(state.temperature_state().chamber_heater_name().empty());
     CHECK(lv_subject_get_int(presence) == 0);
+}
+
+// ============================================================================
+// set_hardware(): a chamber sensor assignment counts only while Klipper reports it
+// ============================================================================
+
+namespace {
+
+/// A chamber sensor name an older model preset seeded, still saved on a printer
+/// whose configuration names its chamber sensor differently.
+constexpr const char* STALE_CHAMBER_SENSOR = "temperature_sensor box";
+
+} // namespace
+
+TEST_CASE("PrinterState::set_hardware: a chamber sensor the printer does not report yields "
+          "discovery's",
+          "[state][hardware][chamber]") {
+    ChamberAssignmentsRestore restore;
+    PrinterState& state = state_before_discovery("auto", STALE_CHAMBER_SENSOR);
+
+    SECTION("the chamber reads the sensor the printer has") {
+        state.set_hardware(centauri_carbon_objects());
+
+        REQUIRE(state.temperature_state().chamber_sensor_name() == "temperature_sensor chamber");
+        CHECK(state.temperature_state().chamber_heater_name().empty());
+        CHECK(has_chamber_sensor(state) == 1);
+
+        json status = {{"temperature_sensor chamber", {{"temperature", 30.87}}}};
+        state.update_from_status(status);
+        // Decidegrees, truncated.
+        CHECK(lv_subject_get_int(state.get_chamber_temp_subject()) == 308);
+    }
+    SECTION("a printer with no chamber sensor has none") {
+        state.set_hardware(discovered_objects(
+            {"temperature_sensor mcu_toolhead", "temperature_sensor mcu_bed",
+             "temperature_host mainboard", "temperature_fan mainboard", "extruder", "heater_bed"}));
+
+        CHECK(state.temperature_state().chamber_sensor_name().empty());
+        CHECK(has_chamber_sensor(state) == 0);
+    }
+}
+
+TEST_CASE("PrinterState::set_hardware: a named chamber sensor the printer reports is its sensor",
+          "[state][hardware][chamber]") {
+    ChamberAssignmentsRestore restore;
+    PrinterState& state = state_before_discovery("auto", "temperature_sensor external_bme");
+
+    auto hw = discovered_objects({"temperature_sensor external_bme", "temperature_sensor chamber",
+                                  "extruder", "heater_bed"});
+    REQUIRE(hw.chamber_sensor_name() == "temperature_sensor chamber");
+    state.set_hardware(std::move(hw));
+
+    CHECK(state.temperature_state().chamber_sensor_name() == "temperature_sensor external_bme");
+    CHECK(has_chamber_sensor(state) == 1);
 }
 
 // ============================================================================
