@@ -3893,6 +3893,39 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture, "A probe line counts as pre-p
     REQUIRE(get_current_phase() != PrintStartPhase::COMPLETE);
 }
 
+TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
+                 "A heat soak line relabels a bed that is already heating",
+                 "[print][collector][heating]") {
+    // Temperatures often put the bed in HEATING_BED before the macro says a
+    // word, and a soak is part of the same phase: its label is the news.
+    set_all_temps(500, 1050, 1400, 1400);
+    collector().start();
+    drain_async_updates();
+    collector().enable_fallbacks();
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+    REQUIRE(get_current_message() == "Heating Bed...");
+
+    send_gcode_response("// Heat soaking the bed");
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+    REQUIRE(get_current_message() == "Heat Soak");
+
+    SECTION("a heating line puts its own label back") {
+        send_gcode_response("M190 S105");
+        REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+        REQUIRE(get_current_message() == "Heating Bed...");
+    }
+
+    SECTION("a bed line never pulls a later phase back to heating") {
+        send_gcode_response("BED_MESH_CALIBRATE");
+        REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+        send_gcode_response("// Heat soaking the bed");
+        REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+    }
+}
+
 // ============================================================================
 // POSITION TELEMETRY INTEGRATION — silent-window refinement, end to end.
 // Coordinates below are the real K1C capture values (mesh 5..215, wipe strip
@@ -4017,6 +4050,9 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
 struct CosmosReplayVariant {
     /// The heat soak as COSMOS prints it (cosmos.conf heatsoak, 0-30 minutes).
     const char* heatsoak_minutes = "1.0";
+    /// false: SMART_PARK and LINE_PURGE print nothing, as with adaptive_purge
+    /// off or KAMP's verbose output disabled.
+    bool narrates_park_and_purge = true;
 };
 
 class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
@@ -4099,7 +4135,7 @@ class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
             static_cast<int>(std::lround((std::stod(variant.heatsoak_minutes) - 1.0) * 60.0));
         const int extra_ms = extra_s * 1000;
         const std::string soak = std::string("Heatsoak: ") + variant.heatsoak_minutes + "m";
-        const std::vector<Narration> narration = {
+        std::vector<Narration> narration = {
             {SOAK_NARRATION_MS, "// " + soak, soak},
             {542500 + extra_ms, "// Using default bed mesh", "Using default bed mesh"},
             {542600 + extra_ms, "// Smart Park location: 41.0714,33.0046.", ""},
@@ -4115,6 +4151,15 @@ class CosmosPrintStartReplayFixture : public PrintStartCollectorHeaterFixture {
              "'my_skew_profile' in printer.cfg",
              ""},
         };
+        if (!variant.narrates_park_and_purge) {
+            narration.erase(std::remove_if(narration.begin(), narration.end(),
+                                           [](const Narration& n) {
+                                               return n.console.find("Smart Park") !=
+                                                          std::string::npos ||
+                                                      n.console.find("KAMP") != std::string::npos;
+                                           }),
+                            narration.end());
+        }
         // Through the extra soak time the heaters read what they read at 540s.
         std::vector<Sample> timeline;
         for (const Sample& s : SAMPLES) {
@@ -4283,4 +4328,22 @@ TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
     REQUIRE(result.trace == "0:INITIALIZING 5:HEATING_BED 1082:BED_MESH 1082:HEATING_NOZZLE "
                             "1145:PURGING 1158:COMPLETE");
     REQUIRE(result.completed_at_ms == 618500 + 540000);
+}
+
+TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
+                 "PrintStartCollector: a quiet COSMOS park and purge shows the nozzle heating",
+                 "[print][collector][cosmos][integration]") {
+    if (!have_profile_) {
+        SKIP("cosmos_cc1.json not available");
+    }
+    // Without the smart park narration, the stored mesh line is the last word
+    // before M109 raises the nozzle from 140C to 260C.
+    ThermalRateManager::instance().apply_archetype_defaults(256.0f, "Elegoo Centauri Carbon");
+
+    CosmosReplayVariant variant;
+    variant.narrates_park_and_purge = false;
+    const Result result = replay(variant);
+    CAPTURE(result.trace);
+    REQUIRE(result.trace ==
+            "0:INITIALIZING 5:HEATING_BED 542:BED_MESH 550:HEATING_NOZZLE 618:COMPLETE");
 }
