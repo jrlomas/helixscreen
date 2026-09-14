@@ -449,6 +449,10 @@ write_stock_app_service() {
         -e "s|/etc/rc\.d/|$MOCK_ROOT/etc/rc.d/|g" \
         "$UNINSTALL_BUNDLE" > "$patched"
 
+    # The restore path killalls the carve-out's web-server; mock it so the
+    # sandbox never sees a host-addressing call.
+    mock_command_script "killall" 'exit 0'
+
     write_stock_app_service
     rm -f "$MOCK_ROOT"/etc/rc.d/*app 2>/dev/null || true
 
