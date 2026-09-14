@@ -33,6 +33,9 @@ struct CalibrationPlan {
     /// The command heats and homes the printer itself.
     bool self_prepares = false;
 
+    /// The command is a sequence helixscreen ships for this printer.
+    bool shipped = false;
+
     /// The profile the command stores the finished mesh in.
     std::string writes_profile;
 
@@ -145,6 +148,7 @@ inline std::string named_profile(const std::string& command) {
     CalibrationPlan plan;
     plan.name = name;
     plan.self_prepares = resolved.self_prepares;
+    plan.shipped = resolved.shipped;
     plan.command = resolved.script;
 
     if (resolved.takes_profile_arg) {

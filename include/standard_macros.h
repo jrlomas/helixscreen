@@ -212,6 +212,10 @@ struct ResolvedMacroScript {
     /// The script marks where a profile argument goes, so whatever it stores lands
     /// in the profile the caller named.
     bool takes_profile_arg = false;
+
+    /// The shipped tier won: a sequence authored for this printer, every command of
+    /// which is meant to exist.
+    bool shipped = false;
 };
 
 /**

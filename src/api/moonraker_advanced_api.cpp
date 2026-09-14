@@ -1609,10 +1609,11 @@ class BedMeshProgressCollector : public std::enable_shared_from_this<BedMeshProg
     BedMeshProgressCollector(IMoonrakerClient& client, ProgressCallback on_progress,
                              MoonrakerAdvancedAPI::SuccessCallback on_complete,
                              MoonrakerAdvancedAPI::ErrorCallback on_error, int expected_probes = 0,
-                             int probe_samples = 1)
+                             int probe_samples = 1, bool unknown_command_fails = false)
         : client_(client), on_progress_(std::move(on_progress)),
           on_complete_(std::move(on_complete)), on_error_(std::move(on_error)),
-          expected_probes_(expected_probes), point_counter_(probe_samples) {}
+          expected_probes_(expected_probes), unknown_command_fails_(unknown_command_fails),
+          point_counter_(probe_samples) {}
 
     ~BedMeshProgressCollector() {
         unregister();
@@ -1676,10 +1677,19 @@ class BedMeshProgressCollector : public std::enable_shared_from_this<BedMeshProg
         // line rather than an error and carries on with the script, so this line is
         // the only sign that a step of the calibration never ran.
         if (auto missing = helix::parse_unknown_command(line)) {
-            complete_error(
-                missing->rfind("BED_MESH_CALIBRATE", 0) == 0
-                    ? std::string("BED_MESH_CALIBRATE requires [bed_mesh] in printer.cfg")
-                    : "Unknown command: " + *missing);
+            const bool calibrate_missing = missing->rfind("BED_MESH_CALIBRATE", 0) == 0;
+            if (calibrate_missing || unknown_command_fails_) {
+                complete_error(
+                    calibrate_missing
+                        ? std::string("BED_MESH_CALIBRATE requires [bed_mesh] in printer.cfg")
+                        : "Unknown command: " + *missing);
+                return;
+            }
+            // A user's or a detected macro may call something optional; what the
+            // calibration stores decides whether it worked.
+            spdlog::warn("[BedMeshProgressCollector] Calibration called undefined '{}'; still "
+                         "waiting for it to finish",
+                         *missing);
             return;
         }
 
@@ -1769,6 +1779,8 @@ class BedMeshProgressCollector : public std::enable_shared_from_this<BedMeshProg
     int current_probe_ = 0;
     int total_probes_ = 0;
     int expected_probes_ = 0; // hint from configfile (0 = unknown)
+    // Every command the script calls is meant to exist (a shipped sequence).
+    bool unknown_command_fails_ = false;
     // Dedupes "probe at X,Y is z=Z" samples into mesh points. Seeded with the
     // configured sample count, which it uses only when a line's coordinates
     // cannot be parsed.
@@ -1800,9 +1812,9 @@ void MoonrakerAdvancedAPI::start_bed_mesh_calibrate(const BedMeshCommand& comman
                  expected_probes, probe_samples);
 
     // Create collector to track progress
-    auto collector = std::make_shared<BedMeshProgressCollector>(client_, std::move(on_progress),
-                                                                std::move(on_complete), on_error,
-                                                                expected_probes, probe_samples);
+    auto collector = std::make_shared<BedMeshProgressCollector>(
+        client_, std::move(on_progress), std::move(on_complete), on_error, expected_probes,
+        probe_samples, command.shipped);
 
     collector->start();
 

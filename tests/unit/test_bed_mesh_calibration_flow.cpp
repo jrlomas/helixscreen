@@ -82,10 +82,10 @@ class CalibrationCollectorFixture : public LVGLTestFixture {
     }
 
     /// A calibration whose RPC never returns, so only console lines can end it.
-    void start() {
+    void start(bool shipped = true) {
         client.force_next_gcode_dropped_response("BED_MESH_CALIBRATE");
         advanced.start_bed_mesh_calibrate(
-            {"BED_MESH_CALIBRATE BED_TEMP=60", /*self_prepares=*/true},
+            {"BED_MESH_CALIBRATE BED_TEMP=60", /*self_prepares=*/shipped, /*shipped=*/shipped},
             [this](int current, int total) { progress.emplace_back(current, total); },
             [this]() { ++completions; },
             [this](const MoonrakerError& err) { errors.push_back(err.message); },
@@ -179,7 +179,8 @@ class BedMeshPanelFlowFixture : public LVGLTestFixture {
 // Collector: console lines that end a calibration
 // ============================================================================
 
-TEST_CASE_METHOD(CalibrationCollectorFixture, "an unknown command during calibration fails it",
+TEST_CASE_METHOD(CalibrationCollectorFixture,
+                 "an unknown command in a shipped sequence fails the calibration",
                  "[bed_mesh_flow][cc1]") {
     start();
     client.dispatch_gcode_response("// probe at 9.998,9.998 is z=0.265669");
@@ -197,10 +198,31 @@ TEST_CASE_METHOD(CalibrationCollectorFixture, "an unknown command during calibra
     CHECK(errors.size() == 1);
 }
 
+TEST_CASE_METHOD(
+    CalibrationCollectorFixture,
+    "an unknown command in any other calibration is logged, and the calibration runs on",
+    "[bed_mesh_flow]") {
+    start(/*shipped=*/false);
+    client.dispatch_gcode_response("// Unknown command:\"CLEAN_NOZZLE\"");
+    CHECK(errors.empty());
+    CHECK(completions == 0);
+
+    client.dispatch_gcode_response("// probe at 9.998,9.998 is z=0.265669");
+    CHECK(progress.size() == 1); // still listening
+    client.dispatch_gcode_response("// Mesh Bed Leveling Complete");
+    CHECK(completions == 1);
+    CHECK(errors.empty());
+}
+
 TEST_CASE_METHOD(CalibrationCollectorFixture,
                  "an unknown BED_MESH_CALIBRATE still points at the missing [bed_mesh]",
                  "[bed_mesh_flow]") {
-    start();
+    SECTION("in a shipped sequence") {
+        start(/*shipped=*/true);
+    }
+    SECTION("in any other command, since the calibration itself never ran") {
+        start(/*shipped=*/false);
+    }
     client.dispatch_gcode_response("// Unknown command:\"BED_MESH_CALIBRATE\"");
     REQUIRE(errors.size() == 1);
     CHECK(mentions(errors[0], "[bed_mesh]"));
@@ -512,6 +534,32 @@ TEST_CASE_METHOD(LVGLTestFixture, "the mock printer's calibration runs the comma
     CHECK(any_sent(client.gcode_script_history(), "BED_MESH_CALIBRATE PROFILE=cold"));
     const auto& profiles = client.get_bed_mesh_profiles();
     CHECK(std::find(profiles.begin(), profiles.end(), "cold") != profiles.end());
+}
+
+TEST_CASE_METHOD(BedMeshPanelFlowFixture,
+                 "only a shipped sequence is failed by a command the printer does not define",
+                 "[bed_mesh_flow][cc1]") {
+    SECTION("the Centauri Carbon's shipped sequence") {
+        use_printer("Elegoo Centauri Carbon");
+        client.force_next_gcode_console_reply("BED_MESH_CALIBRATE",
+                                              "// Unknown command:\"CLEAN_NOZZLE\"");
+        BedMeshPanel panel;
+        calibrate_as(panel, "default");
+        REQUIRE(any_sent(sent(), "BED_MESH_CALIBRATE"));
+        CHECK(successes.empty());
+    }
+
+    SECTION("a detected BED_MESH_CALIBRATE") {
+        detect_macros({"gcode_macro BED_MESH_CALIBRATE"});
+        client.force_next_gcode_console_reply("BED_MESH_CALIBRATE",
+                                              "// Unknown command:\"CLEAN_NOZZLE\"");
+        BedMeshPanel panel;
+        calibrate_as(panel, "default");
+        REQUIRE(any_sent(sent(), "BED_MESH_CALIBRATE"));
+        CHECK(errors.empty());
+        REQUIRE(successes.size() == 1);
+        CHECK(mentions(successes[0], "'default'"));
+    }
 }
 
 TEST_CASE_METHOD(BedMeshPanelFlowFixture,

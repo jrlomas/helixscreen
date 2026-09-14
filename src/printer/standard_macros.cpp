@@ -189,7 +189,8 @@ ResolvedMacroScript resolve_macro_script(const StandardMacroInfo& info,
         return out;
     }
     out.script = info.get_macro();
-    out.self_prepares = source == MacroSource::SHIPPED;
+    out.shipped = source == MacroSource::SHIPPED;
+    out.self_prepares = out.shipped;
 
     out.takes_profile_arg = out.script.find("{profile_arg}") != std::string::npos;
 

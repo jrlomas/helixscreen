@@ -1539,7 +1539,8 @@ void BedMeshPanel::launch_calibration(IMoonrakerAPI* api, int expected_probes, i
     // WebSocket thread; bg_cb defers the body to main and re-checks the lifetime
     // generation atomically before invoking.
     api->advanced().start_bed_mesh_calibrate(
-        IAdvancedAPI::BedMeshCommand{calibration_plan_.command, calibration_plan_.self_prepares},
+        IAdvancedAPI::BedMeshCommand{calibration_plan_.command, calibration_plan_.self_prepares,
+                                     calibration_plan_.shipped},
         lifetime_.bg_cb("BedMeshPanel::probe_progress",
                         [this](int current, int total) { on_probe_progress(current, total); }),
         lifetime_.bg_cb("BedMeshPanel::calibrate_done", [this]() { on_calibration_complete(); }),

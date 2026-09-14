@@ -85,6 +85,7 @@ TEST_CASE("calibration plan: a command that cannot be named stores default, then
         slot.detected_macro = "G29";
         const auto plan = plan_calibration(slot, "cold", 60);
         CHECK(plan.command == "G29");
+        CHECK_FALSE(plan.shipped);
         CHECK(plan.writes_profile == "default");
         CHECK(plan.copy_to == "cold");
         CHECK(plan.final_profile() == "cold");
@@ -128,6 +129,7 @@ TEST_CASE("calibration plan: the Centauri Carbon template, default and named",
         CHECK(plan.writes_profile == "default");
         CHECK(plan.copy_to.empty());
         CHECK(plan.self_prepares);
+        CHECK(plan.shipped);
     }
 
     SECTION("named") {
