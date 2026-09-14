@@ -3694,6 +3694,38 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
     REQUIRE(get_current_phase() != PrintStartPhase::COMPLETE);
 }
 
+TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
+                 "A heater sampled during the last print is not climbing on the next",
+                 "[print][collector][timeout]") {
+    // The last print's final fallback sample caught the bed mid-climb.
+    collector().start();
+    drain_async_updates();
+    reset_collector_to_idle();
+    collector().enable_fallbacks();
+    set_all_temps(500, 1050, 2650, 2650);
+    collector().check_fallback_completion();
+    drain_async_updates();
+    REQUIRE(get_current_phase() != PrintStartPhase::COMPLETE);
+    collector().stop();
+    drain_async_updates();
+
+    // The next print starts with the bed hot, just short of its target, and quiet.
+    collector().start();
+    drain_async_updates();
+    reset_collector_to_idle();
+    collector().enable_fallbacks();
+    PrintStartCollectorTestAccess::set_predicted_total(collector(), 0.0f);
+    set_all_temps(1040, 1050, 2650, 2650);
+    PrintStartCollectorTestAccess::set_elapsed_seconds(collector(), 400);
+
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+
+    // Nothing climbed since this print began, so the quiet timeout ends it.
+    REQUIRE(get_current_phase() == PrintStartPhase::COMPLETE);
+}
+
 TEST_CASE_METHOD(PrintStartCollectorHeaterFixture, "A probe line counts as pre-print activity",
                  "[print][collector][timeout]") {
     // Mesh probing is the longest silent-to-the-profile stretch on many
