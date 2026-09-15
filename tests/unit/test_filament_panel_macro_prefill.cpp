@@ -35,6 +35,7 @@
 #include "macro_param_modal.h"
 #include "moonraker_api.h"
 #include "moonraker_client_mock.h"
+#include "post_op_cooldown_manager.h"
 #include "preset_materials.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
@@ -121,6 +122,13 @@ struct PrefillPanelHarness {
     }
 
     ~PrefillPanelHarness() {
+        // A macro that ran queued its completion callbacks, which reach the panel,
+        // so they run while it is still alive. Completing an op can schedule the
+        // post-op cooldown, whose timer would otherwise outlive this test.
+        helix::ui::UpdateQueue::instance().drain();
+        PostOpCooldownManager::instance().cancel();
+        helix::ui::UpdateQueue::instance().drain();
+
         helix::ui::set_filament_param_prompter({});
         panel.reset();
         AmsState::instance().clear_backends();
