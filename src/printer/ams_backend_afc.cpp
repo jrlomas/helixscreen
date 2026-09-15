@@ -5263,6 +5263,16 @@ AmsError AmsBackendAfc::cancel() {
 // Configuration Operations
 // ============================================================================
 
+namespace {
+
+/// SET_WEIGHT for a lane, in whole grams. The edit path and a weight persist
+/// both send it, so they share one spelling.
+std::string set_weight_command(const std::string& lane_name, float remaining_weight_g) {
+    return fmt::format("SET_WEIGHT LANE={} WEIGHT={:.0f}", lane_name, remaining_weight_g);
+}
+
+} // namespace
+
 AmsError AmsBackendAfc::set_slot_info(int slot_index, const SlotInfo& info, bool persist) {
     // Set when the material could not be expressed as a G-code parameter. Reported
     // after every other write has gone out, so a name AFC cannot store costs the user
@@ -5393,8 +5403,7 @@ AmsError AmsBackendAfc::set_slot_info(int slot_index, const SlotInfo& info, bool
 
                 // Weight (if valid)
                 if (info.remaining_weight_g > 0) {
-                    execute_gcode(fmt::format("SET_WEIGHT LANE={} WEIGHT={:.0f}", lane_name,
-                                              info.remaining_weight_g));
+                    execute_gcode(set_weight_command(lane_name, info.remaining_weight_g));
                 }
 
                 // Tool mapping (lane → tool number) via SET_MAP.
@@ -5422,6 +5431,22 @@ AmsError AmsBackendAfc::set_slot_info(int slot_index, const SlotInfo& info, bool
     }
 
     return AmsErrorHelper::success();
+}
+
+void AmsBackendAfc::persist_slot_weight(int slot_index, float remaining_weight_g,
+                                        float total_weight_g) {
+    std::string lane_name;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        helix::ams::persist_override_weight(override_store_.get(), overrides_, slot_index,
+                                            remaining_weight_g, total_weight_g, "[AMS AFC]");
+        lane_name = slots_.name_of(slot_index);
+    }
+    // AFC keeps a lane's weight itself, and SET_WEIGHT is the one SET_* command
+    // a meter has anything to say to.
+    if (!lane_name.empty() && remaining_weight_g > 0) {
+        execute_gcode(set_weight_command(lane_name, remaining_weight_g));
+    }
 }
 
 AmsError AmsBackendAfc::set_tool_mapping(int tool_number, int slot_index) {

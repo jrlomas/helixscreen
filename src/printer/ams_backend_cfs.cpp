@@ -2371,6 +2371,14 @@ AmsError AmsBackendCfs::set_slot_info(int slot_index, const SlotInfo& info, bool
     return AmsErrorHelper::success();
 }
 
+void AmsBackendCfs::persist_slot_weight(int slot_index, float remaining_weight_g,
+                                        float total_weight_g) {
+    const std::string tag = backend_log_tag();
+    std::lock_guard<std::mutex> lock(mutex_);
+    helix::ams::persist_override_weight(override_store_.get(), overrides_, slot_index,
+                                        remaining_weight_g, total_weight_g, tag);
+}
+
 void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::string& material,
                                                    const std::string& brand,
                                                    const std::string& catalog_id,

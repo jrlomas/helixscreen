@@ -601,6 +601,40 @@ TEST_CASE("Happy Hare persistence: MMU_TTG_MAP not fired when caller leaves mapp
     REQUIRE(entry->info.mapped_tool == 2);
 }
 
+TEST_CASE("Happy Hare persistence: a weight persist sends no MMU_GATE_MAP",
+          "[ams][happy_hare][persistence][1652]") {
+    AmsBackendHappyHareTestHelper helper;
+    // The gate map reports a spool in every gate: red PLA in gate 0.
+    nlohmann::json mmu_data = {{"gate", 2},
+                               {"tool", 2},
+                               {"filament", "Loaded"},
+                               {"action", "Idle"},
+                               {"filament_pos", 8},
+                               {"has_bypass", true},
+                               {"gate_status", {1, 0, 2, 1}},
+                               {"gate_color_rgb", {0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00}},
+                               {"gate_material", {"PLA", "PETG", "ABS", "TPU"}},
+                               {"ttg_map", {0, 1, 2, 3}},
+                               {"endless_spool_groups", {0, 0, 1, 1}}};
+    helper.test_parse_mmu_state(mmu_data);
+    REQUIRE(helper.get_slot_info(0).material == "PLA");
+    helper.clear_captured_gcodes();
+
+    // What the consumption meter's minute persist and its pause and completion
+    // flushes do.
+    helper.update_slot_weight(0, 640.0f, -1.0f, /*persist=*/true);
+
+    // The gate map holds no weight, so a meter has nothing to tell it.
+    CHECK_FALSE(helper.has_gcode_starting_with("MMU_GATE_MAP"));
+    CHECK(helper.captured_gcodes == std::vector<std::string>{});
+
+    REQUIRE(helper.has_gate_override(0));
+    const auto& record = HappyHareTestAccess::overrides(helper).at(0);
+    CHECK(record.remaining_weight_g == Catch::Approx(640.0f));
+    CHECK_FALSE(record.color_set);
+    CHECK(record.material.empty());
+}
+
 TEST_CASE("Happy Hare persistence: different gate indices", "[ams][happy_hare][persistence]") {
     AmsBackendHappyHareTestHelper helper;
     helper.initialize_test_gates(8);

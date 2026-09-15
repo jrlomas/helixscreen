@@ -1416,6 +1416,13 @@ AmsError AmsBackendQidi::set_slot_info(int slot_index, const SlotInfo& info, boo
     return AmsErrorHelper::success();
 }
 
+void AmsBackendQidi::update_slot_weight(int /*slot_index*/, float /*remaining_weight_g*/,
+                                        float /*total_weight_g*/, bool /*persist*/) {
+    // The box has nowhere to put a weight: its save_variables hold filament,
+    // colour and vendor ids alone, and set_slot_info() writes those whatever
+    // persist says.
+}
+
 AmsError AmsBackendQidi::set_tool_mapping(int tool_number, int slot_index) {
     spdlog::info("{} set_tool_mapping(tool={}, slot={})", backend_log_tag(), tool_number,
                  slot_index);

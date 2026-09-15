@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 #include "hv/json.hpp"
 
@@ -124,6 +125,15 @@ ResolvedTemps resolved_temps(const FilamentSlotOverride& o);
 // nozzle_temp_min/max when both differ, else nozzle_temp_min when set, else
 // 0 (which signals to resolved_temps that the material-DB default should win).
 void populate_temps_from_slot_info(FilamentSlotOverride& ovr, const SlotInfo& info);
+
+// Put a metered weight on the record @p overrides holds for @p slot_index and
+// return it. Only the two weights move: a meter states no identity, so the
+// record's values and its locks stand as they were. A lane with no record yet
+// gets one carrying the weight alone, and a total below zero leaves the
+// record's total as it was.
+FilamentSlotOverride&
+stage_weight_override(std::unordered_map<int, FilamentSlotOverride>& overrides, int slot_index,
+                      float remaining_weight_g, float total_weight_g);
 
 nlohmann::json to_json(const FilamentSlotOverride& o);
 FilamentSlotOverride from_json(const nlohmann::json& j);

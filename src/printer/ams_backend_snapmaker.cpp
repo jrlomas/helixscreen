@@ -940,6 +940,14 @@ AmsError AmsBackendSnapmaker::set_slot_info(int slot_index, const SlotInfo& info
     return AmsErrorHelper::success();
 }
 
+void AmsBackendSnapmaker::persist_slot_weight(int slot_index, float remaining_weight_g,
+                                              float total_weight_g) {
+    const std::string tag = backend_log_tag();
+    std::lock_guard<std::mutex> lock(mutex_);
+    helix::ams::persist_override_weight(override_store_.get(), overrides_, slot_index,
+                                        remaining_weight_g, total_weight_g, tag);
+}
+
 AmsError AmsBackendSnapmaker::set_tool_mapping(int /*tool_number*/, int /*slot_index*/) {
     return AmsErrorHelper::not_supported("Tool mapping not supported on Snapmaker");
 }

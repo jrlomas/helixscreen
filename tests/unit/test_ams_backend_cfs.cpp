@@ -2116,6 +2116,53 @@ TEST_CASE("CFS set_slot_info(persist=false) does NOT write to store",
     CHECK(info.color_rgb == 0x123456u);
 }
 
+TEST_CASE("CFS weight persist writes the weight and states no identity",
+          "[ams][cfs][filament_slot_override][1652]") {
+    CfsTmpCacheDir tmp("weight_persist_no_identity");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    CfsRemapHelper backend;
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "cfs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    CfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // Bay 0 holds a tagged PLA spool firmware reports. Nobody has edited it.
+    json box = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                    {"0FF5500", "0FFFFFF", "00A2989", "0C12E1F"});
+    CfsTestAccess::handle_status(backend, make_cfs_notification(box));
+    REQUIRE(backend.get_slot_info(0).material == "PLA");
+    if (const auto mirrored = CfsTestAccess::get_override(backend, 0)) {
+        REQUIRE_FALSE(mirrored->user_locked_color);
+        REQUIRE_FALSE(mirrored->user_locked_material);
+    }
+    backend.captured.clear();
+
+    // What the consumption meter's minute persist and its pause and completion
+    // flushes do.
+    backend.update_slot_weight(0, 640.0f, 1000.0f, /*persist=*/true);
+
+    const auto record = CfsTestAccess::get_override(backend, 0);
+    REQUIRE(record.has_value());
+    CHECK(record->remaining_weight_g == Catch::Approx(640.0f));
+    CHECK(record->total_weight_g == Catch::Approx(1000.0f));
+    // A meter has no word on identity, so the bay's colour and material stay
+    // firmware's to report.
+    CHECK_FALSE(record->user_locked_color);
+    CHECK_FALSE(record->user_locked_material);
+
+    const json stored = api.mock_get_db_value("lane_data", "lane1");
+    REQUIRE_FALSE(stored.is_null());
+    CHECK(stored["remaining_weight_g"].get<float>() == Catch::Approx(640.0f));
+    CHECK(stored["helix_locked_color"] == false);
+    CHECK(stored["helix_locked_material"] == false);
+
+    // Nothing restates the spool's identity to the box.
+    CHECK(backend.captured == std::vector<std::string>{});
+}
+
 TEST_CASE("CFS RFID fingerprint change clears override (hardware swap detected)",
           "[ams][cfs][filament_slot_override]") {
     CfsTmpCacheDir tmp("task14_uid_swap_clears");

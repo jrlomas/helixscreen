@@ -2753,6 +2753,14 @@ AmsError AmsBackendHappyHare::set_slot_info(int slot_index, const SlotInfo& info
     return AmsErrorHelper::success();
 }
 
+void AmsBackendHappyHare::persist_slot_weight(int slot_index, float remaining_weight_g,
+                                              float total_weight_g) {
+    // The gate map holds no weight, so the stored record is its only durable home.
+    std::lock_guard<std::mutex> lock(mutex_);
+    helix::ams::persist_override_weight(override_store_.get(), overrides_, slot_index,
+                                        remaining_weight_g, total_weight_g, "[AMS HappyHare]");
+}
+
 uint64_t AmsBackendHappyHare::firmware_tool_mapping_generation() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return slots_.firmware_mapping_generation();

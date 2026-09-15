@@ -626,6 +626,17 @@ void populate_temps_from_slot_info(FilamentSlotOverride& ovr, const SlotInfo& in
     }
 }
 
+FilamentSlotOverride&
+stage_weight_override(std::unordered_map<int, FilamentSlotOverride>& overrides, int slot_index,
+                      float remaining_weight_g, float total_weight_g) {
+    FilamentSlotOverride& staged = overrides[slot_index];
+    staged.remaining_weight_g = remaining_weight_g;
+    if (total_weight_g >= 0.0f) {
+        staged.total_weight_g = total_weight_g;
+    }
+    return staged;
+}
+
 // ============================================================================
 // FilamentSlotOverrideStore skeleton (Task 2). Real load/save wiring lands
 // in Tasks 3-5; this skeleton exists so other components can depend on the
@@ -1843,6 +1854,21 @@ MergeResult merge_override(SlotInfo& slot, const FilamentSlotOverride& o,
     if (!o.product_name.empty())
         slot.product_name = o.product_name;
     return {};
+}
+
+void persist_override_weight(FilamentSlotOverrideStore* store,
+                             std::unordered_map<int, FilamentSlotOverride>& overrides,
+                             int slot_index, float remaining_weight_g, float total_weight_g,
+                             const std::string& log_tag) {
+    const FilamentSlotOverride& staged =
+        stage_weight_override(overrides, slot_index, remaining_weight_g, total_weight_g);
+    if (store) {
+        store->save_async(slot_index, staged, [log_tag, slot_index](bool ok, std::string err) {
+            if (!ok) {
+                spdlog::warn("{} weight persist failed for slot {}: {}", log_tag, slot_index, err);
+            }
+        });
+    }
 }
 
 bool publish_external_lane(FilamentSlotOverrideStore* store, int lane_index, const SlotInfo* spool,
