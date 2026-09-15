@@ -732,13 +732,19 @@ void MoonrakerAPI::update_safety_limits_from_printer(SuccessCallback on_success,
                             }
                         }
                         // Extract min_extrude_temp from extruder (not heater_bed)
-                        if (key == "extruder" && value.contains("min_extrude_temp") &&
+                        // Every extruder carries its own min_extrude_temp; the
+                        // primary's is also the global the single-extruder
+                        // surfaces read.
+                        if (value.contains("min_extrude_temp") &&
                             value["min_extrude_temp"].is_number()) {
                             double min_extrude = value["min_extrude_temp"].get<double>();
-                            safety_limits_.min_extrude_temp_celsius = min_extrude;
+                            safety_limits_.set_min_extrude_temp_for(key, min_extrude);
+                            if (key == "extruder") {
+                                safety_limits_.min_extrude_temp_celsius = min_extrude;
+                            }
                             updated = true;
-                            spdlog::debug("[Moonraker API] min_extrude_temp from config: {}°C",
-                                          min_extrude);
+                            spdlog::debug("[Moonraker API] min_extrude_temp from config: {} {}°C",
+                                          key, min_extrude);
                         }
                     }
                 }

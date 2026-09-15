@@ -445,6 +445,7 @@ class FilamentPanel : public PanelBase {
     int bed_max_temp_ = 150;
     int chamber_max_temp_ = 150;
     int min_extrude_temp_ = 170; ///< Klipper's min_extrude_temp (default 170°C)
+    SafetyLimits safety_limits_; ///< The last set_limits(), with every extruder's own limits
 
     // Auto-preheat state for filament operations
     enum class PreheatOp { NONE, LOAD, UNLOAD, EXTRUDE, RETRACT, PURGE };

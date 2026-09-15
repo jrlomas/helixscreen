@@ -18,11 +18,18 @@
 
 #include "macro_param_cache.h"
 #include "macro_param_modal.h"
+#include "moonraker_types.h"
+#include "tool_state.h"
 
 #include <functional>
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
+
+namespace helix {
+class PrinterState;
+}
 
 namespace helix::ui {
 
@@ -156,6 +163,30 @@ enum class FilamentMacroOp { Load, Unload, Purge };
 [[nodiscard]] std::map<std::string, std::string>
 nozzle_temp_prefill(FilamentMacroOp op, int extruder_target_c, std::optional<int> material_temp_c,
                     int min_extrude_c, int max_nozzle_c);
+
+/**
+ * @brief The Klipper extruder that tool @p tool heats.
+ *
+ * That tool's extruder_name, or @p active_extruder when @p tool is no tool (< 0),
+ * is not among @p tools, or names no extruder.
+ */
+[[nodiscard]] std::string extruder_for_tool(int tool, const std::vector<helix::ToolInfo>& tools,
+                                            const std::string& active_extruder);
+
+/**
+ * @brief nozzle_temp_prefill() for a filament op acting on @p slot_index, held to
+ *        the extruder that slot feeds.
+ *
+ * The extruder is extruder_for_tool() of the slot's mapped tool, and its own live
+ * target, min_extrude_temp and max_temp bound the offer, so each tool of a
+ * toolchanger is held to its own hotend. An op on no slot, or on a slot whose
+ * tool or extruder is unknown, uses the active extruder.
+ *
+ * @param material_temp_c The material temperature the surface resolved for the slot.
+ */
+[[nodiscard]] std::map<std::string, std::string>
+slot_nozzle_temp_prefill(FilamentMacroOp op, int slot_index, std::optional<int> material_temp_c,
+                         helix::PrinterState& state, const SafetyLimits& limits);
 
 /**
  * @brief Tier 3 load fallback: fast move through the bowden, then a slow push

@@ -87,8 +87,10 @@ struct PrefillPanelHarness {
     std::string prompted_macro;
     ParamValues prompted_prefill;
 
-    /// @p backend, when given, is installed before the panel is built.
-    explicit PrefillPanelHarness(std::unique_ptr<AmsBackend> backend = nullptr) {
+    /// @p backend, when given, is installed before the panel is built. More than one
+    /// of @p extruders makes a multi-tool printer with one tool per extruder, in order.
+    explicit PrefillPanelHarness(std::unique_ptr<AmsBackend> backend = nullptr,
+                                 const std::vector<std::string>& extruders = {"extruder"}) {
         ToolState::instance().init_subjects(true);
         AmsState::instance().init_subjects(true);
         AmsState::instance().clear_backends();
@@ -97,13 +99,19 @@ struct PrefillPanelHarness {
             AmsState::instance().set_backend(std::move(backend));
         }
         state.init_subjects(false);
-        state.init_extruders({"extruder"});
+        state.init_extruders(extruders);
         state.set_klippy_state_sync(helix::KlippyState::READY);
 
         helix::PrinterDiscovery hardware;
-        nlohmann::json objects = {"extruder", "gcode_macro LOAD_FILAMENT",
-                                  "gcode_macro UNLOAD_FILAMENT", "gcode_macro PURGE"};
+        nlohmann::json objects = {"gcode_macro LOAD_FILAMENT", "gcode_macro UNLOAD_FILAMENT",
+                                  "gcode_macro PURGE"};
+        for (const auto& extruder : extruders) {
+            objects.push_back(extruder);
+        }
         hardware.parse_objects(objects);
+        if (extruders.size() > 1) {
+            ToolState::instance().init_tools(hardware);
+        }
         StandardMacros::instance().reset();
         StandardMacros::instance().init(hardware);
 
@@ -418,6 +426,107 @@ TEST_CASE_METHOD(LVGLUITestFixture,
 
     CHECK(h.prompt_count == 0);
     CHECK(h.sent_for("LOAD_FILAMENT") == Scripts{"LOAD_FILAMENT EXTRUDER_TEMP=235"});
+}
+
+// =============================================================================
+// Multi-tool: the extruder the op's slot feeds
+// =============================================================================
+
+namespace {
+
+/// Two hotends with different limits: `extruder` 170-300C, `extruder1` 220-250C.
+SafetyLimits two_hotend_limits() {
+    SafetyLimits limits;
+    limits.min_extrude_temp_celsius = 170.0;
+    limits.set_min_extrude_temp_for("extruder", 170.0);
+    limits.set_max_temp_for("extruder", 300.0);
+    limits.set_min_extrude_temp_for("extruder1", 220.0);
+    limits.set_max_temp_for("extruder1", 250.0);
+    return limits;
+}
+
+/// Lane 1 loaded with a @p material_c material, feeding @p tool (no tool when < 0).
+std::unique_ptr<helix::test::LaneMaterialBackend> lane_feeding_tool(int material_c, int tool) {
+    auto backend = std::make_unique<helix::test::LaneMaterialBackend>(/*lane=*/1, material_c);
+    if (tool >= 0) {
+        backend->map_slot_to_tool(1, tool);
+    }
+    return backend;
+}
+
+/// A two-hotend printer whose active `extruder` targets 280C and `extruder1` 240C.
+void seed_two_hotends(PrefillPanelHarness& h, const char* macro, const char* gcode) {
+    h.cache_macros({{macro, gcode}});
+    h.panel->set_limits(two_hotend_limits());
+    TA::set_selected_material(*h.panel, -1);
+    h.state.update_from_status(
+        {{"extruder", {{"target", 280.0}}}, {"extruder1", {{"target", 240.0}}}});
+    REQUIRE(h.state.active_extruder_name() == "extruder");
+    REQUIRE(ToolState::instance().tool_count() == 2);
+}
+
+constexpr const char* PURGE_TEMP_ONLY = "{% set t = params.PURGE_TEMP|default(240)|int %}\n"
+                                        "M109 S{t}\nG1 E30 F300";
+
+} // namespace
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Load on a slot feeding another tool reads that tool's extruder target",
+                 "[filament][prefill][toolchanger]") {
+    PrefillPanelHarness h(lane_feeding_tool(/*material_c=*/100, /*tool=*/1),
+                          {"extruder", "extruder1"});
+    seed_two_hotends(h, "LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT);
+
+    TA::execute_load(*h.panel);
+
+    CHECK(h.prompt_count == 0);
+    CHECK(h.sent_for("LOAD_FILAMENT") == Scripts{"LOAD_FILAMENT EXTRUDER_TEMP=240"});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Purge of a lane feeding another tool reads that tool's extruder target",
+                 "[filament][prefill][toolchanger]") {
+    PrefillPanelHarness h(lane_feeding_tool(/*material_c=*/100, /*tool=*/1),
+                          {"extruder", "extruder1"});
+    seed_two_hotends(h, "PURGE", PURGE_TEMP_ONLY);
+
+    TA::execute_purge(*h.panel);
+
+    CHECK(h.prompt_count == 0);
+    CHECK(h.sent_for("PURGE") == Scripts{"PURGE PURGE_TEMP=240"});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Load on a slot feeding another tool is held to that extruder's own limits",
+                 "[filament][prefill][toolchanger]") {
+    int material_c = 0;
+    SECTION("above its max_temp, though within the active extruder's") {
+        material_c = 270;
+    }
+    SECTION("at its min_extrude_temp, though above the active extruder's") {
+        material_c = 220;
+    }
+    PrefillPanelHarness h(lane_feeding_tool(material_c, /*tool=*/1), {"extruder", "extruder1"});
+    seed_two_hotends(h, "LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT);
+    h.state.update_from_status({{"extruder1", {{"target", 0.0}}}});
+
+    TA::execute_load(*h.panel);
+
+    CHECK(h.prompt_count == 1);
+    CHECK(h.prompted_prefill.empty());
+    CHECK(h.sent_for("LOAD_FILAMENT").empty());
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "Load on a slot that feeds no tool uses the active extruder",
+                 "[filament][prefill][toolchanger]") {
+    PrefillPanelHarness h(lane_feeding_tool(/*material_c=*/100, /*tool=*/-1),
+                          {"extruder", "extruder1"});
+    seed_two_hotends(h, "LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT);
+
+    TA::execute_load(*h.panel);
+
+    CHECK(h.prompt_count == 0);
+    CHECK(h.sent_for("LOAD_FILAMENT") == Scripts{"LOAD_FILAMENT EXTRUDER_TEMP=280"});
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture,

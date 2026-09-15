@@ -695,3 +695,29 @@ TEST_CASE("Temperature Utils: nozzle_max_temp_c is the extruder's own max_temp",
         CHECK(nozzle_max_temp_c(limits) == 280);
     }
 }
+
+TEST_CASE("Temperature Utils: another extruder's floor and ceiling are its own",
+          "[temp_utils][safety]") {
+    SafetyLimits limits;
+    limits.min_extrude_temp_celsius = 170.0;
+    limits.set_min_extrude_temp_for("extruder", 170.0);
+    limits.set_max_temp_for("extruder", 300.0);
+
+    SECTION("an extruder whose section was read keeps its own") {
+        limits.set_min_extrude_temp_for("extruder1", 220.5);
+        limits.set_max_temp_for("extruder1", 250.5);
+        CHECK(extrusion_floor_c(limits, "extruder1") == 221);
+        CHECK(nozzle_max_temp_c(limits, "extruder1") == 250);
+        CHECK(extrusion_floor_c(limits) == 170);
+        CHECK(nozzle_max_temp_c(limits) == 300);
+    }
+
+    SECTION("an extruder whose section was not read takes the primary's minimum") {
+        CHECK(extrusion_floor_c(limits, "extruder2") == 170);
+    }
+
+    SECTION("a name matches its section whatever the case") {
+        limits.set_min_extrude_temp_for("Extruder1", 220.0);
+        CHECK(extrusion_floor_c(limits, "extruder1") == 220);
+    }
+}

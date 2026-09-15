@@ -48,6 +48,7 @@
 #include "printer_discovery.h"
 #include "printer_state.h"
 #include "standard_macros.h"
+#include "tool_state.h"
 
 #include <initializer_list>
 #include <map>
@@ -585,6 +586,32 @@ TEST_CASE("nozzle_temp_prefill knows nothing with the heater off and no material
     CHECK(helix::ui::nozzle_temp_prefill(FilamentMacroOp::Load, 0, 0, 0, 300).empty());
 }
 
+TEST_CASE("extruder_for_tool names the extruder the tool heats, else the active one",
+          "[filament][prefill][toolchanger]") {
+    std::vector<helix::ToolInfo> tools(3);
+    for (int i = 0; i < 3; ++i) {
+        tools[i].index = i;
+    }
+    tools[0].extruder_name = "extruder";
+    tools[1].extruder_name = "extruder1";
+    tools[2].extruder_name = std::nullopt;
+
+    SECTION("a tool with an extruder") {
+        CHECK(helix::ui::extruder_for_tool(1, tools, "extruder") == "extruder1");
+        CHECK(helix::ui::extruder_for_tool(0, tools, "extruder1") == "extruder");
+    }
+    SECTION("no tool") {
+        CHECK(helix::ui::extruder_for_tool(-1, tools, "extruder1") == "extruder1");
+    }
+    SECTION("a tool the printer does not have") {
+        CHECK(helix::ui::extruder_for_tool(7, tools, "extruder1") == "extruder1");
+        CHECK(helix::ui::extruder_for_tool(1, {}, "extruder") == "extruder");
+    }
+    SECTION("a tool that names no extruder") {
+        CHECK(helix::ui::extruder_for_tool(2, tools, "extruder1") == "extruder1");
+    }
+}
+
 TEST_CASE_METHOD(DispatchSurfaceFixture,
                  "A macro whose every parameter is known runs with those values and no prompt",
                  "[filament][dispatch][wiring][params][prefill]") {
@@ -783,4 +810,66 @@ TEST_CASE_METHOD(DispatchSurfaceFixture,
 
     CHECK(prompt_count == 1);
     CHECK(prompted_prefill.empty());
+}
+
+namespace {
+
+/// ToolState with one tool per extruder named in @p extruders, torn down at scope exit.
+struct ToolsScope {
+    explicit ToolsScope(const nlohmann::json& extruders) {
+        helix::ToolState::instance().deinit_subjects();
+        helix::ToolState::instance().init_subjects(false);
+        helix::PrinterDiscovery hw;
+        hw.parse_objects(extruders);
+        helix::ToolState::instance().init_tools(hw);
+    }
+    ~ToolsScope() {
+        helix::ToolState::instance().deinit_subjects();
+    }
+    ToolsScope(const ToolsScope&) = delete;
+    ToolsScope& operator=(const ToolsScope&) = delete;
+};
+
+} // namespace
+
+TEST_CASE_METHOD(DispatchSurfaceFixture,
+                 "Sidebar load on a slot feeding another tool is held to that tool's extruder",
+                 "[filament][dispatch][wiring][ams][prefill][toolchanger]") {
+    configure_filament_macros();
+    cache_macros({{"LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT}});
+    state.init_extruders({"extruder", "extruder1"});
+    state.update_from_status(
+        {{"extruder", {{"target", 280.0}}}, {"extruder1", {{"target", 240.0}}}});
+    ToolsScope tools(nlohmann::json::array({"extruder", "extruder1"}));
+    REQUIRE(helix::ToolState::instance().tool_count() == 2);
+
+    auto limits = api->get_safety_limits();
+    limits.set_max_temp_for("extruder", 300.0);
+    limits.set_min_extrude_temp_for("extruder1", 220.0);
+    limits.set_max_temp_for("extruder1", 250.0);
+    api->set_safety_limits(limits);
+
+    int material_c = 100;
+    std::string expected_sent = "LOAD_FILAMENT EXTRUDER_TEMP=240";
+    SECTION("its target") {}
+    SECTION("its max_temp") {
+        state.update_from_status({{"extruder1", {{"target", 0.0}}}});
+        material_c = 270;
+        expected_sent.clear();
+    }
+    auto backend = std::make_unique<helix::test::LaneMaterialBackend>(/*lane=*/1, material_c);
+    backend->map_slot_to_tool(1, 1);
+    AmsScope ams(std::move(backend));
+
+    AmsOperationSidebar sidebar(state);
+    sidebar.handle_load_with_preheat(1);
+    helix::ui::UpdateQueue::instance().drain();
+
+    if (expected_sent.empty()) {
+        CHECK(prompt_count == 1);
+        CHECK_FALSE(gcode_sent_containing("LOAD_FILAMENT"));
+    } else {
+        CHECK(prompt_count == 0);
+        CHECK(gcode_sent_containing(expected_sent));
+    }
 }

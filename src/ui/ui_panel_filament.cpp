@@ -2499,10 +2499,11 @@ FilamentPanel::macro_temp_prefill(helix::ui::FilamentMacroOp op) const {
         preheat_op = PreheatOp::PURGE;
         break;
     }
-    const auto material = resolve_material_preheat_temp(preheat_slot_for_op(preheat_op));
-    return helix::ui::nozzle_temp_prefill(
-        op, current_extruder_target(), material ? std::optional<int>(material->temp) : std::nullopt,
-        min_extrude_temp_, nozzle_max_temp_);
+    const int slot = preheat_slot_for_op(preheat_op);
+    const auto material = resolve_material_preheat_temp(slot);
+    return helix::ui::slot_nozzle_temp_prefill(
+        op, slot, material ? std::optional<int>(material->temp) : std::nullopt, printer_state_,
+        safety_limits_);
 }
 
 const char* FilamentPanel::preheat_op_name(PreheatOp op) {
@@ -2654,6 +2655,7 @@ void FilamentPanel::restore_heater_after_preheat() {
 }
 
 void FilamentPanel::set_limits(const SafetyLimits& limits) {
+    safety_limits_ = limits;
     const int min_temp = static_cast<int>(limits.min_temperature_celsius);
     const int max_temp = helix::ui::temperature::nozzle_max_temp_c(limits);
     const int min_extrude_temp = helix::ui::temperature::extrusion_floor_c(limits);

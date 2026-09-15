@@ -3,11 +3,16 @@
 
 #include "filament_op_router.h"
 
+#include "ui_temperature_utils.h"
+
+#include "ams_state.h"
 #include "filament_op_slot_resolver.h"
+#include "printer_state.h"
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <lvgl.h>
 
 namespace helix::ui {
@@ -118,6 +123,39 @@ std::map<std::string, std::string> nozzle_temp_prefill(FilamentMacroOp op, int e
         break;
     }
     return {{"EXTRUDER_TEMP", value}, {"NOZZLE_TEMP", value}, {"TEMP", value}};
+}
+
+std::string extruder_for_tool(int tool, const std::vector<helix::ToolInfo>& tools,
+                              const std::string& active_extruder) {
+    const auto it = std::find_if(tools.begin(), tools.end(),
+                                 [tool](const helix::ToolInfo& t) { return t.index == tool; });
+    if (tool < 0 || it == tools.end() || !it->extruder_name) {
+        return active_extruder;
+    }
+    return *it->extruder_name;
+}
+
+std::map<std::string, std::string> slot_nozzle_temp_prefill(FilamentMacroOp op, int slot_index,
+                                                            std::optional<int> material_temp_c,
+                                                            helix::PrinterState& state,
+                                                            const SafetyLimits& limits) {
+    std::string extruder = state.active_extruder_name();
+    const AmsBackend* backend = AmsState::instance().get_backend();
+    if (backend && slot_index >= 0) {
+        extruder = extruder_for_tool(backend->get_slot_info(slot_index).mapped_tool,
+                                     helix::ToolState::instance().tools(), extruder);
+    }
+    lv_subject_t* target = state.get_extruder_target_subject(extruder);
+    if (!target) {
+        // A tool naming an extruder the printer does not report has no target or
+        // limits of its own to hold the offer to.
+        extruder = state.active_extruder_name();
+        target = state.get_active_extruder_target_subject();
+    }
+    const int target_c = target ? temperature::deci_to_degrees(lv_subject_get_int(target)) : 0;
+    return nozzle_temp_prefill(op, target_c, material_temp_c,
+                               temperature::extrusion_floor_c(limits, extruder),
+                               temperature::nozzle_max_temp_c(limits, extruder));
 }
 
 void set_home_confirm_prompter(HomeConfirmPrompter prompter) {
