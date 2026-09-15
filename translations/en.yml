@@ -1094,6 +1094,7 @@ translations:
   FilamentSensor: FilamentSensor
   File: File
   File Size: File Size
+  File Will Stop the Printer: File Will Stop the Printer
   Filename: Filename
   Fine: Fine
   Fine-Tune: Fine-Tune
@@ -1433,6 +1434,7 @@ translations:
   Light: Light
   Light will switch when the current operation finishes: Light will switch when the
     current operation finishes
+  Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.
   Listen to all theme sounds: Listen to all theme sounds
   Live temperature graph with configurable sensors: Live temperature graph with configurable sensors
   Live webcam feed: Live webcam feed
@@ -2028,6 +2030,7 @@ translations:
   Printer image set to auto-detect: Printer image set to auto-detect
   Printer is busy - {} stays in the queue: Printer is busy - {} stays in the queue
   Printer is not paired — pair it first: Printer is not paired — pair it first
+  'Printer message: {}': 'Printer message: {}'
   Printer name: Printer name
   Printer not ready: Printer not ready
   Printer ready: Printer ready
