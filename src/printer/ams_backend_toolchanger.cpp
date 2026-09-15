@@ -1292,6 +1292,14 @@ AmsError AmsBackendToolChanger::set_slot_info(int slot_index, const SlotInfo& in
     return AmsErrorHelper::success();
 }
 
+void AmsBackendToolChanger::persist_slot_weight(int slot_index, float remaining_weight_g,
+                                                float total_weight_g) {
+    const std::string tag = backend_log_tag();
+    std::lock_guard<std::mutex> lock(mutex_);
+    helix::ams::persist_override_weight(override_store_.get(), overrides_, slot_index,
+                                        remaining_weight_g, total_weight_g, tag);
+}
+
 AmsError AmsBackendToolChanger::set_tool_mapping(int tool_number, int slot_index) {
     // Remap G-code tool number to a different physical tool via klipper-toolchanger's
     // ASSIGN_TOOL command. This makes Klipper's T<tool_number> command activate the

@@ -1491,10 +1491,13 @@ class AmsBackend {
      * firmware store (#981, AD5X native ZMOD: a 60 s weight persist rewrote
      * ffmType and reverted the user's material).
      *
-     * The default routes through set_slot_info() — correct for backends where
-     * weight and identity share one persist path with no clobber risk. Backends
-     * that write identity to a firmware-owned store override this to persist
-     * weight alone (see AmsBackendAd5xIfs).
+     * The default puts the weight on the live slot through
+     * set_slot_info(persist=false), which writes memory alone, and hands a
+     * persist to persist_slot_weight(). A persist never goes through
+     * set_slot_info(): that is the edit path, which stamps the user locks and
+     * restates identity to firmware, and a meter states neither. A backend
+     * whose set_slot_info() writes more than memory even without persist
+     * overrides this (see AmsBackendQidi).
      *
      * @param slot_index Slot to update (0-based)
      * @param remaining_weight_g New remaining weight in grams (>= 0)
@@ -1507,7 +1510,30 @@ class AmsBackend {
         info.remaining_weight_g = remaining_weight_g;
         if (total_weight_g >= 0.0f)
             info.total_weight_g = total_weight_g;
-        set_slot_info(slot_index, info, persist);
+        const AmsError stored = set_slot_info(slot_index, info, /*persist=*/false);
+        if (persist && stored.success()) {
+            persist_slot_weight(slot_index, remaining_weight_g, total_weight_g);
+        }
+    }
+
+    /**
+     * @brief Write a slot's weight to the backend's durable stores, and nothing else.
+     *
+     * The persist half of the default update_slot_weight(), reached once the
+     * live slot already holds the weight. The default writes nothing, for a
+     * backend with no durable home for a weight. An override amends the weights
+     * onto the slot's stored record, whose identity and locks stand, and writes
+     * any weight store firmware keeps; it restates no identity.
+     *
+     * @param slot_index Slot to update (0-based)
+     * @param remaining_weight_g New remaining weight in grams
+     * @param total_weight_g Total weight in grams, or < 0 to leave unchanged
+     */
+    virtual void persist_slot_weight(int slot_index, float remaining_weight_g,
+                                     float total_weight_g) {
+        (void)slot_index;
+        (void)remaining_weight_g;
+        (void)total_weight_g;
     }
 
     /**

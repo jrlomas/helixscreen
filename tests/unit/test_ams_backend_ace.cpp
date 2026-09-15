@@ -810,6 +810,88 @@ TEST_CASE("ACE set_slot_info(persist=false) does NOT write to store",
     CHECK(info.color_rgb == 0x123456u);
 }
 
+namespace {
+
+/// Slot 0 under an orange PLA spool firmware reads, carrying a stored record as
+/// a lane_data entry with no helix_locked_* keys loads: a brand and a PETG
+/// material, the material read as locked, and no colour recorded.
+struct AceStoredRecordRig {
+    AceTmpCacheDir tmp;
+    MoonrakerClientMock client{MoonrakerClientMock::PrinterType::VORON_24};
+    helix::PrinterState state;
+    std::unique_ptr<MoonrakerAPIMock> api;
+    std::unique_ptr<AmsBackendAce> backend;
+
+    explicit AceStoredRecordRig(const std::string& name) : tmp(name) {
+        state.init_subjects(false);
+        api = std::make_unique<MoonrakerAPIMock>(client, state);
+        backend = std::make_unique<AmsBackendAce>(api.get(), nullptr);
+        auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(api.get(), "ace");
+        FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+        AceTestAccess::inject_override_store(*backend, std::move(store));
+
+        helix::ams::FilamentSlotOverride stored;
+        stored.brand = "Polymaker";
+        stored.material = "PETG";
+        stored.user_locked_material = true;
+        stored.remaining_weight_g = 730.0f;
+        stored.total_weight_g = 1000.0f;
+        AceTestAccess::seed_override(*backend, 0, stored);
+
+        AceTestAccess::parse_ace(*backend, make_ace_slot_payload("available", 0xFF5500, "PLA"));
+        const SlotInfo merged = backend->get_slot_info(0);
+        REQUIRE(merged.material == "PETG");
+        REQUIRE(merged.color_rgb == 0xFF5500u);
+    }
+
+    [[nodiscard]] helix::ams::FilamentSlotOverride record() const {
+        const auto kept = AceTestAccess::get_override(*backend, 0);
+        REQUIRE(kept.has_value());
+        return *kept;
+    }
+};
+
+} // namespace
+
+TEST_CASE("ACE weight persist amends the stored record's weight and nothing else",
+          "[ams][ace][filament_slot_override][1652]") {
+    AceStoredRecordRig rig("weight_persist_amends");
+
+    // What the consumption meter's minute persist and its pause and completion
+    // flushes do.
+    rig.backend->update_slot_weight(0, 640.0f, -1.0f, /*persist=*/true);
+
+    const auto after = rig.record();
+    CHECK(after.remaining_weight_g == Catch::Approx(640.0f));
+    CHECK(after.total_weight_g == Catch::Approx(1000.0f));
+    // Identity and locks stand as loaded. The lane's colour is firmware's
+    // reading, which the record never held.
+    CHECK(after.brand == "Polymaker");
+    CHECK(after.material == "PETG");
+    CHECK(after.user_locked_material);
+    CHECK_FALSE(after.color_set);
+    CHECK_FALSE(after.user_locked_color);
+
+    const json stored = rig.api->mock_get_db_value("lane_data", "lane1");
+    REQUIRE_FALSE(stored.is_null());
+    CHECK(stored["remaining_weight_g"].get<float>() == Catch::Approx(640.0f));
+    CHECK(stored["helix_locked_material"] == true);
+    CHECK_FALSE(stored.contains("color"));
+}
+
+TEST_CASE("ACE weight update without persist writes nothing durable",
+          "[ams][ace][filament_slot_override][1652]") {
+    AceStoredRecordRig rig("weight_update_no_persist");
+
+    rig.backend->update_slot_weight(0, 500.0f, -1.0f, /*persist=*/false);
+
+    // The live slot takes the meter's number...
+    CHECK(rig.backend->get_slot_info(0).remaining_weight_g == Catch::Approx(500.0f));
+    // ...and neither the stored record nor the database does.
+    CHECK(rig.record().remaining_weight_g == Catch::Approx(730.0f));
+    CHECK(rig.api->mock_get_db_value("lane_data", "lane1").is_null());
+}
+
 TEST_CASE("ACE slot transition empty -> present clears override",
           "[ams][ace][filament_slot_override]") {
     AceTmpCacheDir tmp("task13_empty_to_present_clears");

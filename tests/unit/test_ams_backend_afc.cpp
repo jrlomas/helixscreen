@@ -1447,6 +1447,39 @@ TEST_CASE("AFC persistence: skips SET_WEIGHT for zero or negative", "[ams][afc][
     }
 }
 
+TEST_CASE("AFC weight persist sends SET_WEIGHT and no identity",
+          "[ams][afc][persistence][filament_slot_override][1652]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_with_slots(4);
+
+    // What AFC reports for lane1: an orange PLA spool nobody has edited here.
+    SlotInfo* lane = helper.get_mutable_slot(0);
+    REQUIRE(lane != nullptr);
+    lane->color_rgb = 0xFF5500;
+    lane->material = "PLA";
+    lane->remaining_weight_g = 900.0f;
+
+    // What the consumption meter's minute persist and its pause and completion
+    // flushes do.
+    helper.update_slot_weight(0, 730.0f, 1000.0f, /*persist=*/true);
+
+    // AFC keeps a lane's weight itself, so the meter's number goes to it...
+    CHECK(helper.has_gcode("SET_WEIGHT LANE=lane1 WEIGHT=730"));
+    // ...and nothing else does: restating colour or material would overwrite
+    // whatever has changed on the lane since.
+    CHECK_FALSE(helper.has_gcode_starting_with("SET_COLOR"));
+    CHECK_FALSE(helper.has_gcode_starting_with("SET_MATERIAL"));
+    CHECK_FALSE(helper.has_gcode_starting_with("SET_SPOOL_ID"));
+
+    const auto& overrides = AfcTestAccess::overrides(helper);
+    const auto kept = overrides.find(0);
+    REQUIRE(kept != overrides.end());
+    CHECK(kept->second.remaining_weight_g == Catch::Approx(730.0f));
+    CHECK(kept->second.total_weight_g == Catch::Approx(1000.0f));
+    CHECK_FALSE(kept->second.color_set);
+    CHECK(kept->second.material.empty());
+}
+
 TEST_CASE("AFC persistence: skips SET_SPOOL_ID when both old and new are zero",
           "[ams][afc][persistence]") {
     AmsBackendAfcTestHelper helper;

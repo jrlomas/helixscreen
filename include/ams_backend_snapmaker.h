@@ -238,6 +238,8 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
 
     // Configuration
     AmsError set_slot_info(int slot_index, const SlotInfo& info, bool persist = true) override;
+    void persist_slot_weight(int slot_index, float remaining_weight_g,
+                             float total_weight_g) override;
     AmsError set_tool_mapping(int tool_number, int slot_index) override;
 
     // Explicit user-initiated override clear (e.g. "Clear slot metadata" button
