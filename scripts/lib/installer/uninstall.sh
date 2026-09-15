@@ -60,11 +60,98 @@ _sweep_uninstalling_sentinel() {
 
 # Re-enable services that were disabled during installation
 # Reads the state file and reverses each recorded disable action
-reenable_disabled_services() {
-    local state_file="${INSTALL_DIR}/config/.disabled_services"
-    [ -f "$state_file" ] || return 0
+# The newest ${INSTALL_DIR}.old.<timestamp> directory, or nothing if none
+# exist. backup_install_dir_for_update() falls back to this name (over the
+# plain ${INSTALL_DIR}.old) only when a stale .old is root-owned and cannot
+# be removed under NoNewPrivileges; the timestamp itself is not recorded
+# anywhere else, so the newest one is the best guess. date +%s produces a
+# fixed-width decimal count for as long as this code will run, so sorting the
+# names lexicographically sorts them chronologically too.
+_newest_timestamped_install_backup() {
+    local _cand
+    for _cand in "${INSTALL_DIR}".old.*; do
+        [ -d "$_cand" ] && printf '%s\n' "$_cand"
+    done | sort | tail -1
+}
 
-    log_info "Re-enabling previously disabled services..."
+# Every place a copy of the disabled-services ledger can end up, in the order
+# they are trusted. An interrupted install or --clean can strand the only
+# copy outside ${INSTALL_DIR}/config (prestonbrown/helixscreen#1618):
+#
+#   1. ${INSTALL_DIR}/config/.disabled_services   the live per-install path -
+#      a symlink into printer_data on a completed install (setup_config_symlink
+#      has run), a real file before that.
+#   2. $(klipper_config_dir)/helixscreen/.disabled_services   the same file
+#      reached directly, for when $INSTALL_DIR itself is gone (an interrupted
+#      extract_release swap moved it to one of the backup forms below).
+#   3. $(klipper_config_dir)/.disabled_services.clean-keep   the carry
+#      clean_old_installation stages before wiping printer_data/config/helixscreen;
+#      an interruption between that move and the move back strands it here.
+#   4. Every shape release.sh's extract_release can leave $INSTALL_BACKUP
+#      pointing at, checked in the same order that code tries them:
+#      ${INSTALL_DIR}.old (the plain roomy-partition case), the newest
+#      ${INSTALL_DIR}.old.<timestamp> (the NoNewPrivileges fallback used when
+#      a stale .old is root-owned), and, under every mount in
+#      HELIX_ROLLBACK_CANDIDATES, its helixscreen-rollback/helixscreen
+#      subtree (the off-partition case used when the install filesystem is
+#      too tight to hold the old and new tree at once). This module has no
+#      access to release.sh's $INSTALL_BACKUP itself - it is local to that
+#      file, and this run may not even be an install - so these are the same
+#      three shapes derived from their fixed naming, not a read of that
+#      variable. A run where HELIX_ROLLBACK_CANDIDATES was overridden at
+#      install time to a mount outside this default list is the one form
+#      this cannot find.
+#
+# A location this run cannot resolve (no Klipper config dir known) is omitted
+# rather than probed with an empty prefix.
+_disabled_services_ledger_candidates() {
+    local _pd_config="" _newest_old _rollback_mount
+    if type klipper_config_dir >/dev/null 2>&1; then
+        _pd_config="$(klipper_config_dir)"
+    fi
+    echo "${INSTALL_DIR}/config/.disabled_services"
+    if [ -n "$_pd_config" ]; then
+        echo "${_pd_config}/helixscreen/.disabled_services"
+        echo "${_pd_config}/.disabled_services.clean-keep"
+    fi
+    echo "${INSTALL_DIR}.old/config/.disabled_services"
+    _newest_old="$(_newest_timestamped_install_backup)"
+    [ -n "$_newest_old" ] && echo "${_newest_old}/config/.disabled_services"
+    for _rollback_mount in ${HELIX_ROLLBACK_CANDIDATES:-$HELIX_ROLLBACK_CANDIDATES_DEFAULT}; do
+        echo "${_rollback_mount}/helixscreen-rollback/helixscreen/config/.disabled_services"
+    done
+}
+
+# Re-enable services that were disabled during installation
+# Reads the state file and reverses each recorded disable action
+#
+# Publishes what it found, because $INSTALL_DIR (and the state file with it) is
+# gone by the time the standalone uninstaller restores the previous screen UI:
+#
+#   HELIX_DISABLED_RECORD_FOUND  1 when a ledger existed at any candidate
+#                                location. A run that finds one knows exactly
+#                                what this install displaced, and must not go
+#                                looking for more.
+#   HELIX_REENABLED_UNITS        recorded systemd unit names, space separated
+#   HELIX_REENABLED_SCRIPTS      recorded sysv-chmod targets, space separated
+reenable_disabled_services() {
+    local state_file="" _candidate
+    for _candidate in $(_disabled_services_ledger_candidates); do
+        if [ -f "$_candidate" ]; then
+            state_file="$_candidate"
+            break
+        fi
+    done
+
+    # shellcheck disable=SC2034  # consumed by reenable_previous_ui (bundle-uninstaller.sh)
+    HELIX_DISABLED_RECORD_FOUND=0
+    HELIX_REENABLED_UNITS=""
+    HELIX_REENABLED_SCRIPTS=""
+    [ -n "$state_file" ] || return 0
+    # shellcheck disable=SC2034  # consumed by reenable_previous_ui (bundle-uninstaller.sh)
+    HELIX_DISABLED_RECORD_FOUND=1
+
+    log_info "Re-enabling previously disabled services (ledger: $state_file)..."
     while IFS= read -r entry; do
         # Skip empty lines and comments
         case "$entry" in ""|\#*) continue ;; esac
@@ -76,15 +163,18 @@ reenable_disabled_services() {
             systemd)
                 log_info "Re-enabling systemd service: $target"
                 $SUDO systemctl enable "$target" 2>/dev/null || true
+                HELIX_REENABLED_UNITS="${HELIX_REENABLED_UNITS} ${target}"
                 ;;
             sysv-chmod)
                 if [ -f "$target" ]; then
                     log_info "Re-enabling init script: $target"
                     $SUDO chmod +x "$target" 2>/dev/null || true
+                    HELIX_REENABLED_SCRIPTS="${HELIX_REENABLED_SCRIPTS} ${target}"
                 fi
                 ;;
             sysv-created)
-                # An init script HelixScreen itself wrote (the K2 web-server
+                # An init script HelixScreen itself wrote (the K1 Creality
+                # backend, prestonbrown/helixscreen#1468; the K2 web-server
                 # carve-out, prestonbrown/helixscreen#1617). Stopping and
                 # removing it is the only correct reversal: chmod +x would
                 # leave our script competing with the restored stock one.
@@ -92,8 +182,7 @@ reenable_disabled_services() {
                 # boot symlinks outlive the script they point at.
                 if [ -f "$target" ]; then
                     log_info "Removing HelixScreen init script: $target"
-                    if [ -x /etc/rc.common ] && \
-                       awk 'NR==1 {exit !/\/etc\/rc\.common/}' "$target" 2>/dev/null; then
+                    if [ -x /etc/rc.common ] && is_rc_common_script "$target"; then
                         $SUDO "$target" disable 2>/dev/null || true
                     fi
                     $SUDO "$target" stop 2>/dev/null || true
@@ -103,14 +192,6 @@ reenable_disabled_services() {
         esac
     done < "$state_file"
 }
-
-# Undo per-printer Klipper includes recorded at install time (#986).
-# Reverses each entry in ${INSTALL_DIR}/config/.klipper_includes:
-#   cfg:<path>                      → remove the copied snippet
-#   include:<printer.cfg>:<relpath> → strip the [include <relpath>] line (and
-#                                     the installer's marker comment above it)
-# Must run BEFORE $INSTALL_DIR is removed (the state file lives in it) and
-# touches printer_data files that live outside $INSTALL_DIR.
 undo_klipper_includes() {
     local state_file="${INSTALL_DIR}/config/.klipper_includes"
     [ -f "$state_file" ] || return 0
@@ -234,26 +315,22 @@ restore_previous_ui_platform() {
         # Drop any web-server the carve-out left running so the stock
         # instance app start is about to spawn can bind its port.
         kill_process_by_name web-server || true
-        $SUDO /etc/init.d/app enable 2>/dev/null || true
-        # rc.common's `enable` writes an S (boot) link and a K (shutdown) link
-        # and reports success if either was made, so its status says nothing
-        # about boot. Only the S link starts a service at boot, and the K link
-        # sorts ahead of it, so the glob admits S links alone; the slot number
-        # comes from the stock script's own START directive. A restore claimed
-        # without an S link leaves the K2 booting to the logo with no UI.
+        # enable_and_verify_rcd drops any rc.d entry an older install left
+        # and verifies the fresh pair by target against the script's own
+        # START/STOP slots — `enable` exits 0 even having made no (or only
+        # half the) links, which would otherwise read as a restored boot
+        # entry.
         local app_link app_target="" start_fix
-        for app_link in /etc/rc.d/S[0-9][0-9]app; do
-            [ -L "$app_link" ] || continue
-            if [ "$(readlink "$app_link" 2>/dev/null || true)" = "../init.d/app" ]; then
-                app_target="$app_link"
-                break
-            fi
-        done
-        if [ -z "$app_target" ]; then
+        if enable_and_verify_rcd /etc/init.d/app; then
+            # The helper dropped every other slot before enabling, so the
+            # first S??app link names exactly the entry it verified.
+            for app_link in /etc/rc.d/S??app; do
+                [ -L "$app_link" ] && { app_target="$app_link"; break; }
+            done
+            restored_ui="Creality stock UI (/etc/init.d/app, boot via $app_target)"
+        else
             log_warn "Stock UI boot symlink missing or wrong (no /etc/rc.d/S<nn>app -> ../init.d/app); run: /etc/init.d/app enable"
             restore_warned="Creality stock UI will not start at boot; run: /etc/init.d/app enable"
-        else
-            restored_ui="Creality stock UI (/etc/init.d/app, boot via $app_target)"
         fi
         # Start runs in both branches: the kill above already took the
         # carve-out's web-server down, so a missing boot symlink must leave
@@ -449,16 +526,15 @@ uninstall() {
             if [ -f "$init_script" ]; then
                 log_info "Stopping and removing $init_script..."
                 $SUDO "$init_script" stop 2>/dev/null || true
-                # K2 procd shim: only call disable if this is actually a
-                # rc.common-style script. CC1 installs a plain SysV script
-                # at the same /etc/init.d/helixscreen path, and CC1's BusyBox
-                # rejects `head -1` (only supports `head -n 1`), so we use
-                # awk for the shebang check (portable across all BusyBox
-                # variants we ship to). Also CC1 has no /etc/rc.common, so
-                # the first guard short-circuits anyway.
+                # K2 procd shim: only call disable if this is actually an
+                # rc.common script. CC1 installs a plain SysV script at
+                # the same /etc/init.d/helixscreen path and has no
+                # /etc/rc.common, so the first guard short-circuits there
+                # anyway.
                 if [ "$init_script" = "/etc/init.d/helixscreen" ] && \
                    [ -x /etc/rc.common ] && \
-                   awk 'NR==1 {exit !/\/etc\/rc\.common/}' "$init_script" 2>/dev/null; then
+                   is_rc_common_script "$init_script"; then
+
                     $SUDO "$init_script" disable 2>/dev/null || true
                     removed_procd_shim=true
                 fi
@@ -467,9 +543,10 @@ uninstall() {
         done
         # Belt-and-suspenders cleanup of rc.d symlinks, but only if we actually
         # removed a procd shim (avoid touching /etc/rc.d on platforms that
-        # don't use the procd boot iterator).
+        # don't use the procd boot iterator). Globbed across slots so a stale
+        # link in a different slot does not dangle beside the sweep.
         if [ "$removed_procd_shim" = "true" ]; then
-            $SUDO rm -f /etc/rc.d/S99helixscreen /etc/rc.d/K01helixscreen 2>/dev/null || true
+            $SUDO rm -f /etc/rc.d/S??helixscreen /etc/rc.d/K??helixscreen 2>/dev/null || true
         fi
     fi
 
