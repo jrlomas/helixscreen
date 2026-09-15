@@ -2836,6 +2836,11 @@ void FilamentPanel::execute_load() {
             break;
         }
         if (!err.success()) {
+            // The dispatch this home consent was armed for never ran, and the arm
+            // is consumed single-shot by whichever operation dispatches next —
+            // leaving it set would home a later one without asking. Idempotent
+            // no-op when nothing was armed.
+            backend->clear_home_preconfirmed();
             operation_guard_.end();
             backend_op_active_ = false;
             op_in_flight_.reset();
