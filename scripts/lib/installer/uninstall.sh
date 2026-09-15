@@ -60,11 +60,98 @@ _sweep_uninstalling_sentinel() {
 
 # Re-enable services that were disabled during installation
 # Reads the state file and reverses each recorded disable action
-reenable_disabled_services() {
-    local state_file="${INSTALL_DIR}/config/.disabled_services"
-    [ -f "$state_file" ] || return 0
+# The newest ${INSTALL_DIR}.old.<timestamp> directory, or nothing if none
+# exist. backup_install_dir_for_update() falls back to this name (over the
+# plain ${INSTALL_DIR}.old) only when a stale .old is root-owned and cannot
+# be removed under NoNewPrivileges; the timestamp itself is not recorded
+# anywhere else, so the newest one is the best guess. date +%s produces a
+# fixed-width decimal count for as long as this code will run, so sorting the
+# names lexicographically sorts them chronologically too.
+_newest_timestamped_install_backup() {
+    local _cand
+    for _cand in "${INSTALL_DIR}".old.*; do
+        [ -d "$_cand" ] && printf '%s\n' "$_cand"
+    done | sort | tail -1
+}
 
-    log_info "Re-enabling previously disabled services..."
+# Every place a copy of the disabled-services ledger can end up, in the order
+# they are trusted. An interrupted install or --clean can strand the only
+# copy outside ${INSTALL_DIR}/config (prestonbrown/helixscreen#1618):
+#
+#   1. ${INSTALL_DIR}/config/.disabled_services   the live per-install path -
+#      a symlink into printer_data on a completed install (setup_config_symlink
+#      has run), a real file before that.
+#   2. $(klipper_config_dir)/helixscreen/.disabled_services   the same file
+#      reached directly, for when $INSTALL_DIR itself is gone (an interrupted
+#      extract_release swap moved it to one of the backup forms below).
+#   3. $(klipper_config_dir)/.disabled_services.clean-keep   the carry
+#      clean_old_installation stages before wiping printer_data/config/helixscreen;
+#      an interruption between that move and the move back strands it here.
+#   4. Every shape release.sh's extract_release can leave $INSTALL_BACKUP
+#      pointing at, checked in the same order that code tries them:
+#      ${INSTALL_DIR}.old (the plain roomy-partition case), the newest
+#      ${INSTALL_DIR}.old.<timestamp> (the NoNewPrivileges fallback used when
+#      a stale .old is root-owned), and, under every mount in
+#      HELIX_ROLLBACK_CANDIDATES, its helixscreen-rollback/helixscreen
+#      subtree (the off-partition case used when the install filesystem is
+#      too tight to hold the old and new tree at once). This module has no
+#      access to release.sh's $INSTALL_BACKUP itself - it is local to that
+#      file, and this run may not even be an install - so these are the same
+#      three shapes derived from their fixed naming, not a read of that
+#      variable. A run where HELIX_ROLLBACK_CANDIDATES was overridden at
+#      install time to a mount outside this default list is the one form
+#      this cannot find.
+#
+# A location this run cannot resolve (no Klipper config dir known) is omitted
+# rather than probed with an empty prefix.
+_disabled_services_ledger_candidates() {
+    local _pd_config="" _newest_old _rollback_mount
+    if type klipper_config_dir >/dev/null 2>&1; then
+        _pd_config="$(klipper_config_dir)"
+    fi
+    echo "${INSTALL_DIR}/config/.disabled_services"
+    if [ -n "$_pd_config" ]; then
+        echo "${_pd_config}/helixscreen/.disabled_services"
+        echo "${_pd_config}/.disabled_services.clean-keep"
+    fi
+    echo "${INSTALL_DIR}.old/config/.disabled_services"
+    _newest_old="$(_newest_timestamped_install_backup)"
+    [ -n "$_newest_old" ] && echo "${_newest_old}/config/.disabled_services"
+    for _rollback_mount in ${HELIX_ROLLBACK_CANDIDATES:-$HELIX_ROLLBACK_CANDIDATES_DEFAULT}; do
+        echo "${_rollback_mount}/helixscreen-rollback/helixscreen/config/.disabled_services"
+    done
+}
+
+# Re-enable services that were disabled during installation
+# Reads the state file and reverses each recorded disable action
+#
+# Publishes what it found, because $INSTALL_DIR (and the state file with it) is
+# gone by the time the standalone uninstaller restores the previous screen UI:
+#
+#   HELIX_DISABLED_RECORD_FOUND  1 when a ledger existed at any candidate
+#                                location. A run that finds one knows exactly
+#                                what this install displaced, and must not go
+#                                looking for more.
+#   HELIX_REENABLED_UNITS        recorded systemd unit names, space separated
+#   HELIX_REENABLED_SCRIPTS      recorded sysv-chmod targets, space separated
+reenable_disabled_services() {
+    local state_file="" _candidate
+    for _candidate in $(_disabled_services_ledger_candidates); do
+        if [ -f "$_candidate" ]; then
+            state_file="$_candidate"
+            break
+        fi
+    done
+
+    # shellcheck disable=SC2034  # consumed by reenable_previous_ui (bundle-uninstaller.sh)
+    HELIX_DISABLED_RECORD_FOUND=0
+    HELIX_REENABLED_UNITS=""
+    HELIX_REENABLED_SCRIPTS=""
+    [ -n "$state_file" ] || return 0
+    # shellcheck disable=SC2034  # consumed by reenable_previous_ui (bundle-uninstaller.sh)
+    HELIX_DISABLED_RECORD_FOUND=1
+
+    log_info "Re-enabling previously disabled services (ledger: $state_file)..."
     while IFS= read -r entry; do
         # Skip empty lines and comments
         case "$entry" in ""|\#*) continue ;; esac
@@ -76,15 +163,18 @@ reenable_disabled_services() {
             systemd)
                 log_info "Re-enabling systemd service: $target"
                 $SUDO systemctl enable "$target" 2>/dev/null || true
+                HELIX_REENABLED_UNITS="${HELIX_REENABLED_UNITS} ${target}"
                 ;;
             sysv-chmod)
                 if [ -f "$target" ]; then
                     log_info "Re-enabling init script: $target"
                     $SUDO chmod +x "$target" 2>/dev/null || true
+                    HELIX_REENABLED_SCRIPTS="${HELIX_REENABLED_SCRIPTS} ${target}"
                 fi
                 ;;
             sysv-created)
-                # An init script HelixScreen itself wrote (the K2 web-server
+                # An init script HelixScreen itself wrote (the K1 Creality
+                # backend, prestonbrown/helixscreen#1468; the K2 web-server
                 # carve-out, prestonbrown/helixscreen#1617). Stopping and
                 # removing it is the only correct reversal: chmod +x would
                 # leave our script competing with the restored stock one.
@@ -102,14 +192,6 @@ reenable_disabled_services() {
         esac
     done < "$state_file"
 }
-
-# Undo per-printer Klipper includes recorded at install time (#986).
-# Reverses each entry in ${INSTALL_DIR}/config/.klipper_includes:
-#   cfg:<path>                      → remove the copied snippet
-#   include:<printer.cfg>:<relpath> → strip the [include <relpath>] line (and
-#                                     the installer's marker comment above it)
-# Must run BEFORE $INSTALL_DIR is removed (the state file lives in it) and
-# touches printer_data files that live outside $INSTALL_DIR.
 undo_klipper_includes() {
     local state_file="${INSTALL_DIR}/config/.klipper_includes"
     [ -f "$state_file" ] || return 0
