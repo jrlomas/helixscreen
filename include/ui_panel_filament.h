@@ -453,6 +453,8 @@ class FilamentPanel : public PanelBase {
     PreheatOp pending_preheat_op_ = PreheatOp::NONE;
     int pending_preheat_target_ = 0; ///< Target temp in °C for pending preheat
     int prior_nozzle_target_ = 0; ///< Nozzle target before preheat (0 = was off → cool down after)
+    /// The user agreed to home before the pending load; execute_load() consumes it.
+    bool load_home_confirmed_ = false;
 
     // Filament macros now resolved via StandardMacros singleton (load, unload, purge)
 
@@ -622,6 +624,10 @@ class FilamentPanel : public PanelBase {
     void show_load_warning();
     void show_unload_warning();
     void execute_load();
+
+    /// What a Load would do right now: plan_load() for the selected slot, read off
+    /// the current backend.
+    [[nodiscard]] helix::ui::FilamentOpPlan plan_current_load() const;
     void execute_unload();
     void execute_extrude();
     void execute_retract();
