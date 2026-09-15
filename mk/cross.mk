@@ -2573,22 +2573,29 @@ deploy-k2:
 	@if [ -d build/assets/images/printers/prerendered ] && ls build/assets/images/printers/prerendered/*.bin >/dev/null 2>&1; then \
 		COPYFILE_DISABLE=1 tar -cf - -C build/assets/images/printers prerendered | ssh $(K2_SSH_TARGET) "cd $(K2_DEPLOY_DIR)/assets/images/printers && tar -xof -"; \
 	fi
-	@# Install/update init script + procd shim for boot persistence.
-	@# K2 (procd) silently skips plain SysV scripts at boot ([L086]) — only
-	@# scripts with `#!/bin/sh /etc/rc.common` + DEPEND= are invoked. The
-	@# shim at /etc/init.d/helixscreen is what procd's boot iterator picks up;
-	@# it delegates to the SysV script. Single sources of truth are
+	@# Install/update init script + procd shim for boot persistence, plus
+	@# the web-server carve-out (prestonbrown/helixscreen#1617): the runtime
+	@# hook's app stop runs killall -9 over the stock set and takes any
+	@# web-server down at every HelixScreen start (disable only removes rc.d
+	@# links), and the hook restores the carve-out through
+	@# /etc/init.d/helix-k2-webserver at the end of every start. That script
+	@# is a USE_PROCD starter whose registered instance procd respawns; its
+	@# rc.d boot entry is belt-and-braces.
+	@# K2 (procd) dispatches init scripts carrying the
+	@# `#!/bin/sh /etc/rc.common` shebang (a DEPEND directive is optional
+	@# for boot dispatch); a plain SysV script without it is skipped at boot.
+	@# The shim at /etc/init.d/helixscreen carries the shebang and delegates
+	@# to the SysV script. Single sources of truth are
 	@# config/helixscreen-k2-procd-shim.sh and config/k2-webserver.init —
 	@# also used by install_procd_shim_k2() and install_k2_webserver_backend()
-	@# in scripts/lib/installer/service.sh. The web-server carve-out
-	@# (prestonbrown/helixscreen#1617) is deployed here too: the runtime
-	@# hook's app stop+disable take web-server down at every start, so the
-	@# hook itself restores it through /etc/init.d/helix-k2-webserver (the
-	@# service-shaped starter; procd's iterator has been observed to skip
-	@# our S99 while dispatching the shim, hence the hook-based restore).
-	@# One ssh (set -e) so any failure aborts the deploy; rc.d symlinks are
-	@# verified post-enable because `enable` exits 0 even when the symlinks
-	@# are wrong.
+	@# in scripts/lib/installer/service.sh. One ssh (set -e) so any failure
+	@# aborts the deploy; rc.d symlinks are verified post-enable because
+	@# `enable` exits 0 even when the symlinks are wrong — the same rule
+	@# enable_and_verify_rcd applies in the installer, spelled inline here
+	@# because this block runs on the device and cannot source the lib
+	@# helpers. The ledger entry appended after the carve-out's verify
+	@# mirrors record_disabled_service, so uninstall reverses a dev deploy
+	@# too (prestonbrown/helixscreen#1667).
 	@echo "$(DIM)Installing init script + procd shim + web-server carve-out...$(RESET)"
 	@COPYFILE_DISABLE=1 tar -cf - -C config helixscreen.init helixscreen-k2-procd-shim.sh k2-webserver.init \
 		| ssh $(K2_SSH_TARGET) 'set -e; \
@@ -2611,10 +2618,14 @@ deploy-k2:
 			rm -f /etc/rc.d/S99helix-k2-webserver /etc/rc.d/K01helix-k2-webserver && \
 			/etc/init.d/helix-k2-webserver enable && \
 			ws99=$$(readlink /etc/rc.d/S99helix-k2-webserver 2>/dev/null || true); \
-			if [ "$$ws99" != "../init.d/helix-k2-webserver" ]; then \
-				echo "ERROR: web-server carve-out rc.d symlink wrong (S99=$$ws99)" >&2; \
+			ws01=$$(readlink /etc/rc.d/K01helix-k2-webserver 2>/dev/null || true); \
+			if [ "$$ws99" != "../init.d/helix-k2-webserver" ] || [ "$$ws01" != "../init.d/helix-k2-webserver" ]; then \
+				echo "ERROR: web-server carve-out rc.d symlinks wrong (S99=$$ws99 K01=$$ws01)" >&2; \
 				exit 1; \
 			fi; \
+			mkdir -p $(K2_DEPLOY_DIR)/config && \
+			grep -qF "sysv-created:/etc/init.d/helix-k2-webserver" $(K2_DEPLOY_DIR)/config/.disabled_services 2>/dev/null || \
+				echo "sysv-created:/etc/init.d/helix-k2-webserver" >> $(K2_DEPLOY_DIR)/config/.disabled_services; \
 			/etc/init.d/helix-k2-webserver start || true; \
 			rm -f /tmp/helixscreen.init /tmp/helixscreen-k2-procd-shim.sh /tmp/k2-webserver.init; \
 			echo "Init script + procd shim + web-server carve-out installed (boot symlinks verified)"'
