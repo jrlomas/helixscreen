@@ -6,7 +6,9 @@
 #include "ams_error.h"
 #include "filament_slot_override_store.h"
 
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -55,5 +57,28 @@ class ToolChangerTestAccess {
     /// when no store was built (null API).
     static std::string store_namespace(const AmsBackendToolChanger& b) {
         return b.override_store_ ? b.override_store_->namespace_for_test() : std::string();
+    }
+
+    /// Give a backend built with a null API a store, without on_started()'s
+    /// blocking load.
+    static void inject_override_store(AmsBackendToolChanger& b,
+                                      std::unique_ptr<helix::ams::FilamentSlotOverrideStore> s) {
+        b.override_store_ = std::move(s);
+    }
+
+    /// Put a stored record on a tool, as a load would.
+    static void seed_override(AmsBackendToolChanger& b, int slot_index,
+                              const helix::ams::FilamentSlotOverride& ovr) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.overrides_[slot_index] = ovr;
+    }
+
+    static std::optional<helix::ams::FilamentSlotOverride>
+    get_override(const AmsBackendToolChanger& b, int slot_index) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        auto it = b.overrides_.find(slot_index);
+        if (it == b.overrides_.end())
+            return std::nullopt;
+        return it->second;
     }
 };

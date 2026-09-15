@@ -345,3 +345,55 @@ TEST_CASE("Starting with a live API does not deadlock",
     backend.stop();
     helix::ui::UpdateQueue::instance().drain();
 }
+
+// ============================================================================
+// Weight persist
+// ============================================================================
+
+TEST_CASE("A tool's weight persist writes the weight and locks nothing",
+          "[ams][toolchanger][slot_memory][filament_slot_override][1652]") {
+    ScopedCacheDir tmp("weight_persist");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    SlotMemoryHelper h(4);
+    ToolChangerTestAccess::inject_override_store(
+        h, std::make_unique<helix::ams::FilamentSlotOverrideStore>(
+               &api, "toolchanger", helix::ams::lane_key_style_for(h.get_type())));
+
+    // A stored record carrying identity with neither lock set, as a lane_data
+    // record whose helix_locked_* flags say false loads.
+    helix::ams::FilamentSlotOverride record;
+    record.color_rgb = 0x1E5AA8;
+    record.color_set = true;
+    record.material = "PETG";
+    record.brand = "Polymaker";
+    record.remaining_weight_g = 730.0f;
+    record.total_weight_g = 1000.0f;
+    ToolChangerTestAccess::seed_override(h, 1, record);
+    h.set_tools(4);
+    REQUIRE(h.get_slot_info(1).material == "PETG");
+
+    // What the consumption meter's minute persist and its pause and completion
+    // flushes do.
+    h.update_slot_weight(1, 640.0f, -1.0f, /*persist=*/true);
+
+    const auto after = ToolChangerTestAccess::get_override(h, 1);
+    REQUIRE(after.has_value());
+    CHECK(after->remaining_weight_g == Catch::Approx(640.0f));
+    CHECK(after->total_weight_g == Catch::Approx(1000.0f));
+    CHECK_FALSE(after->user_locked_color);
+    CHECK_FALSE(after->user_locked_material);
+
+    const nlohmann::json stored = api.mock_get_db_value("lane_data", "T1");
+    REQUIRE_FALSE(stored.is_null());
+    CHECK(stored["remaining_weight_g"].get<float>() == Catch::Approx(640.0f));
+    CHECK(stored["helix_locked_color"] == false);
+    CHECK(stored["helix_locked_material"] == false);
+
+    // klipper-toolchanger holds no filament identity; the one command a slot
+    // write can send is a remap, and a weight names no tool.
+    CHECK(h.sent() == std::vector<std::string>{});
+}
