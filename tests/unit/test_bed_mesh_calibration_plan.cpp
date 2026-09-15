@@ -110,7 +110,9 @@ TEST_CASE("calibration plan: a command that cannot be named stores default, then
         slot.shipped_macro = "CLEAN_NOZZLE\nBED_MESH_CALIBRATE";
         const auto plan = plan_calibration(slot, "cold", 60);
         CHECK(plan.command == "CLEAN_NOZZLE\nBED_MESH_CALIBRATE");
-        CHECK(plan.self_prepares);
+        CHECK(plan.shipped);
+        // Nothing marks it self-preparing, so the panel still heats and homes first.
+        CHECK_FALSE(plan.self_prepares);
         CHECK(plan.writes_profile == "default");
         CHECK(plan.copy_to == "cold");
     }
@@ -136,6 +138,8 @@ TEST_CASE("calibration plan: the Centauri Carbon template, default and named",
     PrinterDetector::reload();
     StandardMacroInfo slot;
     slot.shipped_macro = PrinterDetector::get_bed_mesh_calibrate_gcode("Elegoo Centauri Carbon");
+    slot.shipped_self_prepares =
+        PrinterDetector::get_bed_mesh_self_prepares("Elegoo Centauri Carbon");
     REQUIRE_FALSE(slot.shipped_macro.empty());
 
     SECTION("default") {

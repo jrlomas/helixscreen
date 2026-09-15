@@ -100,6 +100,15 @@ struct StandardMacroInfo {
      */
     std::string shipped_macro;
 
+    /**
+     * @brief The printer database records that shipped_macro heats, homes and
+     *        prepares the printer itself.
+     *
+     * Describes the shipped sequence only: resolve_macro_script() reads it when
+     * the shipped tier wins and ignores it otherwise.
+     */
+    bool shipped_self_prepares = false;
+
     std::string detected_macro; ///< Auto-detected (or empty)
     std::string fallback_macro; ///< HELIX_* fallback (or empty)
 
@@ -204,9 +213,11 @@ struct ResolvedMacroScript {
     std::string script;
 
     /// The script prepares the machine itself, so a caller that would otherwise
-    /// heat, home or prepend preparation gcode must not. True only for the
-    /// shipped tier: those sequences are authored per machine, and the
-    /// database's name-based skip rules cannot recognise a script.
+    /// heat, home or prepend preparation gcode must not. True only when the
+    /// shipped tier wins and the printer database records that its sequence
+    /// prepares the machine (StandardMacroInfo::shipped_self_prepares): a
+    /// script cannot be recognised by name, and a shipped one may still expect
+    /// the caller's preparation.
     bool self_prepares = false;
 
     /// The script marks where a profile argument goes, so whatever it stores lands

@@ -613,6 +613,7 @@ TEST_CASE("StandardMacros - init fills the shipped tier from the printer databas
         macros.init(hardware, "Some Random Printer");
         const auto& info = macros.get(StandardMacroSlot::BedMesh);
         CHECK(info.shipped_macro.empty());
+        CHECK_FALSE(info.shipped_self_prepares);
         CHECK(info.get_source() == MacroSource::DETECTED);
     }
 
@@ -620,6 +621,20 @@ TEST_CASE("StandardMacros - init fills the shipped tier from the printer databas
         // Tests and early startup both reach init() before the printer is known.
         macros.init(hardware, "");
         CHECK(macros.get(StandardMacroSlot::BedMesh).shipped_macro.empty());
+        CHECK_FALSE(macros.get(StandardMacroSlot::BedMesh).shipped_self_prepares);
+    }
+
+    SECTION("switching to a printer that ships nothing drops the previous flag") {
+        macros.init(hardware, "Elegoo Centauri Carbon");
+        REQUIRE(macros.get(StandardMacroSlot::BedMesh).shipped_self_prepares);
+        macros.init(hardware, "Some Random Printer");
+        CHECK_FALSE(macros.get(StandardMacroSlot::BedMesh).shipped_self_prepares);
+    }
+
+    SECTION("a slot the database ships nothing for is never self-preparing") {
+        macros.init(hardware, "Elegoo Centauri Carbon");
+        CHECK_FALSE(macros.get(StandardMacroSlot::ScrewsTilt).shipped_self_prepares);
+        CHECK_FALSE(macros.get(StandardMacroSlot::CleanNozzle).shipped_self_prepares);
     }
 
     SECTION("the Centauri Carbon's mesh sequence reaches the slot") {
@@ -652,12 +667,34 @@ TEST_CASE("resolve_macro_script - substitution and self-preparation",
         CHECK_FALSE(r.takes_profile_arg);
     }
 
-    SECTION("a shipped sequence keeps its own preparation") {
+    SECTION("a shipped sequence prepares nothing itself unless the database says so") {
+        info.detected_macro = "BED_MESH_CALIBRATE";
+        info.shipped_macro = "CLEAN_NOZZLE\nBED_MESH_CALIBRATE";
+        const auto r = resolve_macro_script(info, {});
+        CHECK(r.script == "CLEAN_NOZZLE\nBED_MESH_CALIBRATE");
+        CHECK(r.shipped);
+        // The caller still heats, homes and prepends its probe preparation.
+        CHECK_FALSE(r.self_prepares);
+    }
+
+    SECTION("a shipped sequence the database marks self-preparing keeps its own preparation") {
         info.detected_macro = "BED_MESH_CALIBRATE";
         info.shipped_macro = "LOAD_CELL_TARE\nBED_MESH_CALIBRATE";
+        info.shipped_self_prepares = true;
         const auto r = resolve_macro_script(info, {});
         CHECK(r.script == "LOAD_CELL_TARE\nBED_MESH_CALIBRATE");
+        CHECK(r.shipped);
         CHECK(r.self_prepares);
+    }
+
+    SECTION("the flag belongs to the shipped sequence, not to a tier that outranks it") {
+        info.shipped_macro = "LOAD_CELL_TARE\nBED_MESH_CALIBRATE";
+        info.shipped_self_prepares = true;
+        info.configured_macro = "MY_MESH";
+        const auto r = resolve_macro_script(info, {});
+        CHECK(r.script == "MY_MESH");
+        CHECK_FALSE(r.shipped);
+        CHECK_FALSE(r.self_prepares);
     }
 
     SECTION("{profile_arg} is substituted everywhere it appears") {
@@ -748,7 +785,7 @@ TEST_CASE("resolve_macro_script - a conditional fallback is refused when the op 
         info.shipped_macro = "LOAD_CELL_SAVE_TARE\nBED_MESH_CALIBRATE_WITH_WIPE";
         const auto r = resolve_macro_script(info, {}, /*accept_fallback=*/false);
         CHECK(r.script == "LOAD_CELL_SAVE_TARE\nBED_MESH_CALIBRATE_WITH_WIPE");
-        CHECK(r.self_prepares);
+        CHECK(r.shipped);
     }
 }
 

@@ -1444,8 +1444,8 @@ class PrinterDiscovery {
     }
 
     // Chamber/enclosure keyword scoring for sensor, fan, and heater object
-    // names. Vendors diverge: Creality uses "chamber", Snapmaker uses "cavity",
-    // Elegoo COSMOS uses literal "box", modders often use "enclosure".
+    // names. Four keywords name a printer chamber: "chamber", "enclosure",
+    // "cavity", and "box" as a standalone token.
     //
     // Returns 0 for no match, higher for stronger evidence. The discovery loop
     // keeps the highest-scoring match so iteration order does not decide.
@@ -1455,9 +1455,9 @@ class PrinterDiscovery {
     // intended as the printer chamber.
     //
     // BOX matches only as a standalone token — split on `_` and whitespace —
-    // so AMS-style names like "box1_heater" / "Box1_STM32" (QIDI Box filament
-    // dryer) are not mistaken for the printer chamber. The COSMOS case
-    // ("temperature_sensor box") and compound forms ("box_fan") still match.
+    // so AMS-style names like "box1_heater" / "Box1_STM32" (a filament dryer
+    // unit) are not mistaken for the printer chamber, while a bare
+    // "temperature_sensor box" and compound forms ("box_fan") still match.
     //
     // Two modifiers refine the base tier so a real chamber TEMPERATURE sensor
     // outranks an air-quality sensor whose name merely contains a chamber

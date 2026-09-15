@@ -360,6 +360,20 @@ class PrinterDetector {
     static std::string get_bed_mesh_calibrate_gcode(const std::string& printer_name);
 
     /**
+     * @brief Whether the printer's bed-mesh sequence prepares the printer itself
+     *
+     * `calibration.bed_mesh_self_prepares` in the database entry. A sequence that
+     * heats, homes and readies its own probe is sent alone; any other is preceded
+     * by the app's preheat, homing and probe preparation.
+     *
+     * Read through StandardMacros (StandardMacroInfo::shipped_self_prepares), which
+     * applies it only when the shipped sequence is what runs.
+     *
+     * @return true only when the entry sets the flag.
+     */
+    static bool get_bed_mesh_self_prepares(const std::string& printer_name);
+
+    /**
      * @brief Get print start profile name for a printer
      *
      * Looks up the print_start_profile field from the printer database JSON

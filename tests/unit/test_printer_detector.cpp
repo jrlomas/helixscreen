@@ -4522,6 +4522,23 @@ TEST_CASE("Bed mesh calibration gcode override", "[printer_detector]") {
     }
 }
 
+TEST_CASE("Bed mesh sequence self-preparation is read from the database", "[printer_detector]") {
+    PrinterDetector::reload();
+
+    SECTION("the Centauri Carbon's sequence prepares the printer itself") {
+        CHECK(PrinterDetector::get_bed_mesh_self_prepares("Elegoo Centauri Carbon"));
+        CHECK(PrinterDetector::get_bed_mesh_self_prepares("elegoo centauri carbon"));
+    }
+
+    SECTION("an entry that does not say so does not") {
+        CHECK_FALSE(PrinterDetector::get_bed_mesh_self_prepares("FlashForge Adventurer 5M"));
+    }
+
+    SECTION("an unknown printer does not") {
+        CHECK_FALSE(PrinterDetector::get_bed_mesh_self_prepares("Some Random Printer"));
+    }
+}
+
 TEST_CASE("Centauri Carbon preset buttons name only commands COSMOS defines",
           "[printer_detector][cc1]") {
     // What COSMOS 26.08 lacks, or defines as an emergency stop (M729, M8213).
