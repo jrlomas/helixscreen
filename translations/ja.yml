@@ -1032,6 +1032,7 @@ translations:
   FilamentSensor: フィラメントセンサー
   File: ファイル
   File Size: ファイルサイズ
+  File Will Stop the Printer: 'ファイルがプリンターを停止します'
   Filename: ファイル名
   Fine: 微動
   Fine-Tune: 微調整
@@ -1344,6 +1345,7 @@ translations:
   Lifetime Print Stats: 累計印刷統計
   Light: ライト
   Light will switch when the current operation finishes: 現在の操作が完了したらライトを切り替えます
+  Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: '{} 行目で {} を実行します。このプリンターでは緊急停止とみなされます。このプリンター用のプロファイルでファイルを再スライスしてください。'
   Listen to all theme sounds: すべてのテーマサウンドを試聴
   Live temperature graph with configurable sensors: '設定可能なセンサーによるリアルタイム温度グラフ'
   Live webcam feed: 'ウェブカメラのライブ映像'
@@ -1916,6 +1918,7 @@ translations:
   Printer image set to auto-detect: プリンター画像を自動検出に設定しました
   Printer is busy - {} stays in the queue: 'プリンターは使用中です – {} はキューに残ります'
   Printer is not paired — pair it first: プリンターがペアリングされていません — 先にペアリングしてください
+  'Printer message: {}': 'プリンターのメッセージ: {}'
   Printer name: プリンター名
   Printer not ready: プリンターの準備ができていません
   Printer ready: プリンター準備完了

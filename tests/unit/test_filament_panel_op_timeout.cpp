@@ -97,6 +97,22 @@ class StubBackend : public AmsBackendMock {
     }
 };
 
+/// Refuses every tier-1 dispatch, and counts the home consent being cleared.
+class FailingDispatchBackend : public StubBackend {
+  public:
+    AmsError load_filament(int) override {
+        return AmsErrorHelper::busy("dispatch refused");
+    }
+    AmsError change_tool(int) override {
+        return AmsErrorHelper::busy("dispatch refused");
+    }
+    void clear_home_preconfirmed() override {
+        ++clears;
+        StubBackend::clear_home_preconfirmed();
+    }
+    int clears = 0;
+};
+
 AmsSystemInfo afc_sys() {
     AmsSystemInfo sys;
     sys.type = AmsType::AFC;
@@ -123,11 +139,12 @@ struct TimeoutHarness {
     std::unique_ptr<FilamentPanel> panel;
     lv_obj_t* root = nullptr;
 
-    explicit TimeoutHarness(LVGLUITestFixture& f) : fx(f) {
+    explicit TimeoutHarness(LVGLUITestFixture& f, std::unique_ptr<StubBackend> backend = nullptr)
+        : fx(f) {
         ToolState::instance().init_subjects(true);
         AmsState::instance().init_subjects(true);
 
-        auto owned = std::make_unique<StubBackend>();
+        auto owned = backend ? std::move(backend) : std::make_unique<StubBackend>();
         owned->sys_ = afc_sys();
         owned->loaded_slot_ = 3; // slot 0 stays free so a Load can proceed
         mock = owned.get();
@@ -428,4 +445,23 @@ TEST_CASE_METHOD(LVGLUITestFixture, "a later operation is not eaten by a stale a
     h.publish_action(AmsAction::IDLE, 600);
 
     CHECK(TA::op_load_state(*h.panel) == 2); // done/checkmark
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "a tier-1 dispatch that fails clears the home consent it never spent",
+                 "[ui_integration][filament][homing][preconfirm]") {
+    // The arm is consumed single-shot by whichever operation dispatches next, so
+    // consent that its own dispatch never spent would home an unrelated later one
+    // without asking.
+    auto owned = std::make_unique<FailingDispatchBackend>();
+    FailingDispatchBackend* backend = owned.get();
+    TimeoutHarness h(*this, std::move(owned));
+
+    backend->arm_home_preconfirmed();
+    backend->clears = 0;
+
+    TA::execute_load(*h.panel);
+    process_lvgl(20);
+
+    CHECK(backend->clears == 1);
 }

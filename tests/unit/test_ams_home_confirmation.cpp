@@ -1,16 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "../lvgl_test_fixture.h"
+#include "../lvgl_ui_test_fixture.h"
 #include "ams_backend_afc.h"
 #include "ams_backend_cfs.h"
 #include "ams_backend_toolchanger.h"
+#include "app_globals.h"
 #include "filament_op_router.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
+#include "standard_macros.h"
 #include "test_helpers/cfs_test_access.h"
+#include "test_helpers/filament_panel_harness.h"
+#include "test_helpers/filament_panel_test_access.h"
+#include "test_helpers/lane_material_backend.h"
+#include "test_helpers/printer_state_test_access.h"
 #include "test_helpers/scoped_home_confirm_prompter.h"
 #include "test_helpers/toolchanger_test_access.h"
 #include "test_helpers/update_queue_test_access.h"
+
+#include <algorithm>
+#include <string>
 
 #include "../catch_amalgamated.hpp"
 
@@ -567,4 +577,203 @@ TEST_CASE("CFS Fork variant never homes via dispatch_action_script", "[ams][homi
     REQUIRE(client.gcode_script_history().size() == 1);
     CHECK(client.gcode_script_history()[0] == "BOX_LOAD LANE=1");
     CHECK_FALSE(client.last_send_silent());
+}
+
+// =====================================================================
+// FilamentPanel: what confirming "Home printer first?" leads to
+// =====================================================================
+// The panel asks before its preheat, and the tier the load then takes decides
+// who homes: a backend homes right before its own dispatch, the macro tier
+// homes right before the macro, and a raw extrude, which moves only E, never
+// asks.
+
+namespace {
+
+using helix::ui::FilamentPanelTestAccess;
+
+/// A load macro with no parameters, so it runs without a parameter dialog.
+constexpr const char* PLAIN_LOAD_MACRO = "G1 E50 F300";
+
+/// A lane backend that records the home consent and the loads it is handed, and
+/// moves nothing. @p wants_slot decides whether plan_load() gives it the load or
+/// hands the load to a configured macro.
+class ConsentRecordingLaneBackend : public helix::test::LaneMaterialBackend {
+  public:
+    explicit ConsentRecordingLaneBackend(bool wants_slot)
+        : LaneMaterialBackend(/*lane=*/1, /*nozzle_c=*/220), wants_slot_(wants_slot) {}
+
+    void arm_home_preconfirmed() override {
+        ++armed;
+    }
+    AmsError load_filament(int) override {
+        ++loads;
+        return AmsErrorHelper::success();
+    }
+    AmsError change_tool(int) override {
+        ++loads;
+        return AmsErrorHelper::success();
+    }
+    [[nodiscard]] bool requires_slot_selection_for_load() const override {
+        return wants_slot_;
+    }
+
+    int armed = 0;
+    int loads = 0;
+
+  private:
+    bool wants_slot_;
+};
+
+/// The process-wide toolhead reads unhomed, which is what ensure_homed_then() asks.
+void unhome_process_toolhead() {
+    helix::PrinterStateTestAccess::reset(get_printer_state());
+    get_printer_state().init_subjects(false);
+    get_printer_state().update_from_status({{"toolhead", {{"homed_axes", ""}}}});
+}
+
+/// No load macro anywhere, so a load with no backend falls through to raw gcode.
+void clear_load_macros() {
+    helix::PrinterDiscovery bare;
+    bare.parse_objects(nlohmann::json::array({"extruder"}));
+    StandardMacros::instance().reset();
+    StandardMacros::instance().init(bare);
+    REQUIRE(StandardMacros::instance().get(StandardMacroSlot::LoadFilament).is_empty());
+}
+
+/// Press Load on the harness's cold, unhomed printer, answer the home prompt with
+/// @p confirm, and let the preheat finish. Returns how often the prompt was raised.
+int press_load_cold(helix::test::FilamentPanelHarness& h, bool confirm) {
+    int prompts = 0;
+    ScopedHomeConfirmPrompter prompter(
+        [&prompts, confirm](std::function<void()> on_confirm, std::function<void()> on_cancel) {
+            ++prompts;
+            if (confirm) {
+                on_confirm();
+            } else {
+                on_cancel();
+            }
+        });
+    auto& queue = helix::ui::UpdateQueue::instance();
+    h.state.update_from_status({{"extruder", {{"temperature", 25.0}}}});
+    helix::ui::UpdateQueueTestAccess::drain_all(queue);
+    FilamentPanelTestAccess::handle_load_button(*h.panel);
+
+    h.state.update_from_status({{"extruder", {{"temperature", 250.0}}}});
+    helix::ui::UpdateQueueTestAccess::drain_all(queue);
+    FilamentPanelTestAccess::check_pending_preheat(*h.panel);
+    helix::ui::UpdateQueueTestAccess::drain_all(queue);
+    return prompts;
+}
+
+/// Position of the first script sent whose first word is @p word, or -1.
+long first_sent(const helix::test::FilamentPanelHarness& h, const std::string& word) {
+    const auto& sent = h.client.gcode_script_history();
+    for (size_t i = 0; i < sent.size(); ++i) {
+        if (sent[i] == word || sent[i].rfind(word + " ", 0) == 0) {
+            return static_cast<long>(i);
+        }
+    }
+    return -1;
+}
+
+} // namespace
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Filament panel: a confirmed home before a macro load sends G28, then the macro",
+                 "[ams][homing][filament]") {
+    unhome_process_toolhead();
+    helix::test::FilamentPanelHarness h;
+    h.cache_macros({{"LOAD_FILAMENT", PLAIN_LOAD_MACRO}});
+
+    REQUIRE(press_load_cold(h, /*confirm=*/true) == 1);
+
+    const long home = first_sent(h, "G28");
+    const long macro = first_sent(h, "LOAD_FILAMENT");
+    REQUIRE(home >= 0);
+    REQUIRE(macro >= 0);
+    CHECK(home < macro);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Filament panel: a failed home before a macro load sends no macro",
+                 "[ams][homing][filament]") {
+    unhome_process_toolhead();
+    helix::test::FilamentPanelHarness h;
+    h.cache_macros({{"LOAD_FILAMENT", PLAIN_LOAD_MACRO}});
+    h.client.force_next_gcode_error(MoonrakerErrorType::JSON_RPC_ERROR, "Must home axis first",
+                                    "G28");
+
+    REQUIRE(press_load_cold(h, /*confirm=*/true) == 1);
+
+    REQUIRE(first_sent(h, "G28") >= 0);
+    CHECK(first_sent(h, "LOAD_FILAMENT") < 0);
+    CHECK_FALSE(FilamentPanelTestAccess::operation_active(*h.panel));
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Filament panel: declining the home before a macro load sends nothing",
+                 "[ams][homing][filament]") {
+    unhome_process_toolhead();
+    helix::test::FilamentPanelHarness h;
+    h.cache_macros({{"LOAD_FILAMENT", PLAIN_LOAD_MACRO}});
+
+    REQUIRE(press_load_cold(h, /*confirm=*/false) == 1);
+
+    CHECK(h.client.gcode_script_history().empty());
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "Filament panel: a raw extrude load never asks to home",
+                 "[ams][homing][filament]") {
+    unhome_process_toolhead();
+    helix::test::FilamentPanelHarness h;
+    clear_load_macros();
+
+    CHECK(press_load_cold(h, /*confirm=*/true) == 0);
+
+    CHECK(first_sent(h, "G28") < 0);
+    const auto& sent = h.client.gcode_script_history();
+    std::string history;
+    for (const auto& script : sent) {
+        history += "[" + script + "]";
+    }
+    INFO("sent: " << history);
+    const std::string raw = helix::ui::filament_load_fallback_gcode();
+    const std::string first_move =
+        raw.substr(raw.find("G1 "), raw.find('\n', raw.find("G1 ")) - raw.find("G1 "));
+    CHECK(std::any_of(sent.begin(), sent.end(), [&first_move](const std::string& s) {
+        return s.find(first_move) != std::string::npos;
+    }));
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Filament panel: only a backend load is handed the home consent",
+                 "[ams][homing][filament]") {
+    unhome_process_toolhead();
+
+    SECTION("a macro load homes before the macro and arms nothing") {
+        auto owned = std::make_unique<ConsentRecordingLaneBackend>(/*wants_slot=*/false);
+        ConsentRecordingLaneBackend* backend = owned.get();
+        helix::test::FilamentPanelHarness h(std::move(owned));
+        h.cache_macros({{"LOAD_FILAMENT", PLAIN_LOAD_MACRO}});
+
+        REQUIRE(press_load_cold(h, /*confirm=*/true) == 1);
+
+        REQUIRE(first_sent(h, "LOAD_FILAMENT") >= 0);
+        CHECK(first_sent(h, "G28") >= 0);
+        CHECK(backend->loads == 0);
+        CHECK(backend->armed == 0);
+    }
+
+    SECTION("a backend load is armed, so the backend homes without asking again") {
+        auto owned = std::make_unique<ConsentRecordingLaneBackend>(/*wants_slot=*/true);
+        ConsentRecordingLaneBackend* backend = owned.get();
+        helix::test::FilamentPanelHarness h(std::move(owned));
+        clear_load_macros();
+
+        REQUIRE(press_load_cold(h, /*confirm=*/true) == 1);
+
+        REQUIRE(backend->loads == 1);
+        CHECK(backend->armed == 1);
+        CHECK(first_sent(h, "G28") < 0);
+    }
 }

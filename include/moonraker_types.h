@@ -49,7 +49,14 @@ struct SafetyLimits {
     /// normalize_heater_key(), and a raw insert is how the key casing drifts
     /// apart from the lookup.
     std::map<std::string, double> heater_max_temp_celsius;
-    double min_extrude_temp_celsius = 170.0; ///< Minimum temp for extrusion (Klipper default)
+
+    /// Per-extruder min_extrude_temp, keyed and normalized like
+    /// heater_max_temp_celsius. Read through min_extrude_temp_for() and written
+    /// through set_min_extrude_temp_for().
+    std::map<std::string, double> heater_min_extrude_temp_celsius;
+
+    /// The primary extruder's minimum temp for extrusion (Klipper default)
+    double min_extrude_temp_celsius = 170.0;
     double max_fan_speed_percent = 100.0;
     double min_fan_speed_percent = 0.0;
     double max_feedrate_mm_min = 50000.0;
@@ -88,6 +95,24 @@ struct SafetyLimits {
     /// max_temp_for() normalizes its lookup.
     void set_max_temp_for(const std::string& heater, double max_temp) {
         heater_max_temp_celsius[normalize_heater_key(heater)] = max_temp;
+    }
+
+    /**
+     * @brief Extrusion minimum for one extruder, by Klipper object name.
+     *
+     * Every extruder section carries its own min_extrude_temp, so a toolchanger's
+     * tools need not share one. An extruder whose section was not seen takes the
+     * primary's min_extrude_temp_celsius.
+     */
+    double min_extrude_temp_for(const std::string& extruder) const {
+        const auto it = heater_min_extrude_temp_celsius.find(normalize_heater_key(extruder));
+        return it != heater_min_extrude_temp_celsius.end() ? it->second : min_extrude_temp_celsius;
+    }
+
+    /// Record one extruder's extrusion minimum, normalizing the key the same way
+    /// min_extrude_temp_for() normalizes its lookup.
+    void set_min_extrude_temp_for(const std::string& extruder, double min_extrude) {
+        heater_min_extrude_temp_celsius[normalize_heater_key(extruder)] = min_extrude;
     }
 
     /// Fold a heater name to its map key.
@@ -131,6 +156,11 @@ struct SafetyLimits {
         }
         if (min_extrude_temp_celsius < 0.0) {
             min_extrude_temp_celsius = 0.0;
+        }
+        for (auto& [extruder, min_extrude] : heater_min_extrude_temp_celsius) {
+            if (min_extrude < 0.0) {
+                min_extrude = 0.0;
+            }
         }
     }
 };

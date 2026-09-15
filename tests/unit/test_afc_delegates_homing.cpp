@@ -18,7 +18,9 @@
 #include "ams_backend_mock.h"
 #include "ams_state.h"
 #include "ams_types.h"
+#include "printer_discovery.h"
 #include "printer_state.h"
+#include "standard_macros.h"
 #include "test_helpers/scoped_home_confirm_prompter.h"
 #include "tool_state.h"
 
@@ -339,6 +341,13 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "[ui][homing][1265][filament]") {
     PanelPrePromptHarness h(*this);
     REQUIRE(AmsState::instance().get_backend() == nullptr);
+    // With no backend a load goes to the macro, which moves the toolhead. A raw
+    // extrude moves only E and is never asked about.
+    helix::PrinterDiscovery hardware;
+    hardware.parse_objects(nlohmann::json::array({"extruder", "gcode_macro LOAD_FILAMENT"}));
+    StandardMacros::instance().reset();
+    StandardMacros::instance().init(hardware);
+    REQUIRE_FALSE(StandardMacros::instance().get(StandardMacroSlot::LoadFilament).is_empty());
 
     int prompts = 0;
     ScopedHomeConfirmPrompter prompter(
@@ -351,6 +360,8 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     TA::handle_load_button(*h.panel);
     CHECK(prompts == 2);
     CHECK(h.stub->armed == 0);
+
+    StandardMacros::instance().init(helix::PrinterDiscovery{});
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture,

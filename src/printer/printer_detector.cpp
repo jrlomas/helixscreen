@@ -1683,6 +1683,23 @@ std::string PrinterDetector::get_bed_mesh_calibrate_gcode(const std::string& pri
     return "";
 }
 
+namespace {
+const json* find_printer_entry(const std::string& printer_name);
+} // namespace
+
+bool PrinterDetector::get_bed_mesh_self_prepares(const std::string& printer_name) {
+    const json* printer = find_printer_entry(printer_name);
+    if (printer == nullptr) {
+        return false;
+    }
+    const auto cal = printer->find("calibration");
+    if (cal == printer->end() || !cal->is_object()) {
+        return false;
+    }
+    const auto flag = cal->find("bed_mesh_self_prepares");
+    return flag != cal->end() && flag->is_boolean() && flag->get<bool>();
+}
+
 // ============================================================================
 // Pre-print lookups: profile, default phases, heating rates
 // ============================================================================

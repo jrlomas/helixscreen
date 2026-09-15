@@ -20,6 +20,7 @@
 #include "ui_update_queue.h"
 
 #include "../lvgl_ui_test_fixture.h"
+#include "../test_helpers/filament_panel_harness.h"
 #include "../test_helpers/filament_panel_test_access.h"
 #include "../test_helpers/lane_material_backend.h"
 #include "../test_helpers/load_filament_expression_default.h"
@@ -75,117 +76,7 @@ constexpr const char* TEMP_BETWEEN_TWO = "{% set l = params.LENGTH|default(100)|
                                          "{% set s = params.SPEED|default(5)|float %}\n"
                                          "M109 S{t}\nG1 E{l} F{s * 60}";
 
-/// A real FilamentPanel with no AMS backend over a mock printer, so every op
-/// reaches the configured-macro tier and the gcode it sends is observable.
-struct PrefillPanelHarness {
-    MoonrakerClientMock client{MoonrakerClientMock::PrinterType::VORON_24};
-    helix::PrinterState state;
-    MoonrakerAPI api{client, state};
-    std::unique_ptr<FilamentPanel> panel;
-
-    int prompt_count = 0;
-    std::string prompted_macro;
-    ParamValues prompted_prefill;
-
-    /// @p backend, when given, is installed before the panel is built.
-    explicit PrefillPanelHarness(std::unique_ptr<AmsBackend> backend = nullptr) {
-        ToolState::instance().init_subjects(true);
-        AmsState::instance().init_subjects(true);
-        AmsState::instance().clear_backends();
-        AmsState::instance().clear_external_spool_info();
-        if (backend) {
-            AmsState::instance().set_backend(std::move(backend));
-        }
-        state.init_subjects(false);
-        state.init_extruders({"extruder"});
-        state.set_klippy_state_sync(helix::KlippyState::READY);
-
-        helix::PrinterDiscovery hardware;
-        nlohmann::json objects = {"extruder", "gcode_macro LOAD_FILAMENT",
-                                  "gcode_macro UNLOAD_FILAMENT", "gcode_macro PURGE"};
-        hardware.parse_objects(objects);
-        StandardMacros::instance().reset();
-        StandardMacros::instance().init(hardware);
-
-        helix::MacroParamCache::instance().clear();
-        helix::ui::set_filament_param_prompter(
-            [this](const std::string& macro, const helix::CachedMacroInfo&,
-                   const ParamValues& prefill, helix::MacroExecuteCallback) {
-                ++prompt_count;
-                prompted_macro = macro;
-                prompted_prefill = prefill;
-            });
-
-        panel = std::make_unique<FilamentPanel>(state, &api);
-        panel->init_subjects();
-        client.clear_gcode_script_history();
-    }
-
-    ~PrefillPanelHarness() {
-        // A macro that ran queued its completion callbacks, which reach the panel,
-        // so they run while it is still alive. Completing an op can schedule the
-        // post-op cooldown, whose timer would otherwise outlive this test.
-        helix::ui::UpdateQueue::instance().drain();
-        PostOpCooldownManager::instance().cancel();
-        helix::ui::UpdateQueue::instance().drain();
-
-        helix::ui::set_filament_param_prompter({});
-        panel.reset();
-        AmsState::instance().clear_backends();
-        AmsState::instance().clear_external_spool_info();
-        StandardMacros::instance().reset();
-        helix::MacroParamCache::instance().clear();
-        helix::ui::UpdateQueue::instance().drain();
-        AmsState::instance().deinit_subjects();
-        ToolState::instance().deinit_subjects();
-    }
-
-    /// populate_from_configfile() replaces the cache, so every macro goes in one call.
-    static void cache_macros(std::initializer_list<std::pair<const char*, const char*>> macros) {
-        nlohmann::json config;
-        std::unordered_set<std::string> names;
-        for (const auto& [name, gcode] : macros) {
-            config[std::string("gcode_macro ") + name]["gcode"] = gcode;
-            names.insert(name);
-        }
-        helix::MacroParamCache::instance().populate_from_configfile(config, names);
-    }
-
-    /// The extruder target Klipper reports, in degrees.
-    void set_extruder_target(double degrees) {
-        state.update_from_status({{"extruder", {{"target", degrees}}}});
-    }
-
-    /// The printer's safety limits as discovery hands them to the panel: Klipper's
-    /// min_extrude_temp and the hotend's max_temp.
-    void set_safety_limits(double min_extrude_c, double nozzle_max_c = 300.0) {
-        SafetyLimits limits;
-        limits.min_extrude_temp_celsius = min_extrude_c;
-        limits.set_max_temp_for("extruder", nozzle_max_c);
-        panel->set_limits(limits);
-    }
-
-    /// An external spool whose material heats to exactly @p nozzle_c: a name the
-    /// filament database does not know, so the spool's own temperatures stand.
-    static void set_external_spool(int nozzle_c) {
-        SlotInfo spool;
-        spool.material = "Spool Test Filament";
-        spool.nozzle_temp_min = nozzle_c;
-        spool.nozzle_temp_max = nozzle_c;
-        AmsState::instance().set_external_spool_info_in_memory(spool);
-    }
-
-    /// Every script sent whose first word is @p macro.
-    [[nodiscard]] Scripts sent_for(const std::string& macro) const {
-        Scripts out;
-        for (const auto& script : client.gcode_script_history()) {
-            if (script == macro || script.rfind(macro + " ", 0) == 0) {
-                out.push_back(script);
-            }
-        }
-        return out;
-    }
-};
+using PrefillPanelHarness = helix::test::FilamentPanelHarness;
 
 } // namespace
 
@@ -418,6 +309,107 @@ TEST_CASE_METHOD(LVGLUITestFixture,
 
     CHECK(h.prompt_count == 0);
     CHECK(h.sent_for("LOAD_FILAMENT") == Scripts{"LOAD_FILAMENT EXTRUDER_TEMP=235"});
+}
+
+// =============================================================================
+// Multi-tool: the extruder the op's slot feeds
+// =============================================================================
+
+namespace {
+
+/// Two hotends with different limits: `extruder` 170-300C, `extruder1` 220-250C.
+SafetyLimits two_hotend_limits() {
+    SafetyLimits limits;
+    limits.min_extrude_temp_celsius = 170.0;
+    limits.set_min_extrude_temp_for("extruder", 170.0);
+    limits.set_max_temp_for("extruder", 300.0);
+    limits.set_min_extrude_temp_for("extruder1", 220.0);
+    limits.set_max_temp_for("extruder1", 250.0);
+    return limits;
+}
+
+/// Lane 1 loaded with a @p material_c material, feeding @p tool (no tool when < 0).
+std::unique_ptr<helix::test::LaneMaterialBackend> lane_feeding_tool(int material_c, int tool) {
+    auto backend = std::make_unique<helix::test::LaneMaterialBackend>(/*lane=*/1, material_c);
+    if (tool >= 0) {
+        backend->map_slot_to_tool(1, tool);
+    }
+    return backend;
+}
+
+/// A two-hotend printer whose active `extruder` targets 280C and `extruder1` 240C.
+void seed_two_hotends(PrefillPanelHarness& h, const char* macro, const char* gcode) {
+    h.cache_macros({{macro, gcode}});
+    h.panel->set_limits(two_hotend_limits());
+    TA::set_selected_material(*h.panel, -1);
+    h.state.update_from_status(
+        {{"extruder", {{"target", 280.0}}}, {"extruder1", {{"target", 240.0}}}});
+    REQUIRE(h.state.active_extruder_name() == "extruder");
+    REQUIRE(ToolState::instance().tool_count() == 2);
+}
+
+constexpr const char* PURGE_TEMP_ONLY = "{% set t = params.PURGE_TEMP|default(240)|int %}\n"
+                                        "M109 S{t}\nG1 E30 F300";
+
+} // namespace
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Load on a slot feeding another tool reads that tool's extruder target",
+                 "[filament][prefill][toolchanger]") {
+    PrefillPanelHarness h(lane_feeding_tool(/*material_c=*/100, /*tool=*/1),
+                          {"extruder", "extruder1"});
+    seed_two_hotends(h, "LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT);
+
+    TA::execute_load(*h.panel);
+
+    CHECK(h.prompt_count == 0);
+    CHECK(h.sent_for("LOAD_FILAMENT") == Scripts{"LOAD_FILAMENT EXTRUDER_TEMP=240"});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Purge of a lane feeding another tool reads that tool's extruder target",
+                 "[filament][prefill][toolchanger]") {
+    PrefillPanelHarness h(lane_feeding_tool(/*material_c=*/100, /*tool=*/1),
+                          {"extruder", "extruder1"});
+    seed_two_hotends(h, "PURGE", PURGE_TEMP_ONLY);
+
+    TA::execute_purge(*h.panel);
+
+    CHECK(h.prompt_count == 0);
+    CHECK(h.sent_for("PURGE") == Scripts{"PURGE PURGE_TEMP=240"});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Load on a slot feeding another tool is held to that extruder's own limits",
+                 "[filament][prefill][toolchanger]") {
+    int material_c = 0;
+    SECTION("above its max_temp, though within the active extruder's") {
+        material_c = 270;
+    }
+    SECTION("at its min_extrude_temp, though above the active extruder's") {
+        material_c = 220;
+    }
+    PrefillPanelHarness h(lane_feeding_tool(material_c, /*tool=*/1), {"extruder", "extruder1"});
+    seed_two_hotends(h, "LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT);
+    h.state.update_from_status({{"extruder1", {{"target", 0.0}}}});
+
+    TA::execute_load(*h.panel);
+
+    CHECK(h.prompt_count == 1);
+    CHECK(h.prompted_prefill.empty());
+    CHECK(h.sent_for("LOAD_FILAMENT").empty());
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "Load on a slot that feeds no tool uses the active extruder",
+                 "[filament][prefill][toolchanger]") {
+    PrefillPanelHarness h(lane_feeding_tool(/*material_c=*/100, /*tool=*/-1),
+                          {"extruder", "extruder1"});
+    seed_two_hotends(h, "LOAD_FILAMENT", helix::test::LOAD_FILAMENT_EXPRESSION_DEFAULT);
+
+    TA::execute_load(*h.panel);
+
+    CHECK(h.prompt_count == 0);
+    CHECK(h.sent_for("LOAD_FILAMENT") == Scripts{"LOAD_FILAMENT EXTRUDER_TEMP=280"});
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture,

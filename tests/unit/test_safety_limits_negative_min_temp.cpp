@@ -141,11 +141,13 @@ TEST_CASE("SafetyLimits: negative temperature floors clamp to zero", "[1353][saf
     SafetyLimits limits;
     limits.min_temperature_celsius = REPORTED_MIN_TEMP;
     limits.min_extrude_temp_celsius = REPORTED_MIN_TEMP;
+    limits.set_min_extrude_temp_for("extruder1", REPORTED_MIN_TEMP);
 
     limits.clamp_temperature_floors();
 
     CHECK(limits.min_temperature_celsius == Catch::Approx(0.0));
     CHECK(limits.min_extrude_temp_celsius == Catch::Approx(0.0));
+    CHECK(limits.min_extrude_temp_for("extruder1") == Catch::Approx(0.0));
 }
 
 TEST_CASE("SafetyLimits: a configured positive floor survives the clamp", "[1353][safety_limits]") {
@@ -200,6 +202,9 @@ TEST_CASE_METHOD(NegativeMinTempFixture,
     // The regression. Before the fix these were -100.
     CHECK(limits.min_temperature_celsius == Catch::Approx(0.0));
     CHECK(limits.min_extrude_temp_celsius == Catch::Approx(0.0));
+    // The extruder's own entry is recorded, and clamped the same way.
+    CHECK(limits.heater_min_extrude_temp_celsius.count("extruder") == 1);
+    CHECK(limits.min_extrude_temp_for("extruder") == Catch::Approx(0.0));
 }
 
 TEST_CASE_METHOD(NegativeMinTempFixture,

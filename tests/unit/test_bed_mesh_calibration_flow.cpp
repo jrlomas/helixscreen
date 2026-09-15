@@ -83,10 +83,11 @@ class CalibrationCollectorFixture : public LVGLTestFixture {
     }
 
     /// A calibration whose RPC never returns, so only console lines can end it.
-    void start(bool shipped = true) {
+    /// A self-preparing sequence is always a shipped one.
+    void start(bool shipped = true, bool self_prepares = true) {
         client.force_next_gcode_dropped_response("BED_MESH_CALIBRATE");
         advanced.start_bed_mesh_calibrate(
-            {"BED_MESH_CALIBRATE BED_TEMP=60", /*self_prepares=*/shipped, /*shipped=*/shipped},
+            {"BED_MESH_CALIBRATE BED_TEMP=60", shipped && self_prepares, shipped},
             [this](int current, int total) { progress.emplace_back(current, total); },
             [this]() { ++completions; },
             [this](const MoonrakerError& err) { errors.push_back(err.message); },
@@ -197,6 +198,16 @@ TEST_CASE_METHOD(CalibrationCollectorFixture,
     client.dispatch_gcode_response("// Mesh Bed Leveling Complete");
     CHECK(completions == 0);
     CHECK(errors.size() == 1);
+}
+
+TEST_CASE_METHOD(CalibrationCollectorFixture,
+                 "an unknown command fails a shipped sequence whoever does the preparing",
+                 "[bed_mesh_flow]") {
+    start(/*shipped=*/true, /*self_prepares=*/false);
+    client.dispatch_gcode_response("// Unknown command:\"CLEAN_NOZZLE\"");
+    REQUIRE(errors.size() == 1);
+    CHECK(mentions(errors[0], "CLEAN_NOZZLE"));
+    CHECK(completions == 0);
 }
 
 TEST_CASE_METHOD(

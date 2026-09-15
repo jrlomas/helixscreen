@@ -4,6 +4,8 @@
 #include "ams_backend_mock.h"
 #include "ams_types.h"
 
+#include <map>
+
 namespace helix::test {
 
 /// An AMS backend whose one loaded lane names a material and which wants no slot
@@ -17,6 +19,12 @@ class LaneMaterialBackend : public AmsBackendMock {
     LaneMaterialBackend(int lane, int nozzle_c, int selected_slot = -1)
         : AmsBackendMock(4), lane_(lane), nozzle_c_(nozzle_c),
           selected_slot_(selected_slot < 0 ? lane : selected_slot) {}
+
+    /// Make @p slot report @p tool as the tool it feeds. Slots never mapped
+    /// report no tool.
+    void map_slot_to_tool(int slot, int tool) {
+        mapped_tools_[slot] = tool;
+    }
 
     [[nodiscard]] AmsSystemInfo get_system_info() const override {
         AmsSystemInfo sys;
@@ -34,6 +42,9 @@ class LaneMaterialBackend : public AmsBackendMock {
             info.material = "Lane Test Filament";
             info.nozzle_temp_min = nozzle_c_;
             info.nozzle_temp_max = nozzle_c_;
+        }
+        if (const auto it = mapped_tools_.find(slot); it != mapped_tools_.end()) {
+            info.mapped_tool = it->second;
         }
         return info;
     }
@@ -54,6 +65,7 @@ class LaneMaterialBackend : public AmsBackendMock {
     int lane_;
     int nozzle_c_;
     int selected_slot_;
+    std::map<int, int> mapped_tools_;
 };
 
 } // namespace helix::test

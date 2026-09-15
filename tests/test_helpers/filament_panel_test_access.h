@@ -42,6 +42,12 @@ struct FilamentPanelTestAccess {
         p.execute_purge();
     }
 
+    /// Runs the op a finished preheat was waiting for. update_all_temps() calls it
+    /// only on a panel built from XML, which a harness panel is not.
+    static void check_pending_preheat(FilamentPanel& p) {
+        p.check_pending_preheat();
+    }
+
     /// The preset index the material buttons select (-1 = none), set without
     /// the heater commands a real preset press also sends.
     static void set_selected_material(FilamentPanel& p, int preset) {
