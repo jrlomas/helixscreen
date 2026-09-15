@@ -43,10 +43,25 @@ TEST_CASE("PrintStartProfile: cosmos_cc1 maps the PRINT_START narration",
         REQUIRE(result.message == "Heat Soak");
     }
 
+    SECTION("A heat soak holds the pre-print for the minutes it announces") {
+        // COSMOS prints the soak and then waits it out in a silent G4.
+        REQUIRE(profile->try_match_pattern("// Heatsoak: 1.0m", result));
+        REQUIRE(result.hold_seconds == 60);
+        REQUIRE(profile->try_match_pattern("// Heatsoak: 10.0m", result));
+        REQUIRE(result.hold_seconds == 600);
+        REQUIRE(profile->try_match_pattern("// Heatsoak: 0.5m", result));
+        REQUIRE(result.hold_seconds == 30);
+        REQUIRE(profile->try_match_pattern("// Heatsoak: 0.0m", result));
+        REQUIRE(result.hold_seconds == 0);
+    }
+
     SECTION("Chamber wait is a soak too") {
+        REQUIRE(profile->try_match_pattern("// Heatsoak: 10.0m", result));
         REQUIRE(profile->try_match_pattern("Chamber: 45c", result));
         REQUIRE(result.phase == PrintStartPhase::HEATING_BED);
         REQUIRE(result.message == "Heat Soak");
+        // M191 waits on the chamber sensor for no known time, so it holds nothing.
+        REQUIRE(result.hold_seconds == 0);
     }
 
     SECTION("Stored mesh load") {

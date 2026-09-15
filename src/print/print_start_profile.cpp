@@ -10,7 +10,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
+#include <locale>
+#include <sstream>
 
 #include "hv/json.hpp"
 
@@ -199,6 +202,17 @@ bool PrintStartProfile::try_match_pattern(const std::string& line, MatchResult& 
             result.message =
                 substitute_captures(std::string(lv_tr(rp.message_template.c_str())), match);
             result.progress = rp.weight; // Caller interprets based on progress_mode
+            result.hold_seconds = 0;
+            if (rp.hold_minutes_group > 0 &&
+                static_cast<size_t>(rp.hold_minutes_group) < match.size()) {
+                // Firmware prints the number with a '.' whatever the UI locale.
+                std::istringstream minutes_text(match[rp.hold_minutes_group].str());
+                minutes_text.imbue(std::locale::classic());
+                double minutes = 0.0;
+                if (minutes_text >> minutes && std::isfinite(minutes) && minutes > 0.0) {
+                    result.hold_seconds = static_cast<int>(std::lround(minutes * 60.0));
+                }
+            }
             spdlog::trace("[PrintStartProfile] Pattern match: '{}' -> phase={}, msg='{}'", line,
                           static_cast<int>(result.phase), result.message);
             return true;
@@ -367,6 +381,19 @@ bool PrintStartProfile::parse_json(const json& j, const std::string& source_path
                 rp.weight = rp_json["weight"].get<int>();
             } else {
                 rp.weight = 0;
+            }
+
+            // Silent minutes the line announces, from a capture group (optional)
+            if (rp_json.contains("hold_minutes_group")) {
+                const auto& group = rp_json["hold_minutes_group"];
+                if (group.is_number_integer() && group.get<int>() >= 1 &&
+                    static_cast<unsigned>(group.get<int>()) <= rp.pattern.mark_count()) {
+                    rp.hold_minutes_group = group.get<int>();
+                } else {
+                    spdlog::warn("[PrintStartProfile] Ignoring hold_minutes_group for regex '{}' "
+                                 "in {}: not a capture group of the pattern",
+                                 pattern_str, source_path);
+                }
             }
 
             response_patterns_.push_back(std::move(rp));

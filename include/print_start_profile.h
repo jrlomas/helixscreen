@@ -31,6 +31,9 @@ class PrintStartProfile {
         helix::PrintStartPhase phase;
         std::string message;
         int progress; // 0-100, only meaningful in sequential mode
+        /// Seconds the matched line says the printer will spend without a
+        /// word (a heat soak's G4); 0 when it announces none.
+        int hold_seconds = 0;
     };
 
     /**
@@ -49,6 +52,9 @@ class PrintStartProfile {
         helix::PrintStartPhase phase;
         std::string message_template; // supports $1, $2 capture group substitution
         int weight;                   // only used in weighted mode
+        /// Capture group holding a number of minutes the printer stays silent
+        /// after this line; 0 when the pattern declares no hold.
+        int hold_minutes_group = 0;
     };
 
     /**

@@ -294,10 +294,12 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
      */
     void check_display_narration(const nlohmann::json& status);
 
-    /// Record that the printer said something about its pre-print. Feeds the
-    /// quiet gate on every timeout branch. Takes state_mutex_ itself, so do not
-    /// call it while already holding the lock.
-    void note_activity();
+    /// Record that the printer said something about its pre-print: a matched
+    /// pattern or a probe line. Feeds the quiet gate of every timeout, the
+    /// ceiling included. `hold` is silent time the line announces (a heat
+    /// soak's G4): the printer counts as talking until it ends. Takes
+    /// state_mutex_ itself, so do not call it while already holding the lock.
+    void note_signal(std::chrono::seconds hold = std::chrono::seconds::zero());
 
     /**
      * @brief Check for HELIX:PHASE:* signals from plugin/macros
@@ -358,13 +360,18 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
      * @brief Relabel between the two heating phases from live temps (bed-first).
      *
      * Compare-and-swap: applies the relabel only if current_phase_ is STILL a
-     * heating phase (HEATING_BED/HEATING_NOZZLE) at write time. A background
-     * gcode signal may have advanced current_phase_ past heating between the
-     * caller's temperature snapshot and this call; the CAS refuses in that case
-     * so a newer non-heating phase is never regressed back to heating. The
-     * label is derived from `resolved`.
+     * heating phase (HEATING_BED/HEATING_NOZZLE) at write time, or is a
+     * BED_MESH with no probing under way whose nozzle target rose after the
+     * mesh began and `resolved` is HEATING_NOZZLE. A background gcode signal
+     * may have advanced current_phase_ between the caller's temperature
+     * snapshot and this call; the CAS refuses in that case so a newer phase is
+     * never regressed back to heating. The label is derived from `resolved`.
      */
     void relabel_heating_phase(helix::PrintStartPhase resolved);
+
+    /// Whether BED_MESH is showing and a probe line arrived within
+    /// MESH_PROBE_GAP_RESET. Caller must hold state_mutex_.
+    bool mesh_probing_locked() const;
 
     /**
      * @brief Calculate overall progress based on detected phases
@@ -416,15 +423,24 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     int max_sequential_progress_ = 0; // Monotonic progress guard for sequential mode
     std::chrono::steady_clock::time_point printing_state_start_;
 
-    /// When the printer last showed pre-print work: a profile pattern matched,
-    /// a probe line arrived, or a heater climbed a degree toward its target.
-    ///
-    /// The timeouts key off THIS, not off elapsed-since-start. A pre-print that
-    /// is still narrating itself is not stuck however long it runs, and keying
-    /// off elapsed time made the collector give up mid-sequence on any printer
-    /// that meshes after heating — which then skipped the prediction save and
-    /// froze the estimate that set the deadline in the first place.
-    std::chrono::steady_clock::time_point last_activity_time_;
+    /// When the printer last said something about its pre-print: a profile
+    /// pattern matched or a probe line arrived. Every timeout, the ceiling
+    /// included, waits for 90s past it, so a printer narrating a long
+    /// pre-print is not cut short. Only the backstop ignores it.
+    std::chrono::steady_clock::time_point last_signal_time_;
+
+    /// When a heater last climbed a degree above its highest reading under its
+    /// current target. The deadline timeouts wait for 90s past it, which
+    /// carries them through a silent M190 or M109. The ceiling ignores it: a
+    /// heater that never settles must not hold Preparing open.
+    std::chrono::steady_clock::time_point last_heater_climb_time_;
+
+    /// End of the silent time a matched line announced, {} when none. Until
+    /// then the printer counts as talking. held_for_ is the time holds have
+    /// covered, which the ceiling and the backstop leave out of the elapsed
+    /// time, so a long soak does not spend them.
+    std::chrono::steady_clock::time_point hold_until_;
+    std::chrono::steady_clock::duration held_for_{};
 
     // Profile for signal/pattern matching (set via set_profile() or loaded by start())
     std::shared_ptr<PrintStartProfile> profile_;
@@ -437,15 +453,16 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     // Fallback detection constants
     static constexpr auto FALLBACK_TIMEOUT =
         std::chrono::seconds(300); ///< Last resort when no predictions
-    /// Ungated final backstop. Every other timeout also requires the printer to
-    /// have gone quiet; the ceiling fires regardless, so a firmware that
-    /// chatters forever, or a heater that never settles, still leaves
-    /// Preparing. With a prediction the ceiling is the larger of this and
-    /// predicted x ABSOLUTE_TIMEOUT_MARGIN. Must therefore sit above the longest
-    /// legitimate pre-print: the K2 Plus runs ~1140s (heat, ~390s mesh, purge),
-    /// and a cold-start ASA soak pushes that further.
-    static constexpr auto ABSOLUTE_MAX_TIMEOUT =
-        std::chrono::seconds(1800); ///< Hard ceiling (stuck detection)
+    /// The ceiling: past it, a pre-print ends once 90s pass without a matched
+    /// line or probe line, whatever the temperatures, so a heater that never
+    /// settles still leaves Preparing. With a prediction the ceiling is the
+    /// larger of this and predicted x ABSOLUTE_TIMEOUT_MARGIN. Sits above the
+    /// longest legitimate pre-print: the K2 Plus runs ~1140s (heat, ~390s mesh,
+    /// purge), and a cold-start ASA soak pushes that further.
+    static constexpr auto ABSOLUTE_MAX_TIMEOUT = std::chrono::seconds(1800);
+    /// The backstop, as a multiple of the ceiling. The one fallback that waits
+    /// for nothing, so a firmware that chatters forever still leaves Preparing.
+    static constexpr int BACKSTOP_CEILING_MULTIPLE = 2;
     /// How long the printer must say nothing before a timeout may complete the
     /// pre-print. Longer than the gap between mesh probe points on a slow bed
     /// (the K2 spends ~5s per point, ~3s on a manual sweep) with margin for a
@@ -512,6 +529,16 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     // which sub-phase they're in. Empty when not in BED_MESH.
     std::string current_mesh_message_;
 
+    /// The message passed with the phase now showing. A pattern for that same
+    /// phase relabels it only when its message differs. Guarded by
+    /// state_mutex_; cleared in start()/reset().
+    std::string current_message_;
+
+    /// Nozzle target (°C) when BED_MESH was entered. A higher target while the
+    /// mesh is idle is the print-temperature heat that follows it. Guarded by
+    /// state_mutex_.
+    int mesh_entry_ext_target_ = 0;
+
     /// Last display_status.message fed to the pattern matcher. Klipper repeats
     /// an unchanged message on every status frame, so only a message that
     /// differs from this one is a fresh narration signal. Guarded by
@@ -557,11 +584,26 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     int weights_ext_target_ = 0;
     int weights_bed_target_ = 0;
 
-    // Low-water marks for the climbing-heater activity check, in decidegrees;
-    // -1 until a fallback tick samples the heater. Main thread only, like the
-    // targets above.
-    int bed_climb_ref_ = -1;
-    int ext_climb_ref_ = -1;
+    /// The highest reading a heater has shown under its current target, in
+    /// decidegrees; high is -1 until a fallback tick samples the heater.
+    struct HeaterHighWater {
+        int high = -1;
+        int target = 0;
+    };
+
+    /**
+     * @brief Whether a heater climbed a whole degree above its highest reading
+     *
+     * A bed held near its target swings a degree or so for as long as it is
+     * held, so a return to an earlier high is not progress. A new target, or
+     * none, restarts the mark at the current reading. Temperatures are
+     * decidegrees.
+     */
+    static bool heater_climbed(int temp, int target, HeaterHighWater& mark);
+
+    // Climbing-heater marks. Main thread only, like the targets above.
+    HeaterHighWater bed_climb_;
+    HeaterHighWater ext_climb_;
 
     // Silent-phase progression (firmwares with silent cleaning/purge macros).
     // temps_ready_time_ is set the first time temps become ready (and remains

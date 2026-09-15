@@ -136,7 +136,11 @@ Profiles live in `assets/config/print_start_profiles/{name}.json`.
       "message": "Homing...",
 
       // Weight for weighted mode. In sequential mode this field is ignored.
-      "weight": 10
+      "weight": 10,
+
+      // OPTIONAL: Capture group holding minutes the printer stays silent
+      // after this line (e.g. "Heatsoak: ([0-9.]+)m" followed by a G4).
+      "hold_minutes_group": 1
     }
   ],
 
@@ -155,6 +159,8 @@ Profiles live in `assets/config/print_start_profiles/{name}.json`.
 **`signal_formats`** — Best for firmware that outputs structured state lines (like Forge-X's `// State: HOMING...`). The prefix is matched with `string::find()`, not regex, so it works even if the line has other content before the prefix. The value after the prefix must match a mapping key **exactly** (case-sensitive, including trailing punctuation like `...`).
 
 **`response_patterns`** — Best for catching G-code commands and freeform console output. Patterns are compiled with `std::regex::icase`. Capture groups (`$1`, `$2`, etc.) in the message template are substituted with matched groups. Each pattern is checked via `std::regex_search` (partial match, not full line).
+
+**`hold_minutes_group`** — For a line that announces a wait the console will not narrate, such as a heat soak printed before a silent `G4`. The named capture group must hold a number of minutes (`.` decimal, e.g. `10.0`); a group the pattern does not have is ignored with a warning, and a zero or unparseable capture holds nothing. Until the hold ends the printer counts as talking, so no timeout fires, and the held time is left out of the elapsed time the ceiling and backstop measure. Declare it only for a wait of known length: a wait on a sensor (`M191`, `TEMPERATURE_WAIT`) has none.
 
 **`phase_weights`** — Only meaningful in `weighted` mode. If omitted, phases matched by response_patterns use their individual `weight` field. If provided, this map is used by `calculate_progress_locked()` to sum detected phase weights.
 
@@ -226,7 +232,7 @@ In `assets/config/printer_database.json`, add the `print_start_profile` field to
 
 The value must match the JSON filename without the `.json` extension.
 
-Two more fields give a printer's first print a measured estimate instead of a generic one. The printer's own history replaces both once a print completes:
+Two more fields give a printer's first print a measured estimate instead of a generic one. The printer's own history replaces them: its phase timings from the next print on, its heating rates once saved rates are loaded again. A completed pre-print saves the rates it measured, but the app loads saved rates only at startup and when PID calibration starts, so until one of those the database rates stay in use:
 
 ```json
 {
@@ -235,7 +241,7 @@ Two more fields give a printer's first print a measured estimate instead of a ge
 }
 ```
 
-`print_start_default_phases` is seconds per non-heating phase (HOMING, QGL, Z_TILT, BED_MESH, CLEANING, PURGING). `thermal_rates` is seconds per degree C per heater, used by `ThermalRateManager::apply_archetype_defaults()` in place of its guess from the bed size.
+`print_start_default_phases` is seconds per non-heating phase (HOMING, QGL, Z_TILT, BED_MESH, CLEANING, PURGING). `thermal_rates` is seconds per degree C per heater (`extruder` or `heater_bed`; any other name is ignored with a warning), used by `ThermalRateManager::apply_archetype_defaults()` in place of its guess from the bed size. The rate a print saves is its whole measured climb, seconds over degrees, with a hold between two climbs (a probing temperature, then the print temperature) left out, blended 70/30 with the saved rate loaded at startup.
 
 If a printer has no `print_start_profile` field, or the profile fails to load, the system falls back to `default.json`, then to built-in hardcoded patterns (identical to `default.json`). This three-level fallback chain means nothing ever breaks.
 
@@ -350,7 +356,7 @@ For printers that don't emit any G-code layer markers (like Forge-X), the collec
 |----------|-----------|------|
 | Layer count | `current_layer >= 1` | Most reliable when slicer outputs layer info |
 | Progress + temps | `progress >= 2%` AND temps at target | File past preamble/macros |
-| Timeout + temps | Elapsed past the adaptive deadline AND both heaters at target (within 2°C) AND 90s without pre-print activity | Last resort; the absolute ceiling (1800s, or 2.5x the prediction) ignores temps and activity. Details in PRINT_START_INTEGRATION.md |
+| Timeout + temps | Elapsed past the adaptive deadline AND both heaters at target (within 2°C) AND 90s without pre-print activity | Last resort; the ceiling (1800s, or 2.5x the prediction) ignores temps and climbing heaters but waits for 90s without a matched or probe line, and the backstop at twice the ceiling ignores everything. Details in PRINT_START_INTEGRATION.md |
 | Macro variables | `_START_PRINT.print_started`, `START_PRINT.preparation_done`, `_HELIX_STATE.print_started` | Subscribed via Moonraker |
 
 ---
