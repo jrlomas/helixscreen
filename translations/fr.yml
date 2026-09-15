@@ -2090,6 +2090,7 @@ translations:
     détiquette (état firmware=0x{:02X} erreur=0x{:02X})
   Printer database format error: Erreur de format de la base de données dimprimantes
   Printer database is corrupt: La base de données dimprimantes est corrompue
+  Printer default: Par défaut de l’imprimante
   Printer didn't respond — make sure it's on and in range: L'imprimante n'a pas répondu
     — vérifiez qu'elle est allumée et à portée
   Printer doesn't expose the expected service — wrong device?: L'imprimante n'expose

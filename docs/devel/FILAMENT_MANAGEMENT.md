@@ -1282,10 +1282,27 @@ already owns a dialog. A `MacroParamModal` raised from the runout dialog would s
 a live modal whose observers keep firing underneath it.
 
 `dispatch_filament_macro()` returns **true when a prompt was raised**, which is exactly the
-"your callback outlived this call" signal: `false` means `run` already executed with an empty
-`MacroParamResult`. Tests reach the prompt branch without a screen via
+"your callback outlived this call" signal. `false` means `run` already executed, before the
+call returned: with an empty `MacroParamResult` (Suppress, or a macro that takes no
+parameters), or with the surface's known values when they fill every parameter a
+`KNOWN_PARAMS` macro takes, and no prompt. Tests reach the prompt branch without a screen via
 `set_filament_param_prompter()`; pass a default-constructed `ParamPrompter` to restore the
 shared modal.
+
+The known values the Filament panel and the AMS sidebar pass are
+`nozzle_temp_prefill()`: the hotter of the live extruder target and the material the surface
+would preheat for, offered as `EXTRUDER_TEMP` / `NOZZLE_TEMP` / `TEMP` to Load and Unload and
+as `PURGE_TEMP` to Purge. It shares `filament_op_nozzle_temp()` with the sidebar's backend load,
+but not the temperature that rule is fed: the backend load raises the material to the latched
+last non-zero target (Swap Preheat, below), while the prefill raises it only to the live target,
+so a nozzle whose target is 0 is offered the material temperature alone.
+
+Nothing is offered at or below the printer's minimum extrusion temperature
+(`temperature::extrusion_floor_c()`, rounded up to a whole degree), or above the hotend's
+`max_temp` (`temperature::nozzle_max_temp_c()`). M109 returns within a degree of its target and
+Klipper compares its smoothed temperature with the minimum, so a nozzle heated to exactly the
+minimum can still be refused; a target above `max_temp` is refused outright. A nozzle parked at a
+standby temperature, or a material hotter than the hotend allows, opens the dialog instead.
 
 ### Rules for contributors
 

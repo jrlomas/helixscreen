@@ -14,11 +14,14 @@
 #include "config.h"
 #include "filament_op_dispatch.h"
 #include "macro_param_modal.h"
+#include "moonraker_types.h"
 #include "operation_timeout_guard.h"
 #include "subject_managed_panel.h"
 #include "ui/temperature_observer_bundle.h"
 
 #include <array>
+#include <map>
+#include <optional>
 #include <string>
 
 // Forward declarations
@@ -53,6 +56,7 @@ void reset_to_defaults();
 
 namespace helix::ui {
 struct FilamentPanelTestAccess; // test-only friend (tests/test_helpers/)
+enum class FilamentMacroOp;
 
 /**
  * @brief What FilamentPanel does with a FilamentOpPlan, minus the dispatch itself.
@@ -259,13 +263,13 @@ class FilamentPanel : public PanelBase {
     bool is_extrusion_allowed() const;
 
     /**
-     * @brief Set temperature limits from Moonraker heater config
+     * @brief Take the nozzle limits from the printer's safety limits
      *
-     * @param min_temp Minimum allowed temperature
-     * @param max_temp Maximum allowed temperature
-     * @param min_extrude_temp Minimum extrusion temperature (default: 170°C)
+     * The nozzle range runs from the lowest heater min_temp to the hotend's own
+     * max_temp (temperature::nozzle_max_temp_c()), and the extrusion minimum is
+     * temperature::extrusion_floor_c().
      */
-    void set_limits(int min_temp, int max_temp, int min_extrude_temp = 170);
+    void set_limits(const SafetyLimits& limits);
 
     /// Keypad ceiling for one heater, preferring the printer's configured
     /// max_temp over the compiled-in fallback (prestonbrown/helixscreen#1355).
@@ -570,6 +574,13 @@ class FilamentPanel : public PanelBase {
     /// the panel's material preset > min_extrude_temp_. The first two tiers are
     /// helix::ui::resolve_load_preheat_material(), shared with the AMS sidebar.
     PreheatTempResult resolve_preheat_temp(int target_slot) const;
+    /// resolve_preheat_temp() without the min_extrude_temp_ tail: nullopt when no
+    /// slot, external spool or preset names a material.
+    std::optional<PreheatTempResult> resolve_material_preheat_temp(int target_slot) const;
+    /// Nozzle-temperature parameter values for @p op's macro, from the live extruder
+    /// target and the material resolve_material_preheat_temp() names, held above
+    /// min_extrude_temp_ and at most nozzle_max_temp_ (helix::ui::nozzle_temp_prefill()).
+    std::map<std::string, std::string> macro_temp_prefill(helix::ui::FilamentMacroOp op) const;
     /// Which slot's material a given op should heat for. Load/Unload follow the
     /// dropdown selection (selected_op_slot); Extrude/Retract/Purge follow the
     /// LOADED lane, since they push what is already in the melt zone.
