@@ -42,13 +42,13 @@ lv_obj_t* pipes_canvas(const PipesScreensaver& ss) {
     return SaverTestAccess::canvas(ss);
 }
 void seed_starfield(StarfieldScreensaver& ss, uint32_t seed) {
-    StarfieldScreensaverTestAccess::set_fixed_seed(ss, seed);
+    SaverTestAccess::set_fixed_seed(ss, seed);
 }
 lv_timer_t* starfield_timer(const StarfieldScreensaver& ss) {
-    return StarfieldScreensaverTestAccess::timer(ss);
+    return SaverTestAccess::timer(ss);
 }
 lv_obj_t* starfield_canvas(const StarfieldScreensaver& ss) {
-    return StarfieldScreensaverTestAccess::canvas(ss);
+    return SaverTestAccess::canvas(ss);
 }
 
 uint64_t fnv1a(uint64_t hash, const uint8_t* data, size_t size) {

@@ -220,30 +220,6 @@ class StarfieldScreensaverTestAccess {
         }
     };
 
-    static size_t draw_buf_size(const StarfieldScreensaver& ss) {
-        return ss.draw_buf_size_;
-    }
-
-    static uint32_t draw_buf_stride(const StarfieldScreensaver& ss) {
-        return ss.draw_buf_stride_;
-    }
-
-    static lv_obj_t* overlay(const StarfieldScreensaver& ss) {
-        return ss.overlay_;
-    }
-
-    static lv_obj_t* canvas(const StarfieldScreensaver& ss) {
-        return ss.canvas_;
-    }
-
-    static lv_timer_t* timer(const StarfieldScreensaver& ss) {
-        return ss.timer_;
-    }
-
-    static void set_fixed_seed(StarfieldScreensaver& ss, uint32_t seed) {
-        ss.fixed_seed_ = seed;
-    }
-
     static std::vector<StarState> stars(const StarfieldScreensaver& ss) {
         std::vector<StarState> out;
         for (const auto& s : ss.sim_.stars()) {

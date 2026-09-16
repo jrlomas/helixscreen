@@ -14,22 +14,6 @@
 namespace helix::ui {
 
 /**
- * @brief A frame the starfield draws into
- *
- * XRGB8888, stored B, G, R, X: rows start `stride` bytes apart, each pixel is 4 bytes, and
- * the X byte of every pixel is 0xFF (see SCREENSAVER_CANVAS_FORMAT).
- */
-struct FrameTarget {
-    uint8_t* data = nullptr;
-    uint32_t stride = 0;
-    uint32_t w = 0;
-    uint32_t h = 0;
-};
-
-/// Paints every pixel of `target` opaque black.
-void fill_starfield_black(FrameTarget& target);
-
-/**
  * @brief The starfield's stars, and how one frame of them is drawn
  *
  * No LVGL, no clock, no shared random sequence and no allocation after init(), so it can

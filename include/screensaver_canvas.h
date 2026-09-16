@@ -58,6 +58,12 @@ class SaverCanvas {
         return h_;
     }
 
+    /// The buffer as a frame for direct pixel writes, for a canvas in a format PixelWriter writes.
+    FrameTarget frame() const {
+        return {buf_, stride_, static_cast<uint32_t>(w_), static_cast<uint32_t>(h_),
+                PixelFormat::XRGB8888};
+    }
+
     /// Paints the whole canvas opaque black and invalidates all of it.
     void fill_black();
 

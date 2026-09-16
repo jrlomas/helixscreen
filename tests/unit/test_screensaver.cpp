@@ -927,7 +927,8 @@ TEST_CASE_METHOD(LVGLTestFixture,
         ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
         ss.start();
         REQUIRE(ss.is_active());
-        check_overlay_draws_only_its_canvas(StarAccess::overlay(ss), StarAccess::canvas(ss));
+        check_overlay_draws_only_its_canvas(SaverTestAccess::overlay(ss),
+                                            SaverTestAccess::canvas(ss));
     }
 
     SECTION("pipes") {
@@ -1005,7 +1006,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
         ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
         ss.start();
         REQUIRE(ss.is_active());
-        lv_obj_t* canvas = StarAccess::canvas(ss);
+        lv_obj_t* canvas = SaverTestAccess::canvas(ss);
         REQUIRE(canvas != nullptr);
         ss.stop();
         check_stopped_canvas_is_not_drawn(canvas);
@@ -1072,8 +1073,7 @@ uint32_t running_saver_timer_period(ScreensaverType type) {
             static_cast<const FlyingToasterScreensaver&>(*active));
         break;
     case ScreensaverType::STARFIELD:
-        timer = StarfieldScreensaverTestAccess::timer(
-            static_cast<const StarfieldScreensaver&>(*active));
+        timer = SaverTestAccess::timer(static_cast<const StarfieldScreensaver&>(*active));
         break;
     case ScreensaverType::PIPES_3D:
         timer = SaverTestAccess::timer(static_cast<const PipesScreensaver&>(*active));

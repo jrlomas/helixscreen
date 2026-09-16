@@ -233,16 +233,15 @@ void run_timer(lv_timer_t* timer) {
 
 } // namespace
 
-TEST_CASE_METHOD(LVGLTestFixture, "StarfieldScreensaver ticks at the display refresh period",
-                 "[screensaver][screensaver_motion]") {
-    ScopedRefreshPeriod refresh(20);
-    StarfieldScreensaver ss;
-    ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
-
-    ss.start();
-    REQUIRE(ss.is_active());
-    REQUIRE(StarAccess::timer(ss) != nullptr);
-    CHECK(StarAccess::timer(ss)->period == 20);
+TEST_CASE_METHOD(
+    LVGLTestFixture,
+    "StarfieldScreensaver level 0: configured period, else 16 ms, with the refresh equal",
+    "[screensaver][screensaver_motion]") {
+    const uint32_t configured_ms = GENERATE(as<uint32_t>{}, 0, 20);
+    INFO("configured period " << configured_ms << " ms");
+    const LevelZeroPeriods periods = level_zero_periods<StarfieldScreensaver>(configured_ms);
+    CHECK(periods.timer_ms == (configured_ms != 0 ? configured_ms : helix::ui::SAVER_FAST_PERIOD));
+    CHECK(periods.refresh_ms == periods.timer_ms);
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "StarfieldScreensaver moves stars in proportion to frame time",
@@ -259,10 +258,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "StarfieldScreensaver moves stars in proportio
     REQUIRE_FALSE(placed.empty());
 
     lv_tick_inc(66);
-    run_timer(StarAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     const auto after_66 = StarAccess::stars(ss);
     lv_tick_inc(11);
-    run_timer(StarAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     const auto after_77 = StarAccess::stars(ss);
 
     for (size_t i = 0; i < placed.size(); i++) {
@@ -284,9 +283,9 @@ TEST_CASE_METHOD(LVGLTestFixture, "StarfieldScreensaver with the same seed repla
     ScreensaverStopOnExit<StarfieldScreensaver> stop_b{b};
     StarfieldScreensaver other;
     ScreensaverStopOnExit<StarfieldScreensaver> stop_other{other};
-    StarAccess::set_fixed_seed(a, 1234);
-    StarAccess::set_fixed_seed(b, 1234);
-    StarAccess::set_fixed_seed(other, 99);
+    SaverTestAccess::set_fixed_seed(a, 1234);
+    SaverTestAccess::set_fixed_seed(b, 1234);
+    SaverTestAccess::set_fixed_seed(other, 99);
 
     a.start();
     b.start();
@@ -302,8 +301,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "StarfieldScreensaver with the same seed repla
     int recycled = 0;
     for (int frame = 0; frame < 30; frame++) {
         lv_tick_inc(33);
-        run_timer(StarAccess::timer(a));
-        run_timer(StarAccess::timer(b));
+        run_timer(SaverTestAccess::timer(a));
+        run_timer(SaverTestAccess::timer(b));
         for (const auto& star : StarAccess::stars(a)) {
             if (screensaver_same_bits(star.z, 1.0f)) {
                 recycled++;
@@ -319,13 +318,13 @@ TEST_CASE_METHOD(LVGLTestFixture,
                  "[screensaver][screensaver_motion]") {
     StarfieldScreensaver ss;
     ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
-    StarAccess::set_fixed_seed(ss, 4321);
+    SaverTestAccess::set_fixed_seed(ss, 4321);
 
     ss.start();
     REQUIRE(ss.is_active());
     const auto at_start = StarAccess::stars(ss);
     lv_tick_inc(66);
-    run_timer(StarAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     const auto first_frame = StarAccess::stars(ss);
 
     int moved = 0;
@@ -347,7 +346,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     CHECK(StarAccess::stars(ss) == at_start);
 
     lv_tick_inc(66);
-    run_timer(StarAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     CHECK(StarAccess::stars(ss) == first_frame);
 }
 

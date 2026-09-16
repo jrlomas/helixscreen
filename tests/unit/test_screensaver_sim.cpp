@@ -5,6 +5,7 @@
 
 #include "../lvgl_test_fixture.h"
 #include "../test_helpers/screensaver_test_access.h"
+#include "screensaver_pixel_writer.h"
 #include "screensaver_starfield_sim.h"
 
 #include <algorithm>
@@ -35,7 +36,7 @@ struct Frame {
 
     Frame() : bytes(static_cast<size_t>(FRAME_STRIDE) * FRAME_H, 0) {
         target = {bytes.data(), FRAME_STRIDE, FRAME_W, FRAME_H};
-        helix::ui::fill_starfield_black(target);
+        helix::ui::PixelWriter(target).fill(helix::ui::Rgb{0, 0, 0});
     }
     Frame(const Frame&) = delete;
     Frame& operator=(const Frame&) = delete;
@@ -188,28 +189,30 @@ TEST_CASE("every X byte of a StarfieldSim frame stays 0xFF as stars move and rec
 // StarfieldScreensaver: stepping and invalidating in the timer callback
 // ============================================================================
 
-TEST_CASE_METHOD(LVGLTestFixture, "a starfield frame invalidates the whole canvas",
+TEST_CASE_METHOD(LVGLTestFixture, "a starfield frame invalidates only what its step changed",
                  "[screensaver][starfield_sim]") {
     StarfieldScreensaver ss;
     ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
     ss.start();
     REQUIRE(ss.is_active());
-    // Stars near the centre change a few pixels, far less than the canvas, so only a
-    // full-canvas invalidation covers it.
+    // Stars near the centre change a few pixels, far less than the whole canvas.
     StarAccess::place_stars(ss, 0.02f, -0.02f, 0.9f);
-    lv_obj_t* canvas_obj = StarAccess::canvas(ss);
+    lv_obj_t* canvas_obj = SaverTestAccess::canvas(ss);
     lv_obj_update_layout(canvas_obj);
     lv_area_t coords;
     lv_obj_get_coords(canvas_obj, &coords);
+    const int64_t canvas_px = lv_area_get_size(&coords);
 
     helix::test::InvalidatedAreas invalidated(lv_obj_get_display(canvas_obj));
     lv_tick_inc(33);
-    run_timer(StarAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
 
+    // The frame erases and redraws the star cluster, so it invalidates, and every area
+    // it invalidates is a fraction of the canvas.
     REQUIRE_FALSE(invalidated.areas.empty());
-    CHECK(std::any_of(invalidated.areas.begin(), invalidated.areas.end(), [&](const lv_area_t& a) {
-        return a.x1 <= coords.x1 && a.y1 <= coords.y1 && a.x2 >= coords.x2 && a.y2 >= coords.y2;
-    }));
+    for (const lv_area_t& a : invalidated.areas) {
+        CHECK(lv_area_get_size(&a) < canvas_px);
+    }
 }
 
 #endif // HELIX_ENABLE_SCREENSAVER

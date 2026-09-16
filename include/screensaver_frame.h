@@ -26,6 +26,32 @@ inline constexpr uint32_t SAVER_FAST_PERIOD = 16;
  */
 inline constexpr size_t SAVER_MAX_DIRTY_AREAS = 32;
 
+/// How a FrameTarget stores its pixels.
+enum class PixelFormat : uint8_t {
+    /// 4 bytes per pixel: B, G, R, and an X byte of 0xFF
+    XRGB8888,
+};
+
+/// An 8-bit-per-channel colour.
+struct Rgb {
+    uint8_t r = 0;
+    uint8_t g = 0;
+    uint8_t b = 0;
+
+    bool operator==(const Rgb& o) const {
+        return r == o.r && g == o.g && b == o.b;
+    }
+};
+
+/// A frame a saver writes pixels into directly: rows start `stride` bytes apart.
+struct FrameTarget {
+    uint8_t* data = nullptr;
+    uint32_t stride = 0;
+    uint32_t w = 0;
+    uint32_t h = 0;
+    PixelFormat format = PixelFormat::XRGB8888;
+};
+
 /// Inclusive pixel bounds of what changed in a frame. Empty until something is added.
 struct DirtyRect {
     int32_t x1 = 0;
