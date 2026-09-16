@@ -58,11 +58,21 @@ UsbError UsbBackendLinux::start() {
     // Start monitor thread. Wrap — EAGAIN throws ([L083]).
     stop_requested_ = false;
     running_ = true;
+
+    // Fallback mounter, created while the thread is not yet running so only
+    // this path and stop() ever touch automount_. Nullptr when disarmed.
+    // An injected instance (tests observing the wiring) wins over the factory;
+    // production always arrives here with none present.
+    if (!automount_) {
+        automount_ = helix::usb::UsbAutomount::create();
+    }
+
     try {
         monitor_thread_ = std::thread(&UsbBackendLinux::monitor_thread_func, this);
     } catch (const std::system_error& e) {
         spdlog::error("[UsbBackendLinux] Failed to spawn monitor thread: {}", e.what());
         running_ = false;
+        automount_.reset();
         if (mountinfo_fd_ >= 0) {
             close(mountinfo_fd_);
             mountinfo_fd_ = -1;
@@ -95,6 +105,10 @@ void UsbBackendLinux::stop() {
         close(mountinfo_fd_);
         mountinfo_fd_ = -1;
     }
+
+    // The monitor thread unmounted everything the automounter created before
+    // it exited (join above), so this only releases the object.
+    automount_.reset();
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -192,6 +206,12 @@ std::vector<UsbDrive> UsbBackendLinux::parse_mounts() {
     return drives;
 }
 
+bool UsbBackendLinux::is_usb_mount_point(const std::string& mount_point) {
+    // Common USB mount points (includes /tmp/udisk/ for Creality K1C, #610)
+    return (mount_point.find("/media/") == 0 || mount_point.find("/mnt/") == 0 ||
+            mount_point.find("/run/media/") == 0 || mount_point.find("/tmp/udisk/") == 0);
+}
+
 bool UsbBackendLinux::is_usb_mount(const std::string& device, const std::string& mount_point,
                                    const std::string& fs_type) {
     // Must be a block device (starts with /dev/)
@@ -199,11 +219,7 @@ bool UsbBackendLinux::is_usb_mount(const std::string& device, const std::string&
         return false;
     }
 
-    // Common USB mount points (includes /tmp/udisk/ for Creality K1C, #610)
-    bool is_usb_path =
-        (mount_point.find("/media/") == 0 || mount_point.find("/mnt/") == 0 ||
-         mount_point.find("/run/media/") == 0 || mount_point.find("/tmp/udisk/") == 0);
-    if (!is_usb_path) {
+    if (!is_usb_mount_point(mount_point)) {
         return false;
     }
 
@@ -358,6 +374,13 @@ void UsbBackendLinux::monitor_thread_func() {
     auto last_safety_parse = std::chrono::steady_clock::now();
 
     while (!stop_requested_) {
+        // Fallback-mount pass first: a mount it performs changes the mount
+        // table, which wakes the event poll below, so a drive it mounts is
+        // detected through the regular parse path - no parallel detection.
+        if (automount_) {
+            automount_->poll(std::chrono::steady_clock::now());
+        }
+
         bool mounts_changed = false;
 
         if (use_content_polling_.load()) {
@@ -464,6 +487,13 @@ void UsbBackendLinux::monitor_thread_func() {
                 }
             }
         }
+    }
+
+    // Clean shutdown: unmount what the fallback mounter created before the
+    // thread ends, keeping every automount syscall on this thread. Lazy
+    // unmounts return immediately, so join() in stop() cannot hang here.
+    if (automount_) {
+        automount_->unmount_all();
     }
 
     spdlog::debug("[UsbBackendLinux] Monitor thread stopped");
