@@ -218,3 +218,38 @@ side. The appliance has to actually go away: pull the Panda Breath's power for
 
 Everything else in slice 2 is reproducible from the mock, so this gates the
 hardware confirmation, not the implementation.
+
+## Slice 6 — delta frames wipe diagnostics (found on hardware, PRE-EXISTING)
+
+`DragonbreathBackend::parse_diagnostics` builds a fresh `ChamberHeaterDiagnostics`
+from defaults on every frame. Moonraker sends DELTA frames carrying only the
+fields that changed, so any field absent from a frame reverts to its unknown or
+false default instead of keeping its last value.
+
+Measured on the U1 with the app attached to the real printer. Toggling the filter
+pin, then sampling `chamber_filter_fan_percent_text` every 0.5 s:
+
+```
+00.5s --      01.5s 100%    03.0s --      ... stays -- indefinitely
+```
+
+`100%` survives exactly one poll cycle: the delta that carried `fan_percent`. The
+next delta carries only `ptc_temp`, which changes every poll, and the percent goes
+back to unknown. `chamber_heater_element_temp_text` looks correct throughout
+(37.1 C against the device's 37.1) purely because `ptc_temp` is in every frame.
+
+The existing comment covers an absent OBJECT ("no news: subjects keep their last
+value") but nothing covers absent FIELDS inside an object that is present.
+
+**The serious case is not the fan.** `fault` defaults to false, so a delta frame
+that does not mention `fault` clears a latched fault banner and the Reset button
+with it. Same for `inhibited` and `fault_reason`. That reaches shipped code and is
+not something slice 0 introduced.
+
+Fix: make absence distinguishable from a value. Give `ChamberHeaterDiagnostics`
+optional fields and have the state layer update only the ones a frame actually
+carried, retaining the rest. All three backends and the subject-writing block
+change together.
+
+This sits underneath slice 0: slice 0's running-state rule is correct, and cannot
+be observed on hardware until diagnostics survive a delta.
