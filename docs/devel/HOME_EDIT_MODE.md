@@ -747,6 +747,13 @@ populated page (`ui_xml/home_panel.xml`):
   stays a gather-and-apply loop.
 - **A new drop outcome or drop rule**: extend `resolve_drop()` and its table test;
   `handle_drag_end()` stays gather, resolve, commit.
+- **A widget that refuses sizes**: the resize clamp asks the selected widget through
+  `PanelWidget::fits_at()` after the registry limits, both inside
+  `src/ui/grid_edit_mode.cpp#handle_resize_move`, walking with
+  `helix::grow_span_to_fit()` (`include/grid_layout.h`). A size the widget refuses
+  clamps the span and turns the pixel-following preview red exactly as a registry
+  limit does. Keep `fits_at` monotonic (fits at a size means fits at every larger
+  size) or the clamp's outward walk stops at the wrong span.
 - **A new page operation**: a `PanelWidgetConfig` method with unit tests, and a carousel rebuild on
   the next tick through `on_edit_pages_changed()`, with the change described as a
   `helix::PageSetChange`, so it lands by `page_set_landing()` like every other page-set change.

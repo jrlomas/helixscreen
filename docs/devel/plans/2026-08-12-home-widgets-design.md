@@ -506,6 +506,8 @@ the seven depend on one of its extractions.
 - Half-cell support for any new widget. No new widget sets `supports_half_col` or
   `supports_half_row`; `test_grid_layout.cpp:438-470` pins the current set of five
   and adding a sixth is a separate decision.
+  *(Superseded by prestonbrown/helixscreen#1559: the eighteen centred-icon tiles set
+  both flags; see `LAYOUT_SYSTEM.md` § "Widget span authoring".)*
 - The three parked layout design questions and the known-red
   `test_grid_edit_drag_path.cpp:285-286`, both owned by the square-cell work.
 - Task 12 (AMS mini-status) and the `LAYOUT_SYSTEM.md` span-authoring rewrite

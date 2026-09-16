@@ -379,7 +379,11 @@ color are applied as a shared style at create time, before nested bind elements 
 so a `bind_style_if_*` carrying `text_font` (or `text_color`) **can** retier a `text_small`
 to another font, and an inline `style_text_font` attribute still beats both, exactly like
 the `bg_color` rule above. This is the supported way to swap a text widget's font from a
-width-band or mode subject without touching C++.
+width-band or mode subject without touching C++. An `<icon>`'s face and `temp_display`'s
+four labels sit in the same notch (`helix::ui::apply_font_style`): a bound style can
+retier them too, which is how the home tiles scale their glyph. The tile rung styles
+`styles.tile_icon_xs` .. `styles.tile_icon_xl` live in `ui_xml/styles.xml` and each
+name an `#icon_font_*` token.
 
 **Rule:** When using `bind_style` for reactive visual changes, do NOT set inline style attributes for the properties you want to change reactively.
 
@@ -947,6 +951,11 @@ Font-based icons using Material Design Icons (MDI):
 **Sizes:** `xs` (16px), `sm` (24px), `md` (32px), `lg` (48px), `xl` (64px)
 
 **Variants:** `primary`, `secondary`, `accent`, `disabled`, `warning`
+
+**Bindable face:** the icon's font is applied as a shared style, so `bind_style_if_*` can
+retier it - the home tiles bind `styles.tile_icon_xs` .. `styles.tile_icon_xl` from
+`ui_xml/styles.xml` to scale a tile's glyph with its size. An inline `style_text_font`
+attribute still outranks a bound style.
 
 **Adding Icons:**
 1. Find icon at [Pictogrammers MDI](https://pictogrammers.com/library/mdi/)
