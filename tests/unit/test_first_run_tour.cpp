@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../helix_test_fixture.h"
+#include "app_globals.h"
 #include "config.h"
 #include "first_run_tour.h"
 #include "tour_steps.h"
@@ -22,6 +23,9 @@ void reset_tour_settings() {
     // In the singleton-without-init test environment, active_printer_id_ is empty,
     // so the root-level key is the one that's read.
     cfg->set<bool>("/wizard_completed", true);
+    // Edit mode gates the tour, and the subject is global, so a case that leaves
+    // it set would decide every case that runs after it.
+    lv_subject_set_int(&get_home_edit_mode_subject(), 0);
     // In-memory singleton state is left clean by the public API used in these
     // tests: start()/skip() always pair, and advance() past the last step calls
     // finish() which resets running_. No explicit reset needed.
@@ -52,6 +56,18 @@ TEST_CASE("FirstRunTour gate: re-triggers when last_seen_version is behind TOUR_
     Config::get_instance()->set<bool>("/tour/completed", true);
     Config::get_instance()->set<int>("/tour/last_seen_version", 0);
     // TOUR_VERSION is 1; last_seen=0 < 1, so tour should re-trigger.
+    REQUIRE(FirstRunTour::should_auto_start() == true);
+}
+
+TEST_CASE("FirstRunTour gate: blocks while home grid edit mode is active", "[tour]") {
+    reset_tour_settings();
+    // Pin that the gate is otherwise open, so a gate stuck at false cannot pass.
+    REQUIRE(FirstRunTour::should_auto_start() == true);
+
+    lv_subject_set_int(&get_home_edit_mode_subject(), 1);
+    REQUIRE(FirstRunTour::should_auto_start() == false);
+
+    lv_subject_set_int(&get_home_edit_mode_subject(), 0);
     REQUIRE(FirstRunTour::should_auto_start() == true);
 }
 
