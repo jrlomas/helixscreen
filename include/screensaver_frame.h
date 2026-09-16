@@ -26,6 +26,15 @@ inline constexpr uint32_t SAVER_FAST_PERIOD = 16;
  */
 inline constexpr size_t SAVER_MAX_DIRTY_AREAS = 32;
 
+/**
+ * @brief Dirty coverage at or above which invalidating the whole canvas is cheaper
+ *
+ * A partial invalidation costs MORE than a full one once it covers nearly everything: a
+ * double-buffered display copies the untouched remainder out of the previous buffer in strips
+ * every frame, while a full-canvas invalidation leaves it nothing to sync.
+ */
+inline constexpr int64_t SAVER_WHOLE_CANVAS_PERCENT = 90;
+
 /// How a FrameTarget stores its pixels.
 enum class PixelFormat : uint8_t {
     /// 4 bytes per pixel: B, G, R, and an X byte of 0xFF
@@ -94,6 +103,16 @@ struct DirtyRect {
         return x1 == o.x1 && y1 == o.y1 && x2 == o.x2 && y2 == o.y2;
     }
 };
+
+/// True when `bounds` covers enough of a `w` x `h` canvas that invalidating all of it is cheaper
+/// than invalidating the part that changed.
+constexpr bool covers_whole_canvas(const DirtyRect& bounds, int32_t w, int32_t h) {
+    const int64_t canvas = static_cast<int64_t>(w) * static_cast<int64_t>(h);
+    if (canvas <= 0) {
+        return false;
+    }
+    return bounds.area() * 100 >= canvas * SAVER_WHOLE_CANVAS_PERCENT;
+}
 
 /**
  * @brief Reduces `areas` to at most `max_areas` boxes that together cover every input box

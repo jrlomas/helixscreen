@@ -69,6 +69,17 @@ void SaverCanvas::invalidate(std::vector<DirtyRect>& areas) {
         return;
     }
     merge_dirty_areas(areas, SAVER_MAX_DIRTY_AREAS);
+    if (areas.empty()) {
+        return;
+    }
+    DirtyRect bounds;
+    for (const DirtyRect& r : areas) {
+        bounds.add(r);
+    }
+    if (covers_whole_canvas(bounds, w_, h_)) {
+        lv_obj_invalidate(canvas_);
+        return;
+    }
     lv_area_t coords;
     lv_obj_get_coords(canvas_, &coords);
     for (const DirtyRect& r : areas) {

@@ -608,4 +608,31 @@ TEST_CASE_METHOD(LVGLTestFixture,
     CHECK(helix::ui::pixel_format_for(LV_COLOR_FORMAT_XRGB8888) ==
           helix::ui::PixelFormat::XRGB8888);
 }
+// A saver whose dirty box covers nearly the whole canvas is cheaper to invalidate whole: a
+// double-buffered display syncs whatever the partial invalidation left out, strip by strip,
+// on every frame. The starfield is the case that matters - 150 stars scattered over the
+// screen give it a bounding box of about 97%.
+TEST_CASE("a near-full dirty box invalidates the whole canvas",
+          "[screensaver][screensaver_parts]") {
+    using helix::ui::covers_whole_canvas;
+    using helix::ui::DirtyRect;
+
+    SECTION("the whole canvas counts") {
+        CHECK(covers_whole_canvas(DirtyRect{0, 0, 799, 479}, 800, 480));
+    }
+    SECTION("the starfield's real coverage counts") {
+        // 790 x 470 of 800 x 480 is 96.7%.
+        CHECK(covers_whole_canvas(DirtyRect{5, 5, 794, 474}, 800, 480));
+    }
+    SECTION("a half-screen box does not") {
+        CHECK_FALSE(covers_whole_canvas(DirtyRect{0, 0, 799, 239}, 800, 480));
+    }
+    SECTION("an empty box does not") {
+        CHECK_FALSE(covers_whole_canvas(DirtyRect{}, 800, 480));
+    }
+    SECTION("a canvas with no area never promotes") {
+        CHECK_FALSE(covers_whole_canvas(DirtyRect{0, 0, 10, 10}, 0, 0));
+    }
+}
+
 #endif // HELIX_ENABLE_SCREENSAVER
