@@ -66,6 +66,10 @@ inline constexpr size_t SCREENSAVER_COUNT = std::size(SCREENSAVERS);
 /// Translation key and English label of the dropdown's first option.
 inline constexpr const char* SCREENSAVER_OFF_LABEL_KEY = "Off";
 
+/// Type a fresh install runs, on every board that builds screensavers. The screensaver gate
+/// measures it there and steps it down, or shows a black screen, when it costs too much.
+inline constexpr ScreensaverType DEFAULT_SCREENSAVER_TYPE = ScreensaverType::FLYING_TOASTERS;
+
 /// Highest valid type value.
 constexpr int screensaver_last_type() {
     return static_cast<int>(SCREENSAVERS[SCREENSAVER_COUNT - 1].type);

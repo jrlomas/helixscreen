@@ -4,7 +4,6 @@
 #include "../lvgl_test_fixture.h"
 #include "config.h"
 #include "display_settings_manager.h"
-#include "platform_capabilities.h"
 #include "screensaver.h"
 #include "screensaver_registry.h"
 
@@ -19,15 +18,31 @@ using namespace helix;
 #ifdef HELIX_ENABLE_SCREENSAVER
 
 TEST_CASE_METHOD(LVGLTestFixture,
-                 "Screensaver defaults to tier-appropriate screensaver type when compiled in",
+                 "a fresh install defaults the screensaver to flying toasters on every tier",
                  "[screensaver][display_settings]") {
-    Config::get_instance();
+    Config* config = Config::get_instance();
+    const bool had_type = config->exists("/display/screensaver_type");
+    const int stored_type = config->get<int>("/display/screensaver_type", 0);
+    const bool had_legacy = config->exists("/display/screensaver_enabled");
+    const bool stored_legacy = config->get<bool>("/display/screensaver_enabled", true);
+    if (had_type) {
+        config->get_json("/display").erase("screensaver_type");
+    }
+    if (had_legacy) {
+        config->get_json("/display").erase("screensaver_enabled");
+    }
+
     DisplaySettingsManager::instance().init_subjects();
-
-    int expected = helix::PlatformCapabilities::detect().supports_animations ? 1 : 0;
-    REQUIRE(DisplaySettingsManager::instance().get_screensaver_type() == expected);
-
+    CHECK(DisplaySettingsManager::instance().get_screensaver_type() ==
+          static_cast<int>(helix::ui::DEFAULT_SCREENSAVER_TYPE));
     DisplaySettingsManager::instance().deinit_subjects();
+
+    if (had_type) {
+        config->set<int>("/display/screensaver_type", stored_type);
+    }
+    if (had_legacy) {
+        config->set<bool>("/display/screensaver_enabled", stored_legacy);
+    }
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "Screensaver type set/get round trip",

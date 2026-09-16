@@ -123,3 +123,9 @@ TEST_CASE("the settings dropdown lists Off then every registered screensaver in 
     CHECK(split_option_lines(attribute_of_named(xml, "row_screensaver", "options_tag")) ==
           expected);
 }
+
+TEST_CASE("fresh installs default to flying toasters, a registered saver",
+          "[screensaver][screensaver_registry]") {
+    CHECK(helix::ui::DEFAULT_SCREENSAVER_TYPE == ScreensaverType::FLYING_TOASTERS);
+    CHECK(helix::ui::find_screensaver(helix::ui::DEFAULT_SCREENSAVER_TYPE) != nullptr);
+}
