@@ -39,8 +39,13 @@ namespace helix::ui {
  * canvas is copied byte for byte into the ARGB8888 display, so those pixels would draw
  * transparent. An ARGB8888 canvas keeps real alpha, and it is filled opaque before anything
  * is drawn on it, so it still covers every pixel under the transparent overlay.
+ *
+ * RGB565 has no 4th byte for a blend to zero, so a 16 bpp build takes the display's own
+ * format and the trap above does not arise. This is why pipes does not use
+ * SAVER_BUILD_CANVAS_FORMAT: at 32 bpp it needs ARGB8888 specifically, not XRGB8888.
  */
-inline constexpr lv_color_format_t PIPES_CANVAS_FORMAT = LV_COLOR_FORMAT_ARGB8888;
+inline constexpr lv_color_format_t PIPES_CANVAS_FORMAT =
+    LV_COLOR_DEPTH == 16 ? LV_COLOR_FORMAT_RGB565 : LV_COLOR_FORMAT_ARGB8888;
 
 /**
  * @brief Row pitch in bytes lv_canvas_set_buffer() uses for a w-wide canvas in format cf
