@@ -168,8 +168,10 @@ All registered by `PrinterTemperatureState`; display strings are formatter subje
 | `chamber_heater_externally_controlled` | int 0/1 | Another controller is driving the heater (display-only, see below) |
 | `chamber_heater_element_temp` / `..._text` | int / string | Heating-element temp ("-1"/"--" = unknown) |
 | `chamber_filter_fan_percent` / `..._text` | int / string | Filtration-fan speed ("-1"/"--" = unknown) |
-| `chamber_filter_fan_reason` | string | Why the firmware chose that fan speed |
-| `chamber_filter_fan_on` / `..._text` | int / string | Binary filter-fan pin state |
+| `chamber_filter_fan_reason` | string | Raw vendor reason why the firmware chose that speed — log-only, classified to `FilterFanDriver` at the backend border |
+| `chamber_filter_fan_requested` | int | Our output_pin request (-1 unknown / 0 / 1) — what the toggle click inverts |
+| `chamber_filter_fan_device_driven` | int 0/1 | Device runs the fan on its own (heater warmup / thermal purge); the card badges the readout and disables the toggle |
+| `chamber_filter_fan_on` / `..._text` | int / string | Fan RUNNING state: reported speed when the backend has one, the pin otherwise |
 | `chamber_filter_fan_icon` | string | Toggle icon name ("fan"/"fan_off") — bind_icon source for the compact portrait card |
 | `printer_has_chamber_heater_diagnostics` | int 0/1 | Capability: diagnostics card is built at all |
 | `printer_has_chamber_filter_fan` | int 0/1 | Capability: filter-fan toggle row |

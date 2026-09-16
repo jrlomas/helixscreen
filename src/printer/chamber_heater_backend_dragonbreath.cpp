@@ -36,6 +36,24 @@ FaultReason classify_fault_reason(const std::string& raw) {
     return FaultReason::Other;
 }
 
+/// Vendor fan reason -> generic driver. The vocabulary is closed (off /
+/// requested / heater / thermal_purge); any OTHER non-empty value is still
+/// the device acting on its own, so it maps to Device — a reason we cannot
+/// classify is never "we control it". Absent/null stays Unknown: no report
+/// is not a report that the fan is stopped.
+FilterFanDriver classify_filter_fan_driver(const std::string& raw) {
+    if (raw.empty()) {
+        return FilterFanDriver::Unknown;
+    }
+    if (raw == "off") {
+        return FilterFanDriver::Off;
+    }
+    if (raw == "requested") {
+        return FilterFanDriver::Requested;
+    }
+    return FilterFanDriver::Device;
+}
+
 class DragonbreathBackend : public ChamberHeaterBackend {
   public:
     std::string_view id() const override {
@@ -95,6 +113,7 @@ class DragonbreathBackend : public ChamberHeaterBackend {
         }
         if (status.contains("fan_reason") && status["fan_reason"].is_string()) {
             d.filter_fan_reason = status["fan_reason"].get<std::string>();
+            d.filter_fan_driver = classify_filter_fan_driver(d.filter_fan_reason);
         }
         // Externally driven: heater active, but neither klipper source nor our lease.
         // Fields may arrive as null (value() throws on null, not just on missing).

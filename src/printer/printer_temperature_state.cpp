@@ -103,6 +103,11 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
     chamber_heater_fault_reason_text_lifetime_ = std::make_shared<bool>(true);
     INIT_SUBJECT_INT(chamber_filter_fan_on, -1, subjects_, register_xml);
     chamber_filter_fan_on_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_filter_fan_requested, -1, subjects_, register_xml);
+    chamber_filter_fan_requested_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_filter_fan_device_driven, 0, subjects_, register_xml);
+    chamber_filter_fan_device_driven_lifetime_ = std::make_shared<bool>(true);
+    chamber_filter_fan_percent_ = -1;
     // Display strings written alongside the raw ints — XML has no deci/percent
     // formatter (bind_text-fmt prints the raw int), and the fan toggle needs a
     // translated On/Off label, so the parse block owns the formatting.
@@ -114,7 +119,8 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
                         register_xml);
     chamber_filter_fan_on_text_lifetime_ = std::make_shared<bool>(true);
     // Icon-name subject for the compact portrait card's icon-button toggle
-    // (bind_icon); mirrors chamber_filter_fan_on_text, set from the same pin.
+    // (bind_icon); mirrors chamber_filter_fan_on_text, set from the same
+    // running state.
     INIT_SUBJECT_STRING(chamber_filter_fan_icon, "fan_off", subjects_, register_xml);
     chamber_filter_fan_icon_lifetime_ = std::make_shared<bool>(true);
 
@@ -168,6 +174,12 @@ void PrinterTemperatureState::deinit_subjects() {
     if (chamber_filter_fan_on_lifetime_)
         *chamber_filter_fan_on_lifetime_ = false;
     chamber_filter_fan_on_lifetime_.reset();
+    if (chamber_filter_fan_requested_lifetime_)
+        *chamber_filter_fan_requested_lifetime_ = false;
+    chamber_filter_fan_requested_lifetime_.reset();
+    if (chamber_filter_fan_device_driven_lifetime_)
+        *chamber_filter_fan_device_driven_lifetime_ = false;
+    chamber_filter_fan_device_driven_lifetime_.reset();
     if (chamber_heater_element_temp_text_lifetime_)
         *chamber_heater_element_temp_text_lifetime_ = false;
     chamber_heater_element_temp_text_lifetime_.reset();
@@ -551,18 +563,35 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
                                        d->filter_fan_percent < 0
                                            ? "--"
                                            : fmt::format("{}%", d->filter_fan_percent).c_str());
+                chamber_filter_fan_percent_ = d->filter_fan_percent;
+                lv_subject_set_int(&chamber_filter_fan_device_driven_,
+                                   d->filter_fan_driver == chamber::FilterFanDriver::Device ? 1
+                                                                                            : 0);
             }
         }
     }
     if (!chamber_filter_fan_pin_.empty() && status.contains(chamber_filter_fan_pin_)) {
         const auto& pin = status[chamber_filter_fan_pin_];
         if (pin.contains("value") && pin["value"].is_number()) {
-            int on = pin["value"].get<double>() > 0.5 ? 1 : 0;
-            lv_subject_set_int(&chamber_filter_fan_on_, on);
-            lv_subject_copy_string(&chamber_filter_fan_on_text_,
-                                   on ? lv_tr("Filter Fan: On") : lv_tr("Filter Fan: Off"));
-            lv_subject_copy_string(&chamber_filter_fan_icon_, on ? "fan" : "fan_off");
+            // The pin is our REQUEST, not the fan: the device also runs this
+            // fan on its own (heater warmup, thermal purge).
+            lv_subject_set_int(&chamber_filter_fan_requested_,
+                               pin["value"].get<double>() > 0.5 ? 1 : 0);
         }
+    }
+    // Filter-fan running state: the speed the backend reports wins when there
+    // is one, so the label/icon agree with the percent beside them. Backends
+    // with a pin but no reported speed fall back to the pin. Neither surface
+    // in the frame (delta) leaves the subjects at their last values.
+    if (chamber_filter_fan_percent_ >= 0 ||
+        lv_subject_get_int(&chamber_filter_fan_requested_) >= 0) {
+        const int running = chamber_filter_fan_percent_ >= 0
+                                ? (chamber_filter_fan_percent_ > 0 ? 1 : 0)
+                                : lv_subject_get_int(&chamber_filter_fan_requested_);
+        lv_subject_set_int(&chamber_filter_fan_on_, running);
+        lv_subject_copy_string(&chamber_filter_fan_on_text_,
+                               running ? lv_tr("Filter Fan: On") : lv_tr("Filter Fan: Off"));
+        lv_subject_copy_string(&chamber_filter_fan_icon_, running ? "fan" : "fan_off");
     }
 
     // Effective chamber setpoint + control mode: delegate to the single source of

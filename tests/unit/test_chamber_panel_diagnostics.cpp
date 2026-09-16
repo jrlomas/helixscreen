@@ -237,6 +237,26 @@ TEST_CASE_METHOD(ChamberOverlayFixture,
         CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "chamber_diagnostics_card")));
         CHECK(hidden(lv_obj_find_by_name(overlay_, "filter_fan_button")));
     }
+
+    SECTION("device-driven fan badges the readout and disables the toggle") {
+        lv_obj_t* fan_btn = lv_obj_find_by_name(overlay_, "filter_fan_button");
+        REQUIRE(fan_btn != nullptr);
+        lv_obj_t* badge = lv_obj_find_by_name(overlay_, "fan_device_badge");
+        REQUIRE(badge != nullptr);
+
+        // Our request driving the fan: no badge, toggle usable.
+        set_xml_int("chamber_filter_fan_device_driven", 0);
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK(hidden(badge));
+        CHECK_FALSE(lv_obj_has_state(fan_btn, LV_STATE_DISABLED));
+
+        // Device's own initiative: badge appears beside the percent, toggle
+        // disables (a click here cannot stop a fan the device is running).
+        set_xml_int("chamber_filter_fan_device_driven", 1);
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK_FALSE(hidden(badge));
+        CHECK(lv_obj_has_state(fan_btn, LV_STATE_DISABLED));
+    }
 }
 
 // ============================================================================
@@ -272,25 +292,36 @@ TEST_CASE_METHOD(ChamberOverlayFixture, "diagnostics card buttons drive the cont
         CHECK(client.gcode_script_history()[0] == "DRAGONBREATH_RESET");
     }
 
-    SECTION("filter-fan button toggles off->on and on->off from the on subject") {
+    SECTION("filter-fan button toggles our request, not the device's running state") {
         lv_obj_t* fan_btn = lv_obj_find_by_name(overlay_, "filter_fan_button");
         REQUIRE(fan_btn != nullptr);
 
-        // Currently off -> click turns it on.
-        set_xml_int("chamber_filter_fan_on", 0);
+        // Request off (pin 0) -> click turns our request on.
+        set_xml_int("chamber_filter_fan_requested", 0);
         client.clear_gcode_script_history();
         lv_obj_send_event(fan_btn, LV_EVENT_CLICKED, nullptr);
         helix::ui::UpdateQueue::instance().drain();
         REQUIRE(client.gcode_script_history().size() == 1);
         CHECK(client.gcode_script_history()[0] == "SET_PIN PIN=dragonbreath_filter VALUE=1");
 
-        // Currently on -> click turns it off.
-        set_xml_int("chamber_filter_fan_on", 1);
+        // Request on -> click turns it off.
+        set_xml_int("chamber_filter_fan_requested", 1);
         client.clear_gcode_script_history();
         lv_obj_send_event(fan_btn, LV_EVENT_CLICKED, nullptr);
         helix::ui::UpdateQueue::instance().drain();
         REQUIRE(client.gcode_script_history().size() == 1);
         CHECK(client.gcode_script_history()[0] == "SET_PIN PIN=dragonbreath_filter VALUE=0");
+
+        // The running state is the DEVICE's business: a fan the device runs
+        // at full speed while our request is still off must not flip the next
+        // click to VALUE=0 — the click inverts the request.
+        set_xml_int("chamber_filter_fan_on", 1);
+        set_xml_int("chamber_filter_fan_requested", 0);
+        client.clear_gcode_script_history();
+        lv_obj_send_event(fan_btn, LV_EVENT_CLICKED, nullptr);
+        helix::ui::UpdateQueue::instance().drain();
+        REQUIRE(client.gcode_script_history().size() == 1);
+        CHECK(client.gcode_script_history()[0] == "SET_PIN PIN=dragonbreath_filter VALUE=1");
     }
 
     // Drop the registration so later tests' get_temperature_controller()
@@ -326,19 +357,28 @@ TEST_CASE("diagnostics parse block writes display text subjects", "[chamber][sub
     // the same pin.
     CHECK(std::string(lv_subject_get_string(ts.get_chamber_filter_fan_icon_subject())) == "fan");
 
-    // Pin going low flips only the on/off pair (delta frames keep the rest).
+    // The pin is a request, not the fan: a pin-only delta updates the
+    // request, and the running pair follows the reported fan speed (100%
+    // above) until a diagnostics frame says otherwise.
     ts.update_from_status({{"output_pin dragonbreath_filter", {{"value", 0.0}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_filter_fan_requested_subject()) == 0);
+    CHECK(lv_subject_get_int(ts.get_chamber_filter_fan_on_subject()) == 1);
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_filter_fan_on_text_subject())) ==
+          std::string(lv_tr("Filter Fan: On")));
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_filter_fan_icon_subject())) == "fan");
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
+          "106°C");
+
+    // Sub-100 element temp keeps its one decimal; the fan stopping is what
+    // flips the running pair.
+    ts.update_from_status(nlohmann::json::parse(
+        R"({"dragonbreath": {"fault": false, "fault_reason": null, "ptc_temp": 39.4,
+                            "fan_percent": 0, "fan_reason": "off"}})"));
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
+          "39.4°C");
     CHECK(lv_subject_get_int(ts.get_chamber_filter_fan_on_subject()) == 0);
     CHECK(std::string(lv_subject_get_string(ts.get_chamber_filter_fan_on_text_subject())) ==
           std::string(lv_tr("Filter Fan: Off")));
     CHECK(std::string(lv_subject_get_string(ts.get_chamber_filter_fan_icon_subject())) ==
           "fan_off");
-    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
-          "106°C");
-
-    // Sub-100 element temp keeps its one decimal.
-    ts.update_from_status(
-        {{"dragonbreath", {{"fault", false}, {"fault_reason", nullptr}, {"ptc_temp", 39.4}}}});
-    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
-          "39.4°C");
 }

@@ -213,13 +213,36 @@ class PrinterTemperatureState {
         lifetime = chamber_heater_fault_reason_text_lifetime_;
         return &chamber_heater_fault_reason_text_;
     }
-    /// Filter fan running state (-1 unknown, 0 off, 1 on)
+    /// Filter fan running state (-1 unknown, 0 off, 1 on) — whether the fan is
+    /// actually spinning, from the backend-reported speed when there is one,
+    /// from the pin otherwise. NOT the pin: the device also runs this fan on
+    /// its own while heating or purging.
     lv_subject_t* get_chamber_filter_fan_on_subject() {
         return &chamber_filter_fan_on_;
     }
     lv_subject_t* get_chamber_filter_fan_on_subject(SubjectLifetime& lifetime) {
         lifetime = chamber_filter_fan_on_lifetime_;
         return &chamber_filter_fan_on_;
+    }
+    /// Filter-fan pin request (-1 unknown, 0 off, 1 on) — what WE asked for
+    /// via the output_pin; the click handler inverts this, not the running
+    /// state.
+    lv_subject_t* get_chamber_filter_fan_requested_subject() {
+        return &chamber_filter_fan_requested_;
+    }
+    lv_subject_t* get_chamber_filter_fan_requested_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_filter_fan_requested_lifetime_;
+        return &chamber_filter_fan_requested_;
+    }
+    /// Filter fan is device-driven (0/1): the backend reports the device
+    /// running it on its own initiative (heater warmup, thermal purge), so a
+    /// pin request cannot stop it.
+    lv_subject_t* get_chamber_filter_fan_device_driven_subject() {
+        return &chamber_filter_fan_device_driven_;
+    }
+    lv_subject_t* get_chamber_filter_fan_device_driven_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_filter_fan_device_driven_lifetime_;
+        return &chamber_filter_fan_device_driven_;
     }
     /// Heating-element temp display string ("--" unknown; "106.2°C" nominal)
     lv_subject_t* get_chamber_heater_element_temp_text_subject() {
@@ -431,7 +454,9 @@ class PrinterTemperatureState {
     lv_subject_t chamber_heater_fault_{};             ///< XML: 0/1
     lv_subject_t chamber_heater_inhibited_{};         ///< XML: 0/1
     lv_subject_t chamber_heater_fault_reason_text_{}; ///< XML: translated reason, "" when none
-    lv_subject_t chamber_filter_fan_on_{};            ///< XML: -1 unknown / 0 / 1
+    lv_subject_t chamber_filter_fan_on_{};            ///< XML: -1 unknown / 0 / 1 (fan RUNNING)
+    lv_subject_t chamber_filter_fan_requested_{};     ///< XML: -1 unknown / 0 / 1 (our pin request)
+    lv_subject_t chamber_filter_fan_device_driven_{}; ///< XML: 0/1 (device runs the fan itself)
     lv_subject_t chamber_heater_element_temp_text_{}; ///< XML: display string ("--"/"106.2°C")
     lv_subject_t chamber_filter_fan_percent_text_{};  ///< XML: display string ("--"/"100%")
     lv_subject_t chamber_filter_fan_on_text_{};       ///< XML: translated toggle label
@@ -445,6 +470,8 @@ class PrinterTemperatureState {
     SubjectLifetime chamber_heater_inhibited_lifetime_;
     SubjectLifetime chamber_heater_fault_reason_text_lifetime_;
     SubjectLifetime chamber_filter_fan_on_lifetime_;
+    SubjectLifetime chamber_filter_fan_requested_lifetime_;
+    SubjectLifetime chamber_filter_fan_device_driven_lifetime_;
     SubjectLifetime chamber_heater_element_temp_text_lifetime_;
     SubjectLifetime chamber_filter_fan_percent_text_lifetime_;
     SubjectLifetime chamber_filter_fan_on_text_lifetime_;
@@ -472,6 +499,7 @@ class PrinterTemperatureState {
     std::string chamber_backend_id_;         ///< Matched backend id, "" = none/generic
     std::string chamber_diagnostics_object_; ///< Status object with diagnostics, "" = none
     std::string chamber_filter_fan_pin_;     ///< Binary filter fan output_pin, "" = none
+    int chamber_filter_fan_percent_ = -1;    ///< Last backend-reported fan speed, -1 = none yet
 };
 
 } // namespace helix

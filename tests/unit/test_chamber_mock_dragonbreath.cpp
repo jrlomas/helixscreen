@@ -37,6 +37,18 @@ using namespace helix;
 
 namespace {
 
+/// First parameter of a notify_status_update frame, or a null json when the
+/// notification is not shaped like one. nlohmann's CONST operator[] asserts on
+/// a missing key rather than throwing, so a malformed frame here would abort
+/// the run instead of failing a check; every step of the walk is fallible.
+json first_status_param(const json& notification) {
+    auto params = notification.find("params");
+    if (params == notification.end() || !params->is_array() || params->empty()) {
+        return json{};
+    }
+    return (*params)[0];
+}
+
 constexpr const char* TRIO_ENV =
     "heater_generic dragonbreath dragonbreath output_pin dragonbreath_filter";
 
@@ -92,20 +104,21 @@ TEST_CASE_METHOD(HelixTestFixture, "mock materializes dragonbreath trio", "[cham
     SECTION("first status frame carries diagnostics + heater") {
         json frame;
         client.register_notify_update(
-            [&frame](const json& notification) { frame = notification["params"][0]; });
+            [&frame](const json& notification) { frame = first_status_param(notification); });
         MoonrakerClientMockTestAccess::dispatch_initial_state(client);
 
         REQUIRE(frame.is_object());
         REQUIRE(frame.contains("dragonbreath"));
         const json& diag = frame["dragonbreath"];
-        CHECK(diag["fault"].get<bool>() == false);
-        CHECK(diag["fan_percent"].get<int>() == 0);
-        CHECK(diag["ptc_temp"].get<double>() > 0.0);
-        CHECK(diag["inhibited"].get<bool>() == false);
-        CHECK(diag["connected"].get<bool>() == true);
-        CHECK(diag["mode"].get<std::string>() == "off"); // no target set yet
+        CHECK(diag.at("fault").get<bool>() == false);
+        CHECK(diag.at("fan_percent").get<int>() == 0);
+        CHECK(diag.at("ptc_temp").get<double>() > 0.0);
+        CHECK(diag.at("inhibited").get<bool>() == false);
+        CHECK(diag.at("connected").get<bool>() == true);
+        CHECK(diag.at("mode").get<std::string>() == "off"); // no target set yet
         // fault_reason is JSON null in the nominal frame
-        CHECK((diag["fault_reason"].is_null() || diag["fault_reason"].get<std::string>().empty()));
+        CHECK((diag.at("fault_reason").is_null() ||
+               diag.at("fault_reason").get<std::string>().empty()));
 
         REQUIRE(frame.contains("heater_generic dragonbreath"));
         CHECK(frame["heater_generic dragonbreath"]["temperature"].get<double>() > 0.0);
@@ -125,13 +138,13 @@ TEST_CASE_METHOD(HelixTestFixture, "mock materializes dragonbreath trio", "[cham
         REQUIRE(response["result"]["status"].contains("configfile"));
         const json& config = response["result"]["status"]["configfile"]["config"];
         REQUIRE(config.contains("heater_generic dragonbreath"));
-        CHECK(config["heater_generic dragonbreath"]["max_temp"].get<double>() == 75.0);
+        CHECK(config.at("heater_generic dragonbreath")["max_temp"].get<double>() == 75.0);
     }
 
     SECTION("SET_PIN toggles the filter pin in subsequent frames") {
         json frame;
         client.register_notify_update(
-            [&frame](const json& notification) { frame = notification["params"][0]; });
+            [&frame](const json& notification) { frame = first_status_param(notification); });
 
         REQUIRE(client.gcode_script("SET_PIN PIN=dragonbreath_filter VALUE=1") == 0);
         REQUIRE(frame.contains("output_pin dragonbreath_filter"));
@@ -147,10 +160,28 @@ TEST_CASE_METHOD(HelixTestFixture, "mock materializes dragonbreath trio", "[cham
         CHECK(frame["dragonbreath"]["fan_percent"].get<int>() == 0);
     }
 
+    SECTION("device heating runs the fan on its own while the pin stays 0") {
+        json frame;
+        client.register_notify_update(
+            [&frame](const json& notification) { frame = first_status_param(notification); });
+
+        // Measured on the rig (issue #1290): a chamber target makes the
+        // firmware run the filter fan itself; our pin never moves.
+        REQUIRE(client.gcode_script("SET_HEATER_TEMPERATURE HEATER=dragonbreath TARGET=45") == 0);
+        frame = json();
+        MoonrakerClientMockTestAccess::dispatch_initial_state(client);
+
+        REQUIRE(frame.contains("dragonbreath"));
+        CHECK(frame["dragonbreath"]["fan_percent"].get<int>() == 100);
+        CHECK(frame["dragonbreath"]["fan_reason"].get<std::string>() == "heater");
+        REQUIRE(frame.contains("output_pin dragonbreath_filter"));
+        CHECK(frame["output_pin dragonbreath_filter"]["value"].get<double>() == 0.0);
+    }
+
     SECTION("SET_HEATER_TEMPERATURE uses the bare backend heater name") {
         json frame;
         client.register_notify_update(
-            [&frame](const json& notification) { frame = notification["params"][0]; });
+            [&frame](const json& notification) { frame = first_status_param(notification); });
 
         REQUIRE(client.gcode_script("SET_HEATER_TEMPERATURE HEATER=dragonbreath TARGET=45") == 0);
         REQUIRE(frame.contains("heater_generic dragonbreath"));
@@ -177,7 +208,7 @@ TEST_CASE_METHOD(HelixTestFixture, "mock materializes dragonbreath trio", "[cham
 
         json frame;
         client.register_notify_update(
-            [&frame](const json& notification) { frame = notification["params"][0]; });
+            [&frame](const json& notification) { frame = first_status_param(notification); });
         MoonrakerClientMockTestAccess::dispatch_initial_state(client);
         REQUIRE(frame.contains("dragonbreath"));
         CHECK(frame["dragonbreath"]["ptc_temp"].get<double>() > 0.0);
@@ -192,7 +223,7 @@ TEST_CASE_METHOD(HelixTestFixture, "mock dragonbreath fault hook", "[chamber][mo
 
     json frame;
     client.register_notify_update(
-        [&frame](const json& notification) { frame = notification["params"][0]; });
+        [&frame](const json& notification) { frame = first_status_param(notification); });
     MoonrakerClientMockTestAccess::dispatch_initial_state(client);
 
     REQUIRE(frame.contains("dragonbreath"));

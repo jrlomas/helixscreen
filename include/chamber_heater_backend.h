@@ -17,6 +17,12 @@ namespace helix::chamber {
 /// reaches the UI.
 enum class FaultReason { None, Overtemp, SensorFault, CommsLoss, Other };
 
+/// Who is driving the filtration fan right now. The filter-fan output_pin is
+/// a REQUEST; a device may also run the fan on its own (heater warmup,
+/// residual-heat purge) and report why. Vendor reason strings map to one of
+/// these at the backend border; the raw string is kept for logging only.
+enum class FilterFanDriver { Unknown, Off, Requested, Device };
+
 /// Generic chamber-heater diagnostics — the ONLY shape subjects/UI ever see.
 /// Vendor JSON schemas are translated to this at the backend border.
 struct ChamberHeaterDiagnostics {
@@ -31,7 +37,8 @@ struct ChamberHeaterDiagnostics {
     FaultReason fault_reason_kind = FaultReason::None; ///< classified kind for UI
     double element_temp_c = NAN;                       ///< heating-element temp; NAN = unknown
     int filter_fan_percent = -1;                       ///< -1 = unknown
-    std::string filter_fan_reason;                     ///< empty when none
+    std::string filter_fan_reason;                     ///< raw vendor reason, logs only
+    FilterFanDriver filter_fan_driver = FilterFanDriver::Unknown; ///< classified driver for UI
 };
 
 /// One chamber-heater style/brand behind an interface (AMS-backend pattern).

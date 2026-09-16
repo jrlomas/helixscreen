@@ -124,6 +124,42 @@ TEST_CASE("dragonbreath fault codes classify to generic kinds", "[chamber][backe
     CHECK(nominal->fault_reason_kind == FaultReason::None);
 }
 
+TEST_CASE("dragonbreath fan reasons classify to generic drivers", "[chamber][backend]") {
+    const auto* db = backend_by_id("dragonbreath");
+    REQUIRE(db != nullptr);
+
+    // Closed vendor vocabulary measured on the rig: off / requested / heater
+    // / thermal_purge. Any OTHER non-empty value is still the device acting
+    // on its own — a reason we cannot classify is never "we control it".
+    struct Case {
+        const char* reason;
+        FilterFanDriver expected;
+    };
+    const Case cases[] = {
+        {"off", FilterFanDriver::Off},       {"requested", FilterFanDriver::Requested},
+        {"heater", FilterFanDriver::Device}, {"thermal_purge", FilterFanDriver::Device},
+        {"button", FilterFanDriver::Device},
+    };
+    for (const auto& c : cases) {
+        CAPTURE(c.reason);
+        auto d = db->parse_diagnostics(
+            nlohmann::json{{"ptc_temp", 24.9}, {"fan_percent", 100}, {"fan_reason", c.reason}});
+        REQUIRE(d.has_value());
+        CHECK(d->filter_fan_reason == c.reason); // raw reason preserved for logs
+        CHECK(d->filter_fan_driver == c.expected);
+    }
+
+    // Missing and null reasons are Unknown — never Off: no report is not a
+    // report that the fan is stopped.
+    auto missing = db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}});
+    REQUIRE(missing.has_value());
+    CHECK(missing->filter_fan_driver == FilterFanDriver::Unknown);
+    auto null_reason =
+        db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}, {"fan_reason", nullptr}});
+    REQUIRE(null_reason.has_value());
+    CHECK(null_reason->filter_fan_driver == FilterFanDriver::Unknown);
+}
+
 TEST_CASE("dragonbreath parse tolerates null lease fields", "[chamber][backend]") {
     const auto* db = backend_by_id("dragonbreath");
     // .value() throws type_error.302 when a key is present but null; the

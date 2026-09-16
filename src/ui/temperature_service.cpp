@@ -931,10 +931,12 @@ void TemperatureService::on_chamber_filter_fan_clicked(lv_event_t* /*e*/) {
         spdlog::warn("[TempPanel] chamber filter-fan clicked with no controller registered");
         return;
     }
-    // Toggle: read the same subject the button's label reflects. A missing
-    // subject (state torn down mid-click) fails safe to "turn on".
-    lv_subject_t* on_subj = lv_xml_get_subject(nullptr, "chamber_filter_fan_on");
-    tc->set_chamber_filter_fan(!on_subj || lv_subject_get_int(on_subj) != 1);
+    // Toggle: invert OUR pin request, not the running state — the device also
+    // runs this fan on its own, and a click must not read that as "already
+    // on". A missing subject (state torn down mid-click) or an unknown value
+    // fails safe to "turn on".
+    lv_subject_t* req_subj = lv_xml_get_subject(nullptr, "chamber_filter_fan_requested");
+    tc->set_chamber_filter_fan(!req_subj || lv_subject_get_int(req_subj) != 1);
 }
 
 void TemperatureService::on_heater_custom_clicked(lv_event_t* e) {
