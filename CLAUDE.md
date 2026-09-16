@@ -188,6 +188,11 @@ The protocol is global CLAUDE.md § Peer Sessions. What is shared here:
   `worktree:helixscreen` and a bare `worktree:` all resolve to the same tree, matched by
   directory basename or checked-out branch. Free-form names let two sessions claim one tree
   under two spellings and both read FREE, and an advisory lock must never fail open.
+  **`build:<tree>` and `worktree:<tree>` name the same directory and exclude each other**,
+  in both directions and for the same reason: writing under a running build corrupts the
+  build, and building while files move gives a binary matching no commit. A take consults
+  its sibling, so `check worktree:main` reports a live `build:` holder instead of FREE.
+  One session may hold both on its own tree; only a different owner blocks.
 
   Liveness is **derived from process state, never asserted**: a claim records its owner's pid
   and that pid's kernel start-time, so a crashed owner reads STALE on its own, pid reuse
