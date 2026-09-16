@@ -133,6 +133,16 @@ scripts/teardown-worktree.sh my-branch -n    # ...or just print the plan
 > entirely), or name the target explicitly with `--moonraker ws://HOST:7125`, which takes
 > precedence over the saved host. The flag is `--moonraker`; there is no `--moonraker-url`.
 >
+> **Writing your own `settings.json` there does NOT preset anything unless it carries
+> `config_version`.** A config whose `config_version` is absent or 0 is read as the
+> packaged tarball default and replaced *wholesale* from the rolling backup (`[Config]
+> Loaded config is a tarball default (no config_version) — restoring from backup:`), which
+> is how a Moonraker web update recovers real settings after `rmtree()`. So a hand-written
+> file presetting `beta_features`, `display/screensaver_type` or anything else is discarded
+> before the app reads it, and every value you thought you set is the backup's. Copy a real
+> `settings.json` and edit it, or read the value back from the log rather than trusting the
+> file you wrote.
+>
 > Prefer `ctl text <name>` / `ctl geom <name>` over reading a screenshot — they are exact,
 > and a screenshot only proves what a scroll position happened to expose.
 
@@ -178,6 +188,11 @@ The protocol is global CLAUDE.md § Peer Sessions. What is shared here:
   `worktree:helixscreen` and a bare `worktree:` all resolve to the same tree, matched by
   directory basename or checked-out branch. Free-form names let two sessions claim one tree
   under two spellings and both read FREE, and an advisory lock must never fail open.
+  **`build:<tree>` and `worktree:<tree>` name the same directory and exclude each other**,
+  in both directions and for the same reason: writing under a running build corrupts the
+  build, and building while files move gives a binary matching no commit. A take consults
+  its sibling, so `check worktree:main` reports a live `build:` holder instead of FREE.
+  One session may hold both on its own tree; only a different owner blocks.
 
   Liveness is **derived from process state, never asserted**: a claim records its owner's pid
   and that pid's kernel start-time, so a crashed owner reads STALE on its own, pid reuse

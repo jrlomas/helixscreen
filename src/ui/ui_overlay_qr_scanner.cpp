@@ -216,6 +216,11 @@ void QrScannerOverlay::on_activate() {
 }
 
 void QrScannerOverlay::on_deactivating(DeactivateReason) {
+    // The reason is deliberately ignored: this tears down unconditionally, a
+    // suspended screen included. A camera left streaming behind the screensaver
+    // is both a power cost and a privacy one, and the viewfinder buffers must
+    // not outlive the frames LVGL points at. Do not add a Suspended guard here.
+
     // Expire all outstanding lifetime tokens FIRST, before any cleanup.
     // Camera BG thread may be mid-frame with a valid token; invalidating
     // early ensures queued lambdas are skipped. (#632)

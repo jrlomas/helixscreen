@@ -6,6 +6,7 @@
 #include "ui_callback_helpers.h"
 #include "ui_emergency_stop.h"
 #include "ui_event_safety.h"
+#include "ui_modal.h"
 #include "ui_nav_manager.h"
 #include "ui_temperature_utils.h"
 #include "ui_timer_guard.h"
@@ -121,6 +122,9 @@ void PIDCalibrationPanel::init_subjects() {
 
     UI_MANAGED_SUBJECT_STRING(subj_calibrating_heater_, buf_calibrating_heater_,
                               "Extruder PID Tuning", "pid_calibrating_heater", subjects_);
+
+    UI_MANAGED_SUBJECT_STRING(subj_migration_notice_, buf_migration_notice_, "",
+                              "cal_migration_notice", subjects_);
 
     UI_MANAGED_SUBJECT_STRING(subj_pid_kp_, buf_pid_kp_, "0.000", "pid_kp", subjects_);
 
@@ -316,6 +320,16 @@ void PIDCalibrationPanel::on_activate() {
 
     spdlog::debug("[PIDCal] on_activate()");
 
+    // A run still in flight owns this panel's state. Reactivation happens on
+    // waking from the screensaver too, and resetting there would drop the UI to
+    // idle under a live calibration - whose results on_mpc_result() then
+    // discards, because it only accepts them while the state says CALIBRATING.
+    if (state_ == State::CALIBRATING || state_ == State::MIGRATING) {
+        spdlog::info("[PIDCal] Reactivated during a run - keeping state {}",
+                     static_cast<int>(state_));
+        return;
+    }
+
     // Reset to idle state with default values
     set_state(State::IDLE);
     selected_heater_ = Heater::EXTRUDER;
@@ -343,6 +357,8 @@ void PIDCalibrationPanel::on_activate() {
     update_wattage_display();
     needs_migration_ = false;
     is_kalico_ = false;
+    current_control_ = ControlType::UNKNOWN;
+    lv_subject_copy_string(&subj_migration_notice_, "");
 
     update_fan_section_visibility();
 
@@ -352,11 +368,7 @@ void PIDCalibrationPanel::on_activate() {
     // Check PrinterDiscovery for Kalico detection (primary source)
     if (get_printer_state().get_capability_overrides().is_kalico()) {
         is_kalico_ = true;
-        // Only expose MPC UI to beta users
-        lv_subject_t* beta = lv_xml_get_subject(nullptr, "show_beta_features");
-        if (beta && lv_subject_get_int(beta) == 1) {
-            lv_subject_set_int(&subj_is_kalico_, 1);
-        }
+        lv_subject_set_int(&subj_is_kalico_, 1);
     }
 
     // Detect heater control type (only relevant for Kalico/MPC)
@@ -371,14 +383,22 @@ void PIDCalibrationPanel::on_activate() {
     }
 }
 
-void PIDCalibrationPanel::on_deactivating(DeactivateReason) {
-    spdlog::debug("[PIDCal] on_deactivating()");
+void PIDCalibrationPanel::on_deactivating(DeactivateReason reason) {
+    spdlog::debug("[PIDCal] on_deactivating({})", deactivate_reason_name(reason));
 
     // Stop progress tracking
     stop_progress_tracking();
 
     // Teardown graph before deactivating
     teardown_pid_graph();
+
+    // An idle screen is not a walk-away: this panel stays on the stack and is
+    // reactivated on the next touch, so the run keeps its fan curve and its
+    // heaters and goes on reporting here. A calibration runs for minutes with
+    // nobody touching the screen, which is exactly when the screensaver fires.
+    if (reason == DeactivateReason::Suspended) {
+        return;
+    }
 
     // Turn off fan if it was running
     turn_off_fan();
@@ -754,6 +774,9 @@ void PIDCalibrationPanel::handle_heater_extruder_clicked() {
     if (is_kalico_) {
         heater_wattage_ = WATTAGE_DEFAULT_EXTRUDER;
         update_wattage_display();
+        // The new heater's control type is unread until the query answers
+        current_control_ = ControlType::UNKNOWN;
+        update_migration_notice();
         detect_heater_control_type();
     }
 }
@@ -778,7 +801,9 @@ void PIDCalibrationPanel::handle_heater_bed_clicked() {
     if (is_kalico_) {
         heater_wattage_ = WATTAGE_DEFAULT_BED;
         update_wattage_display();
-        update_fan_section_visibility();
+        // The new heater's control type is unread until the query answers
+        current_control_ = ControlType::UNKNOWN;
+        update_migration_notice();
         detect_heater_control_type();
     }
 }
@@ -814,18 +839,45 @@ void PIDCalibrationPanel::handle_temp_down() {
 void PIDCalibrationPanel::handle_start_clicked() {
     spdlog::debug("[PIDCal] Start clicked (method={})",
                   selected_method_ == CalibMethod::MPC ? "MPC" : "PID");
-    if (selected_method_ == CalibMethod::MPC) {
-        if (needs_migration_) {
-            set_state(State::MIGRATING);
-            start_migration();
-        } else {
-            set_state(State::CALIBRATING);
-            send_mpc_calibrate();
-        }
+    if (needs_migration_) {
+        confirm_migration();
+        return;
+    }
+
+    begin_calibration(selected_method_);
+}
+
+void PIDCalibrationPanel::begin_calibration(CalibMethod method) {
+    set_state(State::CALIBRATING);
+    if (method == CalibMethod::MPC) {
+        send_mpc_calibrate();
     } else {
-        set_state(State::CALIBRATING);
         send_pid_calibrate();
     }
+}
+
+void PIDCalibrationPanel::confirm_migration() {
+    const bool to_mpc = selected_method_ == CalibMethod::MPC;
+
+    // Start looks like the dangerous button, but Cancel is the one that bites:
+    // aborting a running calibration is M112 plus a firmware restart. Confirm
+    // before the config is touched, so declining costs nothing.
+    const char* what =
+        to_mpc ? lv_tr("Switching to MPC changes how this heater is controlled, then calibrates "
+                       "it. That takes several minutes at temperature.")
+               : lv_tr("Switching back to PID changes how this heater is controlled, then "
+                       "calibrates it. That takes several minutes at temperature.");
+
+    helix::ui::ConfirmOptions opts;
+    opts.owner_token = lifetime_.token();
+
+    helix::ui::confirm_config_rewrite(
+        lv_tr("Change heater control?"), what, lv_tr("Continue"),
+        [this]() {
+            set_state(State::MIGRATING);
+            start_migration(selected_method_);
+        },
+        opts);
 }
 
 void PIDCalibrationPanel::handle_abort_clicked() {
@@ -1216,7 +1268,63 @@ void PIDCalibrationPanel::save_calibration_history() {
 // MPC: DETECTION, MIGRATION, CALIBRATION
 // ============================================================================
 
-void PIDCalibrationPanel::detect_heater_control_type() {
+bool PIDCalibrationPanel::needs_control_migration(ControlType current, CalibMethod target) {
+    if (current == ControlType::UNKNOWN)
+        return false;
+    return (current == ControlType::MPC) != (target == CalibMethod::MPC);
+}
+
+std::vector<helix::system::ConfigEdit>
+PIDCalibrationPanel::build_control_migration_edits(CalibMethod target, int heater_wattage) {
+    using helix::system::ConfigEdit;
+
+    // ADD_KEY, not SET_VALUE: SAVE_CONFIG writes `control` into the autosave
+    // block, so a real section often names it only in a comment - and SET_VALUE
+    // on an absent key fails the whole edit list. ADD_KEY sets it where it
+    // exists and adds it where it does not.
+    if (target == CalibMethod::MPC) {
+        return {
+            {ConfigEdit::Type::ADD_KEY, "control", "mpc"},
+            {ConfigEdit::Type::ADD_KEY, "heater_power", std::to_string(heater_wattage)},
+        };
+    }
+
+    // heater_power is ours, written by the forward migration. MPC_CALIBRATE's
+    // results land in Klipper's autosave block instead, which we never edit and
+    // which tolerates them under PID control. The other four REMOVE_KEYs cover
+    // the hand-written case: an MPC key left active in the section itself fails
+    // Klipper's unused-option check once no MPC object reads it.
+    return {
+        {ConfigEdit::Type::ADD_KEY, "control", "pid"},
+        {ConfigEdit::Type::REMOVE_KEY, "heater_power", ""},
+        {ConfigEdit::Type::REMOVE_KEY, "block_heat_capacity", ""},
+        {ConfigEdit::Type::REMOVE_KEY, "sensor_responsiveness", ""},
+        {ConfigEdit::Type::REMOVE_KEY, "ambient_transfer", ""},
+        {ConfigEdit::Type::REMOVE_KEY, "fan_ambient_transfer", ""},
+    };
+}
+
+void PIDCalibrationPanel::update_migration_notice() {
+    needs_migration_ = needs_control_migration(current_control_, selected_method_);
+    lv_subject_set_int(&subj_needs_migration_, needs_migration_ ? 1 : 0);
+
+    // Heater wattage is an MPC model input, so it is only collected on the way in.
+    const bool to_mpc = selected_method_ == CalibMethod::MPC;
+    lv_subject_set_int(&subj_show_wattage_, (needs_migration_ && to_mpc) ? 1 : 0);
+
+    if (needs_migration_) {
+        lv_subject_copy_string(
+            &subj_migration_notice_,
+            to_mpc ? lv_tr("Switching to MPC requires a config change and Klipper restart.")
+                   : lv_tr("Switching back to PID requires a config change and Klipper restart."));
+    } else {
+        lv_subject_copy_string(&subj_migration_notice_, "");
+    }
+
+    update_fan_section_visibility();
+}
+
+void PIDCalibrationPanel::detect_heater_control_type(bool preselect_mpc) {
     if (!api_)
         return;
 
@@ -1226,38 +1334,24 @@ void PIDCalibrationPanel::detect_heater_control_type() {
     auto token = lifetime_.token();
     api_->advanced().get_heater_control_type(
         heater,
-        [this, token](const std::string& type) {
+        [this, token, preselect_mpc](const std::string& type) {
             if (token.expired())
                 return;
-            token.defer([this, type]() {
+            token.defer([this, type, preselect_mpc]() {
                 // Query succeeded, firmware supports control type query (Kalico)
                 is_kalico_ = true;
-                // Only expose MPC UI to beta users
-                lv_subject_t* beta = lv_xml_get_subject(nullptr, "show_beta_features");
-                if (beta && lv_subject_get_int(beta) == 1) {
-                    lv_subject_set_int(&subj_is_kalico_, 1);
-                }
+                lv_subject_set_int(&subj_is_kalico_, 1);
 
-                if (type == "mpc") {
-                    // Already MPC, no migration needed
+                current_control_ = (type == "mpc") ? ControlType::MPC : ControlType::PID;
+
+                if (preselect_mpc) {
+                    // MPC is the recommended method on firmware that offers it
                     selected_method_ = CalibMethod::MPC;
-                    needs_migration_ = false;
                     lv_subject_set_int(&subj_method_is_mpc_, 1);
-                    lv_subject_set_int(&subj_needs_migration_, 0);
-                    lv_subject_set_int(&subj_show_wattage_, 0);
-                    update_fan_section_visibility();
-                    spdlog::info("[PIDCal] Heater already using MPC control");
-                } else {
-                    // PID mode — MPC needs migration, pre-select MPC (recommended)
-                    selected_method_ = CalibMethod::MPC;
-                    needs_migration_ = true;
-                    lv_subject_set_int(&subj_method_is_mpc_, 1);
-                    lv_subject_set_int(&subj_needs_migration_, 1);
-                    lv_subject_set_int(&subj_show_wattage_, 1);
-                    update_fan_section_visibility();
-                    spdlog::info("[PIDCal] Heater using '{}' control, MPC migration available",
-                                 type);
                 }
+                update_migration_notice();
+
+                spdlog::info("[PIDCal] Heater using '{}' control", type);
             });
         },
         [this, token](const MoonrakerError&) {
@@ -1266,39 +1360,44 @@ void PIDCalibrationPanel::detect_heater_control_type() {
             // Can't determine control type, not Kalico — default to PID
             token.defer([this]() {
                 is_kalico_ = false;
+                current_control_ = ControlType::UNKNOWN;
                 lv_subject_set_int(&subj_is_kalico_, 0);
+                update_migration_notice();
                 spdlog::debug("[PIDCal] Heater control type query failed, defaulting to PID");
             });
         });
 }
 
-void PIDCalibrationPanel::start_migration() {
+void PIDCalibrationPanel::start_migration(CalibMethod target) {
     if (!api_)
         return;
 
     const char* section = (selected_heater_ == Heater::EXTRUDER) ? "extruder" : "heater_bed";
-    std::vector<helix::system::ConfigEdit> edits = {
-        {helix::system::ConfigEdit::Type::SET_VALUE, "control", "mpc"},
-        {helix::system::ConfigEdit::Type::ADD_KEY, "heater_power", std::to_string(heater_wattage_)},
-    };
+    const bool to_mpc = target == CalibMethod::MPC;
+    std::vector<helix::system::ConfigEdit> edits =
+        build_control_migration_edits(target, heater_wattage_);
 
-    spdlog::info("[PIDCal] Starting PID->MPC migration for '{}' with heater_power={}W", section,
-                 heater_wattage_);
+    if (to_mpc) {
+        spdlog::info("[PIDCal] Starting PID->MPC migration for '{}' with heater_power={}W", section,
+                     heater_wattage_);
+    } else {
+        spdlog::info("[PIDCal] Starting MPC->PID migration for '{}'", section);
+    }
 
     EmergencyStopOverlay::instance().suppress_recovery_dialog(RecoverySuppression::EXTRA);
 
     auto token = lifetime_.token();
     config_editor_.safe_multi_edit(
         *api_, section, edits,
-        [this, token]() {
+        [this, token, target]() {
             if (token.expired())
                 return;
-            token.defer([this]() {
-                needs_migration_ = false;
-                lv_subject_set_int(&subj_needs_migration_, 0);
-                spdlog::info("[PIDCal] Migration complete, starting MPC calibration");
-                set_state(State::CALIBRATING);
-                send_mpc_calibrate();
+            token.defer([this, target]() {
+                current_control_ =
+                    (target == CalibMethod::MPC) ? ControlType::MPC : ControlType::PID;
+                update_migration_notice();
+                spdlog::info("[PIDCal] Migration complete, starting calibration");
+                begin_calibration(target);
             });
         },
         [this, token](const std::string& err) {
@@ -1417,11 +1516,8 @@ void PIDCalibrationPanel::handle_method_pid_clicked() {
         return;
     spdlog::debug("[PIDCal] PID method selected");
     selected_method_ = CalibMethod::PID;
-    needs_migration_ = false;
     lv_subject_set_int(&subj_method_is_mpc_, 0);
-    lv_subject_set_int(&subj_show_wattage_, 0);
-    lv_subject_set_int(&subj_needs_migration_, 0);
-    update_fan_section_visibility();
+    update_migration_notice();
 }
 
 void PIDCalibrationPanel::handle_method_mpc_clicked() {
@@ -1430,9 +1526,9 @@ void PIDCalibrationPanel::handle_method_mpc_clicked() {
     spdlog::debug("[PIDCal] MPC method selected");
     selected_method_ = CalibMethod::MPC;
     lv_subject_set_int(&subj_method_is_mpc_, 1);
-    update_fan_section_visibility();
-    // Re-detect to determine migration needs
-    detect_heater_control_type();
+    update_migration_notice();
+    // Re-read the control type in case the config changed since activation
+    detect_heater_control_type(false);
 }
 
 void PIDCalibrationPanel::handle_wattage_up() {

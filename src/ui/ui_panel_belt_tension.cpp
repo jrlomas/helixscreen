@@ -714,8 +714,15 @@ void BeltTensionPanel::on_activate() {
     }
 }
 
-void BeltTensionPanel::on_deactivating(DeactivateReason) {
-    spdlog::debug("[BeltTension] on_deactivating()");
+void BeltTensionPanel::on_deactivating(DeactivateReason reason) {
+    spdlog::debug("[BeltTension] on_deactivating({})", deactivate_reason_name(reason));
+
+    // An idle screen is not a walk-away. Plucking a belt means nobody is
+    // touching the screen, so the screensaver lands mid-measurement; the live
+    // meter has to survive it.
+    if (reason == DeactivateReason::Suspended) {
+        return;
+    }
 
     // Abandon an in-progress run. POSITION may have a park move outstanding and
     // LISTEN is the live meter; both must not survive the panel going away.

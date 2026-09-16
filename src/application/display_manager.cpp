@@ -1440,6 +1440,14 @@ void DisplayManager::restore_display_output() {
     // is a no-op because the flag was never released.
     set_keep_screen_on(true);
 
+    // Rendering comes back first, and unconditionally. enter_sleep() engages the
+    // suppression on its own, so undoing it must not depend on which panel mechanism is
+    // still available now: a backend that has gone away since would fall to the branch
+    // below that only removes the overlay, leaving the no-op flush installed. LVGL then
+    // keeps painting into it and the panel holds its last frame for good, while every
+    // later wake reports success. No-op when suppression was never engaged.
+    restore_flush_after_sleep();
+
     // Undo whatever enter_sleep() did to the panel output, mirroring its branches.
     // This must run BEFORE the post-wake lv_refr_now() (#303 wake-race).
     if (m_use_hardware_blank) {
@@ -1469,6 +1477,9 @@ void DisplayManager::wake_display() {
     }
 
     if (!m_display_sleeping && !m_display_dimmed) {
+        // Reaching here means the display is meant to be awake, so a flush still
+        // suppressed is a frozen panel that no later wake would clear.
+        restore_flush_after_sleep();
         return; // Already fully awake
     }
 

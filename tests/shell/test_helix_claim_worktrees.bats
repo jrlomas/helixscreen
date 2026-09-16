@@ -147,3 +147,61 @@ teardown() {
     contains "RELEASED" "$(cat "$out")"
     contains "FREE" "$(cat "$out")"
 }
+
+# ---------------------------------------------------------------------------
+# build: and worktree: name the same tree
+#
+# Two prefixes, one directory. Storing them under separate files let one
+# session hold build: while editing and another take worktree: and read FREE -
+# the fail-open this tool exists to prevent, with only git's own "local changes
+# would be overwritten" left to catch it.
+# ---------------------------------------------------------------------------
+
+@test "worktree: is refused while another session builds the same tree" {
+    "$CLAIM" take build:mainrepo "peer build" --pid "$OWNER" >/dev/null
+    run "$CLAIM" take worktree:mainrepo "my merge" --pid 1
+    [ "$status" -ne 0 ]
+    contains "REFUSED" "$output"
+    contains "peer build" "$output"
+}
+
+@test "build: is refused while another session writes the same tree" {
+    "$CLAIM" take worktree:mainrepo "peer merge" --pid "$OWNER" >/dev/null
+    run "$CLAIM" take build:mainrepo "my build" --pid 1
+    [ "$status" -ne 0 ]
+    contains "REFUSED" "$output"
+    contains "peer merge" "$output"
+}
+
+@test "one session may hold both build: and worktree: on its own tree" {
+    "$CLAIM" take build:mainrepo "my build" --pid "$OWNER" >/dev/null
+    run "$CLAIM" take worktree:mainrepo "my merge" --pid "$OWNER"
+    [ "$status" -eq 0 ]
+    contains "CLAIMED" "$output"
+}
+
+@test "check reports a sibling holder rather than answering FREE" {
+    "$CLAIM" take build:mainrepo "peer build" --pid "$OWNER" >/dev/null
+    run "$CLAIM" check worktree:mainrepo
+    [ "$status" -eq 1 ]
+    contains "peer build" "$output"
+}
+
+@test "a dead sibling owner does not block" {
+    # A claim whose owner has exited reads STALE and must not hold the tree.
+    sleep 120 &
+    dead=$!
+    "$CLAIM" take build:mainrepo "abandoned build" --pid "$dead" >/dev/null
+    kill "$dead" 2>/dev/null
+    wait "$dead" 2>/dev/null || true
+    run "$CLAIM" take worktree:mainrepo "my merge" --pid "$OWNER"
+    [ "$status" -eq 0 ]
+    contains "CLAIMED" "$output"
+}
+
+@test "a non-tree resource is unaffected by tree siblings" {
+    "$CLAIM" take build:mainrepo "peer build" --pid "$OWNER" >/dev/null
+    run "$CLAIM" take device:k2plus "hw verify" --pid 1
+    [ "$status" -eq 0 ]
+    contains "CLAIMED" "$output"
+}

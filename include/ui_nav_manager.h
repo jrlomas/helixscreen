@@ -7,6 +7,7 @@
 #include "ui_printer_switch_menu.h"
 
 #include "lvgl/lvgl.h"
+#include "panel_lifecycle.h"
 #include "subject_managed_panel.h"
 
 #include <array>
@@ -341,7 +342,7 @@ class NavigationManager {
      *
      * Safe to call multiple times — tracks suspended state internally.
      */
-    void suspend_active();
+    void suspend_active(DeactivateReason reason = DeactivateReason::Suspended);
 
     /**
      * @brief Resume the previously suspended panel/overlay lifecycle

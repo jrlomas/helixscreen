@@ -1867,7 +1867,7 @@ void NavigationManager::activate_initial_panel() {
     }
 }
 
-void NavigationManager::suspend_active() {
+void NavigationManager::suspend_active(DeactivateReason reason) {
     if (suspended_) {
         return;
     }
@@ -1879,12 +1879,11 @@ void NavigationManager::suspend_active() {
         auto it = overlay_instances_.find(top_overlay);
         if (it != overlay_instances_.end() && it->second) {
             spdlog::debug("[NavigationManager] Suspending overlay {}", it->second->get_name());
-            it->second->on_deactivate(DeactivateReason::NavigateAway);
+            it->second->on_deactivate(reason);
         }
     } else if (panel_instances_[static_cast<int>(active_panel_)]) {
         spdlog::debug("[NavigationManager] Suspending panel {}", static_cast<int>(active_panel_));
-        panel_instances_[static_cast<int>(active_panel_)]->on_deactivate(
-            DeactivateReason::NavigateAway);
+        panel_instances_[static_cast<int>(active_panel_)]->on_deactivate(reason);
     }
 }
 

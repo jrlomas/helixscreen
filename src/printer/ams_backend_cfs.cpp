@@ -2877,29 +2877,38 @@ std::string AmsBackendCfs::load_gcode(int idx, CfsMacroVariant variant) {
         // K1 official CFS upgrade firmware — fresh load, nozzle empty. The feed
         // steps follow the firmware's BOX_LOAD_MATERIAL_WITHOUT_MATERIAL chain
         //   (M104 → CHECK_MATERIAL → EXTRUDE → EXTRUDER_EXTRUDE → FLUSH),
-        // but this is not a literal mirror of it: we carry explicit TNN= on the
-        // two commands that take it, rather than relying on the box's implicit
-        // "current TN" — addressing the slot explicitly is what keeps this
-        // independent of Tnn_map state), and BOX_GO_TO_EXTRUDE_POS
-        // plus the trailing BOX_NOZZLE_CLEAN are ours — the WITHOUT_MATERIAL
-        // macro has neither. Both commands are defined in box.cfg and used by
-        // the WITH_MATERIAL chain.
+        // carrying explicit TNN= on the two commands that take it rather than
+        // relying on the box's implicit "current TN", which keeps the script
+        // independent of Tnn_map state.
         //
         // BOX_MATERIAL_FLUSH is emitted BARE. It has no TNN parameter: box.cfg
         // documents it as `BOX_MATERIAL_FLUSH LEN=100 VELOCITY=360 TEMP=220`,
-        // and cmd_material_flush reads only LEN/VELOCITY/TEMP, defaulting from
-        // the [box] Tn_retrude / Tn_extrude_velocity / Tn_extrude_temp keys.
+        // and cmd_material_flush reads only LEN/VELOCITY/TEMP/PERCENT,
+        // defaulting from the [box] Tn_retrude / Tn_extrude_velocity /
+        // Tn_extrude_temp keys.
         //
-        // BOX_EXTRUDER_EXTRUDE is the root-cause fix for "no auto-extrude after
-        // load" (#968): the firmware's WITHOUT_MATERIAL chain drives the main
-        // extruder after the cassette feed, and we previously omitted it.
-        // Homing is handled upstream by dispatch_action_script; do NOT add
-        // IF_NEED_HOME here. Envelope (wrap_with_envelope_k1) adds ERROR_CLEAR /
-        // CHECK_MATERIAL / MOVE_TO_SAFE_POS.
+        // The script ends at the flush: cmd_material_flush finishes with a
+        // nozzle clean and a small retract of its own, so a BOX_NOZZLE_CLEAN
+        // after it wipes a nozzle that was just wiped and buys a second trip to
+        // the cleaning positions. The firmware's WITHOUT_MATERIAL chain ends
+        // there for the same reason. A swap wipes explicitly instead, because
+        // there the clean clears the OLD material after the cut, before any
+        // flush has run.
+        //
+        // BOX_GO_TO_EXTRUDE_POS is ours — the WITHOUT_MATERIAL chain carries no
+        // positioning. It stays because the flush purges wherever the toolhead
+        // is standing, and the WITH_MATERIAL chain uses this same command to put
+        // it over the configured extrude position first.
+        //
+        // BOX_EXTRUDER_EXTRUDE drives the toolhead extruder to grab what the
+        // cassette just fed; without it the box feeds and the nozzle never
+        // extrudes. Homing is handled upstream by dispatch_action_script; do NOT
+        // add IF_NEED_HOME here. Envelope (wrap_with_envelope_k1) adds
+        // ERROR_CLEAR / CHECK_MATERIAL / fan save+restore / MOVE_TO_SAFE_POS.
         return wrap_with_envelope_k1("BOX_GO_TO_EXTRUDE_POS\n"
                                      "BOX_EXTRUDE_MATERIAL TNN=" +
                                      tnn + "\nBOX_EXTRUDER_EXTRUDE TNN=" + tnn +
-                                     "\nBOX_MATERIAL_FLUSH\nBOX_NOZZLE_CLEAN");
+                                     "\nBOX_MATERIAL_FLUSH");
     }
     // Use CR_BOX_* commands directly — M8200 macro's Jinja2 `params.I|int` is broken
     // on Creality's Klipper fork (always evaluates to 0, loading T1A regardless of I= value).
@@ -2922,18 +2931,24 @@ std::string AmsBackendCfs::unload_gcode(CfsMacroVariant variant) {
     }
     if (variant == CfsMacroVariant::K1) {
         // K1: the step list follows the firmware's BOX_QUIT_MATERIAL chain
-        // (ERROR_CLEAR → CHECK_MATERIAL → CUT → RETRUDE), but the tail is NOT
-        // a literal mirror: the firmware macro parks at
-        // BOX_GO_TO_BOX_EXTRUDE_POS and has BOX_MOVE_TO_SAFE_POS commented
-        // out, while our shared envelope parks via BOX_MOVE_TO_SAFE_POS.
-        // Deliberate divergence, tracked in #1278 — changing toolhead motion
-        // on K1 hardware nobody on the project owns is the failure class that
-        // opened #968, so the park stays as-is until a K1+CFS owner validates
-        // otherwise. BOX_CUT_MATERIAL handles the cut;
-        // BOX_RETRUDE_MATERIAL is the no-TNN retract primitive (operates on
-        // the currently-loaded slot tracked by the box driver) — same one
-        // BOX_QUIT_MATERIAL uses in box.cfg. Nozzle is empty after the
-        // cut+retract, so no wipe. Homing handled upstream.
+        // (ERROR_CLEAR → CHECK_MATERIAL → CUT → RETRUDE), but parks through the
+        // envelope's BOX_MOVE_TO_SAFE_POS where BOX_QUIT_MATERIAL ends at
+        // BOX_GO_TO_BOX_EXTRUDE_POS. The divergence is intentional (#1278).
+        //
+        // safe_pos_y is the coordinate the firmware designates as clear of the
+        // box and cutter hardware, and BOX_MOVE_TO_SAFE_POS is where every other
+        // box operation parks. BOX_GO_TO_BOX_EXTRUDE_POS moves to the retrude
+        // working position instead; inside BOX_QUIT_MATERIAL it is the setup
+        // move for a BOX_RETRUDE_MATERIAL_WITH_TNN step that ships commented
+        // out, so on stock firmware it leaves the toolhead standing at a work
+        // position with nothing following it. A standalone unload is better off
+        // ending somewhere the firmware calls safe.
+        //
+        // BOX_CUT_MATERIAL handles the cut; BOX_RETRUDE_MATERIAL is the no-TNN
+        // retract primitive (operates on the currently-loaded slot tracked by
+        // the box driver) — the same one BOX_QUIT_MATERIAL uses in box.cfg.
+        // Nozzle is empty after the cut+retract, so no wipe. Homing handled
+        // upstream.
         return wrap_with_envelope_k1("BOX_CUT_MATERIAL\n"
                                      "BOX_RETRUDE_MATERIAL");
     }
