@@ -1656,7 +1656,7 @@ One always-compiled header names every saver and derives the count, the clamp, t
 **Interfaces:**
 - Consumes: nothing.
 - Produces (every later task):
-  - `enum class ScreensaverType : int { OFF = 0, FLYING_TOASTERS = 1, STARFIELD = 2, PIPES_3D = 3 };` (global, moved into `include/screensaver_registry.h`; Task 10 adds `FIREWORKS = 4`)
+  - `enum class ScreensaverType : int { OFF = 0, FLYING_TOASTERS = 1, STARFIELD = 2, PIPES_3D = 3 };` (global, moved into `include/screensaver_registry.h`; the tree also ships `BOUNCING_PRINTER = 4`, so Task 10 adds `FIREWORKS = 5`)
   - `namespace helix::ui`: `enum SaverDepth : uint8_t { SAVER_DEPTH_16 = 1u << 0, SAVER_DEPTH_32 = 1u << 1 };`
   - `struct ScreensaverInfo { ScreensaverType type; const char* name; const char* label_key; uint8_t depths; };`
   - `inline constexpr ScreensaverInfo SCREENSAVERS[]`, `inline constexpr size_t SCREENSAVER_COUNT`, `inline constexpr const char* SCREENSAVER_OFF_LABEL_KEY = "Off";`
@@ -8093,7 +8093,7 @@ A pure `FireworksSim` draws a night sky (computed per pixel, never stored), hill
 **Interfaces:**
 - Consumes: Task 9 `PixelWriter::{put_dithered, blend_max, get, contains, line}`, `FrameTarget`, `Rgb`, `SAVER_BUILD_CANVAS_FORMAT`; Task 3 `SaverBase`, `SaverTestAccess`, `SAVER_FAST_PERIOD`; Task 1 registry; Task 6 `ScreensaverManagerTestAccess::active`; `helix::ui::screensaver::{random_below, unit_random}`.
 - Produces (Task 11):
-  - `ScreensaverType::FIREWORKS = 4`; registry row `{FIREWORKS, "fireworks", "Fireworks", SAVER_DEPTH_16 | SAVER_DEPTH_32}`
+  - `ScreensaverType::FIREWORKS = 5`; registry row `{FIREWORKS, "fireworks", "Fireworks", SAVER_DEPTH_16 | SAVER_DEPTH_32}`
   - `struct FireworksLevel { uint32_t period_ms; uint16_t sparks_per_burst; uint8_t trail; uint8_t bursts_at_once; };`, `inline constexpr FireworksLevel FIREWORKS_LEVELS[]`, `inline constexpr size_t FIREWORKS_LEVEL_COUNT`
   - `struct FireworksPacing { uint32_t first_launch_ms = 300; uint32_t min_gap_ms = 800; uint32_t max_gap_ms = 2500; uint32_t finale_every_ms = 180000; uint8_t finale_min_shells = 6; uint8_t finale_max_shells = 10; uint32_t finale_span_ms = 4000; };`
   - `class FireworksSim { static constexpr size_t MAX_BURSTS = 6; static constexpr int STAR_COUNT = 80; void init(FrameTarget&, std::minstd_rand&, size_t level, const FireworksPacing& = {}); void step(uint32_t dt_ms, FrameTarget&, std::minstd_rand&, std::vector<DirtyRect>& dirty); void request_level(size_t); size_t level() const; size_t spark_capacity() const; size_t sparks_in_use() const; void clear(); Rgb sky_at(int32_t x, int32_t y) const; };`
@@ -9372,7 +9372,7 @@ void FireworksScreensaver::on_stop() {
 #endif // HELIX_ENABLE_SCREENSAVER
 ```
 
-In `include/screensaver_registry.h`, add `FIREWORKS = 4,` after `PIPES_3D = 3,` in `ScreensaverType`, and add this row after the pipes row of `SCREENSAVERS`:
+In `include/screensaver_registry.h`, add `FIREWORKS = 5,` after `BOUNCING_PRINTER = 4,` in `ScreensaverType`, and add this row after the bounce row of `SCREENSAVERS`:
 
 ```cpp
     {ScreensaverType::FIREWORKS, "fireworks", "Fireworks", SAVER_DEPTH_16 | SAVER_DEPTH_32},
