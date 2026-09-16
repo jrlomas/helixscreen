@@ -2,9 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * @file test_chamber_mock_dragonbreath.cpp
- * @brief Mock-client materialization of the dragonbreath chamber-heater trio
- *        (issue #1290, task 6).
+ * @file test_chamber_mock_appliances.cpp
+ * @brief Mock-client materialization of the appliance chamber-heater backends
+ *        (issue #1290).
+ *
+ * Both appliance backends live here because they share this file's frame and
+ * object-list helpers; a second file would redefine them.
+ *
+ * DragonBreath — the full trio.
  *
  * HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath
  * output_pin dragonbreath_filter" must yield:
@@ -21,6 +26,10 @@
  *   4. a configfile answer of max_temp 75 for the heater section,
  *   5. SET_PIN round-trip on the filter pin,
  *   6. a HELIX_MOCK_DRAGONBREATH_FAULT=1 hook flipping fault + fault_reason.
+ *
+ * Stock Panda Breath — a heater and a status object, no filter pin. Its schema
+ * carries no fault and no element temperature, so what the mock has to get
+ * right is the link field and which control loop holds the heater.
  */
 
 #include "../helix_test_fixture.h"
@@ -29,6 +38,7 @@
 #include "moonraker_client_mock.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 #include "../catch_amalgamated.hpp"
@@ -273,4 +283,94 @@ TEST_CASE_METHOD(HelixTestFixture, "HELIX_MOCK_OBJECTS legacy shapes still parse
         CHECK(MoonrakerClientMockTestAccess::chamber_heater_status_key(client) ==
               "heater_generic chamber");
     }
+}
+
+// ============================================================================
+// Stock Panda Breath
+// ============================================================================
+
+namespace {
+constexpr const char* STOCK_PAIR_ENV = "heater_generic panda_breath panda_breath";
+
+/// The stock diagnostics object out of the first synthesized status frame.
+json first_stock_diagnostics(MoonrakerClientMock& client) {
+    json frame;
+    client.register_notify_update(
+        [&frame](const json& notification) { frame = first_status_param(notification); });
+    MoonrakerClientMockTestAccess::dispatch_initial_state(client);
+    if (!frame.is_object() || !frame.contains("panda_breath")) {
+        return json{};
+    }
+    return frame["panda_breath"];
+}
+} // namespace
+
+TEST_CASE_METHOD(HelixTestFixture, "mock materializes the stock panda_breath pair",
+                 "[chamber][mock][1290]") {
+    ScopedEnv objects_env("HELIX_MOCK_OBJECTS", STOCK_PAIR_ENV);
+    MoonrakerClientMock client;
+
+    SECTION("discovery resolves the heater and its diagnostics, and no filter pin") {
+        const PrinterDiscovery hw = client.hardware();
+        REQUIRE(hw.has_chamber_heater());
+        CHECK(hw.chamber_heater_name() == "heater_generic panda_breath");
+        CHECK(hw.chamber_heater_backend_id() == "panda_breath");
+        CHECK(hw.chamber_diagnostics_object() == "panda_breath");
+        CHECK(hw.chamber_filter_fan_pin().empty());
+        CHECK(MoonrakerClientMockTestAccess::chamber_heater_status_key(client) ==
+              "heater_generic panda_breath");
+    }
+
+    SECTION("the synthesized frame carries the stock schema and nothing else") {
+        const json diag = first_stock_diagnostics(client);
+        REQUIRE(diag.is_object());
+        CHECK(diag.at("connected").get<bool>() == true);
+        CHECK(diag.at("work_on").get<bool>() == false); // no target, no auto
+        CHECK(diag.at("filament_drying_active").get<bool>() == false);
+        CHECK(diag.at("temperature").get<double>() > 0.0);
+        // Whole degrees, as the appliance reports them.
+        CHECK(diag.at("temperature").get<double>() ==
+              std::floor(diag.at("temperature").get<double>()));
+        // Fields the stock binding does not have must not be invented here, or
+        // the mock would exercise a parse path no device can reach.
+        for (const char* absent : {"fault", "inhibited", "fault_reason", "ptc_temp",
+                                   "fan_percent", "fan_reason", "protocol_error"}) {
+            CAPTURE(absent);
+            CHECK_FALSE(diag.contains(absent));
+        }
+    }
+}
+
+// The appliance holding its own auto target while the Klipper target reads 0 is
+// the state the rig sits in at rest, and the only one that raises External.
+TEST_CASE_METHOD(HelixTestFixture, "HELIX_MOCK_PANDA_BREATH_AUTO drives the device's own loop",
+                 "[chamber][mock][1290]") {
+    ScopedEnv objects_env("HELIX_MOCK_OBJECTS", STOCK_PAIR_ENV);
+    ScopedEnv auto_env("HELIX_MOCK_PANDA_BREATH_AUTO", "1");
+    MoonrakerClientMock client;
+
+    const json diag = first_stock_diagnostics(client);
+    REQUIRE(diag.is_object());
+    CHECK(diag.at("work_mode").get<int>() == 1);
+    CHECK(diag.at("work_on").get<bool>() == true);
+    CHECK(diag.at("auto_enabled").get<bool>() == true);
+    CHECK(diag.at("device_target").get<double>() > 0.0); // the appliance's own target
+    CHECK(diag.at("target").get<double>() == 0.0);       // ours is still zero
+    CHECK(diag.at("connected").get<bool>() == true);
+}
+
+// The WebSocket to the appliance can drop while Klipper keeps answering for the
+// heater section it owns.
+TEST_CASE_METHOD(HelixTestFixture, "HELIX_MOCK_PANDA_BREATH_OFFLINE drops the link",
+                 "[chamber][mock][1290]") {
+    ScopedEnv objects_env("HELIX_MOCK_OBJECTS", STOCK_PAIR_ENV);
+    ScopedEnv offline_env("HELIX_MOCK_PANDA_BREATH_OFFLINE", "1");
+    MoonrakerClientMock client;
+
+    const json diag = first_stock_diagnostics(client);
+    REQUIRE(diag.is_object());
+    CHECK(diag.at("connected").get<bool>() == false);
+    // The heater section still answers — that is what makes the banner the only
+    // signal the reading is dead.
+    CHECK(diag.at("temperature").get<double>() > 0.0);
 }

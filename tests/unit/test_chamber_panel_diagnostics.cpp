@@ -121,6 +121,7 @@ class ChamberOverlayFixture : public XMLTestFixture {
         // cases re-set them explicitly (the reactive cond rebuilds).
         set_xml_int("printer_has_chamber_heater_diagnostics", 1);
         set_xml_int("printer_has_chamber_filter_fan", 1);
+        set_xml_int("printer_has_chamber_element_temp", 1);
 
         overlay_ = create_component("temp_graph_overlay");
         REQUIRE(overlay_ != nullptr);
@@ -267,12 +268,40 @@ TEST_CASE_METHOD(ChamberOverlayFixture,
         CHECK(lv_obj_find_by_name(overlay_, "reset_fault_button") != nullptr);
     }
 
-    SECTION("no filter-fan capability hides only the toggle") {
+    SECTION("no filter-fan capability hides the toggle and its readout") {
         set_xml_int("printer_has_chamber_filter_fan", 0);
         helix::ui::UpdateQueue::instance().drain();
 
         CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "chamber_diagnostics_card")));
         CHECK(hidden(lv_obj_find_by_name(overlay_, "filter_fan_button")));
+        CHECK(hidden(lv_obj_find_by_name(overlay_, "filter_fan_readout")));
+    }
+
+    // A backend with no element temperature (stock Panda Breath) would otherwise
+    // render a row that can only ever read "--".
+    SECTION("no element-temp capability hides that readout, keeps the rest") {
+        set_xml_int("printer_has_chamber_element_temp", 0);
+        helix::ui::UpdateQueue::instance().drain();
+
+        CHECK(hidden(lv_obj_find_by_name(overlay_, "element_readout")));
+        CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "chamber_diagnostics_card")));
+        CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "filter_fan_readout")));
+    }
+
+    // The External badge annotates the heater, not the element, so it survives a
+    // backend that reports no element temperature.
+    SECTION("external control shows with no element readout beside it") {
+        set_xml_int("printer_has_chamber_element_temp", 0);
+        set_xml_int("chamber_heater_externally_controlled", 1);
+        helix::ui::UpdateQueue::instance().drain();
+
+        CHECK(hidden(lv_obj_find_by_name(overlay_, "element_readout")));
+        CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "external_control_readout")));
+        CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "external_control_badge")));
+
+        set_xml_int("chamber_heater_externally_controlled", 0);
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK(hidden(lv_obj_find_by_name(overlay_, "external_control_readout")));
     }
 
     SECTION("device-driven fan badges the readout and disables the toggle") {

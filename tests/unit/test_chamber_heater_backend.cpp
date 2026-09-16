@@ -23,6 +23,8 @@ TEST_CASE("generic backend keeps keyword tiers", "[chamber][backend]") {
     // Original tokenizer splits ONLY on _/whitespace — hyphen is not a separator.
     CHECK(generic->discovery_confidence("chamber-tvoc") == 99); // no air-quality penalty
     CHECK(generic->discovery_confidence("my-box") == 0);        // BOX not standalone
+    // A plain heater_generic is one temperature, with no element behind it.
+    CHECK(generic->reports_element_temp() == false);
 }
 
 TEST_CASE("registry exposes generic as default", "[chamber][backend]") {
@@ -45,6 +47,7 @@ TEST_CASE("dragonbreath backend matches names and ceiling", "[chamber][backend]"
     CHECK(db->diagnostics_object() == "dragonbreath");
     CHECK(db->filter_fan_pin() == "output_pin dragonbreath_filter");
     CHECK(db->fault_reset_gcode() == "DRAGONBREATH_RESET");
+    CHECK(db->reports_element_temp() == true); // ptc_temp rides every frame
     CHECK(db->conservative_max_temp() == 60.0);
     CHECK(db->device_autonomous_control() == false);
 }
@@ -264,17 +267,142 @@ TEST_CASE("dragonbreath parse rejects foreign payloads", "[chamber][backend]") {
     CHECK_FALSE(db->parse_diagnostics(nlohmann::json::parse("7")).has_value());
 }
 
-TEST_CASE("panda_breath backend: heater + ceiling only", "[chamber][backend]") {
+// The stock firmware's Klipper binding publishes no fault, no filtration
+// speed and no reset command, so those slots stay unengaged for every frame.
+// What it does publish is its own link state and which control loop is
+// holding the heater.
+TEST_CASE("panda_breath backend: the surfaces stock actually has", "[chamber][backend][1290]") {
     const auto* pb = backend_by_id("panda_breath");
     REQUIRE(pb != nullptr);
     CHECK(pb->discovery_confidence("heater_generic panda_breath") == 95);
     CHECK(pb->discovery_confidence("heater_generic pandabreath") == 95);
     CHECK(pb->discovery_confidence("heater_generic chamber") == 0);
-    CHECK(pb->diagnostics_object().empty()); // stock schema unverified — no surface
-    CHECK(pb->filter_fan_pin().empty());
+    CHECK(pb->diagnostics_object() == "panda_breath");
+    CHECK(pb->filter_fan_pin().empty());        // no filtration pin in the binding
+    CHECK(pb->fault_reset_gcode().empty());     // nothing to reset: no fault surface
+    CHECK(pb->reports_element_temp() == false); // the PTC temp stays on the appliance
     CHECK(pb->conservative_max_temp() == 60.0);
     CHECK(pb->device_autonomous_control() == true); // stock Auto drives from bed temp
+}
+
+// Recognition cannot hinge on one field: Moonraker deltas carry only what
+// changed. Any stock-specific key marks the frame ours, and the three keys a
+// plain heater also publishes (temperature/target/smoothed_temp) mark nothing,
+// or the backend would claim every heater payload in the printer.
+TEST_CASE("panda_breath parse: recognition spans the stock schema", "[chamber][backend][1290]") {
+    const auto* pb = backend_by_id("panda_breath");
+    REQUIRE(pb != nullptr);
+
+    const char* const witnesses[] = {
+        "connected",     "work_mode",      "work_on",           "device_target",
+        "auto_enabled",  "auto_target",    "auto_filtertemp",   "auto_hotbedtemp",
+        "filament_temp", "filament_timer", "remaining_seconds", "filament_drying_active"};
+    for (const char* key : witnesses) {
+        CAPTURE(key);
+        CHECK(pb->parse_diagnostics(nlohmann::json{{key, 0}}).has_value());
+    }
+
+    for (const char* shared : {"temperature", "target", "smoothed_temp"}) {
+        CAPTURE(shared);
+        CHECK_FALSE(pb->parse_diagnostics(nlohmann::json{{shared, 23.0}}).has_value());
+    }
     CHECK_FALSE(pb->parse_diagnostics(nlohmann::json::object()).has_value());
+    CHECK_FALSE(pb->parse_diagnostics(nlohmann::json::parse("7")).has_value());
+}
+
+// The binding holds a WebSocket to the appliance and reports whether it is up.
+// Absent is no report; a value we cannot read is not evidence the appliance is
+// gone, so it engages as connected rather than raising the offline banner.
+TEST_CASE("panda_breath parse: connected engages, absent stays unengaged",
+          "[chamber][backend][1290]") {
+    const auto* pb = backend_by_id("panda_breath");
+    REQUIRE(pb != nullptr);
+
+    auto offline = pb->parse_diagnostics(nlohmann::json{{"connected", false}});
+    REQUIRE(offline.has_value());
+    CHECK(offline->device_connected == false);
+
+    auto online = pb->parse_diagnostics(nlohmann::json{{"connected", true}});
+    REQUIRE(online.has_value());
+    CHECK(online->device_connected == true);
+
+    auto silent = pb->parse_diagnostics(nlohmann::json{{"work_mode", 2}});
+    REQUIRE(silent.has_value());
+    CHECK_FALSE(silent->device_connected.has_value());
+
+    auto garbage = pb->parse_diagnostics(nlohmann::json{{"connected", "yes"}});
+    REQUIRE(garbage.has_value());
+    CHECK(garbage->device_connected == true);
+}
+
+// work_mode names the loop holding the heater: 1 = the appliance's own auto
+// cycle, 2 = the target Klipper set, 3 = a filament-drying run. Only 2 is our
+// target closing the loop. work_mode latches at its last value after the
+// output stops, so work_on is what makes the answer present-tense.
+TEST_CASE("panda_breath parse: only a klipper target counts as ours", "[chamber][backend][1290]") {
+    const auto* pb = backend_by_id("panda_breath");
+    REQUIRE(pb != nullptr);
+
+    struct Row {
+        int work_mode;
+        bool work_on;
+        bool expected;
+    };
+    const Row rows[] = {
+        {1, true, true},   // appliance auto loop holds the chamber
+        {3, true, true},   // drying cycle: the appliance is running itself
+        {2, true, false},  // heating to the target we set
+        {1, false, false}, // output off: nobody is driving
+        {2, false, false}, {3, false, false},
+    };
+    for (const auto& r : rows) {
+        CAPTURE(r.work_mode, r.work_on);
+        auto d = pb->parse_diagnostics(
+            nlohmann::json{{"work_mode", r.work_mode}, {"work_on", r.work_on}});
+        REQUIRE(d.has_value());
+        CHECK(d->externally_controlled == r.expected);
+    }
+
+    // Both halves are needed: one alone is not an answer.
+    auto mode_only = pb->parse_diagnostics(nlohmann::json{{"work_mode", 1}});
+    REQUIRE(mode_only.has_value());
+    CHECK_FALSE(mode_only->externally_controlled.has_value());
+    auto on_only = pb->parse_diagnostics(nlohmann::json{{"work_on", true}});
+    REQUIRE(on_only.has_value());
+    CHECK_FALSE(on_only->externally_controlled.has_value());
+
+    // A value we cannot read fails toward not raising the badge.
+    auto garbage =
+        pb->parse_diagnostics(nlohmann::json{{"work_mode", "auto"}, {"work_on", nullptr}});
+    REQUIRE(garbage.has_value());
+    CHECK(garbage->externally_controlled == false);
+}
+
+// Everything the stock binding does not publish stays unengaged, so the state
+// layer keeps whatever it last knew instead of showing a cleared fault or a
+// stopped fan the device never reported.
+TEST_CASE("panda_breath parse leaves absent surfaces unengaged", "[chamber][backend][1290]") {
+    const auto* pb = backend_by_id("panda_breath");
+    REQUIRE(pb != nullptr);
+
+    auto d = pb->parse_diagnostics(nlohmann::json::parse(R"({
+        "temperature":23.0,"target":0.0,"smoothed_temp":23.0,"connected":true,
+        "work_mode":1,"work_on":true,"device_target":60.0,"auto_enabled":true,
+        "auto_target":45,"auto_filtertemp":30,"auto_hotbedtemp":80,
+        "filament_temp":60,"filament_timer":12,"remaining_seconds":0,
+        "filament_drying_active":false})"));
+    REQUIRE(d.has_value());
+    CHECK(d->device_connected == true);
+    CHECK(d->externally_controlled == true);
+    CHECK_FALSE(d->fault.has_value());
+    CHECK_FALSE(d->inhibited.has_value());
+    CHECK_FALSE(d->fault_reason.has_value());
+    CHECK_FALSE(d->fault_reason_kind.has_value());
+    CHECK_FALSE(d->element_temp_c.has_value());
+    CHECK_FALSE(d->filter_fan_percent.has_value());
+    CHECK_FALSE(d->filter_fan_reason.has_value());
+    CHECK_FALSE(d->filter_fan_driver.has_value());
+    CHECK_FALSE(d->link_error.has_value());
 }
 
 TEST_CASE("appliance beats generic on its own name", "[chamber][backend]") {

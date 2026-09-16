@@ -54,7 +54,7 @@ The invariant: **vendor JSON schemas are translated to the generic `ChamberHeate
 | `include/chamber_heater_backend.h` | Backend interface + registry API: `ChamberHeaterDiagnostics` (the only shape subjects/UI see), `match()`, `backend_by_id()`, `required_status_objects()` |
 | `src/printer/chamber_heater_backend_generic.cpp` | Generic keyword backend + the registry itself (`registry()`, `match()`, `backend_by_id()`) and the keyword-confidence tiers |
 | `src/printer/chamber_heater_backend_dragonbreath.cpp` | DragonBreath appliance backend: 24-field `dragonbreath` status parse, `DRAGONBREATH_RESET`, filter pin, 60°C conservative cap. Schema verified live on the U1 rig 2026-08 |
-| `src/printer/chamber_heater_backend_panda_breath.cpp` | Panda Breath backend: heater + 60°C ceiling only (schema not yet hardware-verified), documents stock Auto mode via `device_autonomous_control()` |
+| `src/printer/chamber_heater_backend_panda_breath.cpp` | Panda Breath backend (stock firmware): heater, 60°C fallback ceiling, link state and which control loop holds the heater. No fault surface, no filtration speed, no element temperature |
 | `include/chamber_heater_assignment.h` | `chamber::resolve_heater()` and `chamber::resolve_sensor()`: the one rule for which chamber heater and which chamber sensor the printer has, given each role's "auto" / "none" / named-object assignment |
 | `include/printer_discovery.h` | `try_set_chamber_heater` lambda in `parse_objects()` — first registry consult, records backend id + diagnostics object + filter pin on discovery |
 | `src/api/moonraker_discovery_sequence.cpp` | Subscription-builder block adding the backend's diagnostics object + filter pin (`chamber::required_status_objects`) |
@@ -165,7 +165,7 @@ All registered by `PrinterTemperatureState`; display strings are formatter subje
 | `chamber_heater_inhibited` | int 0/1 | Heater refusing commands (e.g. post-fault cooldown) |
 | `chamber_heater_fault_reason` | string | Raw vendor fault code, "" when none — log-only, never bound by UI |
 | `chamber_heater_fault_reason_text` | string | Translated phrase for the backend's generic `FaultReason` kind ("" when none) — what the banner binds |
-| `chamber_heater_offline` | int 0/1 | Device unreachable on its own link. 1 only on an engaged "not connected" report; a backend with no link state (generic, panda_breath) leaves it 0 — unknown is not offline. While 1 the card banners the offline message and hides Reset (`DRAGONBREATH_RESET` cannot reach a device that is not answering). The vendor `protocol_error` string behind a link drop is log-only, like `chamber_heater_fault_reason` |
+| `chamber_heater_offline` | int 0/1 | Device unreachable on its own link. 1 only on an engaged "not connected" report; a backend with no link state (generic) leaves it 0 — unknown is not offline. While 1 the card banners the offline message and hides Reset (`DRAGONBREATH_RESET` cannot reach a device that is not answering). The vendor `protocol_error` string behind a link drop is log-only, like `chamber_heater_fault_reason` |
 | `chamber_heater_externally_controlled` | int 0/1 | Another controller is driving the heater (display-only, see below) |
 | `chamber_heater_element_temp` / `..._text` | int / string | Heating-element temp ("-1"/"--" = unknown) |
 | `chamber_filter_fan_percent` / `..._text` | int / string | Filtration-fan speed ("-1"/"--" = unknown) |
@@ -175,9 +175,10 @@ All registered by `PrinterTemperatureState`; display strings are formatter subje
 | `chamber_filter_fan_on` / `..._text` | int / string | Fan RUNNING state: reported speed when the backend has one, the pin otherwise |
 | `chamber_filter_fan_icon` | string | Toggle icon name ("fan"/"fan_off") — bind_icon source for the compact portrait card |
 | `printer_has_chamber_heater_diagnostics` | int 0/1 | Capability: diagnostics card is built at all |
-| `printer_has_chamber_filter_fan` | int 0/1 | Capability: filter-fan toggle row |
+| `printer_has_chamber_filter_fan` | int 0/1 | Capability: filter-fan toggle and its readout column |
+| `printer_has_chamber_element_temp` | int 0/1 | Capability: element readout column, from the backend's `reports_element_temp()` |
 
-Capability setters round-trip through `PrinterCapabilitiesState`; `set_hardware` raises them exactly when the backend provides the corresponding surface.
+Capability setters round-trip through `PrinterCapabilitiesState`; `set_hardware` raises them exactly when the backend provides the corresponding surface. Backends differ in what they publish, so each readout column on the card follows its own capability — a permanently blank row tells the user nothing. The External badge sits in its own Mode column rather than beside the element temperature, so it survives a backend that reports no element.
 
 ---
 
@@ -186,7 +187,7 @@ Capability setters round-trip through `PrinterCapabilitiesState`; `set_hardware`
 What the chamber keypad and presets will offer, in precedence order:
 
 1. **`configfile` `max_temp`** for the resolved heater section — the printer's own limit (read via `query_configfile` in `TemperatureController::ensure_limits()`). Example: the K2's `heater_generic chamber_heater` declares `max_temp: 80`.
-2. **Backend `conservative_max_temp()`** — used only when configfile is silent. DragonBreath and Panda Breath both return 60 (their firmware hard-caps targets; DragonBreath's config usually says 75 — the backend stays below it on purpose).
+2. **Backend `conservative_max_temp()`** — used only when configfile is silent, and a declared `max_temp` always wins. DragonBreath and Panda Breath both return 60, the chamber temperature the appliances are sold for. Real configs sit above it (DragonBreath's usually says 75; Snapmaker's shipped Panda Breath heater fragment says 80), so the fallback is deliberately the low end.
 3. **Heater default** (`keypad_max_default`, 80 for chamber) — generic backend returns 0 = no clamp, so an unconfigured generic chamber keeps the default.
 
 The fallback snapshot is taken **before** the configfile query fires — the parse callback runs on the WebSocket thread and must not read `this` members (see `THREADING.md`).
@@ -198,7 +199,7 @@ The fallback snapshot is taken **before** the configfile query fires — the par
 Two distinct mechanisms, both informational in v1 — HelixScreen never fights another controller for the chamber:
 
 - **DragonBreath lease semantics.** SET_HEATER_TEMPERATURE commands round-trip with a lease: while our lease is held the status reports `lease_owned` / `source: klipper`. When another controller (device web UI, physical button) takes over, the firmware invalidates our lease and the status keeps reporting authoritative state. `parse_diagnostics()` derives `externally_controlled = (mode == power_on) && !(lease_owned || source == klipper)` — heating that is neither ours nor Klipper's. The UI shows this as an annotation only.
-- **Stock-firmware autonomous mode (Panda Breath).** `device_autonomous_control()` returns true: the device's own Auto mode follows the bed temperature with no host involvement. Documented, not acted on — a policy (e.g. dimming the setpoint UI) is deliberately deferred.
+- **Stock-firmware autonomous mode (Panda Breath).** `device_autonomous_control()` returns true: the device's own Auto mode follows the bed temperature with no host involvement. The binding publishes which loop is holding the heater as `work_mode` (1 = the appliance's own auto cycle, 2 = the target Klipper set, 3 = a filament-drying run) alongside `work_on` for its output stage, so `parse_diagnostics()` derives `externally_controlled = work_on && work_mode != 2`. `work_mode` latches at its last value after the output stops, which is why `work_on` is what makes the answer present-tense. Beyond the badge this is still informational — no policy (e.g. dimming the setpoint UI) acts on it.
 
 ---
 
@@ -212,7 +213,7 @@ One file + one registry line + one test + one mock shape. The vendor-abstraction
 
 3. **Add a `parse_diagnostics` test** in `tests/unit/test_chamber_heater_backend.cpp` — a live nominal payload, a faulted/edge variant, and a foreign-payload rejection (mirror the three DragonBreath cases).
 
-4. **Mock shape** — for appliances with a status object, extend the `HELIX_MOCK_OBJECTS` handling in `moonraker_client_mock.cpp` if a new object shape is needed (the dragonbreath trio is the reference: `HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbreath_filter"` — heater object, status object, filter pin).
+4. **Mock shape** — for appliances with a status object, extend `append_chamber_backend_status()` in `moonraker_client_mock.cpp` with a branch on your backend id, and add any `HELIX_MOCK_*` hooks the interesting states need (`MOCK_ENVIRONMENT_VARIABLES.md`). Two references, both in `test_chamber_mock_appliances.cpp`: the dragonbreath trio `HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbreath_filter"` (heater, status object, filter pin) and the stock pair `HELIX_MOCK_OBJECTS="heater_generic panda_breath panda_breath"` (heater, status object, no pin). Synthesize only fields the real binding publishes — inventing one exercises a parse path no device can reach.
 
 Verify with `./build/bin/helix-tests "[chamber]"` and a mock run:
 
@@ -233,7 +234,7 @@ HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbr
 ./build/bin/helix-tests "[chamber][actions]" # fault reset + filter fan gcode
 ```
 
-Per-file: `test_chamber_heater_backend.cpp` (match/parse), `test_chamber_heater_discovery.cpp` (discovery hook), `test_chamber_diagnostics_subjects.cpp`, `test_chamber_ceiling_actions.cpp`, `test_chamber_mock_dragonbreath.cpp`, `test_chamber_panel_diagnostics.cpp`, `test_chamber_temperature.cpp`, `test_chamber_mode_icon_label_parity.cpp`.
+Per-file: `test_chamber_heater_backend.cpp` (match/parse), `test_chamber_heater_discovery.cpp` (discovery hook), `test_chamber_diagnostics_subjects.cpp`, `test_chamber_ceiling_actions.cpp`, `test_chamber_mock_appliances.cpp`, `test_chamber_panel_diagnostics.cpp`, `test_chamber_temperature.cpp`, `test_chamber_mode_icon_label_parity.cpp`.
 
 ---
 
@@ -245,6 +246,39 @@ Per-file: `test_chamber_heater_backend.cpp` (match/parse), `test_chamber_heater_
 - The glue module's `M141` is **module-registered, not a macro** — invisible to Moonraker's `gcode_macro` object list. Chamber routing therefore falls back to raw `SET_HEATER_TEMPERATURE` (`chamber_uses_m141()` returns false because no `gcode_macro M141` object exists).
 - `configfile` exposes `max_temp: 75` for the heater section — readable, and it wins over the backend's conservative 60.
 - The `dragonbreath` status object carries **24 fields**; the backend parse (`chamber_heater_backend_dragonbreath.cpp`) is written against a captured live payload.
+
+### Stock Panda Breath on the U1 rig (2026-09-16, live)
+
+Captured with the appliance flipped to its stock OTA slot and the U1's Klipper
+config switched from the DragonBreath fragment to Snapmaker's shipped
+`[panda_breath]` one (`firmware: stock`, a WebSocket to `ws://<host>:80/ws`).
+
+- Objects: `panda_breath` (status, 15 fields) and `heater_generic panda_breath`.
+  **No filter-fan `output_pin`** — the appliance runs its filter from its own
+  auto settings and publishes no speed. `temperature_sensor cavity` is the
+  printer's own probe and is unrelated.
+- Status fields: `temperature`, `target`, `smoothed_temp`, `connected`,
+  `work_mode`, `work_on`, `device_target`, `auto_enabled`, `auto_target`,
+  `auto_filtertemp`, `auto_hotbedtemp`, `filament_temp`, `filament_timer`,
+  `remaining_seconds`, `filament_drying_active`. No fault, inhibit or element
+  temperature anywhere in the schema.
+- Chamber temperature arrives in **whole degrees** (23.0 → 24.0 → 25.0).
+- Mode transition, measured: at rest the appliance sat in its own auto cycle
+  (`work_mode: 1`, `work_on: true`, `auto_enabled: true`, `device_target: 60`)
+  while the Klipper target read 0. `SET_HEATER_TEMPERATURE HEATER=panda_breath
+  TARGET=30` flipped it to `work_mode: 2`, `auto_enabled: false`,
+  `device_target: 30`, and the chamber rose 23 → 25 °C in 16 s at `power: 1.00`.
+  Returning to 0 cleared `work_on` but **left `work_mode` at 2** — the mode
+  latches, so `work_on` is what makes `externally_controlled` present-tense.
+- The binding registers `PANDA_BREATH_AUTO`, `PANDA_BREATH_DRY_START` and
+  `PANDA_BREATH_DRY_STOP` without a help description, so **none of them appear
+  in `/printer/gcode/help`** — capability detection has to come from the status
+  object's presence, not the command list.
+- No `gcode_macro M141` with this config fragment, so chamber routing falls
+  through to raw `SET_HEATER_TEMPERATURE`, as it does for DragonBreath.
+  Snapmaker's optional `panda_breath_heater_auto.cfg` *does* define `M141` (and
+  routes it through `PANDA_BREATH_AUTO`), so both shapes occur in the field and
+  the existing `chamber_uses_m141()` check picks the right one.
 
 ### K2 Plus, integrated style (2026-08-20, live, non-invasive)
 
@@ -265,3 +299,5 @@ Config facts captured: `heater_generic chamber_heater` — `max_temp: 80`, water
 ## Deferred: Dryer Mode
 
 Chamber dryer mode (Panda Breath's `PANDA_BREATH_DRY_START`/`STOP` passthrough, DragonBreath's hardware drying with no Klipper surface, a generic hold-N°C-for-M-hours loop) is **deliberately out of scope** for v1 — tracked in [#1299](https://github.com/prestonbrown/helixscreen/issues/1299). It should land as a generic backend capability question reusing the existing dryer UX (Happy Hare dryer panels, AMS environment overlay), not as per-vendor UI.
+
+The two appliance firmwares are not equally blocked, which matters when #1299 is picked up. Stock Panda Breath has **both halves**: the commands above plus live status in the same object the backend already parses — `filament_drying_active`, `filament_temp`, `filament_timer` and a `remaining_seconds` countdown (`work_mode: 3` while a cycle runs). DragonBreath's glue exposes neither a drying command nor drying status through Klipper, even though the appliance itself advertises a `drying` capability on its own HTTP API. So a #1299 implementation can be verified end to end on stock firmware and only stubbed for DragonBreath.

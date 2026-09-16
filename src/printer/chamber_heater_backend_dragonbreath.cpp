@@ -78,6 +78,10 @@ class DragonbreathBackend : public ChamberHeaterBackend {
     std::string_view fault_reset_gcode() const override {
         return "DRAGONBREATH_RESET";
     }
+    // ptc_temp rides in every status frame.
+    bool reports_element_temp() const override {
+        return true;
+    }
     // Firmware hard-caps the target at 70 C; configfile usually says 75. If we
     // ever have NO ceiling data, assume the stock chamber cap.
     double conservative_max_temp() const override {

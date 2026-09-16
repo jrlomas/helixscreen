@@ -55,6 +55,10 @@ class GenericChamberHeaterBackend : public ChamberHeaterBackend {
     std::string_view fault_reset_gcode() const override {
         return {};
     }
+    // A plain heater_generic is one temperature; there is no element behind it.
+    bool reports_element_temp() const override {
+        return false;
+    }
     double conservative_max_temp() const override {
         return 0;
     }

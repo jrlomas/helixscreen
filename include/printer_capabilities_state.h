@@ -138,6 +138,9 @@ class PrinterCapabilitiesState {
     /** @brief Set chamber filter-fan capability (backend filter pin resolved) */
     void set_has_chamber_filter_fan(bool available);
 
+    /** @brief Set chamber element-temperature capability (backend reports one) */
+    void set_has_chamber_element_temp(bool available);
+
     /**
      * @brief Set stepper_z position_endstop value (for non-probe printers)
      *
@@ -281,6 +284,11 @@ class PrinterCapabilitiesState {
         return const_cast<lv_subject_t*>(&printer_has_chamber_filter_fan_);
     }
 
+    /// 1 if the chamber backend reports the heating element's own temperature
+    lv_subject_t* get_printer_has_chamber_element_temp_subject() const {
+        return const_cast<lv_subject_t*>(&printer_has_chamber_element_temp_);
+    }
+
     /// 1 if printer has any chamber capability (sensor OR heater)
     lv_subject_t* get_printer_has_chamber_subject() const {
         return const_cast<lv_subject_t*>(&printer_has_chamber_);
@@ -414,21 +422,22 @@ class PrinterCapabilitiesState {
     lv_subject_t printer_has_chamber_sensor_{};      // chamber temperature sensor
     lv_subject_t printer_has_chamber_heater_{};      // active chamber heater (heater_generic)
     lv_subject_t
-        printer_has_chamber_heater_diagnostics_{};  // chamber heater exposes backend diagnostics
-    lv_subject_t printer_has_chamber_filter_fan_{}; // chamber filter fan (output_pin)
-    lv_subject_t printer_has_chamber_{};            // combined: sensor OR heater
-    lv_subject_t printer_has_screws_tilt_{};        // screws_tilt_adjust
-    lv_subject_t printer_has_webcam_{};             // enabled webcam configured
-    lv_subject_t webcam_count_{};                   // named webcams in webcams_
-    std::vector<WebcamInfo> webcams_;               // every enabled webcam, Moonraker order
-    std::string webcam_stream_url_;                 // auto-pick: MJPEG stream URL
-    std::string webcam_snapshot_url_;               // snapshot URL
-    bool webcam_flip_h_ = false;                    // flip horizontal
-    bool webcam_flip_v_ = false;                    // flip vertical
-    int webcam_target_fps_ = 15;                    // configured target FPS
-    lv_subject_t printer_has_extra_fans_{};         // extra controllable fans beyond part cooling
-    lv_subject_t power_device_count_{};             // number of power devices (0 = none)
-    lv_subject_t sensor_count_{};                   // number of Moonraker sensors (0 = none)
+        printer_has_chamber_heater_diagnostics_{};    // chamber heater exposes backend diagnostics
+    lv_subject_t printer_has_chamber_filter_fan_{};   // chamber filter fan (output_pin)
+    lv_subject_t printer_has_chamber_element_temp_{}; // backend reports element temperature
+    lv_subject_t printer_has_chamber_{};              // combined: sensor OR heater
+    lv_subject_t printer_has_screws_tilt_{};          // screws_tilt_adjust
+    lv_subject_t printer_has_webcam_{};               // enabled webcam configured
+    lv_subject_t webcam_count_{};                     // named webcams in webcams_
+    std::vector<WebcamInfo> webcams_;                 // every enabled webcam, Moonraker order
+    std::string webcam_stream_url_;                   // auto-pick: MJPEG stream URL
+    std::string webcam_snapshot_url_;                 // snapshot URL
+    bool webcam_flip_h_ = false;                      // flip horizontal
+    bool webcam_flip_v_ = false;                      // flip vertical
+    int webcam_target_fps_ = 15;                      // configured target FPS
+    lv_subject_t printer_has_extra_fans_{};           // extra controllable fans beyond part cooling
+    lv_subject_t power_device_count_{};               // number of power devices (0 = none)
+    lv_subject_t sensor_count_{};                     // number of Moonraker sensors (0 = none)
 };
 
 } // namespace helix

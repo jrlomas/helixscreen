@@ -98,6 +98,13 @@ bool is_chamber_heater_object(const std::string& obj) {
     return chamber::match(name).confidence > 0;
 }
 
+/// A HELIX_MOCK_* switch: set to "1" to arm it. Mock hooks are read per frame,
+/// so a test can flip one without rebuilding the client.
+bool mock_env_flag(const char* name) {
+    const char* v = std::getenv(name);
+    return v && v[0] == '1';
+}
+
 /// Does any registered backend expose this exact bare object as its
 /// diagnostics status object? Used by the HELIX_MOCK_OBJECTS tokenizer to
 /// recognize a standalone diagnostics token ("dragonbreath") that follows a
@@ -479,15 +486,10 @@ void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double
             // The pin is only a request: while the device heats it runs the
             // filter fan itself and reports why, leaving our pin untouched.
             const bool device_fan = !filter_on && chamber_target > 0.0;
-            // Test hook: HELIX_MOCK_DRAGONBREATH_FAULT=1 latches a fault into
-            // every synthesized frame.
-            const char* fault_env = std::getenv("HELIX_MOCK_DRAGONBREATH_FAULT");
-            const bool mock_fault = fault_env && fault_env[0] == '1';
-            // Test hook: HELIX_MOCK_DRAGONBREATH_OFFLINE=1 drops the appliance
-            // off its radio link. Read per frame so one client crosses the
+            // Test hooks. Read per frame so one client crosses the
             // transition rather than having to be rebuilt.
-            const char* offline_env = std::getenv("HELIX_MOCK_DRAGONBREATH_OFFLINE");
-            const bool mock_offline = offline_env && offline_env[0] == '1';
+            const bool mock_fault = mock_env_flag("HELIX_MOCK_DRAGONBREATH_FAULT");
+            const bool mock_offline = mock_env_flag("HELIX_MOCK_DRAGONBREATH_OFFLINE");
             // PTC element rides a few degrees above chamber air, drifting
             // with the same slow sine the other mock sensors use.
             const double ptc_temp =
@@ -506,6 +508,39 @@ void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double
                                 {"source", "klipper"},
                                 {"lease_owned", chamber_target > 0.0},
                                 {"connected", !mock_offline}};
+        } else if (backend->id() == "panda_breath") {
+            // VENDOR_OK: mirrors the stock Panda Breath binding's status
+            // object as captured live on the U1 rig (issue #1290).
+            const double chamber_temp = chamber_temp_.load();
+            const double chamber_target = chamber_target_.load();
+            const bool mock_offline = mock_env_flag("HELIX_MOCK_PANDA_BREATH_OFFLINE");
+            // Test hook: the appliance holding its own auto target while our
+            // target reads 0 — the state the rig sits in at rest, and the
+            // only one that raises the External badge.
+            const bool mock_auto = mock_env_flag("HELIX_MOCK_PANDA_BREATH_AUTO");
+            const bool klipper_driving = chamber_target > 0.0;
+            // work_mode latches at its last value once the output stops, so a
+            // Klipper target that has been set and cleared still reads 2.
+            const int work_mode = klipper_driving ? 2 : (mock_auto ? 1 : 2);
+            // The device reports whole degrees.
+            const double reported_temp = std::round(chamber_temp);
+            status_obj[diag] = {{"temperature", reported_temp},
+                                {"target", chamber_target},
+                                {"smoothed_temp", reported_temp},
+                                {"connected", !mock_offline},
+                                {"work_mode", work_mode},
+                                {"work_on", klipper_driving || mock_auto},
+                                {"device_target", klipper_driving ? chamber_target
+                                                  : mock_auto     ? 60.0
+                                                                  : 0.0},
+                                {"auto_enabled", mock_auto && !klipper_driving},
+                                {"auto_target", 45},
+                                {"auto_filtertemp", 30},
+                                {"auto_hotbedtemp", 80},
+                                {"filament_temp", 60},
+                                {"filament_timer", 12},
+                                {"remaining_seconds", 0},
+                                {"filament_drying_active", false}};
         }
     }
 

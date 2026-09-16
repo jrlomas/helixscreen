@@ -71,6 +71,10 @@ class ChamberHeaterBackend {
     virtual std::string_view filter_fan_pin() const = 0;
     /// Gcode clearing a latched fault ("" = none).
     virtual std::string_view fault_reset_gcode() const = 0;
+    /// Backend reports the heating element's own temperature. False hides the
+    /// element readout: a permanently blank row tells the user nothing, and
+    /// this is a property of the schema, not of any one frame.
+    virtual bool reports_element_temp() const = 0;
     /// Conservative °C ceiling when configfile max_temp is unknown. 0 = no clamp.
     virtual double conservative_max_temp() const = 0;
     /// Device may self-drive the heater (stock-firmware Auto mode).

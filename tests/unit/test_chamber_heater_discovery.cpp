@@ -35,11 +35,13 @@ TEST_CASE("printer-native chamber wins over appliance name", "[chamber][discover
     CHECK(d.chamber_diagnostics_object().empty());
 }
 
-TEST_CASE("panda_breath heater detects, no diagnostics", "[chamber][discovery]") {
-    auto d = parse({"heater_generic panda_breath"});
+TEST_CASE("panda_breath heater detects with diagnostics, no filter pin", "[chamber][discovery]") {
+    auto d = parse({"heater_generic panda_breath", "panda_breath"});
     CHECK(d.chamber_heater_name() == "heater_generic panda_breath");
     CHECK(d.chamber_heater_backend_id() == "panda_breath");
-    CHECK(d.chamber_diagnostics_object().empty());
+    CHECK(d.chamber_diagnostics_object() == "panda_breath");
+    // The stock binding publishes no filtration pin: the appliance runs its
+    // filter from its own auto settings.
     CHECK(d.chamber_filter_fan_pin().empty());
 }
 

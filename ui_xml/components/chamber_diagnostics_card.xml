@@ -14,11 +14,14 @@
 
        The caller owns outer visibility: instantiate inside
        <if cond="printer_has_chamber_heater_diagnostics and temp_graph_mode eq 3">
-       so non-chamber printers never build the subtree. The two inner gates
-       (banner on fault-or-inhibited, toggle on the filter-fan capability)
-       are bind-based because they flip at runtime. While the device drives
-       the filter fan itself, the percent readout gains a Device badge and the
-       toggle disables — the pin is a request the device overrides.
+       so non-chamber printers never build the subtree. Every inner gate is
+       bind-based because it flips at runtime: the banner on
+       fault-or-inhibited-or-offline, the Mode column on external control, and
+       the Element and Filter Fan columns on their capability subjects —
+       backends differ in what they report, and a permanently blank readout
+       tells the user nothing. While the device drives the filter fan itself,
+       the percent readout gains a Device badge and the toggle disables — the
+       pin is a request the device overrides.
 
        Orientation is a structural branch (nozzle_control_strip pattern):
        landscape keeps the comfortable stacked layout; portrait collapses to
@@ -64,19 +67,16 @@
       </lv_obj>
       <!-- Info row: heating-element temp + filter fan speed -->
       <lv_obj width="100%" height="content" flex_flow="row" style_pad_gap="#space_md" scrollable="false">
-        <lv_obj height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+        <lv_obj name="element_readout" height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <bind_flag_if_eq subject="printer_has_chamber_element_temp" flag="hidden" ref_value="0"/>
           <text_muted text="Element" translation_tag="Element"/>
           <lv_obj height="content" flex_flow="row" style_pad_gap="#space_xxs" scrollable="false">
             <text_small name="element_temp_label" bind_text="chamber_heater_element_temp_text"/>
-            <!-- Another controller is driving the heater: the device's own
-                 web UI or a button on the unit. Informational, not a fault. -->
-            <text_small name="external_control_badge"
-                        text="External" translation_tag="External" style_text_color="#text_muted">
-              <bind_flag_if cond="chamber_heater_externally_controlled" flag="hidden" invert="true"/>
-            </text_small>
           </lv_obj>
         </lv_obj>
-        <lv_obj height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+        <lv_obj name="filter_fan_readout"
+                height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <bind_flag_if_eq subject="printer_has_chamber_filter_fan" flag="hidden" ref_value="0"/>
           <text_muted text="Filter Fan" translation_tag="Filter Fan"/>
           <lv_obj height="content" flex_flow="row" style_pad_gap="#space_xxs" scrollable="false">
             <text_small name="fan_percent_label" bind_text="chamber_filter_fan_percent_text"/>
@@ -86,6 +86,15 @@
               <bind_flag_if cond="chamber_filter_fan_device_driven" flag="hidden" invert="true"/>
             </text_small>
           </lv_obj>
+        </lv_obj>
+        <!-- Another controller is driving the heater: the device's own web UI,
+             a button on the unit, or the appliance's own auto cycle holding a
+             target of its own. Informational, not a fault. -->
+        <lv_obj name="external_control_readout"
+                height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <bind_flag_if cond="chamber_heater_externally_controlled" flag="hidden" invert="true"/>
+          <text_muted text="Mode" translation_tag="Mode"/>
+          <text_small name="external_control_badge" text="External" translation_tag="External"/>
         </lv_obj>
       </lv_obj>
       <!-- Filter fan toggle — only when the backend wires a filter-fan pin.
@@ -127,19 +136,16 @@
       <lv_obj width="100%"
               height="content" flex_flow="row" style_pad_gap="#space_md" style_flex_cross_place="center"
               scrollable="false">
-        <lv_obj height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+        <lv_obj name="element_readout" height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <bind_flag_if_eq subject="printer_has_chamber_element_temp" flag="hidden" ref_value="0"/>
           <text_muted text="Element" translation_tag="Element"/>
           <lv_obj height="content" flex_flow="row" style_pad_gap="#space_xxs" scrollable="false">
             <text_small name="element_temp_label" bind_text="chamber_heater_element_temp_text"/>
-            <!-- Another controller is driving the heater: the device's own
-                 web UI or a button on the unit. Informational, not a fault. -->
-            <text_small name="external_control_badge"
-                        text="External" translation_tag="External" style_text_color="#text_muted">
-              <bind_flag_if cond="chamber_heater_externally_controlled" flag="hidden" invert="true"/>
-            </text_small>
           </lv_obj>
         </lv_obj>
-        <lv_obj height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+        <lv_obj name="filter_fan_readout"
+                height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <bind_flag_if_eq subject="printer_has_chamber_filter_fan" flag="hidden" ref_value="0"/>
           <text_muted text="Filter Fan" translation_tag="Filter Fan"/>
           <lv_obj height="content" flex_flow="row" style_pad_gap="#space_xxs" scrollable="false">
             <text_small name="fan_percent_label" bind_text="chamber_filter_fan_percent_text"/>
@@ -147,6 +153,15 @@
               <bind_flag_if cond="chamber_filter_fan_device_driven" flag="hidden" invert="true"/>
             </text_small>
           </lv_obj>
+        </lv_obj>
+        <!-- Another controller is driving the heater: the device's own web UI,
+             a button on the unit, or the appliance's own auto cycle holding a
+             target of its own. Informational, not a fault. -->
+        <lv_obj name="external_control_readout"
+                height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
+          <bind_flag_if cond="chamber_heater_externally_controlled" flag="hidden" invert="true"/>
+          <text_muted text="Mode" translation_tag="Mode"/>
+          <text_small name="external_control_badge" text="External" translation_tag="External"/>
         </lv_obj>
         <lv_obj height="1" flex_grow="1" style_pad_all="0" scrollable="false" style_border_opa="0"/>
         <ui_button name="filter_fan_button"

@@ -650,7 +650,7 @@ HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbr
 
 ### `HELIX_MOCK_DRAGONBREATH_OFFLINE`
 
-Drop the appliance off its radio link: every synthesized dragonbreath status frame reports `connected: false` instead of `true`, so the diagnostics card banners the offline state and hides its Reset button. The hardware confirmation of a real `connected: false` is pending, which is why this path is mock-driven.
+Drop the appliance off its radio link: every synthesized dragonbreath status frame reports `connected: false` instead of `true`, so the diagnostics card banners the offline state and hides its Reset button. A real link drop is brief and unpredictable (the U1 rig flaps for one or two polls roughly every 20 minutes), so this hook is how the sustained-outage path gets exercised on demand.
 
 | Property | Value |
 |----------|-------|
@@ -662,6 +662,38 @@ Drop the appliance off its radio link: every synthesized dragonbreath status fra
 # Chamber heater that dropped off WiFi
 HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbreath_filter" \
   HELIX_MOCK_DRAGONBREATH_OFFLINE=1 ./build/bin/helix-screen --test -vv
+```
+
+### `HELIX_MOCK_PANDA_BREATH_AUTO`
+
+Put the stock Panda Breath into its own auto cycle: the status frame reports `work_mode: 1`, `work_on: true`, `auto_enabled: true` and a `device_target` of its own while our `target` stays 0. This is the state the appliance sits in at rest, and the only one that raises the diagnostics card's External badge.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Exactly `1` |
+| **Default** | Unset — the appliance idles with `work_on: false` |
+| **File** | `src/api/moonraker_client_mock.cpp` |
+
+```bash
+# Stock Panda Breath holding its own auto target
+HELIX_MOCK_OBJECTS="heater_generic panda_breath panda_breath" \
+  HELIX_MOCK_PANDA_BREATH_AUTO=1 ./build/bin/helix-screen --test -vv
+```
+
+### `HELIX_MOCK_PANDA_BREATH_OFFLINE`
+
+The stock counterpart to `HELIX_MOCK_DRAGONBREATH_OFFLINE`: every synthesized `panda_breath` frame reports `connected: false` while the heater section keeps answering, which is exactly what a dropped WebSocket looks like from Klipper.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Exactly `1` |
+| **Default** | Unset — nominal frame (`connected: true`) |
+| **File** | `src/api/moonraker_client_mock.cpp` |
+
+```bash
+# Stock Panda Breath that dropped off WiFi
+HELIX_MOCK_OBJECTS="heater_generic panda_breath panda_breath" \
+  HELIX_MOCK_PANDA_BREATH_OFFLINE=1 ./build/bin/helix-screen --test -vv
 ```
 
 ### `HELIX_MOCK_KALICO`
