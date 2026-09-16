@@ -6,6 +6,8 @@
 
 #include <filesystem>
 #include <fstream>
+#include <string>
+#include <unistd.h>
 
 #include "../catch_amalgamated.hpp"
 
@@ -36,8 +38,13 @@ class PresetConfigFixture {
 
     void SetUp() {
         did_setup_ = true;
-        // Create temp directory for test config and presets
-        temp_dir = (fs::temp_directory_path() / "helix_preset_test").string();
+        // Per-process sandbox. The name must not be shared: the printer_database
+        // symlink below is created inside it, and a copy_file fallback onto an
+        // existing symlink writes THROUGH it — into whichever checkout that
+        // symlink names. Two suites running from different worktrees at once
+        // would otherwise rewrite each other's tracked assets/config copy.
+        temp_dir = (fs::temp_directory_path() / ("helix_preset_test." + std::to_string(::getpid())))
+                       .string();
         fs::create_directories(temp_dir + "/presets");
         fs::create_directories(temp_dir + "/assets/config/presets");
 
@@ -98,7 +105,11 @@ class PresetConfigFixture {
             return;
         }
         torn_down_ = true;
-        fs::remove_all(temp_dir);
+        // TearDown runs from the destructor, which a failing REQUIRE reaches while
+        // unwinding. The throwing overload would terminate the process there and
+        // bury the assertion that actually failed.
+        std::error_code rm_ec;
+        fs::remove_all(temp_dir, rm_ec);
         if (had_config_dir_) {
             setenv("HELIX_CONFIG_DIR", saved_config_dir_.c_str(), 1);
         } else {
@@ -206,21 +217,102 @@ TEST_CASE_METHOD(PresetConfigFixture, "Config::apply_preset_file preserves non-h
     TearDown();
 }
 
-TEST_CASE_METHOD(PresetConfigFixture, "Config::apply_preset_file skips merge when wizard completed",
+TEST_CASE_METHOD(PresetConfigFixture,
+                 "Config::apply_preset_file post-wizard seeds absent role keys from preset",
+                 "[config][preset]") {
+    SetUp();
+
+    // Machine provisioned before the ForgeX preset landed: wizard done, generic
+    // ad5m fan names in config, no chamber/exhaust/aux/led keys.
+    printer_data()["wizard_completed"] = true;
+    copy_shipped_preset("ad5m_pro_forgex");
+
+    REQUIRE(config.apply_preset_file("ad5m_pro_forgex") == true);
+
+    auto& pd = printer_data();
+    REQUIRE(pd["fans"]["chamber"] == "fan_generic chamber_fan");
+    REQUIRE(pd["fans"]["exhaust"] == "fan_generic external_fan");
+    REQUIRE(pd["fans"]["aux"] == "fan_generic internal_fan");
+    // leds/strip is not seeded post-wizard: a preset LED name the machine does not
+    // have would raise "Configured LED strip not found", which outranks the toast
+    // this migration exists to silence.
+    REQUIRE_FALSE(pd.contains("leds"));
+
+    TearDown();
+}
+
+TEST_CASE_METHOD(PresetConfigFixture,
+                 "Config::apply_preset_file post-wizard never overwrites a held role value",
+                 "[config][preset]") {
+    SetUp();
+
+    printer_data()["wizard_completed"] = true;
+    // The user (or a heal) holds a chamber mapping; the preset disagrees.
+    printer_data()["fans"]["chamber"] = "fan_generic user_pick";
+
+    json preset = {
+        {"printer",
+         {{"fans",
+           {{"chamber", "fan_generic chamber_fan"}, {"exhaust", "fan_generic external_fan"}}}}}};
+    write_preset("ad5m_pro", preset);
+
+    REQUIRE(config.apply_preset_file("ad5m_pro") == true);
+    REQUIRE(printer_data()["fans"]["chamber"] == "fan_generic user_pick");
+    // Seeding still reaches keys nobody holds.
+    REQUIRE(printer_data()["fans"]["exhaust"] == "fan_generic external_fan");
+
+    TearDown();
+}
+
+TEST_CASE_METHOD(PresetConfigFixture,
+                 "Config::apply_preset_file post-wizard unions hardware/expected without AMS "
+                 "keywords",
                  "[config][preset]") {
     SetUp();
 
     printer_data()["wizard_completed"] = true;
 
     json preset = {{"printer",
-                    {{"fans",
-                      {{"hotend", "heater_fan heat_fan"},
-                       {"part", "fan_generic fanM106"},
-                       {"chamber", "fan_generic chamber_fan"}}}}}};
-    write_preset("ad5m_pro", preset);
+                    {{"hardware",
+                      {{"expected",
+                        {"heater_bed", "extruder", "fan_generic chamber_fan", "led chamber_light",
+                         "controller_fan driver_fan", "AFC", "mmu", "toolchanger", "ace"}}}}}}};
+    write_preset("expected_preset", preset);
 
-    REQUIRE(config.apply_preset_file("ad5m_pro") == false);
-    REQUIRE_FALSE(printer_data()["fans"].contains("chamber"));
+    REQUIRE(config.apply_preset_file("expected_preset") == true);
+
+    auto& expected = printer_data()["hardware"]["expected"];
+    // Scaffold holds heater_bed + extruder; the union adds the rest, no duplicates.
+    REQUIRE(expected.size() == 5);
+    for (const auto& entry : expected) {
+        std::string name = entry.get<std::string>();
+        REQUIRE(name != "AFC");
+        REQUIRE(name != "mmu");
+        REQUIRE(name != "toolchanger");
+        REQUIRE(name != "ace");
+    }
+
+    TearDown();
+}
+
+TEST_CASE_METHOD(PresetConfigFixture,
+                 "Config::apply_preset_file post-wizard leaves leds/strip alone",
+                 "[config][preset]") {
+    SetUp();
+
+    printer_data()["wizard_completed"] = true;
+    printer_data().erase("leds");
+
+    // The fan role pins that the migration ran at all, so the LED absence below is
+    // evidence rather than a vacuous pass on a preset that was never applied.
+    json preset = {{"printer",
+                    {{"fans", {{"chamber", "fan_generic chamber_fan"}}},
+                     {"leds", {{"strip", "led chamber_light"}}}}}};
+    write_preset("led_preset", preset);
+
+    REQUIRE(config.apply_preset_file("led_preset") == true);
+    REQUIRE(printer_data()["fans"]["chamber"] == "fan_generic chamber_fan");
+    REQUIRE_FALSE(printer_data().contains("leds"));
 
     TearDown();
 }
