@@ -11,6 +11,8 @@
 
 namespace helix {
 
+class TileSizing;
+
 /// Marks the root object of a home panel widget tile, set once at the single
 /// creation site in PanelWidgetManager::populate_widgets(). A tile is sized by
 /// the home grid and scrolled by dragging it, so page-level affordances do not
@@ -108,6 +110,44 @@ class PanelWidget {
     /// handles full cleanup. Default: true. Override to return false if
     /// the widget's detach() is irreversible or cannot be re-attached.
     virtual bool supports_reuse() const {
+        return true;
+    }
+
+    /// Attributes to hand this instance's component at creation, as the flat
+    /// nullptr-terminated key/value list lv_xml_create() takes. Returning
+    /// nullptr creates the component with no attributes, which is what a widget
+    /// that binds nothing per-instance wants.
+    ///
+    /// This is how a tile's per-instance subject NAMES reach its XML. They must
+    /// exist before the component is parsed, so whatever supplies them is
+    /// constructed with the widget, not in attach().
+    virtual const char** xml_attrs() const {
+        return nullptr;
+    }
+
+    /// The tile's sizing helper, for widgets that have one. The manager hands
+    /// it the created root so the verdict is computed against the box the
+    /// content really draws in rather than the tile's outer box.
+    virtual TileSizing* tile_sizing() {
+        return nullptr;
+    }
+
+    /// Whether this widget can render its identifying content in a box of this
+    /// size. Edit mode's resize clamp and the load path both ask before
+    /// offering a size, and a widget that returns false at a size is never
+    /// given it. Default true, so a widget that has not opted in keeps exactly
+    /// its registry limits.
+    ///
+    /// Pixels are the grid's arithmetic extent for the span
+    /// (grid_track_extent), not laid-out geometry: the same numbers
+    /// on_size_changed() carries, and available before any layout pass runs.
+    ///
+    /// Must be MONOTONIC. A widget that fits at a size fits at every larger
+    /// size on both axes, because the clamp walks outward assuming the first
+    /// accepting size is the nearest one.
+    virtual bool fits_at(int width_px, int height_px) const {
+        (void)width_px;
+        (void)height_px;
         return true;
     }
 
