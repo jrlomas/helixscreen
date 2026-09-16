@@ -24,6 +24,7 @@ class RefreshPeriodHoldTestAccess {
         hold.m_count = 0;
         hold.restore_timers();
         hold.m_period_ms = 0;
+        hold.m_saver_period_ms = 0;
     }
 };
 

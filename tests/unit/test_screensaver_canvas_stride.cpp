@@ -47,9 +47,9 @@ TEST_CASE_METHOD(LVGLTestFixture, "starfield canvas allocation covers LVGL's str
     REQUIRE(cbuf != nullptr);
     // The walk render_frame() uses and the stride lv_canvas_set_buffer()
     // recorded must be the same number.
-    REQUIRE(StarfieldScreensaverTestAccess::draw_buf_stride(ss) == cbuf->header.stride);
+    REQUIRE(SaverTestAccess::draw_buf_stride(ss) == cbuf->header.stride);
     // And the allocation must cover the extent LVGL will write.
-    REQUIRE(StarfieldScreensaverTestAccess::draw_buf_size(ss) >= cbuf->data_size);
+    REQUIRE(SaverTestAccess::draw_buf_size(ss) >= cbuf->data_size);
 
     ss.stop();
     REQUIRE_FALSE(ss.is_active());
@@ -65,7 +65,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "pipes canvas allocation covers LVGL's stride-
 
     lv_draw_buf_t* cbuf = lv_canvas_get_draw_buf(find_screensaver_canvas());
     REQUIRE(cbuf != nullptr);
-    REQUIRE(PipesScreensaverTestAccess::draw_buf_size(ss) >= cbuf->data_size);
+    REQUIRE(SaverTestAccess::draw_buf_size(ss) >= cbuf->data_size);
 
     ss.stop();
     REQUIRE_FALSE(ss.is_active());
@@ -150,7 +150,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "the starfield canvas is opaque XRGB8888",
     ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
     ss.start();
     REQUIRE(ss.is_active());
-    const lv_draw_buf_t* buf = lv_canvas_get_draw_buf(StarfieldScreensaverTestAccess::canvas(ss));
+    const lv_draw_buf_t* buf = lv_canvas_get_draw_buf(SaverTestAccess::canvas(ss));
     REQUIRE(buf != nullptr);
     CHECK(buf->header.cf == LV_COLOR_FORMAT_XRGB8888);
 }
@@ -159,15 +159,15 @@ TEST_CASE_METHOD(LVGLTestFixture, "every starfield canvas pixel stays opaque as 
                  "[screensaver][screensaver_canvas]") {
     StarfieldScreensaver ss;
     ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
-    StarfieldScreensaverTestAccess::set_fixed_seed(ss, 3);
+    SaverTestAccess::set_fixed_seed(ss, 3);
     ss.start();
     REQUIRE(ss.is_active());
-    lv_obj_t* canvas = StarfieldScreensaverTestAccess::canvas(ss);
+    lv_obj_t* canvas = SaverTestAccess::canvas(ss);
     CHECK(pixels_not_opaque(canvas) == 0);
 
     for (int frame = 0; frame < 30; frame++) {
         lv_tick_inc(33);
-        run_timer(StarfieldScreensaverTestAccess::timer(ss));
+        run_timer(SaverTestAccess::timer(ss));
     }
     REQUIRE(lit_pixels(canvas) > 0);
     CHECK(pixels_not_opaque(canvas) == 0);

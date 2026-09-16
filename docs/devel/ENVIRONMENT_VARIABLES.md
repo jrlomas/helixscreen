@@ -489,9 +489,9 @@ Force the screensaver to start immediately instead of waiting for the idle timeo
 
 | Property | Value |
 |----------|-------|
-| **Values** | `toasters`, `starfield`, `pipes`, `bounce`, or `1` / any other value (uses the configured type, falling back to flying toasters) |
+| **Values** | A saver name from `include/screensaver_registry.h#SCREENSAVERS` (`toasters`, `starfield`, `pipes`, `bounce`, `fireworks`), or `1` / any other value (uses the configured type, falling back to flying toasters) |
 | **Default** | Unset — normal idle-timeout behavior |
-| **File** | `src/application/display_manager.cpp` |
+| **File** | `src/application/display_manager.cpp`, names in `include/screensaver_registry.h` |
 
 ```bash
 # Jump straight into the starfield screensaver
@@ -535,18 +535,52 @@ Which timers `HELIX_REFR_PERIOD_MS` sets. `display` sets the display refresh and
 
 ### `HELIX_SCREENSAVER_REFR_PERIOD_MS`
 
-Display refresh and animation period while a screensaver runs. Set before the saver starts, so the saver's own tick timer, which follows the refresh period, runs at it too. Switching between saver types keeps it, and so does an input rebuild after a backend swap, which makes the new global period the one stopping puts back. Stopping the saver, a saver that fails to start, and entering sleep all put back the period in force before (`HELIX_REFR_PERIOD_MS`, or LVGL's default). The static software sleep overlay does not use it.
+Level 0 frame period of every screensaver, for manual testing: the saver draws at it, and the display refreshes and animates at it. Without it, level 0 runs at 16 ms. Levels 1 and up keep their own periods (33 ms and slower) either way, and while a saver runs the display refresh follows it to them. Switching between saver types keeps it, and so does an input rebuild after a backend swap, which makes the new global period the one stopping puts back. Stopping the saver, a saver that fails to start, and entering sleep all put back the period in force before (`HELIX_REFR_PERIOD_MS`, or LVGL's default). The static software sleep overlay does not use it.
 
 | Property | Value |
 |----------|-------|
 | **Values** | Whole milliseconds, `8` to `100`, or `0` to run savers at the global period |
-| **Default** | `16` |
+| **Default** | Unset: level 0 runs at 16 ms |
 | **Invalid** | Ignored with a warning |
-| **File** | `include/refresh_period_hold.h`, `src/ui/screensaver_manager.cpp` |
+| **File** | `include/refresh_period_hold.h`, `src/ui/screensaver_manager.cpp`, `src/ui/screensaver_base.cpp` |
 
 ```bash
 # Savers at the global period instead of 16 ms
 HELIX_SCREENSAVER_REFR_PERIOD_MS=0 HELIX_SCREENSAVER_NOW=1 ./build/bin/helix-screen --test -vv
+```
+
+Requires a build with `HELIX_ENABLE_SCREENSAVER`.
+
+### `HELIX_SCREENSAVER_BUDGET_PCT`
+
+Replaces the screensaver gate's CPU budget, as a whole percent of one core. Each 5 s window of a running saver's CPU share, with the idle baseline subtracted, is compared with this number instead of the core-count budget (4 or more cores 50%, 3 cores 37%, 2 cores 25%, 1 core 10%, halved while a print runs), so a small value proves on a device that a saver steps down and remembers its level. Read when a saver starts.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Whole percent, `1` to `400` |
+| **Default** | Unset: the core-count budget |
+| **Invalid** | Anything else (`0`, `25%`, `-5`, empty) is ignored with a warning |
+| **File** | `include/screensaver_gate.h#saver_env_overrides`, `src/ui/screensaver_manager.cpp` |
+
+```bash
+HELIX_SCREENSAVER_BUDGET_PCT=5 HELIX_SCREENSAVER_NOW=toasters ./build/bin/helix-screen --test -vv
+```
+
+Requires a build with `HELIX_ENABLE_SCREENSAVER`.
+
+### `HELIX_SCREENSAVER_LEVEL`
+
+Runs every saver that starts at this quality level and turns the gate off for that run: no step-down and no stored level. Level 0 is the most expensive. A level past the saver's ladder is ignored with a warning, and the stored level is used. Read when a saver starts.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Whole level number, `0` to `99` |
+| **Default** | Unset: the stored level for this saver, app version and board |
+| **Invalid** | Ignored with a warning |
+| **File** | `include/screensaver_gate.h#saver_env_overrides`, `src/ui/screensaver_manager.cpp` |
+
+```bash
+HELIX_SCREENSAVER_LEVEL=1 HELIX_SCREENSAVER_NOW=pipes ./build/bin/helix-screen --test -vv
 ```
 
 Requires a build with `HELIX_ENABLE_SCREENSAVER`.

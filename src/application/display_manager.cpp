@@ -489,6 +489,11 @@ bool DisplayManager::init(const Config& config) {
                  m_refresh_timing.screensaver_refr_period_ms, m_refresh_timing.loop_min_sleep_ms,
                  m_refresh_timing.screensaver_loop_min_sleep_ms);
 
+#ifdef HELIX_ENABLE_SCREENSAVER
+    // The gate halves the screensaver budget during prints and keys stored levels by display path.
+    ScreensaverManager::instance().set_host(screensaver_host(m_backend.get()));
+#endif
+
     // Create backlight backend (auto-detects hardware)
     m_backlight = BacklightBackend::create();
     spdlog::info("[DisplayManager] Backlight: {} (available: {})", m_backlight->name(),
@@ -1041,8 +1046,34 @@ void RefreshPeriodHold::acquire() {
     take_timers();
 }
 
+void RefreshPeriodHold::follow(uint32_t saver_period_ms) {
+    if (m_count == 0 || saver_period_ms == 0) {
+        return;
+    }
+    m_saver_period_ms = saver_period_ms;
+    if (!lv_is_initialized()) {
+        return;
+    }
+    if (m_display == nullptr) {
+        // acquire() had no period to run at and left the timers alone.
+        take_timers();
+        return;
+    }
+    if (display_is_live(m_display)) {
+        if (lv_timer_t* refr = lv_display_get_refr_timer(m_display)) {
+            lv_timer_set_period(refr, saver_period_ms);
+        }
+    }
+    if (m_saved_anim) {
+        if (lv_timer_t* anim = lv_anim_get_timer()) {
+            lv_timer_set_period(anim, saver_period_ms);
+        }
+    }
+}
+
 void RefreshPeriodHold::take_timers() {
-    if (m_period_ms == 0 || !lv_is_initialized()) {
+    const uint32_t period_ms = effective_period();
+    if (period_ms == 0 || !lv_is_initialized()) {
         return;
     }
     lv_display_t* disp = lv_display_get_default();
@@ -1052,15 +1083,14 @@ void RefreshPeriodHold::take_timers() {
     }
     m_display = disp;
     m_saved_refr_period_ms = refr->period;
-    lv_timer_set_period(refr, m_period_ms);
+    lv_timer_set_period(refr, period_ms);
     if (lv_timer_t* anim = lv_anim_get_timer()) {
         m_saved_anim_period_ms = anim->period;
         m_saved_anim = true;
-        lv_timer_set_period(anim, m_period_ms);
+        lv_timer_set_period(anim, period_ms);
     }
-    spdlog::debug("[RefreshPeriodHold] Refresh period {} ms -> {} ms, main-loop floor {} ms "
-                  "(0 = the loop's own)",
-                  m_saved_refr_period_ms, m_period_ms, m_loop_min_sleep_ms);
+    spdlog::debug("[RefreshPeriodHold] Refresh period {} ms -> {} ms", m_saved_refr_period_ms,
+                  period_ms);
 }
 
 void RefreshPeriodHold::release() {
@@ -1068,6 +1098,7 @@ void RefreshPeriodHold::release() {
         return;
     }
     restore_timers();
+    m_saver_period_ms = 0;
 }
 
 void RefreshPeriodHold::rebase(const std::function<void()>& set_baseline) {
@@ -1230,19 +1261,18 @@ void DisplayManager::restore_flush_cb(lv_display_flush_cb_t flush_cb) {
 
 void DisplayManager::check_display_sleep() {
 #ifdef HELIX_ENABLE_SCREENSAVER
-    // HELIX_SCREENSAVER_NOW — force-start screensaver immediately (for testing)
-    // Values: "toasters", "starfield", "pipes", "bounce", or "1" / anything else
-    // (the configured type, falling back to toasters)
+    ScreensaverManager::instance().on_idle_check_tick();
+    // HELIX_SCREENSAVER_NOW: start a screensaver on the first tick. A registered saver name
+    // picks that saver; any other value the configured one, or flying toasters.
     static bool screensaver_force_checked = false;
     if (!screensaver_force_checked) {
         screensaver_force_checked = true;
         const char* env = std::getenv("HELIX_SCREENSAVER_NOW");
         if (env) {
-            std::string val(env);
             const ScreensaverType force_type =
-                helix::screensaver_type_from_env(val, ScreensaverManager::configured_type());
+                helix::ui::resolve_screensaver_now(env, ScreensaverManager::configured_type());
             spdlog::info("[DisplayManager] HELIX_SCREENSAVER_NOW={}, forcing screensaver type {}",
-                         val, static_cast<int>(force_type));
+                         env, static_cast<int>(force_type));
             m_display_dimmed = true;
             ScreensaverManager::instance().start(force_type);
             m_screensaver_active = true;
@@ -1513,6 +1543,15 @@ void DisplayManager::wake_display() {
 }
 
 #ifdef HELIX_ENABLE_SCREENSAVER
+helix::ui::SaverHost DisplayManager::screensaver_host(const DisplayBackend* backend) {
+    helix::ui::SaverHost host;
+    host.is_printing = [] { return job_holds_machine(get_printer_state().get_print_lifecycle()); };
+    host.display_backend =
+        backend ? helix::ui::display_backend_key(backend->type(), backend->is_gpu_accelerated())
+                : "unknown";
+    return host;
+}
+
 void DisplayManager::preview_screensaver(int type) {
     if (m_shutting_down || m_screensaver_active) {
         return;

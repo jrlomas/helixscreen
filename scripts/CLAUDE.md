@@ -28,6 +28,11 @@ what each script is for; the script's own header carries the reasoning behind it
 | `generate-whatsnew.sh` | Extracts the current version's `CHANGELOG.md` section into the Play Store "What's new" file under `android/fastlane/` (≤500 chars, cut on a sentence boundary) |
 | `generate-upload-keystore.sh` | One-time generation of the Android upload keystore. Output belongs in `~/.android-keystore/`, never in the tree |
 
+### Performance Measurement
+| Script | Purpose |
+|--------|---------|
+| `screensaver-perf/` | Screensaver cost on real boards: CPU per thread, presented frames from DRM ioctls, and the load gate (cyclictest or `wakeup_probe` under load). Device settings come from `HELIX_PERF_*` variables; `screensaver-perf/README.md` has the flows |
+
 ### Asset Generation (`make regen-*`)
 | Script | Purpose |
 |--------|---------|

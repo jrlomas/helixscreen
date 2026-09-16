@@ -5,9 +5,9 @@
 #include "screensaver_starfield_sim.h"
 
 #include "screensaver_motion.h"
+#include "screensaver_pixel_writer.h"
 
 #include <cmath>
-#include <cstring>
 
 namespace helix::ui {
 
@@ -20,10 +20,9 @@ using screensaver::unit_random;
 constexpr float SPEED_FRAME_MS = 33.0f;
 constexpr float COLOR_THRESHOLD = 0.35f; // stars closer than this show color
 
-// Opaque black, with the X byte at the 0xFF SCREENSAVER_CANVAS_FORMAT requires
-constexpr uint32_t PIXEL_BLACK = 0xFF000000;
+constexpr Rgb BLACK = {0, 0, 0};
 
-// Star color tints — blue dwarfs, red giants, yellow suns, blue-white hot stars
+// Star color tints: blue dwarfs, red giants, yellow suns, blue-white hot stars
 constexpr uint8_t STAR_TINTS[][3] = {
     {255, 255, 255}, // white (most common)
     {255, 255, 255}, // white
@@ -43,14 +42,10 @@ void assign_tint(std::minstd_rand& rng, uint8_t& r, uint8_t& g, uint8_t& b) {
     b = STAR_TINTS[idx][2];
 }
 
-/// Writes one pixel byte by byte, so the frame's storage type does not matter.
-void put_pixel(uint8_t* row, int x, uint32_t pixel) {
-    std::memcpy(row + static_cast<size_t>(x) * 4, &pixel, sizeof(pixel));
-}
-
 /// Paints the size x size square at (sx, sy), clipped to the frame, and adds what it wrote
 /// to `dirty`.
-void fill_square(FrameTarget& target, int sx, int sy, int size, uint32_t pixel, DirtyRect& dirty) {
+void fill_square(PixelWriter& writer, const FrameTarget& target, int sx, int sy, int size,
+                 Rgb color, DirtyRect& dirty) {
     const int x1 = std::max(sx, 0);
     const int y1 = std::max(sy, 0);
     const int x2 = std::min(sx + size, static_cast<int>(target.w)) - 1;
@@ -58,27 +53,15 @@ void fill_square(FrameTarget& target, int sx, int sy, int size, uint32_t pixel, 
     if (x2 < x1 || y2 < y1) {
         return;
     }
-    // Rows step by the frame's stride: indexing by width alone skews every row past the
-    // first when the stride exceeds w * 4.
     for (int y = y1; y <= y2; y++) {
-        uint8_t* row = target.data + static_cast<size_t>(y) * target.stride;
         for (int x = x1; x <= x2; x++) {
-            put_pixel(row, x, pixel);
+            writer.put(x, y, color);
         }
     }
     dirty.add(x1, y1, x2, y2);
 }
 
 } // namespace
-
-void fill_starfield_black(FrameTarget& target) {
-    for (uint32_t y = 0; y < target.h; y++) {
-        uint8_t* row = target.data + static_cast<size_t>(y) * target.stride;
-        for (uint32_t x = 0; x < target.w; x++) {
-            put_pixel(row, static_cast<int>(x), PIXEL_BLACK);
-        }
-    }
-}
 
 void StarfieldSim::init(uint32_t w, uint32_t h, std::minstd_rand& rng) {
     cx_ = static_cast<float>(w) / 2.0f;
@@ -113,15 +96,16 @@ void StarfieldSim::recycle(Star& star, std::minstd_rand& rng) {
 
 DirtyRect StarfieldSim::step(uint32_t dt_ms, FrameTarget& target, std::minstd_rand& rng) {
     DirtyRect dirty;
+    PixelWriter writer(target);
     const int w = static_cast<int>(target.w);
     const int h = static_cast<int>(target.h);
 
-    // Erase previous star positions (incremental clear — avoids a full-frame fill)
+    // Erase previous star positions (an incremental clear, which avoids a full-frame fill)
     for (auto& star : stars_) {
         if (star.prev_size == 0) {
             continue;
         }
-        fill_square(target, star.prev_sx, star.prev_sy, star.prev_size, PIXEL_BLACK, dirty);
+        fill_square(writer, target, star.prev_sx, star.prev_sy, star.prev_size, BLACK, dirty);
         star.prev_size = 0;
     }
 
@@ -167,10 +151,7 @@ DirtyRect StarfieldSim::step(uint32_t dt_ms, FrameTarget& target, std::minstd_ra
             r = g = b = static_cast<uint8_t>(bright_f);
         }
 
-        // X byte 0xFF from PIXEL_BLACK
-        const uint32_t pixel =
-            PIXEL_BLACK | (static_cast<uint32_t>(r) << 16) | (static_cast<uint32_t>(g) << 8) | b;
-        fill_square(target, isx, isy, size, pixel, dirty);
+        fill_square(writer, target, isx, isy, size, Rgb{r, g, b}, dirty);
 
         // Remember position for next step's erase pass
         star.prev_sx = static_cast<int16_t>(isx);

@@ -4,63 +4,14 @@
 
 #ifdef HELIX_ENABLE_SCREENSAVER
 
+#include "screensaver_frame.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <random>
 #include <vector>
 
 namespace helix::ui {
-
-/**
- * @brief A frame the starfield draws into
- *
- * XRGB8888, stored B, G, R, X: rows start `stride` bytes apart, each pixel is 4 bytes, and
- * the X byte of every pixel is 0xFF (see SCREENSAVER_CANVAS_FORMAT).
- */
-struct FrameTarget {
-    uint8_t* data = nullptr;
-    uint32_t stride = 0;
-    uint32_t w = 0;
-    uint32_t h = 0;
-};
-
-/// Inclusive pixel bounds of what changed in a frame. Empty until something is added.
-struct DirtyRect {
-    int32_t x1 = 0;
-    int32_t y1 = 0;
-    int32_t x2 = -1;
-    int32_t y2 = -1;
-
-    bool empty() const {
-        return x2 < x1 || y2 < y1;
-    }
-
-    /// Grows to cover the inclusive box (ax1, ay1)-(ax2, ay2). An empty box adds nothing.
-    void add(int32_t ax1, int32_t ay1, int32_t ax2, int32_t ay2) {
-        if (ax2 < ax1 || ay2 < ay1) {
-            return;
-        }
-        if (empty()) {
-            *this = {ax1, ay1, ax2, ay2};
-            return;
-        }
-        x1 = std::min(x1, ax1);
-        y1 = std::min(y1, ay1);
-        x2 = std::max(x2, ax2);
-        y2 = std::max(y2, ay2);
-    }
-
-    void add(const DirtyRect& other) {
-        add(other.x1, other.y1, other.x2, other.y2);
-    }
-
-    bool operator==(const DirtyRect& o) const {
-        return x1 == o.x1 && y1 == o.y1 && x2 == o.x2 && y2 == o.y2;
-    }
-};
-
-/// Paints every pixel of `target` opaque black.
-void fill_starfield_black(FrameTarget& target);
 
 /**
  * @brief The starfield's stars, and how one frame of them is drawn

@@ -25,8 +25,7 @@ namespace helix {
 class ConfigDirGuard {
   public:
     explicit ConfigDirGuard(const std::string& suffix)
-        : dir(dir_path_for(suffix, ::getpid())),
-          env_("HELIX_CONFIG_DIR", dir.string().c_str()) {
+        : dir(dir_path_for(suffix, ::getpid())), env_("HELIX_CONFIG_DIR", dir.string().c_str()) {
         sweep_dead_sibling_dirs();
         std::filesystem::remove_all(dir);
         std::filesystem::create_directories(dir);

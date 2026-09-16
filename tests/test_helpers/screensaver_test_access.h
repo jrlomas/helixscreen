@@ -4,6 +4,8 @@
 
 #include "ui_screensaver.h"
 
+#include "refresh_period_hold_test_access.h"
+#include "screensaver_base.h"
 #include "screensaver_pipes.h"
 #include "screensaver_starfield.h"
 
@@ -81,6 +83,80 @@ class InvalidatedAreas {
 
 } // namespace helix::test
 
+namespace helix::ui {
+
+/// Reaches the parts every saver keeps in SaverBase.
+class SaverTestAccess {
+  public:
+    static lv_obj_t* overlay(const SaverBase& saver) {
+        return saver.overlay_.obj();
+    }
+    static lv_obj_t* canvas(const SaverBase& saver) {
+        return saver.canvas_.obj();
+    }
+    static lv_timer_t* timer(const SaverBase& saver) {
+        return saver.timer_.timer();
+    }
+    static size_t draw_buf_size(const SaverBase& saver) {
+        return saver.canvas_.buffer_size();
+    }
+    static uint32_t draw_buf_stride(const SaverBase& saver) {
+        return saver.canvas_.stride();
+    }
+    static void set_fixed_seed(SaverBase& saver, uint32_t seed) {
+        saver.fixed_seed_ = seed;
+    }
+};
+
+/// Leaves the global refresh hold released with no configured period, on entry and however
+/// the test exits: the configured period is level 0's frame period for every saver started.
+struct ScopedGlobalRefreshHold {
+    ScopedGlobalRefreshHold() {
+        helix::RefreshPeriodHoldTestAccess::reset(helix::active_refresh_period_hold());
+    }
+    ~ScopedGlobalRefreshHold() {
+        helix::RefreshPeriodHoldTestAccess::reset(helix::active_refresh_period_hold());
+    }
+    ScopedGlobalRefreshHold(const ScopedGlobalRefreshHold&) = delete;
+    ScopedGlobalRefreshHold& operator=(const ScopedGlobalRefreshHold&) = delete;
+};
+
+/// Level 0's frame timer period and the held display refresh period of one saver.
+struct LevelZeroPeriods {
+    uint32_t timer_ms = 0;
+    uint32_t refresh_ms = 0;
+};
+
+/// Starts a fresh `Saver` while the global refresh hold is out, as ScreensaverManager runs
+/// one, with `configured_ms` as HELIX_SCREENSAVER_REFR_PERIOD_MS (0 for unset), and reads
+/// its level 0 periods.
+template <typename Saver> LevelZeroPeriods level_zero_periods(uint32_t configured_ms) {
+    helix::ScopedTimerPeriods restore;
+    helix::ScopedTimerPeriods::set(40, 40); // unlike 16, 20 and 33
+    ScopedGlobalRefreshHold clean_hold;
+    helix::RefreshPeriodHold& hold = helix::active_refresh_period_hold();
+    hold.set_period(configured_ms);
+    hold.acquire();
+    LevelZeroPeriods periods;
+    Saver saver;
+    ScreensaverStopOnExit<Saver> stop_on_exit{saver};
+    saver.start();
+    if (saver.is_active() && SaverTestAccess::timer(saver) != nullptr) {
+        periods.timer_ms = SaverTestAccess::timer(saver)->period;
+    }
+    periods.refresh_ms = helix::default_refr_timer_period();
+    saver.stop();
+    hold.release();
+    return periods;
+}
+
+} // namespace helix::ui
+
+using helix::ui::level_zero_periods;
+using helix::ui::LevelZeroPeriods;
+using helix::ui::SaverTestAccess;
+using helix::ui::ScopedGlobalRefreshHold;
+
 class FlyingToasterScreensaverTestAccess {
   public:
     struct Sprite {
@@ -91,10 +167,6 @@ class FlyingToasterScreensaverTestAccess {
         int32_t fly_ms;
         int32_t delay_ms;
     };
-
-    static lv_timer_t* tick_timer(const FlyingToasterScreensaver& ss) {
-        return ss.m_tick_timer;
-    }
 
     static std::vector<Sprite> sprites(const FlyingToasterScreensaver& ss) {
         std::vector<Sprite> out;
@@ -144,30 +216,6 @@ class StarfieldScreensaverTestAccess {
         }
     };
 
-    static size_t draw_buf_size(const StarfieldScreensaver& ss) {
-        return ss.draw_buf_size_;
-    }
-
-    static uint32_t draw_buf_stride(const StarfieldScreensaver& ss) {
-        return ss.draw_buf_stride_;
-    }
-
-    static lv_obj_t* overlay(const StarfieldScreensaver& ss) {
-        return ss.overlay_;
-    }
-
-    static lv_obj_t* canvas(const StarfieldScreensaver& ss) {
-        return ss.canvas_;
-    }
-
-    static lv_timer_t* timer(const StarfieldScreensaver& ss) {
-        return ss.timer_;
-    }
-
-    static void set_fixed_seed(StarfieldScreensaver& ss, uint32_t seed) {
-        ss.fixed_seed_ = seed;
-    }
-
     static std::vector<StarState> stars(const StarfieldScreensaver& ss) {
         std::vector<StarState> out;
         for (const auto& s : ss.sim_.stars()) {
@@ -201,26 +249,6 @@ class PipesScreensaverTestAccess {
                    segment_count == o.segment_count && alive == o.alive;
         }
     };
-
-    static size_t draw_buf_size(const PipesScreensaver& ss) {
-        return ss.draw_buf_size_;
-    }
-
-    static lv_obj_t* overlay(const PipesScreensaver& ss) {
-        return ss.overlay_;
-    }
-
-    static lv_obj_t* canvas(const PipesScreensaver& ss) {
-        return ss.canvas_;
-    }
-
-    static lv_timer_t* timer(const PipesScreensaver& ss) {
-        return ss.timer_;
-    }
-
-    static void set_fixed_seed(PipesScreensaver& ss, uint32_t seed) {
-        ss.fixed_seed_ = seed;
-    }
 
     static int max_segments() {
         return PipesScreensaver::MAX_SEGMENTS;

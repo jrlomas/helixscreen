@@ -164,11 +164,14 @@ Choose a screensaver to display during inactivity instead of dimming the screen:
 
 | Option | Description |
 |--------|-------------|
-| **Off** (default) | No screensaver — the screen dims/sleeps normally |
-| **Flying Toasters** | Classic flying toasters animation |
+| **Off** | No screensaver; the screen dims and sleeps normally |
+| **Flying Toasters** (default) | Classic flying toasters animation |
 | **Starfield** | Scrolling starfield |
 | **3D Pipes** | Animated 3D pipes |
 | **Bouncing Printer** | Your printer drifts across the screen and bounces off the edges, changing color on every wall — with a celebration if it ever lands a corner |
+| **Fireworks** | Fireworks bursting over hills under a night sky |
+
+Each screensaver checks how much processor time it uses on your printer's screen. If it would slow the printer, it lowers its frame rate or detail, and if even that is too much it shows a black screen instead. It remembers the result and checks again after an update.
 
 When any option other than **Off** is selected, a **Test Screensaver** button appears below the dropdown. Tap it to preview the selected screensaver immediately, without waiting for the inactivity timeout.
 

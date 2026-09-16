@@ -18,11 +18,15 @@ class RefreshPeriodHoldTestAccess;
  *
  * A screensaver animates without pause, and LVGL's default 33 ms refresh holds it near
  * 30 fps on a 60 Hz panel. While this hold is out, the default display's refresh timer
- * and the animation timer run at period() instead. The refresh timer pauses itself
- * whenever nothing is invalidated, so a shorter period costs nothing on a still frame.
+ * and the animation timer run at period() instead, and at the running saver's frame period
+ * once the saver gives one. The refresh timer pauses itself whenever nothing is
+ * invalidated, so a shorter period costs nothing on a still frame.
  *
  * - The first acquire() records both timers' periods and sets them to period(). With no
  *   period configured, no default display, or no refresh timer, it changes nothing.
+ * - follow() runs both timers at the saver's frame period from then on, taking them if
+ *   acquire() did not. SaverBase gives period() as level 0's frame period when one is
+ *   configured, so the saver and the display refresh stay equal at every level.
  * - While it runs the timers, loop_min_sleep_ms() gives the main loop this hold's floor, so a
  *   frame due every period() is not held back by the loop's usual floor.
  * - Nested acquire() calls only count.
@@ -58,6 +62,11 @@ class RefreshPeriodHold {
     }
 
     void acquire();
+
+    /// While held, both timers run at `saver_period_ms`, the running saver's frame period,
+    /// until the final release(). Not held, or given 0, it does nothing.
+    void follow(uint32_t saver_period_ms);
+
     void release();
 
     /**
@@ -89,6 +98,11 @@ class RefreshPeriodHold {
     uint32_t m_saved_anim_period_ms = 0;
     bool m_saved_anim = false;
     uint32_t m_period_ms = 0;
+    uint32_t m_saver_period_ms = 0; ///< the running saver's frame period while held, or 0
+
+    uint32_t effective_period() const {
+        return m_saver_period_ms != 0 ? m_saver_period_ms : m_period_ms;
+    }
     uint32_t m_loop_min_sleep_ms = 0;
     int m_count = 0;
 };

@@ -438,8 +438,13 @@ Framebuffer displays (AD5M, K1, K2, CC1, AD5X) rotate by any angle with no meani
 ### `screensaver_type`
 **Type:** integer
 **Default:** `1`
-**Values:** `0` = Off, `1` = Flying Toasters, `2` = Starfield, `3` = 3D Pipes, `4` = Bouncing Printer
-**Description:** Which screensaver plays when the screen has been idle. Choose it in **Settings > Display & Sound**. It starts at the `dim_sec` mark, alongside dimming, and stops when `sleep_sec` takes the display down. On a panel with no backlight control the screensaver is the only idle indication you get.
+**Values:** `0` = Off, `1` = Flying Toasters, `2` = Starfield, `3` = 3D Pipes, `4` = Bouncing Printer, `5` = Fireworks
+**Description:** Which screensaver plays when the screen has been idle. Choose it in **Settings > Display & Sound**. It starts at the `dim_sec` mark, alongside dimming, and stops when `sleep_sec` takes the display down. On a panel with no backlight control the screensaver is the only idle indication you get. A fresh install selects Flying Toasters on every device that has screensavers. Each screensaver checks its own cost on your device and lowers its frame rate or detail, or shows a plain black screen, if it would slow the printer (see `screensaver_levels`).
+
+### `screensaver_levels`
+**Type:** object
+**Default:** absent
+**Description:** Written by HelixScreen; do not edit it. Each screensaver measures how much processor time it uses while it plays. If it would slow the printer, it lowers its frame rate or detail, and if even its lowest setting is too much it shows a plain black screen instead. The result is kept here for each screensaver, with the HelixScreen version and a description of the screen hardware, and is measured again after an update or on different hardware. Delete this entry to have every screensaver measured again.
 
 ### `drm_device`
 **Type:** string

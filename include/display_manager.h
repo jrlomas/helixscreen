@@ -49,6 +49,12 @@
  * display_mgr.shutdown();
  * @endcode
  */
+#ifdef HELIX_ENABLE_SCREENSAVER
+namespace helix::ui {
+struct SaverHost;
+}
+#endif
+
 class DisplayManager : public helix::ICalibrationSink {
   public:
     /**
@@ -375,6 +381,14 @@ class DisplayManager : public helix::ICalibrationSink {
      * @param type Screensaver type to preview
      */
     void preview_screensaver(int type);
+
+    /**
+     * @brief What the screensaver gate needs from this app
+     *
+     * The print callback asks job_holds_machine() of the published print lifecycle; the
+     * display path is `backend`'s display_backend_key(), or "unknown" without a backend.
+     */
+    static helix::ui::SaverHost screensaver_host(const DisplayBackend* backend);
 #endif
 
     /**

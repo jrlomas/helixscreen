@@ -294,6 +294,28 @@ So a board is not simply "better on DRM". Defaulting a Pi 3B to the DRM binary w
 points on a screensaver and give back ~4.5 on the interface people actually touch. The starfield's
 upload is the thing to attack, not the rung.
 
+### Fireworks quality ladder on the Pi 3B (2026-09-16)
+
+Each rung pinned with `HELIX_SCREENSAVER_LEVEL`, three runs per arm, idle sampled in the same
+arm as the baseline. Figures are percent of one core.
+
+| Level | Fireworks | Idle | Net | Flips |
+|---|---|---|---|---|
+| 0 | 10.8 | 2.8 | **8.1** | 59.5 fps |
+| 1 | 7.4 | 3.0 | 4.3 | 29.9 fps |
+| 2 | 6.7 | 3.3 | 3.4 | 29.9 fps |
+| 3 | 5.1 | 3.0 | 2.1 | 19.8 fps |
+
+With `/display/screensaver_levels` cleared the gate started fireworks seven times and chose level
+0 every time (`[Screensaver] Type 5 running at level 0`). 8% against a 50% budget leaves the
+ladder unused here; it is the BASIC and EMBEDDED boards that need the lower rungs.
+
+**This board frequency-caps mid-arm.** Each run begins near 70 C at 1200 MHz and reaches 82-84 C,
+where `vcgencmd get_throttled` reads `0x20002` and the ARM clock falls to 926-1141 MHz. The CPU
+and flip passes finish before the cap engages, so the rungs are comparable with each other; the
+gate's own sampling window does not, so the gate settled on level 0 while measuring itself on a
+downclocked core. Treat absolute figures from this board accordingly.
+
 ## nanovg: why it is unusable
 
 Three independent defects, all upstream in LVGL 9.5. The first alone is

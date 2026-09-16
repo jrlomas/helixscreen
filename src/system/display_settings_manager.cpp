@@ -13,6 +13,7 @@
 #include "observer_factory.h"
 #include "platform_capabilities.h"
 #include "platform_info.h"
+#include "screensaver_registry.h"
 #include "spdlog/spdlog.h"
 #include "static_subject_registry.h"
 #include "theme_loader.h"
@@ -367,20 +368,15 @@ void DisplaySettingsManager::init_subjects() {
     spdlog::info("[DisplaySettingsManager] Timezone set to '{}' (index {})", tz, tz_index);
 
 #ifdef HELIX_ENABLE_SCREENSAVER
-    // Screensaver type — tier-aware default via supports_animations.
-    // Devices that can run smooth animations (STANDARD tier: Pi 3B, Pi 4/5,
-    // desktop) default to Flying Toasters (1). BASIC and EMBEDDED (AD5M, AD5X)
-    // default to OFF (0) because animated screensavers starve Klipper's CPU
-    // budget and cause print failures.
-    const int screensaver_default = PlatformCapabilities::detect().supports_animations ? 1 : 0;
+    // Screensaver type. A fresh install runs the registry default on every tier; a stored
+    // choice is kept as it is.
+    const int screensaver_default = static_cast<int>(helix::ui::DEFAULT_SCREENSAVER_TYPE);
 
     int screensaver_type = screensaver_default;
     if (config->exists("/display/screensaver_type")) {
         screensaver_type = config->get<int>("/display/screensaver_type", screensaver_default);
     } else if (config->exists("/display/screensaver_enabled")) {
-        // Legacy migration: true → tier default, false → Off.
-        // The v14→v15 migration will later flip Flying Toasters to Off on low tiers anyway,
-        // but honouring the tier default here avoids writing a value we're about to overwrite.
+        // Legacy screensaver_enabled: true reads as the default type, false as Off.
         bool old_enabled = config->get<bool>("/display/screensaver_enabled", true);
         screensaver_type = old_enabled ? screensaver_default : 0;
         config->set<int>("/display/screensaver_type", screensaver_type);
@@ -389,7 +385,7 @@ void DisplaySettingsManager::init_subjects() {
             "[DisplaySettingsManager] Migrated screensaver_enabled={} → screensaver_type={}",
             old_enabled, screensaver_type);
     }
-    screensaver_type = std::clamp(screensaver_type, 0, 4);
+    screensaver_type = helix::ui::clamp_screensaver_type(screensaver_type);
     UI_MANAGED_SUBJECT_INT(screensaver_type_subject_, screensaver_type, "settings_screensaver_type",
                            subjects_);
 #endif
@@ -998,7 +994,7 @@ int DisplaySettingsManager::get_screensaver_type() const {
 }
 
 void DisplaySettingsManager::set_screensaver_type(int type) {
-    type = std::clamp(type, 0, 4);
+    type = helix::ui::clamp_screensaver_type(type);
     spdlog::info("[DisplaySettingsManager] set_screensaver_type({})", type);
 
     lv_subject_set_int(&screensaver_type_subject_, type);
