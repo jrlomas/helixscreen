@@ -80,6 +80,11 @@ class GridEditMode {
     void handle_released(lv_event_t* e);
     void handle_drag_start(lv_event_t* e);
 
+    /// Begin a new gesture. Clears the pending-drag latch so the next PRESSING
+    /// frame records this press's own origin rather than inheriting the one
+    /// before it.
+    void handle_press_start();
+
     /// Open the widget catalog overlay for adding a new widget.
     /// @param screen  The parent screen to host the overlay
     void open_widget_catalog(lv_obj_t* screen);

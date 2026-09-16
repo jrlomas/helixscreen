@@ -28,6 +28,7 @@
 #include "app_globals.h"
 #include "config.h"
 #include "filament_sensor_manager.h"
+#include "first_run_tour.h"
 #include "hardware_validator.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "i_moonraker_api.h"
@@ -1008,13 +1009,20 @@ void ui_wizard_complete() {
     // Defer navigation to Home panel — discovery callbacks queue deferred subject updates
     // via ui_queue_update() that can override panel state. A short timer ensures we
     // navigate AFTER those queued updates have been processed.
-    lv_timer_create(
-        [](lv_timer_t* timer) {
+    lv_timer_t* home_nav_timer = lv_timer_create(
+        [](lv_timer_t* /*timer*/) {
             spdlog::info("[Wizard] Deferred navigation to Home panel");
             NavigationManager::instance().set_active(PanelId::Home);
-            lv_timer_delete(timer);
+            // Home is already the active panel here, so set_active() returns
+            // without running on_activate(), which is the tour's only other
+            // entry point. Finishing the wizard is what opens the tour's gate,
+            // so this is where it gets re-checked.
+            helix::tour::FirstRunTour::instance().maybe_start();
         },
         100, nullptr);
+    // Navigation happens once per completion. A finite repeat count is what
+    // makes that explicit; LVGL reclaims the timer once it is exhausted.
+    lv_timer_set_repeat_count(home_nav_timer, 1);
 
     // Show success toast when adding a subsequent printer
     if (config && config->get_printer_ids().size() > 1) {

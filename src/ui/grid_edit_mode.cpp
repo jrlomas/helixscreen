@@ -1082,6 +1082,19 @@ void GridEditMode::handle_long_press(lv_event_t* e) {
     handle_drag_start(e);
 }
 
+void GridEditMode::handle_press_start() {
+    if (!active_) {
+        return;
+    }
+    // handle_released() is the only other place the latch clears, and it is not
+    // guaranteed to run: lv_indev_reset() during a deferred rebuild retires the
+    // press without dispatching a release, and the edit-mode suppression gate is
+    // evaluated at release time. A latch left set sends the next press straight
+    // to the drag-threshold branch, which classifies it against whatever origin
+    // the previous gesture recorded.
+    drag_pending_ = false;
+}
+
 void GridEditMode::handle_pressing(lv_event_t* e) {
     (void)e;
     if (!active_) {

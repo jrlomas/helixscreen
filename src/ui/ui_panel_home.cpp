@@ -914,6 +914,12 @@ void HomePanel::on_home_grid_pressed(lv_event_t* e) {
     } else {
         panel.press_point_valid_ = false;
     }
+    // Unlike the release forwarder, this one is ungated: a press is the start of
+    // a gesture whatever the suppression gate later decides about it, and the
+    // latch it clears must not outlive the press that set it.
+    if (panel.grid_edit_mode_.is_active()) {
+        panel.grid_edit_mode_.handle_press_start();
+    }
     LVGL_SAFE_EVENT_CB_END();
 }
 
