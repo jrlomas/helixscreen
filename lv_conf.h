@@ -106,7 +106,18 @@
  * - LV_OS_WINDOWS
  * - LV_OS_MQX
  * - LV_OS_CUSTOM */
-#define LV_USE_OS   LV_OS_PTHREAD
+/* The software draw unit count is 1, so a render thread adds no concurrency: it only moves
+ * each draw task to another thread and back, and every invalidated area pays
+ * lv_draw_dispatch_wait_for_request() a thread synchronisation for it. That is worth it
+ * where a core is free to take the work, and a loss on a board whose cores are already
+ * running the app and Klipper, so the two-core Ingenic boards render inline.
+ * Measured on a K1C: 0.32% of a core per invalidated area with a render thread, 0.24%
+ * without. */
+#if defined(HELIX_PLATFORM_MIPS) || defined(HELIX_PLATFORM_K1)
+    #define LV_USE_OS   LV_OS_NONE
+#else
+    #define LV_USE_OS   LV_OS_PTHREAD
+#endif
 
 #if LV_USE_OS == LV_OS_CUSTOM
     #define LV_OS_CUSTOM_INCLUDE <stdint.h>
