@@ -2730,23 +2730,37 @@ verify_binary_deps() {
 # STOCK mode expects ffstartup-arm to manage display/backlight which doesn't work for us.
 # We disable GuppyScreen's init scripts so HelixScreen takes over the display.
 configure_forgex_display() {
-    var_file="/opt/config/mod_data/variables.cfg"
+    var_file="${FORGEX_VAR_FILE:-/opt/config/mod_data/variables.cfg}"
+    prev_file="${FORGEX_PREV_DISPLAY:-/opt/config/mod_data/helixscreen_prev_display}"
     guppy_init="/opt/config/mod/.root/S80guppyscreen"
     guppy_bin="/opt/config/mod/.root/guppyscreen"
     tslib_init="/opt/config/mod/.root/S35tslib"
     changed=false
 
-    # Set display mode to GUPPY (required for backlight to work)
+    # Set display mode to GUPPY (required for backlight to work), remembering
+    # the mode the printer arrived in so uninstall can put it back.
     if [ -f "$var_file" ]; then
-        if grep -q "display[[:space:]]*=[[:space:]]*'STOCK'" "$var_file"; then
-            log_info "Setting ForgeX display mode to GUPPY..."
-            $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'STOCK'/display = 'GUPPY'/" "$var_file"
-            changed=true
-        elif grep -q "display[[:space:]]*=[[:space:]]*'HEADLESS'" "$var_file"; then
-            log_info "Setting ForgeX display mode to GUPPY..."
-            $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'HEADLESS'/display = 'GUPPY'/" "$var_file"
-            changed=true
-        fi
+        arrival=$(sed -n "s/^[[:space:]]*display[[:space:]]*=[[:space:]]*'\([A-Z]*\)'.*/\1/p" "$var_file" | head -n 1)
+
+        case "$arrival" in
+            STOCK|GUPPY|HEADLESS)
+                # First write wins: an upgrade re-run finds GUPPY (our own
+                # setting) and overwriting the record would pin uninstall's
+                # restore to GUPPY forever. mod_data is root-owned, so the
+                # record write goes through $SUDO.
+                if [ ! -f "$prev_file" ]; then
+                    printf '%s\n' "$arrival" | $SUDO tee "$prev_file" > /dev/null
+                fi
+                ;;
+        esac
+
+        case "$arrival" in
+            STOCK|HEADLESS)
+                log_info "Setting ForgeX display mode to GUPPY..."
+                $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'$arrival'/display = 'GUPPY'/" "$var_file"
+                changed=true
+                ;;
+        esac
     fi
 
     # Disable GuppyScreen init script (remove execute permission)
@@ -3178,15 +3192,27 @@ uninstall_forgex_logged_wrapper() {
 # and cleans up backup files from manual patches.
 # Note: Sets caller's `restored_ui` variable via dynamic scoping.
 uninstall_forgex() {
-    # Restore ForgeX display mode to GUPPY (from HEADLESS or STOCK)
-    if [ -f "/opt/config/mod_data/variables.cfg" ]; then
-        if grep -q "display[[:space:]]*=[[:space:]]*'HEADLESS'" "/opt/config/mod_data/variables.cfg"; then
-            log_info "Restoring ForgeX display mode to GUPPY..."
-            $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'HEADLESS'/display = 'GUPPY'/" "/opt/config/mod_data/variables.cfg"
-        elif grep -q "display[[:space:]]*=[[:space:]]*'STOCK'" "/opt/config/mod_data/variables.cfg"; then
-            log_info "Restoring ForgeX display mode to GUPPY..."
-            $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'STOCK'/display = 'GUPPY'/" "/opt/config/mod_data/variables.cfg"
-        fi
+    var_file="${FORGEX_VAR_FILE:-/opt/config/mod_data/variables.cfg}"
+    prev_file="${FORGEX_PREV_DISPLAY:-/opt/config/mod_data/helixscreen_prev_display}"
+
+    # Restore the display mode recorded at install. The record is consumed
+    # only by a restore that used it. With no record (a manual install, a
+    # lost record) variables.cfg is left exactly as it stands: GUPPY is
+    # itself a working UI, so there is nothing to guess at.
+    if [ -f "$prev_file" ] && [ -f "$var_file" ]; then
+        # The guard keeps an unreadable record from aborting the bundled
+        # uninstaller, which runs under set -e with this function unguarded.
+        prev_mode=$(cat "$prev_file" 2>/dev/null) || prev_mode=""
+        case "$prev_mode" in
+            STOCK|FEATHER|GUPPY|HEADLESS)
+                log_info "Restoring ForgeX display mode to $prev_mode..."
+                $SUDO sed -i "s/^\([[:space:]]*display[[:space:]]*=[[:space:]]*\)'[^']*'/\1'$prev_mode'/" "$var_file"
+                $SUDO rm -f "$prev_file"
+                ;;
+            *)
+                log_warn "Recorded ForgeX display mode '$prev_mode' is unknown; leaving variables.cfg as is"
+                ;;
+        esac
     fi
 
     # Restore stock FlashForge UI in auto_run.sh
