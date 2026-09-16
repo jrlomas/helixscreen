@@ -5,6 +5,7 @@
 
 #include "ui_nav_manager.h"
 
+#include "app_globals.h"
 #include "config.h"
 #include "observer_factory.h"
 #include "static_panel_registry.h"
@@ -39,6 +40,14 @@ bool FirstRunTour::should_auto_start() {
 
     if (cfg->is_wizard_required()) {
         spdlog::debug("[FirstRunTour] gate: wizard_required");
+        return false;
+    }
+
+    // Every tour step highlights a home widget, and edit mode is where those
+    // widgets move, resize and get deleted. The gate stays open, so the tour is
+    // offered again at the next home activation.
+    if (lv_subject_get_int(&get_home_edit_mode_subject()) != 0) {
+        spdlog::debug("[FirstRunTour] gate: home_edit_mode_active");
         return false;
     }
 
