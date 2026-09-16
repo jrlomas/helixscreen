@@ -28,7 +28,7 @@ configure_forgex_display() {
         arrival=$(sed -n "s/^[[:space:]]*display[[:space:]]*=[[:space:]]*'\([A-Z]*\)'.*/\1/p" "$var_file" | head -n 1)
 
         case "$arrival" in
-            STOCK|GUPPY|HEADLESS)
+            STOCK|FEATHER|GUPPY|HEADLESS)
                 # First write wins: an upgrade re-run finds GUPPY (our own
                 # setting) and overwriting the record would pin uninstall's
                 # restore to GUPPY forever. mod_data is root-owned, so the
@@ -39,8 +39,12 @@ configure_forgex_display() {
                 ;;
         esac
 
+        # FEATHER (Forge-X 1.4.2's default) is Klipper macros in
+        # config/feather.cfg driving screen.sh, not a process that can be
+        # stopped, so claiming the mode variable is the whole takeover for
+        # it, same as the managed STOCK and HEADLESS UIs.
         case "$arrival" in
-            STOCK|HEADLESS)
+            STOCK|FEATHER|HEADLESS)
                 log_info "Setting ForgeX display mode to GUPPY..."
                 $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'$arrival'/display = 'GUPPY'/" "$var_file"
                 changed=true

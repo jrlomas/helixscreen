@@ -65,6 +65,18 @@ sudo_logging_fixture() {
     contains "display = 'GUPPY'" "$(cat "$FORGEX_VAR_FILE")"
 }
 
+@test "install takes over a FEATHER arrival like STOCK and HEADLESS" {
+    # Forge-X 1.4.2 defaults to FEATHER. Feather is Klipper macros driving
+    # screen.sh, not a process to stop, so taking the display means claiming
+    # the mode variable itself.
+    display_fixture
+    write_var_file FEATHER
+    run configure_forgex_display
+    [ "$status" -eq 0 ] || fail "expected success, got status $status: $output"
+    contains "FEATHER" "$(cat "$FORGEX_PREV_DISPLAY")"
+    contains "display = 'GUPPY'" "$(cat "$FORGEX_VAR_FILE")"
+}
+
 @test "install records a GUPPY arrival without rewriting variables.cfg" {
     display_fixture
     write_var_file GUPPY
