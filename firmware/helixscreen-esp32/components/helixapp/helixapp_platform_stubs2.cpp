@@ -247,6 +247,9 @@ void SpoolmanManager::invalidate_identity(int) {}
 std::optional<helix::SpoolIdentity> SpoolmanManager::find_identity(int) {
     return std::nullopt;
 }
+// No identity cache exists here, so a spool a save just wrote has nothing to be
+// re-read onto.
+void SpoolmanManager::refresh_spool(int) {}
 
 // src/spoolman/spoolman_slot_saver.cpp — the AMS edit overlay compiles calls to
 // these, but reaches them only from the Spoolman-gated save path. "No change"
@@ -259,6 +262,12 @@ ChangeSet SpoolmanSlotSaver::detect_changes(const SlotInfo&, const SlotInfo&) {
 }
 bool SpoolmanSlotSaver::is_filament_complete(const SlotInfo&) {
     return false;
+}
+// Every field a filament write needs reads as absent, the same answer
+// is_filament_complete() gives: a save reaching here stops at the caller's
+// missing-field check instead of continuing into save().
+MissingFilamentFields SpoolmanSlotSaver::missing_filament_fields(const SlotInfo&) {
+    return MissingFilamentFields{true, true, true};
 }
 void SpoolmanSlotSaver::build_spool_patches(const SpoolInfo&, const SpoolInfo&, nlohmann::json&,
                                             nlohmann::json&) {}
