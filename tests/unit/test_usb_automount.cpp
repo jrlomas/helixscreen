@@ -5,6 +5,7 @@
 
 #if defined(__linux__) && !defined(__ANDROID__)
 
+#include "../test_helpers/fake_mount_ops.h"
 #include "usb_backend_linux.h"
 
 #include <algorithm>
@@ -19,63 +20,13 @@
 
 namespace {
 
+using helix::test::FakeMountOps;
+using helix::test::format_mount_call;
 using helix::usb::UsbAutomount;
 using TimePoint = std::chrono::steady_clock::time_point;
 
 constexpr auto kGrace = std::chrono::milliseconds(3000);
 const TimePoint kT0{std::chrono::seconds(1000)};
-
-std::string call(const std::string& dev, const std::string& mnt, const std::string& fs,
-                 const std::string& opts) {
-    return dev + "|" + mnt + "|" + fs + "|" + opts;
-}
-
-// Records every syscall the automounter makes so assertions run against the
-// decision layer, not against a real mount table.
-struct FakeMountOps : helix::usb::MountOps {
-    bool root = true;
-    std::vector<std::string> candidates; // what a sysfs scan would return
-    std::set<std::string> mounted;       // devices listed in the mount table
-    std::set<std::string> present;       // devices sysfs still shows
-    std::set<std::string> busy;          // mount points whose plain umount is EBUSY
-    bool dir_result = true;
-
-    // Which (fs, options) pairs this kernel accepts. Default: any vfat.
-    std::function<bool(const std::string&, const std::string&)> accepts =
-        [](const std::string& fs, const std::string&) { return fs == "vfat"; };
-
-    std::vector<std::string> mount_calls;   // "dev|mnt|fs|opts"
-    std::vector<std::string> unmount_calls; // "mnt|plain" or "mnt|lazy"
-
-    bool is_root() override {
-        return root;
-    }
-    std::vector<std::string> mounted_devices() override {
-        return {mounted.begin(), mounted.end()};
-    }
-    std::vector<std::string> removable_block_devices() override {
-        return candidates;
-    }
-    bool device_present(const std::string& device) override {
-        return present.count(device) > 0;
-    }
-    bool ensure_mount_point_dir(const std::string&) override {
-        return dir_result;
-    }
-
-    bool mount(const std::string& dev, const std::string& mnt, const std::string& fs,
-               const std::string& opts) override {
-        mount_calls.push_back(call(dev, mnt, fs, opts));
-        return accepts(fs, opts);
-    }
-
-    bool unmount(const std::string& mnt, bool lazy) override {
-        // Every attempt is recorded, including ones that fail with EBUSY, so
-        // assertions can see the fallback sequence.
-        unmount_calls.push_back(mnt + "|" + (lazy ? "lazy" : "plain"));
-        return !(!lazy && busy.count(mnt) > 0); // EBUSY on plain umount
-    }
-};
 
 struct AutomountFixture {
     FakeMountOps* ops = new FakeMountOps();
@@ -167,15 +118,15 @@ TEST_CASE("UsbAutomount waits out the grace period before mounting", "[usb_autom
     fx.ops->present = {"/dev/sda1"};
 
     fx.am->poll(kT0); // first sighting
-    REQUIRE(fx.ops->mount_calls.empty());
+    REQUIRE(fx.ops->mount_record().empty());
 
     fx.am->poll(kT0 + std::chrono::milliseconds(1500)); // inside grace
-    REQUIRE(fx.ops->mount_calls.empty());
+    REQUIRE(fx.ops->mount_record().empty());
 
     // A primary mounter winning the race cancels our intent entirely.
     fx.expect_mounted("/dev/sda1");
     fx.am->poll(kT0 + kGrace + std::chrono::milliseconds(100));
-    REQUIRE(fx.ops->mount_calls.empty());
+    REQUIRE(fx.ops->mount_record().empty());
     REQUIRE(fx.am->our_mount_count() == 0);
 }
 
@@ -187,8 +138,9 @@ TEST_CASE("UsbAutomount mounts an unmounted stick read-only after grace", "[usb_
     fx.am->poll(kT0);
     fx.am->poll(kT0 + kGrace + std::chrono::milliseconds(100));
 
-    REQUIRE(fx.ops->mount_calls.size() == 1);
-    REQUIRE(fx.ops->mount_calls[0] == call("/dev/sda1", "/mnt/usb/sda1", "vfat", "ro,noatime"));
+    REQUIRE(fx.ops->mount_record().size() == 1);
+    REQUIRE(fx.ops->mount_record()[0] ==
+            format_mount_call("/dev/sda1", "/mnt/usb/sda1", "vfat", "ro,noatime"));
     REQUIRE(fx.am->our_mount_count() == 1);
 }
 
@@ -204,12 +156,12 @@ TEST_CASE("UsbAutomount never touches a device mounted anywhere else", "[usb_aut
         fx.am->poll(kT0);
         fx.am->poll(kT0 + kGrace + std::chrono::milliseconds(100));
 
-        for (const auto& c : fx.ops->mount_calls) {
+        for (const auto& c : fx.ops->mount_record()) {
             CAPTURE(c);
             REQUIRE(c.find("/dev/sda1|") != 0);
         }
-        REQUIRE(fx.ops->mount_calls.size() == 1);
-        REQUIRE(fx.ops->mount_calls[0].find("/dev/sdb1|/mnt/usb/sdb1|") == 0);
+        REQUIRE(fx.ops->mount_record().size() == 1);
+        REQUIRE(fx.ops->mount_record()[0].find("/dev/sdb1|/mnt/usb/sdb1|") == 0);
     }
 
     SECTION("mounted outside the usb prefixes") {
@@ -220,7 +172,7 @@ TEST_CASE("UsbAutomount never touches a device mounted anywhere else", "[usb_aut
 
         fx.am->poll(kT0);
         fx.am->poll(kT0 + std::chrono::minutes(1));
-        REQUIRE(fx.ops->mount_calls.empty());
+        REQUIRE(fx.ops->mount_record().empty());
     }
 }
 
@@ -238,10 +190,10 @@ TEST_CASE("UsbAutomount stays disarmed without root", "[usb_automount]") {
 
     am.poll(kT0);
     am.poll(kT0 + std::chrono::minutes(1));
-    REQUIRE(view->mount_calls.empty());
+    REQUIRE(view->mount_record().empty());
 
     am.unmount_all();
-    REQUIRE(view->unmount_calls.empty());
+    REQUIRE(view->unmount_record().empty());
 }
 
 TEST_CASE("UsbAutomount caches the winning option combination", "[usb_automount]") {
@@ -257,10 +209,11 @@ TEST_CASE("UsbAutomount caches the winning option combination", "[usb_automount]
     fx.am->poll(kT0 + kGrace + std::chrono::milliseconds(100));
 
     // Ladder order until the first success: plain vfat, then utf8.
-    REQUIRE(fx.ops->mount_calls.size() == 2);
-    REQUIRE(fx.ops->mount_calls[0] == call("/dev/sda1", "/mnt/usb/sda1", "vfat", "ro,noatime"));
-    REQUIRE(fx.ops->mount_calls[1] ==
-            call("/dev/sda1", "/mnt/usb/sda1", "vfat", "ro,noatime,iocharset=utf8"));
+    REQUIRE(fx.ops->mount_record().size() == 2);
+    REQUIRE(fx.ops->mount_record()[0] ==
+            format_mount_call("/dev/sda1", "/mnt/usb/sda1", "vfat", "ro,noatime"));
+    REQUIRE(fx.ops->mount_record()[1] ==
+            format_mount_call("/dev/sda1", "/mnt/usb/sda1", "vfat", "ro,noatime,iocharset=utf8"));
     fx.expect_mounted("/dev/sda1");
 
     // A second stick on the same kernel starts from the cached combination.
@@ -270,12 +223,13 @@ TEST_CASE("UsbAutomount caches the winning option combination", "[usb_automount]
     fx.am->poll(t1); // sdb1 first sighting
     fx.am->poll(t1 + kGrace + std::chrono::milliseconds(100));
 
-    const auto sdb_calls =
-        std::count_if(fx.ops->mount_calls.begin(), fx.ops->mount_calls.end(),
-                      [](const std::string& c) { return c.find("/dev/sdb1|") == 0; });
+    const auto record = fx.ops->mount_record();
+    const auto sdb_calls = std::count_if(record.begin(), record.end(), [](const std::string& c) {
+        return c.find("/dev/sdb1|") == 0;
+    });
     REQUIRE(sdb_calls == 1);
-    REQUIRE(fx.ops->mount_calls.back() ==
-            call("/dev/sdb1", "/mnt/usb/sdb1", "vfat", "ro,noatime,iocharset=utf8"));
+    REQUIRE(record.back() ==
+            format_mount_call("/dev/sdb1", "/mnt/usb/sdb1", "vfat", "ro,noatime,iocharset=utf8"));
 }
 
 TEST_CASE("UsbAutomount backs off after every option combination fails", "[usb_automount]") {
@@ -287,16 +241,16 @@ TEST_CASE("UsbAutomount backs off after every option combination fails", "[usb_a
     fx.am->poll(kT0);
     fx.am->poll(kT0 + kGrace + std::chrono::milliseconds(100));
     const auto ladder_size = helix::usb::automount_ladder().size();
-    REQUIRE(fx.ops->mount_calls.size() == ladder_size);
+    REQUIRE(fx.ops->mount_record().size() == ladder_size);
     REQUIRE(fx.am->our_mount_count() == 0);
 
     // Immediately after failure: no retry storm.
     fx.am->poll(kT0 + kGrace + std::chrono::seconds(2));
-    REQUIRE(fx.ops->mount_calls.size() == ladder_size);
+    REQUIRE(fx.ops->mount_record().size() == ladder_size);
 
     // After the cooldown the full ladder runs again.
     fx.am->poll(kT0 + kGrace + std::chrono::seconds(31));
-    REQUIRE(fx.ops->mount_calls.size() == 2 * ladder_size);
+    REQUIRE(fx.ops->mount_record().size() == 2 * ladder_size);
 }
 
 TEST_CASE("UsbAutomount unmounts its own stale mount when the device vanishes", "[usb_automount]") {
@@ -313,8 +267,8 @@ TEST_CASE("UsbAutomount unmounts its own stale mount when the device vanishes", 
     fx.ops->candidates.clear();
 
     fx.am->poll(kT0 + std::chrono::seconds(30));
-    REQUIRE(fx.ops->unmount_calls.size() == 1);
-    REQUIRE(fx.ops->unmount_calls[0] == "/mnt/usb/sda1|plain");
+    REQUIRE(fx.ops->unmount_record().size() == 1);
+    REQUIRE(fx.ops->unmount_record()[0] == "/mnt/usb/sda1|plain");
     REQUIRE(fx.am->our_mount_count() == 0);
 }
 
@@ -331,9 +285,9 @@ TEST_CASE("UsbAutomount falls back to a lazy unmount when the mount is busy", "[
     fx.ops->candidates.clear();
     fx.am->poll(kT0 + std::chrono::seconds(30));
 
-    REQUIRE(fx.ops->unmount_calls.size() == 2);
-    REQUIRE(fx.ops->unmount_calls[0] == "/mnt/usb/sda1|plain");
-    REQUIRE(fx.ops->unmount_calls[1] == "/mnt/usb/sda1|lazy");
+    REQUIRE(fx.ops->unmount_record().size() == 2);
+    REQUIRE(fx.ops->unmount_record()[0] == "/mnt/usb/sda1|plain");
+    REQUIRE(fx.ops->unmount_record()[1] == "/mnt/usb/sda1|lazy");
 }
 
 TEST_CASE("UsbAutomount unmounts only mounts it created", "[usb_automount]") {
@@ -349,14 +303,14 @@ TEST_CASE("UsbAutomount unmounts only mounts it created", "[usb_automount]") {
         fx.ops->present.clear();
         fx.ops->candidates.clear();
         fx.am->poll(kT0 + std::chrono::seconds(30));
-        REQUIRE(fx.ops->unmount_calls.size() == 1);
-        REQUIRE(fx.ops->unmount_calls[0] == "/mnt/usb/sda1|plain");
+        REQUIRE(fx.ops->unmount_record().size() == 1);
+        REQUIRE(fx.ops->unmount_record()[0] == "/mnt/usb/sda1|plain");
     }
 
     SECTION("clean shutdown: only ours is unmounted") {
         fx.am->unmount_all();
-        REQUIRE(fx.ops->unmount_calls.size() == 1);
-        REQUIRE(fx.ops->unmount_calls[0] == "/mnt/usb/sda1|plain");
+        REQUIRE(fx.ops->unmount_record().size() == 1);
+        REQUIRE(fx.ops->unmount_record()[0] == "/mnt/usb/sda1|plain");
         REQUIRE(fx.am->our_mount_count() == 0);
     }
 }
@@ -376,17 +330,17 @@ TEST_CASE("UsbAutomount forgets a mount unmounted from outside", "[usb_automount
 
     fx.am->poll(kT0 + std::chrono::seconds(30));
     REQUIRE(fx.am->our_mount_count() == 0);
-    REQUIRE(fx.ops->unmount_calls.empty()); // nothing of ours to unmount
+    REQUIRE(fx.ops->unmount_record().empty()); // nothing of ours to unmount
 
     // The device stays a candidate, so it is mounted again - but through a
     // fresh grace period that started at the reap poll above, never instantly
     // off the stale first sighting.
-    const auto before = fx.ops->mount_calls.size();
+    const auto before = fx.ops->mount_record().size();
     fx.am->poll(kT0 + std::chrono::seconds(31)); // 1s after the reap: inside grace
-    REQUIRE(fx.ops->mount_calls.size() == before);
+    REQUIRE(fx.ops->mount_record().size() == before);
 
     fx.am->poll(kT0 + std::chrono::seconds(34)); // fresh grace elapsed
-    REQUIRE(fx.ops->mount_calls.size() == before + 1);
+    REQUIRE(fx.ops->mount_record().size() == before + 1);
 }
 
 TEST_CASE("The test binary pins the automounter off before any test runs", "[usb_automount]") {

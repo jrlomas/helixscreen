@@ -1,13 +1,17 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/fake_mount_ops.h"
+#include "../test_helpers/usb_backend_linux_test_access.h"
 #include "usb_backend_linux.h"
 
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
@@ -99,6 +103,41 @@ TEST_CASE("UsbBackendLinux start and stop are idempotent", "[usb_backend][linux]
     REQUIRE(backend.start().success());
     REQUIRE(backend.using_mountinfo_events());
     backend.stop();
+}
+
+TEST_CASE("UsbBackendLinux stop unmounts what the fallback mounter mounted",
+          "[usb_backend][linux]") {
+    // Wiring test, not an automounter test: unmount_all()'s own behaviour is
+    // pinned in test_usb_automount.cpp. This case pins that the monitor thread
+    // calls it before exiting - the call that keeps a shutdown from leaving a
+    // mount pointing at a stick the automounter itself mounted. The fake runs
+    // on the real monitor thread; grace 0 mounts on the first pass.
+    auto fake = std::make_shared<helix::test::FakeMountOps>();
+    fake->candidates = {"/dev/hxwire1"};
+    fake->present = {"/dev/hxwire1"};
+
+    UsbBackendLinux backend;
+    helix::test::UsbBackendLinuxTestAccess::set_automount(
+        backend,
+        std::make_unique<helix::usb::UsbAutomount>(
+            std::make_unique<helix::test::SharedMountOps>(fake), std::chrono::milliseconds(0)));
+
+    REQUIRE(backend.start().success());
+
+    // Precondition: the monitor thread's fallback pass mounted the device, so
+    // the automounter holds it going into shutdown.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (fake->mount_count() == 0 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    REQUIRE(fake->mount_count() > 0);
+
+    backend.stop();
+
+    // stop() joins the monitor thread and the thread unmounts before it exits,
+    // so this read races with nothing; the fake survives the automounter's
+    // destruction through shared ownership.
+    REQUIRE(fake->unmount_record() == std::vector<std::string>{"/mnt/usb/hxwire1|plain"});
 }
 
 TEST_CASE("UsbBackendLinux::scan_directory lists every printable extension",

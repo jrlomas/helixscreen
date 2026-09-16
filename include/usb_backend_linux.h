@@ -35,6 +35,10 @@
  *   a monitor that can silently never fire again is the defect this design
  *   excludes
  */
+namespace helix::test {
+class UsbBackendLinuxTestAccess;
+} // namespace helix::test
+
 class UsbBackendLinux : public UsbBackend {
   public:
     UsbBackendLinux();
@@ -156,6 +160,8 @@ class UsbBackendLinux : public UsbBackend {
      * @brief Read contents of /proc/mounts for polling comparison
      */
     std::string read_mounts_content();
+
+    friend class helix::test::UsbBackendLinuxTestAccess;
 };
 
 #endif // __linux__

@@ -61,7 +61,11 @@ UsbError UsbBackendLinux::start() {
 
     // Fallback mounter, created while the thread is not yet running so only
     // this path and stop() ever touch automount_. Nullptr when disarmed.
-    automount_ = helix::usb::UsbAutomount::create();
+    // An injected instance (tests observing the wiring) wins over the factory;
+    // production always arrives here with none present.
+    if (!automount_) {
+        automount_ = helix::usb::UsbAutomount::create();
+    }
 
     try {
         monitor_thread_ = std::thread(&UsbBackendLinux::monitor_thread_func, this);
