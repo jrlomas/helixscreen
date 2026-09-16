@@ -52,11 +52,20 @@ Every pass appends a `THERMAL` line per workload (`vcgencmd measure_temp`, `get_
 the ARM clock) and every gate run one sampled mid-run. The Pi 3B throttles under the load gate
 (80 to 84 C, `throttled=0x20002`, the ARM clock down to 818 MHz), and a throttled run is not
 comparable with an unthrottled one. `summarize.py` ignores these lines; report the hottest
-reading and the count of readings with a `throttled` other than `0x0` beside an arm's numbers:
+reading and the count of CURRENTLY throttled readings beside an arm's numbers.
+
+`get_throttled` splits into current state in bits 0-3 and "has occurred since boot" in bits
+16-19, and the high bits never clear until a reboot. A board that throttled once therefore
+reports a non-zero value for the rest of its uptime, so counting any value other than `0x0`
+condemns every later run: a clean set of passes on a Pi 3B that had thermally capped earlier
+in the day reads `throttled=0x20000` on all fifteen samples while its ARM clock never leaves
+1200 MHz. Mask the low nibble instead:
 
 ```bash
 grep -o "temp=[0-9.]*" "$HELIX_PERF_SCRATCH/results/my-arm.txt" | sort -t= -k2 -n | tail -n 1
-grep THERMAL "$HELIX_PERF_SCRATCH/results/my-arm.txt" | grep -v -c "throttled=0x0"
+n=0; for v in $(grep -o 'throttled=0x[0-9a-f]*' "$HELIX_PERF_SCRATCH/results/my-arm.txt" | cut -d= -f2); do
+  (( (v & 0xF) != 0 )) && n=$((n + 1))
+done; echo "$n currently-throttled sample(s)"
 ```
 
 Frames come from `strace` of the presenting ioctls: `DRM_IOCTL_MODE_PAGE_FLIP` on the dumb-DRM
