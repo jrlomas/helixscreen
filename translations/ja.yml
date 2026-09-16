@@ -455,6 +455,7 @@ translations:
   Change Printer Host: プリンターホスト変更
   Change Tool: ツール交換
   Change Tool While Paused: 一時停止中のツール交換
+  Change heater control?: ''
   Change tool: ツールを交換
   Changes apply immediately. Adjust during print for tuning.: 変更は即座に適用されます。印刷中に調整して最適化できます。
   Changes are temporary and reset on printer reboot: 変更は一時的で、プリンター再起動時にリセットされます
@@ -1259,6 +1260,7 @@ translations:
   HelixScreen is detecting your display orientation: HelixScreenがディスプレイの向きを検出しています
   HelixScreen will integrate with your filament changer for multi-spool/color print operations.: HelixScreen
     はマルチスプール/カラー印刷操作のためにフィラメントチェンジャーと連携します。
+  HelixScreen writes this to printer.cfg and restarts Klipper. The printer will briefly disconnect.: ''
   HelixScreen {} is available — tap Update: HelixScreen {} が利用可能です — 「更新」をタップ
   Help & About: ヘルプと情報
   Help Improve HelixScreen: HelixScreen の改善にご協力ください
@@ -2677,7 +2679,13 @@ translations:
   Switch to v%s: 'v%s に切り替え'
   Switched to {}: '{} に切替えました'
   Switches to a backup spool on runout: フィラメント切れ時にバックアップスプールへ切り替えます
+  ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
+  : ''
+  Switching back to PID changes how this heater is controlled.: ''
+  Switching back to PID requires a config change and Klipper restart.: ''
   Switching heater control to MPC. Klipper will restart.: ヒーター制御をMPCに切り替えます。Klipperが再起動します。
+  Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: ''
+  Switching to MPC changes how this heater is controlled.: ''
   Switching to MPC requires a config change and Klipper restart.: MPCへの切り替えには設定変更とKlipperの再起動が必要です。
   Sync with Spoolman: Spoolman と同期
   Sysfs: Sysfs

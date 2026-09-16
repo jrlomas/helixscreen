@@ -821,7 +821,7 @@ class PIDCalibrateCollector : public std::enable_shared_from_this<PIDCalibrateCo
 /**
  * @brief State machine for collecting MPC_CALIBRATE gcode responses
  *
- * Kalico/Danger Klipper sends MPC calibration output as multiple gcode_response lines.
+ * Kalico sends MPC calibration output as multiple gcode_response lines.
  * The collector tracks calibration phases for progress reporting and accumulates
  * result values from multiple lines after "Finished MPC calibration".
  *
@@ -914,8 +914,7 @@ class MPCCalibrateCollector : public std::enable_shared_from_this<MPCCalibrateCo
         // Check for unknown command error
         if (line.find("Unknown command") != std::string::npos &&
             line.find("MPC_CALIBRATE") != std::string::npos) {
-            complete_error(
-                "MPC_CALIBRATE command not recognized. Requires Kalico or Danger Klipper.");
+            complete_error("MPC_CALIBRATE command not recognized. Requires Kalico firmware.");
             return;
         }
 

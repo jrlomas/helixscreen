@@ -15,6 +15,7 @@
 
 #include <lvgl.h>
 #include <string>
+#include <vector>
 
 class IMoonrakerAPI;
 class MoonrakerAdvancedAPI;
@@ -71,6 +72,35 @@ class PIDCalibrationPanel : public OverlayBase {
      * @brief Calibration method
      */
     enum class CalibMethod { PID, MPC };
+
+    /**
+     * @brief What the heater's config currently says, as opposed to the method
+     *        the user has selected
+     *
+     * UNKNOWN until the firmware answers a control-type query. Firmware without
+     * MPC support never answers, so UNKNOWN also means "not Kalico".
+     */
+    enum class ControlType { UNKNOWN, PID, MPC };
+
+    /**
+     * @brief Whether switching to @p target requires rewriting the config
+     *
+     * Only a known control type can disagree with the target: an unanswered
+     * query must not make the panel offer to rewrite a config it never read.
+     */
+    [[nodiscard]] static bool needs_control_migration(ControlType current, CalibMethod target);
+
+    /**
+     * @brief Config edits that move a heater section to @p target
+     *
+     * MPC needs `heater_power` to model the heater. PID clears the MPC keys the
+     * section may carry, which Klipper would reject once no MPC object reads
+     * them. Calibration results live in the autosave block and are left alone.
+     *
+     * @param heater_wattage Heater power in watts, used only for MPC
+     */
+    [[nodiscard]] static std::vector<helix::system::ConfigEdit>
+    build_control_migration_edits(CalibMethod target, int heater_wattage);
 
     PIDCalibrationPanel();
     ~PIDCalibrationPanel() override;
@@ -262,6 +292,7 @@ class PIDCalibrationPanel : public OverlayBase {
     int fan_breakpoints_ = FAN_BP_QUICK;
     bool needs_migration_ = false;
     bool is_kalico_ = false;
+    ControlType current_control_ = ControlType::UNKNOWN;
 
     // MPC results
     MoonrakerAdvancedAPI::MPCResult mpc_result_;
@@ -281,6 +312,9 @@ class PIDCalibrationPanel : public OverlayBase {
 
     lv_subject_t subj_calibrating_heater_;
     char buf_calibrating_heater_[32];
+
+    lv_subject_t subj_migration_notice_;
+    char buf_migration_notice_[128];
 
     lv_subject_t subj_pid_kp_;
     char buf_pid_kp_[32];
@@ -407,8 +441,18 @@ class PIDCalibrationPanel : public OverlayBase {
     void fetch_old_pid_values();
 
     // MPC-specific methods
-    void detect_heater_control_type();
-    void start_migration();
+    /**
+     * @brief Query the firmware for the selected heater's control type
+     *
+     * @param preselect_mpc Select MPC once the answer arrives. Activation wants
+     *        this; a re-read triggered by the MPC button has already selected
+     *        it, and a late answer must not override a PID choice made since.
+     */
+    void detect_heater_control_type(bool preselect_mpc = true);
+    void start_migration(CalibMethod target);
+    void confirm_migration();
+    void begin_calibration(CalibMethod method);
+    void update_migration_notice();
     void on_mpc_result(const MoonrakerAdvancedAPI::MPCResult& result);
     void on_mpc_progress(int phase, int total_phases, const std::string& desc);
 
