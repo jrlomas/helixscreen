@@ -5,9 +5,11 @@
 
 #ifdef __linux__
 
+#include "usb_automount.h"
 #include "usb_backend.h"
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -65,6 +67,14 @@ class UsbBackendLinux : public UsbBackend {
      */
     bool is_usb_mount(const std::string& device, const std::string& mount_point,
                       const std::string& fs_type);
+
+    /**
+     * @brief Is this mount point in a removable-media location?
+     *
+     * Shared contract: mounters must place USB mounts under one of these
+     * prefixes or the detection here will not surface the drive.
+     */
+    static bool is_usb_mount_point(const std::string& mount_point);
 
     /**
      * @brief Recursively scan a directory for printable G-code files
@@ -128,6 +138,12 @@ class UsbBackendLinux : public UsbBackend {
     // Event path: pollable fd on /proc/self/mountinfo
     int mountinfo_fd_{-1};
     std::thread monitor_thread_;
+
+    // Fallback mounter for boards where nothing else mounts USB sticks.
+    // Nullptr (disarmed) unless running as root. Owned here so its whole
+    // lifecycle - poll() passes and the shutdown unmount - stays on the
+    // monitor thread; it never touches LVGL.
+    std::unique_ptr<helix::usb::UsbAutomount> automount_;
 
     // Content-compare fallback. Atomic: the monitor thread can demote itself
     // to this mode after a poll failure while a reader checks the mode.

@@ -1264,6 +1264,26 @@ SCREWS_AUTO_START=1 ./build/bin/helix-screen --test &
 
 ## Development
 
+### `HELIX_USB_AUTOMOUNT`
+
+Disable the in-app fallback USB mounter. When nothing else on the device mounts USB sticks
+(no udisks2, no vendor app doing it), HelixScreen mounts an unmounted removable device
+read-only after a 3s grace period so the print-from-USB picker can see it. `0` forces that
+off, leaving mounting entirely to whatever else is on the system. The mounter also disarms
+itself when the process does not run as root, so a developer's desktop build never mounts
+the workstation's own drives.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0` (fallback mounting off), anything else or unset (on for root) |
+| **Default** | Enabled when running as root |
+| **File** | `src/api/usb_automount.cpp`, `include/usb_automount.h` |
+
+```bash
+# Leave USB mounting entirely to the platform's own mounter.
+HELIX_USB_AUTOMOUNT=0 ./build/bin/helix-screen -vv
+```
+
 ### `HELIX_TEMP_GRAPH_GRAD_SKIP`
 
 Force the temperature graph's gradient to re-render on every dirtied frame, disabling the
