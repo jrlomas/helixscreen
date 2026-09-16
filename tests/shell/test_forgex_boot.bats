@@ -489,3 +489,167 @@ wpa_fixture() {
          END { exit found ? 0 : 1 }' \
         "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
 }
+
+# --- Which hooks file a Forge-X AD5X gets ---
+#
+# A Forge-X AD5X reports BOTH platform=ad5x and flavor=forge_x, and the two
+# dispatch cases in install_platform_hooks pull opposite ways: the flavor case
+# says ad5m-forgex, the platform case overrides to ad5x (the Z-Mod hook). The
+# host profile's hook key exists precisely to break that tie: it is set only
+# when the mod's own tree layout was probed, and names the rig's actual
+# payload layout (ad5x-forgex). It must outrank both cases.
+#
+# The deployed file is compared by content, not by tracing which key string
+# won: deploy_platform_hooks copies hooks-<key>.sh onto platform/hooks.sh, so
+# the bytes at the destination are the behavior that ships.
+
+_load_install_platform_hooks() {
+    # main.sh's source-time traps (ERR/EXIT) are stripped from the copy: an
+    # ERR trap left armed inside a bats test fires on the first failing
+    # assertion into an undefined error_handler and swallows bats' result
+    # line for that test.
+    local main_patched="$BATS_TEST_TMPDIR/main.sh"
+    sed -e "/^trap /d" \
+        "$WORKTREE_ROOT/scripts/lib/installer/main.sh" > "$main_patched"
+    unset _HELIX_MAIN_SOURCED _HELIX_SERVICE_SOURCED _HELIX_PLATFORM_SOURCED
+    # shellcheck disable=SC1090
+    . "$WORKTREE_ROOT/scripts/lib/installer/service.sh"
+    # platform.sh holds resolve_platform_hook_key, which install_platform_hooks
+    # delegates the whole dispatch to (it lives there rather than in main.sh so
+    # scripts/device-profile.sh can ask the same question over ssh without
+    # sourcing the orchestrator and its traps). Sourced ahead of main.sh, which
+    # is the bundle's own module order.
+    # shellcheck disable=SC1090
+    . "$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
+    # shellcheck disable=SC1090
+    . "$main_patched"
+    # platform.sh defines the real log_* helpers' callers; restore helpers.bash's
+    # silent stubs so they cannot write into the assertions below.
+    load helpers
+}
+
+# Stage every hooks file the dispatch could pick into a sandbox payload tree,
+# so the assertion reads the destination copy, exactly as a real install
+# would (the tarball ships assets/config/platform/ wholesale).
+stage_hook_candidates() {
+    INSTALL_DIR="$BATS_TEST_TMPDIR/payload/helixscreen"
+    mkdir -p "$INSTALL_DIR/assets/config/platform"
+    local f
+    for f in hooks-ad5x-forgex.sh hooks-ad5x.sh hooks-ad5m-forgex.sh; do
+        cp "$WORKTREE_ROOT/assets/config/platform/$f" \
+           "$INSTALL_DIR/assets/config/platform/$f"
+    done
+    platform="ad5x"
+    MOD_FLAVOR="forge_x"
+    AD5M_FIRMWARE="forge_x"
+}
+
+@test "install_platform_hooks: the probed rig key outranks the ad5x platform arm" {
+    _load_install_platform_hooks
+    stage_hook_candidates
+    HOST_PLATFORM_HOOK_KEY="ad5x-forgex"
+
+    install_platform_hooks
+
+    [ -f "$INSTALL_DIR/platform/hooks.sh" ] \
+        || fail "no hooks deployed at all"
+    cmp -s "$INSTALL_DIR/assets/config/platform/hooks-ad5x-forgex.sh" \
+           "$INSTALL_DIR/platform/hooks.sh" \
+        || fail "deployed hooks are not the forge-x rig file"
+}
+
+@test "install_platform_hooks: without the probe key ad5x keeps the Z-Mod hook" {
+    # Control: an AD5X the probe did not recognize as the Forge-X rig (e.g.
+    # Z-Mod) must keep getting the ad5x hook — flavor forge_x must not leak
+    # the AD5M's forge-x file onto a non-rig box.
+    _load_install_platform_hooks
+    stage_hook_candidates
+    HOST_PLATFORM_HOOK_KEY=""
+
+    install_platform_hooks
+
+    cmp -s "$INSTALL_DIR/assets/config/platform/hooks-ad5x.sh" \
+           "$INSTALL_DIR/platform/hooks.sh" \
+        || fail "ad5x without the probe key must deploy hooks-ad5x.sh"
+}
+
+@test "install_platform_hooks: an AD5M host still gets the ad5m-forgex hook" {
+    # Control: the flavor dispatch that every installed AD5M Forge-X box
+    # relies on is unchanged.
+    _load_install_platform_hooks
+    stage_hook_candidates
+    platform="ad5m"
+    HOST_PLATFORM_HOOK_KEY=""
+
+    install_platform_hooks
+
+    cmp -s "$INSTALL_DIR/assets/config/platform/hooks-ad5m-forgex.sh" \
+           "$INSTALL_DIR/platform/hooks.sh" \
+        || fail "ad5m + forge_x must deploy hooks-ad5m-forgex.sh"
+}
+
+# --- netd restore: first-run WiFi setup must stay reachable -------------------
+#
+# S55boot starts netd and, when the network does not come up inside its 180s
+# wait, kills it and unlinks the socket. netd loads the WiFi driver and owns the
+# radio, so a carrier-less boot reaches S90 with no daemon and no wlan0: the
+# wizard has nothing to configure and the owner cannot get the printer online
+# from the only UI we left them.
+
+netd_restore_fixture() {
+    export FORGEX_NETD_BIN="$BATS_TEST_TMPDIR/netd"
+    export FORGEX_NETD_SOCK="$BATS_TEST_TMPDIR/netd.sock"
+    export FORGEX_NETWORK_CONF="$BATS_TEST_TMPDIR/network.conf"
+    printf '#!/bin/sh\n' > "$FORGEX_NETD_BIN"
+    chmod +x "$FORGEX_NETD_BIN"
+    mock_command_script start-stop-daemon "echo \"\$@\" >> $BATS_TEST_TMPDIR/ssd.log"
+}
+
+@test "ForgeX netd restore starts the daemon when it is installed but down" {
+    netd_restore_fixture
+    mock_command_script pidof "exit 1"   # nothing running
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    grep -q -- "--exec $FORGEX_NETD_BIN" "$BATS_TEST_TMPDIR/ssd.log"
+}
+
+@test "ForgeX netd restore leaves a running daemon alone" {
+    netd_restore_fixture
+    mock_command_script pidof "echo 1234"   # already running
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    [ ! -f "$BATS_TEST_TMPDIR/ssd.log" ]
+}
+
+@test "ForgeX netd restore is a no-op on releases without netd" {
+    netd_restore_fixture
+    rm -f "$FORGEX_NETD_BIN"             # pre-1.4.2: no daemon ships
+    mock_command_script pidof "exit 1"
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    [ ! -f "$BATS_TEST_TMPDIR/ssd.log" ]
+}
+
+@test "ForgeX netd restore adopts an existing link when network.conf is present" {
+    netd_restore_fixture
+    printf 'mode=ETHERNET\n' > "$FORGEX_NETWORK_CONF"
+    mock_command_script pidof "exit 1"
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    grep -q -- "--adopt-existing" "$BATS_TEST_TMPDIR/ssd.log"
+}
+
+@test "ForgeX netd restore bootstraps without adoption when there is no network.conf" {
+    netd_restore_fixture
+    rm -f "$FORGEX_NETWORK_CONF"
+    mock_command_script pidof "exit 1"
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    run grep -c -- "--adopt-existing" "$BATS_TEST_TMPDIR/ssd.log"
+    [ "$(last_line)" = "0" ]
+}
+
+@test "ForgeX pre-start restores netd" {
+    awk '/^platform_pre_start\(\)/,/^}/' \
+        "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh" | grep -q 'platform_start_netd'
+}
