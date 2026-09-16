@@ -538,9 +538,11 @@ void HardwareValidator::validate_configured_hardware(Config* config,
         }
     }
 
-    // Check configured fan (aux) — not in the registry; kept as a bespoke check.
-    // Some presets (e.g. AD5M Pro ForgeX) map a fifth fan role; without this check a
-    // missing aux fan would silently disappear rather than surface as a hardware issue.
+    // Check configured fan (aux). AuxFan is a GUIDED registry role, so the loop above
+    // routes a stale key to the reconfig wizard instead of warning here; this check is
+    // what keeps a missing aux fan visible as a hardware issue. Some presets (e.g.
+    // AD5M Pro ForgeX) map a fifth fan role; without it the fan would silently
+    // disappear.
     try {
         std::string aux_fan = config->get<std::string>(config->df() + "fans/aux", "");
         if (!aux_fan.empty() && !contains_name(fans, aux_fan) &&

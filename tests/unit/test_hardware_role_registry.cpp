@@ -3,6 +3,7 @@
 #include "hardware_role_registry.h"
 #include "moonraker_client_mock.h"
 #include "printer_discovery.h"
+#include "printer_fan_state.h"
 #include "wizard_config_paths.h"
 
 #include <algorithm>
@@ -90,6 +91,68 @@ TEST_CASE("registry integrity: every descriptor has a usable config key", "[hwro
         REQUIRE(d.config_key != nullptr);
         REQUIRE(std::string(d.config_key).find("/") != std::string::npos);
         REQUIRE(role_descriptor(d.id) == &d);
+    }
+}
+
+TEST_CASE("resolve_role: stale aux fan heals to a live aux-vocabulary fan", "[hwrole][resolve]") {
+    const auto* desc = role_descriptor(HardwareRoleId::AuxFan);
+    REQUIRE(desc != nullptr);
+    auto r = resolve_role(*desc, "fan_generic gone", {"fan_generic internal_fan"});
+    REQUIRE(r.status == RoleResolutionStatus::AutoHealed);
+    REQUIRE(r.object == "fan_generic internal_fan");
+}
+
+TEST_CASE("aux fan role: descriptor is fans/aux, resolves live value, never invents one",
+          "[hwrole][config]") {
+    const auto* desc = role_descriptor(HardwareRoleId::AuxFan);
+    REQUIRE(desc != nullptr);
+    REQUIRE(std::string(desc->config_key) == "fans/aux");
+    REQUIRE(std::string(desc->canonical_default).empty());
+
+    Config* cfg = Config::get_instance();
+    REQUIRE(cfg != nullptr);
+    const std::string key = cfg->df() + helix::wizard::AUX_FAN;
+    const std::string orig = cfg->get<std::string>(key, "");
+
+    cfg->set<std::string>(key, std::string("fan_generic internal_fan"));
+    std::string r =
+        resolve_role_from_config(HardwareRoleId::AuxFan, cfg, {"fan_generic internal_fan"}, false);
+    REQUIRE(r == "fan_generic internal_fan");
+
+    // An empty saved value means the role is unconfigured — no heuristic guess.
+    cfg->set<std::string>(key, std::string(""));
+    r = resolve_role_from_config(HardwareRoleId::AuxFan, cfg, {"fan_generic internal_fan"}, false);
+    REQUIRE(r.empty());
+
+    cfg->set<std::string>(key, orig); // restore
+}
+
+// FanRoleConfig::from_config is the batch the discovery sequence actually calls. A role
+// the registry knows about but that batch never asks for stays unresolved forever.
+TEST_CASE("FanRoleConfig::from_config resolves the aux fan role", "[hwrole][config]") {
+    Config* cfg = Config::get_instance();
+    REQUIRE(cfg != nullptr);
+
+    const char* keys[] = {helix::wizard::PART_FAN, helix::wizard::HOTEND_FAN,
+                          helix::wizard::CHAMBER_FAN, helix::wizard::EXHAUST_FAN,
+                          helix::wizard::AUX_FAN};
+    std::vector<std::string> saved;
+    for (const char* k : keys) {
+        saved.push_back(cfg->get<std::string>(cfg->df() + k, ""));
+    }
+    // Leave every other role empty so from_config has nothing it would persist: this
+    // test shares the process-wide Config and must not write the caller's settings.
+    for (const char* k : keys) {
+        cfg->set<std::string>(cfg->df() + k, std::string(""));
+    }
+    cfg->set<std::string>(cfg->df() + helix::wizard::AUX_FAN,
+                          std::string("fan_generic internal_fan"));
+
+    auto roles = FanRoleConfig::from_config(cfg, {"fan", "fan_generic internal_fan"});
+    REQUIRE(roles.aux_fan == "fan_generic internal_fan");
+
+    for (size_t i = 0; i < saved.size(); ++i) {
+        cfg->set<std::string>(cfg->df() + keys[i], saved[i]);
     }
 }
 
