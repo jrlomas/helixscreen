@@ -145,6 +145,16 @@ class ScreensaverManager {
      */
     void start(ScreensaverType type);
 
+    /**
+     * @brief Registry savers this build can draw but has no instance for
+     *
+     * Which savers a colour depth can draw is stated in four places that agree only by
+     * convention: SCREENSAVERS::depths, the Makefile's source filter, and this file's include
+     * and registration guards. When they disagree the type is selectable and starts nothing,
+     * which looks to a user like the screen simply never blanking. Empty in a correct build.
+     */
+    std::vector<const char*> savers_missing_for_build_depth() const;
+
     /** @brief Stop whatever screensaver or black screen is active */
     void stop();
 

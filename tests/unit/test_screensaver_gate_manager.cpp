@@ -326,3 +326,19 @@ TEST_CASE_METHOD(LVGLTestFixture,
 }
 
 #endif // HELIX_ENABLE_SCREENSAVER
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "every saver the registry marks for this colour depth is registered",
+                 "[screensaver][screensaver_gate][depth_wiring]") {
+    // Four hand-kept lists decide this: SCREENSAVERS::depths, the Makefile source filter, and
+    // the manager's include and registration guards. A saver missing here is selectable and
+    // starts nothing.
+    const std::vector<const char*> missing =
+        ScreensaverManager::instance().savers_missing_for_build_depth();
+    std::string names;
+    for (const char* n : missing) {
+        names += names.empty() ? n : std::string(", ") + n;
+    }
+    CAPTURE(names);
+    CHECK(missing.empty());
+}

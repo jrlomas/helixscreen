@@ -63,6 +63,22 @@ ScreensaverManager::ScreensaverManager() : cpu_clock_(helix::ui::read_process_cp
     screensavers_.push_back(std::make_unique<StarfieldScreensaver>());
     screensavers_.push_back(std::make_unique<helix::BouncingPrinterScreensaver>());
     screensavers_.push_back(std::make_unique<helix::ui::FireworksScreensaver>());
+
+    for (const char* name : savers_missing_for_build_depth()) {
+        spdlog::error("[ScreensaverManager] {} is listed as drawing at this colour depth but no "
+                      "instance is registered; choosing it starts nothing",
+                      name);
+    }
+}
+
+std::vector<const char*> ScreensaverManager::savers_missing_for_build_depth() const {
+    std::vector<const char*> missing;
+    for (const helix::ui::ScreensaverInfo& row : helix::ui::SCREENSAVERS) {
+        if ((row.depths & helix::ui::SAVER_BUILD_DEPTH) != 0U && find(row.type) == nullptr) {
+            missing.push_back(row.name);
+        }
+    }
+    return missing;
 }
 
 ScreensaverManager::~ScreensaverManager() = default;
