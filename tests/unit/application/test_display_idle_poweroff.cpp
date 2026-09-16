@@ -869,3 +869,38 @@ TEST_CASE_METHOD(LVGLTestFixture,
 
     DisplayManagerTestAccess::set_display(*ApplicationTestAccess::display_manager(app), nullptr);
 }
+
+TEST_CASE_METHOD(LVGLTestFixture, "a wake restores rendering even when the panel branch cannot run",
+                 "[application][display][poweroff][flush_restore]") {
+    // Suppression is engaged by enter_sleep() alone. Undoing it must not depend on
+    // which panel mechanism is still available at wake: a no-op flush left installed
+    // freezes the panel on its last frame while LVGL keeps painting, and every later
+    // wake looks successful.
+    DisplayManager mgr;
+    auto backend =
+        std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true, DisplayBackendType::DRM);
+    FakePowerOffBackend* raw = backend.get();
+    DisplayManagerTestAccess::set_backend(mgr, std::move(backend));
+    DisplayManagerTestAccess::set_use_hardware_blank(mgr, false);
+    DisplayManagerTestAccess::set_use_power_off(mgr, raw->supports_power_off());
+
+    lv_display_t* disp = lv_display_get_default();
+    REQUIRE(disp != nullptr);
+    DisplayManagerTestAccess::set_display(mgr, disp);
+    lv_display_set_flush_cb(disp, test_sentinel_flush_cb);
+    lv_display_flush_cb_t real_cb = disp->flush_cb;
+
+    DisplayManagerTestAccess::enter_sleep(mgr, 60);
+    REQUIRE(raw->power_off_calls == 1);
+    REQUIRE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
+
+    // The backend goes away before the wake (a swap, or teardown racing a wake).
+    DisplayManagerTestAccess::set_backend(mgr, nullptr);
+
+    DisplayManagerTestAccess::restore_display_output(mgr);
+
+    CHECK_FALSE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
+    CHECK(disp->flush_cb == real_cb);
+
+    DisplayManagerTestAccess::set_display(mgr, nullptr);
+}
