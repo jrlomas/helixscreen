@@ -1207,6 +1207,7 @@
   <translation tag="Heater Power" fr="Puissance du chauffage"/>
   <translation tag="Heater connection lost" fr="Connexion au chauffage perdue"/>
   <translation tag="Heater fault" fr="Défaut du chauffage"/>
+  <translation tag="Heater offline" fr="Chauffage déconnecté"/>
   <translation tag="Heater over-temperature" fr="Surchauffe du chauffage"/>
   <translation tag="Heater sensor fault" fr="Défaut du capteur de chauffage"/>
   <translation tag="HeaterSelect" fr="Sélection du chauffage"/>

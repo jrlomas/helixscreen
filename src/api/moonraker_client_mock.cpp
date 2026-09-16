@@ -476,10 +476,18 @@ void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double
             const double chamber_target = chamber_target_.load();
             const double filter_value = chamber_filter_value_.load();
             const bool filter_on = filter_value > 0.0;
+            // The pin is only a request: while the device heats it runs the
+            // filter fan itself and reports why, leaving our pin untouched.
+            const bool device_fan = !filter_on && chamber_target > 0.0;
             // Test hook: HELIX_MOCK_DRAGONBREATH_FAULT=1 latches a fault into
             // every synthesized frame.
             const char* fault_env = std::getenv("HELIX_MOCK_DRAGONBREATH_FAULT");
             const bool mock_fault = fault_env && fault_env[0] == '1';
+            // Test hook: HELIX_MOCK_DRAGONBREATH_OFFLINE=1 drops the appliance
+            // off its radio link. Read per frame so one client crosses the
+            // transition rather than having to be rebuilt.
+            const char* offline_env = std::getenv("HELIX_MOCK_DRAGONBREATH_OFFLINE");
+            const bool mock_offline = offline_env && offline_env[0] == '1';
             // PTC element rides a few degrees above chamber air, drifting
             // with the same slow sine the other mock sensors use.
             const double ptc_temp =
@@ -490,12 +498,14 @@ void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double
                                 {"inhibited", false},
                                 {"fault_reason", mock_fault ? json("ptc_overtemp") : json(nullptr)},
                                 {"ptc_temp", ptc_temp},
-                                {"fan_percent", filter_on ? 100 : 0},
-                                {"fan_reason", filter_on ? "filter" : "off"},
+                                {"fan_percent", (filter_on || device_fan) ? 100 : 0},
+                                {"fan_reason", filter_on    ? "requested"
+                                               : device_fan ? "heater"
+                                                            : "off"},
                                 {"mode", chamber_target > 0.0 ? "power_on" : "off"},
                                 {"source", "klipper"},
                                 {"lease_owned", chamber_target > 0.0},
-                                {"connected", true}};
+                                {"connected", !mock_offline}};
         }
     }
 

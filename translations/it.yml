@@ -1330,6 +1330,7 @@ translations:
   Heater Power: Potenza riscaldatore
   Heater connection lost: Connessione al riscaldatore persa
   Heater fault: Guasto al riscaldatore
+  Heater offline: Riscaldatore disconnesso
   Heater over-temperature: Sovratemperatura del riscaldatore
   Heater sensor fault: Guasto al sensore del riscaldatore
   HeaterSelect: Seleziona riscaldatore

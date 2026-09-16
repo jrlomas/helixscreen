@@ -242,7 +242,7 @@ endif
 # Compile app C sources
 # Uses DEPFLAGS to generate .d files for header dependency tracking
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[CC]$(RESET) $<"
 ifeq ($(V),1)
@@ -268,10 +268,33 @@ $(APP_DNS_RESOLV_OBJ): $(LIBHV_DIR)/base/dns_resolv.c $(LIBHV_LIB)
 	$(Q)$(CC) $(CFLAGS) -I$(LIBHV_DIR)/base $(LIBHV_INC) -c $< -o $@
 endif
 
+# ----------------------------------------------------------------------------
+# Feature-flag stamp
+# ----------------------------------------------------------------------------
+# Toggling ENABLE_SCREENSAVER over an existing tree leaves every object compiled
+# under the previous flags: no source changed, so make rebuilds nothing, the
+# callers stay #ifdef'd out, and LTO drops the feature the new sources added.
+# The link succeeds at an unchanged binary size, so exit 0 reports a feature the
+# binary does not contain. $(FLAGS_STAMP) is a prerequisite of every rule that
+# compiles into $(OBJ_DIR); rewriting it here bumps its mtime whenever the flag
+# text changes, which is what forces those objects to rebuild.
+#
+# Hashing the flag text rather than naming the ENABLE_* variables keeps this
+# correct as flags are added. INCLUDES and DEPFLAGS stay out: app and test
+# objects share these flags and differ only in include paths, so folding those in
+# would make `make` and `make test` invalidate each other on every alternation.
+#
+# Keyed on OBJ_DIR rather than BUILD_DIR, unlike $(ABI_STAMP): obj-asan, obj-tsan
+# and obj-cov share a BUILD_DIR while carrying different flags, and a single stamp
+# between them would ping-pong and rebuild everything on each alternation.
+$(shell mkdir -p $(OBJ_DIR))
+$(file >$(FLAGS_STAMP).new,$(CC) $(CFLAGS) $(CXX) $(CXXFLAGS) $(SUBMODULE_CXXFLAGS) $(SUBMODULE_CFLAGS) $(LVGL_C_CFLAGS))
+$(shell cmp -s $(FLAGS_STAMP).new $(FLAGS_STAMP) || mv -f $(FLAGS_STAMP).new $(FLAGS_STAMP); rm -f $(FLAGS_STAMP).new)
+
 # Compile app C++ sources (depend on libhv and PCH)
 # Uses DEPFLAGS to generate .d files for header dependency tracking
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[CXX]$(RESET) $<"
 ifeq ($(V),1)
@@ -304,7 +327,7 @@ $(OBJ_DIR)/rendering/gcode_data_source.o: override CXXFLAGS += -D_FILE_OFFSET_BI
 # Compile app Objective-C++ sources (macOS .mm files)
 # Uses DEPFLAGS to generate .d files for header dependency tracking
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.mm $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.mm $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[OBJCXX]$(RESET) $<"
 ifeq ($(V),1)
@@ -328,7 +351,7 @@ endif
 # lvgl_event_pop_unwind_safe.patch (L081 root cause fix). Code-size impact is
 # bounded — only functions with cleanups get extra unwind regions.
 LVGL_C_CFLAGS := $(SUBMODULE_CFLAGS) -fexceptions
-$(OBJ_DIR)/lvgl/%.o: $(LVGL_DIR)/%.c lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
+$(OBJ_DIR)/lvgl/%.o: $(LVGL_DIR)/%.c lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[CC]$(RESET) $<"
 ifeq ($(V),1)
@@ -346,7 +369,7 @@ endif
 # development (see CLAUDE.md), so it gets
 # DEPFLAGS like app sources do - stale objects after a header-only edit here
 # caused a struct-size mismatch/stack-smash that required hand-deleting 168 .o files.
-$(OBJ_DIR)/helix-xml/%.o: $(HELIX_XML_DIR)/%.c lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
+$(OBJ_DIR)/helix-xml/%.o: $(HELIX_XML_DIR)/%.c lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[CC]$(RESET) $<"
 	$(Q)$(CC) $(SUBMODULE_CFLAGS) $(DEPFLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \
@@ -356,7 +379,7 @@ $(OBJ_DIR)/helix-xml/%.o: $(HELIX_XML_DIR)/%.c lv_conf.h $(PATCHES_STAMP) $(ABI_
 	$(call emit-compile-command,$(CC),$(SUBMODULE_CFLAGS) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Compile lv_markdown C sources (markdown viewer + md4c parser)
-$(OBJ_DIR)/lv_markdown/%.o: $(LV_MARKDOWN_DIR)/%.c $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
+$(OBJ_DIR)/lv_markdown/%.o: $(LV_MARKDOWN_DIR)/%.c $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[CC]$(RESET) $<"
 	$(Q)$(CC) $(SUBMODULE_CFLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \
@@ -369,7 +392,7 @@ $(OBJ_DIR)/lv_markdown/%.o: $(LV_MARKDOWN_DIR)/%.c $(PATCHES_STAMP) $(ABI_STAMP)
 # NOTE: No DEPFLAGS for internal headers - see C rule above for rationale.
 # lv_conf.h tracked explicitly as it controls LVGL feature flags.
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/lvgl/%.o: $(LVGL_DIR)/%.cpp $(PCH) lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
+$(OBJ_DIR)/lvgl/%.o: $(LVGL_DIR)/%.cpp $(PCH) lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[CXX]$(RESET) $<"
 ifeq ($(V),1)
@@ -385,7 +408,7 @@ endif
 # Only the assets/ subdirectory needs C++ — the rest compiles fine as C.
 # -fpermissive allows void* implicit conversions from C-style LVGL allocations.
 # Only built when ENABLE_OPENGLES=yes (LVGL_OPENGLES_OBJS is empty otherwise).
-$(LVGL_OPENGLES_OBJS): $(OBJ_DIR)/lvgl/%.o: $(LVGL_DIR)/%.c lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
+$(LVGL_OPENGLES_OBJS): $(OBJ_DIR)/lvgl/%.o: $(LVGL_DIR)/%.c lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[CXX/GLES]$(RESET) $<"
 	$(Q)$(CXX) $(SUBMODULE_CXXFLAGS) -fpermissive $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \
@@ -396,7 +419,7 @@ $(LVGL_OPENGLES_OBJS): $(OBJ_DIR)/lvgl/%.o: $(LVGL_DIR)/%.c lv_conf.h $(PATCHES_
 
 # Compile lv_markdown sources (vendored C library - use SUBMODULE_CFLAGS)
 # Includes both src/*.c and deps/md4c/md4c.c
-$(OBJ_DIR)/lv_markdown/%.o: $(LV_MARKDOWN_DIR)/%.c $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
+$(OBJ_DIR)/lv_markdown/%.o: $(LV_MARKDOWN_DIR)/%.c $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[CC]$(RESET) $<"
 ifeq ($(V),1)
@@ -420,7 +443,7 @@ $(OBJ_DIR)/quirc/%.o: $(QUIRC_DIR)/%.c
 
 # Compile font sources (generated by lv_font_conv - use SUBMODULE flags)
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/assets/fonts/%.o: assets/fonts/%.c $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
+$(OBJ_DIR)/assets/fonts/%.o: assets/fonts/%.c $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(GREEN)[FONT]$(RESET) $<"
 	$(Q)$(CC) $(SUBMODULE_CFLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \

@@ -8,10 +8,10 @@
 using namespace helix;
 
 namespace {
-PrinterDiscovery parse(std::initializer_list<const char*> objs) {
+PrinterDiscovery parse(std::initializer_list<std::string> objs) {
     PrinterDiscovery d;
     nlohmann::json arr = nlohmann::json::array();
-    for (const char* o : objs)
+    for (const auto& o : objs)
         arr.push_back(o);
     d.parse_objects(arr);
     return d;
@@ -51,4 +51,72 @@ TEST_CASE("existing keyword behavior unchanged", "[chamber][discovery]") {
     auto none = parse({"heater_bed", "extruder"});
     CHECK_FALSE(none.has_chamber_heater());
     CHECK(none.chamber_heater_backend_id().empty());
+}
+
+namespace {
+// Object names spanning the keyword tiers, both penalties, case handling and
+// the separator rules (whitespace splits tokens, hyphen does not).
+const std::vector<std::string> kKeywordNames = {
+    "chamber",          // 100 exact keyword
+    "ChAmBeR",          // 100 case-insensitive
+    "chamber_temp",     // 99 compound penalty
+    "my chamber",       // 99 whitespace-separated compound
+    "chamber-tvoc",     // 99 hyphen is not a separator: no air-quality penalty
+    "enclosure",        // 90
+    "enclosure_tvoc",   // 49 air-quality penalty
+    "cavity",           // 85
+    "cavity_pressure",  // 44
+    "box",              // 60 standalone token
+    "box_fan",          // 59
+    "box_gas",          // 19
+    "chamber_humidity", // 59
+};
+
+// Which of the two candidate object names a recorded full name kept.
+std::string picked_name(const std::string& full, const std::string& prefix,
+                        const std::string& first, const std::string& second) {
+    return full == prefix + first ? first : second;
+}
+} // namespace
+
+TEST_CASE("all three chamber paths rank the same names identically", "[chamber][discovery]") {
+    for (const auto& first : kKeywordNames) {
+        for (const auto& second : kKeywordNames) {
+            if (first == second) {
+                continue;
+            }
+            auto heater = parse({"heater_generic " + first, "heater_generic " + second});
+            auto sensor = parse({"temperature_sensor " + first, "temperature_sensor " + second});
+            auto fan = parse({"temperature_fan " + first, "temperature_fan " + second});
+            // Every path scores the object NAME with the same keyword rule, so
+            // the winner must be path-independent — including on equal scores,
+            // where all three keep whichever object was listed first.
+            std::string heater_pick =
+                picked_name(heater.chamber_heater_name(), "heater_generic ", first, second);
+            std::string sensor_pick =
+                picked_name(sensor.chamber_sensor_name(), "temperature_sensor ", first, second);
+            std::string fan_pick =
+                picked_name(fan.chamber_cooling_fan_name(), "temperature_fan ", first, second);
+            INFO("first=" << first << " second=" << second);
+            CHECK(heater_pick == sensor_pick);
+            CHECK(heater_pick == fan_pick);
+        }
+    }
+}
+
+TEST_CASE("sensor and cooling-fan paths score keywords only", "[chamber][discovery]") {
+    // No chamber keyword: never a sensor or cooling-fan candidate.
+    auto numbered_box = parse({"temperature_sensor box1_heater"});
+    CHECK_FALSE(numbered_box.has_chamber_sensor());
+    CHECK(numbered_box.chamber_sensor_name().empty());
+    CHECK(parse({"temperature_fan boxx"}).chamber_cooling_fan_name().empty());
+
+    // Appliance names are match()-only (heater slot). The sensor and
+    // cooling-fan slots are decided by keyword score alone, so an appliance
+    // name never claims them even though match() gives it 95.
+    CHECK_FALSE(parse({"temperature_sensor dragonbreath"}).has_chamber_sensor());
+    CHECK(parse({"temperature_fan panda_breath"}).chamber_cooling_fan_name().empty());
+
+    // A floored air-quality chamber sensor stays detectable.
+    CHECK(parse({"temperature_sensor chamber_humidity"}).has_chamber_sensor());
 }

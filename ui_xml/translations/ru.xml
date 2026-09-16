@@ -1207,6 +1207,7 @@
   <translation tag="Heater Power" ru="Мощность нагревателя"/>
   <translation tag="Heater connection lost" ru="Потеряна связь с нагревателем"/>
   <translation tag="Heater fault" ru="Неисправность нагревателя"/>
+  <translation tag="Heater offline" ru="Нагреватель отключён"/>
   <translation tag="Heater over-temperature" ru="Перегрев нагревателя"/>
   <translation tag="Heater sensor fault" ru="Неисправность датчика нагревателя"/>
   <translation tag="HeaterSelect" ru="Выбрать нагреватель"/>

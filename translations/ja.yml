@@ -1235,6 +1235,7 @@ translations:
   Heater Power: ヒーター出力
   Heater connection lost: ヒーター接続が切断されました
   Heater fault: ヒーター異常
+  Heater offline: ヒーター切断
   Heater over-temperature: ヒーター過昇温
   Heater sensor fault: ヒーターセンサー異常
   HeaterSelect: ヒーターを選択

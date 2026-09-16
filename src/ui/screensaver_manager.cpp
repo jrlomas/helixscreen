@@ -2,6 +2,8 @@
 
 #ifdef HELIX_ENABLE_SCREENSAVER
 
+#include "ui_screensaver.h"
+
 #include "config.h"
 #include "display_settings_manager.h"
 #include "helix_version.h"
@@ -9,10 +11,6 @@
 #include "refresh_period_hold.h"
 #include "screen_hide_hold.h"
 #include "screensaver.h"
-#if LV_COLOR_DEPTH == 32
-#include "ui_screensaver.h"
-
-#endif
 #include "screensaver_base.h"
 #include "screensaver_bounce.h"
 #include "screensaver_fireworks.h"
@@ -54,11 +52,7 @@ ScreensaverManager& ScreensaverManager::instance() {
 }
 
 ScreensaverManager::ScreensaverManager() : cpu_clock_(helix::ui::read_process_cpu_clock) {
-#if LV_COLOR_DEPTH == 32
-    // Sprite alpha and an ARGB canvas; SCREENSAVERS marks these SAVER_DEPTH_32 and the Makefile
-    // keeps their sources out of a 16 bpp build, so the three lists must agree.
     screensavers_.push_back(std::make_unique<FlyingToasterScreensaver>());
-#endif
     screensavers_.push_back(std::make_unique<PipesScreensaver>());
     screensavers_.push_back(std::make_unique<StarfieldScreensaver>());
     screensavers_.push_back(std::make_unique<helix::BouncingPrinterScreensaver>());

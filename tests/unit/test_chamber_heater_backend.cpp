@@ -60,8 +60,11 @@ TEST_CASE("dragonbreath parse: live nominal payload", "[chamber][backend]") {
     REQUIRE(d.has_value());
     CHECK(d->fault == false);
     CHECK(d->inhibited == false);
-    CHECK(d->fault_reason.empty());
-    CHECK(d->element_temp_c == Catch::Approx(24.9));
+    // fault_reason: null is the device answering "none", not an absent field:
+    // engaged as an empty string.
+    CHECK(d->fault_reason == "");
+    REQUIRE(d->element_temp_c.has_value());
+    CHECK(*d->element_temp_c == Catch::Approx(24.9));
     CHECK(d->filter_fan_percent == 0);
     CHECK(d->filter_fan_reason == "off");
     CHECK(d->externally_controlled == false);
@@ -77,7 +80,8 @@ TEST_CASE("dragonbreath parse: faulted + external-control variants", "[chamber][
     CHECK(faulted->fault == true);
     CHECK(faulted->fault_reason == "ptc_overtemp");
     CHECK(faulted->fault_reason_kind == FaultReason::Overtemp);
-    CHECK(faulted->element_temp_c == Catch::Approx(106.2));
+    REQUIRE(faulted->element_temp_c.has_value());
+    CHECK(*faulted->element_temp_c == Catch::Approx(106.2));
 
     auto ext = db->parse_diagnostics(nlohmann::json::parse(R"({"fault":false,
       "inhibited":false,"fault_reason":null,"ptc_temp":30.1,"fan_percent":40,
@@ -118,10 +122,128 @@ TEST_CASE("dragonbreath fault codes classify to generic kinds", "[chamber][backe
         CHECK(d->fault_reason_kind == c.expected);
     }
 
-    // No reason at all -> None.
+    // No reason key at all -> no report this frame (nullopt, distinct from
+    // the engaged None an explicit null reason classifies to).
     auto nominal = db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}});
     REQUIRE(nominal.has_value());
-    CHECK(nominal->fault_reason_kind == FaultReason::None);
+    CHECK_FALSE(nominal->fault_reason_kind.has_value());
+    auto null_reason =
+        db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}, {"fault_reason", nullptr}});
+    REQUIRE(null_reason.has_value());
+    CHECK(null_reason->fault_reason_kind == FaultReason::None);
+}
+
+// A delta frame carries only changed fields and may legitimately lack
+// ptc_temp, so frame recognition accepts any dragonbreath-schema key and only
+// the keys present engage. See ChamberHeaterDiagnostics in
+// chamber_heater_backend.h for the full field-level rule.
+TEST_CASE("dragonbreath parse: delta frames engage only carried fields",
+          "[chamber][backend][1290]") {
+    const auto* db = backend_by_id("dragonbreath");
+    REQUIRE(db != nullptr);
+
+    // A fan-only delta is ours even without ptc_temp, and nothing else engages.
+    auto fan_only = db->parse_diagnostics(nlohmann::json{{"fan_percent", 55}});
+    REQUIRE(fan_only.has_value());
+    CHECK(fan_only->filter_fan_percent == 55);
+    CHECK_FALSE(fan_only->fault.has_value());
+    CHECK_FALSE(fan_only->element_temp_c.has_value());
+    CHECK_FALSE(fan_only->fault_reason.has_value());
+    CHECK_FALSE(fan_only->filter_fan_driver.has_value());
+    CHECK_FALSE(fan_only->externally_controlled.has_value());
+
+    // externally_controlled reads mode, source AND lease_owned: a frame
+    // carrying only part of the trio is not an answer.
+    auto mode_only = db->parse_diagnostics(nlohmann::json{{"mode", "power_on"}});
+    REQUIRE(mode_only.has_value());
+    CHECK_FALSE(mode_only->externally_controlled.has_value());
+
+    // No dragonbreath key at all: not ours, even as an object.
+    CHECK_FALSE(db->parse_diagnostics(nlohmann::json{{"temperature", 21.0}}).has_value());
+    CHECK_FALSE(db->parse_diagnostics(nlohmann::json::object()).has_value());
+}
+
+// The appliance's own radio link. An engaged false is the device reporting
+// itself unreachable; an absent key is no report. A connected-only delta must
+// be recognized as ours — the frame the device emits when it drops off WiFi
+// carries exactly that one field.
+TEST_CASE("dragonbreath parse: connected engages, absent stays unengaged",
+          "[chamber][backend][1290]") {
+    const auto* db = backend_by_id("dragonbreath");
+    REQUIRE(db != nullptr);
+
+    auto offline = db->parse_diagnostics(nlohmann::json{{"connected", false}});
+    REQUIRE(offline.has_value());
+    CHECK(offline->device_connected == false);
+
+    auto online = db->parse_diagnostics(nlohmann::json{{"connected", true}});
+    REQUIRE(online.has_value());
+    CHECK(online->device_connected == true);
+
+    auto silent = db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}});
+    REQUIRE(silent.has_value());
+    CHECK_FALSE(silent->device_connected.has_value());
+
+    // A malformed value in the connected slot is not evidence the device is
+    // unreachable — it engages as connected (unknown is not offline).
+    auto garbage = db->parse_diagnostics(nlohmann::json{{"connected", "yes"}});
+    REQUIRE(garbage.has_value());
+    CHECK(garbage->device_connected == true);
+}
+
+// protocol_error is raw vendor vocabulary with no UI kind: null engages as an
+// empty string, a string engages verbatim for the log.
+TEST_CASE("dragonbreath parse: protocol_error engages for logs only", "[chamber][backend][1290]") {
+    const auto* db = backend_by_id("dragonbreath");
+    REQUIRE(db != nullptr);
+
+    auto d =
+        db->parse_diagnostics(nlohmann::json{{"connected", true}, {"protocol_error", nullptr}});
+    REQUIRE(d.has_value());
+    CHECK(d->link_error == "");
+
+    auto errored = db->parse_diagnostics(
+        nlohmann::json{{"connected", false}, {"protocol_error", "frame_crc"}});
+    REQUIRE(errored.has_value());
+    CHECK(errored->link_error == "frame_crc");
+    CHECK(errored->device_connected == false);
+}
+
+TEST_CASE("dragonbreath fan reasons classify to generic drivers", "[chamber][backend]") {
+    const auto* db = backend_by_id("dragonbreath");
+    REQUIRE(db != nullptr);
+
+    // Closed vendor vocabulary measured on the rig: off / requested / heater
+    // / thermal_purge. Any OTHER non-empty value is still the device acting
+    // on its own — a reason we cannot classify is never "we control it".
+    struct Case {
+        const char* reason;
+        FilterFanDriver expected;
+    };
+    const Case cases[] = {
+        {"off", FilterFanDriver::Off},       {"requested", FilterFanDriver::Requested},
+        {"heater", FilterFanDriver::Device}, {"thermal_purge", FilterFanDriver::Device},
+        {"button", FilterFanDriver::Device},
+    };
+    for (const auto& c : cases) {
+        CAPTURE(c.reason);
+        auto d = db->parse_diagnostics(
+            nlohmann::json{{"ptc_temp", 24.9}, {"fan_percent", 100}, {"fan_reason", c.reason}});
+        REQUIRE(d.has_value());
+        CHECK(d->filter_fan_reason == c.reason); // raw reason preserved for logs
+        CHECK(d->filter_fan_driver == c.expected);
+    }
+
+    // A missing reason key is no report this frame; an explicit null IS a
+    // report, of an unknown driver — never Off: no report is not a report
+    // that the fan is stopped.
+    auto missing = db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}});
+    REQUIRE(missing.has_value());
+    CHECK_FALSE(missing->filter_fan_driver.has_value());
+    auto null_reason =
+        db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}, {"fan_reason", nullptr}});
+    REQUIRE(null_reason.has_value());
+    CHECK(null_reason->filter_fan_driver == FilterFanDriver::Unknown);
 }
 
 TEST_CASE("dragonbreath parse tolerates null lease fields", "[chamber][backend]") {
@@ -160,4 +282,61 @@ TEST_CASE("appliance beats generic on its own name", "[chamber][backend]") {
     CHECK(match("heater_generic panda_breath").backend == backend_by_id("panda_breath"));
     // printer-native chamber still wins over appliance tiers (100 > 95)
     CHECK(match("heater_generic chamber").backend == backend_by_id("generic"));
+}
+
+TEST_CASE("keyword_confidence pins the keyword rule", "[chamber][backend]") {
+    struct Row {
+        const char* name;
+        int expected;
+    };
+    const Row rows[] = {
+        // Tiers.
+        {"chamber", 100},
+        {"enclosure", 90},
+        {"cavity", 85},
+        {"box", 60},
+        // Case-insensitive; keyword match is substring, BOX is token-only.
+        {"ChAmBeR", 100},
+        {"EnClOsUrE_TeMp", 89},
+        {"ENCLOSURE_top", 89},
+        {"my chamber", 99},   // whitespace separates tokens
+        {"chamber-tvoc", 99}, // hyphen is NOT a separator: no air-quality token
+        {"my-box", 0},
+        {"boxx", 0},
+        {"box1_heater", 0}, // numbered filament box: BOX1 is not BOX
+        // Compound penalty.
+        {"chamber_heater", 99},
+        {"box_fan", 59},
+        // Every air-quality token carries the -40 (compound -1 alongside).
+        {"chamber_tvoc", 59},
+        {"chamber_voc", 59},
+        {"chamber_co2", 59},
+        {"chamber_gas", 59},
+        {"chamber_humidity", 59},
+        {"chamber_iaq", 59},
+        {"chamber_aqi", 59},
+        {"chamber_pm25", 59},
+        {"chamber_pm10", 59},
+        {"chamber_particulate", 59},
+        {"chamber_pressure", 59},
+        {"enclosure_tvoc", 49},
+        {"cavity_pressure", 44},
+        {"box_gas", 19},
+        // Air-quality tokens without a chamber keyword score nothing.
+        {"tvoc", 0},
+        {"humidity", 0},
+        {"temperature_sensor voc", 0},
+        // Appliance names carry no chamber keyword: keyword-only callers
+        // (sensor/cooling-fan paths) must not see match()'s 95.
+        {"dragonbreath", 0},
+        {"heater_generic dragonbreath", 0},
+        {"panda_breath", 0},
+        // Everything else.
+        {"hotend", 0},
+        {"", 0},
+    };
+    for (const auto& r : rows) {
+        INFO("name=" << r.name);
+        CHECK(keyword_confidence(r.name) == r.expected);
+    }
 }

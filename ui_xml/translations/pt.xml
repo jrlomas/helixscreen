@@ -1207,6 +1207,7 @@
   <translation tag="Heater Power" pt="Potência do Aquecedor"/>
   <translation tag="Heater connection lost" pt="Conexão do aquecedor perdida"/>
   <translation tag="Heater fault" pt="Falha do aquecedor"/>
+  <translation tag="Heater offline" pt="Aquecedor desconectado"/>
   <translation tag="Heater over-temperature" pt="Sobretemperatura do aquecedor"/>
   <translation tag="Heater sensor fault" pt="Falha no sensor do aquecedor"/>
   <translation tag="HeaterSelect" pt="Selecionar Aquecedor"/>

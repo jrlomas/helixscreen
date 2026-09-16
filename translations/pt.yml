@@ -1332,6 +1332,7 @@ translations:
   Heater Power: Potência do Aquecedor
   Heater connection lost: Conexão do aquecedor perdida
   Heater fault: Falha do aquecedor
+  Heater offline: Aquecedor desconectado
   Heater over-temperature: Sobretemperatura do aquecedor
   Heater sensor fault: Falha no sensor do aquecedor
   HeaterSelect: Selecionar Aquecedor

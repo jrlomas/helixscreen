@@ -1315,6 +1315,7 @@ translations:
   Heater Power: Мощность нагревателя
   Heater connection lost: Потеряна связь с нагревателем
   Heater fault: Неисправность нагревателя
+  Heater offline: Нагреватель отключён
   Heater over-temperature: Перегрев нагревателя
   Heater sensor fault: Неисправность датчика нагревателя
   HeaterSelect: Выбрать нагреватель

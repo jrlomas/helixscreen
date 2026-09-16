@@ -36,44 +36,6 @@ bool has_standalone_token(const std::string& upper, const char* tok) {
     return false;
 }
 
-/// Keyword tiers MOVED VERBATIM from printer_discovery.h chamber_keyword_confidence
-/// (which keeps its own copy for sensor/fan paths until Task 3 delegates).
-/// CHAMBER 100 > ENCLOSURE 90 > CAVITY 85 > BOX 60; -1 compound, -40 air-quality,
-/// floored at 1 when any keyword matched.
-int keyword_confidence(const std::string& object_name) {
-    std::string upper = to_upper_copy(object_name);
-    int score = 0;
-    const char* keyword = nullptr;
-    if (upper.find("CHAMBER") != std::string::npos) {
-        score = 100;
-        keyword = "CHAMBER";
-    } else if (upper.find("ENCLOSURE") != std::string::npos) {
-        score = 90;
-        keyword = "ENCLOSURE";
-    } else if (upper.find("CAVITY") != std::string::npos) {
-        score = 85;
-        keyword = "CAVITY";
-    } else if (has_standalone_token(upper, "BOX")) {
-        score = 60;
-        keyword = "BOX";
-    } else {
-        return 0;
-    }
-    if (upper != keyword) {
-        score -= 1;
-    }
-    static const char* const AIR_QUALITY_TOKENS[] = {"TVOC",     "VOC",         "CO2",     "GAS",
-                                                     "HUMIDITY", "IAQ",         "AQI",     "PM25",
-                                                     "PM10",     "PARTICULATE", "PRESSURE"};
-    for (const char* tok : AIR_QUALITY_TOKENS) {
-        if (has_standalone_token(upper, tok)) {
-            score -= 40;
-            break;
-        }
-    }
-    return score < 1 ? 1 : score;
-}
-
 /// Default backend: any chamber-ish heater_generic / temperature_fan discovered
 /// by keyword. No diagnostics, no filter pin, no cap — configfile rules alone.
 class GenericChamberHeaterBackend : public ChamberHeaterBackend {
@@ -108,6 +70,45 @@ class GenericChamberHeaterBackend : public ChamberHeaterBackend {
 const GenericChamberHeaterBackend kGeneric;
 
 } // namespace
+
+/// Keyword-only chamber score — the single keyword rule every discovery path
+/// (heater, sensor, cooling fan) scores object names with. match() layers
+/// appliance-backend names on top of it for the heater slot only.
+/// CHAMBER 100 > ENCLOSURE 90 > CAVITY 85 > standalone-token BOX 60; -1
+/// compound, -40 air-quality, floored at 1 when any keyword matched.
+int keyword_confidence(const std::string& object_name) {
+    std::string upper = to_upper_copy(object_name);
+    int score = 0;
+    const char* keyword = nullptr;
+    if (upper.find("CHAMBER") != std::string::npos) {
+        score = 100;
+        keyword = "CHAMBER";
+    } else if (upper.find("ENCLOSURE") != std::string::npos) {
+        score = 90;
+        keyword = "ENCLOSURE";
+    } else if (upper.find("CAVITY") != std::string::npos) {
+        score = 85;
+        keyword = "CAVITY";
+    } else if (has_standalone_token(upper, "BOX")) {
+        score = 60;
+        keyword = "BOX";
+    } else {
+        return 0;
+    }
+    if (upper != keyword) {
+        score -= 1;
+    }
+    static const char* const AIR_QUALITY_TOKENS[] = {"TVOC",     "VOC",         "CO2",     "GAS",
+                                                     "HUMIDITY", "IAQ",         "AQI",     "PM25",
+                                                     "PM10",     "PARTICULATE", "PRESSURE"};
+    for (const char* tok : AIR_QUALITY_TOKENS) {
+        if (has_standalone_token(upper, tok)) {
+            score -= 40;
+            break;
+        }
+    }
+    return score < 1 ? 1 : score;
+}
 
 // Declared at helix::chamber scope (NOT the anonymous namespace) so they link
 // against the external definitions in the vendor backend files.

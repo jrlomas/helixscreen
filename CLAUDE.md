@@ -11,7 +11,15 @@
 **Before compiling, check for a build already running** — concurrent compilations thrash the machine:
 
 ```bash
-pgrep -x -d' ' 'make|cc1plus'   # ONE pattern. Never pgrep -f: it matches its own command line
+pgrep -x -d' ' 'make|clang++|cc1plus'   # ONE pattern. Never pgrep -f: it matches its own command line
+#   The compiler is auto-detected in `Makefile`'s `origin CXX` block: clang++
+#   when it can link, else g++; mk/cross.mk uses $(CROSS_COMPILE)g++. Native
+#   builds on this box show `clang++` and NOT `cc1plus`; cross builds show
+#   `cc1plus`. A pattern naming only one of them reads 0 against a box at full
+#   tilt. A 0 does not prove idle either: everything is wrapped in ccache, and
+#   a cache hit finishes in milliseconds, so sampling between translation units
+#   legitimately catches nothing mid-build. `make` is the process that stays up
+#   for the whole build; treat it as the signal, compilers as corroboration.
 free -h                          # read the Mem row: `available` is the only number that matters
 #   A nearly-full Swap row is NORMAL here and is NOT a problem by itself. Linux
 #   never reclaims swap it has already written, so `used` only ratchets up over
@@ -27,6 +35,7 @@ ps -eo pid,etime,time,pcpu,comm --sort=-time | head   # abandoned spinners
 - **Default to a big `-j`.** This box has 32 cores and ~120GB of RAM; the common mistake is building far too small and leaving the machine idle. Read `nproc`, the idle % in `top`, and `available` — with cores idle and tens of GB available, `-j16`-`-j24` is right even with peers building. Ramp back up the moment a peer finishes.
 - Throttle ONLY when `available` itself is genuinely low (single-digit GB). A full swap row is not a trigger and never has been: tens of GB `available` beside a 14-of-16GB swap row is a healthy box. The failure the throttle exists for is a big `-j` dying mid-link with no `oom-kill` line while load average looks healthy, and that needs `available` to be exhausted, not swap.
 - Dying at the same step twice **can** be a resource ceiling, but rule out a peer first: a second `make` in the SAME tree deletes your freshly linked binary (`prune-orphan-test-objs` in `mk/tests.mk` runs `rm -f $(TEST_BIN)` as a sibling prerequisite of the link, so `-j` gives them no order). The tell: `[LD] helix-tests`, then `✓ Unit test binary ready`, NO `✗ Test linking failed!`, then every shard reports `No such file or directory`. Nothing is wrong with your code; a starved link fails loudly and stops make.
+- **A build here goes minutes at a time printing nothing, and that is normal.** Judge liveness by the log growing, and compare its mtime against `date` in the SAME command before calling it stale - an `etime` and an mtime are not comparable by eye. A parent `make` in `do_wait` and a sub-make in `poll_schedule_timeout` are a make waiting on children and a jobserver poll, not a deadlock. Nothing short of a log that has not grown across two checks minutes apart justifies killing someone's build.
 - Who else is building, and in which tree, is a question you ask them: `ListAgents` + `SendMessage` (global CLAUDE.md § Peer Sessions), not a `pgrep` guess.
 - **The commit hook builds too.** `scripts/quality-checks.sh` verifies an incremental build of the app, at `-j${HELIX_QC_JOBS:-6}`. That is the bound that keeps N sessions committing from becoming N unbounded builds; raise `HELIX_QC_JOBS` when the box is yours. `scripts/qc_timing.py [--staged-only]` runs the gate and prints where its time went, which is how you find out whether you are waiting on that build or on a check.
 
@@ -50,9 +59,17 @@ make t F='[tag]'                     # Build, then run ONE tag or case (the inne
 #   Correct only when you have not edited code since the last `make test`:
 #   `make -j` builds the app alone, so after an edit the bare binary reports the
 #   PREVIOUS build's numbers. `make t` costs 5-18s and buys exactly that guarantee.
-make full-test-run                   # The WHOLE suite in parallel (25s idle, minutes loaded)
+make unit-sweep                      # C++ unit tests only, sharded (~50s idle)
+make full-test-run                   # unit-sweep + the 204-file bats suite (~2m) - the completion gate
+#   Nothing else runs bats locally: not the commit hook, not test-xml. Without this
+#   the shell suite reaches CI unrun. [.] and [slow] stay outside it deliberately -
+#   quality-checks.sh runs [.] on any staged code change, nightly CI runs [slow].
 #   `make test-run` no longer runs anything: it prints which of these fits the
 #   question you have and exits non-zero. Cadence table: tests/CLAUDE.md.
+
+make dev-timing                      # What the dev loop costs, measured (ledger from transcripts)
+#   Medians for every build, suite and test run, so "is this worth running" is
+#   answered from data. Derived + gitignored; rebuilding it takes a few seconds.
 
 scripts/syntax_check.py <file>...    # "does this compile?" in seconds
 #   Takes the file's own flags from compile_commands.json and runs -fsyntax-only,
@@ -196,8 +213,11 @@ The protocol is global CLAUDE.md § Peer Sessions. What is shared here:
 
   Liveness is **derived from process state, never asserted**: a claim records its owner's pid
   and that pid's kernel start-time, so a crashed owner reads STALE on its own, pid reuse
-  cannot fake LIVE, and nothing needs cleaning up. Use it for `worktree:<name>` (merge,
-  rebase, long commit), `build:<name>`, `device:<printer>`, `gh:issues`, `socket:<path>`.
+  cannot fake LIVE, and nothing needs cleaning up. Use it for `worktree:<name>` (hold it
+  from your FIRST edit until the commit lands - not merely for a merge, rebase or long
+  commit: uncommitted files with no claim and an old mtime are indistinguishable from
+  abandoned work, and `build:<name>` reserves nothing),
+  `build:<name>`, `device:<printer>`, `gh:issues`, `socket:<path>`.
 
   **Before concluding anything about someone else's work, run `check`.** A merge mid-commit
   and an abandoned one look identical in the tree — same `MERGE_HEAD`, same resolved index,

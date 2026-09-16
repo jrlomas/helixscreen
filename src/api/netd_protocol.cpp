@@ -287,12 +287,16 @@ std::string binary_path() {
     return "/opt/config/mod/.bin/exec/netd";
 }
 
+bool binary_present() {
+    return ::access(binary_path().c_str(), X_OK) == 0;
+}
+
 bool available() {
     struct stat st {};
     if (::stat(socket_path().c_str(), &st) == 0 && (st.st_mode & S_IFMT) == S_IFSOCK) {
         return true;
     }
-    return ::access(binary_path().c_str(), X_OK) == 0;
+    return binary_present();
 }
 
 bool set_nonblocking(int fd, bool on) {

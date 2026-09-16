@@ -14,7 +14,7 @@
  */
 
 #include "ams_types.h"
-#include "chamber_heater_backend.h"  // For chamber::match — heater candidate scoring
+#include "chamber_heater_backend.h" // chamber::match — heater slot; chamber::keyword_confidence — sensor/fan slots
 #include "display_numbering.h"       // helix::ui::tool_label — T<n> gcode tool naming
 #include "klipper_extruder_naming.h" // count_extruder_names: one hot end per numbered extruder
 #include "macro_patterns.h"          // Shared macro-name tables (nozzle clean, ...)
@@ -107,7 +107,6 @@ class PrinterDiscovery {
                                           const std::string& object_name, int type_weight) {
             // Registry first: appliance backends (dragonbreath, panda_breath)
             // claim their names at 95; generic carries the keyword tiers.
-            // chamber_keyword_confidence is kept for sensor/cooling-fan paths.
             chamber::MatchResult m = chamber::match(object_name);
             if (m.confidence == 0) {
                 return; // not a chamber-named object — never a heater candidate
@@ -127,10 +126,11 @@ class PrinterDiscovery {
         // the heater pick above uses: keyword confidence with an object-TYPE
         // tiebreak, so an equal-keyword tie resolves to the passive
         // temperature_sensor in either iteration order while a stronger keyword
-        // still wins whatever the type.
+        // still wins whatever the type. Keywords only — appliance backends
+        // score their names in match() and never claim the sensor slot.
         auto try_set_chamber_sensor = [&](const std::string& full_name,
                                           const std::string& object_name, int type_weight) {
-            int keyword_conf = chamber_keyword_confidence(object_name);
+            int keyword_conf = chamber::keyword_confidence(object_name);
             if (keyword_conf == 0) {
                 return; // not a chamber-named object — never a sensor candidate
             }
@@ -147,7 +147,7 @@ class PrinterDiscovery {
         // fan's target — so we must remember it separately to read that target.
         auto try_set_chamber_cooling_fan = [&](const std::string& full_name,
                                                const std::string& object_name) {
-            int conf = chamber_keyword_confidence(object_name);
+            int conf = chamber::keyword_confidence(object_name);
             if (conf > best_chamber_cooling_fan_conf) {
                 chamber_cooling_fan_name_ = full_name;
                 best_chamber_cooling_fan_conf = conf;
@@ -1590,98 +1590,6 @@ class PrinterDiscovery {
         std::transform(result.begin(), result.end(), result.begin(),
                        [](unsigned char c) { return std::toupper(c); });
         return result;
-    }
-
-    // Chamber/enclosure keyword scoring for sensor, fan, and heater object
-    // names. Configs name the enclosure "chamber", "enclosure", "cavity" or a
-    // bare "box".
-    //
-    // Returns 0 for no match, higher for stronger evidence. The discovery loop
-    // keeps the highest-scoring match so iteration order does not decide.
-    //
-    // CHAMBER / ENCLOSURE / CAVITY match as substrings — these names are
-    // unambiguous, and compound forms ("chamber_temp", "ENCLOSURE_top") are
-    // intended as the printer chamber.
-    //
-    // BOX matches only as a standalone token — split on `_` and whitespace —
-    // so numbered filament-box names like "box1_heater" / "Box1_STM32" are not
-    // mistaken for the printer chamber, while "temperature_sensor box" and
-    // compound forms ("box_fan") still match.
-    //
-    // Two modifiers refine the base tier so a real chamber TEMPERATURE sensor
-    // outranks an air-quality sensor whose name merely contains a chamber
-    // keyword:
-    //   - Compound penalty (-1): if the keyword is not the entire name (e.g.
-    //     "chamber_temp"), subtract 1. Exact "chamber" (100) then beats
-    //     "chamber_temp" (99) on a tie, while both still crush weaker keywords.
-    //   - Air-quality penalty (-40): if the name carries an air-quality token
-    //     (TVOC/VOC/CO2/GAS/HUMIDITY/IAQ/AQI/PM25/PM10/PARTICULATE/PRESSURE),
-    //     subtract 40 so "chamber_tvoc" (59) loses to a clean "chamber" (100)
-    //     or even "enclosure" (90).
-    // A matched score is floored at 1 so an only-candidate air-quality chamber
-    // sensor is still detected rather than dropped; no keyword still returns 0.
-    static int chamber_keyword_confidence(const std::string& object_name) {
-        std::string upper = to_upper(object_name);
-
-        int score = 0;
-        const char* keyword = nullptr;
-        if (upper.find("CHAMBER") != std::string::npos) {
-            score = 100;
-            keyword = "CHAMBER";
-        } else if (upper.find("ENCLOSURE") != std::string::npos) {
-            score = 90;
-            keyword = "ENCLOSURE";
-        } else if (upper.find("CAVITY") != std::string::npos) {
-            score = 85;
-            keyword = "CAVITY";
-        } else if (has_standalone_token(upper, "BOX")) {
-            score = 60;
-            keyword = "BOX";
-        } else {
-            return 0;
-        }
-
-        // Compound penalty: prefer a name that is exactly the keyword.
-        if (upper != keyword)
-            score -= 1;
-
-        // Air-quality penalty: names carrying a gas/particulate/humidity token
-        // describe air quality, not chamber temperature.
-        static const char* const AIR_QUALITY_TOKENS[] = {
-            "TVOC", "VOC",  "CO2",  "GAS",         "HUMIDITY", "IAQ",
-            "AQI",  "PM25", "PM10", "PARTICULATE", "PRESSURE"};
-        for (const char* tok : AIR_QUALITY_TOKENS) {
-            if (has_standalone_token(upper, tok)) {
-                score -= 40;
-                break;
-            }
-        }
-
-        // A matched keyword always stays detectable.
-        return score < 1 ? 1 : score;
-    }
-
-    // Returns true iff `token` appears in `haystack` as a complete token,
-    // where tokens are separated by `_` or whitespace. Both inputs are
-    // compared case-sensitively; callers upper-case beforehand.
-    static bool has_standalone_token(const std::string& haystack, const std::string& token) {
-        auto is_separator = [](char c) {
-            return c == '_' || std::isspace(static_cast<unsigned char>(c));
-        };
-        size_t i = 0;
-        while (i < haystack.size()) {
-            while (i < haystack.size() && is_separator(haystack[i])) {
-                ++i;
-            }
-            size_t start = i;
-            while (i < haystack.size() && !is_separator(haystack[i])) {
-                ++i;
-            }
-            if (i - start == token.size() && haystack.compare(start, token.size(), token) == 0) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // Helper: natural sort — splits on trailing digits so "lane2" < "lane10"

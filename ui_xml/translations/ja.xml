@@ -1207,6 +1207,7 @@
   <translation tag="Heater Power" ja="ヒーター出力"/>
   <translation tag="Heater connection lost" ja="ヒーター接続が切断されました"/>
   <translation tag="Heater fault" ja="ヒーター異常"/>
+  <translation tag="Heater offline" ja="ヒーター切断"/>
   <translation tag="Heater over-temperature" ja="ヒーター過昇温"/>
   <translation tag="Heater sensor fault" ja="ヒーターセンサー異常"/>
   <translation tag="HeaterSelect" ja="ヒーターを選択"/>
