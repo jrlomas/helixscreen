@@ -38,7 +38,12 @@ The arm claims `device:pi3b` with `scripts/helix-claim`, deploys, smoke-tests ev
 crashes, runs three measurement passes and three load-gate passes, and writes
 `$HELIX_PERF_SCRATCH/my-arm_summary.txt`. `ENV_EXTRA="HELIX_SCREENSAVER_LEVEL=1"` runs the arm
 with those variables in a systemd drop-in, which the arm removes (restarting the app) when it
-finishes. `SAVERS="off ui"` measures the idle home panel and a loop through the base panels.
+finishes. An arm has two halves and they take DIFFERENT variables: `ARM_WORKLOADS` selects the
+measurement passes (default `idle toasters starfield pipes`) and `SAVERS` selects the load gates
+(default `off toasters starfield pipes`). Setting only one leaves the other at its default, so
+`SAVERS="off fireworks"` gates fireworks while still measuring the default four. Workload names
+come from `perf_saver_type` in `perf_env.sh`: `idle`, `off` and `ui` run no saver, and `toasters`,
+`starfield`, `pipes`, `bounce` and `fireworks` each run that saver.
 
 Before touching the Pi the arm asks the Moonraker in the app's settings for the print state and
 stops unless the printer is idle (`PRINT_STATE` in the log). Every arm runs with
