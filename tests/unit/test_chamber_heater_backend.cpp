@@ -60,8 +60,11 @@ TEST_CASE("dragonbreath parse: live nominal payload", "[chamber][backend]") {
     REQUIRE(d.has_value());
     CHECK(d->fault == false);
     CHECK(d->inhibited == false);
-    CHECK(d->fault_reason.empty());
-    CHECK(d->element_temp_c == Catch::Approx(24.9));
+    // fault_reason: null is the device answering "none", not an absent field:
+    // engaged as an empty string.
+    CHECK(d->fault_reason == "");
+    REQUIRE(d->element_temp_c.has_value());
+    CHECK(*d->element_temp_c == Catch::Approx(24.9));
     CHECK(d->filter_fan_percent == 0);
     CHECK(d->filter_fan_reason == "off");
     CHECK(d->externally_controlled == false);
@@ -77,7 +80,8 @@ TEST_CASE("dragonbreath parse: faulted + external-control variants", "[chamber][
     CHECK(faulted->fault == true);
     CHECK(faulted->fault_reason == "ptc_overtemp");
     CHECK(faulted->fault_reason_kind == FaultReason::Overtemp);
-    CHECK(faulted->element_temp_c == Catch::Approx(106.2));
+    REQUIRE(faulted->element_temp_c.has_value());
+    CHECK(*faulted->element_temp_c == Catch::Approx(106.2));
 
     auto ext = db->parse_diagnostics(nlohmann::json::parse(R"({"fault":false,
       "inhibited":false,"fault_reason":null,"ptc_temp":30.1,"fan_percent":40,
@@ -118,10 +122,45 @@ TEST_CASE("dragonbreath fault codes classify to generic kinds", "[chamber][backe
         CHECK(d->fault_reason_kind == c.expected);
     }
 
-    // No reason at all -> None.
+    // No reason key at all -> no report this frame (nullopt, distinct from
+    // the engaged None an explicit null reason classifies to).
     auto nominal = db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}});
     REQUIRE(nominal.has_value());
-    CHECK(nominal->fault_reason_kind == FaultReason::None);
+    CHECK_FALSE(nominal->fault_reason_kind.has_value());
+    auto null_reason =
+        db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}, {"fault_reason", nullptr}});
+    REQUIRE(null_reason.has_value());
+    CHECK(null_reason->fault_reason_kind == FaultReason::None);
+}
+
+// A delta frame carries only changed fields and may legitimately lack
+// ptc_temp, so frame recognition accepts any dragonbreath-schema key and only
+// the keys present engage. See ChamberHeaterDiagnostics in
+// chamber_heater_backend.h for the full field-level rule.
+TEST_CASE("dragonbreath parse: delta frames engage only carried fields",
+          "[chamber][backend][1290]") {
+    const auto* db = backend_by_id("dragonbreath");
+    REQUIRE(db != nullptr);
+
+    // A fan-only delta is ours even without ptc_temp, and nothing else engages.
+    auto fan_only = db->parse_diagnostics(nlohmann::json{{"fan_percent", 55}});
+    REQUIRE(fan_only.has_value());
+    CHECK(fan_only->filter_fan_percent == 55);
+    CHECK_FALSE(fan_only->fault.has_value());
+    CHECK_FALSE(fan_only->element_temp_c.has_value());
+    CHECK_FALSE(fan_only->fault_reason.has_value());
+    CHECK_FALSE(fan_only->filter_fan_driver.has_value());
+    CHECK_FALSE(fan_only->externally_controlled.has_value());
+
+    // externally_controlled reads mode, source AND lease_owned: a frame
+    // carrying only part of the trio is not an answer.
+    auto mode_only = db->parse_diagnostics(nlohmann::json{{"mode", "power_on"}});
+    REQUIRE(mode_only.has_value());
+    CHECK_FALSE(mode_only->externally_controlled.has_value());
+
+    // No dragonbreath key at all: not ours, even as an object.
+    CHECK_FALSE(db->parse_diagnostics(nlohmann::json{{"temperature", 21.0}}).has_value());
+    CHECK_FALSE(db->parse_diagnostics(nlohmann::json::object()).has_value());
 }
 
 TEST_CASE("dragonbreath fan reasons classify to generic drivers", "[chamber][backend]") {
@@ -149,11 +188,12 @@ TEST_CASE("dragonbreath fan reasons classify to generic drivers", "[chamber][bac
         CHECK(d->filter_fan_driver == c.expected);
     }
 
-    // Missing and null reasons are Unknown — never Off: no report is not a
-    // report that the fan is stopped.
+    // A missing reason key is no report this frame; an explicit null IS a
+    // report, of an unknown driver — never Off: no report is not a report
+    // that the fan is stopped.
     auto missing = db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}});
     REQUIRE(missing.has_value());
-    CHECK(missing->filter_fan_driver == FilterFanDriver::Unknown);
+    CHECK_FALSE(missing->filter_fan_driver.has_value());
     auto null_reason =
         db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}, {"fan_reason", nullptr}});
     REQUIRE(null_reason.has_value());

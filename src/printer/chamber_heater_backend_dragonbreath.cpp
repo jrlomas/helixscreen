@@ -91,47 +91,78 @@ class DragonbreathBackend : public ChamberHeaterBackend {
 
     std::optional<ChamberHeaterDiagnostics>
     parse_diagnostics(const nlohmann::json& status) const override {
-        if (!status.is_object() || !status.contains("ptc_temp")) {
+        if (!status.is_object()) {
+            return std::nullopt; // not a dragonbreath diagnostics frame
+        }
+        // A delta frame may carry any subset of the schema, so recognition
+        // cannot hinge on one field (ptc_temp alone drops every delta that
+        // mentions only the fan). Any dragonbreath-specific key marks the
+        // frame ours; generic heater keys (temperature/target) never do.
+        static const char* const DB_FIELDS[] = {"ptc_temp",     "fault",       "inhibited",
+                                                "fault_reason", "fan_percent", "fan_reason",
+                                                "mode",         "source",      "lease_owned"};
+        bool known_field = false;
+        for (const char* f : DB_FIELDS) {
+            if (status.contains(f)) {
+                known_field = true;
+                break;
+            }
+        }
+        if (!known_field) {
             return std::nullopt; // not a dragonbreath diagnostics frame
         }
         ChamberHeaterDiagnostics d;
-        if (status.contains("fault") && status["fault"].is_boolean()) {
-            d.fault = status["fault"].get<bool>();
+        // Key present -> engaged; null or a wrong type coerces to the type's
+        // unknown value. Key absent -> nullopt: the frame made no report.
+        if (status.contains("fault")) {
+            d.fault = status["fault"].is_boolean() ? status["fault"].get<bool>() : false;
         }
-        if (status.contains("inhibited") && status["inhibited"].is_boolean()) {
-            d.inhibited = status["inhibited"].get<bool>();
+        if (status.contains("inhibited")) {
+            d.inhibited =
+                status["inhibited"].is_boolean() ? status["inhibited"].get<bool>() : false;
         }
-        if (status.contains("fault_reason") && status["fault_reason"].is_string()) {
-            d.fault_reason = status["fault_reason"].get<std::string>();
-            d.fault_reason_kind = classify_fault_reason(d.fault_reason);
+        if (status.contains("fault_reason")) {
+            d.fault_reason = status["fault_reason"].is_string()
+                                 ? status["fault_reason"].get<std::string>()
+                                 : std::string();
+            d.fault_reason_kind = classify_fault_reason(*d.fault_reason);
         }
-        if (status["ptc_temp"].is_number()) {
-            d.element_temp_c = status["ptc_temp"].get<double>();
+        if (status.contains("ptc_temp")) {
+            d.element_temp_c =
+                status["ptc_temp"].is_number() ? status["ptc_temp"].get<double>() : NAN;
         }
-        if (status.contains("fan_percent") && status["fan_percent"].is_number()) {
-            d.filter_fan_percent = status["fan_percent"].get<int>();
+        if (status.contains("fan_percent")) {
+            d.filter_fan_percent =
+                status["fan_percent"].is_number() ? status["fan_percent"].get<int>() : -1;
         }
-        if (status.contains("fan_reason") && status["fan_reason"].is_string()) {
-            d.filter_fan_reason = status["fan_reason"].get<std::string>();
-            d.filter_fan_driver = classify_filter_fan_driver(d.filter_fan_reason);
+        if (status.contains("fan_reason")) {
+            d.filter_fan_reason = status["fan_reason"].is_string()
+                                      ? status["fan_reason"].get<std::string>()
+                                      : std::string();
+            d.filter_fan_driver = classify_filter_fan_driver(*d.filter_fan_reason);
         }
-        // Externally driven: heater active, but neither klipper source nor our lease.
+        // Externally driven: heater active, but neither klipper source nor our
+        // lease. Computed from three inputs, so it is an answer only when the
+        // frame carries all of them — a partial trio is not a confident false.
         // Fields may arrive as null (value() throws on null, not just on missing).
-        std::string mode;
-        if (status.contains("mode") && status["mode"].is_string()) {
-            mode = status["mode"].get<std::string>();
+        if (status.contains("mode") && status.contains("source") &&
+            status.contains("lease_owned")) {
+            std::string mode;
+            if (status["mode"].is_string()) {
+                mode = status["mode"].get<std::string>();
+            }
+            std::string source;
+            if (status["source"].is_string()) {
+                source = status["source"].get<std::string>();
+            }
+            bool lease_owned = false;
+            if (status["lease_owned"].is_boolean()) {
+                lease_owned = status["lease_owned"].get<bool>();
+            }
+            bool heating = mode == "power_on";
+            bool ours = lease_owned || source == "klipper";
+            d.externally_controlled = heating && !ours;
         }
-        std::string source;
-        if (status.contains("source") && status["source"].is_string()) {
-            source = status["source"].get<std::string>();
-        }
-        bool lease_owned = false;
-        if (status.contains("lease_owned") && status["lease_owned"].is_boolean()) {
-            lease_owned = status["lease_owned"].get<bool>();
-        }
-        bool heating = mode == "power_on";
-        bool ours = lease_owned || source == "klipper";
-        d.externally_controlled = heating && !ours;
         return d;
     }
 };

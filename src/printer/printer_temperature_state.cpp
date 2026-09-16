@@ -530,43 +530,60 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
     }
 
     // Chamber-heater diagnostics (backend-provided, capability-gated). Absent
-    // object in a delta frame = no news: subjects keep their last value.
-    // Vendor schema translation lives in the backend (chamber_heater_backend.h).
+    // object in a delta frame = no news, and the same holds field-wise: a
+    // delta carries only changed fields, so every unengaged optional (the
+    // frame did not mention it) leaves the subject at its last value. An
+    // engaged unknown — empty reason, negative percent, NAN temp — is a real
+    // report and does update. Vendor schema translation lives in the backend
+    // (chamber_heater_backend.h).
     if (!chamber_diagnostics_object_.empty() && status.contains(chamber_diagnostics_object_)) {
         const auto* backend = chamber::backend_by_id(chamber_backend_id_);
         if (backend) {
             if (auto d = backend->parse_diagnostics(status[chamber_diagnostics_object_])) {
-                lv_subject_set_int(&chamber_heater_fault_, d->fault ? 1 : 0);
-                lv_subject_set_int(&chamber_heater_inhibited_, d->inhibited ? 1 : 0);
-                lv_subject_copy_string(&chamber_heater_fault_reason_text_,
-                                       chamber_fault_reason_text(d->fault_reason_kind));
-                if (!d->fault_reason.empty()) {
+                if (d->fault.has_value()) {
+                    lv_subject_set_int(&chamber_heater_fault_, *d->fault ? 1 : 0);
+                }
+                if (d->inhibited.has_value()) {
+                    lv_subject_set_int(&chamber_heater_inhibited_, *d->inhibited ? 1 : 0);
+                }
+                if (d->fault_reason_kind.has_value()) {
+                    lv_subject_copy_string(&chamber_heater_fault_reason_text_,
+                                           chamber_fault_reason_text(*d->fault_reason_kind));
+                }
+                if (d->fault_reason.has_value() && !d->fault_reason->empty()) {
                     // Vendor code is log-only — the UI shows the translated kind.
                     spdlog::debug(
                         "[PrinterTemperatureState] Chamber heater fault: backend={} reason={}",
-                        backend->id(), d->fault_reason);
+                        backend->id(), *d->fault_reason);
                 }
-                if (std::isnan(d->element_temp_c)) {
-                    lv_subject_copy_string(&chamber_heater_element_temp_text_, "--");
-                } else {
-                    // Canonical decimal-drop rule (one decimal <100°C, whole
-                    // degrees at/above) — format_temperature_f wraps
-                    // format_temp_number plus the unit.
-                    helix::ui::temperature::format_temperature_f(
-                        static_cast<float>(d->element_temp_c),
-                        chamber_heater_element_temp_text_buf_,
-                        sizeof(chamber_heater_element_temp_text_buf_));
-                    lv_subject_copy_string(&chamber_heater_element_temp_text_,
-                                           chamber_heater_element_temp_text_buf_);
+                if (d->element_temp_c.has_value()) {
+                    if (std::isnan(*d->element_temp_c)) {
+                        lv_subject_copy_string(&chamber_heater_element_temp_text_, "--");
+                    } else {
+                        // Canonical decimal-drop rule (one decimal <100°C, whole
+                        // degrees at/above) — format_temperature_f wraps
+                        // format_temp_number plus the unit.
+                        helix::ui::temperature::format_temperature_f(
+                            static_cast<float>(*d->element_temp_c),
+                            chamber_heater_element_temp_text_buf_,
+                            sizeof(chamber_heater_element_temp_text_buf_));
+                        lv_subject_copy_string(&chamber_heater_element_temp_text_,
+                                               chamber_heater_element_temp_text_buf_);
+                    }
                 }
-                lv_subject_copy_string(&chamber_filter_fan_percent_text_,
-                                       d->filter_fan_percent < 0
-                                           ? "--"
-                                           : fmt::format("{}%", d->filter_fan_percent).c_str());
-                chamber_filter_fan_percent_ = d->filter_fan_percent;
-                lv_subject_set_int(&chamber_filter_fan_device_driven_,
-                                   d->filter_fan_driver == chamber::FilterFanDriver::Device ? 1
-                                                                                            : 0);
+                if (d->filter_fan_percent.has_value()) {
+                    lv_subject_copy_string(
+                        &chamber_filter_fan_percent_text_,
+                        *d->filter_fan_percent < 0
+                            ? "--"
+                            : fmt::format("{}%", *d->filter_fan_percent).c_str());
+                    chamber_filter_fan_percent_ = *d->filter_fan_percent;
+                }
+                if (d->filter_fan_driver.has_value()) {
+                    lv_subject_set_int(
+                        &chamber_filter_fan_device_driven_,
+                        *d->filter_fan_driver == chamber::FilterFanDriver::Device ? 1 : 0);
+                }
             }
         }
     }

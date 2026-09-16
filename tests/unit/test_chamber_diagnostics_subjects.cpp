@@ -129,6 +129,110 @@ TEST_CASE("absent diagnostics objects in a delta frame keep last values", "[cham
     CHECK(lv_subject_get_int(ts.get_chamber_filter_fan_on_subject()) == 1);
 }
 
+// A delta frame carries only changed fields, so an absent field is not a
+// report of absence. The frame after a fault latch mentions only ptc_temp
+// (the one field that moves every poll) and must leave the latched fault,
+// its reason, and the reported fan speed exactly where they were.
+TEST_CASE("a ptc_temp-only delta keeps the latched fault, reason, and fan percent",
+          "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
+                                      "output_pin dragonbreath_filter");
+
+    ts.update_from_status(nlohmann::json::parse(R"({
+      "dragonbreath": {"fault": true, "inhibited": true, "fault_reason": "ptc_overtemp",
+        "ptc_temp": 80.0, "fan_percent": 100, "fan_reason": "thermal_purge",
+        "mode": "off", "source": "device", "lease_owned": false}})"));
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 1);
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_inhibited_subject()) == 1);
+    REQUIRE(std::string(lv_subject_get_string(ts.get_chamber_heater_fault_reason_text_subject())) ==
+            std::string(lv_tr("Heater over-temperature")));
+    REQUIRE(std::string(lv_subject_get_string(ts.get_chamber_filter_fan_percent_text_subject())) ==
+            "100%");
+    REQUIRE(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
+            "80.0°C");
+
+    ts.update_from_status({{"dragonbreath", {{"ptc_temp", 81.0}}}});
+
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 1);
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_inhibited_subject()) == 1);
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_fault_reason_text_subject())) ==
+          std::string(lv_tr("Heater over-temperature")));
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_filter_fan_percent_text_subject())) ==
+          "100%");
+    CHECK(lv_subject_get_int(ts.get_chamber_filter_fan_device_driven_subject()) == 1);
+    // The delta was processed: the one field it carried did land.
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
+          "81.0°C");
+}
+
+// A delta that toggles only the fan carries no ptc_temp, so recognition of a
+// dragonbreath frame cannot hinge on that one field: the frame must parse and
+// the reported speed must land.
+TEST_CASE("a fan-percent-only delta updates the reported speed", "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
+                                      "output_pin dragonbreath_filter");
+
+    ts.update_from_status(nlohmann::json::parse(R"({
+      "dragonbreath": {"fault": false, "fault_reason": null, "ptc_temp": 40.0,
+        "fan_percent": 0, "fan_reason": "off", "mode": "off", "source": "klipper",
+        "lease_owned": false}})"));
+    REQUIRE(std::string(lv_subject_get_string(ts.get_chamber_filter_fan_percent_text_subject())) ==
+            "0%");
+    REQUIRE(lv_subject_get_int(ts.get_chamber_filter_fan_on_subject()) == 0);
+
+    ts.update_from_status({{"dragonbreath", {{"fan_percent", 100}}}});
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_filter_fan_percent_text_subject())) ==
+          "100%");
+    CHECK(lv_subject_get_int(ts.get_chamber_filter_fan_on_subject()) == 1);
+}
+
+// Absence and false are different reports: a frame that carries fault: false
+// is the device clearing the latch, and must clear it.
+TEST_CASE("an explicit fault false delta clears a latched fault", "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
+                                      "output_pin dragonbreath_filter");
+
+    ts.update_from_status(faulted_diagnostics_status());
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 1);
+
+    ts.update_from_status({{"dragonbreath", {{"fault", false}, {"ptc_temp", 24.9}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 0);
+}
+
+// fault_reason: null in a frame is the device ANSWERING "no reason", not the
+// field being absent: it engages as an empty reason and clears the text.
+TEST_CASE("a fault_reason null delta clears the reason text", "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
+                                      "output_pin dragonbreath_filter");
+
+    ts.update_from_status(faulted_diagnostics_status());
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 1);
+    REQUIRE(std::string(lv_subject_get_string(ts.get_chamber_heater_fault_reason_text_subject())) ==
+            std::string(lv_tr("Heater over-temperature")));
+
+    ts.update_from_status(
+        {{"dragonbreath", {{"fault", true}, {"fault_reason", nullptr}, {"ptc_temp", 106.3}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 1);
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_fault_reason_text_subject()))
+              .empty());
+}
+
 // The pin is a REQUEST; the device also runs the filter fan on its own while
 // heating and while purging residual element heat (measured on the rig,
 // issue #1290). The running-state subjects must follow the reported fan
