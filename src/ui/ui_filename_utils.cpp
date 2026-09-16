@@ -5,9 +5,47 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cctype>
 #include <vector>
 
 namespace helix::gcode {
+
+namespace {
+
+// The printable-extension list every consumer shares: the Moonraker file list,
+// the USB stick scanner and the display-name stripper. A second copy anywhere
+// drifts, and each copy reads correct alone.
+const std::vector<std::string>& printable_extensions() {
+    static const std::vector<std::string> extensions = {".gcode", ".gco", ".g", ".3mf"};
+    return extensions;
+}
+
+// Case-insensitive suffix match. A name exactly as long as the extension is a
+// hidden dotfile (".gcode"), not a printable file.
+bool ends_with_ci(const std::string& filename, const std::string& ext) {
+    if (filename.size() <= ext.size()) {
+        return false;
+    }
+    size_t pos = filename.size() - ext.size();
+    for (size_t i = 0; i < ext.size(); ++i) {
+        char c = static_cast<char>(std::tolower(static_cast<unsigned char>(filename[pos + i])));
+        if (c != ext[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+bool has_printable_extension(const std::string& filename) {
+    for (const auto& ext : printable_extensions()) {
+        if (ends_with_ci(filename, ext)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 std::string join_gcode_path(const std::string& dir, const std::string& filename) {
     return dir.empty() ? filename : dir + "/" + filename;
@@ -28,23 +66,9 @@ std::string get_filename_basename(const std::string& path) {
 }
 
 std::string strip_gcode_extension(const std::string& filename) {
-    // Common G-code extensions (case-insensitive check)
-    static const std::vector<std::string> extensions = {".gcode", ".gco", ".g", ".3mf"};
-
-    for (const auto& ext : extensions) {
-        if (filename.size() > ext.size()) {
-            size_t pos = filename.size() - ext.size();
-            // Case-insensitive suffix comparison
-            std::string suffix = filename.substr(pos);
-            std::string suffix_lower;
-            suffix_lower.reserve(suffix.size());
-            for (char c : suffix) {
-                suffix_lower.push_back(
-                    static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-            }
-            if (suffix_lower == ext) {
-                return filename.substr(0, pos);
-            }
+    for (const auto& ext : printable_extensions()) {
+        if (ends_with_ci(filename, ext)) {
+            return filename.substr(0, filename.size() - ext.size());
         }
     }
 
