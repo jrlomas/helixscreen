@@ -208,10 +208,15 @@ TEST_CASE_METHOD(
     helix::ui::SaverBase* toasters = gate.running();
     REQUIRE(toasters != nullptr);
 
-    gate.run(6.25, 0.9);
-    REQUIRE(toasters->level() == 1);
-    gate.run(5.5, 0.9);
-    REQUIRE(toasters->level() == 2);
+    // Walk to whatever the bottom rung is rather than naming it: the ladder's depth is the
+    // saver's business, and hardcoding it here breaks every time a rung is added.
+    const size_t bottom = toasters->level_count() - 1;
+    for (size_t expected = 1; expected <= bottom; expected++) {
+        gate.run(6.25, 0.9);
+        CAPTURE(expected);
+        REQUIRE(toasters->level() == expected);
+    }
+    // One more window over budget with nowhere left to step.
     gate.run(5.5, 0.9);
 
     CHECK(gate.running() == nullptr);
@@ -227,7 +232,7 @@ TEST_CASE_METHOD(
     CHECK_FALSE(helix::active_refresh_period_hold().is_held());
     const std::optional<SaverLevelEntry> entry = gate.stored("toasters");
     REQUIRE(entry.has_value());
-    CHECK(entry->level == 2);
+    CHECK(entry->level == bottom);
     CHECK(entry->too_heavy);
 
     gate.mgr.stop();
