@@ -8,7 +8,6 @@
  */
 
 #include "ui_bypass_toggle_controller.h"
-#include "observer_factory.h"
 #include "ui_observer_guard.h"
 #include "ui_update_queue.h"
 
@@ -20,6 +19,8 @@
 #include "ams_state.h"
 #include "ams_types.h"
 #include "app_globals.h"
+#include "grid_layout.h"
+#include "observer_factory.h"
 #include "panel_widget_registry.h"
 #include "printer_state.h"
 
@@ -304,8 +305,7 @@ TEST_CASE("bypass toggle chain: unload ERROR disarms (regression)", "[ams][bypas
     CHECK_FALSE(fx.backend->is_bypass_active());
 }
 
-TEST_CASE("bypass toggle chain: controller self-observes ams_data_revision",
-          "[ams][bypass-home]") {
+TEST_CASE("bypass toggle chain: controller self-observes ams_data_revision", "[ams][bypass-home]") {
     BypassToggleFixture fx;
     seed_print_state(PrintJobState::STANDBY);
 
@@ -373,12 +373,13 @@ TEST_CASE("bypass widget: gated on ams_supports_bypass", "[ams][bypass-home]") {
     REQUIRE(def != nullptr);
     CHECK(def->hardware_gate_subject != nullptr);
     CHECK(std::string_view(def->hardware_gate_subject) == "ams_supports_bypass");
-    // Default span one cell (2x2 tracks), scalable to 2x1 cells (4x2
-    // tracks) per the registry row - spans are in grid tracks, half a cell.
+    // Default span one cell (2x2 tracks), resizable out to the whole grid on
+    // both axes, per the registry row - spans are in grid tracks, half a cell
+    // (prestonbrown/helixscreen#1559).
     CHECK(def->colspan == 2);
     CHECK(def->rowspan == 2);
-    CHECK(def->max_colspan == 4);
-    CHECK(def->max_rowspan == 2);
+    CHECK(def->max_colspan == helix::GridLayout::MAX_TRACKS);
+    CHECK(def->max_rowspan == helix::GridLayout::MAX_TRACKS);
     // opt-in tile, like the ams row
     CHECK_FALSE(def->default_enabled);
 }

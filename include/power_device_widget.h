@@ -8,6 +8,7 @@
 #include "async_lifetime_guard.h"
 #include "panel_widget.h"
 #include "sensor_state.h"
+#include "src/ui/panel_widgets/tile_sizing.h"
 
 #include <string>
 #include <vector>
@@ -40,6 +41,24 @@ class PowerDeviceWidget : public PanelWidget {
     }
     const char* id() const override {
         return instance_id_.c_str();
+    }
+
+    void on_size_changed(int colspan, int rowspan, int width_px, int height_px) override {
+        (void)colspan;
+        (void)rowspan;
+        sizing_.measure_and_publish(width_px, height_px);
+    }
+
+    bool fits_at(int width_px, int height_px) const override {
+        return sizing_.fits(width_px, height_px);
+    }
+
+    const char** xml_attrs() const override {
+        return sizing_.subject_attrs();
+    }
+
+    TileSizing* tile_sizing() override {
+        return &sizing_;
     }
 
     void handle_clicked();
@@ -112,6 +131,11 @@ class PowerDeviceWidget : public PanelWidget {
     std::string auto_match_sensor() const;
 
     friend struct PowerDeviceWidgetTestAccess;
+
+    /// Built with the widget so its subjects exist before the manager parses
+    /// this tile's component; a binding whose subject is missing at parse time
+    /// is dropped permanently.
+    TileSizing sizing_{instance_id_.c_str(), TileSizing::Content{"", "", "Power", false}};
 };
 
 } // namespace helix

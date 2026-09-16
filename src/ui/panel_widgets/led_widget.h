@@ -7,6 +7,7 @@
 
 #include "async_lifetime_guard.h"
 #include "panel_widget.h"
+#include "src/ui/panel_widgets/tile_sizing.h"
 
 #include <memory>
 
@@ -27,6 +28,24 @@ class LedWidget : public PanelWidget {
     void detach() override;
     const char* id() const override {
         return "led";
+    }
+
+    void on_size_changed(int colspan, int rowspan, int width_px, int height_px) override {
+        (void)colspan;
+        (void)rowspan;
+        sizing_.measure_and_publish(width_px, height_px);
+    }
+
+    bool fits_at(int width_px, int height_px) const override {
+        return sizing_.fits(width_px, height_px);
+    }
+
+    const char** xml_attrs() const override {
+        return sizing_.subject_attrs();
+    }
+
+    TileSizing* tile_sizing() override {
+        return &sizing_;
     }
 
     // XML event callbacks (public for early registration in register_led_widget)
@@ -59,6 +78,11 @@ class LedWidget : public PanelWidget {
     void flash_light_icon();
     void bind_led();
     void on_led_state_changed(int state);
+
+    /// Built with the widget so its subjects exist before the manager parses
+    /// this tile's component; a binding whose subject is missing at parse time
+    /// is dropped permanently.
+    TileSizing sizing_{"led", TileSizing::Content{"", "", "Light", false}};
 };
 
 } // namespace helix

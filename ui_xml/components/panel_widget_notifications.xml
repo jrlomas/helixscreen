@@ -2,6 +2,15 @@
 <!-- Copyright (C) 2025-2026 356C LLC -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <component>
+  <api>
+    <!-- Per-instance subject names, supplied by the widget at creation. They
+         must exist before this component is parsed: a binding whose subject is
+         missing at parse time is dropped permanently and silently. -->
+    <prop name="tile_icon_subject" type="string" default=""/>
+    <prop name="tile_label_subject" type="string" default=""/>
+    <prop name="tile_dir_subject" type="string" default=""/>
+    <prop name="tile_target_subject" type="string" default=""/>
+  </api>
   <styles>
     <style name="badge_info" bg_color="#info"/>
     <style name="badge_warning" bg_color="#warning"/>
@@ -14,6 +23,12 @@
       <icon name="status_notification_icon"
             src="notifications" size="#icon_size" variant="secondary" align="center" clickable="true"
             click_focusable="false">
+        <bind_style_if_eq name="styles.tile_icon_xs" subject="$tile_icon_subject" ref_value="0"/>
+        <bind_style_if_eq name="styles.tile_icon_sm" subject="$tile_icon_subject" ref_value="1"/>
+        <bind_style_if_eq name="styles.tile_icon_md" subject="$tile_icon_subject" ref_value="2"/>
+        <bind_style_if_eq name="styles.tile_icon_lg" subject="$tile_icon_subject" ref_value="3"/>
+        <bind_style_if_eq name="styles.tile_icon_xl" subject="$tile_icon_subject" ref_value="4"/>
+
         <event_cb trigger="clicked" callback="status_notification_history_clicked"/>
       </icon>
       <!-- Notification Count Badge - auto-contrast text color based on severity bg -->
@@ -31,6 +46,7 @@
                translation_tag="Alerts" style_text_color="#text_muted" style_text_align="center" clickable="false"
                event_bubble="true">
       <bind_flag_if_eq subject="show_widget_labels" flag="hidden" ref_value="0"/>
+      <bind_flag_if_eq subject="$tile_label_subject" flag="hidden" ref_value="0"/>
     </text_tiny>
   </view>
 </component>

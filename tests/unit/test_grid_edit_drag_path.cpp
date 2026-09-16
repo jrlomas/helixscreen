@@ -109,7 +109,7 @@ TEST_CASE_METHOD(XMLTestFixture, "GridEditMode: real drag lands on the gutter-aw
     constexpr int COLSPAN = GridLayout::TRACKS_PER_CELL;
     constexpr int ROWSPAN = GridLayout::TRACKS_PER_CELL;
     lv_obj_t* widget = lv_obj_create(container);
-    lv_obj_set_name(widget, "temperature");
+    lv_obj_set_name(widget, "humidity");
     lv_obj_remove_flag(widget, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_grid_cell(widget, LV_GRID_ALIGN_STRETCH, 0, COLSPAN, LV_GRID_ALIGN_STRETCH, 0,
                          ROWSPAN);
@@ -131,7 +131,7 @@ TEST_CASE_METHOD(XMLTestFixture, "GridEditMode: real drag lands on the gutter-aw
                         {{{"id", "main"}, {"widgets", nlohmann::json::array()}},
                          {{"id", "spy"},
                           {"widgets",
-                           {{{"id", "temperature"},
+                           {{{"id", "humidity"},
                              {"enabled", true},
                              {"col", 0},
                              {"row", 0},
@@ -144,14 +144,14 @@ TEST_CASE_METHOD(XMLTestFixture, "GridEditMode: real drag lands on the gutter-aw
     auto& config = mgr.get_widget_config(panel_id);
     constexpr int PAGE_INDEX = 1; // "spy" page above
 
-    // Sanity check on the config wiring itself, not the drag: "temperature" is
+    // Sanity check on the config wiring itself, not the drag: "humidity" is
     // a real registered widget ID (panel_widget_registry.cpp) — an ID
     // parse_widget_array() doesn't recognize is silently dropped
     // (find_widget_def() == nullptr), which would make the drag below fail
     // with "widget not in config" rather than a snap-target mismatch.
     const auto& spy_entries = config.page_entries(static_cast<size_t>(PAGE_INDEX));
     REQUIRE(spy_entries.size() == 1);
-    REQUIRE(spy_entries[0].id == "temperature");
+    REQUIRE(spy_entries[0].id == "humidity");
 
     GridEditMode em;
     em.enter(container, &config, PAGE_INDEX);
@@ -168,14 +168,14 @@ TEST_CASE_METHOD(XMLTestFixture, "GridEditMode: real drag lands on the gutter-aw
     // build the expectation could not tell a correct helper from a broken
     // one.
     //
-    // Snap resolution: "temperature" halves on neither axis, so
+    // Snap resolution: "humidity" halves on neither axis, so
     // snap_step_for() hands round_to_grid_cell() a step of TRACKS_PER_CELL and
     // every reachable target is an EVEN track index. Assert that here — if the
     // registry ever grants this widget half-cell support the step drops to 1,
     // every expectation below shifts, and the test must be re-derived rather
     // than left to fail on an arithmetic mismatch that looks like a geometry
     // regression.
-    const auto* drag_def = helix::find_widget_def("temperature");
+    const auto* drag_def = helix::find_widget_def("humidity");
     REQUIRE(drag_def != nullptr);
     REQUIRE_FALSE(drag_def->supports_half_col);
     REQUIRE_FALSE(drag_def->supports_half_row);
@@ -312,7 +312,7 @@ TEST_CASE_METHOD(XMLTestFixture,
     lv_obj_set_style_pad_row(container, gutter, 0);
 
     lv_obj_t* widget = lv_obj_create(container);
-    lv_obj_set_name(widget, "temperature");
+    lv_obj_set_name(widget, "humidity");
     lv_obj_remove_flag(widget, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_grid_cell(widget, LV_GRID_ALIGN_STRETCH, 0, COLSPAN, LV_GRID_ALIGN_STRETCH, 0,
                          ROWSPAN);
@@ -328,7 +328,7 @@ TEST_CASE_METHOD(XMLTestFixture,
                         {{{"id", "main"}, {"widgets", nlohmann::json::array()}},
                          {{"id", "spy"},
                           {"widgets",
-                           {{{"id", "temperature"},
+                           {{{"id", "humidity"},
                              {"enabled", true},
                              {"col", 0},
                              {"row", 0},
@@ -343,7 +343,7 @@ TEST_CASE_METHOD(XMLTestFixture,
 
     const auto& spy_entries = config.page_entries(static_cast<size_t>(PAGE_INDEX));
     REQUIRE(spy_entries.size() == 1);
-    REQUIRE(spy_entries[0].id == "temperature");
+    REQUIRE(spy_entries[0].id == "humidity");
 
     GridEditMode em;
     em.enter(container, &config, PAGE_INDEX);
@@ -403,7 +403,7 @@ TEST_CASE_METHOD(XMLTestFixture,
 namespace {
 
 /// Shared setup for the two guard tests below: a container with a real grid
-/// descriptor and one 2x2 "temperature" widget on a private page.
+/// descriptor and one 2x2 "humidity" widget on a private page.
 ///
 /// Mirrors the first test's setup because that is this file's convention
 /// (each test owns its geometry — the second test deliberately builds a
@@ -461,7 +461,7 @@ GuardFixture make_guard_fixture(lv_obj_t* parent, const std::string& panel_id) {
     constexpr int COLSPAN = GridLayout::TRACKS_PER_CELL;
     constexpr int ROWSPAN = GridLayout::TRACKS_PER_CELL;
     f.widget = lv_obj_create(f.container);
-    lv_obj_set_name(f.widget, "temperature");
+    lv_obj_set_name(f.widget, "humidity");
     lv_obj_remove_flag(f.widget, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_grid_cell(f.widget, LV_GRID_ALIGN_STRETCH, 0, COLSPAN, LV_GRID_ALIGN_STRETCH, 0,
                          ROWSPAN);
@@ -476,7 +476,7 @@ GuardFixture make_guard_fixture(lv_obj_t* parent, const std::string& panel_id) {
                         {{{"id", "main"}, {"widgets", nlohmann::json::array()}},
                          {{"id", "spy"},
                           {"widgets",
-                           {{{"id", "temperature"},
+                           {{{"id", "humidity"},
                              {"enabled", true},
                              {"col", 0},
                              {"row", 0},
@@ -490,7 +490,7 @@ GuardFixture make_guard_fixture(lv_obj_t* parent, const std::string& panel_id) {
 
     const auto& entries = f.config->page_entries(static_cast<size_t>(f.page_index));
     REQUIRE(entries.size() == 1);
-    REQUIRE(entries[0].id == "temperature");
+    REQUIRE(entries[0].id == "humidity");
     return f;
 }
 
@@ -523,7 +523,7 @@ TEST_CASE_METHOD(XMLTestFixture,
     // Preconditions, asserted so a geometry or registry change fails loudly
     // instead of making the assertion below vacuous.
     //  - the origin must classify as Right, not a corner;
-    //  - "temperature" must still be scalable, or handle_drag_start() takes
+    //  - "humidity" must still be scalable, or handle_drag_start() takes
     //    the move path and resizing_ stays false for an unrelated reason.
     REQUIRE(em.detect_resize_edge(origin.x, origin.y, sel_area) == GridEditMode::ResizeEdge::Right);
 

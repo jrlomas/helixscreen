@@ -545,8 +545,26 @@ TEST_CASE_METHOD(ContentFitsFixture,
             grid_cell_metrics(g.content_w, g.content_h, dims.cols, dims.rows, g.gutter);
 
         for (const auto& def : defs) {
-            const int min_c = def.effective_min_colspan();
-            const int min_r = def.effective_min_rowspan();
+            // The smallest span the widget is actually OFFERED here, not the
+            // registry floor. A widget that declines a size through fits_at is
+            // grown past it by the resize clamp and by the load path alike, so
+            // measuring the floor would measure a box the runtime never hands
+            // it. grow_span_to_fit is the same helper both of those use, so
+            // this cannot drift from what they do.
+            int min_c = def.effective_min_colspan();
+            int min_r = def.effective_min_rowspan();
+            if (def.factory) {
+                auto probe = def.factory(def.id);
+                if (probe) {
+                    const auto [fit_c, fit_r] = grow_span_to_fit(
+                        [&probe](int w, int h) { return probe->fits_at(w, h); }, min_c, min_r,
+                        def.effective_max_colspan(), def.effective_max_rowspan(),
+                        def.supports_half_col ? 1 : GridLayout::TRACKS_PER_CELL,
+                        def.supports_half_row ? 1 : GridLayout::TRACKS_PER_CELL, m);
+                    min_c = fit_c;
+                    min_r = fit_r;
+                }
+            }
             if (min_c > dims.cols || min_r > dims.rows) {
                 // GridLayout::PlacementFailure::TooLargeForGrid — the widget is
                 // never placed here, so there is no size to measure. Recorded
@@ -568,7 +586,7 @@ TEST_CASE_METHOD(ContentFitsFixture,
 
             OverflowReport r;
             {
-                RegistryWidgetHarness h(test_screen(), def);
+                RegistryWidgetHarness h(test_screen(), def, &m);
                 if (!h.created()) {
                     spdlog::warn("[content_fits] {} @ {}: component would not build", def.id,
                                  g.name);

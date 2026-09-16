@@ -9,6 +9,7 @@
 
 #include "async_lifetime_guard.h"
 #include "panel_widget.h"
+#include "src/ui/panel_widgets/tile_sizing.h"
 
 class TemperatureService;
 
@@ -56,6 +57,24 @@ class HeaterTempWidget : public PanelWidget {
         return cfg_.widget_id;
     }
 
+    void on_size_changed(int colspan, int rowspan, int width_px, int height_px) override {
+        (void)colspan;
+        (void)rowspan;
+        sizing_.measure_and_publish(width_px, height_px);
+    }
+
+    bool fits_at(int width_px, int height_px) const override {
+        return sizing_.fits(width_px, height_px);
+    }
+
+    const char** xml_attrs() const override {
+        return sizing_.subject_attrs();
+    }
+
+    TileSizing* tile_sizing() override {
+        return &sizing_;
+    }
+
     // Shared XML event callback. All three heater components register their
     // distinct callback names (temp_clicked_cb / bed_temp_clicked_cb /
     // chamber_temp_clicked_cb) against this one function — the bound widget is
@@ -82,6 +101,14 @@ class HeaterTempWidget : public PanelWidget {
     helix::AsyncLifetimeGuard lifetime_;
 
     void handle_temp_clicked();
+
+    /// Built with the widget so its subjects exist before the manager parses
+    /// this tile's component. The three heaters draw the same shape, so one
+    /// worst-case budget covers them. temp_display draws the unit as its own
+    /// label beside the value, so the budget carries it too: a value measured
+    /// without the unit is narrower than the row that renders.
+    TileSizing sizing_{cfg_.widget_id,
+                       TileSizing::Content{"888 / 888\u00B0C", "888\u00B0C", "Temp", true}};
 };
 
 // Per-heater configs — single source of truth shared by the widget factories
