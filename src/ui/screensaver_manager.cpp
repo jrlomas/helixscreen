@@ -2,8 +2,6 @@
 
 #ifdef HELIX_ENABLE_SCREENSAVER
 
-#include "ui_screensaver.h"
-
 #include "config.h"
 #include "display_settings_manager.h"
 #include "helix_version.h"
@@ -11,12 +9,16 @@
 #include "refresh_period_hold.h"
 #include "screen_hide_hold.h"
 #include "screensaver.h"
+#if LV_COLOR_DEPTH == 32
+#include "ui_screensaver.h"
+
+#include "screensaver_pipes.h"
+#include "screensaver_starfield.h"
+#endif
 #include "screensaver_base.h"
 #include "screensaver_bounce.h"
 #include "screensaver_fireworks.h"
 #include "screensaver_level_store.h"
-#include "screensaver_pipes.h"
-#include "screensaver_starfield.h"
 
 #include <spdlog/spdlog.h>
 
@@ -52,9 +54,12 @@ ScreensaverManager& ScreensaverManager::instance() {
 }
 
 ScreensaverManager::ScreensaverManager() : cpu_clock_(helix::ui::read_process_cpu_clock) {
+#if LV_COLOR_DEPTH == 32
+    // These draw at 32 bpp only; a 16 bpp build registers the bouncing printer and fireworks.
     screensavers_.push_back(std::make_unique<FlyingToasterScreensaver>());
     screensavers_.push_back(std::make_unique<StarfieldScreensaver>());
     screensavers_.push_back(std::make_unique<PipesScreensaver>());
+#endif
     screensavers_.push_back(std::make_unique<helix::BouncingPrinterScreensaver>());
     screensavers_.push_back(std::make_unique<helix::ui::FireworksScreensaver>());
 }

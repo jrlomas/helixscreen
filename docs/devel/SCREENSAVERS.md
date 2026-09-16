@@ -72,7 +72,9 @@ with the gate off (`docs/devel/ENVIRONMENT_VARIABLES.md`).
 
 The registry row lists the depths a saver draws at. Toasters, starfield and pipes are 32 bpp
 only; fireworks draws RGB565 or XRGB8888 through `PixelWriter`, with `SAVER_BUILD_CANVAS_FORMAT`
-picking the display's depth at compile time.
+picking the display's depth at compile time. A 16 bpp build with `ENABLE_SCREENSAVER=yes`
+compiles only the savers that draw at 16 bpp (Makefile `SCREENSAVER_32BPP_ONLY_SRCS`); the
+settings dropdown still lists every row, and choosing one that is not compiled starts nothing.
 
 ## Adding a saver
 
