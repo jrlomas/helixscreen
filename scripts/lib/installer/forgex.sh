@@ -37,6 +37,31 @@ forgex_prev_display_f() {
     printf '%s\n' "$(forgex_mod_data)/helixscreen_prev_display"
 }
 
+# printer.cfg, beside the mod tree on the same derivation as mod_data:
+# /opt/config/printer.cfg on an AD5M, /usr/data/config/printer.cfg on an AD5X.
+# Only the mod's own tooling writes the display include in it (S00init at
+# boot, zdisplay.sh on a SET_MOD), which is why the include can lag
+# variables.cfg until a reboot.
+forgex_printer_cfg() {
+    printf '%s\n' "$(dirname "${HOST_MOD_ROOT:-/opt/config/mod}")/printer.cfg"
+}
+
+# The display mode printer.cfg's include selects - what the machine RUNS, as
+# against variables.cfg's display variable, which is what it will run after
+# the next boot. Empty when printer.cfg is missing, unreadable, or carries no
+# recognised display include; a caller must read empty as "unknown", never as
+# a mode. Never fails: callers capture the output under set -e.
+forgex_running_display_mode() {
+    pcfg="$(forgex_printer_cfg)"
+    [ -r "$pcfg" ] || return 0
+    for inc in stock feather guppy headless; do
+        grep -q "^[[:space:]]*\[include[[:space:]][^]]*/${inc}\.cfg\]" "$pcfg" 2>/dev/null || continue
+        printf '%s\n' "$inc" | tr '[:lower:]' '[:upper:]'
+        return 0
+    done
+    return 0
+}
+
 # Replace a vendor script with its rewrite only after the rewrite parses.
 # Every screen.sh surgery funnels through here: the candidate stays a .tmp
 # beside the target until it passes a shell syntax check, so a botched edit -
@@ -149,6 +174,7 @@ configure_forgex_display() {
     changed=false
     display_set=false
     record_failed=false
+    drift_refused=false
 
     if [ -f "$var_file" ]; then
         # HEADLESS closes the list as an arrival state: a printer already on
@@ -159,13 +185,38 @@ configure_forgex_display() {
         for mode in $FORGEX_DISPLAY_MODES HEADLESS; do
             grep -q "display[[:space:]]*=[[:space:]]*'$mode'" "$var_file" || continue
 
+            # The record must name the mode the machine RUNS, and at a first
+            # takeover that is confirmed against printer.cfg's include: the
+            # variable only says what runs after the next boot, and the two
+            # disagree for as long as the printer stays up between a SET_MOD
+            # and its reboot. A record already on disk means our own earlier
+            # install left the pair disagreeing (variables.cfg on HEADLESS,
+            # the include still naming the arrival mode), so a re-run takes
+            # the record's answer and does not compare the files at all.
+            running_mode=""
+            if [ ! -s "$(forgex_prev_display_f)" ]; then
+                running_mode="$(forgex_running_display_mode)"
+                if [ -n "$running_mode" ] && [ "$running_mode" != "$mode" ]; then
+                    log_error "ForgeX display state disagrees: variables.cfg says $mode, printer.cfg runs $running_mode"
+                    log_error "Reboot the printer (its boot tooling reconciles the two files) and re-run the install"
+                    drift_refused=true
+                    break
+                fi
+                if [ -z "$running_mode" ]; then
+                    # No verified display include is not a failure: layouts
+                    # this derivation cannot read must keep installing, on
+                    # the variable's say-so.
+                    log_warn "ForgeX running display mode could not be confirmed from $(forgex_printer_cfg) - recording the variables.cfg mode ($mode)"
+                fi
+            fi
+
             # Remember where we found it so uninstall can put it back. 1.4.0
             # and 1.4.1 default to STOCK, 1.4.2 to FEATHER, so a fixed restore
             # target would strand one of them on a mode it never had. A record
             # that cannot be written ends the takeover here: moving the
             # display to HEADLESS anyway would leave uninstall restoring the
             # GUPPY fallback for a mode this printer never had.
-            if ! forgex_record_prev_display "$mode"; then
+            if ! forgex_record_prev_display "${running_mode:-$mode}"; then
                 record_failed=true
                 break
             fi
@@ -182,7 +233,7 @@ configure_forgex_display() {
             break
         done
 
-        if [ "$display_set" != true ] && [ "$record_failed" != true ]; then
+        if [ "$display_set" != true ] && [ "$record_failed" != true ] && [ "$drift_refused" != true ]; then
             log_warn "ForgeX display mode in ${var_file} was not recognized - left unchanged"
         fi
     else
@@ -725,18 +776,31 @@ uninstall_forgex() {
     var_file="$(forgex_mod_data)/variables.cfg"
     record_f="$(forgex_prev_display_f)"
 
-    # Put the display mode back where install found it. 1.4.0/1.4.1 default to
-    # STOCK and 1.4.2 to FEATHER, so a hardcoded restore target would leave one
-    # of them on a mode the printer never had. GUPPY is the fallback for
-    # installs predating the recorded value; it exists in every supported
-    # Forge-X.
-    restore_mode="GUPPY"
+    # Put the display mode back by evidence, in descending order of trust:
+    # the recorded mode, else the mode printer.cfg's include runs right now,
+    # else GUPPY aloud. 1.4.0/1.4.1 default to STOCK and 1.4.2 to FEATHER, so
+    # a hardcoded restore target would leave one of them on a mode the
+    # printer never had. GUPPY is the last resort rather than a refusal
+    # because it exists in every supported Forge-X, and because leaving
+    # variables.cfg on HEADLESS with no HelixScreen is a printer with no UI
+    # at all.
+    restore_mode=""
     mode_restored=false
     if [ -r "$record_f" ]; then
         saved_mode=$(cat "$record_f" 2>/dev/null)
         case "$saved_mode" in
             STOCK|FEATHER|GUPPY|HEADLESS) restore_mode="$saved_mode" ;;
         esac
+    fi
+    if [ -z "$restore_mode" ]; then
+        # What printer.cfg's include names is what the printer is configured
+        # to run - evidence of the mode to restore, not a guess.
+        restore_mode="$(forgex_running_display_mode)"
+    fi
+    if [ -z "$restore_mode" ]; then
+        restore_mode="GUPPY"
+        log_warn "The ForgeX display mode from before HelixScreen could not be determined - restoring GUPPY as a fallback"
+        log_warn "If that is not the mode you had, change it from the printer's SET_MOD display setting (zdisplay.sh)"
     fi
 
     if [ -f "$var_file" ]; then
