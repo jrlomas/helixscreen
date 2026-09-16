@@ -38,7 +38,7 @@ The arm claims `device:pi3b` with `scripts/helix-claim`, deploys, smoke-tests ev
 crashes, runs three measurement passes and three load-gate passes, and writes
 `$HELIX_PERF_SCRATCH/my-arm_summary.txt`. `ENV_EXTRA="HELIX_SCREENSAVER_LEVEL=1"` runs the arm
 with those variables in a systemd drop-in, which the arm removes (restarting the app) when it
-finishes. An arm has two halves and they take DIFFERENT variables: `ARM_WORKLOADS` selects the
+finishes. An arm has two halves and they take DIFFERENT variables: `WORKLOADS` selects the
 measurement passes (default `idle toasters starfield pipes`) and `SAVERS` selects the load gates
 (default `off toasters starfield pipes`). Setting only one leaves the other at its default, so
 `SAVERS="off fireworks"` gates fireworks while still measuring the default four. Workload names
