@@ -1441,4 +1441,27 @@ TEST_CASE_METHOD(NetdBackendFixture,
     REQUIRE_FALSE(backend_->supports_wpa_supplicant_fallback());
 }
 
+// An installed daemon that is not answering is not an absent one. netd loads the
+// WiFi driver, so with it down there is no interface for wpa_supplicant to take:
+// swapping to it trades an accurate failure for a misleading one and abandons the
+// reconnect that would recover when the daemon returns.
+TEST_CASE_METHOD(NetdBackendFixture,
+                 "netd installed but not answering withholds the wpa_supplicant fallback",
+                 "[netd][wifi]") {
+    // Start from the answer that admits the fallback, so a flag that is never
+    // written cannot satisfy this case.
+    server_.reset();
+    REQUIRE_FALSE(backend_->start().success());
+    REQUIRE(backend_->supports_wpa_supplicant_fallback());
+
+    // Same unreachable socket, but the daemon binary is installed: this is a
+    // netd firmware whose daemon is down, not a machine that never had one.
+    bin_env_.set("/bin/sh");
+    REQUIRE_FALSE(backend_->supports_wpa_supplicant_fallback());
+
+    // And an install path that names nothing readmits it.
+    bin_env_.set("/nonexistent/netd");
+    REQUIRE(backend_->supports_wpa_supplicant_fallback());
+}
+
 #endif // !__APPLE__ && !__ANDROID__
