@@ -62,6 +62,29 @@ inline const char* display_backend_type_to_string(DisplayBackendType type) {
     }
 }
 
+namespace helix::ui {
+
+/**
+ * @brief Short lowercase name of the running display path, for keys and fingerprints
+ *
+ * "sdl", "fbdev", "drm", or "egl" for DRM rendering through EGL/OpenGL ES.
+ */
+inline const char* display_backend_key(DisplayBackendType type, bool gpu_accelerated) {
+    switch (type) {
+    case DisplayBackendType::SDL:
+        return "sdl";
+    case DisplayBackendType::FBDEV:
+        return "fbdev";
+    case DisplayBackendType::DRM:
+        return gpu_accelerated ? "egl" : "drm";
+    case DisplayBackendType::AUTO:
+        return "auto";
+    }
+    return "unknown";
+}
+
+} // namespace helix::ui
+
 /**
  * @brief Convert rotation degrees to LVGL rotation enum
  *

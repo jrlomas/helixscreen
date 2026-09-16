@@ -1433,9 +1433,6 @@ TEST_CASE_METHOD(LVGLTestFixture,
     ScopedGlobalRefreshHold clean_hold; // no configured period, so level 0 is 16 ms
 
     SECTION("flying toasters") {
-        if (!helix::PlatformCapabilities::detect().supports_animations) {
-            SKIP("BASIC and EMBEDDED hosts fly ten sprites at every level until the gate lands");
-        }
         FlyingToasterScreensaver ss;
         ScreensaverStopOnExit<FlyingToasterScreensaver> stop_on_exit{ss};
         ss.start();

@@ -551,6 +551,40 @@ HELIX_SCREENSAVER_REFR_PERIOD_MS=0 HELIX_SCREENSAVER_NOW=1 ./build/bin/helix-scr
 
 Requires a build with `HELIX_ENABLE_SCREENSAVER`.
 
+### `HELIX_SCREENSAVER_BUDGET_PCT`
+
+Replaces the screensaver gate's CPU budget, as a whole percent of one core. Each 5 s window of a running saver's CPU share, with the idle baseline subtracted, is compared with this number instead of the core-count budget (4 or more cores 50%, 3 cores 37%, 2 cores 25%, 1 core 10%, halved while a print runs), so a small value proves on a device that a saver steps down and remembers its level. Read when a saver starts.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Whole percent, `1` to `400` |
+| **Default** | Unset: the core-count budget |
+| **Invalid** | Anything else (`0`, `25%`, `-5`, empty) is ignored with a warning |
+| **File** | `include/screensaver_gate.h#saver_env_overrides`, `src/ui/screensaver_manager.cpp` |
+
+```bash
+HELIX_SCREENSAVER_BUDGET_PCT=5 HELIX_SCREENSAVER_NOW=toasters ./build/bin/helix-screen --test -vv
+```
+
+Requires a build with `HELIX_ENABLE_SCREENSAVER`.
+
+### `HELIX_SCREENSAVER_LEVEL`
+
+Runs every saver that starts at this quality level and turns the gate off for that run: no step-down and no stored level. Level 0 is the most expensive. A level past the saver's ladder is ignored with a warning, and the stored level is used. Read when a saver starts.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Whole level number, `0` to `99` |
+| **Default** | Unset: the stored level for this saver, app version and board |
+| **Invalid** | Ignored with a warning |
+| **File** | `include/screensaver_gate.h#saver_env_overrides`, `src/ui/screensaver_manager.cpp` |
+
+```bash
+HELIX_SCREENSAVER_LEVEL=1 HELIX_SCREENSAVER_NOW=pipes ./build/bin/helix-screen --test -vv
+```
+
+Requires a build with `HELIX_ENABLE_SCREENSAVER`.
+
 ### `HELIX_LOOP_MIN_SLEEP_MS`
 
 Shortest sleep the main loop takes between `lv_timer_handler()` calls. The loop sleeps for LVGL's "next timer due" hint, but never less than this, so with a 16 ms refresh period the default floor of 5 ms can make a frame up to 4 ms late. A lower floor paces frames more closely at the cost of more wakeups. While a screensaver holds its refresh period the floor is 1 ms, so its 16 ms frames land on time; everywhere else it is 5 ms. Setting this variable sets the floor in both places.

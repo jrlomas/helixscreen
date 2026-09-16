@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "env_whole_number.h"
 #include "refresh_timing.h"
 
 #include <spdlog/spdlog.h>
@@ -26,27 +27,14 @@ namespace refresh_timing_detail {
 /// warning.
 inline std::optional<uint32_t> ms_from_env(const char* name, uint32_t min_ms, uint32_t max_ms,
                                            bool zero_means_off = false) {
-    const char* value = std::getenv(name);
-    if (value == nullptr) {
-        return std::nullopt;
+    // "0" turns the pacing off, which the in-range parse below would reject.
+    if (zero_means_off) {
+        const char* value = std::getenv(name);
+        if (value != nullptr && std::strcmp(value, "0") == 0) {
+            return 0;
+        }
     }
-    // strtoul skips leading whitespace and accepts a sign, so the first character is
-    // checked here: only a digit starts a value.
-    bool ok = *value >= '0' && *value <= '9';
-    unsigned long parsed = 0;
-    if (ok) {
-        errno = 0;
-        char* end = nullptr;
-        parsed = std::strtoul(value, &end, 10);
-        ok = errno == 0 && *end == '\0' &&
-             ((parsed >= min_ms && parsed <= max_ms) || (zero_means_off && parsed == 0));
-    }
-    if (!ok) {
-        spdlog::warn("[RefreshTiming] Ignoring {}='{}': expected whole milliseconds, {} to {}{}",
-                     name, value, min_ms, max_ms, zero_means_off ? ", or 0 for off" : "");
-        return std::nullopt;
-    }
-    return static_cast<uint32_t>(parsed);
+    return whole_number_from_env(name, min_ms, max_ms, "[RefreshTiming]", "whole milliseconds");
 }
 
 inline bool scope_all_from_env() {

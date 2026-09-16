@@ -6,8 +6,6 @@
 
 #include "ui_utils.h"
 
-#include "platform_capabilities.h"
-
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -36,9 +34,8 @@ static constexpr int FLIGHT_DISTANCE = 1600;
 // 24 s flight: slower flight, slower flap.
 static constexpr int FLAP_STEP_MS = 50;
 
-// Sprites flown at the lowest level, and at every level on a BASIC or EMBEDDED board: every
-// visible sprite costs dirty-region work each frame. OBJECTS[] is ordered by delay and wave,
-// so the first ones keep a representative mix.
+// Sprites flown at the lowest level: every visible sprite costs dirty-region work each frame.
+// OBJECTS[] is ordered by delay and wave, so the first ones keep a representative mix.
 static constexpr int SPRITE_CAP_LOW = 10;
 
 // Object definition matching the exact CSS classes and positions.
@@ -149,9 +146,6 @@ int FlyingToasterScreensaver::get_scale_factor() const {
 bool FlyingToasterScreensaver::on_start() {
     spdlog::info("[Screensaver] Starting flying toasters");
 
-    const auto caps = helix::PlatformCapabilities::detect();
-    m_low_tier = !caps.supports_animations;
-
     m_elapsed_ms = 0;
     decode_sprites();
     spawn_objects(sprite_limit(level()));
@@ -170,7 +164,7 @@ void FlyingToasterScreensaver::on_level_request(size_t level) {
 }
 
 size_t FlyingToasterScreensaver::sprite_limit(size_t level) const {
-    const bool capped = m_low_tier || level >= CAPPED_LEVEL;
+    const bool capped = level >= CAPPED_LEVEL;
     return static_cast<size_t>(capped ? std::min(NUM_OBJECTS, SPRITE_CAP_LOW) : NUM_OBJECTS);
 }
 

@@ -99,7 +99,6 @@ class FlyingToasterScreensaver : public helix::ui::SaverBase {
 
     std::vector<FlyingObject> m_objects;
     uint32_t m_elapsed_ms = 0; // time the saver has run
-    bool m_low_tier = false;   // a BASIC or EMBEDDED board flies the capped count at every level
 
     // Pre-decoded sprite buffers (avoid per-frame PNG file I/O + decompression)
     lv_draw_buf_t* m_decoded_frames[4] = {}; // toaster_0..3

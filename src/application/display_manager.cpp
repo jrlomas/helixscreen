@@ -489,6 +489,11 @@ bool DisplayManager::init(const Config& config) {
                  m_refresh_timing.screensaver_refr_period_ms, m_refresh_timing.loop_min_sleep_ms,
                  m_refresh_timing.screensaver_loop_min_sleep_ms);
 
+#ifdef HELIX_ENABLE_SCREENSAVER
+    // The gate halves the screensaver budget during prints and keys stored levels by display path.
+    ScreensaverManager::instance().set_host(screensaver_host(m_backend.get()));
+#endif
+
     // Create backlight backend (auto-detects hardware)
     m_backlight = BacklightBackend::create();
     spdlog::info("[DisplayManager] Backlight: {} (available: {})", m_backlight->name(),
@@ -1256,6 +1261,7 @@ void DisplayManager::restore_flush_cb(lv_display_flush_cb_t flush_cb) {
 
 void DisplayManager::check_display_sleep() {
 #ifdef HELIX_ENABLE_SCREENSAVER
+    ScreensaverManager::instance().on_idle_check_tick();
     // HELIX_SCREENSAVER_NOW: start a screensaver on the first tick. A registered saver name
     // picks that saver; any other value the configured one, or flying toasters.
     static bool screensaver_force_checked = false;
@@ -1537,6 +1543,15 @@ void DisplayManager::wake_display() {
 }
 
 #ifdef HELIX_ENABLE_SCREENSAVER
+helix::ui::SaverHost DisplayManager::screensaver_host(const DisplayBackend* backend) {
+    helix::ui::SaverHost host;
+    host.is_printing = [] { return job_holds_machine(get_printer_state().get_print_lifecycle()); };
+    host.display_backend =
+        backend ? helix::ui::display_backend_key(backend->type(), backend->is_gpu_accelerated())
+                : "unknown";
+    return host;
+}
+
 void DisplayManager::preview_screensaver(int type) {
     if (m_shutting_down || m_screensaver_active) {
         return;

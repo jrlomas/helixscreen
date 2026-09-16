@@ -213,8 +213,11 @@ src/ui/recovery_modal_presenter.cpp  # not in the v1 Core+AMS cut
 src/ui/screensaver_base.cpp  # not in the v1 Core+AMS cut
 src/ui/screensaver_bounce.cpp  # not in the v1 Core+AMS cut
 src/ui/screensaver_canvas.cpp  # not in the v1 Core+AMS cut
+src/ui/screensaver_cpu_clock.cpp  # not in the v1 Core+AMS cut
 src/ui/screensaver_frame.cpp  # not in the v1 Core+AMS cut
 src/ui/screensaver_frame_timer.cpp  # not in the v1 Core+AMS cut
+src/ui/screensaver_gate.cpp  # not in the v1 Core+AMS cut
+src/ui/screensaver_level_store.cpp  # not in the v1 Core+AMS cut
 src/ui/screensaver_manager.cpp  # not in the v1 Core+AMS cut
 src/ui/screensaver_overlay.cpp  # not in the v1 Core+AMS cut
 src/ui/screensaver_pipes.cpp  # not in the v1 Core+AMS cut
