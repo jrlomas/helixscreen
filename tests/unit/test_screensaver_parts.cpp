@@ -18,6 +18,7 @@
 #include <optional>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
@@ -581,4 +582,30 @@ TEST_CASE_METHOD(LVGLTestFixture, "a restarted saver replays its fixed seed",
     CHECK(saver.first_random == first);
 }
 
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a saver canvas frame describes its buffer in the matching pixel format",
+                 "[screensaver][screensaver_parts]") {
+    for (const auto& [cf, format] :
+         {std::pair<lv_color_format_t, helix::ui::PixelFormat>{LV_COLOR_FORMAT_XRGB8888,
+                                                               helix::ui::PixelFormat::XRGB8888},
+          std::pair<lv_color_format_t, helix::ui::PixelFormat>{LV_COLOR_FORMAT_RGB565,
+                                                               helix::ui::PixelFormat::RGB565}}) {
+        INFO("canvas format " << static_cast<int>(cf));
+        SaverOverlay overlay;
+        overlay.create();
+        SaverCanvas canvas;
+        REQUIRE(canvas.create(overlay.obj(), 96, 40, cf));
+        const helix::ui::FrameTarget frame = canvas.frame();
+        CHECK(frame.format == format);
+        CHECK(frame.data == canvas.data());
+        CHECK(frame.stride == canvas.stride());
+        CHECK(frame.w == 96u);
+        CHECK(frame.h == 40u);
+        canvas.release();
+        overlay.destroy();
+    }
+    CHECK(helix::ui::pixel_format_for(LV_COLOR_FORMAT_RGB565) == helix::ui::PixelFormat::RGB565);
+    CHECK(helix::ui::pixel_format_for(LV_COLOR_FORMAT_XRGB8888) ==
+          helix::ui::PixelFormat::XRGB8888);
+}
 #endif // HELIX_ENABLE_SCREENSAVER

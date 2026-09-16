@@ -30,6 +30,9 @@ inline constexpr size_t SAVER_MAX_DIRTY_AREAS = 32;
 enum class PixelFormat : uint8_t {
     /// 4 bytes per pixel: B, G, R, and an X byte of 0xFF
     XRGB8888,
+    /// 2 bytes per pixel, little-endian: red in the top 5 bits, green in the middle 6, blue in the
+    /// low 5
+    RGB565,
 };
 
 /// An 8-bit-per-channel colour.

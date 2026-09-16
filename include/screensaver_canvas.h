@@ -12,6 +12,14 @@
 #include <vector>
 
 namespace helix::ui {
+/// Canvas format for a saver that writes every pixel itself: the display's own depth.
+inline constexpr lv_color_format_t SAVER_BUILD_CANVAS_FORMAT =
+    LV_COLOR_DEPTH == 16 ? LV_COLOR_FORMAT_RGB565 : LV_COLOR_FORMAT_XRGB8888;
+
+/// PixelWriter format of a canvas: RGB565 for an RGB565 canvas, XRGB8888 for a 4-byte one.
+constexpr PixelFormat pixel_format_for(lv_color_format_t cf) {
+    return cf == LV_COLOR_FORMAT_RGB565 ? PixelFormat::RGB565 : PixelFormat::XRGB8888;
+}
 
 /**
  * @brief A full-screen canvas a screensaver draws on
@@ -61,7 +69,7 @@ class SaverCanvas {
     /// The buffer as a frame for direct pixel writes, for a canvas in a format PixelWriter writes.
     FrameTarget frame() const {
         return {buf_, stride_, static_cast<uint32_t>(w_), static_cast<uint32_t>(h_),
-                PixelFormat::XRGB8888};
+                pixel_format_for(cf_)};
     }
 
     /// Paints the whole canvas opaque black and invalidates all of it.
