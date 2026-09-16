@@ -2509,12 +2509,11 @@ bool preset_targets_this_device(const std::string& moonraker_host) {
 
 bool Config::apply_preset_file(const std::string& preset_name) {
     // Guard: only full-apply if wizard hasn't been completed for this printer.
-    // Post-wizard, still allow a narrow migration for filament_sensors so that
-    // a printer detected with an empty filament_sensors block (preset never
-    // populated it at first-install, or preset was extended later) gets the
-    // current preset's runout/toolhead role assignments. Without this, fixing
-    // a preset only helps fresh installs — existing users stay broken even
-    // after an update.
+    // Post-wizard, still allow a narrow migration: filament_sensors (A/B below),
+    // role keys the stored config never held (fans/*, heaters/*, temp_sensors/* —
+    // seeded only when absent or empty), and a hardware/expected union. Without
+    // this, fixing a preset only helps fresh installs — existing users stay broken
+    // even after an update.
     const bool wizard_done = get<bool>(df() + "wizard_completed", false);
     if (wizard_done) {
         // Post-wizard migration window. Two cases:
@@ -2543,76 +2542,143 @@ bool Config::apply_preset_file(const std::string& preset_name) {
             spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
             return false;
         }
-        if (!preset_json.contains("printer") || !preset_json["printer"].is_object() ||
-            !preset_json["printer"].contains("filament_sensors")) {
+        if (!preset_json.contains("printer") || !preset_json["printer"].is_object()) {
             spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
             return false;
         }
-        const auto& preset_fs = preset_json["printer"]["filament_sensors"];
-
-        json::json_pointer fs_ptr(df() + "filament_sensors");
-        json::json_pointer sensors_ptr(df() + "filament_sensors/sensors");
-
-        // Case A: empty/missing block — full seed.
-        if (!data.contains(sensors_ptr) ||
-            (data.at(sensors_ptr).is_array() && data.at(sensors_ptr).empty())) {
-            auto& printer_node = data["printers"][active_printer_id_];
-            if (!printer_node.is_object()) {
-                printer_node = json::object();
-            }
-            printer_node["filament_sensors"] = preset_fs;
-            spdlog::info("[Config] Migrated filament_sensors from preset '{}' "
-                         "(existing block was empty)",
-                         preset_name);
-            save();
-            return true;
+        const json& preset_printer = preset_json["printer"];
+        auto& printer_node = data["printers"][active_printer_id_];
+        if (!printer_node.is_object()) {
+            printer_node = json::object();
         }
 
-        // Case B: per-sensor role-upgrade from "none" → preset's role.
-        if (!preset_fs.contains("sensors") || !preset_fs["sensors"].is_array()) {
-            spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
-            return false;
-        }
-        if (!data.at(sensors_ptr).is_array()) {
-            spdlog::info("[Config] Wizard completed, skipping preset '{}' merge", preset_name);
-            return false;
-        }
-        int upgraded = 0;
-        auto& user_sensors = data.at(sensors_ptr);
-        for (const auto& preset_sensor : preset_fs["sensors"]) {
-            if (!preset_sensor.is_object())
-                continue;
-            std::string preset_klipper = preset_sensor.value("klipper_name", "");
-            std::string preset_role = preset_sensor.value("role", "none");
-            if (preset_klipper.empty() || preset_role == "none")
-                continue;
-            bool found = false;
-            for (auto& user_sensor : user_sensors) {
-                if (!user_sensor.is_object())
-                    continue;
-                if (user_sensor.value("klipper_name", "") != preset_klipper)
-                    continue;
-                found = true;
-                std::string user_role = user_sensor.value("role", "none");
-                // Only upgrade when user has role=none — never overwrite an
-                // explicit user assignment (runout/toolhead/entry/z_probe).
-                if (user_role == "none") {
-                    user_sensor["role"] = preset_role;
-                    ++upgraded;
-                    spdlog::info("[Config] Upgraded sensor '{}' role: none -> {} (preset '{}')",
-                                 preset_klipper, preset_role, preset_name);
-                }
-                break;
-            }
-            // Sensor in preset but missing entirely from user settings → append.
-            if (!found) {
-                user_sensors.push_back(preset_sensor);
-                ++upgraded;
-                spdlog::info("[Config] Added missing sensor '{}' from preset '{}'", preset_klipper,
+        bool migrated = false;
+
+        // Filament sensors. Two cases:
+        //  A) filament_sensors.sensors is empty/missing → seed from preset
+        //     (installs whose old preset didn't write the block).
+        //  B) Block exists but the preset assigns RUNOUT to sensors the stored
+        //     copy still has at "none" → upgrade those. User-edited role=runout
+        //     entries are never downgraded; role=none entries the preset also
+        //     wants at none are left alone.
+        if (preset_printer.contains("filament_sensors")) {
+            const auto& preset_fs = preset_printer["filament_sensors"];
+            json::json_pointer sensors_ptr(df() + "filament_sensors/sensors");
+
+            // Case A: empty/missing block — full seed.
+            if (!data.contains(sensors_ptr) ||
+                (data.at(sensors_ptr).is_array() && data.at(sensors_ptr).empty())) {
+                printer_node["filament_sensors"] = preset_fs;
+                migrated = true;
+                spdlog::info("[Config] Migrated filament_sensors from preset '{}' "
+                             "(existing block was empty)",
                              preset_name);
+            } else if (preset_fs.contains("sensors") && preset_fs["sensors"].is_array() &&
+                       data.at(sensors_ptr).is_array()) {
+                // Case B: per-sensor role-upgrade from "none" → preset's role.
+                int upgraded = 0;
+                auto& user_sensors = data.at(sensors_ptr);
+                for (const auto& preset_sensor : preset_fs["sensors"]) {
+                    if (!preset_sensor.is_object())
+                        continue;
+                    std::string preset_klipper = preset_sensor.value("klipper_name", "");
+                    std::string preset_role = preset_sensor.value("role", "none");
+                    if (preset_klipper.empty() || preset_role == "none")
+                        continue;
+                    bool found = false;
+                    for (auto& user_sensor : user_sensors) {
+                        if (!user_sensor.is_object())
+                            continue;
+                        if (user_sensor.value("klipper_name", "") != preset_klipper)
+                            continue;
+                        found = true;
+                        std::string user_role = user_sensor.value("role", "none");
+                        // Only upgrade when user has role=none — never overwrite an
+                        // explicit user assignment (runout/toolhead/entry/z_probe).
+                        if (user_role == "none") {
+                            user_sensor["role"] = preset_role;
+                            ++upgraded;
+                            spdlog::info("[Config] Upgraded sensor '{}' role: none -> {} "
+                                         "(preset '{}')",
+                                         preset_klipper, preset_role, preset_name);
+                        }
+                        break;
+                    }
+                    // Sensor in preset but missing entirely from user settings → append.
+                    if (!found) {
+                        user_sensors.push_back(preset_sensor);
+                        ++upgraded;
+                        spdlog::info("[Config] Added missing sensor '{}' from preset '{}'",
+                                     preset_klipper, preset_name);
+                    }
+                }
+                migrated = migrated || upgraded > 0;
             }
         }
-        if (upgraded > 0) {
+
+        // Role keys. Seed the hardware mappings the preset defines onto a machine
+        // provisioned before the preset landed, writing only absent-or-empty stored
+        // values: a present value is the user's (or the auto-heal path's) call, and
+        // a wrong-but-present one is the auto-heal path's job, not the preset's.
+        const char* role_groups[] = {"fans", "heaters", "temp_sensors"};
+        for (const char* group : role_groups) {
+            if (!preset_printer.contains(group) || !preset_printer[group].is_object()) {
+                continue;
+            }
+            for (const auto& [key, val] : preset_printer[group].items()) {
+                if (!val.is_string() || val.get<std::string>().empty()) {
+                    continue;
+                }
+                const std::string rel = std::string(group) + "/" + key;
+                json::json_pointer ptr(df() + rel);
+                const bool held = data.contains(ptr) && data.at(ptr).is_string() &&
+                                  !data.at(ptr).get<std::string>().empty();
+                if (!held) {
+                    printer_node[group][key] = val;
+                    migrated = true;
+                    spdlog::info("[Config] Seeded '{}' from preset '{}'", rel, preset_name);
+                }
+            }
+        }
+        // leds/strip is deliberately not seeded. A configured LED absent from discovery
+        // raises "Configured LED strip not found" from validate_configured_hardware, and
+        // notify_user reports expected_missing ahead of newly_discovered — so seeding a
+        // preset LED name that does not match the machine trades a wrong INFO toast for a
+        // wrong WARNING one. LedController auto-selects discoverable strips into
+        // leds/selected_strips, which is what the validator reads.
+
+        // hardware/expected: union the preset's entries into the stored array.
+        // The four AMS keywords are the only expected-entries that can raise an
+        // expected_missing warning ("AMS/MMU system not detected"), so unioning one
+        // could invent that warning; every other name only ever suppresses a false
+        // "new hardware" report.
+        if (preset_printer.contains("hardware") && preset_printer["hardware"].is_object() &&
+            preset_printer["hardware"].contains("expected") &&
+            preset_printer["hardware"]["expected"].is_array()) {
+            json::json_pointer exp_ptr(df() + "hardware/expected");
+            if (!data.contains(exp_ptr) || !data.at(exp_ptr).is_array()) {
+                data[exp_ptr] = json::array();
+            }
+            auto is_ams_keyword = [](const std::string& name) {
+                return name == "AFC" || name == "mmu" || name == "toolchanger" || name == "ace";
+            };
+            for (const auto& entry : preset_printer["hardware"]["expected"]) {
+                if (!entry.is_string()) {
+                    continue;
+                }
+                const std::string name = entry.get<std::string>();
+                if (name.empty() || is_ams_keyword(name)) {
+                    continue;
+                }
+                json& stored = data.at(exp_ptr);
+                if (std::find(stored.begin(), stored.end(), entry) == stored.end()) {
+                    stored.push_back(entry);
+                    migrated = true;
+                }
+            }
+        }
+
+        if (migrated) {
             save();
             return true;
         }
