@@ -451,8 +451,7 @@ SCREENSAVER_SRCS := $(SRC_DIR)/ui/ui_screensaver.cpp $(wildcard $(SRC_DIR)/ui/sc
 # 16 bpp target missing here fails to compile rather than shipping them.
 SCREENSAVER_16BPP_TARGETS := ad5m ad5m-br cc1 mips k1 k1-dynamic ad5x k2 snapmaker-u1
 # Savers that draw only at 32 bpp; ScreensaverManager registers them under LV_COLOR_DEPTH == 32.
-SCREENSAVER_32BPP_ONLY_SRCS := $(SRC_DIR)/ui/ui_screensaver.cpp \
-    $(SRC_DIR)/ui/screensaver_pipes.cpp
+SCREENSAVER_32BPP_ONLY_SRCS := $(SRC_DIR)/ui/ui_screensaver.cpp
 ifneq ($(ENABLE_SCREENSAVER),yes)
     APP_SRCS := $(filter-out $(SCREENSAVER_SRCS),$(APP_SRCS))
 else ifneq ($(filter $(PLATFORM_TARGET),$(SCREENSAVER_16BPP_TARGETS)),)

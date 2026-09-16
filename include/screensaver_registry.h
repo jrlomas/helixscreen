@@ -55,7 +55,7 @@ struct ScreensaverInfo {
 inline constexpr ScreensaverInfo SCREENSAVERS[] = {
     {ScreensaverType::FLYING_TOASTERS, "toasters", "Flying Toasters", SAVER_DEPTH_32},
     {ScreensaverType::STARFIELD, "starfield", "Starfield", SAVER_DEPTH_16 | SAVER_DEPTH_32},
-    {ScreensaverType::PIPES_3D, "pipes", "3D Pipes", SAVER_DEPTH_32},
+    {ScreensaverType::PIPES_3D, "pipes", "3D Pipes", SAVER_DEPTH_16 | SAVER_DEPTH_32},
     {ScreensaverType::BOUNCING_PRINTER, "bounce", "Bouncing Printer",
      SAVER_DEPTH_16 | SAVER_DEPTH_32},
     {ScreensaverType::FIREWORKS, "fireworks", "Fireworks", SAVER_DEPTH_16 | SAVER_DEPTH_32},
