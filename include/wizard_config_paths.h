@@ -60,11 +60,12 @@ constexpr const char* CHAMBER_HEATER = "heaters/chamber";
 constexpr const char* FEEDER_OPEN_MACRO = "toolchanger/feeder_open_macro";
 constexpr const char* FEEDER_CLOSE_MACRO = "toolchanger/feeder_close_macro";
 
-// LED hardware. LED_SELECTED_STRIPS is the live key LedController::load_config()
-// persists and reads, and it auto-selects every discoverable strip into it when
-// none is chosen. LED_SELECTED and LED_STRIP are legacy: hardware_validator.cpp is
-// their only reader, consulting them after the live key so a config saved before
-// the move still answers "this LED is configured".
+// LED hardware. LED_SELECTED_STRIPS is what LedController persists and reads, and
+// it auto-selects every discoverable strip into it when none is chosen. LED_STRIP
+// is the wizard's own record of the user's pick (written by the LED step, read by
+// the summary) and LED_SELECTED its array form; LedController reads neither, so the
+// two are not kept in step. hardware_validator.cpp therefore asks the live key
+// first and these second before deciding no LED is configured.
 constexpr const char* LED_SELECTED_STRIPS = "leds/selected_strips";
 constexpr const char* LED_STRIP = "leds/strip";
 constexpr const char* LED_SELECTED = "leds/selected";
