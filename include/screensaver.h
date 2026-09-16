@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "screensaver_registry.h"
+
 #ifdef HELIX_ENABLE_SCREENSAVER
 
 #include <cstdint>
@@ -9,19 +11,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-
-/**
- * @brief Available screensaver types
- *
- * Values map directly to the settings dropdown index and persisted config value.
- */
-enum class ScreensaverType : int {
-    OFF = 0,
-    FLYING_TOASTERS = 1,
-    STARFIELD = 2,
-    PIPES_3D = 3,
-    BOUNCING_PRINTER = 4,
-};
 
 namespace helix::ui {
 

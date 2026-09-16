@@ -13,6 +13,7 @@
 #include "observer_factory.h"
 #include "platform_capabilities.h"
 #include "platform_info.h"
+#include "screensaver_registry.h"
 #include "spdlog/spdlog.h"
 #include "static_subject_registry.h"
 #include "theme_loader.h"
@@ -389,7 +390,7 @@ void DisplaySettingsManager::init_subjects() {
             "[DisplaySettingsManager] Migrated screensaver_enabled={} → screensaver_type={}",
             old_enabled, screensaver_type);
     }
-    screensaver_type = std::clamp(screensaver_type, 0, 4);
+    screensaver_type = helix::ui::clamp_screensaver_type(screensaver_type);
     UI_MANAGED_SUBJECT_INT(screensaver_type_subject_, screensaver_type, "settings_screensaver_type",
                            subjects_);
 #endif
@@ -998,7 +999,7 @@ int DisplaySettingsManager::get_screensaver_type() const {
 }
 
 void DisplaySettingsManager::set_screensaver_type(int type) {
-    type = std::clamp(type, 0, 4);
+    type = helix::ui::clamp_screensaver_type(type);
     spdlog::info("[DisplaySettingsManager] set_screensaver_type({})", type);
 
     lv_subject_set_int(&screensaver_type_subject_, type);

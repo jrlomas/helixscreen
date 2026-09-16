@@ -143,11 +143,8 @@ bool ScreensaverManager::is_active() const {
 }
 
 ScreensaverType ScreensaverManager::configured_type() {
-    int type_int = helix::DisplaySettingsManager::instance().get_screensaver_type();
-    if (type_int < 0 || type_int > 4) {
-        return ScreensaverType::OFF;
-    }
-    return static_cast<ScreensaverType>(type_int);
+    const int type_int = helix::DisplaySettingsManager::instance().get_screensaver_type();
+    return static_cast<ScreensaverType>(helix::ui::clamp_screensaver_type(type_int));
 }
 
 Screensaver* ScreensaverManager::find(ScreensaverType type) const {

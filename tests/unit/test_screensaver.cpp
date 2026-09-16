@@ -5,6 +5,8 @@
 #include "config.h"
 #include "display_settings_manager.h"
 #include "platform_capabilities.h"
+#include "screensaver.h"
+#include "screensaver_registry.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -61,7 +63,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "Screensaver type set/get round trip",
 
     SECTION("out of range clamped") {
         DisplaySettingsManager::instance().set_screensaver_type(99);
-        REQUIRE(DisplaySettingsManager::instance().get_screensaver_type() == 4);
+        REQUIRE(DisplaySettingsManager::instance().get_screensaver_type() ==
+                helix::ui::screensaver_last_type());
 
         DisplaySettingsManager::instance().set_screensaver_type(-1);
         REQUIRE(DisplaySettingsManager::instance().get_screensaver_type() == 0);
@@ -116,6 +119,29 @@ TEST_CASE_METHOD(LVGLTestFixture, "Screensaver type subject reflects setter",
     REQUIRE(lv_subject_get_int(DisplaySettingsManager::instance().subject_screensaver_type()) == 1);
 
     DisplaySettingsManager::instance().deinit_subjects();
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a stored or subject screensaver type past the last type clamps to the last type",
+                 "[screensaver][display_settings]") {
+    Config* config = Config::get_instance();
+    const int stored_before = config->get<int>("/display/screensaver_type", 1);
+    config->set<int>("/display/screensaver_type", 99);
+
+    // init_subjects() returns early while subjects are up, and the fixture leaves
+    // them up, so the stored read is only exercised with them down.
+    DisplaySettingsManager::instance().deinit_subjects();
+    DisplaySettingsManager::instance().init_subjects();
+    CHECK(DisplaySettingsManager::instance().get_screensaver_type() ==
+          helix::ui::screensaver_last_type());
+
+    // The manager clamps what the subject holds, whoever wrote it.
+    lv_subject_set_int(DisplaySettingsManager::instance().subject_screensaver_type(), 99);
+    CHECK(ScreensaverManager::configured_type() ==
+          static_cast<ScreensaverType>(helix::ui::screensaver_last_type()));
+
+    DisplaySettingsManager::instance().deinit_subjects();
+    config->set<int>("/display/screensaver_type", stored_before);
 }
 
 // ============================================================================
