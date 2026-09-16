@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <functional>
 #include <set>
 #include <string>
@@ -386,6 +387,21 @@ TEST_CASE("UsbAutomount forgets a mount unmounted from outside", "[usb_automount
 
     fx.am->poll(kT0 + std::chrono::seconds(34)); // fresh grace elapsed
     REQUIRE(fx.ops->mount_calls.size() == before + 1);
+}
+
+TEST_CASE("The test binary pins the automounter off before any test runs", "[usb_automount]") {
+    // A root run of this binary (CI containers run as root) with a stick
+    // attached must never issue real mount(2) calls against the host's
+    // drives. test_main's startup constructor forces HELIX_USB_AUTOMOUNT=0
+    // and create() refuses to arm under it, so this holds with or without a
+    // fixture and whatever euid runs the suite.
+    //
+    // Deliberately fixture-less: the pin must hold for tests that construct
+    // UsbBackendLinux directly.
+    const char* pinned = ::getenv("HELIX_USB_AUTOMOUNT");
+    REQUIRE(pinned != nullptr);
+    REQUIRE(std::string(pinned) == "0");
+    REQUIRE(helix::usb::UsbAutomount::create() == nullptr);
 }
 
 #endif // __linux__ && !__ANDROID__

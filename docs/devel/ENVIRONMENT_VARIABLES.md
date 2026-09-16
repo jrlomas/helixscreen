@@ -1271,7 +1271,8 @@ Disable the in-app fallback USB mounter. When nothing else on the device mounts 
 read-only after a 3s grace period so the print-from-USB picker can see it. `0` forces that
 off, leaving mounting entirely to whatever else is on the system. The mounter also disarms
 itself when the process does not run as root, so a developer's desktop build never mounts
-the workstation's own drives.
+the workstation's own drives. The unit-test binary pins this to `0` in its startup
+constructor, so the suite never arms the mounter regardless of euid.
 
 | Property | Value |
 |----------|-------|
