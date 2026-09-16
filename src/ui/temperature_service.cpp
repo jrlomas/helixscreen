@@ -1355,24 +1355,18 @@ void TemperatureService::setup_mini_combined_graph(lv_obj_t* container) {
         const auto& chamber = heaters_[idx(HeaterType::Chamber)];
         auto* heater_subj = printer_state_.get_printer_has_chamber_heater_subject();
         bool has_heater = heater_subj && lv_subject_get_int(heater_subj) != 0;
-        // The sensor PrinterState resolved: empty when the printer has none or is
-        // set not to use one.
-        const auto& sensor = printer_state_.temperature_state().chamber_sensor_name();
-
-        if (has_heater && !chamber.klipper_name.empty()) {
+        // One source for the reading, so this series cannot disagree with the
+        // chamber readout about which probe it means. A target line needs a
+        // heater behind it: a sensor-only chamber has a temperature and
+        // nothing to set.
+        const auto& temp_state = printer_state_.temperature_state();
+        const std::string& klipper = temp_state.chamber_temperature_source();
+        if (!klipper.empty()) {
             helix::TempGraphSeriesSpec spec;
-            spec.klipper_name = chamber.klipper_name;
+            spec.klipper_name = klipper;
             spec.display_name = lv_tr("Chamber");
             spec.color = chamber.config.color;
-            spec.show_target = true;
-            config.series.push_back(std::move(spec));
-        } else if (!sensor.empty()) {
-            // Sensor-only: show temp without target line
-            helix::TempGraphSeriesSpec spec;
-            spec.klipper_name = sensor;
-            spec.display_name = lv_tr("Chamber");
-            spec.color = chamber.config.color;
-            spec.show_target = false;
+            spec.show_target = has_heater && !temp_state.chamber_heater_name().empty();
             config.series.push_back(std::move(spec));
         }
     }

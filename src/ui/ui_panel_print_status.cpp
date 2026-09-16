@@ -2781,8 +2781,7 @@ void PrintStatusPanel::ensure_temp_graph() {
     if (chamber_gate && lv_subject_get_int(chamber_gate) != 0) {
         const auto& temp_state = printer_state_.temperature_state();
         const std::string& heater = temp_state.chamber_heater_name();
-        const std::string& sensor = temp_state.chamber_sensor_name();
-        const std::string& klipper = !heater.empty() ? heater : sensor;
+        const std::string& klipper = temp_state.chamber_temperature_source();
         if (!klipper.empty()) {
             helix::TempGraphSeriesSpec chamber;
             chamber.klipper_name = klipper;
