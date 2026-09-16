@@ -373,7 +373,9 @@ else ifeq ($(PLATFORM_TARGET),cc1)
     # -ffunction-sections/-fdata-sections: Allow linker to remove unused sections
     # -Wno-error=conversion: LVGL headers have int32_t->float conversions that GCC flags
     # -DHELIX_RELEASE_BUILD: Disables debug features like LV_USE_ASSERT_STYLE
-    # NOTE: CC1 framebuffer is 32bpp (ARGB8888), as is lv_conf.h (LV_COLOR_DEPTH=32)
+    # NOTE: the CC1 panel's framebuffer is 32bpp (simpledrm, 480x272), but lv_conf.h
+    # builds every constrained fbdev target, CC1 included, at LV_COLOR_DEPTH=16 (RGB565).
+    # The two depths differ on purpose; do not "fix" one to match the other.
     # -funwind-tables: Emit ARM unwind info (.ARM.exidx) so backtrace() can walk
     # the full call stack in crash reports. ~5-10% code size, zero runtime cost.
     # NOTE: ALSO required for C++ exception unwinding — cannot be dropped while
