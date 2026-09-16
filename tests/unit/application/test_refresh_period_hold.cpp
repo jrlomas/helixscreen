@@ -406,3 +406,56 @@ TEST_CASE_METHOD(LVGLTestFixture,
         hold.release();
     }
 }
+
+TEST_CASE_METHOD(
+    LVGLTestFixture,
+    "RefreshPeriodHold without a configured period waits for the saver's and follows it",
+    "[application][display][refresh_period]") {
+    ScopedTimerPeriods restore;
+    ScopedTimerPeriods::set(40, 45);
+    RefreshPeriodHold hold;
+
+    hold.follow(33); // not held: changes nothing
+    CHECK(default_refr_timer_period() == 40);
+
+    hold.acquire();
+    CHECK(default_refr_timer_period() == 40);
+    hold.follow(16);
+    CHECK(default_refr_timer_period() == 16);
+    CHECK(anim_timer_period() == 16);
+    hold.follow(33);
+    CHECK(default_refr_timer_period() == 33);
+    CHECK(anim_timer_period() == 33);
+
+    hold.release();
+    CHECK_FALSE(hold.is_held());
+    CHECK(default_refr_timer_period() == 40);
+    CHECK(anim_timer_period() == 45);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a held RefreshPeriodHold moves from its configured period to the saver's",
+                 "[application][display][refresh_period]") {
+    ScopedTimerPeriods restore;
+    ScopedTimerPeriods::set(40, 45);
+    RefreshPeriodHold hold;
+    hold.set_period(20);
+
+    hold.acquire();
+    CHECK(default_refr_timer_period() == 20);
+    hold.follow(20); // a saver at level 0, which takes the configured period
+    CHECK(default_refr_timer_period() == 20);
+    hold.follow(33); // the same saver at level 1
+    CHECK(default_refr_timer_period() == 33);
+    CHECK(anim_timer_period() == 33);
+
+    hold.release();
+    CHECK(default_refr_timer_period() == 40);
+    CHECK(anim_timer_period() == 45);
+
+    // The saver's period ends with the hold: the next acquire starts at the configured one.
+    hold.acquire();
+    CHECK(default_refr_timer_period() == 20);
+    hold.release();
+    CHECK(default_refr_timer_period() == 40);
+}

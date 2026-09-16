@@ -29,7 +29,7 @@ void run_timer(lv_timer_t* timer) {
 }
 
 const lv_draw_buf_t* pipes_canvas_buf(const PipesScreensaver& ss) {
-    lv_obj_t* canvas = PipesScreensaverTestAccess::canvas(ss);
+    lv_obj_t* canvas = SaverTestAccess::canvas(ss);
     REQUIRE(canvas != nullptr);
     const lv_draw_buf_t* buf = lv_canvas_get_draw_buf(canvas);
     REQUIRE(buf != nullptr);
@@ -71,7 +71,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
                  "[screensaver][screensaver_canvas][pipes_canvas]") {
     PipesScreensaver ss;
     ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
-    PipesScreensaverTestAccess::set_fixed_seed(ss, 21);
+    SaverTestAccess::set_fixed_seed(ss, 21);
     ss.start();
     REQUIRE(ss.is_active());
     const lv_draw_buf_t* buf = pipes_canvas_buf(ss);
@@ -82,7 +82,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     // One grow step per 100 ms, drawing antialiased segments and joints.
     for (int step = 0; step < 30; step++) {
         lv_tick_inc(100);
-        run_timer(PipesScreensaverTestAccess::timer(ss));
+        run_timer(SaverTestAccess::timer(ss));
     }
     counts = count_pixels(buf);
     REQUIRE(counts.lit > 0);
@@ -91,7 +91,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
     PipesScreensaverTestAccess::set_total_segments(ss,
                                                    PipesScreensaverTestAccess::max_segments() + 1);
     lv_tick_inc(100);
-    run_timer(PipesScreensaverTestAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     REQUIRE(PipesScreensaverTestAccess::total_segments(ss) == 0);
     counts = count_pixels(buf);
     REQUIRE(counts.lit > 0);

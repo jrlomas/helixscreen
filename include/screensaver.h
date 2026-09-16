@@ -123,9 +123,9 @@ class ScreensaverManager {
      *
      * While a saver runs, the active screen is hidden beneath its overlay
      * (helix::ScreenHideHold), and it stays hidden across a switch between types.
-     * For the same span the display refreshes at HELIX_SCREENSAVER_REFR_PERIOD_MS when
-     * one is configured (helix::RefreshPeriodHold), set before the saver starts so the
-     * saver's own timer follows it.
+     * For the same span the display refreshes at the running saver's frame period,
+     * following its level; level 0 runs at HELIX_SCREENSAVER_REFR_PERIOD_MS when one is
+     * configured (helix::RefreshPeriodHold).
      * A saver that fails to start leaves the manager inactive, and the screen and
      * refresh period as they were before any saver ran.
      */

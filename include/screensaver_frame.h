@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+/**
+ * @file screensaver_frame.h
+ * @brief Frame geometry the screensavers share. No LVGL, so simulations use it too.
+ */
+
+namespace helix::ui {
+
+/// Frame period, in ms, of every saver's most expensive level: one refresh of a 60 Hz panel.
+inline constexpr uint32_t SAVER_FAST_PERIOD = 16;
+
+/**
+ * @brief Most areas a saver invalidates in one frame
+ *
+ * LVGL keeps pending invalid areas in a fixed buffer (LV_INV_BUF_SIZE in
+ * lvgl/src/display/lv_display_private.h) and invalidates the whole screen once it overflows,
+ * so a frame with more areas than that costs a full redraw.
+ */
+inline constexpr size_t SAVER_MAX_DIRTY_AREAS = 32;
+
+/// Inclusive pixel bounds of what changed in a frame. Empty until something is added.
+struct DirtyRect {
+    int32_t x1 = 0;
+    int32_t y1 = 0;
+    int32_t x2 = -1;
+    int32_t y2 = -1;
+
+    bool empty() const {
+        return x2 < x1 || y2 < y1;
+    }
+
+    /// Pixels covered, 0 when empty.
+    int64_t area() const {
+        return empty() ? 0 : static_cast<int64_t>(x2 - x1 + 1) * (y2 - y1 + 1);
+    }
+
+    /// Grows to cover the inclusive box (ax1, ay1)-(ax2, ay2). An empty box adds nothing.
+    void add(int32_t ax1, int32_t ay1, int32_t ax2, int32_t ay2) {
+        if (ax2 < ax1 || ay2 < ay1) {
+            return;
+        }
+        if (empty()) {
+            *this = {ax1, ay1, ax2, ay2};
+            return;
+        }
+        x1 = std::min(x1, ax1);
+        y1 = std::min(y1, ay1);
+        x2 = std::max(x2, ax2);
+        y2 = std::max(y2, ay2);
+    }
+
+    void add(const DirtyRect& other) {
+        add(other.x1, other.y1, other.x2, other.y2);
+    }
+
+    bool operator==(const DirtyRect& o) const {
+        return x1 == o.x1 && y1 == o.y1 && x2 == o.x2 && y2 == o.y2;
+    }
+};
+
+/**
+ * @brief Reduces `areas` to at most `max_areas` boxes that together cover every input box
+ *
+ * Empty boxes are dropped, and within the limit the rest keep their order. Past it, the pair
+ * whose bounding box adds the fewest pixels over the two boxes is joined, until the limit
+ * holds. A `max_areas` of 0 is read as 1.
+ */
+void merge_dirty_areas(std::vector<DirtyRect>& areas, size_t max_areas);
+
+} // namespace helix::ui

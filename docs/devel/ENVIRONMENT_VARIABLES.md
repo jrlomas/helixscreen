@@ -535,14 +535,14 @@ Which timers `HELIX_REFR_PERIOD_MS` sets. `display` sets the display refresh and
 
 ### `HELIX_SCREENSAVER_REFR_PERIOD_MS`
 
-Display refresh and animation period while a screensaver runs. Set before the saver starts, so the saver's own tick timer, which follows the refresh period, runs at it too. Switching between saver types keeps it, and so does an input rebuild after a backend swap, which makes the new global period the one stopping puts back. Stopping the saver, a saver that fails to start, and entering sleep all put back the period in force before (`HELIX_REFR_PERIOD_MS`, or LVGL's default). The static software sleep overlay does not use it.
+Level 0 frame period of every screensaver, for manual testing: the saver draws at it, and the display refreshes and animates at it. Without it, level 0 runs at 16 ms. Levels 1 and up keep their own periods (33 ms and slower) either way, and while a saver runs the display refresh follows it to them. Switching between saver types keeps it, and so does an input rebuild after a backend swap, which makes the new global period the one stopping puts back. Stopping the saver, a saver that fails to start, and entering sleep all put back the period in force before (`HELIX_REFR_PERIOD_MS`, or LVGL's default). The static software sleep overlay does not use it.
 
 | Property | Value |
 |----------|-------|
 | **Values** | Whole milliseconds, `8` to `100`, or `0` to run savers at the global period |
-| **Default** | `16` |
+| **Default** | Unset: level 0 runs at 16 ms |
 | **Invalid** | Ignored with a warning |
-| **File** | `include/refresh_period_hold.h`, `src/ui/screensaver_manager.cpp` |
+| **File** | `include/refresh_period_hold.h`, `src/ui/screensaver_manager.cpp`, `src/ui/screensaver_base.cpp` |
 
 ```bash
 # Savers at the global period instead of 16 ms

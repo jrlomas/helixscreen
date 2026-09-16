@@ -33,13 +33,13 @@ constexpr uint64_t FNV_PRIME = 1099511628211ULL;
 
 // The saver seams: the only lines that change when a saver moves to another test access class.
 void seed_pipes(PipesScreensaver& ss, uint32_t seed) {
-    PipesScreensaverTestAccess::set_fixed_seed(ss, seed);
+    SaverTestAccess::set_fixed_seed(ss, seed);
 }
 lv_timer_t* pipes_timer(const PipesScreensaver& ss) {
-    return PipesScreensaverTestAccess::timer(ss);
+    return SaverTestAccess::timer(ss);
 }
 lv_obj_t* pipes_canvas(const PipesScreensaver& ss) {
-    return PipesScreensaverTestAccess::canvas(ss);
+    return SaverTestAccess::canvas(ss);
 }
 void seed_starfield(StarfieldScreensaver& ss, uint32_t seed) {
     StarfieldScreensaverTestAccess::set_fixed_seed(ss, seed);

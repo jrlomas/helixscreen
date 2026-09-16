@@ -445,14 +445,11 @@ APP_SRCS := $(filter-out $(wildcard $(SRC_DIR)/bluetooth/*.cpp),$(APP_SRCS))
 ifneq ($(ENABLE_GLES_3D),yes)
     APP_SRCS := $(filter-out $(SRC_DIR)/rendering/gcode_gles_renderer.cpp,$(APP_SRCS))
 endif
+# Screensaver sources: every saver, the parts they share and the manager
+SCREENSAVER_SRCS := $(SRC_DIR)/ui/ui_screensaver.cpp $(wildcard $(SRC_DIR)/ui/screensaver_*.cpp)
 # Exclude screensaver when not enabled
 ifneq ($(ENABLE_SCREENSAVER),yes)
-    APP_SRCS := $(filter-out $(SRC_DIR)/ui/ui_screensaver.cpp,$(APP_SRCS))
-    APP_SRCS := $(filter-out $(SRC_DIR)/ui/screensaver_manager.cpp,$(APP_SRCS))
-    APP_SRCS := $(filter-out $(SRC_DIR)/ui/screensaver_starfield.cpp,$(APP_SRCS))
-    APP_SRCS := $(filter-out $(SRC_DIR)/ui/screensaver_starfield_sim.cpp,$(APP_SRCS))
-    APP_SRCS := $(filter-out $(SRC_DIR)/ui/screensaver_pipes.cpp,$(APP_SRCS))
-    APP_SRCS := $(filter-out $(SRC_DIR)/ui/screensaver_bounce.cpp,$(APP_SRCS))
+    APP_SRCS := $(filter-out $(SCREENSAVER_SRCS),$(APP_SRCS))
 endif
 # Mock backends (enabled by default, disable with ENABLE_MOCKS=no for production)
 ENABLE_MOCKS ?= yes

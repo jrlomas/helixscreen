@@ -65,7 +65,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "pipes canvas allocation covers LVGL's stride-
 
     lv_draw_buf_t* cbuf = lv_canvas_get_draw_buf(find_screensaver_canvas());
     REQUIRE(cbuf != nullptr);
-    REQUIRE(PipesScreensaverTestAccess::draw_buf_size(ss) >= cbuf->data_size);
+    REQUIRE(SaverTestAccess::draw_buf_size(ss) >= cbuf->data_size);
 
     ss.stop();
     REQUIRE_FALSE(ss.is_active());

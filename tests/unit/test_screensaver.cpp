@@ -935,7 +935,8 @@ TEST_CASE_METHOD(LVGLTestFixture,
         ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
         ss.start();
         REQUIRE(ss.is_active());
-        check_overlay_draws_only_its_canvas(PipesAccess::overlay(ss), PipesAccess::canvas(ss));
+        check_overlay_draws_only_its_canvas(SaverTestAccess::overlay(ss),
+                                            SaverTestAccess::canvas(ss));
     }
 }
 
@@ -944,10 +945,10 @@ TEST_CASE_METHOD(LVGLTestFixture,
                  "[screensaver][screensaver_canvas]") {
     PipesScreensaver ss;
     ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
-    PipesAccess::set_fixed_seed(ss, 42);
+    SaverTestAccess::set_fixed_seed(ss, 42);
     ss.start();
     REQUIRE(ss.is_active());
-    lv_obj_t* canvas = PipesAccess::canvas(ss);
+    lv_obj_t* canvas = SaverTestAccess::canvas(ss);
     REQUIRE(canvas != nullptr);
     const lv_draw_buf_t* buf = lv_canvas_get_draw_buf(canvas);
     REQUIRE(buf != nullptr);
@@ -963,7 +964,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
         invalidated.areas.clear();
 
         lv_tick_inc(PIPES_STEP_MS);
-        run_timer(PipesAccess::timer(ss));
+        run_timer(SaverTestAccess::timer(ss));
 
         const PixelChanges changes = diff_canvas(before, buf, canvas_coords, invalidated.areas);
         REQUIRE(changes.changed > 0);
@@ -979,17 +980,17 @@ TEST_CASE_METHOD(LVGLTestFixture, "a pipes grid reset invalidates the whole canv
                  "[screensaver][screensaver_canvas]") {
     PipesScreensaver ss;
     ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
-    PipesAccess::set_fixed_seed(ss, 11);
+    SaverTestAccess::set_fixed_seed(ss, 11);
     ss.start();
     REQUIRE(ss.is_active());
-    lv_obj_t* canvas = PipesAccess::canvas(ss);
+    lv_obj_t* canvas = SaverTestAccess::canvas(ss);
     REQUIRE(canvas != nullptr);
     const lv_area_t canvas_coords = coords_of(canvas);
 
     PipesAccess::set_total_segments(ss, PipesAccess::max_segments() + 1);
     InvalidatedAreas invalidated(lv_obj_get_display(canvas));
     lv_tick_inc(PIPES_STEP_MS);
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     REQUIRE(PipesAccess::total_segments(ss) == 0);
 
     CHECK(std::any_of(invalidated.areas.begin(), invalidated.areas.end(),
@@ -1015,7 +1016,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
         ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
         ss.start();
         REQUIRE(ss.is_active());
-        lv_obj_t* canvas = PipesAccess::canvas(ss);
+        lv_obj_t* canvas = SaverTestAccess::canvas(ss);
         REQUIRE(canvas != nullptr);
         ss.stop();
         check_stopped_canvas_is_not_drawn(canvas);
@@ -1031,6 +1032,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
 #include "../test_helpers/screensaver_manager_test_access.h"
 #include "refresh_period_hold.h"
 #include "refresh_timing_env.h"
+#include "screensaver_base.h"
 
 namespace {
 
@@ -1074,7 +1076,7 @@ uint32_t running_saver_timer_period(ScreensaverType type) {
             static_cast<const StarfieldScreensaver&>(*active));
         break;
     case ScreensaverType::PIPES_3D:
-        timer = PipesScreensaverTestAccess::timer(static_cast<const PipesScreensaver&>(*active));
+        timer = SaverTestAccess::timer(static_cast<const PipesScreensaver&>(*active));
         break;
     case ScreensaverType::OFF:
         break;
@@ -1402,6 +1404,40 @@ TEST_CASE("Bouncing printer: the sprite box is the shape of the artwork",
         REQUIRE(w == 80);
         REQUIRE(h == 80);
     }
+}
+
+TEST_CASE_METHOD(
+    LVGLTestFixture,
+    "without HELIX_SCREENSAVER_REFR_PERIOD_MS the display refreshes at the saver's level period",
+    "[screensaver][refresh_period]") {
+    auto& mgr = ScreensaverManager::instance();
+    helix::ScopedTimerPeriods timers;
+    helix::ScopedEnv global{"HELIX_REFR_PERIOD_MS"};
+    helix::ScopedEnv scope{"HELIX_REFR_PERIOD_SCOPE"};
+    helix::ScopedEnv saver_period{"HELIX_SCREENSAVER_REFR_PERIOD_MS"};
+    setenv("HELIX_REFR_PERIOD_MS", "40", 1);
+    unsetenv("HELIX_REFR_PERIOD_SCOPE");
+    unsetenv("HELIX_SCREENSAVER_REFR_PERIOD_MS");
+    helix::apply_refresh_timing(helix::refresh_timing_from_env());
+    StopSaverOnExit stop_on_exit;
+    REQUIRE_FALSE(helix::active_refresh_period_hold().is_held());
+
+    mgr.start(ScreensaverType::PIPES_3D);
+    REQUIRE(mgr.is_active());
+    CHECK(default_refr_timer_period() == helix::ui::SAVER_FAST_PERIOD);
+    CHECK(anim_timer_period() == helix::ui::SAVER_FAST_PERIOD);
+
+    auto* pipes =
+        static_cast<helix::ui::SaverBase*>(helix::ScreensaverManagerTestAccess::active(mgr));
+    pipes->request_level(1);
+    CHECK(running_saver_timer_period(ScreensaverType::PIPES_3D) == 33);
+    CHECK(default_refr_timer_period() == 33);
+    CHECK(anim_timer_period() == 33);
+
+    mgr.stop();
+    CHECK_FALSE(helix::active_refresh_period_hold().is_held());
+    CHECK(default_refr_timer_period() == GLOBAL_PERIOD_MS);
+    CHECK(anim_timer_period() == GLOBAL_PERIOD_MS);
 }
 
 #endif // HELIX_ENABLE_SCREENSAVER

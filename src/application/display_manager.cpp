@@ -1041,8 +1041,34 @@ void RefreshPeriodHold::acquire() {
     take_timers();
 }
 
+void RefreshPeriodHold::follow(uint32_t saver_period_ms) {
+    if (m_count == 0 || saver_period_ms == 0) {
+        return;
+    }
+    m_saver_period_ms = saver_period_ms;
+    if (!lv_is_initialized()) {
+        return;
+    }
+    if (m_display == nullptr) {
+        // acquire() had no period to run at and left the timers alone.
+        take_timers();
+        return;
+    }
+    if (display_is_live(m_display)) {
+        if (lv_timer_t* refr = lv_display_get_refr_timer(m_display)) {
+            lv_timer_set_period(refr, saver_period_ms);
+        }
+    }
+    if (m_saved_anim) {
+        if (lv_timer_t* anim = lv_anim_get_timer()) {
+            lv_timer_set_period(anim, saver_period_ms);
+        }
+    }
+}
+
 void RefreshPeriodHold::take_timers() {
-    if (m_period_ms == 0 || !lv_is_initialized()) {
+    const uint32_t period_ms = effective_period();
+    if (period_ms == 0 || !lv_is_initialized()) {
         return;
     }
     lv_display_t* disp = lv_display_get_default();
@@ -1052,15 +1078,14 @@ void RefreshPeriodHold::take_timers() {
     }
     m_display = disp;
     m_saved_refr_period_ms = refr->period;
-    lv_timer_set_period(refr, m_period_ms);
+    lv_timer_set_period(refr, period_ms);
     if (lv_timer_t* anim = lv_anim_get_timer()) {
         m_saved_anim_period_ms = anim->period;
         m_saved_anim = true;
-        lv_timer_set_period(anim, m_period_ms);
+        lv_timer_set_period(anim, period_ms);
     }
-    spdlog::debug("[RefreshPeriodHold] Refresh period {} ms -> {} ms, main-loop floor {} ms "
-                  "(0 = the loop's own)",
-                  m_saved_refr_period_ms, m_period_ms, m_loop_min_sleep_ms);
+    spdlog::debug("[RefreshPeriodHold] Refresh period {} ms -> {} ms", m_saved_refr_period_ms,
+                  period_ms);
 }
 
 void RefreshPeriodHold::release() {
@@ -1068,6 +1093,7 @@ void RefreshPeriodHold::release() {
         return;
     }
     restore_timers();
+    m_saver_period_ms = 0;
 }
 
 void RefreshPeriodHold::rebase(const std::function<void()>& set_baseline) {

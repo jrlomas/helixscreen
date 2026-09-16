@@ -351,16 +351,14 @@ TEST_CASE_METHOD(LVGLTestFixture,
     CHECK(StarAccess::stars(ss) == first_frame);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "PipesScreensaver ticks at the display refresh period",
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "PipesScreensaver level 0: configured period, else 16 ms, with the refresh equal",
                  "[screensaver][screensaver_motion]") {
-    ScopedRefreshPeriod refresh(20);
-    PipesScreensaver ss;
-    ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
-
-    ss.start();
-    REQUIRE(ss.is_active());
-    REQUIRE(PipesAccess::timer(ss) != nullptr);
-    CHECK(PipesAccess::timer(ss)->period == 20);
+    const uint32_t configured_ms = GENERATE(as<uint32_t>{}, 0, 20);
+    INFO("configured period " << configured_ms << " ms");
+    const LevelZeroPeriods periods = level_zero_periods<PipesScreensaver>(configured_ms);
+    CHECK(periods.timer_ms == (configured_ms != 0 ? configured_ms : helix::ui::SAVER_FAST_PERIOD));
+    CHECK(periods.refresh_ms == periods.timer_ms);
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "PipesScreensaver grows one step per 100 ms of frame time",
@@ -369,8 +367,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "PipesScreensaver grows one step per 100 ms of
     ScreensaverStopOnExit<PipesScreensaver> stop_one{one_call};
     PipesScreensaver per_step;
     ScreensaverStopOnExit<PipesScreensaver> stop_per_step{per_step};
-    PipesAccess::set_fixed_seed(one_call, 77);
-    PipesAccess::set_fixed_seed(per_step, 77);
+    SaverTestAccess::set_fixed_seed(one_call, 77);
+    SaverTestAccess::set_fixed_seed(per_step, 77);
 
     one_call.start();
     per_step.start();
@@ -380,9 +378,9 @@ TEST_CASE_METHOD(LVGLTestFixture, "PipesScreensaver grows one step per 100 ms of
 
     for (int i = 0; i < 3; i++) {
         lv_tick_inc(100);
-        run_timer(PipesAccess::timer(per_step));
+        run_timer(SaverTestAccess::timer(per_step));
     }
-    run_timer(PipesAccess::timer(one_call));
+    run_timer(SaverTestAccess::timer(one_call));
 
     // A 300 ms gap grows each of the two starting pipes three times.
     const auto pipes = PipesAccess::pipes(one_call);
@@ -395,23 +393,23 @@ TEST_CASE_METHOD(LVGLTestFixture, "PipesScreensaver caps the steps one callback 
                  "[screensaver][screensaver_motion]") {
     PipesScreensaver ss;
     ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
-    PipesAccess::set_fixed_seed(ss, 5);
+    SaverTestAccess::set_fixed_seed(ss, 5);
     ss.start();
     REQUIRE(ss.is_active());
 
     // Four steps are due; three are drawn.
     lv_tick_inc(450);
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     CHECK(PipesAccess::pipes(ss)[0].segment_count == 3);
     CHECK(PipesAccess::pipes(ss)[1].segment_count == 3);
 
     // The fourth is dropped rather than owed to the next callback.
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     CHECK(PipesAccess::pipes(ss)[0].segment_count == 3);
 
     // The 50 ms left over still counts toward the next step.
     lv_tick_inc(50);
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     CHECK(PipesAccess::pipes(ss)[0].segment_count == 4);
 }
 
@@ -419,14 +417,14 @@ TEST_CASE_METHOD(LVGLTestFixture, "PipesScreensaver drops the steps still due wh
                  "[screensaver][screensaver_motion]") {
     PipesScreensaver ss;
     ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
-    PipesAccess::set_fixed_seed(ss, 11);
+    SaverTestAccess::set_fixed_seed(ss, 11);
     ss.start();
     REQUIRE(ss.is_active());
     PipesAccess::set_total_segments(ss, PipesAccess::max_segments() + 1);
 
     // 3.5 steps are due: the first resets the full grid, and the rest belong to the old scene.
     lv_tick_inc(350);
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     REQUIRE(PipesAccess::total_segments(ss) == 0);
     for (const auto& pipe : PipesAccess::pipes(ss)) {
         CHECK(pipe.segment_count == 0);
@@ -434,10 +432,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "PipesScreensaver drops the steps still due wh
 
     // The new scene's first step comes a full step after the reset.
     lv_tick_inc(60);
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     CHECK(PipesAccess::total_segments(ss) == 0);
     lv_tick_inc(40);
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     CHECK(PipesAccess::pipes(ss)[0].segment_count == 1);
 }
 
@@ -446,13 +444,13 @@ TEST_CASE_METHOD(LVGLTestFixture,
                  "[screensaver][screensaver_motion]") {
     PipesScreensaver ss;
     ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
-    PipesAccess::set_fixed_seed(ss, 3);
+    SaverTestAccess::set_fixed_seed(ss, 3);
 
     ss.start();
     REQUIRE(ss.is_active());
     const auto at_start = PipesAccess::pipes(ss);
     lv_tick_inc(250);
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     REQUIRE(PipesAccess::pipes(ss)[0].segment_count == 2);
 
     ss.stop();
@@ -465,10 +463,10 @@ TEST_CASE_METHOD(LVGLTestFixture,
 
     // Neither the 50 ms left from the first run nor the time spent stopped counts.
     lv_tick_inc(60);
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     CHECK(PipesAccess::total_segments(ss) == 0);
     lv_tick_inc(40);
-    run_timer(PipesAccess::timer(ss));
+    run_timer(SaverTestAccess::timer(ss));
     CHECK(PipesAccess::pipes(ss)[0].segment_count == 1);
 }
 
@@ -480,9 +478,9 @@ TEST_CASE_METHOD(LVGLTestFixture, "PipesScreensaver with the same seed replays t
     ScreensaverStopOnExit<PipesScreensaver> stop_b{b};
     PipesScreensaver other;
     ScreensaverStopOnExit<PipesScreensaver> stop_other{other};
-    PipesAccess::set_fixed_seed(a, 2024);
-    PipesAccess::set_fixed_seed(b, 2024);
-    PipesAccess::set_fixed_seed(other, 7);
+    SaverTestAccess::set_fixed_seed(a, 2024);
+    SaverTestAccess::set_fixed_seed(b, 2024);
+    SaverTestAccess::set_fixed_seed(other, 7);
 
     a.start();
     b.start();
@@ -496,8 +494,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "PipesScreensaver with the same seed replays t
     // The two grow in turn, so a random sequence they shared would steer them apart.
     for (int i = 0; i < 20; i++) {
         lv_tick_inc(100);
-        run_timer(PipesAccess::timer(a));
-        run_timer(PipesAccess::timer(b));
+        run_timer(SaverTestAccess::timer(a));
+        run_timer(SaverTestAccess::timer(b));
     }
     REQUIRE(PipesAccess::total_segments(a) > 20);
     CHECK(PipesAccess::same_scene(a, b));
