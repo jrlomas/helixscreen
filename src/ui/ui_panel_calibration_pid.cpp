@@ -320,6 +320,16 @@ void PIDCalibrationPanel::on_activate() {
 
     spdlog::debug("[PIDCal] on_activate()");
 
+    // A run still in flight owns this panel's state. Reactivation happens on
+    // waking from the screensaver too, and resetting there would drop the UI to
+    // idle under a live calibration - whose results on_mpc_result() then
+    // discards, because it only accepts them while the state says CALIBRATING.
+    if (state_ == State::CALIBRATING || state_ == State::MIGRATING) {
+        spdlog::info("[PIDCal] Reactivated during a run - keeping state {}",
+                     static_cast<int>(state_));
+        return;
+    }
+
     // Reset to idle state with default values
     set_state(State::IDLE);
     selected_heater_ = Heater::EXTRUDER;
@@ -373,14 +383,22 @@ void PIDCalibrationPanel::on_activate() {
     }
 }
 
-void PIDCalibrationPanel::on_deactivating(DeactivateReason) {
-    spdlog::debug("[PIDCal] on_deactivating()");
+void PIDCalibrationPanel::on_deactivating(DeactivateReason reason) {
+    spdlog::debug("[PIDCal] on_deactivating({})", deactivate_reason_name(reason));
 
     // Stop progress tracking
     stop_progress_tracking();
 
     // Teardown graph before deactivating
     teardown_pid_graph();
+
+    // An idle screen is not a walk-away: this panel stays on the stack and is
+    // reactivated on the next touch, so the run keeps its fan curve and its
+    // heaters and goes on reporting here. A calibration runs for minutes with
+    // nobody touching the screen, which is exactly when the screensaver fires.
+    if (reason == DeactivateReason::Suspended) {
+        return;
+    }
 
     // Turn off fan if it was running
     turn_off_fan();

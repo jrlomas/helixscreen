@@ -294,8 +294,12 @@ void ScrewsTiltPanel::on_activate() {
     }
 }
 
-void ScrewsTiltPanel::on_deactivating(DeactivateReason) {
-    if (state_ == State::PROBING) {
+void ScrewsTiltPanel::on_deactivating(DeactivateReason reason) {
+    // An idle screen is not a walk-away, so the probe keeps running - but the
+    // indicators below carry LV_ANIM_REPEAT_INFINITE rotations, and clearing
+    // them is what stops those. Leaving them spinning behind the screensaver
+    // would burn exactly the CPU the suspend exists to free.
+    if (state_ == State::PROBING && reason != DeactivateReason::Suspended) {
         // Cancel ongoing probe via Moonraker
         if (api_) {
             spdlog::info("[ScrewsTilt] Aborting probe on deactivate");
