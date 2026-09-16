@@ -6,9 +6,6 @@
 #include "screensaver_bounce.h"
 
 #include "ui_confetti.h"
-#include "ui_event_safety.h"
-#include "ui_timer_guard.h" // lv_timer_cancel_safe
-#include "ui_utils.h"
 
 #include "platform_capabilities.h"
 #include "printer_image_manager.h"
@@ -18,7 +15,6 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
-#include <chrono>
 #include <draw/lv_image_decoder_private.h>
 #include <string>
 
@@ -89,93 +85,54 @@ std::string resolve_sprite_path(int screen_w) {
 
 namespace helix {
 
-void BouncingPrinterScreensaver::start() {
-    if (active_) {
-        spdlog::debug("[Screensaver] Bouncing printer already active, ignoring start()");
-        return;
-    }
+bool BouncingPrinterScreensaver::on_start() {
+    spdlog::info("[Screensaver] Starting bouncing printer");
 
-    lv_display_t* disp = lv_display_get_default();
-    if (!disp) {
-        spdlog::warn("[Screensaver] No display available, cannot start bouncing printer");
-        return;
-    }
-
-    screen_w_ = lv_display_get_horizontal_resolution(disp);
-    screen_h_ = lv_display_get_vertical_resolution(disp);
+    screen_w_ = screen_w();
+    screen_h_ = screen_h();
 
     const int box = sprite_size_for(screen_w_, screen_h_);
     if (box <= 0) {
         spdlog::warn("[Screensaver] {}x{} leaves under {}px of travel, declining to bounce",
                      screen_w_, screen_h_, MIN_RANGE_PX);
-        return;
+        return false;
     }
 
     if (!decode_sprite()) {
-        return;
+        return false;
     }
     fit_sprite(box, src_w_, src_h_, sprite_w_, sprite_h_);
 
-    spdlog::info("[Screensaver] Starting bouncing printer");
+    spdlog::debug("[Screensaver] Bouncing printer sprite ready ({}x{}, {}x{} sprite)", screen_w_,
+                  screen_h_, sprite_w_, sprite_h_);
 
-    const auto caps = helix::PlatformCapabilities::detect();
-    tick_period_ms_ = helix::ui::screensaver_timer_period_ms();
     elapsed_ms_ = 0;
-    clock_.reset(lv_tick_get());
-
-    rng_.seed(static_cast<std::minstd_rand::result_type>(
-        std::chrono::steady_clock::now().time_since_epoch().count()));
-
     range_x_ = static_cast<float>(screen_w_ - sprite_w_);
     range_y_ = static_cast<float>(screen_h_ - sprite_h_);
+    speed_ = SPEED_FRACTION * static_cast<float>(std::min(screen_w_, screen_h_));
 
-    create_overlay();
+    img_ = lv_image_create(overlay().obj());
+    lv_image_set_src(img_, decoded_);
+    // CONTAIN makes the object's box and the sprite's footprint the same
+    // rectangle, which is what the bounce arithmetic addresses. Set once here:
+    // it forces a layout pass, and this overlay is built fresh on lv_layer_top()
+    // rather than inside a live rebuild (#983/#1025).
+    lv_image_set_inner_align(img_, LV_IMAGE_ALIGN_CONTAIN);
+    lv_obj_set_size(img_, sprite_w_, sprite_h_);
+    lv_obj_set_pos(img_, 0, 0);
+
     seed_motion();
     apply_tint();
-
-    timer_ = lv_timer_create(tick_cb, tick_period_ms_, this);
-
-    active_ = true;
-    spdlog::debug(
-        "[Screensaver] Bouncing printer started ({}x{}, {}x{} sprite, {}ms tick, {} tier)",
-        screen_w_, screen_h_, sprite_w_, sprite_h_, tick_period_ms_,
-        helix::platform_tier_to_string(caps.tier));
+    return true;
 }
 
-BouncingPrinterScreensaver::~BouncingPrinterScreensaver() {
-    // ScreensaverManager owns these in a unique_ptr and does not stop the active
-    // one before destroying it, so a screensaver torn down while running would
-    // otherwise leave tick_cb armed on a freed `this` (#750, #751, #1173).
-    cancel_timer();
-}
-
-void BouncingPrinterScreensaver::cancel_timer() {
-    if (timer_) {
-        helix::ui::lv_timer_cancel_safe(timer_);
-        timer_ = nullptr;
-    }
-}
-
-void BouncingPrinterScreensaver::stop() {
-    if (!active_) {
-        return;
-    }
-
-    spdlog::info("[Screensaver] Stopping bouncing printer");
-
-    cancel_timer();
-
-    // Async delete — stop() runs inside lv_timer_handler (via check_display_sleep),
-    // so synchronous deletion corrupts LVGL's event linked list (#316).
-    helix::ui::safe_delete_deferred(overlay_);
-    img_ = nullptr; // deleted as child of overlay
-
+void BouncingPrinterScreensaver::on_stop() {
+    // The sprite is a child of the overlay the base has already queued for deletion.
+    img_ = nullptr;
     free_sprite();
-
     prev_x_ = INT32_MIN;
     prev_y_ = INT32_MIN;
     corner_flash_ticks_ = 0;
-    active_ = false;
 }
 
 bool BouncingPrinterScreensaver::decode_sprite() {
@@ -218,46 +175,19 @@ void BouncingPrinterScreensaver::free_sprite() {
     }
 }
 
-void BouncingPrinterScreensaver::create_overlay() {
-    overlay_ = lv_obj_create(lv_layer_top());
-    lv_obj_set_size(overlay_, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(overlay_, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(overlay_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(overlay_, 0, 0);
-    lv_obj_set_style_pad_all(overlay_, 0, 0);
-    lv_obj_set_style_radius(overlay_, 0, 0);
-    // Clickable to absorb wake touch (prevents it from triggering underlying UI)
-    // LVGL still registers the activity for inactivity tracking
-    lv_obj_add_flag(overlay_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(overlay_, LV_OBJ_FLAG_SCROLLABLE);
-
-    img_ = lv_image_create(overlay_);
-    lv_image_set_src(img_, decoded_);
-    // CONTAIN makes the object's box and the sprite's footprint the same
-    // rectangle, which is what the bounce arithmetic addresses. Set once here:
-    // it forces a layout pass, and this overlay is built fresh on lv_layer_top()
-    // rather than inside a live rebuild (#983/#1025).
-    lv_image_set_inner_align(img_, LV_IMAGE_ALIGN_CONTAIN);
-    lv_obj_set_size(img_, sprite_w_, sprite_h_);
-    lv_obj_set_pos(img_, 0, 0);
-}
-
 void BouncingPrinterScreensaver::seed_motion() {
-    const float narrow = static_cast<float>(std::min(screen_w_, screen_h_));
-    const float speed = SPEED_FRACTION * narrow;
-
     // Start anywhere on the field so consecutive runs do not trace the same path.
-    const float start_x = unit_random(rng_) * range_x_;
-    const float start_y = unit_random(rng_) * range_y_;
+    const float start_x = unit_random(rng()) * range_x_;
+    const float start_y = unit_random(rng()) * range_y_;
 
     for (int attempt = 0; attempt < SEED_ATTEMPTS; ++attempt) {
-        const float deg = ANGLE_MIN_DEG + unit_random(rng_) * ANGLE_SPAN_DEG;
+        const float deg = ANGLE_MIN_DEG + unit_random(rng()) * ANGLE_SPAN_DEG;
         const float theta = deg * (static_cast<float>(M_PI) / 180.0f);
-        const float sx = (unit_random(rng_) < 0.5f) ? -1.0f : 1.0f;
-        const float sy = (unit_random(rng_) < 0.5f) ? -1.0f : 1.0f;
+        const float sx = (unit_random(rng()) < 0.5f) ? -1.0f : 1.0f;
+        const float sy = (unit_random(rng()) < 0.5f) ? -1.0f : 1.0f;
 
-        vx_ = speed * std::cos(theta) * sx;
-        vy_ = speed * std::sin(theta) * sy;
+        vx_ = speed_ * std::cos(theta) * sx;
+        vy_ = speed_ * std::sin(theta) * sy;
 
         if (range_x_ <= 0.0f || range_y_ <= 0.0f) {
             break;
@@ -272,11 +202,6 @@ void BouncingPrinterScreensaver::seed_motion() {
     y0_ = start_y;
     prev_fold_x_ = fold_index(x0_, range_x_);
     prev_fold_y_ = fold_index(y0_, range_y_);
-
-    // Half a tick of travel — wide enough that a corner is not missed between
-    // frames, tight enough that a plain wall hit is not mistaken for one.
-    const float per_tick = speed * static_cast<float>(tick_period_ms_) / 1000.0f;
-    corner_tol_ = std::max(4.0f, per_tick / 2.0f);
 }
 
 void BouncingPrinterScreensaver::rebase(int screen_w, int screen_h) {
@@ -294,6 +219,7 @@ void BouncingPrinterScreensaver::rebase(int screen_w, int screen_h) {
     fit_sprite(box, src_w_, src_h_, sprite_w_, sprite_h_);
     range_x_ = static_cast<float>(screen_w_ - sprite_w_);
     range_y_ = static_cast<float>(screen_h_ - sprite_h_);
+    speed_ = SPEED_FRACTION * static_cast<float>(std::min(screen_w_, screen_h_));
 
     if (img_) {
         lv_obj_set_size(img_, sprite_w_, sprite_h_);
@@ -323,20 +249,15 @@ void BouncingPrinterScreensaver::apply_tint() {
     lv_obj_set_style_image_recolor_opa(img_, RECOLOR_OPA, 0);
 }
 
-void BouncingPrinterScreensaver::tick_cb(lv_timer_t* timer) {
-    LVGL_SAFE_EVENT_CB_BEGIN("[BouncingPrinterScreensaver] tick_cb");
-
-    auto* self = static_cast<BouncingPrinterScreensaver*>(lv_timer_get_user_data(timer));
-    if (!self || !self->active_) {
-        return;
-    }
-    self->tick();
-
-    LVGL_SAFE_EVENT_CB_END();
+int BouncingPrinterScreensaver::confetti_count(size_t level) const {
+    return level < FLASH_ONLY_LEVEL ? CORNER_CONFETTI_PARTICLES : 0;
 }
 
-void BouncingPrinterScreensaver::tick() {
-    elapsed_ms_ += clock_.advance(lv_tick_get());
+// The sprite is an LVGL image, which invalidates its own old and new areas when
+// it moves, so a frame adds nothing to the dirty list.
+void BouncingPrinterScreensaver::on_frame(uint32_t dt_ms,
+                                          std::vector<helix::ui::DirtyRect>& /*dirty*/) {
+    elapsed_ms_ += dt_ms;
 
     lv_display_t* disp = lv_display_get_default();
     if (disp) {
@@ -366,27 +287,33 @@ void BouncingPrinterScreensaver::tick() {
         apply_tint();
     }
 
-    const bool corner = is_corner_hit(bounced_x, bounced_y, x, y, range_x_, range_y_, corner_tol_);
+    // Half a frame of travel — wide enough that a corner is not missed between
+    // frames at whatever period the running level allows, tight enough that a
+    // plain wall hit is not mistaken for one.
+    const float tol = std::max(4.0f, speed_ * static_cast<float>(dt_ms) / 2000.0f);
+    const bool corner = is_corner_hit(bounced_x, bounced_y, x, y, range_x_, range_y_, tol);
     if (corner) {
         spdlog::info("[Screensaver] Bouncing printer hit the corner");
         corner_flash_ticks_ = CORNER_FLASH_TICKS;
         lv_obj_set_style_bg_color(
-            overlay_, lv_color_mix(BOUNCE_TINTS[color_index_], lv_color_black(), CORNER_FLASH_MIX),
-            0);
+            overlay().obj(),
+            lv_color_mix(BOUNCE_TINTS[color_index_], lv_color_black(), CORNER_FLASH_MIX), 0);
 
-        // The particle system is 60 objects repositioned and resized every
-        // frame. That is the cost profile BASIC and EMBEDDED tiers had the
-        // screensaver taken away over, so those get the flash alone.
-        if (helix::PlatformCapabilities::detect().supports_animations) {
+        // The particle system is dozens of objects repositioned and resized
+        // every frame. That is the cost profile BASIC and EMBEDDED tiers had the
+        // screensaver taken away over, so boards that cannot animate and the
+        // ladder's lowest rung get the flash alone.
+        const int particles = confetti_count(level());
+        if (particles > 0 && helix::PlatformCapabilities::detect().supports_animations) {
             // ui_confetti deletes its own container once the last particle dies, so a
             // handle kept across bursts is dangling by the next corner. Each burst gets
             // its own, and the overlay's deferred delete reaps whatever is still alive.
-            if (lv_obj_t* confetti = ui_confetti_create(overlay_)) {
-                ui_confetti_burst(confetti, CORNER_CONFETTI_PARTICLES);
+            if (lv_obj_t* confetti = ui_confetti_create(overlay().obj())) {
+                ui_confetti_burst(confetti, particles);
             }
         }
     } else if (corner_flash_ticks_ > 0 && --corner_flash_ticks_ == 0) {
-        lv_obj_set_style_bg_color(overlay_, lv_color_black(), 0);
+        lv_obj_set_style_bg_color(overlay().obj(), lv_color_black(), 0);
     }
 
     const int32_t px = static_cast<int32_t>(std::lround(x));

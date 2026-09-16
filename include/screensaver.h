@@ -58,16 +58,6 @@ inline uint32_t screensaver_canvas_stride_bytes(int32_t w, lv_color_format_t cf)
     return lv_draw_buf_width_to_stride(static_cast<uint32_t>(w), cf);
 }
 
-/**
- * @brief Period for a screensaver's frame timer: the default display's refresh period
- *
- * A saver ticking faster than the display refreshes computes frames nobody sees, and one
- * ticking slower moves in visible steps. LV_DEF_REFR_PERIOD when there is no display or
- * its refresh timer has been deleted. Only the bouncing printer, which is not on SaverBase,
- * still reads this.
- */
-uint32_t screensaver_timer_period_ms();
-
 class SaverBase;
 struct BoardFacts;
 
@@ -193,9 +183,6 @@ class ScreensaverManager {
     /** @brief Find screensaver instance by type, or nullptr */
     helix::ui::SaverBase* find(ScreensaverType type) const;
 
-    /** @brief The bouncing printer, until it moves onto SaverBase */
-    Screensaver* find_not_on_base(ScreensaverType type) const;
-
     /// Level, too-heavy mark and gating a run of `saver` starts with. Records the board and
     /// version.
     StartPlan plan_start(const helix::ui::SaverBase& saver, const helix::ui::ScreensaverInfo& info);
@@ -227,11 +214,7 @@ class ScreensaverManager {
     void release_refresh_period();
 
     std::vector<std::unique_ptr<helix::ui::SaverBase>> screensavers_;
-    // The bouncing printer is not on SaverBase yet, so the gate cannot measure it: it runs
-    // ungated and stores no level.
-    std::unique_ptr<Screensaver> bounce_saver_;
     helix::ui::SaverBase* active_ = nullptr;
-    Screensaver* active_unbased_ = nullptr;
     const helix::ui::ScreensaverInfo* active_info_ = nullptr;
     helix::ui::SaverOverlay black_screen_;
     ScreensaverType black_screen_type_ = ScreensaverType::OFF;

@@ -395,10 +395,9 @@ TEST_CASE_METHOD(LVGLTestFixture, "every registered saver this build draws start
         }
         mgr.start(info.type);
         CHECK(mgr.is_active());
-        const bool on_base = helix::ScreensaverManagerTestAccess::active(mgr) != nullptr;
-        const bool unbased = helix::ScreensaverManagerTestAccess::active_unbased(mgr) != nullptr;
-        CHECK((on_base || unbased)); // the bouncing printer runs off SaverBase
-        started += on_base || unbased ? 1 : 0;
+        // Every registered saver runs on SaverBase, so the gate can measure it.
+        CHECK(helix::ScreensaverManagerTestAccess::active(mgr) != nullptr);
+        started += 1;
         mgr.stop();
     }
     CHECK(started > 0);

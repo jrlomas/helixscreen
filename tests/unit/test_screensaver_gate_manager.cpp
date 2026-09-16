@@ -168,6 +168,35 @@ TEST_CASE_METHOD(
     CHECK(gate.running()->level() == 1);
 }
 
+TEST_CASE_METHOD(LVGLTestFixture, "the bouncing printer runs under the gate like every other saver",
+                 "[screensaver][screensaver_gate]") {
+    GateHarness gate;
+    setenv("HELIX_SCREENSAVER_BUDGET_PCT", "20", 1);
+    gate.run(10.0, 0.0);
+    gate.mgr.start(ScreensaverType::BOUNCING_PRINTER);
+    // The manager holds the bouncing printer in its gated saver list: active() is what
+    // stayed nullptr while it ran off SaverBase.
+    helix::ui::SaverBase* bounce = gate.running();
+    REQUIRE(bounce != nullptr);
+    CHECK(bounce->type() == ScreensaverType::BOUNCING_PRINTER);
+    CHECK(bounce->level() == 0);
+
+    gate.run(0.75, 0.9); // the warm-up second
+    CHECK(gate.running()->level() == 0);
+    gate.run(5.5, 0.5);
+    REQUIRE(gate.running()->level() == 1);
+    CHECK(SaverTestAccess::timer(*gate.running())->period == 33);
+    const std::optional<SaverLevelEntry> entry = gate.stored("bounce");
+    REQUIRE(entry.has_value());
+    CHECK(entry->level == 1);
+    CHECK_FALSE(entry->too_heavy);
+
+    gate.mgr.stop();
+    gate.mgr.start(ScreensaverType::BOUNCING_PRINTER);
+    REQUIRE(gate.running() != nullptr);
+    CHECK(gate.running()->level() == 1);
+}
+
 TEST_CASE_METHOD(
     LVGLTestFixture,
     "over budget at the lowest level stores the board as too heavy and shows a black screen",

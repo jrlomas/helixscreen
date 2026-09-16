@@ -7,7 +7,6 @@
 #include "config.h"
 #include "display_settings_manager.h"
 #include "helix_version.h"
-#include "lvgl/src/misc/lv_timer_private.h" // lv_timer_t::period; LVGL has no period getter
 #include "platform_capabilities.h"
 #include "refresh_period_hold.h"
 #include "screen_hide_hold.h"
@@ -22,12 +21,6 @@
 #include <spdlog/spdlog.h>
 
 #include <utility>
-
-uint32_t helix::ui::screensaver_timer_period_ms() {
-    lv_display_t* disp = lv_display_get_default();
-    const lv_timer_t* refr = disp ? lv_display_get_refr_timer(disp) : nullptr;
-    return refr ? refr->period : LV_DEF_REFR_PERIOD;
-}
 
 namespace helix {
 
@@ -62,8 +55,8 @@ ScreensaverManager::ScreensaverManager() : cpu_clock_(helix::ui::read_process_cp
     screensavers_.push_back(std::make_unique<FlyingToasterScreensaver>());
     screensavers_.push_back(std::make_unique<StarfieldScreensaver>());
     screensavers_.push_back(std::make_unique<PipesScreensaver>());
+    screensavers_.push_back(std::make_unique<helix::BouncingPrinterScreensaver>());
     screensavers_.push_back(std::make_unique<helix::ui::FireworksScreensaver>());
-    bounce_saver_ = std::make_unique<helix::BouncingPrinterScreensaver>();
 }
 
 ScreensaverManager::~ScreensaverManager() = default;
@@ -79,9 +72,7 @@ void ScreensaverManager::start(ScreensaverType type) {
     }
 
     const bool already_running =
-        (active_ && active_->type() == type && active_->is_active()) ||
-        (active_unbased_ && active_unbased_->type() == type && active_unbased_->is_active()) ||
-        black_screen_type_ == type;
+        (active_ && active_->type() == type && active_->is_active()) || black_screen_type_ == type;
     if (already_running) {
         return;
     }
@@ -93,24 +84,8 @@ void ScreensaverManager::start(ScreensaverType type) {
     helix::ui::SaverBase* saver = find(type);
     const helix::ui::ScreensaverInfo* info = helix::ui::find_screensaver(type);
     if (!saver || !info) {
-        // The bouncing printer is not on SaverBase: it runs ungated and stores no level.
-        Screensaver* bounce = find_not_on_base(type);
-        if (bounce && info) {
-            hold_refresh_period();
-            bounce->start();
-            if (bounce->is_active()) {
-                active_unbased_ = bounce;
-                hold_screen();
-                spdlog::info("[ScreensaverManager] Started screensaver type {}",
-                             static_cast<int>(type));
-                return;
-            }
-            spdlog::warn("[ScreensaverManager] Screensaver type {} did not start",
-                         static_cast<int>(type));
-        } else {
-            spdlog::warn("[ScreensaverManager] No screensaver registered for type {}",
-                         static_cast<int>(type));
-        }
+        spdlog::warn("[ScreensaverManager] No screensaver registered for type {}",
+                     static_cast<int>(type));
         release_screen();
         release_refresh_period();
         return;
@@ -163,12 +138,6 @@ void ScreensaverManager::end_current() {
         active_ = nullptr;
         active_info_ = nullptr;
     }
-    if (active_unbased_) {
-        active_unbased_->stop();
-        spdlog::info("[ScreensaverManager] Stopped screensaver type {}",
-                     static_cast<int>(active_unbased_->type()));
-        active_unbased_ = nullptr;
-    }
     if (black_screen_type_ != ScreensaverType::OFF) {
         black_screen_.destroy();
         spdlog::info("[ScreensaverManager] Stopped screensaver type {} (black screen)",
@@ -179,8 +148,7 @@ void ScreensaverManager::end_current() {
 }
 
 bool ScreensaverManager::is_active() const {
-    return (active_ && active_->is_active()) || (active_unbased_ && active_unbased_->is_active()) ||
-           black_screen_type_ != ScreensaverType::OFF;
+    return (active_ && active_->is_active()) || black_screen_type_ != ScreensaverType::OFF;
 }
 
 ScreensaverType ScreensaverManager::configured_type() {
@@ -193,13 +161,6 @@ helix::ui::SaverBase* ScreensaverManager::find(ScreensaverType type) const {
         if (saver->type() == type) {
             return saver.get();
         }
-    }
-    return nullptr;
-}
-
-Screensaver* ScreensaverManager::find_not_on_base(ScreensaverType type) const {
-    if (bounce_saver_ && bounce_saver_->type() == type) {
-        return bounce_saver_.get();
     }
     return nullptr;
 }
@@ -269,11 +230,6 @@ void ScreensaverManager::on_idle_check_tick() {
     last_sample_ns_ = now.wall_ns;
     sampled_ = true;
 
-    if (active_unbased_) {
-        // The bouncing printer is not on SaverBase, so the gate cannot measure it; its work
-        // must not feed the idle baseline either.
-        return;
-    }
     if (!active_ || !active_->is_active()) {
         if (black_screen_type_ == ScreensaverType::OFF) {
             baseline_.add(now);

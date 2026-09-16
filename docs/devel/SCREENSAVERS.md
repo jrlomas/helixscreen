@@ -18,7 +18,7 @@ This doc is the map: which file owns what, how the gate decides, and how to add 
 | `include/screensaver_gate.h`, `include/screensaver_cpu_clock.h` | Budget, decision, idle baseline, windows, environment switches, the CPU clock seam |
 | `include/screensaver_level_store.h` | Board fingerprint and the stored level per saver |
 | `include/screensaver.h`, `src/ui/screensaver_manager.cpp` | `ScreensaverManager`: factories, holds, the gate, the black-screen fallback |
-| `include/ui_screensaver.h`, `include/screensaver_starfield.h`, `include/screensaver_pipes.h`, `include/screensaver_fireworks.h` | The savers |
+| `include/ui_screensaver.h`, `include/screensaver_starfield.h`, `include/screensaver_pipes.h`, `include/screensaver_bounce.h`, `include/screensaver_fireworks.h` | The savers |
 | `scripts/screensaver-perf/` | Measuring a saver on a real board |
 
 ## The foundation
@@ -34,8 +34,9 @@ opens `SaverCanvas::begin_layer()`, marks what it draws with `mark_dirty()` and 
 Every ladder starts at 16 ms (`SAVER_FAST_PERIOD`, one refresh of a 60 Hz panel), or at
 `HELIX_SCREENSAVER_REFR_PERIOD_MS` when that is set for manual testing
 (`SaverBase::level_period_ms`); levels 1 and up keep their declared periods either way. Starfield
-and pipes then run at 33 ms; toasters at 33 ms with every sprite, then 33 ms with ten; fireworks
-per `FIREWORKS_LEVELS`. While a saver runs, `helix::RefreshPeriodHold` refreshes the display at
+and pipes then run at 33 ms; toasters at 33 ms with every sprite, then 33 ms with ten; the
+bouncing printer at 33 ms, then 33 ms with its corner flash but no confetti; fireworks per
+`FIREWORKS_LEVELS`. While a saver runs, `helix::RefreshPeriodHold` refreshes the display at
 the saver's current period (`follow`), so the display and the saver stay equal at every level. Device measurements assume the pacing that keeps 16 ms even: EGL vsync and a 1 ms
 main-loop floor, which every device run sets explicitly (`scripts/screensaver-perf/arm_measure.sh`).
 

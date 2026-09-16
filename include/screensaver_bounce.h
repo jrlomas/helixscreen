@@ -5,13 +5,15 @@
 
 #ifdef HELIX_ENABLE_SCREENSAVER
 
-#include "screensaver.h"
+#include "screensaver_base.h"
 #include "screensaver_motion.h"
 
 #include <cmath>
 #include <cstdint>
 #include <lvgl.h>
+#include <optional>
 #include <random>
+#include <vector>
 
 namespace helix::screensaver_bounce {
 
@@ -75,56 +77,60 @@ namespace helix {
  *
  * The printer this display is attached to drifts across a black field and
  * reflects off the edges, changing tint on every wall. Landing a true corner
- * earns a celebration.
+ * earns a celebration: the backdrop flashes and, above the ladder's lowest
+ * level on a board that animates, a confetti burst.
  *
- * One sprite on one lv_timer. Position is computed from elapsed time rather
- * than integrated per frame, matching the rest of the subsystem.
+ * Position is computed from elapsed time rather than integrated per frame,
+ * matching the rest of the subsystem, so a level that changes the frame period
+ * changes nothing on screen but the frame rate.
  */
-class BouncingPrinterScreensaver : public Screensaver {
+class BouncingPrinterScreensaver : public helix::ui::SaverBase {
   public:
     BouncingPrinterScreensaver() = default;
-    ~BouncingPrinterScreensaver() override;
-
     BouncingPrinterScreensaver(const BouncingPrinterScreensaver&) = delete;
     BouncingPrinterScreensaver& operator=(const BouncingPrinterScreensaver&) = delete;
 
-    void start() override;
-    void stop() override;
-    bool is_active() const override {
-        return active_;
-    }
     ScreensaverType type() const override {
         return ScreensaverType::BOUNCING_PRINTER;
     }
 
+  protected:
+    /// The sprite is an LVGL image on the overlay; there is no canvas.
+    std::optional<lv_color_format_t> canvas_format() const override {
+        return std::nullopt;
+    }
+    bool on_start() override;
+    void on_frame(uint32_t dt_ms, std::vector<helix::ui::DirtyRect>& dirty) override;
+    void on_stop() override;
+    size_t ladder_size() const override {
+        return sizeof(LEVEL_PERIODS_MS) / sizeof(LEVEL_PERIODS_MS[0]);
+    }
+    uint32_t ladder_period_ms(size_t level) const override {
+        return LEVEL_PERIODS_MS[level];
+    }
+
   private:
+    /// Frame period per level: 16 ms with confetti corners, 33 ms with confetti corners, 33 ms
+    /// with the corner flash alone.
+    static constexpr uint32_t LEVEL_PERIODS_MS[] = {helix::ui::SAVER_FAST_PERIOD, 33, 33};
+    /// First level that celebrates a corner with the flash alone.
+    static constexpr size_t FLASH_ONLY_LEVEL = 2;
+
     /// Decode the active printer image into a persistent draw buffer
     bool decode_sprite();
     void free_sprite();
-    void create_overlay();
     /// Pick a velocity whose path is not a short repeating loop
     void seed_motion();
     /// Recompute travel ranges after a resolution change without teleporting
     void rebase(int screen_w, int screen_h);
     void apply_tint();
+    /// Confetti particles a corner releases at `level`: full bursts, none on the flash-only rung.
+    int confetti_count(size_t level) const;
 
-    static void tick_cb(lv_timer_t* timer);
-    void tick();
-
-    /// Shared by stop() and the destructor — a timer cancelled only in stop()
-    /// stays armed on a freed `this` on any teardown that skips it.
-    void cancel_timer();
-
-    bool active_ = false;
-
-    lv_obj_t* overlay_ = nullptr;
     lv_obj_t* img_ = nullptr;
-    lv_timer_t* timer_ = nullptr;
     lv_draw_buf_t* decoded_ = nullptr;
 
-    uint32_t tick_period_ms_ = 50;
     uint32_t elapsed_ms_ = 0;
-    helix::ui::screensaver::MotionClock clock_;
 
     int screen_w_ = 0;
     int screen_h_ = 0;
@@ -132,6 +138,9 @@ class BouncingPrinterScreensaver : public Screensaver {
     int sprite_h_ = 0;
     int32_t src_w_ = 0;
     int32_t src_h_ = 0;
+
+    // Speed (px/s) the path travels, shared by both axes
+    float speed_ = 0.0f;
 
     // Travel range per axis: screen extent less the sprite footprint
     float range_x_ = 0.0f;
@@ -148,11 +157,8 @@ class BouncingPrinterScreensaver : public Screensaver {
     int32_t prev_x_ = INT32_MIN;
     int32_t prev_y_ = INT32_MIN;
 
-    float corner_tol_ = 4.0f;
     int color_index_ = 0;
     int corner_flash_ticks_ = 0;
-
-    std::minstd_rand rng_;
 };
 
 } // namespace helix

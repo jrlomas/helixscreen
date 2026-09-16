@@ -1242,6 +1242,17 @@ TEST_CASE_METHOD(LVGLTestFixture, "BouncingPrinterScreensaver creates overlay on
     REQUIRE(children_final <= children_after);
 }
 
+TEST_CASE_METHOD(
+    LVGLTestFixture,
+    "BouncingPrinterScreensaver level 0: configured period, else 16 ms, with the refresh equal",
+    "[screensaver][screensaver_motion]") {
+    const uint32_t configured_ms = GENERATE(as<uint32_t>{}, 0, 20);
+    INFO("configured period " << configured_ms << " ms");
+    const LevelZeroPeriods periods = level_zero_periods<BouncingPrinterScreensaver>(configured_ms);
+    CHECK(periods.timer_ms == (configured_ms != 0 ? configured_ms : helix::ui::SAVER_FAST_PERIOD));
+    CHECK(periods.refresh_ms == periods.timer_ms);
+}
+
 // The motion is a pure function of elapsed time, so the parts that decide where
 // the sprite is and whether it just hit something are testable without a display.
 
@@ -1510,6 +1521,21 @@ TEST_CASE_METHOD(LVGLTestFixture,
         CHECK(ss.level_count() == 2);
         CHECK(SaverTestAccess::timer(ss)->period == helix::ui::SAVER_FAST_PERIOD);
         ss.request_level(1);
+        CHECK(SaverTestAccess::timer(ss)->period == 33);
+    }
+
+    SECTION("bouncing printer") {
+        BouncingPrinterScreensaver ss;
+        ScreensaverStopOnExit<BouncingPrinterScreensaver> stop_on_exit{ss};
+        ss.start();
+        REQUIRE(ss.is_active());
+        CHECK(ss.level_count() == 3);
+        CHECK(SaverTestAccess::timer(ss)->period == helix::ui::SAVER_FAST_PERIOD);
+        ss.request_level(1);
+        CHECK(ss.level() == 1);
+        CHECK(SaverTestAccess::timer(ss)->period == 33);
+        ss.request_level(2);
+        CHECK(ss.level() == 2);
         CHECK(SaverTestAccess::timer(ss)->period == 33);
     }
 }
