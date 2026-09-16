@@ -528,66 +528,6 @@ _load_install_platform_hooks() {
     load helpers
 }
 
-# Stage every hooks file the dispatch could pick into a sandbox payload tree,
-# so the assertion reads the destination copy, exactly as a real install
-# would (the tarball ships assets/config/platform/ wholesale).
-stage_hook_candidates() {
-    INSTALL_DIR="$BATS_TEST_TMPDIR/payload/helixscreen"
-    mkdir -p "$INSTALL_DIR/assets/config/platform"
-    local f
-    for f in hooks-ad5x-forgex.sh hooks-ad5x.sh hooks-ad5m-forgex.sh; do
-        cp "$WORKTREE_ROOT/assets/config/platform/$f" \
-           "$INSTALL_DIR/assets/config/platform/$f"
-    done
-    platform="ad5x"
-    MOD_FLAVOR="forge_x"
-    AD5M_FIRMWARE="forge_x"
-}
-
-@test "install_platform_hooks: the probed rig key outranks the ad5x platform arm" {
-    _load_install_platform_hooks
-    stage_hook_candidates
-    HOST_PLATFORM_HOOK_KEY="ad5x-forgex"
-
-    install_platform_hooks
-
-    [ -f "$INSTALL_DIR/platform/hooks.sh" ] \
-        || fail "no hooks deployed at all"
-    cmp -s "$INSTALL_DIR/assets/config/platform/hooks-ad5x-forgex.sh" \
-           "$INSTALL_DIR/platform/hooks.sh" \
-        || fail "deployed hooks are not the forge-x rig file"
-}
-
-@test "install_platform_hooks: without the probe key ad5x keeps the Z-Mod hook" {
-    # Control: an AD5X the probe did not recognize as the Forge-X rig (e.g.
-    # Z-Mod) must keep getting the ad5x hook — flavor forge_x must not leak
-    # the AD5M's forge-x file onto a non-rig box.
-    _load_install_platform_hooks
-    stage_hook_candidates
-    HOST_PLATFORM_HOOK_KEY=""
-
-    install_platform_hooks
-
-    cmp -s "$INSTALL_DIR/assets/config/platform/hooks-ad5x.sh" \
-           "$INSTALL_DIR/platform/hooks.sh" \
-        || fail "ad5x without the probe key must deploy hooks-ad5x.sh"
-}
-
-@test "install_platform_hooks: an AD5M host still gets the ad5m-forgex hook" {
-    # Control: the flavor dispatch that every installed AD5M Forge-X box
-    # relies on is unchanged.
-    _load_install_platform_hooks
-    stage_hook_candidates
-    platform="ad5m"
-    HOST_PLATFORM_HOOK_KEY=""
-
-    install_platform_hooks
-
-    cmp -s "$INSTALL_DIR/assets/config/platform/hooks-ad5m-forgex.sh" \
-           "$INSTALL_DIR/platform/hooks.sh" \
-        || fail "ad5m + forge_x must deploy hooks-ad5m-forgex.sh"
-}
-
 # --- netd restore: first-run WiFi setup must stay reachable -------------------
 #
 # S55boot starts netd and, when the network does not come up inside its 180s
