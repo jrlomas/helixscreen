@@ -44,6 +44,36 @@ std::string json_string_member(const json& obj, const char* key) {
     return it->get<std::string>();
 }
 
+/// The configured LED strips, in precedence order: the live key LedController
+/// persists (leds/selected_strips), then the legacy keys (leds/selected array,
+/// leds/strip single string). Empty when no LED is configured. Both validators
+/// ask this one question through here — a configured LED must read as
+/// configured whichever key it was saved under.
+std::vector<std::string> configured_led_strips(Config* config) {
+    std::vector<std::string> strips;
+    if (config == nullptr) {
+        return strips;
+    }
+    auto prune_empty = [](std::vector<std::string>& v) {
+        v.erase(std::remove_if(v.begin(), v.end(), [](const std::string& n) { return n.empty(); }),
+                v.end());
+    };
+    strips = config->get_string_array(config->df() + helix::wizard::LED_SELECTED_STRIPS);
+    prune_empty(strips);
+    if (strips.empty()) {
+        strips = config->get_string_array(config->df() + helix::wizard::LED_SELECTED);
+        prune_empty(strips);
+    }
+    if (strips.empty()) {
+        const json* led_strip = config->try_get_json(config->df() + helix::wizard::LED_STRIP);
+        if (led_strip != nullptr && led_strip->is_string() &&
+            !led_strip->get<std::string>().empty()) {
+            strips.push_back(led_strip->get<std::string>());
+        }
+    }
+    return strips;
+}
+
 } // namespace
 
 // =============================================================================
@@ -553,29 +583,11 @@ void HardwareValidator::validate_configured_hardware(Config* config,
     } catch (...) {
     }
 
-    // Check configured LEDs (array format: LED_SELECTED, legacy single: LED_STRIP)
-    {
-        // Try new array format first
-        std::vector<std::string> configured_leds =
-            config->get_string_array(config->df() + helix::wizard::LED_SELECTED);
-        configured_leds.erase(std::remove_if(configured_leds.begin(), configured_leds.end(),
-                                             [](const std::string& n) { return n.empty(); }),
-                              configured_leds.end());
-
-        // Fall back to legacy single string
-        if (configured_leds.empty()) {
-            const json* led_strip = config->try_get_json(config->df() + helix::wizard::LED_STRIP);
-            if (led_strip != nullptr && led_strip->is_string() &&
-                !led_strip->get<std::string>().empty()) {
-                configured_leds.push_back(led_strip->get<std::string>());
-            }
-        }
-
-        for (const auto& led_name : configured_leds) {
-            if (!contains_name(leds, led_name) && !is_hardware_optional(config, led_name)) {
-                result.expected_missing.push_back(HardwareIssue::warning(
-                    led_name, HardwareType::LED, "Configured LED strip not found"));
-            }
+    // Check configured LEDs
+    for (const auto& led_name : configured_led_strips(config)) {
+        if (!contains_name(leds, led_name) && !is_hardware_optional(config, led_name)) {
+            result.expected_missing.push_back(HardwareIssue::warning(
+                led_name, HardwareType::LED, "Configured LED strip not found"));
         }
     }
 
@@ -653,18 +665,7 @@ void HardwareValidator::validate_new_hardware(Config* config,
 
     // Check for LEDs not in config
     // Only suggest if user hasn't configured any LED yet
-    bool has_configured_led = false;
-    if (config) {
-        // Try new array format first
-        has_configured_led =
-            !config->get_string_array(config->df() + helix::wizard::LED_SELECTED).empty();
-        // Fall back to legacy single string
-        if (!has_configured_led) {
-            const json* led_strip = config->try_get_json(config->df() + helix::wizard::LED_STRIP);
-            has_configured_led = led_strip != nullptr && led_strip->is_string() &&
-                                 !led_strip->get<std::string>().empty();
-        }
-    }
+    const bool has_configured_led = !configured_led_strips(config).empty();
 
     if (!has_configured_led && !leds.empty()) {
         // User has no LED configured but printer has some

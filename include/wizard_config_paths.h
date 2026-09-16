@@ -60,8 +60,12 @@ constexpr const char* CHAMBER_HEATER = "heaters/chamber";
 constexpr const char* FEEDER_OPEN_MACRO = "toolchanger/feeder_open_macro";
 constexpr const char* FEEDER_CLOSE_MACRO = "toolchanger/feeder_close_macro";
 
-// LED hardware (legacy — used for migration only in LedController::load_config()
-// and hardware_validator.cpp. New code should use LedController::selected_strips())
+// LED hardware. LED_SELECTED_STRIPS is the live key LedController::load_config()
+// persists and reads, and it auto-selects every discoverable strip into it when
+// none is chosen. LED_SELECTED and LED_STRIP are legacy: hardware_validator.cpp is
+// their only reader, consulting them after the live key so a config saved before
+// the move still answers "this LED is configured".
+constexpr const char* LED_SELECTED_STRIPS = "leds/selected_strips";
 constexpr const char* LED_STRIP = "leds/strip";
 constexpr const char* LED_SELECTED = "leds/selected";
 
