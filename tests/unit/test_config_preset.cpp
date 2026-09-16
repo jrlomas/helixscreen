@@ -6,6 +6,8 @@
 
 #include <filesystem>
 #include <fstream>
+#include <string>
+#include <unistd.h>
 
 #include "../catch_amalgamated.hpp"
 
@@ -37,7 +39,13 @@ class PresetConfigFixture {
     void SetUp() {
         did_setup_ = true;
         // Create temp directory for test config and presets
-        temp_dir = (fs::temp_directory_path() / "helix_preset_test").string();
+        // Per-process sandbox. The name must not be shared: the printer_database
+        // symlink below is created inside it, and a copy_file fallback onto an
+        // existing symlink writes THROUGH it — into whichever checkout that
+        // symlink names. Two suites running from different worktrees at once
+        // would otherwise rewrite each other's tracked assets/config copy.
+        temp_dir = (fs::temp_directory_path() / ("helix_preset_test." + std::to_string(::getpid())))
+                       .string();
         fs::create_directories(temp_dir + "/presets");
         fs::create_directories(temp_dir + "/assets/config/presets");
 
@@ -98,7 +106,11 @@ class PresetConfigFixture {
             return;
         }
         torn_down_ = true;
-        fs::remove_all(temp_dir);
+        // TearDown runs from the destructor, which a failing REQUIRE reaches while
+        // unwinding. The throwing overload would terminate the process there and
+        // bury the assertion that actually failed.
+        std::error_code rm_ec;
+        fs::remove_all(temp_dir, rm_ec);
         if (had_config_dir_) {
             setenv("HELIX_CONFIG_DIR", saved_config_dir_.c_str(), 1);
         } else {
