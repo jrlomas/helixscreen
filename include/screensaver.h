@@ -30,7 +30,6 @@ namespace helix::ui {
  * trap" in docs/devel/GPU_ACCELERATION.md). The starfield writes every pixel itself with
  * that byte set. A canvas drawn with lv_draw_* cannot rely on it: see PIPES_CANVAS_FORMAT.
  */
-inline constexpr lv_color_format_t SCREENSAVER_CANVAS_FORMAT = LV_COLOR_FORMAT_XRGB8888;
 
 /**
  * @brief Color format of the pipes canvas

@@ -10,8 +10,6 @@ using helix::ui::DirtyRect;
 using helix::ui::FrameTarget;
 using helix::ui::StarfieldSim;
 
-static_assert(LV_COLOR_DEPTH == 32, "the starfield canvas is XRGB8888 on a 32 bpp display");
-
 bool StarfieldScreensaver::on_start() {
     spdlog::info("[Screensaver] Starting starfield");
     sim_.init(static_cast<uint32_t>(screen_w()), static_cast<uint32_t>(screen_h()), rng());

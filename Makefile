@@ -452,7 +452,6 @@ SCREENSAVER_SRCS := $(SRC_DIR)/ui/ui_screensaver.cpp $(wildcard $(SRC_DIR)/ui/sc
 SCREENSAVER_16BPP_TARGETS := ad5m ad5m-br cc1 mips k1 k1-dynamic ad5x k2 snapmaker-u1
 # Savers that draw only at 32 bpp; ScreensaverManager registers them under LV_COLOR_DEPTH == 32.
 SCREENSAVER_32BPP_ONLY_SRCS := $(SRC_DIR)/ui/ui_screensaver.cpp \
-    $(SRC_DIR)/ui/screensaver_starfield.cpp $(SRC_DIR)/ui/screensaver_starfield_sim.cpp \
     $(SRC_DIR)/ui/screensaver_pipes.cpp
 ifneq ($(ENABLE_SCREENSAVER),yes)
     APP_SRCS := $(filter-out $(SCREENSAVER_SRCS),$(APP_SRCS))

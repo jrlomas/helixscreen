@@ -31,7 +31,7 @@ class StarfieldScreensaver : public helix::ui::SaverBase {
 
   protected:
     std::optional<lv_color_format_t> canvas_format() const override {
-        return helix::ui::SCREENSAVER_CANVAS_FORMAT;
+        return helix::ui::SAVER_BUILD_CANVAS_FORMAT;
     }
     bool on_start() override;
     void on_frame(uint32_t dt_ms, std::vector<helix::ui::DirtyRect>& dirty) override;
