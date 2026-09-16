@@ -161,3 +161,60 @@ TEST_CASE("appliance beats generic on its own name", "[chamber][backend]") {
     // printer-native chamber still wins over appliance tiers (100 > 95)
     CHECK(match("heater_generic chamber").backend == backend_by_id("generic"));
 }
+
+TEST_CASE("keyword_confidence pins the keyword rule", "[chamber][backend]") {
+    struct Row {
+        const char* name;
+        int expected;
+    };
+    const Row rows[] = {
+        // Tiers.
+        {"chamber", 100},
+        {"enclosure", 90},
+        {"cavity", 85},
+        {"box", 60},
+        // Case-insensitive; keyword match is substring, BOX is token-only.
+        {"ChAmBeR", 100},
+        {"EnClOsUrE_TeMp", 89},
+        {"ENCLOSURE_top", 89},
+        {"my chamber", 99},   // whitespace separates tokens
+        {"chamber-tvoc", 99}, // hyphen is NOT a separator: no air-quality token
+        {"my-box", 0},
+        {"boxx", 0},
+        {"box1_heater", 0}, // numbered filament box: BOX1 is not BOX
+        // Compound penalty.
+        {"chamber_heater", 99},
+        {"box_fan", 59},
+        // Every air-quality token carries the -40 (compound -1 alongside).
+        {"chamber_tvoc", 59},
+        {"chamber_voc", 59},
+        {"chamber_co2", 59},
+        {"chamber_gas", 59},
+        {"chamber_humidity", 59},
+        {"chamber_iaq", 59},
+        {"chamber_aqi", 59},
+        {"chamber_pm25", 59},
+        {"chamber_pm10", 59},
+        {"chamber_particulate", 59},
+        {"chamber_pressure", 59},
+        {"enclosure_tvoc", 49},
+        {"cavity_pressure", 44},
+        {"box_gas", 19},
+        // Air-quality tokens without a chamber keyword score nothing.
+        {"tvoc", 0},
+        {"humidity", 0},
+        {"temperature_sensor voc", 0},
+        // Appliance names carry no chamber keyword: keyword-only callers
+        // (sensor/cooling-fan paths) must not see match()'s 95.
+        {"dragonbreath", 0},
+        {"heater_generic dragonbreath", 0},
+        {"panda_breath", 0},
+        // Everything else.
+        {"hotend", 0},
+        {"", 0},
+    };
+    for (const auto& r : rows) {
+        INFO("name=" << r.name);
+        CHECK(keyword_confidence(r.name) == r.expected);
+    }
+}

@@ -72,6 +72,15 @@ const std::vector<const ChamberHeaterBackend*>& registry();
 /// Best backend for an object name, or nullptr.
 MatchResult match(const std::string& object_name);
 
+/// Keyword-only confidence for a chamber/enclosure/cavity/box object name:
+/// CHAMBER 100 > ENCLOSURE 90 > CAVITY 85 > standalone-token BOX 60, minus 1
+/// when the keyword is compound, minus 40 for an air-quality token
+/// (TVOC/VOC/CO2/GAS/HUMIDITY/IAQ/AQI/PM25/PM10/PARTICULATE/PRESSURE). 0 = no
+/// chamber keyword. Sensor and cooling-fan discovery score names with this
+/// directly — appliance backends score their names only in match(), so an
+/// appliance heater never claims the sensor or fan slot.
+int keyword_confidence(const std::string& object_name);
+
 /// Lookup by id (nullptr if unknown).
 const ChamberHeaterBackend* backend_by_id(std::string_view id);
 
