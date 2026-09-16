@@ -342,6 +342,11 @@ endif
 BIN_DIR ?= $(BUILD_DIR)/bin
 OBJ_DIR ?= $(BUILD_DIR)/obj
 
+# Objects are invalidated by a change to the flags they were built with, not only
+# by a change to their sources. The path is fixed here beside OBJ_DIR because the
+# rules naming it are read before CXXFLAGS is final; mk/rules.mk writes contents.
+FLAGS_STAMP := $(OBJ_DIR)/.build-flags
+
 # LVGL
 LVGL_DIR := lib/lvgl
 # LVGL config discovery. Defined here (not further down) so it can travel inside

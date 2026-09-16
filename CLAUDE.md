@@ -50,9 +50,17 @@ make t F='[tag]'                     # Build, then run ONE tag or case (the inne
 #   Correct only when you have not edited code since the last `make test`:
 #   `make -j` builds the app alone, so after an edit the bare binary reports the
 #   PREVIOUS build's numbers. `make t` costs 5-18s and buys exactly that guarantee.
-make full-test-run                   # The WHOLE suite in parallel (25s idle, minutes loaded)
+make unit-sweep                      # C++ unit tests only, sharded (~50s idle)
+make full-test-run                   # unit-sweep + the 204-file bats suite (~2m) - the completion gate
+#   Nothing else runs bats locally: not the commit hook, not test-xml. Without this
+#   the shell suite reaches CI unrun. [.] and [slow] stay outside it deliberately -
+#   quality-checks.sh runs [.] on any staged code change, nightly CI runs [slow].
 #   `make test-run` no longer runs anything: it prints which of these fits the
 #   question you have and exits non-zero. Cadence table: tests/CLAUDE.md.
+
+make dev-timing                      # What the dev loop costs, measured (ledger from transcripts)
+#   Medians for every build, suite and test run, so "is this worth running" is
+#   answered from data. Derived + gitignored; rebuilding it takes a few seconds.
 
 scripts/syntax_check.py <file>...    # "does this compile?" in seconds
 #   Takes the file's own flags from compile_commands.json and runs -fsyntax-only,
@@ -196,8 +204,11 @@ The protocol is global CLAUDE.md § Peer Sessions. What is shared here:
 
   Liveness is **derived from process state, never asserted**: a claim records its owner's pid
   and that pid's kernel start-time, so a crashed owner reads STALE on its own, pid reuse
-  cannot fake LIVE, and nothing needs cleaning up. Use it for `worktree:<name>` (merge,
-  rebase, long commit), `build:<name>`, `device:<printer>`, `gh:issues`, `socket:<path>`.
+  cannot fake LIVE, and nothing needs cleaning up. Use it for `worktree:<name>` (hold it
+  from your FIRST edit until the commit lands - not merely for a merge, rebase or long
+  commit: uncommitted files with no claim and an old mtime are indistinguishable from
+  abandoned work, and `build:<name>` reserves nothing),
+  `build:<name>`, `device:<printer>`, `gh:issues`, `socket:<path>`.
 
   **Before concluding anything about someone else's work, run `check`.** A merge mid-commit
   and an abandoned one look identical in the tree — same `MERGE_HEAD`, same resolved index,
