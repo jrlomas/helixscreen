@@ -141,6 +141,10 @@ describe() {
     printf '%-10s %-26s %s\n  owner=%s pid=%s since=%s\n' \
         "$(state_of "$f")" "$(json_get "$body" resource)" "$(json_get "$body" op)" \
         "$(json_get "$body" session)" "$(json_get "$body" pid)" "$(json_get "$body" started)"
+    local sock; sock=$(json_get "$body" socket)
+    [ -n "$sock" ] && printf '  message=uds:%s\n' "$sock"
+    local sid; sid=$(json_get "$body" session_id)
+    [ -n "$sid" ] && printf '  session_id=%s\n' "$sid"
     local note; note=$(json_get "$body" note)
     [ -n "$note" ] && printf '  note=%s\n' "$note"
     return 0
@@ -170,11 +174,17 @@ take)
         printf 'REFUSED: another session holds the same tree\n'; describe "$sib"; exit 1
     fi
     tmp="$f.$$.tmp"
+    # session_id/socket let a reader address this claim's holder directly rather
+    # than resolving a pid back to a session by hand. Both are empty for a caller
+    # outside a Claude session, so describe() prints each only when it is set;
+    # HELIX_SESSION_ID and HELIX_SESSION_SOCKET let any other agent fill them in.
     cat > "$tmp" <<EOF
 {
   "resource": "$res",
   "op": "$op",
-  "session": "${HELIX_SESSION_NAME:-$(hostname)-$$}",
+  "session": "${HELIX_SESSION_NAME:-$(hostname)-$pid}",
+  "session_id": "${HELIX_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}",
+  "socket": "${HELIX_SESSION_SOCKET:-${CLAUDE_CODE_MESSAGING_SOCKET:-}}",
   "pid": $pid,
   "pid_start": "$(pid_starttime "$pid")",
   "cwd": "$PWD",
