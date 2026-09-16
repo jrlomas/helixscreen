@@ -19,6 +19,7 @@ void register_fan_stack_widget();
 void register_temperature_widget();
 void register_temp_stack_widget();
 void register_network_widget();
+void register_tile_widgets();
 void register_led_widget();
 void register_led_controls_widget();
 void register_thermistor_widget();
@@ -250,6 +251,10 @@ void init_widget_registrations() {
 #endif
 
     spdlog::debug("[PanelWidgetRegistry] All widget factories registered");
+
+    // Last, so "already claimed" is the truth: tiles no widget class took
+    // get a sizing-only instance.
+    register_tile_widgets();
 }
 
 } // namespace helix

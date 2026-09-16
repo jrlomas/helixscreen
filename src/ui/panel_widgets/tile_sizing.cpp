@@ -1,0 +1,183 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "src/ui/panel_widgets/tile_sizing.h"
+
+#include "grid_layout.h"
+#include "helix-xml/src/xml/lv_xml.h"
+#include "panel_widget_size.h"
+#include "theme_manager.h"
+
+#include <spdlog/spdlog.h>
+
+#include <algorithm>
+#include <cstring>
+
+namespace helix {
+
+namespace {
+
+/// The three ladders move together: one rung index selects the icon face, the
+/// value face beside it and the label face below that, so a tile can never
+/// draw a 64px glyph next to 12px digits.
+constexpr const char* kIconTokens[kTileRungs] = {"icon_font_xs", "icon_font_sm", "icon_font_md",
+                                                 "icon_font_lg", "icon_font_xl"};
+constexpr const char* kValueTokens[kTileRungs] = {"font_xs", "font_xs", "font_small", "font_body",
+                                                  "font_heading"};
+constexpr const char* kLabelTokens[kTileRungs] = {"font_xs", "font_xs", "font_xs", "font_small",
+                                                  "font_body"};
+
+/// The rung `#icon_size` names at the current tier, which is the size every
+/// other icon on screen draws at.
+///
+/// Resolved from the token rather than assumed: the tiers are free to re-point
+/// it, and a tile that capped to a hardcoded rung would quietly disagree with
+/// its neighbours the day one did.
+int authored_rung() {
+    const char* size = lv_xml_get_const_silent(nullptr, "icon_size");
+    if (size) {
+        for (int r = 0; r < kTileRungs; ++r) {
+            // kIconTokens[r] is "icon_font_<name>"; compare past the prefix.
+            if (std::strcmp(kIconTokens[r] + std::strlen("icon_font_"), size) == 0) {
+                return r;
+            }
+        }
+        spdlog::warn("[TileSizing] icon_size '{}' names no rung; capping at md", size);
+    }
+    return 2;
+}
+
+/// A representative icon glyph. Every MDI face is monospaced across the icon
+/// block, so any codepoint measures the box all of them draw in.
+constexpr const char* kIconGlyph = "\xF3\xB0\x90\xA5";
+
+int line_height_of(const lv_font_t* font) {
+    return font ? static_cast<int>(lv_font_get_line_height(font)) : 0;
+}
+
+} // namespace
+
+TileSizing::TileSizing(const std::string& instance_id)
+    : icon_name_(instance_id + "_tile_icon"), label_name_(instance_id + "_tile_label"),
+      dir_name_(instance_id + "_tile_dir"), target_name_(instance_id + "_tile_target") {
+    // Registered here, in the constructor, because the manager parses this
+    // tile's XML before attach() runs and the parser drops a binding whose
+    // subject is missing at parse time.
+    UI_MANAGED_SUBJECT_INT(icon_rung_subject_, 2, icon_name_.c_str(), subjects_);
+    UI_MANAGED_SUBJECT_INT(label_subject_, 1, label_name_.c_str(), subjects_);
+    UI_MANAGED_SUBJECT_INT(direction_subject_, 0, dir_name_.c_str(), subjects_);
+    UI_MANAGED_SUBJECT_INT(show_target_subject_, 1, target_name_.c_str(), subjects_);
+
+    attr_storage_ = {"tile_icon_subject", icon_name_, "tile_label_subject",  label_name_,
+                     "tile_dir_subject",  dir_name_,  "tile_target_subject", target_name_};
+    attrs_.reserve(attr_storage_.size() + 1);
+    for (const auto& s : attr_storage_) {
+        attrs_.push_back(s.c_str());
+    }
+    attrs_.push_back(nullptr);
+}
+
+TileSizing::~TileSizing() {
+    // Withdraws each name from the XML scope before the subjects are freed, so
+    // a later parse cannot bind to storage that is gone.
+    subjects_.deinit_all();
+}
+
+TileVerdict TileSizing::decide(int width_px, int height_px) const {
+    TileRungMetrics rungs[kTileRungs];
+    for (int r = 0; r < kTileRungs; ++r) {
+        const lv_font_t* icon_face = theme_manager_get_font(kIconTokens[r]);
+        const lv_font_t* value_face = theme_manager_get_font(kValueTokens[r]);
+        const lv_font_t* label_face = theme_manager_get_font(kLabelTokens[r]);
+
+        rungs[r].icon_w = ui::text_width(kIconGlyph, icon_face);
+        rungs[r].icon_h = line_height_of(icon_face);
+        rungs[r].value_full_w = ui::text_width(content_.widest_value.c_str(), value_face);
+        rungs[r].value_current_w = ui::text_width(content_.widest_current.c_str(), value_face);
+        rungs[r].value_h = line_height_of(value_face);
+        rungs[r].label_w = ui::text_width(content_.label.c_str(), label_face);
+        rungs[r].label_h = line_height_of(label_face);
+    }
+
+    const int gap = theme_manager_get_spacing("space_xs");
+
+    // The chrome between the tile's outer box and the box its content draws in:
+    // the padding of every container between them, and the flex gap each one
+    // puts between its children.
+    // Measured from the tree wherever there is one, because container padding
+    // is a theme value that varies by widget and by breakpoint; a constant
+    // guess is either too small, and the glyph spills out of its container, or
+    // too large, and the tile draws smaller than it needs to. Before the tree
+    // exists (the load path asks fits_at then) a gap on each side is the
+    // conservative stand-in.
+    // A gap on each side on top of whatever is measured. A measured-exact fit
+    // renders as an overlap by a pixel or two, and the walk cannot see a
+    // container that is not on the single-child chain, so the reservation is
+    // deliberately generous. It errs toward a smaller rung, never toward one
+    // that overflows.
+    int chrome_w = 2 * gap;
+    int chrome_h = 2 * gap;
+    if (content_root_) {
+        for (lv_obj_t* o = content_root_; o != nullptr; o = lv_obj_get_child(o, 0)) {
+            chrome_w += static_cast<int>(lv_obj_get_style_pad_left(o, LV_PART_MAIN)) +
+                        static_cast<int>(lv_obj_get_style_pad_right(o, LV_PART_MAIN)) +
+                        static_cast<int>(lv_obj_get_style_pad_column(o, LV_PART_MAIN));
+            chrome_h += static_cast<int>(lv_obj_get_style_pad_top(o, LV_PART_MAIN)) +
+                        static_cast<int>(lv_obj_get_style_pad_bottom(o, LV_PART_MAIN)) +
+                        static_cast<int>(lv_obj_get_style_pad_row(o, LV_PART_MAIN));
+            if (lv_obj_get_child_count(o) != 1) {
+                break; // past the single-child chrome and into the content
+            }
+        }
+    }
+
+    const int avail_w = std::max(width_px - chrome_w, 1);
+    const int avail_h = std::max(height_px - chrome_h, 1);
+
+    TileVerdict verdict = decide_tile_layout(avail_w, avail_h, gap, rungs, content_.has_value,
+                                             !content_.label.empty());
+
+    // At micro and tiny a whole cell is barely wider than the glyph itself, so
+    // there is no room to grow into and the authored rung is already the right
+    // answer. Capping there keeps those screens looking as they were designed
+    // and confines scaling to screens with room to spend.
+    if (widget_size::current_breakpoint() <= UiBreakpoint::Tiny) {
+        verdict.icon_rung = std::min(verdict.icon_rung, authored_rung());
+    }
+    return verdict;
+}
+
+bool TileSizing::fits(int width_px, int height_px) const {
+    // Half a cell is only offered above the tiny tier. A track is 34px at micro
+    // and 40px at tiny, which cannot carry a glyph and a reading together at
+    // any rung, so the floor there is a whole cell on both axes. Declining the
+    // size here rather than lowering the registry minimum keeps one floor for
+    // every screen and lets the resize clamp and the load path grow past it,
+    // which they both already do through grow_span_to_fit.
+    const UiBreakpoint bp = widget_size::current_breakpoint();
+    if (whole_cell_only_ || bp <= UiBreakpoint::Tiny) {
+        const float cell = has_cell_metrics_
+                               ? std::min(cell_metrics_.cell_w, cell_metrics_.cell_h)
+                               : static_cast<float>(GridLayout::GRID_CELL[to_int(bp)]);
+        const int gutter = has_cell_metrics_ ? cell_metrics_.gutter : GridLayout::gutter_px();
+        const int whole_cell =
+            static_cast<int>(grid_track_extent(cell, gutter, GridLayout::TRACKS_PER_CELL));
+        if (width_px < whole_cell || height_px < whole_cell) {
+            return false;
+        }
+    }
+    return decide(width_px, height_px).fits;
+}
+
+void TileSizing::measure_and_publish(int width_px, int height_px) {
+    const TileVerdict v = decide(width_px, height_px);
+    lv_subject_set_int(&icon_rung_subject_, v.icon_rung);
+    lv_subject_set_int(&label_subject_, static_cast<int>(v.label));
+    lv_subject_set_int(&direction_subject_, static_cast<int>(v.direction));
+    lv_subject_set_int(&show_target_subject_, v.show_target ? 1 : 0);
+    spdlog::trace("[TileSizing] {} at {}x{}: rung={} dir={} label={} target={} fits={}", icon_name_,
+                  width_px, height_px, v.icon_rung, static_cast<int>(v.direction),
+                  static_cast<int>(v.label), v.show_target, v.fits);
+}
+
+} // namespace helix

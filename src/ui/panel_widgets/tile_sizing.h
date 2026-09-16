@@ -1,0 +1,127 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+#pragma once
+
+#include "grid_layout.h"
+#include "helix/ui/text_metrics.h"
+#include "src/ui/panel_widgets/tile_layout.h"
+#include "subject_managed_panel.h"
+
+#include <string>
+#include <vector>
+
+namespace helix {
+
+/**
+ * @brief Per-instance sizing for a centred-icon home tile
+ *
+ * Measures the tile's content in the faces it actually renders, decides with
+ * decide_tile_layout(), and publishes the verdict as subjects XML binds
+ * appearance to. One of these per widget INSTANCE, not per widget type: fan,
+ * thermistor and power_device are multi-instance, and a type-global subject
+ * would make the second instance overwrite the first's verdict so both tiles
+ * agreed on whichever measured last.
+ *
+ * Construct it in the widget's CONSTRUCTOR. The manager creates a widget, then
+ * calls lv_xml_create() on its component, and only then attach(). The XML
+ * parser permanently skips a binding whose subject does not exist when the
+ * component is parsed, silently and with nothing in the log, so subjects
+ * registered from attach() would never bind and the tile would render at its
+ * default appearance forever.
+ */
+class TileSizing {
+  public:
+    /// What this tile draws. The two value strings are WORST CASES, never a
+    /// live reading: a size accepted while the tile reads 95 must still draw
+    /// 888.
+    struct Content {
+        std::string widest_value;   ///< widest "current / target" ever shown
+        std::string widest_current; ///< widest current half alone
+        std::string label;
+        bool has_value = false;
+    };
+
+    explicit TileSizing(const std::string& instance_id);
+
+    /// Most tiles know their content at construction; this is that spelling.
+    TileSizing(const std::string& instance_id, Content content) : TileSizing(instance_id) {
+        content_ = std::move(content);
+    }
+    ~TileSizing();
+
+    TileSizing(const TileSizing&) = delete;
+    TileSizing& operator=(const TileSizing&) = delete;
+
+    /// Refuse anything narrower than a whole cell, whatever the measurement
+    /// says. For a tile whose glyph sits in a fixed-size badge: the disc does
+    /// not shrink with the box, so half a cell spills the badge rather than
+    /// drawing a smaller one.
+    /// The live track geometry, so the half-cell floor is measured against the
+    /// cell this grid actually built rather than the nominal edge for the tier.
+    /// A grid whose content box forces a smaller track would otherwise never
+    /// satisfy the floor, and the span would grow until something clipped.
+    void set_cell_metrics(const CellMetrics& metrics) {
+        cell_metrics_ = metrics;
+        has_cell_metrics_ = true;
+    }
+
+    void require_whole_cell() {
+        whole_cell_only_ = true;
+    }
+
+    void set_content(Content content) {
+        content_ = std::move(content);
+    }
+
+    /// The tile's root, once it exists. The verdict is computed against the box
+    /// the content actually draws in, which is the outer box less whatever
+    /// padding the containers between them consume; estimating that instead of
+    /// measuring it picks a rung that spills out of the tile's own container.
+    void set_content_root(lv_obj_t* root) {
+        content_root_ = root;
+    }
+
+    /// Measure at this pixel box and publish the verdict.
+    void measure_and_publish(int width_px, int height_px);
+
+    /// Whether the tile can draw here. Monotonic, as PanelWidget::fits_at
+    /// requires, because decide_tile_layout is.
+    bool fits(int width_px, int height_px) const;
+
+    /// Flat key/value pairs naming this instance's subjects, for
+    /// lv_xml_create(). The vector owns the strings; it stays alive as long as
+    /// this object does.
+    /// Shaped for lv_xml_create(), which takes a mutable char** even though it
+    /// only reads: a flat key/value list terminated by one nullptr.
+    const char** subject_attrs() const {
+        return const_cast<const char**>(attrs_.data());
+    }
+
+    const std::string& icon_subject_name() const {
+        return icon_name_;
+    }
+
+  private:
+    TileVerdict decide(int width_px, int height_px) const;
+
+    std::string icon_name_;
+    std::string label_name_;
+    std::string dir_name_;
+    std::string target_name_;
+    std::vector<std::string> attr_storage_;
+    std::vector<const char*> attrs_;
+
+    Content content_;
+    lv_obj_t* content_root_ = nullptr;
+    bool whole_cell_only_ = false;
+    CellMetrics cell_metrics_{};
+    bool has_cell_metrics_ = false;
+
+    lv_subject_t icon_rung_subject_{};
+    lv_subject_t label_subject_{};
+    lv_subject_t direction_subject_{};
+    lv_subject_t show_target_subject_{};
+    SubjectManager subjects_;
+};
+
+} // namespace helix

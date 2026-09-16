@@ -17,6 +17,7 @@
 #include "panel_widget_config.h"
 #include "panel_widget_registry.h"
 #include "printer_cache_registry.h"
+#include "src/ui/panel_widgets/tile_sizing.h"
 #include "system/crash_handler.h"
 #include "system/telemetry_manager.h"
 #include "theme_manager.h"
@@ -1137,7 +1138,8 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
 
             // Create XML component
             auto* widget = static_cast<lv_obj_t*>(
-                lv_xml_create(container, slot.component_name.c_str(), nullptr));
+                lv_xml_create(container, slot.component_name.c_str(),
+                              slot.instance ? slot.instance->xml_attrs() : nullptr));
             if (!widget) {
                 spdlog::warn("[PanelWidgetManager] Failed to create widget: {} (component: {})",
                              slot.widget_id, slot.component_name);
@@ -1208,6 +1210,10 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
 
             // Attach the pre-created PanelWidget instance if present and NOT gated
             if (slot.instance && !slot.hardware_gated) {
+                if (auto* sizing = slot.instance->tile_sizing()) {
+                    sizing->set_content_root(widget);
+                    sizing->set_cell_metrics(metrics);
+                }
                 slot.instance->attach(widget, lv_scr_act());
 
                 // Notify widget of its grid allocation and approximate pixel size.
