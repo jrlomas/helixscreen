@@ -2778,10 +2778,11 @@ bool preset_targets_this_device(const std::string& moonraker_host) {
 
 bool Config::apply_preset_file(const std::string& preset_name) {
     // Guard: only full-apply if wizard hasn't been completed for this printer.
-    // Post-wizard, still allow two narrow migrations for an already-provisioned
-    // printer: filament_sensors (below) and default_macros (further down).
-    // Without this, fixing a preset only helps fresh installs: existing users
-    // stay broken even after an update.
+    // Post-wizard, still allow narrow migrations for an already-provisioned printer:
+    // filament_sensors, default_macros, role keys the stored config never held
+    // (fans/*, heaters/*, temp_sensors/*, seeded only when absent or empty), and a
+    // hardware/expected union. Without this, fixing a preset only helps fresh
+    // installs: existing users stay broken even after an update.
     const bool wizard_done = get<bool>(df() + "wizard_completed", false);
     if (wizard_done) {
         if (active_printer_id_.empty()) {
@@ -2902,6 +2903,69 @@ bool Config::apply_preset_file(const std::string& preset_name) {
                     spdlog::info(
                         "[Config] Migrated default_macros.{} from preset '{}' (stale text)",
                         macro_key, preset_name);
+                }
+            }
+        }
+
+        // Migration 3: role keys. Seed the hardware mappings the preset defines onto a
+        // machine provisioned before the preset landed, writing only absent-or-empty
+        // stored values: a present value is the user's (or the auto-heal path's) call,
+        // and a wrong-but-present one is the auto-heal path's job, not the preset's.
+        // leds/strip is deliberately excluded — a preset LED name the machine lacks
+        // raises "Configured LED strip not found", which notify_user reports ahead of
+        // the toast this migration exists to silence.
+        {
+            auto& printer_node = data["printers"][active_printer_id_];
+            if (!printer_node.is_object()) {
+                printer_node = json::object();
+            }
+            for (const char* group : {"fans", "heaters", "temp_sensors"}) {
+                if (!preset_printer.contains(group) || !preset_printer[group].is_object()) {
+                    continue;
+                }
+                for (const auto& [key, val] : preset_printer[group].items()) {
+                    if (!val.is_string() || val.get<std::string>().empty()) {
+                        continue;
+                    }
+                    const std::string rel = std::string(group) + "/" + key;
+                    json::json_pointer ptr(df() + rel);
+                    const bool held = data.contains(ptr) && data.at(ptr).is_string() &&
+                                      !data.at(ptr).get<std::string>().empty();
+                    if (!held) {
+                        printer_node[group][key] = val;
+                        changed = true;
+                        spdlog::info("[Config] Seeded '{}' from preset '{}'", rel, preset_name);
+                    }
+                }
+            }
+        }
+
+        // Migration 4: hardware/expected union. The four AMS keywords are the only
+        // expected entries that can raise an expected_missing warning ("AMS/MMU system
+        // not detected"), so unioning one could invent that warning; every other name
+        // only ever suppresses a false "new hardware" report.
+        if (preset_printer.contains("hardware") && preset_printer["hardware"].is_object() &&
+            preset_printer["hardware"].contains("expected") &&
+            preset_printer["hardware"]["expected"].is_array()) {
+            json::json_pointer exp_ptr(df() + "hardware/expected");
+            if (!data.contains(exp_ptr) || !data.at(exp_ptr).is_array()) {
+                data[exp_ptr] = json::array();
+            }
+            json& stored = data.at(exp_ptr);
+            for (const auto& entry : preset_printer["hardware"]["expected"]) {
+                if (!entry.is_string()) {
+                    continue;
+                }
+                const std::string name = entry.get<std::string>();
+                if (name.empty() || name == "AFC" || name == "mmu" || name == "toolchanger" ||
+                    name == "ace") {
+                    continue;
+                }
+                if (std::find(stored.begin(), stored.end(), entry) == stored.end()) {
+                    stored.push_back(entry);
+                    changed = true;
+                    spdlog::info("[Config] Added '{}' to hardware/expected from preset '{}'", name,
+                                 preset_name);
                 }
             }
         }
