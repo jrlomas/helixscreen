@@ -1,91 +1,100 @@
 # Printer Images
 
-This directory contains shipped printer images used in the first-run configuration wizard and the Printer Image picker overlay. Users can also add their own custom images (see [Custom Images](#custom-images) below).
+Shipped artwork for the printers HelixScreen knows about. Three places draw it: the
+first-run configuration wizard (`src/ui/ui_wizard_printer_identify.cpp`), the Printer
+Image picker overlay (`src/ui/ui_overlay_printer_image.cpp`), and the home panel's
+printer widget (`src/ui/panel_widgets/printer_image_widget.cpp`).
 
-## Available Images (13 printers)
+76 PNGs, ~24 MB. PNG is the only format here; nothing loads a `.jpg` or `.webp` from
+this directory.
 
-### Voron Family
-- ✅ `voron-0-2-4-750x930.jpg` - Voron V0.2 (120mm³ build)
-- ✅ `voron-24r2-pro-5-750x930.webp` - Voron V2.4 (CoreXY, QGL)
-- ✅ `voron-trident-pro-1-750x930.webp` - Voron Trident (3Z steppers)
+## Which printer gets which image
 
-### Creality K-Series
-- ✅ `creality-k1-2-750x930.jpg` - Creality K1 (CoreXY, multi-MCU)
+`assets/config/printer_database.json` owns that mapping — each entry's `image` field
+names a file in this directory. This README does not list them, because a
+hand-maintained list drifts from the database silently.
 
-### FlashForge
-- ✅ `flashforge-adventurer-5m-1-750x930.webp` - FlashForge Adventurer 5M
-- ✅ `flashforge-adventurer-5m-pro-2-750x930.jpg` - FlashForge Adventurer 5M Pro
+```bash
+scripts/check_printer_images.py --list   # entries whose image is not on disk
+```
 
-### Any cubic
-- ✅ `anycubic-kobra.png` - Anycubic Kobra (LeviQ ABL)
-- ✅ `anycubic-vyper.png` - Anycubic Vyper (Volcano hotend)
-- ✅ `anycubic-chiron.png` - Anycubic Chiron (400×400mm)
+That gate fails the build when the database names art that does not exist. It matters
+because a missing image is otherwise invisible: `get_prerendered_printer_path()` falls
+through to `generic-corexy` and the user just sees a CoreXY frame for their bed-slinger.
 
-### Rat Rig
-- ✅ `ratrig-vcore3.png` - Rat Rig V-Core 3 (CoreXY); also used for V-Core Pro
-- ✅ `ratrig-vcore4.png` - Rat Rig V-Core 4 (CoreXY); also used for V-Core 4 IDEX
-- ✅ `ratrig-vminion.png` - Rat Rig V-Minion (Compact CoreXY)
+## How an image reaches the screen
 
-### FLSUN
-- ✅ `flsun-delta.png` - FLSUN Delta (QQ-S/Super Racer/V400)
+`src/system/prerendered_images.cpp#get_prerendered_printer_path` resolves in this
+order, degrading rather than failing:
 
-### Elegoo
-- ✅ `elegoo-centauri-carbon.png` - Elegoo Centauri Carbon
+1. `prerendered/<name>-<300|150>.bin` — LVGL binary, LZ4-compressed, no PNG decode
+2. `<name>.png` — this directory, decoded at full resolution by lodepng
+3. `generic-corexy` at the same tier, then its PNG
 
-## Missing Images (Use Generic Fallback)
+The tier comes from `src/system/prerender_size_class.cpp#get_printer_image_size`:
+screen width >= 600 selects 300px, narrower selects 150px.
 
-The following printers will use the generic Voron V2 image (`voron-24r2-pro-5-750x930.webp`) as fallback:
+**Step 2 is the expensive one.** These PNGs are large (see below), LVGL's image cache
+is disabled (`LV_CACHE_DEF_SIZE 0` in `lv_conf.h`), and the widget draws with
+`inner_align="contain"`, so a miss means decoding the full-resolution bitmap and
+scaling it at draw time. Measured on a K1C: 1347 ms to first paint from
+`creality-k1c.png`, 78 ms from `creality-k1c-300.bin`.
 
-### Voron
-- ❌ Voron V1/Legacy
-- ❌ Voron Switchwire
+Note that the fallback in step 2 logs at `trace` while step 1 logs at `debug`, so a
+device silently taking the slow path shows no `[Prerendered]` line at debug level.
 
-### Creality Ender/CR Series
-- ❌ Creality Ender 3
-- ❌ Creality Ender 5
-- ❌ Creality CR-10
-- ❌ Creality CR-6 SE
+### Generating the renders
 
-### Prusa
-- ❌ Prusa i3 MK3/MK3S
-- ❌ Prusa MK4
-- ❌ Prusa Mini/Mini+
-- ❌ Prusa XL
+```bash
+make gen-printer-images      # -> build/assets/images/printers/prerendered/*.bin
+make list-printer-images     # what it would write
+```
 
-## Image Specifications
+Build artifacts, not committed. Every `package-*` target depends on this, and the
+`deploy-*` targets generate it when the output directory is empty — so a cross-built
+device gets the tiers. A plain dev checkout, `make install`, and the Android build do
+not, and take the PNG path.
 
-- **Dimensions:** 750×930 pixels (standardized)
-- **Format:** PNG, JPG, or WebP
-- **Background:** White or transparent preferred
-- **Content:** Full printer view, centered and cropped
+`scripts/platform_manifest.py#prune_assets` then drops the tier a fixed panel cannot
+select, and drops the source PNGs only when every database entry has a render at the
+kept size.
 
-## Custom Images
+## Image specifications
 
-Users can add their own printer images without modifying this directory:
+- **Format:** PNG, RGBA or palette
+- **Background:** transparent preferred
+- **Content:** full printer view, centered
 
-1. Place a PNG or JPEG file into `config/custom_images/` in the HelixScreen installation directory
-2. Open the Printer Image picker (Home Panel → tap printer image → Printer Manager → tap image again)
-3. Custom images appear automatically in the picker under the "Custom" section
+**Dimensions are not currently standardized.** The shipped set ranges from 169x180 to
+2507x1885, and only 6 of 76 are 750x930. New art should land near the low end: the
+300px tier is the largest any panel asks for, so pixels beyond ~800px on the long edge
+cost disk, RAM and decode time on every platform that falls back to the PNG, and buy
+nothing on the ones that do not.
 
-**Requirements:** PNG or JPEG, maximum 5MB file size, maximum 2048x2048 pixels. HelixScreen auto-converts custom images to optimized LVGL binary format (300px and 150px variants) the first time the Printer Image picker overlay is opened.
+```bash
+magick input.jpg -resize 800x800 -background none -gravity center output.png
+```
 
-Custom image selection is stored in the config as `"display.printer_image": "custom:filename"` (without extension).
+## Adding new art
 
-## Adding New Shipped Images
+1. Source a product photo, alpha-cut the background
+2. Resize per above, save here with a `vendor-model` filename
+3. Point the `printer_database.json` entry's `image` field at it
+4. `scripts/check_printer_images.py` to confirm it resolves
 
-1. Source high-quality printer image (product photos work best)
-2. Resize to 750x930px with aspect ratio preservation:
-   ```bash
-   magick input.jpg -resize 750x930 -gravity center -extent 750x930 -background white output.png
-   ```
-3. Save to this directory with descriptive filename
-4. Update this README
-5. Update the Printer Image picker integration
+## Custom images
 
-## Future Work
+Users add their own without touching this directory:
 
-- Add remaining Voron variant images (V1, Switchwire)
-- Add Creality Ender/CR series images
-- Add Prusa family images
-- Consider adding manufacturer logos for unidentified printers
-- Add more community-contributed shipped images
+1. Drop a PNG/JPEG/BMP/GIF into `config/custom_images/` in the install directory
+2. Open the picker (Home Panel -> tap printer image -> Printer Manager -> tap image)
+3. Custom images appear under the "Custom" section
+
+**Limits:** 5 MB, 2048x2048 (`MAX_FILE_SIZE` / `MAX_IMAGE_DIMENSION` in
+`src/system/printer_image_manager.cpp`). On first picker open,
+`#PrinterImageManager::auto_import_raw_images` converts each raw file to `-300.bin`
+and `-150.bin` beside it, so custom art skips the PNG decode that shipped art hits.
+
+Selection is stored as `"display.printer_image": "custom:<filename>"` (no extension);
+shipped art uses `"shipped:<name>"`, and an unset value means auto-detect from the
+detected printer type.

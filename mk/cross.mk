@@ -419,7 +419,7 @@ else ifeq ($(PLATFORM_TARGET),cc1)
 else ifneq ($(filter mips k1,$(PLATFORM_TARGET)),)
     # -------------------------------------------------------------------------
     # MIPS32 Devices (Creality K1) - Ingenic XBurst2
-    # K1: Ingenic X2000E, 480x400, 256MB RAM
+    # K1: Ingenic X2000E, 2 cores, 480x800 panel used rotated (800x480), 256MB RAM
     # MIPS32r2, musl libc, fbdev display, evdev touch
     # -------------------------------------------------------------------------
     # FULLY STATIC BUILD with musl: Cleaner than glibc static linking.
@@ -482,7 +482,9 @@ else ifneq ($(filter mips k1,$(PLATFORM_TARGET)),)
 else ifeq ($(PLATFORM_TARGET),k1-dynamic)
     # -------------------------------------------------------------------------
     # Creality K1 Series - Dynamic Linking (Ingenic X2000E MIPS32r2)
-    # Specs: 480x400 display (K1/K1C/K1Max), 480x800 (K2), 256MB RAM, glibc 2.29
+    # Specs: 480x800 panel used rotated, so 800x480 landscape (K1/K1C/K1Max and K2
+    # alike), 256MB RAM, glibc 2.29. Panel geometry of record is
+    # assets/config/platforms.json; these lines are a reader's summary of it.
     # -------------------------------------------------------------------------
     # DYNAMIC BUILD: Links against K1's native glibc 2.29 system libraries.
     # Requires custom NaN2008+FP64 toolchain (built via crosstool-NG).
