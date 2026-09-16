@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<component>
+  <!--
+    One centred glyph over one label, filling its tile: the shape seven home
+    widgets share.
+
+    button_name and icon_name are props because C++ finds these by name
+    (lv_obj_find_by_name) to wire state that is not expressible in XML, so each
+    call site keeps the name its widget already looks up.
+
+    disabled_cond takes a whole expression rather than a subject, because the
+    call sites do not agree on how many reasons there are to be disabled:
+    shutdown has none, four have one, and led has two. One expression covers
+    all three shapes; "0 eq 1" is the default because it can never be true, so
+    a tile that passes nothing is never disabled.
+  -->
+  <api>
+    <prop name="icon" type="string" default="power"/>
+    <prop name="icon_variant" type="string" default="secondary"/>
+    <prop name="label" type="string" default=""/>
+    <prop name="label_tag" type="string" default=""/>
+    <prop name="callback" type="string" default=""/>
+    <prop name="disabled_cond" type="string" default="0 eq 1"/>
+    <prop name="button_name" type="string" default="home_action_tile_button"/>
+    <prop name="icon_name" type="string" default="home_action_tile_icon"/>
+    <!-- Per-instance rung subject from the owning tile. Empty installs no
+         binding, so a call site that does not size itself keeps #icon_size. -->
+    <prop name="tile_icon_subject" type="string" default=""/>
+    <prop name="tile_label_subject" type="string" default=""/>
+  </api>
+  <view name="home_action_tile" extends="lv_obj" height="100%" flex_grow="1" style_pad_all="0" scrollable="false">
+    <ui_button name="$button_name"
+               width="100%" height="100%" style_pad_all="0" variant="ghost" flex_flow="column"
+               style_flex_main_place="center" style_flex_cross_place="center" style_flex_track_place="center"
+               style_border_width="0" focusable="false">
+      <bind_state_if cond="$disabled_cond" state="disabled"/>
+      <icon name="$icon_name"
+            src="$icon" size="#icon_size" variant="$icon_variant" clickable="false" event_bubble="true">
+        <bind_style_if_eq name="styles.tile_icon_xs" subject="$tile_icon_subject" ref_value="0"/>
+        <bind_style_if_eq name="styles.tile_icon_sm" subject="$tile_icon_subject" ref_value="1"/>
+        <bind_style_if_eq name="styles.tile_icon_md" subject="$tile_icon_subject" ref_value="2"/>
+        <bind_style_if_eq name="styles.tile_icon_lg" subject="$tile_icon_subject" ref_value="3"/>
+        <bind_style_if_eq name="styles.tile_icon_xl" subject="$tile_icon_subject" ref_value="4"/>
+      </icon>
+      <text_tiny text="$label"
+                 translation_tag="$label_tag" style_text_color="#text_muted" style_text_align="center" clickable="false"
+                 event_bubble="true">
+        <bind_flag_if_eq subject="show_widget_labels" flag="hidden" ref_value="0"/>
+        <bind_flag_if_eq subject="$tile_label_subject" flag="hidden" ref_value="0"/>
+      </text_tiny>
+      <event_cb trigger="clicked" callback="$callback"/>
+    </ui_button>
+  </view>
+</component>
