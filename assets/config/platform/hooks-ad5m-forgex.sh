@@ -66,8 +66,52 @@ FORGEX_NET_SYSFS="${FORGEX_NET_SYSFS:-/sys/class/net}"
 FORGEX_WPA_BIN="${FORGEX_WPA_BIN:-/usr/sbin/wpa_supplicant}"
 FORGEX_WPA_CONF="${FORGEX_WPA_CONF:-/etc/wpa_supplicant.conf}"
 
+FORGEX_NETD_SOCK="${FORGEX_NETD_SOCK:-/run/netd.sock}"
+FORGEX_NETWORK_CONF="${FORGEX_NETWORK_CONF:-/opt/config/mod_data/network.conf}"
+
 forgex_netd_owns_network() {
     [ -x "$FORGEX_NETD_BIN" ]
+}
+
+# Bring netd back when it ships but is not running.
+#
+# S55boot starts netd and waits on it; when the network does not come up inside
+# that wait it kills the daemon, unlinks the socket and hands the machine back to
+# stock, skipping the MCU bringup and Klipper on the way. netd loads the Wi-Fi
+# driver and owns the radio, so a carrier-less boot arrives here with no daemon
+# and no wlan0 -- the WiFi wizard has nothing to configure, and our installer
+# de-execs the stock UI, so the owner cannot get the printer online from the
+# screen at all. A machine that can never reach a network never escapes that on
+# its own.
+#
+# Starting the daemon itself is not the stray-process hazard the comment above
+# warns about: that is about a second driver or supplicant racing netd's own
+# teardown. This is the owner, started the way boot.sh starts it, and only when
+# nothing is already serving. Idempotent.
+platform_start_netd() {
+    forgex_netd_owns_network || return 0
+    if pidof netd >/dev/null 2>&1; then
+        return 0
+    fi
+    echo "Network daemon not running - starting it so WiFi setup stays reachable..."
+    # Safe because nothing is serving: a live daemon returned above.
+    rm -f "$FORGEX_NETD_SOCK"
+    # --adopt-existing takes over a link that is already up instead of tearing it
+    # down; it needs a stored mode to adopt, so a machine that has never been
+    # configured gets the plain bootstrap.
+    if [ -f "$FORGEX_NETWORK_CONF" ]; then
+        _netd_args="--adopt-existing"
+    else
+        _netd_args=""
+    fi
+    if command -v start-stop-daemon >/dev/null 2>&1; then
+        # shellcheck disable=SC2086  # deliberate word-splitting: empty means no flag
+        start-stop-daemon -Sb --exec "$FORGEX_NETD_BIN" -- $_netd_args
+    else
+        # shellcheck disable=SC2086
+        "$FORGEX_NETD_BIN" $_netd_args &
+    fi
+    unset _netd_args
 }
 
 # Stop stock FlashForge UI and competing screen UIs.
@@ -264,6 +308,7 @@ platform_pre_start() {
     mkdir -p "/data/helixscreen/logs" 2>/dev/null || true
 
     touch /tmp/helixscreen_active
+    platform_start_netd
     platform_load_wifi_driver
     platform_start_wpa_supplicant
 }
