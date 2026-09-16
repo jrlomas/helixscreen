@@ -125,19 +125,6 @@ static const lv_font_t* get_button_icon_font() {
     return s_icon_font;
 }
 
-/**
- * @brief Check if a font is one of the MDI icon fonts
- *
- * NOTE: Duplicates is_icon_font() in theme_manager.cpp (both are file-local static).
- * If new icon font sizes are added, update both.
- */
-static bool is_mdi_icon_font(const lv_font_t* font) {
-    if (!font)
-        return false;
-    return font == &mdi_icons_14 || font == &mdi_icons_16 || font == &mdi_icons_24 ||
-           font == &mdi_icons_32 || font == &mdi_icons_48 || font == &mdi_icons_64;
-}
-
 // ---------------------------------------------------------------------------
 // op-state spinner (bind_op_state busy animation)
 //
@@ -309,7 +296,7 @@ void update_button_text_contrast(lv_obj_t* btn) {
             if (!lv_obj_check_type(child, &lv_label_class))
                 continue;
             const lv_font_t* font = lv_obj_get_style_text_font(child, LV_PART_MAIN);
-            if (is_mdi_icon_font(font))
+            if (helix::ui::is_icon_font(font))
                 continue;
             set_contrast(child);
         }

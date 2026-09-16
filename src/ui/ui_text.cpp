@@ -11,6 +11,7 @@
 #include "helix-xml/src/xml/lv_xml_widget.h"
 #include "helix-xml/src/xml/parsers/lv_xml_label_parser.h"
 #include "helix-xml/src/xml/parsers/lv_xml_obj_parser.h"
+#include "helix/ui/shared_font_style.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/misc/lv_text_private.h" // lv_text_get_width, lv_text_encoded_next/prev
 #include "theme_manager.h"
@@ -30,40 +31,6 @@ enum class TextStyleType {
     PRIMARY, // Primary text color (text_body, text_button)
     MUTED    // Muted text color (text_heading, text_small, text_xs)
 };
-
-/**
- * One shared style per compiled font face
- *
- * Semantic text widgets carry their font through these styles instead of a
- * local style property. A local property outranks every ADDED style, and the
- * XML engine applies bind_style / bind_style_if_* through lv_obj_add_style —
- * so a font written locally here would make any style bound from XML silently
- * unable to override it. As a shared style added at create time, the semantic
- * font sits below the nested bind elements the parser applies afterwards
- * (same-precedence styles resolve in addition order) while an inline
- * style_text_font attribute — still local, still applied after create — keeps
- * outranking both.
- */
-static lv_style_t* shared_font_style(const lv_font_t* font) {
-    // Append-only: one entry per compiled face a semantic constant has ever
-    // resolved to (at most one per tier per role), so a fixed table is enough
-    // and nothing here needs the heap.
-    constexpr size_t MAX_FACES = 32;
-    static const lv_font_t* faces[MAX_FACES] = {};
-    static lv_style_t styles[MAX_FACES];
-    for (size_t i = 0; i < MAX_FACES; ++i) {
-        if (faces[i] == font)
-            return &styles[i];
-        if (faces[i] == nullptr) {
-            faces[i] = font;
-            lv_style_init(&styles[i]);
-            lv_style_set_text_font(&styles[i], font);
-            return &styles[i];
-        }
-    }
-    spdlog::critical("[ui_text] FATAL: shared font style table full ({} faces)", MAX_FACES);
-    std::exit(EXIT_FAILURE);
-}
 
 /**
  * Helper function to apply semantic font to a label
@@ -103,7 +70,7 @@ static void apply_semantic_font(lv_obj_t* label, const char* font_const_name) {
         std::exit(EXIT_FAILURE);
     }
 
-    lv_obj_add_style(label, shared_font_style(font), LV_PART_MAIN);
+    helix::ui::apply_font_style(label, font);
 
     // Debug: log the actual font being applied
     spdlog::trace("[ui_text] Applied font '{}' (from '{}') - line_height={}px", font_name,

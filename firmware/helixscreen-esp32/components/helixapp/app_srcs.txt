@@ -318,11 +318,13 @@ src/ui/print_control_buttons.cpp
 src/ui/print_control_view.cpp
 src/ui/save_config_restart.cpp
 src/ui/setting_group.cpp
+src/ui/shared_font_style.cpp
 src/ui/style_configs.cpp
 src/ui/temp_graph_controller.cpp
 src/ui/temp_graph_tooltip.cpp
 src/ui/temperature_controller.cpp
 src/ui/temperature_service.cpp
+src/ui/text_metrics.cpp
 src/ui/theme_loader.cpp
 src/ui/theme_manager_new.cpp
 src/ui/touch_calibration.cpp
