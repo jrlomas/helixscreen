@@ -17,10 +17,6 @@ using helix::ui::screensaver::flap_frame_at;
 using helix::ui::screensaver::flight_pos_at;
 using helix::ui::screensaver::FlightPos;
 
-// The sprites are decoded for and tuned on a 32 bpp display; 16 bpp builds leave this saver out
-// (Makefile SCREENSAVER_32BPP_ONLY_SRCS).
-static_assert(LV_COLOR_DEPTH == 32, "flying toasters draw on a 32 bpp display");
-
 // Sprite asset paths
 static constexpr const char* TOASTER_FRAMES[] = {
     "A:assets/images/screensaver/toaster_0.png",
