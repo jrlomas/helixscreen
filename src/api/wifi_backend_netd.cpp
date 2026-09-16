@@ -1124,7 +1124,12 @@ bool WifiBackendNetd::supports_wpa_supplicant_fallback() const {
     // so wpa_supplicant may only be started when the daemon is provably absent
     // — an init failure with a live daemon must leave WiFi down rather than
     // put two clients on one radio. open_connection() supplies that proof.
-    return daemon_unreachable_.load();
+    // ...and only when the daemon is absent from the SYSTEM, not merely from the
+    // socket. netd is what loads the WiFi driver, so on a firmware that ships it
+    // a down daemon leaves no interface for wpa_supplicant to take: swapping
+    // would replace an accurate failure with a misleading one and abandon the
+    // reconnect that recovers when the daemon returns.
+    return daemon_unreachable_.load() && !helix::netd::binary_present();
 }
 
 bool WifiBackendNetd::supports_radio_toggle() const {
