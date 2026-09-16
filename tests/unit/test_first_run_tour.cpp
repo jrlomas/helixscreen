@@ -1,7 +1,11 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_nav_manager.h"
+#include "ui_wizard.h"
+
 #include "../helix_test_fixture.h"
+#include "../lvgl_ui_test_fixture.h"
 #include "app_globals.h"
 #include "config.h"
 #include "first_run_tour.h"
@@ -69,6 +73,27 @@ TEST_CASE("FirstRunTour gate: blocks while home grid edit mode is active", "[tou
 
     lv_subject_set_int(&get_home_edit_mode_subject(), 0);
     REQUIRE(FirstRunTour::should_auto_start() == true);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "FirstRunTour: wizard completion re-evaluates the gate",
+                 "[tour][wizard]") {
+    reset_tour_settings();
+    Config::get_instance()->set<bool>("/wizard_completed", false);
+
+    // Home is already the active panel while the wizard owns the screen, so the
+    // deferred set_active(PanelId::Home) returns without activating anything.
+    // on_activate() is the tour's other entry point and does not run here.
+    REQUIRE(NavigationManager::instance().get_active() == helix::PanelId::Home);
+    REQUIRE(FirstRunTour::should_auto_start() == false);
+
+    auto& tour = FirstRunTour::instance();
+    REQUIRE(tour.is_running() == false);
+
+    ui_wizard_complete();
+    process_lvgl(200); // past the 100ms nav timer, and drains the async start
+
+    REQUIRE(tour.is_running() == true);
+    tour.skip();
 }
 
 TEST_CASE("FirstRunTour mark_completed writes both flags", "[tour]") {
