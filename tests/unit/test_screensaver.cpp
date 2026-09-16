@@ -225,7 +225,7 @@ using helix::ui::screensaver::FlightPos;
 constexpr int32_t TOASTER_FLIGHT_PX = 1600;
 
 void run_toaster_tick(const FlyingToasterScreensaver& ss) {
-    lv_timer_t* timer = ToasterAccess::tick_timer(ss);
+    lv_timer_t* timer = SaverTestAccess::timer(ss);
     REQUIRE(timer != nullptr);
     REQUIRE(timer->timer_cb != nullptr);
     timer->timer_cb(timer);
@@ -318,18 +318,15 @@ SpriteTally check_sprites_at(const FlyingToasterScreensaver& ss, uint32_t elapse
 
 } // namespace
 
-TEST_CASE_METHOD(LVGLTestFixture, "FlyingToasterScreensaver ticks at the display refresh period",
-                 "[screensaver][screensaver_motion]") {
-    // Matches neither LVGL's default refresh period nor any fixed saver period.
-    ScopedRefreshPeriod refresh(20);
-    FlyingToasterScreensaver ss;
-    ScreensaverStopOnExit<FlyingToasterScreensaver> stop_on_exit{ss};
-
-    ss.start();
-    REQUIRE(ss.is_active());
-    lv_timer_t* timer = ToasterAccess::tick_timer(ss);
-    REQUIRE(timer != nullptr);
-    CHECK(timer->period == 20);
+TEST_CASE_METHOD(
+    LVGLTestFixture,
+    "FlyingToasterScreensaver level 0: configured period, else 16 ms, with the refresh equal",
+    "[screensaver][screensaver_motion]") {
+    const uint32_t configured_ms = GENERATE(as<uint32_t>{}, 0, 20);
+    INFO("configured period " << configured_ms << " ms");
+    const LevelZeroPeriods periods = level_zero_periods<FlyingToasterScreensaver>(configured_ms);
+    CHECK(periods.timer_ms == (configured_ms != 0 ? configured_ms : helix::ui::SAVER_FAST_PERIOD));
+    CHECK(periods.refresh_ms == periods.timer_ms);
 }
 
 TEST_CASE_METHOD(
@@ -1041,7 +1038,8 @@ using helix::anim_timer_period;
 using helix::default_refr_timer_period;
 
 constexpr uint32_t GLOBAL_PERIOD_MS = 40;
-constexpr uint32_t SAVER_PERIOD_MS = 16;
+// Unlike the 16 ms default, so the checks see the configured period reach each saver.
+constexpr uint32_t SAVER_PERIOD_MS = 20;
 
 /// Sets the global and screensaver refresh periods through the environment and applies
 /// them as DisplayManager::init() does. Puts the environment and both timers back when the
@@ -1055,7 +1053,7 @@ struct SaverRefreshEnv {
     SaverRefreshEnv() {
         setenv("HELIX_REFR_PERIOD_MS", "40", 1);
         unsetenv("HELIX_REFR_PERIOD_SCOPE");
-        setenv("HELIX_SCREENSAVER_REFR_PERIOD_MS", "16", 1);
+        setenv("HELIX_SCREENSAVER_REFR_PERIOD_MS", "20", 1);
         helix::apply_refresh_timing(helix::refresh_timing_from_env());
     }
 };
@@ -1066,21 +1064,9 @@ uint32_t running_saver_timer_period(ScreensaverType type) {
         helix::ScreensaverManagerTestAccess::active(ScreensaverManager::instance());
     REQUIRE(active != nullptr);
     REQUIRE(active->type() == type);
-    const lv_timer_t* timer = nullptr;
-    switch (type) {
-    case ScreensaverType::FLYING_TOASTERS:
-        timer = FlyingToasterScreensaverTestAccess::tick_timer(
-            static_cast<const FlyingToasterScreensaver&>(*active));
-        break;
-    case ScreensaverType::STARFIELD:
-        timer = SaverTestAccess::timer(static_cast<const StarfieldScreensaver&>(*active));
-        break;
-    case ScreensaverType::PIPES_3D:
-        timer = SaverTestAccess::timer(static_cast<const PipesScreensaver&>(*active));
-        break;
-    case ScreensaverType::OFF:
-        break;
-    }
+    // Every registered saver runs on SaverBase.
+    const lv_timer_t* timer =
+        SaverTestAccess::timer(static_cast<const helix::ui::SaverBase&>(*active));
     REQUIRE(timer != nullptr);
     return timer->period;
 }
@@ -1101,8 +1087,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
 
     mgr.start(type);
     REQUIRE(mgr.is_active());
-    // The saver reads the refresh period when it starts, so this is only the configured
-    // value if the period was set before start().
+    // A saver reads the configured period as it starts, as its level 0 frame period.
     CHECK(running_saver_timer_period(type) == SAVER_PERIOD_MS);
     CHECK(default_refr_timer_period() == SAVER_PERIOD_MS);
     CHECK(anim_timer_period() == SAVER_PERIOD_MS);
@@ -1438,6 +1423,83 @@ TEST_CASE_METHOD(
     CHECK_FALSE(helix::active_refresh_period_hold().is_held());
     CHECK(default_refr_timer_period() == GLOBAL_PERIOD_MS);
     CHECK(anim_timer_period() == GLOBAL_PERIOD_MS);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "each existing saver runs 16 ms at level 0, then 33 ms, without a motion jump",
+                 "[screensaver][screensaver_motion]") {
+    // Matches neither LVGL's default refresh period nor the level 0 period.
+    ScopedRefreshPeriod refresh(20);
+    ScopedGlobalRefreshHold clean_hold; // no configured period, so level 0 is 16 ms
+
+    SECTION("flying toasters") {
+        if (!helix::PlatformCapabilities::detect().supports_animations) {
+            SKIP("BASIC and EMBEDDED hosts fly ten sprites at every level until the gate lands");
+        }
+        FlyingToasterScreensaver ss;
+        ScreensaverStopOnExit<FlyingToasterScreensaver> stop_on_exit{ss};
+        ss.start();
+        REQUIRE(ss.is_active());
+        REQUIRE(ToasterAccess::frames_decoded(ss));
+        const auto initial = shown_frames(ss);
+        const auto all_sprites = ToasterAccess::sprites(ss);
+        REQUIRE(all_sprites.size() > 10);
+        CHECK(ss.level_count() == 3);
+        CHECK(SaverTestAccess::timer(ss)->period == helix::ui::SAVER_FAST_PERIOD);
+        for (int i = 0; i < 10; i++) {
+            lv_tick_inc(400);
+            run_toaster_tick(ss);
+        }
+
+        ss.request_level(1);
+        CHECK(ss.level() == 1);
+        CHECK(SaverTestAccess::timer(ss)->period == 33);
+        CHECK(ToasterAccess::sprites(ss).size() == all_sprites.size());
+
+        lv_tick_inc(100);
+        run_toaster_tick(ss);
+        // Sprites sit exactly where 4.1 s of flight puts them, so the switch cost no time.
+        CHECK(check_sprites_at(ss, 4100, initial).visible_toasters > 0);
+
+        // The lowest rung flies ten sprites and lets the rest go.
+        ss.request_level(2);
+        CHECK(ss.level() == 2);
+        CHECK(SaverTestAccess::timer(ss)->period == 33);
+        CHECK(ToasterAccess::sprites(ss).size() == 10);
+        CHECK(lv_obj_has_flag(all_sprites[10].img, LV_OBJ_FLAG_HIDDEN));
+    }
+
+    SECTION("flying toasters started at the lowest rung") {
+        FlyingToasterScreensaver ss;
+        ScreensaverStopOnExit<FlyingToasterScreensaver> stop_on_exit{ss};
+        ss.set_start_level(2);
+        ss.start();
+        REQUIRE(ss.is_active());
+        CHECK(ToasterAccess::sprites(ss).size() == 10);
+        CHECK(SaverTestAccess::timer(ss)->period == 33);
+    }
+
+    SECTION("starfield") {
+        StarfieldScreensaver ss;
+        ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
+        ss.start();
+        REQUIRE(ss.is_active());
+        CHECK(ss.level_count() == 2);
+        CHECK(SaverTestAccess::timer(ss)->period == helix::ui::SAVER_FAST_PERIOD);
+        ss.request_level(1);
+        CHECK(SaverTestAccess::timer(ss)->period == 33);
+    }
+
+    SECTION("pipes") {
+        PipesScreensaver ss;
+        ScreensaverStopOnExit<PipesScreensaver> stop_on_exit{ss};
+        ss.start();
+        REQUIRE(ss.is_active());
+        CHECK(ss.level_count() == 2);
+        CHECK(SaverTestAccess::timer(ss)->period == helix::ui::SAVER_FAST_PERIOD);
+        ss.request_level(1);
+        CHECK(SaverTestAccess::timer(ss)->period == 33);
+    }
 }
 
 #endif // HELIX_ENABLE_SCREENSAVER

@@ -4,7 +4,6 @@
 
 #include "ui_screensaver.h"
 
-#include "ui_timer_guard.h" // lv_timer_cancel_safe
 #include "ui_utils.h"
 
 #include "platform_capabilities.h"
@@ -15,6 +14,7 @@
 #include <cstdlib>
 #include <draw/lv_image_decoder_private.h>
 
+using helix::ui::DirtyRect;
 using helix::ui::screensaver::flap_frame_at;
 using helix::ui::screensaver::flight_pos_at;
 using helix::ui::screensaver::FlightPos;
@@ -36,10 +36,9 @@ static constexpr int FLIGHT_DISTANCE = 1600;
 // 24 s flight: slower flight, slower flap.
 static constexpr int FLAP_STEP_MS = 50;
 
-// Low-tier sprite cap — every visible sprite costs dirty-region work each frame, so
-// BASIC/EMBEDDED boards fly at most this many regardless of how many are defined in
-// OBJECTS[]. The array is pre-ordered by delay/wave, so truncation keeps a
-// representative visual mix.
+// Sprites flown at the lowest level, and at every level on a BASIC or EMBEDDED board: every
+// visible sprite costs dirty-region work each frame. OBJECTS[] is ordered by delay and wave,
+// so the first ones keep a representative mix.
 static constexpr int SPRITE_CAP_LOW = 10;
 
 // Object definition matching the exact CSS classes and positions.
@@ -147,86 +146,46 @@ int FlyingToasterScreensaver::get_scale_factor() const {
     return (w > 800) ? 512 : 256; // 2x on larger displays
 }
 
-void FlyingToasterScreensaver::start() {
-    if (m_active) {
-        spdlog::debug("[Screensaver] Already active, ignoring start()");
-        return;
-    }
-
+bool FlyingToasterScreensaver::on_start() {
     spdlog::info("[Screensaver] Starting flying toasters");
 
     const auto caps = helix::PlatformCapabilities::detect();
-    const bool low_tier = !caps.supports_animations;
+    m_low_tier = !caps.supports_animations;
 
     m_elapsed_ms = 0;
     decode_sprites();
-    create_overlay();
-    spawn_objects(low_tier);
-
-    const uint32_t period_ms = helix::ui::screensaver_timer_period_ms();
-    m_clock.reset(lv_tick_get());
-    m_tick_timer = lv_timer_create(tick_cb, period_ms, this);
-    spdlog::info("[Screensaver] Flying toasters frame period = {}ms ({} tier)", period_ms,
-                 helix::platform_tier_to_string(caps.tier));
-
-    m_active = true;
+    spawn_objects(sprite_limit(level()));
+    return true;
 }
 
-FlyingToasterScreensaver::~FlyingToasterScreensaver() {
-    // ScreensaverManager owns these in a unique_ptr and does not stop the active
-    // one before destroying it, so a screensaver torn down while running would
-    // otherwise leave tick_cb armed on a freed `this`. lv_timer_cancel_safe()
-    // self-guards on lv_is_initialized() and neuters rather than unlinking, which
-    // is what makes it safe from a destructor and after lv_deinit has already
-    // reclaimed the timer (#750, #751, #1173).
-    cancel_timer();
+void FlyingToasterScreensaver::on_stop() {
+    // The sprites are children of the overlay the base has already queued for deletion.
+    m_objects.clear();
+    free_sprites();
 }
 
-void FlyingToasterScreensaver::cancel_timer() {
-    if (m_tick_timer) {
-        helix::ui::lv_timer_cancel_safe(m_tick_timer);
-        m_tick_timer = nullptr;
-    }
+void FlyingToasterScreensaver::on_level_request(size_t level) {
+    apply_level(level);
+    drop_sprites_past(sprite_limit(this->level()));
 }
 
-void FlyingToasterScreensaver::stop() {
-    if (!m_active) {
+size_t FlyingToasterScreensaver::sprite_limit(size_t level) const {
+    const bool capped = m_low_tier || level >= CAPPED_LEVEL;
+    return static_cast<size_t>(capped ? std::min(NUM_OBJECTS, SPRITE_CAP_LOW) : NUM_OBJECTS);
+}
+
+void FlyingToasterScreensaver::drop_sprites_past(size_t limit) {
+    if (m_objects.size() <= limit) {
         return;
     }
-
-    spdlog::info("[Screensaver] Stopping flying toasters");
-
-    cancel_timer();
-
-    // Clear object list (LVGL objects are children of overlay, deleted with it)
-    m_objects.clear();
-
-    // Async delete — stop() runs inside lv_timer_handler (via check_display_sleep),
-    // so synchronous deletion corrupts LVGL's event linked list (#316).
-    // safe_delete_deferred also reparents to lv_layer_top() before the async
-    // delete so a racing parent-clean can't free the overlay out from under us.
-    helix::ui::safe_delete_deferred(m_overlay);
-
-    free_sprites();
-
-    m_active = false;
+    // Each sprite is hidden now and freed on the next timer pass.
+    for (size_t i = limit; i < m_objects.size(); i++) {
+        helix::ui::safe_delete_deferred(m_objects[i].img);
+    }
+    m_objects.erase(m_objects.begin() + static_cast<std::ptrdiff_t>(limit), m_objects.end());
 }
 
-void FlyingToasterScreensaver::create_overlay() {
-    m_overlay = lv_obj_create(lv_layer_top());
-    lv_obj_set_size(m_overlay, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(m_overlay, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(m_overlay, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(m_overlay, 0, 0);
-    lv_obj_set_style_pad_all(m_overlay, 0, 0);
-    lv_obj_set_style_radius(m_overlay, 0, 0);
-    // Clickable to absorb wake touch (prevents it from triggering underlying UI)
-    // LVGL still registers the activity for inactivity tracking
-    lv_obj_add_flag(m_overlay, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(m_overlay, LV_OBJ_FLAG_SCROLLABLE);
-}
-
-void FlyingToasterScreensaver::spawn_objects(bool low_tier) {
+void FlyingToasterScreensaver::spawn_objects(size_t count) {
     lv_display_t* disp = lv_display_get_default();
     if (!disp)
         return;
@@ -239,7 +198,7 @@ void FlyingToasterScreensaver::spawn_objects(bool low_tier) {
         obj_size = obj_size * scale / 256;
     }
 
-    const int active_count = low_tier ? std::min(NUM_OBJECTS, SPRITE_CAP_LOW) : NUM_OBJECTS;
+    const int active_count = std::min(NUM_OBJECTS, static_cast<int>(count));
 
     m_objects.reserve(active_count);
 
@@ -260,17 +219,16 @@ void FlyingToasterScreensaver::spawn_objects(bool low_tier) {
                              def.delay_ms);
     }
 
-    spdlog::debug("[Screensaver] Spawned {}/{} flying objects ({}x{} screen, {}px sprites, "
-                  "low_tier={})",
-                  m_objects.size(), NUM_OBJECTS, screen_w, screen_h, obj_size, low_tier);
+    spdlog::debug("[Screensaver] Spawned {}/{} flying objects ({}x{} screen, {}px sprites)",
+                  m_objects.size(), NUM_OBJECTS, screen_w, screen_h, obj_size);
 }
 
 void FlyingToasterScreensaver::create_flying_object(int start_x, int start_y, bool is_toaster,
                                                     bool reverse_flap, int speed_ms, int delay_ms) {
-    if (!m_overlay)
+    if (!overlay().obj())
         return;
 
-    lv_obj_t* img = lv_image_create(m_overlay);
+    lv_obj_t* img = lv_image_create(overlay().obj());
 
     // Set initial image from pre-decoded RAM buffers
     uint8_t initial_frame = reverse_flap ? 2 : 0;
@@ -305,29 +263,27 @@ void FlyingToasterScreensaver::create_flying_object(int start_x, int start_y, bo
     m_objects.push_back(obj);
 }
 
-void FlyingToasterScreensaver::tick_cb(lv_timer_t* timer) {
-    auto* self = static_cast<FlyingToasterScreensaver*>(lv_timer_get_user_data(timer));
-    if (!self || !self->m_active)
-        return;
-
-    self->m_elapsed_ms += self->m_clock.advance(lv_tick_get());
+// Sprites are LVGL images, which invalidate their own old and new areas when they move or
+// change frame, so a frame adds nothing to the dirty list.
+void FlyingToasterScreensaver::on_frame(uint32_t dt_ms, std::vector<DirtyRect>& /*dirty*/) {
+    m_elapsed_ms += dt_ms;
 
     lv_display_t* disp = lv_display_get_default();
     int screen_w = disp ? lv_display_get_horizontal_resolution(disp) : 800;
     int screen_h = disp ? lv_display_get_vertical_resolution(disp) : 480;
     int obj_size = 64;
-    int scale = self->get_scale_factor();
+    int scale = get_scale_factor();
     if (scale != 256) {
         obj_size = obj_size * scale / 256;
     }
 
-    for (auto& obj : self->m_objects) {
+    for (auto& obj : m_objects) {
         if (!obj.img)
             continue;
 
         // Position is a function of elapsed time, never of how often the timer fired
-        const FlightPos pos = flight_pos_at(self->m_elapsed_ms, obj.start_x, obj.start_y,
-                                            obj.fly_ms, obj.delay_ms, FLIGHT_DISTANCE);
+        const FlightPos pos = flight_pos_at(m_elapsed_ms, obj.start_x, obj.start_y, obj.fly_ms,
+                                            obj.delay_ms, FLIGHT_DISTANCE);
 
         // Skip objects still in their start delay
         if (!pos.started) {
@@ -361,12 +317,12 @@ void FlyingToasterScreensaver::tick_cb(lv_timer_t* timer) {
 
         // Wing frame cycles 0→1→2→3→2→1 on elapsed time
         const uint8_t frame =
-            flap_frame_at(self->m_elapsed_ms, obj.delay_ms, obj.flap_step_ms, obj.initial_frame);
+            flap_frame_at(m_elapsed_ms, obj.delay_ms, obj.flap_step_ms, obj.initial_frame);
 
         // Only update image source when frame actually changed (RAM buffer, no file I/O)
         if (frame != obj.flap_frame) {
             obj.flap_frame = frame;
-            lv_image_set_src(obj.img, self->m_decoded_frames[frame]);
+            lv_image_set_src(obj.img, m_decoded_frames[frame]);
         }
     }
 }

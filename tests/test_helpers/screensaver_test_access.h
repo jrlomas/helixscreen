@@ -168,10 +168,6 @@ class FlyingToasterScreensaverTestAccess {
         int32_t delay_ms;
     };
 
-    static lv_timer_t* tick_timer(const FlyingToasterScreensaver& ss) {
-        return ss.m_tick_timer;
-    }
-
     static std::vector<Sprite> sprites(const FlyingToasterScreensaver& ss) {
         std::vector<Sprite> out;
         for (const auto& obj : ss.m_objects) {
