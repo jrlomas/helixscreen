@@ -36,6 +36,21 @@ class Ad5xIfsTestAccess {
     static void handle_status(AmsBackendAd5xIfs& b, const json& n) {
         b.handle_status_update(n);
     }
+    // Put a whole Spoolman link on the live slot — the shape a linked slot
+    // carries. The persisted override record has no filament-id field, so
+    // the live slot is the only half of a link a test can seed whole.
+    static bool seed_live_spoolman_link(AmsBackendAd5xIfs& b, int slot_index, int spool_id,
+                                        int filament_id, int vendor_id) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        helix::printer::SlotEntry* entry = b.slots_.get_mut(slot_index);
+        if (!entry)
+            return false;
+        entry->info.spoolman_id = spool_id;
+        entry->info.spoolman_filament_id = filament_id;
+        entry->info.spoolman_vendor_id = vendor_id;
+        entry->info.spool_name = "Linked Spool";
+        return true;
+    }
     // Standalone IFS module surface (ifs / ifs_materials objects).
     static bool module_live(const AmsBackendAd5xIfs& b) {
         return b.ifs_module_live_.load();
@@ -436,8 +451,12 @@ class Ad5xIfsTestAccess {
     }
     // Drive the local read-modify-write path directly so tests can assert
     // file content without going through the full apply_user_edit pipeline.
-    static AmsError write_adventurer_json_local(AmsBackendAd5xIfs& b, int slot_index) {
-        return b.write_adventurer_json_local(slot_index);
+    // The values are the caller's own, as production passes them: the writer
+    // takes no reading from the firmware-truth caches.
+    static AmsError write_adventurer_json_local(AmsBackendAd5xIfs& b, int slot_index,
+                                                const std::string& hex,
+                                                const std::string& material) {
+        return b.write_adventurer_json_local(slot_index, hex, material);
     }
     // tool_map snapshot: copy out for comparison without holding mutex_.
     static std::array<int, AmsBackendAd5xIfs::TOOL_MAP_SIZE> tool_map(const AmsBackendAd5xIfs& b) {

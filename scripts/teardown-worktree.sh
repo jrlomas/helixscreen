@@ -176,6 +176,28 @@ if [[ -n "$BUSY" ]]; then
     exit 1
 fi
 
+# Guard: a live claim outranks an idle-looking tree. The process scan above sees
+# a build, and sees nothing at all while a tree's owner is reading code to work
+# out what a bug is - a phase with no compiler, no commits and a clean status.
+# An advisory claim is the only signal that phase leaves behind.
+if [[ -x "$MAIN_ABS/scripts/helix-claim" ]]; then
+    WT_NAME="$(basename "$WT_ABS")"
+    for res in "worktree:$WT_NAME" "build:$WT_NAME"; do
+        # check exits non-zero only for LIVE; FREE and STALE pass.
+        "$MAIN_ABS/scripts/helix-claim" check "$res" >/dev/null 2>&1 && continue
+        if (( FORCE )); then
+            say "${YELLOW}! $res is claimed by a live owner; removing anyway (--force).${RESET}"
+            continue
+        fi
+        say "${RED}Error: $res is claimed and its owner is alive.${RESET}"
+        { "$MAIN_ABS/scripts/helix-claim" check "$res" 2>&1 || true; } | sed 's/^/    /'
+        say "If the claim is yours, release it and rerun:"
+        say "  ${CYAN}scripts/helix-claim release $res${RESET}"
+        say "Otherwise leave the tree alone, or pass ${CYAN}--force${RESET}."
+        exit 1
+    done
+fi
+
 # Guard: a worktree's ".git" is a pointer file into the main repo's admin
 # data. Once it is gone - a previous teardown that got partway through
 # removing this same tree before root-owned leftovers (a docker build, say)
@@ -263,8 +285,7 @@ if [[ -n "$BRANCH" ]] && (( ! KEEP_BRANCH )); then
     if ! git -C "$MAIN_ABS" rev-parse --verify --quiet "$INTO" >/dev/null; then
         say "${YELLOW}! '$INTO' does not resolve; keeping the branch.${RESET}"
     elif git -C "$MAIN_ABS" merge-base --is-ancestor "$BRANCH" "$INTO" 2>/dev/null; then
-        AHEAD="$( { git -C "$MAIN_ABS" log --oneline "$INTO..$BRANCH" 2>/dev/null || true; } | wc -l | tr -d ' ')"
-        say "${GREEN}Branch tip is an ancestor of $INTO ($AHEAD commits outstanding).${RESET}"
+        say "${GREEN}Branch tip is an ancestor of $INTO.${RESET}"
         DELETE_BRANCH=1
     else
         say "${YELLOW}! '$BRANCH' is NOT contained in '$INTO' - keeping it.${RESET}"
@@ -301,6 +322,31 @@ else
     rmdir "$WT_ABS" 2>/dev/null || true
 fi
 run git -C "$MAIN_ABS" worktree prune
+
+# --- shared submodule pointers -------------------------------------------------
+# .git/modules/<name> is common to every worktree, so initializing a submodule
+# inside one repoints that shared core.worktree at it. Left aimed at a directory
+# this script is about to delete, every OTHER worktree symlinking that submodule
+# fails `git status` with "cannot chdir", and so does the main tree.
+say ""
+say "${BOLD}Restoring shared submodule pointers${RESET}"
+restored=0
+for cfg in "$MAIN_ABS"/.git/modules/*/config "$MAIN_ABS"/.git/modules/lib/*/config; do
+    [[ -f "$cfg" ]] || continue
+    target="$(git config --file "$cfg" --get core.worktree 2>/dev/null || true)"
+    [[ -n "$target" ]] || continue
+    resolved="$(canonicalize_path "$(dirname -- "$cfg")/$target")"
+    [[ "$resolved" == "$WT_ABS"/* ]] || continue
+    # Keep the existing ../ depth (it differs between .git/modules/<n>/ and
+    # .git/modules/lib/<n>/) and swap the path tail back to the main tree's copy.
+    prefix="$(printf '%s' "$target" | sed -E 's#^((\.\./)+).*#\1#')"
+    run git config --file "$cfg" core.worktree "${prefix}${resolved#"$WT_ABS"/}"
+    say "  $(basename -- "$(dirname -- "$cfg")"): pointed here, restored to the main tree"
+    restored=$((restored + 1))
+done
+if (( restored == 0 )); then
+    say "  none pointed into this worktree"
+fi
 
 # The claim, if any, outlives the directory and would read LIVE forever.
 if [[ -x "$MAIN_ABS/scripts/helix-claim" ]]; then
