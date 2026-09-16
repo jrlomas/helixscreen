@@ -78,6 +78,17 @@ struct GridEditModeTestAccess {
     static bool dragging(const GridEditMode& em) {
         return em.dragging_;
     }
+
+    /// The press point every gesture is classified against: press_owns_widget()
+    /// and detect_resize_edge() both read it, so which press it came from
+    /// decides whether a gesture is a drag or an edge resize. drag_pending_ is
+    /// the latch that gates writing it.
+    static lv_point_t press_origin(const GridEditMode& em) {
+        return em.press_origin_;
+    }
+    static bool drag_pending(const GridEditMode& em) {
+        return em.drag_pending_;
+    }
 };
 
 } // namespace helix

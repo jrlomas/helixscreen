@@ -88,6 +88,10 @@ class ScopedTestIndev {
         lv_indev_read(indev_);
     }
 
+    lv_indev_t* get() const {
+        return indev_;
+    }
+
   private:
     lv_indev_t* indev_ = nullptr;
 };
@@ -99,6 +103,12 @@ class ScopedTestIndev {
 void forward_pressing(lv_event_t* e) {
     auto* em = static_cast<GridEditMode*>(lv_event_get_user_data(e));
     em->handle_pressing(e);
+}
+
+/// Mirrors HomePanel::on_home_grid_pressed's forward of a new press.
+void forward_pressed(lv_event_t* e) {
+    auto* em = static_cast<GridEditMode*>(lv_event_get_user_data(e));
+    em->handle_press_start();
 }
 
 } // namespace
@@ -620,6 +630,53 @@ TEST_CASE_METHOD(XMLTestFixture,
     CHECK(GridEditModeTestAccess::dragging(em)); // admitted, as a move
 
     indev.send(far_x, centre.y, LV_INDEV_STATE_RELEASED);
+    em.exit();
+    PanelWidgetManager::instance().clear_panel_config(f.panel_id);
+}
+
+TEST_CASE_METHOD(XMLTestFixture,
+                 "GridEditMode: a press whose release never arrives does not own the next gesture",
+                 "[grid_edit][grid_edit_drag]") {
+    GuardFixture f = make_guard_fixture(test_screen(), "test_grid_edit_press_origin");
+
+    GridEditMode em;
+    em.enter(f.container, f.config, f.page_index);
+    em.select_widget(f.widget);
+    REQUIRE(em.selected_widget() == f.widget);
+
+    lv_obj_add_event_cb(f.container, forward_pressed, LV_EVENT_PRESSED, &em);
+    lv_obj_add_event_cb(f.container, forward_pressing, LV_EVENT_PRESSING, &em);
+
+    ScopedTestIndev indev;
+    lv_area_t sel_area;
+    lv_obj_get_coords(f.widget, &sel_area);
+
+    // First gesture: a press hard against the top edge, which is what makes a
+    // stale origin classify every later gesture on this widget as a resize.
+    const int mid_x = (sel_area.x1 + sel_area.x2) / 2;
+    const lv_point_t first{mid_x, sel_area.y1 + 2};
+    indev.send(first.x, first.y, LV_INDEV_STATE_PRESSED);
+    REQUIRE(GridEditModeTestAccess::drag_pending(em));
+    REQUIRE(GridEditModeTestAccess::press_origin(em).y == first.y);
+
+    // Retire the press the way a deferred rebuild does. lv_indev_reset() drops
+    // the active object, so the finger coming up afterwards reaches no widget
+    // and handle_released() never runs — the latch survives into the next
+    // gesture with the first press's origin still in it.
+    lv_indev_reset(indev.get(), nullptr);
+    indev.send(first.x, first.y, LV_INDEV_STATE_RELEASED);
+    REQUIRE(GridEditModeTestAccess::drag_pending(em));
+    REQUIRE(GridEditModeTestAccess::press_origin(em).y == first.y);
+
+    // Second gesture, at the centre — far enough from the first that a stale
+    // origin is unambiguous rather than a rounding difference.
+    const lv_point_t second{mid_x, (sel_area.y1 + sel_area.y2) / 2};
+    REQUIRE(second.y - first.y > GridEditModeTestAccess::edge_hit_band(em));
+    indev.send(second.x, second.y, LV_INDEV_STATE_PRESSED);
+
+    CHECK(GridEditModeTestAccess::press_origin(em).y == second.y);
+
+    indev.send(second.x, second.y, LV_INDEV_STATE_RELEASED);
     em.exit();
     PanelWidgetManager::instance().clear_panel_config(f.panel_id);
 }
