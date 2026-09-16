@@ -296,10 +296,10 @@ TEST_CASE("connected reports drive chamber_heater_offline", "[chamber][subjects]
     // One report is a missed poll, not an outage: the run has to build.
     const nlohmann::json down{
         {"dragonbreath", {{"connected", false}, {"protocol_error", nullptr}}}};
-    ts.update_from_status(down);
-    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
-    ts.update_from_status(down);
-    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+    for (int i = 0; i < 3; ++i) {
+        ts.update_from_status(down);
+        CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+    }
     ts.update_from_status(down);
     CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 1);
     // protocol_error: null is inert — no UI subject moves on it.
@@ -326,7 +326,7 @@ TEST_CASE("a delta without connected keeps the offline state", "[chamber][subjec
     const nlohmann::json down =
         nlohmann::json::parse(R"({"dragonbreath": {"fault": false, "fault_reason": null,
       "ptc_temp": 40.0, "fan_percent": 0, "fan_reason": "off", "connected": false}})");
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         ts.update_from_status(down);
     }
     REQUIRE(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 1);
@@ -615,7 +615,9 @@ TEST_CASE("a one-poll link flap never reaches the banner", "[chamber][subjects][
     ts.update_from_status({{"dragonbreath", {{"connected", true}, {"ptc_temp", 30.0}}}});
     REQUIRE(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
 
-    // The flap, at the observed length of one report.
+    // The flap, at the longest length measured on hardware (two reports).
+    ts.update_from_status({{"dragonbreath", {{"connected", false}, {"ptc_temp", 30.05}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
     ts.update_from_status({{"dragonbreath", {{"connected", false}, {"ptc_temp", 30.1}}}});
     CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
     ts.update_from_status({{"dragonbreath", {{"connected", true}, {"ptc_temp", 30.2}}}});

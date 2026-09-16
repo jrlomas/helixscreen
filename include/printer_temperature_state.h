@@ -501,13 +501,16 @@ class PrinterTemperatureState {
     char chamber_filter_fan_icon_buf_[16] = {};
     SubjectLifetime chamber_heater_fault_lifetime_;
     SubjectLifetime chamber_heater_inhibited_lifetime_;
-    /// A single missed poll of the appliance reports connected:false and
-    /// recovers on the very next frame, so asserting offline on the first
-    /// report flashes an alarm for one poll several times an hour. Offline is
-    /// asserted only after this many consecutive reports; any connected report
-    /// clears the run. At the module's 2s poll that is ~6s to notice a real
-    /// outage, against a measured flap length of one poll.
-    static constexpr int CHAMBER_OFFLINE_CONSECUTIVE_REPORTS = 3;
+    /// The appliance drops a poll periodically and recovers within a frame or
+    /// two, so asserting offline on the first connected:false flashes an alarm
+    /// for a couple of seconds several times an hour. Offline is asserted only
+    /// after this many consecutive reports; any connected report clears the
+    /// run. Measured flap lengths on a U1 over an hour were 1, 1 and 2 polls
+    /// about twenty minutes apart, so the bar sits clear of the longest seen
+    /// rather than one sample above it. At the module's 2s poll this notices a
+    /// real outage in about eight seconds, which costs nothing: an appliance
+    /// that has actually gone is gone for minutes.
+    static constexpr int CHAMBER_OFFLINE_CONSECUTIVE_REPORTS = 4;
     int chamber_offline_run_ = 0;
 
     SubjectLifetime chamber_heater_externally_controlled_lifetime_;
