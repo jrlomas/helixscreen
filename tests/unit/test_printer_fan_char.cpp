@@ -29,6 +29,7 @@
 #include "../ui_test_utils.h"
 #include "app_globals.h"
 #include "config.h"
+#include "printer_fan_state.h"
 #include "printer_state.h"
 
 #include "../catch_amalgamated.hpp"
@@ -1648,4 +1649,41 @@ TEST_CASE("Promoted part fan survives a role re-apply (#1181)", "[fan][reinit][c
     state.init_fans({"fan", "fan_generic part_cooling"});
 
     REQUIRE(state.get_fan_state().classify_primary_fans().part == "fan_generic part_cooling");
+}
+
+// ============================================================================
+// Role display names
+// ============================================================================
+
+TEST_CASE("Fan role display names cover every assigned role", "[fan][roles][display]") {
+    lv_init_safe();
+
+    helix::PrinterFanState fans;
+    fans.init_subjects(/*register_xml=*/false);
+
+    helix::FanRoleConfig roles;
+    roles.part_fan = "fan_generic fanM106";
+    roles.hotend_fan = "heater_fan heat_fan";
+    roles.chamber_fan = "fan_generic chamber_fan";
+    roles.exhaust_fan = "fan_generic external_fan";
+    roles.aux_fan = "fan_generic internal_fan";
+
+    fans.init_fans({"fan_generic fanM106", "heater_fan heat_fan", "fan_generic chamber_fan",
+                    "fan_generic external_fan", "fan_generic internal_fan"},
+                   roles);
+
+    auto name_of = [&fans](const std::string& object_name) {
+        for (const auto& f : fans.get_fans()) {
+            if (f.object_name == object_name) {
+                return f.display_name;
+            }
+        }
+        return std::string{"<not discovered>"};
+    };
+
+    CHECK(name_of("fan_generic fanM106") == "Part Fan");
+    CHECK(name_of("heater_fan heat_fan") == "Hotend Fan");
+    CHECK(name_of("fan_generic chamber_fan") == "Chamber Fan");
+    CHECK(name_of("fan_generic external_fan") == "Exhaust Fan");
+    CHECK(name_of("fan_generic internal_fan") == "Aux Fan");
 }

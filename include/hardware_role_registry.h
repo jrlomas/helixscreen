@@ -18,6 +18,7 @@ enum class HardwareRoleId {
     HotendFan,
     ChamberFan,
     ExhaustFan,
+    AuxFan,
 };
 
 enum class HardwareCategory { Fan, Heater, Led, FilamentSensor };

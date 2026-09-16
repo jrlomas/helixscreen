@@ -42,6 +42,7 @@ struct FanRoleConfig {
     std::string hotend_fan;  ///< Configured hotend fan object name
     std::string chamber_fan; ///< Configured chamber fan object name
     std::string exhaust_fan; ///< Configured exhaust fan object name
+    std::string aux_fan;     ///< Configured aux fan object name
 
     /// Resolve roles from config against the live discovered fan list, auto-healing
     /// (and persisting) stale roles that name objects no longer present. Pass the

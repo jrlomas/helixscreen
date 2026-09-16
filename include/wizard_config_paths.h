@@ -48,6 +48,7 @@ constexpr const char* HOTEND_FAN = "fans/hotend";
 constexpr const char* PART_FAN = "fans/part";
 constexpr const char* CHAMBER_FAN = "fans/chamber";
 constexpr const char* EXHAUST_FAN = "fans/exhaust";
+constexpr const char* AUX_FAN = "fans/aux";
 
 // Chamber hardware (sensor and heater — distinct from chamber_fan above)
 constexpr const char* CHAMBER_SENSOR = "temp_sensors/chamber";
