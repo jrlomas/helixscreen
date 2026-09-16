@@ -14,7 +14,8 @@
 ```bash
 make t F='[tag]'               # build, then run ONE tag or case (the inner loop)
 make test                      # build tests only (does NOT run them)
-make full-test-run             # build AND run the whole suite in parallel
+make unit-sweep                # build AND run the C++ unit suite, sharded (~50s)
+make full-test-run             # unit-sweep + bats shell suite (~2m) - the completion gate
 ./build/bin/helix-tests "[tag]"  # one tag with NO dependency scan, 0.05-0.6s
 ```
 
@@ -141,7 +142,9 @@ Key the choice on the question you actually have, not on a phase of work:
 | Do any assertions only look like assertions? | `make check-tautology`, `make test-vacuous` | 3s, seconds |
 | Does any test even reach this code? | `make cov-diff` | minutes |
 | Do my changed lines have detection? | `make mutate-diff` | 2-4 min per hunk |
-| Did I break something elsewhere? | `make full-test-run` | 25s idle, minutes loaded, **once, at the end** |
+| Did I break something elsewhere in C++? | `make unit-sweep` | ~50s idle, minutes loaded |
+| Am I finished - did I break anything, anywhere? | `make full-test-run` | ~2m, **once, at the end** |
+| What does any of this actually cost? | `make dev-timing` | 5s, measured medians |
 
 The rule the table encodes: **a full run cannot tell you your feature works.** It can only
 tell you something else broke, and that question is not interesting until you are done. A
