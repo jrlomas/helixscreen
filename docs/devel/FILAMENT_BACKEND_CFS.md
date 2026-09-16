@@ -233,7 +233,7 @@ inference.
   `BOX_MATERIAL_FLUSH`, matching the firmware's own `BOX_LOAD_MATERIAL_WITH_MATERIAL` macro.
   The colour-aware `BOX_MATERIAL_CHANGE_FLUSH LAST_TNN=<old> TNN=<new>` exists and is what the
   internal `T*` path uses, but adopting it changes purge length on unowned hardware and adds a
-  blockage failure mode — gated on #1278.
+  blockage failure mode, so it needs a K1 + CFS to settle.
 - `BOX_MODIFY_TN_DATA` (color sync) syntax is confirmed correct — `PART` values are the
   tn_data.json field names. Material-type writeback is unblocked *except* for the
   `material_type` value domain, which is still unknown.
