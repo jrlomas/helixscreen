@@ -346,6 +346,13 @@ OBJ_DIR ?= $(BUILD_DIR)/obj
 # by a change to their sources. The path is fixed here beside OBJ_DIR because the
 # rules naming it are read before CXXFLAGS is final; mk/rules.mk writes contents.
 FLAGS_STAMP := $(OBJ_DIR)/.build-flags
+# Created empty here, before the first rule naming it is parsed. A prerequisite
+# that neither exists nor has a rule makes make discard the whole pattern rule,
+# and every one of the 15 rules naming this stamp shares that one file record --
+# so an object not already on disk reports "No rule to make target" instead. Only
+# a build with no $(OBJ_DIR) yet is affected, which is why CI sees it and an
+# incremental tree never does. mk/rules.mk fills in the flag text below.
+$(shell mkdir -p $(OBJ_DIR); [ -e $(FLAGS_STAMP) ] || : > $(FLAGS_STAMP))
 
 # LVGL
 LVGL_DIR := lib/lvgl
