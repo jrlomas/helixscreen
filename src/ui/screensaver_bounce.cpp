@@ -101,15 +101,12 @@ bool BouncingPrinterScreensaver::on_start() {
     if (!decode_sprite()) {
         return false;
     }
-    fit_sprite(box, src_w_, src_h_, sprite_w_, sprite_h_);
+    apply_geometry(box);
 
     spdlog::debug("[Screensaver] Bouncing printer sprite ready ({}x{}, {}x{} sprite)", screen_w_,
                   screen_h_, sprite_w_, sprite_h_);
 
     elapsed_ms_ = 0;
-    range_x_ = static_cast<float>(screen_w_ - sprite_w_);
-    range_y_ = static_cast<float>(screen_h_ - sprite_h_);
-    speed_ = SPEED_FRACTION * static_cast<float>(std::min(screen_w_, screen_h_));
 
     img_ = lv_image_create(overlay().obj());
     lv_image_set_src(img_, decoded_);
@@ -204,6 +201,13 @@ void BouncingPrinterScreensaver::seed_motion() {
     prev_fold_y_ = fold_index(y0_, range_y_);
 }
 
+void BouncingPrinterScreensaver::apply_geometry(int box) {
+    fit_sprite(box, src_w_, src_h_, sprite_w_, sprite_h_);
+    range_x_ = static_cast<float>(screen_w_ - sprite_w_);
+    range_y_ = static_cast<float>(screen_h_ - sprite_h_);
+    speed_ = SPEED_FRACTION * static_cast<float>(std::min(screen_w_, screen_h_));
+}
+
 void BouncingPrinterScreensaver::rebase(int screen_w, int screen_h) {
     const int box = sprite_size_for(screen_w, screen_h);
     if (box <= 0) {
@@ -216,10 +220,7 @@ void BouncingPrinterScreensaver::rebase(int screen_w, int screen_h) {
 
     screen_w_ = screen_w;
     screen_h_ = screen_h;
-    fit_sprite(box, src_w_, src_h_, sprite_w_, sprite_h_);
-    range_x_ = static_cast<float>(screen_w_ - sprite_w_);
-    range_y_ = static_cast<float>(screen_h_ - sprite_h_);
-    speed_ = SPEED_FRACTION * static_cast<float>(std::min(screen_w_, screen_h_));
+    apply_geometry(box);
 
     if (img_) {
         lv_obj_set_size(img_, sprite_w_, sprite_h_);

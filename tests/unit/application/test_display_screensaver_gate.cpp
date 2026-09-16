@@ -6,6 +6,7 @@
 #include "ui_update_queue.h"
 
 #include "app_globals.h"
+#include "display_backend.h"
 #include "display_manager.h"
 #include "lvgl_test_fixture.h"
 #include "print_lifecycle_state.h"
@@ -35,6 +36,36 @@ struct ScriptedGateClock {
                                                            helix::ui::read_process_cpu_clock);
         helix::ScreensaverManagerTestAccess::reset_baseline(savers);
     }
+};
+
+/// Backend whose type and GPU flag the test picks, so the host's display-path key can be
+/// asserted without hardware. Everything else on the interface is inert.
+class FakeKeyBackend : public DisplayBackend {
+  public:
+    FakeKeyBackend(DisplayBackendType type, bool gpu) : m_type(type), m_gpu(gpu) {}
+
+    lv_display_t* create_display(int, int) override {
+        return nullptr;
+    }
+    lv_indev_t* create_input_pointer() override {
+        return nullptr;
+    }
+    DisplayBackendType type() const override {
+        return m_type;
+    }
+    const char* name() const override {
+        return "FakeKey";
+    }
+    bool is_available() const override {
+        return true;
+    }
+    bool is_gpu_accelerated() const override {
+        return m_gpu;
+    }
+
+  private:
+    DisplayBackendType m_type;
+    bool m_gpu;
 };
 
 } // namespace
@@ -84,6 +115,20 @@ TEST_CASE_METHOD(
 
     helix::PrinterStateTestAccess::reset(printer_state);
     printer_state.init_subjects(false);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "the screensaver host keys its display path off the backend it is given",
+                 "[application][display][screensaver_gate]") {
+    FakeKeyBackend fbdev{DisplayBackendType::FBDEV, /*gpu=*/false};
+    FakeKeyBackend egl{DisplayBackendType::DRM, /*gpu=*/true};
+
+    const helix::ui::SaverHost software = DisplayManager::screensaver_host(&fbdev);
+    CHECK(software.display_backend == "fbdev");
+    REQUIRE(software.is_printing != nullptr);
+
+    const helix::ui::SaverHost hardware = DisplayManager::screensaver_host(&egl);
+    CHECK(hardware.display_backend == "egl");
 }
 
 #endif // HELIX_ENABLE_SCREENSAVER

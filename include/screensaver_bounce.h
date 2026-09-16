@@ -110,6 +110,8 @@ class BouncingPrinterScreensaver : public helix::ui::SaverBase {
     }
 
   private:
+    friend class BounceTestAccess;
+
     /// Frame period per level: 16 ms with confetti corners, 33 ms with confetti corners, 33 ms
     /// with the corner flash alone.
     static constexpr uint32_t LEVEL_PERIODS_MS[] = {helix::ui::SAVER_FAST_PERIOD, 33, 33};
@@ -121,6 +123,8 @@ class BouncingPrinterScreensaver : public helix::ui::SaverBase {
     void free_sprite();
     /// Pick a velocity whose path is not a short repeating loop
     void seed_motion();
+    /// Size the sprite to `box` and derive travel ranges and speed from the current screen
+    void apply_geometry(int box);
     /// Recompute travel ranges after a resolution change without teleporting
     void rebase(int screen_w, int screen_h);
     void apply_tint();

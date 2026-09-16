@@ -1184,6 +1184,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "a screensaver that fails to start gives the r
 // BouncingPrinterScreensaver Tests
 // ============================================================================
 
+#include "../test_helpers/screensaver_bounce_test_access.h"
 #include "screensaver_bounce.h"
 
 TEST_CASE_METHOD(LVGLTestFixture, "BouncingPrinterScreensaver starts inactive", "[screensaver]") {
@@ -1369,6 +1370,28 @@ TEST_CASE("Bouncing printer: sprite leaves room to bounce at every breakpoint",
 
     // A panel with no room to bounce declines rather than pinning the sprite.
     REQUIRE(sprite_size_for(64, 64) == 0);
+}
+
+TEST_CASE("Bouncing printer: a resize rescales the speed to the screen's narrow axis",
+          "[screensaver][bounce_math]") {
+    BouncingPrinterScreensaver ss;
+
+    BounceTestAccess::rebase(ss, 480, 320);
+    const float small = BounceTestAccess::speed(ss);
+    REQUIRE(small > 0.0f);
+
+    // The narrow axis sets the speed whichever side of the screen it is on.
+    BounceTestAccess::rebase(ss, 320, 480);
+    CHECK(BounceTestAccess::speed(ss) == Catch::Approx(small).epsilon(0.0001f));
+
+    // A taller narrow axis speeds the path proportionally: 480 over 320.
+    BounceTestAccess::rebase(ss, 800, 480);
+    const float wide = BounceTestAccess::speed(ss);
+    CHECK(wide == Catch::Approx(small * (480.0f / 320.0f)).epsilon(0.0001f));
+
+    // Growing the long axis alone leaves the speed where it was.
+    BounceTestAccess::rebase(ss, 1024, 480);
+    CHECK(BounceTestAccess::speed(ss) == Catch::Approx(wide).epsilon(0.0001f));
 }
 
 TEST_CASE("Bouncing printer: the sprite box is the shape of the artwork",

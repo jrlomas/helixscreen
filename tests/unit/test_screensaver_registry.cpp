@@ -124,6 +124,26 @@ TEST_CASE("the settings dropdown lists Off then every registered screensaver in 
           expected);
 }
 
+TEST_CASE("every screensaver label the dropdown can show has an en.xml translation",
+          "[screensaver][screensaver_registry]") {
+    std::ifstream file("ui_xml/translations/en.xml");
+    REQUIRE(file.is_open()); // helix-tests runs from the repo root
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string xml = buffer.str();
+
+    // en.xml is the master list the other locales are generated from, so a saver
+    // missing here ships untranslated everywhere.
+    std::vector<std::string> tags{helix::ui::SCREENSAVER_OFF_LABEL_KEY};
+    for (const helix::ui::ScreensaverInfo& info : SCREENSAVERS) {
+        tags.emplace_back(info.label_key);
+    }
+    for (const std::string& tag : tags) {
+        CAPTURE(tag);
+        CHECK(xml.find("<translation tag=\"" + tag + "\"") != std::string::npos);
+    }
+}
+
 TEST_CASE("fresh installs default to flying toasters, a registered saver",
           "[screensaver][screensaver_registry]") {
     CHECK(helix::ui::DEFAULT_SCREENSAVER_TYPE == ScreensaverType::FLYING_TOASTERS);
