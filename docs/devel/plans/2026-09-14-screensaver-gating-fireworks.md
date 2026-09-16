@@ -5364,6 +5364,12 @@ git commit -m "refactor(screensaver): flying toasters on the shared parts, with 
 
 Every running saver measures its own CPU cost. `ScreensaverManager` samples process CPU time on the display manager's idle-check tick, keeps an idle baseline, closes 5 s windows after a 1 s warm-up, and asks a pure decision function whether to keep the level, step down or mark the board too heavy. Levels are stored per saver, app version and board. Two environment switches override the budget or force a level. Toasters stop reading the platform tier; their lowest ladder rung keeps the sprite cap.
 
+> **Bouncing Printer's depth bits are inferred, not measured.** Its registry row claims
+> `SAVER_DEPTH_16 | SAVER_DEPTH_32` because the saver blits an `lv_image` and never names a
+> colour format, unlike the canvas savers which pick one explicitly. Nothing has yet rendered
+> it on a 16 bpp display. This gate is the first consumer of that claim, so confirm it when
+> Task 9 brings up the RGB565 path rather than trusting the row.
+
 **Files:**
 - Create: `include/env_whole_number.h`, `include/screensaver_cpu_clock.h`, `src/ui/screensaver_cpu_clock.cpp`, `include/screensaver_gate.h`, `src/ui/screensaver_gate.cpp`, `include/screensaver_level_store.h`, `src/ui/screensaver_level_store.cpp`
 - Modify: `include/refresh_timing_env.h#refresh_timing_detail::ms_from_env`, `include/display_backend.h` (new `display_backend_key`), `include/screensaver.h` (rewritten: `SaverHost`, gate members), `src/ui/screensaver_manager.cpp` (rewritten), `include/display_manager.h` (`DisplayManager::screensaver_host`), `src/application/display_manager.cpp#DisplayManager::init`, `#DisplayManager::check_display_sleep`, `#DisplayManager::screensaver_host`, `include/ui_screensaver.h` and `src/ui/ui_screensaver.cpp` (no tier input), `tests/unit/test_screensaver.cpp` (the Task 5 host guard goes), `tests/test_helpers/screensaver_manager_test_access.h`, `docs/devel/ENVIRONMENT_VARIABLES.md`, `docs/user/CONFIGURATION.md`, `firmware/helixscreen-esp32/components/helixapp/app_srcs_excluded.txt`
