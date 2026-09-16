@@ -109,16 +109,21 @@ forgex_strip_guard_blocks() {
 # Record the display mode the printer arrived on, so uninstall can restore it.
 # The write goes through $SUDO like every other privileged write: mod_data is
 # root-owned on a real device and a bare redirect fails silently there.
-# The first record wins: a re-run
-# (upgrade) finds HEADLESS because we set it, and overwriting would make
-# uninstall "restore" HEADLESS, leaving an uninstalled printer with no UI.
+# A write that fails returns non-zero and the takeover must stop: without the
+# record, uninstall restores the GUPPY fallback for a printer that may never
+# have had it. The first record wins: a re-run (upgrade) finds HEADLESS
+# because we set it, and overwriting would make uninstall "restore" HEADLESS,
+# leaving an uninstalled printer with no UI.
 forgex_record_prev_display() {
     record_f="$(forgex_prev_display_f)"
     if [ -s "$record_f" ]; then
         return 0
     fi
-    printf '%s\n' "$1" | $SUDO tee "$record_f" >/dev/null 2>/dev/null \
-        || log_warn "Could not record the previous ForgeX display mode (${record_f})"
+    if ! printf '%s\n' "$1" | $SUDO tee "$record_f" >/dev/null 2>/dev/null; then
+        log_error "Could not record the previous ForgeX display mode (${record_f})"
+        return 1
+    fi
+    return 0
 }
 
 # Configure ForgeX display settings for HelixScreen.
@@ -143,6 +148,7 @@ configure_forgex_display() {
     tslib_init="$(forgex_mod_root)/.root/S35tslib"
     changed=false
     display_set=false
+    record_failed=false
 
     if [ -f "$var_file" ]; then
         # HEADLESS closes the list as an arrival state: a printer already on
@@ -155,8 +161,14 @@ configure_forgex_display() {
 
             # Remember where we found it so uninstall can put it back. 1.4.0
             # and 1.4.1 default to STOCK, 1.4.2 to FEATHER, so a fixed restore
-            # target would strand one of them on a mode it never had.
-            forgex_record_prev_display "$mode"
+            # target would strand one of them on a mode it never had. A record
+            # that cannot be written ends the takeover here: moving the
+            # display to HEADLESS anyway would leave uninstall restoring the
+            # GUPPY fallback for a mode this printer never had.
+            if ! forgex_record_prev_display "$mode"; then
+                record_failed=true
+                break
+            fi
             display_set=true
 
             if [ "$mode" = "HEADLESS" ]; then
@@ -170,9 +182,11 @@ configure_forgex_display() {
             break
         done
 
-        if [ "$display_set" != true ]; then
+        if [ "$display_set" != true ] && [ "$record_failed" != true ]; then
             log_warn "ForgeX display mode in ${var_file} was not recognized - left unchanged"
         fi
+    else
+        log_warn "ForgeX variables.cfg not found (${var_file}) - display mode cannot be taken over"
     fi
 
     # Disable GuppyScreen init script (remove execute permission). HEADLESS
@@ -204,17 +218,21 @@ configure_forgex_display() {
         changed=true
     fi
 
-    if [ "$display_set" != true ] && [ -f "$var_file" ]; then
-        # A variables.cfg whose display spelling we did not recognize means
-        # the takeover failed - the vendor UI keeps the slot - and that must
-        # not be reported as success just because the chmod arms above fired.
+    if [ "$display_set" != true ]; then
+        # display_set survives only a mode the takeover both recognized and
+        # recorded. Reaching here - unrecognized spelling, unwritable record,
+        # or no variables.cfg to read - means the takeover failed and the
+        # vendor UI keeps the slot, which must not be reported as success just
+        # because the chmod arms above fired.
         return 1
     fi
     if [ "$changed" = true ]; then
         log_success "ForgeX configured for HelixScreen (HEADLESS mode, GuppyScreen disabled)"
-        return 0
     fi
-    return 1
+    # An already-HEADLESS printer with nothing left to de-exec is the
+    # takeover's goal state; a re-run (upgrade) lands here and must not read
+    # as failure.
+    return 0
 }
 
 # Pre-dismiss ForgeX's "Try the new Feather screen" offer.
@@ -705,6 +723,7 @@ uninstall_forgex() {
     fi
 
     var_file="$(forgex_mod_data)/variables.cfg"
+    record_f="$(forgex_prev_display_f)"
 
     # Put the display mode back where install found it. 1.4.0/1.4.1 default to
     # STOCK and 1.4.2 to FEATHER, so a hardcoded restore target would leave one
@@ -713,8 +732,8 @@ uninstall_forgex() {
     # Forge-X.
     restore_mode="GUPPY"
     mode_restored=false
-    if [ -r "$(forgex_prev_display_f)" ]; then
-        saved_mode=$(cat "$(forgex_prev_display_f)" 2>/dev/null)
+    if [ -r "$record_f" ]; then
+        saved_mode=$(cat "$record_f" 2>/dev/null)
         case "$saved_mode" in
             STOCK|FEATHER|GUPPY|HEADLESS) restore_mode="$saved_mode" ;;
         esac
@@ -723,10 +742,21 @@ uninstall_forgex() {
     if [ -f "$var_file" ]; then
         if grep -q "display[[:space:]]*=[[:space:]]*'HEADLESS'" "$var_file"; then
             log_info "Restoring ForgeX display mode to ${restore_mode}..."
-            $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'HEADLESS'/display = '${restore_mode}'/" "$var_file"
-            mode_restored=true
+            if $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'HEADLESS'/display = '${restore_mode}'/" "$var_file"; then
+                mode_restored=true
+                # The record dies only with the restore that consumed it.
+                $SUDO rm -f "$record_f"
+            else
+                log_warn "Could not rewrite ${var_file} - the recorded display mode is kept for a later uninstall"
+            fi
+        elif [ -s "$record_f" ]; then
+            # ForgeX's own tooling can move the display after our install
+            # (zdisplay.sh on a SET_MOD, an accepted Feather promo). That mode
+            # is not ours to overwrite and the record is the only copy of the
+            # printer's real pre-install mode, so it stays for a later
+            # uninstall instead of being deleted unused.
+            log_warn "ForgeX display is no longer HEADLESS - not restoring; the recorded pre-install mode is kept (${record_f})"
         fi
-        $SUDO rm -f "$(forgex_prev_display_f)"
     fi
 
     # Restore stock FlashForge UI in auto_run.sh

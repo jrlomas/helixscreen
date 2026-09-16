@@ -46,6 +46,19 @@ setup() {
     HOST_MOD_ROOT="$MOD_ROOT"
 }
 
+# Source configure_platform's module (main.sh) with its source-time traps
+# stripped: an ERR trap left armed inside bats fires on the first failing
+# assertion into an undefined error_handler and swallows bats' result line
+# (same approach as test_mod_owned_competing_uis.bats).
+source_main_platform() {
+    local main_patched="$BATS_TEST_TMPDIR/main.sh"
+    sed -e "/^trap /d" \
+        "$WORKTREE_ROOT/scripts/lib/installer/main.sh" > "$main_patched"
+    unset _HELIX_MAIN_SOURCED
+    # shellcheck disable=SC1090
+    . "$main_patched"
+}
+
 # Lay out a mod tree at $1 and point the path variables at it.
 use_mod_root() {
     MOD_ROOT="$1"
@@ -459,6 +472,78 @@ EOF
     [ "$(current_display_mode)" = "TFT" ]
 }
 
+@test "a record write that fails fails the takeover instead of proceeding" {
+    # Without the record, uninstall cannot know the printer's real pre-install
+    # mode and restores the GUPPY fallback -- a mode this printer never had.
+    # The takeover must not move the display to HEADLESS when it cannot write
+    # the record that undoes the move.
+    write_variables_cfg FEATHER
+    local shim="$BATS_TEST_TMPDIR/sudo-fail-record"
+    cat > "$shim" <<EOF
+#!/bin/sh
+if [ "\$1" = "tee" ] && [ "\$2" = "$PREV_DISPLAY_F" ]; then
+    exit 1
+fi
+exec "\$@"
+EOF
+    chmod +x "$shim"
+    SUDO="$shim"
+    export SUDO
+
+    run configure_forgex_display
+    [ "$status" -ne 0 ] || fail "takeover reported success without a record"
+    [ "$(current_display_mode)" = "FEATHER" ] \
+        || fail "display moved to HEADLESS with no record to restore it"
+    [ ! -e "$PREV_DISPLAY_F" ]
+}
+
+# --- configure_platform: a failed takeover fails the install ---
+
+@test "configure_platform propagates a failed display takeover" {
+    # configure_forgex_display returns non-zero only when the vendor UI keeps
+    # the display slot; an install that continued past that would report
+    # success while two UIs fight over the framebuffer. The wiring must reach
+    # the bundled installer too -- that copy is what a device actually runs.
+    source_main_platform
+    AD5M_FIRMWARE=forge_x
+    configure_forgex_display() { return 1; }
+    dismiss_forgex_feather_promo() { :; }
+    patch_forgex_screen_sh() { :; }
+    patch_forgex_screen_drawing() { :; }
+    install_forgex_logged_wrapper() { :; }
+    disable_stock_firmware_ui() { :; }
+
+    # helpers.bash stubs the log helpers silent; re-arm log_error so the
+    # operator-facing message is assertable.
+    log_error() { echo "[ERROR] $1"; }
+    run configure_platform
+    [ "$status" -ne 0 ] || fail "configure_platform masked the failed takeover"
+    contains "display takeover failed" "$output"
+
+    grep -qF 'configure_forgex_display || {' \
+        "$WORKTREE_ROOT/scripts/lib/installer/main.sh" \
+        || fail "main.sh does not propagate the takeover failure"
+    grep -qF 'configure_forgex_display || {' \
+        "$WORKTREE_ROOT/scripts/install.sh" \
+        || fail "bundled install.sh does not carry the propagation"
+}
+
+@test "configure_platform proceeds when the display takeover succeeds" {
+    # Positive control for the test above: without it, a forge_x arm that
+    # fails everything would pass it.
+    source_main_platform
+    AD5M_FIRMWARE=forge_x
+    configure_forgex_display() { return 0; }
+    dismiss_forgex_feather_promo() { :; }
+    patch_forgex_screen_sh() { :; }
+    patch_forgex_screen_drawing() { :; }
+    install_forgex_logged_wrapper() { :; }
+    disable_stock_firmware_ui() { :; }
+
+    run configure_platform
+    [ "$status" -eq 0 ] || fail "configure_platform failed after a successful takeover: $output"
+}
+
 # --- patch_forgex_screen_sh: the smart backlight guard ---
 
 @test "backlight patch guards the backlight case and keeps screen.sh valid (1.4.2)" {
@@ -749,6 +834,59 @@ EOF
     [ "$(current_display_mode)" = "HEADLESS" ] \
         || fail "a stacked second call rewrote HEADLESS to $(current_display_mode)"
     [ ! -e "$PREV_DISPLAY_F" ]
+}
+
+@test "a display moved off HEADLESS keeps its pre-install record" {
+    # ForgeX's own tooling can move the display while HelixScreen is installed
+    # (zdisplay.sh on a SET_MOD, an accepted Feather promo). The record is the
+    # only copy of the printer's real pre-install mode, so an uninstall that
+    # finds a foreign mode must leave it for a later restore instead of
+    # deleting it unused.
+    write_variables_cfg FEATHER
+    configure_forgex_display
+    [ "$(cat "$PREV_DISPLAY_F")" = "FEATHER" ]
+    write_variables_cfg GUPPY
+
+    # helpers.bash stubs the log helpers silent; re-arm log_warn so the
+    # operator-facing explanation is assertable.
+    log_warn() { echo "[WARN] $1"; }
+    unset restored_ui
+    uninstall_forgex >"$BATS_TEST_TMPDIR/uninstall.log" 2>&1
+
+    [ "$(current_display_mode)" = "GUPPY" ] \
+        || fail "uninstall rewrote a display mode it did not install"
+    [ "$(cat "$PREV_DISPLAY_F")" = "FEATHER" ] \
+        || fail "pre-install record destroyed without being used"
+    [ -z "${restored_ui:-}" ] \
+        || fail "uninstall claimed a restore that did not happen: $restored_ui"
+    grep -q "no longer HEADLESS" "$BATS_TEST_TMPDIR/uninstall.log" \
+        || fail "no log line explains the skipped restore"
+}
+
+@test "a restore that cannot rewrite variables.cfg keeps the record" {
+    # A restore consumes the record only when the rewrite it drives lands;
+    # a failed sed must not take the printer's only record of its pre-install
+    # mode down with it.
+    write_variables_cfg FEATHER
+    configure_forgex_display
+    local shim="$BATS_TEST_TMPDIR/sudo-fail-sed"
+    cat > "$shim" <<EOF
+#!/bin/sh
+if [ "\$1" = "sed" ]; then
+    exit 1
+fi
+exec "\$@"
+EOF
+    chmod +x "$shim"
+    SUDO="$shim"
+    export SUDO
+
+    uninstall_forgex
+
+    [ "$(current_display_mode)" = "HEADLESS" ] \
+        || fail "variables.cfg was rewritten despite the failed restore"
+    [ "$(cat "$PREV_DISPLAY_F")" = "FEATHER" ] \
+        || fail "record consumed by a restore that did not happen"
 }
 
 # --- the restored-UI report must name what was actually restored ---
