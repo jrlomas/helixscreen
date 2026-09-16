@@ -910,6 +910,33 @@ resolve_chroot_daemon_dir() {
     return 0
 }
 
+# /data doubles as Moonraker's gcodes root on the AD5M (the gcodes path is a
+# symlink to the whole partition), so anything of ours left at its top level
+# is a folder or file in the user's print-file picker. Swept at install time:
+# the in-app updater removes its own archive, but nothing else ever does.
+# AD5M_GCODES_ROOT is the test seam; nothing on a device ever sets it.
+cleanup_ad5m_gcodes_root() {
+    local _root="${AD5M_GCODES_ROOT:-/data}"
+    # Release archives scp'd in for manual installs, tens of MB each on a
+    # 6.2 GB partition, and the updater's fallback install log. Never the
+    # archive this run is installing from.
+    local _f
+    for _f in "$_root"/helixscreen-*.tar.gz "$_root"/helixscreen-*.zip "$_root"/helixscreen-*.install.log; do
+        [ -f "$_f" ] || continue
+        [ "$_f" = "${local_tarball:-}" ] && continue
+        rm -f "$_f" 2>/dev/null || $SUDO rm -f "$_f" 2>/dev/null || true
+        log_info "Removed leftover from the gcodes root: $_f"
+    done
+
+    # A cleanup staging directory naming this app; removed only in its exact
+    # known shape — nothing inside but our own subtree. Anything a person put
+    # there themselves survives.
+    if [ -d "$_root/hx-clean" ] && [ "$(ls -A "$_root/hx-clean" 2>/dev/null)" = "helixscreen" ]; then
+        rm -rf "$_root/hx-clean" 2>/dev/null || $SUDO rm -rf "$_root/hx-clean" 2>/dev/null || true
+        log_info "Removed leftover cleanup staging directory: $_root/hx-clean"
+    fi
+}
+
 set_install_paths() {
     local platform=$1
     local firmware=${2:-}
@@ -924,6 +951,8 @@ set_install_paths() {
     PREVIOUS_INSTALL_DIR=""
     PREVIOUS_STATE_DIR=""
     STATE_DIR=""
+    STATE_ROOT=""
+    PREVIOUS_STATE_ROOT=""
     MIGRATE_FROM_DIR=""
 
     if [ "$platform" = "ad5m" ]; then
@@ -963,6 +992,21 @@ set_install_paths() {
                 log_info "Install directory: ${INSTALL_DIR}"
                 ;;
         esac
+        # /data is this board's only large writable partition and the vendor
+        # symlinks it whole into Moonraker's gcodes root, so the state root
+        # must be dot-prefixed to stay out of the print-file picker:
+        # Moonraker's listings hide dot-entries, the mechanism the vendor's
+        # own .mod and .thumbs rely on. migrate_state_root() moves an install
+        # that still carries the plain-named root.
+        # shellcheck disable=SC2034  # consumed by release.sh (state-root rename)
+        STATE_ROOT="/data/.helixscreen"
+        # shellcheck disable=SC2034  # consumed by release.sh (state-root rename)
+        PREVIOUS_STATE_ROOT="/data/helixscreen"
+        # Reclaim the cache an install that predates the rename left at the
+        # plain-named root, once migrate_state_root() has carried it across.
+        # shellcheck disable=SC2034  # consumed by release.sh (stale cache reclaim)
+        STALE_CACHE_DIRS="/data/helixscreen/cache"
+        cleanup_ad5m_gcodes_root
     elif [ "$platform" = "ad5x" ]; then
         # FlashForge AD5X - uses ZMOD, /usr/data structure, runs as root
         KLIPPER_USER="root"
@@ -1211,7 +1255,7 @@ resolve_platform_hook_key() {
     # Platform hooks (pi32 shares Pi hooks). AD5X gets its own key, never
     # ad5m-zmod: it runs inside the chroot at /usr/data/.mod/.zmod, installs to
     # /srv/helixscreen, and has no /data, so the AD5M hook's
-    # HELIX_CACHE_DIR=/data/helixscreen/cache does not exist there.
+    # HELIX_CACHE_DIR=/data/.helixscreen/cache does not exist there.
     case "$platform" in
         pi|pi32)       platform_hook="pi" ;;
         k1)            platform_hook="k1" ;;

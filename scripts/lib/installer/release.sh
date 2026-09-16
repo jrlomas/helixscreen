@@ -2201,6 +2201,51 @@ migrate_previous_state_dir() {
     done
 }
 
+# Rename a state root whose name has to change, payload not involved. This is
+# the AD5M's move to a dot-prefixed root: /data is that board's gcodes root,
+# so a plain-named state directory shows up in the print-file picker and the
+# vendor's own hidden directories (.mod, .thumbs) mark dot-prefixing as the
+# local convention. The app performs the same rename at startup, so this
+# covers the reinstall path and boxes the app's pass cannot reach.
+migrate_state_root() {
+    _mst_old="${PREVIOUS_STATE_ROOT:-}"
+    _mst_new="${STATE_ROOT:-}"
+
+    [ -n "$_mst_old" ] && [ -n "$_mst_new" ] || return 0
+    [ "$_mst_old" != "$_mst_new" ] || return 0
+    [ -d "$_mst_old" ] || return 0
+    # Only our own spelling, and only a same-parent rename: this must never
+    # touch a mount root or a directory some other package owns.
+    case "${_mst_old}:${_mst_new}" in
+        /*/helixscreen:/*/.helixscreen) ;;
+        *)
+            log_warn "Refusing unexpected state-root rename: $_mst_old -> $_mst_new"
+            return 0 ;;
+    esac
+    [ "$(dirname "$_mst_old")" = "$(dirname "$_mst_new")" ] || return 0
+
+    if [ -d "$_mst_new" ]; then
+        # Both exist: carry the known state subtrees across, never clobber.
+        for _mst_sub in cache logs; do
+            [ -d "${_mst_old}/${_mst_sub}" ] || continue
+            if [ ! -e "${_mst_new}/${_mst_sub}" ]; then
+                mv "${_mst_old}/${_mst_sub}" "${_mst_new}/${_mst_sub}" 2>/dev/null \
+                    || $SUDO mv "${_mst_old}/${_mst_sub}" "${_mst_new}/${_mst_sub}" 2>/dev/null \
+                    || log_warn "Could not move ${_mst_old}/${_mst_sub}"
+            fi
+        done
+        # The rest is either empty scaffolding or the operator's; rmdir takes
+        # only the empty case.
+        rmdir "$_mst_old" 2>/dev/null || $SUDO rmdir "$_mst_old" 2>/dev/null || true
+    else
+        mv "$_mst_old" "$_mst_new" 2>/dev/null \
+            || $SUDO mv "$_mst_old" "$_mst_new" 2>/dev/null \
+            || { log_warn "Could not move state root ${_mst_old}"; return 0; }
+        log_info "Moved state root ${_mst_old} -> ${_mst_new}"
+    fi
+    return 0
+}
+
 # Remove the tree a migration moved away from.
 # Runs after the service is up, so a failure at any earlier step leaves a
 # complete and bootable install at the old path.

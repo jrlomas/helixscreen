@@ -101,10 +101,13 @@ hook_cache_dir() {
         dir="$(hook_cache_dir "$plat")"
         [ -n "$dir" ] || continue
         # Either beside the payload (<mount>/helixscreen-state/cache) or on a
-        # different mount that carries the platform's durable state.
+        # different mount that carries the platform's durable state. The AD5M's
+        # is dot-prefixed: its /data doubles as Moonraker's gcodes root, so a
+        # plainly named directory there shows in the print-file picker.
         case "$dir" in
             /*/helixscreen-state/cache|/*/*/helixscreen-state/cache) ;;
             /*/helixscreen/cache|/*/*/helixscreen/cache) ;;
+            /*/.helixscreen/cache) ;;
             /*/mod_data/helixscreen/cache) ;;
             *) failures="$failures $plat:$dir" ;;
         esac

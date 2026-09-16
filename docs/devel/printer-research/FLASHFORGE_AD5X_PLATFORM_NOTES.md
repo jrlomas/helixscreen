@@ -126,7 +126,7 @@ The app log's path is set by `platform_pre_start` in
 rather than `/data` because ZMOD's `TAR_CONFIG` archiver collects
 `/opt/config/ /usr/prog/config/ /usr/data/logs/ /usr/prog/app_startup.sh
 /tmp/*.txt` on AD5X and `/opt/config/ /data/logFiles/ /tmp/*.txt` on AD5M —
-`/data/helixscreen/` is in neither, so an app log written there never reached a
+`/data/.helixscreen/` is in neither, so an app log written there never reached a
 support archive (issue #1249). Auto-detection is **not** what puts the log in a
 file: `detect_best_target()` returns `Syslog` on Linux and never `File`, so
 without the hook's `HELIX_LOG_DEST=file` the app log goes to `/var/log/messages`.

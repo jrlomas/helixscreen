@@ -753,6 +753,9 @@ main() {
     # Clear the payload's directory of any state kept there, before anything
     # extracts on top of it.
     migrate_previous_state_dir
+    # Rename a state root whose name had to change (AD5M dot-prefix), before
+    # the new payload's hook looks for it at the new name.
+    migrate_state_root
 
     extract_release "$platform"
     fix_install_ownership
@@ -798,7 +801,7 @@ main() {
     # Create platform cache directory
     case "$platform" in
         ad5m)
-            $SUDO mkdir -p /data/helixscreen/cache
+            $SUDO mkdir -p /data/.helixscreen/cache
             ;;
         k1)
             $SUDO mkdir -p /usr/data/helixscreen/cache
