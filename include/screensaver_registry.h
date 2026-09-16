@@ -66,8 +66,8 @@ inline constexpr size_t SCREENSAVER_COUNT = std::size(SCREENSAVERS);
 /// Translation key and English label of the dropdown's first option.
 inline constexpr const char* SCREENSAVER_OFF_LABEL_KEY = "Off";
 
-/// Type a fresh install runs, on every board that builds screensavers. The screensaver gate
-/// measures it there and steps it down, or shows a black screen, when it costs too much.
+/// Type a fresh install prefers, when this build can draw it. The screensaver gate measures it
+/// and steps it down, or shows a black screen, when it costs too much.
 inline constexpr ScreensaverType DEFAULT_SCREENSAVER_TYPE = ScreensaverType::FLYING_TOASTERS;
 
 /// Highest valid type value.
@@ -94,6 +94,22 @@ constexpr const ScreensaverInfo* find_screensaver(ScreensaverType type) {
         }
     }
     return nullptr;
+}
+
+/// Type a fresh install runs at `build_depth` (a SaverDepth bit): the preferred default when it
+/// draws at that depth, otherwise the first registered saver that does, and OFF if none do.
+/// A 16 bpp build excludes the 32 bpp-only savers, so a default naming one would start nothing.
+constexpr ScreensaverType default_screensaver_type(uint8_t build_depth) {
+    const ScreensaverInfo* preferred = find_screensaver(DEFAULT_SCREENSAVER_TYPE);
+    if (preferred != nullptr && (preferred->depths & build_depth) != 0U) {
+        return DEFAULT_SCREENSAVER_TYPE;
+    }
+    for (const ScreensaverInfo& row : SCREENSAVERS) {
+        if ((row.depths & build_depth) != 0U) {
+            return row.type;
+        }
+    }
+    return ScreensaverType::OFF;
 }
 
 /// The row whose stable name is `name`, or nullptr.

@@ -13,6 +13,7 @@
 #include "observer_factory.h"
 #include "platform_capabilities.h"
 #include "platform_info.h"
+#include "screensaver_canvas.h"
 #include "screensaver_registry.h"
 #include "spdlog/spdlog.h"
 #include "static_subject_registry.h"
@@ -368,9 +369,10 @@ void DisplaySettingsManager::init_subjects() {
     spdlog::info("[DisplaySettingsManager] Timezone set to '{}' (index {})", tz, tz_index);
 
 #ifdef HELIX_ENABLE_SCREENSAVER
-    // Screensaver type. A fresh install runs the registry default on every tier; a stored
-    // choice is kept as it is.
-    const int screensaver_default = static_cast<int>(helix::ui::DEFAULT_SCREENSAVER_TYPE);
+    // Screensaver type. A fresh install runs the registry default for this build's colour
+    // depth; a stored choice is kept as it is.
+    const int screensaver_default =
+        static_cast<int>(helix::ui::default_screensaver_type(helix::ui::SAVER_BUILD_DEPTH));
 
     int screensaver_type = screensaver_default;
     if (config->exists("/display/screensaver_type")) {

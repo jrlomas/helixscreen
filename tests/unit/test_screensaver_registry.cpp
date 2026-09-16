@@ -149,3 +149,35 @@ TEST_CASE("fresh installs default to flying toasters, a registered saver",
     CHECK(helix::ui::DEFAULT_SCREENSAVER_TYPE == ScreensaverType::FLYING_TOASTERS);
     CHECK(helix::ui::find_screensaver(helix::ui::DEFAULT_SCREENSAVER_TYPE) != nullptr);
 }
+
+TEST_CASE("the fresh-install default is a saver this build can actually draw",
+          "[screensaver][screensaver_registry]") {
+    using helix::ui::default_screensaver_type;
+    using helix::ui::find_screensaver;
+    using helix::ui::SAVER_DEPTH_16;
+    using helix::ui::SAVER_DEPTH_32;
+
+    SECTION("a 32 bpp build gets the preferred default") {
+        CHECK(default_screensaver_type(SAVER_DEPTH_32) == helix::ui::DEFAULT_SCREENSAVER_TYPE);
+    }
+
+    SECTION("a 16 bpp build does not get a 32 bpp-only saver") {
+        const ScreensaverType chosen = default_screensaver_type(SAVER_DEPTH_16);
+        REQUIRE(chosen != ScreensaverType::OFF);
+        const helix::ui::ScreensaverInfo* row = find_screensaver(chosen);
+        REQUIRE(row != nullptr);
+        CAPTURE(row->name);
+        CHECK((row->depths & SAVER_DEPTH_16) != 0U);
+    }
+
+    SECTION("whatever is chosen draws at the depth it was chosen for") {
+        for (const uint8_t depth : {SAVER_DEPTH_16, SAVER_DEPTH_32}) {
+            CAPTURE(depth);
+            const ScreensaverType chosen = default_screensaver_type(depth);
+            const helix::ui::ScreensaverInfo* row = find_screensaver(chosen);
+            REQUIRE(row != nullptr);
+            CAPTURE(row->name);
+            CHECK((row->depths & depth) != 0U);
+        }
+    }
+}
