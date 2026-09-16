@@ -96,7 +96,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "Screensaver type survives a restart",
     }
 
     SECTION("a type past the last one is clamped, not wrapped") {
-        REQUIRE(boot_with_type(99) == 4);
+        REQUIRE(boot_with_type(99) == helix::ui::screensaver_last_type());
     }
 
     SECTION("a negative type falls back to Off") {

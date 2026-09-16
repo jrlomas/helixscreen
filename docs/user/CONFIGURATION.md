@@ -438,7 +438,7 @@ Framebuffer displays (AD5M, K1, K2, CC1, AD5X) rotate by any angle with no meani
 ### `screensaver_type`
 **Type:** integer
 **Default:** `1`
-**Values:** `0` = Off, `1` = Flying Toasters, `2` = Starfield, `3` = 3D Pipes, `4` = Bouncing Printer
+**Values:** `0` = Off, `1` = Flying Toasters, `2` = Starfield, `3` = 3D Pipes, `4` = Bouncing Printer, `5` = Fireworks
 **Description:** Which screensaver plays when the screen has been idle. Choose it in **Settings > Display & Sound**. It starts at the `dim_sec` mark, alongside dimming, and stops when `sleep_sec` takes the display down. On a panel with no backlight control the screensaver is the only idle indication you get.
 
 ### `screensaver_levels`

@@ -82,6 +82,7 @@ perf_saver_type() {
     toasters) echo 1 ;;
     starfield) echo 2 ;;
     pipes) echo 3 ;;
+    fireworks) echo 5 ;;
     *)
         echo "perf_saver_type: unknown workload '$1'" >&2
         return 1

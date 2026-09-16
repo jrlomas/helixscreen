@@ -5,6 +5,7 @@
 #ifdef HELIX_ENABLE_SCREENSAVER
 
 #include "screensaver_frame.h"
+#include "screensaver_registry.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -20,6 +21,9 @@ inline constexpr lv_color_format_t SAVER_BUILD_CANVAS_FORMAT =
 constexpr PixelFormat pixel_format_for(lv_color_format_t cf) {
     return cf == LV_COLOR_FORMAT_RGB565 ? PixelFormat::RGB565 : PixelFormat::XRGB8888;
 }
+
+/// SaverDepth bit of this build's display.
+inline constexpr uint8_t BUILD_SAVER_DEPTH = LV_COLOR_DEPTH == 16 ? SAVER_DEPTH_16 : SAVER_DEPTH_32;
 
 /**
  * @brief A full-screen canvas a screensaver draws on

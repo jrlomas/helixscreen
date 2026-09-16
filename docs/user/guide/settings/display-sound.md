@@ -169,6 +169,7 @@ Choose a screensaver to display during inactivity instead of dimming the screen:
 | **Starfield** | Scrolling starfield |
 | **3D Pipes** | Animated 3D pipes |
 | **Bouncing Printer** | Your printer drifts across the screen and bounces off the edges, changing color on every wall — with a celebration if it ever lands a corner |
+| **Fireworks** | Fireworks bursting over hills under a night sky |
 
 When any option other than **Off** is selected, a **Test Screensaver** button appears below the dropdown. Tap it to preview the selected screensaver immediately, without waiting for the inactivity timeout.
 

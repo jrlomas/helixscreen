@@ -23,6 +23,11 @@ class ScreensaverManagerTestAccess {
         return mgr.active_;
     }
 
+    /// The running saver that is not on SaverBase (the bouncing printer), or nullptr.
+    static Screensaver* active_unbased(const ScreensaverManager& mgr) {
+        return mgr.active_unbased_;
+    }
+
     /// Replaces the CPU clock; the next idle-check tick samples it at once.
     static void set_cpu_clock(ScreensaverManager& mgr, helix::ui::CpuClockFn clock) {
         mgr.cpu_clock_ = std::move(clock);

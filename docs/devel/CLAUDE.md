@@ -84,6 +84,7 @@ All developer documentation lives here. When working on features, look up the re
 | `POWER_LOSS_RECOVERY.md` | Resume-after-power-loss: the passive Snapmaker backend vs the **active, side-effectful** Creality probe, capability detection via `print_stats.power_loss` presence, and the mandatory probe-before-resume safety invariant |
 | `UPDATE_SYSTEM.md` | Update channels (stable/beta/dev), R2 CDN, Moonraker updater |
 | `SOUND_SYSTEM.md` | Audio architecture, JSON themes, backends (SDL, ALSA, PWM, M300). User guide: `../user/guide/settings/display-sound.md#sound` |
+| `SCREENSAVERS.md` | Screensavers: the registry, shared overlay/canvas/timer/pixel writer, the CPU gate and stored levels, color depth in builds, adding a saver |
 | `LED_CONTROL.md` | LED control system: 5 backends, auto-state lighting, control/settings overlays, home panel widget |
 | `CHAMBER_HEATER.md` | Chamber heaters: backend registry (generic/dragonbreath/panda_breath), discovery, diagnostics subjects + card, ceiling rules, arbitration, verification logs |
 | `PRINTER_MANAGER.md` | Printer overlay, custom images, inline name editing |

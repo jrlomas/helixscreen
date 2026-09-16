@@ -27,6 +27,7 @@ enum class ScreensaverType : int {
     STARFIELD = 2,
     PIPES_3D = 3,
     BOUNCING_PRINTER = 4,
+    FIREWORKS = 5,
 };
 
 namespace helix::ui {
@@ -57,6 +58,7 @@ inline constexpr ScreensaverInfo SCREENSAVERS[] = {
     {ScreensaverType::PIPES_3D, "pipes", "3D Pipes", SAVER_DEPTH_32},
     {ScreensaverType::BOUNCING_PRINTER, "bounce", "Bouncing Printer",
      SAVER_DEPTH_16 | SAVER_DEPTH_32},
+    {ScreensaverType::FIREWORKS, "fireworks", "Fireworks", SAVER_DEPTH_16 | SAVER_DEPTH_32},
 };
 
 inline constexpr size_t SCREENSAVER_COUNT = std::size(SCREENSAVERS);

@@ -277,7 +277,7 @@ class DisplaySettingsManager {
     // =========================================================================
 
 #ifdef HELIX_ENABLE_SCREENSAVER
-    /** @brief Get screensaver type (0=Off, 1=Flying Toasters, 2=Starfield, 3=3D Pipes) */
+    /** @brief Get screensaver type (a ScreensaverType value, include/screensaver_registry.h) */
     int get_screensaver_type() const;
 
     /** @brief Set screensaver type (updates subject + persists) */
@@ -445,7 +445,7 @@ class DisplaySettingsManager {
     }
 
 #ifdef HELIX_ENABLE_SCREENSAVER
-    /** @brief Screensaver type subject (integer: 0=off, 1=toasters, 2=starfield, 3=pipes) */
+    /** @brief Screensaver type subject (a ScreensaverType value, include/screensaver_registry.h) */
     lv_subject_t* subject_screensaver_type() {
         return &screensaver_type_subject_;
     }

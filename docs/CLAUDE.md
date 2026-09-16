@@ -9,6 +9,7 @@
 | Write/update user-facing docs | `user/CLAUDE.md` — style rules for end users |
 | Find XML widget docs | `devel/LVGL9_XML_GUIDE.md` |
 | Understand modal patterns | `devel/MODAL_SYSTEM.md` |
+| Work on a screensaver | `devel/SCREENSAVERS.md` |
 | Check a feature's architecture | `devel/ARCHITECTURE.md` → the right chapter in `devel/architecture/` |
 | See what's planned/complete | [GitHub issues](https://github.com/prestonbrown/helixscreen/issues) |
 | Find in-flight plans/specs | `devel/plans/` (tracked, deleted when the work ships) or `superpowers/` (local scratch) |

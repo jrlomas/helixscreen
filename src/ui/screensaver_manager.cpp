@@ -14,6 +14,7 @@
 #include "screensaver.h"
 #include "screensaver_base.h"
 #include "screensaver_bounce.h"
+#include "screensaver_fireworks.h"
 #include "screensaver_level_store.h"
 #include "screensaver_pipes.h"
 #include "screensaver_starfield.h"
@@ -61,6 +62,7 @@ ScreensaverManager::ScreensaverManager() : cpu_clock_(helix::ui::read_process_cp
     screensavers_.push_back(std::make_unique<FlyingToasterScreensaver>());
     screensavers_.push_back(std::make_unique<StarfieldScreensaver>());
     screensavers_.push_back(std::make_unique<PipesScreensaver>());
+    screensavers_.push_back(std::make_unique<helix::ui::FireworksScreensaver>());
     bounce_saver_ = std::make_unique<helix::BouncingPrinterScreensaver>();
 }
 
