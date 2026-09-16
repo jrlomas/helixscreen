@@ -550,7 +550,7 @@ CONF
 }
 
 @test "regression: uninstall.sh handles STOCK display mode" {
-    grep -q "'STOCK'" "$WORKTREE_ROOT/scripts/uninstall.sh"
+    grep -q "STOCK|FEATHER|GUPPY|HEADLESS" "$WORKTREE_ROOT/scripts/uninstall.sh"
 }
 
 @test "regression: uninstall.sh cleans macOS resource forks" {

@@ -169,7 +169,10 @@ EOF
 # --- Uninstall parity ---
 
 @test "uninstall_forgex calls unpatch_forgex_screen_drawing" {
-    grep -A25 'uninstall_forgex()' "$WORKTREE_ROOT/scripts/lib/installer/forgex.sh" | grep -q 'unpatch_forgex_screen_drawing'
+    # awk pulls the function body rather than grep -A<N>, for the reason
+    # spelled out at the pre_start test above: a fixed context window goes
+    # stale as bodies grow.
+    awk '/^uninstall_forgex\(\)/,/^}/' "$WORKTREE_ROOT/scripts/lib/installer/forgex.sh" | grep -q 'unpatch_forgex_screen_drawing'
 }
 
 @test "unpatch_forgex_screen_drawing function exists" {
@@ -193,7 +196,7 @@ EOF
 }
 
 @test "bundled install.sh uninstall_forgex calls unpatch_forgex_screen_drawing" {
-    grep -A25 'uninstall_forgex()' "$WORKTREE_ROOT/scripts/install.sh" | grep -q 'unpatch_forgex_screen_drawing'
+    awk '/^uninstall_forgex\(\)/,/^}/' "$WORKTREE_ROOT/scripts/install.sh" | grep -q 'unpatch_forgex_screen_drawing'
 }
 
 @test "bundled install.sh logged wrapper uses string accumulation for args" {
