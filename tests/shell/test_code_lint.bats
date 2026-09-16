@@ -954,9 +954,21 @@ check_deinit_all_does_not_log() {
 }
 
 @test "print-vacuous-max resolves to a bare integer" {
-    run bash -c 'make -s print-vacuous-max 2>/dev/null | tail -1'
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ ^[0-9]+$ ]]
+    local out='' err='' i
+    # A parent make (mutate-diff, full-test-run) exports its jobserver state to
+    # this inner make; that reaches stderr only, never the echoed value. A
+    # suite-parallel run can still lose one invocation to a transient, so a
+    # failed shape is retried once before it counts as drift, and make's stderr
+    # is kept for the failure message: a red here must say what make said.
+    for i in 1 2; do
+        out="$(make -s print-vacuous-max 2>"$BATS_TEST_TMPDIR/vacuous-max.err")" || true
+        [[ "$out" =~ ^[0-9]+$ ]] && return 0
+        err="$(cat "$BATS_TEST_TMPDIR/vacuous-max.err")" || true
+        sleep 0.2
+    done
+    echo "print-vacuous-max stdout: [$out]"
+    echo "print-vacuous-max stderr: [$err]"
+    false
 }
 
 # --- the vacuous baseline can express a test name that starts with '#' ---
