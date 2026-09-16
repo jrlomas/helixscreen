@@ -359,6 +359,45 @@ std::string PrinterHardware::guess_exhaust_fan() const {
     return "";
 }
 
+std::string PrinterHardware::guess_aux_fan() const {
+    if (fans_.empty()) {
+        spdlog::debug("[PrinterHardware] guess_aux_fan() -> no fans discovered");
+        return "";
+    }
+
+    // Priority 1: Exact match for "aux_fan"
+    if (has_exact(fans_, "aux_fan")) {
+        spdlog::debug("[PrinterHardware] guess_aux_fan() -> 'aux_fan' (exact)");
+        return "aux_fan";
+    }
+
+    // Priority 2: Substring priority chain
+    // "aux" - auxiliary (also covers the spelled-out "auxiliary")
+    std::string match = find_containing(fans_, "aux");
+    if (!match.empty()) {
+        spdlog::debug("[PrinterHardware] guess_aux_fan() -> '{}' (contains 'aux')", match);
+        return match;
+    }
+
+    // "internal" - internal/case circulation
+    match = find_containing(fans_, "internal");
+    if (!match.empty()) {
+        spdlog::debug("[PrinterHardware] guess_aux_fan() -> '{}' (contains 'internal')", match);
+        return match;
+    }
+
+    // "side" - side-mounted
+    match = find_containing(fans_, "side");
+    if (!match.empty()) {
+        spdlog::debug("[PrinterHardware] guess_aux_fan() -> '{}' (contains 'side')", match);
+        return match;
+    }
+
+    // No match - aux fan is optional hardware
+    spdlog::debug("[PrinterHardware] guess_aux_fan() -> no match found (optional)");
+    return "";
+}
+
 // ============================================================================
 // LED Guessing
 // ============================================================================

@@ -2913,9 +2913,11 @@ release-ad5m: | build/ad5m/bin/helix-screen build/ad5m/bin/helix-splash
 	@cp scripts/helix-launcher.sh $(RELEASE_DIR)/helixscreen/bin/
 	$(call release-copy-xml-config,$(RELEASE_DIR)/helixscreen)
 	$(call release-strip-pii,$(RELEASE_DIR)/helixscreen)
-	@# Copy AD5M Pro default config as config/settings.json (skips wizard on first run)
+	@# Seed settings.json from the base AD5M preset. Presets ship wizard_completed:
+	@# false, so first boot runs detection, which refines to the matching AD5M Pro
+	@# variant preset (ad5m_pro_forgex / ad5m_pro_zmod) via apply_preset_with_variants.
 	@cp assets/config/presets/ad5m.json $(RELEASE_DIR)/helixscreen/config/settings.json
-	@echo "  $(DIM)Included pre-configured config/settings.json for AD5M Pro$(RESET)"
+	@echo "  $(DIM)Seeded config/settings.json from the AD5M base preset$(RESET)"
 	@cp scripts/$(INSTALLER_FILENAME) $(RELEASE_DIR)/helixscreen/
 	@chmod +x $(RELEASE_DIR)/helixscreen/$(INSTALLER_FILENAME)
 	@mkdir -p $(RELEASE_DIR)/helixscreen/scripts

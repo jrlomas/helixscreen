@@ -42,6 +42,11 @@ bool is_exhaust_fan_candidate(const std::string& o) {
     return o.find("exhaust") != std::string::npos || o.find("vent") != std::string::npos ||
            o.find("external") != std::string::npos;
 }
+// Aux / secondary cooling fan. "aux" also covers the spelled-out "auxiliary".
+bool is_aux_fan_candidate(const std::string& o) {
+    return o.find("aux") != std::string::npos || o.find("internal") != std::string::npos ||
+           o.find("side") != std::string::npos;
+}
 bool is_bed_heater_candidate(const std::string& o) {
     return o.find("bed") != std::string::npos;
 }
@@ -62,6 +67,9 @@ std::string guess_chamber_fan(const std::vector<std::string>& fans) {
 }
 std::string guess_exhaust_fan(const std::vector<std::string>& fans) {
     return PrinterHardware({}, {}, fans, {}).guess_exhaust_fan();
+}
+std::string guess_aux_fan(const std::vector<std::string>& fans) {
+    return PrinterHardware({}, {}, fans, {}).guess_aux_fan();
 }
 std::string guess_bed_heater(const std::vector<std::string>& heaters) {
     return PrinterHardware(heaters, {}, {}, {}).guess_bed_heater();
@@ -86,6 +94,8 @@ const std::vector<HardwareRoleDescriptor>& registry() {
          helix::wizard::StepId::FanSelect, true, &is_chamber_fan_candidate, &guess_chamber_fan},
         {HardwareRoleId::ExhaustFan, helix::wizard::EXHAUST_FAN, "", HardwareCategory::Fan,
          helix::wizard::StepId::FanSelect, true, &is_exhaust_fan_candidate, &guess_exhaust_fan},
+        {HardwareRoleId::AuxFan, helix::wizard::AUX_FAN, "", HardwareCategory::Fan,
+         helix::wizard::StepId::FanSelect, true, &is_aux_fan_candidate, &guess_aux_fan},
     };
     return REG;
 }

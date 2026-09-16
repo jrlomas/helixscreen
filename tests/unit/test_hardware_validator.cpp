@@ -581,6 +581,64 @@ TEST_CASE_METHOD(HardwareValidatorConfigFixture,
     }
 }
 
+// LedController persists the configured strips to leds/selected_strips; leds/selected
+// and leds/strip are legacy. An LED the user configured through the live key must not
+// be re-offered as newly discovered hardware.
+TEST_CASE_METHOD(HardwareValidatorConfigFixture,
+                 "HardwareValidator - LED configured via leds/selected_strips is not newly "
+                 "discovered",
+                 "[hardware][validator]") {
+    setup_printer_data({{"moonraker_host", "127.0.0.1"},
+                        {"moonraker_port", 7125},
+                        {"leds", {{"selected_strips", {"led chamber_light"}}}},
+                        {"hardware",
+                         {{"optional", json::array()},
+                          {"expected", json::array()},
+                          {"last_snapshot", json::object()}}}});
+
+    MoonrakerClientMock client;
+    client.set_leds({"led chamber_light"});
+
+    HardwareValidator validator;
+    auto result = validator.validate(&config, client.hardware());
+
+    for (const auto& issue : result.newly_discovered) {
+        INFO("unexpected new LED: " << issue.hardware_name);
+        REQUIRE(issue.hardware_type != HardwareType::LED);
+    }
+}
+
+// The same live key drives the missing-hardware side: a strip the user holds in
+// leds/selected_strips that the printer stops reporting is a real absence, and
+// reading only the legacy keys would answer "no LED configured" and stay silent.
+TEST_CASE_METHOD(HardwareValidatorConfigFixture,
+                 "HardwareValidator - LED held in leds/selected_strips but absent from discovery "
+                 "is reported missing",
+                 "[hardware][validator]") {
+    setup_printer_data({{"moonraker_host", "127.0.0.1"},
+                        {"moonraker_port", 7125},
+                        {"leds", {{"selected_strips", {"led chamber_light"}}}},
+                        {"hardware",
+                         {{"optional", json::array()},
+                          {"expected", json::array()},
+                          {"last_snapshot", json::object()}}}});
+
+    MoonrakerClientMock client;
+    client.set_leds({"neopixel something_else"});
+
+    HardwareValidator validator;
+    auto result = validator.validate(&config, client.hardware());
+
+    bool reported = false;
+    for (const auto& issue : result.expected_missing) {
+        if (issue.hardware_type == HardwareType::LED &&
+            issue.hardware_name == "led chamber_light") {
+            reported = true;
+        }
+    }
+    REQUIRE(reported);
+}
+
 TEST_CASE_METHOD(HardwareValidatorConfigFixture,
                  "HardwareValidator - is_hardware_optional with empty config",
                  "[hardware][validator][config]") {
