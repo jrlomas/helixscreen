@@ -879,6 +879,10 @@ uint64_t UpdateChecker::required_download_space_bytes(uint64_t download_bytes) {
     return need < DOWNLOAD_SPACE_FLOOR_BYTES ? DOWNLOAD_SPACE_FLOOR_BYTES : need;
 }
 
+std::string UpdateChecker::download_filename_for_url(const std::string& url) {
+    return path_is_zip(url) ? DOWNLOAD_FILENAME_ZIP : DOWNLOAD_FILENAME;
+}
+
 namespace {
 
 // True if `child` is within-or-equal-to `parent` (both already stripped of
