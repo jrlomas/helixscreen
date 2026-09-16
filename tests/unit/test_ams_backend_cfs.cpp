@@ -1058,7 +1058,6 @@ TEST_CASE("CFS K1 macro variant (#968)", "[ams][cfs]") {
                                        "BOX_EXTRUDE_MATERIAL TNN=T1A\n"
                                        "BOX_EXTRUDER_EXTRUDE TNN=T1A\n"
                                        "BOX_MATERIAL_FLUSH\n"
-                                       "BOX_NOZZLE_CLEAN\n"
                                        "BOX_RESTORE_FAN\n"
                                        "BOX_MOVE_TO_SAFE_POS\n"
                                        "RESTORE_GCODE_STATE NAME=helix_cfs_load";
@@ -1092,7 +1091,19 @@ TEST_CASE("CFS K1 macro variant (#968)", "[ams][cfs]") {
         // Envelope helpers that K1 DOES support.
         REQUIRE(g.find("BOX_GO_TO_EXTRUDE_POS") != std::string::npos);
         REQUIRE(g.find("BOX_MOVE_TO_SAFE_POS") != std::string::npos);
-        REQUIRE(g.find("BOX_NOZZLE_CLEAN") != std::string::npos);
+
+        // BOX_MATERIAL_FLUSH ends with a nozzle clean of its own, so a
+        // trailing BOX_NOZZLE_CLEAN wipes a nozzle that was just wiped.
+        // The firmware's WITHOUT_MATERIAL chain ends at the flush for the
+        // same reason. The flush assertion keeps this from passing against
+        // an empty or truncated script.
+        REQUIRE(g.find("BOX_MATERIAL_FLUSH") != std::string::npos);
+        REQUIRE(g.find("BOX_NOZZLE_CLEAN") == std::string::npos);
+
+        // A swap still wipes: there the clean precedes the new feed and
+        // clears the OLD material after the cut, which no flush has run
+        // for. Dropping it from the fresh load must not reach that path.
+        REQUIRE(AmsBackendCfs::swap_gcode(1, V::K1).find("BOX_NOZZLE_CLEAN") != std::string::npos);
     }
 
     SECTION("K1 load TNN covers full unit/slot range") {

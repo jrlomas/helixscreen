@@ -48,6 +48,7 @@ constexpr const char* HOTEND_FAN = "fans/hotend";
 constexpr const char* PART_FAN = "fans/part";
 constexpr const char* CHAMBER_FAN = "fans/chamber";
 constexpr const char* EXHAUST_FAN = "fans/exhaust";
+constexpr const char* AUX_FAN = "fans/aux";
 
 // Chamber hardware (sensor and heater — distinct from chamber_fan above)
 constexpr const char* CHAMBER_SENSOR = "temp_sensors/chamber";
@@ -66,8 +67,13 @@ constexpr const char* FEEDER_CLOSE_MACRO = "toolchanger/feeder_close_macro";
 constexpr const char* ACE_BYPASS_ON_MACRO = "ams/ace_bypass_on_macro";
 constexpr const char* ACE_BYPASS_OFF_MACRO = "ams/ace_bypass_off_macro";
 
-// LED hardware (legacy — used for migration only in LedController::load_config()
-// and hardware_validator.cpp. New code should use LedController::selected_strips())
+// LED hardware. LED_SELECTED_STRIPS is what LedController persists and reads, and
+// it auto-selects every discoverable strip into it when none is chosen. LED_STRIP
+// is the wizard's own record of the user's pick (written by the LED step, read by
+// the summary) and LED_SELECTED its array form; LedController reads neither, so the
+// two are not kept in step. hardware_validator.cpp therefore asks the live key
+// first and these second before deciding no LED is configured.
+constexpr const char* LED_SELECTED_STRIPS = "leds/selected_strips";
 constexpr const char* LED_STRIP = "leds/strip";
 constexpr const char* LED_SELECTED = "leds/selected";
 

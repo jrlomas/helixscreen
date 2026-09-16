@@ -503,6 +503,7 @@ translations:
   Change Printer Host: Cambiar host de impresora
   Change Tool: Cambiar Herramienta
   Change Tool While Paused: Cambiar Herramienta en Pausa
+  Change heater control?: ''
   Change tool: Cambiar herramienta
   Changes apply immediately. Adjust during print for tuning.: Los cambios se aplican
     inmediatamente. Ajuste durante la impresión para afinar.
@@ -1359,6 +1360,7 @@ translations:
     orientación de su pantalla
   HelixScreen will integrate with your filament changer for multi-spool/color print operations.: HelixScreen
     se integrará con su cambiador de filamento para operaciones de impresión multi-bobina/color.
+  HelixScreen writes this to printer.cfg and restarts Klipper. The printer will briefly disconnect.: ''
   HelixScreen {} is available — tap Update: HelixScreen {} está disponible — toque
     Actualizar
   Help & About: Ayuda y acerca de
@@ -2891,8 +2893,14 @@ translations:
   Switch to v%s: 'Cambiar a la v%s'
   Switched to {}: 'Cambiado a {}'
   Switches to a backup spool on runout: Cambia a una bobina de respaldo al agotarse
+  ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
+  : ''
+  Switching back to PID changes how this heater is controlled.: ''
+  Switching back to PID requires a config change and Klipper restart.: ''
   Switching heater control to MPC. Klipper will restart.: Cambiando control del calentador
     a MPC. Klipper se reiniciará.
+  Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: ''
+  Switching to MPC changes how this heater is controlled.: ''
   Switching to MPC requires a config change and Klipper restart.: Cambiar a MPC requiere
     modificar la configuración y reiniciar Klipper.
   Sync with Spoolman: Sincronizar con Spoolman

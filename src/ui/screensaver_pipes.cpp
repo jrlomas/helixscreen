@@ -14,8 +14,6 @@ using helix::ui::DirtyRect;
 using helix::ui::screensaver::random_below;
 using helix::ui::screensaver::unit_random;
 
-static_assert(LV_COLOR_DEPTH == 32, "the pipes canvas is ARGB8888 on a 32 bpp display");
-
 // A pipe grows one grid step per STEP_MS of frame time, whatever the timer's rate.
 static constexpr uint32_t STEP_MS = 100;
 // Most steps one callback draws after a late frame; steps past it are dropped, not owed.

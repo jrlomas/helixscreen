@@ -450,6 +450,7 @@
   <translation tag="Change Printer Host" it="Cambia Host Stampante"/>
   <translation tag="Change Tool" it="Cambia utensile"/>
   <translation tag="Change Tool While Paused" it="Cambia utensile in pausa"/>
+  <translation tag="Change heater control?"/>
   <translation tag="Change tool" it="Cambia utensile"/>
   <translation tag="Changes apply immediately. Adjust during print for tuning." it="Le modifiche si applicano immediatamente. Regolare durante la stampa per la messa a punto."/>
   <translation tag="Changes are temporary and reset on printer reboot" it="Le modifiche sono temporanee e si resettano al riavvio della stampante"/>
@@ -1231,6 +1232,7 @@
   <translation tag="HelixScreen Crashed" it="HelixScreen si è arrestato"/>
   <translation tag="HelixScreen is detecting your display orientation" it="HelixScreen sta rilevando l&apos;orientamento del display"/>
   <translation tag="HelixScreen will integrate with your filament changer for multi-spool/color print operations." it="HelixScreen si integrerà con il tuo cambia-filamento per operazioni di stampa multi-bobina/colore."/>
+  <translation tag="HelixScreen writes this to printer.cfg and restarts Klipper. The printer will briefly disconnect."/>
   <translation tag="HelixScreen {} is available — tap Update" it="HelixScreen {} è disponibile — tocca Aggiorna"/>
   <translation tag="Help &amp; About" it="Aiuto e info"/>
   <translation tag="Help Improve HelixScreen" it="Aiuta a migliorare HelixScreen"/>
@@ -2606,7 +2608,12 @@
   <translation tag="Switch to v%s" it="Passa alla v%s"/>
   <translation tag="Switched to {}" it="Passato a {}"/>
   <translation tag="Switches to a backup spool on runout" it="Passa a una bobina di riserva a filamento esaurito"/>
+  <translation tag="Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature."/>
+  <translation tag="Switching back to PID changes how this heater is controlled."/>
+  <translation tag="Switching back to PID requires a config change and Klipper restart."/>
   <translation tag="Switching heater control to MPC. Klipper will restart." it="Passaggio controllo riscaldatore a MPC. Klipper si riavvierà."/>
+  <translation tag="Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature."/>
+  <translation tag="Switching to MPC changes how this heater is controlled."/>
   <translation tag="Switching to MPC requires a config change and Klipper restart." it="Il passaggio a MPC richiede una modifica alla configurazione e il riavvio di Klipper."/>
   <translation tag="Sync with Spoolman" it="Sincronizza con Spoolman"/>
   <translation tag="Sysfs" it="Sysfs"/>

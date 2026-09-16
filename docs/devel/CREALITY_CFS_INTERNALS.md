@@ -157,6 +157,30 @@ What *is* genuinely K1-specific is the absence of an echo: the K1 box status pub
 only its stated reason was wrong. Both have been corrected in
 `src/printer/ams_backend_cfs.cpp`.
 
+### K1 motion divergences from the firmware macros (#1278) — *Settled*
+
+Two places where our K1 sequences did not match the firmware's own orchestrators. Both are
+answerable from the module's documented command semantics; neither needed a running box.
+
+**Load: the trailing wipe was redundant.** `cmd_material_flush` ends with a nozzle clean and
+a small retract of its own [A][B], and `BOX_NOZZLE_CLEAN` travels to its own
+`clean_left_pos_*` / `clean_right_pos_*` coordinates rather than wiping wherever the caller
+left the toolhead. A `BOX_NOZZLE_CLEAN` emitted after `BOX_MATERIAL_FLUSH` therefore wipes a
+nozzle that was just wiped and buys a second trip to the cleaning positions. That is why
+`BOX_LOAD_MATERIAL_WITHOUT_MATERIAL` ends at the flush, and `load_gcode()` now ends there
+too. The swap keeps its explicit `BOX_NOZZLE_CLEAN`: there the wipe precedes the new feed and
+clears the OLD material after the cut, before any flush has run.
+
+**Unload: the safe park stays ours.** `BOX_QUIT_MATERIAL` ends at `BOX_GO_TO_BOX_EXTRUDE_POS`,
+which moves to the retrude working position [B]. Inside that macro it is the setup move for a
+`BOX_RETRUDE_MATERIAL_WITH_TNN` step that ships commented out, so on stock firmware it leaves
+the toolhead standing at a work position with nothing after it. `safe_pos_y` is the coordinate
+the configuration reference designates as clear of box and cutter hardware, and
+`BOX_MOVE_TO_SAFE_POS` is where every other box operation parks. The envelope keeps the safe
+park, and the builder records the divergence as intentional rather than pending.
+
+Neither change adds motion: the load drops a wipe, the unload is untouched.
+
 ### Flush: two legitimate choices, and we make the vendor's — *Open, not a defect*
 
 `swap_gcode()` emits a bare `BOX_MATERIAL_FLUSH` for a material change. There is a second,
@@ -189,8 +213,8 @@ Switching would mean a purge-length change on hardware nobody here owns: potenti
 longer purges into a finite waste chute, plus the segmented-flush path's measuring-wheel
 blockage detection (`diff_length`) introducing a "nozzle blocked" failure mode the bare flush
 does not have. The upside is only cosmetic (less colour bleed on dark→light swaps). That
-trade needs a K1 + CFS to settle, so it stays behind the #1278 gate — now on [A] evidence
-rather than a guess.
+trade needs a K1 + CFS to settle, and is tracked on its own row in
+[Open questions](#open-questions) — now on [A] evidence rather than a guess.
 
 `swap_gcode()` would also need the *outgoing* slot, which it is not currently passed;
 `do_change_tool` has it in `system_info_.current_slot` before overwriting it.
@@ -574,7 +598,6 @@ and the grep must not assume a naming prefix.
 | `material_type` value domain | **Settled [D]**: 6-char code = brand-prefix digit + 5-char catalog id (`000001` Generic PLA, `000003` Generic PETG on a live K1C; K2 `101001` = Creality `01001`). Matches the `cfs` scheme in `assets/filaments.json`. Writeback shipped — see "What this settles for material-type writeback". | Echo confirmation on a write (`BOX_MODIFY_TN_DATA PART=material_type` echoed back in box status) |
 | Does K2's module read `Tnn_map` the same way? | This page is K1-only. The K1 answer is now settled (it does, via `T*`), but K2 ships a different module generation. | Symbol-grep the K2 `.so`, or a live K2 remap test |
 | Should swaps use `BOX_MATERIAL_CHANGE_FLUSH`? | Command and params verified present [A]; the trade is purge length + a new blockage failure mode vs. colour bleed | K1 + CFS hardware |
-| `#1278` motion-sequence divergences | Deliberately unresolved — changing them blind risks the belt-skip / chute-collision class already reported | K1 + CFS hardware |
 | Bed-area shrink (~5 mm Y) for the rear-mount upgrade | Not applied via printer database | Confirmed `position_max` from a CFS-equipped K1 |
 
 The command surface is now settled from the artifact, but **no behaviour on this page has been
@@ -630,6 +653,8 @@ Notable absences and additions:
 - **`BOX_CHECK_MATERIAL` is not here either** — it is a `[gcode_macro]` in `box.cfg`, not a C
   command, which is why we can emit it. Same for `BOX_LOAD_MATERIAL_WITH_MATERIAL`,
   `BOX_LOAD_MATERIAL_WITHOUT_MATERIAL`, `BOX_QUIT_MATERIAL` and `BOX_INFO_REFRESH`.
+- `BOX_GO_TO_BOX_EXTRUDE_POS` moves to the **retrude working position**, not to a park. We
+  deliberately do not end an unload there — see the motion-divergence finding above.
 - `BOX_MOVE_TO_SAFE_POS1/2/3/6`, `BOX_NUM_POS` and `BOX_START_PRINT_EXTRUDE_MATERIAL` appear
   in neither source B nor any `box.cfg`. Undocumented; do not use without investigation.
 
@@ -647,4 +672,4 @@ tn_data.json field names present verbatim: `base_data` `color_value` `last_cmd`
 - [printers/CREALITY_K1_SUPPORT.md](printers/CREALITY_K1_SUPPORT.md) — K1 platform, firmware prerequisites
 - [printers/CREALITY_K2_SUPPORT.md](printers/CREALITY_K2_SUPPORT.md) — K2 series and the community Kalico port
 - [#968](https://github.com/prestonbrown/helixscreen/issues/968) — K1/K1C CFS compatibility
-- [#1278](https://github.com/prestonbrown/helixscreen/issues/1278) — K1 sequence divergences pending hardware
+- [#1278](https://github.com/prestonbrown/helixscreen/issues/1278) — K1 sequence divergences

@@ -486,6 +486,7 @@ translations:
   Change Printer Host: Change Printer Host
   Change Tool: Change Tool
   Change Tool While Paused: Change Tool While Paused
+  Change heater control?: Change heater control?
   Change tool: Change tool
   Changes apply immediately. Adjust during print for tuning.: Changes apply immediately.
     Adjust during print for tuning.
@@ -1327,6 +1328,7 @@ translations:
     display orientation
   HelixScreen will integrate with your filament changer for multi-spool/color print operations.: HelixScreen
     will integrate with your filament changer for multi-spool/color print operations.
+  HelixScreen writes this to printer.cfg and restarts Klipper. The printer will briefly disconnect.: HelixScreen writes this to printer.cfg and restarts Klipper. The printer will briefly disconnect.
   HelixScreen {} is available — tap Update: HelixScreen {} is available — tap Update
   Help & About: Help & About
   Help Improve HelixScreen: Help Improve HelixScreen
@@ -2832,8 +2834,14 @@ translations:
   Switch to v%s: Switch to v%s
   Switched to {}: Switched to {}
   Switches to a backup spool on runout: Switches to a backup spool on runout
+  ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
+  : Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
+  Switching back to PID changes how this heater is controlled.: Switching back to PID changes how this heater is controlled.
+  Switching back to PID requires a config change and Klipper restart.: Switching back to PID requires a config change and Klipper restart.
   Switching heater control to MPC. Klipper will restart.: Switching heater control
     to MPC. Klipper will restart.
+  Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
+  Switching to MPC changes how this heater is controlled.: Switching to MPC changes how this heater is controlled.
   Switching to MPC requires a config change and Klipper restart.: Switching to MPC
     requires a config change and Klipper restart.
   Sync with Spoolman: Sync with Spoolman

@@ -450,6 +450,7 @@
   <translation tag="Change Printer Host" zh="更改打印机主机"/>
   <translation tag="Change Tool" zh="切换工具"/>
   <translation tag="Change Tool While Paused" zh="暂停时切换工具"/>
+  <translation tag="Change heater control?"/>
   <translation tag="Change tool" zh="切换工具"/>
   <translation tag="Changes apply immediately. Adjust during print for tuning." zh="更改立即生效。可在打印时调整进行调优。"/>
   <translation tag="Changes are temporary and reset on printer reboot" zh="更改是临时的，打印机重启后会重置"/>
@@ -1231,6 +1232,7 @@
   <translation tag="HelixScreen Crashed" zh="HelixScreen 崩溃"/>
   <translation tag="HelixScreen is detecting your display orientation" zh="HelixScreen正在检测显示屏方向"/>
   <translation tag="HelixScreen will integrate with your filament changer for multi-spool/color print operations." zh="HelixScreen 将与您的耗材更换器集成，用于多料盘/多色打印操作。"/>
+  <translation tag="HelixScreen writes this to printer.cfg and restarts Klipper. The printer will briefly disconnect."/>
   <translation tag="HelixScreen {} is available — tap Update" zh="HelixScreen {} 已发布 — 点击更新"/>
   <translation tag="Help &amp; About" zh="帮助与关于"/>
   <translation tag="Help Improve HelixScreen" zh="帮助改进 HelixScreen"/>
@@ -2606,7 +2608,12 @@
   <translation tag="Switch to v%s" zh="切换到 v%s"/>
   <translation tag="Switched to {}" zh="已切换到 {}"/>
   <translation tag="Switches to a backup spool on runout" zh="耗材用尽时切换到备用料盘"/>
+  <translation tag="Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature."/>
+  <translation tag="Switching back to PID changes how this heater is controlled."/>
+  <translation tag="Switching back to PID requires a config change and Klipper restart."/>
   <translation tag="Switching heater control to MPC. Klipper will restart." zh="正在将加热控制切换为 MPC。Klipper 将重启。"/>
+  <translation tag="Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature."/>
+  <translation tag="Switching to MPC changes how this heater is controlled."/>
   <translation tag="Switching to MPC requires a config change and Klipper restart." zh="切换到 MPC 需要修改配置并重启 Klipper。"/>
   <translation tag="Sync with Spoolman" zh="与 Spoolman 同步"/>
   <translation tag="Sysfs" zh="Sysfs"/>

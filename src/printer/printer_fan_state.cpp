@@ -50,6 +50,7 @@ FanRoleConfig FanRoleConfig::from_config(Config* config,
     resolve_one(HardwareRoleId::HotendFan, roles.hotend_fan);
     resolve_one(HardwareRoleId::ChamberFan, roles.chamber_fan);
     resolve_one(HardwareRoleId::ExhaustFan, roles.exhaust_fan);
+    resolve_one(HardwareRoleId::AuxFan, roles.aux_fan);
     if (any_changed) {
         if (!config->save()) {
             spdlog::warn("[FanRoleConfig] Failed to persist batched fan role heals");
@@ -385,11 +386,14 @@ void PrinterFanState::init_fans(const std::vector<std::string>& fan_objects,
     if (!roles_.exhaust_fan.empty()) {
         role_display_names_[roles_.exhaust_fan] = "Exhaust Fan";
     }
+    if (!roles_.aux_fan.empty()) {
+        role_display_names_[roles_.aux_fan] = "Aux Fan";
+    }
 
     spdlog::trace("[PrinterFanState] Fan role config: part='{}' hotend='{}' chamber='{}' "
-                  "exhaust='{}' ({} display overrides)",
+                  "exhaust='{}' aux='{}' ({} display overrides)",
                   roles_.part_fan, roles_.hotend_fan, roles_.chamber_fan, roles_.exhaust_fan,
-                  role_display_names_.size());
+                  roles_.aux_fan, role_display_names_.size());
 
     // Carry live telemetry across the rebuild for fans that persist, exactly as
     // the subject map below does. init_fans() re-runs on every

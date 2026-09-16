@@ -59,9 +59,17 @@ make t F='[tag]'                     # Build, then run ONE tag or case (the inne
 #   Correct only when you have not edited code since the last `make test`:
 #   `make -j` builds the app alone, so after an edit the bare binary reports the
 #   PREVIOUS build's numbers. `make t` costs 5-18s and buys exactly that guarantee.
-make full-test-run                   # The WHOLE suite in parallel (25s idle, minutes loaded)
+make unit-sweep                      # C++ unit tests only, sharded (~50s idle)
+make full-test-run                   # unit-sweep + the 204-file bats suite (~2m) - the completion gate
+#   Nothing else runs bats locally: not the commit hook, not test-xml. Without this
+#   the shell suite reaches CI unrun. [.] and [slow] stay outside it deliberately -
+#   quality-checks.sh runs [.] on any staged code change, nightly CI runs [slow].
 #   `make test-run` no longer runs anything: it prints which of these fits the
 #   question you have and exits non-zero. Cadence table: tests/CLAUDE.md.
+
+make dev-timing                      # What the dev loop costs, measured (ledger from transcripts)
+#   Medians for every build, suite and test run, so "is this worth running" is
+#   answered from data. Derived + gitignored; rebuilding it takes a few seconds.
 
 scripts/syntax_check.py <file>...    # "does this compile?" in seconds
 #   Takes the file's own flags from compile_commands.json and runs -fsyntax-only,
@@ -142,6 +150,16 @@ scripts/teardown-worktree.sh my-branch -n    # ...or just print the plan
 > entirely), or name the target explicitly with `--moonraker ws://HOST:7125`, which takes
 > precedence over the saved host. The flag is `--moonraker`; there is no `--moonraker-url`.
 >
+> **Writing your own `settings.json` there does NOT preset anything unless it carries
+> `config_version`.** A config whose `config_version` is absent or 0 is read as the
+> packaged tarball default and replaced *wholesale* from the rolling backup (`[Config]
+> Loaded config is a tarball default (no config_version) — restoring from backup:`), which
+> is how a Moonraker web update recovers real settings after `rmtree()`. So a hand-written
+> file presetting `beta_features`, `display/screensaver_type` or anything else is discarded
+> before the app reads it, and every value you thought you set is the backup's. Copy a real
+> `settings.json` and edit it, or read the value back from the log rather than trusting the
+> file you wrote.
+>
 > Prefer `ctl text <name>` / `ctl geom <name>` over reading a screenshot — they are exact,
 > and a screenshot only proves what a scroll position happened to expose.
 
@@ -187,11 +205,19 @@ The protocol is global CLAUDE.md § Peer Sessions. What is shared here:
   `worktree:helixscreen` and a bare `worktree:` all resolve to the same tree, matched by
   directory basename or checked-out branch. Free-form names let two sessions claim one tree
   under two spellings and both read FREE, and an advisory lock must never fail open.
+  **`build:<tree>` and `worktree:<tree>` name the same directory and exclude each other**,
+  in both directions and for the same reason: writing under a running build corrupts the
+  build, and building while files move gives a binary matching no commit. A take consults
+  its sibling, so `check worktree:main` reports a live `build:` holder instead of FREE.
+  One session may hold both on its own tree; only a different owner blocks.
 
   Liveness is **derived from process state, never asserted**: a claim records its owner's pid
   and that pid's kernel start-time, so a crashed owner reads STALE on its own, pid reuse
-  cannot fake LIVE, and nothing needs cleaning up. Use it for `worktree:<name>` (merge,
-  rebase, long commit), `build:<name>`, `device:<printer>`, `gh:issues`, `socket:<path>`.
+  cannot fake LIVE, and nothing needs cleaning up. Use it for `worktree:<name>` (hold it
+  from your FIRST edit until the commit lands - not merely for a merge, rebase or long
+  commit: uncommitted files with no claim and an old mtime are indistinguishable from
+  abandoned work, and `build:<name>` reserves nothing),
+  `build:<name>`, `device:<printer>`, `gh:issues`, `socket:<path>`.
 
   **Before concluding anything about someone else's work, run `check`.** A merge mid-commit
   and an abandoned one look identical in the tree — same `MERGE_HEAD`, same resolved index,

@@ -348,7 +348,9 @@ else ifeq ($(PLATFORM_TARGET),ad5x)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # AD5X: 385 MB free, no swap, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
+    # they sit near 110 MB and the AD5M swaps at idle.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := ad5x
     # Strip binary for size on memory-constrained device
@@ -468,7 +470,9 @@ else ifneq ($(filter mips k1,$(PLATFORM_TARGET)),)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # K1C: 130 MB free, swap file untouched, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
+    # they sit near 110 MB and the AD5M swaps at idle.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := mips
     # Strip binary for size on memory-constrained device
@@ -511,7 +515,9 @@ else ifeq ($(PLATFORM_TARGET),k1-dynamic)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # K1 dynamic: same board as k1/mips, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
+    # they sit near 110 MB and the AD5M swaps at idle.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := k1-dynamic
     STRIP_BINARY := yes
@@ -553,7 +559,9 @@ else ifeq ($(PLATFORM_TARGET),k2)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # K2 Plus: 395 MB free, no swap, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
+    # they sit near 110 MB and the AD5M swaps at idle.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := k2
     STRIP_BINARY := yes
@@ -586,7 +594,9 @@ else ifeq ($(PLATFORM_TARGET),snapmaker-u1)
     DISPLAY_BACKEND := drm
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # Snapmaker U1: 4 cores and 705 MB free - the roomiest board in the fleet, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
+    # they sit near 110 MB and the AD5M swaps at idle.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := snapmaker-u1
     STRIP_BINARY := yes
@@ -3025,9 +3035,11 @@ release-ad5m: | build/ad5m/bin/helix-screen build/ad5m/bin/helix-splash
 	@cp scripts/helix-launcher.sh $(RELEASE_DIR)/helixscreen/bin/
 	$(call release-copy-xml-config,$(RELEASE_DIR)/helixscreen)
 	$(call release-strip-pii,$(RELEASE_DIR)/helixscreen)
-	@# Copy AD5M Pro default config as config/settings.json (skips wizard on first run)
+	@# Seed settings.json from the base AD5M preset. Presets ship wizard_completed:
+	@# false, so first boot runs detection, which refines to the matching AD5M Pro
+	@# variant preset (ad5m_pro_forgex / ad5m_pro_zmod) via apply_preset_with_variants.
 	@cp assets/config/presets/ad5m.json $(RELEASE_DIR)/helixscreen/config/settings.json
-	@echo "  $(DIM)Included pre-configured config/settings.json for AD5M Pro$(RESET)"
+	@echo "  $(DIM)Seeded config/settings.json from the AD5M base preset$(RESET)"
 	@cp scripts/$(INSTALLER_FILENAME) $(RELEASE_DIR)/helixscreen/
 	@chmod +x $(RELEASE_DIR)/helixscreen/$(INSTALLER_FILENAME)
 	@mkdir -p $(RELEASE_DIR)/helixscreen/scripts

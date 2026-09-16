@@ -50,6 +50,15 @@ enum class DeactivateReason {
     /// pointer the view holds is about to dangle; the view object itself
     /// survives and create()/setup() runs again immediately. Dev-only path.
     Rebuild,
+    /// The screen went idle - the screensaver is up, the display slept, or the
+    /// app moved to the background. The view stays on the stack and gets
+    /// on_activate() again on the next wake, so an operation started here still
+    /// has a UI to report into. A view must NOT cancel in-flight work on this:
+    /// nobody walked away, and the work outlives the blanked screen. It MUST
+    /// still stop timers, animations and polling - a suspended view that keeps
+    /// drawing burns the CPU the suspend exists to free. Guard per statement,
+    /// not per function: the two jobs live in the same on_deactivating().
+    Suspended,
 };
 
 /// Human-readable reason, for log lines that need to say which one fired.
@@ -62,6 +71,8 @@ inline const char* deactivate_reason_name(DeactivateReason reason) {
         return "shutdown";
     case DeactivateReason::Rebuild:
         return "rebuild";
+    case DeactivateReason::Suspended:
+        return "suspended";
     }
     return "unknown";
 }

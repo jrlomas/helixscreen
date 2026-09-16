@@ -450,6 +450,7 @@
   <translation tag="Change Printer Host" en="Change Printer Host"/>
   <translation tag="Change Tool" en="Change Tool"/>
   <translation tag="Change Tool While Paused" en="Change Tool While Paused"/>
+  <translation tag="Change heater control?" en="Change heater control?"/>
   <translation tag="Change tool" en="Change tool"/>
   <translation tag="Changes apply immediately. Adjust during print for tuning." en="Changes apply immediately. Adjust during print for tuning."/>
   <translation tag="Changes are temporary and reset on printer reboot" en="Changes are temporary and reset on printer reboot"/>
@@ -1231,6 +1232,7 @@
   <translation tag="HelixScreen Crashed" en="HelixScreen Crashed"/>
   <translation tag="HelixScreen is detecting your display orientation" en="HelixScreen is detecting your display orientation"/>
   <translation tag="HelixScreen will integrate with your filament changer for multi-spool/color print operations." en="HelixScreen will integrate with your filament changer for multi-spool/color print operations."/>
+  <translation tag="HelixScreen writes this to printer.cfg and restarts Klipper. The printer will briefly disconnect." en="HelixScreen writes this to printer.cfg and restarts Klipper. The printer will briefly disconnect."/>
   <translation tag="HelixScreen {} is available — tap Update" en="HelixScreen {} is available — tap Update"/>
   <translation tag="Help &amp; About" en="Help &amp; About"/>
   <translation tag="Help Improve HelixScreen" en="Help Improve HelixScreen"/>
@@ -2606,7 +2608,12 @@
   <translation tag="Switch to v%s" en="Switch to v%s"/>
   <translation tag="Switched to {}" en="Switched to {}"/>
   <translation tag="Switches to a backup spool on runout" en="Switches to a backup spool on runout"/>
+  <translation tag="Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." en="Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature."/>
+  <translation tag="Switching back to PID changes how this heater is controlled." en="Switching back to PID changes how this heater is controlled."/>
+  <translation tag="Switching back to PID requires a config change and Klipper restart." en="Switching back to PID requires a config change and Klipper restart."/>
   <translation tag="Switching heater control to MPC. Klipper will restart." en="Switching heater control to MPC. Klipper will restart."/>
+  <translation tag="Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." en="Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature."/>
+  <translation tag="Switching to MPC changes how this heater is controlled." en="Switching to MPC changes how this heater is controlled."/>
   <translation tag="Switching to MPC requires a config change and Klipper restart." en="Switching to MPC requires a config change and Klipper restart."/>
   <translation tag="Sync with Spoolman" en="Sync with Spoolman"/>
   <translation tag="Sysfs" en="Sysfs"/>

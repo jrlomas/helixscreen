@@ -107,6 +107,34 @@ state_of() {
     [ "$now" = "$st" ] && printf 'LIVE' || printf 'STALE'   # pid reused => stale
 }
 
+# build: and worktree: are two prefixes over ONE directory, stored as two files.
+# Left unrelated, a session holding build: while it edits is invisible to a
+# session taking worktree:, which reads FREE and writes into a tree somebody is
+# already in. Physically they exclude each other in both directions: writing
+# under a running build corrupts the build, and building while files move gives
+# a binary that matches no commit. So a tree-scoped take consults its sibling.
+#
+# Same owner is exempt: one session legitimately holds both on its own tree.
+sibling_file() {
+    local pfx=${1%%:*} name=${1#*:} other
+    case "$pfx" in
+        worktree) other=build;;
+        build)    other=worktree;;
+        *) return 1;;
+    esac
+    printf '%s/%s.json' "$CLAIM_DIR" "$(slug "$other:$name")"
+}
+
+# Echoes the sibling's file when a DIFFERENT live session holds the same tree.
+blocking_sibling() {
+    local f; f=$(sibling_file "$1") || return 1
+    [ -f "$f" ] || return 1
+    [ "$(state_of "$f")" = "LIVE" ] || return 1
+    local body; body=$(tr -d '\n' < "$f")
+    [ "$(json_get "$body" pid)" = "$2" ] && return 1
+    printf '%s' "$f"
+}
+
 describe() {
     local f=$1 body
     body=$(tr -d '\n' < "$f")
@@ -138,6 +166,9 @@ take)
     if [ "$(state_of "$f")" = "LIVE" ]; then
         printf 'REFUSED: already claimed\n'; describe "$f"; exit 1
     fi
+    if sib=$(blocking_sibling "$res" "$pid"); then
+        printf 'REFUSED: another session holds the same tree\n'; describe "$sib"; exit 1
+    fi
     tmp="$f.$$.tmp"
     cat > "$tmp" <<EOF
 {
@@ -158,7 +189,16 @@ check)
     res=$(canon "${1:-}"); [ -n "$res" ] || die "usage: helix-claim check <resource>"
     f="$CLAIM_DIR/$(slug "$res").json"
     s=$(state_of "$f")
-    [ "$s" = "FREE" ] && { printf 'FREE       %s\n' "$res"; exit 0; }
+    if [ "$s" = "FREE" ]; then
+        # Answering FREE here while a sibling prefix holds the tree is the
+        # fail-open: the caller proceeds into a directory someone else is in.
+        if sib=$(blocking_sibling "$res" "$(session_pid)"); then
+            printf 'HELD BY SIBLING - %s names the same tree\n' "$res"
+            describe "$sib"
+            exit 1
+        fi
+        printf 'FREE       %s\n' "$res"; exit 0
+    fi
     describe "$f"
     [ "$s" = "LIVE" ] && exit 1 || exit 0
     ;;
