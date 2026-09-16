@@ -1795,8 +1795,7 @@ std::map<std::string, float> PrinterDetector::get_thermal_rates(const std::strin
     }
     for (const auto& [heater, rate] : printer->at("thermal_rates").items()) {
         const auto& persisted = ThermalRateManager::PERSISTED_HEATERS;
-        if (std::none_of(persisted.begin(), persisted.end(),
-                         [&heater](const char* name) { return heater == name; })) {
+        if (std::find(persisted.begin(), persisted.end(), heater) == persisted.end()) {
             spdlog::warn("[PrinterDetector] Ignoring thermal rate for '{}' on '{}': not a heater "
                          "the rate model keeps (extruder, heater_bed)",
                          heater, printer_name);
