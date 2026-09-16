@@ -20,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Forward declaration
@@ -599,6 +600,33 @@ struct AlertOptions {
 lv_obj_t* modal_confirm(const char* title, const char* message, ModalSeverity severity,
                         const char* confirm_text, std::function<void()> on_confirm,
                         const ConfirmOptions& options = {});
+
+/**
+ * @brief Message body for a confirmation whose action rewrites printer.cfg
+ *
+ * Callers supply one sentence naming what changes; this appends the shared
+ * consequence. Keeping the tail here means a caller can describe its own
+ * change but cannot quietly drop the warning that Klipper restarts.
+ *
+ * @param what One translated sentence, e.g. "Switching to MPC changes how the
+ *        extruder heater is controlled." May be empty.
+ */
+std::string config_rewrite_message(std::string_view what);
+
+/**
+ * @brief Warning confirmation for an action that rewrites printer.cfg
+ *
+ * Every such action disconnects the printer while Klipper restarts, so they
+ * share one severity and one consequence sentence rather than each writing
+ * its own copy.
+ *
+ * @param what See config_rewrite_message()
+ * @param options Passed through to modal_confirm() - pass `owner_token`
+ *        whenever a callback captures something that can outlive the caller
+ */
+lv_obj_t* confirm_config_rewrite(const char* title, std::string_view what, const char* confirm_text,
+                                 std::function<void()> on_confirm,
+                                 const ConfirmOptions& options = {});
 
 /**
  * @brief Single-button alert whose callback never touches a widget

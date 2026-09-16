@@ -1596,6 +1596,29 @@ lv_obj_t* helix::ui::modal_confirm(const char* title, const char* message, Modal
                               });
 }
 
+std::string helix::ui::config_rewrite_message(std::string_view what) {
+    const char* tail =
+        lv_tr("HelixScreen writes this to printer.cfg and restarts Klipper. The printer will "
+              "briefly disconnect.");
+
+    while (!what.empty() && what.back() == ' ') {
+        what.remove_suffix(1);
+    }
+    if (what.empty()) {
+        return tail;
+    }
+    return std::string(what) + " " + tail;
+}
+
+lv_obj_t* helix::ui::confirm_config_rewrite(const char* title, std::string_view what,
+                                            const char* confirm_text,
+                                            std::function<void()> on_confirm,
+                                            const ConfirmOptions& options) {
+    const std::string message = config_rewrite_message(what);
+    return modal_confirm(title, message.c_str(), ModalSeverity::Warning, confirm_text,
+                         std::move(on_confirm), options);
+}
+
 lv_obj_t* helix::ui::modal_alert(const char* title, const char* message, ModalSeverity severity,
                                  const char* ok_text, std::function<void()> on_ok,
                                  const AlertOptions& options) {

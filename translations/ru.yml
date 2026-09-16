@@ -495,6 +495,7 @@ translations:
   Change Printer Host: Изменить хост принтера
   Change Tool: Сменить инструмент
   Change Tool While Paused: Смена инструмента при паузе
+  Change heater control?: ''
   Change tool: Сменить инструмент
   Changes apply immediately. Adjust during print for tuning.: Изменения применяются
     немедленно. Корректируйте во время печати.
@@ -1340,6 +1341,7 @@ translations:
     дисплея
   HelixScreen will integrate with your filament changer for multi-spool/color print operations.: HelixScreen
     интегрируется с вашим сменщиком филамента для многокатушечной/многоцветной печати.
+  HelixScreen writes this to printer.cfg and restarts Klipper. The printer will briefly disconnect.: ''
   HelixScreen {} is available — tap Update: Доступен HelixScreen {} — нажмите «Обновить»
   Help & About: Помощь и о программе
   Help Improve HelixScreen: Помогите улучшить HelixScreen
@@ -2858,8 +2860,14 @@ translations:
   Switch to v%s: 'Перейти на v%s'
   Switched to {}: 'Переключено на {}'
   Switches to a backup spool on runout: При обрыве переключится на резервную катушку
+  ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
+  : ''
+  Switching back to PID changes how this heater is controlled.: ''
+  Switching back to PID requires a config change and Klipper restart.: ''
   Switching heater control to MPC. Klipper will restart.: Переключение управления
     нагревом на MPC. Klipper перезапустится.
+  Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: ''
+  Switching to MPC changes how this heater is controlled.: ''
   Switching to MPC requires a config change and Klipper restart.: Переход на MPC требует
     изменения конфига и перезапуска Klipper.
   Sync with Spoolman: Синхронизация со Spoolman

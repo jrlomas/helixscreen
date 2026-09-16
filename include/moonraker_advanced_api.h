@@ -400,7 +400,7 @@ class MoonrakerAdvancedAPI : public IAdvancedAPI {
                              PIDProgressCallback on_progress = nullptr) override;
 
     /**
-     * @brief Start MPC calibration for a heater (Kalico/Danger Klipper)
+     * @brief Start MPC calibration for a heater (Kalico)
      *
      * Executes MPC_CALIBRATE HEATER={heater} TARGET={target_temp} command
      * and collects multi-line results via gcode_response parsing.
