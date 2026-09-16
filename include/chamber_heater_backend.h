@@ -40,7 +40,14 @@ struct ChamberHeaterDiagnostics {
     /// Raw vendor fault code, empty when none. Logs only — the UI binds the
     /// translated chamber_heater_fault_reason_text derived from fault_reason_kind.
     std::optional<std::string> fault_reason;
-    std::optional<FaultReason> fault_reason_kind;     ///< classified kind for UI
+    std::optional<FaultReason> fault_reason_kind; ///< classified kind for UI
+    /// Device reachable on its own radio link. Engaged false = the device
+    /// itself reports unreachable. Unengaged = this backend reports no link
+    /// state, which is unknown, NOT offline.
+    std::optional<bool> device_connected;
+    /// Raw vendor protocol/link error, empty when none. Logs only — the UI
+    /// surface is chamber_heater_offline, derived from device_connected.
+    std::optional<std::string> link_error;
     std::optional<double> element_temp_c;             ///< heating-element temp; NAN = unknown
     std::optional<int> filter_fan_percent;            ///< negative = unknown
     std::optional<std::string> filter_fan_reason;     ///< raw vendor reason, logs only

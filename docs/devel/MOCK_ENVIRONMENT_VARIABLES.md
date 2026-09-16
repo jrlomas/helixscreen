@@ -648,6 +648,22 @@ HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbr
   HELIX_MOCK_DRAGONBREATH_FAULT=1 ./build/bin/helix-screen --test -vv
 ```
 
+### `HELIX_MOCK_DRAGONBREATH_OFFLINE`
+
+Drop the appliance off its radio link: every synthesized dragonbreath status frame reports `connected: false` instead of `true`, so the diagnostics card banners the offline state and hides its Reset button. The hardware confirmation of a real `connected: false` is pending, which is why this path is mock-driven.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Exactly `1` |
+| **Default** | Unset — nominal frame (`connected: true`) |
+| **File** | `src/api/moonraker_client_mock.cpp` |
+
+```bash
+# Chamber heater that dropped off WiFi
+HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbreath_filter" \
+  HELIX_MOCK_DRAGONBREATH_OFFLINE=1 ./build/bin/helix-screen --test -vv
+```
+
 ### `HELIX_MOCK_KALICO`
 
 Make the mock report Kalico-style MPC heater control instead of Klipper's PID. The extruder's `configfile` settings then carry `control: mpc` + `heater_power` rather than `control: pid` + the three PID coefficients — the discriminator HelixScreen uses to decide which tuning UI to show.

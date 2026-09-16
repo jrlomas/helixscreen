@@ -280,6 +280,102 @@ TEST_CASE("device-driven filter fan keeps label and icon on the reported speed",
           "fan_off");
 }
 
+// Comms health: the appliance reports its own radio link. An engaged false is
+// the device saying it is unreachable — that drives chamber_heater_offline.
+// Unknown (absent key, or a backend with no link report at all) is NOT
+// offline.
+TEST_CASE("connected reports drive chamber_heater_offline", "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
+                                      "output_pin dragonbreath_filter");
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+
+    ts.update_from_status({{"dragonbreath", {{"connected", false}, {"protocol_error", nullptr}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 1);
+    // protocol_error: null is inert — no UI subject moves on it.
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 0);
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_fault_reason_text_subject()))
+              .empty());
+
+    ts.update_from_status({{"dragonbreath", {{"connected", true}, {"ptc_temp", 24.9}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+}
+
+// Delta rule applied to the link field: after an offline report, a frame that
+// does not mention connected carries no news about it, so the heater stays
+// offline — while the field the frame DOES carry (ptc_temp) lands, proving
+// the frame was parsed rather than dropped.
+TEST_CASE("a delta without connected keeps the offline state", "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
+                                      "output_pin dragonbreath_filter");
+
+    ts.update_from_status(
+        nlohmann::json::parse(R"({"dragonbreath": {"fault": false, "fault_reason": null,
+      "ptc_temp": 40.0, "fan_percent": 0, "fan_reason": "off", "connected": false}})"));
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 1);
+    REQUIRE(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
+            "40.0°C");
+
+    ts.update_from_status({{"dragonbreath", {{"ptc_temp", 41.0}}}});
+
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 1);
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
+          "41.0°C");
+}
+
+// A backend with no link report (a plain heater_generic chamber) must leave
+// the offline subject at 0 forever, even when some other object in the frame
+// carries connected: false — unknown is not offline.
+TEST_CASE("a generic chamber heater never reports offline", "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_heater_name("heater_generic chamber");
+    ts.set_chamber_diagnostics_source("generic", "", "");
+
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+
+    ts.update_from_status({{"heater_generic chamber", {{"temperature", 24.2}, {"target", 0.0}}},
+                           {"dragonbreath", {{"connected", false}}}});
+    // The frame was processed — the heater branch landed its temperature —
+    // yet no link report was read off the stray appliance-shaped object.
+    CHECK(lv_subject_get_int(ts.get_chamber_temp_subject()) == 242);
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 0);
+}
+
+// The vendor protocol_error string dies at the subject border: the frame is
+// parsed (its other fields land) and the error reaches no UI subject.
+TEST_CASE("protocol_error never reaches a UI subject", "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
+                                      "output_pin dragonbreath_filter");
+
+    ts.update_from_status({{"dragonbreath",
+                            {{"protocol_error", "frame_crc"},
+                             {"connected", true},
+                             {"ptc_temp", 24.9},
+                             {"fan_percent", 0}}}});
+
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 0);
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_fault_reason_text_subject()))
+              .empty());
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
+          "24.9°C");
+}
+
 TEST_CASE("filter fan pin maps output_pin value to on/off", "[chamber][subjects]") {
     LVGLTestFixture fixture;
 
@@ -327,10 +423,11 @@ TEST_CASE("chamber diagnostics subjects are XML-registered", "[chamber][xml][str
     ts.init_subjects(true); // register_xml=true: full production path
 
     for (const char* name :
-         {"chamber_heater_fault", "chamber_heater_inhibited", "chamber_heater_fault_reason_text",
-          "chamber_heater_element_temp_text", "chamber_filter_fan_percent_text",
-          "chamber_filter_fan_on", "chamber_filter_fan_on_text", "chamber_filter_fan_icon",
-          "chamber_filter_fan_requested", "chamber_filter_fan_device_driven"}) {
+         {"chamber_heater_fault", "chamber_heater_inhibited", "chamber_heater_offline",
+          "chamber_heater_fault_reason_text", "chamber_heater_element_temp_text",
+          "chamber_filter_fan_percent_text", "chamber_filter_fan_on", "chamber_filter_fan_on_text",
+          "chamber_filter_fan_icon", "chamber_filter_fan_requested",
+          "chamber_filter_fan_device_driven"}) {
         CAPTURE(name);
         REQUIRE(lv_xml_get_subject(nullptr, name) != nullptr);
     }

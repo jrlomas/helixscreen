@@ -1206,6 +1206,7 @@
   <translation tag="Heater Power" it="Potenza riscaldatore"/>
   <translation tag="Heater connection lost" it="Connessione al riscaldatore persa"/>
   <translation tag="Heater fault" it="Guasto al riscaldatore"/>
+  <translation tag="Heater offline" it="Riscaldatore disconnesso"/>
   <translation tag="Heater over-temperature" it="Sovratemperatura del riscaldatore"/>
   <translation tag="Heater sensor fault" it="Guasto al sensore del riscaldatore"/>
   <translation tag="HeaterSelect" it="Seleziona riscaldatore"/>

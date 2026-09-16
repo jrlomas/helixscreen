@@ -1341,6 +1341,7 @@ translations:
   Heater Power: Heizleistung
   Heater connection lost: Verbindung zur Heizung verloren
   Heater fault: Heizungsfehler
+  Heater offline: Heizung getrennt
   Heater over-temperature: Heizung überhitzt
   Heater sensor fault: Heizungssensor-Fehler
   HeaterSelect: Heizung auswählen

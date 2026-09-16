@@ -47,10 +47,18 @@
               width="100%" height="content" flex_flow="row" style_pad_all="#space_xs" style_pad_gap="#space_xs"
               style_flex_cross_place="center" scrollable="false" style_bg_color="#danger" style_bg_opa="25"
               style_radius="#border_radius_sm" style_border_width="#border_width" style_border_color="#danger">
-        <bind_flag_if cond="chamber_heater_fault or chamber_heater_inhibited" flag="hidden" invert="true"/>
+        <bind_flag_if cond="chamber_heater_fault or chamber_heater_inhibited or chamber_heater_offline"
+                      flag="hidden" invert="true"/>
+        <text_small name="offline_label"
+                    text="Heater offline" translation_tag="Heater offline" style_text_color="#danger" flex_grow="1">
+          <bind_flag_if cond="chamber_heater_offline" flag="hidden" invert="true"/>
+        </text_small>
         <text_small name="fault_reason_label"
-                    bind_text="chamber_heater_fault_reason_text" style_text_color="#danger" flex_grow="1"/>
+                    bind_text="chamber_heater_fault_reason_text" style_text_color="#danger" flex_grow="1">
+          <bind_flag_if cond="chamber_heater_offline" flag="hidden"/>
+        </text_small>
         <ui_button name="reset_fault_button" text="Reset" translation_tag="Reset" variant="secondary">
+          <bind_flag_if cond="chamber_heater_offline" flag="hidden"/>
           <event_cb trigger="clicked" callback="on_chamber_fault_reset_clicked"/>
         </ui_button>
       </lv_obj>
@@ -90,13 +98,21 @@
               width="100%" height="content" flex_flow="row" style_pad_all="#space_xxs" style_pad_gap="#space_xs"
               style_flex_cross_place="center" scrollable="false" style_bg_color="#danger" style_bg_opa="25"
               style_radius="#border_radius_sm" style_border_width="#border_width" style_border_color="#danger">
-        <bind_flag_if cond="chamber_heater_fault or chamber_heater_inhibited" flag="hidden" invert="true"/>
+        <bind_flag_if cond="chamber_heater_fault or chamber_heater_inhibited or chamber_heater_offline"
+                      flag="hidden" invert="true"/>
+        <text_small name="offline_label"
+                    text="Heater offline" translation_tag="Heater offline" style_text_color="#danger" flex_grow="1">
+          <bind_flag_if cond="chamber_heater_offline" flag="hidden" invert="true"/>
+        </text_small>
         <text_small name="fault_reason_label"
-                    bind_text="chamber_heater_fault_reason_text" style_text_color="#danger" flex_grow="1"/>
+                    bind_text="chamber_heater_fault_reason_text" style_text_color="#danger" flex_grow="1">
+          <bind_flag_if cond="chamber_heater_offline" flag="hidden"/>
+        </text_small>
         <ui_button name="reset_fault_button"
                    height="#button_height_sm_tiny" text="Reset" translation_tag="Reset" variant="ghost"
                    style_pad_left="#space_xs" style_pad_right="#space_xs" style_border_width="#border_width"
                    style_border_color="#border" style_border_opa="255">
+          <bind_flag_if cond="chamber_heater_offline" flag="hidden"/>
           <event_cb trigger="clicked" callback="on_chamber_fault_reset_clicked"/>
         </ui_button>
       </lv_obj>

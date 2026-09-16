@@ -1230,6 +1230,7 @@ translations:
   Heater Power: 加热器功率
   Heater connection lost: 加热器连接丢失
   Heater fault: 加热器故障
+  Heater offline: 加热器已断开
   Heater over-temperature: 加热器过热
   Heater sensor fault: 加热器传感器故障
   HeaterSelect: 选择加热器

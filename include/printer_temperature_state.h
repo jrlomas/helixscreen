@@ -204,6 +204,16 @@ class PrinterTemperatureState {
         lifetime = chamber_heater_inhibited_lifetime_;
         return &chamber_heater_inhibited_;
     }
+    /// Device unreachable on its own link (0/1). 1 only on an engaged
+    /// "not connected" report — a backend with no link state leaves it 0
+    /// (unknown is not offline).
+    lv_subject_t* get_chamber_heater_offline_subject() {
+        return &chamber_heater_offline_;
+    }
+    lv_subject_t* get_chamber_heater_offline_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_heater_offline_lifetime_;
+        return &chamber_heater_offline_;
+    }
     /// Translated fault reason for the UI ("" when none) — derived from the
     /// backend's generic FaultReason kind; the raw vendor code never binds.
     lv_subject_t* get_chamber_heater_fault_reason_text_subject() {
@@ -453,6 +463,7 @@ class PrinterTemperatureState {
     // objects in a delta status frame = no news: subjects keep last values.
     lv_subject_t chamber_heater_fault_{};             ///< XML: 0/1
     lv_subject_t chamber_heater_inhibited_{};         ///< XML: 0/1
+    lv_subject_t chamber_heater_offline_{};           ///< XML: 0/1
     lv_subject_t chamber_heater_fault_reason_text_{}; ///< XML: translated reason, "" when none
     lv_subject_t chamber_filter_fan_on_{};            ///< XML: -1 unknown / 0 / 1 (fan RUNNING)
     lv_subject_t chamber_filter_fan_requested_{};     ///< XML: -1 unknown / 0 / 1 (our pin request)
@@ -468,6 +479,7 @@ class PrinterTemperatureState {
     char chamber_filter_fan_icon_buf_[16] = {};
     SubjectLifetime chamber_heater_fault_lifetime_;
     SubjectLifetime chamber_heater_inhibited_lifetime_;
+    SubjectLifetime chamber_heater_offline_lifetime_;
     SubjectLifetime chamber_heater_fault_reason_text_lifetime_;
     SubjectLifetime chamber_filter_fan_on_lifetime_;
     SubjectLifetime chamber_filter_fan_requested_lifetime_;

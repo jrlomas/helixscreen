@@ -1206,6 +1206,7 @@
   <translation tag="Heater Power" de="Heizleistung"/>
   <translation tag="Heater connection lost" de="Verbindung zur Heizung verloren"/>
   <translation tag="Heater fault" de="Heizungsfehler"/>
+  <translation tag="Heater offline" de="Heizung getrennt"/>
   <translation tag="Heater over-temperature" de="Heizung überhitzt"/>
   <translation tag="Heater sensor fault" de="Heizungssensor-Fehler"/>
   <translation tag="HeaterSelect" de="Heizung auswählen"/>

@@ -231,6 +231,29 @@ TEST_CASE_METHOD(HelixTestFixture, "mock dragonbreath fault hook", "[chamber][mo
     CHECK_FALSE(frame["dragonbreath"]["fault_reason"].get<std::string>().empty());
 }
 
+// HELIX_MOCK_DRAGONBREATH_OFFLINE=1 drops the appliance off its radio link:
+// every synthesized frame reports connected: false instead of true. The hook
+// is read per frame, so one client crosses the transition.
+TEST_CASE_METHOD(HelixTestFixture, "mock dragonbreath offline hook", "[chamber][mock]") {
+    ScopedEnv objects_env("HELIX_MOCK_OBJECTS", TRIO_ENV);
+    MoonrakerClientMock client;
+
+    json frame;
+    client.register_notify_update(
+        [&frame](const json& notification) { frame = first_status_param(notification); });
+    MoonrakerClientMockTestAccess::dispatch_initial_state(client);
+
+    REQUIRE(frame.contains("dragonbreath"));
+    CHECK(frame["dragonbreath"]["connected"].get<bool>() == true);
+
+    ScopedEnv offline_env("HELIX_MOCK_DRAGONBREATH_OFFLINE", "1");
+    frame = json{};
+    MoonrakerClientMockTestAccess::dispatch_initial_state(client);
+
+    REQUIRE(frame.contains("dragonbreath"));
+    CHECK(frame["dragonbreath"]["connected"].get<bool>() == false);
+}
+
 TEST_CASE_METHOD(HelixTestFixture, "HELIX_MOCK_OBJECTS legacy shapes still parse",
                  "[chamber][mock]") {
     SECTION("temperature_fan chamber stays a single object and wins the chamber key") {

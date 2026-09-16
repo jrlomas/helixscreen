@@ -483,6 +483,11 @@ void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double
             // every synthesized frame.
             const char* fault_env = std::getenv("HELIX_MOCK_DRAGONBREATH_FAULT");
             const bool mock_fault = fault_env && fault_env[0] == '1';
+            // Test hook: HELIX_MOCK_DRAGONBREATH_OFFLINE=1 drops the appliance
+            // off its radio link. Read per frame so one client crosses the
+            // transition rather than having to be rebuilt.
+            const char* offline_env = std::getenv("HELIX_MOCK_DRAGONBREATH_OFFLINE");
+            const bool mock_offline = offline_env && offline_env[0] == '1';
             // PTC element rides a few degrees above chamber air, drifting
             // with the same slow sine the other mock sensors use.
             const double ptc_temp =
@@ -500,7 +505,7 @@ void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double
                                 {"mode", chamber_target > 0.0 ? "power_on" : "off"},
                                 {"source", "klipper"},
                                 {"lease_owned", chamber_target > 0.0},
-                                {"connected", true}};
+                                {"connected", !mock_offline}};
         }
     }
 

@@ -163,6 +163,52 @@ TEST_CASE("dragonbreath parse: delta frames engage only carried fields",
     CHECK_FALSE(db->parse_diagnostics(nlohmann::json::object()).has_value());
 }
 
+// The appliance's own radio link. An engaged false is the device reporting
+// itself unreachable; an absent key is no report. A connected-only delta must
+// be recognized as ours — the frame the device emits when it drops off WiFi
+// carries exactly that one field.
+TEST_CASE("dragonbreath parse: connected engages, absent stays unengaged",
+          "[chamber][backend][1290]") {
+    const auto* db = backend_by_id("dragonbreath");
+    REQUIRE(db != nullptr);
+
+    auto offline = db->parse_diagnostics(nlohmann::json{{"connected", false}});
+    REQUIRE(offline.has_value());
+    CHECK(offline->device_connected == false);
+
+    auto online = db->parse_diagnostics(nlohmann::json{{"connected", true}});
+    REQUIRE(online.has_value());
+    CHECK(online->device_connected == true);
+
+    auto silent = db->parse_diagnostics(nlohmann::json{{"ptc_temp", 24.9}});
+    REQUIRE(silent.has_value());
+    CHECK_FALSE(silent->device_connected.has_value());
+
+    // A malformed value in the connected slot is not evidence the device is
+    // unreachable — it engages as connected (unknown is not offline).
+    auto garbage = db->parse_diagnostics(nlohmann::json{{"connected", "yes"}});
+    REQUIRE(garbage.has_value());
+    CHECK(garbage->device_connected == true);
+}
+
+// protocol_error is raw vendor vocabulary with no UI kind: null engages as an
+// empty string, a string engages verbatim for the log.
+TEST_CASE("dragonbreath parse: protocol_error engages for logs only", "[chamber][backend][1290]") {
+    const auto* db = backend_by_id("dragonbreath");
+    REQUIRE(db != nullptr);
+
+    auto d =
+        db->parse_diagnostics(nlohmann::json{{"connected", true}, {"protocol_error", nullptr}});
+    REQUIRE(d.has_value());
+    CHECK(d->link_error == "");
+
+    auto errored = db->parse_diagnostics(
+        nlohmann::json{{"connected", false}, {"protocol_error", "frame_crc"}});
+    REQUIRE(errored.has_value());
+    CHECK(errored->link_error == "frame_crc");
+    CHECK(errored->device_connected == false);
+}
+
 TEST_CASE("dragonbreath fan reasons classify to generic drivers", "[chamber][backend]") {
     const auto* db = backend_by_id("dragonbreath");
     REQUIRE(db != nullptr);

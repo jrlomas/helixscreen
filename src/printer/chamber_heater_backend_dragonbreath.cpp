@@ -98,9 +98,9 @@ class DragonbreathBackend : public ChamberHeaterBackend {
         // cannot hinge on one field (ptc_temp alone drops every delta that
         // mentions only the fan). Any dragonbreath-specific key marks the
         // frame ours; generic heater keys (temperature/target) never do.
-        static const char* const DB_FIELDS[] = {"ptc_temp",     "fault",       "inhibited",
-                                                "fault_reason", "fan_percent", "fan_reason",
-                                                "mode",         "source",      "lease_owned"};
+        static const char* const DB_FIELDS[] = {
+            "ptc_temp", "fault",  "inhibited",   "fault_reason", "fan_percent",   "fan_reason",
+            "mode",     "source", "lease_owned", "connected",    "protocol_error"};
         bool known_field = false;
         for (const char* f : DB_FIELDS) {
             if (status.contains(f)) {
@@ -140,6 +140,23 @@ class DragonbreathBackend : public ChamberHeaterBackend {
                                       ? status["fan_reason"].get<std::string>()
                                       : std::string();
             d.filter_fan_driver = classify_filter_fan_driver(*d.filter_fan_reason);
+        }
+        // The appliance is a mains-powered radio device: it can vanish while
+        // Klipper keeps answering for the heater section it owns. Absent means
+        // the frame said nothing, which is not a report that the link is up.
+        // A value we cannot read is not evidence the device is unreachable, so
+        // a malformed slot engages as connected: every coercion here fails
+        // toward not raising an alarm, as the fault slot does.
+        if (status.contains("connected")) {
+            d.device_connected =
+                status["connected"].is_boolean() ? status["connected"].get<bool>() : true;
+        }
+        // Transport-level complaint from the glue. Logs only; the UI speaks
+        // through chamber_heater_offline.
+        if (status.contains("protocol_error")) {
+            d.link_error = status["protocol_error"].is_string()
+                               ? status["protocol_error"].get<std::string>()
+                               : std::string();
         }
         // Externally driven: heater active, but neither klipper source nor our
         // lease. Computed from three inputs, so it is an answer only when the

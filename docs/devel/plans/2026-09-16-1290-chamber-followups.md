@@ -253,3 +253,82 @@ change together.
 
 This sits underneath slice 0: slice 0's running-state rule is correct, and cannot
 be observed on hardware until diagnostics survive a delta.
+
+## Slice 2 design, revised after slice 6
+
+Once the diagnostics fields are optional, comms health needs no tri-state enum of
+its own: `std::optional<bool> device_connected` already carries all three
+meanings. `nullopt` is "this frame did not say", `true` is online, `false` is
+offline. A `LinkState` enum would duplicate what the optional provides.
+
+Fields, from the live payload:
+
+| Device field | Becomes | Note |
+|---|---|---|
+| `connected` | `std::optional<bool> device_connected` | the one that matters |
+| `protocol_error` | `std::optional<std::string> link_error` | null engages as empty, logs only |
+| `device_moonraker_connected` | not modelled | the appliance's own Bambu binding, reads false on a Klipper rig and means nothing to us |
+| `chamber_status`, `ptc_status` | not modelled yet | only ever observed as `ok`; no fault vocabulary to map, so logs only until one appears |
+
+Surface: a `chamber_heater_offline` subject, shown in the existing banner. **Reset
+hides while offline** rather than disabling, because a latched-fault reset cannot
+reach a device that is not answering, and a greyed button invites a press that
+would silently do nothing.
+
+Open until the hardware test: whether Klipper keeps reporting the heater's last
+temperature when the appliance drops, or marks the sensor bad. That decides
+whether the chamber readout also needs a stale marker, and it cannot be answered
+from the mock.
+
+## Slice 1b — which probe is "the chamber", measured
+
+Measured on the U1 shortly after a heat cycle, while the element was still
+shedding residual heat:
+
+| Object | Reading |
+|---|---|
+| `temperature_sensor cavity` | 27.0 C |
+| `dragonbreath` (appliance's own chamber probe) | 30.8 C |
+| `heater_generic dragonbreath` | 31.0 C |
+| `ptc_temp` (the element) | 32.4 C |
+
+Four degrees apart. The appliance's probe sits near its own PTC element, so it
+reads warm while that element is hot; the cavity sensor is elsewhere in the
+enclosure.
+
+Today the readout takes the heater's probe (temperature comes from the heater
+whenever one is configured) while `chamber_sensor_name_` resolves to
+`temperature_sensor cavity` and feeds the graph series,
+`temperature_service.cpp` and `TemperatureSensorManager::apply_chamber_sensor_override`.
+That is the worst of the two options: the same quantity shown from two probes
+that disagree by 4 C.
+
+The tradeoff is real in both directions:
+
+- **Heater's probe wins both.** The display converges on the target the user set,
+  because that is the loop the heater closes. It overstates enclosure air while
+  the element is hot.
+- **Cavity wins both.** The number better describes the air the print sits in,
+  but a target of 40 C will sit at ~36 C on screen forever, because the heater is
+  satisfying a different sensor. A readout that never reaches its setpoint reads
+  as broken.
+
+Recommendation: the heater's own probe wins both, on the grounds that a
+temperature which cannot reach its own target is the worse failure, and the
+cavity sensor remains available as its own graph series.
+
+Not yet decided, and not a decision to take silently — it changes what the number
+on the chamber tile means on every printer with both.
+
+Followed the gap down as the element cooled (ptc 32.4 -> 29.1 over ~12 min):
+
+    gap  +4.0   +2.5   +2.5   +2.2   +2.9
+
+So it is mostly residual-element bias, but it does not close: a 2-3 C difference
+persists with the element near chamber temperature. `temperature_sensor cavity`
+also steps in whole degrees (27.0 <-> 28.0 and nothing between), so it carries
+1 C resolution against the appliance's one decimal.
+
+That makes the decision less dramatic than 4 C suggested but does not remove it:
+the two probes still disagree by more than a degree at rest, and the readout and
+the graph series currently take different ones.

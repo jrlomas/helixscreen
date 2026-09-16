@@ -97,6 +97,8 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
     chamber_heater_fault_lifetime_ = std::make_shared<bool>(true);
     INIT_SUBJECT_INT(chamber_heater_inhibited, 0, subjects_, register_xml);
     chamber_heater_inhibited_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_heater_offline, 0, subjects_, register_xml);
+    chamber_heater_offline_lifetime_ = std::make_shared<bool>(true);
     // Translated UI text derived from the backend's generic FaultReason kind —
     // vendor codes die at the backend border and only surface in logs.
     INIT_SUBJECT_STRING(chamber_heater_fault_reason_text, "", subjects_, register_xml);
@@ -168,6 +170,9 @@ void PrinterTemperatureState::deinit_subjects() {
     if (chamber_heater_inhibited_lifetime_)
         *chamber_heater_inhibited_lifetime_ = false;
     chamber_heater_inhibited_lifetime_.reset();
+    if (chamber_heater_offline_lifetime_)
+        *chamber_heater_offline_lifetime_ = false;
+    chamber_heater_offline_lifetime_.reset();
     if (chamber_heater_fault_reason_text_lifetime_)
         *chamber_heater_fault_reason_text_lifetime_ = false;
     chamber_heater_fault_reason_text_lifetime_.reset();
@@ -583,6 +588,17 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
                     lv_subject_set_int(
                         &chamber_filter_fan_device_driven_,
                         *d->filter_fan_driver == chamber::FilterFanDriver::Device ? 1 : 0);
+                }
+                // Offline is asserted only on a report that the link is down.
+                // A backend that never speaks to connectivity leaves this 0,
+                // so a plain heater_generic chamber never claims to be offline.
+                if (d->device_connected.has_value()) {
+                    lv_subject_set_int(&chamber_heater_offline_, *d->device_connected ? 0 : 1);
+                }
+                if (d->link_error.has_value() && !d->link_error->empty()) {
+                    spdlog::debug("[PrinterTemperatureState] Chamber heater link error: "
+                                  "backend={} detail={}",
+                                  backend->id(), *d->link_error);
                 }
             }
         }

@@ -1206,6 +1206,7 @@
   <translation tag="Heater Power" en="Heater Power"/>
   <translation tag="Heater connection lost" en="Heater connection lost"/>
   <translation tag="Heater fault" en="Heater fault"/>
+  <translation tag="Heater offline" en="Heater offline"/>
   <translation tag="Heater over-temperature" en="Heater over-temperature"/>
   <translation tag="Heater sensor fault" en="Heater sensor fault"/>
   <translation tag="HeaterSelect" en="HeaterSelect"/>

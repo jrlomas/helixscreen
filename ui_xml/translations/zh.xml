@@ -1206,6 +1206,7 @@
   <translation tag="Heater Power" zh="加热器功率"/>
   <translation tag="Heater connection lost" zh="加热器连接丢失"/>
   <translation tag="Heater fault" zh="加热器故障"/>
+  <translation tag="Heater offline" zh="加热器已断开"/>
   <translation tag="Heater over-temperature" zh="加热器过热"/>
   <translation tag="Heater sensor fault" zh="加热器传感器故障"/>
   <translation tag="HeaterSelect" zh="选择加热器"/>

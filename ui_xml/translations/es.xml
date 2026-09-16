@@ -1206,6 +1206,7 @@
   <translation tag="Heater Power" es="Potencia del calentador"/>
   <translation tag="Heater connection lost" es="Fallo de conexión del calentador"/>
   <translation tag="Heater fault" es="Fallo del calentador"/>
+  <translation tag="Heater offline" es="Calentador desconectado"/>
   <translation tag="Heater over-temperature" es="Sobrecalentamiento del calentador"/>
   <translation tag="Heater sensor fault" es="Fallo del sensor del calentador"/>
   <translation tag="HeaterSelect" es="Seleccionar calentador"/>

@@ -61,7 +61,7 @@ The invariant: **vendor JSON schemas are translated to the generic `ChamberHeate
 | `src/printer/printer_temperature_state.cpp` | Diagnostics parse block: translates backend output to subjects; also owns all `chamber_heater_*` / `chamber_filter_fan_*` subject registration and display-string formatters |
 | `src/printer/printer_state.cpp` | The wiring block: gates both the diagnostics source and the TemperatureController action surface on resolved-heater == discovery-pick |
 | `src/ui/temperature_controller.cpp` | `set_chamber_actions()`, `reset_chamber_fault()`, `set_chamber_filter_fan()`, and the `ensure_limits()` ceiling fallback |
-| `ui_xml/components/chamber_diagnostics_card.xml` | The card: fault/inhibited banner + Reset, element temp + filter fan %, filter-fan toggle. Structural portrait branch renders a compact variant (single info row with an inline icon-button fan toggle, one-line banner) so 272x480 chamber mode fits with no scroll. Instantiated in `temp_graph_overlay.xml` behind `<if cond="printer_has_chamber_heater_diagnostics and temp_graph_mode eq 3">` |
+| `ui_xml/components/chamber_diagnostics_card.xml` | The card: fault/inhibited/offline banner + Reset (hidden while the device is offline), element temp + filter fan %, filter-fan toggle. Structural portrait branch renders a compact variant (single info row with an inline icon-button fan toggle, one-line banner) so 272x480 chamber mode fits with no scroll. Instantiated in `temp_graph_overlay.xml` behind `<if cond="printer_has_chamber_heater_diagnostics and temp_graph_mode eq 3">` |
 | `src/api/moonraker_client_mock.cpp` | Mock chamber backend shape (`HELIX_MOCK_OBJECTS` dragonbreath trio), registry-based chamber-status key |
 | `tests/unit/test_chamber_*.cpp` | Backend match/parse, subjects, ceiling, actions, discovery, mock — tags under `[chamber]` |
 
@@ -165,6 +165,7 @@ All registered by `PrinterTemperatureState`; display strings are formatter subje
 | `chamber_heater_inhibited` | int 0/1 | Heater refusing commands (e.g. post-fault cooldown) |
 | `chamber_heater_fault_reason` | string | Raw vendor fault code, "" when none — log-only, never bound by UI |
 | `chamber_heater_fault_reason_text` | string | Translated phrase for the backend's generic `FaultReason` kind ("" when none) — what the banner binds |
+| `chamber_heater_offline` | int 0/1 | Device unreachable on its own link. 1 only on an engaged "not connected" report; a backend with no link state (generic, panda_breath) leaves it 0 — unknown is not offline. While 1 the card banners the offline message and hides Reset (`DRAGONBREATH_RESET` cannot reach a device that is not answering). The vendor `protocol_error` string behind a link drop is log-only, like `chamber_heater_fault_reason` |
 | `chamber_heater_externally_controlled` | int 0/1 | Another controller is driving the heater (display-only, see below) |
 | `chamber_heater_element_temp` / `..._text` | int / string | Heating-element temp ("-1"/"--" = unknown) |
 | `chamber_filter_fan_percent` / `..._text` | int / string | Filtration-fan speed ("-1"/"--" = unknown) |

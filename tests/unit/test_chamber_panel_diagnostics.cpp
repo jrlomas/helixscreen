@@ -202,6 +202,43 @@ TEST_CASE_METHOD(ChamberOverlayFixture,
         CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "fault_banner")));
     }
 
+    SECTION("offline banners without Reset; merely faulted keeps Reset") {
+        // Merely faulted: banner + reason + Reset present, no offline message.
+        set_xml_int("chamber_heater_fault", 1);
+        set_xml_int("chamber_heater_inhibited", 0);
+        set_xml_int("chamber_heater_offline", 0);
+        helix::ui::UpdateQueue::instance().drain();
+
+        CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "fault_banner")));
+        CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "reset_fault_button")));
+        CHECK(hidden(lv_obj_find_by_name(overlay_, "offline_label")));
+
+        // Offline with no fault: the banner carries the offline message, and
+        // the Reset button is HIDDEN — DRAGONBREATH_RESET clears a latched
+        // fault ON the device and cannot reach one that is not answering.
+        set_xml_int("chamber_heater_fault", 0);
+        set_xml_int("chamber_heater_offline", 1);
+        helix::ui::UpdateQueue::instance().drain();
+
+        CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "fault_banner")));
+        CHECK(hidden(lv_obj_find_by_name(overlay_, "reset_fault_button")));
+        lv_obj_t* offline_label = lv_obj_find_by_name(overlay_, "offline_label");
+        REQUIRE(offline_label != nullptr);
+        CHECK_FALSE(hidden(offline_label));
+        CHECK(std::string(lv_label_get_text(offline_label)) ==
+              std::string(lv_tr("Heater offline")));
+        // The fault-reason text does not show while offline: an unreachable
+        // device is not a device reporting a fault.
+        CHECK(hidden(lv_obj_find_by_name(overlay_, "fault_reason_label")));
+
+        // Back online with nothing faulted: banner drops, Reset returns.
+        set_xml_int("chamber_heater_offline", 0);
+        helix::ui::UpdateQueue::instance().drain();
+
+        CHECK(hidden(lv_obj_find_by_name(overlay_, "fault_banner")));
+        CHECK_FALSE(hidden(lv_obj_find_by_name(overlay_, "reset_fault_button")));
+    }
+
     SECTION("no diagnostics capability unbuilds the whole card") {
         // Structural <if>: dropping the capability tears the card down — the
         // names are gone from the tree entirely, not merely hidden.
