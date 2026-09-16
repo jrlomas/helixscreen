@@ -72,6 +72,9 @@ class PipesScreensaver : public helix::ui::SaverBase {
     void setup_camera();
     void start_new_pipe(ActivePipe& pipe);
     bool grow_pipe(ActivePipe& pipe, lv_layer_t* layer);
+    /// Occupies `np`, draws the segment reaching it, and moves the pipe there. The caller has
+    /// already established that `np` is in bounds and free.
+    bool advance_pipe(ActivePipe& pipe, Direction dir, GridPos np, lv_layer_t* layer);
     bool project(float wx, float wy, float wz, int& sx, int& sy, float& depth) const;
     void draw_segment(lv_layer_t* layer, int sx1, int sy1, int sx2, int sy2, float depth,
                       const ActivePipe& pipe);

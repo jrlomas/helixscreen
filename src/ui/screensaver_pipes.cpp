@@ -244,6 +244,37 @@ void PipesScreensaver::grow_step() {
 
 // ---------- Growth ----------
 
+bool PipesScreensaver::advance_pipe(ActivePipe& pipe, Direction dir, GridPos np,
+                                    lv_layer_t* layer) {
+    grid_[np.x][np.y][np.z] = true;
+
+    const float wx1 = static_cast<float>(pipe.pos.x - GRID_OFFSET);
+    const float wy1 = static_cast<float>(pipe.pos.y - GRID_OFFSET);
+    const float wz1 = static_cast<float>(pipe.pos.z - GRID_OFFSET);
+    const float wx2 = static_cast<float>(np.x - GRID_OFFSET);
+    const float wy2 = static_cast<float>(np.y - GRID_OFFSET);
+    const float wz2 = static_cast<float>(np.z - GRID_OFFSET);
+
+    int sx1, sy1, sx2, sy2;
+    float d1, d2;
+
+    if (project(wx1, wy1, wz1, sx1, sy1, d1) && project(wx2, wy2, wz2, sx2, sy2, d2)) {
+        // Ball joint at direction change (reference: makeBallJoint)
+        if (pipe.has_prev_dir && dir != pipe.dir) {
+            draw_joint(layer, sx1, sy1, d1, pipe);
+        }
+
+        draw_segment(layer, sx1, sy1, sx2, sy2, (d1 + d2) * 0.5f, pipe);
+    }
+
+    pipe.dir = dir;
+    pipe.has_prev_dir = true;
+    pipe.pos = np;
+    pipe.segment_count++;
+    total_segments_++;
+    return true;
+}
+
 bool PipesScreensaver::grow_pipe(ActivePipe& pipe, lv_layer_t* layer) {
     Direction try_dir = pipe.dir;
 
@@ -259,33 +290,7 @@ bool PipesScreensaver::grow_pipe(ActivePipe& pipe, lv_layer_t* layer) {
     // Try the chosen direction
     GridPos np = next_pos(pipe.pos, try_dir);
     if (in_bounds(np) && !grid_[np.x][np.y][np.z]) {
-        grid_[np.x][np.y][np.z] = true;
-
-        float wx1 = static_cast<float>(pipe.pos.x - GRID_OFFSET);
-        float wy1 = static_cast<float>(pipe.pos.y - GRID_OFFSET);
-        float wz1 = static_cast<float>(pipe.pos.z - GRID_OFFSET);
-        float wx2 = static_cast<float>(np.x - GRID_OFFSET);
-        float wy2 = static_cast<float>(np.y - GRID_OFFSET);
-        float wz2 = static_cast<float>(np.z - GRID_OFFSET);
-
-        int sx1, sy1, sx2, sy2;
-        float d1, d2;
-
-        if (project(wx1, wy1, wz1, sx1, sy1, d1) && project(wx2, wy2, wz2, sx2, sy2, d2)) {
-            // Ball joint at direction change (reference: makeBallJoint)
-            if (pipe.has_prev_dir && try_dir != pipe.dir) {
-                draw_joint(layer, sx1, sy1, d1, pipe);
-            }
-
-            draw_segment(layer, sx1, sy1, sx2, sy2, (d1 + d2) * 0.5f, pipe);
-        }
-
-        pipe.dir = try_dir;
-        pipe.has_prev_dir = true;
-        pipe.pos = np;
-        pipe.segment_count++;
-        total_segments_++;
-        return true;
+        return advance_pipe(pipe, try_dir, np, layer);
     }
 
     // Fallback: try all 6 directions (reference just returns, but we're at lower tick rate)
@@ -293,33 +298,7 @@ bool PipesScreensaver::grow_pipe(ActivePipe& pipe, lv_layer_t* layer) {
         auto candidate = static_cast<Direction>(d);
         GridPos cnp = next_pos(pipe.pos, candidate);
         if (in_bounds(cnp) && !grid_[cnp.x][cnp.y][cnp.z]) {
-            grid_[cnp.x][cnp.y][cnp.z] = true;
-
-            float wx1 = static_cast<float>(pipe.pos.x - GRID_OFFSET);
-            float wy1 = static_cast<float>(pipe.pos.y - GRID_OFFSET);
-            float wz1 = static_cast<float>(pipe.pos.z - GRID_OFFSET);
-            float wx2 = static_cast<float>(cnp.x - GRID_OFFSET);
-            float wy2 = static_cast<float>(cnp.y - GRID_OFFSET);
-            float wz2 = static_cast<float>(cnp.z - GRID_OFFSET);
-
-            int sx1, sy1, sx2, sy2;
-            float depth1, depth2;
-
-            if (project(wx1, wy1, wz1, sx1, sy1, depth1) &&
-                project(wx2, wy2, wz2, sx2, sy2, depth2)) {
-                if (pipe.has_prev_dir && candidate != pipe.dir) {
-                    draw_joint(layer, sx1, sy1, depth1, pipe);
-                }
-
-                draw_segment(layer, sx1, sy1, sx2, sy2, (depth1 + depth2) * 0.5f, pipe);
-            }
-
-            pipe.dir = candidate;
-            pipe.has_prev_dir = true;
-            pipe.pos = cnp;
-            pipe.segment_count++;
-            total_segments_++;
-            return true;
+            return advance_pipe(pipe, candidate, cnp, layer);
         }
     }
 
