@@ -84,6 +84,12 @@
 /*Default display refresh, input device read and animation step period.*/
 #define LV_DEF_REFR_PERIOD  33      /*[ms]*/
 
+/*Pending invalid areas kept per display. A frame that needs more areas than this makes
+ *LVGL drop every pending area and invalidate the whole screen, and the screensavers
+ *invalidate one area per moving object (helix::ui::SAVER_MAX_DIRTY_AREAS caps them at
+ *160), so the buffer sits above that cap with headroom for UI invalidations of its own.*/
+#define LV_INV_BUF_SIZE 192
+
 /*Default Dot Per Inch. Used to initialize default sizes such as widgets sized, style paddings.
  *(Not so important, you can adjust it to modify default sizes and spaces)*/
 #define LV_DPI_DEF 160     /*[px/inch]*/

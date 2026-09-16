@@ -232,6 +232,11 @@ class StarfieldScreensaverTestAccess {
             s.z = z;
         }
     }
+
+    /// Stars the sim moves and draws per frame at the saver's current level.
+    static int active_star_count(const StarfieldScreensaver& ss) {
+        return ss.sim_.active_count();
+    }
 };
 
 class PipesScreensaverTestAccess {

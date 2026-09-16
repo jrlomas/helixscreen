@@ -19,6 +19,10 @@ using screensaver::unit_random;
 // A star's speed is its depth change per this many ms of frame time
 constexpr float SPEED_FRAME_MS = 33.0f;
 constexpr float COLOR_THRESHOLD = 0.35f; // stars closer than this show color
+/// Depth a star is recycled at, and the span of depths a live star occupies. A drawn star
+/// always sits in [Z_NEAR, 1.0], so size and brightness scale over Z_SPAN.
+constexpr float Z_NEAR = 0.01f;
+constexpr float Z_SPAN = 1.0f - Z_NEAR;
 
 constexpr Rgb BLACK = {0, 0, 0};
 
@@ -42,23 +46,23 @@ void assign_tint(std::minstd_rand& rng, uint8_t& r, uint8_t& g, uint8_t& b) {
     b = STAR_TINTS[idx][2];
 }
 
-/// Paints the size x size square at (sx, sy), clipped to the frame, and adds what it wrote
-/// to `dirty`.
-void fill_square(PixelWriter& writer, const FrameTarget& target, int sx, int sy, int size,
-                 Rgb color, DirtyRect& dirty) {
+/// Paints the size x size square at (sx, sy), clipped to the frame, and returns the box it
+/// wrote (empty when the square is entirely outside the frame).
+DirtyRect fill_square(PixelWriter& writer, const FrameTarget& target, int sx, int sy, int size,
+                      Rgb color) {
     const int x1 = std::max(sx, 0);
     const int y1 = std::max(sy, 0);
     const int x2 = std::min(sx + size, static_cast<int>(target.w)) - 1;
     const int y2 = std::min(sy + size, static_cast<int>(target.h)) - 1;
     if (x2 < x1 || y2 < y1) {
-        return;
+        return {};
     }
     for (int y = y1; y <= y2; y++) {
         for (int x = x1; x <= x2; x++) {
             writer.put(x, y, color);
         }
     }
-    dirty.add(x1, y1, x2, y2);
+    return {x1, y1, x2, y2};
 }
 
 } // namespace
@@ -69,12 +73,14 @@ void StarfieldSim::init(uint32_t w, uint32_t h, std::minstd_rand& rng) {
     focal_ = static_cast<float>(w) / 3.0f;
 
     stars_.resize(NUM_STARS);
+    star_dirty_.resize(NUM_STARS);
+    active_count_ = NUM_STARS;
     for (auto& star : stars_) {
         float angle = unit_random(rng) * 2.0f * 3.14159265f;
         float radius = 0.1f + unit_random(rng) * 0.9f;
         star.x = radius * std::cos(angle);
         star.y = radius * std::sin(angle);
-        star.z = 0.01f + unit_random(rng) * 0.99f;
+        star.z = Z_NEAR + unit_random(rng) * Z_SPAN;
         star.speed = 0.008f + unit_random(rng) * 0.017f;
         assign_tint(rng, star.tint_r, star.tint_g, star.tint_b);
         star.prev_sx = 0;
@@ -94,27 +100,42 @@ void StarfieldSim::recycle(Star& star, std::minstd_rand& rng) {
     assign_tint(rng, star.tint_r, star.tint_g, star.tint_b);
 }
 
-DirtyRect StarfieldSim::step(uint32_t dt_ms, FrameTarget& target, std::minstd_rand& rng) {
-    DirtyRect dirty;
+void StarfieldSim::set_active_count(int count) {
+    active_count_ = std::clamp(count, 1, NUM_STARS);
+}
+
+void StarfieldSim::step(uint32_t dt_ms, FrameTarget& target, std::minstd_rand& rng,
+                        std::vector<DirtyRect>& dirty) {
+    dirty.clear();
     PixelWriter writer(target);
     const int w = static_cast<int>(target.w);
     const int h = static_cast<int>(target.h);
+    star_dirty_.resize(stars_.size());
 
-    // Erase previous star positions (an incremental clear, which avoids a full-frame fill)
-    for (auto& star : stars_) {
+    // Erase previous star positions (an incremental clear, which avoids a full-frame fill).
+    // Covers every star of the population, so a star parked by set_active_count() leaves
+    // the canvas on the step after it stops flying.
+    for (size_t i = 0; i < stars_.size(); i++) {
+        star_dirty_[i] = DirtyRect{};
+        Star& star = stars_[i];
         if (star.prev_size == 0) {
             continue;
         }
-        fill_square(writer, target, star.prev_sx, star.prev_sy, star.prev_size, BLACK, dirty);
+        star_dirty_[i].add(
+            fill_square(writer, target, star.prev_sx, star.prev_sy, star.prev_size, BLACK));
         star.prev_size = 0;
     }
 
     const float frames = static_cast<float>(dt_ms) / SPEED_FRAME_MS;
-    for (auto& star : stars_) {
+    // active_count_ is a ladder setting, so it can outlive the population it was set for.
+    const int flying = std::min(active_count_, static_cast<int>(stars_.size()));
+    for (int i = 0; i < flying; i++) {
+        Star& star = stars_[i];
+
         // Move star closer by its speed, scaled to the time since the previous frame
         star.z -= star.speed * frames;
 
-        if (star.z <= 0.01f) {
+        if (star.z <= Z_NEAR) {
             recycle(star, rng);
             continue;
         }
@@ -131,8 +152,9 @@ DirtyRect StarfieldSim::step(uint32_t dt_ms, FrameTarget& target, std::minstd_ra
         int isx = static_cast<int>(sx);
         int isy = static_cast<int>(sy);
 
-        // Size: larger when closer (z near 0)
-        int size = std::max(1, static_cast<int>(3.0f * (1.0f - star.z)));
+        // Size: larger when closer. A drawn star has z above the recycle bound, so the
+        // range is scaled to that bound and rounds to span the full 1..3 px.
+        int size = 1 + static_cast<int>(std::lround(2.0f * (1.0f - star.z) / Z_SPAN));
 
         // Brightness: brighter when closer, with minimum floor
         float bright_f = 80.0f + 175.0f * (1.0f - star.z);
@@ -151,7 +173,7 @@ DirtyRect StarfieldSim::step(uint32_t dt_ms, FrameTarget& target, std::minstd_ra
             r = g = b = static_cast<uint8_t>(bright_f);
         }
 
-        fill_square(writer, target, isx, isy, size, Rgb{r, g, b}, dirty);
+        star_dirty_[i].add(fill_square(writer, target, isx, isy, size, Rgb{r, g, b}));
 
         // Remember position for next step's erase pass
         star.prev_sx = static_cast<int16_t>(isx);
@@ -159,7 +181,11 @@ DirtyRect StarfieldSim::step(uint32_t dt_ms, FrameTarget& target, std::minstd_ra
         star.prev_size = static_cast<uint8_t>(size);
     }
 
-    return dirty;
+    for (const DirtyRect& r : star_dirty_) {
+        if (!r.empty()) {
+            dirty.push_back(r);
+        }
+    }
 }
 
 } // namespace helix::ui
