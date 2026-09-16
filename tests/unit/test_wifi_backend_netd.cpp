@@ -1464,4 +1464,24 @@ TEST_CASE_METHOD(NetdBackendFixture,
     REQUIRE(backend_->supports_wpa_supplicant_fallback());
 }
 
+// With the daemon up, the radio genuinely is the daemon's to manage and there is
+// nothing to report. With it down, saying so names the wrong thing: the radio is
+// not being managed at all, and the user is told a service is absent rather than
+// that a capability is missing.
+TEST_CASE_METHOD(NetdBackendFixture, "netd names a down daemon rather than a missing capability",
+                 "[netd][wifi]") {
+    REQUIRE(start_and_settle());
+    REQUIRE(backend_->is_running());
+    REQUIRE(backend_->set_radio_enabled(true).result == WiFiResult::NOT_SUPPORTED);
+
+    // A connect that finds nothing listening is what distinguishes a down
+    // daemon from one this backend simply has not reached for yet.
+    backend_->stop();
+    server_.reset();
+    REQUIRE_FALSE(backend_->start().success());
+    const auto down = backend_->set_radio_enabled(true);
+    REQUIRE(down.result == WiFiResult::SERVICE_NOT_RUNNING);
+    REQUIRE(down.user_msg == "The printer's network service is not running");
+}
+
 #endif // !__APPLE__ && !__ANDROID__

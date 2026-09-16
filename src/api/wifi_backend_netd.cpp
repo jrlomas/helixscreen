@@ -1078,6 +1078,17 @@ bool WifiBackendNetd::supports_5ghz() const {
 
 WiFiError WifiBackendNetd::set_radio_enabled(bool on) {
     (void)on;
+    // A connect that found nothing there means the daemon is not managing the
+    // radio, so reporting a missing capability would name the wrong thing. It
+    // also loads the WiFi driver, so with it down there is no interface at all
+    // - the honest answer is that the service is absent, which is what the user
+    // can act on. Before any connect is attempted the daemon may be perfectly
+    // healthy, so this asks what a connect actually found, not whether this
+    // backend happens to be started.
+    if (daemon_unreachable_.load()) {
+        return WiFiError(WiFiResult::SERVICE_NOT_RUNNING, "the network daemon is not running",
+                         "The printer's network service is not running");
+    }
     // NOT_SUPPORTED, not BACKEND_ERROR: nothing failed and nothing is broken.
     // The daemon owns the radio and its protocol has no verb for this, so the
     // capability is absent. The distinction is what the user sees — an error
