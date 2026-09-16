@@ -674,12 +674,15 @@ if [ -z "$HIDDEN_TRIGGERS" ]; then
 elif [ ! -x "build/bin/helix-tests" ]; then
   echo "⚠️  build/bin/helix-tests not built — skipping hidden tests"
   echo "   Run 'make test-hidden' by hand to enable this gate."
-elif ! make -q _PARALLEL_GUARD=1 build/bin/helix-tests >/dev/null 2>&1; then
+elif ! HIDDEN_STALE=$(scripts/check_test_binary_current.sh); then
   echo "⚠️  Test binary is stale — skipping hidden tests"
+  echo "   Behind: $(echo "$HIDDEN_STALE" | head -3 | tr '\n' ' ')"
   echo "   A test build is too slow for a commit hook. Run: make test-hidden"
 else
   SECTION_START=$(date +%s)
-  if make test-hidden >/tmp/test_hidden.out 2>&1; then
+  # The binary runs directly here: `make test-hidden` carries a test-build
+  # prerequisite that would relink, and this block never builds.
+  if build/bin/helix-tests "[.]" >/tmp/test_hidden.out 2>&1; then
     printf "✅ Hidden tests passed (%s)" "$(grep -E '^test cases:' /tmp/test_hidden.out | tail -1)"
     section_time $SECTION_START
     echo ""
