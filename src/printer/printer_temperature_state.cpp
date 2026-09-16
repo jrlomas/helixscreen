@@ -99,6 +99,8 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
     chamber_heater_inhibited_lifetime_ = std::make_shared<bool>(true);
     INIT_SUBJECT_INT(chamber_heater_offline, 0, subjects_, register_xml);
     chamber_heater_offline_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_heater_externally_controlled, 0, subjects_, register_xml);
+    chamber_heater_externally_controlled_lifetime_ = std::make_shared<bool>(true);
     // Translated UI text derived from the backend's generic FaultReason kind —
     // vendor codes die at the backend border and only surface in logs.
     INIT_SUBJECT_STRING(chamber_heater_fault_reason_text, "", subjects_, register_xml);
@@ -173,6 +175,9 @@ void PrinterTemperatureState::deinit_subjects() {
     if (chamber_heater_offline_lifetime_)
         *chamber_heater_offline_lifetime_ = false;
     chamber_heater_offline_lifetime_.reset();
+    if (chamber_heater_externally_controlled_lifetime_)
+        *chamber_heater_externally_controlled_lifetime_ = false;
+    chamber_heater_externally_controlled_lifetime_.reset();
     if (chamber_heater_fault_reason_text_lifetime_)
         *chamber_heater_fault_reason_text_lifetime_ = false;
     chamber_heater_fault_reason_text_lifetime_.reset();
@@ -593,7 +598,18 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
                 // A backend that never speaks to connectivity leaves this 0,
                 // so a plain heater_generic chamber never claims to be offline.
                 if (d->device_connected.has_value()) {
-                    lv_subject_set_int(&chamber_heater_offline_, *d->device_connected ? 0 : 1);
+                    if (*d->device_connected) {
+                        chamber_offline_run_ = 0;
+                        lv_subject_set_int(&chamber_heater_offline_, 0);
+                    } else if (++chamber_offline_run_ >= CHAMBER_OFFLINE_CONSECUTIVE_REPORTS) {
+                        lv_subject_set_int(&chamber_heater_offline_, 1);
+                    }
+                }
+                // Another controller is driving the heater: the device's own
+                // web UI or a button on the unit. Informational, not a fault.
+                if (d->externally_controlled.has_value()) {
+                    lv_subject_set_int(&chamber_heater_externally_controlled_,
+                                       *d->externally_controlled ? 1 : 0);
                 }
                 if (d->link_error.has_value() && !d->link_error->empty()) {
                     spdlog::debug("[PrinterTemperatureState] Chamber heater link error: "

@@ -66,7 +66,15 @@
       <lv_obj width="100%" height="content" flex_flow="row" style_pad_gap="#space_md" scrollable="false">
         <lv_obj height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
           <text_muted text="Element" translation_tag="Element"/>
-          <text_small name="element_temp_label" bind_text="chamber_heater_element_temp_text"/>
+          <lv_obj height="content" flex_flow="row" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small name="element_temp_label" bind_text="chamber_heater_element_temp_text"/>
+            <!-- Another controller is driving the heater: the device's own
+                 web UI or a button on the unit. Informational, not a fault. -->
+            <text_small name="external_control_badge"
+                        text="External" translation_tag="External" style_text_color="#text_muted">
+              <bind_flag_if cond="chamber_heater_externally_controlled" flag="hidden" invert="true"/>
+            </text_small>
+          </lv_obj>
         </lv_obj>
         <lv_obj height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
           <text_muted text="Filter Fan" translation_tag="Filter Fan"/>
@@ -121,7 +129,15 @@
               scrollable="false">
         <lv_obj height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
           <text_muted text="Element" translation_tag="Element"/>
-          <text_small name="element_temp_label" bind_text="chamber_heater_element_temp_text"/>
+          <lv_obj height="content" flex_flow="row" style_pad_gap="#space_xxs" scrollable="false">
+            <text_small name="element_temp_label" bind_text="chamber_heater_element_temp_text"/>
+            <!-- Another controller is driving the heater: the device's own
+                 web UI or a button on the unit. Informational, not a fault. -->
+            <text_small name="external_control_badge"
+                        text="External" translation_tag="External" style_text_color="#text_muted">
+              <bind_flag_if cond="chamber_heater_externally_controlled" flag="hidden" invert="true"/>
+            </text_small>
+          </lv_obj>
         </lv_obj>
         <lv_obj height="content" flex_flow="column" style_pad_gap="#space_xxs" scrollable="false">
           <text_muted text="Filter Fan" translation_tag="Filter Fan"/>

@@ -207,6 +207,13 @@ class PrinterTemperatureState {
     /// Device unreachable on its own link (0/1). 1 only on an engaged
     /// "not connected" report — a backend with no link state leaves it 0
     /// (unknown is not offline).
+    lv_subject_t* get_chamber_heater_externally_controlled_subject() {
+        return &chamber_heater_externally_controlled_;
+    }
+    lv_subject_t* get_chamber_heater_externally_controlled_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_heater_externally_controlled_lifetime_;
+        return &chamber_heater_externally_controlled_;
+    }
     lv_subject_t* get_chamber_heater_offline_subject() {
         return &chamber_heater_offline_;
     }
@@ -475,11 +482,12 @@ class PrinterTemperatureState {
 
     // Chamber-heater diagnostics (backend-provided, issue #1290). Absent
     // objects in a delta status frame = no news: subjects keep last values.
-    lv_subject_t chamber_heater_fault_{};             ///< XML: 0/1
-    lv_subject_t chamber_heater_inhibited_{};         ///< XML: 0/1
-    lv_subject_t chamber_heater_offline_{};           ///< XML: 0/1
-    lv_subject_t chamber_heater_fault_reason_text_{}; ///< XML: translated reason, "" when none
-    lv_subject_t chamber_filter_fan_on_{};            ///< XML: -1 unknown / 0 / 1 (fan RUNNING)
+    lv_subject_t chamber_heater_fault_{};                 ///< XML: 0/1
+    lv_subject_t chamber_heater_inhibited_{};             ///< XML: 0/1
+    lv_subject_t chamber_heater_externally_controlled_{}; ///< XML: 0/1
+    lv_subject_t chamber_heater_offline_{};               ///< XML: 0/1
+    lv_subject_t chamber_heater_fault_reason_text_{};     ///< XML: translated reason, "" when none
+    lv_subject_t chamber_filter_fan_on_{};                ///< XML: -1 unknown / 0 / 1 (fan RUNNING)
     lv_subject_t chamber_filter_fan_requested_{};     ///< XML: -1 unknown / 0 / 1 (our pin request)
     lv_subject_t chamber_filter_fan_device_driven_{}; ///< XML: 0/1 (device runs the fan itself)
     lv_subject_t chamber_heater_element_temp_text_{}; ///< XML: display string ("--"/"106.2°C")
@@ -493,6 +501,16 @@ class PrinterTemperatureState {
     char chamber_filter_fan_icon_buf_[16] = {};
     SubjectLifetime chamber_heater_fault_lifetime_;
     SubjectLifetime chamber_heater_inhibited_lifetime_;
+    /// A single missed poll of the appliance reports connected:false and
+    /// recovers on the very next frame, so asserting offline on the first
+    /// report flashes an alarm for one poll several times an hour. Offline is
+    /// asserted only after this many consecutive reports; any connected report
+    /// clears the run. At the module's 2s poll that is ~6s to notice a real
+    /// outage, against a measured flap length of one poll.
+    static constexpr int CHAMBER_OFFLINE_CONSECUTIVE_REPORTS = 3;
+    int chamber_offline_run_ = 0;
+
+    SubjectLifetime chamber_heater_externally_controlled_lifetime_;
     SubjectLifetime chamber_heater_offline_lifetime_;
     SubjectLifetime chamber_heater_fault_reason_text_lifetime_;
     SubjectLifetime chamber_filter_fan_on_lifetime_;

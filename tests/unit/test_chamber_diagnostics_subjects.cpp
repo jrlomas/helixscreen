@@ -293,7 +293,14 @@ TEST_CASE("connected reports drive chamber_heater_offline", "[chamber][subjects]
                                       "output_pin dragonbreath_filter");
     REQUIRE(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
 
-    ts.update_from_status({{"dragonbreath", {{"connected", false}, {"protocol_error", nullptr}}}});
+    // One report is a missed poll, not an outage: the run has to build.
+    const nlohmann::json down{
+        {"dragonbreath", {{"connected", false}, {"protocol_error", nullptr}}}};
+    ts.update_from_status(down);
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+    ts.update_from_status(down);
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+    ts.update_from_status(down);
     CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 1);
     // protocol_error: null is inert — no UI subject moves on it.
     CHECK(lv_subject_get_int(ts.get_chamber_heater_fault_subject()) == 0);
@@ -316,9 +323,12 @@ TEST_CASE("a delta without connected keeps the offline state", "[chamber][subjec
     ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
                                       "output_pin dragonbreath_filter");
 
-    ts.update_from_status(
+    const nlohmann::json down =
         nlohmann::json::parse(R"({"dragonbreath": {"fault": false, "fault_reason": null,
-      "ptc_temp": 40.0, "fan_percent": 0, "fan_reason": "off", "connected": false}})"));
+      "ptc_temp": 40.0, "fan_percent": 0, "fan_reason": "off", "connected": false}})");
+    for (int i = 0; i < 3; ++i) {
+        ts.update_from_status(down);
+    }
     REQUIRE(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 1);
     REQUIRE(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
             "40.0°C");
@@ -550,4 +560,75 @@ TEST_CASE("set_hardware wires diagnostics only when the resolved heater is the d
     }
 
     restore_settings();
+}
+
+// externally_controlled is computed from mode + source + lease_owned, so it is
+// an answer only when a frame carries all three. Its surface is informational:
+// another controller driving the heater is not a fault.
+TEST_CASE("externally-controlled reaches its subject only on a complete trio",
+          "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
+                                      "output_pin dragonbreath_filter");
+
+    // Heating, and neither our lease nor a klipper source: somebody else.
+    ts.update_from_status(nlohmann::json::parse(R"({
+      "dragonbreath": {"ptc_temp": 55.0, "mode": "power_on", "source": "device",
+                       "lease_owned": false}})"));
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_externally_controlled_subject()) == 1);
+
+    // Same heat, driven through klipper: ours.
+    ts.update_from_status(nlohmann::json::parse(R"({
+      "dragonbreath": {"ptc_temp": 56.0, "mode": "power_on", "source": "klipper",
+                       "lease_owned": true}})"));
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_externally_controlled_subject()) == 0);
+
+    // Back to somebody else, then a delta carrying only part of the trio. A
+    // partial trio is not a confident "no", so the subject holds.
+    ts.update_from_status(nlohmann::json::parse(R"({
+      "dragonbreath": {"ptc_temp": 57.0, "mode": "power_on", "source": "device",
+                       "lease_owned": false}})"));
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_externally_controlled_subject()) == 1);
+
+    ts.update_from_status(nlohmann::json::parse(R"({
+      "dragonbreath": {"ptc_temp": 58.0, "mode": "power_on"}})"));
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_externally_controlled_subject()) == 1);
+    // The delta was processed: the field it did carry landed.
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
+          "58.0°C");
+}
+
+// Measured on a U1: the appliance reports connected:false for exactly one poll
+// roughly every twenty minutes and recovers on the next frame. Raising the
+// banner on that would flash an alarm several times an hour for nothing.
+TEST_CASE("a one-poll link flap never reaches the banner", "[chamber][subjects][1290]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState ts;
+    ts.init_subjects(false);
+    ts.set_chamber_diagnostics_source("dragonbreath", "dragonbreath",
+                                      "output_pin dragonbreath_filter");
+
+    ts.update_from_status({{"dragonbreath", {{"connected", true}, {"ptc_temp", 30.0}}}});
+    REQUIRE(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+
+    // The flap, at the observed length of one report.
+    ts.update_from_status({{"dragonbreath", {{"connected", false}, {"ptc_temp", 30.1}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+    ts.update_from_status({{"dragonbreath", {{"connected", true}, {"ptc_temp", 30.2}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+
+    // A recovered flap must not leave the run part-built: a later lone flap
+    // still has to start from zero rather than tipping the banner over.
+    ts.update_from_status({{"dragonbreath", {{"connected", false}, {"ptc_temp", 30.3}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+    ts.update_from_status({{"dragonbreath", {{"connected", true}, {"ptc_temp", 30.4}}}});
+    CHECK(lv_subject_get_int(ts.get_chamber_heater_offline_subject()) == 0);
+
+    // The frames landed, so this is not a test passing on a dropped payload.
+    CHECK(std::string(lv_subject_get_string(ts.get_chamber_heater_element_temp_text_subject())) ==
+          "30.4°C");
 }
