@@ -28,6 +28,8 @@
 #include "display_settings_manager.h"
 #include "flush_stride.h"
 #include "helix-xml/src/xml/lv_xml.h"
+#include "lvgl/src/misc/cache/instance/lv_image_cache.h"        // not in the lvgl.h umbrella
+#include "lvgl/src/misc/cache/instance/lv_image_header_cache.h" // not in the lvgl.h umbrella
 #include "lvgl/src/misc/lv_timer_private.h" // lv_timer_t::period; LVGL has no period getter
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "lvgl_log_handler.h"
@@ -178,6 +180,52 @@ DisplayManager::~DisplayManager() {
     shutdown();
 }
 
+namespace {
+
+/// Reads a non-negative integer env var, or `fallback` when unset or malformed.
+long env_count(const char* name, long fallback) {
+    const char* v = std::getenv(name);
+    if (!v || !v[0]) {
+        return fallback;
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(v, &end, 10);
+    if (end == v || *end != '\0' || parsed < 0) {
+        spdlog::warn("[DisplayManager] {}='{}' is not a non-negative integer, ignoring", name, v);
+        return fallback;
+    }
+    return parsed;
+}
+
+/// Sizes LVGL's two image caches from the environment, for A/B measurement of
+/// what caching is worth on a given board.
+///
+/// HELIX_IMAGE_CACHE_KB sizes the decoded-pixel cache. **A value below the
+/// largest single decoded image is worse than no cache at all**: the LRU's
+/// reserve path reports TOO_LARGE before it evicts anything, and the decoder
+/// then destroys a bitmap it had already decoded successfully, so the image
+/// draws as nothing rather than slowly. Budget against the biggest asset the
+/// build can hand LVGL, not against the steady-state working set.
+///
+/// HELIX_IMAGE_HEADER_CACHE_CNT is a count of header entries, not bytes, and
+/// carries no such failure mode: a miss reopens and reparses the file to read
+/// its dimensions, so the only cost of being wrong is the status quo.
+void apply_image_cache_env() {
+    const long cache_kb = env_count("HELIX_IMAGE_CACHE_KB", 0);
+    if (cache_kb > 0) {
+        lv_image_cache_resize(static_cast<uint32_t>(cache_kb) * 1024u, false);
+        spdlog::info("[DisplayManager] Image cache: {} KB", cache_kb);
+    }
+
+    const long header_cnt = env_count("HELIX_IMAGE_HEADER_CACHE_CNT", 0);
+    if (header_cnt > 0) {
+        lv_image_header_cache_resize(static_cast<uint32_t>(header_cnt), false);
+        spdlog::info("[DisplayManager] Image header cache: {} entries", header_cnt);
+    }
+}
+
+} // namespace
+
 bool DisplayManager::init(const Config& config) {
     if (m_initialized) {
         spdlog::warn("[DisplayManager] Already initialized, call shutdown() first");
@@ -186,6 +234,11 @@ bool DisplayManager::init(const Config& config) {
 
     // Initialize LVGL library
     lv_init();
+
+    // lv_init() builds both cache objects even when lv_conf.h sizes them at 0,
+    // so they can be sized here rather than at compile time. Both default to 0,
+    // which is the behaviour every board ships with today.
+    apply_image_cache_env();
 
     // Register LVGL log handler immediately after lv_init() so that DRM/fbdev
     // driver errors are captured via spdlog (lv_init resets callbacks, so this

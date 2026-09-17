@@ -18,6 +18,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <vector>
 
 namespace helix {
@@ -99,8 +100,41 @@ std::string get_prerendered_splash_path(int screen_width, int screen_height) {
     return asset_component_uri("assets/images/helixscreen-logo.png");
 }
 
+namespace {
+
+/// One line per distinct key for the whole process. The resolver runs on every
+/// panel rebuild, so an unconditional message here reprints several times per
+/// navigation and the signal is lost in its own repeats.
+///
+/// Main thread only, which every caller of this file's resolvers is; the set has
+/// no lock.
+bool first_mention(const std::string& key) {
+    static std::set<std::string> seen;
+    return seen.insert(key).second;
+}
+
+/// Says once what the process will be decoding, because "which tier am I on"
+/// is the first question any slow-paint report has to answer and it is
+/// otherwise only inferable from a full debug trace.
+void announce_tier_once(int size) {
+    if (!first_mention("tier")) {
+        return;
+    }
+    if (prerendered_exists("assets/images/printers/prerendered")) {
+        spdlog::info("[Prerendered] Printer art: {}px renders", size);
+        return;
+    }
+    // Absent for a source checkout and for any build that skipped
+    // gen-printer-images, which is normal; a shipped package always carries them.
+    spdlog::info("[Prerendered] Printer art: no renders installed, decoding full-resolution "
+                 "PNGs instead (make gen-printer-images)");
+}
+
+} // namespace
+
 std::string get_prerendered_printer_path(const std::string& printer_name, int screen_width) {
     int size = get_printer_image_size(screen_width);
+    announce_tier_once(size);
 
     // Path relative to install directory
     std::string path = "assets/images/printers/prerendered/";
@@ -110,19 +144,31 @@ std::string get_prerendered_printer_path(const std::string& printer_name, int sc
     path += ".bin";
 
     if (prerendered_exists(path)) {
-        spdlog::debug("[Prerendered] Using printer image: {}", path);
+        spdlog::debug("[Prerendered] {} -> {}", printer_name, path);
         return asset_component_uri(path);
     }
 
     // Fall back to original PNG, but verify it exists
     std::string png_path = "assets/images/printers/" + printer_name + ".png";
     if (prerendered_exists(png_path)) {
-        spdlog::trace("[Prerendered] Printer {} fallback to PNG (no {}px)", printer_name, size);
+        // A render dir that exists but lacks THIS printer is partial coverage, and
+        // the only state here that is never expected. A wholly absent dir already
+        // spoke once in announce_tier_once(); repeating it per printer buries it.
+        if (prerendered_exists("assets/images/printers/prerendered") &&
+            first_mention(printer_name + "-" + std::to_string(size))) {
+            spdlog::warn("[Prerendered] No {}px render for '{}' - decoding {} at full "
+                         "resolution on every repaint. Expected {}",
+                         size, printer_name, png_path, path);
+        }
+        spdlog::debug("[Prerendered] {} -> {} (full-resolution PNG)", printer_name, png_path);
         return asset_component_uri(png_path);
     }
 
     // Neither prerendered nor PNG exists — fall back to generic
-    spdlog::debug("[Prerendered] Printer {} has no image, using generic fallback", printer_name);
+    if (first_mention("generic:" + printer_name)) {
+        spdlog::warn("[Prerendered] No artwork for '{}' - showing the generic CoreXY frame",
+                     printer_name);
+    }
     std::string generic_bin =
         "assets/images/printers/prerendered/generic-corexy-" + std::to_string(size) + ".bin";
     if (prerendered_exists(generic_bin)) {
