@@ -1290,139 +1290,147 @@ void MoonrakerClientMock::discover_printer(
 
     // Query server.info to get moonraker_version (uses registered RPC handler)
     send_jsonrpc("server.info", json::object(), [this, on_complete](json response) {
+        std::string moonraker_version;
         if (response.contains("result")) {
-            auto moonraker_version = response["result"].value("moonraker_version", "unknown");
-            discovery_.modify_hardware(
-                [&](PrinterDiscovery& hw) { hw.set_moonraker_version(moonraker_version); });
+            moonraker_version = response["result"].value("moonraker_version", "unknown");
             spdlog::debug("[MoonrakerClientMock] Moonraker version: {}", moonraker_version);
         }
 
-        // Chain to printer.info to get hostname and software_version
-        send_jsonrpc("printer.info", json::object(), [this, on_complete](json response) {
-            spdlog::debug("[MoonrakerClientMock] printer.info response received");
+        // Carried into the printer.info callback rather than stored here:
+        // populate_capabilities() below reparses the objects list and clears the
+        // discovery record, so anything written before it is lost.
+        send_jsonrpc(
+            "printer.info", json::object(), [this, on_complete, moonraker_version](json response) {
+                spdlog::debug("[MoonrakerClientMock] printer.info response received");
 
-            // Re-populate after mock discovery may have changed hardware data
-            populate_capabilities();
+                // Re-populate after mock discovery may have changed hardware data
+                populate_capabilities();
 
-            // Now set the metadata AFTER parse_objects() has run
-            if (response.contains("result")) {
-                auto hostname = response["result"].value("hostname", "unknown");
-                auto software_version = response["result"].value("software_version", "unknown");
-                discovery_.modify_hardware([&](PrinterDiscovery& hw) {
-                    hw.set_hostname(hostname);
-                    hw.set_software_version(software_version);
-                });
-                spdlog::debug("[MoonrakerClientMock] Printer hostname: {}", hostname);
-                spdlog::debug("[MoonrakerClientMock] Klipper software version: {}",
-                              software_version);
-            }
+                // Now set the metadata AFTER parse_objects() has run
+                if (response.contains("result")) {
+                    auto hostname = response["result"].value("hostname", "unknown");
+                    auto software_version = response["result"].value("software_version", "unknown");
+                    discovery_.modify_hardware([&](PrinterDiscovery& hw) {
+                        hw.set_hostname(hostname);
+                        hw.set_software_version(software_version);
+                        hw.set_moonraker_version(moonraker_version);
+                    });
+                    spdlog::debug("[MoonrakerClientMock] Printer hostname: {}", hostname);
+                    spdlog::debug("[MoonrakerClientMock] Klipper software version: {}",
+                                  software_version);
+                }
 
-            // Query machine.system_info for OS version (uses registered RPC handler)
-            send_jsonrpc(
-                "machine.system_info", json::object(),
-                [this](json sys_response) {
-                    if (sys_response.contains("result") &&
-                        sys_response["result"].contains("system_info") &&
-                        sys_response["result"]["system_info"].contains("distribution") &&
-                        sys_response["result"]["system_info"]["distribution"].contains("name")) {
-                        std::string os_name =
-                            sys_response["result"]["system_info"]["distribution"]["name"]
-                                .get<std::string>();
-                        discovery_.modify_hardware(
-                            [&](PrinterDiscovery& hw) { hw.set_os_version(os_name); });
-                        spdlog::debug("[MoonrakerClientMock] OS version: {}", os_name);
-                    }
-                },
-                [](const MoonrakerError& err) {
-                    spdlog::debug("[MoonrakerClientMock] machine.system_info failed: {}",
-                                  err.message);
-                });
+                // Query machine.system_info for OS version (uses registered RPC handler)
+                send_jsonrpc(
+                    "machine.system_info", json::object(),
+                    [this](json sys_response) {
+                        if (sys_response.contains("result") &&
+                            sys_response["result"].contains("system_info") &&
+                            sys_response["result"]["system_info"].contains("distribution") &&
+                            sys_response["result"]["system_info"]["distribution"].contains(
+                                "name")) {
+                            std::string os_name =
+                                sys_response["result"]["system_info"]["distribution"]["name"]
+                                    .get<std::string>();
+                            discovery_.modify_hardware(
+                                [&](PrinterDiscovery& hw) { hw.set_os_version(os_name); });
+                            spdlog::debug("[MoonrakerClientMock] OS version: {}", os_name);
+                        }
+                    },
+                    [](const MoonrakerError& err) {
+                        spdlog::debug("[MoonrakerClientMock] machine.system_info failed: {}",
+                                      err.message);
+                    });
 
-            // Set Spoolman availability during discovery (matches real Moonraker behavior)
-            // Real client queries server.spoolman.status during discovery - see
-            // moonraker_client.cpp:1047
-            get_printer_state().set_spoolman_available(mock_spoolman_enabled_);
-            spdlog::debug("[MoonrakerClientMock] Spoolman available: {}", mock_spoolman_enabled_);
+                // Set Spoolman availability during discovery (matches real Moonraker behavior)
+                // Real client queries server.spoolman.status during discovery - see
+                // moonraker_client.cpp:1047
+                get_printer_state().set_spoolman_available(mock_spoolman_enabled_);
+                spdlog::debug("[MoonrakerClientMock] Spoolman available: {}",
+                              mock_spoolman_enabled_);
 
-            // Set webcam availability during discovery (matches real Moonraker behavior)
-            // Real client queries server.webcams.list during discovery
-            if (mock_webcams_.empty()) {
-                get_printer_state().set_webcam_available(true, "/webcam/?action=stream",
-                                                         "/webcam/?action=snapshot");
-                spdlog::debug(
-                    "[MoonrakerClientMock] Webcam available: true (mock always has webcam)");
-            } else {
-                get_printer_state().set_webcams(mock_webcams_);
-                spdlog::debug("[MoonrakerClientMock] Webcams published: {} (HELIX_MOCK_WEBCAMS)",
-                              mock_webcams_.size());
-            }
+                // Set webcam availability during discovery (matches real Moonraker behavior)
+                // Real client queries server.webcams.list during discovery
+                if (mock_webcams_.empty()) {
+                    get_printer_state().set_webcam_available(true, "/webcam/?action=stream",
+                                                             "/webcam/?action=snapshot");
+                    spdlog::debug(
+                        "[MoonrakerClientMock] Webcam available: true (mock always has webcam)");
+                } else {
+                    get_printer_state().set_webcams(mock_webcams_);
+                    spdlog::debug(
+                        "[MoonrakerClientMock] Webcams published: {} (HELIX_MOCK_WEBCAMS)",
+                        mock_webcams_.size());
+                }
 
-            // Set power device count during discovery (matches real Moonraker behavior)
-            // Real client queries machine.device_power.devices during discovery
-            if (std::getenv("MOCK_EMPTY_POWER")) {
-                get_printer_state().set_power_device_count(0);
-                helix::PowerDeviceState::instance().set_devices({});
-                spdlog::debug("[MoonrakerClientMock] Power devices: 0 (MOCK_EMPTY_POWER set)");
-            } else {
-                get_printer_state().set_power_device_count(4);
-                std::vector<PowerDevice> mock_power_devices = {
-                    {"printer_psu", "gpio", "on", false},
-                    {"chamber_light", "klipper_device", "on", true},
-                    {"exhaust_fan", "klipper_device", "off", false},
-                    {"led_strip", "gpio", "on", false},
+                // Set power device count during discovery (matches real Moonraker behavior)
+                // Real client queries machine.device_power.devices during discovery
+                if (std::getenv("MOCK_EMPTY_POWER")) {
+                    get_printer_state().set_power_device_count(0);
+                    helix::PowerDeviceState::instance().set_devices({});
+                    spdlog::debug("[MoonrakerClientMock] Power devices: 0 (MOCK_EMPTY_POWER set)");
+                } else {
+                    get_printer_state().set_power_device_count(4);
+                    std::vector<PowerDevice> mock_power_devices = {
+                        {"printer_psu", "gpio", "on", false},
+                        {"chamber_light", "klipper_device", "on", true},
+                        {"exhaust_fan", "klipper_device", "off", false},
+                        {"led_strip", "gpio", "on", false},
+                    };
+                    helix::PowerDeviceState::instance().set_devices(mock_power_devices);
+                    spdlog::debug("[MoonrakerClientMock] Power devices: 4 (mock default)");
+                }
+
+                // Set up mock sensors
+                std::vector<helix::SensorInfo> mock_sensors = {
+                    {"mock_energy",
+                     "Mock Energy Monitor",
+                     "mqtt",
+                     {"power", "voltage", "current", "energy"}},
                 };
-                helix::PowerDeviceState::instance().set_devices(mock_power_devices);
-                spdlog::debug("[MoonrakerClientMock] Power devices: 4 (mock default)");
-            }
+                nlohmann::json mock_sensor_values = {
+                    {"mock_energy",
+                     {{"power", 45.0}, {"voltage", 230.5}, {"current", 0.195}, {"energy", 123.4}}},
+                };
+                helix::SensorState::instance().set_sensors(mock_sensors, mock_sensor_values);
+                spdlog::debug("[MoonrakerClientMock] Sensors: {} (mock default)",
+                              mock_sensors.size());
 
-            // Set up mock sensors
-            std::vector<helix::SensorInfo> mock_sensors = {
-                {"mock_energy",
-                 "Mock Energy Monitor",
-                 "mqtt",
-                 {"power", "voltage", "current", "energy"}},
-            };
-            nlohmann::json mock_sensor_values = {
-                {"mock_energy",
-                 {{"power", 45.0}, {"voltage", 230.5}, {"current", 0.195}, {"energy", 123.4}}},
-            };
-            helix::SensorState::instance().set_sensors(mock_sensors, mock_sensor_values);
-            spdlog::debug("[MoonrakerClientMock] Sensors: {} (mock default)", mock_sensors.size());
+                // Log discovered hardware
+                spdlog::debug(
+                    "[MoonrakerClientMock] Discovered: {} heaters, {} sensors, {} fans, {} "
+                    "LEDs",
+                    discovery_.heaters().size(), discovery_.sensors().size(),
+                    discovery_.fans().size(), discovery_.leds().size());
 
-            // Log discovered hardware
-            spdlog::debug("[MoonrakerClientMock] Discovered: {} heaters, {} sensors, {} fans, {} "
-                          "LEDs",
-                          discovery_.heaters().size(), discovery_.sensors().size(),
-                          discovery_.fans().size(), discovery_.leds().size());
+                // Early hardware discovery callback (for AMS/MMU initialization)
+                // Must be called BEFORE discovery_complete to match real implementation timing
+                spdlog::debug("[MoonrakerClientMock] Invoking early hardware discovery callback");
+                discovery_.invoke_hardware_discovered();
 
-            // Early hardware discovery callback (for AMS/MMU initialization)
-            // Must be called BEFORE discovery_complete to match real implementation timing
-            spdlog::debug("[MoonrakerClientMock] Invoking early hardware discovery callback");
-            discovery_.invoke_hardware_discovered();
+                // Seed probe z_offset from the mock configfile, mirroring Step 4 of
+                // MoonrakerDiscoverySequence. This shortcut of a discover_printer()
+                // never queries configfile, so without it the whole configfile→probe
+                // path — the one that rescues probes whose runtime status reports a
+                // null z_offset — is unreachable under --test.
+                //
+                // Queued, not called inline, for ordering: ProbeSensorManager's
+                // sensor list is populated by the hardware-discovered callback just
+                // above, which Application also queues. Seeding runs on a sensor list
+                // that does not exist yet if it jumps the queue. FIFO puts it second.
+                helix::ui::queue_update("MoonrakerClientMock::probe_config_seed", []() {
+                    helix::sensors::ProbeSensorManager::instance().discover_from_config(
+                        mock_internal::get_mock_probe_config());
+                });
 
-            // Seed probe z_offset from the mock configfile, mirroring Step 4 of
-            // MoonrakerDiscoverySequence. This shortcut of a discover_printer()
-            // never queries configfile, so without it the whole configfile→probe
-            // path — the one that rescues probes whose runtime status reports a
-            // null z_offset — is unreachable under --test.
-            //
-            // Queued, not called inline, for ordering: ProbeSensorManager's
-            // sensor list is populated by the hardware-discovered callback just
-            // above, which Application also queues. Seeding runs on a sensor list
-            // that does not exist yet if it jumps the queue. FIFO puts it second.
-            helix::ui::queue_update("MoonrakerClientMock::probe_config_seed", []() {
-                helix::sensors::ProbeSensorManager::instance().discover_from_config(
-                    mock_internal::get_mock_probe_config());
+                // Invoke discovery complete callback with hardware (for PrinterState binding)
+                discovery_.invoke_discovery_complete();
+
+                // Invoke completion callback immediately (no async delay in mock)
+                if (on_complete) {
+                    on_complete();
+                }
             });
-
-            // Invoke discovery complete callback with hardware (for PrinterState binding)
-            discovery_.invoke_discovery_complete();
-
-            // Invoke completion callback immediately (no async delay in mock)
-            if (on_complete) {
-                on_complete();
-            }
-        });
     });
 }
 
