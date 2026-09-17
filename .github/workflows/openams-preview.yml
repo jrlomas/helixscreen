@@ -1,4 +1,4 @@
-name: OpenAMS Raspberry Pi 64-bit preview
+name: OpenAMS Linux previews
 
 on:
   push:
@@ -16,10 +16,10 @@ env:
   HELIX_PATCHES_FROM_CLEAN: "1"
 
 jobs:
-  build:
+  validate:
     if: github.repository == 'jrlomas/helixscreen'
     runs-on: ubuntu-22.04
-    timeout-minutes: 180
+    timeout-minutes: 15
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
@@ -34,16 +34,6 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=openams-preview-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare runner for cross-compilation
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
-          sudo fallocate -l 16G /swapfile-helix
-          sudo chmod 600 /swapfile-helix
-          sudo mkswap /swapfile-helix
-          sudo swapon /swapfile-helix
-          df -h /
-          free -h
-
       - name: Validate installer and shell behavior
         run: |
           make apply-patches
@@ -54,85 +44,124 @@ jobs:
           diff scripts/uninstall.sh /tmp/uninstall-regen.sh
           make test-shell
 
+  build:
+    name: Build (${{ matrix.display_name }})
+    needs: validate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: pi
+            display_name: Raspberry Pi 64-bit
+            elf_class: ELF64
+            elf_machine: AArch64
+          - platform: pi32
+            display_name: Raspberry Pi 32-bit
+            elf_class: ELF32
+            elf_machine: ARM
+          - platform: x86
+            display_name: Linux x86-64
+            elf_class: ELF64
+            elf_machine: Advanced Micro Devices X86-64
+    env:
+      PLATFORM: ${{ matrix.platform }}
+      DISPLAY_NAME: ${{ matrix.display_name }}
+      ELF_CLASS: ${{ matrix.elf_class }}
+      ELF_MACHINE: ${{ matrix.elf_machine }}
+      PREVIEW_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/init-submodules
+
+      - name: Prepare runner for compilation
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo fallocate -l 16G /swapfile-helix
+          sudo chmod 600 /swapfile-helix
+          sudo mkswap /swapfile-helix
+          sudo swapon /swapfile-helix
+          df -h /
+          free -h
+
       - uses: docker/setup-buildx-action@v4
       - uses: actions/cache@v5
         with:
-          path: /tmp/.ccache-openams-pi
-          key: openams-pi-${{ runner.os }}-${{ github.sha }}
-          restore-keys: openams-pi-${{ runner.os }}-
+          path: /tmp/.ccache-openams-${{ matrix.platform }}
+          key: openams-${{ matrix.platform }}-${{ runner.os }}-${{ github.sha }}
+          restore-keys: openams-${{ matrix.platform }}-${{ runner.os }}-
 
       - name: Configure compiler cache
         run: |
-          mkdir -p /tmp/.ccache-openams-pi
-          printf 'max_size = 2G\ncompression = true\n' > /tmp/.ccache-openams-pi/ccache.conf
+          mkdir -p "/tmp/.ccache-openams-${PLATFORM}"
+          printf 'max_size = 2G\ncompression = true\n' > "/tmp/.ccache-openams-${PLATFORM}/ccache.conf"
 
-      - name: Build Raspberry Pi toolchain
+      - name: Build platform toolchain
         run: |
           docker buildx build \
-            --cache-from type=gha,scope=openams-toolchain-pi \
-            --cache-to type=gha,mode=max,scope=openams-toolchain-pi \
-            --load -t helixscreen/toolchain-pi \
-            -f docker/Dockerfile.pi docker/
+            --cache-from "type=gha,scope=openams-toolchain-${PLATFORM}" \
+            --cache-to "type=gha,mode=max,scope=openams-toolchain-${PLATFORM}" \
+            --load -t "helixscreen/toolchain-${PLATFORM}" \
+            -f "docker/Dockerfile.${PLATFORM}" docker/
 
-      - name: Build ARM64 DRM and framebuffer binaries
-        env:
-          PREVIEW_VERSION: ${{ steps.version.outputs.version }}
+      - name: Build DRM and framebuffer binaries
         run: |
           docker run --rm \
             -v "$GITHUB_WORKSPACE":/src \
-            -v /tmp/.ccache-openams-pi:/root/.cache/ccache \
+            -v "/tmp/.ccache-openams-${PLATFORM}":/root/.cache/ccache \
             -e CCACHE_DIR=/root/.cache/ccache \
             -e HELIX_PATCHES_FROM_CLEAN \
-            -w /src helixscreen/toolchain-pi \
-            make PLATFORM_TARGET=pi-both HELIX_PACKAGING=1 \
+            -w /src "helixscreen/toolchain-${PLATFORM}" \
+            make PLATFORM_TARGET="${PLATFORM}-both" HELIX_PACKAGING=1 \
               HELIX_VERSION="$PREVIEW_VERSION" SKIP_OPTIONAL_DEPS=1 -j"$(nproc)"
           sudo chown -R "$(id -u):$(id -g)" build/
 
       - name: Verify binary architecture and OpenAMS backend
         run: |
-          for binary in build/pi/bin/helix-screen build/pi-fbdev/bin/helix-screen; do
+          for binary in "build/${PLATFORM}/bin/helix-screen" "build/${PLATFORM}-fbdev/bin/helix-screen"; do
             test -x "$binary"
-            readelf -h "$binary" | grep 'Machine:.*AArch64'
+            readelf -h "$binary" | grep -E "Class:[[:space:]]+${ELF_CLASS}$"
+            readelf -h "$binary" | grep -E "Machine:[[:space:]]+${ELF_MACHINE}$"
             strings "$binary" | grep 'OpenAMS' > /dev/null
           done
-          for features in build/pi/bin/.build-features build/pi-fbdev/bin/.build-features; do
+          for features in "build/${PLATFORM}/bin/.build-features" "build/${PLATFORM}-fbdev/bin/.build-features"; do
             grep -x 'remote_control=no' "$features"
             grep -x 'diag_uploads=yes' "$features"
           done
 
       - name: Generate assets and package
-        env:
-          PREVIEW_VERSION: ${{ steps.version.outputs.version }}
         run: |
           make venv-setup
           make gen-all-images
-          make release-pi VERSION="$PREVIEW_VERSION"
+          make "release-${PLATFORM}" VERSION="$PREVIEW_VERSION"
           cp scripts/install.sh releases/install.sh
-          printf 'Repository: %s\nCommit: %s\nVersion: %s\nPlatform: Raspberry Pi ARM64\nBuild: %s/%s/actions/runs/%s\n' \
-            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$PREVIEW_VERSION" \
-            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > releases/BUILD_INFO.txt
+          printf 'Repository: %s\nCommit: %s\nVersion: %s\nPlatform: %s\nBuild: %s/%s/actions/runs/%s\n' \
+            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$PREVIEW_VERSION" "$DISPLAY_NAME" \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > "releases/BUILD_INFO-${PLATFORM}.txt"
           cd releases
-          tar -tzf "helixscreen-pi-v${PREVIEW_VERSION}.tar.gz" > archive-contents.txt
+          tar -tzf "helixscreen-${PLATFORM}-v${PREVIEW_VERSION}.tar.gz" > archive-contents.txt
           grep -x 'helixscreen/bin/helix-screen' archive-contents.txt
           grep -x 'helixscreen/bin/helix-screen-fbdev' archive-contents.txt
           grep -x 'helixscreen/install.sh' archive-contents.txt
-          unzip -t helixscreen-pi.zip
-          sha256sum "helixscreen-pi-v${PREVIEW_VERSION}.tar.gz" helixscreen-pi.zip install.sh BUILD_INFO.txt > SHA256SUMS
+          unzip -t "helixscreen-${PLATFORM}.zip"
+          sha256sum "helixscreen-${PLATFORM}-v${PREVIEW_VERSION}.tar.gz" "helixscreen-${PLATFORM}.zip" \
+            install.sh "BUILD_INFO-${PLATFORM}.txt" > "SHA256SUMS-${PLATFORM}"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: openams-pi64-preview
+          name: openams-${{ matrix.platform }}-preview
           if-no-files-found: error
           retention-days: 14
           path: |
-            releases/helixscreen-pi-*.tar.gz
-            releases/helixscreen-pi.zip
+            releases/helixscreen-${{ matrix.platform }}-*.tar.gz
+            releases/helixscreen-${{ matrix.platform }}.zip
             releases/install.sh
-            releases/BUILD_INFO.txt
-            releases/SHA256SUMS
+            releases/BUILD_INFO-${{ matrix.platform }}.txt
+            releases/SHA256SUMS-${{ matrix.platform }}
 
   publish:
-    needs: build
+    needs: [validate, build]
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     permissions:
@@ -141,20 +170,23 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
-          name: openams-pi64-preview
+          pattern: openams-*-preview
+          merge-multiple: true
           path: release-files
       - name: Publish preview after successful package checks
         env:
           GH_TOKEN: ${{ github.token }}
-          PREVIEW_TAG: ${{ needs.build.outputs.tag }}
-          PREVIEW_VERSION: ${{ needs.build.outputs.version }}
+          PREVIEW_TAG: ${{ needs.validate.outputs.tag }}
+          PREVIEW_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           cd release-files
-          sha256sum -c SHA256SUMS
+          for platform in pi pi32 x86; do
+            sha256sum -c "SHA256SUMS-${platform}"
+          done
           gh release create "$PREVIEW_TAG" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "OpenAMS preview ${PREVIEW_VERSION} — Raspberry Pi 64-bit" \
+            --title "OpenAMS preview ${PREVIEW_VERSION} — Pi 64/32-bit and Linux x86-64" \
             --notes-file ../.github/openams-preview-notes.md \
             --prerelease --draft --latest=false \
-            helixscreen-pi-*.tar.gz helixscreen-pi.zip install.sh BUILD_INFO.txt SHA256SUMS
+            helixscreen-*.tar.gz helixscreen-*.zip install.sh BUILD_INFO-*.txt SHA256SUMS-*
           gh release edit "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
