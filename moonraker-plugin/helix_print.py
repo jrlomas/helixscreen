@@ -18,6 +18,15 @@ Key features:
 - Automatic history patching to record original filename
 - Configurable cleanup of temporary files
 
+Moonraker versions:
+- Symlink attribution, temp tracking and cleanup work from v0.8.x up; v0.8.x
+  persists through the namespace key-value API instead of a SQL table.
+- Rewriting the finished history entry to the original filename needs v0.9.0,
+  where History grew save_job() and auxiliary_data became a list of provider
+  entries. Those arrived together, so probing for save_job() is the same test
+  as probing for the list shape. Older installs keep the symlink's name in
+  history and log one warning per print.
+
 Configuration (moonraker.conf):
     [helix_print]
     enabled: True
@@ -602,7 +611,8 @@ class HelixPrint:
         ):
             logging.warning(
                 "HelixPrint: History filename-rename unavailable "
-                "(history component has no get_job/save_job)"
+                "(history component has no get_job/save_job; needs Moonraker "
+                "v0.9.0 or newer). The print itself is unaffected."
             )
             return
 
@@ -634,9 +644,20 @@ class HelixPrint:
             # auxiliary_data is a list of provider entries. Keep every other
             # provider's, and drop any earlier entry of ours so re-patching the
             # same job does not stack duplicates.
+            # auxiliary_data is a list of provider entries. Iterating anything
+            # else would walk it by element anyway - a dict yields its KEYS -
+            # and quietly write that back over the real thing, so a shape we do
+            # not recognise is dropped rather than transformed.
+            existing = job.get("auxiliary_data")
+            if existing is not None and not isinstance(existing, list):
+                logging.warning(
+                    "HelixPrint: Ignoring auxiliary_data of unexpected type "
+                    f"{type(existing).__name__}"
+                )
+                existing = None
             aux_data = [
                 entry
-                for entry in (job.get("auxiliary_data") or [])
+                for entry in (existing or [])
                 if not (
                     isinstance(entry, dict)
                     and entry.get("provider") == HELIX_AUX_PROVIDER

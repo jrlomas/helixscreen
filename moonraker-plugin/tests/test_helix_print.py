@@ -933,9 +933,43 @@ class TestHistoryPatching:
 
 
 
+    @pytest.mark.asyncio
+    async def test_dict_shaped_auxiliary_data_is_dropped_not_walked(
+        self, helix_print_component, mock_server
+    ):
+        # auxiliary_data is a list from Moonraker v0.9.0, the same release that
+        # added save_job. A fork handing back the older mapping would otherwise
+        # be iterated by element - yielding its KEYS - and written back as a
+        # list of strings over the real thing.
+        history = mock_server.components["history"]
+        history.add_job("00001A", auxiliary_data={"spoolman_id": 7, "other": 1})
+        await helix_print_component.component_init()
+
+        await helix_print_component._patch_history_entry(_print_info(), "complete")
+
+        job, _ = history.save_job_calls[0]
+        assert isinstance(job.auxiliary_data, list)
+        assert job.auxiliary_data == _helix_entry(job)
+        assert "spoolman_id" not in job.auxiliary_data
+
+    @pytest.mark.asyncio
+    async def test_a_list_of_other_providers_is_kept(
+        self, helix_print_component, mock_server
+    ):
+        history = mock_server.components["history"]
+        spoolman = {"provider": "spoolman", "name": "spool_id", "value": 7}
+        history.add_job("00001A", auxiliary_data=[spoolman])
+        await helix_print_component.component_init()
+
+        await helix_print_component._patch_history_entry(_print_info(), "complete")
+
+        job, _ = history.save_job_calls[0]
+        assert spoolman in job.auxiliary_data
+        assert len(_helix_entry(job)) == 1
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
 
 class TestHistoryIdCapture:
     """The history id arrives on history's own event, not in print_stats."""
