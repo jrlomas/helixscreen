@@ -197,30 +197,22 @@ long env_count(const char* name, long fallback) {
     return parsed;
 }
 
-/// Sizes LVGL's two image caches from the environment, for A/B measurement of
-/// what caching is worth on a given board.
+/// Sizes LVGL's decoded-image cache from the environment. 0, the default, leaves it off.
 ///
-/// HELIX_IMAGE_CACHE_KB sizes the decoded-pixel cache. **A value below the
-/// largest single decoded image is worse than no cache at all**: the LRU's
-/// reserve path reports TOO_LARGE before it evicts anything, and the decoder
-/// then destroys a bitmap it had already decoded successfully, so the image
-/// draws as nothing rather than slowly. Budget against the biggest asset the
-/// build can hand LVGL, not against the steady-state working set.
+/// Any size is safe. An image whose decoded size exceeds the whole cache cannot be
+/// stored - LVGL reports that before it evicts anything - and
+/// `patches/lvgl-image-cache-oversize-uncached.patch` makes the decoder draw those
+/// uncached instead of discarding the decode. Sizing below the working set therefore
+/// buys less, it does not blank anything.
 ///
-/// HELIX_IMAGE_HEADER_CACHE_CNT is a count of header entries, not bytes, and
-/// carries no such failure mode: a miss reopens and reparses the file to read
-/// its dimensions, so the only cost of being wrong is the status quo.
+/// Decoded size is the source asset's w*h*4: lodepng always produces ARGB8888, so a
+/// 16bpp panel does not shrink it. Shipped printer PNGs reach 18 MB decoded, well beyond
+/// any cache worth giving an embedded board.
 void apply_image_cache_env() {
     const long cache_kb = env_count("HELIX_IMAGE_CACHE_KB", 0);
     if (cache_kb > 0) {
         lv_image_cache_resize(static_cast<uint32_t>(cache_kb) * 1024u, false);
         spdlog::info("[DisplayManager] Image cache: {} KB", cache_kb);
-    }
-
-    const long header_cnt = env_count("HELIX_IMAGE_HEADER_CACHE_CNT", 0);
-    if (header_cnt > 0) {
-        lv_image_header_cache_resize(static_cast<uint32_t>(header_cnt), false);
-        spdlog::info("[DisplayManager] Image header cache: {} entries", header_cnt);
     }
 }
 
