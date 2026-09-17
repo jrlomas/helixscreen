@@ -109,6 +109,34 @@ std::string resolve_gcode_filename(const std::string& path);
 bool is_rewritten_gcode_path(const std::string& path);
 
 /**
+ * @brief Build the gcodes-root-relative path a rewritten copy is uploaded to.
+ *
+ * The ONE spelling of that name, and the reason it is a function rather than a
+ * string each caller assembles: the post-print cleanup, the startup sweep and
+ * resolve_gcode_filename() all recognise a staged copy BY THIS PREFIX. A path
+ * built any other way is invisible to every one of them at once - its temp file
+ * outlives the print and its name never resolves back to the original, so the
+ * job the user started shows up under a name they have never seen.
+ *
+ * @param display_filename Bare filename of the original, no directory component
+ * @return e.g. "<staging dir>/modified_1766807545_benchy.gcode"
+ */
+std::string make_rewritten_gcode_path(const std::string& display_filename);
+
+/**
+ * @brief Is this a copy WE staged on the printer, i.e. ours to delete?
+ *
+ * Narrower than is_rewritten_gcode_path(), which also answers true for our
+ * local scratch copies. Only a path under the printer's staging directory
+ * names a file the printer holds and that we are responsible for removing when
+ * the print ends.
+ *
+ * @param path Filename or path as the printer reports it
+ * @return true if the path is a copy we uploaded
+ */
+bool is_uploaded_rewrite_path(const std::string& path);
+
+/**
  * @brief Does a recorded thumbnail source still describe the reported print?
  *
  * A thumbnail source names the file whose media the current print should be

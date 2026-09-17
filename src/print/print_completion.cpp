@@ -104,11 +104,10 @@ static void init_completion_subjects() {
     });
 }
 
-// Helper to cleanup .helix_temp modified G-code files after print ends
+// Helper to cleanup the staged G-code copy after a print ends
 static void cleanup_helix_temp_file(const std::string& filename) {
-    // Check if this is a .helix_temp modified file
-    if (filename.find(".helix_temp/modified_") == std::string::npos) {
-        return; // Not a temp file
+    if (!helix::gcode::is_uploaded_rewrite_path(filename)) {
+        return; // Not a copy we staged
     }
 
     auto* mgr = get_moonraker_manager();

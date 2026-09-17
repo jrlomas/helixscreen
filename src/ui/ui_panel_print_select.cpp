@@ -2865,18 +2865,26 @@ void PrintSelectPanel::open_remap_modal() {
     }
 
     // GcodeRewrite is the generic fallback for backends with no native routing
-    // table: it prints a modified temp copy and relies on the HelixPrint plugin
-    // to patch print history back to the original filename. No backend ships this
-    // strategy today (ACE will adopt it once ACE_CHANGE_TOOL is implemented).
-    // Guard BEFORE opening the modal so the user sees the actionable alert instead
-    // of a picker whose Done would silently fail.
-    if (strategy == AmsBackend::RemapStrategy::GcodeRewrite &&
-        !printer_state_.service_has_helix_plugin()) {
-        helix::ui::modal_alert(lv_tr("Remap needs the HelixPrint plugin"),
-                               lv_tr("Install the HelixPrint plugin in Advanced settings to remap "
-                                     "filament without affecting print history."),
-                               ModalSeverity::Info, lv_tr("OK"));
-        return;
+    // table: it prints a rewritten copy of the file rather than moving a tool
+    // number in firmware. That is the same act the pre-print options perform, so
+    // it asks the same question they do rather than re-deriving the answer -
+    // two copies of "may we modify this file" is how one of them ends up
+    // offering a picker the other would have refused.
+    //
+    // Guard BEFORE opening the modal so the user sees the actionable alert
+    // instead of a picker whose Done would silently fail.
+    if (strategy == AmsBackend::RemapStrategy::GcodeRewrite) {
+        auto* prep = detail_view_ ? detail_view_->get_prep_manager() : nullptr;
+        const helix::ui::ModificationCapability capability =
+            prep != nullptr ? prep->check_modification_capability()
+                            : helix::ui::ModificationCapability{};
+        if (!capability.can_modify) {
+            helix::ui::modal_alert(lv_tr("Remap needs the HelixPrint plugin"),
+                                   lv_tr("Install the HelixPrint plugin in Advanced settings to "
+                                         "remap filament without affecting print history."),
+                                   ModalSeverity::Info, lv_tr("OK"));
+            return;
+        }
     }
 
     // Build picker inputs from the per-tool info of the tools this file uses.
