@@ -2221,11 +2221,15 @@ deploy-ad5x-bin:
 	$(call sync-device-features,$(AD5X_SSH_TARGET),$(AD5X_DEPLOY_DIR),build/ad5x/bin)
 	@echo ""
 	@echo "$(YELLOW)$(BOLD)The app has NOT been restarted and is still the old binary.$(RESET)"
-	@echo "$(YELLOW)This board can only be restarted by rebooting it.$(RESET)"
+	@echo "  The app runs inside a chroot that supplies its glibc, so a plain ssh"
+	@echo "  invocation fails on libssl. Restart it through the chroot - no reboot:"
+	@echo "    $(CYAN)FX=\$$(sed -n 's|.*\(/usr/data/\.mod/\.[a-z-]*\)/usr/lib/.*|\\1|p' /proc/\$$(pidof helix-screen)/maps | head -n 1)$(RESET)"
+	@echo "  (Forge-X is /usr/data/.mod/.forge-x, ZMOD is /usr/data/.mod/.zmod.)"
 	@echo "  Confirm it is not printing:"
 	@echo "    $(CYAN)curl -s http://$(AD5X_HOST):7125/printer/objects/query?print_stats$(RESET)"
-	@echo "  Then, when state is \"standby\":"
-	@echo "    $(CYAN)ssh $(AD5X_SSH_TARGET) /sbin/reboot$(RESET)"
+	@echo "  Then, when state is \"standby\", stop it, then start the new binary:"
+	@echo "    $(CYAN)ssh $(AD5X_SSH_TARGET) \"kill \$$(pidof helix-screen)\"$(RESET)"
+	@echo "    $(CYAN)ssh $(AD5X_SSH_TARGET) \"chroot \$$FX $(AD5X_DEPLOY_DIR)/bin/helix-screen --log-level=info --remote &\"$(RESET)"
 	@echo "  Previous binary is kept at $(AD5X_DEPLOY_DIR)/bin/helix-screen.prev-deploy"
 
 # Convenience: SSH into the AD5M
