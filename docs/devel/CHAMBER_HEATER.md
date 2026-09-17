@@ -166,18 +166,18 @@ whose "Auto" entry names the sensor `auto` takes.
 ## Subjects
 
 All registered by `PrinterTemperatureState`; display strings are formatter subjects (XML has no deci/percent formatter).
+Raw vendor strings — the fault code and the filter-fan reason — are logged at the backend border and classified into the
+generic kinds above; they are deliberately not subjects, so nothing can bind a vendor word.
 
 | Subject | Type | Meaning |
 |---------|------|---------|
 | `chamber_heater_fault` | int 0/1 | Latched fault |
 | `chamber_heater_inhibited` | int 0/1 | Heater refusing commands (e.g. post-fault cooldown) |
-| `chamber_heater_fault_reason` | string | Raw vendor fault code, "" when none — log-only, never bound by UI |
 | `chamber_heater_fault_reason_text` | string | Translated phrase for the backend's generic `FaultReason` kind ("" when none) — what the banner binds |
-| `chamber_heater_offline` | int 0/1 | Device unreachable on its own link. 1 only on an engaged "not connected" report; a backend with no link state (generic) leaves it 0 — unknown is not offline. While 1 the card banners the offline message and hides Reset (`DRAGONBREATH_RESET` cannot reach a device that is not answering). The vendor `protocol_error` string behind a link drop is log-only, like `chamber_heater_fault_reason` |
+| `chamber_heater_offline` | int 0/1 | Device unreachable on its own link. 1 only on an engaged "not connected" report; a backend with no link state (generic) leaves it 0 — unknown is not offline. While 1 the card banners the offline message and hides Reset (`DRAGONBREATH_RESET` cannot reach a device that is not answering). The vendor `protocol_error` string behind a link drop is log-only, and so is the raw vendor fault code |
 | `chamber_heater_externally_controlled` | int 0/1 | Another controller is driving the heater (display-only, see below) |
-| `chamber_heater_element_temp` / `..._text` | int / string | Heating-element temp ("-1"/"--" = unknown) |
-| `chamber_filter_fan_percent` / `..._text` | int / string | Filtration-fan speed ("-1"/"--" = unknown) |
-| `chamber_filter_fan_reason` | string | Raw vendor reason why the firmware chose that speed — log-only, classified to `FilterFanDriver` at the backend border |
+| `chamber_heater_element_temp_text` | string | Heating-element temp ("--" = unknown). The number stays a private member: nothing graphs, thresholds or colours the element, so no int subject is registered |
+| `chamber_filter_fan_percent_text` | string | Filtration-fan speed ("--" = unknown). The number stays a private member, as with the element temp |
 | `chamber_filter_fan_requested` | int | Our output_pin request (-1 unknown / 0 / 1) — what the toggle click inverts |
 | `chamber_filter_fan_device_driven` | int 0/1 | Device runs the fan on its own (heater warmup / thermal purge); the card badges the readout and disables the toggle |
 | `chamber_filter_fan_on` / `..._text` | int / string | Fan RUNNING state: reported speed when the backend has one, the pin otherwise |
