@@ -5,6 +5,7 @@
 
 #include "ui_busy_overlay.h"
 #include "ui_error_reporting.h"
+#include "ui_filename_utils.h"
 #include "ui_panel_print_status.h"
 #include "ui_pre_print_options_renderer.h"
 #include "ui_temperature_utils.h"
@@ -34,7 +35,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <sstream>
 
 // Forward declaration for global print status panel (declared in ui_panel_print_status.h)
 PrintStatusPanel& get_global_print_status_panel();
@@ -1522,7 +1522,7 @@ void PrintPreparationManager::modify_and_print_streaming(
     // Generate unique temp file paths
     auto timestamp = std::to_string(std::time(nullptr));
     std::string local_download_path = temp_dir + "/helix_download_" + timestamp + ".gcode";
-    std::string remote_temp_path = ".helix_temp/modified_" + timestamp + "_" + display_filename;
+    std::string remote_temp_path = gcode::make_rewritten_gcode_path(display_filename);
 
     spdlog::info("[PrintPreparationManager] Streaming modification: downloading to {}",
                  local_download_path);
@@ -1808,16 +1808,19 @@ void PrintPreparationManager::modify_and_print_with_remap(
 
     auto token = lifetime_.token();
 
-    std::string temp_dir = get_temp_directory();
-    if (temp_dir.empty()) {
+    // The download lands in the gcode_mod cache under the mod_ prefix, which is
+    // the only shape GCodeFileModifier::cleanup_temp_files() reaps. A crash
+    // between the download and the delete below otherwise leaves a full copy of
+    // the job on a board that has no room for one and no sweeper that sees it.
+    const std::string local_download_path =
+        gcode::GCodeFileModifier::generate_temp_path("remap_dl_" + display_filename);
+    if (local_download_path.empty()) {
         NOTIFY_ERROR(lv_tr("Cannot remap G-code: no temp directory available"));
         abandon_start("remap_no_temp_dir");
         return;
     }
 
-    auto timestamp = std::to_string(std::time(nullptr));
-    std::string local_download_path = temp_dir + "/helix_remap_dl_" + timestamp + ".gcode";
-    std::string remote_temp_path = ".helix_temp/remapped_" + timestamp + "_" + display_filename;
+    const std::string remote_temp_path = gcode::make_rewritten_gcode_path(display_filename);
 
     spdlog::info("[PrintPreparationManager] Remap modification: {} tool mapping(s), downloading {}",
                  remap.size(), file_path);
@@ -1844,21 +1847,12 @@ void PrintPreparationManager::modify_and_print_with_remap(
         // this->/api_-> access is deferred to the main thread via token.defer.
         [this, token, file_path, display_filename, remap, local_download_path, remote_temp_path,
          on_navigate_to_status](const std::string& /*dest_path*/) {
-            // Read the downloaded gcode into memory to feed the remapper. The
-            // remapper needs full content to map each line from its ORIGINAL
-            // index in one collision-safe pass.
-            std::string content;
-            {
-                std::ifstream in(local_download_path, std::ios::binary);
-                if (in) {
-                    std::ostringstream ss;
-                    ss << in.rdbuf();
-                    content = ss.str();
-                }
-            }
-
             std::error_code ec;
-            if (content.empty()) {
+
+            // A download that produced nothing is a failed download, not a file
+            // whose every line happens to be unchanged, and the two must not
+            // take the same exit.
+            if (std::filesystem::file_size(local_download_path, ec) == 0 || ec) {
                 std::filesystem::remove(local_download_path, ec);
                 NOTIFY_ERROR(lv_tr("Failed to read G-code for remap"));
                 token.defer("PrintPreparationManager::remap_read_fail", [this]() {
@@ -1868,12 +1862,31 @@ void PrintPreparationManager::modify_and_print_with_remap(
                 return;
             }
 
-            // Compute exactly the changed lines.
-            auto replacements = helix::GcodeToolRemapper::build_line_replacements(content, remap);
+            // Rewrite file-to-file. Peak memory is one line, so a 400MB job
+            // costs what a 4MB one does; holding the content to find the
+            // changed lines would put the whole file in RAM on a board that
+            // has none to spare.
+            const std::string modified_path =
+                gcode::GCodeFileModifier::generate_temp_path(local_download_path);
+            size_t lines_changed = 0;
+            bool rewrite_ok = false;
+            {
+                std::ifstream in(local_download_path, std::ios::binary);
+                std::ofstream out(modified_path, std::ios::binary);
+                if (in && out) {
+                    lines_changed = helix::GcodeToolRemapper::apply_to_stream(in, out, remap);
+                    out.flush();
+                    // good() after the flush, not is_open() before it: a volume
+                    // that fills mid-write opens fine and yields a truncated
+                    // file that would otherwise upload and print as if whole.
+                    rewrite_ok = out.good();
+                }
+            }
 
             // Identity remap (nothing changes): print the original directly,
-            // no temp copy. Clean up the download and dispatch a plain start.
-            if (replacements.empty()) {
+            // no temp copy. Clean up both local files and dispatch a plain start.
+            if (rewrite_ok && lines_changed == 0) {
+                std::filesystem::remove(modified_path, ec);
                 std::filesystem::remove(local_download_path, ec);
                 spdlog::info("[PrintPreparationManager] Remap produced no changes; "
                              "printing original {}",
@@ -1895,21 +1908,13 @@ void PrintPreparationManager::modify_and_print_with_remap(
                 return;
             }
 
-            // Step 2: Convert each replacement -> a single-line REPLACE
-            // modification and apply file-to-file (streaming, minimal memory).
-            gcode::GCodeFileModifier modifier;
-            for (const auto& r : replacements) {
-                modifier.add_modification(gcode::Modification::replace(
-                    static_cast<size_t>(r.line_number), r.new_line, "tool remap"));
-            }
-
-            auto result = modifier.apply_streaming(local_download_path);
-
             // Download file no longer needed (bg-safe filesystem op).
             std::filesystem::remove(local_download_path, ec);
 
-            if (!result.success) {
-                NOTIFY_ERROR(lv_tr("Failed to remap G-code: {}"), result.error_message);
+            if (!rewrite_ok) {
+                std::filesystem::remove(modified_path, ec);
+                NOTIFY_ERROR(lv_tr("Failed to remap G-code: {}"),
+                             std::string("could not write ") + modified_path);
                 token.defer("PrintPreparationManager::remap_apply_fail", [this]() {
                     BusyOverlay::hide();
                     abandon_start("remap_apply_failed");
@@ -1918,10 +1923,9 @@ void PrintPreparationManager::modify_and_print_with_remap(
             }
 
             spdlog::info("[PrintPreparationManager] Remap applied ({} lines), uploading {}",
-                         result.lines_modified, result.modified_path);
+                         lines_changed, modified_path);
 
             // Step 3: Upload modified copy from disk — defer api_-> kickoff to main.
-            std::string modified_path = result.modified_path;
             std::vector<std::string> mod_names;
             mod_names.reserve(remap.size());
             for (const auto& [logical, physical] : remap) {

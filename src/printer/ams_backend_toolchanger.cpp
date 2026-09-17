@@ -7,7 +7,6 @@
 #include "ams_fault_event.h"
 #include "ams_state.h"
 #include "ams_tool_map_sync.h"
-#include "config.h"
 #include "i_moonraker_api.h"
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
@@ -1348,15 +1347,6 @@ void AmsBackendToolChanger::persist_slot_weight(int slot_index, float remaining_
     std::lock_guard<std::mutex> lock(mutex_);
     helix::ams::persist_override_weight(override_store_.get(), overrides_, slot_index,
                                         remaining_weight_g, total_weight_g, tag);
-}
-
-AmsBackend::RemapStrategy AmsBackendToolChanger::get_remap_strategy() const {
-    if (!tool_commands_.present) {
-        return RemapStrategy::Native;
-    }
-    auto* config = Config::get_instance();
-    return (config && config->is_beta_features_enabled()) ? RemapStrategy::GcodeRewrite
-                                                          : RemapStrategy::None;
 }
 
 AmsError AmsBackendToolChanger::assign_tool(const std::string& physical_tool_name,

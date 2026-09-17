@@ -114,23 +114,26 @@
             <event_cb trigger="clicked" callback="on_timelapse_setup_clicked"/>
           </setting_action_row>
         </lv_obj>
-        <!-- HelixPrint Plugin (NOT installed - show Install row) -->
-        <!-- TEMPORARILY DISABLED: plugin install hidden from settings for now -->
-        <!--
-      <beta_feature name="container_helix_plugin_install">
-        <bind_flag_if_not_eq subject="helix_plugin_installed" flag="hidden" ref_value="0"/>
-        <setting_action_row name="row_helix_plugin_install"
-                            label="Install HelixPrint Plugin" label_tag="Install HelixPrint Plugin" icon="puzzle_outline"
-                            description="Control optional print start features"
-                            description_tag="Control optional print start features">
-          <event_cb trigger="clicked" callback="on_helix_plugin_install_clicked"/>
-        </setting_action_row>
-      </beta_feature>
-      -->
+        <!-- HelixPrint Plugin (NOT installed - show Install row).
+             Shows ONLY when value == 0 (known absent); -1 means the probe has
+             not answered yet and must not advertise an install. -->
+        <lv_obj name="container_helix_plugin_install"
+                width="100%" height="content" style_pad_top="0" style_pad_left="0" style_pad_bottom="0"
+                scrollable="false">
+          <bind_flag_if_not_eq subject="helix_plugin_installed" flag="hidden" ref_value="0"/>
+          <setting_action_row name="row_helix_plugin_install"
+                              label="Install HelixPrint Plugin" label_tag="Install HelixPrint Plugin"
+                              icon="puzzle_outline" description="Control optional print start features"
+                              description_tag="Control optional print start features">
+            <event_cb trigger="clicked" callback="on_helix_plugin_install_clicked"/>
+          </setting_action_row>
+        </lv_obj>
 
         <!-- HelixPrint Plugin (INSTALLED - show Uninstall row) -->
         <!-- Shows ONLY when value == 1 (installed), hidden otherwise (-1 or 0) -->
-        <beta_feature name="container_helix_plugin_uninstall">
+        <lv_obj name="container_helix_plugin_uninstall"
+                width="100%" height="content" style_pad_top="0" style_pad_left="0" style_pad_bottom="0"
+                scrollable="false">
           <setting_action_row name="row_helix_plugin_uninstall"
                               label="Uninstall HelixPrint Plugin" label_tag="Uninstall HelixPrint Plugin"
                               icon="puzzle_outline" description="Remove plugin from printer"
@@ -138,9 +141,10 @@
             <bind_flag_if_not_eq subject="helix_plugin_installed" flag="hidden" ref_value="1"/>
             <event_cb trigger="clicked" callback="on_helix_plugin_uninstall_clicked"/>
           </setting_action_row>
-        </beta_feature>
+        </lv_obj>
         <!-- HelixPrint Plugin Help Text -->
-        <beta_feature>
+        <lv_obj width="100%"
+                height="content" style_pad_top="0" style_pad_left="0" style_pad_bottom="0" scrollable="false">
           <lv_obj width="100%"
                   height="content" style_pad_left="#space_xl" style_pad_right="#space_lg" style_pad_top="0"
                   style_pad_bottom="#space_md" scrollable="false" flex_flow="row" style_flex_cross_place="start"
@@ -151,7 +155,7 @@
                         translation_tag="This plugin lets HelixScreen control print start options like bed mesh and QGL. Once installed, use Configure PRINT_START below to enable optional steps."
                         long_mode="wrap" style_text_color="#text_muted"/>
           </lv_obj>
-        </beta_feature>
+        </lv_obj>
         <!-- Configure PRINT_START -->
         <beta_feature>
           <setting_action_row name="row_configure_print_start"

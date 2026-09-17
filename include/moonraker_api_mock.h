@@ -563,8 +563,46 @@ class MoonrakerFileTransferAPIMock : public MoonrakerFileTransferAPI {
                                const std::string& filename, const std::string& content,
                                SuccessCallback on_success, ErrorCallback on_error) override;
 
+    void upload_file_from_path(const std::string& root, const std::string& dest_path,
+                               const std::string& local_path, SuccessCallback on_success,
+                               ErrorCallback on_error,
+                               ProgressCallback on_progress = nullptr) override;
+
     void download_thumbnail(const std::string& thumbnail_path, const std::string& cache_path,
                             StringCallback on_success, ErrorCallback on_error) override;
+
+    // ========================================================================
+    // upload_file_from_path spy (test injection)
+    // ========================================================================
+
+    /// One recorded upload_file_from_path() call. @a content is what was on
+    /// disk at @a local_path when the call was made — the producer deletes that
+    /// file in its success callback, so reading it later is not an option.
+    struct PathUploadRecord {
+        std::string root;
+        std::string dest_path;
+        std::string local_path;
+        std::string content;
+    };
+
+    /// Every upload_file_from_path() the mock has served, in call order.
+    [[nodiscard]] const std::vector<PathUploadRecord>& path_uploads() const {
+        return path_uploads_;
+    }
+
+    /// Local destinations handed to download_file_to_path(), in call order.
+    /// A caller that deletes its download cannot be asked where it put it, so
+    /// the mock is the only place that path survives.
+    [[nodiscard]] const std::vector<std::string>& download_destinations() const {
+        return download_destinations_;
+    }
+
+    /// Make every later upload_file_from_path() call on_error instead of
+    /// on_success. The call is still recorded, so a test can assert both that
+    /// the upload was attempted and that its failure was handled.
+    void mock_fail_path_uploads(bool fail = true) {
+        fail_path_uploads_ = fail;
+    }
 
   private:
     /**
@@ -586,6 +624,13 @@ class MoonrakerFileTransferAPIMock : public MoonrakerFileTransferAPI {
 
     /// Injected config root: full relative path -> content. Empty = use disk.
     std::map<std::string, std::string> config_files_;
+
+    /// Recorded upload_file_from_path() calls (test spy)
+    std::vector<PathUploadRecord> path_uploads_;
+    /// Recorded download_file_to_path() destinations (test spy)
+    std::vector<std::string> download_destinations_;
+    /// When set, upload_file_from_path() reports failure instead of success
+    bool fail_path_uploads_ = false;
 };
 
 /**
@@ -605,13 +650,81 @@ class MoonrakerFileAPIMock : public MoonrakerFileAPI {
     void list_files(const std::string& root, const std::string& path, bool recursive,
                     FileListCallback on_success, ErrorCallback on_error) override;
 
+    void delete_file(const std::string& filename, SuccessCallback on_success,
+                     ErrorCallback on_error) override;
+
     /// Seed the paths list_files("config", ...) reports. See
     /// MoonrakerFileTransferAPIMock::set_config_files().
     void set_config_files(std::map<std::string, std::string> files);
 
+    /// Every path delete_file() was asked to remove, in call order. Root-qualified
+    /// exactly as the caller spelled it (e.g. "gcodes/.helix_temp/modified_1_a.gcode").
+    [[nodiscard]] const std::vector<std::string>& deleted_files() const {
+        return deleted_files_;
+    }
+
   private:
     std::map<std::string, std::string> config_files_;
+    std::vector<std::string> deleted_files_;
 };
+
+/**
+ * @brief Mock Job API covering the endpoints MoonrakerClientMock does not serve
+ *
+ * Only start_modified_print() is intercepted: it reaches Moonraker through the
+ * HelixPrint plugin's server.helix.print_modified, which the client mock's RPC
+ * registry has no handler for. start_print() is recorded and then forwarded to
+ * the real implementation, so the mock print simulation still runs.
+ */
+namespace helix {
+
+class MoonrakerJobAPIMock : public MoonrakerJobAPI {
+  public:
+    using SuccessCallback = MoonrakerJobAPI::SuccessCallback;
+    using ErrorCallback = MoonrakerJobAPI::ErrorCallback;
+    using ModifiedPrintCallback = MoonrakerJobAPI::ModifiedPrintCallback;
+
+    explicit MoonrakerJobAPIMock(helix::IMoonrakerClient& client);
+    ~MoonrakerJobAPIMock() override = default;
+
+    /// One recorded start_modified_print() call
+    struct ModifiedPrintRecord {
+        std::string original_filename;
+        std::string temp_file_path;
+        std::vector<std::string> modifications;
+    };
+
+    void start_print(const std::string& filename, SuccessCallback on_success,
+                     ErrorCallback on_error) override;
+
+    void start_modified_print(const std::string& original_filename,
+                              const std::string& temp_file_path,
+                              const std::vector<std::string>& modifications,
+                              ModifiedPrintCallback on_success, ErrorCallback on_error) override;
+
+    /// Filenames handed to start_print(), in call order
+    [[nodiscard]] const std::vector<std::string>& started_prints() const {
+        return started_prints_;
+    }
+
+    /// Recorded start_modified_print() calls, in call order
+    [[nodiscard]] const std::vector<ModifiedPrintRecord>& modified_prints() const {
+        return modified_prints_;
+    }
+
+    /// Make every later start_modified_print() call on_error instead of
+    /// on_success. The call is still recorded.
+    void mock_fail_modified_prints(bool fail = true) {
+        fail_modified_prints_ = fail;
+    }
+
+  private:
+    std::vector<std::string> started_prints_;
+    std::vector<ModifiedPrintRecord> modified_prints_;
+    bool fail_modified_prints_ = false;
+};
+
+} // namespace helix
 
 /**
  * @brief Mock MoonrakerAPI for testing without real printer connection
@@ -783,6 +896,13 @@ class MoonrakerAPIMock : public MoonrakerAPI {
      * @return Reference to MoonrakerFileAPIMock
      */
     MoonrakerFileAPIMock& files_mock();
+
+    /**
+     * @brief Get the Job mock sub-API for mock-specific access
+     *
+     * @return Reference to MoonrakerJobAPIMock
+     */
+    helix::MoonrakerJobAPIMock& job_mock();
 
     /**
      * @brief Seed an in-memory "config" root for both file sub-APIs

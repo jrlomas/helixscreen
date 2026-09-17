@@ -483,24 +483,13 @@ TEST_CASE("ToolChanger without klipper-toolchanger has no remap route",
     own_commands.select_prefix = "T";
     backend.set_tool_commands(own_commands);
 
-    auto* config = helix::Config::get_instance();
-    const bool prev_beta = config->get<bool>("/beta_features", false);
-
-    // Outside beta the remap is refused outright.
-    config->set<bool>("/beta_features", false);
-    CHECK(backend.get_remap_strategy() == helix::AmsBackend::RemapStrategy::None);
-    CHECK_FALSE(helix::printer::can_remap(backend));
-    CHECK_FALSE(helix::printer::can_write_mapping_table(backend));
-
-    // In beta it falls back to rewriting the file's own tool numbers, which
-    // needs no firmware cooperation. Still not a table write, so the AMS edit
-    // overlay's inline dropdown stays hidden.
-    config->set<bool>("/beta_features", true);
+    // The file's own tool numbers are the only thing left to change, so the
+    // route is a rewrite of the job. It carries the user's pick, so can_remap()
+    // is true - but it writes no table, so the AMS edit overlay's inline tool
+    // dropdown stays hidden and print-start takes no generic send.
     CHECK(backend.get_remap_strategy() == helix::AmsBackend::RemapStrategy::GcodeRewrite);
     CHECK(helix::printer::can_remap(backend));
     CHECK_FALSE(helix::printer::can_write_mapping_table(backend));
-
-    config->set<bool>("/beta_features", prev_beta);
 
     backend.captured.clear();
     CHECK_FALSE(backend.set_tool_mapping(/*tool_number=*/2, /*slot_index=*/4).success());

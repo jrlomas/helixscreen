@@ -50,6 +50,7 @@ setup() {
                 restore_stock_firmware_ui unpatch_forgex_screen_sh \
                 unpatch_forgex_screen_drawing uninstall_forgex_logged_wrapper \
                 find_moonraker_conf remove_update_manager_section \
+                find_helix_print_plugin remove_moonraker_plugin \
                 reenable_disabled_services kill_process_by_name; do
         grep -q "^${func}()" "$WORKTREE_ROOT/scripts/uninstall.sh" || \
         grep -q "^${func} ()" "$WORKTREE_ROOT/scripts/uninstall.sh"
@@ -331,6 +332,187 @@ CONF
     run remove_update_manager_section
     [ "$status" -eq 0 ]
     grep -q '\[server\]' "$conf"
+}
+
+# ============================================================================
+# Moonraker (remove_moonraker_plugin)
+# ============================================================================
+
+# A Moonraker source tree in the plain-checkout layout, with the plugin
+# symlinked into its components dir the way the plugin install leaves it. The
+# link points into the install tree, so it dangles once the install dir is
+# gone - which is exactly the state an uninstall has to recognise.
+# Sets HELIX_PRINT_SYMLINK and MOONRAKER_SRC_PATHS. Called directly, never
+# through $(...): a subshell would swallow both assignments.
+setup_helix_print_symlink() {
+    local root="$BATS_TEST_TMPDIR/moonraker"
+    mkdir -p "$root/moonraker/components/update_manager"
+    ln -sf "$INSTALL_DIR/moonraker-plugin/helix_print.py" \
+           "$root/moonraker/components/helix_print.py"
+    MOONRAKER_SRC_PATHS="$root"
+    HELIX_PRINT_SYMLINK="$root/moonraker/components/helix_print.py"
+}
+
+# A Moonraker source tree with no plugin in it.
+setup_bare_moonraker_src() {
+    local root="$BATS_TEST_TMPDIR/moonraker"
+    mkdir -p "$root/moonraker/components/update_manager"
+    MOONRAKER_SRC_PATHS="$root"
+}
+
+# Sets HELIX_PRINT_CONF and the discovery overrides. Same subshell caveat.
+create_helix_print_conf() {
+    HELIX_PRINT_CONF="$BATS_TEST_TMPDIR/moonraker.conf"
+    cat > "$HELIX_PRINT_CONF" << 'CONF'
+[server]
+host: 0.0.0.0
+
+[helix_print]
+enabled: True
+temp_dir: .helix_temp
+
+[update_manager mainsail]
+type: web
+CONF
+    KLIPPER_HOME=""
+    KLIPPER_CONFIG_DIR=""
+    MOONRAKER_CONF_PATHS="$HELIX_PRINT_CONF"
+}
+
+# Stand-in for the install tree's moonraker-plugin/install.sh: records the
+# arguments it was called with, performs the removals a real --uninstall-auto
+# would, and exits with the status the test asks for.
+install_plugin_script_stub() {
+    local exit_code="$1" symlink="$2" conf="$3"
+    mkdir -p "$INSTALL_DIR/moonraker-plugin"
+    cat > "$INSTALL_DIR/moonraker-plugin/install.sh" << EOF
+#!/bin/sh
+printf '%s\n' "\$@" > "$BATS_TEST_TMPDIR/plugin-stub.args"
+rm -f "$symlink"
+sed -i'.orig' '/^\[helix_print\]/,/^enabled/d' "$conf" && rm -f "$conf.orig"
+exit $exit_code
+EOF
+    chmod +x "$INSTALL_DIR/moonraker-plugin/install.sh"
+}
+
+@test "remove_moonraker_plugin delegates to the bundled plugin installer" {
+    local symlink conf
+    setup_helix_print_symlink
+    create_helix_print_conf
+    symlink="$HELIX_PRINT_SYMLINK"
+    conf="$HELIX_PRINT_CONF"
+    install_plugin_script_stub 0 "$symlink" "$conf"
+
+    remove_moonraker_plugin
+
+    grep -q -- '--uninstall-auto' "$BATS_TEST_TMPDIR/plugin-stub.args"
+    refute test -L "$symlink"
+    refute_grep '^\[helix_print\]' "$conf"
+    # The delegate did the work, so the inline pass had nothing to back up.
+    refute test -e "${conf}.bak.helixscreen-uninstall"
+    grep -q '\[server\]' "$conf"
+    grep -q 'update_manager mainsail' "$conf"
+}
+
+@test "remove_moonraker_plugin is a no-op when the plugin was never installed" {
+    local conf="$BATS_TEST_TMPDIR/moonraker.conf"
+    cat > "$conf" << 'CONF'
+[server]
+host: 0.0.0.0
+CONF
+    KLIPPER_HOME=""
+    KLIPPER_CONFIG_DIR=""
+    MOONRAKER_CONF_PATHS="$conf"
+    setup_bare_moonraker_src
+    install_plugin_script_stub 0 "/nonexistent" "$conf"
+
+    run remove_moonraker_plugin
+    [ "$status" -eq 0 ]
+
+    # The plugin installer is never even invoked.
+    refute test -e "$BATS_TEST_TMPDIR/plugin-stub.args"
+    grep -q '\[server\]' "$conf"
+}
+
+@test "remove_moonraker_plugin warns but succeeds when the plugin installer exits 2" {
+    local symlink conf rc=0
+    setup_helix_print_symlink
+    create_helix_print_conf
+    symlink="$HELIX_PRINT_SYMLINK"
+    conf="$HELIX_PRINT_CONF"
+    install_plugin_script_stub 2 "$symlink" "$conf"
+
+    remove_moonraker_plugin 2>"$BATS_TEST_TMPDIR/plugin.log" || rc=$?
+
+    [ "$rc" -eq 0 ]
+    grep -q 'needs a look' "$BATS_TEST_TMPDIR/plugin.log"
+    refute test -L "$symlink"
+}
+
+@test "remove_moonraker_plugin finishes the job when the plugin installer fails" {
+    local symlink conf rc=0
+    setup_helix_print_symlink
+    create_helix_print_conf
+    symlink="$HELIX_PRINT_SYMLINK"
+    conf="$HELIX_PRINT_CONF"
+    # Exits nonzero without removing anything.
+    mkdir -p "$INSTALL_DIR/moonraker-plugin"
+    printf '#!/bin/sh\nexit 1\n' > "$INSTALL_DIR/moonraker-plugin/install.sh"
+    chmod +x "$INSTALL_DIR/moonraker-plugin/install.sh"
+
+    remove_moonraker_plugin 2>"$BATS_TEST_TMPDIR/plugin.log" || rc=$?
+
+    [ "$rc" -eq 0 ]
+    refute test -L "$symlink"
+    refute_grep '^\[helix_print\]' "$conf"
+}
+
+@test "remove_moonraker_plugin removes the plugin inline when the installer script is gone" {
+    local symlink conf
+    setup_helix_print_symlink
+    create_helix_print_conf
+    symlink="$HELIX_PRINT_SYMLINK"
+    conf="$HELIX_PRINT_CONF"
+    refute test -e "$INSTALL_DIR/moonraker-plugin/install.sh"
+
+    remove_moonraker_plugin 2>/dev/null
+
+    refute test -L "$symlink"
+    refute_grep '^\[helix_print\]' "$conf"
+    [ -f "${conf}.bak.helixscreen-uninstall" ]
+    grep -q '\[server\]' "$conf"
+    grep -q 'update_manager mainsail' "$conf"
+}
+
+@test "remove_moonraker_plugin finds the plugin in the nested Creality layout" {
+    # /usr/data/moonraker/moonraker/moonraker/components - what a K1/K2 has.
+    local root="$BATS_TEST_TMPDIR/usr-data-moonraker"
+    mkdir -p "$root/moonraker/moonraker/components/update_manager"
+    ln -sf "$INSTALL_DIR/moonraker-plugin/helix_print.py" \
+           "$root/moonraker/moonraker/components/helix_print.py"
+    MOONRAKER_SRC_PATHS="$root"
+    create_helix_print_conf
+
+    remove_moonraker_plugin 2>/dev/null
+
+    refute test -L "$root/moonraker/moonraker/components/helix_print.py"
+    refute_grep '^\[helix_print\]' "$HELIX_PRINT_CONF"
+}
+
+@test "uninstall removes the plugin before the install tree goes away" {
+    # Two uninstall paths reach this: uninstall(), which install.sh --uninstall
+    # calls, and the standalone uninstaller's own main(), which does not go
+    # through uninstall() at all.
+    local calls plugin_line removal_line
+    calls=$(grep -c 'remove_moonraker_plugin || true' "$WORKTREE_ROOT/scripts/uninstall.sh")
+    [ "$calls" -eq 2 ] || fail "want 2 remove_moonraker_plugin call sites, found $calls"
+
+    # main()'s call sits above its file removal, so the delegated
+    # moonraker-plugin/install.sh is still on disk when it runs.
+    plugin_line=$(grep -n 'remove_moonraker_plugin || true' "$WORKTREE_ROOT/scripts/uninstall.sh" | tail -1 | cut -d: -f1)
+    removal_line=$(grep -n '^    remove_installation$' "$WORKTREE_ROOT/scripts/uninstall.sh" | tail -1 | cut -d: -f1)
+    [ -n "$removal_line" ]
+    [ "$plugin_line" -lt "$removal_line" ]
 }
 
 # ============================================================================

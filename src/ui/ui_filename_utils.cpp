@@ -6,6 +6,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cctype>
+#include <ctime>
 #include <vector>
 
 namespace helix::gcode {
@@ -82,6 +83,10 @@ std::string get_display_filename(const std::string& path) {
 // Pattern: .helix_temp/modified_123456789_OriginalName.gcode (Moonraker plugin)
 // Also handles: */gcode_mod/mod_XXXXXX_filename.gcode (local temp files)
 // Legacy: /tmp/helixscreen_mod_XXXXXX_filename.gcode
+// The staging directory on the printer and the prefix inside it. Named once:
+// producers build paths through make_rewritten_gcode_path() and consumers
+// recognise them through is_uploaded_rewrite_path(), so neither side can spell
+// it differently from the other.
 static const std::string helix_temp_prefix = ".helix_temp/modified_";
 static const std::string gcode_mod_prefix = "/gcode_mod/mod_";
 static const std::string legacy_prefix = "/tmp/helixscreen_mod_";
@@ -153,6 +158,15 @@ bool is_native_3mf_shadow(const std::string& name) {
         return false;
     }
     return name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+std::string make_rewritten_gcode_path(const std::string& display_filename) {
+    return helix_temp_prefix + std::to_string(static_cast<long long>(std::time(nullptr))) + "_" +
+           display_filename;
+}
+
+bool is_uploaded_rewrite_path(const std::string& path) {
+    return path.find(helix_temp_prefix) != std::string::npos;
 }
 
 } // namespace helix::gcode
