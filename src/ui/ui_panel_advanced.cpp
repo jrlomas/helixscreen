@@ -485,13 +485,6 @@ void AdvancedPanel::wire_macro_restart_observer() {
 void AdvancedPanel::handle_helix_plugin_install_clicked() {
     spdlog::debug("[{}] HelixPrint Plugin Install clicked", get_name());
 
-    // Gate plugin install behind beta_features flag
-    Config* config = Config::get_instance();
-    if (config && !config->is_beta_features_enabled()) {
-        spdlog::debug("[{}] Beta features disabled, ignoring plugin install", get_name());
-        return;
-    }
-
     // Double-check plugin isn't already installed (defensive)
     if (printer_state_.service_has_helix_plugin()) {
         spdlog::info("[{}] Plugin already installed", get_name());

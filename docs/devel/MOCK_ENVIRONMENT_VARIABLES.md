@@ -207,6 +207,31 @@ HELIX_MOCK_AUTO_PRINT=1 HELIX_MOCK_EXCLUDE_OBJECTS=9 \
 
 Confirm via the log: `Published <n> synthetic exclude_object entries`.
 
+### `HELIX_MOCK_HELIX_PLUGIN`
+
+Report the HelixPrint Moonraker plugin as installed.
+
+| Property | Value |
+|----------|-------|
+| Values | `1` = installed, anything else = absent |
+| Default | absent |
+| Affects | `server.helix.status`, and every surface gated on it |
+
+Absent is the default because it is the state a fresh printer is in, and it is
+what shows the Advanced panel's **Install HelixPrint Plugin** row. Set it to `1`
+to get the **Uninstall** row instead.
+
+The mock answers the absent case with a JSON-RPC error, which is what Moonraker
+does for an endpoint it has no component for. That distinction is the point: a
+method the mock leaves unregistered invokes NEITHER callback, so the plugin
+subject stays at its `-1` unknown and every surface gated on it is unreachable
+in a mock run, including the pre-print options and the G-code rewrite remap.
+
+```bash
+./build/bin/helix-screen --test -vv                          # Install row
+HELIX_MOCK_HELIX_PLUGIN=1 ./build/bin/helix-screen --test -vv # Uninstall row
+```
+
 ### `HELIX_MOCK_AMS`
 
 Select the mock AMS topology/type.
