@@ -35,7 +35,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <sstream>
 
 // Forward declaration for global print status panel (declared in ui_panel_print_status.h)
 PrintStatusPanel& get_global_print_status_panel();
