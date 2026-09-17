@@ -104,12 +104,15 @@ class AmsBackendToolChanger : public AmsSubscriptionBackend {
     /// outright. Klipper answers an unknown command by logging it and carrying
     /// on, so a remap sent to such a machine is accepted and never applied.
     ///
-    /// Such a machine falls back to rewriting the file's own tool numbers,
-    /// which needs no firmware cooperation but costs a download and an upload
-    /// of the whole G-code. Beta-gated for that reason; outside beta the
-    /// remap is refused and the pre-flight check still names the mismatch.
-    /// Defined out-of-line so this header does not pull in Config.
-    [[nodiscard]] RemapStrategy get_remap_strategy() const override;
+    /// The file's own tool numbers are the only thing left to change, so such a
+    /// machine rewrites the job instead. That needs no firmware cooperation but
+    /// costs a download and an upload of the whole G-code, and it needs the
+    /// HelixPrint plugin - open_remap_modal() gates on that through
+    /// check_modification_capability(), the same question the pre-print options
+    /// ask, so the picker is never offered when the rewrite cannot land.
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override {
+        return tool_commands_.present ? RemapStrategy::GcodeRewrite : RemapStrategy::Native;
+    }
 
     /// A tool changer has one extruder per tool, so its table is identity — but it
     /// is a real table the firmware owns and ASSIGN_TOOL rewrites, and
