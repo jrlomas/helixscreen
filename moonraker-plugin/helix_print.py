@@ -31,6 +31,7 @@ from __future__ import annotations
 import glob as glob_module
 import json
 import logging
+import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -51,6 +52,9 @@ PLUGIN_VERSION = "1.0.1"
 
 # Namespace for key-value storage fallback (Moonraker v0.8.x)
 HELIX_NAMESPACE = "helix_temp_files"
+
+# Provider name stamped on our entry in a history job's auxiliary_data
+HELIX_AUX_PROVIDER = "helix_print"
 
 
 class PrintInfo:
@@ -566,31 +570,37 @@ class HelixPrint:
     async def _patch_history_entry(
         self, print_info: PrintInfo, final_state: str
     ) -> None:
-        """Patch the history entry to show original filename."""
+        """Rewrite the finished history entry so it names the original file.
+
+        Cosmetic and best-effort: history shows the file the user picked
+        instead of the symlink we printed through. Any failure is logged and
+        swallowed so it can never surface in a print.
+        """
         if not self.history or not print_info.job_id:
             return
 
-        # Check if history API is compatible. This filename-rename is a cosmetic,
-        # best-effort feature (shows the original filename in job history instead
-        # of the temp/symlink name), so it degrades silently when unavailable.
-        # It relies on `modify_job`, which does not exist on Moonraker 0.9+
-        # (removed upstream). The modern replacement is `save_job`, but that takes
-        # an internal PrinterJob object rather than the plain dict `get_job`
-        # returns, and reconstructing one here would be fragile — so we don't
-        # implement that path. Gate on the method we actually call so modern
-        # Moonraker skips cleanly with a single warning rather than falling
-        # through to an AttributeError traceback on every finished print.
         if not hasattr(self.history, "get_job") or not hasattr(
-            self.history, "modify_job"
+            self.history, "save_job"
         ):
             logging.warning(
                 "HelixPrint: History filename-rename unavailable "
-                "(history component has no modify_job; needs Moonraker <0.9)"
+                "(history component has no get_job/save_job)"
+            )
+            return
+
+        # PrinterJob lives in whichever module defined the live history
+        # component, so ask that module rather than guessing an import path.
+        job_class = getattr(
+            sys.modules.get(type(self.history).__module__), "PrinterJob", None
+        )
+        if job_class is None:
+            logging.warning(
+                "HelixPrint: History filename-rename unavailable "
+                "(no PrinterJob alongside the history component)"
             )
             return
 
         try:
-            # Get the job from history
             job = await self.history.get_job(print_info.job_id)
             if not job:
                 logging.warning(
@@ -598,24 +608,47 @@ class HelixPrint:
                 )
                 return
 
-            # Extract original filename (strip symlink dir prefix if present)
+            # Strip the symlink dir prefix if present
             original = print_info.original_filename
             if original.startswith(f"{self.symlink_dir}/"):
                 original = original[len(self.symlink_dir) + 1 :]
 
-            # Update auxiliary_data with modification info
-            aux_data = job.get("auxiliary_data", {}) or {}
-            aux_data["helix_modifications"] = print_info.modifications
-            aux_data["helix_temp_file"] = print_info.temp_filename
-            aux_data["helix_symlink"] = print_info.symlink_filename
-            aux_data["helix_original"] = print_info.original_filename
-
-            # Update the history entry
-            await self.history.modify_job(
-                print_info.job_id,
-                filename=original,
-                auxiliary_data=aux_data,
+            # auxiliary_data is a list of provider entries. Keep every other
+            # provider's, and drop any earlier entry of ours so re-patching the
+            # same job does not stack duplicates.
+            aux_data = [
+                entry
+                for entry in (job.get("auxiliary_data") or [])
+                if not (
+                    isinstance(entry, dict)
+                    and entry.get("provider") == HELIX_AUX_PROVIDER
+                )
+            ]
+            aux_data.append(
+                {
+                    "provider": HELIX_AUX_PROVIDER,
+                    "name": "modifications",
+                    "value": {
+                        "modifications": print_info.modifications,
+                        "temp_file": print_info.temp_filename,
+                        "symlink": print_info.symlink_filename,
+                        "original": print_info.original_filename,
+                    },
+                    "description": "G-code modifications applied by HelixScreen",
+                    "units": None,
+                }
             )
+
+            job["filename"] = original
+            job["auxiliary_data"] = aux_data
+
+            # save_job REPLACEs the row addressed by job_id, and wants the
+            # numeric id even though get_job also accepts the hex spelling.
+            job_id = print_info.job_id
+            numeric_id = (
+                int(job_id, 16) if isinstance(job_id, str) else int(job_id)
+            )
+            await self.history.save_job(job_class(job), numeric_id)
 
             logging.info(
                 f"HelixPrint: Patched history {print_info.job_id} "

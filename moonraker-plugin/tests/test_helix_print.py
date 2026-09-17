@@ -181,22 +181,73 @@ class MockKlippyApis:
         self.get_klippy_info = AsyncMock(return_value={})
 
 
+class PrinterJob:
+    """Stand-in for Moonraker's PrinterJob with the same attribute round-trip.
+
+    HelixPrint resolves PrinterJob from the module that defines the live
+    history component, so MockHistory's module has to offer one.
+    """
+
+    def __init__(self, data: Dict[str, Any] = None):
+        self.user = "No User"
+        self.filename = None
+        self.status = "in_progress"
+        self.start_time = 0.0
+        self.end_time = None
+        self.print_duration = 0.0
+        self.total_duration = 0.0
+        self.filament_used = 0.0
+        self.metadata: Dict[str, Any] = {}
+        self.auxiliary_data: list = []
+        self.update_from_ps(data or {})
+
+    def update_from_ps(self, data: Dict[str, Any]) -> None:
+        for i in data:
+            if hasattr(self, i) and data[i] is not None:
+                setattr(self, i, data[i])
+
+
 class MockHistory:
     """Mock history component for testing.
 
-    Mirrors the real Moonraker v0.10.0 `history` component: get_job(job_id) and
-    save_job(job, job_id). There is NO `modify_job` - that method does not exist
-    on modern Moonraker. HelixPrint's history filename-patching feature degrades
-    safely (best-effort) when it isn't available; see
-    HelixPrint._patch_history_entry.
+    Mirrors the real Moonraker v0.10.0 `history` component: get_job(job_id)
+    accepts a hex string or an int and returns a plain column dict, and
+    save_job(job, job_id) takes a PrinterJob plus the numeric id. There is no
+    `modify_job` - that method is not part of the component.
     """
 
     def __init__(self):
-        self.jobs = {}
+        self.jobs: Dict[int, Dict[str, Any]] = {}
         self.save_job_calls = []
 
-    async def get_job(self, job_id: str):
-        return self.jobs.get(job_id)
+    @staticmethod
+    def _key(job_id) -> int:
+        return int(job_id, 16) if isinstance(job_id, str) else int(job_id)
+
+    def add_job(self, job_id, **columns) -> Dict[str, Any]:
+        """Seed a job row with the columns job_history actually carries."""
+        key = self._key(job_id)
+        job = {
+            "job_id": f"{key:06X}",
+            "user": "helix",
+            "filename": ".helix_print/abcd_benchy.gcode",
+            "status": "completed",
+            "start_time": 100.0,
+            "end_time": 200.0,
+            "print_duration": 90.0,
+            "total_duration": 100.0,
+            "filament_used": 1.5,
+            "metadata": {},
+            "auxiliary_data": [],
+            "instance_id": "default",
+        }
+        job.update(columns)
+        self.jobs[key] = job
+        return job
+
+    async def get_job(self, job_id):
+        job = self.jobs.get(self._key(job_id))
+        return dict(job) if job is not None else None
 
     async def save_job(self, job, job_id=None):
         self.save_job_calls.append((job, job_id))
@@ -691,6 +742,195 @@ class TestPathValidation:
 
         result = await handler(request)
         assert result["status"] == "printing"
+
+
+
+# ============================================================================
+# History Patching Tests
+# ============================================================================
+
+def _print_info(job_id="00001A", modifications=None):
+    info = PrintInfo(
+        original_filename="prints/benchy.gcode",
+        temp_filename=".helix_temp/mod_benchy.gcode",
+        symlink_filename=".helix_print/abcd_benchy.gcode",
+        modifications=modifications if modifications is not None else ["pa_tuning"],
+        start_time=100.0,
+    )
+    info.job_id = job_id
+    return info
+
+
+def _helix_entry(job):
+    return [e for e in job.auxiliary_data if e.get("provider") == "helix_print"]
+
+
+class TestHistoryPatching:
+    """Tests for rewriting the history entry after a modified print."""
+
+    @pytest.mark.asyncio
+    async def test_rewrites_filename_to_original(self, helix_print_component,
+                                                 mock_server):
+        history = mock_server.components["history"]
+        history.add_job("00001A")
+        await helix_print_component.component_init()
+
+        await helix_print_component._patch_history_entry(_print_info(), "complete")
+
+        assert len(history.save_job_calls) == 1
+        job, job_id = history.save_job_calls[0]
+        assert job.filename == "prints/benchy.gcode"
+        assert job_id == 0x1A
+        # Columns that are not ours survive the round trip
+        assert job.status == "completed"
+        assert job.total_duration == 100.0
+
+    @pytest.mark.asyncio
+    async def test_strips_symlink_dir_prefix(self, helix_print_component,
+                                             mock_server):
+        history = mock_server.components["history"]
+        history.add_job("00001A")
+        await helix_print_component.component_init()
+
+        info = _print_info()
+        info.original_filename = ".helix_print/benchy.gcode"
+        await helix_print_component._patch_history_entry(info, "complete")
+
+        job, _ = history.save_job_calls[0]
+        assert job.filename == "benchy.gcode"
+
+    @pytest.mark.asyncio
+    async def test_appends_to_existing_auxiliary_data(self, helix_print_component,
+                                                      mock_server):
+        history = mock_server.components["history"]
+        other = {"provider": "spoolman", "name": "spool_id", "value": 7}
+        history.add_job("00001A", auxiliary_data=[other])
+        await helix_print_component.component_init()
+
+        await helix_print_component._patch_history_entry(_print_info(), "complete")
+
+        job, _ = history.save_job_calls[0]
+        assert isinstance(job.auxiliary_data, list)
+        assert other in job.auxiliary_data
+        ours = _helix_entry(job)
+        assert len(ours) == 1
+        assert ours[0]["value"]["original"] == "prints/benchy.gcode"
+        assert ours[0]["value"]["modifications"] == ["pa_tuning"]
+        assert ours[0]["value"]["temp_file"] == ".helix_temp/mod_benchy.gcode"
+
+    @pytest.mark.asyncio
+    async def test_repatch_replaces_own_entry(self, helix_print_component,
+                                              mock_server):
+        history = mock_server.components["history"]
+        stale = {"provider": "helix_print", "name": "modifications", "value": {}}
+        history.add_job("00001A", auxiliary_data=[stale])
+        await helix_print_component.component_init()
+
+        await helix_print_component._patch_history_entry(_print_info(), "complete")
+
+        job, _ = history.save_job_calls[0]
+        ours = _helix_entry(job)
+        assert len(ours) == 1
+        assert ours[0]["value"]["modifications"] == ["pa_tuning"]
+
+    @pytest.mark.asyncio
+    async def test_hex_string_job_id(self, helix_print_component, mock_server):
+        history = mock_server.components["history"]
+        history.add_job("00FF01")
+        await helix_print_component.component_init()
+
+        await helix_print_component._patch_history_entry(
+            _print_info(job_id="00FF01"), "complete"
+        )
+
+        job, job_id = history.save_job_calls[0]
+        assert job_id == 0xFF01
+        assert job.filename == "prints/benchy.gcode"
+
+    @pytest.mark.asyncio
+    async def test_int_job_id(self, helix_print_component, mock_server):
+        history = mock_server.components["history"]
+        history.add_job(26)
+        await helix_print_component.component_init()
+
+        await helix_print_component._patch_history_entry(
+            _print_info(job_id=26), "complete"
+        )
+
+        _, job_id = history.save_job_calls[0]
+        assert job_id == 26
+
+    @pytest.mark.asyncio
+    async def test_missing_job_is_quiet(self, helix_print_component, mock_server):
+        history = mock_server.components["history"]
+        await helix_print_component.component_init()
+
+        await helix_print_component._patch_history_entry(_print_info(), "complete")
+
+        assert history.save_job_calls == []
+
+    @pytest.mark.asyncio
+    async def test_no_job_id_skips_lookup(self, helix_print_component, mock_server):
+        history = mock_server.components["history"]
+        history.add_job("00001A")
+        await helix_print_component.component_init()
+
+        info = _print_info()
+        info.job_id = None
+        await helix_print_component._patch_history_entry(info, "complete")
+
+        assert history.save_job_calls == []
+
+    @pytest.mark.asyncio
+    async def test_history_without_save_job_warns(self, mock_server,
+                                                  temp_gcodes_dir, caplog):
+        class AncientHistory:
+            async def get_job(self, job_id):
+                return {"job_id": job_id, "filename": "x.gcode"}
+
+        mock_server.components["file_manager"] = MockFileManager(temp_gcodes_dir)
+        mock_server.components["database"] = MockDatabase()
+        mock_server.components["klippy_apis"] = MockKlippyApis()
+        mock_server.components["history"] = AncientHistory()
+        component = load_component(MockConfigHelper(mock_server, {
+            "temp_dir": ".helix_temp",
+            "symlink_dir": ".helix_print",
+            "cleanup_delay": 3600,
+            "enabled": True,
+        }))
+        await component.component_init()
+
+        await component._patch_history_entry(_print_info(), "complete")
+
+        assert "History filename-rename unavailable" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_missing_printer_job_class_warns(self, helix_print_component,
+                                                   mock_server, caplog,
+                                                   monkeypatch):
+        history = mock_server.components["history"]
+        history.add_job("00001A")
+        await helix_print_component.component_init()
+        monkeypatch.delattr(sys.modules[MockHistory.__module__], "PrinterJob")
+
+        await helix_print_component._patch_history_entry(_print_info(), "complete")
+
+        assert history.save_job_calls == []
+        assert "no PrinterJob" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_failing_history_does_not_raise(self, helix_print_component,
+                                                  mock_server):
+        history = mock_server.components["history"]
+        history.add_job("00001A")
+        await helix_print_component.component_init()
+
+        async def boom(job, job_id=None):
+            raise RuntimeError("database is locked")
+
+        history.save_job = boom
+        await helix_print_component._patch_history_entry(_print_info(), "complete")
+
 
 
 if __name__ == "__main__":
