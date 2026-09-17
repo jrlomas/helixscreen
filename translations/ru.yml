@@ -450,8 +450,6 @@ translations:
     временная директория недоступна'
   'Cannot modify G-code: scan result not available': 'Невозможно изменить G-code:
     результат сканирования недоступен'
-  'Cannot modify G-code: {}. Printing original file.': 'Невозможно изменить G-code:
-    {}. Печать оригинального файла.'
   Cannot perform this action now: Сейчас это действие выполнить нельзя
   'Cannot remap G-code: no temp directory available': 'Не удалось переназначить G-code:
     нет доступной временной директории'
@@ -3462,6 +3460,7 @@ translations:
   'off': выкл
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: Параметр remember_spool в AFC сохраняет данные катушки в прошивке и имеет приоритет над этим переключателем
   AI detection: AI-детекция
+  Modifying G-code needs the HelixPrint plugin. Printing original file.: ''
   Monitor for print abnormalities (K2 Plus camera-based): Отслеживание дефектов печати (на основе камеры K2 Plus)
   Monitor for print abnormalities (camera-based): 'Отслеживание дефектов печати (на основе камеры)'
   on unit {}: 'на блоке {}'

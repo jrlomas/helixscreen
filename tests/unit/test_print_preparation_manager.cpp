@@ -176,18 +176,48 @@ TEST_CASE("PrintPreparationManager: clear_scan_cache", "[print_preparation][gcod
 // Tests: Resource Safety
 // ============================================================================
 
-TEST_CASE("PrintPreparationManager: check_modification_capability", "[print_preparation][safety]") {
-    PrintPreparationManager manager;
-    // No API set - tests fallback behavior
+TEST_CASE_METHOD(HelixTestFixture, "PrintPreparationManager: can_modify_gcode",
+                 "[print_preparation][safety]") {
+    lv_init_safe();
+    PrinterState& printer_state = get_printer_state();
+    PrinterStateTestAccess::reset(printer_state);
+    printer_state.init_subjects(false);
 
-    SECTION("Without API, checks disk space fallback") {
-        auto capability = manager.check_modification_capability();
-        // Without API, has_plugin is false
-        REQUIRE(capability.has_plugin == false);
-        // Should still check disk space
-        // (can_modify depends on system - just verify it returns valid struct)
-        REQUIRE((capability.can_modify ||
-                 !capability.can_modify)); // Always true, just checking no crash
+    PrintPreparationManager manager;
+
+    SECTION("no printer state at all declines rather than dereferences") {
+        CHECK_FALSE(manager.can_modify_gcode());
+    }
+
+    SECTION("the plugin is the whole answer") {
+        manager.set_dependencies(nullptr, &printer_state);
+
+        // Unknown must not read as permission: the probe answers after first
+        // paint, and a rewrite sent before it lands cannot be un-filed from
+        // history afterwards.
+        CHECK_FALSE(manager.can_modify_gcode());
+
+        printer_state.set_helix_plugin_installed(false);
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK_FALSE(manager.can_modify_gcode());
+
+        printer_state.set_helix_plugin_installed(true);
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK(manager.can_modify_gcode());
+    }
+
+    SECTION("file size does not enter into it") {
+        // The rewrite streams a line at a time, so the answer cannot depend on
+        // how big the file is. A size rule here is what the retired
+        // ModificationCapability struct still claimed to enforce.
+        manager.set_dependencies(nullptr, &printer_state);
+        printer_state.set_helix_plugin_installed(true);
+        helix::ui::UpdateQueue::instance().drain();
+
+        manager.set_cached_file_size(10ULL * 1024 * 1024);
+        CHECK(manager.can_modify_gcode());
+        manager.set_cached_file_size(1000ULL * 1024 * 1024 * 1024);
+        CHECK(manager.can_modify_gcode());
     }
 }
 
@@ -201,42 +231,6 @@ TEST_CASE("PrintPreparationManager: get_temp_directory", "[print_preparation][sa
         INFO("Temp directory: " << temp_dir);
         // Just verify it doesn't crash and returns something reasonable
         REQUIRE(temp_dir.find("helix") != std::string::npos);
-    }
-}
-
-TEST_CASE("PrintPreparationManager: set_cached_file_size", "[print_preparation][safety]") {
-    PrintPreparationManager manager;
-
-    SECTION("Setting file size affects modification capability calculation") {
-        // Set a reasonable file size
-        manager.set_cached_file_size(10 * 1024 * 1024); // 10MB
-
-        auto capability = manager.check_modification_capability();
-
-        // If temp directory isn't available, required_bytes will be 0 (early return)
-        // This can happen in CI environments or sandboxed test runners
-        if (capability.has_disk_space) {
-            // Disk space check succeeded - verify required_bytes accounts for file size
-            REQUIRE(capability.required_bytes > 10 * 1024 * 1024);
-        } else {
-            // Temp directory unavailable - verify we get a sensible response
-            INFO("Temp directory unavailable: " << capability.reason);
-            REQUIRE(capability.can_modify == false);
-            REQUIRE(capability.has_plugin == false);
-        }
-    }
-
-    SECTION("Very large file size may exceed available space") {
-        // Set an extremely large file size
-        manager.set_cached_file_size(1000ULL * 1024 * 1024 * 1024); // 1TB
-
-        auto capability = manager.check_modification_capability();
-        // Should report insufficient space for such a large file
-        // (unless running on a system with 2TB+ free space)
-        INFO("can_modify: " << capability.can_modify);
-        INFO("reason: " << capability.reason);
-        // Just verify it handles large values without overflow/crash
-        REQUIRE((capability.can_modify || !capability.can_modify));
     }
 }
 

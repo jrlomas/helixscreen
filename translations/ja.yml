@@ -415,7 +415,6 @@ translations:
   'Cannot delete file: printer not connected': 'ファイルを削除できません: プリンター未接続'
   'Cannot modify G-code: no temp directory available': 'G-code を変更できません: 一時ディレクトリがありません'
   'Cannot modify G-code: scan result not available': 'G-code を変更できません: スキャン結果がありません'
-  'Cannot modify G-code: {}. Printing original file.': 'G-code を変更できません: {}。元のファイルで印刷します。'
   Cannot perform this action now: 現在この操作は実行できません
   'Cannot remap G-code: no temp directory available': 'G-codeをリマップできません: 一時ディレクトリが利用できません'
   'Cannot remap: internal error': 'リマップできません: 内部エラー'
@@ -3240,6 +3239,7 @@ translations:
   'off': オフ
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: AFC の remember_spool がファームウェア側でスプール情報を保持しているため、このトグル設定より優先されます
   AI detection: AI 検出
+  Modifying G-code needs the HelixPrint plugin. Printing original file.: ''
   Monitor for print abnormalities (K2 Plus camera-based): 印刷異常を監視 (K2 Plus カメラベース)
   Monitor for print abnormalities (camera-based): '印刷異常を監視 (カメラベース)'
   on unit {}: 'ユニット {}'

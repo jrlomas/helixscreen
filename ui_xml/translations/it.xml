@@ -411,7 +411,6 @@
   <translation tag="Cannot delete file: printer not connected" it="Impossibile eliminare file: stampante non connessa"/>
   <translation tag="Cannot modify G-code: no temp directory available" it="Impossibile modificare G-code: directory temporanea non disponibile"/>
   <translation tag="Cannot modify G-code: scan result not available" it="Impossibile modificare G-code: risultato scansione non disponibile"/>
-  <translation tag="Cannot modify G-code: {}. Printing original file." it="Impossibile modificare G-code: {}. Stampa del file originale."/>
   <translation tag="Cannot perform this action now" it="Impossibile eseguire questa azione ora"/>
   <translation tag="Cannot remap G-code: no temp directory available" it="Impossibile rimappare G-code: directory temporanea non disponibile"/>
   <translation tag="Cannot remap: internal error" it="Impossibile rimappare: errore interno"/>
@@ -1600,6 +1599,7 @@
   <translation tag="Missing value" it="Valore mancante"/>
   <translation tag="Mode" it="Modalità"/>
   <translation tag="Modified" it="Modificato"/>
+  <translation tag="Modifying G-code needs the HelixPrint plugin. Printing original file."/>
   <translation tag="Monitor for print abnormalities (K2 Plus camera-based)" it="Monitora le anomalie di stampa (basato sulla camera del K2 Plus)"/>
   <translation tag="Monitor for print abnormalities (camera-based)" it="Monitora le anomalie di stampa (basato sulla camera)"/>
   <translation tag="Monitor prints in progress — time remaining, current layer, and progress. Tap to pause, resume, or cancel the active job." it="Monitora le stampe in corso — tempo rimanente, layer attuale e avanzamento. Tocca per mettere in pausa, riprendere o annullare il lavoro attivo."/>

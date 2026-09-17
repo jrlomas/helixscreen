@@ -108,7 +108,7 @@ class AmsBackendToolChanger : public AmsSubscriptionBackend {
     /// machine rewrites the job instead. That needs no firmware cooperation but
     /// costs a download and an upload of the whole G-code, and it needs the
     /// HelixPrint plugin - open_remap_modal() gates on that through
-    /// check_modification_capability(), the same question the pre-print options
+    /// can_modify_gcode(), the same question the pre-print options
     /// ask, so the picker is never offered when the rewrite cannot land.
     [[nodiscard]] RemapStrategy get_remap_strategy() const override {
         return tool_commands_.present ? RemapStrategy::GcodeRewrite : RemapStrategy::Native;

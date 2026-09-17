@@ -411,7 +411,6 @@
   <translation tag="Cannot delete file: printer not connected" zh="无法删除文件: 打印机未连接"/>
   <translation tag="Cannot modify G-code: no temp directory available" zh="无法修改 G-code: 无可用临时目录"/>
   <translation tag="Cannot modify G-code: scan result not available" zh="无法修改 G-code: 扫描结果不可用"/>
-  <translation tag="Cannot modify G-code: {}. Printing original file." zh="无法修改 G-code: {}。正在打印原始文件。"/>
   <translation tag="Cannot perform this action now" zh="当前无法执行此操作"/>
   <translation tag="Cannot remap G-code: no temp directory available" zh="无法重新映射 G-code：没有可用的临时目录"/>
   <translation tag="Cannot remap: internal error" zh="无法重新映射：内部错误"/>
@@ -1600,6 +1599,7 @@
   <translation tag="Missing value" zh="缺少值"/>
   <translation tag="Mode" zh="模式"/>
   <translation tag="Modified" zh="已修改"/>
+  <translation tag="Modifying G-code needs the HelixPrint plugin. Printing original file."/>
   <translation tag="Monitor for print abnormalities (K2 Plus camera-based)" zh="监测打印异常（基于 K2 Plus 摄像头）"/>
   <translation tag="Monitor for print abnormalities (camera-based)" zh="监测打印异常（基于摄像头）"/>
   <translation tag="Monitor prints in progress — time remaining, current layer, and progress. Tap to pause, resume, or cancel the active job." zh="监控正在进行的打印 — 剩余时间、当前层和进度。点击可暂停、恢复或取消当前任务。"/>

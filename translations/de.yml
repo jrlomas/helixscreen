@@ -462,8 +462,6 @@ translations:
     werden: kein temporäres Verzeichnis verfügbar'
   'Cannot modify G-code: scan result not available': 'G-Code kann nicht geändert werden:
     Scan-Ergebnis nicht verfügbar'
-  'Cannot modify G-code: {}. Printing original file.': 'G-Code kann nicht geändert
-    werden: {}. Originaldatei wird gedruckt.'
   Cannot perform this action now: Diese Aktion ist derzeit nicht möglich
   'Cannot remap G-code: no temp directory available': 'G-code kann nicht neu zugeordnet
     werden: kein temporäres Verzeichnis verfügbar'
@@ -3514,6 +3512,7 @@ translations:
   'off': aus
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: AFCs remember_spool behält Spuleninfos in der Firmware; das hat Vorrang vor diesem Schalter
   AI detection: AI-Erkennung
+  Modifying G-code needs the HelixPrint plugin. Printing original file.: ''
   Monitor for print abnormalities (K2 Plus camera-based): Überwacht auf Druckanomalien (K2 Plus kamerabasiert)
   Monitor for print abnormalities (camera-based): 'Überwacht auf Druckanomalien (kamerabasiert)'
   on unit {}: 'an Einheit {}'

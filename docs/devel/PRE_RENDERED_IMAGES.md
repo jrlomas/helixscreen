@@ -219,4 +219,4 @@ LVGL can convert images at build time via its CMake integration, but:
 Pre-rendered images are larger than PNGs (uncompressed vs. compressed), but:
 - They're stored on the filesystem, not in RAM
 - They're loaded directly into LVGL's image cache
-- The AD5M has 512MB RAM and 8GB storage, so space isn't a concern
+- The AD5M has ~108MB RAM and 8GB storage, so disk space isn't a concern (RAM is)

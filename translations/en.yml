@@ -443,8 +443,6 @@ translations:
     directory available'
   'Cannot modify G-code: scan result not available': 'Cannot modify G-code: scan result
     not available'
-  'Cannot modify G-code: {}. Printing original file.': 'Cannot modify G-code: {}.
-    Printing original file.'
   Cannot perform this action now: Cannot perform this action now
   'Cannot remap G-code: no temp directory available': 'Cannot remap G-code: no temp
     directory available'
@@ -1732,6 +1730,7 @@ translations:
   Missing value: Missing value
   Mode: Mode
   Modified: Modified
+  Modifying G-code needs the HelixPrint plugin. Printing original file.: Modifying G-code needs the HelixPrint plugin. Printing original file.
   Monitor for print abnormalities (K2 Plus camera-based): Monitor for print abnormalities (K2 Plus camera-based)
   Monitor for print abnormalities (camera-based): 'Monitor for print abnormalities (camera-based)'
   'Monitor prints in progress — time remaining, current layer, and progress. Tap to pause, resume, or cancel the active job.': 'Monitor prints in progress — time remaining, current layer, and progress. Tap to pause, resume, or cancel the active job.'

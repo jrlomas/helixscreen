@@ -10,7 +10,7 @@
  * buffered (in-memory) approaches.
  *
  * The policy is critical for preventing memory exhaustion on embedded devices
- * like the AD5M (512MB RAM) when handling large G-code files (10-100MB+).
+ * like the AD5M (~108MB RAM) when handling large G-code files (10-100MB+).
  *
  * Usage:
  *   if (StreamingPolicy::instance().should_stream(file_size)) {

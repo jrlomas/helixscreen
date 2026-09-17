@@ -411,7 +411,6 @@
   <translation tag="Cannot delete file: printer not connected" ja="ファイルを削除できません: プリンター未接続"/>
   <translation tag="Cannot modify G-code: no temp directory available" ja="G-code を変更できません: 一時ディレクトリがありません"/>
   <translation tag="Cannot modify G-code: scan result not available" ja="G-code を変更できません: スキャン結果がありません"/>
-  <translation tag="Cannot modify G-code: {}. Printing original file." ja="G-code を変更できません: {}。元のファイルで印刷します。"/>
   <translation tag="Cannot perform this action now" ja="現在この操作は実行できません"/>
   <translation tag="Cannot remap G-code: no temp directory available" ja="G-codeをリマップできません: 一時ディレクトリが利用できません"/>
   <translation tag="Cannot remap: internal error" ja="リマップできません: 内部エラー"/>
@@ -1600,6 +1599,7 @@
   <translation tag="Missing value" ja="値が入力されていません"/>
   <translation tag="Mode" ja="モード"/>
   <translation tag="Modified" ja="変更日時"/>
+  <translation tag="Modifying G-code needs the HelixPrint plugin. Printing original file."/>
   <translation tag="Monitor for print abnormalities (K2 Plus camera-based)" ja="印刷異常を監視 (K2 Plus カメラベース)"/>
   <translation tag="Monitor for print abnormalities (camera-based)" ja="印刷異常を監視 (カメラベース)"/>
   <translation tag="Monitor prints in progress — time remaining, current layer, and progress. Tap to pause, resume, or cancel the active job." ja="印刷の進行状況を監視します — 残り時間、現在のレイヤー、進捗。タップすれば進行中のジョブを一時停止、再開、キャンセルできます。"/>

@@ -88,22 +88,6 @@ struct PrePrintOptions {
 };
 
 /**
- * @brief Result of checking if G-code modification can be performed safely
- *
- * On resource-constrained devices (like AD5M with 512MB RAM), modifying large
- * G-code files can exhaust memory and crash both Moonraker and Klipper.
- * This struct captures whether modification is safe and why (or why not).
- */
-struct ModificationCapability {
-    bool can_modify = false;     ///< True if modification can be done safely
-    bool has_plugin = false;     ///< True if helix_print plugin handles it server-side
-    bool has_disk_space = false; ///< True if enough disk space for streaming fallback
-    std::string reason;          ///< Human-readable reason if modification is disabled
-    size_t available_bytes = 0;  ///< Available disk space in temp directory
-    size_t required_bytes = 0;   ///< Estimated bytes needed for modification
-};
-
-/**
  * @brief Callback for navigating to print status panel
  */
 using NavigateToStatusCallback = std::function<void()>;
@@ -335,20 +319,15 @@ class PrintPreparationManager {
     void set_cached_file_size(size_t size);
 
     /**
-     * @brief Check if G-code modification can be performed safely
+     * @brief May we print a rewritten copy of the selected G-code file?
      *
-     * Evaluates whether the device has sufficient resources to modify the
-     * currently selected G-code file. Returns detailed information about
-     * what's available and what's needed.
-     *
-     * Safety priority:
-     * 1. If helix_print plugin available → always safe (server-side)
-     * 2. If disk space available for streaming → safe (disk-based modification)
-     * 3. Otherwise → unsafe, modification disabled
-     *
-     * @return ModificationCapability with safety status and details
+     * The HelixPrint plugin is what makes a rewrite survivable as a product
+     * decision rather than a technical one: without it the rewritten copy is
+     * what lands in print history, so finished jobs are filed under names like
+     * modified_1730824_benchy.gcode. Size is not part of the question - the
+     * rewrite streams a line at a time, so a 2GB file costs what a 2KB one does.
      */
-    [[nodiscard]] ModificationCapability check_modification_capability() const;
+    [[nodiscard]] bool can_modify_gcode() const;
 
     /**
      * @brief Get the temp directory path for streaming operations
@@ -429,7 +408,7 @@ class PrintPreparationManager {
      *
      * The print-detail view uses this to HIDE a toggle when the plugin is
      * absent: without the plugin, disabling such an option can't be honored —
-     * start_print() reaches check_modification_capability() and drops the
+     * start_print() reaches can_modify_gcode() and drops the
      * modification with a "Requires HelixPrint plugin" warning.
      *
      * Returns true only when NO pre-start short-circuit in start_print() would

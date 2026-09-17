@@ -597,29 +597,12 @@ std::string PrintPreparationManager::get_temp_directory() const {
     return get_helix_cache_dir("gcode_temp");
 }
 
-ModificationCapability PrintPreparationManager::check_modification_capability() const {
-    ModificationCapability result;
-
-    // Pre-print modifications require the HelixPrint plugin to keep print history clean.
-    // Without the plugin, modified files show up as ugly temp file names in Moonraker's
-    // job history (e.g., ".helix_temp/modified_1766807545_filename.gcode").
-    // The plugin handles this by creating symlinks and patching history metadata.
-    if (printer_state_ && printer_state_->service_has_helix_plugin()) {
-        result.can_modify = true;
-        result.has_plugin = true;
-        result.has_disk_space = true;
-        result.reason = "Using server-side plugin";
-        spdlog::debug("[PrintPreparationManager] Plugin available - modifications enabled");
-        return result;
-    }
-
-    // No plugin = no modifications. This prevents print history clutter.
-    result.can_modify = false;
-    result.has_plugin = false;
-    result.has_disk_space = false;
-    result.reason = "Requires HelixPrint plugin";
-    spdlog::debug("[PrintPreparationManager] No plugin - modifications disabled");
-    return result;
+bool PrintPreparationManager::can_modify_gcode() const {
+    // Pre-print modifications rewrite the job file, and the plugin is what puts
+    // the original filename back in Moonraker's history afterwards. Without it
+    // finished jobs are listed as ".helix_temp/modified_1766807545_name.gcode",
+    // so we decline rather than clutter the history.
+    return printer_state_ != nullptr && printer_state_->service_has_helix_plugin();
 }
 
 // ============================================================================
@@ -813,16 +796,9 @@ void PrintPreparationManager::start_print(const std::string& filename,
 
     if (needs_file_modification || needs_macro_params) {
         helix::MemoryMonitor::log_now("print_modification_start", spdlog::level::debug);
-        // SAFETY CHECK: Verify we can safely modify the G-code file
-        // On resource-constrained devices (e.g., AD5M with 512MB RAM), loading large
-        // G-code files into memory can exhaust resources and crash both Moonraker and Klipper.
-        ModificationCapability capability = check_modification_capability();
-
-        if (!capability.can_modify) {
-            spdlog::warn("[PrintPreparationManager] Cannot modify G-code safely: {}",
-                         capability.reason);
-            spdlog::warn(
-                "[PrintPreparationManager] Skipping modification - printing original file");
+        if (!can_modify_gcode()) {
+            spdlog::warn("[PrintPreparationManager] No HelixPrint plugin - skipping modification, "
+                         "printing original file");
             // Name the features being dropped. "Cannot modify G-code" alone left
             // the user guessing which of the print dialog's controls it referred
             // to — #1269 was filed against filament remapping, which does not
@@ -833,17 +809,19 @@ void PrintPreparationManager::start_print(const std::string& filename,
             macro_skip_params.clear();
             // Show user notification about skipped modification
             if (dropped.empty()) {
-                NOTIFY_WARNING(lv_tr("Cannot modify G-code: {}. Printing original file."),
-                               capability.reason);
+                // One reason exists, so state it. Interpolating a reason string
+                // into a translated sentence left the English fragment showing
+                // in every other locale.
+                NOTIFY_WARNING(
+                    lv_tr("Modifying G-code needs the HelixPrint plugin. Printing original file."));
             } else {
                 NOTIFY_WARNING(lv_tr("{} needs the HelixPrint plugin. Printing original file."),
                                dropped);
             }
         } else {
-            spdlog::info("[PrintPreparationManager] Modifying G-code: {} file ops, {} macro params "
-                         "(method: {})",
-                         ops_to_disable.size(), macro_skip_params.size(),
-                         capability.has_plugin ? "server-side plugin" : "streaming fallback");
+            spdlog::info("[PrintPreparationManager] Modifying G-code server-side: {} file ops, "
+                         "{} macro params",
+                         ops_to_disable.size(), macro_skip_params.size());
             modify_and_print(filename_to_print, ops_to_disable, macro_skip_params,
                              on_navigate_to_status);
             return; // modify_and_print handles everything including navigation
@@ -924,7 +902,7 @@ bool PrintPreparationManager::disabling_option_requires_plugin(const PrePrintOpt
     }
 
     // Would start_print() short-circuit into a plugin-free pre-start path BEFORE
-    // reaching check_modification_capability()? That happens when a pre-start
+    // reaching can_modify_gcode()? That happens when a pre-start
     // gcode block is emitted:
     //   - printer-level setup_gcode fires (it is gated on a MacroParam skip
     //     being present — see emit_printer_setup in start_print()), OR
@@ -943,7 +921,7 @@ bool PrintPreparationManager::disabling_option_requires_plugin(const PrePrintOpt
         return false;
     }
 
-    // No short-circuit: start_print() reaches check_modification_capability(),
+    // No short-circuit: start_print() reaches can_modify_gcode(),
     // which warns "Requires HelixPrint plugin" and drops the modification when
     // the plugin is absent. So disabling this option genuinely needs the plugin.
     return true;
@@ -1034,7 +1012,7 @@ std::string PrintPreparationManager::describe_dropped_modifications(
 // macro runs its own default mesh, which is exactly what happens today after
 // the drop - minus the warning.
 bool PrintPreparationManager::adaptive_emit_is_deliverable() const {
-    if (check_modification_capability().can_modify) {
+    if (can_modify_gcode()) {
         return true;
     }
     if (!get_cached_options().setup_gcode.empty()) {
@@ -1486,7 +1464,7 @@ void PrintPreparationManager::modify_and_print(
     // 4. If plugin available: use path-based API for symlink/history patching
     //    Otherwise: use standard start_print
     //
-    // This prevents TTC errors on memory-constrained devices like AD5M (512MB RAM)
+    // This prevents TTC errors on memory-constrained devices like AD5M (~108MB RAM)
     // by never loading the entire G-code file into memory.
     bool has_plugin = printer_state_ && printer_state_->service_has_helix_plugin();
     spdlog::info("[PrintPreparationManager] Using unified streaming modification flow (plugin: {})",
