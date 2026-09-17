@@ -98,9 +98,18 @@ class AmsBackendToolChanger : public AmsSubscriptionBackend {
         return helix::ui::LaneNoun::Tool;
     }
 
-    [[nodiscard]] RemapStrategy get_remap_strategy() const override {
-        return RemapStrategy::Native;
-    }
+    /// ASSIGN_TOOL belongs to klipper-toolchanger. A machine that drives swaps
+    /// with its own T<n> commands instead (tool_commands_.present) has no
+    /// tool-number indirection to rewrite: those macros name the physical tool
+    /// outright. Klipper answers an unknown command by logging it and carrying
+    /// on, so a remap sent to such a machine is accepted and never applied.
+    ///
+    /// Such a machine falls back to rewriting the file's own tool numbers,
+    /// which needs no firmware cooperation but costs a download and an upload
+    /// of the whole G-code. Beta-gated for that reason; outside beta the
+    /// remap is refused and the pre-flight check still names the mismatch.
+    /// Defined out-of-line so this header does not pull in Config.
+    [[nodiscard]] RemapStrategy get_remap_strategy() const override;
 
     /// A tool changer has one extruder per tool, so its table is identity — but it
     /// is a real table the firmware owns and ASSIGN_TOOL rewrites, and
@@ -277,6 +286,11 @@ class AmsBackendToolChanger : public AmsSubscriptionBackend {
     void persist_external_identity_impl(int slot_index,
                                         const helix::ams::Observation& spoolman) override;
     AmsError set_tool_mapping_impl(int tool_number, int slot_index) override;
+
+    /// Point G-code tool @p tool_number at the physical tool named
+    /// @p physical_tool_name, or refuse when this machine has no such command.
+    /// The one emitter, so the refusal cannot be reached around.
+    AmsError assign_tool(const std::string& physical_tool_name, int tool_number);
 
     // Tool mapping via klipper-toolchanger ASSIGN_TOOL command
     AmsError reset_tool_mappings() override;
