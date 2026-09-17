@@ -197,3 +197,63 @@ TEST_CASE("Class names are distinct and log-safe", "[watchdog][restart]") {
     CHECK(std::string(exec_failure_class_name(ExecFailureClass::PERMANENT)) == "permanent");
     CHECK(std::string(exec_failure_class_name(ExecFailureClass::NONE)) == "unclassified");
 }
+
+TEST_CASE("Repeated deliberate failures reach the give-up budget", "[watchdog][restart]") {
+    // Each failure is paced by the backoff the one before it earned, and the
+    // child's own time-to-fail adds to that gap without bound. Counting has to
+    // be consecutive: any fixed window forgets earlier failures faster than the
+    // backoff delivers new ones, so the budget is never spent and the watchdog
+    // retries a permanently broken child forever.
+    RestartFailureCounters counters;
+
+    int count = 0;
+    for (int i = 0; i <= RESTART_LOOP_MAX_FAILURES; ++i) {
+        count = counters.record(ExecFailureClass::NONE);
+    }
+
+    REQUIRE(count > RESTART_LOOP_MAX_FAILURES);
+    REQUIRE(decide_restart_action(ExecFailureClass::NONE, count, counters.cooldown_rounds).action ==
+            RestartAction::GIVE_UP);
+}
+
+TEST_CASE("A launch that ran clears the failure history", "[watchdog][restart]") {
+    RestartFailureCounters counters;
+    for (int i = 0; i < RESTART_LOOP_MAX_FAILURES; ++i) {
+        counters.record(ExecFailureClass::NONE);
+    }
+
+    counters.on_launch_succeeded();
+
+    REQUIRE(counters.record(ExecFailureClass::NONE) == 1);
+}
+
+TEST_CASE("Transient and deliberate failures spend separate budgets", "[watchdog][restart]") {
+    // A transient exec failure must not spend the small deliberate budget, and
+    // a deliberate exit must not spend the transient one.
+    RestartFailureCounters counters;
+
+    for (int i = 0; i < TRANSIENT_MAX_FAILURES; ++i) {
+        counters.record(ExecFailureClass::TRANSIENT);
+    }
+    REQUIRE(counters.record(ExecFailureClass::NONE) == 1);
+
+    for (int i = 0; i < RESTART_LOOP_MAX_FAILURES; ++i) {
+        counters.record(ExecFailureClass::NONE);
+    }
+    REQUIRE(counters.record(ExecFailureClass::TRANSIENT) == 1);
+}
+
+TEST_CASE("A spent transient budget cools down, then gives up", "[watchdog][restart]") {
+    RestartFailureCounters counters;
+
+    int count = 0;
+    for (int i = 0; i <= TRANSIENT_MAX_FAILURES; ++i) {
+        count = counters.record(ExecFailureClass::TRANSIENT);
+    }
+    REQUIRE(decide_restart_action(ExecFailureClass::TRANSIENT, count, counters.cooldown_rounds)
+                .action == RestartAction::COOLDOWN_RETRY);
+
+    counters.cooldown_rounds = TRANSIENT_MAX_COOLDOWN_ROUNDS;
+    REQUIRE(decide_restart_action(ExecFailureClass::TRANSIENT, count, counters.cooldown_rounds)
+                .action == RestartAction::GIVE_UP);
+}

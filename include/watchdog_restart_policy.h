@@ -194,13 +194,50 @@ struct RestartDecision {
 inline constexpr int RESTART_LOOP_MAX_FAILURES = 5;
 
 /**
+ * @brief Consecutive launch-failure counters feeding decide_restart_action().
+ *
+ * Counting is consecutive, never windowed. The restart backoff spaces failures
+ * further apart as they accumulate, and the child's own time-to-fail adds to
+ * every gap without bound, so any fixed window forgets earlier failures faster
+ * than the backoff delivers new ones and the budget is never spent. A launch
+ * that actually ran clears the history instead.
+ *
+ * The two budgets are separate so a transient exec failure cannot spend the
+ * small deliberate-failure budget and strand the user at a black screen.
+ */
+struct RestartFailureCounters {
+    int transient = 0;
+    int deliberate = 0;
+    int cooldown_rounds = 0;
+
+    /// Record one failed launch. Returns the count for @p cls including this
+    /// one, ready to hand to decide_restart_action().
+    int record(ExecFailureClass cls) {
+        if (cls == ExecFailureClass::TRANSIENT) {
+            return ++transient;
+        }
+        // A deliberate exit proves the binary ran, so no exec squeeze is in
+        // progress and the transient pressure history is stale.
+        transient = 0;
+        cooldown_rounds = 0;
+        return ++deliberate;
+    }
+
+    /// A launch that ran, whether it exited cleanly or crashed afterwards,
+    /// clears every budget: whatever was blocking startup is gone.
+    void on_launch_succeeded() {
+        transient = 0;
+        deliberate = 0;
+        cooldown_rounds = 0;
+    }
+};
+
+/**
  * @brief Decide how to respond to a failed child launch.
  *
  * @param cls                   Classification of this failure.
- * @param consecutive_failures  For TRANSIENT: consecutive transient exec/fork
- *                              failures including this one. For everything
- *                              else: failures inside the rolling window,
- *                              including this one.
+ * @param consecutive_failures  Consecutive failures of this class including
+ *                              this one, as counted by RestartFailureCounters.
  * @param cooldown_rounds_used  Cooldown rounds already consumed (TRANSIENT only).
  */
 inline RestartDecision decide_restart_action(ExecFailureClass cls, int consecutive_failures,
