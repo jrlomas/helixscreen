@@ -1540,10 +1540,25 @@ TEST_CASE_METHOD(LVGLTestFixture,
         ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
         ss.start();
         REQUIRE(ss.is_active());
-        CHECK(ss.level_count() == 2);
+        CHECK(ss.level_count() == 4);
+        CHECK(StarAccess::active_star_count(ss) == 150);
         CHECK(SaverTestAccess::timer(ss)->period == helix::ui::SAVER_FAST_PERIOD);
         ss.request_level(1);
+        CHECK(ss.level() == 1);
         CHECK(SaverTestAccess::timer(ss)->period == 33);
+        CHECK(StarAccess::active_star_count(ss) == 96);
+        // Every rung past half rate holds 33 ms and thins the population strictly.
+        int previous_stars = 96;
+        for (size_t level = 2; level < ss.level_count(); level++) {
+            ss.request_level(level);
+            CAPTURE(level);
+            CHECK(SaverTestAccess::timer(ss)->period == 33);
+            const int stars = StarAccess::active_star_count(ss);
+            CHECK(stars < previous_stars);
+            previous_stars = stars;
+        }
+        // The bottom rung is the sparsest sky the gate can fall back to.
+        CHECK(previous_stars == 32);
     }
 
     SECTION("pipes") {

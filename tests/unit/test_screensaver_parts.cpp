@@ -120,7 +120,7 @@ TEST_CASE("merged dirty areas number at most the limit and cover every input",
           "[screensaver][screensaver_parts]") {
     std::minstd_rand rng(17);
     std::vector<DirtyRect> input;
-    for (int i = 0; i < 45; i++) {
+    for (int i = 0; i < 180; i++) {
         const auto x = static_cast<int32_t>(rng() % 780);
         const auto y = static_cast<int32_t>(rng() % 460);
         input.push_back(
@@ -257,8 +257,11 @@ TEST_CASE_METHOD(
     const lv_area_t coords = coords_of(canvas.obj());
 
     std::vector<DirtyRect> dirty;
-    for (int32_t i = 0; i < 40; i++) {
-        dirty.push_back({i * 19, i * 11, i * 19 + 2, i * 11 + 2});
+    for (int32_t i = 0; i < 200; i++) {
+        // A stride-coprime scatter over the canvas, so every box stays on it.
+        const int32_t x = (i * 37) % 790;
+        const int32_t y = (i * 53) % 470;
+        dirty.push_back({x, y, x + 2, y + 2});
     }
     const std::vector<DirtyRect> input = dirty;
     helix::test::InvalidatedAreas invalidated(lv_obj_get_display(canvas.obj()));
@@ -608,10 +611,10 @@ TEST_CASE_METHOD(LVGLTestFixture,
     CHECK(helix::ui::pixel_format_for(LV_COLOR_FORMAT_XRGB8888) ==
           helix::ui::PixelFormat::XRGB8888);
 }
-// A saver whose dirty box covers nearly the whole canvas is cheaper to invalidate whole: a
+// A saver whose dirty areas cover nearly the whole canvas is cheaper to invalidate whole: a
 // double-buffered display syncs whatever the partial invalidation left out, strip by strip,
-// on every frame. The starfield is the case that matters - 150 stars scattered over the
-// screen give it a bounding box of about 97%.
+// on every frame. Coverage counts covered pixels: each area is rendered and flushed on its
+// own, so scattered small areas cost their sum however far apart they lie.
 TEST_CASE("a near-full dirty box invalidates the whole canvas",
           "[screensaver][screensaver_parts]") {
     using helix::ui::covers_whole_canvas;
@@ -620,7 +623,7 @@ TEST_CASE("a near-full dirty box invalidates the whole canvas",
     SECTION("the whole canvas counts") {
         CHECK(covers_whole_canvas(DirtyRect{0, 0, 799, 479}, 800, 480));
     }
-    SECTION("the starfield's real coverage counts") {
+    SECTION("a near-whole box counts") {
         // 790 x 470 of 800 x 480 is 96.7%.
         CHECK(covers_whole_canvas(DirtyRect{5, 5, 794, 474}, 800, 480));
     }
@@ -633,6 +636,58 @@ TEST_CASE("a near-full dirty box invalidates the whole canvas",
     SECTION("a canvas with no area never promotes") {
         CHECK_FALSE(covers_whole_canvas(DirtyRect{0, 0, 10, 10}, 0, 0));
     }
+}
+
+// Two small boxes at opposite corners span the whole canvas between them while covering a
+// handful of pixels, so deciding the whole-canvas promotion on their bounding box would
+// turn almost any scattered frame into a full redraw.
+// The coverage rule answers at compile time, so a caller can size a buffer or assert a
+// budget from it without running anything.
+static_assert(helix::ui::covers_whole_canvas(helix::ui::DirtyRect{0, 0, 799, 479}, 800, 480),
+              "a full-canvas box covers the canvas");
+static_assert(!helix::ui::covers_whole_canvas(helix::ui::DirtyRect{0, 0, 4, 4}, 800, 480),
+              "a 5x5 box does not cover the canvas");
+
+TEST_CASE("scattered dirty boxes do not promote a whole-canvas invalidate",
+          "[screensaver][screensaver_parts]") {
+    using helix::ui::covers_whole_canvas;
+    using helix::ui::DirtyRect;
+
+    const DirtyRect corners[] = {{0, 0, 4, 4}, {795, 475, 799, 479}};
+    int64_t covered = 0;
+    DirtyRect span;
+    for (const DirtyRect& r : corners) {
+        covered += r.area();
+        span.add(r);
+    }
+    // The pair spans essentially the whole canvas but covers 50 of its 384000 pixels.
+    REQUIRE(span.area() * 100 >= 800 * 480 * 90);
+    REQUIRE(covered * 100 < 800 * 480 * 90);
+    CHECK_FALSE(covers_whole_canvas(covered, 800, 480));
+    CHECK(covers_whole_canvas(covered * 8000, 800, 480));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a saver canvas keeps scattered dirty boxes as separate small areas",
+                 "[screensaver][screensaver_parts]") {
+    SaverOverlay overlay;
+    overlay.create();
+    SaverCanvas canvas;
+    REQUIRE(canvas.create(overlay.obj(), 800, 480, LV_COLOR_FORMAT_XRGB8888));
+    // Invalidations are clipped to the object's coords, which a layout pass computes.
+    lv_obj_update_layout(canvas.obj());
+    helix::test::InvalidatedAreas invalidated(lv_obj_get_display(canvas.obj()));
+
+    // The two boxes span the whole canvas between them.
+    std::vector<DirtyRect> dirty = {{0, 0, 4, 4}, {795, 475, 799, 479}};
+    canvas.invalidate(dirty);
+
+    REQUIRE(invalidated.areas.size() == 2);
+    for (const lv_area_t& a : invalidated.areas) {
+        CHECK(lv_area_get_size(&a) == 25);
+    }
+    canvas.release();
+    overlay.destroy();
 }
 
 #endif // HELIX_ENABLE_SCREENSAVER
