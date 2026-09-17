@@ -247,13 +247,20 @@ void PrinterImageWidget::refresh_printer_image() {
         lv_image_cache_drop(current_source_path_.c_str());
     }
 
+    if (current_source_path_ != source_path) {
+        current_displayed_path_.clear();
+    }
     current_source_path_ = source_path;
 
     // Set source with CONTAIN alignment — displays immediately (with runtime scaling)
     lv_obj_t* img = lv_obj_find_by_name(widget_obj_, "printer_image");
-    if (img) {
+    if (img && !try_set_exact_size_source(img)) {
+        // No exact-size copy for this size yet. The tier image costs a decode plus a
+        // CONTAIN scale on every paint and is replaced as soon as one is generated,
+        // so this path is the first display at a given size, not the steady state.
         lv_image_set_src(img, source_path.c_str());
         lv_image_set_inner_align(img, LV_IMAGE_ALIGN_CONTAIN);
+        current_displayed_path_ = source_path;
         spdlog::debug("[PrinterImageWidget] Source image: '{}'", source_path);
     }
 
@@ -311,12 +318,43 @@ void PrinterImageWidget::schedule_cache_check() {
     lv_timer_set_repeat_count(cache_timer_, 1);
 }
 
+bool PrinterImageWidget::try_set_exact_size_source(lv_obj_t* img) {
+    if (!img || current_source_path_.empty())
+        return false;
+
+    const int32_t w = lv_obj_get_width(img);
+    const int32_t h = lv_obj_get_height(img);
+    if (w <= 0 || h <= 0)
+        return false;
+
+    const std::string cache_path = helix::get_cached_printer_image_path(current_source_path_, w, h);
+
+    // error_code overload: the ESP32 VFS reports missing paths as ENODATA,
+    // which the throwing exists(p) treats as an error, not "not found".
+    std::error_code cache_ec;
+    if (!std::filesystem::exists(cache_path, cache_ec))
+        return false;
+
+    const std::string lvgl_path = "A:" + cache_path;
+    if (lvgl_path == current_displayed_path_)
+        return true; // already showing it; re-setting would invalidate for nothing
+
+    lv_image_set_src(img, lvgl_path.c_str());
+    lv_image_set_inner_align(img, LV_IMAGE_ALIGN_CENTER);
+    current_displayed_path_ = lvgl_path;
+    spdlog::debug("[PrinterImageWidget] Exact-size image: {} ({}x{})", cache_path, w, h);
+    return true;
+}
+
 void PrinterImageWidget::check_or_generate_cache() {
     if (!widget_obj_ || current_source_path_.empty())
         return;
 
     lv_obj_t* img = lv_obj_find_by_name(widget_obj_, "printer_image");
     if (!img)
+        return;
+
+    if (try_set_exact_size_source(img))
         return;
 
     int32_t w = lv_obj_get_width(img);
@@ -326,20 +364,7 @@ void PrinterImageWidget::check_or_generate_cache() {
         return;
     }
 
-    // Check if a cached .bin exists at exact widget dimensions
-    std::string cache_path = helix::get_cached_printer_image_path(current_source_path_, w, h);
-
-    // error_code overload: the ESP32 VFS reports missing paths as ENODATA,
-    // which the throwing exists(p) treats as an error, not "not found".
-    std::error_code cache_ec;
-    if (std::filesystem::exists(cache_path, cache_ec)) {
-        // Cache hit — load directly, no scaling needed
-        std::string lvgl_path = "A:" + cache_path;
-        lv_image_set_src(img, lvgl_path.c_str());
-        lv_image_set_inner_align(img, LV_IMAGE_ALIGN_CENTER);
-        spdlog::debug("[PrinterImageWidget] Cache hit: {} ({}x{})", cache_path, w, h);
-        return;
-    }
+    const std::string cache_path = helix::get_cached_printer_image_path(current_source_path_, w, h);
 
     // Cache miss — generate off the UI thread. Decoding and resizing an image is
     // half a second per entry on a two-core MIPS board, and every navigation back
@@ -398,6 +423,7 @@ void PrinterImageWidget::check_or_generate_cache() {
             std::string lvgl_path = "A:" + cache_path;
             lv_image_set_src(cached_img, lvgl_path.c_str());
             lv_image_set_inner_align(cached_img, LV_IMAGE_ALIGN_CENTER);
+            this->current_displayed_path_ = lvgl_path;
             spdlog::debug("[PrinterImageWidget] Cached and loaded: {} ({}x{})", cache_path, gen_w,
                           gen_h);
         });
