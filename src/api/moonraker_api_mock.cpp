@@ -64,6 +64,7 @@ MoonrakerAPIMock::MoonrakerAPIMock(MoonrakerClient& client, PrinterState& state)
     file_transfer_api_ =
         std::make_unique<MoonrakerFileTransferAPIMock>(client, get_http_base_url());
     file_api_ = std::make_unique<MoonrakerFileAPIMock>(client);
+    job_api_ = std::make_unique<helix::MoonrakerJobAPIMock>(client);
     rest_api_ = std::make_unique<MoonrakerRestAPIMock>(client, get_http_base_url());
     spoolman_api_ = std::make_unique<MoonrakerSpoolmanAPIMock>(client);
     timelapse_api_ = std::make_unique<MoonrakerTimelapseAPIMock>(client, get_http_base_url());
@@ -115,6 +116,10 @@ MoonrakerAdvancedAPIMock& MoonrakerAPIMock::advanced_mock() {
 
 MoonrakerFileTransferAPIMock& MoonrakerAPIMock::transfers_mock() {
     return static_cast<MoonrakerFileTransferAPIMock&>(*file_transfer_api_);
+}
+
+helix::MoonrakerJobAPIMock& MoonrakerAPIMock::job_mock() {
+    return static_cast<helix::MoonrakerJobAPIMock&>(*job_api_);
 }
 
 MoonrakerFileAPIMock& MoonrakerAPIMock::files_mock() {
@@ -521,6 +526,58 @@ void MoonrakerFileAPIMock::list_files(const std::string& root, const std::string
         on_success(listing);
 }
 
+void MoonrakerFileAPIMock::delete_file(const std::string& filename, SuccessCallback on_success,
+                                       ErrorCallback on_error) {
+    (void)on_error; // Unused - the mock always accepts a delete
+    deleted_files_.push_back(filename);
+    spdlog::debug("[MoonrakerAPIMock] Mock delete_file: {}", filename);
+    if (on_success) {
+        on_success();
+    }
+}
+
+// ============================================================================
+// MoonrakerJobAPIMock
+// ============================================================================
+
+helix::MoonrakerJobAPIMock::MoonrakerJobAPIMock(helix::IMoonrakerClient& client)
+    : MoonrakerJobAPI(client) {}
+
+void helix::MoonrakerJobAPIMock::start_print(const std::string& filename,
+                                             SuccessCallback on_success, ErrorCallback on_error) {
+    started_prints_.push_back(filename);
+    MoonrakerJobAPI::start_print(filename, std::move(on_success), std::move(on_error));
+}
+
+void helix::MoonrakerJobAPIMock::start_modified_print(const std::string& original_filename,
+                                                      const std::string& temp_file_path,
+                                                      const std::vector<std::string>& modifications,
+                                                      ModifiedPrintCallback on_success,
+                                                      ErrorCallback on_error) {
+    modified_prints_.push_back({original_filename, temp_file_path, modifications});
+
+    spdlog::info("[MoonrakerAPIMock] Mock start_modified_print: original='{}', temp='{}', "
+                 "{} modification(s)",
+                 original_filename, temp_file_path, modifications.size());
+
+    if (fail_modified_prints_) {
+        if (on_error) {
+            on_error(MoonrakerError::unknown("Mock plugin rejected: " + temp_file_path,
+                                             "start_modified_print"));
+        }
+        return;
+    }
+
+    if (on_success) {
+        ModifiedPrintResult result;
+        result.original_filename = original_filename;
+        result.print_filename = original_filename;
+        result.temp_filename = temp_file_path;
+        result.status = "printing";
+        on_success(result);
+    }
+}
+
 void MoonrakerFileTransferAPIMock::download_file(const std::string& root, const std::string& path,
                                                  StringCallback on_success,
                                                  ErrorCallback on_error) {
@@ -719,6 +776,7 @@ void MoonrakerFileTransferAPIMock::download_file_to_path(
     const std::string& root, const std::string& path, const std::string& dest_path,
     StringCallback on_success, ErrorCallback on_error, ProgressCallback on_progress) {
     (void)on_progress; // Progress callback ignored in mock
+    download_destinations_.push_back(dest_path);
     // Extract just the filename from the path
     std::string filename = path;
     size_t last_slash = path.find_last_of('/');
@@ -796,6 +854,43 @@ void MoonrakerFileTransferAPIMock::download_file_to_path(
 
     if (on_success) {
         on_success(dest_path);
+    }
+}
+
+void MoonrakerFileTransferAPIMock::upload_file_from_path(
+    const std::string& root, const std::string& dest_path, const std::string& local_path,
+    SuccessCallback on_success, ErrorCallback on_error, ProgressCallback on_progress) {
+    (void)on_progress; // Progress callback ignored in mock
+
+    // Snapshot the bytes now: the producer deletes local_path from its own
+    // success callback, so a test that reads the file afterwards finds nothing.
+    PathUploadRecord record;
+    record.root = root;
+    record.dest_path = dest_path;
+    record.local_path = local_path;
+    {
+        std::ifstream src(local_path, std::ios::binary);
+        if (src) {
+            record.content.assign(std::istreambuf_iterator<char>(src),
+                                  std::istreambuf_iterator<char>());
+        }
+    }
+    path_uploads_.push_back(record);
+
+    spdlog::info("[MoonrakerAPIMock] Mock upload_file_from_path: root='{}', dest='{}', "
+                 "local='{}', size={} bytes",
+                 root, dest_path, local_path, record.content.size());
+
+    if (fail_path_uploads_) {
+        if (on_error) {
+            on_error(MoonrakerError::unknown("Mock upload rejected: " + dest_path,
+                                             "upload_file_from_path"));
+        }
+        return;
+    }
+
+    if (on_success) {
+        on_success();
     }
 }
 

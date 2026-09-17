@@ -5,6 +5,7 @@
 
 #include "ui_busy_overlay.h"
 #include "ui_error_reporting.h"
+#include "ui_filename_utils.h"
 #include "ui_panel_print_status.h"
 #include "ui_pre_print_options_renderer.h"
 #include "ui_temperature_utils.h"
@@ -1522,7 +1523,7 @@ void PrintPreparationManager::modify_and_print_streaming(
     // Generate unique temp file paths
     auto timestamp = std::to_string(std::time(nullptr));
     std::string local_download_path = temp_dir + "/helix_download_" + timestamp + ".gcode";
-    std::string remote_temp_path = ".helix_temp/modified_" + timestamp + "_" + display_filename;
+    std::string remote_temp_path = gcode::make_rewritten_gcode_path(display_filename);
 
     spdlog::info("[PrintPreparationManager] Streaming modification: downloading to {}",
                  local_download_path);
@@ -1808,16 +1809,19 @@ void PrintPreparationManager::modify_and_print_with_remap(
 
     auto token = lifetime_.token();
 
-    std::string temp_dir = get_temp_directory();
-    if (temp_dir.empty()) {
+    // The download lands in the gcode_mod cache under the mod_ prefix, which is
+    // the only shape GCodeFileModifier::cleanup_temp_files() reaps. A crash
+    // between the download and the delete below otherwise leaves a full copy of
+    // the job on a board that has no room for one and no sweeper that sees it.
+    const std::string local_download_path =
+        gcode::GCodeFileModifier::generate_temp_path("remap_dl_" + display_filename);
+    if (local_download_path.empty()) {
         NOTIFY_ERROR(lv_tr("Cannot remap G-code: no temp directory available"));
         abandon_start("remap_no_temp_dir");
         return;
     }
 
-    auto timestamp = std::to_string(std::time(nullptr));
-    std::string local_download_path = temp_dir + "/helix_remap_dl_" + timestamp + ".gcode";
-    std::string remote_temp_path = ".helix_temp/remapped_" + timestamp + "_" + display_filename;
+    const std::string remote_temp_path = gcode::make_rewritten_gcode_path(display_filename);
 
     spdlog::info("[PrintPreparationManager] Remap modification: {} tool mapping(s), downloading {}",
                  remap.size(), file_path);
