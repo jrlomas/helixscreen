@@ -61,9 +61,11 @@ namespace printer {
  * @brief Will a write to this backend's own mapping table land, right now?
  *
  * The question every caller of the generic set_tool_mapping() apply path is
- * really asking: the route has to write a table AND be usable. The U1 answers
- * false and still honors the user's pick, through its pre-print send, which is
- * why this is not can_remap().
+ * really asking: the route has to write a table AND be usable. Native is the
+ * only route that writes one. GcodeRewrite persists its answer in the job file
+ * and the U1 sends it before PRINT_START, so both honor the user's pick with
+ * no table to write and both answer false here - which is why this is neither
+ * can_remap() nor remap_is_persistent().
  *
  * Named rather than left as `remap_is_persistent(b.get_remap_strategy()) &&
  * b.remap_ready()` at each site — three hand-written copies of one two-part
@@ -71,7 +73,8 @@ namespace printer {
  * first place.
  */
 [[nodiscard]] inline bool can_write_mapping_table(const AmsBackend& backend) {
-    return remap_is_persistent(backend.get_remap_strategy()) && backend.remap_ready();
+    return backend.get_remap_strategy() == AmsBackend::RemapStrategy::Native &&
+           backend.remap_ready();
 }
 
 } // namespace printer

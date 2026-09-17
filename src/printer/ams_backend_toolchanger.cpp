@@ -7,6 +7,7 @@
 #include "ams_fault_event.h"
 #include "ams_state.h"
 #include "ams_tool_map_sync.h"
+#include "config.h"
 #include "i_moonraker_api.h"
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
@@ -1305,8 +1306,7 @@ AmsError AmsBackendToolChanger::apply_user_edit(int slot_index, const SlotInfo& 
     if (!physical_tool_name.empty()) {
         spdlog::info("[AMS ToolChanger] Remap via slot edit: T{} -> physical {} (slot {})",
                      info.mapped_tool, physical_tool_name, slot_index);
-        return execute_gcode(
-            fmt::format("ASSIGN_TOOL TOOL={} N={}", physical_tool_name, info.mapped_tool));
+        return assign_tool(physical_tool_name, info.mapped_tool);
     }
 
     return AmsErrorHelper::success();
@@ -1350,6 +1350,30 @@ void AmsBackendToolChanger::persist_slot_weight(int slot_index, float remaining_
                                         remaining_weight_g, total_weight_g, tag);
 }
 
+AmsBackend::RemapStrategy AmsBackendToolChanger::get_remap_strategy() const {
+    if (!tool_commands_.present) {
+        return RemapStrategy::Native;
+    }
+    auto* config = Config::get_instance();
+    return (config && config->is_beta_features_enabled()) ? RemapStrategy::GcodeRewrite
+                                                          : RemapStrategy::None;
+}
+
+AmsError AmsBackendToolChanger::assign_tool(const std::string& physical_tool_name,
+                                            int tool_number) {
+    // ASSIGN_TOOL is klipper-toolchanger's. tool_commands_.present means this
+    // machine drives swaps with its own T<n> commands instead, and those name
+    // the physical tool outright - there is no tool-number indirection to
+    // rewrite. Klipper logs an unknown command and carries on, so sending it
+    // anyway reads as a successful remap and prints the firmware's own mapping.
+    if (tool_commands_.present) {
+        spdlog::warn("[AMS ToolChanger] {} has no tool-number remap; T{} -> {} not sent",
+                     tool_commands_.provider_name, tool_number, physical_tool_name);
+        return AmsErrorHelper::not_supported("Tool remapping");
+    }
+    return execute_gcode(fmt::format("ASSIGN_TOOL TOOL={} N={}", physical_tool_name, tool_number));
+}
+
 AmsError AmsBackendToolChanger::set_tool_mapping_impl(int tool_number, int slot_index) {
     // Remap G-code tool number to a different physical tool via klipper-toolchanger's
     // ASSIGN_TOOL command. This makes Klipper's T<tool_number> command activate the
@@ -1380,13 +1404,9 @@ AmsError AmsBackendToolChanger::set_tool_mapping_impl(int tool_number, int slot_
         helix::printer::assign_tool_slot(system_info_, tool_number, slot_index);
     }
 
-    // Send ASSIGN_TOOL: assign physical tool to respond to T<tool_number> commands
-    std::ostringstream cmd;
-    cmd << "ASSIGN_TOOL TOOL=" << physical_tool_name << " N=" << tool_number;
-
     spdlog::info("[AMS ToolChanger] Remapping T{} -> physical {} (slot {})", tool_number,
                  physical_tool_name, slot_index);
-    return execute_gcode(cmd.str());
+    return assign_tool(physical_tool_name, tool_number);
 }
 
 std::vector<int> AmsBackendToolChanger::get_tool_mapping() const {
@@ -1427,11 +1447,9 @@ AmsError AmsBackendToolChanger::reset_tool_mappings() {
 
     AmsError last_error = AmsErrorHelper::success();
     for (const auto& [tool_num, tool_name] : remaps_needed) {
-        std::ostringstream cmd;
-        cmd << "ASSIGN_TOOL TOOL=" << tool_name << " N=" << tool_num;
         spdlog::info("[AMS ToolChanger] Resetting T{} -> physical {} (identity)", tool_num,
                      tool_name);
-        auto err = execute_gcode(cmd.str());
+        auto err = assign_tool(tool_name, tool_num);
         if (err.result != AmsResult::SUCCESS) {
             last_error = err;
         }

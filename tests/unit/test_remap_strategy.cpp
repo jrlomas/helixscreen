@@ -273,12 +273,14 @@ TEST_CASE("can_write_mapping_table needs a table-writing route AND readiness", "
     };
     const Case cases[] = {
         {"Native and ready", RS::Native, true, true},
-        // The two rows that make this a different question from can_remap():
-        // the U1 can remap and writes no table, and a Native backend that has
-        // not discovered its firmware object yet writes nothing that lands.
+        // The rows that make this a different question from can_remap(): the
+        // U1 can remap and writes no table, a GcodeRewrite backend honors the
+        // pick by rewriting the job file and has no table either, and a Native
+        // backend that has not discovered its firmware object yet writes
+        // nothing that lands.
         {"SnapmakerNative and ready", RS::SnapmakerNative, true, false},
         {"Native, not ready", RS::Native, false, false},
-        {"GcodeRewrite and ready", RS::GcodeRewrite, true, true},
+        {"GcodeRewrite and ready", RS::GcodeRewrite, true, false},
         {"GcodeRewrite, not ready", RS::GcodeRewrite, false, false},
         {"None but ready", RS::None, true, false},
     };
@@ -289,9 +291,11 @@ TEST_CASE("can_write_mapping_table needs a table-writing route AND readiness", "
     }
 }
 
-TEST_CASE("remap_is_persistent separates the table-writing routes from the pre-send",
-          "[ams][strategy]") {
+TEST_CASE("remap_is_persistent separates the routes that outlive the send", "[ams][strategy]") {
     using RS = AmsBackend::RemapStrategy;
+    // Where this parts company with can_write_mapping_table(): GcodeRewrite's
+    // answer outlives the send because it is in the job file, but there is no
+    // table for set_tool_mapping() to write.
     // Native writes the machine's own table; GcodeRewrite writes the job file.
     CHECK(helix::printer::remap_is_persistent(RS::Native));
     CHECK(helix::printer::remap_is_persistent(RS::GcodeRewrite));
