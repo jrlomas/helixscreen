@@ -1300,3 +1300,29 @@ TEST_CASE("every heater status string fits the buffer its surfaces render from",
     std::snprintf(buf.data(), buf.size(), "%s", longest.c_str());
     CHECK(std::string(buf.data()) == longest);
 }
+
+TEST_CASE("a driving element appends its duty to the status phrase",
+          "[chamber][temperature][power]") {
+    using helix::ui::temperature::chamber_status_text;
+    using helix::ui::temperature::status_with_duty;
+
+    // A heater drawing nothing says so with its state word. Hanging "0%" off
+    // every idle heater would put a number on every row that never moves.
+    CHECK(status_with_duty("Ready", -1) == "Ready");
+    CHECK(status_with_duty("Ready", 0) == "Ready");
+    CHECK(status_with_duty("Ready", 4) == "Ready \xc2\xb7 4%");
+
+    // The chamber case that matters: climbing, so the progress word is
+    // suppressed and the duty is what is left to say.
+    CHECK(chamber_status_text(350, 600, helix::ChamberMode::Heating, 100) ==
+          "Heating \xc2\xb7 100%");
+
+    // Flat out and still short of target is the shape of a chamber that will
+    // never arrive; the same reading at a trickle is one that is holding.
+    CHECK(chamber_status_text(550, 600, helix::ChamberMode::Heating, 100) !=
+          chamber_status_text(550, 600, helix::ChamberMode::Heating, 5));
+
+    // Unknown duty leaves every phrase exactly as it was.
+    CHECK(chamber_status_text(350, 600, helix::ChamberMode::Heating, -1) ==
+          chamber_status_text(350, 600, helix::ChamberMode::Heating));
+}

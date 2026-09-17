@@ -459,6 +459,22 @@ std::string MoonrakerClientMock::chamber_filter_pin_object() const {
     return pin;
 }
 
+namespace {
+/// Duty a real heater would be running at, 0.0-1.0, as Klipper reports it: flat
+/// out while far below target, tapering in, and a trickle once holding. The
+/// mock publishes this on every heater so a power readout has something to show.
+double mock_heater_duty(double temperature, double target) {
+    if (target <= 0.0) {
+        return 0.0;
+    }
+    const double gap = target - temperature;
+    if (gap <= 0.0) {
+        return 0.05;
+    }
+    return std::clamp(gap / 10.0, 0.1, 1.0);
+}
+} // namespace
+
 void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double sim_time,
                                                         const json* requested) const {
     const auto hw = discovery_.hardware();
@@ -4345,13 +4361,21 @@ void MoonrakerClientMock::dispatch_initial_state() {
     }
 
     json initial_status = {
-        {"extruder", {{"temperature", ext_temp}, {"target", ext_target}}},
-        {"heater_bed", {{"temperature", bed_temp_val}, {"target", bed_target_val}}},
+        {"extruder",
+         {{"temperature", ext_temp},
+          {"target", ext_target},
+          {"power", mock_heater_duty(ext_temp, ext_target)}}},
+        {"heater_bed",
+         {{"temperature", bed_temp_val},
+          {"target", bed_target_val},
+          {"power", mock_heater_duty(bed_temp_val, bed_target_val)}}},
         {[this]() {
              auto key = chamber_heater_status_key();
              return key.empty() ? "heater_generic chamber" : key;
          }(),
-         {{"temperature", 42.3}, {"target", chamber_target_.load()}}},
+         {{"temperature", 42.3},
+          {"target", chamber_target_.load()},
+          {"power", mock_heater_duty(42.3, chamber_target_.load())}}},
         {"temperature_sensor chamber", {{"temperature", 42.3}}},
         {"toolhead",
          {{"position", {x, y, z, 0.0}},
@@ -5145,8 +5169,14 @@ void MoonrakerClientMock::temperature_simulation_loop() {
 
         // Build notification JSON (enhanced Moonraker format with layer info)
         json status_obj = {
-            {"extruder", {{"temperature", ext_temp}, {"target", ext_target}}},
-            {"heater_bed", {{"temperature", bed_temp_val}, {"target", bed_target_val}}},
+            {"extruder",
+             {{"temperature", ext_temp},
+              {"target", ext_target},
+              {"power", mock_heater_duty(ext_temp, ext_target)}}},
+            {"heater_bed",
+             {{"temperature", bed_temp_val},
+              {"target", bed_target_val},
+              {"power", mock_heater_duty(bed_temp_val, bed_target_val)}}},
             {"toolhead",
              {{"position", {x, y, z, 0.0}},
               {"homed_axes", homed},
@@ -5417,6 +5447,20 @@ void MoonrakerClientMock::temperature_simulation_loop() {
             double dryer_temp = 55.0 + 3.0 * std::sin(2.0 * M_PI * sim_time / 200.0);
             status_obj["htu21d dryer"] = {{"humidity", dryer_humidity},
                                           {"temperature", dryer_temp}};
+        }
+
+        // The chamber heater object itself. The chamber reading is taken from
+        // this object whenever a heater exists, so without it here the chamber
+        // freezes at whatever the first frame carried. A temperature_fan
+        // chamber is emitted by the sensor loop above with its speed, and
+        // re-emitting it as a heater would drop that.
+        if (const std::string chamber_key = chamber_heater_status_key();
+            chamber_key.rfind("heater_generic ", 0) == 0) {
+            const double chamber_now = chamber_temp_.load();
+            const double chamber_tgt = chamber_target_.load();
+            status_obj[chamber_key] = {{"temperature", chamber_now},
+                                       {"target", chamber_tgt},
+                                       {"power", mock_heater_duty(chamber_now, chamber_tgt)}};
         }
 
         // Chamber backend diagnostics + filter pin (e.g. dragonbreath trio via

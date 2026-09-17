@@ -152,7 +152,8 @@ TEST_CASE("Subscription: virtual_sdcard fields cover printer_print_state reads",
     REQUIRE(has_field(subs, "virtual_sdcard", "is_active"));
 }
 
-TEST_CASE("Subscription: heaters narrow to {temperature, target}", "[moonraker][subscription]") {
+TEST_CASE("Subscription: heaters narrow to {temperature, target, power}",
+          "[moonraker][subscription]") {
     DiscoveryFixture fx;
     fx.add("extruder", {"heater"});
     fx.add("extruder1", {"heater"});
@@ -165,8 +166,11 @@ TEST_CASE("Subscription: heaters narrow to {temperature, target}", "[moonraker][
         CAPTURE(heater);
         REQUIRE(has_field(subs, heater, "temperature"));
         REQUIRE(has_field(subs, heater, "target"));
+        // Duty distinguishes an element working flat out from one ticking over
+        // at the same temperature, which is what the power readouts render.
+        REQUIRE(has_field(subs, heater, "power"));
         // Should NOT contain extra fields — narrowing contract
-        REQUIRE(subs[heater].size() == 2);
+        REQUIRE(subs[heater].size() == 3);
     }
 }
 

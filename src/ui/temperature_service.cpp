@@ -360,18 +360,21 @@ void TemperatureService::update_status(HeaterType type) {
 
     // Use heater_display() for consistent status strings and color across all panels
     auto result = helix::ui::temperature::heater_display(h.current, h.target);
+    const int power_pct = lv_subject_get_int(printer_state_.get_heater_power_subject(type));
 
     if (h.read_only) {
+        // Nothing of ours drives this chamber, so there is no duty to report.
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", lv_tr("Monitoring"));
     } else if (type == HeaterType::Chamber) {
         // Delegate to the shared helper so the controls panel and the temp-graph
         // overlay always produce identical output (single source of truth).
         auto mode_int = lv_subject_get_int(printer_state_.get_chamber_mode_subject());
         auto status = helix::ui::temperature::chamber_status_text(
-            h.current, h.target, static_cast<helix::ChamberMode>(mode_int));
+            h.current, h.target, static_cast<helix::ChamberMode>(mode_int), power_pct);
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", status.c_str());
     } else {
-        snprintf(h.status_buf.data(), h.status_buf.size(), "%s", result.status.c_str());
+        auto status = helix::ui::temperature::status_with_duty(result.status, power_pct);
+        snprintf(h.status_buf.data(), h.status_buf.size(), "%s", status.c_str());
     }
 
     lv_subject_copy_string(&h.status_subject, h.status_buf.data());

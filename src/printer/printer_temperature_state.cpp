@@ -23,6 +23,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace helix {
 
@@ -72,6 +73,16 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
     if (register_xml) {
         helix::xml::register_subject_in_current_scope("extruder_target", &active_extruder_target_);
     }
+
+    lv_subject_init_int(&active_extruder_power_, -1);
+    subjects_.register_subject(&active_extruder_power_, register_xml ? "extruder_power" : nullptr);
+    if (register_xml) {
+        helix::xml::register_subject_in_current_scope("extruder_power", &active_extruder_power_);
+    }
+
+    // Heater duty cycle, whole percent, -1 = the heater reports none.
+    INIT_SUBJECT_INT(bed_power, -1, subjects_, register_xml);
+    INIT_SUBJECT_INT(chamber_power, -1, subjects_, register_xml);
 
     // Bed and chamber temperature subjects
     INIT_SUBJECT_INT(bed_temp, 0, subjects_, register_xml);
@@ -471,6 +482,27 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
             }
         }
     }
+
+    // Klipper reports duty as 0.0-1.0 on a heater object. Publish whole percent
+    // and leave the subject alone when the field is absent: a frame that omits
+    // it says nothing, and a temperature_fan never carries one at all.
+    auto publish_power = [&status](const std::string& object, lv_subject_t* subject) {
+        if (object.empty() || !status.contains(object)) {
+            return;
+        }
+        const auto& obj = status[object];
+        if (!obj.contains("power") || !obj["power"].is_number()) {
+            return;
+        }
+        int pct = static_cast<int>(std::lround(obj["power"].get<double>() * 100.0));
+        pct = std::clamp(pct, 0, 100);
+        if (lv_subject_get_int(subject) != pct) {
+            lv_subject_set_int(subject, pct);
+        }
+    };
+    publish_power(active_extruder_name_, &active_extruder_power_);
+    publish_power("heater_bed", &bed_power_);
+    publish_power(chamber_heater_name_, &chamber_power_);
 
     // The chamber reading comes from whichever object owns it, and the target
     // from the heater alone. Those are the same object unless a sensor has

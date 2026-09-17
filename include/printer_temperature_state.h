@@ -119,6 +119,15 @@ class PrinterTemperatureState {
     /// Get per-extruder target subject with lifetime token (use when creating observers)
     lv_subject_t* get_extruder_target_subject(const std::string& name, SubjectLifetime& lifetime);
 
+    lv_subject_t* get_extruder_power_subject() {
+        return &active_extruder_power_;
+    }
+    lv_subject_t* get_bed_power_subject() {
+        return &bed_power_;
+    }
+    lv_subject_t* get_chamber_power_subject() {
+        return &chamber_power_;
+    }
     lv_subject_t* get_bed_temp_subject() {
         return &bed_temp_;
     }
@@ -465,6 +474,12 @@ class PrinterTemperatureState {
     lv_subject_t active_extruder_target_{};
     lv_subject_t bed_temp_{};
     lv_subject_t bed_target_{};
+    // Duty cycle in whole percent, -1 until a heater reports one. Klipper sends
+    // 0.0-1.0 on a heater object; a temperature_fan reports a speed instead and
+    // never publishes power, so -1 is a lasting state, not just a startup one.
+    lv_subject_t active_extruder_power_{};
+    lv_subject_t bed_power_{};
+    lv_subject_t chamber_power_{};
     SubjectLifetime bed_temp_lifetime_;
     SubjectLifetime bed_target_lifetime_;
     // XML display subjects: chamber_effective_target + chamber_mode are THE canonical

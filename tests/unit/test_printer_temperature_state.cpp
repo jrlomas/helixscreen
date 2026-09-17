@@ -252,3 +252,75 @@ TEST_CASE("PrinterTemperatureState: extruder names are sorted before labeling",
 
     PrinterTemperatureStateTestAccess::reset(state);
 }
+
+TEST_CASE("PrinterTemperatureState: heater power publishes as whole percent",
+          "[core][temperature][power]") {
+    lv_init_safe();
+    PrinterTemperatureState state;
+    state.init_subjects(false);
+    state.set_chamber_heater_name("heater_generic chamber");
+
+    // Klipper reports duty as a 0.0-1.0 fraction on the heater object.
+    nlohmann::json status = {
+        {"extruder", {{"temperature", 210.0}, {"target", 210.0}, {"power", 0.42}}},
+        {"heater_bed", {{"temperature", 60.0}, {"target", 60.0}, {"power", 1.0}}},
+        {"heater_generic chamber", {{"temperature", 55.0}, {"target", 60.0}, {"power", 0.0}}}};
+    state.update_from_status(status);
+
+    CHECK(lv_subject_get_int(state.get_extruder_power_subject()) == 42);
+    CHECK(lv_subject_get_int(state.get_bed_power_subject()) == 100);
+    CHECK(lv_subject_get_int(state.get_chamber_power_subject()) == 0);
+
+    PrinterTemperatureStateTestAccess::reset(state);
+}
+
+TEST_CASE("PrinterTemperatureState: a heater reporting no power stays unknown",
+          "[core][temperature][power]") {
+    lv_init_safe();
+    PrinterTemperatureState state;
+    state.init_subjects(false);
+    // A temperature_fan drives the chamber by speed and never reports a duty.
+    state.set_chamber_heater_name("temperature_fan chamber_fan");
+
+    nlohmann::json status = {
+        {"extruder", {{"temperature", 25.0}, {"target", 0.0}}},
+        {"temperature_fan chamber_fan", {{"temperature", 30.0}, {"target", 40.0}, {"speed", 0.5}}}};
+    state.update_from_status(status);
+
+    // -1 is unknown, and a readout bound to it stays hidden rather than
+    // claiming the element is idle.
+    CHECK(lv_subject_get_int(state.get_chamber_power_subject()) == -1);
+    CHECK(lv_subject_get_int(state.get_extruder_power_subject()) == -1);
+
+    PrinterTemperatureStateTestAccess::reset(state);
+}
+
+TEST_CASE("PrinterTemperatureState: a frame omitting power leaves the last reading",
+          "[core][temperature][power]") {
+    lv_init_safe();
+    PrinterTemperatureState state;
+    state.init_subjects(false);
+
+    state.update_from_status({{"heater_bed", {{"temperature", 60.0}, {"power", 0.75}}}});
+    REQUIRE(lv_subject_get_int(state.get_bed_power_subject()) == 75);
+
+    // Moonraker sends deltas: a frame carrying only a temperature says nothing
+    // about duty, so the reading must survive rather than fall back to zero.
+    state.update_from_status({{"heater_bed", {{"temperature", 60.5}}}});
+    CHECK(lv_subject_get_int(state.get_bed_power_subject()) == 75);
+
+    PrinterTemperatureStateTestAccess::reset(state);
+}
+
+TEST_CASE("PrinterTemperatureState: out-of-range duty is clamped", "[core][temperature][power]") {
+    lv_init_safe();
+    PrinterTemperatureState state;
+    state.init_subjects(false);
+
+    state.update_from_status({{"heater_bed", {{"power", 1.4}}}});
+    CHECK(lv_subject_get_int(state.get_bed_power_subject()) == 100);
+    state.update_from_status({{"heater_bed", {{"power", -0.2}}}});
+    CHECK(lv_subject_get_int(state.get_bed_power_subject()) == 0);
+
+    PrinterTemperatureStateTestAccess::reset(state);
+}
