@@ -84,17 +84,6 @@ class Application {
      */
     int run(int argc, char** argv);
 
-    /// The oldest Moonraker whose History API carries save_job() and a
-    /// list-shaped auxiliary_data. Below this the HelixPrint plugin still
-    /// attributes symlinked prints and cleans up its temp files, but a job the
-    /// filament remapper rewrote keeps the rewritten name in print history.
-    static constexpr const char* MIN_MOONRAKER_VERSION = "0.9.0";
-
-    /// True only for a version string we could both read AND place below
-    /// MIN_MOONRAKER_VERSION. An absent or unparseable version is not evidence
-    /// of an old Moonraker, so it answers false.
-    static bool moonraker_version_too_old(const std::string& version);
-
   private:
     /// Allow test-only accessor to reach protected/private members
     friend class ApplicationTestAccess;
@@ -159,10 +148,6 @@ class Application {
     // Shows the one-time actionable mismatch modal; guarded to once per session
     // and once per saved type (TYPE_MISMATCH_SHOWN_FOR). Main thread only.
     void maybe_warn_type_mismatch(const helix::PrinterDiscovery& hardware);
-    // Warn once when this printer's Moonraker predates MIN_MOONRAKER_VERSION.
-    // Guarded to one prompt per session and permanently dismissible per printer
-    // (MOONRAKER_VERSION_WARNING_DISMISSED). Main thread only — shows a modal.
-    void maybe_warn_moonraker_version(const helix::PrinterDiscovery& hardware);
     // Run the accepted re-identify as a targeted wizard session (PrinterIdentify
     // step ONLY — never a full wizard run), fired by a one-shot timer so the
     // wizard is built after the modal's exit animation rather than underneath it.
@@ -295,9 +280,6 @@ class Application {
     // TYPE_MISMATCH_SHOWN_FOR flag covers cross-boot; intentionally NOT reset on
     // reconnect.
     bool m_type_mismatch_shown = false;
-    // Guards the too-old-Moonraker warning to one prompt per session. The
-    // persisted MOONRAKER_VERSION_WARNING_DISMISSED flag covers cross-boot.
-    bool m_moonraker_version_warned = false;
     // Steps the deferred hardware-setup offer will run if accepted. Held here
     // for launch_deferred_hardware_setup()'s timer to consume from the
     // instance when the user accepts.

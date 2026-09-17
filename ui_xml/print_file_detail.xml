@@ -252,6 +252,12 @@
                  flex_flow="column">
           <bind_flag_if_eq subject="filament_mapping_visible" flag="hidden" ref_value="0"/>
           <bind_flag_if_eq subject="color_card_remappable" flag="clickable" ref_value="1"/>
+          <!-- Greyed ONLY when a remap this printer could do is refused for a
+               reason the user can clear. A backend with no route, a one-tool job
+               and an in-flight plugin probe all just leave the chevron dark: the
+               chips are still worth reading and there is nothing to act on.
+               ui_card themes LV_STATE_DISABLED at LV_OPA_50 globally. -->
+          <bind_state_if_eq subject="color_card_remap_needs_setup" state="disabled" ref_value="1"/>
           <lv_obj width="100%"
                   height="content" style_pad_all="0" style_pad_gap="#space_xs" flex_flow="row"
                   style_flex_cross_place="center" scrollable="false" clickable="false" event_bubble="true">
@@ -283,6 +289,15 @@
             <icon name="color_card_remap_chevron"
                   src="chevron_right" size="sm" variant="secondary" clickable="false" event_bubble="true">
               <bind_flag_if_eq subject="color_card_remappable" flag="hidden" ref_value="0"/>
+            </icon>
+            <!-- Takes the chevron's place when a remap is unavailable or will
+                 cost something. Its own clickable object, never a bubbling chip:
+                 the card greys itself with LV_STATE_DISABLED and LVGL delivers
+                 no pointer events to a disabled object, so an icon relying on
+                 the card's handler would be dead exactly when it is needed. -->
+            <icon name="color_card_remap_help" src="help_circle" size="sm" variant="secondary" clickable="true">
+              <bind_flag_if_eq subject="color_card_remap_help_visible" flag="hidden" ref_value="0"/>
+              <event_cb trigger="clicked" callback="on_color_card_remap_help"/>
             </icon>
           </lv_obj>
           <!-- height is FIXED, not "content": the filament_swatch chips inside are

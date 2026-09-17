@@ -1011,6 +1011,10 @@ bool PrinterState::service_has_helix_plugin() const {
     return plugin_status_state_.service_has_helix_plugin();
 }
 
+int PrinterState::helix_plugin_state() const {
+    return plugin_status_state_.helix_plugin_state();
+}
+
 void PrinterState::set_helix_macros_restart_pending(bool pending) {
     // Main thread only; the install flow reaches this from deferred callbacks
     plugin_status_state_.set_helix_macros_restart_pending(pending);

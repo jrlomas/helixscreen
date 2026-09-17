@@ -1097,6 +1097,7 @@
   <translation tag="Filament ran out. Auto-refill is off, so the CFS will not switch spools on its own. Load filament, then resume." ru="Филамент закончился. Автопополнение выключено, поэтому CFS не сменит катушку сам. Загрузите филамент и продолжите печать."/>
   <translation tag="Filament ran out. The CFS knows which spools match, but those slots are empty. Load one of them, then resume." ru="Филамент закончился. CFS знает, какие катушки подходят, но эти слоты пусты. Загрузите одну из них, затем продолжите печать."/>
   <translation tag="Filament reload failed" ru="Не удалось повторно подать филамент"/>
+  <translation tag="Filament remapping is unavailable"/>
   <translation tag="Filament runout" ru="Окончание филамента"/>
   <translation tag="Filament runout and motion detection sensors" ru="Датчики окончания и движения филамента"/>
   <translation tag="Filament saved" ru="Филамент сохранён"/>
@@ -1335,7 +1336,6 @@
   <translation tag="Install Update" ru="Установить обновление"/>
   <translation tag="Install plugin" ru="Установить плагин"/>
   <translation tag="Install script not found. Use the remote install command instead." ru="Скрипт установки не найден. Используйте вместо этого команду удалённой установки."/>
-  <translation tag="Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history." ru="Установите плагин HelixPrint в расширенных настройках, чтобы переназначать филамент без влияния на историю печати."/>
   <translation tag="Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:" ru="Установите плагин HelixPrint для быстрой модификации G-code. Выполните эту команду через SSH на вашем принтере:"/>
   <translation tag="Install the timelapse plugin via SSH,&#10;then tap &quot;Check Again&quot;." ru="Установите плагин таймлапс через SSH,&#10;затем нажмите &quot;Проверить снова&quot;."/>
   <translation tag="Install timelapse plugin" ru="Установить плагин таймлапса"/>
@@ -1606,7 +1606,6 @@
   <translation tag="Monitoring" ru="Мониторинг"/>
   <translation tag="Month" ru="Месяц"/>
   <translation tag="Moonraker" ru="Moonraker"/>
-  <translation tag="Moonraker is out of date"/>
   <translation tag="Moonraker restarted but Spoolman not connected. Check server." ru="Moonraker перезапущен, но Spoolman не подключен. Проверьте сервер."/>
   <translation tag="Moonraker restarting...&#10;Waiting for reconnection..." ru="Moonraker перезапускается...&#10;Ожидание переподключения..."/>
   <translation tag="Moonraker: " ru="Moonraker: "/>
@@ -1998,6 +1997,7 @@
   <translation tag="Print ending..." ru="Завершение печати..."/>
   <translation tag="Print error" ru="Ошибка печати"/>
   <translation tag="Print failed" ru="Печать не удалась"/>
+  <translation tag="Print history will show the rewritten name"/>
   <translation tag="Print issue detected" ru="Обнаружена проблема печати"/>
   <translation tag="Print jobs waiting to run" ru="Задания печати в очереди"/>
   <translation tag="Print preparation failed: {}" ru="Ошибка подготовки печати: {}"/>
@@ -2175,7 +2175,8 @@
   <translation tag="Remaining (g)" ru="Осталось (г)"/>
   <translation tag="Remaining Weight (g)" ru="Оставшийся вес (г)"/>
   <translation tag="Remap Tool" ru="Переназначить инструмент"/>
-  <translation tag="Remap needs the HelixPrint plugin" ru="Для переназначения нужен плагин HelixPrint"/>
+  <translation tag="Remapping rewrites the job file before printing it. This printer&apos;s Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally."/>
+  <translation tag="Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.&#10;&#10;Installing the plugin takes a moment and needs no restart."/>
   <translation tag="Remap…" ru="Переназначить…"/>
   <translation tag="Remember slot spool details across an eject" ru="Запоминать данные катушки слота после извлечения"/>
   <translation tag="Remove" ru="Удалить"/>
@@ -2761,7 +2762,6 @@
   <translation tag="This plugin lets HelixScreen control print start options like bed mesh and QGL. Once installed, use Configure PRINT_START below to enable optional steps." ru="Этот плагин позволяет HelixScreen управлять опциями начала печати, такими как сетка стола и QGL. После установки используйте «Настроить PRINT_START» ниже для включения опциональных шагов."/>
   <translation tag="This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?" ru="Для этой печати нужно около %.0fг, но на катушке осталось около %.0fг. Всё равно начать?"/>
   <translation tag="This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets." ru="Этот принтер похож на {} (уверенность {}%), но настроен как {}. Неверный тип применяет неправильные параметры перед печатью и пресеты."/>
-  <translation tag="This printer runs Moonraker {}. HelixScreen needs {} or newer to put the original filename back in your print history after a filament remap rewrites the job. Everything else works normally."/>
   <translation tag="This removes the plugin&apos;s Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that." ru="Это удаляет компонент Moonraker плагина и перезапускает Moonraker. Принтер ненадолго отключится. Если в PRINT_START всё ещё остались старые строки отслеживания фаз, они также удаляются, при этом резервные копии сохраняются. Перезапуск Klipper применяет эти изменения."/>
   <translation tag="This replaces the printer&apos;s helper macros with the current version and restarts Klipper." ru="Это заменит вспомогательные макросы принтера текущей версией и перезапустит Klipper."/>
   <translation tag="This replaces the printer&apos;s helper macros with the current version. A print is running, so Klipper restarts after it finishes." ru="Это заменит вспомогательные макросы принтера текущей версией. Идёт печать, поэтому Klipper перезапустится после её завершения."/>
