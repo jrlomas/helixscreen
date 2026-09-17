@@ -430,3 +430,61 @@ TEST_CASE_METHOD(LVGLTestFixture, "ctl: several candidates are reported, not gue
     REQUIRE(ambiguous[0] == a);
     REQUIRE(ambiguous[1] == b);
 }
+
+// --- reachability -------------------------------------------------------
+//
+// lv_obj_send_event(o, LV_EVENT_CLICKED) reaches any object at all, so a
+// synthetic click reports success on widgets no finger could activate. That is
+// not a theoretical gap: it produced a green "tap opens the install modal"
+// against a card carrying LV_STATE_DISABLED, which on a real panel did nothing.
+
+TEST_CASE_METHOD(LVGLTestFixture, "ctl click: a reachable widget has no blocker", "[remote][ctl]") {
+    lv_obj_t* btn = lv_button_create(lv_screen_active());
+    CHECK(helix::click_blocker(btn) == nullptr);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "ctl click: every reason a tap would miss", "[remote][ctl]") {
+    SECTION("null is reported, not dereferenced") {
+        CHECK(std::string(helix::click_blocker(nullptr)) == "not found");
+    }
+
+    SECTION("a plain object is not a click target") {
+        lv_obj_t* obj = lv_obj_create(lv_screen_active());
+        lv_obj_remove_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+        CHECK(std::string(helix::click_blocker(obj)) == "not clickable");
+    }
+
+    SECTION("disabled is what LVGL's indev refuses") {
+        lv_obj_t* btn = lv_button_create(lv_screen_active());
+        lv_obj_add_state(btn, LV_STATE_DISABLED);
+        CHECK(std::string(helix::click_blocker(btn)) == "disabled");
+    }
+
+    SECTION("hidden is inherited from any ancestor") {
+        // The child is visible and clickable in its own right; nothing is drawn
+        // or hit-tested inside a hidden parent regardless.
+        lv_obj_t* parent = lv_obj_create(lv_screen_active());
+        lv_obj_t* btn = lv_button_create(parent);
+        CHECK(helix::click_blocker(btn) == nullptr);
+        lv_obj_add_flag(parent, LV_OBJ_FLAG_HIDDEN);
+        CHECK(std::string(helix::click_blocker(btn)) == "hidden");
+    }
+
+    SECTION("a disabled parent does not block an enabled child") {
+        // lv_indev.c checks the state of the hit object only, so this must not
+        // read as blocked - it is how a help affordance stays live on a card
+        // that is itself greyed out.
+        lv_obj_t* parent = lv_obj_create(lv_screen_active());
+        lv_obj_add_state(parent, LV_STATE_DISABLED);
+        lv_obj_t* btn = lv_button_create(parent);
+        CHECK(helix::click_blocker(btn) == nullptr);
+    }
+
+    SECTION("hidden outranks the other two, matching the order a finger hits them") {
+        lv_obj_t* obj = lv_obj_create(lv_screen_active());
+        lv_obj_remove_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_state(obj, LV_STATE_DISABLED);
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+        CHECK(std::string(helix::click_blocker(obj)) == "hidden");
+    }
+}
