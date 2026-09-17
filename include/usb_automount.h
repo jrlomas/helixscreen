@@ -50,6 +50,20 @@ std::vector<MountAttempt> automount_ladder();
 std::string automount_mount_point(const std::string& device_node);
 
 /**
+ * @brief What the system probe observed about primary USB mounters
+ *
+ * The mount grace period exists only to lose the race against a primary
+ * mounter (udisks2, udev, an mdev hotplug helper, a vendor app). On a system
+ * where the probe positively observes that none is registered, waiting is
+ * dead time before the first mount; any less-certain answer keeps the grace.
+ */
+enum class MounterPresence {
+    PRESENT, ///< udev daemon or a kernel hotplug helper is registered
+    ABSENT,  ///< both signals positively observed absent
+    UNKNOWN, ///< probe could not observe the system; behave as PRESENT
+};
+
+/**
  * @brief Syscall surface of UsbAutomount, injectable for tests
  */
 class MountOps {
@@ -83,7 +97,8 @@ class MountOps {
  * @brief Fallback mounter for boards where nothing else mounts USB sticks
  *
  * Runs on the USB backend's monitor thread. After a grace period (so a
- * primary mounter - udisks2, a vendor app - wins the race) it mounts
+ * primary mounter - udisks2, a vendor app - wins the race; skipped only when
+ * the boot-time probe says none can exist) it mounts
  * otherwise-unmounted removable devices read-only, letting the backend's
  * existing mount-table detection pick the drive up. It never mounts a device
  * the mount table already lists, and never unmounts a mount it did not
@@ -104,9 +119,12 @@ class UsbAutomount {
      */
     static std::unique_ptr<UsbAutomount> create();
 
-    /// Injection form for tests: decisions against a fake syscall surface
+    /// Injection form for tests: decisions against a fake syscall surface.
+    /// primary_mounter is the (injected or probed) capability answer that
+    /// decides whether the grace period applies at all.
     explicit UsbAutomount(std::unique_ptr<MountOps> ops,
-                          std::chrono::milliseconds grace_period = kDefaultGrace);
+                          std::chrono::milliseconds grace_period = kDefaultGrace,
+                          MounterPresence primary_mounter = MounterPresence::UNKNOWN);
 
     bool armed() const {
         return armed_;

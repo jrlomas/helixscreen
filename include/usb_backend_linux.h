@@ -23,7 +23,6 @@
  *   read to EOF and rewound)
  * - Parsing /proc/mounts to detect USB drives (looking for /dev/sd* on /media
  *   or /mnt)
- * - statvfs() for capacity information
  *
  * Design notes:
  * - /proc/mounts changes whenever any filesystem is mounted/unmounted
@@ -105,11 +104,6 @@ class UsbBackendLinux : public UsbBackend {
      * @brief Get volume label for a device
      */
     std::string get_volume_label(const std::string& device, const std::string& mount_point);
-
-    /**
-     * @brief Get capacity info for a mount point
-     */
-    void get_capacity(const std::string& mount_point, uint64_t& total, uint64_t& available);
 
     /**
      * @brief Background thread function - monitors the mount table

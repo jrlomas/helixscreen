@@ -96,6 +96,49 @@ bool is_directory(const std::string& path) {
     return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+/// /proc/sys/kernel/hotplug prints an unregistered helper as an empty line.
+bool hotplug_helper_registered(const std::string& line) {
+    std::string trimmed = line;
+    trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(),
+                                 [](unsigned char c) { return std::isspace(c) != 0; }),
+                  trimmed.end());
+    return !trimmed.empty() && trimmed != "(none)";
+}
+
+/// Ask the system whether anything else mounts USB sticks. Two filesystem
+/// traces cover the primary mounters a Linux board ships with: udev's control
+/// socket (created by the daemon itself at startup; udisks2 and the desktop
+/// automounters all sit on top of udev) and the kernel hotplug helper (how
+/// mdev and vendor hotplug scripts are registered). ABSENT requires both
+/// signals positively observed; anything unreadable reads UNKNOWN and keeps
+/// the grace, since fighting another mounter is what the grace prevents.
+MounterPresence probe_primary_mounter() {
+    struct stat st {};
+    const bool udev_running = (::stat("/run/udev/control", &st) == 0);
+
+    std::string helper_line;
+    bool hotplug_readable = false;
+    if (std::ifstream f("/proc/sys/kernel/hotplug"); f.is_open()) {
+        std::getline(f, helper_line);
+        hotplug_readable = true;
+    }
+    const bool helper = hotplug_helper_registered(helper_line);
+
+    if (udev_running || helper) {
+        spdlog::debug("[UsbAutomount] Primary mounter present (udev daemon: {}, hotplug helper: "
+                      "{}) - keeping mount grace",
+                      udev_running, helper);
+        return MounterPresence::PRESENT;
+    }
+    if (hotplug_readable) {
+        spdlog::debug("[UsbAutomount] No primary mounter (no udev control socket, no hotplug "
+                      "helper) - skipping mount grace");
+        return MounterPresence::ABSENT;
+    }
+    spdlog::debug("[UsbAutomount] Primary mounter status unobservable - keeping mount grace");
+    return MounterPresence::UNKNOWN;
+}
+
 class SystemMountOps final : public MountOps {
   public:
     bool is_root() override {
@@ -244,11 +287,21 @@ std::unique_ptr<UsbAutomount> UsbAutomount::create() {
         spdlog::debug("[UsbAutomount] Not running as root - fallback mounting off");
         return nullptr;
     }
-    return std::make_unique<UsbAutomount>(std::move(ops));
+    // Probed once here, never per poll pass: the answer is a boot-time
+    // property of the system, and the ctor bakes it into the grace period.
+    return std::make_unique<UsbAutomount>(std::move(ops), kDefaultGrace, probe_primary_mounter());
 }
 
-UsbAutomount::UsbAutomount(std::unique_ptr<MountOps> ops, std::chrono::milliseconds grace_period)
-    : ops_(std::move(ops)), grace_(grace_period), armed_(ops_ != nullptr && ops_->is_root()) {}
+UsbAutomount::UsbAutomount(std::unique_ptr<MountOps> ops, std::chrono::milliseconds grace_period,
+                           MounterPresence primary_mounter)
+    : ops_(std::move(ops)), grace_(grace_period), armed_(ops_ != nullptr && ops_->is_root()) {
+    // The grace exists to lose the race against a primary mounter; with none
+    // on the system it is dead time before the first mount. Only a positive
+    // "absent" collapses it - every less-certain answer waits it out.
+    if (primary_mounter == MounterPresence::ABSENT) {
+        grace_ = std::chrono::milliseconds::zero();
+    }
+}
 
 void UsbAutomount::poll(std::chrono::steady_clock::time_point now) {
     if (!armed_) {
