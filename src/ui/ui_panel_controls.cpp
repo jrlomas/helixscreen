@@ -768,7 +768,10 @@ void ControlsPanel::update_nozzle_temp_display() {
 
     lv_subject_set_int(&nozzle_pct_subject_, result.pct);
 
-    std::snprintf(nozzle_status_buf_, sizeof(nozzle_status_buf_), "%s", result.status.c_str());
+    auto nozzle_status = helix::ui::temperature::status_with_duty(
+        result.status,
+        lv_subject_get_int(printer_state_.get_heater_power_subject(helix::HeaterType::Nozzle)));
+    std::snprintf(nozzle_status_buf_, sizeof(nozzle_status_buf_), "%s", nozzle_status.c_str());
     lv_subject_copy_string(&nozzle_status_subject_, nozzle_status_buf_);
 }
 
@@ -780,7 +783,10 @@ void ControlsPanel::update_bed_temp_display() {
 
     lv_subject_set_int(&bed_pct_subject_, result.pct);
 
-    std::snprintf(bed_status_buf_, sizeof(bed_status_buf_), "%s", result.status.c_str());
+    auto bed_status = helix::ui::temperature::status_with_duty(
+        result.status,
+        lv_subject_get_int(printer_state_.get_heater_power_subject(helix::HeaterType::Bed)));
+    std::snprintf(bed_status_buf_, sizeof(bed_status_buf_), "%s", bed_status.c_str());
     lv_subject_copy_string(&bed_status_subject_, bed_status_buf_);
 }
 
@@ -791,7 +797,8 @@ void ControlsPanel::update_chamber_temp_display() {
     // "Cooling") is appended only when it adds information.
     auto status = helix::ui::temperature::chamber_status_text(
         cached_chamber_temp_, cached_chamber_effective_target_,
-        static_cast<helix::ChamberMode>(cached_chamber_mode_));
+        static_cast<helix::ChamberMode>(cached_chamber_mode_),
+        lv_subject_get_int(printer_state_.get_heater_power_subject(helix::HeaterType::Chamber)));
     std::snprintf(chamber_status_buf_, sizeof(chamber_status_buf_), "%s", status.c_str());
     lv_subject_copy_string(&chamber_status_subject_, chamber_status_buf_);
 }

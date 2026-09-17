@@ -7,6 +7,7 @@
 #include "ui_heater_icon_binder.h"
 #include "ui_observer_guard.h"
 #include "ui_temp_graph.h"
+#include "ui_temperature_utils.h" // HEATER_STATUS_BUF_BYTES
 
 #include "async_lifetime_guard.h"
 #include "lvgl/lvgl.h"
@@ -64,7 +65,7 @@ struct HeaterState {
 
     // Subject string buffers
     std::array<char, 32> display_buf{};
-    std::array<char, 64> status_buf{};
+    std::array<char, helix::ui::temperature::HEATER_STATUS_BUF_BYTES> status_buf{};
 
     // Panel widget (the overlay lv_obj)
     lv_obj_t* panel = nullptr;

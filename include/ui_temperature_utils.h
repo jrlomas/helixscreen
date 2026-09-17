@@ -299,6 +299,17 @@ constexpr int DEFAULT_AT_TEMP_TOLERANCE = 2;
 constexpr int DEFAULT_AT_TEMP_TOLERANCE_DECI = DEFAULT_AT_TEMP_TOLERANCE * 10;
 
 /**
+ * @brief Bytes a rendered heater status string needs, including its terminator.
+ *
+ * `chamber_status_text()` joins a mode word to a progress word, and both are
+ * translated, so the longest composition is several times the longest English
+ * word. Every surface that snprintf's a status into a fixed buffer sizes it
+ * from here: a surface with a smaller buffer renders the same heater cut short
+ * while another renders it whole, and the two then disagree on screen.
+ */
+constexpr std::size_t HEATER_STATUS_BUF_BYTES = 64;
+
+/**
  * @brief Thermal state of a heater, shared by every consumer of the 4-state logic.
  *
  * One classifier feeds three renderers: the temp-label color
@@ -544,7 +555,19 @@ inline const char* build_heater_off_gcode(const std::string& heater_full_name, c
  * @param mode           ChamberMode enum value (Off / Heating / Maintaining)
  * @return Localised status string, e.g. "Maintaining", "Heating", "Maintaining · Cooling"
  */
-std::string chamber_status_text(int current_deci, int target_deci, helix::ChamberMode mode);
+std::string chamber_status_text(int current_deci, int target_deci, helix::ChamberMode mode,
+                                int power_pct = -1);
+
+/**
+ * @brief Append a heater's duty to its status phrase while the element drives.
+ *
+ * A temperature alone cannot say whether an element is holding with a trickle
+ * or pinned flat out and still losing ground, which is the difference between
+ * a chamber that will reach its target and one that never will. A heater
+ * drawing nothing says so with its state word, so an unknown duty and a zero
+ * one both render unchanged rather than hanging "0%" off every idle heater.
+ */
+std::string status_with_duty(const std::string& status, int power_pct);
 
 } // namespace temperature
 } // namespace ui

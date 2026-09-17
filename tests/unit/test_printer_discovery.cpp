@@ -1103,12 +1103,14 @@ TEST_CASE("PrinterDiscovery detects chamber heater and sensor", "[printer_discov
         REQUIRE(hw.supports_chamber());
     }
 
-    SECTION("Both chamber heater and sensor") {
+    SECTION("A chamber heater takes the chamber from a chamber-named probe") {
         json objects = {"heater_generic chamber", "temperature_sensor chamber_temp"};
         hw.parse_objects(objects);
 
         REQUIRE(hw.has_chamber_heater());
-        REQUIRE(hw.has_chamber_sensor());
+        REQUIRE(hw.supports_chamber());
+        // The heater measures its own chamber, so the probe keeps its own role.
+        REQUIRE_FALSE(hw.has_chamber_sensor());
     }
 
     SECTION("Cavity sensor is treated as chamber (Snapmaker U1)") {
@@ -1135,32 +1137,38 @@ TEST_CASE("PrinterDiscovery detects chamber heater and sensor", "[printer_discov
         REQUIRE(hw.has_chamber_heater());
     }
 
-    SECTION("Chamber temperature_fan is the sensor pick when no chamber temperature_sensor "
-            "exists") {
+    SECTION("A chamber temperature_fan drives the chamber and supplies its reading") {
         json objects = {"temperature_fan chamber_exhaust_fans", "temperature_sensor mcu_temp"};
         hw.parse_objects(objects);
 
-        REQUIRE(hw.has_chamber_sensor());
-        REQUIRE(hw.chamber_sensor_name() == "temperature_fan chamber_exhaust_fans");
+        REQUIRE(hw.has_chamber_heater());
+        REQUIRE(hw.chamber_heater_name() == "temperature_fan chamber_exhaust_fans");
+        REQUIRE(hw.supports_chamber());
+        REQUIRE_FALSE(hw.has_chamber_sensor());
     }
 
-    SECTION("Equal chamber keyword prefers the passive temperature_sensor over the fan") {
-        // Both orders: the pick must not depend on Moonraker's iteration order.
+    SECTION("A chamber fan beside a chamber probe takes the chamber in either order") {
+        // The fan drives air temperature, so it reaches the chamber through the
+        // heater slot and the probe keeps its own role. The outcome must not
+        // depend on Moonraker's iteration order.
         json fan_first = {"temperature_fan chamber", "temperature_sensor chamber"};
         hw.parse_objects(fan_first);
-        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor chamber");
+        REQUIRE(hw.chamber_heater_name() == "temperature_fan chamber");
+        REQUIRE_FALSE(hw.has_chamber_sensor());
 
         PrinterDiscovery hw2;
         json fan_last = {"temperature_sensor chamber", "temperature_fan chamber"};
         hw2.parse_objects(fan_last);
-        REQUIRE(hw2.chamber_sensor_name() == "temperature_sensor chamber");
+        REQUIRE(hw2.chamber_heater_name() == "temperature_fan chamber");
+        REQUIRE_FALSE(hw2.has_chamber_sensor());
     }
 
-    SECTION("Stronger fan keyword beats weaker sensor keyword for the sensor pick") {
+    SECTION("Stronger fan keyword beats weaker sensor keyword for the chamber") {
         json objects = {"temperature_fan chamber", "temperature_sensor enclosure"};
         hw.parse_objects(objects);
 
-        REQUIRE(hw.chamber_sensor_name() == "temperature_fan chamber");
+        REQUIRE(hw.chamber_heater_name() == "temperature_fan chamber");
+        REQUIRE_FALSE(hw.has_chamber_sensor());
     }
 
     SECTION("Box sensor is treated as chamber (Elegoo COSMOS)") {
@@ -1200,8 +1208,8 @@ TEST_CASE("PrinterDiscovery detects chamber heater and sensor", "[printer_discov
         PrinterDiscovery hw2;
         hw2.parse_objects(objects);
 
-        REQUIRE(hw2.has_chamber_sensor());
         REQUIRE(hw2.has_chamber_heater());
+        REQUIRE(hw2.supports_chamber());
     }
 }
 
@@ -1231,7 +1239,7 @@ TEST_CASE("PrinterDiscovery chamber-keyword scoring prefers 'chamber' over 'box'
 
         REQUIRE(hw.chamber_heater_name() == "heater_generic chamber");
         REQUIRE(hw.chamber_heater_object_name() == "chamber");
-        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor Chamber_Thermal_Protection_Sensor");
+        REQUIRE(hw.chamber_sensor_name().empty());
     }
 
     SECTION("QIDI Q2: chamber heater still wins when box1_* objects come LAST") {
@@ -1249,7 +1257,7 @@ TEST_CASE("PrinterDiscovery chamber-keyword scoring prefers 'chamber' over 'box'
 
         REQUIRE(hw.chamber_heater_name() == "heater_generic chamber");
         REQUIRE(hw.chamber_heater_object_name() == "chamber");
-        REQUIRE(hw.chamber_sensor_name() == "temperature_sensor Chamber_Thermal_Protection_Sensor");
+        REQUIRE(hw.chamber_sensor_name().empty());
     }
 
     SECTION("box1_* alone (no chamber) does NOT register as chamber") {
@@ -1470,7 +1478,7 @@ TEST_CASE("PrinterDiscovery handles full Voron 2.4 config", "[printer_discovery]
     REQUIRE(hw.has_probe());
     REQUIRE(hw.has_heater_bed());
     REQUIRE(hw.has_chamber_heater());
-    REQUIRE(hw.has_chamber_sensor());
+    REQUIRE(hw.supports_chamber());
     REQUIRE(hw.has_led());
 
     // Macros

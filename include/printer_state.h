@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "ui_heater_config.h" // helix::HeaterType
+
 #include "app_macro_activity.h"
 #include "app_motion_activity.h"
 #include "async_lifetime_guard.h"
@@ -274,6 +276,31 @@ class PrinterState {
     }
     lv_subject_t* get_active_extruder_target_subject() {
         return temperature_state_.get_active_extruder_target_subject();
+    }
+
+    /// Duty for one heater, so every surface renders the same number rather
+    /// than each mapping heater type to subject on its own.
+    lv_subject_t* get_heater_power_subject(helix::HeaterType type) {
+        switch (type) {
+        case helix::HeaterType::Bed:
+            return get_bed_power_subject();
+        case helix::HeaterType::Chamber:
+            return get_chamber_power_subject();
+        case helix::HeaterType::Nozzle:
+        default:
+            return get_extruder_power_subject();
+        }
+    }
+
+    // Heater duty cycle, whole percent, -1 until a heater reports one.
+    lv_subject_t* get_extruder_power_subject() {
+        return temperature_state_.get_extruder_power_subject();
+    }
+    lv_subject_t* get_bed_power_subject() {
+        return temperature_state_.get_bed_power_subject();
+    }
+    lv_subject_t* get_chamber_power_subject() {
+        return temperature_state_.get_chamber_power_subject();
     }
 
     // Multi-extruder discovery

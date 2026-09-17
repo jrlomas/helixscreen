@@ -1519,7 +1519,7 @@ TEST_CASE("PrinterState::set_hardware propagates auto-detected chamber sensor na
     REQUIRE(state.temperature_state().chamber_heater_name().empty());
 }
 
-TEST_CASE("PrinterState::set_hardware prefers heater over sensor when both exist",
+TEST_CASE("PrinterState::set_hardware gives the chamber to its heater",
           "[state][hardware][chamber]") {
     lv_init_safe();
     PrinterState& state = get_printer_state();
@@ -1538,8 +1538,8 @@ TEST_CASE("PrinterState::set_hardware prefers heater over sensor when both exist
 
     state.set_hardware(std::move(hw));
 
-    REQUIRE(state.temperature_state().chamber_sensor_name() == "temperature_sensor chamber");
     REQUIRE(state.temperature_state().chamber_heater_name() == "heater_generic chamber");
+    REQUIRE(state.temperature_state().chamber_sensor_name().empty());
 }
 
 TEST_CASE("PrinterState::set_hardware respects 'none' override for chamber",
@@ -1703,10 +1703,10 @@ TEST_CASE(
             discovered_objects({"temperature_fan chamber_fan", "temperature_sensor chamber_temp",
                                 "extruder", "heater_bed"}));
 
-        // The chamber did resolve: the sensor this printer does have is live.
-        REQUIRE(state.temperature_state().chamber_sensor_name() ==
-                "temperature_sensor chamber_temp");
+        // The chamber did resolve: the fan this printer does have drives it,
+        // and supplies the reading, so no probe holds the sensor role.
         CHECK(state.temperature_state().chamber_heater_name() == "temperature_fan chamber_fan");
+        CHECK(state.temperature_state().chamber_sensor_name().empty());
         CHECK(has_chamber_heater(state) == 1);
     }
     SECTION("neither a heater nor a chamber fan leaves no chamber heater") {
@@ -1913,8 +1913,8 @@ TEST_CASE("PrinterState::set_hardware: a stale chamber sensor name leaves the re
     CHECK(role_of(sensors, "temperature_sensor chamber") == TemperatureSensorRole::CHAMBER);
 }
 
-TEST_CASE("PrinterState::set_hardware: a stale chamber sensor override falls back to the "
-          "chamber temperature_fan discovery picked",
+TEST_CASE("PrinterState::set_hardware: a stale chamber sensor override leaves the chamber "
+          "to its heater",
           "[state][hardware][chamber]") {
     using helix::sensors::TemperatureSensorManager;
     using helix::sensors::TemperatureSensorRole;
@@ -1937,15 +1937,15 @@ TEST_CASE("PrinterState::set_hardware: a stale chamber sensor override falls bac
 
     state.set_hardware(std::move(hw));
 
-    CHECK(state.temperature_state().chamber_sensor_name() ==
-          "temperature_fan chamber_exhaust_fans");
-    CHECK(has_chamber_sensor(state) == 1);
-    CHECK(role_of(sensors, "temperature_fan chamber_exhaust_fans") ==
+    CHECK(state.temperature_state().chamber_sensor_name().empty());
+    CHECK(has_chamber_sensor(state) == 0);
+    // Released from the chamber role, the fan is listed as the sensor it is
+    // rather than suppressed as a chamber readout it does not supply.
+    CHECK(role_of(sensors, "temperature_fan chamber_exhaust_fans") !=
           TemperatureSensorRole::CHAMBER);
 }
 
-TEST_CASE("PrinterState::set_hardware: auto resolves a chamber temperature_fan as the chamber "
-          "sensor",
+TEST_CASE("PrinterState::set_hardware: auto leaves a chamber-named fan its own sensor role",
           "[state][hardware][chamber]") {
     using helix::sensors::TemperatureSensorManager;
     using helix::sensors::TemperatureSensorRole;
@@ -1966,10 +1966,11 @@ TEST_CASE("PrinterState::set_hardware: auto resolves a chamber temperature_fan a
 
     state.set_hardware(std::move(hw));
 
-    CHECK(state.temperature_state().chamber_sensor_name() ==
-          "temperature_fan chamber_exhaust_fans");
-    CHECK(has_chamber_sensor(state) == 1);
-    CHECK(role_of(sensors, "temperature_fan chamber_exhaust_fans") ==
+    CHECK(state.temperature_state().chamber_sensor_name().empty());
+    CHECK(has_chamber_sensor(state) == 0);
+    // Released from the chamber role, the fan is listed as the sensor it is
+    // rather than suppressed as a chamber readout it does not supply.
+    CHECK(role_of(sensors, "temperature_fan chamber_exhaust_fans") !=
           TemperatureSensorRole::CHAMBER);
 }
 

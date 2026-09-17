@@ -122,3 +122,35 @@ TEST_CASE("sensor and cooling-fan paths score keywords only", "[chamber][discove
     // A floored air-quality chamber sensor stays detectable.
     CHECK(parse({"temperature_sensor chamber_humidity"}).has_chamber_sensor());
 }
+
+TEST_CASE("a chamber heater leaves no separate chamber sensor", "[chamber][discovery]") {
+    // A heater carries its own temperature, so it is the chamber reading and
+    // the sensor role stays empty. A keyword-matched probe alongside it is the
+    // printer's own sensor, free to be listed and assigned on its own.
+    auto u1 = parse({"heater_generic panda_breath", "panda_breath", "temperature_sensor cavity"});
+    CHECK(u1.chamber_heater_name() == "heater_generic panda_breath");
+    CHECK_FALSE(u1.has_chamber_sensor());
+    CHECK(u1.chamber_sensor_name().empty());
+
+    // Same rule for an integrated chamber: a chamber-named probe at keyword
+    // 100 still yields to the object that actually heats.
+    auto integrated = parse({"heater_generic chamber_heater", "temperature_sensor chamber_temp"});
+    CHECK(integrated.chamber_heater_name() == "heater_generic chamber_heater");
+    CHECK_FALSE(integrated.has_chamber_sensor());
+
+    // A chamber-named temperature_fan is both the heater and its own reading.
+    auto fan_driven = parse({"temperature_fan chamber_fan", "temperature_sensor cavity"});
+    CHECK(fan_driven.chamber_heater_name() == "temperature_fan chamber_fan");
+    CHECK_FALSE(fan_driven.has_chamber_sensor());
+}
+
+TEST_CASE("without a chamber heater the sensor heuristics still decide", "[chamber][discovery]") {
+    auto d = parse({"extruder", "heater_bed", "temperature_sensor cavity"});
+    CHECK_FALSE(d.has_chamber_heater());
+    CHECK(d.has_chamber_sensor());
+    CHECK(d.chamber_sensor_name() == "temperature_sensor cavity");
+
+    // A stronger keyword still wins among probes when nothing heats.
+    auto ranked = parse({"temperature_sensor cavity", "temperature_sensor chamber"});
+    CHECK(ranked.chamber_sensor_name() == "temperature_sensor chamber");
+}

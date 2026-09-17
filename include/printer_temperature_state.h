@@ -119,6 +119,15 @@ class PrinterTemperatureState {
     /// Get per-extruder target subject with lifetime token (use when creating observers)
     lv_subject_t* get_extruder_target_subject(const std::string& name, SubjectLifetime& lifetime);
 
+    lv_subject_t* get_extruder_power_subject() {
+        return &active_extruder_power_;
+    }
+    lv_subject_t* get_bed_power_subject() {
+        return &bed_power_;
+    }
+    lv_subject_t* get_chamber_power_subject() {
+        return &chamber_power_;
+    }
     lv_subject_t* get_bed_temp_subject() {
         return &bed_temp_;
     }
@@ -386,15 +395,19 @@ class PrinterTemperatureState {
     /**
      * @brief The Klipper object the chamber temperature is read from.
      *
-     * The heater when one is configured, else the sensor. A heater carries
-     * both a reading and a target, and on printers with both, the "sensor" is
-     * often a thermal-protection thermistor tracking a different heat source,
-     * so it serves as the fallback for heaterless chambers rather than as a
-     * second opinion. Every chamber readout and graph series resolves its
-     * source here so they cannot disagree about which probe they mean.
+     * A chamber heater measures its own chamber, so discovery resolves the
+     * sensor role to the heater itself and the two names agree. A sensor that
+     * names a different object is therefore a deliberate assignment, and it
+     * wins the reading while the heater goes on supplying the target. With no
+     * heater the sensor is the only reading there is. Every chamber readout
+     * and graph series resolves its source here so they cannot disagree about
+     * which probe they mean.
      */
     const std::string& chamber_temperature_source() const {
-        return !chamber_heater_name_.empty() ? chamber_heater_name_ : chamber_sensor_name_;
+        if (!chamber_sensor_name_.empty() && chamber_sensor_name_ != chamber_heater_name_) {
+            return chamber_sensor_name_;
+        }
+        return chamber_heater_name_;
     }
 
     /**
@@ -461,6 +474,12 @@ class PrinterTemperatureState {
     lv_subject_t active_extruder_target_{};
     lv_subject_t bed_temp_{};
     lv_subject_t bed_target_{};
+    // Duty cycle in whole percent, -1 until a heater reports one. Klipper sends
+    // 0.0-1.0 on a heater object; a temperature_fan reports a speed instead and
+    // never publishes power, so -1 is a lasting state, not just a startup one.
+    lv_subject_t active_extruder_power_{};
+    lv_subject_t bed_power_{};
+    lv_subject_t chamber_power_{};
     SubjectLifetime bed_temp_lifetime_;
     SubjectLifetime bed_target_lifetime_;
     // XML display subjects: chamber_effective_target + chamber_mode are THE canonical

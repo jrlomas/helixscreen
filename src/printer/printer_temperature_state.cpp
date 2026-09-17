@@ -23,6 +23,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace helix {
 
@@ -72,6 +73,16 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
     if (register_xml) {
         helix::xml::register_subject_in_current_scope("extruder_target", &active_extruder_target_);
     }
+
+    lv_subject_init_int(&active_extruder_power_, -1);
+    subjects_.register_subject(&active_extruder_power_, register_xml ? "extruder_power" : nullptr);
+    if (register_xml) {
+        helix::xml::register_subject_in_current_scope("extruder_power", &active_extruder_power_);
+    }
+
+    // Heater duty cycle, whole percent, -1 = the heater reports none.
+    INIT_SUBJECT_INT(bed_power, -1, subjects_, register_xml);
+    INIT_SUBJECT_INT(chamber_power, -1, subjects_, register_xml);
 
     // Bed and chamber temperature subjects
     INIT_SUBJECT_INT(bed_temp, 0, subjects_, register_xml);
@@ -472,52 +483,62 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
         }
     }
 
-    // Chamber temperature comes from the heater when one is configured (it has
-    // both current temp and target), otherwise from the sensor (temp only).
-    // The sensor is NOT a fallback when a heater is configured — on printers
-    // that have both (e.g. QIDI Q2: heater_generic chamber + thermal-protection
-    // thermistor), the "sensor" often tracks the bed or another nearby heat
-    // source and would pollute chamber_temp_ when partial subscription updates
-    // omit the heater object.
-    if (!chamber_heater_name_.empty()) {
-        if (status.contains(chamber_heater_name_)) {
-            const auto& chamber = status[chamber_heater_name_];
-
-            if (chamber.contains("temperature") && chamber["temperature"].is_number()) {
-                int temp_deci = helix::units::json_to_decidegrees(chamber, "temperature");
-                if (lv_subject_get_int(&chamber_temp_) != temp_deci) {
-                    lv_subject_set_int(&chamber_temp_, temp_deci);
-                    spdlog::trace("[PrinterTemperatureState] Chamber temp (heater): {}.{}C",
-                                  temp_deci / 10, temp_deci % 10);
-                }
-            }
-
-            // A temperature_fan's target is a cooling threshold, not a heating
-            // command: Klipper always reports its configured target_temp (40.0 on
-            // the K1C) even at speed 0. Wherever discovery resolves a
-            // temperature_fan into the heater slot (no heater_generic exists),
-            // that target flows through the cooling-fan branch below instead and
-            // is neutralized by the resting-target comparison in
-            // chamber_effective_setpoint().
-            if (chamber_heater_name_.rfind("temperature_fan ", 0) != 0 &&
-                chamber.contains("target") && chamber["target"].is_number()) {
-                int target_deci = helix::units::json_to_decidegrees(chamber, "target");
-                if (lv_subject_get_int(&chamber_target_) != target_deci) {
-                    lv_subject_set_int(&chamber_target_, target_deci);
-                    spdlog::trace("[PrinterTemperatureState] Chamber target: {}.{}C",
-                                  target_deci / 10, target_deci % 10);
-                }
-            }
+    // Klipper reports duty as 0.0-1.0 on a heater object. Publish whole percent
+    // and leave the subject alone when the field is absent: a frame that omits
+    // it says nothing, and a temperature_fan never carries one at all.
+    auto publish_power = [&status](const std::string& object, lv_subject_t* subject) {
+        if (object.empty() || !status.contains(object)) {
+            return;
         }
-    } else if (!chamber_sensor_name_.empty() && status.contains(chamber_sensor_name_)) {
-        const auto& chamber = status[chamber_sensor_name_];
+        const auto& obj = status[object];
+        if (!obj.contains("power") || !obj["power"].is_number()) {
+            return;
+        }
+        int pct = static_cast<int>(std::lround(obj["power"].get<double>() * 100.0));
+        pct = std::clamp(pct, 0, 100);
+        if (lv_subject_get_int(subject) != pct) {
+            lv_subject_set_int(subject, pct);
+        }
+    };
+    publish_power(active_extruder_name_, &active_extruder_power_);
+    publish_power("heater_bed", &bed_power_);
+    publish_power(chamber_heater_name_, &chamber_power_);
+
+    // The chamber reading comes from whichever object owns it, and the target
+    // from the heater alone. Those are the same object unless a sensor has
+    // been assigned to the chamber role by hand, which is the one way a probe
+    // outranks the heater that measures its own chamber.
+    const std::string& chamber_source = chamber_temperature_source();
+    if (!chamber_source.empty() && status.contains(chamber_source)) {
+        const auto& chamber = status[chamber_source];
 
         if (chamber.contains("temperature") && chamber["temperature"].is_number()) {
             int temp_deci = helix::units::json_to_decidegrees(chamber, "temperature");
             if (lv_subject_get_int(&chamber_temp_) != temp_deci) {
                 lv_subject_set_int(&chamber_temp_, temp_deci);
-                spdlog::trace("[PrinterTemperatureState] Chamber temp (sensor): {}.{}C",
+                spdlog::trace("[PrinterTemperatureState] Chamber temp ({}): {}.{}C", chamber_source,
                               temp_deci / 10, temp_deci % 10);
+            }
+        }
+    }
+
+    if (!chamber_heater_name_.empty() && status.contains(chamber_heater_name_)) {
+        const auto& chamber = status[chamber_heater_name_];
+
+        // A temperature_fan's target is a cooling threshold, not a heating
+        // command: Klipper always reports its configured target_temp (40.0 on
+        // the K1C) even at speed 0. Wherever discovery resolves a
+        // temperature_fan into the heater slot (no heater_generic exists),
+        // that target flows through the cooling-fan branch below instead and
+        // is neutralized by the resting-target comparison in
+        // chamber_effective_setpoint().
+        if (chamber_heater_name_.rfind("temperature_fan ", 0) != 0 && chamber.contains("target") &&
+            chamber["target"].is_number()) {
+            int target_deci = helix::units::json_to_decidegrees(chamber, "target");
+            if (lv_subject_get_int(&chamber_target_) != target_deci) {
+                lv_subject_set_int(&chamber_target_, target_deci);
+                spdlog::trace("[PrinterTemperatureState] Chamber target: {}.{}C", target_deci / 10,
+                              target_deci % 10);
             }
         }
     }
