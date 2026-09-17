@@ -2318,6 +2318,7 @@ translations:
   'RFCOMM connect failed: ': 'Не удалось подключиться по RFCOMM: '
   RFID reader malfunction (left): Неисправность RFID-считывателя (левый)
   RFID reader malfunction (right): Неисправность RFID-считывателя (правый)
+  RFID, auto-refill, nozzle and link care: ''
   RSS: RSS
   'RSS:': 'RSS:'
   Ramming Volume: 'Объём рэмминга'

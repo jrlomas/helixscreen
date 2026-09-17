@@ -2296,6 +2296,7 @@ translations:
   'RFCOMM connect failed: ': 'RFCOMM connect failed: '
   RFID reader malfunction (left): RFID reader malfunction (left)
   RFID reader malfunction (right): RFID reader malfunction (right)
+  RFID, auto-refill, nozzle and link care: RFID, auto-refill, nozzle and link care
   RSS: RSS
   'RSS:': 'RSS:'
   Ramming Volume: Ramming Volume

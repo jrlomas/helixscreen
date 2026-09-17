@@ -14,9 +14,9 @@
  */
 
 #include "afc_config_manager.h"
-#include "test_helpers/afc_test_access.h"
 #include "ams_backend_afc.h"
 #include "ams_types.h"
+#include "test_helpers/afc_test_access.h"
 
 #include <algorithm>
 #include <any>
@@ -272,6 +272,9 @@ TEST_CASE("Hub actions disabled when config not loaded", "[ams][afc][device_acti
 TEST_CASE("Tip forming actions read macro vars", "[ams][afc][device_actions][config]") {
     AmsBackendAfc backend(nullptr, nullptr);
     AmsBackendAfcConfigHelper::load_test_configs(backend);
+    // Tip forming actions are exposed only while tip forming is the active
+    // method — the same condition that shows the tip_forming section.
+    AmsBackendAfcConfigHelper::set_tip_method(backend, TipMethod::TIP_FORM);
 
     auto actions = backend.get_device_actions();
 
@@ -432,6 +435,9 @@ TEST_CASE("Execute macro var slider modifies config", "[ams][afc][device_actions
 TEST_CASE("Config sections show correct values from parser", "[ams][afc][device_actions][config]") {
     AmsBackendAfc backend(nullptr, nullptr);
     AmsBackendAfcConfigHelper::create_configs(backend);
+    // The macro-var SECTION below reads tip forming actions, exposed only
+    // while tip forming is the active method.
+    AmsBackendAfcConfigHelper::set_tip_method(backend, TipMethod::TIP_FORM);
 
     // Load custom config with different values
     const char* custom_afc = R"(

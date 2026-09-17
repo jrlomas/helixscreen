@@ -2121,6 +2121,7 @@
   <translation tag="RFCOMM connect failed: " es="Error al conectar RFCOMM: "/>
   <translation tag="RFID reader malfunction (left)" es="Fallo del lector RFID (izquierdo)"/>
   <translation tag="RFID reader malfunction (right)" es="Fallo del lector RFID (derecho)"/>
+  <translation tag="RFID, auto-refill, nozzle and link care"/>
   <translation tag="RSS" es="RSS"/>
   <translation tag="RSS:" es="RSS:"/>
   <translation tag="Ramming Volume" es="Volumen de compactación"/>
