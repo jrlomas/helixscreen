@@ -98,7 +98,6 @@ class PrinterDiscovery {
 
         constexpr int CHAMBER_HEATER_GENERIC_WEIGHT = 2;  // settable heater — preferred
         constexpr int CHAMBER_TEMPERATURE_FAN_WEIGHT = 1; // fan — only wins if no heater_generic
-        constexpr int CHAMBER_TEMPERATURE_SENSOR_WEIGHT = 2; // passive sensor — wins sensor ties
 
         // Promote the current object to the best chamber heater if its keyword
         // confidence (plus object-type tiebreak) exceeds the running best.
@@ -122,23 +121,23 @@ class PrinterDiscovery {
                 chamber_filter_fan_pin_ = std::string(m.backend->filter_fan_pin());
             }
         };
-        // Promote the current object to the best chamber sensor by the same rule
-        // the heater pick above uses: keyword confidence with an object-TYPE
-        // tiebreak, so an equal-keyword tie resolves to the passive
-        // temperature_sensor in either iteration order while a stronger keyword
-        // still wins whatever the type. Keywords only — appliance backends
-        // score their names in match() and never claim the sensor slot.
+        // Promote the current object to the best chamber sensor on keyword
+        // confidence, keeping the first-listed object on a tie. Only passive
+        // temperature_sensor objects reach here: anything that drives air
+        // temperature scores at least as well in match() and takes the heater
+        // slot instead, and the post-pass below then releases the sensor pick
+        // entirely. Keywords only — appliance backends score their names in
+        // match() and never claim the sensor slot.
         auto try_set_chamber_sensor = [&](const std::string& full_name,
-                                          const std::string& object_name, int type_weight) {
+                                          const std::string& object_name) {
             int keyword_conf = chamber::keyword_confidence(object_name);
             if (keyword_conf == 0) {
                 return; // not a chamber-named object — never a sensor candidate
             }
-            int conf = keyword_conf * 10 + type_weight;
-            if (conf > best_chamber_sensor_conf) {
+            if (keyword_conf > best_chamber_sensor_conf) {
                 has_chamber_sensor_ = true;
                 chamber_sensor_name_ = full_name;
-                best_chamber_sensor_conf = conf;
+                best_chamber_sensor_conf = keyword_conf;
             }
         };
         // Record the chamber cooling fan independent of the heater pick. A
@@ -198,7 +197,7 @@ class PrinterDiscovery {
             else if (name.rfind("temperature_sensor ", 0) == 0) {
                 sensors_.push_back(name);
                 std::string sensor_name = name.substr(19); // Remove "temperature_sensor " prefix
-                try_set_chamber_sensor(name, sensor_name, CHAMBER_TEMPERATURE_SENSOR_WEIGHT);
+                try_set_chamber_sensor(name, sensor_name);
             }
             // Temperature-controlled fans (also act as sensors). A chamber-named
             // temperature_fan is the heater equivalent — it actively drives air
@@ -209,10 +208,6 @@ class PrinterDiscovery {
                 std::string fan_name = name.substr(16); // Remove "temperature_fan " prefix
                 try_set_chamber_heater(name, fan_name, CHAMBER_TEMPERATURE_FAN_WEIGHT);
                 try_set_chamber_cooling_fan(name, fan_name);
-                // The fan reports chamber air temperature too, so it also competes
-                // for the sensor pick — a printer whose only chamber thermistor is
-                // a chamber-named temperature_fan still gets a chamber sensor.
-                try_set_chamber_sensor(name, fan_name, CHAMBER_TEMPERATURE_FAN_WEIGHT);
             }
             // TMC stepper drivers with built-in temperature (tmc2240, tmc5160)
             else if (name.rfind("tmc2240 ", 0) == 0 || name.rfind("tmc5160 ", 0) == 0) {
