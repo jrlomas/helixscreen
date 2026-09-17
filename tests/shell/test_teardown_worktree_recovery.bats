@@ -247,3 +247,34 @@ make_claimed_worktree() {
     contains "Teardown complete" "$output"
     [ ! -d "$MAIN/.worktrees/released" ]
 }
+
+# A branch carrying commits of its own is what --force-branch exists for: git
+# refuses -d on it, so the script must either keep it or discard it on request,
+# and must never describe the discarding case as lossless.
+make_diverged_worktree() {
+    local name="$1"
+    make_worktree "$name"
+    echo diverged > "$MAIN/.worktrees/$name/own.txt"
+    git -C "$MAIN/.worktrees/$name" add own.txt
+    git -C "$MAIN/.worktrees/$name" commit -qm "work only on this branch" --no-verify
+}
+
+@test "a branch --into does not contain survives teardown by default" {
+    make_diverged_worktree diverged
+    run "$SCRIPT" diverged --into master
+    [ "$status" -eq 0 ]
+    contains "NOT contained" "$output"
+    contains "--force-branch" "$output"
+    run git -C "$MAIN" branch --list feature/diverged
+    contains "feature/diverged" "$output"
+}
+
+@test "--force-branch deletes a branch --into does not contain" {
+    make_diverged_worktree diverged
+    run "$SCRIPT" diverged --into master --force-branch
+    [ "$status" -eq 0 ]
+    contains "discards" "$output"
+    [ ! -d "$MAIN/.worktrees/diverged" ]
+    run git -C "$MAIN" branch --list feature/diverged
+    lacks "feature/diverged" "$output"
+}
