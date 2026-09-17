@@ -1367,7 +1367,6 @@ translations:
   Install Update: 更新をインストール
   Install plugin: プラグインをインストール
   Install script not found. Use the remote install command instead.: インストールスクリプトが見つかりません。代わりにリモートインストールコマンドを使用してください。
-  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: 印刷履歴に影響を与えずにフィラメントをリマップするには、詳細設定でHelixPrintプラグインをインストールしてください。
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': '高速
     G-code 修正を有効にするために HelixPrint プラグインをインストールしてください。プリンターで SSH 経由でこのコマンドを実行してください:'
   ? "Install the timelapse plugin via SSH,\nthen tap \"Check Again\"."
@@ -1645,7 +1644,6 @@ translations:
   Monitoring: モニタリング
   Month: 月
   Moonraker: Moonraker
-  Moonraker is out of date: ''
   Moonraker restarted but Spoolman not connected. Check server.: Moonraker は再起動しましたが
     Spoolman に未接続です。サーバーを確認してください。
   ? "Moonraker restarting...\nWaiting for reconnection..."
@@ -2236,7 +2234,8 @@ translations:
   Remaining (g): 残量 (g)
   Remaining Weight (g): 残量（g）
   Remap Tool: ツールを再割当
-  Remap needs the HelixPrint plugin: リマップにはHelixPrintプラグインが必要です
+  ? Remapping rewrites the job file. Without the HelixPrint plugin your print history fills up with names like modified_1730824_benchy.gcode instead of the file you picked.
+  : ''
   Remap…: リマップ…
   Remember slot spool details across an eject: 取り出し後もスロットのスプール情報を記憶します
   Remove: 削除
@@ -2856,7 +2855,7 @@ translations:
     %.0fg 必要ですが、スプールの残量は約 %.0fg です。それでも開始しますか？
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : このプリンターは {} のようです（信頼度 {}%）が、{} として設定されています。誤ったタイプでは不正確な印刷前オプションとプリセットが適用されます。
-  ? This printer runs Moonraker {}. HelixScreen needs {} or newer to put the original filename back in your print history after a filament remap rewrites the job. Everything else works normally.
+  ? This printer's Moonraker is too old to put the original filename back in your print history after a remap. Remapping still works.
   : ''
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
   : プラグインの Moonraker コンポーネントを削除し、Moonraker を再起動します。プリンターは一時的に切断されます。PRINT_START に古いフェーズトラッキングの行が残っている場合、それらも削除されますが、バックアップは保持されます。Klipper を再起動すると、その変更が適用されます。

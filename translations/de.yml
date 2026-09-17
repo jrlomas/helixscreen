@@ -1486,9 +1486,6 @@ translations:
   Install plugin: Plugin installieren
   Install script not found. Use the remote install command instead.: Installationsskript
     nicht gefunden. Verwenden Sie stattdessen den Remote-Installationsbefehl.
-  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Installieren
-    Sie das HelixPrint-Plugin in den erweiterten Einstellungen, um Filament neu zuzuordnen,
-    ohne den Druckverlauf zu beeinflussen.
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': 'Installieren
     Sie das HelixPrint-Plugin für schnelle G-Code-Modifikationen. Führen Sie diesen
     Befehl per SSH auf Ihrem Drucker aus:'
@@ -1786,7 +1783,6 @@ translations:
   Monitoring: Überwachung
   Month: Monat
   Moonraker: Moonraker
-  Moonraker is out of date: ''
   Moonraker restarted but Spoolman not connected. Check server.: Moonraker neu gestartet,
     aber Spoolman nicht verbunden. Server prüfen.
   ? "Moonraker restarting...\nWaiting for reconnection..."
@@ -2411,7 +2407,8 @@ translations:
   Remaining (g): Verbleibend (g)
   Remaining Weight (g): Restgewicht (g)
   Remap Tool: Werkzeug zuordnen
-  Remap needs the HelixPrint plugin: Neuzuordnung benötigt das HelixPrint-Plugin
+  ? Remapping rewrites the job file. Without the HelixPrint plugin your print history fills up with names like modified_1730824_benchy.gcode instead of the file you picked.
+  : ''
   Remap…: Neu zuordnen…
   Remember slot spool details across an eject: Spulendetails des Slots über ein Auswerfen hinweg merken
   Remove: Entfernen
@@ -3099,7 +3096,7 @@ translations:
     starten?
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : Dieser Drucker sieht aus wie ein {} ({}% Konfidenz), ist aber als {} eingerichtet. Ein falscher Typ wendet falsche Optionen und Voreinstellungen für die Druckvorbereitung an.
-  ? This printer runs Moonraker {}. HelixScreen needs {} or newer to put the original filename back in your print history after a filament remap rewrites the job. Everything else works normally.
+  ? This printer's Moonraker is too old to put the original filename back in your print history after a remap. Remapping still works.
   : ''
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
   : Dies entfernt die Moonraker-Komponente des Plugins und startet Moonraker neu. Der Drucker wird kurz getrennt. Falls in PRINT_START noch alte Zeilen zur Phasenverfolgung vorhanden sind, werden sie ebenfalls entfernt, wobei Backups aufbewahrt werden. Ein Klipper-Neustart wendet das an.

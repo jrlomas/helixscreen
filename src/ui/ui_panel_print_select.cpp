@@ -2625,6 +2625,12 @@ void PrintSelectPanel::create_detail_view() {
     // route their tap here so there is ONE opener and ONE modal instance for
     // every backend — the same entry the preflight "Remap…" button uses.
     detail_view_->set_on_remap_requested([this]() { open_remap_modal(); });
+    // The card's Set up tap. Same modal the boot-time prompt uses, so a user who
+    // dismissed that one still has a way in from the place the refusal is shown.
+    detail_view_->set_on_plugin_setup_requested([this]() {
+        plugin_install_modal_.set_installer(&plugin_installer_);
+        plugin_install_modal_.show(lv_screen_active());
+    });
 
     // Re-enable the print button when macro analysis completes. The legacy
     // bullet-text "preprint steps" display has been replaced by the dynamic
@@ -2860,31 +2866,16 @@ void PrintSelectPanel::open_remap_modal() {
         return;
     }
     const auto strategy = backend->get_remap_strategy();
-    if (!helix::printer::can_remap(*backend)) {
-        return;
-    }
 
-    // GcodeRewrite is the generic fallback for backends with no native routing
-    // table: it prints a rewritten copy of the file rather than moving a tool
-    // number in firmware. That is the same act the pre-print options perform, so
-    // it asks the same question they do rather than re-deriving the answer -
-    // two copies of "may we modify this file" is how one of them ends up
-    // offering a picker the other would have refused.
-    //
-    // Guard BEFORE opening the modal so the user sees the actionable alert
-    // instead of a picker whose Done would silently fail.
-    if (strategy == AmsBackend::RemapStrategy::GcodeRewrite) {
-        auto* prep = detail_view_ ? detail_view_->get_prep_manager() : nullptr;
-        const helix::ui::ModificationCapability capability =
-            prep != nullptr ? prep->check_modification_capability()
-                            : helix::ui::ModificationCapability{};
-        if (!capability.can_modify) {
-            helix::ui::modal_alert(lv_tr("Remap needs the HelixPrint plugin"),
-                                   lv_tr("Install the HelixPrint plugin in Advanced settings to "
-                                         "remap filament without affecting print history."),
-                                   ModalSeverity::Info, lv_tr("OK"));
-            return;
-        }
+    // The same answer the card published, asked again here because this opener
+    // is reachable from the preflight modal too and a subject is only as fresh
+    // as its last publish. Every refusal is already stated on the card, so this
+    // is a guard, not a second place to explain anything.
+    const auto block = detail_view_->current_remap_block();
+    if (block != helix::printer::RemapBlock::None) {
+        spdlog::debug("[{}] Remap opener declined: {}", get_name(),
+                      helix::printer::remap_block_name(block));
+        return;
     }
 
     // Build picker inputs from the per-tool info of the tools this file uses.
@@ -2894,9 +2885,10 @@ void PrintSelectPanel::open_remap_modal() {
     // card instance's tool_info_ is empty.
     auto tool_info = detail_view_->get_used_tool_info();
 
+    // remap_block() already refused an empty job as NothingToRemap, so reaching
+    // here with none means the tool set changed between publish and tap.
     if (tool_info.empty()) {
         spdlog::warn("[{}] Remap: no tools in pre-flight result", get_name());
-        NOTIFY_INFO(lv_tr("Nothing to remap"));
         return;
     }
 

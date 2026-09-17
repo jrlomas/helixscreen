@@ -72,7 +72,6 @@
 #include "timelapse_state.h"
 #include "timezone_env.h"
 #include "translation_loader.h"
-#include "version.h"
 #include "wizard_config_paths.h"
 
 // UI headers
@@ -2948,84 +2947,6 @@ void Application::maybe_warn_type_mismatch(const helix::PrinterDiscovery& hardwa
         opts);
 }
 
-bool Application::moonraker_version_too_old(const std::string& version) {
-    // Discovery defaults this to "unknown" when server.info omits the field, and
-    // check_version_constraint() answers false for anything it cannot parse —
-    // which would read as "too old" and warn every printer that never reported a
-    // version. Parse first, and judge only what parsed.
-    if (!helix::version::parse_version(version)) {
-        return false;
-    }
-    // Moonraker ships git-describe versions ("v0.9.0-16-g0f1e2d3"). SemVer ranks
-    // a prerelease below its own release, so the constraint check is the right
-    // comparison here: it answers on the core triple alone.
-    return !helix::version::check_version_constraint(std::string(">=") + MIN_MOONRAKER_VERSION,
-                                                     version);
-}
-
-void Application::maybe_warn_moonraker_version(const helix::PrinterDiscovery& hardware) {
-    const std::string version = hardware.moonraker_version();
-
-    // A debug bundle is the only view we get of a reporter's run, so say why
-    // this declined rather than leaving "no prompt appeared" indistinguishable
-    // from "the check never ran".
-    const auto decline = [&](const char* why) {
-        spdlog::debug("[Application] No Moonraker version prompt ('{}' vs floor {}): {}", version,
-                      MIN_MOONRAKER_VERSION, why);
-    };
-
-    if (m_moonraker_version_warned) {
-        return decline("already prompted this session");
-    }
-    // Never stack on the type-mismatch prompt: two modals in one discovery pass
-    // read as a broken app, and the wrong-printer warning is the more urgent one.
-    if (m_type_mismatch_shown) {
-        return decline("type mismatch prompt owns this pass");
-    }
-    if (Config::get_instance()->is_wizard_required() || is_wizard_active()) {
-        return decline("wizard required or active");
-    }
-    if (!moonraker_version_too_old(version)) {
-        return decline("at or above the floor, or unreadable");
-    }
-
-    auto* cfg = Config::get_instance();
-    if (cfg->get<bool>(cfg->df() + helix::wizard::MOONRAKER_VERSION_WARNING_DISMISSED, false)) {
-        spdlog::info("[Application] Moonraker {} is below {}, warning dismissed for this printer",
-                     version, MIN_MOONRAKER_VERSION);
-        return;
-    }
-
-    // Session guard: one prompt per boot regardless of which button dismisses it.
-    m_moonraker_version_warned = true;
-    spdlog::warn("[Application] Moonraker {} is older than {} — a remapped print keeps its "
-                 "rewritten filename in history",
-                 version, MIN_MOONRAKER_VERSION);
-
-    // fmt::runtime: the format string is the translated handle, not a literal.
-    const std::string body = fmt::format(
-        fmt::runtime(lv_tr("This printer runs Moonraker {}. HelixScreen needs {} or newer to put "
-                           "the original filename back in your print history after a filament "
-                           "remap rewrites the job. Everything else works normally.")),
-        version, MIN_MOONRAKER_VERSION);
-
-    helix::ui::ConfirmOptions opts;
-    opts.cancel_text = lv_tr("Don't show again");
-    opts.on_cancel = [this] {
-        auto* cfg = Config::get_instance();
-        cfg->set<bool>(cfg->df() + helix::wizard::MOONRAKER_VERSION_WARNING_DISMISSED, true);
-        if (!cfg->save()) {
-            spdlog::warn("[Application] Failed to persist Moonraker version warning dismissal");
-        }
-    };
-    opts.owner_token = m_async_lifetime.token();
-    // No on_dismiss, deliberately: a backdrop tap or ESC is not an answer, so the
-    // warning stays armed for the next boot. Only a button settles it.
-
-    helix::ui::modal_confirm(lv_tr("Moonraker is out of date"), body.c_str(),
-                             ModalSeverity::Warning, lv_tr("OK"), nullptr, opts);
-}
-
 void Application::launch_type_reidentify_wizard() {
     spdlog::info("[Application] Launching printer re-identify wizard");
     ui_wizard_register_event_callbacks();
@@ -3512,11 +3433,6 @@ void Application::setup_discovery_callbacks() {
                 !app->m_type_mismatch_shown) {
                 app->maybe_warn_type_mismatch(api->hardware());
             }
-
-            // Not gated on hw_changed: the Moonraker version is a property of
-            // the server we just connected to, not of the printer's shape, so a
-            // reconnect to an upgraded Moonraker has to be able to stop warning.
-            app->maybe_warn_moonraker_version(api->hardware());
 
             // Save session snapshot for next comparison (even if no issues)
             validator.save_session_snapshot(Config::get_instance(), api->hardware());

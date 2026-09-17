@@ -1478,9 +1478,6 @@ translations:
   Install plugin: Instalar plugin
   Install script not found. Use the remote install command instead.: Script de instalación
     no encontrado. Use el comando de instalación remota en su lugar.
-  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Instale
-    el plugin HelixPrint en Ajustes avanzados para reasignar filamento sin afectar
-    el historial de impresión.
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': 'Instale
     el plugin HelixPrint para habilitar modificaciones rápidas de G-code. Ejecute
     este comando vía SSH en su impresora:'
@@ -1778,7 +1775,6 @@ translations:
   Monitoring: Monitorizando
   Month: Mes
   Moonraker: Moonraker
-  Moonraker is out of date: ''
   Moonraker restarted but Spoolman not connected. Check server.: Moonraker reiniciado
     pero Spoolman no conectado. Verifique el servidor.
   ? "Moonraker restarting...\nWaiting for reconnection..."
@@ -2404,7 +2400,8 @@ translations:
   Remaining (g): Restante (g)
   Remaining Weight (g): Peso Restante (g)
   Remap Tool: Reasignar Herramienta
-  Remap needs the HelixPrint plugin: La reasignación requiere el plugin HelixPrint
+  ? Remapping rewrites the job file. Without the HelixPrint plugin your print history fills up with names like modified_1730824_benchy.gcode instead of the file you picked.
+  : ''
   Remap…: Reasignar…
   Remember slot spool details across an eject: Recordar los detalles de la bobina de la ranura tras una expulsión
   Remove: Eliminar
@@ -3095,7 +3092,7 @@ translations:
     %.0fg restantes. ¿Iniciar de todos modos?
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : Esta impresora parece una {} ({}% de confianza), pero está configurada como {}. Un tipo erróneo aplica opciones y preajustes de preimpresión incorrectos.
-  ? This printer runs Moonraker {}. HelixScreen needs {} or newer to put the original filename back in your print history after a filament remap rewrites the job. Everything else works normally.
+  ? This printer's Moonraker is too old to put the original filename back in your print history after a remap. Remapping still works.
   : ''
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
   : Esto elimina el componente de Moonraker del plugin y reinicia Moonraker. La impresora se desconectará brevemente. Si aún hay líneas de seguimiento de fases antiguas en PRINT_START, también se eliminan, conservando copias de seguridad. Un reinicio de Klipper aplica eso.
