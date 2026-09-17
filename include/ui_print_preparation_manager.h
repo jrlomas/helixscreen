@@ -405,13 +405,11 @@ class PrintPreparationManager {
      * different physical head is to rewrite the Tx / ACTIVATE_EXTRUDER /
      * SET_GCODE_VARIABLE lines in the file itself.
      *
-     * Flow (reuses the proven streaming modify+print pipeline):
-     * 1. Download the original to a temp file (streaming, no memory spike).
-     * 2. Read it back, call GcodeToolRemapper::build_line_replacements(content,
-     *    remap) to get exactly the lines that change.
-     * 3. Convert each GcodeLineReplacement -> GCodeFileModifier::replace(line,
-     *    text), apply_streaming() file-to-file.
-     * 4. Upload the modified copy and start it via the HelixPrint plugin's
+     * Flow, streaming end to end - no stage ever holds the file:
+     * 1. Download the original to a temp file (streaming).
+     * 2. GcodeToolRemapper::apply_to_stream() rewrites it to a second temp file
+     *    a line at a time, so peak memory is one line whatever the job's size.
+     * 3. Upload the modified copy and start it via the HelixPrint plugin's
      *    start_modified_print() so print history stays under the ORIGINAL
      *    filename. (This path requires the plugin; callers must guard.)
      *
