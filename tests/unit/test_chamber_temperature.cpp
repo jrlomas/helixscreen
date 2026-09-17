@@ -18,6 +18,9 @@
 #include "settings_manager.h"
 #include "temperature_sensor_manager.h"
 
+#include <array>
+#include <cstdio>
+
 #include "../catch_amalgamated.hpp"
 #include "hv/json.hpp"
 
@@ -1264,4 +1267,36 @@ TEST_CASE("chamber_status_text: Maintaining appends thermal progress when at-tem
         REQUIRE(status.find(lv_tr("Maintaining")) != std::string::npos);
         REQUIRE(status.find(lv_tr("Cooling")) != std::string::npos);
     }
+}
+
+TEST_CASE("every heater status string fits the buffer its surfaces render from",
+          "[chamber][temperature]") {
+    using helix::ui::temperature::chamber_status_text;
+    using helix::ui::temperature::HEATER_STATUS_BUF_BYTES;
+
+    // The composer joins a mode word to a progress word. A surface whose
+    // buffer cannot hold the join renders the heater cut short while a surface
+    // with a larger buffer renders it whole, and the two disagree on screen.
+    std::string longest;
+    for (auto mode :
+         {helix::ChamberMode::Off, helix::ChamberMode::Heating, helix::ChamberMode::Maintaining}) {
+        for (int current : {0, 300, 600, 900}) {
+            for (int target : {0, 400, 600}) {
+                std::string s = chamber_status_text(current, target, mode);
+                if (s.size() > longest.size()) {
+                    longest = s;
+                }
+            }
+        }
+    }
+    CAPTURE(longest);
+    CAPTURE(longest.size());
+
+    // Non-vacuity: the longest join has to outgrow a small buffer, or this
+    // test would hold for any size at all.
+    REQUIRE(longest.size() >= 16);
+
+    std::array<char, HEATER_STATUS_BUF_BYTES> buf{};
+    std::snprintf(buf.data(), buf.size(), "%s", longest.c_str());
+    CHECK(std::string(buf.data()) == longest);
 }

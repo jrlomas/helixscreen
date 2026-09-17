@@ -299,6 +299,17 @@ constexpr int DEFAULT_AT_TEMP_TOLERANCE = 2;
 constexpr int DEFAULT_AT_TEMP_TOLERANCE_DECI = DEFAULT_AT_TEMP_TOLERANCE * 10;
 
 /**
+ * @brief Bytes a rendered heater status string needs, including its terminator.
+ *
+ * `chamber_status_text()` joins a mode word to a progress word, and both are
+ * translated, so the longest composition is several times the longest English
+ * word. Every surface that snprintf's a status into a fixed buffer sizes it
+ * from here: a surface with a smaller buffer renders the same heater cut short
+ * while another renders it whole, and the two then disagree on screen.
+ */
+constexpr std::size_t HEATER_STATUS_BUF_BYTES = 64;
+
+/**
  * @brief Thermal state of a heater, shared by every consumer of the 4-state logic.
  *
  * One classifier feeds three renderers: the temp-label color

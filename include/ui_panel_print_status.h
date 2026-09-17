@@ -13,6 +13,7 @@
 #include "ui_print_light_timelapse.h"
 #include "ui_print_tune_overlay.h"
 #include "ui_save_z_offset_modal.h"
+#include "ui_temperature_utils.h" // HEATER_STATUS_BUF_BYTES
 
 #include "overlay_base.h"
 #include "print_control_buttons.h"
@@ -437,9 +438,9 @@ class PrintStatusPanel : public OverlayBase {
     char elapsed_buf_[32] = "0h 00m";
     char remaining_buf_[32] = "0h 00m";
     char eta_buf_[32] = "";
-    char nozzle_status_buf_[16] = "Off";
-    char bed_status_buf_[16] = "Off";
-    char chamber_status_buf_[16] = "";
+    char nozzle_status_buf_[helix::ui::temperature::HEATER_STATUS_BUF_BYTES] = "Off";
+    char bed_status_buf_[helix::ui::temperature::HEATER_STATUS_BUF_BYTES] = "Off";
+    char chamber_status_buf_[helix::ui::temperature::HEATER_STATUS_BUF_BYTES] = "";
     char speed_buf_[32] = "100%";
     char flow_buf_[32] = "100%";
     char objects_text_buf_[32] = "";        ///< "X of Y obj" buffer
