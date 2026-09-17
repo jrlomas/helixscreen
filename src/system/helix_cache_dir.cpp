@@ -345,7 +345,8 @@ void migrate_legacy_state_roots() {
 
     for (const char* var : {"HELIX_CACHE_DIR", "HELIX_LOG_FILE"}) {
         const char* value = std::getenv(var);
-        if (value == nullptr || !std::string_view(value).starts_with(kLegacyPrefix))
+        // string_view::starts_with is C++20; the build is -std=c++17.
+        if (value == nullptr || std::string_view(value).rfind(kLegacyPrefix, 0) != 0)
             continue;
         const std::string repaired = std::string(kCurrentRoot) + (value + kLegacyPrefix.size() - 1);
         setenv(var, repaired.c_str(), 1);
