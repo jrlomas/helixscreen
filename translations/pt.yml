@@ -859,6 +859,7 @@ translations:
   Documentation: Documentação
   Don't Save: Não Salvar
   Don't ask again: Não perguntar novamente
+  Don't show again: ''
   Done: Concluído
   Download update?: Baixar atualização?
   Download v{}?: Baixar v{}?
@@ -1779,6 +1780,7 @@ translations:
   Monitoring: Monitorando
   Month: Mês
   Moonraker: Moonraker
+  Moonraker is out of date: ''
   Moonraker restarted but Spoolman not connected. Check server.: Moonraker reiniciou,
     mas Spoolman não conectou. Verifique o servidor.
   ? "Moonraker restarting...\nWaiting for reconnection..."
@@ -3097,6 +3099,8 @@ translations:
     Iniciar mesmo assim?
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : Esta impressora parece ser uma {} ({}% de confiança), mas está configurada como {}. Um tipo errado aplica opções de pré-impressão e predefinições incorretas.
+  ? This printer runs Moonraker {}. HelixScreen needs {} or newer to put the original filename back in your print history after a filament remap rewrites the job. Everything else works normally.
+  : ''
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
   : Isso remove o componente do Moonraker do plugin e reinicia o Moonraker. A impressora será brevemente desconectada. Se ainda houver linhas antigas de rastreamento de fase no PRINT_START, elas também são removidas, mantendo os backups. Um reinício do Klipper aplica isso.
   This replaces the printer's helper macros with the current version and restarts Klipper.: 'Isto substitui as macros de ajuda da impressora pela versão atual e reinicia o Klipper.'

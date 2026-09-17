@@ -129,11 +129,17 @@ void register_server_handlers(std::unordered_map<std::string, MethodHandler>& re
         spdlog::debug("[MoonrakerClientMock] server.info: klippy_state={}, connected={}",
                       klippy_state_str, klippy_connected);
 
+        // Recent enough that no --test run trips Application's too-old-Moonraker
+        // warning. HELIX_MOCK_MOONRAKER_VERSION drives the other side of that
+        // gate, which is otherwise unreachable in mock.
+        const char* version_env = std::getenv("HELIX_MOCK_MOONRAKER_VERSION");
+        const std::string moonraker_version = version_env != nullptr ? version_env : "v0.9.3-mock";
+
         json response = {{"jsonrpc", "2.0"},
                          {"result",
                           {{"klippy_connected", klippy_connected},
                            {"klippy_state", klippy_state_str},
-                           {"moonraker_version", "v0.8.0-mock"},
+                           {"moonraker_version", moonraker_version},
                            {"api_version", json::array({1, 5, 0})},
                            {"api_version_string", "1.5.0"},
                            // Spoolman is reported on the WIRE, the way Moonraker reports it,

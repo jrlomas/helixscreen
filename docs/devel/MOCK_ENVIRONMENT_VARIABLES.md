@@ -232,6 +232,26 @@ in a mock run, including the pre-print options and the G-code rewrite remap.
 HELIX_MOCK_HELIX_PLUGIN=1 ./build/bin/helix-screen --test -vv # Uninstall row
 ```
 
+### `HELIX_MOCK_MOONRAKER_VERSION`
+
+Override the Moonraker version the mock reports in `server.info`.
+
+| Property | Value |
+|----------|-------|
+| Values | any version string, e.g. `v0.8.0` |
+| Default | `v0.9.3-mock` |
+| Affects | `server.info` -> `moonraker_version`, Settings -> About, and the startup too-old warning |
+
+The default is deliberately above `Application::MIN_MOONRAKER_VERSION` so no
+`--test` run trips the warning. Set an older version to reach the warning, which
+is otherwise unreachable in mock:
+
+```bash
+HELIX_MOCK_MOONRAKER_VERSION=v0.8.0 ./build/bin/helix-screen --test -vv
+```
+
+Confirm via the log: `Moonraker v0.8.0 is older than 0.9.0`.
+
 ### `HELIX_MOCK_AMS`
 
 Select the mock AMS topology/type.

@@ -772,6 +772,7 @@
   <translation tag="Documentation" de="Dokumentation"/>
   <translation tag="Don&apos;t Save" de="Nicht speichern"/>
   <translation tag="Don&apos;t ask again" de="Nicht erneut fragen"/>
+  <translation tag="Don&apos;t show again"/>
   <translation tag="Done" de="Fertig"/>
   <translation tag="Download update?" de="Update herunterladen?"/>
   <translation tag="Download v{}?" de="v{} herunterladen?"/>
@@ -1605,6 +1606,7 @@
   <translation tag="Monitoring" de="Überwachung"/>
   <translation tag="Month" de="Monat"/>
   <translation tag="Moonraker" de="Moonraker"/>
+  <translation tag="Moonraker is out of date"/>
   <translation tag="Moonraker restarted but Spoolman not connected. Check server." de="Moonraker neu gestartet, aber Spoolman nicht verbunden. Server prüfen."/>
   <translation tag="Moonraker restarting...&#10;Waiting for reconnection..." de="Moonraker wird neu gestartet...&#10;Warte auf Wiederverbindung..."/>
   <translation tag="Moonraker: " de="Moonraker: "/>
@@ -2759,6 +2761,7 @@
   <translation tag="This plugin lets HelixScreen control print start options like bed mesh and QGL. Once installed, use Configure PRINT_START below to enable optional steps." de="Dieses Plugin ermöglicht HelixScreen die Steuerung von Druckstartoptionen wie Bettnetz und QGL. Nach der Installation verwenden Sie PRINT_START konfigurieren unten, um optionale Schritte zu aktivieren."/>
   <translation tag="This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?" de="Dieser Druck benötigt etwa %.0fg, aber die Spule hat noch etwa %.0fg übrig. Trotzdem starten?"/>
   <translation tag="This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets." de="Dieser Drucker sieht aus wie ein {} ({}% Konfidenz), ist aber als {} eingerichtet. Ein falscher Typ wendet falsche Optionen und Voreinstellungen für die Druckvorbereitung an."/>
+  <translation tag="This printer runs Moonraker {}. HelixScreen needs {} or newer to put the original filename back in your print history after a filament remap rewrites the job. Everything else works normally."/>
   <translation tag="This removes the plugin&apos;s Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that." de="Dies entfernt die Moonraker-Komponente des Plugins und startet Moonraker neu. Der Drucker wird kurz getrennt. Falls in PRINT_START noch alte Zeilen zur Phasenverfolgung vorhanden sind, werden sie ebenfalls entfernt, wobei Backups aufbewahrt werden. Ein Klipper-Neustart wendet das an."/>
   <translation tag="This replaces the printer&apos;s helper macros with the current version and restarts Klipper." de="Dies ersetzt die Hilfsmakros des Druckers durch die aktuelle Version und startet Klipper neu."/>
   <translation tag="This replaces the printer&apos;s helper macros with the current version. A print is running, so Klipper restarts after it finishes." de="Dies ersetzt die Hilfsmakros des Druckers durch die aktuelle Version. Ein Druck läuft, daher wird Klipper nach dessen Abschluss neu gestartet."/>

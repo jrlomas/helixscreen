@@ -784,6 +784,7 @@ translations:
   Documentation: 文档
   Don't Save: 不保存
   Don't ask again: 不再询问
+  Don't show again: ''
   Done: 完成
   Download update?: 下载更新？
   Download v{}?: 下载 v{}？
@@ -1639,6 +1640,7 @@ translations:
   Monitoring: 监控中
   Month: 月
   Moonraker: Moonraker
+  Moonraker is out of date: ''
   Moonraker restarted but Spoolman not connected. Check server.: Moonraker 已重启但 Spoolman
     未连接。请检查服务器。
   ? "Moonraker restarting...\nWaiting for reconnection..."
@@ -2845,6 +2847,8 @@ translations:
     %.0fg，但料盘仅剩约 %.0fg。仍要开始吗？
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : 此打印机看起来是 {}（置信度 {}%），但当前设置为 {}。错误的类型会应用不正确的打印前选项和预设。
+  ? This printer runs Moonraker {}. HelixScreen needs {} or newer to put the original filename back in your print history after a filament remap rewrites the job. Everything else works normally.
+  : ''
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
   : 这会移除插件的 Moonraker 组件并重启 Moonraker。打印机将短暂断开连接。如果 PRINT_START 中仍有旧的阶段跟踪行，它们也会被移除，但会保留备份。重启 Klipper 后生效。
   This replaces the printer's helper macros with the current version and restarts Klipper.: '这会将打印机的帮助宏替换为当前版本并重启 Klipper。'

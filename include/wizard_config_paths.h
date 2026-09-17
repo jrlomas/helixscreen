@@ -34,6 +34,10 @@ constexpr const char* PRINTER_TYPE = "type";
 // (Application::maybe_warn_type_mismatch) was last shown for. Changing the
 // saved type re-arms the warning once.
 constexpr const char* TYPE_MISMATCH_SHOWN_FOR = "type_mismatch_shown_for";
+// Set once the too-old-Moonraker warning (Application::maybe_warn_moonraker_version)
+// has been permanently dismissed. Per printer, because one machine can run a
+// current Moonraker while another does not.
+constexpr const char* MOONRAKER_VERSION_WARNING_DISMISSED = "moonraker_version_warning_dismissed";
 
 // Bed hardware
 constexpr const char* BED_HEATER = "heaters/bed";
