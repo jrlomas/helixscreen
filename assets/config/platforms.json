@@ -304,7 +304,7 @@
       },
       "package": {
         "asset_name": "helixscreen-ad5x.zip",
-        "docker_target": "mips-docker",
+        "docker_target": "ad5x-docker",
         "build_dir": "build/ad5x",
         "splash_3d_target": "gen-splash-3d-ad5x",
         "gen_images_target": "gen-images",

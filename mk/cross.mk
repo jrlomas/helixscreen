@@ -2215,21 +2215,21 @@ deploy-ad5x-bin:
 	ssh $(AD5X_SSH_TARGET) "mkdir -p $(AD5X_DEPLOY_DIR)/bin"
 	@echo "$(DIM)Backing up the current binary (cp -a: BusyBox cp has no -n)...$(RESET)"
 	ssh $(AD5X_SSH_TARGET) "cd $(AD5X_DEPLOY_DIR)/bin && cp -a helix-screen helix-screen.prev-deploy"
+	@echo "$(DIM)Stopping the app: a running binary cannot be overwritten (Text file busy).$(RESET)"
+	ssh $(AD5X_SSH_TARGET) "killall helix-watchdog helix-screen helix-splash 2>/dev/null; sleep 3; killall -9 helix-watchdog helix-screen helix-splash 2>/dev/null; rm -f /tmp/helix-screen.lock; true"
 	scp -O build/ad5x/bin/helix-screen build/ad5x/bin/helix-splash $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/
 	@if [ -f build/ad5x/bin/helix-watchdog ]; then scp -O build/ad5x/bin/helix-watchdog $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/; fi
 	@echo "$(GREEN)✓ Binaries deployed$(RESET)"
 	$(call sync-device-features,$(AD5X_SSH_TARGET),$(AD5X_DEPLOY_DIR),build/ad5x/bin)
 	@echo ""
-	@echo "$(YELLOW)$(BOLD)The app has NOT been restarted and is still the old binary.$(RESET)"
-	@echo "  The app runs inside a chroot that supplies its glibc, so a plain ssh"
-	@echo "  invocation fails on libssl. Restart it through the chroot - no reboot:"
-	@echo "    $(CYAN)FX=\$$(sed -n 's|.*\(/usr/data/\.mod/\.[a-z-]*\)/usr/lib/.*|\\1|p' /proc/\$$(pidof helix-screen)/maps | head -n 1)$(RESET)"
-	@echo "  (Forge-X is /usr/data/.mod/.forge-x, ZMOD is /usr/data/.mod/.zmod.)"
-	@echo "  Confirm it is not printing:"
-	@echo "    $(CYAN)curl -s http://$(AD5X_HOST):7125/printer/objects/query?print_stats$(RESET)"
-	@echo "  Then, when state is \"standby\", stop it, then start the new binary:"
-	@echo "    $(CYAN)ssh $(AD5X_SSH_TARGET) \"kill \$$(pidof helix-screen)\"$(RESET)"
-	@echo "    $(CYAN)ssh $(AD5X_SSH_TARGET) \"chroot \$$FX $(AD5X_DEPLOY_DIR)/bin/helix-screen --log-level=info --remote &\"$(RESET)"
+	@echo "$(CYAN)Restarting through the chroot...$(RESET)"
+	@# The app's glibc lives in a mod chroot, so a plain ssh invocation fails on
+	@# libssl. Forge-X is .forge-x and ZMOD is .zmod, so the root is read off the
+	@# stopped app's own launcher path rather than hardcoded to either.
+	ssh $(AD5X_SSH_TARGET) 'FX=$$(ls -d /usr/data/.mod/.forge-x /usr/data/.mod/.zmod 2>/dev/null | head -n 1); \
+		chroot $$FX sh -c "cd $(AD5X_DEPLOY_DIR) && ./bin/helix-launcher.sh" >/dev/null 2>&1 & \
+		sleep 12; pidof helix-screen >/dev/null && echo "  restarted" || echo "  WARNING: did not come up"'
+	@echo "$(GREEN)✓ helix-screen restarted$(RESET)"
 	@echo "  Previous binary is kept at $(AD5X_DEPLOY_DIR)/bin/helix-screen.prev-deploy"
 
 # Convenience: SSH into the AD5M
@@ -3516,7 +3516,7 @@ package-cc1: cc1-docker gen-images gen-splash-3d-cc1 gen-printer-images release-
 package-pi: pi-all-docker gen-images gen-splash-3d-pi gen-printer-images release-pi
 package-pi32: pi32-all-docker gen-images gen-splash-3d-pi32 gen-printer-images release-pi32
 package-k1: mips-docker gen-images gen-splash-3d-k1 gen-printer-images release-k1
-package-ad5x: mips-docker gen-images gen-splash-3d-ad5x gen-printer-images release-ad5x
+package-ad5x: ad5x-docker gen-images gen-splash-3d-ad5x gen-printer-images release-ad5x
 package-k1-dynamic: k1-dynamic-docker gen-images gen-splash-3d-k1-dynamic gen-printer-images release-k1-dynamic
 package-k2: k2-docker gen-images gen-splash-3d-k2 gen-printer-images release-k2
 package-snapmaker-u1: snapmaker-u1-docker gen-images gen-splash-3d-snapmaker-u1 gen-printer-images release-snapmaker-u1
