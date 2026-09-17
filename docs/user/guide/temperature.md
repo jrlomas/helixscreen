@@ -95,6 +95,8 @@ Some add-on chamber heaters — currently the BIGTREETECH Panda Breath, with eit
 
 The card only appears when the heater provides diagnostics; printers with a plain heated chamber see no change.
 
+Don't have your heater showing up yet? See [Add-On Chamber Heater Setup](chamber-heater.md).
+
 **Heating vs. Maintaining vs. Off:** On printers that coordinate the chamber heater and a cooling fan (such as the Creality K2), the chamber status shows one of three states:
 
 - **Off** — no chamber temperature is being held

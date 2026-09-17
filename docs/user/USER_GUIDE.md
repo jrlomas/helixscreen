@@ -90,6 +90,9 @@ Display, theme, sound, LED, network, sensors, touch calibration, hardware issues
 ### [Fans](guide/fans.md)
 Discovered fans grouped by controllable vs. automatic, fan types, live speed control via animated dials, RPM readouts, and per-fan renaming.
 
+### [Add-On Chamber Heater Setup](guide/chamber-heater.md)
+Getting a BIGTREETECH Panda Breath working with Klipper so HelixScreen can see it — putting it on the network, choosing between stock and DragonBreath firmware, the module and config each one needs, the Snapmaker U1 one-menu shortcut, and what to do when it goes offline.
+
 ### [Sensors](guide/sensors.md)
 Filament switch and motion sensors with per-sensor role assignment (None, Runout, Toolhead, Entry), read-only probe/width/humidity/accelerometer/color/temperature sensors, and chamber heater/sensor assignment.
 
