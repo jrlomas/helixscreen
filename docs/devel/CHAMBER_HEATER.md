@@ -99,7 +99,8 @@ The backend translates that schema to the generic struct. Vendor names appear **
 - Appliance backends claim their own names at **95** — they always beat the generic keyword tiers on the object that is actually theirs.
 - The generic backend carries the keyword tiers: `CHAMBER` 100 > `ENCLOSURE` 90 > `CAVITY` 85 > standalone `BOX` 60; -1 for compound names, -40 for air-quality tokens (`TVOC`, `CO2`, `HUMIDITY`, ...), floored at 1.
 - `try_set_chamber_heater` additionally breaks ties by object type: a settable `heater_generic` (weight 2) beats a `temperature_fan` (weight 1) at equal keyword confidence. The losing `temperature_fan` is still recorded as the **chamber cooling fan** so the integrated-style Maintaining readout works.
-- `try_set_chamber_sensor` applies the same rule to the sensor pick: a chamber-named `temperature_fan` competes as a sensor candidate — a printer whose only chamber thermistor is such a fan still gets a chamber sensor — and an equal-keyword tie resolves to the passive `temperature_sensor` (weight 2 over the fan's 1) in either iteration order.
+- `try_set_chamber_sensor` scores the sensor pick by keyword alone: a chamber-named `temperature_fan` competes as a sensor candidate — a printer whose only chamber thermistor is such a fan still gets a chamber sensor — and an equal-keyword tie resolves to the passive `temperature_sensor` (weight 2 over the fan's 1) in either iteration order.
+- That pick only stands when nothing heats the chamber. Objects are classified in one pass and the three picks cannot consult each other, so a post-pass at the end of `parse_objects()` releases the sensor pick whenever a chamber heater was resolved — the heater measures its own chamber, so it supplies the reading and no probe holds the sensor role beside it. The released probe keeps its own role and stays listed. The reconciliation sits with the AFC and multiACE yield-backs, which revoke in-loop decisions the same way.
 
 ### Which heater the printer has
 
@@ -125,9 +126,11 @@ panel builds Cool Down and material chamber targets from it, and the material te
 same capability its chamber column binds.
 
 There is no macro-only chamber heater. `M141` is a transport for the resolved heater
-(`chamber_uses_m141()`), and chamber temperature and target are read from that heater's own status
-object, so every working chamber heater is a `heater_generic` or `temperature_fan` object Klipper
-reports.
+(`chamber_uses_m141()`), and the chamber target is read from that heater's own status object, so
+every working chamber heater is a `heater_generic` or `temperature_fan` object Klipper reports.
+The reading comes from the same object unless a sensor has been assigned to the chamber role by
+hand; `chamber_temperature_source()` is the one rule, so every readout and graph series names the
+same probe.
 
 The matched backend id survives on `PrinterDiscovery` (`chamber_heater_backend_id()`) and is re-consulted in `PrinterState::set_hardware`: the diagnostics source and the action surface apply **only while the resolved chamber heater is the discovery pick** — a manual override to another heater (or "none") detaches both, and the actions revert to no-ops.
 
@@ -138,13 +141,18 @@ settings) is `"auto"`, `"none"`, or a Klipper object name. `chamber::resolve_sen
 (`include/chamber_heater_assignment.h`) is the only code that turns it into a sensor, and it applies
 the heater's rule against discovery's sensor pick:
 
-- `"auto"` takes the discovery pick; `"none"` means no chamber sensor.
+- `"auto"` takes the discovery pick, which is empty whenever a chamber heater was resolved;
+  `"none"` means no chamber sensor.
 - A named object counts only while Klipper reports it in its object list. A saved name the printer
   does not report, such as one a model preset seeded, falls back to discovery's sensor pick, so the
   chamber reads the sensor the printer does have. The fallback is always discovery's sensor pick,
   never its heater pick; the heater keeps its own type-blind fallback above. A sensor absent for one
   boot (a disconnected MCU, a config being edited) resumes its authority on the discovery that
   reports it again.
+- A named object that is not the heater is a deliberate choice of probe, and it outranks the heater
+  for the chamber **reading**. The heater goes on supplying the target either way. This is the one
+  way a probe wins against the heater that measures its own chamber, and it is what makes the
+  assignment meaningful on a printer that has both.
 
 `PrinterState::set_hardware` publishes the result as `temperature_state().chamber_sensor_name()`
 and the `printer_has_chamber_sensor` capability, and re-resolves it on every discovery (each klippy

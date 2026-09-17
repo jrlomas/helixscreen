@@ -472,52 +472,41 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
         }
     }
 
-    // Chamber temperature comes from the heater when one is configured (it has
-    // both current temp and target), otherwise from the sensor (temp only).
-    // The sensor is NOT a fallback when a heater is configured — on printers
-    // that have both (e.g. QIDI Q2: heater_generic chamber + thermal-protection
-    // thermistor), the "sensor" often tracks the bed or another nearby heat
-    // source and would pollute chamber_temp_ when partial subscription updates
-    // omit the heater object.
-    if (!chamber_heater_name_.empty()) {
-        if (status.contains(chamber_heater_name_)) {
-            const auto& chamber = status[chamber_heater_name_];
-
-            if (chamber.contains("temperature") && chamber["temperature"].is_number()) {
-                int temp_deci = helix::units::json_to_decidegrees(chamber, "temperature");
-                if (lv_subject_get_int(&chamber_temp_) != temp_deci) {
-                    lv_subject_set_int(&chamber_temp_, temp_deci);
-                    spdlog::trace("[PrinterTemperatureState] Chamber temp (heater): {}.{}C",
-                                  temp_deci / 10, temp_deci % 10);
-                }
-            }
-
-            // A temperature_fan's target is a cooling threshold, not a heating
-            // command: Klipper always reports its configured target_temp (40.0 on
-            // the K1C) even at speed 0. Wherever discovery resolves a
-            // temperature_fan into the heater slot (no heater_generic exists),
-            // that target flows through the cooling-fan branch below instead and
-            // is neutralized by the resting-target comparison in
-            // chamber_effective_setpoint().
-            if (chamber_heater_name_.rfind("temperature_fan ", 0) != 0 &&
-                chamber.contains("target") && chamber["target"].is_number()) {
-                int target_deci = helix::units::json_to_decidegrees(chamber, "target");
-                if (lv_subject_get_int(&chamber_target_) != target_deci) {
-                    lv_subject_set_int(&chamber_target_, target_deci);
-                    spdlog::trace("[PrinterTemperatureState] Chamber target: {}.{}C",
-                                  target_deci / 10, target_deci % 10);
-                }
-            }
-        }
-    } else if (!chamber_sensor_name_.empty() && status.contains(chamber_sensor_name_)) {
-        const auto& chamber = status[chamber_sensor_name_];
+    // The chamber reading comes from whichever object owns it, and the target
+    // from the heater alone. Those are the same object unless a sensor has
+    // been assigned to the chamber role by hand, which is the one way a probe
+    // outranks the heater that measures its own chamber.
+    const std::string& chamber_source = chamber_temperature_source();
+    if (!chamber_source.empty() && status.contains(chamber_source)) {
+        const auto& chamber = status[chamber_source];
 
         if (chamber.contains("temperature") && chamber["temperature"].is_number()) {
             int temp_deci = helix::units::json_to_decidegrees(chamber, "temperature");
             if (lv_subject_get_int(&chamber_temp_) != temp_deci) {
                 lv_subject_set_int(&chamber_temp_, temp_deci);
-                spdlog::trace("[PrinterTemperatureState] Chamber temp (sensor): {}.{}C",
+                spdlog::trace("[PrinterTemperatureState] Chamber temp ({}): {}.{}C", chamber_source,
                               temp_deci / 10, temp_deci % 10);
+            }
+        }
+    }
+
+    if (!chamber_heater_name_.empty() && status.contains(chamber_heater_name_)) {
+        const auto& chamber = status[chamber_heater_name_];
+
+        // A temperature_fan's target is a cooling threshold, not a heating
+        // command: Klipper always reports its configured target_temp (40.0 on
+        // the K1C) even at speed 0. Wherever discovery resolves a
+        // temperature_fan into the heater slot (no heater_generic exists),
+        // that target flows through the cooling-fan branch below instead and
+        // is neutralized by the resting-target comparison in
+        // chamber_effective_setpoint().
+        if (chamber_heater_name_.rfind("temperature_fan ", 0) != 0 && chamber.contains("target") &&
+            chamber["target"].is_number()) {
+            int target_deci = helix::units::json_to_decidegrees(chamber, "target");
+            if (lv_subject_get_int(&chamber_target_) != target_deci) {
+                lv_subject_set_int(&chamber_target_, target_deci);
+                spdlog::trace("[PrinterTemperatureState] Chamber target: {}.{}C", target_deci / 10,
+                              target_deci % 10);
             }
         }
     }

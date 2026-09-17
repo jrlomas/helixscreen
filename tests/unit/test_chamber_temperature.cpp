@@ -142,41 +142,67 @@ TEST_CASE("PrinterTemperatureState ignores chamber when sensor not configured",
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 0);
 }
 
-// 5b. Regression for #947 (QIDI Q2): when both a chamber heater AND a chamber
-// sensor are configured, partial Moonraker subscription updates that only
-// include the sensor (because the sensor's temperature ticked but the heater's
-// didn't) MUST NOT overwrite chamber_temp_ with the sensor's reading. On the
-// Q2 the "chamber sensor" auto-discovered is actually a thermal-protection
-// thermistor that climbs as the bed heats up — so without this guard, the
-// chamber temp display flashes between the real chamber temp (heater) and
-// the bed-influenced sensor reading.
-TEST_CASE("PrinterTemperatureState does not let sensor pollute chamber when heater configured",
+// A chamber heater measures its own chamber, so it owns the reading and no
+// probe holds the sensor role beside it. A thermal-protection thermistor that
+// tracks the bed cannot then take turns writing chamber_temp_ on the partial
+// frames where only it ticked (prestonbrown/helixscreen#947).
+TEST_CASE("an auto-resolved chamber reads only from its heater",
           "[temperature][chamber][issue947]") {
     LVGLTestFixture fixture;
 
+    PrinterDiscovery discovery;
+    nlohmann::json objects = nlohmann::json::array(
+        {"heater_generic chamber", "temperature_sensor Chamber_Thermal_Protection_Sensor"});
+    discovery.parse_objects(objects);
+    REQUIRE(discovery.chamber_heater_name() == "heater_generic chamber");
+    REQUIRE(discovery.chamber_sensor_name().empty());
+
     PrinterTemperatureState temp_state;
     temp_state.init_subjects(false);
-    temp_state.set_chamber_heater_name("heater_generic chamber");
-    temp_state.set_chamber_sensor_name("temperature_sensor Chamber_Thermal_Protection_Sensor");
+    temp_state.set_chamber_heater_name(discovery.chamber_heater_name());
+    temp_state.set_chamber_sensor_name(discovery.chamber_sensor_name());
 
-    // First update: heater reports 27.2°C / target 65°C
     nlohmann::json heater_update = {
         {"heater_generic chamber", {{"temperature", 27.2}, {"target", 65.0}}}};
     temp_state.update_from_status(heater_update);
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 272);
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_target_subject()) == 650);
 
-    // Second update: only the thermal-protection sensor ticks (it tracks bed
-    // proximity, climbing to ~70°C while the bed heats). The chamber heater
-    // object is omitted from this partial update.
+    // The thermistor climbs with the bed and ticks on its own frame.
     nlohmann::json sensor_only_update = {
         {"temperature_sensor Chamber_Thermal_Protection_Sensor", {{"temperature", 70.0}}}};
     temp_state.update_from_status(sensor_only_update);
 
-    // chamber_temp_ must NOT pick up the 70°C sensor reading — when a chamber
-    // heater is configured, it is the only valid source for chamber_temp_.
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 272);
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_target_subject()) == 650);
+}
+
+// An assignment naming something other than the heater is a deliberate choice
+// of probe, so it supplies the reading. The heater still owns the target.
+TEST_CASE("an assigned chamber sensor outranks the heater for the reading",
+          "[temperature][chamber]") {
+    LVGLTestFixture fixture;
+
+    PrinterTemperatureState temp_state;
+    temp_state.init_subjects(false);
+    temp_state.set_chamber_heater_name("heater_generic panda_breath");
+    temp_state.set_chamber_sensor_name("temperature_sensor cavity");
+
+    nlohmann::json status = {
+        {"heater_generic panda_breath", {{"temperature", 55.0}, {"target", 60.0}}},
+        {"temperature_sensor cavity", {{"temperature", 48.6}}}};
+    temp_state.update_from_status(status);
+
+    CHECK(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 486);
+    CHECK(lv_subject_get_int(temp_state.get_chamber_target_subject()) == 600);
+
+    // A frame carrying only the heater moves the target, never the reading.
+    nlohmann::json heater_only = {
+        {"heater_generic panda_breath", {{"temperature", 57.0}, {"target", 45.0}}}};
+    temp_state.update_from_status(heater_only);
+
+    CHECK(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 486);
+    CHECK(lv_subject_get_int(temp_state.get_chamber_target_subject()) == 450);
 }
 
 // 5c. Task 4 (M141 cooling routing): in COOLING mode the K2 M141 macro puts the
@@ -540,8 +566,9 @@ TEST_CASE("Chamber assignment full round trip", "[chamber][integration]") {
         {"temperature_sensor external_bme", {{"temperature", 48.1}}}};
     temp_state.update_from_status(status);
 
-    // Heater is preferred when both are set
-    REQUIRE(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 552);
+    // Both were assigned by hand, so the named sensor supplies the reading
+    // and the named heater supplies the target.
+    REQUIRE(lv_subject_get_int(temp_state.get_chamber_temp_subject()) == 481);
     REQUIRE(lv_subject_get_int(temp_state.get_chamber_target_subject()) == 600);
 
     // Clean up
@@ -691,19 +718,18 @@ TEST_CASE("PrinterDiscovery clears chamber_heater_object_name on reset", "[disco
     REQUIRE(discovery.chamber_heater_object_name().empty());
 }
 
-// 18. PrinterDiscovery prefers heater over sensor for chamber
-TEST_CASE("PrinterDiscovery tracks both chamber heater and sensor independently",
-          "[discovery][chamber]") {
+// 18. A chamber heater is the chamber reading, so no probe holds the sensor role
+TEST_CASE("PrinterDiscovery gives the chamber to its heater", "[discovery][chamber]") {
     PrinterDiscovery discovery;
     nlohmann::json objects = {"heater_generic chamber", "temperature_sensor chamber_temp",
                               "extruder", "heater_bed"};
     discovery.parse_objects(objects);
 
     REQUIRE(discovery.has_chamber_heater());
-    REQUIRE(discovery.has_chamber_sensor());
     REQUIRE(discovery.chamber_heater_name() == "heater_generic chamber");
     REQUIRE(discovery.chamber_heater_object_name() == "chamber");
-    REQUIRE(discovery.chamber_sensor_name() == "temperature_sensor chamber_temp");
+    REQUIRE_FALSE(discovery.has_chamber_sensor());
+    REQUIRE(discovery.chamber_sensor_name().empty());
 }
 
 // ============================================================================

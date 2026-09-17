@@ -633,6 +633,22 @@ class PrinterDiscovery {
             std::sort(tool_names_.begin(), tool_names_.end());
         }
 
+        // A chamber heater measures its own chamber, so it supplies the reading
+        // and there is no separate chamber sensor to name. Objects are
+        // classified in one pass and the picks cannot consult each other, so a
+        // chamber-named probe may have taken the sensor role before any heater
+        // was seen. Release it: the role is a suppression flag in the graph and
+        // the sensor lists, so a probe left holding it is hidden in order to
+        // stand in for a reading it does not supply. An assignment naming a
+        // probe still outranks the heater downstream.
+        if (has_chamber_heater_ && has_chamber_sensor_) {
+            spdlog::info("[PrinterDiscovery] Chamber heater '{}' supplies the chamber "
+                         "temperature; '{}' keeps its own sensor role.",
+                         chamber_heater_name_, chamber_sensor_name_);
+            chamber_sensor_name_.clear();
+            has_chamber_sensor_ = false;
+        }
+
         // [tool N] objects come from klipper-toolchanger, so a machine that does
         // not run it has none: a hotend changer driven by its own extra, or a
         // plain multi-extruder printer whose T<n> macros are the whole story.

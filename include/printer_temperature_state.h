@@ -386,15 +386,19 @@ class PrinterTemperatureState {
     /**
      * @brief The Klipper object the chamber temperature is read from.
      *
-     * The heater when one is configured, else the sensor. A heater carries
-     * both a reading and a target, and on printers with both, the "sensor" is
-     * often a thermal-protection thermistor tracking a different heat source,
-     * so it serves as the fallback for heaterless chambers rather than as a
-     * second opinion. Every chamber readout and graph series resolves its
-     * source here so they cannot disagree about which probe they mean.
+     * A chamber heater measures its own chamber, so discovery resolves the
+     * sensor role to the heater itself and the two names agree. A sensor that
+     * names a different object is therefore a deliberate assignment, and it
+     * wins the reading while the heater goes on supplying the target. With no
+     * heater the sensor is the only reading there is. Every chamber readout
+     * and graph series resolves its source here so they cannot disagree about
+     * which probe they mean.
      */
     const std::string& chamber_temperature_source() const {
-        return !chamber_heater_name_.empty() ? chamber_heater_name_ : chamber_sensor_name_;
+        if (!chamber_sensor_name_.empty() && chamber_sensor_name_ != chamber_heater_name_) {
+            return chamber_sensor_name_;
+        }
+        return chamber_heater_name_;
     }
 
     /**
