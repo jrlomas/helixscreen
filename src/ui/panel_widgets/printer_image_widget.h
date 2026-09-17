@@ -40,6 +40,13 @@ class PrinterImageWidget : public PanelWidget {
     /// XML event callback — opens printer manager overlay
     static void printer_manager_clicked_cb(lv_event_t* e);
 
+  private:
+    /// Points `img` at the pre-scaled copy for its current size, if one is on disk.
+    /// Returns false when the widget has no resolved size yet, or nothing is cached
+    /// at that size, leaving the caller to fall back to the tier image.
+    bool try_set_exact_size_source(lv_obj_t* img);
+
+  public:
   protected:
     void on_hooked_root_deleted() override;
 
@@ -55,6 +62,9 @@ class PrinterImageWidget : public PanelWidget {
     // (mid-rebuild grid) walked the freed descriptor off the heap end (#983/#1025).
     lv_timer_t* refresh_timer_ = nullptr;
     std::string current_source_path_; // Resolved source image (LVGL path)
+    /// What lv_image_set_src was last given, so a repeat resolve to the same file
+    /// does not invalidate the widget for an identical image.
+    std::string current_displayed_path_;
 
     /// Guards the cache-generation continuation, which runs from a worker thread
     /// and touches this widget's LVGL tree.
