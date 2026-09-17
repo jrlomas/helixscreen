@@ -32,8 +32,11 @@ struct AutomountFixture {
     FakeMountOps* ops = new FakeMountOps();
     std::unique_ptr<UsbAutomount> am;
 
-    explicit AutomountFixture(std::chrono::milliseconds grace = std::chrono::milliseconds(100))
-        : am(std::make_unique<UsbAutomount>(std::unique_ptr<helix::usb::MountOps>(ops), grace)) {}
+    explicit AutomountFixture(
+        std::chrono::milliseconds grace = std::chrono::milliseconds(100),
+        helix::usb::MounterPresence probe = helix::usb::MounterPresence::UNKNOWN)
+        : am(std::make_unique<UsbAutomount>(std::unique_ptr<helix::usb::MountOps>(ops), grace,
+                                            probe)) {}
 
     void expect_mounted(const std::string& dev) {
         // Mirror what a successful mount(2) does to the mount table so later
@@ -128,6 +131,48 @@ TEST_CASE("UsbAutomount waits out the grace period before mounting", "[usb_autom
     fx.am->poll(kT0 + kGrace + std::chrono::milliseconds(100));
     REQUIRE(fx.ops->mount_record().empty());
     REQUIRE(fx.am->our_mount_count() == 0);
+}
+
+TEST_CASE("UsbAutomount mount grace follows the primary-mounter probe", "[usb_automount]") {
+    // The grace exists to lose the race against a primary mounter. Only a
+    // positive "nothing on this system can mount" collapses it; a mounter
+    // being present and the probe being unable to tell both wait it out.
+    SECTION("no primary mounter: the first sighting pass mounts") {
+        AutomountFixture fx{kGrace, helix::usb::MounterPresence::ABSENT};
+        fx.ops->candidates = {"/dev/sda1"};
+        fx.ops->present = {"/dev/sda1"};
+
+        fx.am->poll(kT0); // first sighting
+        REQUIRE(fx.ops->mount_record().size() == 1);
+        REQUIRE(fx.ops->mount_record()[0] ==
+                format_mount_call("/dev/sda1", "/mnt/usb/sda1", "vfat", "ro,noatime"));
+    }
+
+    SECTION("primary mounter present: the full grace applies") {
+        AutomountFixture fx{kGrace, helix::usb::MounterPresence::PRESENT};
+        fx.ops->candidates = {"/dev/sda1"};
+        fx.ops->present = {"/dev/sda1"};
+
+        fx.am->poll(kT0);
+        fx.am->poll(kT0 + std::chrono::milliseconds(1500)); // inside grace
+        REQUIRE(fx.ops->mount_record().empty());
+
+        fx.am->poll(kT0 + kGrace + std::chrono::milliseconds(100));
+        REQUIRE(fx.ops->mount_record().size() == 1);
+    }
+
+    SECTION("probe inconclusive: the full grace applies") {
+        AutomountFixture fx{kGrace, helix::usb::MounterPresence::UNKNOWN};
+        fx.ops->candidates = {"/dev/sda1"};
+        fx.ops->present = {"/dev/sda1"};
+
+        fx.am->poll(kT0);
+        fx.am->poll(kT0 + std::chrono::milliseconds(1500)); // inside grace
+        REQUIRE(fx.ops->mount_record().empty());
+
+        fx.am->poll(kT0 + kGrace + std::chrono::milliseconds(100));
+        REQUIRE(fx.ops->mount_record().size() == 1);
+    }
 }
 
 TEST_CASE("UsbAutomount mounts an unmounted stick read-only after grace", "[usb_automount]") {
