@@ -329,7 +329,10 @@ else ifeq ($(PLATFORM_TARGET),ad5x)
     # -ffunction-sections/-fdata-sections: Allow linker to remove unused sections
     # -Wno-error=conversion: LVGL headers have int32_t->float conversions that GCC flags
     # -DHELIX_RELEASE_BUILD: Disables debug features like LV_USE_ASSERT_STYLE
-    # NOTE: ad5x framebuffer is 32bpp (ARGB8888), as is lv_conf.h (LV_COLOR_DEPTH=32)
+    # NOTE: the ad5x framebuffer is 32bpp (ARGB8888) but LVGL renders RGB565 -
+    # lv_conf.h puts HELIX_PLATFORM_AD5X in the 16bpp branch, so the flush path
+    # converts. Probe it rather than trust this comment:
+    #   gcc -DHELIX_PLATFORM_AD5X -DLV_CONF_INCLUDE_SIMPLE -I. -Ilib/lvgl ...
     # -funwind-tables: Emit DWARF unwind info so backtrace() can walk the full
     # call stack in crash reports. Small code size cost, zero runtime cost.
     TARGET_CFLAGS := -march=mips32r5 -mtune=mips32r5 -mabi=32 -mnan=2008 -mfp64 \
@@ -2183,6 +2186,47 @@ deploy-ad5m-bin:
 	@echo "$(CYAN)Restarting helix-screen on $(AD5M_HOST)...$(RESET)"
 	ssh $(AD5M_SSH_TARGET) "killall helix-watchdog helix-screen helix-splash 2>/dev/null || true; sleep 1; cd $(AD5M_DEPLOY_DIR) && ./bin/helix-launcher.sh >/dev/null 2>&1 &"
 	@echo "$(GREEN)✓ helix-screen restarted$(RESET)"
+
+# =============================================================================
+# AD5X deploy
+# =============================================================================
+# The AD5X does NOT resolve via mDNS, so the host is required rather than
+# defaulted, the way the K2's is.
+AD5X_HOST ?=
+AD5X_USER ?= root
+AD5X_SSH_TARGET = $(if $(AD5X_HOST),$(AD5X_USER)@$(AD5X_HOST),$(error AD5X_HOST is required. The AD5X does not resolve via mDNS. Use: make deploy-ad5x-bin AD5X_HOST=192.168.x.x))
+# Forge-X payload root, same shape as the AD5M's.
+AD5X_DEPLOY_DIR ?= /opt/config/mod/.bin/helixscreen
+
+# Binaries only. Deliberately does NOT restart the app, and that is not an
+# oversight: helix-screen on this board links against Forge-X's alternate glibc,
+# and an ssh login shell resolves the host /lib (2.33) instead. Launching
+# helix-launcher.sh from a deploy recipe therefore dies with
+# "GLIBC_2.34 not found", and pointing LD_LIBRARY_PATH at the Forge-X libs only
+# moves it to "ld-linux-mipsn8.so.1: GLIBC_2.35 not found" - their libc wants a
+# matching loader. Nothing under /etc, /opt/config/mod or /usr/data references
+# the launcher, so there is no start path to invoke. A reboot is the only
+# reliable restart, and rebooting a printer is the operator's call to make, not
+# a Makefile's: the board may be mid-print.
+.PHONY: deploy-ad5x-bin
+deploy-ad5x-bin:
+	@test -f build/ad5x/bin/helix-screen || { echo "$(RED)Error: build/ad5x/bin/helix-screen not found. Run 'make ad5x-docker' first.$(RESET)"; exit 1; }
+	@echo "$(CYAN)Deploying binaries only to $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin...$(RESET)"
+	ssh $(AD5X_SSH_TARGET) "mkdir -p $(AD5X_DEPLOY_DIR)/bin"
+	@echo "$(DIM)Backing up the current binary (cp -a: BusyBox cp has no -n)...$(RESET)"
+	ssh $(AD5X_SSH_TARGET) "cd $(AD5X_DEPLOY_DIR)/bin && cp -a helix-screen helix-screen.prev-deploy"
+	scp -O build/ad5x/bin/helix-screen build/ad5x/bin/helix-splash $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/
+	@if [ -f build/ad5x/bin/helix-watchdog ]; then scp -O build/ad5x/bin/helix-watchdog $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/; fi
+	@echo "$(GREEN)✓ Binaries deployed$(RESET)"
+	$(call sync-device-features,$(AD5X_SSH_TARGET),$(AD5X_DEPLOY_DIR),build/ad5x/bin)
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)The app has NOT been restarted and is still the old binary.$(RESET)"
+	@echo "$(YELLOW)This board can only be restarted by rebooting it.$(RESET)"
+	@echo "  Confirm it is not printing:"
+	@echo "    $(CYAN)curl -s http://$(AD5X_HOST):7125/printer/objects/query?print_stats$(RESET)"
+	@echo "  Then, when state is \"standby\":"
+	@echo "    $(CYAN)ssh $(AD5X_SSH_TARGET) /sbin/reboot$(RESET)"
+	@echo "  Previous binary is kept at $(AD5X_DEPLOY_DIR)/bin/helix-screen.prev-deploy"
 
 # Convenience: SSH into the AD5M
 ad5m-ssh:
