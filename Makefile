@@ -875,7 +875,8 @@ else ifneq ($(CROSS_COMPILE)$(filter x86 x86-fbdev x86-both,$(PLATFORM_TARGET)),
     # No SDL2 - display handled by framebuffer/DRM
     # SSL is optional - only needed if connecting to remote Moonraker over HTTPS
     # Note: libnl must come AFTER wpa_client (static linking order matters)
-    # Note: -L path only for glibc targets (Pi, AD5M) - musl targets (K1) are self-contained
+    # Note: -L path only for targets that link against host libs (Pi, AD5M);
+    # the toolchains below each carry their own sysroot
     ifeq ($(PLATFORM_TARGET),k1-dynamic)
         # K1 Dynamic: Mixed static/dynamic linking
         # Project libraries linked statically, system libraries linked dynamically
@@ -885,7 +886,9 @@ else ifneq ($(CROSS_COMPILE)$(filter x86 x86-fbdev x86-both,$(PLATFORM_TARGET)),
             -Wl,-Bdynamic \
             -lstdc++ -lz -lm -lpthread -lrt -ldl -latomic -lgcc_s
     else ifneq ($(filter mips k1 ad5x,$(PLATFORM_TARGET)),)
-        # MIPS targets (K1, AD5X) use musl - fully static, no system library paths needed
+        # No system library path: these toolchains are self-contained.
+        # mips/k1 use musl and link fully static; ad5x uses Buildroot glibc and
+        # resolves its libs from the mod chroot at runtime, never the host's /usr/lib.
         # -latomic: Required for 64-bit atomics on 32-bit MIPS (std::atomic<int64_t>)
         LDFLAGS := $(LIBHV_LIBS) $(FMT_LIBS) $(WPA_CLIENT_LIB) $(LIBNL_LIBS) -latomic -ldl -lz -lm -lpthread
     else ifeq ($(PLATFORM_TARGET),k2)

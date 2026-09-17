@@ -82,9 +82,9 @@ static constexpr int DEFAULT_AUTO_RESTART_SEC = 30;
 // far larger budget — see watchdog_restart_policy.h. Under memory pressure
 // execv() of an intact binary can fail with ENOEXEC/ENOMEM; spending the small
 // budget above on those turns a passing squeeze into a permanently black screen.
-// The budget itself (RESTART_LOOP_MAX_FAILURES) and the pacing live in the
-// policy header so they can be unit tested on hosts that never build this binary.
-static constexpr int RESTART_LOOP_WINDOW_SEC = 60;
+// The budget itself (RESTART_LOOP_MAX_FAILURES), the counting and the pacing
+// live in the policy header so they can be unit tested on hosts that never
+// build this binary.
 static constexpr int RESTART_LOOP_EXIT_CODE = 42;
 
 // Crash-loop detection (separate window from non-zero-exit loops above).
@@ -1108,17 +1108,7 @@ static int run_watchdog(const WatchdogArgs& args) {
 
     bool first_launch = true;
 
-    // Rolling window of recent non-zero deliberate-exit timestamps. See the
-    // RESTART_LOOP_* constants at the top of this file for rationale.
-    std::deque<std::chrono::steady_clock::time_point> recent_failures;
-
-    // TRANSIENT exec/fork failures get their own counters, deliberately NOT
-    // windowed: with exponential backoff a fixed window would drain faster than
-    // failures arrive and the budget would never bite. Consecutive-count
-    // semantics instead — any launch that actually reached helix-screen clears
-    // them, so a single successful start wipes the history.
-    int consecutive_transient_failures = 0;
-    int transient_cooldown_rounds = 0;
+    helix::watchdog::RestartFailureCounters launch_failures;
 
     // Rolling window of recent crash signatures (signal_num for SIGNAL crashes,
     // or exit_code for crash-handler 128..159 exits). Detecting the same
@@ -1197,11 +1187,12 @@ static int run_watchdog(const WatchdogArgs& args) {
                                     ? helix::watchdog::ExecFailureClass::NONE
                                     : helix::watchdog::classify_child_exit_code(crash.exit_code);
 
-        // Any launch that got past exec ends the transient streak, so one
-        // successful start wipes the accumulated pressure history.
-        if (exec_class != helix::watchdog::ExecFailureClass::TRANSIENT) {
-            consecutive_transient_failures = 0;
-            transient_cooldown_rounds = 0;
+        // A launch that ran, whether it exited cleanly or crashed once up,
+        // clears every budget: the condition that was blocking startup is gone.
+        const bool launch_ran = crash.was_signaled || crash.exit_code == 0 ||
+                                (crash.exit_code > 128 && crash.exit_code < 160);
+        if (launch_ran) {
+            launch_failures.on_launch_succeeded();
         }
 
         // Normal exit (code 0) - just restart silently
@@ -1237,11 +1228,12 @@ static int run_watchdog(const WatchdogArgs& args) {
                 // FFT, a large upload — anything that pushes a small board into
                 // swap). Counted on its own so it cannot spend the small
                 // non-transient budget and strand the user at a black screen.
-                failure_count = ++consecutive_transient_failures;
+                failure_count = launch_failures.record(exec_class);
                 spdlog::warn("[Watchdog] Child launch failed transiently (exit {}); "
                              "consecutive transient failures: {}/{}, cooldown rounds used {}/{}",
                              crash.exit_code, failure_count,
-                             helix::watchdog::TRANSIENT_MAX_FAILURES, transient_cooldown_rounds,
+                             helix::watchdog::TRANSIENT_MAX_FAILURES,
+                             launch_failures.cooldown_rounds,
                              helix::watchdog::TRANSIENT_MAX_COOLDOWN_ROUNDS);
             } else {
                 // Genuine non-zero exit (no crash): deliberate exit() with a
@@ -1249,21 +1241,15 @@ static int run_watchdog(const WatchdogArgs& args) {
                 // CLI arg error — or a PERMANENT exec failure (missing binary,
                 // no execute permission, path is a directory).
                 //
-                // Tracked in a rolling window: if they keep happening, the
+                // Counted consecutively: if they keep happening, the
                 // underlying problem won't fix itself by retrying, so bail out
                 // and let the service manager (or a human) see the failure
                 // rather than spamming logs forever.
-                auto now = std::chrono::steady_clock::now();
-                const auto window = std::chrono::seconds(RESTART_LOOP_WINDOW_SEC);
-                while (!recent_failures.empty() && (now - recent_failures.front()) > window) {
-                    recent_failures.pop_front();
-                }
-                recent_failures.push_back(now);
-                failure_count = static_cast<int>(recent_failures.size());
+                failure_count = launch_failures.record(exec_class);
             }
 
-            const auto decision = helix::watchdog::decide_restart_action(exec_class, failure_count,
-                                                                         transient_cooldown_rounds);
+            const auto decision = helix::watchdog::decide_restart_action(
+                exec_class, failure_count, launch_failures.cooldown_rounds);
 
             if (decision.action == RestartAction::GIVE_UP) {
                 if (exec_class == ExecFailureClass::TRANSIENT) {
@@ -1271,26 +1257,25 @@ static int run_watchdog(const WatchdogArgs& args) {
                         "[Watchdog] Transient launch failures never cleared: {} cooldown "
                         "rounds exhausted (last exit code: {}). Exiting watchdog with code "
                         "{} so the service manager sees it.",
-                        transient_cooldown_rounds, crash.exit_code, RESTART_LOOP_EXIT_CODE);
+                        launch_failures.cooldown_rounds, crash.exit_code, RESTART_LOOP_EXIT_CODE);
                 } else {
                     spdlog::critical(
                         "[Watchdog] Restart loop detected: child exited non-zero {} times "
-                        "in the last {}s (last exit code: {}). Giving up to avoid busy-loop; "
+                        "in a row (last exit code: {}). Giving up to avoid busy-loop; "
                         "exiting watchdog with code {}. Investigate the underlying failure "
                         "(another instance running, bad config, missing library, etc.).",
-                        failure_count, RESTART_LOOP_WINDOW_SEC, crash.exit_code,
-                        RESTART_LOOP_EXIT_CODE);
+                        failure_count, crash.exit_code, RESTART_LOOP_EXIT_CODE);
                 }
                 cleanup_splash(g_splash_pid);
                 return RESTART_LOOP_EXIT_CODE;
             }
 
             if (decision.action == RestartAction::COOLDOWN_RETRY) {
-                ++transient_cooldown_rounds;
-                consecutive_transient_failures = 0;
+                ++launch_failures.cooldown_rounds;
+                launch_failures.transient = 0;
                 spdlog::warn("[Watchdog] Transient launch failures outlasted the backoff "
                              "budget; cooling down {}s before retrying (round {}/{})",
-                             decision.delay_seconds, transient_cooldown_rounds,
+                             decision.delay_seconds, launch_failures.cooldown_rounds,
                              helix::watchdog::TRANSIENT_MAX_COOLDOWN_ROUNDS);
             } else {
                 spdlog::warn("[Watchdog] Child exited with code {} ({}, not a crash), "

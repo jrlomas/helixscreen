@@ -265,7 +265,9 @@ else ifeq ($(PLATFORM_TARGET),ad5m)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # AD5M: 110 MB total over a disk-backed swap file. Measured with a saver drawing:
+    # zero Klipper major faults across 730 s, and no detectable RSS cost.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := ad5m
     # Mock backends are dev/test scaffolding. The Makefile defaults ENABLE_MOCKS
@@ -306,7 +308,8 @@ else ifeq ($(PLATFORM_TARGET),ad5m-br)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # Same board as ad5m, so it carries savers on the same evidence.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := ad5m-br
     # Matches the `ad5m` target's size treatment (see its ENABLE_MOCKS block).
@@ -351,8 +354,8 @@ else ifeq ($(PLATFORM_TARGET),ad5x)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # AD5X: 385 MB free, no swap, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # AD5X: 385 MB free, no swap, so a saver is affordable. A running saver costs no
+    # detectable RSS, and the load gate measures CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := ad5x
@@ -406,7 +409,10 @@ else ifeq ($(PLATFORM_TARGET),cc1)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # CC1: 114 MB total, zram swap. Measured with a saver drawing: Klipper faulted at
+    # 0.247/s against 0.251/s for the same binary restarted without one, so the load is
+    # the restart, not the saver.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := cc1
     # Matches the `ad5m` target's size treatment (see its ENABLE_MOCKS block).
@@ -473,8 +479,8 @@ else ifneq ($(filter mips k1,$(PLATFORM_TARGET)),)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # K1C: 130 MB free, swap file untouched, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # K1C: 130 MB free, swap file untouched, so a saver is affordable. A running saver costs no
+    # detectable RSS, and the load gate measures CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := mips
@@ -520,8 +526,8 @@ else ifeq ($(PLATFORM_TARGET),k1-dynamic)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # K1 dynamic: same board as k1/mips, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # K1 dynamic: same board as k1/mips, so a saver is affordable. A running saver costs no
+    # detectable RSS, and the load gate measures CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := k1-dynamic
@@ -564,8 +570,8 @@ else ifeq ($(PLATFORM_TARGET),k2)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # K2 Plus: 395 MB free, no swap, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # K2 Plus: 395 MB free, no swap, so a saver is affordable. A running saver costs no
+    # detectable RSS, and the load gate measures CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := k2
@@ -599,8 +605,9 @@ else ifeq ($(PLATFORM_TARGET),snapmaker-u1)
     DISPLAY_BACKEND := drm
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # Snapmaker U1: 4 cores and 705 MB free - the roomiest board in the fleet, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # Snapmaker U1: 4 cores and 705 MB free, the roomiest board in the fleet, so a saver
+    # is affordable. A running saver costs no detectable RSS, and the load gate measures
+    # CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := snapmaker-u1
@@ -703,7 +710,8 @@ else ifeq ($(PLATFORM_TARGET),yocto)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # Same board as cc1 (Centauri Carbon 1), so it carries savers on the same evidence.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := yocto
     # Don't strip — bitbake's package split handles debug/strip via FILES:${PN}-dbg.

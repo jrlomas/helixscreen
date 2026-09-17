@@ -281,15 +281,23 @@ fi
 # --- branch containment -------------------------------------------------------
 
 DELETE_BRANCH=0
+UNCONTAINED=0
 if [[ -n "$BRANCH" ]] && (( ! KEEP_BRANCH )); then
     if ! git -C "$MAIN_ABS" rev-parse --verify --quiet "$INTO" >/dev/null; then
         say "${YELLOW}! '$INTO' does not resolve; keeping the branch.${RESET}"
     elif git -C "$MAIN_ABS" merge-base --is-ancestor "$BRANCH" "$INTO" 2>/dev/null; then
         say "${GREEN}Branch tip is an ancestor of $INTO.${RESET}"
         DELETE_BRANCH=1
+    elif (( FORCE_BRANCH )); then
+        say "${YELLOW}! '$BRANCH' is NOT contained in '$INTO'.${RESET}"
+        { git -C "$MAIN_ABS" log --oneline "$INTO..$BRANCH" 2>/dev/null || true; } | head -5 | sed 's/^/    /'
+        say "${YELLOW}--force-branch given: deleting anyway, discarding the commits above.${RESET}"
+        UNCONTAINED=1
+        DELETE_BRANCH=1
     else
         say "${YELLOW}! '$BRANCH' is NOT contained in '$INTO' - keeping it.${RESET}"
         { git -C "$MAIN_ABS" log --oneline "$INTO..$BRANCH" 2>/dev/null || true; } | head -5 | sed 's/^/    /'
+        say "  Re-run with ${CYAN}--force-branch${RESET} to delete it and discard them."
     fi
 fi
 
@@ -373,7 +381,7 @@ if (( DELETE_BRANCH )); then
         # then reads as unpushed when it is not.
         UPSTREAM="$(git -C "$MAIN_ABS" rev-parse --abbrev-ref "$BRANCH@{u}" 2>/dev/null || echo '<none>')"
         DELETED_AFTER_FETCH=0
-        if [[ "$UPSTREAM" == */* ]]; then
+        if [[ "$UPSTREAM" == */* ]] && (( ! UNCONTAINED )); then
             say "Refreshing $UPSTREAM before reporting the branch as unpushed..."
             if git -C "$MAIN_ABS" fetch --quiet "${UPSTREAM%%/*}" "${UPSTREAM#*/}" 2>/dev/null &&
                git -C "$MAIN_ABS" branch -d "$BRANCH" 2>/dev/null; then
@@ -385,12 +393,20 @@ if (( DELETE_BRANCH )); then
             fi
         fi
         if (( ! DELETED_AFTER_FETCH )); then
-            say "${YELLOW}git refused -d.${RESET} Its check includes the branch's upstream ($UPSTREAM),"
-            say "which is behind when $INTO has been merged locally but not pushed."
+            if (( UNCONTAINED )); then
+                say "${YELLOW}git refused -d${RESET} because the branch holds commits $INTO does not."
+            else
+                say "${YELLOW}git refused -d.${RESET} Its check includes the branch's upstream ($UPSTREAM),"
+                say "which is behind when $INTO has been merged locally but not pushed."
+            fi
             say "  git said: $(git -C "$MAIN_ABS" branch -d "$BRANCH" 2>&1 | head -2 | tr '\n' ' ')"
             if (( FORCE_BRANCH )); then
-                # Containment in $INTO was verified above, so -D discards nothing.
-                say "Verified: tip is an ancestor of $INTO, so -D discards nothing."
+                if (( UNCONTAINED )); then
+                    say "${YELLOW}-D discards the commits listed above; no other ref holds them.${RESET}"
+                else
+                    # Containment in $INTO was verified above, so -D discards nothing.
+                    say "Verified: tip is an ancestor of $INTO, so -D discards nothing."
+                fi
                 run git -C "$MAIN_ABS" branch -D "$BRANCH"
                 say "${GREEN}Deleted.${RESET}"
             else
