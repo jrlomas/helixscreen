@@ -662,6 +662,14 @@ int Application::run(int argc, char** argv) {
         }
     }
 
+    // Before Phase 3: a platform state-root rename has to precede logging,
+    // which opens HELIX_LOG_FILE — a path a pre-rename platform hook still
+    // exports from the old root. Skipped in test mode, where the harness owns
+    // the filesystem layout.
+    if (!get_runtime_config()->is_test_mode()) {
+        helix::migrate_legacy_state_roots();
+    }
+
     // Phase 3: Initialize logging
     if (!init_logging()) {
         return 1;

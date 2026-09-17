@@ -71,7 +71,7 @@ $(DESTDIR)/opt/helixscreen/
 ```
 
 Runtime writable state (config file, log, cache) is **not** installed — the
-init script creates it under `/data/helixscreen/` on first boot.
+init script creates it under `/data/.helixscreen/` on first boot.
 
 ## How `data_root_resolver` finds everything
 

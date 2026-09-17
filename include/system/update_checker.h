@@ -289,6 +289,20 @@ class UpdateChecker {
     static std::string compute_update_staging_dir(const std::string& tarball_path,
                                                   const std::string& install_root);
 
+    /**
+     * @brief The filename an update download stages under for a release URL.
+     * @param url The release asset URL; a .zip URL stages under its .zip name.
+     * @return The basename (no directory) of the staged file.
+     *
+     * Dot-prefixed so the staged archive and the scratch files derived from it
+     * stay hidden wherever the free-space search puts them: on boards whose
+     * gcodes root is the whole data partition rather than a directory inside
+     * it, a plainly named archive is a file in the print picker for the whole
+     * update. Pure + static so the hiding invariant is unit-testable without
+     * a network fetch.
+     */
+    static std::string download_filename_for_url(const std::string& url);
+
     std::string get_platform_asset_name() const;
 
     /// Single source of truth for the release asset name Moonraker's update

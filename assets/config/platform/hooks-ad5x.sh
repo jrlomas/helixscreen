@@ -12,7 +12,7 @@
 #   - The install root is /srv/helixscreen (Z-Mod ships and launches it there via
 #     its own /etc/init.d/S80helixscreen), not /opt/helixscreen or /data/helixscreen.
 #   - /data does not exist on this machine at all, on the host or in the chroot.
-#     The AD5M hooks export HELIX_CACHE_DIR=/data/helixscreen/cache, which would
+#     The AD5M hooks export HELIX_CACHE_DIR=/data/.helixscreen/cache, which would
 #     silently point at nothing here.
 #
 # Durable storage is /usr/data (mmcblk0p7, ~5.5G); / is read-only squashfs and

@@ -2087,7 +2087,7 @@ Override the base directory for all HelixScreen cache/temp files (thumbnails, sc
 | **File** | `src/app_globals.cpp` |
 
 When set, all cache subdirectories are created under `$HELIX_CACHE_DIR/<subdir>`. Platform hooks set this automatically:
-- **AD5M**: `/data/helixscreen/cache` (5.8GB ext4 partition)
+- **AD5M**: `/data/.helixscreen/cache` (5.8GB ext4 partition)
 - **K1**: `/usr/data/helixscreen/cache`
 - **K2**: `/mnt/UDISK/helixscreen/cache` (27.5GB user partition). `/usr/data` on the
   K2 is the ~240MB root overlay, not user storage, so it is only a fallback.
@@ -2102,7 +2102,7 @@ When set, all cache subdirectories are created under `$HELIX_CACHE_DIR/<subdir>`
 HELIX_CACHE_DIR=/mnt/storage/helix-cache ./build/bin/helix-screen
 
 # AD5M (set automatically by platform hooks)
-export HELIX_CACHE_DIR="/data/helixscreen/cache"
+export HELIX_CACHE_DIR="/data/.helixscreen/cache"
 ```
 
 **Resolution chain** (first match wins):
