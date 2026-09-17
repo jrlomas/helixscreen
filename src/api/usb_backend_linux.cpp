@@ -19,7 +19,6 @@
 #include <poll.h>
 #include <sstream>
 #include <sys/stat.h>
-#include <sys/statvfs.h>
 #include <unistd.h>
 
 UsbBackendLinux::UsbBackendLinux() {
@@ -195,7 +194,6 @@ std::vector<UsbDrive> UsbBackendLinux::parse_mounts() {
             drive.device = device;
             drive.mount_path = mount_point;
             drive.label = get_volume_label(device, mount_point);
-            get_capacity(mount_point, drive.total_bytes, drive.available_bytes);
 
             spdlog::debug("[UsbBackendLinux] Found USB drive: {} at {} ({})", drive.label,
                           drive.mount_path, drive.device);
@@ -329,18 +327,6 @@ std::string UsbBackendLinux::get_volume_label(const std::string& device,
     }
 
     return "USB Drive";
-}
-
-void UsbBackendLinux::get_capacity(const std::string& mount_point, uint64_t& total,
-                                   uint64_t& available) {
-    struct statvfs stat;
-    if (statvfs(mount_point.c_str(), &stat) == 0) {
-        total = static_cast<uint64_t>(stat.f_blocks) * stat.f_frsize;
-        available = static_cast<uint64_t>(stat.f_bavail) * stat.f_frsize;
-    } else {
-        total = 0;
-        available = 0;
-    }
 }
 
 void UsbBackendLinux::drain_mountinfo_fd() {

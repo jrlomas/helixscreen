@@ -45,20 +45,21 @@ struct UsbError {
 
 /**
  * @brief USB drive information
+ *
+ * Carries no capacity fields: free space on a removable FAT volume costs a
+ * full FAT scan on the first query after mount (seconds on embedded flash),
+ * so whoever displays capacity computes it on demand - never the detection
+ * path that decides a drive exists.
  */
 struct UsbDrive {
-    std::string mount_path;   ///< Mount point path ("/media/usb0" or "/Volumes/USBDRIVE")
-    std::string device;       ///< Device path ("/dev/sda1")
-    std::string label;        ///< Volume label ("USBDRIVE")
-    uint64_t total_bytes;     ///< Total capacity in bytes
-    uint64_t available_bytes; ///< Available space in bytes
+    std::string mount_path; ///< Mount point path ("/media/usb0" or "/Volumes/USBDRIVE")
+    std::string device;     ///< Device path ("/dev/sda1")
+    std::string label;      ///< Volume label ("USBDRIVE")
 
-    UsbDrive() : total_bytes(0), available_bytes(0) {}
+    UsbDrive() = default;
 
-    UsbDrive(const std::string& mount, const std::string& dev, const std::string& lbl,
-             uint64_t total = 0, uint64_t available = 0)
-        : mount_path(mount), device(dev), label(lbl), total_bytes(total),
-          available_bytes(available) {}
+    UsbDrive(const std::string& mount, const std::string& dev, const std::string& lbl)
+        : mount_path(mount), device(dev), label(lbl) {}
 };
 
 /**
