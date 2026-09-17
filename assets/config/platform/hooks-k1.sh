@@ -100,6 +100,15 @@ platform_pre_start() {
     # them, and the thumbnail cache is rebuilt from nothing.
     export HELIX_CACHE_DIR="${HELIX_CACHE_DIR:-/usr/data/helixscreen-state/cache}"
 
+    # LVGL decodes each thumbnail on every draw with no cache. 2 MB is the knee
+    # measured on a K1C: -14% process CPU over a scroll-the-grid scenario, RSS
+    # slightly BELOW the uncached run, and the first size at which no image is
+    # too large to store (1 MB leaves 28 of them uncacheable). Larger buys 0.4
+    # points for four times the memory. The K1 family is the only board where
+    # this resolved cleanly - the K2 and AD5X measured inside their own run-to-run
+    # spread, so they stay at the built-in 0.
+    export HELIX_IMAGE_CACHE_KB="${HELIX_IMAGE_CACHE_KB:-2048}"
+
     # Logging policy: write to /usr/data (mmcblk0p10 ext4, ~5.7 GB free on
     # a typical install), NOT to /tmp. /tmp here is a ~104 MB tmpfs and
     # /var/log is a symlink into it (../tmp), so spdlog's syslog target
