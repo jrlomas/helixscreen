@@ -935,3 +935,104 @@ class TestHistoryPatching:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestHistoryIdCapture:
+    """The history id arrives on history's own event, not in print_stats."""
+
+    def _payload(self, action="added", filename=".helix_print/abcd_benchy.gcode",
+                 job_id="00001A"):
+        job = {"filename": filename, "status": "in_progress"}
+        if job_id is not None:
+            job["job_id"] = job_id
+        return {"action": action, "job": job}
+
+    def _staged(self, component, filename=".helix_print/abcd_benchy.gcode"):
+        info = PrintInfo(
+            original_filename="prints/benchy.gcode",
+            temp_filename=".helix_temp/modified_1_benchy.gcode",
+            symlink_filename=filename,
+            modifications=["remap_T1_to_T2"],
+            start_time=100.0,
+        )
+        component.active_prints[filename] = info
+        return info
+
+    @pytest.mark.asyncio
+    async def test_added_event_records_the_id(self, helix_print_component):
+        info = self._staged(helix_print_component)
+        assert info.job_id is None
+
+        await helix_print_component._on_history_changed(self._payload())
+
+        assert info.job_id == "00001A"
+
+    @pytest.mark.asyncio
+    async def test_klipper_print_stats_never_carry_an_id(self, helix_print_component):
+        # Klipper's print_stats has no job_id, so the job-state route is not
+        # where the id comes from. Planting one here and watching it be ignored
+        # is what makes that a claim about our code rather than about the
+        # fixture happening to leave the key out.
+        info = self._staged(helix_print_component)
+
+        await helix_print_component._on_job_state_changed(
+            None,
+            {"state": "standby", "filename": ".helix_print/abcd_benchy.gcode"},
+            {
+                "state": "printing",
+                "filename": ".helix_print/abcd_benchy.gcode",
+                "job_id": "00BEEF",
+            },
+        )
+
+        assert info.job_id is None
+
+    @pytest.mark.asyncio
+    async def test_other_peoples_prints_are_ignored(self, helix_print_component):
+        info = self._staged(helix_print_component)
+
+        await helix_print_component._on_history_changed(
+            self._payload(filename="prints/somebody_elses.gcode")
+        )
+
+        assert info.job_id is None
+
+    @pytest.mark.asyncio
+    async def test_finished_action_does_not_record(self, helix_print_component):
+        # Only the "added" action carries an id for a job we are still staging.
+        info = self._staged(helix_print_component)
+
+        await helix_print_component._on_history_changed(self._payload(action="finished"))
+
+        assert info.job_id is None
+
+    @pytest.mark.asyncio
+    async def test_payload_without_an_id_is_ignored(self, helix_print_component):
+        info = self._staged(helix_print_component)
+
+        await helix_print_component._on_history_changed(self._payload(job_id=None))
+
+        assert info.job_id is None
+
+    @pytest.mark.asyncio
+    async def test_the_handler_is_registered(self, helix_print_component, mock_server):
+        await helix_print_component.component_init()
+        assert "history:history_changed" in mock_server.event_handlers
+
+    @pytest.mark.asyncio
+    async def test_id_from_the_event_reaches_the_patch(self, helix_print_component,
+                                                       mock_server):
+        # The whole chain: history announces the row, we keep the id, and the
+        # patch uses it to address that row.
+        history = mock_server.components["history"]
+        history.add_job("00001A")
+        await helix_print_component.component_init()
+        info = self._staged(helix_print_component)
+
+        await helix_print_component._on_history_changed(self._payload())
+        await helix_print_component._patch_history_entry(info, "complete")
+
+        assert len(history.save_job_calls) == 1
+        job, job_id = history.save_job_calls[0]
+        assert job_id == 0x1A
+        assert job.filename == "prints/benchy.gcode"

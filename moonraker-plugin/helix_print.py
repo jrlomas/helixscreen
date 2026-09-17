@@ -135,6 +135,9 @@ class HelixPrint:
             "job_state:state_changed", self._on_job_state_changed
         )
         self.server.register_event_handler(
+            "history:history_changed", self._on_history_changed
+        )
+        self.server.register_event_handler(
             "server:klippy_ready", self._on_klippy_ready
         )
 
@@ -522,6 +525,28 @@ class HelixPrint:
     # Event Handlers
     # =========================================================================
 
+    async def _on_history_changed(self, payload: Dict[str, Any]) -> None:
+        """Record the history id of a print we staged.
+
+        The id is history's own, assigned when it writes the row, and it is
+        never part of Klipper's print_stats - so this event is the only place
+        it can be read. It also carries the id in its payload rather than on
+        the component, which matters: every handler of a Moonraker event runs
+        under one asyncio.gather(), so a handler that reached into history for
+        the live id would be racing history's own handler for it.
+        """
+        if payload.get("action") != "added":
+            return
+        job = payload.get("job") or {}
+        print_info = self.active_prints.get(job.get("filename", ""))
+        if print_info is None:
+            return
+        job_id = job.get("job_id")
+        if not job_id:
+            return
+        print_info.job_id = job_id
+        logging.info(f"HelixPrint: Job started with ID {job_id}")
+
     async def _on_klippy_ready(self) -> None:
         """Handle Klipper ready event - recover from any interrupted prints."""
         logging.debug("HelixPrint: Klipper ready, checking for interrupted prints")
@@ -545,13 +570,6 @@ class HelixPrint:
         if not print_info:
             logging.warning(f"HelixPrint: Unknown modified file: {filename}")
             return
-
-        # Capture job_id when print starts
-        if state == "printing":
-            job_id = new_stats.get("job_id")
-            if job_id:
-                print_info.job_id = job_id
-                logging.info(f"HelixPrint: Job started with ID {job_id}")
 
         # Handle completion states
         if state in ("complete", "cancelled", "error"):
