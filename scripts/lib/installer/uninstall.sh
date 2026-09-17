@@ -639,6 +639,12 @@ uninstall() {
         [ -n "$_asvc_conf" ] && remove_moonraker_asvc "$_asvc_conf" || true
     fi
 
+    # Remove the HelixPrint Moonraker plugin while the install tree is still
+    # here: the removal delegates to moonraker-plugin/install.sh inside it.
+    if type remove_moonraker_plugin >/dev/null 2>&1; then
+        remove_moonraker_plugin || true
+    fi
+
     # Detect init system first
     detect_init_system
 

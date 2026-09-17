@@ -606,6 +606,135 @@ remove_moonraker_asvc() {
     log_success "Removed helixscreen from Moonraker service allowlist"
 }
 
+# Locate the helix_print.py the HelixPrint plugin install symlinks into
+# Moonraker's components directory.
+#
+# update_manager is a core Moonraker component, so the parent of its package
+# directory IS the components directory - in whichever of the three on-disk
+# layouts find_moonraker_update_manager_dir resolved, including the nested
+# Creality one.
+#
+# Returns: path to helix_print.py (symlink or regular file), or empty string.
+find_helix_print_plugin() {
+    local um
+    um=$(find_moonraker_update_manager_dir)
+    if [ -z "$um" ]; then
+        echo ""
+        return 0
+    fi
+
+    local target
+    target="$(dirname "$um")/helix_print.py"
+    # -L before -f: a symlink into an install directory this uninstall already
+    # removed is dangling, and -f is false for it.
+    if [ -L "$target" ] || [ -f "$target" ]; then
+        echo "$target"
+    else
+        echo ""
+    fi
+}
+
+# Remove the plugin symlink and the [helix_print] section directly.
+#
+# A plain section strip, NOT remove_update_manager_section's comment-block
+# heuristic: nothing generates a comment header above [helix_print], so
+# buffering the preceding comment run would eat a neighbouring line's comment.
+#
+# Idempotent and silent when there is nothing left to remove.
+_remove_helix_print_inline() {
+    local target
+    target=$(find_helix_print_plugin)
+
+    if [ -L "$target" ]; then
+        local ps
+        ps=$(path_sudo "$target")
+        log_info "Removing plugin symlink $target..."
+        if $ps rm -f "$target"; then
+            log_success "Removed the HelixPrint plugin symlink"
+        else
+            log_warn "Could not remove $target - remove it by hand"
+        fi
+    elif [ -n "$target" ]; then
+        log_warn "$target is a regular file, not a symlink this installer created - leaving it in place"
+    fi
+
+    local conf
+    conf=$(find_moonraker_conf)
+    if [ -n "$conf" ] && grep -q '^\[helix_print\]' "$conf" 2>/dev/null; then
+        local fs
+        fs=$(file_sudo "$conf")
+        $fs cp "$conf" "${conf}.bak.helixscreen-uninstall" 2>/dev/null || true
+        log_info "Removing [helix_print] section from $conf..."
+        local prog='
+            /^\[helix_print\]/ { skip = 1; next }
+            /^\[/ { skip = 0 }
+            !skip { print }
+        '
+        # The program is passed as an argument rather than interpolated into the
+        # -c string, so its $0 and $1 stay awk's and are never expanded by a shell.
+        if $fs sh -c 'awk "$1" "$2" > "$2.helixtmp" && mv "$2.helixtmp" "$2"' sh "$prog" "$conf"; then
+            log_success "Removed [helix_print] section from $conf"
+        else
+            log_warn "Could not remove [helix_print] from $conf - edit it by hand, backup at ${conf}.bak.helixscreen-uninstall"
+        fi
+    fi
+}
+
+# Remove the HelixPrint Moonraker plugin: the helix_print.py symlink in
+# Moonraker's components directory, and the [helix_print] section in
+# moonraker.conf.
+#
+# Left behind, that symlink points into a deleted install directory. Moonraker
+# loads helix_print as an optional component, so the load does not abort the
+# server, but it logs an "Unable to load component: (helix_print)" traceback on
+# every startup and reports the name in /server/info's failed_components, which
+# clients surface as a permanently failed component.
+#
+# The plugin's own installer owns this removal - it also strips any PRINT_START
+# phase-tracking instrumentation and restarts Moonraker - so it is delegated to
+# whenever it is still on disk. The inline pass then mops up: the plugin
+# script's Moonraker search covers the desktop and Pi layouts, while
+# MOONRAKER_SRC_PATHS here also covers the buildroot vendor trees, and it is the
+# only pass on an install tree that is already gone.
+#
+# Always returns 0. The plugin being absent is the common case, and a failed
+# removal must never abort the rest of the uninstall.
+remove_moonraker_plugin() {
+    local target conf
+    target=$(find_helix_print_plugin)
+    conf=$(find_moonraker_conf)
+
+    local has_section=false
+    if [ -n "$conf" ] && grep -q '^\[helix_print\]' "$conf" 2>/dev/null; then
+        has_section=true
+    fi
+
+    if [ -z "$target" ] && [ "$has_section" = "false" ]; then
+        return 0
+    fi
+
+    local script="${INSTALL_DIR}/moonraker-plugin/install.sh"
+    if [ -f "$script" ]; then
+        log_info "Removing the HelixPrint Moonraker plugin..."
+        local status=0
+        sh "$script" --uninstall-auto || status=$?
+        case "$status" in
+            0)
+                log_success "Removed the HelixPrint Moonraker plugin"
+                ;;
+            2)
+                log_warn "HelixPrint plugin removed, but a config file needs a look - see the output above"
+                ;;
+            *)
+                log_warn "HelixPrint plugin removal reported failure (exit $status) - checking what is left"
+                ;;
+        esac
+    fi
+
+    _remove_helix_print_inline
+    return 0
+}
+
 # Restart Moonraker to pick up configuration changes.
 #
 # The init script name varies by firmware, and knowing only systemd plus the K1's
