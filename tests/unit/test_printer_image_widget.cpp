@@ -189,15 +189,19 @@ TEST_CASE_METHOD(XMLTestFixture, "PrinterImageWidget generates its image cache o
     process_lvgl(20); // settle any straggler from the generation above
     widget.on_activate();
 
+    // With the entry on disk the widget must go straight to it and never show the
+    // tier image again: decoding that and rescaling it costs the whole saving on
+    // every return to the panel.
     bool re_refreshed = false;
     for (int i = 0; i < 10 && !re_refreshed; ++i) {
         REQUIRE(fire_one_async_call());
-        re_refreshed = std::string(static_cast<const char*>(lv_image_get_src(img))) == source;
+        const auto* now = static_cast<const char*>(lv_image_get_src(img));
+        REQUIRE(now != nullptr);
+        INFO("re-activation must not fall back to the tier image");
+        CHECK(std::string(now) != source);
+        re_refreshed = std::string(now) == cache_src;
     }
     REQUIRE(re_refreshed);
-
-    process_async_calls(); // the cache check
-    CHECK(std::string(static_cast<const char*>(lv_image_get_src(img))) == cache_src);
 
     widget.detach();
     std::filesystem::remove(cache_path, ec);
