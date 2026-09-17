@@ -2173,6 +2173,7 @@ translations:
   'RFCOMM connect failed: ': 'RFCOMM 连接失败: '
   RFID reader malfunction (left): RFID 读取器故障（左）
   RFID reader malfunction (right): RFID 读取器故障（右）
+  RFID, auto-refill, nozzle and link care: ''
   RSS: RSS
   'RSS:': RSS：
   Ramming Volume: '填充体积'
