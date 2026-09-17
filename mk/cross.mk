@@ -348,7 +348,12 @@ else ifeq ($(PLATFORM_TARGET),ad5x)
     HELIX_HAS_SNAPMAKER := 0
     # -Wl,--gc-sections: Remove unused sections during linking (works with -ffunction-sections)
     # -flto: Must match compiler flag for LTO to work
-    TARGET_LDFLAGS := -Wl,--gc-sections -flto
+    # -static: worth ~18% of a core here. Measured same-board against a dynamic build of
+    # the same commit: every render tag drops by x0.82 (starfield L2 steady 42% -> 37% of
+    # a core, frame 25.5 -> 21.1 ms), which is the PLT/GOT indirection a dynamic link pays
+    # on every cross-object call. Nothing on this target dlopens: the release ships no .so,
+    # and glibc 2.34+ builds nss_files/nss_dns into libc, so static getaddrinfo resolves.
+    TARGET_LDFLAGS := -Wl,--gc-sections -flto -static
     # SSL enabled for HTTPS/WSS support with Moonraker
     ENABLE_SSL := yes
     DISPLAY_BACKEND := fbdev
