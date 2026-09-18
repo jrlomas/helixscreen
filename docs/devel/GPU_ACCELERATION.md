@@ -479,3 +479,30 @@ Anything claimed here is reproducible. The pattern that works:
    did not take effect. Two of the experiments behind this document were no-ops
    on the first attempt — one edited a theme file shadowed by a user copy — and
    both would have read as evidence without a control run.
+
+---
+
+## Per-area render profiling
+
+`tools/lvgl-area-profiler.patch` turns the cost of an invalidated area into a
+per-tag nanosecond profile. Apply it to a worktree, build, then run with
+`HELIX_LVGL_PROFILE=<delay_s>:<run_s>`; the trace goes to stderr.
+
+**It must not be merged.** Its `lv_conf.h` hunk sets `LV_USE_PROFILER 1`, which
+would ship an enabled profiler. Apply, measure, discard.
+
+It answers "which part of the pipeline costs that" — the question the rungs above
+cannot. Profiling an AD5X against a K1C with it showed the per-area gap is a
+uniform ~1.65x across every render-side tag rather than one expensive call, and
+splits into ~1.22x dynamic-linkage overhead (recovered by linking the AD5X
+statically) and a ~1.40x residual that is the build family or the SoC.
+
+Four things about it are easy to get wrong, and the patch header repeats them:
+the default 16 KB trace buffer wraps mid-frame at ~60 areas, the default tick is
+1 ms rather than nanoseconds, the profiler roughly doubles CPU while enabled so
+only ratios between instrumented runs mean anything, and medians must be reported
+rather than means because a buffer flush pauses the thread.
+
+The tag sites inside `lib/lvgl` are not in the patch: that submodule is managed
+through `patches/`, so a diff there entangles with our own. The header names the
+two functions to re-tag by hand.
