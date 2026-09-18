@@ -402,6 +402,33 @@ HELIX_COLOR_SWAP_RB=0 ./build/bin/helix-screen
 
 **Fbdev only:** This setting only applies to the framebuffer backend. DRM and SDL backends handle color format natively.
 
+### `HELIX_SDL_SCALE`
+
+Override the desktop SDL window scale without changing the logical UI resolution
+selected by `--size`. Fractional values are supported and pointer coordinates follow
+the same scale. This is separate from the in-app UI Scale setting.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Number from `1.0` to `4.0` (e.g. `1.25`, `1.5`, `2`) |
+| **Default** | Automatic: on X11, `GDK_SCALE` then `Xft.dpi / 96`; otherwise native window coordinates |
+| **File** | `src/api/display_backend_sdl.cpp` |
+
+```bash
+# Explicit 150% window, retaining an 800x480 logical layout
+HELIX_SDL_SCALE=1.5 ./build/bin/helix-screen --test --size 800x480 -vv
+```
+
+Normally leave this unset. On X11 desktops using mixed-monitor fractional scaling,
+`Xft.dpi` can describe a shared 2x rendering space even when the monitors are set to
+100% and 150%. The compositor applies each output's final scale; HelixScreen follows
+the shared logical DPI, not the monitor's physical DPI. Moving between those outputs
+does not require an extra application-side adjustment. Wayland and Cocoa already
+use logical window coordinates, so their compositor scale is not applied again.
+Desktop scale settings are read at startup; restart after changing them. Invalid
+overrides are ignored with a warning. Android and direct DRM/framebuffer builds are
+unaffected.
+
 ### `HELIX_SDL_DISPLAY`
 
 Select which monitor to use when running with SDL backend on multi-monitor systems.

@@ -1,5 +1,59 @@
+diff --git a/src/drivers/sdl/lv_sdl_mouse.c b/src/drivers/sdl/lv_sdl_mouse.c
+index a401c1256..8c71a4301 100644
+--- a/src/drivers/sdl/lv_sdl_mouse.c
++++ b/src/drivers/sdl/lv_sdl_mouse.c
+@@ -155,8 +155,11 @@ void lv_sdl_mouse_handler(SDL_Event * event)
+             }
+             break;
+         case SDL_MOUSEBUTTONUP:
+-            if(event->button.button == SDL_BUTTON_LEFT)
++            if(event->button.button == SDL_BUTTON_LEFT) {
+                 indev_dev->left_button_down = false;
++                indev_dev->last_x = (int16_t)((float)(event->button.x) / zoom);
++                indev_dev->last_y = (int16_t)((float)(event->button.y) / zoom);
++            }
+             break;
+         case SDL_WINDOWEVENT_LEAVE:
+             indev_dev->left_button_down = false;
+@@ -164,8 +167,8 @@ void lv_sdl_mouse_handler(SDL_Event * event)
+         case SDL_MOUSEBUTTONDOWN:
+             if(event->button.button == SDL_BUTTON_LEFT) {
+                 indev_dev->left_button_down = true;
+-                indev_dev->last_x = (int16_t)((float)(event->motion.x) / zoom);
+-                indev_dev->last_y = (int16_t)((float)(event->motion.y) / zoom);
++                indev_dev->last_x = (int16_t)((float)(event->button.x) / zoom);
++                indev_dev->last_y = (int16_t)((float)(event->button.y) / zoom);
+             }
+             break;
+         case SDL_MOUSEMOTION:
+@@ -175,17 +178,19 @@ void lv_sdl_mouse_handler(SDL_Event * event)
+
+         case SDL_FINGERUP:
+             indev_dev->left_button_down = false;
+-            indev_dev->last_x = (int16_t)((float)hor_res * event->tfinger.x / zoom);
+-            indev_dev->last_y = (int16_t)((float)ver_res * event->tfinger.y / zoom);
++            /* Touch coordinates are normalized to the entire window, so the
++             * logical resolution already includes the zoom conversion. */
++            indev_dev->last_x = (int16_t)((float)hor_res * event->tfinger.x);
++            indev_dev->last_y = (int16_t)((float)ver_res * event->tfinger.y);
+             break;
+         case SDL_FINGERDOWN:
+             indev_dev->left_button_down = true;
+-            indev_dev->last_x = (int16_t)((float)hor_res * event->tfinger.x / zoom);
+-            indev_dev->last_y = (int16_t)((float)ver_res * event->tfinger.y / zoom);
++            indev_dev->last_x = (int16_t)((float)hor_res * event->tfinger.x);
++            indev_dev->last_y = (int16_t)((float)ver_res * event->tfinger.y);
+             break;
+         case SDL_FINGERMOTION:
+-            indev_dev->last_x = (int16_t)((float)hor_res * event->tfinger.x / zoom);
+-            indev_dev->last_y = (int16_t)((float)ver_res * event->tfinger.y / zoom);
++            indev_dev->last_x = (int16_t)((float)hor_res * event->tfinger.x);
++            indev_dev->last_y = (int16_t)((float)ver_res * event->tfinger.y);
+             break;
+         case SDL_MOUSEWHEEL:
+ #if LV_SDL_MOUSEWHEEL_MODE == LV_SDL_MOUSEWHEEL_MODE_CROWN
 diff --git a/src/drivers/sdl/lv_sdl_window.c b/src/drivers/sdl/lv_sdl_window.c
-index 15a87ab12..5826c31bf 100644
+index 15a87ab12..e8fdf4e91 100644
 --- a/src/drivers/sdl/lv_sdl_window.c
 +++ b/src/drivers/sdl/lv_sdl_window.c
 @@ -21,6 +21,10 @@
@@ -71,7 +125,20 @@ index 15a87ab12..5826c31bf 100644
      /*Process the initial events*/
      sdl_event_handler(NULL);
  
-@@ -122,7 +148,13 @@ void lv_sdl_window_set_zoom(lv_display_t * disp, float zoom)
+@@ -116,13 +142,26 @@ void lv_sdl_window_set_zoom(lv_display_t * disp, float zoom)
+ {
+     lv_sdl_window_t * dsc = lv_display_get_driver_data(disp);
+     dsc->zoom = zoom;
++#ifndef __ANDROID__
++    /* Window sizing and decoration compensation use window coordinates, not
++     * LVGL's logical coordinates.  A new zoom also establishes a new target. */
++    csd_target_w = lv_sdl_window_get_horizontal_resolution(disp);
++    csd_target_h = lv_sdl_window_get_vertical_resolution(disp);
++    csd_attempts = 0;
++#endif
+     lv_display_send_event(disp, LV_EVENT_RESOLUTION_CHANGED, NULL);
+     lv_refr_now(disp);
+ }
  
  float lv_sdl_window_get_zoom(lv_display_t * disp)
  {
@@ -85,7 +152,25 @@ index 15a87ab12..5826c31bf 100644
      return dsc->zoom;
  }
  
-@@ -256,12 +288,79 @@ static void sdl_event_handler(lv_timer_t * t)
+@@ -207,7 +246,7 @@ int32_t lv_sdl_window_get_horizontal_resolution(lv_display_t * display)
+     LV_ASSERT_NULL(display);
+     lv_sdl_window_t * dsc = lv_display_get_driver_data(display);
+     LV_ASSERT_NULL(dsc);
+-    return (int32_t)((float)(display->hor_res) * dsc->zoom);
++    return (int32_t)((float)(display->hor_res) * dsc->zoom + 0.5f);
+ }
+ int32_t lv_sdl_window_get_vertical_resolution(lv_display_t * display)
+ {
+@@ -215,7 +254,7 @@ int32_t lv_sdl_window_get_vertical_resolution(lv_display_t * display)
+     LV_ASSERT_NULL(display);
+     lv_sdl_window_t * dsc = lv_display_get_driver_data(display);
+     LV_ASSERT_NULL(dsc);
+-    return (int32_t)((float)(display->ver_res) * dsc->zoom);
++    return (int32_t)((float)(display->ver_res) * dsc->zoom + 0.5f);
+ }
+
+ /**********************
+@@ -256,12 +295,79 @@ static void sdl_event_handler(lv_timer_t * t)
                      lv_sdl_backend_ops.redraw(disp);
                      break;
                  case SDL_WINDOWEVENT_RESIZED:
@@ -107,8 +192,8 @@ index 15a87ab12..5826c31bf 100644
                      lv_refr_now(disp);
 +#else
 +                    {
-+                        int32_t hres = (int32_t)((float)(event.window.data1) / dsc->zoom);
-+                        int32_t vres = (int32_t)((float)(event.window.data2) / dsc->zoom);
++                        int32_t hres = (int32_t)((float)(event.window.data1) / dsc->zoom + 0.5f);
++                        int32_t vres = (int32_t)((float)(event.window.data2) / dsc->zoom + 0.5f);
 +
 +                        /* Wayland CSD (client-side decorations) can shrink the content
 +                         * area below the requested size.  When that happens, grow the
@@ -121,7 +206,7 @@ index 15a87ab12..5826c31bf 100644
 +                         * `csd_settled` so a later deliberate user resize is honoured
 +                         * rather than fought. */
 +                        if(!dsc->ignore_size_chg && !csd_settled && csd_target_w > 0) {
-+                            if(hres >= csd_target_w && vres >= csd_target_h) {
++                            if(event.window.data1 >= csd_target_w && event.window.data2 >= csd_target_h) {
 +                                /* Target reached -- stop compensating from here on. */
 +                                csd_settled = true;
 +                            }
@@ -144,7 +229,7 @@ index 15a87ab12..5826c31bf 100644
 +                                LV_LOG_USER("CSD compensation (attempt %d/%d): content %dx%d < "
 +                                            "requested %dx%d, re-asserting content size",
 +                                            (int)csd_attempts, (int)CSD_MAX_ATTEMPTS,
-+                                            (int)hres, (int)vres,
++                                            (int)event.window.data1, (int)event.window.data2,
 +                                            (int)csd_target_w, (int)csd_target_h);
 +                                break;
 +                            }
@@ -156,7 +241,7 @@ index 15a87ab12..5826c31bf 100644
 +                                LV_LOG_WARN("CSD compensation failed after %d attempts: running at "
 +                                            "%dx%d instead of requested %dx%d -- responsive "
 +                                            "breakpoints will reflect the smaller size",
-+                                            (int)CSD_MAX_ATTEMPTS, (int)hres, (int)vres,
++                                            (int)CSD_MAX_ATTEMPTS, (int)event.window.data1, (int)event.window.data2,
 +                                            (int)csd_target_w, (int)csd_target_h);
 +                            }
 +                        }
@@ -170,7 +255,7 @@ index 15a87ab12..5826c31bf 100644
                      break;
                  case SDL_WINDOWEVENT_CLOSE:
                      lv_display_delete(disp);
-@@ -271,15 +370,108 @@ static void sdl_event_handler(lv_timer_t * t)
+@@ -271,15 +377,108 @@ static void sdl_event_handler(lv_timer_t * t)
              }
          }
          if(event.type == SDL_QUIT) {
@@ -282,7 +367,7 @@ index 15a87ab12..5826c31bf 100644
  
  static lv_result_t window_create(lv_display_t * disp)
  {
-@@ -294,24 +486,121 @@ static lv_result_t window_create(lv_display_t * disp)
+@@ -294,24 +493,124 @@ static lv_result_t window_create(lv_display_t * disp)
  #if LV_SDL_FULLSCREEN
      flag |= SDL_WINDOW_FULLSCREEN;
  #endif
@@ -292,6 +377,9 @@ index 15a87ab12..5826c31bf 100644
 +     * gets invalidated when Android resizes it, causing EGL_BAD_SURFACE. */
 +    flag |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 +#else
++    /* Keep window coordinates independent of drawable pixels on HiDPI
++     * desktops. SDL_RenderCopy scales the logical framebuffer to the output. */
++    flag |= SDL_WINDOW_ALLOW_HIGHDPI;
 +    /* Decorations are kept so the window stays draggable by its title bar.  A
 +     * compositor drawing client-side decorations carves them out of the content
 +     * area (800x480 -> 800x444 under Wayland/libdecor), which would leave LVGL a
@@ -308,11 +396,9 @@ index 15a87ab12..5826c31bf 100644
 +        }
 +    }
 +#endif
- 
-     int32_t hor_res = (int32_t)((float)(disp->hor_res) * dsc->zoom);
-     int32_t ver_res = (int32_t)((float)(disp->ver_res) * dsc->zoom);
--    dsc->window = SDL_CreateWindow("LVGL Simulator",
--                                   SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
++
++    int32_t hor_res = lv_sdl_window_get_horizontal_resolution(disp);
++    int32_t ver_res = lv_sdl_window_get_vertical_resolution(disp);
 +
 +    /* Check environment variables for window position */
 +    int x_pos = SDL_WINDOWPOS_UNDEFINED;
@@ -355,7 +441,11 @@ index 15a87ab12..5826c31bf 100644
 +        y_pos = atoi(ypos_env);
 +        LV_LOG_USER("Window position set to exact coordinates (%d, %d)", x_pos, y_pos);
 +    }
-+
+
+-    int32_t hor_res = (int32_t)((float)(disp->hor_res) * dsc->zoom);
+-    int32_t ver_res = (int32_t)((float)(disp->ver_res) * dsc->zoom);
+-    dsc->window = SDL_CreateWindow("LVGL Simulator",
+-                                   SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 +    /* Remember what was actually asked for.  The live display resolution can't be
 +     * used as the compensation target: once a shrunken size is accepted it becomes
 +     * the resolution, and the original request is lost. */
@@ -406,7 +496,7 @@ index 15a87ab12..5826c31bf 100644
      return LV_RESULT_OK;
  }
  
-@@ -333,16 +622,22 @@ static void res_chg_event_cb(lv_event_t * e)
+@@ -333,16 +632,22 @@ static void res_chg_event_cb(lv_event_t * e)
  
  static void release_disp_cb(lv_event_t * e)
  {

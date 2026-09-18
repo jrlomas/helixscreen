@@ -9,6 +9,7 @@
 # submodule, edited and pushed directly rather than patched.
 LVGL_PATCHED_FILES := \
 	src/drivers/sdl/lv_sdl_window.c \
+	src/drivers/sdl/lv_sdl_mouse.c \
 	src/themes/default/lv_theme_default.c \
 	src/drivers/display/fb/lv_linux_fbdev.c \
 	src/drivers/display/fb/lv_linux_fbdev.h \
