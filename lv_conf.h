@@ -106,18 +106,26 @@
  * - LV_OS_WINDOWS
  * - LV_OS_MQX
  * - LV_OS_CUSTOM */
-/* The software draw unit count is 1, so a render thread adds no concurrency: it only moves
- * each draw task to another thread and back, and every invalidated area pays
- * lv_draw_dispatch_wait_for_request() a thread synchronisation for it. That is worth it
- * where a core is free to take the work, and a loss on a board whose cores are already
- * running the app and Klipper, so the two-core Ingenic boards render inline.
- * Measured per invalidated area, with a render thread then without: 0.32% then 0.24% of a
- * core on a K1C, and on an AD5X the starfield's top rung falls from 83.4% to 61.3%, which is
- * the difference between exhausting the ladder and settling on it. */
-#if defined(HELIX_PLATFORM_MIPS) || defined(HELIX_PLATFORM_K1) || defined(HELIX_PLATFORM_AD5X)
-    #define LV_USE_OS   LV_OS_NONE
-#else
+/* Every shipping board renders inline: a render thread costs a thread synchronisation per
+ * invalidated area and can win nothing back. LV_DRAW_SW_DRAW_UNIT_CNT is 1, so no second
+ * unit exists to overlap with, and raising it does not help either - a unit may only take a
+ * task that lv_draw.c's is_independent() finds non-overlapping, and a full-screen canvas
+ * emits about one image-draw task per area, so there is never a second task to hand out.
+ * Measured on a CB1 (4x Cortex-A53, cores free), starfield settled: 20.0% of a core inline,
+ * 25.4% with one draw unit, 25.4% with two. Per invalidated area on a K1C, with a thread
+ * then without: 0.32% then 0.24%. On an AD5X the starfield's top rung falls 83.4% -> 61.3%,
+ * the difference between exhausting the ladder and settling on it.
+ *
+ * The desktop dev build keeps the thread deliberately. tests/unit/test_info_qr_modal_stress
+ * reproduces the #1673 shape - a draw thread blending a layer source a modal teardown has
+ * already freed - and only surfaces it as an ASAN use-after-free while a real render thread
+ * exists. Without one that test still passes and can no longer fail. Its CPU cost is
+ * irrelevant on a dev machine. HELIX_DISPLAY_SDL is set only for the sdl backend, which only
+ * the native target uses. */
+#ifdef HELIX_DISPLAY_SDL
     #define LV_USE_OS   LV_OS_PTHREAD
+#else
+    #define LV_USE_OS   LV_OS_NONE
 #endif
 
 #if LV_USE_OS == LV_OS_CUSTOM
