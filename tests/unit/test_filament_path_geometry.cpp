@@ -745,3 +745,54 @@ TEST_CASE("build_merge_fan reserves fillet room at every corner", "[filament-pat
         }
     }
 }
+
+TEST_CASE("compact merge fans leave room for tube glow through rounded bends",
+          "[filament-path][geometry][fan-clearance]") {
+    const float separation = GENERATE(15.0f, 19.0f, 24.0f);
+    for (int count : {2, 3, 4, 8}) {
+        for (float height : {200.0f, 240.0f, 300.0f, 400.0f}) {
+            CAPTURE(count, height, separation);
+            MergeLaneIn in[8];
+            MergeLaneOut fan[8];
+            const float span = 360.0f;
+            for (int i = 0; i < count; ++i)
+                in[i] = {span * i / (count - 1), height * 0.1f};
+            // Cover compact tube/glow widths and larger high-resolution sensors.
+            const float tube_end = height * 0.25f - 4;
+            float width = merge_fan_width(in, count, span / 2, tube_end, 82, span + 16, 8, 8, 1.2f,
+                                          separation);
+            REQUIRE(width >= 82);
+            REQUIRE(width <= span + 16);
+            build_merge_fan(in, count, span / 2, tube_end, width, 8, 8, 1.2f, fan);
+            std::vector<PathPoint> previous;
+            for (int i = 0; i < count; ++i) {
+                FilamentPath path;
+                route_polyline_filleted(path, fan[i].pts, 4, 8);
+                float length = path_length(path);
+                std::vector<PathPoint> samples;
+                for (int s = 0; s <= 500; ++s)
+                    samples.push_back(path_point_at(path, length * s / 500));
+                float nearest = 10000;
+                for (auto a : previous)
+                    for (auto b : samples)
+                        nearest = std::min(nearest, dist(a, b));
+                if (!previous.empty()) {
+                    CAPTURE(width, nearest, i);
+                    REQUIRE(nearest >= separation - 0.1f);
+                }
+                previous = std::move(samples);
+            }
+        }
+    }
+}
+
+TEST_CASE("merge fan fitting preserves sufficient widths and respects bounds",
+          "[filament-path][geometry][fan-clearance]") {
+    MergeLaneIn in[4] = {{0, 0}, {40, 0}, {80, 0}, {120, 0}};
+    CHECK(merge_fan_width(in, 4, 60, 120, 90, 136, 8, 8, 1.2f, 15) == 90);
+    CHECK(merge_fan_width(in, 4, 60, 30, 50, 80, 8, 8, 1.2f, 15) == 80);
+    CHECK(merge_fan_width(in, 1, 0, 30, 50, 80, 8, 8, 1.2f, 15) == 50);
+    CHECK(merge_fan_width(nullptr, 0, 0, 30, 50, 80, 8, 8, 1.2f, 15) == 50);
+    MergeLaneIn pair[2] = {{0, 20}, {360, 20}};
+    CHECK(merge_fan_width(pair, 2, 180, 50, 82, 376, 8, 8, 1.2f, 15) == 82);
+}
