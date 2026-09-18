@@ -5,6 +5,7 @@
 
 #include "ui_nav_manager.h"
 
+#include "app_globals.h"
 #include "config.h"
 #include "observer_factory.h"
 #include "static_panel_registry.h"
@@ -42,6 +43,14 @@ bool FirstRunTour::should_auto_start() {
         return false;
     }
 
+    // Every tour step highlights a home widget, and edit mode is where those
+    // widgets move, resize and get deleted. The gate stays open, so the tour is
+    // offered again at the next home activation.
+    if (lv_subject_get_int(&get_home_edit_mode_subject()) != 0) {
+        spdlog::debug("[FirstRunTour] gate: home_edit_mode_active");
+        return false;
+    }
+
     const bool completed = cfg->get<bool>("/tour/completed", false);
     const int last_seen = cfg->get<int>("/tour/last_seen_version", 0);
 
@@ -70,14 +79,24 @@ void FirstRunTour::mark_completed() {
 }
 
 void FirstRunTour::maybe_start() {
-    if (running_)
+    if (running_ || start_queued_)
         return;
     if (!should_auto_start())
         return;
+    start_queued_ = true;
     // Defer one tick so the caller (e.g., HomePanel::on_activate) completes first.
     // Raw lv_async_call with `this` is safe here because FirstRunTour is a
     // function-local static (immortal lifetime) — see instance().
-    lv_async_call([](void* self) { static_cast<FirstRunTour*>(self)->start_impl(); }, this);
+    lv_async_call(
+        [](void* self) {
+            auto* tour = static_cast<FirstRunTour*>(self);
+            tour->start_queued_ = false;
+            // start() may have run the tour synchronously while this was queued.
+            if (tour->running_)
+                return;
+            tour->start_impl();
+        },
+        this);
 }
 
 void FirstRunTour::start() {

@@ -29,6 +29,7 @@
 #include "app_globals.h"
 #include "config.h"
 #include "filament_sensor_manager.h"
+#include "first_run_tour.h"
 #include "hardware_validator.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "i_moonraker_api.h"
@@ -164,6 +165,11 @@ void helix::WizardCompletionTimers::arm_home_navigation() {
 
             spdlog::info("[Wizard] Deferred navigation to Home panel");
             NavigationManager::instance().set_active(PanelId::Home);
+            // Home is already the active panel here, so set_active() returns
+            // without running on_activate(), which is the tour's only other
+            // entry point. Finishing the wizard is what opens the tour's gate,
+            // so this is where it gets re-checked.
+            helix::tour::FirstRunTour::instance().maybe_start();
         },
         100, this);
     lv_timer_set_repeat_count(home_nav_timer_, 1);
