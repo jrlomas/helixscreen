@@ -179,3 +179,28 @@ TEST_CASE("OpenAMS rejects an unknown generic unit topology", "[ams][openams]") 
     REQUIRE(info.action == helix::AmsAction::ERROR);
     REQUIRE(info.operation_detail.find("topology") != std::string::npos);
 }
+
+TEST_CASE("OpenAMS only highlights a path error when an error is reported", "[ams][openams]") {
+    RecordingOpenAmsBackend backend;
+    for (const char* state : {"idle", "loaded", "loading", "unloading"}) {
+        CAPTURE(state);
+        backend.handle_status_update(contract(json::array(
+            {{{"id", "fps"}, {"state", state}, {"current_group", "T1"}, {"current_slot", 6}}})));
+        CHECK(backend.infer_error_segment() == helix::PathSegment::NONE);
+    }
+    backend.handle_status_update(contract(json::array(
+        {{{"id", "fps"}, {"state", "error"}, {"current_group", "T1"}, {"current_slot", 6}}})));
+    CHECK(backend.infer_error_segment() == helix::PathSegment::NOZZLE);
+    backend.handle_status_update(contract());
+    CHECK(backend.infer_error_segment() == helix::PathSegment::NONE);
+}
+
+TEST_CASE("OpenAMS locates a reported error during a pending load", "[ams][openams]") {
+    RecordingOpenAmsBackend backend;
+    backend.handle_status_update(contract());
+    REQUIRE(backend.do_load_filament(0).success());
+    CHECK(backend.infer_error_segment() == helix::PathSegment::NONE);
+    backend.handle_status_update(contract(json::array(
+        {{{"id", "fps"}, {"state", "error"}, {"current_group", "T1"}, {"current_slot", 6}}})));
+    CHECK(backend.infer_error_segment() == helix::PathSegment::OUTPUT);
+}

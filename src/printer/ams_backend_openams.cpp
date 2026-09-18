@@ -172,6 +172,9 @@ PathSegment AmsBackendOpenAms::get_slot_filament_segment(int slot_index) const {
 
 PathSegment AmsBackendOpenAms::infer_error_segment() const {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (system_info_.action != AmsAction::ERROR && reported_action_ != AmsAction::ERROR) {
+        return PathSegment::NONE;
+    }
     if (pending_slot_ >= 0) {
         return pending_action_ == AmsAction::LOADING ? PathSegment::OUTPUT : PathSegment::HUB;
     }
