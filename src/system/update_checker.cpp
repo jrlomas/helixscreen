@@ -30,7 +30,6 @@
 #include "hv/requests.h"
 #include "json_utils.h"
 #include "lvgl/src/others/translation/lv_translation.h"
-#include "platform_info.h"
 #include "print_lifecycle_state.h"
 #include "printer_state.h"
 #include "spdlog/spdlog.h"
@@ -38,6 +37,8 @@
 #include "system/log_path_probe.h"
 #include "system/sha256_util.h"
 #include "system/telemetry_manager.h"
+
+#include <cctype>
 #ifdef __ANDROID__
 #include "system/http_android.h"
 #endif
@@ -189,7 +190,15 @@ bool parse_github_release(const json& j, UpdateChecker::ReleaseInfo& info, std::
         size_t zip_size = 0;
         for (const auto& asset : j["assets"]) {
             std::string name = asset.value("name", "");
-            if (name.find(platform_prefix) == 0 && name.find(".tar.gz") != std::string::npos) {
+            // The version's 'v' must sit directly after the platform prefix:
+            // a longer platform key that extends this one (k1-dynamic for k1)
+            // carries the prefix too and must not be selected for the shorter
+            // key. Asset names are helixscreen-<plat>-v<version>.tar.gz.
+            const size_t after_prefix = platform_prefix.size();
+            if (name.size() > after_prefix + 1 && name[after_prefix] == 'v' &&
+                isdigit(static_cast<unsigned char>(name[after_prefix + 1])) &&
+                name.compare(0, after_prefix, platform_prefix) == 0 &&
+                name.find(".tar.gz") != std::string::npos) {
                 info.download_url = asset.value("browser_download_url", "");
                 info.download_bytes = asset.value("size", static_cast<size_t>(0));
                 spdlog::info("[UpdateChecker] Selected asset: {} ({} bytes)", name,
@@ -288,23 +297,6 @@ std::string fetch_changelog_for_version(const std::string& version) {
         spdlog::debug("[UpdateChecker] Got changelog for v{} ({} bytes)", version, section.size());
     }
     return section;
-}
-
-/**
- * @brief Parse ReleaseInfo from GitHub API JSON response string
- */
-bool parse_github_release(const std::string& json_str, UpdateChecker::ReleaseInfo& info,
-                          std::string& error) {
-    try {
-        auto j = json::parse(json_str);
-        return parse_github_release(j, info, error);
-    } catch (const json::exception& e) {
-        error = std::string("JSON parse error: ") + e.what();
-        return false;
-    } catch (const std::exception& e) {
-        error = std::string("Parse error: ") + e.what();
-        return false;
-    }
 }
 
 /**
@@ -619,6 +611,29 @@ std::string strip_ansi_codes(const std::string& s) {
 }
 
 } // anonymous namespace
+
+// Outside the anonymous namespace: declared in the header and exercised
+// directly by tests/unit/test_update_checker.cpp.
+namespace helix {
+/**
+ * @brief Parse ReleaseInfo from GitHub API JSON response string
+ */
+bool parse_github_release(const std::string& json_str, UpdateChecker::ReleaseInfo& info,
+                          std::string& error) {
+    try {
+        auto j = json::parse(json_str);
+        // :: reaches the anonymous-namespace json overload; unqualified lookup
+        // stops at this namespace and selects the string overload above.
+        return ::parse_github_release(j, info, error);
+    } catch (const json::exception& e) {
+        error = std::string("JSON parse error: ") + e.what();
+        return false;
+    } catch (const std::exception& e) {
+        error = std::string("Parse error: ") + e.what();
+        return false;
+    }
+}
+} // namespace helix
 
 // ============================================================================
 // Channel Version Comparison
@@ -2831,26 +2846,17 @@ std::string UpdateChecker::effective_r2_base_url() {
     return url;
 }
 
-std::string UpdateChecker::mips_runtime_platform_key(const std::string& probe_root) {
-    // The AD5X side of the mips K1/AD5X split is the AD5X mod-tree layout
-    // question — ZMOD (the /ZMOD marker or FlashForge's /usr/prog dir) or
-    // Forge-X (mod git tree reachable) — answered by the same predicate the
-    // launcher and log collector use. A Forge-X rig carries none of the ZMOD
-    // markers, so the old marker-only test here classified it as K1 and a rig
-    // self-update would fetch K1 builds.
-    return helix::ad5x_mod_layout_present(probe_root) ? "ad5x" : "k1";
-}
-
 std::string UpdateChecker::get_platform_key() {
 #ifdef HELIX_PLATFORM_AD5M
     return "ad5m";
 #elif defined(HELIX_PLATFORM_CC1)
     return "cc1";
-#elif defined(HELIX_PLATFORM_AD5X)
-    return "ad5x";
 #elif defined(HELIX_PLATFORM_MIPS)
-    // Same binary runs on K1 and AD5X — classify at runtime.
-    return mips_runtime_platform_key();
+    // One binary serves the K1 series and the AD5X, so one platform key and
+    // one self-update asset. Which board the binary is ON is a separate
+    // runtime question (helix::ad5x_mod_layout_present) answered wherever
+    // behavior actually differs, never for update selection.
+    return "mips";
 #elif defined(HELIX_PLATFORM_K1)
     // k1-dynamic build variant: dev/debug dynamic-linked K1 binary. Not in the
     // release matrix today — map to "k1" so if it ever ships, self-update
@@ -2884,6 +2890,8 @@ std::string UpdateChecker::get_platform_display_name(const std::string& key) {
         return "FlashForge Adventurer 5M";
     if (key == "ad5x")
         return "FlashForge Adventurer 5X";
+    if (key == "mips")
+        return "MIPS (K1 series / AD5X)";
     if (key == "k1")
         return "Creality K1";
     if (key == "k2")
@@ -3242,7 +3250,7 @@ bool UpdateChecker::fetch_stable_release(ReleaseInfo& info, std::string& error) 
         return false;
     }
 
-    return parse_github_release(body, info, error);
+    return helix::parse_github_release(body, info, error);
 }
 
 bool UpdateChecker::fetch_beta_release(ReleaseInfo& info, std::string& error) {
@@ -3291,7 +3299,7 @@ bool UpdateChecker::fetch_beta_release(ReleaseInfo& info, std::string& error) {
             if (!rel.value("prerelease", false))
                 continue;
 
-            if (parse_github_release(rel, info, error)) {
+            if (::parse_github_release(rel, info, error)) {
                 spdlog::debug("[UpdateChecker] Beta: selected prerelease {}", info.tag_name);
                 return true;
             }
@@ -3301,7 +3309,7 @@ bool UpdateChecker::fetch_beta_release(ReleaseInfo& info, std::string& error) {
         for (const auto& rel : releases) {
             if (rel.value("draft", false))
                 continue;
-            if (parse_github_release(rel, info, error)) {
+            if (::parse_github_release(rel, info, error)) {
                 spdlog::debug("[UpdateChecker] Beta: no prerelease found, falling back to {}",
                               info.tag_name);
                 return true;

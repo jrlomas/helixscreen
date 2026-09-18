@@ -3,6 +3,8 @@
 
 #include "touch_calibration.h"
 
+#include "platform_info.h"
+
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -159,14 +161,19 @@ TouchCalibration platform_default_calibration() {
     // fit measured on a rotated panel (a K2-class preset ships rotate=270) has to
     // set capture_rotation to that rotation, or the matrix is placed in a basis it
     // was never solved in and every tap lands a quarter turn out.
-#if defined(HELIX_PLATFORM_AD5X)
-    cal.valid = true;
-    cal.a = 1.171731f;
-    cal.b = -0.043628f;
-    cal.c = -66.965828f;
-    cal.d = -0.006188f;
-    cal.e = 1.478954f;
-    cal.f = -118.906227f;
+#if defined(HELIX_PLATFORM_MIPS)
+    // One binary serves K1 and AD5X: the AD5X fit applies only on that board,
+    // detected by the mod-layout probe. K1 boards ship no default fit — the
+    // calibration wizard owns the first run there.
+    if (helix::ad5x_mod_layout_present()) {
+        cal.valid = true;
+        cal.a = 1.171731f;
+        cal.b = -0.043628f;
+        cal.c = -66.965828f;
+        cal.d = -0.006188f;
+        cal.e = 1.478954f;
+        cal.f = -118.906227f;
+    }
 #elif defined(HELIX_PLATFORM_AD5M)
     cal.valid = true;
     cal.a = 1.174004f;

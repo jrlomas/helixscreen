@@ -409,11 +409,13 @@ TEST_CASE("power-off gate: any power-off-capable backend without a hardware blan
 
 TEST_CASE("power-off gate: excluded platforms refuse the power-off path",
           "[application][display][sleep][poweroff][1049][1594]") {
-    // Snapmaker U1 and AD5X do not recover a panel from a power-down request, so
-    // those builds refuse power-off whatever the backend reports. The host build
-    // asserts the opposite, which is what proves the guard is not accidentally
-    // compiled in everywhere.
-#if defined(HELIX_PLATFORM_SNAPMAKER_U1) || defined(HELIX_PLATFORM_AD5X)
+    // The Snapmaker U1 build refuses power-off whatever the backend reports:
+    // its panel does not recover from a power-down. The unified MIPS build
+    // refuses only on the AD5X (runtime mod-layout probe inside
+    // should_use_power_off), so no compile-time assertion applies there. The
+    // host build asserts the opposite, which is what proves the guard is not
+    // accidentally compiled in everywhere.
+#if defined(HELIX_PLATFORM_SNAPMAKER_U1)
     REQUIRE_FALSE(DisplayManager::should_use_power_off(false, true));
 #else
     REQUIRE(DisplayManager::should_use_power_off(false, true));

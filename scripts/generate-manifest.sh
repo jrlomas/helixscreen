@@ -151,10 +151,15 @@ done
 for plat in "${PLATFORMS[@]}"; do
     tarball=""
     for f in "$DIR"/helixscreen-"${plat}"-*.tar.gz; do
-        if [[ -f "$f" ]]; then
-            tarball="$f"
-            break
-        fi
+        [[ -f "$f" ]] || continue
+        # The glob prefix also matches LONGER platform keys that extend this
+        # one (k1 vs k1-dynamic), and the longer name sorts first. Re-parse
+        # the platform half and keep only an exact match.
+        base=$(basename "$f")
+        [[ "$base" =~ ^helixscreen-(.+)-v([0-9][0-9A-Za-z.+-]*)\.tar\.gz$ ]] || continue
+        [[ "${BASH_REMATCH[1]}" == "$plat" ]] || continue
+        tarball="$f"
+        break
     done
 
     if [[ -z "$tarball" ]]; then

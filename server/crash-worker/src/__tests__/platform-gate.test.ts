@@ -3,34 +3,49 @@
 // build out of the issue tracker (see issue #1410).
 //
 // A HelixScreen build reports whatever UpdateChecker::get_platform_key() compiles
-// in, and that function can only return one of ten keys. A report naming anything
-// else came from a modified binary, whose addresses resolve against no symbol file
-// we publish — so the issue it files is unactionable no matter how complete it looks.
+// in, plus platform keys retired by the MIPS unification that deployed binaries
+// keep sending until the fleet turns over. A report naming anything else came
+// from a modified binary, whose addresses resolve against no symbol file we
+// publish — so the issue it files is unactionable no matter how complete it looks.
 //
 // tests/shell/test_update_platform_coverage.bats enforces that the allowlist here
-// and get_platform_key() stay identical; these tests cover the predicate itself.
+// covers every get_platform_key() value and that worker-only keys are declared
+// retired with a reason; these tests cover the predicate itself.
 
 import { describe, it, expect } from "vitest";
 import { isKnownPlatform } from "../index";
 
-/** Every key get_platform_key() can return, as of the gate landing. */
+/** Every key get_platform_key() can return today. */
 const RELEASE_PLATFORMS = [
   "ad5m",
-  "ad5x",
   "cc1",
   "esp32",
-  "k1",
   "k2",
+  "mips",
   "pi",
   "pi32",
   "snapmaker-u1",
   "x86",
 ];
 
+/** Keys no current build returns but deployed binaries still report. */
+const RETIRED_PLATFORMS = [
+  "k1", // k1-series and k1-dynamic pre-unification builds; now "mips"
+  "ad5x", // pre-unification AD5X builds; now "mips"
+];
+
 describe("isKnownPlatform", () => {
   it("accepts every platform a real build can report", () => {
     for (const p of RELEASE_PLATFORMS) {
       expect(isKnownPlatform(p), `${p} should be accepted`).toBe(true);
+    }
+  });
+
+  it("accepts retired keys while pre-unification binaries remain deployed", () => {
+    // Refusing these would silently drop every crash report from the
+    // pre-unification k1/ad5x fleet.
+    for (const p of RETIRED_PLATFORMS) {
+      expect(isKnownPlatform(p), `${p} should still be accepted`).toBe(true);
     }
   });
 
@@ -45,8 +60,9 @@ describe("isKnownPlatform", () => {
     expect(isKnownPlatform("")).toBe(false);
     expect(isKnownPlatform("linux")).toBe(false);
     expect(isKnownPlatform("raspberry-pi")).toBe(false);
-    // A build target name is not a platform key: the k1 target is "mips".
-    expect(isKnownPlatform("mips")).toBe(false);
+    // A build target name is not a platform key.
+    expect(isKnownPlatform("k1-dynamic")).toBe(false);
+    expect(isKnownPlatform("k1c")).toBe(false);
   });
 
   it("is exact, not fuzzy — no case folding, trimming, or prefix matching", () => {
@@ -68,11 +84,13 @@ describe("isKnownPlatform", () => {
     expect(isKnownPlatform("has")).toBe(false);
   });
 
-  it("allows exactly the release set and nothing more", () => {
+  it("allows the release set plus the declared retired keys, and nothing more", () => {
     // A stale extra key is as much a defect as a missing one: it is a platform
     // no build emits, so it can only ever admit a report we cannot symbolicate.
     const accepted = RELEASE_PLATFORMS.filter(isKnownPlatform);
     expect(accepted).toEqual(RELEASE_PLATFORMS);
-    expect(accepted).toHaveLength(10);
+    expect(accepted).toHaveLength(RELEASE_PLATFORMS.length);
+    const retiredAccepted = RETIRED_PLATFORMS.filter(isKnownPlatform);
+    expect(retiredAccepted).toEqual(RETIRED_PLATFORMS);
   });
 });

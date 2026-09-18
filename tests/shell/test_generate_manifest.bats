@@ -437,3 +437,80 @@ teardown() {
 
     rm -rf "$NUM_DIR"
 }
+
+@test "a platform prefix does not select a longer platform's tarball" {
+    # k1-dynamic shares the helixscreen-k1- prefix and sorts first, so a
+    # prefix glob would hand the k1 manifest entry the dynamic artifact. The
+    # selection must re-parse the platform half to an exact match.
+    local trap_dir
+    trap_dir="$(mktemp -d)"
+    dd if=/dev/zero bs=1024 count=1 2>/dev/null | gzip \
+        > "$trap_dir/helixscreen-k1-dynamic-v0.99.31.tar.gz"
+    echo dynamic-bytes > "$trap_dir/dynamic-marker"
+    tar -czf "$trap_dir/helixscreen-k1-dynamic-v0.99.31.tar.gz" \
+        -C "$trap_dir" dynamic-marker
+    dd if=/dev/zero bs=1024 count=1 2>/dev/null | gzip \
+        > "$trap_dir/helixscreen-k1-v1.1.0.tar.gz"
+    echo k1-bytes > "$trap_dir/k1-marker"
+    tar -czf "$trap_dir/helixscreen-k1-v1.1.0.tar.gz" \
+        -C "$trap_dir" k1-marker
+
+    run bash "$SCRIPT" \
+        --version "1.1.0" --tag "v1.1.0" --notes "Prefix trap" \
+        --dir "$trap_dir" \
+        --base-url "https://releases.helixscreen.org/stable" \
+        --output "$trap_dir/manifest.json"
+    [ "$status" -eq 0 ] || fail "generate-manifest.sh exited $status: $output"
+
+    # k1 must resolve to its own tarball, not the k1-dynamic one.
+    run jq -re '.assets.k1.url' "$trap_dir/manifest.json"
+    [ "$status" -eq 0 ] || fail "k1 entry missing"
+    [ "$output" = "https://releases.helixscreen.org/stable/helixscreen-k1-v1.1.0.tar.gz" ] \
+        || fail "k1 url selected the wrong tarball: $output"
+
+    # And k1-dynamic stays its own platform entry, uncontaminated.
+    run jq -re '.assets["k1-dynamic"].url' "$trap_dir/manifest.json"
+    [ "$status" -eq 0 ] || fail "k1-dynamic entry missing"
+    [ "$output" = "https://releases.helixscreen.org/stable/helixscreen-k1-dynamic-v0.99.31.tar.gz" ] \
+        || fail "k1-dynamic url wrong: $output"
+
+    # The two entries must carry different digests (different content).
+    local k1_sha dyn_sha
+    k1_sha=$(jq -re '.assets.k1.sha256' "$trap_dir/manifest.json")
+    dyn_sha=$(jq -re '.assets["k1-dynamic"].sha256' "$trap_dir/manifest.json")
+    [ "$k1_sha" != "$dyn_sha" ] || fail "k1 and k1-dynamic share a digest"
+
+    rm -rf "$trap_dir"
+}
+
+@test "unified mips aliases: k1/ad5x entries match the mips tarball byte-for-byte" {
+    # The unified MIPS release drops one archive copied under three names. The
+    # manifest must carry all three keys with identical digests, so binaries
+    # reporting retired keys keep updating from the same bytes.
+    local alias_dir
+    alias_dir="$(mktemp -d)"
+    echo payload > "$alias_dir/payload"
+    tar -czf "$alias_dir/helixscreen-mips-v1.1.0.tar.gz" -C "$alias_dir" payload
+    cp "$alias_dir/helixscreen-mips-v1.1.0.tar.gz" "$alias_dir/helixscreen-k1-v1.1.0.tar.gz"
+    cp "$alias_dir/helixscreen-mips-v1.1.0.tar.gz" "$alias_dir/helixscreen-ad5x-v1.1.0.tar.gz"
+
+    run bash "$SCRIPT" \
+        --version "1.1.0" --tag "v1.1.0" --notes "Unified MIPS" \
+        --dir "$alias_dir" \
+        --base-url "https://releases.helixscreen.org/stable" \
+        --output "$alias_dir/manifest.json"
+    [ "$status" -eq 0 ] || fail "generate-manifest.sh exited $status: $output"
+
+    local mips_sha
+    mips_sha=$(jq -re '.assets.mips.sha256' "$alias_dir/manifest.json")
+    for key in k1 ad5x; do
+        run jq -re --arg k "$key" '.assets[$k].sha256' "$alias_dir/manifest.json"
+        [ "$status" -eq 0 ] || fail "$key entry missing from the manifest"
+        [ "$output" = "$mips_sha" ] || fail "$key digest differs from mips"
+        # k1/ad5x carry deployed BusyBox verifiers: tar.gz only, no zip_url.
+        run jq -re --arg k "$key" '.assets[$k].zip_sha256 // "none"' "$alias_dir/manifest.json"
+        [ "$output" = "none" ] || fail "$key unexpectedly offers a zip"
+    done
+
+    rm -rf "$alias_dir"
+}

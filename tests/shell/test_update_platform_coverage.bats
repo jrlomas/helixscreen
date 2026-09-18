@@ -19,10 +19,12 @@
 #      (so a missing branch fails unit tests instead of silently shipping).
 #   3. Every platform key returned by get_platform_key() is also in the
 #      known_platforms allowlist (catches typos in the return string).
-#   4. The crash worker's KNOWN_PLATFORMS allowlist matches get_platform_key()
-#      exactly. The worker refuses crash reports from platforms outside that
-#      set, so a key missing there silently drops a real platform's reports,
-#      and a stale extra key lets a fork keep filing issues.
+#   4. The crash worker's KNOWN_PLATFORMS allowlist carries every current
+#      get_platform_key() value plus an explicitly-declared set of retired
+#      keys. The worker refuses crash reports from platforms outside that set,
+#      so a current key missing there silently drops a platform's reports;
+#      retired keys stay for as long as old binaries exist in the field, and
+#      each must carry a one-line reason in the worker file.
 
 WORKTREE_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 CROSS_MK="$WORKTREE_ROOT/mk/cross.mk"
@@ -91,11 +93,8 @@ _release_matrix_platforms() {
 
     local missing=""
     for p in $platforms; do
-        # The k1 build target is "mips" → platform key "k1"; normalize.
-        local key="$p"
-        if [ "$key" = "mips" ]; then key="k1"; fi
-        if ! echo "$known" | grep -qx "$key"; then
-            missing="$missing $key"
+        if ! echo "$known" | grep -qx "$p"; then
+            missing="$missing $p"
         fi
     done
 
@@ -143,12 +142,12 @@ _release_matrix_platforms() {
     fi
 }
 
-@test "crash worker KNOWN_PLATFORMS matches get_platform_key() exactly" {
-    # get_platform_key() is the single source of truth for what a build can
-    # report. The worker refuses crash reports whose platform is outside its
-    # own allowlist, so the two must agree in BOTH directions: a key missing
-    # from the worker drops that platform's real reports on the floor, and a
-    # key the app can no longer emit leaves the door open.
+@test "crash worker KNOWN_PLATFORMS covers get_platform_key() plus declared retired keys" {
+    # get_platform_key() is the single source of truth for what a CURRENT
+    # build can report, and the worker must accept all of it. Keys the worker
+    # carries beyond that are retired platform keys: deployed binaries keep
+    # sending their compile-time key forever, so each one stays listed here
+    # (declared below) with a one-line reason beside its entry in the worker.
     local returns
     returns=$(awk '/std::string UpdateChecker::get_platform_key\(\)/,/^}/' \
               "$UPDATE_CHECKER_CPP" | grep -oE 'return "[a-z0-9_-]+"' \
@@ -164,23 +163,46 @@ _release_matrix_platforms() {
     # reading nothing -- fail rather than silently pass over no corpus.
     [ -n "$worker" ]
 
-    local only_cpp="" only_worker=""
+    # Retired platform keys the worker deliberately still accepts. Removing
+    # one from here (and from the worker) is a fleet decision -- telemetry
+    # showing the key no longer appears in checkins -- not a code cleanup.
+    local retired="ad5x"
+
+    local missing=""
     for r in $returns; do
-        echo "$worker" | grep -qx "$r" || only_cpp="$only_cpp $r"
-    done
-    for w in $worker; do
-        echo "$returns" | grep -qx "$w" || only_worker="$only_worker $w"
+        echo "$worker" | grep -qx "$r" || missing="$missing $r"
     done
 
-    if [ -n "$only_cpp" ] || [ -n "$only_worker" ]; then
+    local undeclared="" unjustified="" dropped=""
+    for w in $worker; do
+        echo "$returns" | grep -qx "$w" && continue
+        echo " $retired " | grep -q " $w " || undeclared="$undeclared $w"
+        # A retired entry earns its place with a one-line reason beside it.
+        grep -qE "\"$w\", *//" "$CRASH_WORKER_TS" || unjustified="$unjustified $w"
+    done
+    for r in $retired; do
+        echo "$worker" | grep -qx "$r" || dropped="$dropped $r"
+    done
+
+    if [ -n "$missing" ] || [ -n "$undeclared" ] || [ -n "$unjustified" ] || [ -n "$dropped" ]; then
         echo "get_platform_key() and the crash worker's KNOWN_PLATFORMS disagree."
-        [ -n "$only_cpp" ] && {
-            echo "  in get_platform_key() but NOT in the worker:$only_cpp"
+        [ -n "$missing" ] && {
+            echo "  in get_platform_key() but NOT in the worker:$missing"
             echo "  -> the worker would refuse real crash reports from these."
         }
-        [ -n "$only_worker" ] && {
-            echo "  in the worker but NOT in get_platform_key():$only_worker"
-            echo "  -> no build emits these; drop them from the allowlist."
+        [ -n "$undeclared" ] && {
+            echo "  in the worker but neither current nor declared retired:$undeclared"
+            echo "  -> declare it in the retired list here with a reason in the"
+            echo "     worker, or drop it from the allowlist."
+        }
+        [ -n "$unjustified" ] && {
+            echo "  declared retired but has no reason comment in the worker:$unjustified"
+            echo "  -> add a one-line reason beside its KNOWN_PLATFORMS entry."
+        }
+        [ -n "$dropped" ] && {
+            echo "  declared retired but absent from the worker:$dropped"
+            echo "  -> deployed binaries still sending these keys would have"
+            echo "     their crash reports refused; restore the worker entry."
         }
         echo ""
         echo "Fix KNOWN_PLATFORMS in server/crash-worker/src/index.ts, and"
@@ -244,8 +266,12 @@ _release_matrix_platforms() {
 
     # Non-matrix platforms borrow another platform's artifact. The borrow target
     # must itself be a built asset, or Moonraker hits the #993 fallback.
-    #   k1-dynamic (dev/debug variant) -> stable k1
-    [ "$(helix_self_update_asset k1-dynamic)" = "helixscreen-k1.zip" ]
+    #   k1-dynamic (dev/debug variant) -> unified mips
+    [ "$(helix_self_update_asset k1-dynamic)" = "helixscreen-mips.zip" ]
+    # The board spellings collapse onto the unified asset, which the matrix
+    # builds; the k1/ad5x zip names exist only as identical-content aliases.
+    [ "$(helix_self_update_asset k1)" = "helixscreen-mips.zip" ]
+    [ "$(helix_self_update_asset ad5x)" = "helixscreen-mips.zip" ]
     #   m1 (Artillery, Debian SBC) -> pi or pi32 by userspace bitness
     local m1_asset
     m1_asset=$(helix_self_update_asset m1)
@@ -256,7 +282,7 @@ _release_matrix_platforms() {
 
     # Borrow targets must be in the matrix.
     local stem
-    for stem in k1 pi pi32; do
+    for stem in mips pi pi32; do
         if ! echo "$matrix" | grep -qx "$stem"; then
             echo "borrow target '$stem' is not a release matrix platform"
             false

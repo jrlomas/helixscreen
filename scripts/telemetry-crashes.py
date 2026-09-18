@@ -329,7 +329,9 @@ def is_static_platform(platform: str) -> bool:
     We still return True here; the caller should use the precise range
     check (load_base + sym_max) when available, which handles this correctly.
     """
-    return platform in ("ad5m", "ad5x", "cc1")
+    # "mips" is the unified K1/AD5X build (static); "ad5x" stays for bundles
+    # written by pre-unification builds still in the field.
+    return platform in ("ad5m", "ad5x", "mips", "cc1")
 
 
 # ---------------------------------------------------------------------------
@@ -430,8 +432,9 @@ def is_shared_lib_addr(addr: int, platform: str, load_base: int = 0,
     if platform in ("ad5m", "cc1"):
         return addr >= 0x10000000
 
-    # AD5X (MIPS): binary at load_base (~0x55640000), shared libs at 0x70000000+
-    if platform == "ad5x":
+    # MIPS (unified K1/AD5X build, and legacy ad5x bundles): binary at
+    # load_base (~0x55640000), shared libs at 0x70000000+
+    if platform in ("ad5x", "mips"):
         if load_base > 0 and sym_max > 0:
             binary_end = load_base + sym_max + 0x10000
             return addr < load_base or addr > binary_end
