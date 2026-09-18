@@ -6,6 +6,10 @@ No AFC dependency. This is a prerelease, not an official HelixScreen release.
 
 ## Changes in this preview
 
+- Material preheat buttons now run the assigned macro and honor **Macro Handles
+  Heating**, including the Filament panel's fixed and active-spool presets.
+- Manual preheat uses the selected temperature instead of retaining a hotter
+  previous purge temperature. Load/unload purge protection is unchanged.
 - Separate the four-spool routes near the HUB, including space for the wider glow.
 - Stronger blue selection/glow for neutral filament, with a contrasting edge so
   black filament stays visible without changing its actual color.
@@ -15,10 +19,10 @@ No AFC dependency. This is a prerelease, not an official HelixScreen release.
   states no longer appear as a nozzle fault. Reported faults remain highlighted.
 
 The production panel was rendered locally in both dark and light modes using
-disconnected OpenAMS test data. The local native build and 46 focused geometry,
-rendering, and OpenAMS tests passed, plus both visual fixtures. This is not a
-full C++ suite or hardware validation; local full-suite rebuilding was constrained
-by available disk space. No Klipper configuration or printer commands were changed.
+disconnected OpenAMS test data. The preheat fix was checked with regression tests
+and both macro-heating options in the running mock UI. No physical printer was
+used for these checks. The preheat fix needs no configuration migration; existing
+material-to-macro assignments are preserved.
 
 ## Choose your package
 
