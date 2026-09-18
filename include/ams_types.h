@@ -50,8 +50,9 @@ enum class AmsType {
     AD5X_IFS = 5,     ///< FlashForge AD5X IFS (Intelligent Filament Switching)
     CFS = 6,          ///< Creality Filament System (K2 series, RS-485)
     SNAPMAKER = 7,    ///< Snapmaker U1 SnapSwap toolchanger
-    QIDI_BOX = 8, ///< QIDI Box filament changer (PLUS4, Q2, MAX4 — hub AMS, 4 slots chainable to 16)
-    OPENAMS = 9   ///< Native OpenAMS oams_manager API (not AFC OpenAMS hardware support)
+    QIDI_BOX =
+        8, ///< QIDI Box filament changer (PLUS4, Q2, MAX4 — hub AMS, 4 slots chainable to 16)
+    OPENAMS = 9 ///< Native OpenAMS oams_manager API (not AFC OpenAMS hardware support)
 };
 
 /**

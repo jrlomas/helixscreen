@@ -1305,8 +1305,8 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     // nested lane/unit/slot arrays are subscribed whole so topology changes
     // and state changes cannot arrive as mismatched partial elements.
     if (hw.mmu_type() == AmsType::OPENAMS) {
-        subscription_objects["oams_manager"] = json::array(
-            {"api_version", "schema", "ready", "commands", "lanes", "units", "groups"});
+        subscription_objects["oams_manager"] =
+            json::array({"api_version", "schema", "ready", "commands", "lanes", "units", "groups"});
     }
 
     // All discovered AFC objects — narrow per object-type to the fields the
