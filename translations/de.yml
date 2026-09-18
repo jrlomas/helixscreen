@@ -410,9 +410,11 @@ translations:
   Calibrate Gear: 'Zahnrad kalibrieren'
   Calibrate X: X kalibrieren
   Calibrate Y: Y kalibrieren
+  Calibrate all tools: Alle Werkzeuge kalibrieren
   Calibrate and tune scroll feel: "Kalibrieren und Scroll-Verhalten einstellen"
   Calibrate input shaping to reduce ringing artifacts in prints: Input Shaping kalibrieren,
     um Ringing-Artefakte im Druck zu reduzieren
+  Calibrate tool offsets?: Werkzeug-Offsets kalibrieren?
   Calibrate your touchscreen for accurate input: Touchscreen für präzise Eingabe kalibrieren
   Calibrated: Kalibriert
   Calibrating Probe...: Sonde kalibrieren...
@@ -425,13 +427,16 @@ translations:
   Calibration and system configuration: 'Kalibrierung und Systemkonfiguration'
   Calibration cancelled.: Kalibrierung abgebrochen.
   Calibration complete: Kalibrierung abgeschlossen
+  Calibration complete - save to keep the offsets: Kalibrierung abgeschlossen - speichern, um die Offsets zu behalten
   Calibration complete!: Kalibrierung abgeschlossen!
   Calibration complete! Press 'Next' to continue.: Kalibrierung abgeschlossen! Drücken
     Sie 'Weiter' um fortzufahren.
+  Calibration failed: Kalibrierung fehlgeschlagen
   Calibration failed - touch targets more precisely.: Kalibrierung fehlgeschlagen
     – Ziele präziser berühren.
   Calibration kept timing out. Your previous settings were kept.: Bei der Kalibrierung kam es wiederholt zu einer Zeitüberschreitung. Ihre vorherigen Einstellungen wurden beibehalten.
   Calibration may still be running — printer connection was interrupted: 'Kalibrierung läuft möglicherweise noch — Druckerverbindung wurde unterbrochen'
+  Calibration may still be running — response timed out: ''
   Calibration move may still be running — printer connection was interrupted: 'Kalibrierungsbewegung läuft möglicherweise noch — Druckerverbindung wurde unterbrochen'
   Calibration saved but cannot apply on SDL display: Kalibrierung gespeichert, kann
     aber auf SDL-Display nicht angewendet werden
@@ -476,6 +481,7 @@ translations:
     nicht mit Drucker verbunden'
   'Cannot start print: printer is {}': 'Druck kann nicht gestartet werden: Drucker
     ist {}'
+  Cannot save offsets while printing: Offsets können während des Drucks nicht gespeichert werden
   Cannot unload while a print is active: Entladen während eines aktiven Drucks nicht möglich
   'Capabilities: ': 'Fähigkeiten: '
   Cartographer scan calibrate sent — use Z-Offset panel to adjust: Cartographer Scan-Kalibrierung
@@ -995,6 +1001,7 @@ translations:
   Every extruder's temperature at once: Alle Extrudertemperaturen auf einmal
   Everything else was saved. Change them in Spoolman.: Alles Übrige wurde gespeichert. Ändern Sie diese in Spoolman.
   Everything else was saved. Rename the material using letters, digits, spaces, and + - _ . ( ) /: 'Alles Übrige wurde gespeichert. Benennen Sie das Material mit Buchstaben, Ziffern, Leerzeichen sowie + - _ . ( ) / um'
+  Every tool's offsets are measured again and replace the current ones. Save afterwards to keep the result.: Die Offsets aller Werkzeuge werden neu gemessen und ersetzen die aktuellen. Danach speichern, um das Ergebnis zu behalten.
   Excellent Accuracy: Ausgezeichnete Genauigkeit
   'Exception: {}': 'Ausnahme: {}'
   Exclude: Ausschließen
@@ -1722,6 +1729,7 @@ translations:
   Make %s Optional?: '%s optional machen?'
   Make Optional: Optional machen
   Make bed mesh and QGL skippable: Bettnetz und QGL überspringbar machen
+  Make sure every nozzle is clean.: Stelle sicher, dass alle Düsen sauber sind.
   MakeID (Bluetooth): MakeID (Bluetooth)
   Manage: Verwalten
   Manage Printers: Drucker verwalten
@@ -1759,6 +1767,7 @@ translations:
   Maximum toolhead speed (mm/s): Maximale Werkzeugkopfgeschwindigkeit (mm/s)
   Measure and compare belt path frequencies: Riemenpfad-Frequenzen messen und vergleichen
   Measure belt path frequencies: Riemenpfad-Frequenzen messen
+  Measure every tool's XYZ offset automatically: Misst den XYZ-Offset jedes Werkzeugs automatisch
   Measured (shaper off): Gemessen (Shaper aus)
   Measured filament diameter: Gemessener Filamentdurchmesser
   Measurement Failed: Messung fehlgeschlagen
@@ -1938,6 +1947,7 @@ translations:
   No target printer configured: Kein Zieldrucker konfiguriert
   No temperature sensors detected: 'Keine Temperatursensoren erkannt'
   No timelapse videos found: Keine Zeitraffer-Videos gefunden
+  No tools to calibrate: Keine Werkzeuge zum Kalibrieren
   No vendors found: Keine Hersteller gefunden
   No verified bypass command for this CFS firmware: 'Kein verifizierter Bypass-Befehl für diese CFS-Firmware'
   No video player installed - showing the timelapse library: 'Kein Videoplayer installiert – Zeitraffer-Bibliothek wird angezeigt'
@@ -2008,6 +2018,7 @@ translations:
   Objects: Objekte
   'Off': Aus
   'Off:': 'Aus:'
+  Offsets saved: Offsets gespeichert
   "Old setting on today's data: {} residual - now: {}": 'Alte Einstellung auf heutigen Daten: {} Restvibration - jetzt: {}'
   'On': Ein
   On and Off macros must be different: Ein- und Aus-Makros müssen unterschiedlich
@@ -2364,6 +2375,7 @@ translations:
   Ready: Bereit
   Ready for filament operations: Bereit für Filament-Vorgänge
   Ready to Apply: Bereit zum Anwenden
+  Ready to calibrate: Bereit zur Kalibrierung
   Ready to pluck: Bereit zum Zupfen
   Reason: Grund
   ? "Reason: {}\n\nThe printer cannot resume this print. Restart from the beginning?"
@@ -2546,6 +2558,7 @@ translations:
   Running {}...: '{} wird ausgeführt...'
   Runout: 'Auslauf'
   Runout Sensor: Auslaufsensor
+  Runs the printer's tool offset calibration for every tool.: Führt die Werkzeug-Offset-Kalibrierung des Druckers für alle Werkzeuge aus.
   'SAVE_CONFIG failed: {}. Tool offsets were applied but not saved. Run SAVE_CONFIG manually or they will be lost on restart.': 'SAVE_CONFIG fehlgeschlagen: {}. Die Werkzeug-Offsets wurden angewendet, aber nicht gespeichert. Führe SAVE_CONFIG manuell aus, sonst gehen sie beim Neustart verloren.'
   ? 'SAVE_CONFIG failed: {}. Z-offset was applied but not saved. Run SAVE_CONFIG manually or the offset will be lost on restart.'
   : 'SAVE_CONFIG fehlgeschlagen: {}. Der Z-Offset wurde angewendet, aber nicht gespeichert. Führe SAVE_CONFIG manuell aus, sonst geht der Offset beim Neustart verloren.'
@@ -2580,6 +2593,8 @@ translations:
   Save changes to persist them across restarts?: Änderungen speichern, um sie über
     Neustarts hinweg zu erhalten?
   'Save failed: {}': 'Speichern fehlgeschlagen: {}'
+  Save offsets: Offsets speichern
+  Save offsets?: Offsets speichern?
   Save to Spoolman: In Spoolman speichern
   Saved Z-Offset: Gespeicherter Z-Offset
   Saved to crash_report.txt (QR not available): In crash_report.txt gespeichert (QR
@@ -2591,6 +2606,7 @@ translations:
   Saving Z-offset...: Z-Offset wird gespeichert...
   Saving config... Klipper will restart.: Konfiguration wird gespeichert... Klipper
     wird neu starten.
+  Saving offsets...: Speichere Offsets...
   Saving will restart Klipper and CANCEL any active print!: Speichern startet Klipper
     neu und BRICHT jeden aktiven Druck ab!
   Scan: Suchen
@@ -2873,6 +2889,7 @@ translations:
   Stop failed: Stopp fehlgeschlagen
   ? "Stop printing \"{}\"?\n\nThis cannot be undone after 5 seconds."
   : "Druck von \"{}\" stoppen?\n\nDies kann nach 5 Sekunden nicht rückgängig gemacht werden."
+  Stopped: Gestoppt
   Stopped between Hub and Toolhead: Zwischen Hub und Werkzeugkopf gestoppt
   Stopped between Lane and Hub: Zwischen Spur und Hub gestoppt
   Stopped between Spool and Lane: Zwischen Spule und Spur gestoppt
@@ -3096,6 +3113,7 @@ translations:
   This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?: Dieser
     Druck benötigt etwa %.0fg, aber die Spule hat noch etwa %.0fg übrig. Trotzdem
     starten?
+  This printer cannot calibrate tool offsets automatically: Dieser Drucker kann Werkzeug-Offsets nicht automatisch kalibrieren
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : Dieser Drucker sieht aus wie ein {} ({}% Konfidenz), ist aber als {} eingerichtet. Ein falscher Typ wendet falsche Optionen und Voreinstellungen für die Druckvorbereitung an.
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
@@ -3134,6 +3152,8 @@ translations:
     wird neu gestartet. Aktive Vorgänge werden unterbrochen.
   This will restart Klipper.: Dies startet Klipper neu.
   This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect.: Dies speichert den Z-offset und startet Klipper neu, um die Konfiguration zu schreiben. Der Drucker wird kurz getrennt.
+  ? This writes the tool offsets to the printer's config and restarts Klipper, which takes a few seconds. Until then they apply only to this session.
+  : Dies schreibt die Werkzeug-Offsets in die Konfiguration des Druckers und startet Klipper neu, was einige Sekunden dauert. Bis dahin gelten sie nur für diese Sitzung.
   Thorough: Gründlich
   Thumbnail Only: Nur Vorschaubild
   'Thumbnail: ': 'Miniaturbild: '
@@ -3176,10 +3196,13 @@ translations:
   Tool: Werkzeug
   Tool Change Failed: 'Werkzeugwechsel fehlgeschlagen'
   Tool Changer: Werkzeugwechsler
+  Tool Offsets: Werkzeug-Offsets
   Tool Switcher: 'Werkzeugwechsler'
   'Tool change failed: {}': 'Werkzeugwechsel fehlgeschlagen: {}'
   Tool change to T{}: 'Werkzeugwechsel zu T{}'
   Tool mapping failed: Werkzeugzuordnung fehlgeschlagen
+  Tool offsets (mm): Werkzeug-Offsets (mm)
+  Tool offsets saved: Werkzeug-Offsets gespeichert
   Tool swap: Werkzeugwechsel
   Toolhead: 'Werkzeugkopf'
   Toolhead LED: 'Werkzeugkopf-LED'
