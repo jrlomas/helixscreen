@@ -3,6 +3,10 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <component>
   <api>
+    <!-- Per-instance rung subject from the owning tile. Empty by default, so
+         a call site that does not size itself installs no binding and keeps
+         whatever `size` selects. -->
+    <prop name="rung_subject" type="string" default=""/>
     <prop name="size" type="string" default="#icon_size"/>
     <prop name="badge_subject" type="string" default="show_tool_badge"/>
     <prop name="badge_size" type="string" default="#badge_size"/>
@@ -20,12 +24,13 @@
       index 0), not the full name
 
     badge_size/badge_font default to #badge_size and #font_xs, which are
-    breakpoint-scaled and assume a roomy icon (size="xl", 64px). The icon ladder
-    does NOT move with breakpoint - xs/sm/md/lg/xl are always 16/24/32/48/64 - so
-    a call site using a small icon must pass both, or the badge swallows the
-    glyph. Pass them together: a disc can never be smaller than the line height of
-    the font inside it. See #badge_size_on_sm_icon / #font_badge_compact in
-    globals.xml.
+    breakpoint-scaled and assume a roomy icon (size="xl"). The icon rungs are
+    TOKENS, not fixed sizes: icon_font_xs..icon_font_xl each resolve to a
+    different face per breakpoint tier (globals.xml), so "lg" is 48px at medium
+    and 80px at xxlarge. A call site using a small icon must pass badge_size and
+    badge_font together, because a disc can never be smaller than the line
+    height of the font inside it. See #badge_size_on_sm_icon /
+    #font_badge_compact in globals.xml.
 
     The inner glyph is always named "nozzle_icon_glyph" (not the $size wrapper's
     own name) for C++ lookup — HeaterIconBinder::default_icon_name(Nozzle)
@@ -33,7 +38,13 @@
   -->
   <view name="nozzle_icon"
         width="content" height="content" style_pad_all="0" scrollable="false" clickable="false" event_bubble="true">
-    <icon name="nozzle_icon_glyph" src="heater" size="$size" variant="secondary" clickable="false" event_bubble="true"/>
+    <icon name="nozzle_icon_glyph" src="heater" size="$size" variant="secondary" clickable="false" event_bubble="true">
+      <bind_style_if_eq name="styles.tile_icon_xs" subject="$rung_subject" ref_value="0"/>
+      <bind_style_if_eq name="styles.tile_icon_sm" subject="$rung_subject" ref_value="1"/>
+      <bind_style_if_eq name="styles.tile_icon_md" subject="$rung_subject" ref_value="2"/>
+      <bind_style_if_eq name="styles.tile_icon_lg" subject="$rung_subject" ref_value="3"/>
+      <bind_style_if_eq name="styles.tile_icon_xl" subject="$rung_subject" ref_value="4"/>
+    </icon>
     <!-- hidden="true" is the static default the empty-subject contract requires: a
          call site passing badge_subject="" installs no binding at all, so whatever
          flag state the markup declares is the one that sticks. Without it the disc

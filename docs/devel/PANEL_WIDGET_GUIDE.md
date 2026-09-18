@@ -3,7 +3,9 @@
 How home-dashboard widgets are built, and the reference pattern for making
 one size itself responsively. The nozzle-temps widget is the exemplar to copy:
 `src/ui/panel_widgets/nozzle_temps_widget.{h,cpp}`,
-`src/ui/panel_widgets/nozzle_layout.h`, and its three XML components.
+`src/ui/panel_widgets/nozzle_layout.h`, and its three XML components. The eighteen
+centred-icon tiles run the same pattern one instance deeper; see
+[The tile instance of the pattern](#the-tile-instance-of-the-pattern) below.
 
 **Related**: `LAYOUT_SYSTEM.md` (the home grid that sizes tiles),
 `LVGL9_XML_GUIDE.md` (bindings), `ARCHITECTURE.md` (subjects).
@@ -73,6 +75,62 @@ current-only value. Re-decide when the value's width class changes (a
 target setting or clearing), so a tile sized under idle values never draws
 the wide value in the narrow rung.
 
+### The tile instance of the pattern
+
+The eighteen centred-icon tiles run the same four layers one instance deeper: a tile has
+no content of its own to arrange, so the rung its glyph draws at IS the layout
+(prestonbrown/helixscreen#1559). Pure decision: `helix::decide_tile_layout()`
+(`src/ui/panel_widgets/tile_layout.h`) takes measured content widths per icon rung and
+returns a `TileVerdict` - the rung, the direction (icon above or beside the value), label
+visibility, whether the target half is drawn, and `fits`. Content is surrendered in a
+fixed order (the target half first, then the label), and within each step the largest
+rung that fits wins, so a tile grows its glyph rather than its text.
+
+- **`helix::TileSizing`** (`src/ui/panel_widgets/tile_sizing.h`) is the measure/decide/
+  publish layer, one per widget INSTANCE - `fan`, `thermistor` and `power_device` are
+  multi-instance, and a type-global subject would make the second instance overwrite the
+  first's verdict. It measures the WORST-CASE value strings and publishes four subjects:
+  icon rung, label, direction, show-target. Budget the string the tile can ACTUALLY
+  render, including any part a sibling label draws: `temp_display` puts the unit in its
+  own label, so a heater budgeted as "888 / 888" is narrower than the row it draws, and a
+  sensor reading is seven glyphs ("110.0°C"), not three.
+- **The verdict is computed against the content box, not the tile.** `TileSizing` measures
+  the padding and flex gap of every container between the tile's outer edge and its glyph
+  (`set_content_root()`), because that chrome is a theme value that varies by widget and
+  by tier. Estimating it picks a rung that spills the tile's own container.
+- **Constructor registration is load-bearing.** A tile's subjects are per-instance, so
+  they register in the widget's CONSTRUCTOR, never from `attach()`. The manager creates
+  the widget, then calls `lv_xml_create()` on its component, and only then `attach()`;
+  the parser permanently and silently drops a binding whose subject does not exist at
+  parse time, so subjects registered from `attach()` never bind and the tile renders at
+  its default appearance forever. The nozzle-temps spelling satisfies the same constraint
+  with `register_widget_subjects()`, which runs at registration, before any XML is parsed.
+- **Per-instance subject names reach XML through `xml_attrs()`.**
+  `PanelWidget::xml_attrs()` returns the flat key/value list `lv_xml_create()` takes; the
+  manager passes it when creating the component, and the component's `tile_icon_subject`
+  prop carries the instance's rung subject name. Whatever supplies the attrs is
+  constructed with the widget, for the same parse-time reason.
+- **`PanelWidget::fits_at()` is the refusal path.** Defaults to true; a tile overrides
+  it with `TileSizing::fits()`. It must be MONOTONIC (fits at a size means fits at every
+  larger size), because the clamp walks outward assuming the first accepting size is the
+  nearest one. Edit mode's resize clamp and the load path both consult it through
+  `helix::grow_span_to_fit()` (`include/grid_layout.h`), so the rule lives once.
+- **`helix::TileWidget`** (`src/ui/panel_widgets/tile_widget.h`) gives a TileSizing to
+  a tile that has no widget class of its own: `notifications` and `firmware_restart`.
+  Every other centred-icon tile owns one on its own class, including the three heaters,
+  which share `HeaterTempWidget`, and `power_device` and `filament`, whose classes sit
+  outside `src/ui/panel_widgets/`. It is registered LAST and skips any id a class
+  already took, because the last factory registration wins and a sizing-only shell
+  would otherwise replace real behaviour. A tile that grows real behaviour stops using
+  it and implements `PanelWidget` directly.
+
+On the XML side, the rung styles `styles.tile_icon_xs` .. `styles.tile_icon_xl`, plus
+`styles.tile_column` / `styles.tile_row`, live in `ui_xml/styles.xml`; each names an
+`#icon_font_*` TOKEN, never a literal face, because a literal face a platform did not
+link renders tofu. The seven single-icon action tiles share
+`ui_xml/components/home_action_tile.xml`, whose `tile_icon_subject` prop installs the
+per-instance rung binding (empty installs none).
+
 ### Engine contracts this pattern relies on
 
 - A `<style>` carrying `flex_flow` must ALSO carry `layout="flex"` — the
@@ -89,7 +147,10 @@ the wide value in the narrow rung.
   and pin one-line labels (`long_mode="dots"`) when the stack model budgets
   one line.
 - Bindable fonts on semantic `text_*` widgets work because the semantic font
-  rides a shared ADDED style (#1614); do not reintroduce local font writes.
+  rides a shared ADDED style (#1614). An `<icon>`'s face and `temp_display`'s four labels
+  ride the same mechanism (`helix::ui::apply_font_style`,
+  `include/helix/ui/shared_font_style.h`), which is what the tile rung binds rely on.
+  Do not reintroduce local font writes.
 
 ## Testing the pattern
 

@@ -308,6 +308,8 @@ src/ui/panel_widgets/print_stats_widget.cpp
 src/ui/panel_widgets/print_status_widget.cpp
 src/ui/panel_widgets/printer_image_widget.cpp
 src/ui/panel_widgets/shutdown_widget.cpp
+src/ui/panel_widgets/tile_sizing.cpp
+src/ui/panel_widgets/tile_widget.cpp
 src/ui/panel_widgets/temp_graph_widget.cpp
 src/ui/panel_widgets/temp_stack_widget.cpp
 src/ui/panel_widgets/thermistor_widget.cpp
@@ -318,6 +320,8 @@ src/ui/print_control_buttons.cpp
 src/ui/print_control_view.cpp
 src/ui/save_config_restart.cpp
 src/ui/setting_group.cpp
+src/ui/shared_font_style.cpp
+src/ui/text_metrics.cpp
 src/ui/style_configs.cpp
 src/ui/temp_graph_controller.cpp
 src/ui/temp_graph_tooltip.cpp

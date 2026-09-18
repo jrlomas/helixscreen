@@ -839,6 +839,27 @@ void theme_manager_apply_bg_color(lv_obj_t* obj, const char* base_name,
  */
 int32_t theme_manager_get_font_height(const lv_font_t* font);
 
+namespace helix::ui {
+
+/**
+ * @brief Whether a font is one of the compiled MDI icon faces
+ *
+ * Icons carry their colour through the variant styles, so the theme walk and
+ * the button contrast pass both use this to leave them alone; a face it does
+ * not recognise falls through into code that writes inline colours over the
+ * variant and over HeatingIconAnimator's tint.
+ *
+ * Which faces exist is a build-time question — HELIX_MAX_FONT_TIER says how
+ * far up the ladder this build linked, and the faces above 64px are absent
+ * below tier 5.
+ *
+ * @param font Font pointer to test; nullptr is not an icon font
+ * @return true if the font is an MDI icon face linked into this build
+ */
+bool is_icon_font(const lv_font_t* font);
+
+} // namespace helix::ui
+
 /**
  * @brief Apply an overlay's navigation geometry at push time.
  *

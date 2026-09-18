@@ -2343,7 +2343,6 @@ void theme_manager_preview(const helix::ThemeData& theme, bool is_dark) {
 /**
  * Check if a font is one of the MDI icon fonts (forward declaration)
  */
-static bool is_icon_font(const lv_font_t* font);
 static bool is_muted_text_font(const lv_font_t* font);
 
 /**
@@ -2394,7 +2393,7 @@ static void apply_button_text_contrast(lv_obj_t* btn) {
         lv_obj_t* child = lv_obj_get_child(btn, i);
         if (lv_obj_check_type(child, &lv_label_class)) {
             const lv_font_t* font = lv_obj_get_style_text_font(child, LV_PART_MAIN);
-            if (is_icon_font(font)) {
+            if (helix::ui::is_icon_font(font)) {
                 // Icon: only apply contrast if it's using text/muted variant
                 lv_color_t icon_color = lv_obj_get_style_text_color(child, LV_PART_MAIN);
                 if (is_text_variant_color(icon_color)) {
@@ -2413,7 +2412,7 @@ static void apply_button_text_contrast(lv_obj_t* btn) {
             lv_obj_t* nested = lv_obj_get_child(child, j);
             if (lv_obj_check_type(nested, &lv_label_class)) {
                 const lv_font_t* nested_font = lv_obj_get_style_text_font(nested, LV_PART_MAIN);
-                if (is_icon_font(nested_font)) {
+                if (helix::ui::is_icon_font(nested_font)) {
                     lv_color_t icon_color = lv_obj_get_style_text_color(nested, LV_PART_MAIN);
                     if (is_text_variant_color(icon_color)) {
                         lv_obj_set_style_text_color(nested, text_color, LV_PART_MAIN);
@@ -2428,15 +2427,29 @@ static void apply_button_text_contrast(lv_obj_t* btn) {
     }
 }
 
-/**
- * Check if a font is one of the MDI icon fonts
- */
-static bool is_icon_font(const lv_font_t* font) {
+namespace helix::ui {
+
+bool is_icon_font(const lv_font_t* font) {
     if (!font)
         return false;
-    return font == &mdi_icons_14 || font == &mdi_icons_16 || font == &mdi_icons_24 ||
-           font == &mdi_icons_32 || font == &mdi_icons_48 || font == &mdi_icons_64;
+    if (font == &mdi_icons_14 || font == &mdi_icons_16 || font == &mdi_icons_24 ||
+        font == &mdi_icons_32 || font == &mdi_icons_48 || font == &mdi_icons_64)
+        return true;
+        // Faces above 64px ship only with their tier — FONTS_CORE stops at 64, so
+        // taking the address of one unconditionally fails to link every build below
+        // that tier (mk/fonts.mk).
+#if HELIX_MAX_FONT_TIER >= 5
+    if (font == &mdi_icons_80)
+        return true;
+#endif
+#if HELIX_MAX_FONT_TIER >= 6
+    if (font == &mdi_icons_96 || font == &mdi_icons_128)
+        return true;
+#endif
+    return false;
 }
+
+} // namespace helix::ui
 
 /**
  * Check if a font is a "small" semantic font (text_small, text_xs, text_heading use muted color)
@@ -2525,7 +2538,7 @@ void theme_apply_palette_to_widget(lv_obj_t* obj, const helix::ModePalette& pale
         // ThemeManager styles that auto-update on theme change. Setting inline
         // colors here would override variant styles (muted, secondary, etc.)
         // and HeatingIconAnimator's temperature-based colors.
-        if (is_icon_font(font)) {
+        if (helix::ui::is_icon_font(font)) {
             return;
         }
 

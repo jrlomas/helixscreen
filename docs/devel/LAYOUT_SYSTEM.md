@@ -658,19 +658,42 @@ answer — there is no position in that grid it is allowed to occupy.
 `tests/unit/test_grid_half_cell_placement.cpp` covers the search, the growth and the load
 path.
 
-**Which widgets opt in.** Set the flag on an axis when the widget's content is *continuous*
-along it - a chart, an aspect-fit frame, wrapping text, a scrolling strip, stacked readout
-rows, or a layout picked by measurement (`active_spool`'s compact/wide switch,
-`decide_nozzle_layout()`). Half a cell of extra room shows more content there. Leave it off
-for a centred fixed glyph over a short label - `network`, `led`, `filament`, `humidity`, the
-heater tiles - where the intermediate size buys whitespace and nothing else, and costs a drag
-snap twice as fussy on a 34px track. Every minimum is a whole cell, so the flag only ever
-*adds* sizes above one the content already fits; it can never shrink a widget. The four
-fixed-footprint buttons that carry `supports_half_col` with `max == min` - `shutdown`,
-`lock`, `firmware_restart`, `led_controls` - use it for **placement** alone: it lets a lone
-button centre in a two-cell gap. They cannot be resized at all.
-`tests/unit/test_grid_layout.cpp` classifies every registry id, so a new widget cannot be
-added without deciding this.
+**Which widgets opt in.** Set the flag on an axis when half a cell of extra room buys
+something there. Two shapes buy something. The content is *continuous* along the axis - a
+chart, an aspect-fit frame, wrapping text, a scrolling strip, stacked readout rows, or a
+layout picked by measurement (`active_spool`'s compact/wide switch,
+`decide_nozzle_layout()`): half a cell shows more content. Or the widget is a centred-icon
+tile whose glyph scales with its box (`decide_tile_layout()`,
+`src/ui/panel_widgets/tile_layout.h`): half a cell is a larger icon rung. The eighteen
+centred-icon tiles - the three heater tiles, `network`, `led`, `filament`, `fan`,
+`thermistor`, `bypass`, `notifications`, `macros`, `motion`, `gcode_console`,
+`power_device` and the four action tiles - carry both flags
+(prestonbrown/helixscreen#1559). Leave it off for a widget authored around a fixed number
+of cells - `humidity`, `width_sensor`, `control_buttons` - where the intermediate size
+buys whitespace and nothing else, and costs a drag snap twice as fussy on a 34px track.
+
+**A tile's floor is half a cell wide and a whole cell tall.** Height carries the glyph, its
+reading and its label stacked, and no measurement recovers a 31px stack, so the row floor
+is a whole cell for every widget. Width is different: a tile that measures itself can be
+narrower than a cell, because it can refuse a box it cannot draw. It says so through
+`PanelWidget::fits_at()`, and `helix::grow_span_to_fit()` (`include/grid_layout.h`) lifts
+the span back above the floor - the same refusal path the resize clamp and the anchored
+load path both take, so those two cannot disagree. Auto-placement seats a widget at its
+authored default without asking, which is safe only because every definition holds that
+default at or above its own minimum.
+
+Half a cell is declined outright at the micro and tiny tiers, where a track is 31-40px and
+the glyph already fills it, and the rung is capped to the authored face there so those
+screens keep the proportions they were designed with. A widget whose glyph sits in a
+fixed-size badge declines it everywhere (`TileSizing::require_whole_cell()`): the disc
+spills rather than shrinking, so `power_device` keeps the authored face and a whole-cell
+floor.
+
+`tests/unit/test_grid_layout.cpp` classifies every registry id and pins the rule that a
+sub-cell floor belongs only to a widget that can decline one;
+`tests/unit/test_widget_content_fits.cpp` sweeps every tile at every shipping geometry, at
+the smallest span it is actually offered rather than its registry floor. A new widget
+cannot be added without deciding this.
 
 **Almost no widget paints its own background.** Most home widgets extend `lv_obj`, which
 inherits the fully transparent `StyleRole::ObjBase`, so a widget excluded from the card
@@ -715,6 +738,10 @@ So when adding a home widget:
   grid is then correct behaviour, not a bug. `tips` is the honest example: authored 8 tracks
   wide with a 4-track minimum, and switched off through the `disabled` map on the tiers
   where even that minimum costs a third to a half of a row for rotating hints.
+- If the widget can draw at some sizes and not others, override `PanelWidget::fits_at()`,
+  monotonically: fits at a size means fits at every larger size. Edit mode's resize clamp
+  and the load path both honour it through `helix::grow_span_to_fit()`
+  (`include/grid_layout.h`), with the registry min/max as the walk's bounds.
 - Mark every non-scrolling container in the widget's XML `scrollable="false"`. A tile is
   scrolled by dragging it, not by a chevron gutter, so `PageScrollAutoInject` stops its walk
   at the tile root (`src/ui/page_scroll_auto_inject.cpp#walk_and_attach`) - but a scrollable container

@@ -28,6 +28,12 @@ void register_fan_widget() {
     // Register XML event callbacks at startup (before any XML is parsed)
     lv_xml_register_event_cb(nullptr, "fan_widget_clicked_cb", FanWidget::fan_widget_clicked_cb);
 }
+void FanWidget::on_size_changed(int colspan, int rowspan, int width_px, int height_px) {
+    (void)colspan;
+    (void)rowspan;
+    sizing_.measure_and_publish(width_px, height_px);
+}
+
 } // namespace helix
 
 using namespace helix;
@@ -42,7 +48,11 @@ int resolve_space_token(const char* name, int fallback) {
 
 } // anonymous namespace
 
-FanWidget::FanWidget(const std::string& instance_id) : instance_id_(instance_id) {
+FanWidget::FanWidget(const std::string& instance_id)
+    : instance_id_(instance_id), sizing_(instance_id) {
+    // Worst cases, not a live reading: a size accepted while the fan reads 5%
+    // must still draw 100%.
+    sizing_.set_content({"100%", "100%", "Fan", /*has_value=*/true});
     std::strcpy(speed_buffer_, "--");
 }
 

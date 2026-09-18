@@ -17,6 +17,7 @@
 #include "panel_widget_config.h"
 #include "panel_widget_registry.h"
 #include "printer_cache_registry.h"
+#include "src/ui/panel_widgets/tile_sizing.h"
 #include "system/crash_handler.h"
 #include "system/telemetry_manager.h"
 #include "theme_manager.h"
@@ -452,6 +453,13 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
     // Build grid placement tracker to compute positions
     GridLayout grid(breakpoint, grid_dims);
 
+    // Track geometry for the placement pass. The layout is activated much
+    // further down, so this is the only way to know a span's pixel extent while
+    // spans are still being decided; it comes from the same content box the
+    // track counts did, so the two cannot disagree.
+    const CellMetrics place_metrics = grid_cell_metrics(content_w, content_h, grid_dims.cols,
+                                                        grid_dims.rows, GridLayout::gutter_px());
+
     // Correlate widget entries with config entries to get grid positions
     const auto& entries = widget_config.page_entries(page_index);
 
@@ -497,6 +505,31 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
             int row = fitted.row;
             int colspan = fitted.colspan;
             int rowspan = fitted.rowspan;
+
+            // Reading fits_at here is safe only because of the ordering this
+            // pass runs in, all within one tick: the previous tree is detached
+            // and scheduled for deferred deletion but NOT yet freed, so an
+            // instance still holding a root from the last pass points at live
+            // memory, and attach() below replaces it before the free happens.
+            // Making the tree teardown synchronous, or deferring this grow to a
+            // later tick, would leave that root dangling.
+            //
+            // A span saved against a different panel, language or theme can be
+            // smaller than this widget can draw. Grow the PLACEMENT request
+            // only: want_colspan below stays the saved span, so the #1216 guard
+            // keeps a size this panel forced out of serialize_pages(). Growing
+            // before place() means a grown span that collides is refused here
+            // and falls through to auto-place, as any other span would.
+            if (slot.instance) {
+                const auto* grow_def = find_widget_def(slot.widget_id);
+                const auto [grown_c, grown_r] = grow_span_to_fit(
+                    [&](int w, int h) { return slot.instance->fits_at(w, h); }, colspan, rowspan,
+                    grow_def ? grow_def->effective_max_colspan() : colspan,
+                    grow_def ? grow_def->effective_max_rowspan() : rowspan, anchor_col_step,
+                    anchor_row_step, place_metrics);
+                colspan = grown_c;
+                rowspan = grown_r;
+            }
 
             if (grid.place({slot.widget_id, col, row, colspan, rowspan})) {
                 placed.push_back(
@@ -646,6 +679,12 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
             const int grow_rows = def ? std::min(want_rows, def->effective_max_rowspan()) : 1;
             const int min_cols = def ? std::min(def->effective_min_colspan(), want_cols) : 1;
             const int min_rows = def ? std::min(def->effective_min_rowspan(), want_rows) : 1;
+            // These are registry spans, not a fits_at answer: auto-place seats
+            // at the authored default, which every definition holds at or above
+            // its own minimum. A widget whose fits_at declines its authored
+            // default would be seated unmeasured here, where the anchored path
+            // above would have grown it. No definition is shaped that way; one
+            // that were would need this path to consult grow_span_to_fit too.
             // The boundaries this widget may sit on — a whole cell unless it
             // declares half-cell support. Same source edit mode snaps drags and
             // resizes to, so the two paths cannot disagree (#1126).
@@ -1099,7 +1138,8 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
 
             // Create XML component
             auto* widget = static_cast<lv_obj_t*>(
-                lv_xml_create(container, slot.component_name.c_str(), nullptr));
+                lv_xml_create(container, slot.component_name.c_str(),
+                              slot.instance ? slot.instance->xml_attrs() : nullptr));
             if (!widget) {
                 spdlog::warn("[PanelWidgetManager] Failed to create widget: {} (component: {})",
                              slot.widget_id, slot.component_name);
@@ -1170,6 +1210,10 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
 
             // Attach the pre-created PanelWidget instance if present and NOT gated
             if (slot.instance && !slot.hardware_gated) {
+                if (auto* sizing = slot.instance->tile_sizing()) {
+                    sizing->set_content_root(widget);
+                    sizing->set_cell_metrics(metrics);
+                }
                 slot.instance->attach(widget, lv_scr_act());
 
                 // Notify widget of its grid allocation and approximate pixel size.

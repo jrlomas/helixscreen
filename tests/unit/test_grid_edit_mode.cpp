@@ -238,18 +238,19 @@ TEST_CASE("GridEditMode: clamp_span respects min/max from registry", "[grid_edit
 }
 
 TEST_CASE("GridEditMode: clamp_span non-scalable widget stays fixed", "[grid_edit][resize]") {
-    // "macros" is pinned at one whole cell on both axes: min == max == default.
-    // ("shutdown" is no longer the example — it can shrink to a half column.)
-    const auto* def = find_widget_def("macros");
+    // "control_buttons" is authored at a fixed footprint on both axes:
+    // min == max == default, so it cannot be resized at all. Assert that
+    // premise, or a widget that later gains a range turns this into a test of
+    // nothing.
+    const auto* def = find_widget_def("control_buttons");
     REQUIRE(def != nullptr);
     REQUIRE_FALSE(def->is_scalable());
 
-    auto [c, r] = GridEditMode::clamp_span("macros", 6, 6);
+    auto [c, r] = GridEditMode::clamp_span("control_buttons", 6, 6);
     CHECK(c == def->effective_min_colspan());
     CHECK(r == def->effective_min_rowspan());
-    // Both should equal the default colspan/rowspan — one cell, so two tracks.
-    CHECK(c == GridLayout::TRACKS_PER_CELL);
-    CHECK(r == GridLayout::TRACKS_PER_CELL);
+    CHECK(c == def->colspan);
+    CHECK(r == def->rowspan);
 }
 
 TEST_CASE("GridEditMode: clamp_span unknown widget returns at least one track",
@@ -1401,29 +1402,42 @@ TEST_CASE("PanelWidgetDef: partially scalable (one axis)", "[grid_edit][sizing]"
 
 TEST_CASE("clamp_span: clamps to widget min/max", "[grid_edit][sizing]") {
     // Spans are in tracks — a track is half a cell (GridLayout::TRACKS_PER_CELL).
-    // Use an existing scalable widget: "temperature" (min 2x2, max 4x4 tracks).
-    auto [c1, r1] = GridEditMode::clamp_span("temperature", 0, 0);
+    // "humidity" is bounded on both axes (min 2x2, max 4x4 tracks), which is
+    // what makes a clamp observable at all; a widget whose maximum is the whole
+    // grid would never reach its ceiling here.
+    const auto* bounded = find_widget_def("humidity");
+    REQUIRE(bounded != nullptr);
+    REQUIRE(bounded->effective_max_colspan() == 4);
+    REQUIRE(bounded->effective_max_rowspan() == 4);
+
+    auto [c1, r1] = GridEditMode::clamp_span("humidity", 0, 0);
     CHECK(c1 == 2); // Clamped to min
     CHECK(r1 == 2);
 
-    auto [c2, r2] = GridEditMode::clamp_span("temperature", 9, 9);
+    auto [c2, r2] = GridEditMode::clamp_span("humidity", 9, 9);
     CHECK(c2 == 4); // Clamped to max
     CHECK(r2 == 4);
 
-    auto [c3, r3] = GridEditMode::clamp_span("temperature", 3, 3);
+    auto [c3, r3] = GridEditMode::clamp_span("humidity", 3, 3);
     CHECK(c3 == 3); // Within range
     CHECK(r3 == 3);
 
-    auto [c4, r4] = GridEditMode::clamp_span("temperature", 4, 4);
+    auto [c4, r4] = GridEditMode::clamp_span("humidity", 4, 4);
     CHECK(c4 == 4); // At max
     CHECK(r4 == 4);
 }
 
 TEST_CASE("clamp_span: non-scalable widget stays fixed", "[grid_edit][sizing]") {
-    // "macros" is one whole cell on both axes and cannot scale on either.
-    auto [c1, r1] = GridEditMode::clamp_span("macros", 6, 6);
-    CHECK(c1 == 2);
-    CHECK(r1 == 2);
+    // "control_buttons" is authored at a fixed footprint and cannot scale on
+    // either axis. Assert the premise so a widget that later gains a range does
+    // not leave this passing on a clamp that never happened.
+    const auto* def = find_widget_def("control_buttons");
+    REQUIRE(def != nullptr);
+    REQUIRE_FALSE(def->is_scalable());
+
+    auto [c1, r1] = GridEditMode::clamp_span("control_buttons", 6, 6);
+    CHECK(c1 == def->colspan);
+    CHECK(r1 == def->rowspan);
 }
 
 TEST_CASE("clamp_span: asymmetric constraints", "[grid_edit][sizing]") {
@@ -1808,11 +1822,23 @@ TEST_CASE("round_to_grid_cell: gutters do not shift the stepped boundary",
 
 TEST_CASE("snap_step_for: whole-cell widgets step by a full cell",
           "[grid_edit][resize][half_cell]") {
-    auto [wc, wr] = GridEditMode::snap_step_for("temperature");
+    // control_buttons is authored around a fixed number of cells on both axes,
+    // so it is the whole-cell fixed point. Picking a widget that later gains a
+    // half flag would turn this into a test of nothing, so assert the premise.
+    const auto* whole = helix::find_widget_def("control_buttons");
+    REQUIRE(whole != nullptr);
+    REQUIRE_FALSE(whole->supports_half_col);
+    REQUIRE_FALSE(whole->supports_half_row);
+    auto [wc, wr] = GridEditMode::snap_step_for("control_buttons");
     CHECK(wc == helix::GridLayout::TRACKS_PER_CELL);
     CHECK(wr == helix::GridLayout::TRACKS_PER_CELL);
 
-    auto [hc, hr] = GridEditMode::snap_step_for("shutdown");
+    // preheat is half on the column only: its row span is authored fixed.
+    const auto* mixed = helix::find_widget_def("preheat");
+    REQUIRE(mixed != nullptr);
+    REQUIRE(mixed->supports_half_col);
+    REQUIRE_FALSE(mixed->supports_half_row);
+    auto [hc, hr] = GridEditMode::snap_step_for("preheat");
     CHECK(hc == 1);
     CHECK(hr == helix::GridLayout::TRACKS_PER_CELL);
 
@@ -1936,15 +1962,20 @@ TEST_CASE_METHOD(XMLTestFixture,
     // target, so the shield must never be destroyed mid-session. What changes
     // with the selection is its lattice children, the legal drop targets.
     CHECK(dots_for_temperature == dots_at_enter);
+    // Both these tiles snap by a single track now, so the lattice is at its
+    // finest pitch. The two counts must differ, or this case would pass with a
+    // lattice that ignored the selection entirely.
+    REQUIRE(GridEditMode::dot_count(ncols, nrows, 1, 1) !=
+            GridEditMode::dot_count(ncols, nrows, cell, cell));
     CHECK(lv_obj_get_child_count(dots_for_temperature) ==
-          static_cast<uint32_t>(GridEditMode::dot_count(ncols, nrows, cell, cell)));
+          static_cast<uint32_t>(GridEditMode::dot_count(ncols, nrows, 1, 1)));
 
     em.select_widget(shutdown_widget);
     lv_obj_t* dots_for_shutdown = GridEditModeTestAccess::shield(em);
     REQUIRE(dots_for_shutdown != nullptr);
     CHECK(dots_for_shutdown == dots_for_temperature);
     CHECK(lv_obj_get_child_count(dots_for_shutdown) ==
-          static_cast<uint32_t>(GridEditMode::dot_count(ncols, nrows, 1, cell)));
+          static_cast<uint32_t>(GridEditMode::dot_count(ncols, nrows, 1, 1)));
 
     em.exit();
     mgr.clear_panel_config(panel_id);

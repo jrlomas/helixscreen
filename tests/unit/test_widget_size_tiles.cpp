@@ -1,0 +1,454 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_widget_size_tiles.cpp
+ * @brief Centred-icon tiles resolve their icon face, value font, label
+ *        visibility and direction from the per-instance subjects their sizing
+ *        helper publishes.
+ *
+ * Run with: ./build/bin/helix-tests "[widget_size][tile]"
+ */
+
+#include "../lvgl_ui_test_fixture.h"
+#include "../test_helpers/panel_widget_size_harness.h"
+#include "helix-xml/src/xml/lv_xml.h"
+#include "helix-xml/src/xml/lv_xml_component.h"
+#include "helix/ui/shared_font_style.h"
+#include "panel_widget.h"
+#include "panel_widget_registry.h"
+#include "src/ui/panel_widgets/tile_sizing.h"
+#include "theme_manager.h"
+
+#include "../catch_amalgamated.hpp"
+
+namespace {
+
+/// A widget that overrides nothing, to pin the base-class default. Widgets that
+/// have not opted in must keep exactly their registry limits.
+class PlainWidget : public helix::PanelWidget {
+  public:
+    void attach(lv_obj_t*, lv_obj_t*) override {}
+    void detach() override {}
+    const char* id() const override {
+        return "plain";
+    }
+};
+
+} // namespace
+
+TEST_CASE("PanelWidget::fits_at defaults to true", "[widget_size][tile][1559]") {
+    PlainWidget plain;
+    CHECK(plain.fits_at(1, 1));
+    CHECK(plain.fits_at(0, 0));
+    CHECK(plain.fits_at(4000, 4000));
+}
+
+TEST_CASE("every widget can draw in a generous box", "[widget_size][tile][1559]") {
+    // A fits_at that refused a whole-screen box would make its widget
+    // unplaceable, and the clamp would walk to the registry maximum and stop.
+    LVGLUITestFixture fixture;
+    helix::init_widget_registrations();
+
+    int constructed = 0;
+    for (const auto& def : get_all_widget_defs()) {
+        if (!def.factory) {
+            continue;
+        }
+        INFO("widget " << def.id);
+        auto instance = def.factory(def.id);
+        REQUIRE(instance != nullptr);
+        CHECK(instance->fits_at(480, 480));
+        ++constructed;
+    }
+    CHECK(constructed > 10);
+}
+
+namespace {
+
+/// A tile component whose icon face is bound to whichever per-instance subject
+/// it is handed. Two instances get different subject names, so a verdict
+/// published to one must not move the other.
+constexpr const char* TILE_FIXTURE_XML = R"(<component>
+  <api>
+    <prop name="tile_icon_subject" type="string" default=""/>
+  </api>
+  <styles>
+    <style name="rung_xs" text_font="#icon_font_xs"/>
+    <style name="rung_xl" text_font="#icon_font_xl"/>
+  </styles>
+  <view name="root" extends="lv_obj">
+    <icon name="tile_glyph" src="power" size="md">
+      <bind_style_if_eq name="rung_xs" subject="$tile_icon_subject" ref_value="0"/>
+      <bind_style_if_eq name="rung_xl" subject="$tile_icon_subject" ref_value="4"/>
+    </icon>
+  </view>
+</component>)";
+
+lv_obj_t* create_tile(lv_obj_t* parent, const helix::TileSizing& sizing) {
+    static bool registered = false;
+    if (!registered) {
+        REQUIRE(lv_xml_register_component_from_data("tile_size_fixture", TILE_FIXTURE_XML) ==
+                LV_RESULT_OK);
+        registered = true;
+    }
+    return static_cast<lv_obj_t*>(
+        lv_xml_create(parent, "tile_size_fixture", sizing.subject_attrs()));
+}
+
+} // namespace
+
+TEST_CASE("two tile instances resolve their rung independently", "[widget_size][tile][1559]") {
+    // Per-instance subjects are the whole point: one shared name would make the
+    // second instance overwrite the first's verdict and both would agree.
+    LVGLUITestFixture fixture;
+
+    helix::TileSizing wide("fan:0");
+    helix::TileSizing narrow("fan:1");
+    wide.set_content({"888 / 888", "888", "Fan", true});
+    narrow.set_content({"888 / 888", "888", "Fan", true});
+
+    lv_obj_t* wide_obj = create_tile(fixture.test_screen(), wide);
+    lv_obj_t* narrow_obj = create_tile(fixture.test_screen(), narrow);
+    REQUIRE(wide_obj != nullptr);
+    REQUIRE(narrow_obj != nullptr);
+
+    lv_obj_t* wide_glyph = lv_obj_find_by_name(wide_obj, "tile_glyph");
+    lv_obj_t* narrow_glyph = lv_obj_find_by_name(narrow_obj, "tile_glyph");
+    REQUIRE(wide_glyph != nullptr);
+    REQUIRE(narrow_glyph != nullptr);
+
+    const lv_font_t* xs = theme_manager_get_font("icon_font_xs");
+    const lv_font_t* xl = theme_manager_get_font("icon_font_xl");
+    REQUIRE(xs != nullptr);
+    REQUIRE(xl != nullptr);
+    REQUIRE(xs != xl);
+
+    lv_subject_set_int(lv_xml_get_subject(nullptr, "fan:0_tile_icon"), 4);
+    lv_subject_set_int(lv_xml_get_subject(nullptr, "fan:1_tile_icon"), 0);
+
+    // If the subjects had been registered too late to bind, both glyphs would
+    // still read the size attribute's face and these two would be equal.
+    CHECK(lv_obj_get_style_text_font(wide_glyph, LV_PART_MAIN) == xl);
+    CHECK(lv_obj_get_style_text_font(narrow_glyph, LV_PART_MAIN) == xs);
+}
+
+TEST_CASE("a tile registers its subjects before any XML is parsed", "[widget_size][tile][1559]") {
+    // Ruling 2: construction, not attach(). A subject that does not exist when
+    // the component is parsed is dropped permanently, with nothing in the log.
+    LVGLUITestFixture fixture;
+    helix::TileSizing sizing("thermistor:2");
+    for (const char* suffix : {"_tile_icon", "_tile_label", "_tile_dir", "_tile_target"}) {
+        const std::string name = std::string("thermistor:2") + suffix;
+        INFO("subject " << name);
+        CHECK(lv_xml_get_subject(nullptr, name.c_str()) != nullptr);
+    }
+}
+
+TEST_CASE("a tile's verdict follows the box it is given", "[widget_size][tile][1559]") {
+    LVGLUITestFixture fixture;
+    helix::TileSizing sizing("fan:9");
+    sizing.set_content({"888 / 888", "888", "Fan", true});
+
+    sizing.measure_and_publish(240, 240);
+    const int big = lv_subject_get_int(lv_xml_get_subject(nullptr, "fan:9_tile_icon"));
+    sizing.measure_and_publish(60, 60);
+    const int small = lv_subject_get_int(lv_xml_get_subject(nullptr, "fan:9_tile_icon"));
+
+    INFO("rung at 240x240 = " << big << ", at 60x60 = " << small);
+    CHECK(big > small);
+    CHECK(sizing.fits(240, 240));
+}
+
+TEST_CASE("two real fan tiles at different sizes draw different glyphs",
+          "[widget_size][tile][1559]") {
+    // The end-to-end shape: a widget owns a TileSizing, the manager hands its
+    // subject names to lv_xml_create, and the component's bind_style_if_eq
+    // rungs resolve them. If any link in that chain is broken the two icons
+    // come back identical, which is also what a subject registered too late
+    // would produce.
+    LVGLUITestFixture fixture;
+    init_widget_registrations();
+
+    const auto* def = find_widget_def("fan");
+    REQUIRE(def != nullptr);
+    REQUIRE(def->factory != nullptr);
+
+    auto wide = def->factory("fan:0");
+    auto narrow = def->factory("fan:1");
+    REQUIRE(wide != nullptr);
+    REQUIRE(narrow != nullptr);
+
+    // The names must differ, or both tiles bind one subject and agree by
+    // accident rather than by construction.
+    REQUIRE(wide->xml_attrs() != nullptr);
+    REQUIRE(narrow->xml_attrs() != nullptr);
+    REQUIRE(std::string(wide->xml_attrs()[1]) != std::string(narrow->xml_attrs()[1]));
+
+    lv_obj_t* wide_obj = static_cast<lv_obj_t*>(
+        lv_xml_create(fixture.test_screen(), "panel_widget_fan", wide->xml_attrs()));
+    lv_obj_t* narrow_obj = static_cast<lv_obj_t*>(
+        lv_xml_create(fixture.test_screen(), "panel_widget_fan", narrow->xml_attrs()));
+    REQUIRE(wide_obj != nullptr);
+    REQUIRE(narrow_obj != nullptr);
+
+    wide->notify_size_changed(8, 8, 420, 420);
+    narrow->notify_size_changed(1, 1, 52, 52);
+
+    lv_obj_t* wide_icon = lv_obj_find_by_name(wide_obj, "fan_widget_icon");
+    lv_obj_t* narrow_icon = lv_obj_find_by_name(narrow_obj, "fan_widget_icon");
+    REQUIRE(wide_icon != nullptr);
+    REQUIRE(narrow_icon != nullptr);
+
+    const lv_font_t* wide_face = lv_obj_get_style_text_font(wide_icon, LV_PART_MAIN);
+    const lv_font_t* narrow_face = lv_obj_get_style_text_font(narrow_icon, LV_PART_MAIN);
+    INFO("wide=" << static_cast<const void*>(wide_face)
+                 << " narrow=" << static_cast<const void*>(narrow_face));
+    CHECK(wide_face != narrow_face);
+
+    wide->detach();
+    narrow->detach();
+}
+
+TEST_CASE("a fan tile declines a box too small to draw in", "[widget_size][tile][1559]") {
+    LVGLUITestFixture fixture;
+    init_widget_registrations();
+    const auto* def = find_widget_def("fan");
+    REQUIRE(def != nullptr);
+    auto fan = def->factory("fan:0");
+    REQUIRE(fan != nullptr);
+
+    CHECK(fan->fits_at(400, 400));
+    CHECK_FALSE(fan->fits_at(6, 6));
+}
+
+TEST_CASE("every centred-icon tile resolves a different glyph at two sizes",
+          "[widget_size][tile][1559]") {
+    // The acceptance check for the whole change: each of the eighteen must
+    // actually move its glyph between a small box and a large one. A tile whose
+    // binding was dropped, whose subject name never reached its XML, or whose
+    // icon was missed in a state-swapped set comes back identical at both sizes.
+    LVGLUITestFixture fixture;
+    helix::init_widget_registrations();
+
+    const std::vector<std::string> kTiles = {"shutdown",
+                                             "lock",
+                                             "firmware_restart",
+                                             "led_controls",
+                                             "macros",
+                                             "motion",
+                                             "gcode_console",
+                                             "led",
+                                             "network",
+                                             "bypass",
+                                             "notifications",
+                                             "power_device",
+                                             "fan",
+                                             "thermistor",
+                                             "filament",
+                                             "temperature",
+                                             "bed_temperature",
+                                             "chamber_temperature"};
+
+    int scaled = 0;
+    std::vector<std::string> unscaled;
+
+    for (const auto& id : kTiles) {
+        const auto* def = find_widget_def(id);
+        INFO("tile " << id);
+        REQUIRE(def != nullptr);
+        REQUIRE(def->factory != nullptr);
+
+        auto instance = def->factory(id);
+        REQUIRE(instance != nullptr);
+
+        instance->notify_size_changed(1, 1, 48, 48);
+        const int small =
+            lv_subject_get_int(lv_xml_get_subject(nullptr, (id + "_tile_icon").c_str()));
+        instance->notify_size_changed(8, 8, 420, 420);
+        const int large =
+            lv_subject_get_int(lv_xml_get_subject(nullptr, (id + "_tile_icon").c_str()));
+
+        if (large > small) {
+            ++scaled;
+        } else {
+            unscaled.push_back(id + " (" + std::to_string(small) + "->" + std::to_string(large) +
+                               ")");
+        }
+    }
+
+    std::string joined;
+    for (const auto& u : unscaled) {
+        joined += "\n  " + u;
+    }
+    INFO("these tiles do not grow their glyph between 48px and 420px:" << joined);
+    CHECK(unscaled.empty());
+    CHECK(scaled == static_cast<int>(kTiles.size()));
+}
+
+namespace {
+
+/// Every descendant drawing in an MDI icon face, in tree order.
+///
+/// All of them, not just the first: a state-swapped tile keeps one icon per
+/// state and only one is visible, so a set where a single icon was missed
+/// resizes until the state changes and then stops.
+void collect_icon_fonts(lv_obj_t* root, std::vector<const lv_font_t*>& out) {
+    if (!root) {
+        return;
+    }
+    const uint32_t n = lv_obj_get_child_count(root);
+    for (uint32_t i = 0; i < n; ++i) {
+        lv_obj_t* child = lv_obj_get_child(root, i);
+        const lv_font_t* f = lv_obj_get_style_text_font(child, LV_PART_MAIN);
+        if (lv_obj_check_type(child, &lv_label_class) && helix::ui::is_icon_font(f)) {
+            out.push_back(f);
+        }
+        collect_icon_fonts(child, out);
+    }
+}
+
+} // namespace
+
+TEST_CASE("every centred-icon tile RENDERS a different glyph at two sizes",
+          "[widget_size][tile][1559]") {
+    // The subject changing proves measurement ran; it does not prove the XML
+    // binds it. This asserts the resolved FONT on the tile's own tree, which is
+    // what a dropped binding, a missed icon in a swapped set, or a subject name
+    // that never reached the component all fail.
+    LVGLUITestFixture fixture;
+    helix::init_widget_registrations();
+
+    const std::vector<std::string> kTiles = {"shutdown",
+                                             "lock",
+                                             "firmware_restart",
+                                             "led_controls",
+                                             "macros",
+                                             "motion",
+                                             "gcode_console",
+                                             "led",
+                                             "network",
+                                             "bypass",
+                                             "notifications",
+                                             "power_device",
+                                             "fan",
+                                             "thermistor",
+                                             "filament",
+                                             "temperature",
+                                             "bed_temperature",
+                                             "chamber_temperature"};
+
+    // power_device draws its glyph inside a fixed-size disc, so growing the
+    // glyph spills the badge rather than drawing a larger one. It keeps the
+    // authored face and floors at a whole cell; scaling it means scaling the
+    // badge, which is its own design question.
+    const std::string kBadgeBound = "power_device";
+
+    std::vector<std::string> unscaled;
+    for (const auto& id : kTiles) {
+        if (id == kBadgeBound) {
+            continue;
+        }
+        const auto* def = find_widget_def(id);
+        INFO("tile " << id);
+        REQUIRE(def != nullptr);
+        REQUIRE(def->factory != nullptr);
+        auto instance = def->factory(id);
+        REQUIRE(instance != nullptr);
+
+        lv_obj_t* root = static_cast<lv_obj_t*>(lv_xml_create(
+            fixture.test_screen(), instance->get_component_name().c_str(), instance->xml_attrs()));
+        if (!root) {
+            unscaled.push_back(id + " (component would not build)");
+            continue;
+        }
+
+        std::vector<const lv_font_t*> small;
+        std::vector<const lv_font_t*> large;
+        instance->notify_size_changed(1, 1, 48, 48);
+        collect_icon_fonts(root, small);
+        instance->notify_size_changed(8, 8, 420, 420);
+        collect_icon_fonts(root, large);
+
+        if (small.empty() || small.size() != large.size()) {
+            unscaled.push_back(id + " (no icon glyph found)");
+        } else {
+            for (size_t i = 0; i < small.size(); ++i) {
+                if (small[i] == large[i]) {
+                    unscaled.push_back(id + " (icon " + std::to_string(i) + " of " +
+                                       std::to_string(small.size()) + " kept one face)");
+                }
+            }
+        }
+        lv_obj_delete(root);
+    }
+
+    std::string joined;
+    for (const auto& u : unscaled) {
+        joined += "\n  " + u;
+    }
+    INFO("these tiles do not RENDER a different glyph between 48px and 420px:" << joined);
+    CHECK(unscaled.empty());
+
+    // The exception is real and narrow: assert it still declines a half cell,
+    // so "does not scale" cannot quietly spread to tiles that should.
+    const auto* badge_def = find_widget_def(kBadgeBound);
+    REQUIRE(badge_def != nullptr);
+    auto badge = badge_def->factory(kBadgeBound);
+    REQUIRE(badge != nullptr);
+    CHECK_FALSE(badge->fits_at(30, 200));
+}
+
+TEST_CASE("every tile exposes its live instance to edit mode", "[widget_size][tile][1559]") {
+    // The resize clamp reaches the selected tile through its root's user data
+    // (grid_edit_mode.cpp#handle_resize_move). A tile that does not set it
+    // reads as nullptr, the clamp is skipped entirely, and any span the drag
+    // produced is accepted and saved: the tile renders surrendered and the next
+    // load quietly grows it somewhere else. Nothing about that is visible at
+    // the call site, which is why it is pinned here.
+    LVGLUITestFixture fixture;
+    helix::init_widget_registrations();
+
+    const std::vector<std::string> kTiles = {"shutdown",
+                                             "lock",
+                                             "firmware_restart",
+                                             "led_controls",
+                                             "macros",
+                                             "motion",
+                                             "gcode_console",
+                                             "led",
+                                             "network",
+                                             "bypass",
+                                             "notifications",
+                                             "power_device",
+                                             "fan",
+                                             "thermistor",
+                                             "filament",
+                                             "temperature",
+                                             "bed_temperature",
+                                             "chamber_temperature"};
+
+    std::vector<std::string> unreachable;
+    for (const auto& id : kTiles) {
+        const auto* def = find_widget_def(id);
+        INFO("tile " << id);
+        REQUIRE(def != nullptr);
+        REQUIRE(def->factory != nullptr);
+
+        // The harness owns attach/detach and the teardown some of these
+        // widgets need: attaching them by hand leaves a poll thread running
+        // into later tests.
+        RegistryWidgetHarness harness(fixture.test_screen(), *def);
+        REQUIRE(harness.created());
+        if (lv_obj_get_user_data(harness.root()) == nullptr) {
+            unreachable.push_back(id);
+        }
+    }
+
+    std::string joined;
+    for (const auto& u : unreachable) {
+        joined += "\n  " + u;
+    }
+    INFO("these tiles are invisible to the resize clamp:" << joined);
+    CHECK(unreachable.empty());
+}

@@ -1,0 +1,161 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_tile_layout.cpp
+ * @brief Boundaries of the centred-tile sizing decision.
+ *
+ * The fixtures below are measured, not invented: they come from
+ * theme_manager_get_font() and lv_text_get_width() at the medium tier, which is
+ * what the suite's default display resolves to. Boundaries pinned against
+ * measured widths are the ones the widget really meets.
+ *
+ * Run with: ./build/bin/helix-tests "[tile][layout]"
+ */
+
+#include "src/ui/panel_widgets/tile_layout.h"
+
+#include "../catch_amalgamated.hpp"
+
+using namespace helix;
+
+namespace {
+
+/// Medium tier, measured.
+///   icon_font_xs..xl  line height 18/24/33/48/66, glyph width 16/24/32/48/64
+///   paired value face font_xs/font_xs/font_small/font_body/font_heading
+///   line height        18/18/22/24/34
+///   "888 / 888°"       57/57/75/85/125      "888°"  26/26/34/38/56
+///   label face is one rung below the value face; "Nozzle" 38/38/38/48/56
+constexpr TileRungMetrics kMedium[kTileRungs] = {
+    //  icon_w icon_h  full  cur  val_h  lbl_w lbl_h
+    {16, 18, 57, 26, 18, 38, 18}, {24, 24, 57, 26, 18, 38, 18},  {32, 33, 75, 34, 22, 38, 18},
+    {48, 48, 85, 38, 24, 48, 22}, {64, 66, 125, 56, 34, 56, 24},
+};
+
+constexpr int kGap = 4;
+
+TileVerdict verdict_at(int w, int h, bool has_value = true, bool labels = true) {
+    return decide_tile_layout(w, h, kGap, kMedium, has_value, labels);
+}
+
+} // namespace
+
+TEST_CASE("a one-cell tile keeps a large glyph and all its content", "[tile][layout][1559]") {
+    // 110x108 is one cell at medium (2 tracks of 55 minus the gutter).
+    // Rung 4 needs 125px of width for "888 / 888°" and does not fit; rung 3
+    // needs max(48, 85, 48) = 85 wide and 48+4+24+4+22 = 102 tall.
+    TileVerdict v = verdict_at(110, 108);
+    CHECK(v.fits);
+    CHECK(v.icon_rung == 3);
+    CHECK(v.direction == TileDirection::Column);
+    CHECK(v.label == TileLabelRung::Label);
+    CHECK(v.show_target);
+}
+
+TEST_CASE("a half-height strip turns into a row", "[tile][layout][1559]") {
+    // No rung stacks inside 52px: the smallest is 18+4+18+4+18 = 62 tall.
+    // Row at rung 1 needs 24+4+max(57,38) = 85 wide and max(24, 18+4+18) = 40
+    // tall, so direction follows fit rather than aspect ratio.
+    TileVerdict v = verdict_at(110, 52);
+    CHECK(v.fits);
+    CHECK(v.direction == TileDirection::Row);
+    CHECK(v.label == TileLabelRung::Label);
+}
+
+TEST_CASE("the target half is surrendered before the label", "[tile][layout][1559]") {
+    // 50px is under the 57px the narrowest full value needs, and under the
+    // 77px the narrowest row needs, so the target goes. The label survives,
+    // and dropping the target buys back enough width for rung 3:
+    // max(48, 38, 48) = 48 wide, 48+4+24+4+22 = 102 tall.
+    TileVerdict v = verdict_at(50, 108);
+    CHECK(v.fits);
+    CHECK_FALSE(v.show_target);
+    CHECK(v.label == TileLabelRung::Label);
+    CHECK(v.icon_rung == 3);
+}
+
+TEST_CASE("the label is surrendered only after the target", "[tile][layout][1559]") {
+    // Too short for any stack that carries a label (smallest is 62), too
+    // narrow for any row (narrowest is 77 with the target, 61 without).
+    TileVerdict v = verdict_at(44, 44);
+    CHECK(v.fits);
+    CHECK(v.label == TileLabelRung::None);
+    CHECK_FALSE(v.show_target);
+}
+
+TEST_CASE("a size that fits keeps fitting as it grows", "[tile][layout][1559]") {
+    // The resize clamp walks outward assuming the first accepting size is the
+    // nearest one; a non-monotonic answer makes that walk stop at the wrong
+    // size or not terminate.
+    int fitting = 0;
+    for (int w = 8; w <= 400; w += 4) {
+        for (int h = 8; h <= 400; h += 4) {
+            if (!verdict_at(w, h).fits) {
+                continue;
+            }
+            ++fitting;
+            INFO("fits at " << w << "x" << h << " so it must still fit larger");
+            CHECK(verdict_at(w + 4, h).fits);
+            CHECK(verdict_at(w, h + 4).fits);
+            CHECK(verdict_at(w + 4, h + 4).fits);
+        }
+    }
+    // A sweep where nothing ever fits would pass every CHECK above vacuously.
+    CHECK(fitting > 100);
+}
+
+TEST_CASE("fits budgets the widest value, never a live reading", "[tile][layout][1559]") {
+    // Whatever arrangement is chosen, the rung's own worst-case value has to
+    // sit inside the box, or a tile sized while reading 95 clips at 888.
+    for (int w = 8; w <= 240; w += 2) {
+        TileVerdict v = verdict_at(w, 120);
+        if (!v.fits) {
+            continue;
+        }
+        const TileRungMetrics& m = kMedium[v.icon_rung];
+        const int value_w = v.show_target ? m.value_full_w : m.value_current_w;
+        INFO("width " << w << " chose rung " << v.icon_rung);
+        if (v.direction == TileDirection::Column) {
+            CHECK(std::max(m.icon_w, value_w) <= w);
+        } else {
+            CHECK(m.icon_w + 4 + value_w <= w);
+        }
+    }
+}
+
+TEST_CASE("a value-less tile is never refused a size a valued one accepts",
+          "[tile][layout][1559]") {
+    // The seven action tiles draw no value, so their floor must not be set by
+    // one. Dropping content can only ever make a box easier to satisfy.
+    int value_only_refusals = 0;
+    for (int w = 12; w <= 200; w += 4) {
+        for (int h = 12; h <= 200; h += 4) {
+            const bool with = verdict_at(w, h, /*has_value=*/true).fits;
+            const bool without = verdict_at(w, h, /*has_value=*/false).fits;
+            if (with) {
+                INFO("valued tile fits at " << w << "x" << h << " so a value-less one must");
+                CHECK(without);
+            }
+            if (without && !with) {
+                ++value_only_refusals;
+            }
+        }
+    }
+    // If the two never diverged the loop would prove nothing about the value
+    // being what sets the floor.
+    CHECK(value_only_refusals > 0);
+}
+
+TEST_CASE("size can hide a label but never show one the setting hides", "[tile][layout][1559]") {
+    TileVerdict v = verdict_at(400, 400, /*has_value=*/true, /*labels=*/false);
+    CHECK(v.fits);
+    CHECK(v.label == TileLabelRung::None);
+    // And with room to spare it still takes the largest glyph.
+    CHECK(v.icon_rung == kTileRungs - 1);
+}
+
+TEST_CASE("a box too small for anything reports that it does not fit", "[tile][layout][1559]") {
+    TileVerdict v = verdict_at(10, 10);
+    CHECK_FALSE(v.fits);
+}

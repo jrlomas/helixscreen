@@ -14,6 +14,7 @@
 #include "helix-xml/src/xml/lv_xml_utils.h"
 #include "helix-xml/src/xml/lv_xml_widget.h"
 #include "helix-xml/src/xml/parsers/lv_xml_obj_parser.h"
+#include "helix/ui/shared_font_style.h"
 #include "lvgl/lvgl.h"
 #include "theme_manager.h"
 
@@ -135,7 +136,11 @@ void invalidate_font_cache() {
 static void apply_size(lv_obj_t* obj, IconSize size) {
     const lv_font_t* font = get_font_for_size(size);
 
-    lv_obj_set_style_text_font(obj, font, LV_PART_MAIN);
+    // The face rides a shared ADDED style so a style bound from XML can
+    // override it; written locally it would outrank every bound style. Both
+    // the create path and the size= attribute reach here, so an icon that
+    // takes both has its face replaced rather than stacked.
+    helix::ui::apply_font_style(obj, font);
     lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 }
 

@@ -1974,6 +1974,28 @@ void GridEditMode::handle_resize_move(lv_event_t* /*e*/) {
         at_limit = (pre_clamp_r != clamped_r); // Rowspan was clamped
     }
 
+    // Registry limits first, then the tile's own answer: a size it cannot draw
+    // its icon and widest value in is refused the same way a limit is, so the
+    // preview turns red there too.
+    if (auto* live =
+            selected_ ? static_cast<PanelWidget*>(lv_obj_get_user_data(selected_)) : nullptr) {
+        const auto [fit_c, fit_r] = grow_span_to_fit(
+            [live](int w, int h) { return live->fits_at(w, h); }, result.colspan, result.rowspan,
+            clamp_span(resize_id, GridLayout::MAX_TRACKS, GridLayout::MAX_TRACKS).first,
+            clamp_span(resize_id, GridLayout::MAX_TRACKS, GridLayout::MAX_TRACKS).second, col_step,
+            row_step, m);
+        if (fit_c != result.colspan || fit_r != result.rowspan) {
+            at_limit = true;
+            result.colspan = fit_c;
+            result.rowspan = fit_r;
+            if (resize_edge_ == ResizeEdge::Top) {
+                result.row = drag_orig_row_ + drag_orig_rowspan_ - result.rowspan;
+            } else if (resize_edge_ == ResizeEdge::Left) {
+                result.col = drag_orig_col_ + drag_orig_colspan_ - result.colspan;
+            }
+        }
+    }
+
     // Check collision with other widgets
     const bool valid = page_occupancy(resize_id, Occupants::AllPlaced)
                            .can_place(result.col, result.row, result.colspan, result.rowspan);
