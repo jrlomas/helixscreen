@@ -142,14 +142,23 @@ struct MergeLaneOut {
     PathPoint pts[4];
 };
 
+/// Fit the hub width to the perpendicular spacing of its incoming tubes, not
+/// just the horizontal spacing of their entries. Sources are ordered left to
+/// right, as in a spool row. Returns a width in [min_width, max_width]; if the
+/// available bounds cannot provide min_separation, returns max_width.
+float merge_fan_width(const MergeLaneIn* lanes, int n, float hub_cx, float hub_top, float min_width,
+                      float max_width, float entry_margin, float fillet_r, float max_slope,
+                      float min_separation);
+
 /**
- * @brief Separation-by-construction hub merge fan (parallel diagonals per side).
+ * @brief Hub merge fan with parallel diagonals per side.
  *
- * Computes non-overlapping, non-pinching routes for @p n lanes converging onto a
+ * Computes centerline routes for @p n lanes converging onto a
  * hub box. Lanes on each side of the hub center (left: slot_x < hub_cx, right:
  * mirrored) all run their long diagonal at ONE common slope, so parallel runs
  * cannot converge — perpendicular separation = entry_spacing * sin(atan(m_side)),
- * which the widened entry spread keeps comfortably above the tube gauge.
+ * which can be much smaller than the entry spacing on a short canvas. Callers
+ * must allow enough width/height for their stroke gauge (see merge_fan_width).
  *
  * Construction:
  *   - Entry x positions spread evenly across the hub box top edge using most of

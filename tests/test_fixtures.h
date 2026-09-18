@@ -268,6 +268,9 @@ inline lv_obj_t* create_test_textarea(lv_obj_t* parent, const char* placeholder 
 class XMLTestFixture : public LVGLTestFixture {
   public:
     XMLTestFixture();
+    /// Select the initial theme for a standalone visual test process. Must be
+    /// the first XML fixture: widget colors can be cached at creation time.
+    explicit XMLTestFixture(bool initial_dark_mode);
     ~XMLTestFixture() override;
 
     // Non-copyable, non-movable
@@ -355,6 +358,7 @@ class XMLTestFixture : public LVGLTestFixture {
     static void setup_global_xml_registrations_once();
 
   private:
+    static void setup_global_xml_registrations_once(bool initial_dark_mode);
     static bool s_global_registered;
 
     PrinterState m_state;

@@ -4,8 +4,10 @@
 #include "filament_tube_stroker.h"
 
 #include "memory_utils.h"
+#include "theme_manager.h"
 #include "ui/ams_drawing_utils.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace helix {
@@ -36,14 +38,28 @@ lv_color_t tube_blend(lv_color_t c1, lv_color_t c2, float factor) {
     return ams_draw::blend_color(c1, c2, factor);
 }
 
-// Get a suitable glow color from a filament color.
-lv_color_t get_glow_color(lv_color_t color) {
-    // If the filament is very dark, use a contrasting blue tint
-    int brightness = color.red + color.green + color.blue;
-    if (brightness < 120) {
-        return lv_color_hex(0x4466AA); // Dark blue glow for black/dark filaments
+namespace {
+bool needs_contrast_edge(lv_color_t color, lv_color_t bg) {
+    return std::abs(int(lv_color_luminance(color)) - int(lv_color_luminance(bg))) < 72;
+}
+
+lv_color_t contrast_tint(lv_color_t color, lv_color_t bg, uint8_t amount) {
+    return lv_color_luminance(bg) < 128 ? tube_lighten(color, amount) : tube_darken(color, amount);
+}
+
+} // namespace
+
+lv_color_t get_glow_color(lv_color_t color, lv_color_t bg) {
+    // Use the same blue accent as the selected spool for black/white/gray.
+    // The opaque center still shows the actual filament color. Other themes
+    // retain their own selection accent instead of a hard-coded blue.
+    const int chroma = std::max({color.red, color.green, color.blue}) -
+                       std::min({color.red, color.green, color.blue});
+    if (chroma < 40) {
+        auto accent = theme_manager_get_color("primary");
+        return lv_color_luminance(bg) < 128 ? tube_lighten(accent, 40) : accent;
     }
-    return tube_lighten(color, 60);
+    return contrast_tint(color, bg, needs_contrast_edge(color, bg) ? 140 : 60);
 }
 
 // Stroke a path with N concentric passes.
@@ -164,22 +180,29 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
 // Build the concentric pass list for a LaneStyle. Keeps the darken/lighten
 // numbers consistent with the legacy tube look. Returns the number of passes
 // written into `out` (caller sizes out for at least 4).
-int build_passes(const LaneStyle& style, TubePass* out) {
-    const bool simple = reduced_effects();
+int build_passes(const LaneStyle& style, TubePass* out, bool simple) {
     int n = 0;
     if (style.solid) {
-        // Solid (loaded) lanes read the SAME outer gauge as the idle hollow
-        // tubes: the body is drawn at style.width with NO darker +2 outline
-        // pass. The hollow tube's visible wall spans width-2..width+2 (≈ width
-        // gauge), so dropping the outline here matches the two. The "loaded"
-        // emphasis is carried by the fill color, the bright centered core, and
-        // the wide glow backdrop — not by bulk.
+        const bool contrast_edge = needs_contrast_edge(style.color, style.bg);
         if (style.glow && !simple) {
-            out[n++] = {get_glow_color(style.color), style.width + GLOW_WIDTH_EXTRA, GLOW_OPA};
+            const auto glow = get_glow_color(style.color, style.bg);
+            // Preblend two halo bands against the same background used by the
+            // hollow tube bore. Opaque passes can overlap their rounded joints
+            // without bright seams; translucent butt-capped chords leave wedge
+            // gaps at bends, especially with a wide glow.
+            out[n++] = {tube_blend(style.bg, glow, (GLOW_OPA / 2.0f) / 255.0f),
+                        style.width + GLOW_WIDTH_EXTRA, LV_OPA_COVER};
+            out[n++] = {tube_blend(style.bg, glow, GLOW_OPA / 255.0f),
+                        style.width + GLOW_WIDTH_EXTRA / 2, LV_OPA_COVER};
         }
+        // A one-pixel rim keeps low-contrast filament readable, including in
+        // reduced-effects mode. Derive it from the theme and filament, not a
+        // fixed blue that would misrepresent black filament or fail on light UI.
+        if (contrast_edge)
+            out[n++] = {contrast_tint(style.color, style.bg, 128), style.width + 2, LV_OPA_COVER};
         // Body (always).
         out[n++] = {style.color, style.width, LV_OPA_COVER};
-        if (!simple) {
+        if (!simple && !contrast_edge) {
             // Core highlight (lighter, narrower) — concentric, no offset.
             out[n++] = {tube_lighten(style.color, 44), LV_MAX(1, style.width / 2), LV_OPA_COVER};
         }

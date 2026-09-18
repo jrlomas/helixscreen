@@ -110,7 +110,9 @@ static void xml_test_noop_event_callback(lv_event_t* /*e*/) {
     // Intentionally empty - used for optional callbacks that weren't provided
 }
 
-XMLTestFixture::XMLTestFixture() : LVGLTestFixture() {
+XMLTestFixture::XMLTestFixture() : XMLTestFixture(false) {}
+
+XMLTestFixture::XMLTestFixture(bool initial_dark_mode) : LVGLTestFixture() {
     // The parent constructor created a test_screen, but theme initialization
     // (inside the one-time setup) wants no screens present to avoid hanging.
     // Delete it; we recreate a fresh screen below.
@@ -119,7 +121,7 @@ XMLTestFixture::XMLTestFixture() : LVGLTestFixture() {
         m_test_screen = nullptr;
     }
 
-    setup_global_xml_registrations_once();
+    setup_global_xml_registrations_once(initial_dark_mode);
 
     // Fresh per-instance state. init_subjects(true) registers subjects into the
     // global LVGL XML scope, overwriting any prior test's entries with valid
@@ -178,6 +180,10 @@ XMLTestFixture::~XMLTestFixture() {
 }
 
 void XMLTestFixture::setup_global_xml_registrations_once() {
+    setup_global_xml_registrations_once(false);
+}
+
+void XMLTestFixture::setup_global_xml_registrations_once(bool initial_dark_mode) {
     // Add new widget registrations, XML components, event-cb no-ops, or theme
     // setup calls here when introducing new test-only XML primitives. Everything
     // in this helper runs exactly once per process.
@@ -193,7 +199,7 @@ void XMLTestFixture::setup_global_xml_registrations_once() {
     lv_xml_register_component_from_file("A:ui_xml/globals.xml");
 
     // 3. Initialize theme (uses globals constants, registers responsive values)
-    theme_manager_init(lv_display_get_default(), false); // light mode for tests
+    theme_manager_init(lv_display_get_default(), initial_dark_mode);
 
     // 3.5 Shared cross-file styles (ui_xml/styles.xml), same as production's
     // register_xml_components(): must run after theme init so #token values in

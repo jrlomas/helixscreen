@@ -4,6 +4,22 @@ An unofficial test build from the `jrlomas/helixscreen` fork, including the nati
 OpenAMS backend proposed in [HelixScreen PR #1691](https://github.com/prestonbrown/helixscreen/pull/1691).
 No AFC dependency. This is a prerelease, not an official HelixScreen release.
 
+## Changes in this preview
+
+- Separate the four-spool routes near the HUB, including space for the wider glow.
+- Stronger blue selection/glow for neutral filament, with a contrasting edge so
+  black filament stays visible without changing its actual color.
+- Continuous loaded paths through the drop/bend and from HUB to toolhead,
+  removing doubled outlines and disconnected-looking joins.
+- Correct OpenAMS error highlighting: healthy idle/loaded/loading/unloading
+  states no longer appear as a nozzle fault. Reported faults remain highlighted.
+
+The production panel was rendered locally in both dark and light modes using
+disconnected OpenAMS test data. The local native build and 46 focused geometry,
+rendering, and OpenAMS tests passed, plus both visual fixtures. This is not a
+full C++ suite or hardware validation; local full-suite rebuilding was constrained
+by available disk space. No Klipper configuration or printer commands were changed.
+
 ## Choose your package
 
 | System | `uname -m` | Package key | ZIP package |

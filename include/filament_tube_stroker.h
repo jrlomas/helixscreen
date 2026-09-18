@@ -13,9 +13,8 @@
  * of short straight chords sampled from the arc's exact float parametrization
  * (also lv_draw_line, NOT lv_draw_arc, whose integer center / outer radius would
  * round the band ~0.5px out of alignment with the adjoining lines). Round caps
- * live only on the very first seg-start and last seg-end of the path; interior
- * joints (including chord-to-chord) use butt caps (segments join tangentially,
- * so butt joints are seamless and translucent passes don't double-blend).
+ * close every opaque joint (including the preblended halo bands). Translucent
+ * passes use butt caps at interior joints to avoid double-blending.
  *
  * This layer is shared by both AMS path canvases:
  *   - ui_filament_path_canvas (single-unit detail panel)
@@ -37,14 +36,14 @@ namespace pg = pathgeo;
 // internally, so tight layouts degrade gracefully to jogs / straight runs).
 inline constexpr float FILLET_RADIUS = 12.0f;
 
-// Soft bloom behind active filament paths. A wide, low-opacity line in a lighter
-// tint of the filament color.
-inline constexpr lv_opa_t GLOW_OPA = 60;       // Base glow opacity
-inline constexpr int32_t GLOW_WIDTH_EXTRA = 6; // Extra width beyond tube on each side
+// Broad bloom behind loaded filament. Neutral filament uses the selection
+// accent; chromatic filament keeps its own hue.
+inline constexpr lv_opa_t GLOW_OPA = 150;       // Inner halo blend strength (~59%)
+inline constexpr int32_t GLOW_WIDTH_EXTRA = 14; // Total extra width (7px each side)
 
 /// Detect low-performance platforms (K1/K2/MIPS or constrained-memory devices).
-/// When true, the stroker drops the glow / outline / core-highlight passes and
-/// renders a single body pass, matching the legacy "simple" tube look.
+/// When true, the stroker drops decorative glow / core-highlight passes, but
+/// keeps a contrast edge when the filament would disappear into the background.
 bool reduced_effects();
 
 /// Color helpers (delegate to ams_draw::* — kept here so callers and the
@@ -53,9 +52,8 @@ lv_color_t tube_darken(lv_color_t c, uint8_t amt);
 lv_color_t tube_lighten(lv_color_t c, uint8_t amt);
 lv_color_t tube_blend(lv_color_t c1, lv_color_t c2, float factor);
 
-/// Get a suitable glow color from a filament color. Very dark filaments get a
-/// contrasting blue tint so the glow is still visible.
-lv_color_t get_glow_color(lv_color_t color);
+/// Derive a glow from the filament and the current theme's background.
+lv_color_t get_glow_color(lv_color_t color, lv_color_t bg);
 
 // One concentric stroke pass.
 struct TubePass {
@@ -68,7 +66,7 @@ struct TubePass {
 struct LaneStyle {
     bool solid;       // solid filament tube vs hollow idle PTFE
     lv_color_t color; // filament color (solid) or idle wall color (hollow)
-    lv_color_t bg;    // background for hollow bore
+    lv_color_t bg;    // theme background for hollow bore and loaded contrast
     int32_t width;    // tube outer width
     bool glow;        // wide low-opacity backdrop (active lanes only)
 };
@@ -79,7 +77,7 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
 
 /// Build the concentric pass list for a LaneStyle. Returns the number of passes
 /// written into @p out (caller sizes out for at least 4).
-int build_passes(const LaneStyle& style, TubePass* out);
+int build_passes(const LaneStyle& style, TubePass* out, bool simple = reduced_effects());
 
 /// Build a LaneStyle from slot state in ONE place.
 LaneStyle lane_style(bool has_filament, lv_color_t tool_color, lv_color_t idle_color, lv_color_t bg,
@@ -113,9 +111,9 @@ struct MergeFanLane {
     pg::FilamentPath* record = nullptr; // append the drawn path here (active lane)
 };
 
-// Shared hub-merge renderer: parallel diagonals per side, separation by
-// construction (see pathgeo::build_merge_fan). Computes widened hub-top entries
-// + one common slope per side so no two lanes ever overlap or pinch, then routes
+// Shared hub-merge renderer: parallel diagonals per side (see
+// pathgeo::build_merge_fan). Callers must provide enough hub width/height for
+// the tube gauge (pathgeo::merge_fan_width can fit the width), then this routes
 // and draws each lane. Consumed by BOTH AMS path canvases (detail HUB renderer,
 // detail mixed-topology, overview multi-tool routes, overview single-tool hub
 // convergence). @p hub_top is the verticals' final destination; @p fillet_r is

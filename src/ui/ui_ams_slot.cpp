@@ -505,9 +505,9 @@ static void apply_current_slot_highlight(AmsSlotData* data, int current_slot) {
         lv_obj_set_style_border_width(highlight_target, 3, LV_PART_MAIN);
 
         // Outer glow using shadow
-        lv_obj_set_style_shadow_width(highlight_target, 16, LV_PART_MAIN);
+        lv_obj_set_style_shadow_width(highlight_target, 24, LV_PART_MAIN);
         lv_obj_set_style_shadow_color(highlight_target, primary, LV_PART_MAIN);
-        lv_obj_set_style_shadow_opa(highlight_target, LV_OPA_50, LV_PART_MAIN);
+        lv_obj_set_style_shadow_opa(highlight_target, LV_OPA_70, LV_PART_MAIN);
         lv_obj_set_style_shadow_spread(highlight_target, 2, LV_PART_MAIN);
     } else {
         // Inactive: no border or glow

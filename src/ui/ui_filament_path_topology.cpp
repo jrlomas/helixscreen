@@ -489,6 +489,7 @@ struct LinearHubFrame {
     int32_t buf_fil_top = 0;
     int32_t buf_fil_bot = 0;
     bool has_buffer = false;
+    bool continuous_output = false;
 
     // Resolved colors
     lv_color_t idle_color, bg_color, active_color, hub_bg, hub_border, nozzle_color;
@@ -607,6 +608,11 @@ LinearHubFrame compute_linear_hub_frame(const RenderCtx& ctx) {
     f.fil_seg = static_cast<PathSegment>(data->filament_segment);
 
     f.states = compute_slot_render_states(data);
+    // A fully loaded, uninterrupted hub-to-toolhead run is one physical tube.
+    // Splitting it at invisible sensor boundaries leaves caps and gaps.
+    f.continuous_output = data->topology == 1 && !data->hub_only && !data->hub_on_toolhead &&
+                          !data->show_bypass && !f.has_buffer && !f.has_error &&
+                          data->active_slot >= 0 && f.fil_seg == PathSegment::NOZZLE;
     return f;
 }
 
@@ -653,8 +659,8 @@ void apply_debug_flow_override(lv_obj_t* obj, const RenderCtx& ctx, LinearHubFra
     }
 }
 
-// HUB topology: pre-compute the merge fan via the shared builder (parallel
-// diagonals per side — no overlaps or pinches by construction). Each lane's
+// HUB topology: fit the hub to the actual tube clearance before routing its
+// parallel diagonals. Each lane's
 // 4-point polyline and hub-top entry x are derived once; the lane phase draws
 // each lane's tube (preserving active-path record order) and lands the hub
 // sensor dot exactly on its tube.
@@ -662,12 +668,9 @@ void build_linear_hub_merge_fan(const RenderCtx& ctx, LinearHubFrame& f) {
     FilamentPathData* data = ctx.data;
     const BaseGeometry& g = ctx.geo;
 
-    // Width across which the hub-top entries spread. The nominal hub_width is
-    // too narrow for many lanes (entries cluster -> tubes pinch near the
-    // center), so widen the entry span toward the slot row, targeting ~22px
-    // between entries (the design's separation budget). Clamped to the slot
-    // span so the outermost entries never exceed the outermost slots. The hub
-    // box is drawn at this same width so tubes visibly land on it.
+    // Horizontal entry spacing alone does not protect shallow diagonals from
+    // overlapping. Fit perpendicular clearance to the rendered gauge, including
+    // the glow, and draw the hub at exactly that width.
     f.hub_box_w = data->theme.hub_width;
     if (data->topology != 1)
         return;
@@ -690,8 +693,28 @@ void build_linear_hub_merge_fan(const RenderCtx& ctx, LinearHubFrame& f) {
         (fan_n > 1) ? (fan_n - 1) * TARGET_ENTRY_SPACING + 2 * ENTRY_MARGIN : data->theme.hub_width;
     int32_t slot_span = (data->slot_count > 1) ? (g.slot_x[data->slot_count - 1] - g.slot_x[0])
                                                : data->theme.hub_width;
-    f.hub_box_w = LV_CLAMP(want_w, data->theme.hub_width, LV_MAX(data->theme.hub_width, slot_span));
-    pg::build_merge_fan(fan_in, fan_n, (float)f.center_x, (float)hub_top, (float)f.hub_box_w,
+    const int32_t max_width = LV_MAX(data->theme.hub_width, slot_span + 2 * ENTRY_MARGIN);
+    const int32_t min_width = LV_CLAMP(data->theme.hub_width, want_w, max_width);
+    const int32_t separation = LV_MAX(f.line_active + GLOW_WIDTH_EXTRA + 2, 2 * f.sensor_r + 2);
+    if (fan_n > 2 && !data->hub_on_toolhead) {
+        // Borrow unused output-run height before widening the hub. Keep the
+        // buffer/bypass area clear and leave on-toolhead hubs in place.
+        float deepest_start = fan_in[0].start_y;
+        for (int i = 1; i < fan_n; ++i)
+            deepest_start = std::max(deepest_start, fan_in[i].start_y);
+        const int32_t next_y = f.has_buffer ? f.buf_fil_top : f.bypass_merge_y;
+        const int32_t max_top = next_y - f.hub_h - 2 * f.sensor_r - 8;
+        const int32_t wanted_top = (int32_t)deepest_start + 24 + 2 * separation + f.sensor_r;
+        hub_top = LV_MAX(hub_top, LV_MIN(wanted_top, max_top));
+        f.hub_y = hub_top + f.hub_h / 2;
+        f.output_y = f.hub_y + f.hub_h / 2;
+    }
+    // Reserve the final leg above the sensor edge, not underneath its center.
+    const int32_t tube_end_y = hub_top - f.sensor_r;
+    f.hub_box_w = (int32_t)std::ceil(
+        pg::merge_fan_width(fan_in, fan_n, (float)f.center_x, (float)tube_end_y, (float)min_width,
+                            (float)max_width, (float)ENTRY_MARGIN, 8.0f, 1.2f, (float)separation));
+    pg::build_merge_fan(fan_in, fan_n, (float)f.center_x, (float)tube_end_y, (float)f.hub_box_w,
                         (float)ENTRY_MARGIN, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, f.hub_fan);
     for (int i = 0; i < fan_n; i++)
         f.hub_dot_xs[i] = (int32_t)lroundf(f.hub_fan[i].pts[2].x);
@@ -743,13 +766,14 @@ LaneState derive_lane_state(const RenderCtx& ctx, const LinearHubFrame& f, int i
 }
 
 // Spool-grid entry down to the prep sensor (line + per-slot prep sensor dot).
-void draw_lane_entry_segment(const RenderCtx& ctx, LinearHubFrame& f, int i, const LaneState& ls) {
+void draw_lane_entry_segment(const RenderCtx& ctx, LinearHubFrame& f, int i, const LaneState& ls,
+                             bool draw_tube = true) {
     FilamentPathData* data = ctx.data;
 
     // Line from entry to prep sensor position.
     // When no prep sensor exists, draw continuously through the gap.
     int32_t line_end_y = data->slot_has_prep_sensor[i] ? (f.prep_y - f.sensor_r) : f.prep_y;
-    {
+    if (draw_tube) {
         LaneStyle st =
             lane_style(ls.has_filament, ls.lane_color, f.idle_color, f.bg_color, ls.lane_width);
         draw_lane_vline(ctx.layer, ls.slot_x, f.entry_y, line_end_y, st,
@@ -773,7 +797,8 @@ void draw_lane_entry_segment(const RenderCtx& ctx, LinearHubFrame& f, int i, con
 
 // HUB topology: parallel-diagonal merge run from the prep sensor down to this
 // lane's own hub sensor dot on top of the hub box.
-void draw_hub_lane_merge(const RenderCtx& ctx, LinearHubFrame& f, int i, const LaneState& ls) {
+void draw_hub_lane_merge(const RenderCtx& ctx, LinearHubFrame& f, int i, const LaneState& ls,
+                         bool draw_tube = true) {
     int32_t hub_top = f.hub_y - f.hub_h / 2;
     // Hub-entry X (distinct per lane) was pre-computed by build_linear_hub_merge_fan.
     int32_t hub_dot_x = f.hub_dot_xs[i];
@@ -781,7 +806,7 @@ void draw_hub_lane_merge(const RenderCtx& ctx, LinearHubFrame& f, int i, const L
     // Merge run from prep to the hub sensor dot, using this lane's precomputed
     // fan waypoints (separation by construction). Drop the final hub_top
     // vertex down to the sensor-dot edge so the tube meets the dot, not the box.
-    if (i < FilamentPathData::MAX_SLOTS) {
+    if (draw_tube && i < FilamentPathData::MAX_SLOTS) {
         LaneStyle st = lane_style(!ls.merge_is_idle, ls.merge_line_color, f.idle_color, f.bg_color,
                                   ls.lane_width);
         pg::PathPoint pts[4] = {f.hub_fan[i].pts[0],
@@ -807,8 +832,8 @@ void draw_hub_lane_merge(const RenderCtx& ctx, LinearHubFrame& f, int i, const L
 
     // Record hidden hub interior segment for flow dot path
     if (ls.is_active_slot && dot_active) {
-        f.active_path.add_line(hub_dot_x, hub_top - f.sensor_r, f.center_x,
-                               f.output_y + f.sensor_r);
+        f.active_path.add_line(hub_dot_x, draw_tube ? hub_top - f.sensor_r : hub_top, f.center_x,
+                               f.continuous_output ? f.output_y : f.output_y + f.sensor_r);
     }
 }
 
@@ -847,6 +872,25 @@ void draw_lane_merge_segment(const RenderCtx& ctx, LinearHubFrame& f, int i, con
 void draw_entry_lanes(const RenderCtx& ctx, LinearHubFrame& f) {
     for (int i = 0; i < ctx.data->slot_count; i++) {
         LaneState ls = derive_lane_state(ctx, f, i);
+        if (ctx.data->topology == 1 && !ctx.data->hub_on_toolhead && ls.has_filament &&
+            !ls.merge_is_idle && lv_color_eq(ls.lane_color, ls.merge_line_color)) {
+            // Stroke the drop and bend together. Drawing each piece separately
+            // lets the second piece's wide glow cover the first piece's body,
+            // producing a doubled outline just above the first bend.
+            pg::FilamentPath path;
+            pg::PathPoint pts[4] = {f.hub_fan[i].pts[0],
+                                    f.hub_fan[i].pts[1],
+                                    f.hub_fan[i].pts[2],
+                                    {f.hub_fan[i].pts[3].x, (float)(f.hub_y - f.hub_h / 2)}};
+            path.add_line(ls.slot_x, f.entry_y, pts[0].x, pts[0].y);
+            pg::route_polyline_filleted(path, pts, 4, 8.0f);
+            LaneStyle st = lane_style(true, ls.lane_color, f.idle_color, f.bg_color, ls.lane_width);
+            draw_lane(ctx.layer, path, st, ls.is_active_slot ? &f.active_path : nullptr);
+            // Fittings overlay the continuous tube, never another tube cap.
+            draw_lane_entry_segment(ctx, f, i, ls, /*draw_tube=*/false);
+            draw_hub_lane_merge(ctx, f, i, ls, /*draw_tube=*/false);
+            continue;
+        }
         draw_lane_entry_segment(ctx, f, i, ls);
         draw_lane_merge_segment(ctx, f, i, ls);
     }
@@ -1269,7 +1313,7 @@ void draw_nozzle_section(const RenderCtx& ctx, LinearHubFrame& f) {
     bool nozzle_has_filament =
         data->bypass_active ||
         (data->active_slot >= 0 && is_segment_active(PathSegment::NOZZLE, f.fil_seg));
-    {
+    if (!f.continuous_output) {
         LaneStyle st =
             lane_style(nozzle_has_filament, noz_color, f.idle_color, f.bg_color, f.line_active);
         draw_lane_vline(ctx.layer, f.center_x, f.toolhead_y + f.sensor_r,
@@ -1317,9 +1361,19 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
 
     draw_entry_lanes(ctx, f);
     draw_bypass_section(ctx, f);
+    if (f.continuous_output) {
+        LaneStyle st = lane_style(true, f.active_color, f.idle_color, f.bg_color, f.line_active);
+        // Extend behind the hub and glyph so neither endpoint leaves a gap.
+        // These components paint over the hidden ends below.
+        draw_lane_vline(ctx.layer, f.center_x, f.output_y, f.nozzle_y, st, &f.active_path);
+    }
     draw_hub_section(ctx, f);
-    draw_output_section(ctx, f);
-    draw_toolhead_section(ctx, f);
+    if (f.continuous_output) {
+        draw_sensor_dot(ctx.layer, f.output_x, f.output_y, f.active_color, true, f.sensor_r);
+    } else {
+        draw_output_section(ctx, f);
+        draw_toolhead_section(ctx, f);
+    }
     draw_nozzle_section(ctx, f);
 }
 
