@@ -232,6 +232,21 @@ class StarfieldScreensaverTestAccess {
             s.z = z;
         }
     }
+
+    /// Stars the sim moves and draws per frame at the saver's current level.
+    static int active_star_count(const StarfieldScreensaver& ss) {
+        return ss.sim_.active_count();
+    }
+
+    /// Rungs on the starfield's ladder.
+    static size_t ladder_size(const StarfieldScreensaver& ss) {
+        return ss.ladder_size();
+    }
+
+    /// Stars the ladder flies at `level`, without starting the saver.
+    static size_t star_count(const StarfieldScreensaver& ss, size_t level) {
+        return ss.star_count(level);
+    }
 };
 
 class PipesScreensaverTestAccess {

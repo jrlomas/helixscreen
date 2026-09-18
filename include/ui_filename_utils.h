@@ -36,10 +36,29 @@ std::string get_filename_basename(const std::string& path);
 std::string join_gcode_path(const std::string& dir, const std::string& filename);
 
 /**
+ * @brief Does this filename carry an extension we treat as printable?
+ *
+ * The one list of printable extensions (.gcode, .gco, .g, .3mf,
+ * case-insensitive). Every consumer that decides "is this a printable file"
+ * (the Moonraker file list, the USB stick scanner, the display-name stripper)
+ * asks here; two hand-kept lists drift and each reads correct alone. FAT
+ * mounts without long-filename support yield 8.3 upper-case names
+ * (3DBENC~1.GCO), so the match must be case-insensitive down to ".g".
+ *
+ * A name consisting solely of the extension (".gcode") is a hidden dotfile,
+ * not a printable file.
+ *
+ * @param filename Bare filename or path
+ * @return true if the name ends in a printable extension
+ */
+bool has_printable_extension(const std::string& filename);
+
+/**
  * @brief Strip G-code file extensions for display
  *
  * Removes common G-code extensions (.gcode, .g, .gco, case-insensitive)
- * for cleaner display in the UI.
+ * for cleaner display in the UI. Strips exactly the extensions
+ * has_printable_extension() accepts.
  *
  * @param filename The original filename
  * @return Filename without G-code extension, or original if no match
@@ -88,6 +107,34 @@ std::string resolve_gcode_filename(const std::string& path);
  * @return true if the path is a HelixScreen-rewritten temp G-code
  */
 bool is_rewritten_gcode_path(const std::string& path);
+
+/**
+ * @brief Build the gcodes-root-relative path a rewritten copy is uploaded to.
+ *
+ * The ONE spelling of that name, and the reason it is a function rather than a
+ * string each caller assembles: the post-print cleanup, the startup sweep and
+ * resolve_gcode_filename() all recognise a staged copy BY THIS PREFIX. A path
+ * built any other way is invisible to every one of them at once - its temp file
+ * outlives the print and its name never resolves back to the original, so the
+ * job the user started shows up under a name they have never seen.
+ *
+ * @param display_filename Bare filename of the original, no directory component
+ * @return e.g. "<staging dir>/modified_1766807545_benchy.gcode"
+ */
+std::string make_rewritten_gcode_path(const std::string& display_filename);
+
+/**
+ * @brief Is this a copy WE staged on the printer, i.e. ours to delete?
+ *
+ * Narrower than is_rewritten_gcode_path(), which also answers true for our
+ * local scratch copies. Only a path under the printer's staging directory
+ * names a file the printer holds and that we are responsible for removing when
+ * the print ends.
+ *
+ * @param path Filename or path as the printer reports it
+ * @return true if the path is a copy we uploaded
+ */
+bool is_uploaded_rewrite_path(const std::string& path);
 
 /**
  * @brief Does a recorded thumbnail source still describe the reported print?

@@ -43,10 +43,15 @@ inline constexpr const char* kStateRoots[] = {
     "/mnt/UDISK/helixscreen-state", // K2, beside its payload on the user partition
     "/mnt/UDISK/helixscreen",       // K2 state, on installs that predate the move
     // AD5M keeps cache and logs here and installs somewhere else entirely
-    // (/opt, /srv or /root/printer_software by firmware), so this belongs in
+    // (/opt, /srv or /root/printer_software by firmware), so these belong in
     // this list and not in kInstallRoots: nothing ever puts a payload here, and
     // a payload root that no installer produces is a root no uninstall sweeps.
-    "/data/helixscreen",                // AD5M, on the durable ext4 mount
+    // The dot prefix keeps the root out of the print-file picker: the vendor
+    // symlinks /data whole into Moonraker's gcodes root, and Moonraker's
+    // listings hide dot-entries. The plain name stays for devices the rename
+    // has not reached yet.
+    "/data/.helixscreen",               // AD5M, on the durable ext4 mount
+    "/data/helixscreen",                // AD5M state root before the dot rename
     "/usr/data/helixscreen-state",      // K1, K1C
     "/user-resource/helixscreen-state", // CC1
     "/userdata/helixscreen-state",      // Snapmaker U1

@@ -1,13 +1,13 @@
 # Pre-Rendered Image System
 
-HelixScreen pre-renders splash screen images to LVGL binary format (`.lvbin`) at build time for instant display on embedded devices. This eliminates runtime PNG decoding, dramatically improving startup performance.
+HelixScreen pre-renders splash screen images to LVGL binary format (`.bin`) at build time for instant display on embedded devices. This eliminates runtime PNG decoding, dramatically improving startup performance.
 
 ## Performance Impact
 
 | Mode | FPS on AD5M | Time to Display |
 |------|-------------|-----------------|
 | PNG decoding (runtime) | ~2 FPS | ~500ms |
-| Pre-rendered `.lvbin` | ~116 FPS | ~8ms |
+| Pre-rendered `.bin` | ~116 FPS | ~8ms |
 
 ## How It Works
 
@@ -78,11 +78,18 @@ with a tracker keeps its music.
 
 ### File Format
 
-`.lvbin` files contain:
-- 12-byte header (magic, version, dimensions, color format)
-- Raw ARGB8888 pixel data (4 bytes per pixel)
+`.bin` files are LVGL's own image format, written by `scripts/LVGLImage.py` via
+`scripts/lib/lvgl_image_lib.sh#lvgl_render_image` with `--cf ARGB8888 --ofmt BIN
+--compress LZ4`:
 
-Example: `splash-logo-medium.lvbin` = 12 + (400 × 400 × 4) = 640,012 bytes (~625KB)
+- 12-byte header (magic, version, dimensions, color format)
+- LZ4-compressed ARGB8888 pixel data
+
+The compression is why a render is far smaller than its pixel count implies:
+`splash-logo-medium.bin` holds 400x400 ARGB8888 (640,000 bytes of pixels) in 123,654
+bytes on disk. `LV_BIN_DECODER_RAM_LOAD 1` means LVGL decompresses the whole image into
+RAM on load, so the decoded footprint is the uncompressed size either way — the win over
+PNG is skipping the lodepng decode and the draw-time rescale, not the RAM.
 
 ## Usage
 
@@ -212,4 +219,4 @@ LVGL can convert images at build time via its CMake integration, but:
 Pre-rendered images are larger than PNGs (uncompressed vs. compressed), but:
 - They're stored on the filesystem, not in RAM
 - They're loaded directly into LVGL's image cache
-- The AD5M has 512MB RAM and 8GB storage, so space isn't a concern
+- The AD5M has ~108MB RAM and 8GB storage, so disk space isn't a concern (RAM is)

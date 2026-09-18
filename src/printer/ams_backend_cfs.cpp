@@ -3694,6 +3694,17 @@ uint64_t AmsBackendCfs::firmware_tool_mapping_generation() const {
     return firmware_map_generation_;
 }
 
+std::vector<helix::printer::DeviceSection> AmsBackendCfs::get_device_sections() const {
+    // All four box operations are one-shot care commands against the CFS
+    // hardware, so a single maintenance section carries them; a split would be
+    // a taxonomy with one or two members each. The device-operations overlay
+    // renders only actions whose section matches one declared here.
+    using DS = helix::printer::DeviceSection;
+    return {
+        DS{"maintenance", "Maintenance", 0, "RFID, auto-refill, nozzle and link care"},
+    };
+}
+
 std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() const {
     using DA = helix::printer::DeviceAction;
     using AT = helix::printer::ActionType;
@@ -3701,7 +3712,7 @@ std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() co
         DA{"refresh_rfid",
            "Refresh RFID",
            "",
-           "",
+           "maintenance",
            "Re-read spool RFID tags and remaining length",
            AT::BUTTON,
            {},
@@ -3715,7 +3726,7 @@ std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() co
         DA{"toggle_auto_refill",
            "Toggle Auto-Refill",
            "",
-           "",
+           "maintenance",
            "Enable/disable automatic backup spool switching",
            AT::TOGGLE,
            {},
@@ -3729,7 +3740,7 @@ std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() co
         DA{"nozzle_clean",
            "Clean Nozzle",
            "",
-           "",
+           "maintenance",
            "Wipe nozzle on silicone cleaning strip",
            AT::BUTTON,
            {},
@@ -3743,7 +3754,7 @@ std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() co
         DA{"comm_test",
            "Communication Test",
            "",
-           "",
+           "maintenance",
            "Test RS-485 link to CFS units",
            AT::BUTTON,
            {},

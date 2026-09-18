@@ -304,7 +304,7 @@
       },
       "package": {
         "asset_name": "helixscreen-ad5x.zip",
-        "docker_target": "mips-docker",
+        "docker_target": "ad5x-docker",
         "build_dir": "build/ad5x",
         "splash_3d_target": "gen-splash-3d-ad5x",
         "gen_images_target": "gen-images",
@@ -324,15 +324,16 @@
       },
       "storage": {
         "root": "/opt/helixscreen",
-        "state_root": "/data/helixscreen",
+        "state_root": "/data/.helixscreen",
+        "previous_state_root": "/data/helixscreen",
         "root_by_firmware": {
           "klipper_mod": "/root/printer_software/helixscreen if that dir exists, else /opt/helixscreen",
           "zmod": "/srv/helixscreen",
           "forge_x": "/opt/helixscreen"
         },
-        "cache_dir": "/data/helixscreen/cache",
+        "cache_dir": "/data/.helixscreen/cache",
         "log_file_by_firmware": {
-          "klipper_mod": "/data/helixscreen/logs/helix.log",
+          "klipper_mod": "/data/.helixscreen/logs/helix.log",
           "zmod": "/opt/config/mod_data/log/helix.log",
           "forge_x": null
         }

@@ -98,6 +98,13 @@ bool is_chamber_heater_object(const std::string& obj) {
     return chamber::match(name).confidence > 0;
 }
 
+/// A HELIX_MOCK_* switch: set to "1" to arm it. Mock hooks are read per frame,
+/// so a test can flip one without rebuilding the client.
+bool mock_env_flag(const char* name) {
+    const char* v = std::getenv(name);
+    return v && v[0] == '1';
+}
+
 /// Does any registered backend expose this exact bare object as its
 /// diagnostics status object? Used by the HELIX_MOCK_OBJECTS tokenizer to
 /// recognize a standalone diagnostics token ("dragonbreath") that follows a
@@ -452,6 +459,22 @@ std::string MoonrakerClientMock::chamber_filter_pin_object() const {
     return pin;
 }
 
+namespace {
+/// Duty a real heater would be running at, 0.0-1.0, as Klipper reports it: flat
+/// out while far below target, tapering in, and a trickle once holding. The
+/// mock publishes this on every heater so a power readout has something to show.
+double mock_heater_duty(double temperature, double target) {
+    if (target <= 0.0) {
+        return 0.0;
+    }
+    const double gap = target - temperature;
+    if (gap <= 0.0) {
+        return 0.05;
+    }
+    return std::clamp(gap / 10.0, 0.1, 1.0);
+}
+} // namespace
+
 void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double sim_time,
                                                         const json* requested) const {
     const auto hw = discovery_.hardware();
@@ -476,10 +499,13 @@ void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double
             const double chamber_target = chamber_target_.load();
             const double filter_value = chamber_filter_value_.load();
             const bool filter_on = filter_value > 0.0;
-            // Test hook: HELIX_MOCK_DRAGONBREATH_FAULT=1 latches a fault into
-            // every synthesized frame.
-            const char* fault_env = std::getenv("HELIX_MOCK_DRAGONBREATH_FAULT");
-            const bool mock_fault = fault_env && fault_env[0] == '1';
+            // The pin is only a request: while the device heats it runs the
+            // filter fan itself and reports why, leaving our pin untouched.
+            const bool device_fan = !filter_on && chamber_target > 0.0;
+            // Test hooks. Read per frame so one client crosses the
+            // transition rather than having to be rebuilt.
+            const bool mock_fault = mock_env_flag("HELIX_MOCK_DRAGONBREATH_FAULT");
+            const bool mock_offline = mock_env_flag("HELIX_MOCK_DRAGONBREATH_OFFLINE");
             // PTC element rides a few degrees above chamber air, drifting
             // with the same slow sine the other mock sensors use.
             const double ptc_temp =
@@ -490,12 +516,47 @@ void MoonrakerClientMock::append_chamber_backend_status(json& status_obj, double
                                 {"inhibited", false},
                                 {"fault_reason", mock_fault ? json("ptc_overtemp") : json(nullptr)},
                                 {"ptc_temp", ptc_temp},
-                                {"fan_percent", filter_on ? 100 : 0},
-                                {"fan_reason", filter_on ? "filter" : "off"},
+                                {"fan_percent", (filter_on || device_fan) ? 100 : 0},
+                                {"fan_reason", filter_on    ? "requested"
+                                               : device_fan ? "heater"
+                                                            : "off"},
                                 {"mode", chamber_target > 0.0 ? "power_on" : "off"},
                                 {"source", "klipper"},
                                 {"lease_owned", chamber_target > 0.0},
-                                {"connected", true}};
+                                {"connected", !mock_offline}};
+        } else if (backend->id() == "panda_breath") {
+            // VENDOR_OK: mirrors the stock Panda Breath binding's status
+            // object as captured live on the U1 rig (issue #1290).
+            const double chamber_temp = chamber_temp_.load();
+            const double chamber_target = chamber_target_.load();
+            const bool mock_offline = mock_env_flag("HELIX_MOCK_PANDA_BREATH_OFFLINE");
+            // Test hook: the appliance holding its own auto target while our
+            // target reads 0 — the state the rig sits in at rest, and the
+            // only one that raises the External badge.
+            const bool mock_auto = mock_env_flag("HELIX_MOCK_PANDA_BREATH_AUTO");
+            const bool klipper_driving = chamber_target > 0.0;
+            // work_mode latches at its last value once the output stops, so a
+            // Klipper target that has been set and cleared still reads 2.
+            const int work_mode = klipper_driving ? 2 : (mock_auto ? 1 : 2);
+            // The device reports whole degrees.
+            const double reported_temp = std::round(chamber_temp);
+            status_obj[diag] = {{"temperature", reported_temp},
+                                {"target", chamber_target},
+                                {"smoothed_temp", reported_temp},
+                                {"connected", !mock_offline},
+                                {"work_mode", work_mode},
+                                {"work_on", klipper_driving || mock_auto},
+                                {"device_target", klipper_driving ? chamber_target
+                                                  : mock_auto     ? 60.0
+                                                                  : 0.0},
+                                {"auto_enabled", mock_auto && !klipper_driving},
+                                {"auto_target", 45},
+                                {"auto_filtertemp", 30},
+                                {"auto_hotbedtemp", 80},
+                                {"filament_temp", 60},
+                                {"filament_timer", 12},
+                                {"remaining_seconds", 0},
+                                {"filament_drying_active", false}};
         }
     }
 
@@ -1245,139 +1306,147 @@ void MoonrakerClientMock::discover_printer(
 
     // Query server.info to get moonraker_version (uses registered RPC handler)
     send_jsonrpc("server.info", json::object(), [this, on_complete](json response) {
+        std::string moonraker_version;
         if (response.contains("result")) {
-            auto moonraker_version = response["result"].value("moonraker_version", "unknown");
-            discovery_.modify_hardware(
-                [&](PrinterDiscovery& hw) { hw.set_moonraker_version(moonraker_version); });
+            moonraker_version = response["result"].value("moonraker_version", "unknown");
             spdlog::debug("[MoonrakerClientMock] Moonraker version: {}", moonraker_version);
         }
 
-        // Chain to printer.info to get hostname and software_version
-        send_jsonrpc("printer.info", json::object(), [this, on_complete](json response) {
-            spdlog::debug("[MoonrakerClientMock] printer.info response received");
+        // Carried into the printer.info callback rather than stored here:
+        // populate_capabilities() below reparses the objects list and clears the
+        // discovery record, so anything written before it is lost.
+        send_jsonrpc(
+            "printer.info", json::object(), [this, on_complete, moonraker_version](json response) {
+                spdlog::debug("[MoonrakerClientMock] printer.info response received");
 
-            // Re-populate after mock discovery may have changed hardware data
-            populate_capabilities();
+                // Re-populate after mock discovery may have changed hardware data
+                populate_capabilities();
 
-            // Now set the metadata AFTER parse_objects() has run
-            if (response.contains("result")) {
-                auto hostname = response["result"].value("hostname", "unknown");
-                auto software_version = response["result"].value("software_version", "unknown");
-                discovery_.modify_hardware([&](PrinterDiscovery& hw) {
-                    hw.set_hostname(hostname);
-                    hw.set_software_version(software_version);
-                });
-                spdlog::debug("[MoonrakerClientMock] Printer hostname: {}", hostname);
-                spdlog::debug("[MoonrakerClientMock] Klipper software version: {}",
-                              software_version);
-            }
+                // Now set the metadata AFTER parse_objects() has run
+                if (response.contains("result")) {
+                    auto hostname = response["result"].value("hostname", "unknown");
+                    auto software_version = response["result"].value("software_version", "unknown");
+                    discovery_.modify_hardware([&](PrinterDiscovery& hw) {
+                        hw.set_hostname(hostname);
+                        hw.set_software_version(software_version);
+                        hw.set_moonraker_version(moonraker_version);
+                    });
+                    spdlog::debug("[MoonrakerClientMock] Printer hostname: {}", hostname);
+                    spdlog::debug("[MoonrakerClientMock] Klipper software version: {}",
+                                  software_version);
+                }
 
-            // Query machine.system_info for OS version (uses registered RPC handler)
-            send_jsonrpc(
-                "machine.system_info", json::object(),
-                [this](json sys_response) {
-                    if (sys_response.contains("result") &&
-                        sys_response["result"].contains("system_info") &&
-                        sys_response["result"]["system_info"].contains("distribution") &&
-                        sys_response["result"]["system_info"]["distribution"].contains("name")) {
-                        std::string os_name =
-                            sys_response["result"]["system_info"]["distribution"]["name"]
-                                .get<std::string>();
-                        discovery_.modify_hardware(
-                            [&](PrinterDiscovery& hw) { hw.set_os_version(os_name); });
-                        spdlog::debug("[MoonrakerClientMock] OS version: {}", os_name);
-                    }
-                },
-                [](const MoonrakerError& err) {
-                    spdlog::debug("[MoonrakerClientMock] machine.system_info failed: {}",
-                                  err.message);
-                });
+                // Query machine.system_info for OS version (uses registered RPC handler)
+                send_jsonrpc(
+                    "machine.system_info", json::object(),
+                    [this](json sys_response) {
+                        if (sys_response.contains("result") &&
+                            sys_response["result"].contains("system_info") &&
+                            sys_response["result"]["system_info"].contains("distribution") &&
+                            sys_response["result"]["system_info"]["distribution"].contains(
+                                "name")) {
+                            std::string os_name =
+                                sys_response["result"]["system_info"]["distribution"]["name"]
+                                    .get<std::string>();
+                            discovery_.modify_hardware(
+                                [&](PrinterDiscovery& hw) { hw.set_os_version(os_name); });
+                            spdlog::debug("[MoonrakerClientMock] OS version: {}", os_name);
+                        }
+                    },
+                    [](const MoonrakerError& err) {
+                        spdlog::debug("[MoonrakerClientMock] machine.system_info failed: {}",
+                                      err.message);
+                    });
 
-            // Set Spoolman availability during discovery (matches real Moonraker behavior)
-            // Real client queries server.spoolman.status during discovery - see
-            // moonraker_client.cpp:1047
-            get_printer_state().set_spoolman_available(mock_spoolman_enabled_);
-            spdlog::debug("[MoonrakerClientMock] Spoolman available: {}", mock_spoolman_enabled_);
+                // Set Spoolman availability during discovery (matches real Moonraker behavior)
+                // Real client queries server.spoolman.status during discovery - see
+                // moonraker_client.cpp:1047
+                get_printer_state().set_spoolman_available(mock_spoolman_enabled_);
+                spdlog::debug("[MoonrakerClientMock] Spoolman available: {}",
+                              mock_spoolman_enabled_);
 
-            // Set webcam availability during discovery (matches real Moonraker behavior)
-            // Real client queries server.webcams.list during discovery
-            if (mock_webcams_.empty()) {
-                get_printer_state().set_webcam_available(true, "/webcam/?action=stream",
-                                                         "/webcam/?action=snapshot");
-                spdlog::debug(
-                    "[MoonrakerClientMock] Webcam available: true (mock always has webcam)");
-            } else {
-                get_printer_state().set_webcams(mock_webcams_);
-                spdlog::debug("[MoonrakerClientMock] Webcams published: {} (HELIX_MOCK_WEBCAMS)",
-                              mock_webcams_.size());
-            }
+                // Set webcam availability during discovery (matches real Moonraker behavior)
+                // Real client queries server.webcams.list during discovery
+                if (mock_webcams_.empty()) {
+                    get_printer_state().set_webcam_available(true, "/webcam/?action=stream",
+                                                             "/webcam/?action=snapshot");
+                    spdlog::debug(
+                        "[MoonrakerClientMock] Webcam available: true (mock always has webcam)");
+                } else {
+                    get_printer_state().set_webcams(mock_webcams_);
+                    spdlog::debug(
+                        "[MoonrakerClientMock] Webcams published: {} (HELIX_MOCK_WEBCAMS)",
+                        mock_webcams_.size());
+                }
 
-            // Set power device count during discovery (matches real Moonraker behavior)
-            // Real client queries machine.device_power.devices during discovery
-            if (std::getenv("MOCK_EMPTY_POWER")) {
-                get_printer_state().set_power_device_count(0);
-                helix::PowerDeviceState::instance().set_devices({});
-                spdlog::debug("[MoonrakerClientMock] Power devices: 0 (MOCK_EMPTY_POWER set)");
-            } else {
-                get_printer_state().set_power_device_count(4);
-                std::vector<PowerDevice> mock_power_devices = {
-                    {"printer_psu", "gpio", "on", false},
-                    {"chamber_light", "klipper_device", "on", true},
-                    {"exhaust_fan", "klipper_device", "off", false},
-                    {"led_strip", "gpio", "on", false},
+                // Set power device count during discovery (matches real Moonraker behavior)
+                // Real client queries machine.device_power.devices during discovery
+                if (std::getenv("MOCK_EMPTY_POWER")) {
+                    get_printer_state().set_power_device_count(0);
+                    helix::PowerDeviceState::instance().set_devices({});
+                    spdlog::debug("[MoonrakerClientMock] Power devices: 0 (MOCK_EMPTY_POWER set)");
+                } else {
+                    get_printer_state().set_power_device_count(4);
+                    std::vector<PowerDevice> mock_power_devices = {
+                        {"printer_psu", "gpio", "on", false},
+                        {"chamber_light", "klipper_device", "on", true},
+                        {"exhaust_fan", "klipper_device", "off", false},
+                        {"led_strip", "gpio", "on", false},
+                    };
+                    helix::PowerDeviceState::instance().set_devices(mock_power_devices);
+                    spdlog::debug("[MoonrakerClientMock] Power devices: 4 (mock default)");
+                }
+
+                // Set up mock sensors
+                std::vector<helix::SensorInfo> mock_sensors = {
+                    {"mock_energy",
+                     "Mock Energy Monitor",
+                     "mqtt",
+                     {"power", "voltage", "current", "energy"}},
                 };
-                helix::PowerDeviceState::instance().set_devices(mock_power_devices);
-                spdlog::debug("[MoonrakerClientMock] Power devices: 4 (mock default)");
-            }
+                nlohmann::json mock_sensor_values = {
+                    {"mock_energy",
+                     {{"power", 45.0}, {"voltage", 230.5}, {"current", 0.195}, {"energy", 123.4}}},
+                };
+                helix::SensorState::instance().set_sensors(mock_sensors, mock_sensor_values);
+                spdlog::debug("[MoonrakerClientMock] Sensors: {} (mock default)",
+                              mock_sensors.size());
 
-            // Set up mock sensors
-            std::vector<helix::SensorInfo> mock_sensors = {
-                {"mock_energy",
-                 "Mock Energy Monitor",
-                 "mqtt",
-                 {"power", "voltage", "current", "energy"}},
-            };
-            nlohmann::json mock_sensor_values = {
-                {"mock_energy",
-                 {{"power", 45.0}, {"voltage", 230.5}, {"current", 0.195}, {"energy", 123.4}}},
-            };
-            helix::SensorState::instance().set_sensors(mock_sensors, mock_sensor_values);
-            spdlog::debug("[MoonrakerClientMock] Sensors: {} (mock default)", mock_sensors.size());
+                // Log discovered hardware
+                spdlog::debug(
+                    "[MoonrakerClientMock] Discovered: {} heaters, {} sensors, {} fans, {} "
+                    "LEDs",
+                    discovery_.heaters().size(), discovery_.sensors().size(),
+                    discovery_.fans().size(), discovery_.leds().size());
 
-            // Log discovered hardware
-            spdlog::debug("[MoonrakerClientMock] Discovered: {} heaters, {} sensors, {} fans, {} "
-                          "LEDs",
-                          discovery_.heaters().size(), discovery_.sensors().size(),
-                          discovery_.fans().size(), discovery_.leds().size());
+                // Early hardware discovery callback (for AMS/MMU initialization)
+                // Must be called BEFORE discovery_complete to match real implementation timing
+                spdlog::debug("[MoonrakerClientMock] Invoking early hardware discovery callback");
+                discovery_.invoke_hardware_discovered();
 
-            // Early hardware discovery callback (for AMS/MMU initialization)
-            // Must be called BEFORE discovery_complete to match real implementation timing
-            spdlog::debug("[MoonrakerClientMock] Invoking early hardware discovery callback");
-            discovery_.invoke_hardware_discovered();
+                // Seed probe z_offset from the mock configfile, mirroring Step 4 of
+                // MoonrakerDiscoverySequence. This shortcut of a discover_printer()
+                // never queries configfile, so without it the whole configfile→probe
+                // path — the one that rescues probes whose runtime status reports a
+                // null z_offset — is unreachable under --test.
+                //
+                // Queued, not called inline, for ordering: ProbeSensorManager's
+                // sensor list is populated by the hardware-discovered callback just
+                // above, which Application also queues. Seeding runs on a sensor list
+                // that does not exist yet if it jumps the queue. FIFO puts it second.
+                helix::ui::queue_update("MoonrakerClientMock::probe_config_seed", []() {
+                    helix::sensors::ProbeSensorManager::instance().discover_from_config(
+                        mock_internal::get_mock_probe_config());
+                });
 
-            // Seed probe z_offset from the mock configfile, mirroring Step 4 of
-            // MoonrakerDiscoverySequence. This shortcut of a discover_printer()
-            // never queries configfile, so without it the whole configfile→probe
-            // path — the one that rescues probes whose runtime status reports a
-            // null z_offset — is unreachable under --test.
-            //
-            // Queued, not called inline, for ordering: ProbeSensorManager's
-            // sensor list is populated by the hardware-discovered callback just
-            // above, which Application also queues. Seeding runs on a sensor list
-            // that does not exist yet if it jumps the queue. FIFO puts it second.
-            helix::ui::queue_update("MoonrakerClientMock::probe_config_seed", []() {
-                helix::sensors::ProbeSensorManager::instance().discover_from_config(
-                    mock_internal::get_mock_probe_config());
+                // Invoke discovery complete callback with hardware (for PrinterState binding)
+                discovery_.invoke_discovery_complete();
+
+                // Invoke completion callback immediately (no async delay in mock)
+                if (on_complete) {
+                    on_complete();
+                }
             });
-
-            // Invoke discovery complete callback with hardware (for PrinterState binding)
-            discovery_.invoke_discovery_complete();
-
-            // Invoke completion callback immediately (no async delay in mock)
-            if (on_complete) {
-                on_complete();
-            }
-        });
     });
 }
 
@@ -4300,13 +4369,21 @@ void MoonrakerClientMock::dispatch_initial_state() {
     }
 
     json initial_status = {
-        {"extruder", {{"temperature", ext_temp}, {"target", ext_target}}},
-        {"heater_bed", {{"temperature", bed_temp_val}, {"target", bed_target_val}}},
+        {"extruder",
+         {{"temperature", ext_temp},
+          {"target", ext_target},
+          {"power", mock_heater_duty(ext_temp, ext_target)}}},
+        {"heater_bed",
+         {{"temperature", bed_temp_val},
+          {"target", bed_target_val},
+          {"power", mock_heater_duty(bed_temp_val, bed_target_val)}}},
         {[this]() {
              auto key = chamber_heater_status_key();
              return key.empty() ? "heater_generic chamber" : key;
          }(),
-         {{"temperature", 42.3}, {"target", chamber_target_.load()}}},
+         {{"temperature", 42.3},
+          {"target", chamber_target_.load()},
+          {"power", mock_heater_duty(42.3, chamber_target_.load())}}},
         {"temperature_sensor chamber", {{"temperature", 42.3}}},
         {"toolhead",
          {{"position", {x, y, z, 0.0}},
@@ -5100,8 +5177,14 @@ void MoonrakerClientMock::temperature_simulation_loop() {
 
         // Build notification JSON (enhanced Moonraker format with layer info)
         json status_obj = {
-            {"extruder", {{"temperature", ext_temp}, {"target", ext_target}}},
-            {"heater_bed", {{"temperature", bed_temp_val}, {"target", bed_target_val}}},
+            {"extruder",
+             {{"temperature", ext_temp},
+              {"target", ext_target},
+              {"power", mock_heater_duty(ext_temp, ext_target)}}},
+            {"heater_bed",
+             {{"temperature", bed_temp_val},
+              {"target", bed_target_val},
+              {"power", mock_heater_duty(bed_temp_val, bed_target_val)}}},
             {"toolhead",
              {{"position", {x, y, z, 0.0}},
               {"homed_axes", homed},
@@ -5372,6 +5455,20 @@ void MoonrakerClientMock::temperature_simulation_loop() {
             double dryer_temp = 55.0 + 3.0 * std::sin(2.0 * M_PI * sim_time / 200.0);
             status_obj["htu21d dryer"] = {{"humidity", dryer_humidity},
                                           {"temperature", dryer_temp}};
+        }
+
+        // The chamber heater object itself. The chamber reading is taken from
+        // this object whenever a heater exists, so without it here the chamber
+        // freezes at whatever the first frame carried. A temperature_fan
+        // chamber is emitted by the sensor loop above with its speed, and
+        // re-emitting it as a heater would drop that.
+        if (const std::string chamber_key = chamber_heater_status_key();
+            chamber_key.rfind("heater_generic ", 0) == 0) {
+            const double chamber_now = chamber_temp_.load();
+            const double chamber_tgt = chamber_target_.load();
+            status_obj[chamber_key] = {{"temperature", chamber_now},
+                                       {"target", chamber_tgt},
+                                       {"power", mock_heater_duty(chamber_now, chamber_tgt)}};
         }
 
         // Chamber backend diagnostics + filter pin (e.g. dragonbreath trio via

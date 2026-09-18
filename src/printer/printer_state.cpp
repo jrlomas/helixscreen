@@ -897,6 +897,11 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
         chamber_diagnostics_apply && !discovery_.chamber_diagnostics_object().empty());
     capabilities_state_.set_has_chamber_filter_fan(chamber_diagnostics_apply &&
                                                    !discovery_.chamber_filter_fan_pin().empty());
+    const auto* chamber_backend =
+        chamber_diagnostics_apply ? chamber::backend_by_id(discovery_.chamber_heater_backend_id())
+                                  : nullptr;
+    capabilities_state_.set_has_chamber_element_temp(chamber_backend &&
+                                                     chamber_backend->reports_element_temp());
 
     // Promote the resolved chamber sensor to CHAMBER role in the sensor
     // manager. Required for vendors whose chamber sensor name doesn't match
@@ -1004,6 +1009,10 @@ void PrinterState::set_helix_plugin_installed(bool installed) {
 bool PrinterState::service_has_helix_plugin() const {
     // Delegate to plugin_status_state_ component
     return plugin_status_state_.service_has_helix_plugin();
+}
+
+int PrinterState::helix_plugin_state() const {
+    return plugin_status_state_.helix_plugin_state();
 }
 
 void PrinterState::set_helix_macros_restart_pending(bool pending) {

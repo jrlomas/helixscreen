@@ -954,9 +954,19 @@ check_deinit_all_does_not_log() {
 }
 
 @test "print-vacuous-max resolves to a bare integer" {
-    run bash -c 'make -s print-vacuous-max 2>/dev/null | tail -1'
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ ^[0-9]+$ ]]
+    local out='' err=''
+    # `make -C <dir>` implies --print-directory and exports it through MAKEFLAGS,
+    # so an inner make launched under one writes "Entering/Leaving directory" to
+    # STDOUT around the echoed value. --no-print-directory cancels that inherited
+    # -w; -s alone does not. make's stderr is kept for the failure message: a red
+    # here must say what make said.
+    out="$(make --no-print-directory -s print-vacuous-max \
+        2>"$BATS_TEST_TMPDIR/vacuous-max.err")" || true
+    [[ "$out" =~ ^[0-9]+$ ]] && return 0
+    err="$(cat "$BATS_TEST_TMPDIR/vacuous-max.err")" || true
+    echo "print-vacuous-max stdout: [$out]"
+    echo "print-vacuous-max stderr: [$err]"
+    false
 }
 
 # --- the vacuous baseline can express a test name that starts with '#' ---

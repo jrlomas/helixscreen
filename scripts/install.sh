@@ -67,7 +67,7 @@ HELIX_INSTALL_DIRS="/root/printer_software/helixscreen /opt/helixscreen /mnt/UDI
 # it first. Swept on uninstall, since nothing else ever removes them.
 # Mirrors kStateRoots in include/helix_install_roots.h.
 # shellcheck disable=SC2034  # consumed by uninstall.sh
-HELIX_STATE_DIRS="/mnt/UDISK/helixscreen-state /mnt/UDISK/helixscreen /data/helixscreen /usr/data/helixscreen-state /user-resource/helixscreen-state /userdata/helixscreen-state /srv/helixscreen-state"
+HELIX_STATE_DIRS="/mnt/UDISK/helixscreen-state /mnt/UDISK/helixscreen /data/.helixscreen /data/helixscreen /usr/data/helixscreen-state /user-resource/helixscreen-state /userdata/helixscreen-state /srv/helixscreen-state"
 
 # Mounts release.sh's detect_rollback_dir() tries, in order, for an
 # off-partition update-backup when the install filesystem is too tight to
@@ -82,18 +82,19 @@ HELIX_ROLLBACK_CANDIDATES_DEFAULT="/mnt/UDISK /usr/data /mnt/data /data /user-re
 # Remove a state root that is now empty.
 #
 # The sweep above takes cache/ and logs/ but leaves the directory that held
-# them. Only a "-state" directory is removed: that suffix is a name this
-# installer coins, so a directory carrying it was made by us and holds nothing
-# else. A bare ".../helixscreen" state root is left alone even when empty -
-# /data/helixscreen and the pre-migration /mnt/UDISK/helixscreen are plain
-# enough names that the operator may have meant that directory themselves.
+# them. Only a name this installer coins is removed: the "-state" suffix, and
+# the dot-prefixed AD5M root (no operator names a directory with a leading
+# dot by hand). A bare ".../helixscreen" state root is left alone even when
+# empty - /data/helixscreen and the pre-migration /mnt/UDISK/helixscreen are
+# plain enough names that the operator may have meant that directory
+# themselves.
 #
 # rmdir carries the rest of the safety: it refuses a directory with anything
 # still in it, so a root someone has put their own files in survives.
 helix_state_prune_empty_roots() {
     for _hsper in $HELIX_STATE_DIRS; do
         case "$_hsper" in
-            */helixscreen-state) ;;
+            */helixscreen-state|*/.helixscreen) ;;
             *) continue ;;
         esac
         [ -d "$_hsper" ] || continue
@@ -1963,6 +1964,33 @@ resolve_chroot_daemon_dir() {
     return 0
 }
 
+# /data doubles as Moonraker's gcodes root on the AD5M (the gcodes path is a
+# symlink to the whole partition), so anything of ours left at its top level
+# is a folder or file in the user's print-file picker. Swept at install time:
+# the in-app updater removes its own archive, but nothing else ever does.
+# AD5M_GCODES_ROOT is the test seam; nothing on a device ever sets it.
+cleanup_ad5m_gcodes_root() {
+    local _root="${AD5M_GCODES_ROOT:-/data}"
+    # Release archives scp'd in for manual installs, tens of MB each on a
+    # 6.2 GB partition, and the updater's fallback install log. Never the
+    # archive this run is installing from.
+    local _f
+    for _f in "$_root"/helixscreen-*.tar.gz "$_root"/helixscreen-*.zip "$_root"/helixscreen-*.install.log; do
+        [ -f "$_f" ] || continue
+        [ "$_f" = "${local_tarball:-}" ] && continue
+        rm -f "$_f" 2>/dev/null || $SUDO rm -f "$_f" 2>/dev/null || true
+        log_info "Removed leftover from the gcodes root: $_f"
+    done
+
+    # A cleanup staging directory naming this app; removed only in its exact
+    # known shape — nothing inside but our own subtree. Anything a person put
+    # there themselves survives.
+    if [ -d "$_root/hx-clean" ] && [ "$(ls -A "$_root/hx-clean" 2>/dev/null)" = "helixscreen" ]; then
+        rm -rf "$_root/hx-clean" 2>/dev/null || $SUDO rm -rf "$_root/hx-clean" 2>/dev/null || true
+        log_info "Removed leftover cleanup staging directory: $_root/hx-clean"
+    fi
+}
+
 set_install_paths() {
     local platform=$1
     local firmware=${2:-}
@@ -1977,6 +2005,8 @@ set_install_paths() {
     PREVIOUS_INSTALL_DIR=""
     PREVIOUS_STATE_DIR=""
     STATE_DIR=""
+    STATE_ROOT=""
+    PREVIOUS_STATE_ROOT=""
     MIGRATE_FROM_DIR=""
 
     if [ "$platform" = "ad5m" ]; then
@@ -2016,6 +2046,21 @@ set_install_paths() {
                 log_info "Install directory: ${INSTALL_DIR}"
                 ;;
         esac
+        # /data is this board's only large writable partition and the vendor
+        # symlinks it whole into Moonraker's gcodes root, so the state root
+        # must be dot-prefixed to stay out of the print-file picker:
+        # Moonraker's listings hide dot-entries, the mechanism the vendor's
+        # own .mod and .thumbs rely on. migrate_state_root() moves an install
+        # that still carries the plain-named root.
+        # shellcheck disable=SC2034  # consumed by release.sh (state-root rename)
+        STATE_ROOT="/data/.helixscreen"
+        # shellcheck disable=SC2034  # consumed by release.sh (state-root rename)
+        PREVIOUS_STATE_ROOT="/data/helixscreen"
+        # Reclaim the cache an install that predates the rename left at the
+        # plain-named root, once migrate_state_root() has carried it across.
+        # shellcheck disable=SC2034  # consumed by release.sh (stale cache reclaim)
+        STALE_CACHE_DIRS="/data/helixscreen/cache"
+        cleanup_ad5m_gcodes_root
     elif [ "$platform" = "ad5x" ]; then
         # FlashForge AD5X - uses ZMOD, /usr/data structure, runs as root
         KLIPPER_USER="root"
@@ -2264,7 +2309,7 @@ resolve_platform_hook_key() {
     # Platform hooks (pi32 shares Pi hooks). AD5X gets its own key, never
     # ad5m-zmod: it runs inside the chroot at /usr/data/.mod/.zmod, installs to
     # /srv/helixscreen, and has no /data, so the AD5M hook's
-    # HELIX_CACHE_DIR=/data/helixscreen/cache does not exist there.
+    # HELIX_CACHE_DIR=/data/.helixscreen/cache does not exist there.
     case "$platform" in
         pi|pi32)       platform_hook="pi" ;;
         k1)            platform_hook="k1" ;;
@@ -3580,6 +3625,31 @@ forgex_prev_display_f() {
     printf '%s\n' "$(forgex_mod_data)/helixscreen_prev_display"
 }
 
+# printer.cfg, beside the mod tree on the same derivation as mod_data:
+# /opt/config/printer.cfg on an AD5M, /usr/data/config/printer.cfg on an AD5X.
+# Only the mod's own tooling writes the display include in it (S00init at
+# boot, zdisplay.sh on a SET_MOD), which is why the include can lag
+# variables.cfg until a reboot.
+forgex_printer_cfg() {
+    printf '%s\n' "$(dirname "${HOST_MOD_ROOT:-/opt/config/mod}")/printer.cfg"
+}
+
+# The display mode printer.cfg's include selects - what the machine RUNS, as
+# against variables.cfg's display variable, which is what it will run after
+# the next boot. Empty when printer.cfg is missing, unreadable, or carries no
+# recognised display include; a caller must read empty as "unknown", never as
+# a mode. Never fails: callers capture the output under set -e.
+forgex_running_display_mode() {
+    pcfg="$(forgex_printer_cfg)"
+    [ -r "$pcfg" ] || return 0
+    for inc in stock feather guppy headless; do
+        grep -q "^[[:space:]]*\[include[[:space:]][^]]*/${inc}\.cfg\]" "$pcfg" 2>/dev/null || continue
+        printf '%s\n' "$inc" | tr '[:lower:]' '[:upper:]'
+        return 0
+    done
+    return 0
+}
+
 # Replace a vendor script with its rewrite only after the rewrite parses.
 # Every screen.sh surgery funnels through here: the candidate stays a .tmp
 # beside the target until it passes a shell syntax check, so a botched edit -
@@ -3652,16 +3722,21 @@ forgex_strip_guard_blocks() {
 # Record the display mode the printer arrived on, so uninstall can restore it.
 # The write goes through $SUDO like every other privileged write: mod_data is
 # root-owned on a real device and a bare redirect fails silently there.
-# The first record wins: a re-run
-# (upgrade) finds HEADLESS because we set it, and overwriting would make
-# uninstall "restore" HEADLESS, leaving an uninstalled printer with no UI.
+# A write that fails returns non-zero and the takeover must stop: without the
+# record, uninstall restores the GUPPY fallback for a printer that may never
+# have had it. The first record wins: a re-run (upgrade) finds HEADLESS
+# because we set it, and overwriting would make uninstall "restore" HEADLESS,
+# leaving an uninstalled printer with no UI.
 forgex_record_prev_display() {
     record_f="$(forgex_prev_display_f)"
     if [ -s "$record_f" ]; then
         return 0
     fi
-    printf '%s\n' "$1" | $SUDO tee "$record_f" >/dev/null 2>/dev/null \
-        || log_warn "Could not record the previous ForgeX display mode (${record_f})"
+    if ! printf '%s\n' "$1" | $SUDO tee "$record_f" >/dev/null 2>/dev/null; then
+        log_error "Could not record the previous ForgeX display mode (${record_f})"
+        return 1
+    fi
+    return 0
 }
 
 # Configure ForgeX display settings for HelixScreen.
@@ -3686,6 +3761,8 @@ configure_forgex_display() {
     tslib_init="$(forgex_mod_root)/.root/S35tslib"
     changed=false
     display_set=false
+    record_failed=false
+    drift_refused=false
 
     if [ -f "$var_file" ]; then
         # HEADLESS closes the list as an arrival state: a printer already on
@@ -3696,10 +3773,41 @@ configure_forgex_display() {
         for mode in $FORGEX_DISPLAY_MODES HEADLESS; do
             grep -q "display[[:space:]]*=[[:space:]]*'$mode'" "$var_file" || continue
 
+            # The record must name the mode the machine RUNS, and at a first
+            # takeover that is confirmed against printer.cfg's include: the
+            # variable only says what runs after the next boot, and the two
+            # disagree for as long as the printer stays up between a SET_MOD
+            # and its reboot. A record already on disk means our own earlier
+            # install left the pair disagreeing (variables.cfg on HEADLESS,
+            # the include still naming the arrival mode), so a re-run takes
+            # the record's answer and does not compare the files at all.
+            running_mode=""
+            if [ ! -s "$(forgex_prev_display_f)" ]; then
+                running_mode="$(forgex_running_display_mode)"
+                if [ -n "$running_mode" ] && [ "$running_mode" != "$mode" ]; then
+                    log_error "ForgeX display state disagrees: variables.cfg says $mode, printer.cfg runs $running_mode"
+                    log_error "Reboot the printer (its boot tooling reconciles the two files) and re-run the install"
+                    drift_refused=true
+                    break
+                fi
+                if [ -z "$running_mode" ]; then
+                    # No verified display include is not a failure: layouts
+                    # this derivation cannot read must keep installing, on
+                    # the variable's say-so.
+                    log_warn "ForgeX running display mode could not be confirmed from $(forgex_printer_cfg) - recording the variables.cfg mode ($mode)"
+                fi
+            fi
+
             # Remember where we found it so uninstall can put it back. 1.4.0
             # and 1.4.1 default to STOCK, 1.4.2 to FEATHER, so a fixed restore
-            # target would strand one of them on a mode it never had.
-            forgex_record_prev_display "$mode"
+            # target would strand one of them on a mode it never had. A record
+            # that cannot be written ends the takeover here: moving the
+            # display to HEADLESS anyway would leave uninstall restoring the
+            # GUPPY fallback for a mode this printer never had.
+            if ! forgex_record_prev_display "${running_mode:-$mode}"; then
+                record_failed=true
+                break
+            fi
             display_set=true
 
             if [ "$mode" = "HEADLESS" ]; then
@@ -3713,9 +3821,11 @@ configure_forgex_display() {
             break
         done
 
-        if [ "$display_set" != true ]; then
+        if [ "$display_set" != true ] && [ "$record_failed" != true ] && [ "$drift_refused" != true ]; then
             log_warn "ForgeX display mode in ${var_file} was not recognized - left unchanged"
         fi
+    else
+        log_warn "ForgeX variables.cfg not found (${var_file}) - display mode cannot be taken over"
     fi
 
     # Disable GuppyScreen init script (remove execute permission). HEADLESS
@@ -3747,17 +3857,21 @@ configure_forgex_display() {
         changed=true
     fi
 
-    if [ "$display_set" != true ] && [ -f "$var_file" ]; then
-        # A variables.cfg whose display spelling we did not recognize means
-        # the takeover failed - the vendor UI keeps the slot - and that must
-        # not be reported as success just because the chmod arms above fired.
+    if [ "$display_set" != true ]; then
+        # display_set survives only a mode the takeover both recognized and
+        # recorded. Reaching here - unrecognized spelling, unwritable record,
+        # or no variables.cfg to read - means the takeover failed and the
+        # vendor UI keeps the slot, which must not be reported as success just
+        # because the chmod arms above fired.
         return 1
     fi
     if [ "$changed" = true ]; then
         log_success "ForgeX configured for HelixScreen (HEADLESS mode, GuppyScreen disabled)"
-        return 0
     fi
-    return 1
+    # An already-HEADLESS printer with nothing left to de-exec is the
+    # takeover's goal state; a re-run (upgrade) lands here and must not read
+    # as failure.
+    return 0
 }
 
 # Pre-dismiss ForgeX's "Try the new Feather screen" offer.
@@ -4248,28 +4362,53 @@ uninstall_forgex() {
     fi
 
     var_file="$(forgex_mod_data)/variables.cfg"
+    record_f="$(forgex_prev_display_f)"
 
-    # Put the display mode back where install found it. 1.4.0/1.4.1 default to
-    # STOCK and 1.4.2 to FEATHER, so a hardcoded restore target would leave one
-    # of them on a mode the printer never had. GUPPY is the fallback for
-    # installs predating the recorded value; it exists in every supported
-    # Forge-X.
-    restore_mode="GUPPY"
+    # Put the display mode back by evidence, in descending order of trust:
+    # the recorded mode, else the mode printer.cfg's include runs right now,
+    # else GUPPY aloud. 1.4.0/1.4.1 default to STOCK and 1.4.2 to FEATHER, so
+    # a hardcoded restore target would leave one of them on a mode the
+    # printer never had. GUPPY is the last resort rather than a refusal
+    # because it exists in every supported Forge-X, and because leaving
+    # variables.cfg on HEADLESS with no HelixScreen is a printer with no UI
+    # at all.
+    restore_mode=""
     mode_restored=false
-    if [ -r "$(forgex_prev_display_f)" ]; then
-        saved_mode=$(cat "$(forgex_prev_display_f)" 2>/dev/null)
+    if [ -r "$record_f" ]; then
+        saved_mode=$(cat "$record_f" 2>/dev/null)
         case "$saved_mode" in
             STOCK|FEATHER|GUPPY|HEADLESS) restore_mode="$saved_mode" ;;
         esac
+    fi
+    if [ -z "$restore_mode" ]; then
+        # What printer.cfg's include names is what the printer is configured
+        # to run - evidence of the mode to restore, not a guess.
+        restore_mode="$(forgex_running_display_mode)"
+    fi
+    if [ -z "$restore_mode" ]; then
+        restore_mode="GUPPY"
+        log_warn "The ForgeX display mode from before HelixScreen could not be determined - restoring GUPPY as a fallback"
+        log_warn "If that is not the mode you had, change it from the printer's SET_MOD display setting (zdisplay.sh)"
     fi
 
     if [ -f "$var_file" ]; then
         if grep -q "display[[:space:]]*=[[:space:]]*'HEADLESS'" "$var_file"; then
             log_info "Restoring ForgeX display mode to ${restore_mode}..."
-            $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'HEADLESS'/display = '${restore_mode}'/" "$var_file"
-            mode_restored=true
+            if $SUDO sed -i "s/display[[:space:]]*=[[:space:]]*'HEADLESS'/display = '${restore_mode}'/" "$var_file"; then
+                mode_restored=true
+                # The record dies only with the restore that consumed it.
+                $SUDO rm -f "$record_f"
+            else
+                log_warn "Could not rewrite ${var_file} - the recorded display mode is kept for a later uninstall"
+            fi
+        elif [ -s "$record_f" ]; then
+            # ForgeX's own tooling can move the display after our install
+            # (zdisplay.sh on a SET_MOD, an accepted Feather promo). That mode
+            # is not ours to overwrite and the record is the only copy of the
+            # printer's real pre-install mode, so it stays for a later
+            # uninstall instead of being deleted unused.
+            log_warn "ForgeX display is no longer HEADLESS - not restoring; the recorded pre-install mode is kept (${record_f})"
         fi
-        $SUDO rm -f "$(forgex_prev_display_f)"
     fi
 
     # Restore stock FlashForge UI in auto_run.sh
@@ -7826,6 +7965,51 @@ migrate_previous_state_dir() {
     done
 }
 
+# Rename a state root whose name has to change, payload not involved. This is
+# the AD5M's move to a dot-prefixed root: /data is that board's gcodes root,
+# so a plain-named state directory shows up in the print-file picker and the
+# vendor's own hidden directories (.mod, .thumbs) mark dot-prefixing as the
+# local convention. The app performs the same rename at startup, so this
+# covers the reinstall path and boxes the app's pass cannot reach.
+migrate_state_root() {
+    _mst_old="${PREVIOUS_STATE_ROOT:-}"
+    _mst_new="${STATE_ROOT:-}"
+
+    [ -n "$_mst_old" ] && [ -n "$_mst_new" ] || return 0
+    [ "$_mst_old" != "$_mst_new" ] || return 0
+    [ -d "$_mst_old" ] || return 0
+    # Only our own spelling, and only a same-parent rename: this must never
+    # touch a mount root or a directory some other package owns.
+    case "${_mst_old}:${_mst_new}" in
+        /*/helixscreen:/*/.helixscreen) ;;
+        *)
+            log_warn "Refusing unexpected state-root rename: $_mst_old -> $_mst_new"
+            return 0 ;;
+    esac
+    [ "$(dirname "$_mst_old")" = "$(dirname "$_mst_new")" ] || return 0
+
+    if [ -d "$_mst_new" ]; then
+        # Both exist: carry the known state subtrees across, never clobber.
+        for _mst_sub in cache logs; do
+            [ -d "${_mst_old}/${_mst_sub}" ] || continue
+            if [ ! -e "${_mst_new}/${_mst_sub}" ]; then
+                mv "${_mst_old}/${_mst_sub}" "${_mst_new}/${_mst_sub}" 2>/dev/null \
+                    || $SUDO mv "${_mst_old}/${_mst_sub}" "${_mst_new}/${_mst_sub}" 2>/dev/null \
+                    || log_warn "Could not move ${_mst_old}/${_mst_sub}"
+            fi
+        done
+        # The rest is either empty scaffolding or the operator's; rmdir takes
+        # only the empty case.
+        rmdir "$_mst_old" 2>/dev/null || $SUDO rmdir "$_mst_old" 2>/dev/null || true
+    else
+        mv "$_mst_old" "$_mst_new" 2>/dev/null \
+            || $SUDO mv "$_mst_old" "$_mst_new" 2>/dev/null \
+            || { log_warn "Could not move state root ${_mst_old}"; return 0; }
+        log_info "Moved state root ${_mst_old} -> ${_mst_new}"
+    fi
+    return 0
+}
+
 # Remove the tree a migration moved away from.
 # Runs after the service is up, so a failure at any earlier step leaves a
 # complete and bootable install at the old path.
@@ -9494,6 +9678,135 @@ remove_moonraker_asvc() {
     $fs sed -i '/^helixscreen$/d' "$asvc" 2>/dev/null || \
     $fs sed -i '' '/^helixscreen$/d' "$asvc" 2>/dev/null || true
     log_success "Removed helixscreen from Moonraker service allowlist"
+}
+
+# Locate the helix_print.py the HelixPrint plugin install symlinks into
+# Moonraker's components directory.
+#
+# update_manager is a core Moonraker component, so the parent of its package
+# directory IS the components directory - in whichever of the three on-disk
+# layouts find_moonraker_update_manager_dir resolved, including the nested
+# Creality one.
+#
+# Returns: path to helix_print.py (symlink or regular file), or empty string.
+find_helix_print_plugin() {
+    local um
+    um=$(find_moonraker_update_manager_dir)
+    if [ -z "$um" ]; then
+        echo ""
+        return 0
+    fi
+
+    local target
+    target="$(dirname "$um")/helix_print.py"
+    # -L before -f: a symlink into an install directory this uninstall already
+    # removed is dangling, and -f is false for it.
+    if [ -L "$target" ] || [ -f "$target" ]; then
+        echo "$target"
+    else
+        echo ""
+    fi
+}
+
+# Remove the plugin symlink and the [helix_print] section directly.
+#
+# A plain section strip, NOT remove_update_manager_section's comment-block
+# heuristic: nothing generates a comment header above [helix_print], so
+# buffering the preceding comment run would eat a neighbouring line's comment.
+#
+# Idempotent and silent when there is nothing left to remove.
+_remove_helix_print_inline() {
+    local target
+    target=$(find_helix_print_plugin)
+
+    if [ -L "$target" ]; then
+        local ps
+        ps=$(path_sudo "$target")
+        log_info "Removing plugin symlink $target..."
+        if $ps rm -f "$target"; then
+            log_success "Removed the HelixPrint plugin symlink"
+        else
+            log_warn "Could not remove $target - remove it by hand"
+        fi
+    elif [ -n "$target" ]; then
+        log_warn "$target is a regular file, not a symlink this installer created - leaving it in place"
+    fi
+
+    local conf
+    conf=$(find_moonraker_conf)
+    if [ -n "$conf" ] && grep -q '^\[helix_print\]' "$conf" 2>/dev/null; then
+        local fs
+        fs=$(file_sudo "$conf")
+        $fs cp "$conf" "${conf}.bak.helixscreen-uninstall" 2>/dev/null || true
+        log_info "Removing [helix_print] section from $conf..."
+        local prog='
+            /^\[helix_print\]/ { skip = 1; next }
+            /^\[/ { skip = 0 }
+            !skip { print }
+        '
+        # The program is passed as an argument rather than interpolated into the
+        # -c string, so its $0 and $1 stay awk's and are never expanded by a shell.
+        if $fs sh -c 'awk "$1" "$2" > "$2.helixtmp" && mv "$2.helixtmp" "$2"' sh "$prog" "$conf"; then
+            log_success "Removed [helix_print] section from $conf"
+        else
+            log_warn "Could not remove [helix_print] from $conf - edit it by hand, backup at ${conf}.bak.helixscreen-uninstall"
+        fi
+    fi
+}
+
+# Remove the HelixPrint Moonraker plugin: the helix_print.py symlink in
+# Moonraker's components directory, and the [helix_print] section in
+# moonraker.conf.
+#
+# Left behind, that symlink points into a deleted install directory. Moonraker
+# loads helix_print as an optional component, so the load does not abort the
+# server, but it logs an "Unable to load component: (helix_print)" traceback on
+# every startup and reports the name in /server/info's failed_components, which
+# clients surface as a permanently failed component.
+#
+# The plugin's own installer owns this removal - it also strips any PRINT_START
+# phase-tracking instrumentation and restarts Moonraker - so it is delegated to
+# whenever it is still on disk. The inline pass then mops up: the plugin
+# script's Moonraker search covers the desktop and Pi layouts, while
+# MOONRAKER_SRC_PATHS here also covers the buildroot vendor trees, and it is the
+# only pass on an install tree that is already gone.
+#
+# Always returns 0. The plugin being absent is the common case, and a failed
+# removal must never abort the rest of the uninstall.
+remove_moonraker_plugin() {
+    local target conf
+    target=$(find_helix_print_plugin)
+    conf=$(find_moonraker_conf)
+
+    local has_section=false
+    if [ -n "$conf" ] && grep -q '^\[helix_print\]' "$conf" 2>/dev/null; then
+        has_section=true
+    fi
+
+    if [ -z "$target" ] && [ "$has_section" = "false" ]; then
+        return 0
+    fi
+
+    local script="${INSTALL_DIR}/moonraker-plugin/install.sh"
+    if [ -f "$script" ]; then
+        log_info "Removing the HelixPrint Moonraker plugin..."
+        local status=0
+        sh "$script" --uninstall-auto || status=$?
+        case "$status" in
+            0)
+                log_success "Removed the HelixPrint Moonraker plugin"
+                ;;
+            2)
+                log_warn "HelixPrint plugin removed, but a config file needs a look - see the output above"
+                ;;
+            *)
+                log_warn "HelixPrint plugin removal reported failure (exit $status) - checking what is left"
+                ;;
+        esac
+    fi
+
+    _remove_helix_print_inline
+    return 0
 }
 
 # Restart Moonraker to pick up configuration changes.
@@ -11592,6 +11905,12 @@ uninstall() {
         [ -n "$_asvc_conf" ] && remove_moonraker_asvc "$_asvc_conf" || true
     fi
 
+    # Remove the HelixPrint Moonraker plugin while the install tree is still
+    # here: the removal delegates to moonraker-plugin/install.sh inside it.
+    if type remove_moonraker_plugin >/dev/null 2>&1; then
+        remove_moonraker_plugin || true
+    fi
+
     # Detect init system first
     detect_init_system
 
@@ -12417,7 +12736,16 @@ configure_platform() {
 
     case "${AD5M_FIRMWARE:-}" in
         forge_x)
-            configure_forgex_display || true
+            # The display takeover is the one forgex step that must fail the
+            # install: its non-zero return means the vendor UI still owns the
+            # display slot, and an install that continued would ship two UIs
+            # fighting over the framebuffer. The steps below it harden around
+            # a takeover that already succeeded - best-effort by design.
+            configure_forgex_display || {
+                log_error "ForgeX display takeover failed - the vendor UI still owns the display slot"
+                log_error "The install did not complete; address the ForgeX message above and re-run"
+                return 1
+            }
             dismiss_forgex_feather_promo || true
             patch_forgex_screen_sh || true
             patch_forgex_screen_drawing || true
@@ -12739,6 +13067,9 @@ main() {
     # Clear the payload's directory of any state kept there, before anything
     # extracts on top of it.
     migrate_previous_state_dir
+    # Rename a state root whose name had to change (AD5M dot-prefix), before
+    # the new payload's hook looks for it at the new name.
+    migrate_state_root
 
     extract_release "$platform"
     fix_install_ownership
@@ -12784,7 +13115,7 @@ main() {
     # Create platform cache directory
     case "$platform" in
         ad5m)
-            $SUDO mkdir -p /data/helixscreen/cache
+            $SUDO mkdir -p /data/.helixscreen/cache
             ;;
         k1)
             $SUDO mkdir -p /usr/data/helixscreen/cache

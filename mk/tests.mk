@@ -442,7 +442,7 @@ test: test-build
 # the reflex this target exists to replace, so a typo must not reach it. The
 # guard is a parse-time conditional so a bare `make t` fails without first
 # building a binary it has no filter to run.
-.PHONY: t full-test-run test-run
+.PHONY: t unit-sweep full-test-run test-run
 ifeq ($(strip $(F)),)
 t:
 	@echo "$(YELLOW)make t needs a filter.$(RESET)"; \
@@ -455,18 +455,34 @@ t: test-build
 	$(Q)$(TEST_BIN) "$(F)"
 endif
 
-# Every fast test, sharded across cores. Answers "did I break something I was
-# not touching", which is a question about finished work.
+# unit-sweep: every fast unit test, sharded across cores. Answers "did I break
+# something I was not touching" for the C++ suite alone.
 # Uses Catch2 sharding across multiple processes for ~4-8x speedup
 # Use 'make test-serial' for sequential execution (debugging, clean output)
 # Use 'make test-all' to run everything including slow tests
-full-test-run: test-build
+unit-sweep: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running unit tests in parallel (excluding slow)...$(RESET)"
 	@START_TIME=$$(date +%s); \
 	$(call run_tests_parallel,"~[.] ~[slow]"); \
 	END_TIME=$$(date +%s); \
 	DURATION=$$((END_TIME - START_TIME)); \
-	echo "$(GREEN)$(BOLD)✓ Tests passed in $${DURATION}s$(RESET)"
+	echo "$(GREEN)$(BOLD)✓ Unit tests passed in $${DURATION}s$(RESET)"
+
+# full-test-run: the completion gate. Its name promises everything the normal
+# cadence covers, so it runs both suites that cadence has: the C++ unit sweep
+# and the bats shell suite. Nothing else runs bats locally - not the commit
+# hook, not test-xml - so without it 200-plus shell tests reach CI unrun.
+#
+# [.] and [slow] stay outside deliberately. They are slow by design and already
+# have gates: scripts/quality-checks.sh runs [.] on any staged code change, and
+# nightly CI runs [slow]. Folding them in would tax the target reached for most.
+#
+# Ask it once, when a feature is finished. Mid-feature the question is
+# `make t F='[tag]'`, and a full run cannot answer it anyway.
+full-test-run: unit-sweep
+	$(Q)$(MAKE) --no-print-directory test-shell
+	$(ECHO) "$(GREEN)$(BOLD)✓ Completion gate passed: unit sweep + shell suite$(RESET)"
+	$(ECHO) "  Outside this gate: [.] (commit hook) and [slow] (nightly). Both: make test-all"
 
 # ----------------------------------------------------------------------------
 # test-run: a signpost that refuses
@@ -492,13 +508,25 @@ test-run:
 	echo "         Correct ONLY when you have not edited code since that build."; \
 	echo ""; \
 	echo "  $(CYAN)Did I break something I was not touching?$(RESET)"; \
-	echo "      make full-test-run"; \
+	echo "      make unit-sweep        C++ unit tests only, ~50s"; \
+	echo "      make full-test-run     unit sweep + bats shell suite, ~2m"; \
 	echo "         25s idle, minutes on a loaded box, and only worth asking once"; \
 	echo "         the feature is finished."; \
 	echo ""; \
 	echo "A full run cannot tell you your feature works, only that something else broke."; \
 	echo "Cadence table: tests/CLAUDE.md, 'What to run when'."; \
 	exit 2
+
+# ----------------------------------------------------------------------------
+# dev-timing: what the dev loop actually costs
+# ----------------------------------------------------------------------------
+# Rebuilds a wall-clock ledger of every build, suite and test run from session
+# transcripts, so "is this worth running" is answered from measured medians
+# rather than from a guess. Output is derived and gitignored; regenerating is
+# a few seconds and safe at any time.
+.PHONY: dev-timing
+dev-timing:
+	$(Q)python3 scripts/helix-dev-timing.py
 
 # Run unit tests SEQUENTIALLY (for debugging or clean output)
 # Slower but useful when you need to see exact test ordering or debug failures
@@ -1081,7 +1109,7 @@ TEST_WARN_FLAGS := -Werror=type-limits
 # Compile test sources
 # Uses DEPFLAGS to track header dependencies for incremental rebuilds
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/tests/%.o: $(TEST_UNIT_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(OBJ_DIR)/tests/%.o: $(TEST_UNIT_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[TEST]$(RESET) $<"
 	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
@@ -1089,7 +1117,7 @@ $(OBJ_DIR)/tests/%.o: $(TEST_UNIT_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $
 
 # Compile application subdirectory test sources
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/tests/application/%.o: $(TEST_UNIT_DIR)/application/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(OBJ_DIR)/tests/application/%.o: $(TEST_UNIT_DIR)/application/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[TEST-APP]$(RESET) $<"
 	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) -I$(TEST_UNIT_DIR)/application $(INCLUDES) $(LV_CONF) -c $< -o $@
@@ -1108,7 +1136,7 @@ $(DNS_RESOLV_OBJ): $(LIBHV_DIR)/base/dns_resolv.c $(LIBHV_LIB)
 # Compile mock sources
 # Uses DEPFLAGS to track header dependencies
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/tests/mocks/%.o: $(TEST_MOCK_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(OBJ_DIR)/tests/mocks/%.o: $(TEST_MOCK_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(YELLOW)[MOCK]$(RESET) $<"
 	$(Q)$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_MOCK_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
@@ -1505,7 +1533,8 @@ help-test:
 	echo "$${C}Main Test Targets:$${X}"; \
 	echo "  $${G}t F='<filter>'$${X}       - Build, then run ONE tag or case (the inner loop)"; \
 	echo "  $${G}test$${X}                 - Build tests (does not run)"; \
-	echo "  $${G}full-test-run$${X}        - Whole suite in PARALLEL (the completion gate)"; \
+	echo "  $${G}unit-sweep$${X}           - C++ unit tests, sharded in PARALLEL"; \
+	echo "  $${G}full-test-run$${X}        - unit-sweep + bats shell suite (the completion gate)"; \
 	echo "  $${G}test-run$${X}             - Signpost only: refuses, names the target that fits"; \
 	echo "  $${G}test-serial$${X}          - Run tests sequentially (for debugging)"; \
 	echo "  $${G}test-smoke$${X}           - Quick smoke test (~30s) for rapid iteration"; \
@@ -1525,6 +1554,7 @@ help-test:
 	echo "  $${G}test-config$${X}          - Configuration tests"; \
 	echo "  $${G}test-xml$${X}             - helix-xml submodule suite (CMake+Unity)"; \
 	echo "  $${G}test-shell$${X}           - Shell/installer tests (bats)"; \
+	echo "  $${G}dev-timing$${X}           - Measured cost of every build and suite"; \
 	echo "  $${G}test-plugin$${X}          - Moonraker plugin tests (pytest)"; \
 	echo ""; \
 	echo "$${C}Geometry Tests:$${X}"; \

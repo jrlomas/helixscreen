@@ -5963,6 +5963,16 @@ std::vector<helix::printer::DeviceAction> AmsBackendAfc::get_device_actions() co
     // Start from shared defaults for static actions
     auto actions = helix::printer::afc_default_actions();
 
+    // get_device_sections() drops the tip_forming section unless tip forming
+    // is the active method; the section's actions go with it. An action whose
+    // section is not declared renders nowhere.
+    if (system_info_.tip_method != TipMethod::TIP_FORM) {
+        actions.erase(
+            std::remove_if(actions.begin(), actions.end(),
+                           [](const DeviceAction& a) { return a.section == "tip_forming"; }),
+            actions.end());
+    }
+
     // Overlay dynamic values onto default actions
     for (auto& a : actions) {
         if (a.id == "bowden_length") {

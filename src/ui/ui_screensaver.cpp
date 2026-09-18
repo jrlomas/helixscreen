@@ -17,10 +17,6 @@ using helix::ui::screensaver::flap_frame_at;
 using helix::ui::screensaver::flight_pos_at;
 using helix::ui::screensaver::FlightPos;
 
-// The sprites are decoded for and tuned on a 32 bpp display; 16 bpp builds leave this saver out
-// (Makefile SCREENSAVER_32BPP_ONLY_SRCS).
-static_assert(LV_COLOR_DEPTH == 32, "flying toasters draw on a 32 bpp display");
-
 // Sprite asset paths
 static constexpr const char* TOASTER_FRAMES[] = {
     "A:assets/images/screensaver/toaster_0.png",
@@ -37,10 +33,6 @@ static constexpr int FLIGHT_DISTANCE = 1600;
 // Each wing frame holds this long on a 10 s or 16 s flight, and twice as long on a
 // 24 s flight: slower flight, slower flap.
 static constexpr int FLAP_STEP_MS = 50;
-
-// Sprites flown at the lowest level: every visible sprite costs dirty-region work each frame.
-// OBJECTS[] is ordered by delay and wave, so the first ones keep a representative mix.
-static constexpr int SPRITE_CAP_LOW = 10;
 
 // Object definition matching the exact CSS classes and positions.
 // CSS uses right/top percentages. Negative right = off-screen to the right.
@@ -139,6 +131,11 @@ static constexpr ObjectDef OBJECTS[] = {
 };
 static constexpr int NUM_OBJECTS = sizeof(OBJECTS) / sizeof(OBJECTS[0]);
 
+// Sprites flown per level, indexed like LEVEL_PERIODS_MS. Every visible sprite costs
+// dirty-region work each frame, so the rungs past half rate thin the flock rather than slow it
+// again. OBJECTS[] is ordered by delay and wave, so a prefix keeps a representative mix.
+static constexpr int LEVEL_SPRITE_CAPS[] = {NUM_OBJECTS, NUM_OBJECTS, 25, 10};
+
 int FlyingToasterScreensaver::get_scale_factor() const {
     lv_display_t* disp = lv_display_get_default();
     if (!disp)
@@ -168,8 +165,12 @@ void FlyingToasterScreensaver::on_level_request(size_t level) {
 }
 
 size_t FlyingToasterScreensaver::sprite_limit(size_t level) const {
-    const bool capped = level >= CAPPED_LEVEL;
-    return static_cast<size_t>(capped ? std::min(NUM_OBJECTS, SPRITE_CAP_LOW) : NUM_OBJECTS);
+    // A member sees the private period table, so the two stay the same length here.
+    static_assert(sizeof(LEVEL_SPRITE_CAPS) / sizeof(LEVEL_SPRITE_CAPS[0]) ==
+                      sizeof(LEVEL_PERIODS_MS) / sizeof(LEVEL_PERIODS_MS[0]),
+                  "every level needs both a frame period and a sprite cap");
+    constexpr size_t last = sizeof(LEVEL_SPRITE_CAPS) / sizeof(LEVEL_SPRITE_CAPS[0]) - 1;
+    return static_cast<size_t>(std::min(NUM_OBJECTS, LEVEL_SPRITE_CAPS[std::min(level, last)]));
 }
 
 void FlyingToasterScreensaver::drop_sprites_past(size_t limit) {

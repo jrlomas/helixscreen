@@ -85,13 +85,17 @@ Chamber mode works like the nozzle and bed modes of the same overlay, just with 
 
 ### Chamber Heater Diagnostics
 
-Some add-on chamber heaters — currently the BIGTREETECH Panda Breath (with either the stock firmware binding or the DragonBreath firmware) — also report their health. When yours does, a **diagnostics card** appears below the temperature graph in chamber mode:
+Some add-on chamber heaters — currently the BIGTREETECH Panda Breath, with either its stock firmware or the third-party DragonBreath firmware — also report their health. When yours does, a **diagnostics card** appears below the temperature graph in chamber mode. It shows only what your heater actually reports, so the card is smaller on some setups than others:
 
-- **Heater element temperature** — how hot the heating element itself is (usually a bit above chamber air temperature while heating)
-- **Filter fan** — the current filter-fan speed, and a toggle to turn the filtration fan on or off without heating
-- **Fault banner** — when the heater reports a problem (over-temperature, sensor failure, communications loss), a red banner shows the reason with a **Reset** button to clear a latched fault
+- **Heater element temperature** — how hot the heating element itself is, usually a bit above chamber air temperature while heating. *DragonBreath only.*
+- **Filter fan** — the current filter-fan speed, and a toggle to run the filtration fan without heating. A **Device** badge means the heater is running the fan on its own initiative (during warm-up, or a purge after heating), and the toggle is disabled because it cannot override that. *DragonBreath only.*
+- **Fault banner** — when the heater reports a problem (over-temperature, sensor failure, communications loss), a red banner shows the reason with a **Reset** button to clear a latched fault. *DragonBreath only* — the stock firmware reports no faults to Klipper.
+- **Offline banner** — the heater is a separate box on your network, and it can drop off while Klipper keeps reporting its last temperature. When that happens the card says **Heater offline**, so a reading that has quietly stopped updating does not look healthy. Brief dropouts are ignored; only a sustained outage raises it. *Both firmwares.*
+- **Mode: External** — something other than your setpoint is driving the heater: the unit's own web page, a button on it, or its built-in Auto mode holding a target of its own. Informational, not a problem. *Both firmwares.*
 
 The card only appears when the heater provides diagnostics; printers with a plain heated chamber see no change.
+
+Don't have your heater showing up yet? See [Add-On Chamber Heater Setup](chamber-heater.md).
 
 **Heating vs. Maintaining vs. Off:** On printers that coordinate the chamber heater and a cooling fan (such as the Creality K2), the chamber status shows one of three states:
 

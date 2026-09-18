@@ -411,7 +411,6 @@
   <translation tag="Cannot delete file: printer not connected" pt="Não é possível excluir arquivo: impressora não conectada"/>
   <translation tag="Cannot modify G-code: no temp directory available" pt="Não é possível modificar G-code: diretório temporário indisponível"/>
   <translation tag="Cannot modify G-code: scan result not available" pt="Não é possível modificar G-code: resultado da análise indisponível"/>
-  <translation tag="Cannot modify G-code: {}. Printing original file." pt="Não é possível modificar G-code: {}. Imprimindo arquivo original."/>
   <translation tag="Cannot perform this action now" pt="Não é possível executar esta ação agora"/>
   <translation tag="Cannot remap G-code: no temp directory available" pt="Não é possível remapear o G-code: nenhum diretório temporário disponível"/>
   <translation tag="Cannot remap: internal error" pt="Não é possível remapear: erro interno"/>
@@ -772,6 +771,7 @@
   <translation tag="Documentation" pt="Documentação"/>
   <translation tag="Don&apos;t Save" pt="Não Salvar"/>
   <translation tag="Don&apos;t ask again" pt="Não perguntar novamente"/>
+  <translation tag="Don&apos;t show again"/>
   <translation tag="Done" pt="Concluído"/>
   <translation tag="Download update?" pt="Baixar atualização?"/>
   <translation tag="Download v{}?" pt="Baixar v{}?"/>
@@ -1096,6 +1096,7 @@
   <translation tag="Filament ran out. Auto-refill is off, so the CFS will not switch spools on its own. Load filament, then resume." pt="O filamento acabou. O reabastecimento automático está desligado, então o CFS não trocará de carretel sozinho. Carregue filamento e retome."/>
   <translation tag="Filament ran out. The CFS knows which spools match, but those slots are empty. Load one of them, then resume." pt="O filamento acabou. O CFS sabe quais carretéis correspondem, mas esses slots estão vazios. Carregue um deles e depois retome."/>
   <translation tag="Filament reload failed" pt="Falha ao recarregar o filamento"/>
+  <translation tag="Filament remapping is unavailable"/>
   <translation tag="Filament runout" pt="Fim de filamento"/>
   <translation tag="Filament runout and motion detection sensors" pt="Sensores de detecção de fim de filamento e movimento"/>
   <translation tag="Filament saved" pt="Filamento salvo"/>
@@ -1207,6 +1208,7 @@
   <translation tag="Heater Power" pt="Potência do Aquecedor"/>
   <translation tag="Heater connection lost" pt="Conexão do aquecedor perdida"/>
   <translation tag="Heater fault" pt="Falha do aquecedor"/>
+  <translation tag="Heater offline" pt="Aquecedor desconectado"/>
   <translation tag="Heater over-temperature" pt="Sobretemperatura do aquecedor"/>
   <translation tag="Heater sensor fault" pt="Falha no sensor do aquecedor"/>
   <translation tag="HeaterSelect" pt="Selecionar Aquecedor"/>
@@ -1333,7 +1335,6 @@
   <translation tag="Install Update" pt="Instalar Atualização"/>
   <translation tag="Install plugin" pt="Instalar plugin"/>
   <translation tag="Install script not found. Use the remote install command instead." pt="Script de instalação não encontrado. Use o comando de instalação remota."/>
-  <translation tag="Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history." pt="Instale o plugin HelixPrint nas configurações Avançadas para remapear o filamento sem afetar o histórico de impressão."/>
   <translation tag="Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:" pt="Instale o plugin HelixPrint para habilitar modificações rápidas de G-code. Execute este comando via SSH na sua impressora:"/>
   <translation tag="Install the timelapse plugin via SSH,&#10;then tap &quot;Check Again&quot;." pt="Instale o plugin de timelapse via SSH,&#10;depois toque em &quot;Verificar novamente&quot;."/>
   <translation tag="Install timelapse plugin" pt="Instalar plugin de timelapse"/>
@@ -1598,6 +1599,7 @@
   <translation tag="Missing value" pt="Valor ausente"/>
   <translation tag="Mode" pt="Modo"/>
   <translation tag="Modified" pt="Modificado"/>
+  <translation tag="Modifying G-code needs the HelixPrint plugin. Printing original file."/>
   <translation tag="Monitor for print abnormalities (K2 Plus camera-based)" pt="Monitorar anomalias de impressão (baseado na câmera do K2 Plus)"/>
   <translation tag="Monitor for print abnormalities (camera-based)" pt="Monitorar anomalias de impressão (baseado em câmera)"/>
   <translation tag="Monitor prints in progress — time remaining, current layer, and progress. Tap to pause, resume, or cancel the active job." pt="Monitore impressões em andamento — tempo restante, camada atual e progresso. Toque para pausar, retomar ou cancelar o trabalho ativo."/>
@@ -1995,6 +1997,7 @@
   <translation tag="Print ending..." pt="Finalizando impressão..."/>
   <translation tag="Print error" pt="Erro de impressão"/>
   <translation tag="Print failed" pt="Impressão falhou"/>
+  <translation tag="Print history will show the rewritten name"/>
   <translation tag="Print issue detected" pt="Problema de impressão detectado"/>
   <translation tag="Print jobs waiting to run" pt="Trabalhos aguardando impressão"/>
   <translation tag="Print preparation failed: {}" pt="Falha na preparação da impressão: {}"/>
@@ -2120,6 +2123,7 @@
   <translation tag="RFCOMM connect failed: " pt="Falha ao conectar RFCOMM: "/>
   <translation tag="RFID reader malfunction (left)" pt="Falha do leitor RFID (esquerdo)"/>
   <translation tag="RFID reader malfunction (right)" pt="Falha do leitor RFID (direito)"/>
+  <translation tag="RFID, auto-refill, nozzle and link care"/>
   <translation tag="RSS" pt="RSS"/>
   <translation tag="RSS:" pt="RSS:"/>
   <translation tag="Ramming Volume" pt="Volume de compactação"/>
@@ -2171,7 +2175,8 @@
   <translation tag="Remaining (g)" pt="Restante (g)"/>
   <translation tag="Remaining Weight (g)" pt="Peso Restante (g)"/>
   <translation tag="Remap Tool" pt="Remapear Ferramenta"/>
-  <translation tag="Remap needs the HelixPrint plugin" pt="O remapeamento precisa do plugin HelixPrint"/>
+  <translation tag="Remapping rewrites the job file before printing it. This printer&apos;s Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally."/>
+  <translation tag="Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.&#10;&#10;Installing the plugin takes a moment and needs no restart."/>
   <translation tag="Remap…" pt="Remapear…"/>
   <translation tag="Remember slot spool details across an eject" pt="Lembrar os detalhes do carretel do slot ao ejetar"/>
   <translation tag="Remove" pt="Remover"/>

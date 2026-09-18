@@ -72,11 +72,11 @@ void SaverCanvas::invalidate(std::vector<DirtyRect>& areas) {
     if (areas.empty()) {
         return;
     }
-    DirtyRect bounds;
+    int64_t covered_px = 0;
     for (const DirtyRect& r : areas) {
-        bounds.add(r);
+        covered_px += r.area();
     }
-    if (covers_whole_canvas(bounds, w_, h_)) {
+    if (covers_whole_canvas(covered_px, w_, h_)) {
         lv_obj_invalidate(canvas_);
         return;
     }

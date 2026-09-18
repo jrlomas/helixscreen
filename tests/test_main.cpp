@@ -92,6 +92,20 @@ __attribute__((constructor(101))) static void helix_pin_test_ingest_loopback() {
     setenv("HELIX_CRASH_WORKER_URL", "http://127.0.0.1:9/", 1);
 }
 
+/// Pin the in-app USB automounter off for the whole binary.
+///
+/// Same unconditional shape as the ingest pins, and for the same reason: an
+/// armed value is itself the hazard. UsbBackendLinux::start() constructs the
+/// fallback mounter, CI containers run as root, and a host with a USB stick
+/// attached must never take real mount(2) calls from a test run. The
+/// automounter's create() refuses to arm while HELIX_USB_AUTOMOUNT=0, so this
+/// constructor disarms every current and future test that touches the
+/// backend - with or without a fixture, at any euid, even if the caller
+/// exported a different value.
+__attribute__((constructor(101))) static void helix_disarm_test_usb_automount() {
+    setenv("HELIX_USB_AUTOMOUNT", "0", 1);
+}
+
 namespace {
 
 /// Remove the sandbox once the run is over. Only the teardown lives in a

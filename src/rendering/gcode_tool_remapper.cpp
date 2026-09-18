@@ -19,6 +19,9 @@
 #include "gcode_tool_remapper.h"
 
 #include <cctype>
+#include <istream>
+#include <ostream>
+#include <sstream>
 
 namespace helix {
 
@@ -160,50 +163,43 @@ std::string transform_line(const std::string& line, const std::map<int, int>& re
 
 } // namespace
 
-std::string GcodeToolRemapper::apply_to_string(const std::string& gcode,
-                                               const std::map<int, int>& remap) {
-    std::string result;
-    result.reserve(gcode.size());
+size_t GcodeToolRemapper::apply_to_stream(std::istream& in, std::ostream& out,
+                                          const std::map<int, int>& remap) {
+    size_t changed = 0;
+    std::string line;
+    bool first = true;
+    bool source_ended_with_newline = false;
 
-    size_t start = 0;
-    const size_t n = gcode.size();
-    while (start < n) {
-        size_t nl = gcode.find('\n', start);
-        if (nl == std::string::npos) {
-            // Final line with no trailing newline.
-            result += transform_line(gcode.substr(start), remap);
-            break;
+    while (std::getline(in, line)) {
+        // getline sets eofbit only when it ran out of input instead of stopping
+        // at a delimiter, which is exactly "this line carried no trailing \n".
+        // Reading it per line is what lets the newline be emitted BEFORE the
+        // next line, so the final one is written only if the source had it.
+        source_ended_with_newline = !in.eof();
+
+        if (!first) {
+            out << '\n';
         }
-        result += transform_line(gcode.substr(start, nl - start), remap);
-        result += '\n';
-        start = nl + 1;
-    }
-    return result;
-}
-
-std::vector<GcodeLineReplacement>
-GcodeToolRemapper::build_line_replacements(const std::string& gcode,
-                                           const std::map<int, int>& remap) {
-    std::vector<GcodeLineReplacement> out;
-
-    size_t start = 0;
-    const size_t n = gcode.size();
-    int line_number = 0;
-    while (start < n) {
-        ++line_number;
-        size_t nl = gcode.find('\n', start);
-        std::string line =
-            (nl == std::string::npos) ? gcode.substr(start) : gcode.substr(start, nl - start);
         std::string rewritten = transform_line(line, remap);
         if (rewritten != line) {
-            out.push_back(GcodeLineReplacement{line_number, std::move(rewritten)});
+            ++changed;
         }
-        if (nl == std::string::npos) {
-            break;
-        }
-        start = nl + 1;
+        out << rewritten;
+        first = false;
     }
-    return out;
+
+    if (source_ended_with_newline) {
+        out << '\n';
+    }
+    return changed;
+}
+
+std::string GcodeToolRemapper::apply_to_string(const std::string& gcode,
+                                               const std::map<int, int>& remap) {
+    std::istringstream in(gcode);
+    std::ostringstream out;
+    apply_to_stream(in, out, remap);
+    return out.str();
 }
 
 } // namespace helix

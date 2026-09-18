@@ -342,6 +342,18 @@ endif
 BIN_DIR ?= $(BUILD_DIR)/bin
 OBJ_DIR ?= $(BUILD_DIR)/obj
 
+# Objects are invalidated by a change to the flags they were built with, not only
+# by a change to their sources. The path is fixed here beside OBJ_DIR because the
+# rules naming it are read before CXXFLAGS is final; mk/rules.mk writes contents.
+FLAGS_STAMP := $(OBJ_DIR)/.build-flags
+# Created empty here, before the first rule naming it is parsed. A prerequisite
+# that neither exists nor has a rule makes make discard the whole pattern rule,
+# and every one of the 15 rules naming this stamp shares that one file record --
+# so an object not already on disk reports "No rule to make target" instead. Only
+# a build with no $(OBJ_DIR) yet is affected, which is why CI sees it and an
+# incremental tree never does. mk/rules.mk fills in the flag text below.
+$(shell mkdir -p $(OBJ_DIR); [ -e $(FLAGS_STAMP) ] || : > $(FLAGS_STAMP))
+
 # LVGL
 LVGL_DIR := lib/lvgl
 # LVGL config discovery. Defined here (not further down) so it can travel inside
@@ -450,8 +462,9 @@ SCREENSAVER_SRCS := $(SRC_DIR)/ui/ui_screensaver.cpp $(wildcard $(SRC_DIR)/ui/sc
 # Targets whose lv_conf.h LV_COLOR_DEPTH is 16. The savers below static_assert 32 bpp, so a
 # 16 bpp target missing here fails to compile rather than shipping them.
 SCREENSAVER_16BPP_TARGETS := ad5m ad5m-br cc1 mips k1 k1-dynamic ad5x k2 snapmaker-u1
-# Savers that draw only at 32 bpp; ScreensaverManager registers them under LV_COLOR_DEPTH == 32.
-SCREENSAVER_32BPP_ONLY_SRCS := $(SRC_DIR)/ui/ui_screensaver.cpp
+# Every saver now draws at both depths, so a 16 bpp build compiles all of them. A saver that
+# cannot would be listed here and marked SAVER_DEPTH_32 in SCREENSAVERS; the two must agree.
+SCREENSAVER_32BPP_ONLY_SRCS :=
 ifneq ($(ENABLE_SCREENSAVER),yes)
     APP_SRCS := $(filter-out $(SCREENSAVER_SRCS),$(APP_SRCS))
 else ifneq ($(filter $(PLATFORM_TARGET),$(SCREENSAVER_16BPP_TARGETS)),)
@@ -862,7 +875,8 @@ else ifneq ($(CROSS_COMPILE)$(filter x86 x86-fbdev x86-both,$(PLATFORM_TARGET)),
     # No SDL2 - display handled by framebuffer/DRM
     # SSL is optional - only needed if connecting to remote Moonraker over HTTPS
     # Note: libnl must come AFTER wpa_client (static linking order matters)
-    # Note: -L path only for glibc targets (Pi, AD5M) - musl targets (K1) are self-contained
+    # Note: -L path only for targets that link against host libs (Pi, AD5M);
+    # the toolchains below each carry their own sysroot
     ifeq ($(PLATFORM_TARGET),k1-dynamic)
         # K1 Dynamic: Mixed static/dynamic linking
         # Project libraries linked statically, system libraries linked dynamically
@@ -872,7 +886,9 @@ else ifneq ($(CROSS_COMPILE)$(filter x86 x86-fbdev x86-both,$(PLATFORM_TARGET)),
             -Wl,-Bdynamic \
             -lstdc++ -lz -lm -lpthread -lrt -ldl -latomic -lgcc_s
     else ifneq ($(filter mips k1 ad5x,$(PLATFORM_TARGET)),)
-        # MIPS targets (K1, AD5X) use musl - fully static, no system library paths needed
+        # No system library path: these toolchains are self-contained.
+        # mips/k1 use musl and link fully static; ad5x uses Buildroot glibc and
+        # resolves its libs from the mod chroot at runtime, never the host's /usr/lib.
         # -latomic: Required for 64-bit atomics on 32-bit MIPS (std::atomic<int64_t>)
         LDFLAGS := $(LIBHV_LIBS) $(FMT_LIBS) $(WPA_CLIENT_LIB) $(LIBNL_LIBS) -latomic -ldl -lz -lm -lpthread
     else ifeq ($(PLATFORM_TARGET),k2)

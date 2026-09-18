@@ -205,3 +205,40 @@ teardown() {
     [ "$status" -eq 0 ]
     contains "CLAIMED" "$output"
 }
+
+@test "a claim records the address of the session holding it" {
+    CLAUDE_CODE_SESSION_ID=abc-123 \
+    CLAUDE_CODE_MESSAGING_SOCKET=/run/user/1000/cc-socks/4242.sock \
+        "$CLAIM" take worktree:mainrepo "held" --pid "$OWNER" >/dev/null
+    run "$CLAIM" check worktree:mainrepo
+    [ "$status" -eq 1 ]
+    contains "message=uds:/run/user/1000/cc-socks/4242.sock" "$output"
+    contains "session_id=abc-123" "$output"
+}
+
+@test "an agent outside a Claude session supplies its own address" {
+    HELIX_SESSION_ID=opencode-7 HELIX_SESSION_SOCKET=/tmp/agent.sock \
+        "$CLAIM" take worktree:mainrepo "held" --pid "$OWNER" >/dev/null
+    run "$CLAIM" check worktree:mainrepo
+    contains "message=uds:/tmp/agent.sock" "$output"
+    contains "session_id=opencode-7" "$output"
+}
+
+@test "a claim with no address prints none, and still describes its holder" {
+    env -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_MESSAGING_SOCKET \
+        "$CLAIM" take worktree:mainrepo "held" --pid "$OWNER" >/dev/null
+    run "$CLAIM" check worktree:mainrepo
+    # The positive assertions prove describe() ran at all, so the two absences
+    # below are a suppressed line rather than an empty output.
+    [ "$status" -eq 1 ]
+    contains "held" "$output"
+    contains "pid=$OWNER" "$output"
+    lacks "message=" "$output"
+    lacks "session_id=" "$output"
+}
+
+@test "the session field names the process the claim records" {
+    "$CLAIM" take worktree:mainrepo "held" --pid "$OWNER" >/dev/null
+    run "$CLAIM" check worktree:mainrepo
+    contains "owner=$(hostname)-$OWNER pid=$OWNER" "$output"
+}

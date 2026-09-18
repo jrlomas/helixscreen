@@ -594,6 +594,9 @@ main() {
     trap '_sweep_uninstalling_sentinel' EXIT INT TERM
     _drop_uninstalling_sentinel
     remove_update_manager_section || true
+    # Before stop/remove: the plugin removal delegates to
+    # moonraker-plugin/install.sh, which lives inside the install tree.
+    remove_moonraker_plugin || true
     stop_helixscreen
     remove_service
     # The payload arm runs before the generic sweeps: it restores the mod's

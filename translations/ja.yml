@@ -415,7 +415,6 @@ translations:
   'Cannot delete file: printer not connected': 'ファイルを削除できません: プリンター未接続'
   'Cannot modify G-code: no temp directory available': 'G-code を変更できません: 一時ディレクトリがありません'
   'Cannot modify G-code: scan result not available': 'G-code を変更できません: スキャン結果がありません'
-  'Cannot modify G-code: {}. Printing original file.': 'G-code を変更できません: {}。元のファイルで印刷します。'
   Cannot perform this action now: 現在この操作は実行できません
   'Cannot remap G-code: no temp directory available': 'G-codeをリマップできません: 一時ディレクトリが利用できません'
   'Cannot remap: internal error': 'リマップできません: 内部エラー'
@@ -787,6 +786,7 @@ translations:
   Documentation: ドキュメント
   Don't Save: 保存しない
   Don't ask again: 今後表示しない
+  Don't show again: ''
   Done: 完了
   Download update?: アップデートをダウンロードしますか？
   Download v{}?: v{}をダウンロードしますか？
@@ -1119,6 +1119,7 @@ translations:
   Filament ran out. Auto-refill is off, so the CFS will not switch spools on its own. Load filament, then resume.: 'フィラメントが切れました。自動補充がオフのため、CFSは自動でスプールを切り替えません。フィラメントを装填してから再開してください。'
   Filament ran out. The CFS knows which spools match, but those slots are empty. Load one of them, then resume.: フィラメントが切れました。CFSは適合するスプールを認識していますが、該当するスロットは空です。いずれかを装填してから再開してください。
   Filament reload failed: フィラメントの再装填に失敗しました
+  Filament remapping is unavailable: ''
   Filament runout: フィラメント切れ
   Filament runout and motion detection sensors: フィラメント切れとモーション検出センサー
   Filament saved: フィラメントを保存しました
@@ -1235,6 +1236,7 @@ translations:
   Heater Power: ヒーター出力
   Heater connection lost: ヒーター接続が切断されました
   Heater fault: ヒーター異常
+  Heater offline: ヒーター切断
   Heater over-temperature: ヒーター過昇温
   Heater sensor fault: ヒーターセンサー異常
   HeaterSelect: ヒーターを選択
@@ -1365,7 +1367,6 @@ translations:
   Install Update: 更新をインストール
   Install plugin: プラグインをインストール
   Install script not found. Use the remote install command instead.: インストールスクリプトが見つかりません。代わりにリモートインストールコマンドを使用してください。
-  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: 印刷履歴に影響を与えずにフィラメントをリマップするには、詳細設定でHelixPrintプラグインをインストールしてください。
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': '高速
     G-code 修正を有効にするために HelixPrint プラグインをインストールしてください。プリンターで SSH 経由でこのコマンドを実行してください:'
   ? "Install the timelapse plugin via SSH,\nthen tap \"Check Again\"."
@@ -2051,6 +2052,7 @@ translations:
   Print ending...: 印刷終了中...
   Print error: 印刷エラー
   Print failed: 印刷失敗
+  Print history will show the rewritten name: ''
   Print issue detected: 印刷の問題を検出しました
   Print jobs waiting to run: 実行待ちの印刷ジョブ
   'Print preparation failed: {}': '印刷準備に失敗しました: {}'
@@ -2180,6 +2182,7 @@ translations:
   'RFCOMM connect failed: ': 'RFCOMM 接続に失敗しました: '
   RFID reader malfunction (left): RFID リーダーの異常（左）
   RFID reader malfunction (right): RFID リーダーの異常（右）
+  RFID, auto-refill, nozzle and link care: ''
   RSS: RSS
   'RSS:': 'RSS:'
   Ramming Volume: 'ラミング量'
@@ -2232,7 +2235,10 @@ translations:
   Remaining (g): 残量 (g)
   Remaining Weight (g): 残量（g）
   Remap Tool: ツールを再割当
-  Remap needs the HelixPrint plugin: リマップにはHelixPrintプラグインが必要です
+  ? Remapping rewrites the job file before printing it. This printer's Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally.
+  : ''
+  ? "Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.\n\nInstalling the plugin takes a moment and needs no restart."
+  : ''
   Remap…: リマップ…
   Remember slot spool details across an eject: 取り出し後もスロットのスプール情報を記憶します
   Remove: 削除
@@ -3233,6 +3239,7 @@ translations:
   'off': オフ
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: AFC の remember_spool がファームウェア側でスプール情報を保持しているため、このトグル設定より優先されます
   AI detection: AI 検出
+  Modifying G-code needs the HelixPrint plugin. Printing original file.: ''
   Monitor for print abnormalities (K2 Plus camera-based): 印刷異常を監視 (K2 Plus カメラベース)
   Monitor for print abnormalities (camera-based): '印刷異常を監視 (カメラベース)'
   on unit {}: 'ユニット {}'

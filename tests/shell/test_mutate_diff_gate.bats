@@ -907,6 +907,97 @@ reset_to() {
     [[ "$output" != *"SURVIVED"* ]]
 }
 
+@test "a revert its own file cannot compile is rejected without a build" {
+    # A full mutant build is a compile plus a whole-program link. -fsyntax-only
+    # on the one reverted file is seconds, and settles the commonest dead end:
+    # a hunk that removes a declaration its own file still uses. The verdict
+    # names the cheap check, so a run says which step reached it.
+    stub_tests_that_ignore
+    printf 'import sys\nsys.exit(1)\n' > "$WORK/scripts/syntax_check.py"
+
+    run mutate
+    contains "uncompilable (syntax)" "$output"
+}
+
+@test "a revert that compiles on its own still gets the real build" {
+    # The pre-check is a negative filter only: a revert can break a DIFFERENT
+    # translation unit, which nothing but the real build sees. Passing it must
+    # not short-circuit to a verdict.
+    stub_tests_that_ignore
+    printf 'import sys\nsys.exit(0)\n' > "$WORK/scripts/syntax_check.py"
+
+    run mutate
+    lacks "uncompilable (syntax)" "$output"
+    contains "SURVIVED" "$output"
+}
+
+@test "each hunk reports what the run has spent" {
+    # Per-hunk verdicts go to stdout, which a caller redirecting to a log does
+    # not watch. Without a cost on the line, a run that will take a quarter of
+    # an hour looks the same at minute two as at minute ten.
+    stub_tests_that_ignore
+    run mutate
+    contains "elapsed" "$output"
+}
+
+@test "cpp hunks are mutated before header hunks" {
+    # Reverting a header invalidates every consuming TU and usually removes a
+    # declaration its callers still use, so header hunks cost the most and
+    # judge the least. Path order would run include/ first; a run cut short
+    # there has learned nothing.
+    stub_tests_that_ignore
+    mkdir -p "$WORK/include"
+    printf 'int g(int n);\n' > "$WORK/include/feature.h"
+    git -C "$WORK" add include/feature.h
+    git -C "$WORK" commit -qm "add header"
+    BASE=$(git -C "$WORK" rev-parse HEAD)
+    printf 'int g(int n);\nint h(int n);\n' > "$WORK/include/feature.h"
+    printf 'int f(int n) {\n    return n + 3;\n}\n' > "$WORK/src/feature.cpp"
+
+    run mutate --list-only
+    [ "$status" -eq 0 ]
+    cpp_at=$(printf '%s\n' "$output" | grep -n 'src/feature.cpp' | head -1 | cut -d: -f1)
+    hdr_at=$(printf '%s\n' "$output" | grep -n 'include/feature.h' | head -1 | cut -d: -f1)
+    [ -n "$cpp_at" ]
+    [ -n "$hdr_at" ]
+    [ "$cpp_at" -lt "$hdr_at" ]
+}
+
+@test "an include-only hunk is skipped, not reported as a survivor" {
+    # An include has no behaviour to detect, and reverting one usually still
+    # compiles because the symbol arrives transitively - the one hunk shape
+    # guaranteed to cost a full build and come back SURVIVED.
+    stub_tests_that_ignore
+    reset_to 'int f(int n) {
+    return n + 1;
+}
+' '#include <cmath>
+int f(int n) {
+    return n + 1;
+}
+'
+    run mutate
+    [ "$status" -eq 0 ]
+    contains "include only" "$output"
+    [[ "$output" != *"SURVIVED"* ]]
+}
+
+@test "an include riding along with a code change is still mutated" {
+    # The skip must read the whole hunk: a real edit sharing a hunk with an
+    # include is behaviour, and skipping it would lose the only signal there.
+    stub_tests_that_ignore
+    reset_to 'int f(int n) {
+    return n + 1;
+}
+' '#include <cmath>
+int f(int n) {
+    return n + 2;
+}
+'
+    run mutate
+    [[ "$output" != *"include only"* ]]
+}
+
 @test "a whitespace-only hunk is skipped" {
     stub_tests_that_ignore
     reset_to 'int f(int n) {

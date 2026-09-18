@@ -639,6 +639,33 @@ TEST_CASE_METHOD(HardwareValidatorConfigFixture,
     REQUIRE(reported);
 }
 
+// leds/selected_strips spans every LED backend, and macro devices ("macro:NAME") and
+// WLED strips are served outside printer.objects, so neither can ever appear in
+// discovery. Only Klipper-object strips are absence-checkable; a synthetic id must not
+// be reported missing just because the Klipper object list has no row for it.
+TEST_CASE_METHOD(HardwareValidatorConfigFixture,
+                 "HardwareValidator - a macro LED strip is never reported missing",
+                 "[hardware][validator]") {
+    setup_printer_data({{"moonraker_host", "127.0.0.1"},
+                        {"moonraker_port", 7125},
+                        {"leds", {{"selected_strips", {"led chamber_light", "macro:LED"}}}},
+                        {"hardware",
+                         {{"optional", json::array()},
+                          {"expected", json::array()},
+                          {"last_snapshot", json::object()}}}});
+
+    MoonrakerClientMock client;
+    client.set_leds({"led chamber_light"});
+
+    HardwareValidator validator;
+    auto result = validator.validate(&config, client.hardware());
+
+    for (const auto& issue : result.expected_missing) {
+        INFO("unexpected missing LED: " << issue.hardware_name);
+        REQUIRE(issue.hardware_type != HardwareType::LED);
+    }
+}
+
 TEST_CASE_METHOD(HardwareValidatorConfigFixture,
                  "HardwareValidator - is_hardware_optional with empty config",
                  "[hardware][validator][config]") {

@@ -119,6 +119,15 @@ class PrinterTemperatureState {
     /// Get per-extruder target subject with lifetime token (use when creating observers)
     lv_subject_t* get_extruder_target_subject(const std::string& name, SubjectLifetime& lifetime);
 
+    lv_subject_t* get_extruder_power_subject() {
+        return &active_extruder_power_;
+    }
+    lv_subject_t* get_bed_power_subject() {
+        return &bed_power_;
+    }
+    lv_subject_t* get_chamber_power_subject() {
+        return &chamber_power_;
+    }
     lv_subject_t* get_bed_temp_subject() {
         return &bed_temp_;
     }
@@ -204,6 +213,23 @@ class PrinterTemperatureState {
         lifetime = chamber_heater_inhibited_lifetime_;
         return &chamber_heater_inhibited_;
     }
+    /// Device unreachable on its own link (0/1). 1 only on an engaged
+    /// "not connected" report — a backend with no link state leaves it 0
+    /// (unknown is not offline).
+    lv_subject_t* get_chamber_heater_externally_controlled_subject() {
+        return &chamber_heater_externally_controlled_;
+    }
+    lv_subject_t* get_chamber_heater_externally_controlled_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_heater_externally_controlled_lifetime_;
+        return &chamber_heater_externally_controlled_;
+    }
+    lv_subject_t* get_chamber_heater_offline_subject() {
+        return &chamber_heater_offline_;
+    }
+    lv_subject_t* get_chamber_heater_offline_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_heater_offline_lifetime_;
+        return &chamber_heater_offline_;
+    }
     /// Translated fault reason for the UI ("" when none) — derived from the
     /// backend's generic FaultReason kind; the raw vendor code never binds.
     lv_subject_t* get_chamber_heater_fault_reason_text_subject() {
@@ -213,13 +239,36 @@ class PrinterTemperatureState {
         lifetime = chamber_heater_fault_reason_text_lifetime_;
         return &chamber_heater_fault_reason_text_;
     }
-    /// Filter fan running state (-1 unknown, 0 off, 1 on)
+    /// Filter fan running state (-1 unknown, 0 off, 1 on) — whether the fan is
+    /// actually spinning, from the backend-reported speed when there is one,
+    /// from the pin otherwise. NOT the pin: the device also runs this fan on
+    /// its own while heating or purging.
     lv_subject_t* get_chamber_filter_fan_on_subject() {
         return &chamber_filter_fan_on_;
     }
     lv_subject_t* get_chamber_filter_fan_on_subject(SubjectLifetime& lifetime) {
         lifetime = chamber_filter_fan_on_lifetime_;
         return &chamber_filter_fan_on_;
+    }
+    /// Filter-fan pin request (-1 unknown, 0 off, 1 on) — what WE asked for
+    /// via the output_pin; the click handler inverts this, not the running
+    /// state.
+    lv_subject_t* get_chamber_filter_fan_requested_subject() {
+        return &chamber_filter_fan_requested_;
+    }
+    lv_subject_t* get_chamber_filter_fan_requested_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_filter_fan_requested_lifetime_;
+        return &chamber_filter_fan_requested_;
+    }
+    /// Filter fan is device-driven (0/1): the backend reports the device
+    /// running it on its own initiative (heater warmup, thermal purge), so a
+    /// pin request cannot stop it.
+    lv_subject_t* get_chamber_filter_fan_device_driven_subject() {
+        return &chamber_filter_fan_device_driven_;
+    }
+    lv_subject_t* get_chamber_filter_fan_device_driven_subject(SubjectLifetime& lifetime) {
+        lifetime = chamber_filter_fan_device_driven_lifetime_;
+        return &chamber_filter_fan_device_driven_;
     }
     /// Heating-element temp display string ("--" unknown; "106.2°C" nominal)
     lv_subject_t* get_chamber_heater_element_temp_text_subject() {
@@ -344,6 +393,24 @@ class PrinterTemperatureState {
     }
 
     /**
+     * @brief The Klipper object the chamber temperature is read from.
+     *
+     * A chamber heater measures its own chamber, so discovery resolves the
+     * sensor role to the heater itself and the two names agree. A sensor that
+     * names a different object is therefore a deliberate assignment, and it
+     * wins the reading while the heater goes on supplying the target. With no
+     * heater the sensor is the only reading there is. Every chamber readout
+     * and graph series resolves its source here so they cannot disagree about
+     * which probe they mean.
+     */
+    const std::string& chamber_temperature_source() const {
+        if (!chamber_sensor_name_.empty() && chamber_sensor_name_ != chamber_heater_name_) {
+            return chamber_sensor_name_;
+        }
+        return chamber_heater_name_;
+    }
+
+    /**
      * @brief Get the status object carrying chamber-heater diagnostics ("" = none)
      */
     const std::string& chamber_diagnostics_object() const {
@@ -407,6 +474,12 @@ class PrinterTemperatureState {
     lv_subject_t active_extruder_target_{};
     lv_subject_t bed_temp_{};
     lv_subject_t bed_target_{};
+    // Duty cycle in whole percent, -1 until a heater reports one. Klipper sends
+    // 0.0-1.0 on a heater object; a temperature_fan reports a speed instead and
+    // never publishes power, so -1 is a lasting state, not just a startup one.
+    lv_subject_t active_extruder_power_{};
+    lv_subject_t bed_power_{};
+    lv_subject_t chamber_power_{};
     SubjectLifetime bed_temp_lifetime_;
     SubjectLifetime bed_target_lifetime_;
     // XML display subjects: chamber_effective_target + chamber_mode are THE canonical
@@ -428,10 +501,14 @@ class PrinterTemperatureState {
 
     // Chamber-heater diagnostics (backend-provided, issue #1290). Absent
     // objects in a delta status frame = no news: subjects keep last values.
-    lv_subject_t chamber_heater_fault_{};             ///< XML: 0/1
-    lv_subject_t chamber_heater_inhibited_{};         ///< XML: 0/1
-    lv_subject_t chamber_heater_fault_reason_text_{}; ///< XML: translated reason, "" when none
-    lv_subject_t chamber_filter_fan_on_{};            ///< XML: -1 unknown / 0 / 1
+    lv_subject_t chamber_heater_fault_{};                 ///< XML: 0/1
+    lv_subject_t chamber_heater_inhibited_{};             ///< XML: 0/1
+    lv_subject_t chamber_heater_externally_controlled_{}; ///< XML: 0/1
+    lv_subject_t chamber_heater_offline_{};               ///< XML: 0/1
+    lv_subject_t chamber_heater_fault_reason_text_{};     ///< XML: translated reason, "" when none
+    lv_subject_t chamber_filter_fan_on_{};                ///< XML: -1 unknown / 0 / 1 (fan RUNNING)
+    lv_subject_t chamber_filter_fan_requested_{};     ///< XML: -1 unknown / 0 / 1 (our pin request)
+    lv_subject_t chamber_filter_fan_device_driven_{}; ///< XML: 0/1 (device runs the fan itself)
     lv_subject_t chamber_heater_element_temp_text_{}; ///< XML: display string ("--"/"106.2°C")
     lv_subject_t chamber_filter_fan_percent_text_{};  ///< XML: display string ("--"/"100%")
     lv_subject_t chamber_filter_fan_on_text_{};       ///< XML: translated toggle label
@@ -443,8 +520,24 @@ class PrinterTemperatureState {
     char chamber_filter_fan_icon_buf_[16] = {};
     SubjectLifetime chamber_heater_fault_lifetime_;
     SubjectLifetime chamber_heater_inhibited_lifetime_;
+    /// The appliance drops a poll periodically and recovers within a frame or
+    /// two, so asserting offline on the first connected:false flashes an alarm
+    /// for a couple of seconds several times an hour. Offline is asserted only
+    /// after this many consecutive reports; any connected report clears the
+    /// run. Measured flap lengths on a U1 over an hour were 1, 1 and 2 polls
+    /// about twenty minutes apart, so the bar sits clear of the longest seen
+    /// rather than one sample above it. At the module's 2s poll this notices a
+    /// real outage in about eight seconds, which costs nothing: an appliance
+    /// that has actually gone is gone for minutes.
+    static constexpr int CHAMBER_OFFLINE_CONSECUTIVE_REPORTS = 4;
+    int chamber_offline_run_ = 0;
+
+    SubjectLifetime chamber_heater_externally_controlled_lifetime_;
+    SubjectLifetime chamber_heater_offline_lifetime_;
     SubjectLifetime chamber_heater_fault_reason_text_lifetime_;
     SubjectLifetime chamber_filter_fan_on_lifetime_;
+    SubjectLifetime chamber_filter_fan_requested_lifetime_;
+    SubjectLifetime chamber_filter_fan_device_driven_lifetime_;
     SubjectLifetime chamber_heater_element_temp_text_lifetime_;
     SubjectLifetime chamber_filter_fan_percent_text_lifetime_;
     SubjectLifetime chamber_filter_fan_on_text_lifetime_;
@@ -472,6 +565,7 @@ class PrinterTemperatureState {
     std::string chamber_backend_id_;         ///< Matched backend id, "" = none/generic
     std::string chamber_diagnostics_object_; ///< Status object with diagnostics, "" = none
     std::string chamber_filter_fan_pin_;     ///< Binary filter fan output_pin, "" = none
+    int chamber_filter_fan_percent_ = -1;    ///< Last backend-reported fan speed, -1 = none yet
 };
 
 } // namespace helix

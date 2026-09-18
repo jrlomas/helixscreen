@@ -859,8 +859,13 @@ static constexpr uint64_t DOWNLOAD_SPACE_DEFAULT_BYTES = 120ULL * 1024 * 1024;
 // the path. get_download_path() always returns the legacy tar.gz name for
 // back-compat with external callers; do_download() rewrites the path when
 // the URL is a .zip (see below).
-static const char* const DOWNLOAD_FILENAME = "helixscreen-update.tar.gz";
-static const char* const DOWNLOAD_FILENAME_ZIP = "helixscreen-update.zip";
+// Dot-prefixed so the whole derived family — .zip twin, .validate and
+// .installer scratch dirs, .install.log fallback — lands hidden wherever the
+// free-space search puts it. On boards whose gcodes root IS the data partition
+// (the AD5M symlinks /data whole into it) a plainly named archive shows up in
+// the user's print-file picker for the whole update.
+static const char* const DOWNLOAD_FILENAME = ".helixscreen-update.tar.gz";
+static const char* const DOWNLOAD_FILENAME_ZIP = ".helixscreen-update.zip";
 
 uint64_t UpdateChecker::required_download_space_bytes(uint64_t download_bytes) {
     // 20% headroom over the wire size + a small fixed buffer for the .partial
@@ -872,6 +877,10 @@ uint64_t UpdateChecker::required_download_space_bytes(uint64_t download_bytes) {
     }
     uint64_t need = (download_bytes * 6 / 5) + FIXED_BUFFER;
     return need < DOWNLOAD_SPACE_FLOOR_BYTES ? DOWNLOAD_SPACE_FLOOR_BYTES : need;
+}
+
+std::string UpdateChecker::download_filename_for_url(const std::string& url) {
+    return path_is_zip(url) ? DOWNLOAD_FILENAME_ZIP : DOWNLOAD_FILENAME;
 }
 
 namespace {

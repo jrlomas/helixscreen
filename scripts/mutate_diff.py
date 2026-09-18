@@ -140,6 +140,7 @@ import argparse
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -501,16 +502,17 @@ def code_only_lines(text, syntax='c'):
     return out
 
 
-def hunk_is_comment_only(root, base, h, cache):
-    """True when reverting this hunk could not change behaviour.
+HEADER_SUFFIXES = ('.h', '.hpp', '.hh', '.hxx', '.inc')
 
-    Every +/- line is compared with its comments stripped; if the code that
-    remains is identical, the hunk moved only comments or whitespace. Building
-    such a mutant costs a compile and a whole-program link to prove something no
-    test could ever detect, so it is skipped rather than reported as a survivor.
 
-    Any surprise -- unreadable pre-image, a hunk body that does not line up with
-    the files -- returns False, and the hunk gets mutated as usual.
+def hunk_changed_code_lines(root, base, h, cache):
+    """(removed, added) code lines for a hunk, comments stripped, or False.
+
+    Both cheap-skip predicates below ask the same question of a hunk and differ
+    only in what they conclude, so the diff is walked once here. False means the
+    walk hit a surprise -- unreadable pre-image, a body that does not line up
+    with the files -- and the caller must mutate the hunk as usual rather than
+    guess from a partial read.
     """
     path = h['file']
     syntax = comment_syntax(path)
@@ -553,7 +555,41 @@ def hunk_is_comment_only(root, base, h, cache):
     except IndexError:
         return False
     keep = lambda xs: [t for t in (x.strip() for x in xs) if t]
-    return keep(removed) == keep(added)
+    return keep(removed), keep(added)
+
+
+def hunk_is_comment_only(root, base, h, cache):
+    """True when reverting this hunk could not change behaviour.
+
+    The code that survives comment-stripping is identical on both sides, so the
+    hunk moved only comments or whitespace. Building such a mutant costs a
+    compile and a whole-program link to prove something no test could ever
+    detect, so it is skipped rather than reported as a survivor.
+    """
+    sides_ = hunk_changed_code_lines(root, base, h, cache)
+    if not sides_:
+        return False
+    removed, added = sides_
+    return removed == added
+
+
+def hunk_is_include_only(root, base, h, cache):
+    """True when a hunk only adds or removes #include lines.
+
+    An include has no behaviour to detect, and reverting one usually still
+    compiles because the symbol arrives transitively. That combination makes it
+    the one hunk shape guaranteed to cost a full build and come back SURVIVED,
+    which reads as real debt in the tally. It is the same argument the
+    comment-only skip above makes, applied to the other zero-behaviour edit.
+    """
+    sides_ = hunk_changed_code_lines(root, base, h, cache)
+    if not sides_:
+        return False
+    removed, added = sides_
+    changed = [ln for ln in removed + added if ln not in removed or ln not in added]
+    if not changed:
+        return False
+    return all(ln.lstrip().startswith('#include') for ln in changed)
 
 
 def apply_reverse(root, patch_text):
@@ -628,6 +664,26 @@ def build(root, jobs, log):
     r = run(['make', f'-j{jobs}', 'test-build'], cwd=root)
     log.write(r.stdout or '')
     return r.returncode == 0, time.time() - t
+
+
+def syntax_rejects(root, path, log):
+    """True when the reverted file does not even compile on its own.
+
+    A full mutant build is a compile plus a whole-program link; -fsyntax-only on
+    the one file is seconds, and a hunk that removes a declaration its own file
+    still uses is rejected there. It is a negative filter only: passing says
+    nothing, because a revert can break a DIFFERENT translation unit, which only
+    the real build sees. Headers are skipped for that reason -- reverting one
+    breaks its consumers, not itself, so the check would always pass.
+    """
+    if path.endswith(HEADER_SUFFIXES):
+        return False
+    checker = root / 'scripts' / 'syntax_check.py'
+    if not checker.exists():
+        return False
+    r = run([sys.executable, str(checker), path], cwd=root)
+    log.write(r.stdout or '')
+    return r.returncode != 0
 
 
 def run_catch2(root, test_bin, filt, shards, log):
@@ -989,13 +1045,25 @@ def main():
     # A comment-only hunk costs a compile plus a 5 GB link to produce a mutant
     # no test could possibly detect, then lands in the tally as a survivor and
     # reads as real debt. Drop it before it costs anything.
-    skipped_comment = []
+    skipped_comment, skipped_include = [], []
     if not args.no_skip_comments:
         code_cache = {}
         for h in list(mutable):
             if hunk_is_comment_only(root, base, h, code_cache):
                 skipped_comment.append(f"{h['file']}:{h['line']}")
                 mutable.remove(h)
+            elif hunk_is_include_only(root, base, h, code_cache):
+                skipped_include.append(f"{h['file']}:{h['line']}")
+                mutable.remove(h)
+
+    # Reverting a header invalidates every consuming translation unit, so it
+    # costs a near-whole rebuild; and it usually removes a declaration whose
+    # callers remain, so it comes back uncompilable and judges nothing. That
+    # makes header hunks both the most expensive and the least informative, and
+    # path order happens to run them first. Cheap and conclusive first, so a run
+    # that is cut short -- by --limit, or by someone's patience -- has still
+    # answered something.
+    mutable.sort(key=lambda h: (h['file'].endswith(HEADER_SUFFIXES), h['file'], h['line']))
 
     # --only and --limit are deliberate narrowings, but a narrowed run still did
     # not examine the whole change, so what they set aside is counted too.
@@ -1035,6 +1103,8 @@ def main():
         print(f'  EXCLUDED    {label} - {reason}')
     for label in skipped_comment:
         print(f'  SKIPPED     {label} - comment/whitespace only')
+    for label in skipped_include:
+        print(f'  SKIPPED     {label} - include only, nothing to detect')
     for path, n, reason in inert:
         print(f'  not behavioural  {path} - {reason}')
     for path, n, reason in uncovered:
@@ -1115,6 +1185,14 @@ def main():
     print('  baseline established\n')
 
     results, judged_by = [], set()
+    # A run that is killed mid-hunk must not leave the reverted hunk behind.
+    # The restore below lives in a finally, which an uncaught SIGTERM walks
+    # straight past, stranding the tree in a state that reads as half-applied
+    # work. Turning the signal into SystemExit unwinds through that finally.
+    for _sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(_sig, lambda s_, _f: sys.exit(128 + s_))
+
+    started = time.time()
     for n, h in enumerate(mutable, 1):
         strategy = verdict_of[h['file']][1]
         plan = STRATEGIES[strategy]
@@ -1134,7 +1212,9 @@ def main():
                 # binary IS, can be measured against the wrong one.
                 fingerprinted = plan['build'] and 'catch2' in plan['suites']
                 rebuilt = True
-                if plan['build']:
+                if plan['build'] and syntax_rejects(root, h['file'], log):
+                    verdict, note = 'uncompilable', 'syntax'
+                elif plan['build']:
                     was = binary_fingerprint(suites.catch2_bin)
                     built, secs = build(root, args.jobs, log)
                     if not built:
@@ -1151,7 +1231,10 @@ def main():
             finally:
                 restore_file(root, h['file'], original)
         verify_pristine(root, pristine, f'after restoring {label}')
-        print(verdict_line(verdict, note))
+        spent = time.time() - started
+        left = (spent / n) * (len(mutable) - n)
+        eta = f', ~{left / 60:.0f}m left' if n < len(mutable) and left >= 60 else ''
+        print(f'{verdict_line(verdict, note)}  [{spent / 60:.0f}m elapsed{eta}]')
         results.append((label, verdict, note))
 
     # Leave the tree as found, with a rebuilt baseline binary so the next

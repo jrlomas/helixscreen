@@ -207,6 +207,51 @@ HELIX_MOCK_AUTO_PRINT=1 HELIX_MOCK_EXCLUDE_OBJECTS=9 \
 
 Confirm via the log: `Published <n> synthetic exclude_object entries`.
 
+### `HELIX_MOCK_HELIX_PLUGIN`
+
+Report the HelixPrint Moonraker plugin as installed.
+
+| Property | Value |
+|----------|-------|
+| Values | `1` = installed, anything else = absent |
+| Default | absent |
+| Affects | `server.helix.status`, and every surface gated on it |
+
+Absent is the default because it is the state a fresh printer is in, and it is
+what shows the Advanced panel's **Install HelixPrint Plugin** row. Set it to `1`
+to get the **Uninstall** row instead.
+
+The mock answers the absent case with a JSON-RPC error, which is what Moonraker
+does for an endpoint it has no component for. That distinction is the point: a
+method the mock leaves unregistered invokes NEITHER callback, so the plugin
+subject stays at its `-1` unknown and every surface gated on it is unreachable
+in a mock run, including the pre-print options and the G-code rewrite remap.
+
+```bash
+./build/bin/helix-screen --test -vv                          # Install row
+HELIX_MOCK_HELIX_PLUGIN=1 ./build/bin/helix-screen --test -vv # Uninstall row
+```
+
+### `HELIX_MOCK_MOONRAKER_VERSION`
+
+Override the Moonraker version the mock reports in `server.info`.
+
+| Property | Value |
+|----------|-------|
+| Values | any version string, e.g. `v0.8.0` |
+| Default | `v0.9.3-mock` |
+| Affects | `server.info` -> `moonraker_version`, Settings -> About, and the startup too-old warning |
+
+The default is deliberately above `Application::MIN_MOONRAKER_VERSION` so no
+`--test` run trips the warning. Set an older version to reach the warning, which
+is otherwise unreachable in mock:
+
+```bash
+HELIX_MOCK_MOONRAKER_VERSION=v0.8.0 ./build/bin/helix-screen --test -vv
+```
+
+Confirm via the log: `Moonraker v0.8.0 is older than 0.9.0`.
+
 ### `HELIX_MOCK_AMS`
 
 Select the mock AMS topology/type.
@@ -646,6 +691,54 @@ Latch a fault into every synthesized dragonbreath status frame — the diagnosti
 # Faulted dragonbreath chamber heater
 HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbreath_filter" \
   HELIX_MOCK_DRAGONBREATH_FAULT=1 ./build/bin/helix-screen --test -vv
+```
+
+### `HELIX_MOCK_DRAGONBREATH_OFFLINE`
+
+Drop the appliance off its radio link: every synthesized dragonbreath status frame reports `connected: false` instead of `true`, so the diagnostics card banners the offline state and hides its Reset button. A real link drop is brief and unpredictable (the U1 rig flaps for one or two polls roughly every 20 minutes), so this hook is how the sustained-outage path gets exercised on demand.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Exactly `1` |
+| **Default** | Unset — nominal frame (`connected: true`) |
+| **File** | `src/api/moonraker_client_mock.cpp` |
+
+```bash
+# Chamber heater that dropped off WiFi
+HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbreath_filter" \
+  HELIX_MOCK_DRAGONBREATH_OFFLINE=1 ./build/bin/helix-screen --test -vv
+```
+
+### `HELIX_MOCK_PANDA_BREATH_AUTO`
+
+Put the stock Panda Breath into its own auto cycle: the status frame reports `work_mode: 1`, `work_on: true`, `auto_enabled: true` and a `device_target` of its own while our `target` stays 0. This is the state the appliance sits in at rest, and the only one that raises the diagnostics card's External badge.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Exactly `1` |
+| **Default** | Unset — the appliance idles with `work_on: false` |
+| **File** | `src/api/moonraker_client_mock.cpp` |
+
+```bash
+# Stock Panda Breath holding its own auto target
+HELIX_MOCK_OBJECTS="heater_generic panda_breath panda_breath" \
+  HELIX_MOCK_PANDA_BREATH_AUTO=1 ./build/bin/helix-screen --test -vv
+```
+
+### `HELIX_MOCK_PANDA_BREATH_OFFLINE`
+
+The stock counterpart to `HELIX_MOCK_DRAGONBREATH_OFFLINE`: every synthesized `panda_breath` frame reports `connected: false` while the heater section keeps answering, which is exactly what a dropped WebSocket looks like from Klipper.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Exactly `1` |
+| **Default** | Unset — nominal frame (`connected: true`) |
+| **File** | `src/api/moonraker_client_mock.cpp` |
+
+```bash
+# Stock Panda Breath that dropped off WiFi
+HELIX_MOCK_OBJECTS="heater_generic panda_breath panda_breath" \
+  HELIX_MOCK_PANDA_BREATH_OFFLINE=1 ./build/bin/helix-screen --test -vv
 ```
 
 ### `HELIX_MOCK_KALICO`

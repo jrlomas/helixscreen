@@ -116,9 +116,14 @@ static const HelpEntry HELP[] = {
      "array, plus hidden/clickable/scrollable flags. Descends a composite\n"
      "row to its control, matching what click/set_value act on. A hidden\n"
      "widget still resolves — assert bind_flag_if contracts here."},
-    {nullptr, "click <target>", "Click (toggles switches/checkboxes)",
-     "On a composite row, descends to the control inside it."},
-    {nullptr, "set_value <target> <v>", "Set value (slider, switch, dropdown, textarea)", nullptr},
+    {nullptr, "click <target> [--force]", "Click (toggles switches/checkboxes)",
+     "On a composite row, descends to the control inside it. Refuses a target a\n"
+     "real tap could not reach - hidden, not clickable, or disabled - because a\n"
+     "synthetic CLICKED lands on anything and reports success either way.\n"
+     "--force sends it regardless and reports what was bypassed."},
+    {nullptr, "set_value <target> <v> [--force]", "Set value (slider, switch, dropdown, textarea)",
+     "Refuses a disabled control, which the user could not have changed.\n"
+     "--force sets it anyway."},
     {nullptr, "scroll <target> [dx dy]", "Scroll into view, or by a delta", nullptr},
     {nullptr, "focus <target>", "Focus a widget through its input group",
      "Raises the on-screen keyboard for a textarea (click does not)."},
@@ -607,7 +612,13 @@ static nlohmann::json build_request_from_tokens(const std::vector<std::string>& 
             fprintf(stderr, "Error: click requires a widget name or @path\n");
             return {};
         }
-        return build_request("click", target_param(tokens[1]));
+        nlohmann::json params = target_param(tokens[1]);
+        for (size_t i = 2; i < tokens.size(); ++i) {
+            if (tokens[i] == "--force") {
+                params["force"] = true;
+            }
+        }
+        return build_request("click", params);
     } else if (cmd == "focus") {
         if (tokens.size() < 2) {
             fprintf(stderr, "Error: focus requires a widget name or @path\n");
@@ -652,6 +663,11 @@ static nlohmann::json build_request_from_tokens(const std::vector<std::string>& 
         }
         nlohmann::json p = target_param(tokens[1]);
         p["value"] = parse_value(tokens[2]);
+        for (size_t i = 3; i < tokens.size(); ++i) {
+            if (tokens[i] == "--force") {
+                p["force"] = true;
+            }
+        }
         return build_request("set_widget_value", p);
     } else if (cmd == "scenario") {
         if (tokens.size() < 2) {

@@ -55,11 +55,14 @@ class PrintPreparationManagerTestAccess {
     }
 };
 
+#include "ui_filename_utils.h"
+
 #include "../mocks/mock_websocket_server.h"
 #include "../test_helpers/preprint_config_scope.h"
 #include "../ui_test_utils.h"
 #include "app_globals.h"
 #include "capability_matrix.h"
+#include "gcode_file_modifier.h"
 #include "gcode_ops_detector.h"
 #include "hv/EventLoopThread.h"
 #include "moonraker_api.h"
@@ -78,6 +81,8 @@ class PrintPreparationManagerTestAccess {
 
 #include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -171,18 +176,48 @@ TEST_CASE("PrintPreparationManager: clear_scan_cache", "[print_preparation][gcod
 // Tests: Resource Safety
 // ============================================================================
 
-TEST_CASE("PrintPreparationManager: check_modification_capability", "[print_preparation][safety]") {
-    PrintPreparationManager manager;
-    // No API set - tests fallback behavior
+TEST_CASE_METHOD(HelixTestFixture, "PrintPreparationManager: can_modify_gcode",
+                 "[print_preparation][safety]") {
+    lv_init_safe();
+    PrinterState& printer_state = get_printer_state();
+    PrinterStateTestAccess::reset(printer_state);
+    printer_state.init_subjects(false);
 
-    SECTION("Without API, checks disk space fallback") {
-        auto capability = manager.check_modification_capability();
-        // Without API, has_plugin is false
-        REQUIRE(capability.has_plugin == false);
-        // Should still check disk space
-        // (can_modify depends on system - just verify it returns valid struct)
-        REQUIRE((capability.can_modify ||
-                 !capability.can_modify)); // Always true, just checking no crash
+    PrintPreparationManager manager;
+
+    SECTION("no printer state at all declines rather than dereferences") {
+        CHECK_FALSE(manager.can_modify_gcode());
+    }
+
+    SECTION("the plugin is the whole answer") {
+        manager.set_dependencies(nullptr, &printer_state);
+
+        // Unknown must not read as permission: the probe answers after first
+        // paint, and a rewrite sent before it lands cannot be un-filed from
+        // history afterwards.
+        CHECK_FALSE(manager.can_modify_gcode());
+
+        printer_state.set_helix_plugin_installed(false);
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK_FALSE(manager.can_modify_gcode());
+
+        printer_state.set_helix_plugin_installed(true);
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK(manager.can_modify_gcode());
+    }
+
+    SECTION("file size does not enter into it") {
+        // The rewrite streams a line at a time, so the answer cannot depend on
+        // how big the file is. A size rule here is what the retired
+        // ModificationCapability struct still claimed to enforce.
+        manager.set_dependencies(nullptr, &printer_state);
+        printer_state.set_helix_plugin_installed(true);
+        helix::ui::UpdateQueue::instance().drain();
+
+        manager.set_cached_file_size(10ULL * 1024 * 1024);
+        CHECK(manager.can_modify_gcode());
+        manager.set_cached_file_size(1000ULL * 1024 * 1024 * 1024);
+        CHECK(manager.can_modify_gcode());
     }
 }
 
@@ -196,42 +231,6 @@ TEST_CASE("PrintPreparationManager: get_temp_directory", "[print_preparation][sa
         INFO("Temp directory: " << temp_dir);
         // Just verify it doesn't crash and returns something reasonable
         REQUIRE(temp_dir.find("helix") != std::string::npos);
-    }
-}
-
-TEST_CASE("PrintPreparationManager: set_cached_file_size", "[print_preparation][safety]") {
-    PrintPreparationManager manager;
-
-    SECTION("Setting file size affects modification capability calculation") {
-        // Set a reasonable file size
-        manager.set_cached_file_size(10 * 1024 * 1024); // 10MB
-
-        auto capability = manager.check_modification_capability();
-
-        // If temp directory isn't available, required_bytes will be 0 (early return)
-        // This can happen in CI environments or sandboxed test runners
-        if (capability.has_disk_space) {
-            // Disk space check succeeded - verify required_bytes accounts for file size
-            REQUIRE(capability.required_bytes > 10 * 1024 * 1024);
-        } else {
-            // Temp directory unavailable - verify we get a sensible response
-            INFO("Temp directory unavailable: " << capability.reason);
-            REQUIRE(capability.can_modify == false);
-            REQUIRE(capability.has_plugin == false);
-        }
-    }
-
-    SECTION("Very large file size may exceed available space") {
-        // Set an extremely large file size
-        manager.set_cached_file_size(1000ULL * 1024 * 1024 * 1024); // 1TB
-
-        auto capability = manager.check_modification_capability();
-        // Should report insufficient space for such a large file
-        // (unless running on a system with 2TB+ free space)
-        INFO("can_modify: " << capability.can_modify);
-        INFO("reason: " << capability.reason);
-        // Just verify it handles large values without overflow/crash
-        REQUIRE((capability.can_modify || !capability.can_modify));
     }
 }
 
@@ -3309,6 +3308,252 @@ TEST_CASE_METHOD(HelixTestFixture,
     REQUIRE_FALSE(state.has_preparing_job());
     REQUIRE(lv_subject_get_int(state.get_print_in_progress_subject()) == 0);
     REQUIRE(state.last_preparing_exit() == helix::PreparingExit::Failed);
+}
+
+// ============================================================================
+// modify_and_print_with_remap(): download -> rewrite -> upload -> plugin start
+//
+// Every hop is asynchronous through the UpdateQueue, and each deferred stage
+// enqueues the next one, so a single drain() only advances the chain by one
+// step. The helpers below drive it to quiescence and read back what the mocks
+// were asked to do.
+// ============================================================================
+
+namespace {
+
+/// Run queued callbacks until nothing new is enqueued. Each drain() swaps out
+/// one batch, and these stages enqueue their successor from inside a batch.
+void drain_until_quiet() {
+    for (int i = 0; i < 16; ++i) {
+        UpdateQueue::instance().drain();
+    }
+}
+
+/// Number of lines equal to @p want once any trailing CR is stripped.
+size_t count_exact_lines(const std::string& content, const std::string& want) {
+    size_t n = 0;
+    std::istringstream in(content);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line == want) {
+            ++n;
+        }
+    }
+    return n;
+}
+
+std::string read_whole_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+/// The four-colour U1 fixture the file-transfer mock resolves by basename.
+constexpr const char* kRemapFixture = "u1_4color_ring.gcode";
+
+} // namespace
+
+TEST_CASE_METHOD(HelixTestFixture,
+                 "PrintPreparationManager: a remap uploads the rewritten bytes and starts the "
+                 "print under the original name",
+                 "[print_preparation][remap]") {
+    lv_init_safe();
+    // The success path stamps the identity override on the GLOBAL state so the
+    // status panel shows the original name rather than the temp copy's.
+    PrinterStateTestAccess::reset(get_printer_state());
+    get_printer_state().init_subjects(false);
+
+    MoonrakerClientMock mock_client(MoonrakerClientMock::PrinterType::VORON_24);
+    PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(mock_client, state);
+
+    PrintPreparationManager manager;
+    manager.set_dependencies(&api, &state);
+    state.begin_preparing(PrintJobRef{kRemapFixture, "gcodes", ""});
+
+    const std::string original =
+        read_whole_file("assets/test_gcodes/" + std::string(kRemapFixture));
+    REQUIRE_FALSE(original.empty());
+    REQUIRE(count_exact_lines(original, "T1") == 11);
+    REQUIRE(count_exact_lines(original, "T2") == 5);
+
+    manager.modify_and_print_with_remap(kRemapFixture, {{1, 2}}, nullptr);
+    drain_until_quiet();
+
+    // The rewritten bytes are what left the machine, not the original.
+    const auto& uploads = api.transfers_mock().path_uploads();
+    REQUIRE(uploads.size() == 1);
+    REQUIRE(uploads[0].root == "gcodes");
+    CHECK(uploads[0].content != original);
+    CHECK(count_exact_lines(uploads[0].content, "T1") == 0);
+    CHECK(count_exact_lines(uploads[0].content, "T2") == 16);
+
+    // The staged path is the one shape the consumer helpers recognise, and it
+    // still resolves back to the user's filename.
+    CHECK(gcode::is_uploaded_rewrite_path(uploads[0].dest_path));
+    CHECK(gcode::resolve_gcode_filename(uploads[0].dest_path) == kRemapFixture);
+
+    // History is keyed on the ORIGINAL name; the temp copy is only what runs.
+    const auto& starts = api.job_mock().modified_prints();
+    REQUIRE(starts.size() == 1);
+    CHECK(starts[0].original_filename == kRemapFixture);
+    CHECK(starts[0].temp_file_path == uploads[0].dest_path);
+    CHECK(starts[0].modifications == std::vector<std::string>{"remap_T1_to_T2"});
+
+    // Neither local copy outlives the flow.
+    const auto& downloads = api.transfers_mock().download_destinations();
+    REQUIRE(downloads.size() == 1);
+    CHECK_FALSE(std::filesystem::exists(downloads[0]));
+    CHECK_FALSE(std::filesystem::exists(uploads[0].local_path));
+}
+
+TEST_CASE_METHOD(HelixTestFixture,
+                 "PrintPreparationManager: a remap that changes nothing prints the original",
+                 "[print_preparation][remap]") {
+    lv_init_safe();
+    MoonrakerClientMock mock_client(MoonrakerClientMock::PrinterType::VORON_24);
+    PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(mock_client, state);
+
+    PrintPreparationManager manager;
+    manager.set_dependencies(&api, &state);
+    state.begin_preparing(PrintJobRef{kRemapFixture, "gcodes", ""});
+
+    // The fixture uses T0-T3, so remapping T7 rewrites no line at all.
+    manager.modify_and_print_with_remap(kRemapFixture, {{7, 8}}, nullptr);
+    drain_until_quiet();
+
+    CHECK(api.transfers_mock().path_uploads().empty());
+    CHECK(api.job_mock().modified_prints().empty());
+    REQUIRE(api.job_mock().started_prints().size() == 1);
+    CHECK(api.job_mock().started_prints()[0] == kRemapFixture);
+
+    // Both local copies are gone even though neither was uploaded.
+    const auto& downloads = api.transfers_mock().download_destinations();
+    REQUIRE(downloads.size() == 1);
+    CHECK_FALSE(std::filesystem::exists(downloads[0]));
+}
+
+TEST_CASE_METHOD(HelixTestFixture,
+                 "PrintPreparationManager: the remap download lands where the sweeper reaps it",
+                 "[print_preparation][remap]") {
+    // A crash between the download and its delete leaves a full copy of the job
+    // behind. GCodeFileModifier::cleanup_temp_files() is the only sweeper, and
+    // it matches on the mod_ prefix inside the gcode_mod cache, so the download
+    // has to be named into that shape or nothing ever collects it.
+    lv_init_safe();
+    MoonrakerClientMock mock_client(MoonrakerClientMock::PrinterType::VORON_24);
+    PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(mock_client, state);
+
+    PrintPreparationManager manager;
+    manager.set_dependencies(&api, &state);
+    state.begin_preparing(PrintJobRef{kRemapFixture, "gcodes", ""});
+
+    manager.modify_and_print_with_remap(kRemapFixture, {{1, 2}}, nullptr);
+    drain_until_quiet();
+
+    const auto& downloads = api.transfers_mock().download_destinations();
+    REQUIRE(downloads.size() == 1);
+
+    // Model the leak: put a file back at the download's path and age it past
+    // the sweeper's cutoff, so only this file is eligible and a concurrently
+    // running shard's fresh temp files are not.
+    {
+        std::ofstream leaked(downloads[0], std::ios::binary);
+        leaked << "G28\n";
+    }
+    REQUIRE(std::filesystem::exists(downloads[0]));
+    std::filesystem::last_write_time(downloads[0], std::filesystem::file_time_type::clock::now() -
+                                                       std::chrono::hours(2));
+
+    gcode::GCodeFileModifier::cleanup_temp_files(3600);
+
+    CHECK_FALSE(std::filesystem::exists(downloads[0]));
+}
+
+TEST_CASE_METHOD(HelixTestFixture,
+                 "PrintPreparationManager: every remap failure retires the preparing job",
+                 "[print_preparation][remap][preparing]") {
+    lv_init_safe();
+    MoonrakerClientMock mock_client(MoonrakerClientMock::PrinterType::VORON_24);
+    PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(mock_client, state);
+
+    PrintPreparationManager manager;
+
+    // Every exit owes the same thing: the job retired Failed and the machine
+    // released. Asserted per section rather than after them, so a section that
+    // aborts cannot leave the check running against a case that armed nothing.
+    auto expect_job_retired = [&state]() {
+        REQUIRE_FALSE(state.has_preparing_job());
+        CHECK(lv_subject_get_int(state.get_print_in_progress_subject()) == 0);
+        CHECK(state.last_preparing_exit() == PreparingExit::Failed);
+        CHECK(lv_subject_get_int(state.get_job_holds_machine_subject()) == 0);
+    };
+
+    SECTION("no API") {
+        manager.set_dependencies(nullptr, &state);
+        state.begin_preparing(PrintJobRef{kRemapFixture, "gcodes", ""});
+        REQUIRE(state.has_preparing_job());
+
+        manager.modify_and_print_with_remap(kRemapFixture, {{1, 2}}, nullptr);
+        drain_until_quiet();
+        expect_job_retired();
+    }
+
+    SECTION("download fails") {
+        manager.set_dependencies(&api, &state);
+        state.begin_preparing(PrintJobRef{"no_such_file.gcode", "gcodes", ""});
+        REQUIRE(state.has_preparing_job());
+
+        // Nothing under assets/test_gcodes/ resolves this, so the mock errors.
+        manager.modify_and_print_with_remap("no_such_file.gcode", {{1, 2}}, nullptr);
+        drain_until_quiet();
+
+        CHECK(api.transfers_mock().path_uploads().empty());
+        expect_job_retired();
+    }
+
+    SECTION("upload fails") {
+        manager.set_dependencies(&api, &state);
+        api.transfers_mock().mock_fail_path_uploads();
+        state.begin_preparing(PrintJobRef{kRemapFixture, "gcodes", ""});
+        REQUIRE(state.has_preparing_job());
+
+        manager.modify_and_print_with_remap(kRemapFixture, {{1, 2}}, nullptr);
+        drain_until_quiet();
+
+        REQUIRE(api.transfers_mock().path_uploads().size() == 1);
+        CHECK(api.job_mock().modified_prints().empty());
+        // The rewritten copy is not left behind by the failure exit either.
+        CHECK_FALSE(std::filesystem::exists(api.transfers_mock().path_uploads()[0].local_path));
+        expect_job_retired();
+    }
+
+    SECTION("plugin refuses the modified print") {
+        manager.set_dependencies(&api, &state);
+        api.job_mock().mock_fail_modified_prints();
+        state.begin_preparing(PrintJobRef{kRemapFixture, "gcodes", ""});
+        REQUIRE(state.has_preparing_job());
+
+        manager.modify_and_print_with_remap(kRemapFixture, {{1, 2}}, nullptr);
+        drain_until_quiet();
+
+        REQUIRE(api.job_mock().modified_prints().size() == 1);
+        // The staged copy is already on the printer, so it has to be reclaimed.
+        REQUIRE(api.transfers_mock().path_uploads().size() == 1);
+        const auto& deleted = api.files_mock().deleted_files();
+        REQUIRE(deleted.size() == 1);
+        CHECK(deleted[0] == "gcodes/" + api.transfers_mock().path_uploads()[0].dest_path);
+        expect_job_retired();
+    }
 }
 
 // ============================================================================

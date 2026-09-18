@@ -450,8 +450,6 @@ translations:
     временная директория недоступна'
   'Cannot modify G-code: scan result not available': 'Невозможно изменить G-code:
     результат сканирования недоступен'
-  'Cannot modify G-code: {}. Printing original file.': 'Невозможно изменить G-code:
-    {}. Печать оригинального файла.'
   Cannot perform this action now: Сейчас это действие выполнить нельзя
   'Cannot remap G-code: no temp directory available': 'Не удалось переназначить G-code:
     нет доступной временной директории'
@@ -846,6 +844,7 @@ translations:
   Documentation: Документация
   Don't Save: Не сохранять
   Don't ask again: Больше не спрашивать
+  Don't show again: ''
   Done: Готово
   Download update?: Загрузить обновление?
   Download v{}?: Загрузить v{}?
@@ -1194,6 +1193,7 @@ translations:
   Filament ran out. Auto-refill is off, so the CFS will not switch spools on its own. Load filament, then resume.: 'Филамент закончился. Автопополнение выключено, поэтому CFS не сменит катушку сам. Загрузите филамент и продолжите печать.'
   Filament ran out. The CFS knows which spools match, but those slots are empty. Load one of them, then resume.: Филамент закончился. CFS знает, какие катушки подходят, но эти слоты пусты. Загрузите одну из них, затем продолжите печать.
   Filament reload failed: Не удалось повторно подать филамент
+  Filament remapping is unavailable: ''
   Filament runout: Окончание филамента
   Filament runout and motion detection sensors: Датчики окончания и движения филамента
   Filament saved: Филамент сохранён
@@ -1315,6 +1315,7 @@ translations:
   Heater Power: Мощность нагревателя
   Heater connection lost: Потеряна связь с нагревателем
   Heater fault: Неисправность нагревателя
+  Heater offline: Нагреватель отключён
   Heater over-temperature: Перегрев нагревателя
   Heater sensor fault: Неисправность датчика нагревателя
   HeaterSelect: Выбрать нагреватель
@@ -1457,9 +1458,6 @@ translations:
   Install plugin: Установить плагин
   Install script not found. Use the remote install command instead.: Скрипт установки
     не найден. Используйте вместо этого команду удалённой установки.
-  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Установите
-    плагин HelixPrint в расширенных настройках, чтобы переназначать филамент без влияния
-    на историю печати.
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': 'Установите
     плагин HelixPrint для быстрой модификации G-code. Выполните эту команду через
     SSH на вашем принтере:'
@@ -2178,6 +2176,7 @@ translations:
   Print ending...: Завершение печати...
   Print error: Ошибка печати
   Print failed: Печать не удалась
+  Print history will show the rewritten name: ''
   Print issue detected: Обнаружена проблема печати
   Print jobs waiting to run: Задания печати в очереди
   'Print preparation failed: {}': 'Ошибка подготовки печати: {}'
@@ -2317,6 +2316,7 @@ translations:
   'RFCOMM connect failed: ': 'Не удалось подключиться по RFCOMM: '
   RFID reader malfunction (left): Неисправность RFID-считывателя (левый)
   RFID reader malfunction (right): Неисправность RFID-считывателя (правый)
+  RFID, auto-refill, nozzle and link care: ''
   RSS: RSS
   'RSS:': 'RSS:'
   Ramming Volume: 'Объём рэмминга'
@@ -2374,7 +2374,10 @@ translations:
   Remaining (g): Осталось (г)
   Remaining Weight (g): Оставшийся вес (г)
   Remap Tool: Переназначить инструмент
-  Remap needs the HelixPrint plugin: Для переназначения нужен плагин HelixPrint
+  ? Remapping rewrites the job file before printing it. This printer's Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally.
+  : ''
+  ? "Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.\n\nInstalling the plugin takes a moment and needs no restart."
+  : ''
   Remap…: Переназначить…
   Remember slot spool details across an eject: Запоминать данные катушки слота после извлечения
   Remove: Удалить
@@ -3457,6 +3460,7 @@ translations:
   'off': выкл
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: Параметр remember_spool в AFC сохраняет данные катушки в прошивке и имеет приоритет над этим переключателем
   AI detection: AI-детекция
+  Modifying G-code needs the HelixPrint plugin. Printing original file.: ''
   Monitor for print abnormalities (K2 Plus camera-based): Отслеживание дефектов печати (на основе камеры K2 Plus)
   Monitor for print abnormalities (camera-based): 'Отслеживание дефектов печати (на основе камеры)'
   on unit {}: 'на блоке {}'

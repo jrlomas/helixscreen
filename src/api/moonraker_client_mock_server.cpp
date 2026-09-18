@@ -5,6 +5,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cstdlib>
+
 namespace {
 
 /// Moonraker lists `spoolman` in server.info only when the component is
@@ -68,6 +70,35 @@ void register_server_handlers(std::unordered_map<std::string, MethodHandler>& re
         return true;
     };
 
+    // server.helix.status - HelixPrint plugin presence.
+    // Absent by default, which is the state a fresh printer is in and the one
+    // the Advanced panel's Install row is bound to. HELIX_MOCK_HELIX_PLUGIN=1
+    // reports it installed. Leaving this method unregistered is not the same
+    // thing: an unimplemented method invokes NEITHER callback, so the plugin
+    // subject stays at its -1 unknown and every surface gated on it is
+    // unreachable in a mock run.
+    registry["server.helix.status"] =
+        [](MoonrakerClientMock* /*self*/, const json& /*params*/,
+           std::function<void(const json&)> success_cb,
+           std::function<void(const MoonrakerError&)> error_cb) -> bool {
+        const char* env = std::getenv("HELIX_MOCK_HELIX_PLUGIN");
+        const bool installed = env != nullptr && std::string(env) == "1";
+        if (!installed) {
+            // Moonraker answers an unknown endpoint with a JSON-RPC error, and
+            // that error is what tells the app the plugin is absent rather than
+            // merely unprobed.
+            if (error_cb) {
+                error_cb(MoonrakerError::unknown("Method not found", "server.helix.status"));
+            }
+            return true;
+        }
+        json response = {{"jsonrpc", "2.0"}, {"result", {{"enabled", true}, {"version", "1.0.1"}}}};
+        if (success_cb) {
+            success_cb(response);
+        }
+        return true;
+    };
+
     // server.info - Get Moonraker server information
     // https://moonraker.readthedocs.io/en/latest/web_api/#get-server-info
     registry["server.info"] = [](MoonrakerClientMock* self, const json& /*params*/,
@@ -98,11 +129,17 @@ void register_server_handlers(std::unordered_map<std::string, MethodHandler>& re
         spdlog::debug("[MoonrakerClientMock] server.info: klippy_state={}, connected={}",
                       klippy_state_str, klippy_connected);
 
+        // Recent enough that no --test run trips Application's too-old-Moonraker
+        // warning. HELIX_MOCK_MOONRAKER_VERSION drives the other side of that
+        // gate, which is otherwise unreachable in mock.
+        const char* version_env = std::getenv("HELIX_MOCK_MOONRAKER_VERSION");
+        const std::string moonraker_version = version_env != nullptr ? version_env : "v0.9.3-mock";
+
         json response = {{"jsonrpc", "2.0"},
                          {"result",
                           {{"klippy_connected", klippy_connected},
                            {"klippy_state", klippy_state_str},
-                           {"moonraker_version", "v0.8.0-mock"},
+                           {"moonraker_version", moonraker_version},
                            {"api_version", json::array({1, 5, 0})},
                            {"api_version_string", "1.5.0"},
                            // Spoolman is reported on the WIRE, the way Moonraker reports it,

@@ -878,7 +878,11 @@ That trap only ever cleans the **current** run's scratch dir. Directories leaked
 *previous* installs are reclaimed separately: `cleanup_stale_cache_dirs()`
 (`scripts/lib/installer/release.sh`) removes the paths a platform declares in
 `STALE_CACHE_DIRS` — on the K2, the old `/usr/data/helixscreen/cache` thumbnail/gcode
-location (the app now caches on `/mnt/UDISK`), plus installer scratch dirs like
+location (the app now caches on `/mnt/UDISK`); on the AD5M, `/data/helixscreen/cache`,
+whatever `migrate_state_root()` leaves there after carrying the state root to its
+dot-prefixed `/data/.helixscreen` (a plainly named directory at `/data` top level shows in
+Moonraker's print-file picker, because the vendor symlinks the whole partition in as the
+gcodes root); plus installer scratch dirs like
 `/usr/data/helixscreen-install` and `/opt/.helixscreen-install` left behind by pre-EXIT-trap
 installers (one unit held a 60MB archive for two months). It runs after the service starts,
 never touches the scratch dir this run is staging into, and applies the same shape of name

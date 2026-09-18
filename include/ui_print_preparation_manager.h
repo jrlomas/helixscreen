@@ -88,22 +88,6 @@ struct PrePrintOptions {
 };
 
 /**
- * @brief Result of checking if G-code modification can be performed safely
- *
- * On resource-constrained devices (like AD5M with 512MB RAM), modifying large
- * G-code files can exhaust memory and crash both Moonraker and Klipper.
- * This struct captures whether modification is safe and why (or why not).
- */
-struct ModificationCapability {
-    bool can_modify = false;     ///< True if modification can be done safely
-    bool has_plugin = false;     ///< True if helix_print plugin handles it server-side
-    bool has_disk_space = false; ///< True if enough disk space for streaming fallback
-    std::string reason;          ///< Human-readable reason if modification is disabled
-    size_t available_bytes = 0;  ///< Available disk space in temp directory
-    size_t required_bytes = 0;   ///< Estimated bytes needed for modification
-};
-
-/**
  * @brief Callback for navigating to print status panel
  */
 using NavigateToStatusCallback = std::function<void()>;
@@ -335,20 +319,15 @@ class PrintPreparationManager {
     void set_cached_file_size(size_t size);
 
     /**
-     * @brief Check if G-code modification can be performed safely
+     * @brief May we print a rewritten copy of the selected G-code file?
      *
-     * Evaluates whether the device has sufficient resources to modify the
-     * currently selected G-code file. Returns detailed information about
-     * what's available and what's needed.
-     *
-     * Safety priority:
-     * 1. If helix_print plugin available → always safe (server-side)
-     * 2. If disk space available for streaming → safe (disk-based modification)
-     * 3. Otherwise → unsafe, modification disabled
-     *
-     * @return ModificationCapability with safety status and details
+     * The HelixPrint plugin is what makes a rewrite survivable as a product
+     * decision rather than a technical one: without it the rewritten copy is
+     * what lands in print history, so finished jobs are filed under names like
+     * modified_1730824_benchy.gcode. Size is not part of the question - the
+     * rewrite streams a line at a time, so a 2GB file costs what a 2KB one does.
      */
-    [[nodiscard]] ModificationCapability check_modification_capability() const;
+    [[nodiscard]] bool can_modify_gcode() const;
 
     /**
      * @brief Get the temp directory path for streaming operations
@@ -405,13 +384,11 @@ class PrintPreparationManager {
      * different physical head is to rewrite the Tx / ACTIVATE_EXTRUDER /
      * SET_GCODE_VARIABLE lines in the file itself.
      *
-     * Flow (reuses the proven streaming modify+print pipeline):
-     * 1. Download the original to a temp file (streaming, no memory spike).
-     * 2. Read it back, call GcodeToolRemapper::build_line_replacements(content,
-     *    remap) to get exactly the lines that change.
-     * 3. Convert each GcodeLineReplacement -> GCodeFileModifier::replace(line,
-     *    text), apply_streaming() file-to-file.
-     * 4. Upload the modified copy and start it via the HelixPrint plugin's
+     * Flow, streaming end to end - no stage ever holds the file:
+     * 1. Download the original to a temp file (streaming).
+     * 2. GcodeToolRemapper::apply_to_stream() rewrites it to a second temp file
+     *    a line at a time, so peak memory is one line whatever the job's size.
+     * 3. Upload the modified copy and start it via the HelixPrint plugin's
      *    start_modified_print() so print history stays under the ORIGINAL
      *    filename. (This path requires the plugin; callers must guard.)
      *
@@ -431,7 +408,7 @@ class PrintPreparationManager {
      *
      * The print-detail view uses this to HIDE a toggle when the plugin is
      * absent: without the plugin, disabling such an option can't be honored —
-     * start_print() reaches check_modification_capability() and drops the
+     * start_print() reaches can_modify_gcode() and drops the
      * modification with a "Requires HelixPrint plugin" warning.
      *
      * Returns true only when NO pre-start short-circuit in start_print() would

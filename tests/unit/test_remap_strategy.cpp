@@ -11,8 +11,8 @@
 //   Native       — backend owns the T0..Tn slot mapping internally (HH, AFC,
 //                  CFS, AD5X IFS, ToolChanger); helix does NOT rewrite gcode
 //   GcodeRewrite — helix must rewrite T-commands in the gcode file because the
-//                  backend has no internal tool-routing. No backend declares it
-//                  today: it was written for ACE, which declares None until the
+//                  backend has no internal tool-routing. Declared by ToolChanger
+//                  on a changer with no ASSIGN_TOOL; ACE declares None until the
 //                  ACE_CHANGE_TOOL family is handled
 //   SnapmakerNative — firmware pre-print send, no gcode rewrite (Snapmaker U1)
 //
@@ -273,12 +273,14 @@ TEST_CASE("can_write_mapping_table needs a table-writing route AND readiness", "
     };
     const Case cases[] = {
         {"Native and ready", RS::Native, true, true},
-        // The two rows that make this a different question from can_remap():
-        // the U1 can remap and writes no table, and a Native backend that has
-        // not discovered its firmware object yet writes nothing that lands.
+        // The rows that make this a different question from can_remap(): the
+        // U1 can remap and writes no table, a GcodeRewrite backend honors the
+        // pick by rewriting the job file and has no table either, and a Native
+        // backend that has not discovered its firmware object yet writes
+        // nothing that lands.
         {"SnapmakerNative and ready", RS::SnapmakerNative, true, false},
         {"Native, not ready", RS::Native, false, false},
-        {"GcodeRewrite and ready", RS::GcodeRewrite, true, true},
+        {"GcodeRewrite and ready", RS::GcodeRewrite, true, false},
         {"GcodeRewrite, not ready", RS::GcodeRewrite, false, false},
         {"None but ready", RS::None, true, false},
     };
@@ -289,9 +291,11 @@ TEST_CASE("can_write_mapping_table needs a table-writing route AND readiness", "
     }
 }
 
-TEST_CASE("remap_is_persistent separates the table-writing routes from the pre-send",
-          "[ams][strategy]") {
+TEST_CASE("remap_is_persistent separates the routes that outlive the send", "[ams][strategy]") {
     using RS = AmsBackend::RemapStrategy;
+    // Where this parts company with can_write_mapping_table(): GcodeRewrite's
+    // answer outlives the send because it is in the job file, but there is no
+    // table for set_tool_mapping() to write.
     // Native writes the machine's own table; GcodeRewrite writes the job file.
     CHECK(helix::printer::remap_is_persistent(RS::Native));
     CHECK(helix::printer::remap_is_persistent(RS::GcodeRewrite));
@@ -487,4 +491,110 @@ TEST_CASE("Mock Snapmaker pre-print gcode is byte-identical to the real backend"
     // Empty tool set is the one input that legitimately yields nothing, on both.
     REQUIRE(mock.build_preprint_gcode({}, {}).empty());
     REQUIRE(real.build_preprint_gcode({}, {}).empty());
+}
+
+TEST_CASE("remap_block answers the backend's half before anything else", "[ams][strategy][block]") {
+    using helix::printer::remap_block;
+    using helix::printer::RemapBlock;
+    AmsBackendMock backend;
+
+    SECTION("a backend with no route is blocked whatever the job or plugin say") {
+        backend.set_remap_strategy(AmsBackend::RemapStrategy::None);
+        CHECK(remap_block(backend, 1, 4) == RemapBlock::NoStrategy);
+        CHECK(remap_block(backend, -1, 0) == RemapBlock::NoStrategy);
+    }
+
+    SECTION("a route that is not up yet outranks the job and plugin terms") {
+        backend.set_remap_strategy(AmsBackend::RemapStrategy::Native);
+        backend.set_remap_ready(false);
+        CHECK(remap_block(backend, 1, 4) == RemapBlock::NotReady);
+    }
+}
+
+TEST_CASE("remap_block names the job before it names the plugin", "[ams][strategy][block]") {
+    using helix::printer::remap_block;
+    using helix::printer::RemapBlock;
+    AmsBackendMock backend;
+    backend.set_remap_strategy(AmsBackend::RemapStrategy::GcodeRewrite);
+
+    // Installing the plugin would not make a toolless job mappable, so the
+    // plugin must not be the reason offered for one.
+    SECTION("no tools reads as NothingToRemap even with the plugin absent") {
+        CHECK(remap_block(backend, 0, 0) == RemapBlock::NothingToRemap);
+    }
+
+    SECTION("no tools reads as NothingToRemap even while the probe is in flight") {
+        CHECK(remap_block(backend, -1, 0) == RemapBlock::NothingToRemap);
+    }
+
+    SECTION("a negative count is treated as none, not as a mappable job") {
+        CHECK(remap_block(backend, 1, -1) == RemapBlock::NothingToRemap);
+    }
+}
+
+TEST_CASE("Only GcodeRewrite consults the plugin", "[ams][strategy][block]") {
+    using helix::printer::remap_block;
+    using helix::printer::RemapBlock;
+    AmsBackendMock backend;
+
+    SECTION("GcodeRewrite without the plugin is blocked") {
+        backend.set_remap_strategy(AmsBackend::RemapStrategy::GcodeRewrite);
+        CHECK(remap_block(backend, 0, 4) == RemapBlock::NeedsPlugin);
+    }
+
+    SECTION("GcodeRewrite with the plugin is available") {
+        backend.set_remap_strategy(AmsBackend::RemapStrategy::GcodeRewrite);
+        CHECK(remap_block(backend, 1, 4) == RemapBlock::None);
+    }
+
+    SECTION("an unprobed plugin is Probing, never NeedsPlugin") {
+        // The probe lands after first paint. Reading -1 as absent is what makes
+        // a card show its refusal on every boot and then withdraw it.
+        backend.set_remap_strategy(AmsBackend::RemapStrategy::GcodeRewrite);
+        CHECK(remap_block(backend, -1, 4) == RemapBlock::Probing);
+    }
+
+    SECTION("routes that write firmware state ignore the plugin entirely") {
+        for (auto strategy :
+             {AmsBackend::RemapStrategy::Native, AmsBackend::RemapStrategy::SnapmakerNative}) {
+            backend.set_remap_strategy(strategy);
+            CHECK(remap_block(backend, 0, 4) == RemapBlock::None);
+            CHECK(remap_block(backend, -1, 4) == RemapBlock::None);
+            CHECK(remap_block(backend, 1, 4) == RemapBlock::None);
+        }
+    }
+}
+
+TEST_CASE("remap_block agrees with can_remap wherever can_remap has an opinion",
+          "[ams][strategy][block]") {
+    using helix::printer::can_remap;
+    using helix::printer::remap_block;
+    using helix::printer::RemapBlock;
+    AmsBackendMock backend;
+
+    // can_remap() is the backend-only half, so it must never say yes where
+    // remap_block() reports a backend-side block, nor no where it reports None.
+    for (auto strategy :
+         {AmsBackend::RemapStrategy::None, AmsBackend::RemapStrategy::Native,
+          AmsBackend::RemapStrategy::GcodeRewrite, AmsBackend::RemapStrategy::SnapmakerNative}) {
+        for (bool ready : {false, true}) {
+            backend.set_remap_strategy(strategy);
+            backend.set_remap_ready(ready);
+            const auto block = remap_block(backend, 1, 4);
+            const bool backend_side_block =
+                block == RemapBlock::NoStrategy || block == RemapBlock::NotReady;
+            CHECK(can_remap(backend) == !backend_side_block);
+        }
+    }
+}
+
+TEST_CASE("remap_block_name covers every rung", "[ams][strategy][block]") {
+    using helix::printer::remap_block_name;
+    using helix::printer::RemapBlock;
+    // A name falling through to "unknown" means a rung was added without a
+    // spelling, and every log line about it would then be indistinguishable.
+    for (auto block : {RemapBlock::None, RemapBlock::Probing, RemapBlock::NoStrategy,
+                       RemapBlock::NotReady, RemapBlock::NeedsPlugin, RemapBlock::NothingToRemap}) {
+        CHECK(std::string(remap_block_name(block)) != "unknown");
+    }
 }

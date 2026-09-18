@@ -34,7 +34,7 @@ int usb_present() {
 }
 
 UsbDrive drive(const std::string& mount, const std::string& label) {
-    return UsbDrive(mount, "/dev/" + label, label, 1024, 512);
+    return UsbDrive(mount, "/dev/" + label, label);
 }
 
 } // namespace

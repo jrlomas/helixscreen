@@ -230,20 +230,20 @@ AD5M uses SysV init (BusyBox), not systemd. The service script name depends on y
 ```bash
 /etc/init.d/S90helixscreen start|stop|restart|status
 tail -100 /opt/helixscreen/logs/launcher.log    # launcher / crash capture
-tail -100 /data/helixscreen/logs/helix.log      # structured app log
+tail -100 /data/.helixscreen/logs/helix.log      # structured app log
 ```
 
 **Klipper Mod:**
 ```bash
 /etc/init.d/S80helixscreen start|stop|restart|status
 tail -100 /root/printer_software/helixscreen/logs/launcher.log
-tail -100 /data/helixscreen/logs/helix.log
+tail -100 /data/.helixscreen/logs/helix.log
 ```
 
 There are two log streams; collect both when reporting an issue:
 
 - **Launcher / crash capture** (startup, crash output): `/opt/helixscreen/logs/launcher.log` on Forge-X, `/root/printer_software/helixscreen/logs/launcher.log` on Klipper Mod
-- **Structured app log:** `/data/helixscreen/logs/helix.log` on both firmwares. The app writes this file directly to flash; the system syslog only captures the earliest startup output, before the app's own logging takes over
+- **Structured app log:** `/data/.helixscreen/logs/helix.log` on both firmwares. The app writes this file directly to flash; the system syslog only captures the earliest startup output, before the app's own logging takes over
 
 ### Disabling the Previous UI Manually
 

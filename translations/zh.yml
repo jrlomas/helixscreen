@@ -414,7 +414,6 @@ translations:
   'Cannot delete file: printer not connected': '无法删除文件: 打印机未连接'
   'Cannot modify G-code: no temp directory available': '无法修改 G-code: 无可用临时目录'
   'Cannot modify G-code: scan result not available': '无法修改 G-code: 扫描结果不可用'
-  'Cannot modify G-code: {}. Printing original file.': '无法修改 G-code: {}。正在打印原始文件。'
   Cannot perform this action now: 当前无法执行此操作
   'Cannot remap G-code: no temp directory available': 无法重新映射 G-code：没有可用的临时目录
   'Cannot remap: internal error': 无法重新映射：内部错误
@@ -784,6 +783,7 @@ translations:
   Documentation: 文档
   Don't Save: 不保存
   Don't ask again: 不再询问
+  Don't show again: ''
   Done: 完成
   Download update?: 下载更新？
   Download v{}?: 下载 v{}？
@@ -1115,6 +1115,7 @@ translations:
   Filament ran out. Auto-refill is off, so the CFS will not switch spools on its own. Load filament, then resume.: '耗材已用尽。自动续料已关闭，CFS 不会自行更换料盘。请装入耗材后恢复打印。'
   Filament ran out. The CFS knows which spools match, but those slots are empty. Load one of them, then resume.: 耗材已用尽。CFS 知道哪些料盘匹配，但这些槽位都是空的。请装载其中一个，然后恢复打印。
   Filament reload failed: 耗材重新装载失败
+  Filament remapping is unavailable: ''
   Filament runout: 耗材用尽
   Filament runout and motion detection sensors: 耗材用尽和运动检测传感器
   Filament saved: 耗材已保存
@@ -1231,6 +1232,7 @@ translations:
   Heater Power: 加热器功率
   Heater connection lost: 加热器连接丢失
   Heater fault: 加热器故障
+  Heater offline: 加热器已断开
   Heater over-temperature: 加热器过热
   Heater sensor fault: 加热器传感器故障
   HeaterSelect: 选择加热器
@@ -1360,8 +1362,6 @@ translations:
   Install Update: 安装更新
   Install plugin: 安装插件
   Install script not found. Use the remote install command instead.: 未找到安装脚本。请改用远程安装命令。
-  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: 在高级设置中安装
-    HelixPrint 插件，即可在不影响打印历史的情况下重新映射耗材。
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': 安装
     HelixPrint 插件以启用快速 G-code 修改。通过 SSH 在打印机上运行此命令：
   ? "Install the timelapse plugin via SSH,\nthen tap \"Check Again\"."
@@ -2044,6 +2044,7 @@ translations:
   Print ending...: 正在结束打印...
   Print error: 打印错误
   Print failed: 打印失败
+  Print history will show the rewritten name: ''
   Print issue detected: 检测到打印问题
   Print jobs waiting to run: 等待执行的打印任务
   'Print preparation failed: {}': '打印准备失败: {}'
@@ -2172,6 +2173,7 @@ translations:
   'RFCOMM connect failed: ': 'RFCOMM 连接失败: '
   RFID reader malfunction (left): RFID 读取器故障（左）
   RFID reader malfunction (right): RFID 读取器故障（右）
+  RFID, auto-refill, nozzle and link care: ''
   RSS: RSS
   'RSS:': RSS：
   Ramming Volume: '填充体积'
@@ -2224,7 +2226,10 @@ translations:
   Remaining (g): 剩余 (g)
   Remaining Weight (g): 剩余重量（克）
   Remap Tool: 重映射工具
-  Remap needs the HelixPrint plugin: 重新映射需要 HelixPrint 插件
+  ? Remapping rewrites the job file before printing it. This printer's Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally.
+  : ''
+  ? "Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.\n\nInstalling the plugin takes a moment and needs no restart."
+  : ''
   Remap…: 重新映射……
   Remember slot spool details across an eject: 弹出后记住槽位的料盘详情
   Remove: 移除
@@ -3223,6 +3228,7 @@ translations:
   'off': 关闭
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: AFC 的 remember_spool 会在固件中保留料盘信息；其优先级高于此开关
   AI detection: AI 检测
+  Modifying G-code needs the HelixPrint plugin. Printing original file.: ''
   Monitor for print abnormalities (K2 Plus camera-based): 监测打印异常（基于 K2 Plus 摄像头）
   Monitor for print abnormalities (camera-based): '监测打印异常（基于摄像头）'
   on unit {}: '在单元 {}'

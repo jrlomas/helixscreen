@@ -429,6 +429,64 @@ _mock_detect_ad5m_firmware() {
     [ "$PREVIOUS_UI_SCRIPT" = "" ]
 }
 
+@test "AD5M: set_install_paths points the state root at the dot-prefixed name" {
+    detect_tmp_dir() { TMP_DIR="/tmp/helixscreen-install"; }
+
+    set_install_paths "ad5m" "forge_x"
+
+    # /data is the gcodes root (symlinked whole by the vendor), so the state
+    # root is dot-prefixed to stay out of the print-file picker, and the
+    # plain-named root is declared superseded + stale for the migration.
+    [ "$STATE_ROOT" = "/data/.helixscreen" ]
+    [ "$PREVIOUS_STATE_ROOT" = "/data/helixscreen" ]
+    [ "$STALE_CACHE_DIRS" = "/data/helixscreen/cache" ]
+}
+
+@test "AD5M gcodes sweep removes leftover release archives and install log" {
+    local root="$BATS_TEST_TMPDIR/data"
+    mkdir -p "$root"
+    touch "$root/helixscreen-ad5m-v0.99.118.tar.gz" \
+          "$root/helixscreen-ad5m-v1.0.0.zip" \
+          "$root/helixscreen-update.tar.gz.install.log" \
+          "$root/printer.gcode"
+
+    AD5M_GCODES_ROOT="$root" cleanup_ad5m_gcodes_root
+
+    [ ! -e "$root/helixscreen-ad5m-v0.99.118.tar.gz" ]
+    [ ! -e "$root/helixscreen-ad5m-v1.0.0.zip" ]
+    [ ! -e "$root/helixscreen-update.tar.gz.install.log" ]
+    # Only our names; the operator's files are the picker's real content.
+    [ -e "$root/printer.gcode" ]
+}
+
+@test "AD5M gcodes sweep never removes the archive this run installs from" {
+    local root="$BATS_TEST_TMPDIR/data"
+    mkdir -p "$root"
+    touch "$root/helixscreen-ad5m-v1.0.0.tar.gz" "$root/helixscreen-ad5m-v0.99.118.tar.gz"
+
+    local_tarball="$root/helixscreen-ad5m-v1.0.0.tar.gz"
+    AD5M_GCODES_ROOT="$root" cleanup_ad5m_gcodes_root
+
+    [ -e "$local_tarball" ]
+    [ ! -e "$root/helixscreen-ad5m-v0.99.118.tar.gz" ]
+}
+
+@test "AD5M gcodes sweep removes hx-clean only in its exact known shape" {
+    local root="$BATS_TEST_TMPDIR/data"
+    mkdir -p "$root/hx-clean/helixscreen"
+    touch "$root/hx-clean/helixscreen/marker"
+
+    AD5M_GCODES_ROOT="$root" cleanup_ad5m_gcodes_root
+    [ ! -d "$root/hx-clean" ]
+
+    # Anything more than our own subtree is the operator's; it survives.
+    mkdir -p "$root/hx-clean/helixscreen" "$root/hx-clean/keepme"
+    touch "$root/hx-clean/keepme/file"
+    AD5M_GCODES_ROOT="$root" cleanup_ad5m_gcodes_root
+    [ -d "$root/hx-clean" ]
+    [ -e "$root/hx-clean/keepme/file" ]
+}
+
 @test "platform.sh checks /ZMOD before forge_x default" {
     local platform_sh="$WORKTREE_ROOT/scripts/lib/installer/platform.sh"
     local zmod_line forge_x_line

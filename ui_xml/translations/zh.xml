@@ -411,7 +411,6 @@
   <translation tag="Cannot delete file: printer not connected" zh="无法删除文件: 打印机未连接"/>
   <translation tag="Cannot modify G-code: no temp directory available" zh="无法修改 G-code: 无可用临时目录"/>
   <translation tag="Cannot modify G-code: scan result not available" zh="无法修改 G-code: 扫描结果不可用"/>
-  <translation tag="Cannot modify G-code: {}. Printing original file." zh="无法修改 G-code: {}。正在打印原始文件。"/>
   <translation tag="Cannot perform this action now" zh="当前无法执行此操作"/>
   <translation tag="Cannot remap G-code: no temp directory available" zh="无法重新映射 G-code：没有可用的临时目录"/>
   <translation tag="Cannot remap: internal error" zh="无法重新映射：内部错误"/>
@@ -772,6 +771,7 @@
   <translation tag="Documentation" zh="文档"/>
   <translation tag="Don&apos;t Save" zh="不保存"/>
   <translation tag="Don&apos;t ask again" zh="不再询问"/>
+  <translation tag="Don&apos;t show again"/>
   <translation tag="Done" zh="完成"/>
   <translation tag="Download update?" zh="下载更新？"/>
   <translation tag="Download v{}?" zh="下载 v{}？"/>
@@ -1096,6 +1096,7 @@
   <translation tag="Filament ran out. Auto-refill is off, so the CFS will not switch spools on its own. Load filament, then resume." zh="耗材已用尽。自动续料已关闭，CFS 不会自行更换料盘。请装入耗材后恢复打印。"/>
   <translation tag="Filament ran out. The CFS knows which spools match, but those slots are empty. Load one of them, then resume." zh="耗材已用尽。CFS 知道哪些料盘匹配，但这些槽位都是空的。请装载其中一个，然后恢复打印。"/>
   <translation tag="Filament reload failed" zh="耗材重新装载失败"/>
+  <translation tag="Filament remapping is unavailable"/>
   <translation tag="Filament runout" zh="耗材用尽"/>
   <translation tag="Filament runout and motion detection sensors" zh="耗材用尽和运动检测传感器"/>
   <translation tag="Filament saved" zh="耗材已保存"/>
@@ -1207,6 +1208,7 @@
   <translation tag="Heater Power" zh="加热器功率"/>
   <translation tag="Heater connection lost" zh="加热器连接丢失"/>
   <translation tag="Heater fault" zh="加热器故障"/>
+  <translation tag="Heater offline" zh="加热器已断开"/>
   <translation tag="Heater over-temperature" zh="加热器过热"/>
   <translation tag="Heater sensor fault" zh="加热器传感器故障"/>
   <translation tag="HeaterSelect" zh="选择加热器"/>
@@ -1333,7 +1335,6 @@
   <translation tag="Install Update" zh="安装更新"/>
   <translation tag="Install plugin" zh="安装插件"/>
   <translation tag="Install script not found. Use the remote install command instead." zh="未找到安装脚本。请改用远程安装命令。"/>
-  <translation tag="Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history." zh="在高级设置中安装 HelixPrint 插件，即可在不影响打印历史的情况下重新映射耗材。"/>
   <translation tag="Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:" zh="安装 HelixPrint 插件以启用快速 G-code 修改。通过 SSH 在打印机上运行此命令："/>
   <translation tag="Install the timelapse plugin via SSH,&#10;then tap &quot;Check Again&quot;." zh="通过SSH安装延时摄影插件，&#10;然后点击&quot;重新检查&quot;。"/>
   <translation tag="Install timelapse plugin" zh="安装延时摄影插件"/>
@@ -1598,6 +1599,7 @@
   <translation tag="Missing value" zh="缺少值"/>
   <translation tag="Mode" zh="模式"/>
   <translation tag="Modified" zh="已修改"/>
+  <translation tag="Modifying G-code needs the HelixPrint plugin. Printing original file."/>
   <translation tag="Monitor for print abnormalities (K2 Plus camera-based)" zh="监测打印异常（基于 K2 Plus 摄像头）"/>
   <translation tag="Monitor for print abnormalities (camera-based)" zh="监测打印异常（基于摄像头）"/>
   <translation tag="Monitor prints in progress — time remaining, current layer, and progress. Tap to pause, resume, or cancel the active job." zh="监控正在进行的打印 — 剩余时间、当前层和进度。点击可暂停、恢复或取消当前任务。"/>
@@ -1995,6 +1997,7 @@
   <translation tag="Print ending..." zh="正在结束打印..."/>
   <translation tag="Print error" zh="打印错误"/>
   <translation tag="Print failed" zh="打印失败"/>
+  <translation tag="Print history will show the rewritten name"/>
   <translation tag="Print issue detected" zh="检测到打印问题"/>
   <translation tag="Print jobs waiting to run" zh="等待执行的打印任务"/>
   <translation tag="Print preparation failed: {}" zh="打印准备失败: {}"/>
@@ -2120,6 +2123,7 @@
   <translation tag="RFCOMM connect failed: " zh="RFCOMM 连接失败: "/>
   <translation tag="RFID reader malfunction (left)" zh="RFID 读取器故障（左）"/>
   <translation tag="RFID reader malfunction (right)" zh="RFID 读取器故障（右）"/>
+  <translation tag="RFID, auto-refill, nozzle and link care"/>
   <translation tag="RSS" zh="RSS"/>
   <translation tag="RSS:" zh="RSS："/>
   <translation tag="Ramming Volume" zh="填充体积"/>
@@ -2171,7 +2175,8 @@
   <translation tag="Remaining (g)" zh="剩余 (g)"/>
   <translation tag="Remaining Weight (g)" zh="剩余重量（克）"/>
   <translation tag="Remap Tool" zh="重映射工具"/>
-  <translation tag="Remap needs the HelixPrint plugin" zh="重新映射需要 HelixPrint 插件"/>
+  <translation tag="Remapping rewrites the job file before printing it. This printer&apos;s Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally."/>
+  <translation tag="Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.&#10;&#10;Installing the plugin takes a moment and needs no restart."/>
   <translation tag="Remap…" zh="重新映射……"/>
   <translation tag="Remember slot spool details across an eject" zh="弹出后记住槽位的料盘详情"/>
   <translation tag="Remove" zh="移除"/>

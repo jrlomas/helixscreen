@@ -45,7 +45,7 @@ REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platfo
 # maps platform ad5x -> hook ad5m-zmod). Its app-log path must stay under
 # /opt/config: ghzserg's TAR_CONFIG archiver collects /opt/config/ (plus
 # /usr/prog/config/, /usr/data/logs/ on AD5X and /data/logFiles/ on AD5M) and
-# nothing under /data/helixscreen/, so moving the log back to /data makes it
+# nothing under /data/.helixscreen/, so moving the log back to /data makes it
 # invisible to every support archive a user can send us. That is the exact
 # regression that reopens #1249.
 @test "zmod hook logs under /opt/config so ZMOD's TAR_CONFIG archives it" {

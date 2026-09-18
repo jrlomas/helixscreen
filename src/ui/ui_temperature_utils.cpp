@@ -302,7 +302,15 @@ const char* chamber_mode_word(helix::ChamberMode mode) {
     }
 }
 
-std::string chamber_status_text(int current_deci, int target_deci, helix::ChamberMode mode) {
+std::string status_with_duty(const std::string& status, int power_pct) {
+    if (power_pct <= 0) {
+        return status;
+    }
+    return status + " \xc2\xb7 " + std::to_string(power_pct) + "%"; // " · " UTF-8 middle dot
+}
+
+std::string chamber_status_text(int current_deci, int target_deci, helix::ChamberMode mode,
+                                int power_pct) {
     // Resolve the mode word (untranslated key), then localise at the call site.
     std::string mode_str = lv_tr(chamber_mode_word(mode));
 
@@ -312,9 +320,10 @@ std::string chamber_status_text(int current_deci, int target_deci, helix::Chambe
     const std::string& progress = result.status; // already localised
     if (target_deci <= 0 || progress == std::string(lv_tr("Heating...")) ||
         progress == std::string(lv_tr("Off"))) {
-        return mode_str;
+        return status_with_duty(mode_str, power_pct);
     }
-    return mode_str + " \xc2\xb7 " + progress; // " · " UTF-8 middle dot
+    return status_with_duty(mode_str + " \xc2\xb7 " + progress, // " · " UTF-8 middle dot
+                            power_pct);
 }
 
 } // namespace temperature

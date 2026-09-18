@@ -49,6 +49,18 @@ std::string json_string_member(const json& obj, const char* key) {
 /// leds/strip single string). Empty when no LED is configured. Both validators
 /// ask this one question through here — a configured LED must read as
 /// configured whichever key it was saved under.
+/// Whether a configured strip id is something printer.objects can report.
+/// leds/selected_strips spans every LED backend: macro devices are synthetic
+/// "macro:NAME" ids and WLED strips are served over Moonraker's HTTP proxy, so
+/// neither ever appears in a Klipper object list. Only a Klipper-object strip can
+/// be judged present or absent against discovery.
+bool led_strip_is_klipper_object(const std::string& strip_id) {
+    if (strip_id.find(':') != std::string::npos) {
+        return false;
+    }
+    return strip_id.rfind("wled ", 0) != 0;
+}
+
 std::vector<std::string> configured_led_strips(Config* config) {
     std::vector<std::string> strips;
     if (config == nullptr) {
@@ -585,8 +597,12 @@ void HardwareValidator::validate_configured_hardware(Config* config,
     } catch (...) {
     }
 
-    // Check configured LEDs
+    // Check configured LEDs. Synthetic strips are skipped: discovery cannot see them,
+    // so their absence from it is not evidence of anything.
     for (const auto& led_name : configured_led_strips(config)) {
+        if (!led_strip_is_klipper_object(led_name)) {
+            continue;
+        }
         if (!contains_name(leds, led_name) && !is_hardware_optional(config, led_name)) {
             result.expected_missing.push_back(HardwareIssue::warning(
                 led_name, HardwareType::LED, "Configured LED strip not found"));

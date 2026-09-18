@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "ui_heater_config.h" // helix::HeaterType
+
 #include "app_macro_activity.h"
 #include "app_motion_activity.h"
 #include "async_lifetime_guard.h"
@@ -274,6 +276,31 @@ class PrinterState {
     }
     lv_subject_t* get_active_extruder_target_subject() {
         return temperature_state_.get_active_extruder_target_subject();
+    }
+
+    /// Duty for one heater, so every surface renders the same number rather
+    /// than each mapping heater type to subject on its own.
+    lv_subject_t* get_heater_power_subject(helix::HeaterType type) {
+        switch (type) {
+        case helix::HeaterType::Bed:
+            return get_bed_power_subject();
+        case helix::HeaterType::Chamber:
+            return get_chamber_power_subject();
+        case helix::HeaterType::Nozzle:
+        default:
+            return get_extruder_power_subject();
+        }
+    }
+
+    // Heater duty cycle, whole percent, -1 until a heater reports one.
+    lv_subject_t* get_extruder_power_subject() {
+        return temperature_state_.get_extruder_power_subject();
+    }
+    lv_subject_t* get_bed_power_subject() {
+        return temperature_state_.get_bed_power_subject();
+    }
+    lv_subject_t* get_chamber_power_subject() {
+        return temperature_state_.get_chamber_power_subject();
     }
 
     // Multi-extruder discovery
@@ -1628,6 +1655,12 @@ class PrinterState {
     /**
      * @brief Get Moonraker version subject for XML binding
      */
+    /// 1 when this Moonraker is too old for the HelixPrint plugin to restore a
+    /// rewritten job's original filename. See moonraker_history_is_degraded().
+    lv_subject_t* get_moonraker_history_degraded_subject() {
+        return versions_state_.get_moonraker_history_degraded_subject();
+    }
+
     lv_subject_t* get_moonraker_version_subject() {
         return versions_state_.get_moonraker_version_subject();
     }
@@ -1859,6 +1892,11 @@ class PrinterState {
      * @return True if the HelixPrint Moonraker plugin is installed
      */
     bool service_has_helix_plugin() const;
+
+    /// Tri-state plugin presence as published: -1 not probed, 0 absent,
+    /// 1 present. Callers that must tell "not probed yet" apart from "absent"
+    /// want this; service_has_helix_plugin() collapses both to false.
+    int helix_plugin_state() const;
 
     /**
      * @brief Mark helper-macro files as staged, awaiting a Klipper restart

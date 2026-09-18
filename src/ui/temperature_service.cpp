@@ -360,18 +360,21 @@ void TemperatureService::update_status(HeaterType type) {
 
     // Use heater_display() for consistent status strings and color across all panels
     auto result = helix::ui::temperature::heater_display(h.current, h.target);
+    const int power_pct = lv_subject_get_int(printer_state_.get_heater_power_subject(type));
 
     if (h.read_only) {
+        // Nothing of ours drives this chamber, so there is no duty to report.
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", lv_tr("Monitoring"));
     } else if (type == HeaterType::Chamber) {
         // Delegate to the shared helper so the controls panel and the temp-graph
         // overlay always produce identical output (single source of truth).
         auto mode_int = lv_subject_get_int(printer_state_.get_chamber_mode_subject());
         auto status = helix::ui::temperature::chamber_status_text(
-            h.current, h.target, static_cast<helix::ChamberMode>(mode_int));
+            h.current, h.target, static_cast<helix::ChamberMode>(mode_int), power_pct);
         snprintf(h.status_buf.data(), h.status_buf.size(), "%s", status.c_str());
     } else {
-        snprintf(h.status_buf.data(), h.status_buf.size(), "%s", result.status.c_str());
+        auto status = helix::ui::temperature::status_with_duty(result.status, power_pct);
+        snprintf(h.status_buf.data(), h.status_buf.size(), "%s", status.c_str());
     }
 
     lv_subject_copy_string(&h.status_subject, h.status_buf.data());
@@ -931,10 +934,12 @@ void TemperatureService::on_chamber_filter_fan_clicked(lv_event_t* /*e*/) {
         spdlog::warn("[TempPanel] chamber filter-fan clicked with no controller registered");
         return;
     }
-    // Toggle: read the same subject the button's label reflects. A missing
-    // subject (state torn down mid-click) fails safe to "turn on".
-    lv_subject_t* on_subj = lv_xml_get_subject(nullptr, "chamber_filter_fan_on");
-    tc->set_chamber_filter_fan(!on_subj || lv_subject_get_int(on_subj) != 1);
+    // Toggle: invert OUR pin request, not the running state — the device also
+    // runs this fan on its own, and a click must not read that as "already
+    // on". A missing subject (state torn down mid-click) or an unknown value
+    // fails safe to "turn on".
+    lv_subject_t* req_subj = lv_xml_get_subject(nullptr, "chamber_filter_fan_requested");
+    tc->set_chamber_filter_fan(!req_subj || lv_subject_get_int(req_subj) != 1);
 }
 
 void TemperatureService::on_heater_custom_clicked(lv_event_t* e) {
@@ -1353,24 +1358,18 @@ void TemperatureService::setup_mini_combined_graph(lv_obj_t* container) {
         const auto& chamber = heaters_[idx(HeaterType::Chamber)];
         auto* heater_subj = printer_state_.get_printer_has_chamber_heater_subject();
         bool has_heater = heater_subj && lv_subject_get_int(heater_subj) != 0;
-        // The sensor PrinterState resolved: empty when the printer has none or is
-        // set not to use one.
-        const auto& sensor = printer_state_.temperature_state().chamber_sensor_name();
-
-        if (has_heater && !chamber.klipper_name.empty()) {
+        // One source for the reading, so this series cannot disagree with the
+        // chamber readout about which probe it means. A target line needs a
+        // heater behind it: a sensor-only chamber has a temperature and
+        // nothing to set.
+        const auto& temp_state = printer_state_.temperature_state();
+        const std::string& klipper = temp_state.chamber_temperature_source();
+        if (!klipper.empty()) {
             helix::TempGraphSeriesSpec spec;
-            spec.klipper_name = chamber.klipper_name;
+            spec.klipper_name = klipper;
             spec.display_name = lv_tr("Chamber");
             spec.color = chamber.config.color;
-            spec.show_target = true;
-            config.series.push_back(std::move(spec));
-        } else if (!sensor.empty()) {
-            // Sensor-only: show temp without target line
-            helix::TempGraphSeriesSpec spec;
-            spec.klipper_name = sensor;
-            spec.display_name = lv_tr("Chamber");
-            spec.color = chamber.config.color;
-            spec.show_target = false;
+            spec.show_target = has_heater && !temp_state.chamber_heater_name().empty();
             config.series.push_back(std::move(spec));
         }
     }

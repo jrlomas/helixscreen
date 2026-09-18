@@ -623,3 +623,69 @@ stage_hook_candidates() {
            "$INSTALL_DIR/platform/hooks.sh" \
         || fail "ad5m + forge_x must deploy hooks-ad5m-forgex.sh"
 }
+
+# --- netd restore: first-run WiFi setup must stay reachable -------------------
+#
+# S55boot starts netd and, when the network does not come up inside its 180s
+# wait, kills it and unlinks the socket. netd loads the WiFi driver and owns the
+# radio, so a carrier-less boot reaches S90 with no daemon and no wlan0: the
+# wizard has nothing to configure and the owner cannot get the printer online
+# from the only UI we left them.
+
+netd_restore_fixture() {
+    export FORGEX_NETD_BIN="$BATS_TEST_TMPDIR/netd"
+    export FORGEX_NETD_SOCK="$BATS_TEST_TMPDIR/netd.sock"
+    export FORGEX_NETWORK_CONF="$BATS_TEST_TMPDIR/network.conf"
+    printf '#!/bin/sh\n' > "$FORGEX_NETD_BIN"
+    chmod +x "$FORGEX_NETD_BIN"
+    mock_command_script start-stop-daemon "echo \"\$@\" >> $BATS_TEST_TMPDIR/ssd.log"
+}
+
+@test "ForgeX netd restore starts the daemon when it is installed but down" {
+    netd_restore_fixture
+    mock_command_script pidof "exit 1"   # nothing running
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    grep -q -- "--exec $FORGEX_NETD_BIN" "$BATS_TEST_TMPDIR/ssd.log"
+}
+
+@test "ForgeX netd restore leaves a running daemon alone" {
+    netd_restore_fixture
+    mock_command_script pidof "echo 1234"   # already running
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    [ ! -f "$BATS_TEST_TMPDIR/ssd.log" ]
+}
+
+@test "ForgeX netd restore is a no-op on releases without netd" {
+    netd_restore_fixture
+    rm -f "$FORGEX_NETD_BIN"             # pre-1.4.2: no daemon ships
+    mock_command_script pidof "exit 1"
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    [ ! -f "$BATS_TEST_TMPDIR/ssd.log" ]
+}
+
+@test "ForgeX netd restore adopts an existing link when network.conf is present" {
+    netd_restore_fixture
+    printf 'mode=ETHERNET\n' > "$FORGEX_NETWORK_CONF"
+    mock_command_script pidof "exit 1"
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    grep -q -- "--adopt-existing" "$BATS_TEST_TMPDIR/ssd.log"
+}
+
+@test "ForgeX netd restore bootstraps without adoption when there is no network.conf" {
+    netd_restore_fixture
+    rm -f "$FORGEX_NETWORK_CONF"
+    mock_command_script pidof "exit 1"
+    . "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh"
+    platform_start_netd
+    run grep -c -- "--adopt-existing" "$BATS_TEST_TMPDIR/ssd.log"
+    [ "$(last_line)" = "0" ]
+}
+
+@test "ForgeX pre-start restores netd" {
+    awk '/^platform_pre_start\(\)/,/^}/' \
+        "$WORKTREE_ROOT/assets/config/platform/hooks-ad5m-forgex.sh" | grep -q 'platform_start_netd'
+}

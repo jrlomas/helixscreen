@@ -777,6 +777,29 @@ TEST_CASE("UpdateChecker get_download_path returns valid path", "[update_checker
     checker.shutdown();
 }
 
+TEST_CASE("UpdateChecker stages downloads under dot-prefixed names", "[update_checker]") {
+    // Boards whose gcodes root IS the data partition list every plainly named
+    // file in the print picker, so the staged archive must hide behind a
+    // leading dot in both archive formats. The property is the dot, not the
+    // spelling of the name.
+    SECTION("tar.gz release") {
+        const std::string name =
+            UpdateChecker::download_filename_for_url("https://r.example/helixscreen.tar.gz");
+        INFO(name);
+        REQUIRE(!name.empty());
+        REQUIRE(name.front() == '.');
+        REQUIRE(name.compare(name.size() - 7, 7, ".tar.gz") == 0);
+    }
+    SECTION("zip release") {
+        const std::string name =
+            UpdateChecker::download_filename_for_url("https://r.example/helixscreen.zip");
+        INFO(name);
+        REQUIRE(!name.empty());
+        REQUIRE(name.front() == '.');
+        REQUIRE(name.compare(name.size() - 4, 4, ".zip") == 0);
+    }
+}
+
 // Helper: assert the staging dir is NOT within-or-equal-to install_root. This
 // is the load-bearing safety invariant — TMP_DIR is rm -rf'd on cleanup AND the
 // installer's --update flow (release.sh) does dotfile `rm -rf` inside INSTALL_DIR

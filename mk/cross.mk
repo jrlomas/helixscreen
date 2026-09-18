@@ -265,7 +265,9 @@ else ifeq ($(PLATFORM_TARGET),ad5m)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # AD5M: 110 MB total over a disk-backed swap file. Measured with a saver drawing:
+    # zero Klipper major faults across 730 s, and no detectable RSS cost.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := ad5m
     # Mock backends are dev/test scaffolding. The Makefile defaults ENABLE_MOCKS
@@ -306,7 +308,8 @@ else ifeq ($(PLATFORM_TARGET),ad5m-br)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # Same board as ad5m, so it carries savers on the same evidence.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := ad5m-br
     # Matches the `ad5m` target's size treatment (see its ENABLE_MOCKS block).
@@ -329,7 +332,10 @@ else ifeq ($(PLATFORM_TARGET),ad5x)
     # -ffunction-sections/-fdata-sections: Allow linker to remove unused sections
     # -Wno-error=conversion: LVGL headers have int32_t->float conversions that GCC flags
     # -DHELIX_RELEASE_BUILD: Disables debug features like LV_USE_ASSERT_STYLE
-    # NOTE: ad5x framebuffer is 32bpp (ARGB8888), as is lv_conf.h (LV_COLOR_DEPTH=32)
+    # NOTE: the ad5x framebuffer is 32bpp (ARGB8888) but LVGL renders RGB565 -
+    # lv_conf.h puts HELIX_PLATFORM_AD5X in the 16bpp branch, so the flush path
+    # converts. Probe it rather than trust this comment:
+    #   gcc -DHELIX_PLATFORM_AD5X -DLV_CONF_INCLUDE_SIMPLE -I. -Ilib/lvgl ...
     # -funwind-tables: Emit DWARF unwind info so backtrace() can walk the full
     # call stack in crash reports. Small code size cost, zero runtime cost.
     TARGET_CFLAGS := -march=mips32r5 -mtune=mips32r5 -mabi=32 -mnan=2008 -mfp64 \
@@ -342,14 +348,19 @@ else ifeq ($(PLATFORM_TARGET),ad5x)
     HELIX_HAS_SNAPMAKER := 0
     # -Wl,--gc-sections: Remove unused sections during linking (works with -ffunction-sections)
     # -flto: Must match compiler flag for LTO to work
-    TARGET_LDFLAGS := -Wl,--gc-sections -flto
+    # -static: worth ~18% of a core here. Measured same-board against a dynamic build of
+    # the same commit: every render tag drops by x0.82 (starfield L2 steady 42% -> 37% of
+    # a core, frame 25.5 -> 21.1 ms), which is the PLT/GOT indirection a dynamic link pays
+    # on every cross-object call. Nothing on this target dlopens: the release ships no .so,
+    # and glibc 2.34+ builds nss_files/nss_dns into libc, so static getaddrinfo resolves.
+    TARGET_LDFLAGS := -Wl,--gc-sections -flto -static
     # SSL enabled for HTTPS/WSS support with Moonraker
     ENABLE_SSL := yes
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # AD5X: 385 MB free, no swap, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # AD5X: 385 MB free, no swap, so a saver is affordable. A running saver costs no
+    # detectable RSS, and the load gate measures CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := ad5x
@@ -403,7 +414,10 @@ else ifeq ($(PLATFORM_TARGET),cc1)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # CC1: 114 MB total, zram swap. Measured with a saver drawing: Klipper faulted at
+    # 0.247/s against 0.251/s for the same binary restarted without one, so the load is
+    # the restart, not the saver.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := cc1
     # Matches the `ad5m` target's size treatment (see its ENABLE_MOCKS block).
@@ -419,7 +433,7 @@ else ifeq ($(PLATFORM_TARGET),cc1)
 else ifneq ($(filter mips k1,$(PLATFORM_TARGET)),)
     # -------------------------------------------------------------------------
     # MIPS32 Devices (Creality K1) - Ingenic XBurst2
-    # K1: Ingenic X2000E, 480x400, 256MB RAM
+    # K1: Ingenic X2000E, 2 cores, 480x800 panel used rotated (800x480), 256MB RAM
     # MIPS32r2, musl libc, fbdev display, evdev touch
     # -------------------------------------------------------------------------
     # FULLY STATIC BUILD with musl: Cleaner than glibc static linking.
@@ -470,8 +484,8 @@ else ifneq ($(filter mips k1,$(PLATFORM_TARGET)),)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # K1C: 130 MB free, swap file untouched, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # K1C: 130 MB free, swap file untouched, so a saver is affordable. A running saver costs no
+    # detectable RSS, and the load gate measures CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := mips
@@ -482,7 +496,9 @@ else ifneq ($(filter mips k1,$(PLATFORM_TARGET)),)
 else ifeq ($(PLATFORM_TARGET),k1-dynamic)
     # -------------------------------------------------------------------------
     # Creality K1 Series - Dynamic Linking (Ingenic X2000E MIPS32r2)
-    # Specs: 480x400 display (K1/K1C/K1Max), 480x800 (K2), 256MB RAM, glibc 2.29
+    # Specs: 480x800 panel used rotated, so 800x480 landscape (K1/K1C/K1Max and K2
+    # alike), 256MB RAM, glibc 2.29. Panel geometry of record is
+    # assets/config/platforms.json; these lines are a reader's summary of it.
     # -------------------------------------------------------------------------
     # DYNAMIC BUILD: Links against K1's native glibc 2.29 system libraries.
     # Requires custom NaN2008+FP64 toolchain (built via crosstool-NG).
@@ -515,8 +531,8 @@ else ifeq ($(PLATFORM_TARGET),k1-dynamic)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # K1 dynamic: same board as k1/mips, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # K1 dynamic: same board as k1/mips, so a saver is affordable. A running saver costs no
+    # detectable RSS, and the load gate measures CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := k1-dynamic
@@ -559,8 +575,8 @@ else ifeq ($(PLATFORM_TARGET),k2)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # K2 Plus: 395 MB free, no swap, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # K2 Plus: 395 MB free, no swap, so a saver is affordable. A running saver costs no
+    # detectable RSS, and the load gate measures CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := k2
@@ -594,8 +610,9 @@ else ifeq ($(PLATFORM_TARGET),snapmaker-u1)
     DISPLAY_BACKEND := drm
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # Snapmaker U1: 4 cores and 705 MB free - the roomiest board in the fleet, so a saver's ~2 MB is noise. The AD5M and CC1 stay off:
-    # they sit near 110 MB and the AD5M swaps at idle.
+    # Snapmaker U1: 4 cores and 705 MB free, the roomiest board in the fleet, so a saver
+    # is affordable. A running saver costs no detectable RSS, and the load gate measures
+    # CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := snapmaker-u1
@@ -698,7 +715,8 @@ else ifeq ($(PLATFORM_TARGET),yocto)
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    ENABLE_SCREENSAVER := no
+    # Same board as cc1 (Centauri Carbon 1), so it carries savers on the same evidence.
+    ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := yocto
     # Don't strip — bitbake's package split handles debug/strip via FILES:${PN}-dbg.
@@ -2182,6 +2200,51 @@ deploy-ad5m-bin:
 	ssh $(AD5M_SSH_TARGET) "killall helix-watchdog helix-screen helix-splash 2>/dev/null || true; sleep 1; cd $(AD5M_DEPLOY_DIR) && ./bin/helix-launcher.sh >/dev/null 2>&1 &"
 	@echo "$(GREEN)✓ helix-screen restarted$(RESET)"
 
+# =============================================================================
+# AD5X deploy
+# =============================================================================
+# The AD5X does NOT resolve via mDNS, so the host is required rather than
+# defaulted, the way the K2's is.
+AD5X_HOST ?=
+AD5X_USER ?= root
+AD5X_SSH_TARGET = $(if $(AD5X_HOST),$(AD5X_USER)@$(AD5X_HOST),$(error AD5X_HOST is required. The AD5X does not resolve via mDNS. Use: make deploy-ad5x-bin AD5X_HOST=192.168.x.x))
+# Forge-X payload root, same shape as the AD5M's.
+AD5X_DEPLOY_DIR ?= /opt/config/mod/.bin/helixscreen
+
+# Binaries only. Deliberately does NOT restart the app, and that is not an
+# oversight: helix-screen on this board links against Forge-X's alternate glibc,
+# and an ssh login shell resolves the host /lib (2.33) instead. Launching
+# helix-launcher.sh from a deploy recipe therefore dies with
+# "GLIBC_2.34 not found", and pointing LD_LIBRARY_PATH at the Forge-X libs only
+# moves it to "ld-linux-mipsn8.so.1: GLIBC_2.35 not found" - their libc wants a
+# matching loader. Nothing under /etc, /opt/config/mod or /usr/data references
+# the launcher, so there is no start path to invoke. A reboot is the only
+# reliable restart, and rebooting a printer is the operator's call to make, not
+# a Makefile's: the board may be mid-print.
+.PHONY: deploy-ad5x-bin
+deploy-ad5x-bin:
+	@test -f build/ad5x/bin/helix-screen || { echo "$(RED)Error: build/ad5x/bin/helix-screen not found. Run 'make ad5x-docker' first.$(RESET)"; exit 1; }
+	@echo "$(CYAN)Deploying binaries only to $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin...$(RESET)"
+	ssh $(AD5X_SSH_TARGET) "mkdir -p $(AD5X_DEPLOY_DIR)/bin"
+	@echo "$(DIM)Backing up the current binary (cp -a: BusyBox cp has no -n)...$(RESET)"
+	ssh $(AD5X_SSH_TARGET) "cd $(AD5X_DEPLOY_DIR)/bin && cp -a helix-screen helix-screen.prev-deploy"
+	@echo "$(DIM)Stopping the app: a running binary cannot be overwritten (Text file busy).$(RESET)"
+	ssh $(AD5X_SSH_TARGET) "killall helix-watchdog helix-screen helix-splash 2>/dev/null; sleep 3; killall -9 helix-watchdog helix-screen helix-splash 2>/dev/null; rm -f /tmp/helix-screen.lock; true"
+	scp -O build/ad5x/bin/helix-screen build/ad5x/bin/helix-splash $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/
+	@if [ -f build/ad5x/bin/helix-watchdog ]; then scp -O build/ad5x/bin/helix-watchdog $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/; fi
+	@echo "$(GREEN)✓ Binaries deployed$(RESET)"
+	$(call sync-device-features,$(AD5X_SSH_TARGET),$(AD5X_DEPLOY_DIR),build/ad5x/bin)
+	@echo ""
+	@echo "$(CYAN)Restarting through the chroot...$(RESET)"
+	@# The app's glibc lives in a mod chroot, so a plain ssh invocation fails on
+	@# libssl. Forge-X is .forge-x and ZMOD is .zmod, so the root is read off the
+	@# stopped app's own launcher path rather than hardcoded to either.
+	ssh $(AD5X_SSH_TARGET) 'FX=$$(ls -d /usr/data/.mod/.forge-x /usr/data/.mod/.zmod 2>/dev/null | head -n 1); \
+		chroot $$FX sh -c "cd $(AD5X_DEPLOY_DIR) && ./bin/helix-launcher.sh" >/dev/null 2>&1 & \
+		sleep 12; pidof helix-screen >/dev/null && echo "  restarted" || echo "  WARNING: did not come up"'
+	@echo "$(GREEN)✓ helix-screen restarted$(RESET)"
+	@echo "  Previous binary is kept at $(AD5X_DEPLOY_DIR)/bin/helix-screen.prev-deploy"
+
 # Convenience: SSH into the AD5M
 ad5m-ssh:
 	ssh $(AD5M_SSH_TARGET)
@@ -3466,7 +3529,7 @@ package-cc1: cc1-docker gen-images gen-splash-3d-cc1 gen-printer-images release-
 package-pi: pi-all-docker gen-images gen-splash-3d-pi gen-printer-images release-pi
 package-pi32: pi32-all-docker gen-images gen-splash-3d-pi32 gen-printer-images release-pi32
 package-k1: mips-docker gen-images gen-splash-3d-k1 gen-printer-images release-k1
-package-ad5x: mips-docker gen-images gen-splash-3d-ad5x gen-printer-images release-ad5x
+package-ad5x: ad5x-docker gen-images gen-splash-3d-ad5x gen-printer-images release-ad5x
 package-k1-dynamic: k1-dynamic-docker gen-images gen-splash-3d-k1-dynamic gen-printer-images release-k1-dynamic
 package-k2: k2-docker gen-images gen-splash-3d-k2 gen-printer-images release-k2
 package-snapmaker-u1: snapmaker-u1-docker gen-images gen-splash-3d-snapmaker-u1 gen-printer-images release-snapmaker-u1

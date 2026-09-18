@@ -1577,8 +1577,23 @@ nlohmann::json RemoteControlServer::handle_click(const nlohmann::json& params) {
         std::vector<lv_obj_t*> ambiguous;
         lv_obj_t* widget = resolve_actionable(target, &descended, &ambiguous);
 
+        const bool force = params.value("force", false);
+        if (const char* blocked = helix::click_blocker(widget)) {
+            if (!force) {
+                throw std::invalid_argument(
+                    "Widget '" + target_label(params) + "' is " + blocked +
+                    " - a real tap would not reach it. Pass --force to send the event anyway.");
+            }
+        }
+
         nlohmann::json result;
         result["clicked"] = target_label(params);
+        if (const char* blocked = helix::click_blocker(widget)) {
+            // Forced. Say so in the response: a transcript that reads like an
+            // ordinary click is exactly how a synthetic success gets mistaken
+            // for a reachable control.
+            result["forced"] = blocked;
+        }
         // Always report the widget actually hit, and whether anything is
         // listening. A click on a widget with no handlers is a no-op, and
         // without this the response is indistinguishable from a real one.
@@ -1637,6 +1652,16 @@ nlohmann::json RemoteControlServer::handle_set_widget_value(const nlohmann::json
         lv_obj_t* descended = nullptr;
         lv_obj_t* widget = resolve_actionable(target, &descended, nullptr);
         std::string widget_name = target_label(params);
+
+        // Narrower than click_blocker(): this path also pokes labels, which are
+        // never clickable, so only the disabled state is checked. It still ends
+        // in LV_EVENT_VALUE_CHANGED "as if the user changed it", and on a
+        // disabled control the user could not have.
+        if (!params.value("force", false) && lv_obj_has_state(widget, LV_STATE_DISABLED)) {
+            throw std::invalid_argument("Widget '" + widget_name +
+                                        "' is disabled - the user could not change it. Pass "
+                                        "--force to set it anyway.");
+        }
 
         // Try to set value based on widget type
         if (value_json.is_number()) {

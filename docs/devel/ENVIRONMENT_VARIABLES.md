@@ -1264,6 +1264,27 @@ SCREWS_AUTO_START=1 ./build/bin/helix-screen --test &
 
 ## Development
 
+### `HELIX_USB_AUTOMOUNT`
+
+Disable the in-app fallback USB mounter. When nothing else on the device mounts USB sticks
+(no udisks2, no vendor app doing it), HelixScreen mounts an unmounted removable device
+read-only after a 3s grace period so the print-from-USB picker can see it. `0` forces that
+off, leaving mounting entirely to whatever else is on the system. The mounter also disarms
+itself when the process does not run as root, so a developer's desktop build never mounts
+the workstation's own drives. The unit-test binary pins this to `0` in its startup
+constructor, so the suite never arms the mounter regardless of euid.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0` (fallback mounting off), anything else or unset (on for root) |
+| **Default** | Enabled when running as root |
+| **File** | `src/api/usb_automount.cpp`, `include/usb_automount.h` |
+
+```bash
+# Leave USB mounting entirely to the platform's own mounter.
+HELIX_USB_AUTOMOUNT=0 ./build/bin/helix-screen -vv
+```
+
 ### `HELIX_TEMP_GRAPH_GRAD_SKIP`
 
 Force the temperature graph's gradient to re-render on every dirtied frame, disabling the
@@ -2066,7 +2087,7 @@ Override the base directory for all HelixScreen cache/temp files (thumbnails, sc
 | **File** | `src/app_globals.cpp` |
 
 When set, all cache subdirectories are created under `$HELIX_CACHE_DIR/<subdir>`. Platform hooks set this automatically:
-- **AD5M**: `/data/helixscreen/cache` (5.8GB ext4 partition)
+- **AD5M**: `/data/.helixscreen/cache` (5.8GB ext4 partition)
 - **K1**: `/usr/data/helixscreen/cache`
 - **K2**: `/mnt/UDISK/helixscreen/cache` (27.5GB user partition). `/usr/data` on the
   K2 is the ~240MB root overlay, not user storage, so it is only a fallback.
@@ -2081,7 +2102,7 @@ When set, all cache subdirectories are created under `$HELIX_CACHE_DIR/<subdir>`
 HELIX_CACHE_DIR=/mnt/storage/helix-cache ./build/bin/helix-screen
 
 # AD5M (set automatically by platform hooks)
-export HELIX_CACHE_DIR="/data/helixscreen/cache"
+export HELIX_CACHE_DIR="/data/.helixscreen/cache"
 ```
 
 **Resolution chain** (first match wins):

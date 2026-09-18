@@ -1163,8 +1163,10 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     subscription_objects["pause_resume"] = json::array({"is_paused"});
 
     // All discovered heaters (extruders, beds, generic heaters).
-    // PrinterTemperatureState reads only temperature + target.
-    static const json heater_fields = json::array({"temperature", "target"});
+    // PrinterTemperatureState reads temperature, target and duty cycle. Power
+    // is what distinguishes an element working flat out from one barely
+    // ticking over at the same temperature, so it is worth the field.
+    static const json heater_fields = json::array({"temperature", "target", "power"});
     for (const auto& heater : heaters) {
         subscription_objects[heater] = heater_fields;
     }

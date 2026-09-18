@@ -80,7 +80,7 @@ $(CPP_TERMINAL_VERSION_STUB_OBJ): $(TOOLS_DIR)/cpp_terminal_version_stub.cpp $(A
 	}
 
 # Compile cpp-terminal library (use SUBMODULE_CXXFLAGS to suppress third-party warnings)
-$(OBJ_DIR)/cpp-terminal/%.o: $(CPP_TERMINAL_DIR)/%.cpp $(ABI_STAMP)
+$(OBJ_DIR)/cpp-terminal/%.o: $(CPP_TERMINAL_DIR)/%.cpp $(ABI_STAMP) $(FLAGS_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[CXX]$(RESET) $<"
 ifeq ($(V),1)

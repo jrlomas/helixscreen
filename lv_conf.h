@@ -84,6 +84,12 @@
 /*Default display refresh, input device read and animation step period.*/
 #define LV_DEF_REFR_PERIOD  33      /*[ms]*/
 
+/*Pending invalid areas kept per display. A frame that needs more areas than this makes
+ *LVGL drop every pending area and invalidate the whole screen, and the screensavers
+ *invalidate one area per moving object (helix::ui::SAVER_MAX_DIRTY_AREAS caps them at
+ *160), so the buffer sits above that cap with headroom for UI invalidations of its own.*/
+#define LV_INV_BUF_SIZE 192
+
 /*Default Dot Per Inch. Used to initialize default sizes such as widgets sized, style paddings.
  *(Not so important, you can adjust it to modify default sizes and spaces)*/
 #define LV_DPI_DEF 160     /*[px/inch]*/
@@ -100,7 +106,19 @@
  * - LV_OS_WINDOWS
  * - LV_OS_MQX
  * - LV_OS_CUSTOM */
-#define LV_USE_OS   LV_OS_PTHREAD
+/* The software draw unit count is 1, so a render thread adds no concurrency: it only moves
+ * each draw task to another thread and back, and every invalidated area pays
+ * lv_draw_dispatch_wait_for_request() a thread synchronisation for it. That is worth it
+ * where a core is free to take the work, and a loss on a board whose cores are already
+ * running the app and Klipper, so the two-core Ingenic boards render inline.
+ * Measured per invalidated area, with a render thread then without: 0.32% then 0.24% of a
+ * core on a K1C, and on an AD5X the starfield's top rung falls from 83.4% to 61.3%, which is
+ * the difference between exhausting the ladder and settling on it. */
+#if defined(HELIX_PLATFORM_MIPS) || defined(HELIX_PLATFORM_K1) || defined(HELIX_PLATFORM_AD5X)
+    #define LV_USE_OS   LV_OS_NONE
+#else
+    #define LV_USE_OS   LV_OS_PTHREAD
+#endif
 
 #if LV_USE_OS == LV_OS_CUSTOM
     #define LV_OS_CUSTOM_INCLUDE <stdint.h>

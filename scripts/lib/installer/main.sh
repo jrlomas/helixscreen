@@ -431,7 +431,16 @@ configure_platform() {
 
     case "${AD5M_FIRMWARE:-}" in
         forge_x)
-            configure_forgex_display || true
+            # The display takeover is the one forgex step that must fail the
+            # install: its non-zero return means the vendor UI still owns the
+            # display slot, and an install that continued would ship two UIs
+            # fighting over the framebuffer. The steps below it harden around
+            # a takeover that already succeeded - best-effort by design.
+            configure_forgex_display || {
+                log_error "ForgeX display takeover failed - the vendor UI still owns the display slot"
+                log_error "The install did not complete; address the ForgeX message above and re-run"
+                return 1
+            }
             dismiss_forgex_feather_promo || true
             patch_forgex_screen_sh || true
             patch_forgex_screen_drawing || true
@@ -753,6 +762,9 @@ main() {
     # Clear the payload's directory of any state kept there, before anything
     # extracts on top of it.
     migrate_previous_state_dir
+    # Rename a state root whose name had to change (AD5M dot-prefix), before
+    # the new payload's hook looks for it at the new name.
+    migrate_state_root
 
     extract_release "$platform"
     fix_install_ownership
@@ -798,7 +810,7 @@ main() {
     # Create platform cache directory
     case "$platform" in
         ad5m)
-            $SUDO mkdir -p /data/helixscreen/cache
+            $SUDO mkdir -p /data/.helixscreen/cache
             ;;
         k1)
             $SUDO mkdir -p /usr/data/helixscreen/cache

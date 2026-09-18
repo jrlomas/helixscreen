@@ -1490,7 +1490,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
         const auto initial = shown_frames(ss);
         const auto all_sprites = ToasterAccess::sprites(ss);
         REQUIRE(all_sprites.size() > 10);
-        CHECK(ss.level_count() == 3);
+        CHECK(ss.level_count() == 4);
         CHECK(SaverTestAccess::timer(ss)->period == helix::ui::SAVER_FAST_PERIOD);
         for (int i = 0; i < 10; i++) {
             lv_tick_inc(400);
@@ -1507,18 +1507,28 @@ TEST_CASE_METHOD(LVGLTestFixture,
         // Sprites sit exactly where 4.1 s of flight puts them, so the switch cost no time.
         CHECK(check_sprites_at(ss, 4100, initial).visible_toasters > 0);
 
-        // The lowest rung flies ten sprites and lets the rest go.
-        ss.request_level(2);
-        CHECK(ss.level() == 2);
-        CHECK(SaverTestAccess::timer(ss)->period == 33);
-        CHECK(ToasterAccess::sprites(ss).size() == 10);
-        CHECK(lv_obj_has_flag(all_sprites[10].img, LV_OBJ_FLAG_HIDDEN));
+        // Rungs past half rate thin the flock instead of slowing it again, and each one keeps
+        // strictly fewer sprites than the rung above it.
+        size_t previous = ToasterAccess::sprites(ss).size();
+        for (size_t level = 2; level < ss.level_count(); level++) {
+            ss.request_level(level);
+            CAPTURE(level);
+            CHECK(ss.level() == level);
+            CHECK(SaverTestAccess::timer(ss)->period == 33);
+            const size_t kept = ToasterAccess::sprites(ss).size();
+            CHECK(kept < previous);
+            CHECK(lv_obj_has_flag(all_sprites[kept].img, LV_OBJ_FLAG_HIDDEN));
+            previous = kept;
+        }
+        // The bottom rung is the sparsest thing the gate can fall back to.
+        CHECK(previous == 10);
     }
 
     SECTION("flying toasters started at the lowest rung") {
         FlyingToasterScreensaver ss;
         ScreensaverStopOnExit<FlyingToasterScreensaver> stop_on_exit{ss};
-        ss.set_start_level(2);
+        FlyingToasterScreensaver probe;
+        ss.set_start_level(probe.level_count() - 1);
         ss.start();
         REQUIRE(ss.is_active());
         CHECK(ToasterAccess::sprites(ss).size() == 10);
@@ -1530,10 +1540,25 @@ TEST_CASE_METHOD(LVGLTestFixture,
         ScreensaverStopOnExit<StarfieldScreensaver> stop_on_exit{ss};
         ss.start();
         REQUIRE(ss.is_active());
-        CHECK(ss.level_count() == 2);
+        CHECK(ss.level_count() == 4);
+        CHECK(StarAccess::active_star_count(ss) == 150);
         CHECK(SaverTestAccess::timer(ss)->period == helix::ui::SAVER_FAST_PERIOD);
         ss.request_level(1);
+        CHECK(ss.level() == 1);
         CHECK(SaverTestAccess::timer(ss)->period == 33);
+        CHECK(StarAccess::active_star_count(ss) == 96);
+        // Every rung past half rate holds 33 ms and thins the population strictly.
+        int previous_stars = 96;
+        for (size_t level = 2; level < ss.level_count(); level++) {
+            ss.request_level(level);
+            CAPTURE(level);
+            CHECK(SaverTestAccess::timer(ss)->period == 33);
+            const int stars = StarAccess::active_star_count(ss);
+            CHECK(stars < previous_stars);
+            previous_stars = stars;
+        }
+        // The bottom rung is the sparsest sky the gate can fall back to.
+        CHECK(previous_stars == 32);
     }
 
     SECTION("pipes") {

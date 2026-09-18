@@ -5,9 +5,48 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cctype>
+#include <ctime>
 #include <vector>
 
 namespace helix::gcode {
+
+namespace {
+
+// The printable-extension list every consumer shares: the Moonraker file list,
+// the USB stick scanner and the display-name stripper. A second copy anywhere
+// drifts, and each copy reads correct alone.
+const std::vector<std::string>& printable_extensions() {
+    static const std::vector<std::string> extensions = {".gcode", ".gco", ".g", ".3mf"};
+    return extensions;
+}
+
+// Case-insensitive suffix match. A name exactly as long as the extension is a
+// hidden dotfile (".gcode"), not a printable file.
+bool ends_with_ci(const std::string& filename, const std::string& ext) {
+    if (filename.size() <= ext.size()) {
+        return false;
+    }
+    size_t pos = filename.size() - ext.size();
+    for (size_t i = 0; i < ext.size(); ++i) {
+        char c = static_cast<char>(std::tolower(static_cast<unsigned char>(filename[pos + i])));
+        if (c != ext[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+bool has_printable_extension(const std::string& filename) {
+    for (const auto& ext : printable_extensions()) {
+        if (ends_with_ci(filename, ext)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 std::string join_gcode_path(const std::string& dir, const std::string& filename) {
     return dir.empty() ? filename : dir + "/" + filename;
@@ -28,23 +67,9 @@ std::string get_filename_basename(const std::string& path) {
 }
 
 std::string strip_gcode_extension(const std::string& filename) {
-    // Common G-code extensions (case-insensitive check)
-    static const std::vector<std::string> extensions = {".gcode", ".gco", ".g", ".3mf"};
-
-    for (const auto& ext : extensions) {
-        if (filename.size() > ext.size()) {
-            size_t pos = filename.size() - ext.size();
-            // Case-insensitive suffix comparison
-            std::string suffix = filename.substr(pos);
-            std::string suffix_lower;
-            suffix_lower.reserve(suffix.size());
-            for (char c : suffix) {
-                suffix_lower.push_back(
-                    static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-            }
-            if (suffix_lower == ext) {
-                return filename.substr(0, pos);
-            }
+    for (const auto& ext : printable_extensions()) {
+        if (ends_with_ci(filename, ext)) {
+            return filename.substr(0, filename.size() - ext.size());
         }
     }
 
@@ -58,6 +83,10 @@ std::string get_display_filename(const std::string& path) {
 // Pattern: .helix_temp/modified_123456789_OriginalName.gcode (Moonraker plugin)
 // Also handles: */gcode_mod/mod_XXXXXX_filename.gcode (local temp files)
 // Legacy: /tmp/helixscreen_mod_XXXXXX_filename.gcode
+// The staging directory on the printer and the prefix inside it. Named once:
+// producers build paths through make_rewritten_gcode_path() and consumers
+// recognise them through is_uploaded_rewrite_path(), so neither side can spell
+// it differently from the other.
 static const std::string helix_temp_prefix = ".helix_temp/modified_";
 static const std::string gcode_mod_prefix = "/gcode_mod/mod_";
 static const std::string legacy_prefix = "/tmp/helixscreen_mod_";
@@ -129,6 +158,15 @@ bool is_native_3mf_shadow(const std::string& name) {
         return false;
     }
     return name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+std::string make_rewritten_gcode_path(const std::string& display_filename) {
+    return helix_temp_prefix + std::to_string(static_cast<long long>(std::time(nullptr))) + "_" +
+           display_filename;
+}
+
+bool is_uploaded_rewrite_path(const std::string& path) {
+    return path.find(helix_temp_prefix) != std::string::npos;
 }
 
 } // namespace helix::gcode

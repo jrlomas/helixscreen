@@ -144,3 +144,39 @@ TEST_CASE("every declared state root is one the app looks in", "[install-roots][
         }
     }
 }
+
+TEST_CASE("state on the gcodes-shared partition hides behind a dot-entry",
+          "[install-roots][manifest]") {
+    // The AD5M symlinks its whole /data partition into Moonraker's gcodes
+    // root, so anything this manifest puts there is an entry in the
+    // print-file picker unless its top directory is a dot-entry, which the
+    // listing skips. The property is the dotted first segment and everything
+    // living under it, not the spelling of any path.
+    const json manifest = load_manifest();
+    const auto platforms = manifest.find("platforms");
+    REQUIRE(platforms != manifest.end());
+    const auto ad5m = platforms->find("ad5m");
+    REQUIRE(ad5m != platforms->end());
+    const json& storage = ad5m->at("storage");
+
+    const std::string state_root = storage.value("state_root", "");
+    const size_t last_slash = state_root.find_last_of('/');
+    INFO("ad5m state_root " << state_root);
+    REQUIRE(last_slash != std::string::npos);
+    REQUIRE(state_root[last_slash + 1] == '.');
+
+    const std::string cache_dir = storage.value("cache_dir", "");
+    INFO("ad5m cache_dir " << cache_dir);
+    REQUIRE(cache_dir.rfind(state_root + "/", 0) == 0);
+
+    for (auto it = storage.at("log_file_by_firmware").begin();
+         it != storage.at("log_file_by_firmware").end(); ++it) {
+        if (!it.value().is_string())
+            continue; // null = firmware variant has no log of ours
+        const std::string log_path = it.value().get<std::string>();
+        if (log_path.rfind("/data/", 0) != 0)
+            continue; // firmware variants may log outside the shared partition
+        INFO("ad5m log (" << it.key() << ") " << log_path);
+        REQUIRE(log_path.rfind(state_root + "/", 0) == 0);
+    }
+}

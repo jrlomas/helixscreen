@@ -363,7 +363,7 @@ std::function<void()> get_wizard_cancel_callback();
  * 1. HELIX_CACHE_DIR env var + /<subdir>
  * 2. Config /cache/base_directory + /<subdir>
  * 3. Platform-specific (compile-time):
- *    - AD5M:  /data/helixscreen/cache/<subdir>
+ *    - AD5M:  /data/.helixscreen/cache/<subdir>
  *    - K1:    /usr/data/helixscreen-state/cache/<subdir>
  *    - K2:    /mnt/UDISK/helixscreen-state/cache/<subdir>, then /usr/data
  *             (/usr/data is the small root overlay on the K2, not user storage)
@@ -422,6 +422,27 @@ std::string peek_helix_cache_dir(const std::string& subdir);
  * @return Number of stale directories reclaimed.
  */
 int sweep_stale_helix_cache_dirs();
+
+namespace helix {
+
+/**
+ * @brief Move a platform state root whose name had to change, repairing env.
+ *
+ * Which platforms need this and why is a platform question (on the AD5M,
+ * /data is the only large writable partition and the vendor symlinks it whole
+ * into Moonraker's gcodes root, so the state root must stay dot-prefixed to
+ * stay out of the print-file picker: Moonraker's listings hide dot-entries,
+ * the same mechanism the vendor's own .mod and .thumbs rely on). This renames
+ * the old root into place and repoints HELIX_CACHE_DIR / HELIX_LOG_FILE
+ * values the platform hook exported from the old name, so a binary deployed
+ * without the installer does not recreate the visible directory on first use.
+ *
+ * A no-op on builds whose state root never moved. Call once at startup,
+ * before logging init: HELIX_LOG_FILE is consumed there.
+ */
+void migrate_legacy_state_roots();
+
+} // namespace helix
 
 /**
  * @brief Returns the installation root directory (containing bin/, ui_xml/, assets/).

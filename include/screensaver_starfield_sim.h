@@ -41,14 +41,31 @@ class StarfieldSim {
     void init(uint32_t w, uint32_t h, std::minstd_rand& rng);
 
     /**
+     * @brief Stars moved and drawn per frame: the first `count` of the population
+     *
+     * `count` is clamped to [1, NUM_STARS]. The population keeps its allocation, and a
+     * star past the count is erased on the next step and then parked, so the ladder that
+     * changes it reallocates nothing per frame.
+     */
+    void set_active_count(int count);
+
+    /// The count set by set_active_count(), NUM_STARS until one is set.
+    int active_count() const {
+        return active_count_;
+    }
+
+    /**
      * @brief Draws the next frame into `target`
      *
-     * Erases the stars where the previous step drew them, moves each star by `dt_ms` of
-     * flight and draws it, recycling a star that reaches the camera or leaves the frame.
+     * Erases the stars where the previous step drew them, moves each active star by
+     * `dt_ms` of flight and draws it, recycling a star that reaches the camera or leaves
+     * the frame.
      *
-     * @return Bounds of every pixel the step wrote
+     * @param dirty Replaced with one box per star that erased or drew anything: the union
+     * of that star's erase box and its draw box, clipped to the frame
      */
-    DirtyRect step(uint32_t dt_ms, FrameTarget& target, std::minstd_rand& rng);
+    void step(uint32_t dt_ms, FrameTarget& target, std::minstd_rand& rng,
+              std::vector<DirtyRect>& dirty);
 
     std::vector<Star>& stars() {
         return stars_;
@@ -62,6 +79,9 @@ class StarfieldSim {
     void recycle(Star& star, std::minstd_rand& rng);
 
     std::vector<Star> stars_;
+    /// Per-star dirty box of the step in flight, sized by init().
+    std::vector<DirtyRect> star_dirty_;
+    int active_count_ = NUM_STARS;
     float cx_ = 0;    // frame center X
     float cy_ = 0;    // frame center Y
     float focal_ = 0; // projection focal length

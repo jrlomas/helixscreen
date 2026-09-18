@@ -816,9 +816,17 @@ void SensorSettingsOverlay::populate_chamber_assignment() {
     // --- Chamber Sensor Dropdown ---
     lv_obj_t* sensor_dd = lv_obj_find_by_name(overlay_root_, "chamber_sensor_dropdown");
     if (sensor_dd) {
-        auto built = build_chamber_assignment_options(
-            discovery.sensors(), discovery.chamber_sensor_name(),
-            settings.get_chamber_sensor_assignment(), "temperature_sensor ", assignment_labels());
+        // A chamber heater measures its own chamber, so discovery leaves the
+        // sensor pick empty and the heater is what Auto reads. Name it: a
+        // chamber that has a reading must not report none detected. The bare
+        // object name carries no "temperature_sensor " prefix to strip, so it
+        // reaches the label as the user's own object name.
+        const std::string& detected_sensor = discovery.chamber_sensor_name().empty()
+                                                 ? discovery.chamber_heater_object_name()
+                                                 : discovery.chamber_sensor_name();
+        auto built = build_chamber_assignment_options(discovery.sensors(), detected_sensor,
+                                                      settings.get_chamber_sensor_assignment(),
+                                                      "temperature_sensor ", assignment_labels());
 
         lv_dropdown_set_options(sensor_dd, built.options.c_str());
         lv_dropdown_set_selected(sensor_dd, built.selected);

@@ -66,7 +66,7 @@ platform_wait_for_services() {
 # Pre-start setup: set the active flag so other services know HelixScreen
 # owns the display.
 platform_pre_start() {
-    export HELIX_CACHE_DIR="${HELIX_CACHE_DIR:-/data/helixscreen/cache}"
+    export HELIX_CACHE_DIR="${HELIX_CACHE_DIR:-/data/.helixscreen/cache}"
 
     # Logging policy: see hooks-ad5m-forgex.sh for the RAM/tmpfs rationale —
     # AD5M has 107 MB RAM, /tmp is a 54 MB tmpfs typically at <10 MB free, and
@@ -79,7 +79,7 @@ platform_pre_start() {
     #   AD5X  /opt/config/ /usr/prog/config/ /usr/data/logs/
     #         /usr/prog/app_startup.sh /tmp/*.txt
     #   AD5M  /opt/config/ /data/logFiles/ /tmp/*.txt
-    # /data/helixscreen/ is in neither list, so anything written there never
+    # /data/.helixscreen/ is in neither list, so anything written there never
     # reaches a support archive. /opt/config
     # is a bind-mount of the durable mod config dir on both models, `log` is
     # not in TAR_CONFIG's exclude list, and mod_data/log/ already exists and is

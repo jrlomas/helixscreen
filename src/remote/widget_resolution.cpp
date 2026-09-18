@@ -338,4 +338,26 @@ lv_obj_t* topmost_visible(const std::vector<lv_obj_t*>& matches) {
     return best;
 }
 
+const char* click_blocker(lv_obj_t* obj) {
+    if (obj == nullptr) {
+        return "not found";
+    }
+    // Hidden is inherited: an object inside a hidden parent is not drawn and
+    // never hit-tested, however unhidden it is itself.
+    for (lv_obj_t* o = obj; o != nullptr; o = lv_obj_get_parent(o)) {
+        if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) {
+            return "hidden";
+        }
+    }
+    if (!lv_obj_has_flag(obj, LV_OBJ_FLAG_CLICKABLE)) {
+        return "not clickable";
+    }
+    // Checked on the hit object only, which is what lv_indev.c does - a
+    // disabled parent does not stop an enabled child receiving its own taps.
+    if (lv_obj_has_state(obj, LV_STATE_DISABLED)) {
+        return "disabled";
+    }
+    return nullptr;
+}
+
 } // namespace helix

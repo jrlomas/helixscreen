@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 static bool try_create_dir(const std::string& path) {
@@ -82,7 +83,12 @@ static std::vector<CacheCandidate> cache_path_candidates(const std::string& subd
 
     // 3. Platform-specific compile-time paths
 #if defined(HELIX_PLATFORM_AD5M)
-    out.push_back({"/data/helixscreen/cache/" + subdir, "AD5M", true});
+    // Dot-prefixed on purpose: /data is the only large writable partition on
+    // this board and the vendor symlinks it whole into Moonraker's gcodes
+    // root, so a plain-named directory shows up in the print-file picker.
+    // Moonraker's listings hide dot-entries (the vendor's own .mod and .thumbs
+    // rely on exactly that), no moonraker.conf edit needed.
+    out.push_back({"/data/.helixscreen/cache/" + subdir, "AD5M", true});
 #elif defined(HELIX_PLATFORM_CC1)
     // /user-resource is the 6.3GB ext4 partition. / is a read-only squashfs with
     // no /opt, so anything rooted there falls through to RAM-backed /tmp. The
@@ -257,6 +263,57 @@ std::vector<std::string> select_stale_paths(const std::vector<CacheCandidate>& c
     return stale;
 }
 
+int migrate_state_root(const std::string& legacy_root, const std::string& current_root) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    int actions = 0;
+
+    if (!fs::is_directory(legacy_root, ec))
+        return 0;
+
+    if (!fs::is_directory(current_root, ec)) {
+        fs::rename(legacy_root, current_root, ec);
+        if (ec) {
+            spdlog::warn("[CacheDir] Could not move state root {} to {}: {}", legacy_root,
+                         current_root, ec.message());
+            return 0;
+        }
+        spdlog::info("[CacheDir] Moved state root {} -> {}", legacy_root, current_root);
+        return 1;
+    }
+
+    // Both roots exist: a half-finished migration. Carry the known state
+    // subtrees across, never clobbering — a subtree already on the new side
+    // stays, and its legacy twin is left for the operator to inspect.
+    for (const char* sub : {"cache", "logs"}) {
+        const fs::path from = fs::path(legacy_root) / sub;
+        const fs::path to = fs::path(current_root) / sub;
+        if (!fs::is_directory(from, ec) || fs::exists(to, ec))
+            continue;
+        fs::rename(from, to, ec);
+        if (!ec) {
+            spdlog::info("[CacheDir] Moved state subtree {} -> {}", from.string(), to.string());
+            ++actions;
+        }
+    }
+
+    // An empty legacy tree is pure scaffolding: the pre-rename platform hook
+    // recreates <legacy>/logs at every pre-start. fs::remove refuses a
+    // non-empty directory, so anything with content survives on its own.
+    for (const char* sub : {"cache", "logs"}) {
+        const fs::path dir = fs::path(legacy_root) / sub;
+        if (fs::is_empty(dir, ec)) {
+            fs::remove(dir, ec);
+            if (!ec)
+                ++actions;
+        }
+    }
+    fs::remove(legacy_root, ec);
+    if (!ec)
+        ++actions;
+    return actions;
+}
+
 } // namespace helix::cache_internal
 
 int sweep_stale_helix_cache_dirs() {
@@ -268,3 +325,34 @@ int sweep_stale_helix_cache_dirs() {
     }
     return removed;
 }
+
+namespace helix {
+
+void migrate_legacy_state_roots() {
+#if defined(HELIX_PLATFORM_AD5M)
+    // /data is this board's only large writable partition and the vendor
+    // symlinks it whole into Moonraker's gcodes root, so the state root has to
+    // stay dot-prefixed to stay out of the print-file picker. A binary update
+    // that lands without the installer (a dev deploy) still runs under the
+    // pre-rename platform hook, whose exported defaults point at the old root;
+    // those env values would recreate the visible directory on first use, so
+    // they are repointed alongside the rename.
+    constexpr const char* kLegacyRoot = "/data/helixscreen";
+    constexpr const char* kCurrentRoot = "/data/.helixscreen";
+    constexpr std::string_view kLegacyPrefix = "/data/helixscreen/";
+
+    helix::cache_internal::migrate_state_root(kLegacyRoot, kCurrentRoot);
+
+    for (const char* var : {"HELIX_CACHE_DIR", "HELIX_LOG_FILE"}) {
+        const char* value = std::getenv(var);
+        // string_view::starts_with is C++20; the build is -std=c++17.
+        if (value == nullptr || std::string_view(value).rfind(kLegacyPrefix, 0) != 0)
+            continue;
+        const std::string repaired = std::string(kCurrentRoot) + (value + kLegacyPrefix.size() - 1);
+        setenv(var, repaired.c_str(), 1);
+        spdlog::info("[CacheDir] Repointed {} to the renamed state root: {}", var, repaired);
+    }
+#endif
+}
+
+} // namespace helix

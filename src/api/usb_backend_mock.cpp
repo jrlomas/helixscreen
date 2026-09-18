@@ -194,9 +194,7 @@ void UsbBackendMock::clear_all() {
 
 void UsbBackendMock::add_demo_drives() {
     // Add a demo USB drive with realistic G-code files
-    UsbDrive demo_drive("/media/usb0", "/dev/sda1", "PRINT_FILES",
-                        16ULL * 1024 * 1024 * 1024, // 16 GB total
-                        8ULL * 1024 * 1024 * 1024); // 8 GB available
+    UsbDrive demo_drive("/media/usb0", "/dev/sda1", "PRINT_FILES");
 
     simulate_drive_insert(demo_drive);
 

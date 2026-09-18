@@ -53,11 +53,11 @@ class FlyingToasterScreensaver : public helix::ui::SaverBase {
     // pinned. See tests/test_helpers/screensaver_test_access.h.
     friend class FlyingToasterScreensaverTestAccess;
 
-    /// Frame period per level: 16 ms with every sprite, 33 ms with every sprite, 33 ms with the
-    /// capped sprite count.
-    static constexpr uint32_t LEVEL_PERIODS_MS[] = {helix::ui::SAVER_FAST_PERIOD, 33, 33};
+    /// Frame period per level. Below full rate the rungs thin the sprite population instead of
+    /// slowing further, because a halved rate that still flies every sprite saves little: see
+    /// LEVEL_SPRITE_CAPS, which is indexed by the same level.
+    static constexpr uint32_t LEVEL_PERIODS_MS[] = {helix::ui::SAVER_FAST_PERIOD, 33, 33, 33};
     /// First level that flies the capped sprite count.
-    static constexpr size_t CAPPED_LEVEL = 2;
 
     struct FlyingObject {
         lv_obj_t* img;

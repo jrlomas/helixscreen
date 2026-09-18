@@ -397,8 +397,7 @@ void TempGraphOverlay::discover_series() {
         lv_subject_t* chamber_gate = lv_xml_get_subject(nullptr, "printer_has_chamber");
         if (chamber_gate && lv_subject_get_int(chamber_gate) != 0) {
             const std::string& heater = temp_state.chamber_heater_name();
-            const std::string& sensor = temp_state.chamber_sensor_name();
-            const std::string& klipper = !heater.empty() ? heater : sensor;
+            const std::string& klipper = temp_state.chamber_temperature_source();
             if (!klipper.empty()) {
                 SeriesInfo s;
                 s.display_name = lv_tr("Chamber");

@@ -49,7 +49,7 @@ PRERENDERED_IMAGES_ALL := \
 gen-images-ad5m:
 	$(ECHO) "$(CYAN)Generating pre-rendered images for AD5M (800x480)...$(RESET)"
 	$(Q)mkdir -p $(PRERENDERED_DIR)
-	$(Q)OUTPUT_DIR=$(PRERENDERED_DIR) TARGET_SIZES=small ./$(REGEN_IMAGES_SCRIPT)
+	$(Q)OUTPUT_DIR=$(PRERENDERED_DIR) TARGET_SIZES=medium ./$(REGEN_IMAGES_SCRIPT)
 	$(ECHO) "$(GREEN)✓ AD5M images generated$(RESET)"
 
 # Generate images for AD5X (800x480 fixed display only)
@@ -59,7 +59,7 @@ gen-images-ad5m:
 gen-images-ad5x:
 	$(ECHO) "$(CYAN)Generating pre-rendered images for AD5X (800x480)...$(RESET)"
 	$(Q)mkdir -p $(PRERENDERED_DIR)
-	$(Q)OUTPUT_DIR=$(PRERENDERED_DIR) TARGET_SIZES=small ./$(REGEN_IMAGES_SCRIPT)
+	$(Q)OUTPUT_DIR=$(PRERENDERED_DIR) TARGET_SIZES=medium ./$(REGEN_IMAGES_SCRIPT)
 	$(ECHO) "$(GREEN)✓ AD5X images generated$(RESET)"
 
 # Generate images for Pi (all sizes for variable displays)

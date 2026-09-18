@@ -130,6 +130,26 @@ lv_obj_t* resolve_actionable(lv_obj_t* target, lv_obj_t** descended_to,
                              std::vector<lv_obj_t*>* ambiguous);
 
 /**
+ * @brief Why a real tap on this widget would never arrive, or nullptr.
+ *
+ * `lv_obj_send_event(o, LV_EVENT_CLICKED)` reaches any object at all, so a
+ * synthetic click reports success on widgets a finger cannot activate. LVGL's
+ * input device is stricter: it hit-tests on LV_OBJ_FLAG_CLICKABLE and gates
+ * PRESSED, PRESSING and CLICKED on !lv_obj_has_state(o, LV_STATE_DISABLED)
+ * (lv_indev.c). Anything the indev would refuse is named here so a remote click
+ * can refuse it too, instead of handing back a success a real panel would not
+ * reproduce.
+ *
+ * Checked in the indev's own order, so the reported reason is the first one a
+ * finger would hit. The returned string is a literal, valid for the caller's
+ * lifetime.
+ *
+ * @return Literal reason ("hidden", "not clickable", "disabled"), or nullptr
+ *         when a tap would land.
+ */
+const char* click_blocker(lv_obj_t* obj);
+
+/**
  * @brief Rank one candidate of a by-name search; the highest key wins.
  *
  * Packs three fields into one comparable value, most significant first: the

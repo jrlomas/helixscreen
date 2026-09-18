@@ -443,8 +443,6 @@ translations:
     directory available'
   'Cannot modify G-code: scan result not available': 'Cannot modify G-code: scan result
     not available'
-  'Cannot modify G-code: {}. Printing original file.': 'Cannot modify G-code: {}.
-    Printing original file.'
   Cannot perform this action now: Cannot perform this action now
   'Cannot remap G-code: no temp directory available': 'Cannot remap G-code: no temp
     directory available'
@@ -835,6 +833,7 @@ translations:
   Documentation: Documentation
   Don't Save: Don't Save
   Don't ask again: Don't ask again
+  Don't show again: Don't show again
   Done: Done
   Download update?: Download update?
   Download v{}?: Download v{}?
@@ -1179,6 +1178,7 @@ translations:
   Filament ran out. Auto-refill is off, so the CFS will not switch spools on its own. Load filament, then resume.: Filament ran out. Auto-refill is off, so the CFS will not switch spools on its own. Load filament, then resume.
   Filament ran out. The CFS knows which spools match, but those slots are empty. Load one of them, then resume.: Filament ran out. The CFS knows which spools match, but those slots are empty. Load one of them, then resume.
   Filament reload failed: Filament reload failed
+  Filament remapping is unavailable: Filament remapping is unavailable
   Filament runout: Filament runout
   Filament runout and motion detection sensors: Filament runout and motion detection
     sensors
@@ -1301,6 +1301,7 @@ translations:
   Heater Power: Heater Power
   Heater connection lost: 'Heater connection lost'
   Heater fault: 'Heater fault'
+  Heater offline: Heater offline
   Heater over-temperature: 'Heater over-temperature'
   Heater sensor fault: 'Heater sensor fault'
   HeaterSelect: HeaterSelect
@@ -1442,9 +1443,6 @@ translations:
   Install plugin: Install plugin
   Install script not found. Use the remote install command instead.: Install script
     not found. Use the remote install command instead.
-  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Install
-    the HelixPrint plugin in Advanced settings to remap filament without affecting
-    print history.
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': 'Install
     the HelixPrint plugin to enable fast G-code modifications. Run this command via
     SSH on your printer:'
@@ -1732,6 +1730,7 @@ translations:
   Missing value: Missing value
   Mode: Mode
   Modified: Modified
+  Modifying G-code needs the HelixPrint plugin. Printing original file.: Modifying G-code needs the HelixPrint plugin. Printing original file.
   Monitor for print abnormalities (K2 Plus camera-based): Monitor for print abnormalities (K2 Plus camera-based)
   Monitor for print abnormalities (camera-based): 'Monitor for print abnormalities (camera-based)'
   'Monitor prints in progress — time remaining, current layer, and progress. Tap to pause, resume, or cancel the active job.': 'Monitor prints in progress — time remaining, current layer, and progress. Tap to pause, resume, or cancel the active job.'
@@ -2159,6 +2158,7 @@ translations:
   'Print ending...': 'Print ending...'
   Print error: Print error
   Print failed: Print failed
+  Print history will show the rewritten name: Print history will show the rewritten name
   Print issue detected: Print issue detected
   Print jobs waiting to run: Print jobs waiting to run
   'Print preparation failed: {}': 'Print preparation failed: {}'
@@ -2295,6 +2295,7 @@ translations:
   'RFCOMM connect failed: ': 'RFCOMM connect failed: '
   RFID reader malfunction (left): RFID reader malfunction (left)
   RFID reader malfunction (right): RFID reader malfunction (right)
+  RFID, auto-refill, nozzle and link care: RFID, auto-refill, nozzle and link care
   RSS: RSS
   'RSS:': 'RSS:'
   Ramming Volume: Ramming Volume
@@ -2352,7 +2353,10 @@ translations:
   Remaining (g): Remaining (g)
   Remaining Weight (g): Remaining Weight (g)
   Remap Tool: Remap Tool
-  Remap needs the HelixPrint plugin: Remap needs the HelixPrint plugin
+  ? Remapping rewrites the job file before printing it. This printer's Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally.
+  : Remapping rewrites the job file before printing it. This printer's Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally.
+  ? "Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.\n\nInstalling the plugin takes a moment and needs no restart."
+  : "Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.\n\nInstalling the plugin takes a moment and needs no restart."
   Remap…: Remap…
   Remember slot spool details across an eject: Remember slot spool details across an eject
   Remove: Remove

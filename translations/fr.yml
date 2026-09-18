@@ -462,8 +462,6 @@ translations:
     G-Code : aucun répertoire temporaire disponible'
   'Cannot modify G-code: scan result not available': 'Impossible de modifier le G-Code
     : résultat du scan non disponible'
-  'Cannot modify G-code: {}. Printing original file.': 'Impossible de modifier le
-    G-Code : {}. Impression du fichier original.'
   Cannot perform this action now: Impossible d'effectuer cette action maintenant
   'Cannot remap G-code: no temp directory available': 'Impossible de remapper le G-Code
     : aucun répertoire temporaire disponible'
@@ -867,6 +865,7 @@ translations:
   Documentation: Documentation
   Don't Save: Ne pas enregistrer
   Don't ask again: Ne plus demander
+  Don't show again: ''
   Done: Terminé
   Download update?: Télécharger la mise à jour ?
   Download v{}?: Télécharger v{} ?
@@ -1224,6 +1223,7 @@ translations:
   Filament ran out. Auto-refill is off, so the CFS will not switch spools on its own. Load filament, then resume.: 'Filament épuisé. Le réapprovisionnement automatique est désactivé, le CFS ne changera donc pas de bobine tout seul. Chargez du filament, puis reprenez.'
   Filament ran out. The CFS knows which spools match, but those slots are empty. Load one of them, then resume.: Filament épuisé. Le CFS sait quelles bobines correspondent, mais ces slots sont vides. Chargez-en une, puis reprenez.
   Filament reload failed: Échec du rechargement du filament
+  Filament remapping is unavailable: ''
   Filament runout: Fin de filament
   Filament runout and motion detection sensors: Capteurs de fin de filament et de
     détection de mouvement
@@ -1346,6 +1346,7 @@ translations:
   Heater Power: Puissance du chauffage
   Heater connection lost: Connexion au chauffage perdue
   Heater fault: Défaut du chauffage
+  Heater offline: Chauffage déconnecté
   Heater over-temperature: Surchauffe du chauffage
   Heater sensor fault: Défaut du capteur de chauffage
   HeaterSelect: Sélection du chauffage
@@ -1490,9 +1491,6 @@ translations:
   Install plugin: Installer le plugin
   Install script not found. Use the remote install command instead.: Script d'installation
     introuvable. Utilisez plutôt la commande d'installation distante.
-  Install the HelixPrint plugin in Advanced settings to remap filament without affecting print history.: Installez
-    le plugin HelixPrint dans les paramètres avancés pour remapper le filament sans
-    affecter l'historique d'impression.
   'Install the HelixPrint plugin to enable fast G-code modifications. Run this command via SSH on your printer:': 'Installez
     le plugin HelixPrint pour activer les modifications rapides de G-code. Exécutez
     cette commande via SSH sur votre imprimante :'
@@ -2219,6 +2217,7 @@ translations:
   Print ending...: Fin de l'impression...
   Print error: Erreur d'impression
   Print failed: Impression échouée
+  Print history will show the rewritten name: ''
   Print issue detected: Problème d'impression détecté
   Print jobs waiting to run: Impressions en attente
   'Print preparation failed: {}': 'Échec de la préparation de l''impression : {}'
@@ -2360,6 +2359,7 @@ translations:
   'RFCOMM connect failed: ': 'Échec de la connexion RFCOMM : '
   RFID reader malfunction (left): Dysfonctionnement du lecteur RFID (gauche)
   RFID reader malfunction (right): Dysfonctionnement du lecteur RFID (droit)
+  RFID, auto-refill, nozzle and link care: ''
   RSS: RSS
   'RSS:': 'RSS :'
   Ramming Volume: 'Volume de bourrage'
@@ -2419,7 +2419,10 @@ translations:
   Remaining (g): Restant (g)
   Remaining Weight (g): Poids restant (g)
   Remap Tool: Réassigner l'outil
-  Remap needs the HelixPrint plugin: La réaffectation nécessite le plugin HelixPrint
+  ? Remapping rewrites the job file before printing it. This printer's Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally.
+  : ''
+  ? "Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.\n\nInstalling the plugin takes a moment and needs no restart."
+  : ''
   Remap…: Réaffecter…
   Remember slot spool details across an eject: Mémoriser les détails de la bobine du slot après une éjection
   Remove: Supprimer
@@ -3536,6 +3539,7 @@ translations:
   'off': éteint
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: Le paramètre remember_spool d'AFC retient les informations de bobine dans le firmware ; il prime sur cette option
   AI detection: Détection AI
+  Modifying G-code needs the HelixPrint plugin. Printing original file.: ''
   Monitor for print abnormalities (K2 Plus camera-based): Surveiller les anomalies d'impression (caméra K2 Plus)
   Monitor for print abnormalities (camera-based): "Surveiller les anomalies d'impression (caméra)"
   on unit {}: 'sur l''unité {}'

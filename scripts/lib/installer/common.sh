@@ -30,7 +30,7 @@ HELIX_INSTALL_DIRS="/root/printer_software/helixscreen /opt/helixscreen /mnt/UDI
 # it first. Swept on uninstall, since nothing else ever removes them.
 # Mirrors kStateRoots in include/helix_install_roots.h.
 # shellcheck disable=SC2034  # consumed by uninstall.sh
-HELIX_STATE_DIRS="/mnt/UDISK/helixscreen-state /mnt/UDISK/helixscreen /data/helixscreen /usr/data/helixscreen-state /user-resource/helixscreen-state /userdata/helixscreen-state /srv/helixscreen-state"
+HELIX_STATE_DIRS="/mnt/UDISK/helixscreen-state /mnt/UDISK/helixscreen /data/.helixscreen /data/helixscreen /usr/data/helixscreen-state /user-resource/helixscreen-state /userdata/helixscreen-state /srv/helixscreen-state"
 
 # Mounts release.sh's detect_rollback_dir() tries, in order, for an
 # off-partition update-backup when the install filesystem is too tight to
@@ -45,18 +45,19 @@ HELIX_ROLLBACK_CANDIDATES_DEFAULT="/mnt/UDISK /usr/data /mnt/data /data /user-re
 # Remove a state root that is now empty.
 #
 # The sweep above takes cache/ and logs/ but leaves the directory that held
-# them. Only a "-state" directory is removed: that suffix is a name this
-# installer coins, so a directory carrying it was made by us and holds nothing
-# else. A bare ".../helixscreen" state root is left alone even when empty -
-# /data/helixscreen and the pre-migration /mnt/UDISK/helixscreen are plain
-# enough names that the operator may have meant that directory themselves.
+# them. Only a name this installer coins is removed: the "-state" suffix, and
+# the dot-prefixed AD5M root (no operator names a directory with a leading
+# dot by hand). A bare ".../helixscreen" state root is left alone even when
+# empty - /data/helixscreen and the pre-migration /mnt/UDISK/helixscreen are
+# plain enough names that the operator may have meant that directory
+# themselves.
 #
 # rmdir carries the rest of the safety: it refuses a directory with anything
 # still in it, so a root someone has put their own files in survives.
 helix_state_prune_empty_roots() {
     for _hsper in $HELIX_STATE_DIRS; do
         case "$_hsper" in
-            */helixscreen-state) ;;
+            */helixscreen-state|*/.helixscreen) ;;
             *) continue ;;
         esac
         [ -d "$_hsper" ] || continue

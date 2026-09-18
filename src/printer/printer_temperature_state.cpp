@@ -23,6 +23,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace helix {
 
@@ -73,6 +74,16 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
         helix::xml::register_subject_in_current_scope("extruder_target", &active_extruder_target_);
     }
 
+    lv_subject_init_int(&active_extruder_power_, -1);
+    subjects_.register_subject(&active_extruder_power_, register_xml ? "extruder_power" : nullptr);
+    if (register_xml) {
+        helix::xml::register_subject_in_current_scope("extruder_power", &active_extruder_power_);
+    }
+
+    // Heater duty cycle, whole percent, -1 = the heater reports none.
+    INIT_SUBJECT_INT(bed_power, -1, subjects_, register_xml);
+    INIT_SUBJECT_INT(chamber_power, -1, subjects_, register_xml);
+
     // Bed and chamber temperature subjects
     INIT_SUBJECT_INT(bed_temp, 0, subjects_, register_xml);
     bed_temp_lifetime_ = std::make_shared<bool>(true);
@@ -97,12 +108,21 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
     chamber_heater_fault_lifetime_ = std::make_shared<bool>(true);
     INIT_SUBJECT_INT(chamber_heater_inhibited, 0, subjects_, register_xml);
     chamber_heater_inhibited_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_heater_offline, 0, subjects_, register_xml);
+    chamber_heater_offline_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_heater_externally_controlled, 0, subjects_, register_xml);
+    chamber_heater_externally_controlled_lifetime_ = std::make_shared<bool>(true);
     // Translated UI text derived from the backend's generic FaultReason kind —
     // vendor codes die at the backend border and only surface in logs.
     INIT_SUBJECT_STRING(chamber_heater_fault_reason_text, "", subjects_, register_xml);
     chamber_heater_fault_reason_text_lifetime_ = std::make_shared<bool>(true);
     INIT_SUBJECT_INT(chamber_filter_fan_on, -1, subjects_, register_xml);
     chamber_filter_fan_on_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_filter_fan_requested, -1, subjects_, register_xml);
+    chamber_filter_fan_requested_lifetime_ = std::make_shared<bool>(true);
+    INIT_SUBJECT_INT(chamber_filter_fan_device_driven, 0, subjects_, register_xml);
+    chamber_filter_fan_device_driven_lifetime_ = std::make_shared<bool>(true);
+    chamber_filter_fan_percent_ = -1;
     // Display strings written alongside the raw ints — XML has no deci/percent
     // formatter (bind_text-fmt prints the raw int), and the fan toggle needs a
     // translated On/Off label, so the parse block owns the formatting.
@@ -114,7 +134,8 @@ void PrinterTemperatureState::init_subjects(bool register_xml) {
                         register_xml);
     chamber_filter_fan_on_text_lifetime_ = std::make_shared<bool>(true);
     // Icon-name subject for the compact portrait card's icon-button toggle
-    // (bind_icon); mirrors chamber_filter_fan_on_text, set from the same pin.
+    // (bind_icon); mirrors chamber_filter_fan_on_text, set from the same
+    // running state.
     INIT_SUBJECT_STRING(chamber_filter_fan_icon, "fan_off", subjects_, register_xml);
     chamber_filter_fan_icon_lifetime_ = std::make_shared<bool>(true);
 
@@ -162,12 +183,24 @@ void PrinterTemperatureState::deinit_subjects() {
     if (chamber_heater_inhibited_lifetime_)
         *chamber_heater_inhibited_lifetime_ = false;
     chamber_heater_inhibited_lifetime_.reset();
+    if (chamber_heater_offline_lifetime_)
+        *chamber_heater_offline_lifetime_ = false;
+    chamber_heater_offline_lifetime_.reset();
+    if (chamber_heater_externally_controlled_lifetime_)
+        *chamber_heater_externally_controlled_lifetime_ = false;
+    chamber_heater_externally_controlled_lifetime_.reset();
     if (chamber_heater_fault_reason_text_lifetime_)
         *chamber_heater_fault_reason_text_lifetime_ = false;
     chamber_heater_fault_reason_text_lifetime_.reset();
     if (chamber_filter_fan_on_lifetime_)
         *chamber_filter_fan_on_lifetime_ = false;
     chamber_filter_fan_on_lifetime_.reset();
+    if (chamber_filter_fan_requested_lifetime_)
+        *chamber_filter_fan_requested_lifetime_ = false;
+    chamber_filter_fan_requested_lifetime_.reset();
+    if (chamber_filter_fan_device_driven_lifetime_)
+        *chamber_filter_fan_device_driven_lifetime_ = false;
+    chamber_filter_fan_device_driven_lifetime_.reset();
     if (chamber_heater_element_temp_text_lifetime_)
         *chamber_heater_element_temp_text_lifetime_ = false;
     chamber_heater_element_temp_text_lifetime_.reset();
@@ -450,52 +483,62 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
         }
     }
 
-    // Chamber temperature comes from the heater when one is configured (it has
-    // both current temp and target), otherwise from the sensor (temp only).
-    // The sensor is NOT a fallback when a heater is configured — on printers
-    // that have both (e.g. QIDI Q2: heater_generic chamber + thermal-protection
-    // thermistor), the "sensor" often tracks the bed or another nearby heat
-    // source and would pollute chamber_temp_ when partial subscription updates
-    // omit the heater object.
-    if (!chamber_heater_name_.empty()) {
-        if (status.contains(chamber_heater_name_)) {
-            const auto& chamber = status[chamber_heater_name_];
-
-            if (chamber.contains("temperature") && chamber["temperature"].is_number()) {
-                int temp_deci = helix::units::json_to_decidegrees(chamber, "temperature");
-                if (lv_subject_get_int(&chamber_temp_) != temp_deci) {
-                    lv_subject_set_int(&chamber_temp_, temp_deci);
-                    spdlog::trace("[PrinterTemperatureState] Chamber temp (heater): {}.{}C",
-                                  temp_deci / 10, temp_deci % 10);
-                }
-            }
-
-            // A temperature_fan's target is a cooling threshold, not a heating
-            // command: Klipper always reports its configured target_temp (40.0 on
-            // the K1C) even at speed 0. Wherever discovery resolves a
-            // temperature_fan into the heater slot (no heater_generic exists),
-            // that target flows through the cooling-fan branch below instead and
-            // is neutralized by the resting-target comparison in
-            // chamber_effective_setpoint().
-            if (chamber_heater_name_.rfind("temperature_fan ", 0) != 0 &&
-                chamber.contains("target") && chamber["target"].is_number()) {
-                int target_deci = helix::units::json_to_decidegrees(chamber, "target");
-                if (lv_subject_get_int(&chamber_target_) != target_deci) {
-                    lv_subject_set_int(&chamber_target_, target_deci);
-                    spdlog::trace("[PrinterTemperatureState] Chamber target: {}.{}C",
-                                  target_deci / 10, target_deci % 10);
-                }
-            }
+    // Klipper reports duty as 0.0-1.0 on a heater object. Publish whole percent
+    // and leave the subject alone when the field is absent: a frame that omits
+    // it says nothing, and a temperature_fan never carries one at all.
+    auto publish_power = [&status](const std::string& object, lv_subject_t* subject) {
+        if (object.empty() || !status.contains(object)) {
+            return;
         }
-    } else if (!chamber_sensor_name_.empty() && status.contains(chamber_sensor_name_)) {
-        const auto& chamber = status[chamber_sensor_name_];
+        const auto& obj = status[object];
+        if (!obj.contains("power") || !obj["power"].is_number()) {
+            return;
+        }
+        int pct = static_cast<int>(std::lround(obj["power"].get<double>() * 100.0));
+        pct = std::clamp(pct, 0, 100);
+        if (lv_subject_get_int(subject) != pct) {
+            lv_subject_set_int(subject, pct);
+        }
+    };
+    publish_power(active_extruder_name_, &active_extruder_power_);
+    publish_power("heater_bed", &bed_power_);
+    publish_power(chamber_heater_name_, &chamber_power_);
+
+    // The chamber reading comes from whichever object owns it, and the target
+    // from the heater alone. Those are the same object unless a sensor has
+    // been assigned to the chamber role by hand, which is the one way a probe
+    // outranks the heater that measures its own chamber.
+    const std::string& chamber_source = chamber_temperature_source();
+    if (!chamber_source.empty() && status.contains(chamber_source)) {
+        const auto& chamber = status[chamber_source];
 
         if (chamber.contains("temperature") && chamber["temperature"].is_number()) {
             int temp_deci = helix::units::json_to_decidegrees(chamber, "temperature");
             if (lv_subject_get_int(&chamber_temp_) != temp_deci) {
                 lv_subject_set_int(&chamber_temp_, temp_deci);
-                spdlog::trace("[PrinterTemperatureState] Chamber temp (sensor): {}.{}C",
+                spdlog::trace("[PrinterTemperatureState] Chamber temp ({}): {}.{}C", chamber_source,
                               temp_deci / 10, temp_deci % 10);
+            }
+        }
+    }
+
+    if (!chamber_heater_name_.empty() && status.contains(chamber_heater_name_)) {
+        const auto& chamber = status[chamber_heater_name_];
+
+        // A temperature_fan's target is a cooling threshold, not a heating
+        // command: Klipper always reports its configured target_temp (40.0 on
+        // the K1C) even at speed 0. Wherever discovery resolves a
+        // temperature_fan into the heater slot (no heater_generic exists),
+        // that target flows through the cooling-fan branch below instead and
+        // is neutralized by the resting-target comparison in
+        // chamber_effective_setpoint().
+        if (chamber_heater_name_.rfind("temperature_fan ", 0) != 0 && chamber.contains("target") &&
+            chamber["target"].is_number()) {
+            int target_deci = helix::units::json_to_decidegrees(chamber, "target");
+            if (lv_subject_get_int(&chamber_target_) != target_deci) {
+                lv_subject_set_int(&chamber_target_, target_deci);
+                spdlog::trace("[PrinterTemperatureState] Chamber target: {}.{}C", target_deci / 10,
+                              target_deci % 10);
             }
         }
     }
@@ -518,51 +561,107 @@ void PrinterTemperatureState::update_from_status(const nlohmann::json& status) {
     }
 
     // Chamber-heater diagnostics (backend-provided, capability-gated). Absent
-    // object in a delta frame = no news: subjects keep their last value.
-    // Vendor schema translation lives in the backend (chamber_heater_backend.h).
+    // object in a delta frame = no news, and the same holds field-wise: a
+    // delta carries only changed fields, so every unengaged optional (the
+    // frame did not mention it) leaves the subject at its last value. An
+    // engaged unknown — empty reason, negative percent, NAN temp — is a real
+    // report and does update. Vendor schema translation lives in the backend
+    // (chamber_heater_backend.h).
     if (!chamber_diagnostics_object_.empty() && status.contains(chamber_diagnostics_object_)) {
         const auto* backend = chamber::backend_by_id(chamber_backend_id_);
         if (backend) {
             if (auto d = backend->parse_diagnostics(status[chamber_diagnostics_object_])) {
-                lv_subject_set_int(&chamber_heater_fault_, d->fault ? 1 : 0);
-                lv_subject_set_int(&chamber_heater_inhibited_, d->inhibited ? 1 : 0);
-                lv_subject_copy_string(&chamber_heater_fault_reason_text_,
-                                       chamber_fault_reason_text(d->fault_reason_kind));
-                if (!d->fault_reason.empty()) {
+                if (d->fault.has_value()) {
+                    lv_subject_set_int(&chamber_heater_fault_, *d->fault ? 1 : 0);
+                }
+                if (d->inhibited.has_value()) {
+                    lv_subject_set_int(&chamber_heater_inhibited_, *d->inhibited ? 1 : 0);
+                }
+                if (d->fault_reason_kind.has_value()) {
+                    lv_subject_copy_string(&chamber_heater_fault_reason_text_,
+                                           chamber_fault_reason_text(*d->fault_reason_kind));
+                }
+                if (d->fault_reason.has_value() && !d->fault_reason->empty()) {
                     // Vendor code is log-only — the UI shows the translated kind.
                     spdlog::debug(
                         "[PrinterTemperatureState] Chamber heater fault: backend={} reason={}",
-                        backend->id(), d->fault_reason);
+                        backend->id(), *d->fault_reason);
                 }
-                if (std::isnan(d->element_temp_c)) {
-                    lv_subject_copy_string(&chamber_heater_element_temp_text_, "--");
-                } else {
-                    // Canonical decimal-drop rule (one decimal <100°C, whole
-                    // degrees at/above) — format_temperature_f wraps
-                    // format_temp_number plus the unit.
-                    helix::ui::temperature::format_temperature_f(
-                        static_cast<float>(d->element_temp_c),
-                        chamber_heater_element_temp_text_buf_,
-                        sizeof(chamber_heater_element_temp_text_buf_));
-                    lv_subject_copy_string(&chamber_heater_element_temp_text_,
-                                           chamber_heater_element_temp_text_buf_);
+                if (d->element_temp_c.has_value()) {
+                    if (std::isnan(*d->element_temp_c)) {
+                        lv_subject_copy_string(&chamber_heater_element_temp_text_, "--");
+                    } else {
+                        // Canonical decimal-drop rule (one decimal <100°C, whole
+                        // degrees at/above) — format_temperature_f wraps
+                        // format_temp_number plus the unit.
+                        helix::ui::temperature::format_temperature_f(
+                            static_cast<float>(*d->element_temp_c),
+                            chamber_heater_element_temp_text_buf_,
+                            sizeof(chamber_heater_element_temp_text_buf_));
+                        lv_subject_copy_string(&chamber_heater_element_temp_text_,
+                                               chamber_heater_element_temp_text_buf_);
+                    }
                 }
-                lv_subject_copy_string(&chamber_filter_fan_percent_text_,
-                                       d->filter_fan_percent < 0
-                                           ? "--"
-                                           : fmt::format("{}%", d->filter_fan_percent).c_str());
+                if (d->filter_fan_percent.has_value()) {
+                    lv_subject_copy_string(
+                        &chamber_filter_fan_percent_text_,
+                        *d->filter_fan_percent < 0
+                            ? "--"
+                            : fmt::format("{}%", *d->filter_fan_percent).c_str());
+                    chamber_filter_fan_percent_ = *d->filter_fan_percent;
+                }
+                if (d->filter_fan_driver.has_value()) {
+                    lv_subject_set_int(
+                        &chamber_filter_fan_device_driven_,
+                        *d->filter_fan_driver == chamber::FilterFanDriver::Device ? 1 : 0);
+                }
+                // Offline is asserted only on a report that the link is down.
+                // A backend that never speaks to connectivity leaves this 0,
+                // so a plain heater_generic chamber never claims to be offline.
+                if (d->device_connected.has_value()) {
+                    if (*d->device_connected) {
+                        chamber_offline_run_ = 0;
+                        lv_subject_set_int(&chamber_heater_offline_, 0);
+                    } else if (++chamber_offline_run_ >= CHAMBER_OFFLINE_CONSECUTIVE_REPORTS) {
+                        lv_subject_set_int(&chamber_heater_offline_, 1);
+                    }
+                }
+                // Another controller is driving the heater: the device's own
+                // web UI or a button on the unit. Informational, not a fault.
+                if (d->externally_controlled.has_value()) {
+                    lv_subject_set_int(&chamber_heater_externally_controlled_,
+                                       *d->externally_controlled ? 1 : 0);
+                }
+                if (d->link_error.has_value() && !d->link_error->empty()) {
+                    spdlog::debug("[PrinterTemperatureState] Chamber heater link error: "
+                                  "backend={} detail={}",
+                                  backend->id(), *d->link_error);
+                }
             }
         }
     }
     if (!chamber_filter_fan_pin_.empty() && status.contains(chamber_filter_fan_pin_)) {
         const auto& pin = status[chamber_filter_fan_pin_];
         if (pin.contains("value") && pin["value"].is_number()) {
-            int on = pin["value"].get<double>() > 0.5 ? 1 : 0;
-            lv_subject_set_int(&chamber_filter_fan_on_, on);
-            lv_subject_copy_string(&chamber_filter_fan_on_text_,
-                                   on ? lv_tr("Filter Fan: On") : lv_tr("Filter Fan: Off"));
-            lv_subject_copy_string(&chamber_filter_fan_icon_, on ? "fan" : "fan_off");
+            // The pin is our REQUEST, not the fan: the device also runs this
+            // fan on its own (heater warmup, thermal purge).
+            lv_subject_set_int(&chamber_filter_fan_requested_,
+                               pin["value"].get<double>() > 0.5 ? 1 : 0);
         }
+    }
+    // Filter-fan running state: the speed the backend reports wins when there
+    // is one, so the label/icon agree with the percent beside them. Backends
+    // with a pin but no reported speed fall back to the pin. Neither surface
+    // in the frame (delta) leaves the subjects at their last values.
+    if (chamber_filter_fan_percent_ >= 0 ||
+        lv_subject_get_int(&chamber_filter_fan_requested_) >= 0) {
+        const int running = chamber_filter_fan_percent_ >= 0
+                                ? (chamber_filter_fan_percent_ > 0 ? 1 : 0)
+                                : lv_subject_get_int(&chamber_filter_fan_requested_);
+        lv_subject_set_int(&chamber_filter_fan_on_, running);
+        lv_subject_copy_string(&chamber_filter_fan_on_text_,
+                               running ? lv_tr("Filter Fan: On") : lv_tr("Filter Fan: Off"));
+        lv_subject_copy_string(&chamber_filter_fan_icon_, running ? "fan" : "fan_off");
     }
 
     // Effective chamber setpoint + control mode: delegate to the single source of

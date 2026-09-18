@@ -379,8 +379,8 @@ curl -s -X POST http://127.0.0.1:7130/rpc -d '{"jsonrpc":"2.0","id":1,
 | `ls`, `describe_screen` `[target]` | List on-screen widgets: name, `path`, `layer`, type, available actions. With a target, list only that widget's subtree (plus the widget itself); with no target, the working directory. The response also carries `topmost_layer` and `active_screen` — compare an entry's `layer` against `topmost_layer` to tell a frontmost widget from one stacked behind it — and `scope` whenever the listing was confined to a subtree. The REPL's rendering groups widgets by what you can do to them, with a final `(inert)` line for labels, icons and containers that carry no action (repeats collapsed as `name x6`) |
 | `list_components` | List **every** registered XML component (live registry): panels, overlays, modals, cards, rows — the full introspectable surface |
 | `list_callbacks` | List every registered event-callback name (overlay/modal open-handlers, button callbacks). Names only — nothing is fired |
-| `click <target>` | Click a widget (also toggles switches/checkboxes) |
-| `set_value <target> <v>` | Set a value (slider, switch, dropdown, textarea) |
+| `click <target> [--force]` | Click a widget (also toggles switches/checkboxes) |
+| `set_value <target> <v> [--force]` | Set a value (slider, switch, dropdown, textarea) |
 | `scroll <target> [dx dy]` | Scroll a widget into view, or by a delta |
 | `focus <target>` | Focus a widget through its input group. Fires the real `LV_EVENT_FOCUSED`, so a registered textarea raises the on-screen keyboard — `click` does not, and leaves it hidden. Fails if the widget is not in an input group |
 | `text <target>` | Read a widget's text: `lv_label`, `lv_textarea`, or `lv_dropdown` (its selected option). Descends into a composite (e.g. a button wrapping a label) the same way `click` descends to a value-control. Raises rather than returning `""` if the widget has no text concept at all — an empty label and "not a text widget" are different facts |
@@ -666,6 +666,35 @@ that child's path. Rows with no value-control (a category row that opens an
 overlay) are clicked as-is, so navigation is unaffected. If several candidates
 exist the container is clicked and they are listed under `candidates`, so you
 can re-issue against a specific `@path`.
+
+
+### `click` refuses what a finger could not reach
+
+`lv_obj_send_event(o, LV_EVENT_CLICKED)` lands on any object at all, so a
+synthetic click reports success on widgets no real tap can activate. LVGL's
+input device is stricter: it hit-tests on `LV_OBJ_FLAG_CLICKABLE` and gates
+`PRESSED`/`PRESSING`/`CLICKED` on `!lv_obj_has_state(o, LV_STATE_DISABLED)`.
+
+`click` now refuses a target that is **hidden** (its own flag or any ancestor's),
+**not clickable**, or **disabled**, naming which. `set_value` refuses a disabled
+control, which the user could not have changed; it does not require clickability,
+because it also pokes labels.
+
+```
+$ helix-screen ctl click nav_icon_home_active
+Error: Widget 'nav_icon_home_active' is not clickable - a real tap would not
+reach it. Pass --force to send the event anyway.
+```
+
+`--force` sends it regardless and reports what was bypassed, so the transcript
+cannot be mistaken for an ordinary click:
+
+```json
+{"clicked": "nav_icon_home_active", "forced": "not clickable", "handlers": 3}
+```
+
+Occlusion is NOT checked: a target underneath a modal still clicks. That needs
+hit-testing against the layer stack rather than three flag reads.
 
 The descent is **bounded to scaffolding**, in two ways. A target that already
 carries a click handler of its own is acted on literally — never descended
