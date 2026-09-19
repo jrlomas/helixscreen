@@ -61,18 +61,6 @@ using json = nlohmann::json;
 namespace {
 
 /**
- * @brief Strip 'v' or 'V' prefix from version tag
- *
- * GitHub releases use "v1.2.3" format, but version comparison needs "1.2.3"
- */
-std::string strip_version_prefix(const std::string& tag) {
-    if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) {
-        return tag.substr(1);
-    }
-    return tag;
-}
-
-/**
  * @brief One GitHub release asset entry, as the API serves it
  *
  * Asset selection keys off the name, so the url and size only need to be
@@ -248,23 +236,23 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
 
 TEST_CASE("Version prefix stripping", "[update_checker][version]") {
     SECTION("strips lowercase v") {
-        REQUIRE(strip_version_prefix("v1.2.3") == "1.2.3");
+        REQUIRE(helix::strip_version_prefix("v1.2.3") == "1.2.3");
     }
 
     SECTION("strips uppercase V") {
-        REQUIRE(strip_version_prefix("V1.2.3") == "1.2.3");
+        REQUIRE(helix::strip_version_prefix("V1.2.3") == "1.2.3");
     }
 
     SECTION("preserves version without prefix") {
-        REQUIRE(strip_version_prefix("1.2.3") == "1.2.3");
+        REQUIRE(helix::strip_version_prefix("1.2.3") == "1.2.3");
     }
 
     SECTION("handles empty string") {
-        REQUIRE(strip_version_prefix("") == "");
+        REQUIRE(helix::strip_version_prefix("") == "");
     }
 
     SECTION("handles just v") {
-        REQUIRE(strip_version_prefix("v") == "");
+        REQUIRE(helix::strip_version_prefix("v") == "");
     }
 }
 
