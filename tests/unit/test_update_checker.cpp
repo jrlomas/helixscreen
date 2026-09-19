@@ -61,91 +61,21 @@ using json = nlohmann::json;
 namespace {
 
 /**
- * @brief Strip 'v' or 'V' prefix from version tag
+ * @brief One GitHub release asset entry, as the API serves it
  *
- * GitHub releases use "v1.2.3" format, but version comparison needs "1.2.3"
+ * Asset selection keys off the name, so the url and size only need to be
+ * present and distinguishable.
  */
-std::string strip_version_prefix(const std::string& tag) {
-    if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) {
-        return tag.substr(1);
-    }
-    return tag;
+std::string asset_json(const std::string& name) {
+    return R"({"name": ")" + name + R"(", "browser_download_url": "https://x/)" + name +
+           R"(", "size": 123})";
 }
 
 /**
- * @brief Parse ReleaseInfo from GitHub API JSON response
- *
- * Expected JSON format:
- * {
- *   "tag_name": "v1.2.3",
- *   "body": "Release notes...",
- *   "published_at": "2025-01-15T10:00:00Z",
- *   "assets": [{"name": "file.tar.gz", "browser_download_url": "https://..."}]
- * }
+ * @brief The tarball name a release publishes for this build's platform
  */
-struct ParsedRelease {
-    std::string version;       // Stripped version (e.g., "1.2.3")
-    std::string tag_name;      // Original tag (e.g., "v1.2.3")
-    std::string download_url;  // Asset download URL
-    std::string release_notes; // Body markdown
-    std::string published_at;  // ISO 8601 timestamp
-    bool valid = false;
-};
-
-/**
- * @brief Safely get string value from JSON, handling null
- */
-std::string json_string_or_empty(const json& j, const std::string& key) {
-    if (!j.contains(key)) {
-        return "";
-    }
-    const auto& val = j[key];
-    if (val.is_null()) {
-        return "";
-    }
-    if (val.is_string()) {
-        return val.get<std::string>();
-    }
-    return "";
-}
-
-// Mirrors the shipped parser's version/tag/body semantics only. It has no
-// platform filtering, so assertions built on it cannot judge asset selection:
-// it takes the first name containing ".tar.gz", where production matches the
-// platform key and refuses anything else. helix::parse_github_release is the
-// shipped parser; reach for it when the assertion is about which asset wins.
-ParsedRelease parse_release_fixture(const std::string& json_str) {
-    ParsedRelease result;
-
-    try {
-        auto j = json::parse(json_str);
-
-        result.tag_name = json_string_or_empty(j, "tag_name");
-        result.release_notes = json_string_or_empty(j, "body");
-        result.published_at = json_string_or_empty(j, "published_at");
-
-        // Strip 'v' prefix for version comparison
-        result.version = strip_version_prefix(result.tag_name);
-
-        // Find binary asset URL (look for .tar.gz)
-        if (j.contains("assets") && j["assets"].is_array()) {
-            for (const auto& asset : j["assets"]) {
-                std::string name = asset.value("name", "");
-                if (name.find(".tar.gz") != std::string::npos) {
-                    result.download_url = asset.value("browser_download_url", "");
-                    break;
-                }
-            }
-        }
-
-        // Valid if we have at least a version
-        result.valid = !result.version.empty() && parse_version(result.version).has_value();
-
-    } catch (const json::exception&) {
-        result.valid = false;
-    }
-
-    return result;
+std::string platform_tarball(const std::string& version) {
+    return "helixscreen-" + UpdateChecker::get_platform_key() + "-v" + version + ".tar.gz";
 }
 
 } // anonymous namespace
@@ -183,45 +113,44 @@ TEST_CASE("Version parsing semantics update detection rests on", "[update_checke
 // ============================================================================
 
 TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
+    UpdateChecker::ReleaseInfo release;
+    std::string error;
+
     SECTION("parses valid release JSON") {
-        const char* json_str = R"({
+        const std::string tarball = platform_tarball("1.2.3");
+        const std::string json_str = R"({
             "tag_name": "v1.2.3",
             "body": "## What's New\n- Feature A\n- Bug fix B",
             "published_at": "2025-01-15T10:00:00Z",
-            "assets": [{
-                "name": "helixscreen-1.2.3.tar.gz",
-                "browser_download_url": "https://github.com/prestonbrown/helixscreen/releases/download/v1.2.3/helixscreen-1.2.3.tar.gz"
-            }]
+            "assets": [)" + asset_json(tarball) +
+                                     R"(]
         })";
 
-        auto release = parse_release_fixture(json_str);
-
-        REQUIRE(release.valid);
+        REQUIRE(helix::parse_github_release(json_str, release, error));
         REQUIRE(release.tag_name == "v1.2.3");
         REQUIRE(release.version == "1.2.3");
         REQUIRE(release.release_notes == "## What's New\n- Feature A\n- Bug fix B");
         REQUIRE(release.published_at == "2025-01-15T10:00:00Z");
-        REQUIRE(release.download_url ==
-                "https://github.com/prestonbrown/helixscreen/releases/download/v1.2.3/"
-                "helixscreen-1.2.3.tar.gz");
+        REQUIRE(release.download_url == "https://x/" + tarball);
     }
 
-    SECTION("handles multiple assets, selects tar.gz") {
-        const char* json_str = R"({
+    SECTION("selects this platform's tar.gz over its zip and over other assets") {
+        // A release carries one tarball and one zip per platform alongside
+        // GitHub's own source archives. The tarball wins: devices still on
+        // v0.99.30 or earlier gunzip whatever url the asset list hands them.
+        const std::string tarball = platform_tarball("2.0.0");
+        const std::string zip = "helixscreen-" + UpdateChecker::get_platform_key() + ".zip";
+        const std::string json_str = R"({
             "tag_name": "v2.0.0",
             "body": "Release",
             "published_at": "2025-02-01T00:00:00Z",
-            "assets": [
-                {"name": "source.zip", "browser_download_url": "https://example.com/source.zip"},
-                {"name": "helixscreen.tar.gz", "browser_download_url": "https://example.com/helixscreen.tar.gz"},
-                {"name": "debug.log", "browser_download_url": "https://example.com/debug.log"}
-            ]
+            "assets": [)" + asset_json("source.zip") +
+                                     "," + asset_json(zip) + "," + asset_json(tarball) + "," +
+                                     asset_json("debug.log") + R"(]
         })";
 
-        auto release = parse_release_fixture(json_str);
-
-        REQUIRE(release.valid);
-        REQUIRE(release.download_url == "https://example.com/helixscreen.tar.gz");
+        REQUIRE(helix::parse_github_release(json_str, release, error));
+        REQUIRE(release.download_url == "https://x/" + tarball);
     }
 
     SECTION("handles missing optional fields gracefully") {
@@ -230,9 +159,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "tag_name": "v3.0.0"
         })";
 
-        auto release = parse_release_fixture(json_str);
-
-        REQUIRE(release.valid);
+        REQUIRE(helix::parse_github_release(json_str, release, error));
         REQUIRE(release.version == "3.0.0");
         REQUIRE(release.release_notes.empty());
         REQUIRE(release.published_at.empty());
@@ -246,9 +173,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "assets": []
         })";
 
-        auto release = parse_release_fixture(json_str);
-
-        REQUIRE(release.valid);
+        REQUIRE(helix::parse_github_release(json_str, release, error));
         REQUIRE(release.version == "1.0.0");
         REQUIRE(release.download_url.empty());
     }
@@ -260,9 +185,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "published_at": "2025-01-01T00:00:00Z"
         })";
 
-        auto release = parse_release_fixture(json_str);
-
-        REQUIRE(release.valid);
+        REQUIRE(helix::parse_github_release(json_str, release, error));
         // null should be converted to empty string by .value() default
         REQUIRE(release.release_notes.empty());
     }
@@ -273,13 +196,13 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "body": "missing comma"
         })";
 
-        auto release = parse_release_fixture(invalid_json);
-        REQUIRE_FALSE(release.valid);
+        REQUIRE_FALSE(helix::parse_github_release(invalid_json, release, error));
+        REQUIRE_FALSE(error.empty());
     }
 
     SECTION("rejects empty JSON object") {
-        auto release = parse_release_fixture("{}");
-        REQUIRE_FALSE(release.valid);
+        REQUIRE_FALSE(helix::parse_github_release("{}", release, error));
+        REQUIRE_FALSE(error.empty());
     }
 
     SECTION("rejects invalid tag_name") {
@@ -287,13 +210,13 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "tag_name": "not-a-version"
         })";
 
-        auto release = parse_release_fixture(json_str);
-        REQUIRE_FALSE(release.valid);
+        REQUIRE_FALSE(helix::parse_github_release(json_str, release, error));
+        REQUIRE_FALSE(error.empty());
     }
 
     SECTION("rejects empty string") {
-        auto release = parse_release_fixture("");
-        REQUIRE_FALSE(release.valid);
+        REQUIRE_FALSE(helix::parse_github_release("", release, error));
+        REQUIRE_FALSE(error.empty());
     }
 
     SECTION("handles version without v prefix") {
@@ -301,9 +224,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "tag_name": "1.5.0"
         })";
 
-        auto release = parse_release_fixture(json_str);
-
-        REQUIRE(release.valid);
+        REQUIRE(helix::parse_github_release(json_str, release, error));
         REQUIRE(release.tag_name == "1.5.0");
         REQUIRE(release.version == "1.5.0");
     }
@@ -315,23 +236,23 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
 
 TEST_CASE("Version prefix stripping", "[update_checker][version]") {
     SECTION("strips lowercase v") {
-        REQUIRE(strip_version_prefix("v1.2.3") == "1.2.3");
+        REQUIRE(helix::strip_version_prefix("v1.2.3") == "1.2.3");
     }
 
     SECTION("strips uppercase V") {
-        REQUIRE(strip_version_prefix("V1.2.3") == "1.2.3");
+        REQUIRE(helix::strip_version_prefix("V1.2.3") == "1.2.3");
     }
 
     SECTION("preserves version without prefix") {
-        REQUIRE(strip_version_prefix("1.2.3") == "1.2.3");
+        REQUIRE(helix::strip_version_prefix("1.2.3") == "1.2.3");
     }
 
     SECTION("handles empty string") {
-        REQUIRE(strip_version_prefix("") == "");
+        REQUIRE(helix::strip_version_prefix("") == "");
     }
 
     SECTION("handles just v") {
-        REQUIRE(strip_version_prefix("v") == "");
+        REQUIRE(helix::strip_version_prefix("v") == "");
     }
 }
 
@@ -340,19 +261,20 @@ TEST_CASE("Version prefix stripping", "[update_checker][version]") {
 // ============================================================================
 
 TEST_CASE("Update checker error scenarios", "[update_checker][error]") {
+    UpdateChecker::ReleaseInfo release;
+    std::string error;
+
     SECTION("empty response body") {
-        auto release = parse_release_fixture("");
-        REQUIRE_FALSE(release.valid);
+        REQUIRE_FALSE(helix::parse_github_release("", release, error));
     }
 
     SECTION("non-JSON response") {
-        auto release = parse_release_fixture("<!DOCTYPE html><html>Error</html>");
-        REQUIRE_FALSE(release.valid);
+        REQUIRE_FALSE(
+            helix::parse_github_release("<!DOCTYPE html><html>Error</html>", release, error));
     }
 
     SECTION("JSON array instead of object") {
-        auto release = parse_release_fixture("[1, 2, 3]");
-        REQUIRE_FALSE(release.valid);
+        REQUIRE_FALSE(helix::parse_github_release("[1, 2, 3]", release, error));
     }
 
     SECTION("deeply nested invalid structure") {
@@ -360,9 +282,12 @@ TEST_CASE("Update checker error scenarios", "[update_checker][error]") {
             "tag_name": {"nested": "object"}
         })";
 
-        auto release = parse_release_fixture(json_str);
-        REQUIRE_FALSE(release.valid);
+        REQUIRE_FALSE(helix::parse_github_release(json_str, release, error));
     }
+
+    // Every rejection above has to say why: a silent false leaves the UI with
+    // no message to show.
+    CHECK_FALSE(error.empty());
 }
 
 // ============================================================================
@@ -564,7 +489,8 @@ TEST_CASE("UpdateChecker callback is optional", "[update_checker][callback][slow
 TEST_CASE("Real-world update scenarios", "[update_checker][scenarios]") {
     SECTION("typical GitHub release response") {
         // Simulates actual GitHub API response structure
-        const char* github_response = R"({
+        const std::string tarball = platform_tarball("1.5.0");
+        const std::string github_response = R"({
             "url": "https://api.github.com/repos/prestonbrown/helixscreen/releases/12345",
             "html_url": "https://github.com/prestonbrown/helixscreen/releases/tag/v1.5.0",
             "id": 12345,
@@ -580,10 +506,11 @@ TEST_CASE("Real-world update scenarios", "[update_checker][scenarios]") {
                 {
                     "url": "https://api.github.com/repos/prestonbrown/helixscreen/releases/assets/100",
                     "id": 100,
-                    "name": "helixscreen-1.5.0-arm64.tar.gz",
+                    "name": ")" + tarball + R"(",
                     "size": 5242880,
                     "download_count": 42,
-                    "browser_download_url": "https://github.com/prestonbrown/helixscreen/releases/download/v1.5.0/helixscreen-1.5.0-arm64.tar.gz"
+                    "browser_download_url": "https://github.com/prestonbrown/helixscreen/releases/download/v1.5.0/)" +
+                                            tarball + R"("
                 },
                 {
                     "url": "https://api.github.com/repos/prestonbrown/helixscreen/releases/assets/101",
@@ -596,12 +523,13 @@ TEST_CASE("Real-world update scenarios", "[update_checker][scenarios]") {
             ]
         })";
 
-        auto release = parse_release_fixture(github_response);
-
-        REQUIRE(release.valid);
+        UpdateChecker::ReleaseInfo release;
+        std::string error;
+        REQUIRE(helix::parse_github_release(github_response, release, error));
         REQUIRE(release.version == "1.5.0");
         REQUIRE(release.tag_name == "v1.5.0");
-        REQUIRE(release.download_url.find("helixscreen-1.5.0-arm64.tar.gz") != std::string::npos);
+        REQUIRE(release.download_url.find(tarball) != std::string::npos);
+        REQUIRE(release.download_bytes == 5242880);
         REQUIRE(release.release_notes.find("Auto-update support") != std::string::npos);
     }
 }
@@ -681,14 +609,16 @@ TEST_CASE("UpdateChecker subject accessors remain stable after shutdown",
 }
 
 TEST_CASE("JSON edge cases", "[update_checker][json][edge]") {
+    UpdateChecker::ReleaseInfo release;
+    std::string error;
+
     SECTION("unicode in release notes") {
         const char* json_str = R"({
             "tag_name": "v1.0.0",
             "body": "Fixed emoji display \ud83d\ude80 and Chinese chars \u4e2d\u6587"
         })";
 
-        auto release = parse_release_fixture(json_str);
-        REQUIRE(release.valid);
+        REQUIRE(helix::parse_github_release(json_str, release, error));
         REQUIRE_FALSE(release.release_notes.empty());
     }
 
@@ -696,23 +626,25 @@ TEST_CASE("JSON edge cases", "[update_checker][json][edge]") {
         std::string long_body(10000, 'x');
         std::string json_str = R"({"tag_name": "v1.0.0", "body": ")" + long_body + R"("})";
 
-        auto release = parse_release_fixture(json_str);
-        REQUIRE(release.valid);
+        REQUIRE(helix::parse_github_release(json_str, release, error));
         REQUIRE(release.release_notes.length() == 10000);
     }
 
-    SECTION("special characters in asset names") {
-        const char* json_str = R"({
+    SECTION("an asset name carrying no platform key is not selected") {
+        // A wrong-platform binary bricks the device it lands on, so a name the
+        // platform rule does not recognise leaves the update unavailable
+        // rather than guessing. The release still parses; download_url stays
+        // empty. Both spellings below miss the rule for the same reason: no
+        // "-<platform>-v<digit>" between the prefix and the extension.
+        const std::string json_str = R"({
             "tag_name": "v1.0.0",
-            "assets": [{
-                "name": "helix screen_v1.0.0_(arm64).tar.gz",
-                "browser_download_url": "https://example.com/release.tar.gz"
-            }]
+            "assets": [)" + asset_json("helixscreen-1.0.0.tar.gz") +
+                                     "," + asset_json("helix screen_v1.0.0_(arm64).tar.gz") + R"(]
         })";
 
-        auto release = parse_release_fixture(json_str);
-        REQUIRE(release.valid);
-        REQUIRE_FALSE(release.download_url.empty());
+        REQUIRE(helix::parse_github_release(json_str, release, error));
+        CHECK(release.version == "1.0.0");
+        CHECK(release.download_url.empty());
     }
 }
 
@@ -2280,16 +2212,12 @@ TEST_CASE("parse_github_release: a platform prefix does not select a longer plat
     // "pi" on a host test build; the test only needs SOME known key.
     REQUIRE_FALSE(platform.empty());
 
-    const auto asset = [](const std::string& name) {
-        return R"({"name": ")" + name + R"(", "browser_download_url": "https://x/)" + name +
-               R"(", "size": 123})";
-    };
-    const std::string mine = "helixscreen-" + platform + "-v1.2.3.tar.gz";
+    const std::string mine = platform_tarball("1.2.3");
     const std::string decoy = "helixscreen-" + platform + "-dynamic-v0.99.0.tar.gz";
     // Decoy first: it also sorts first alphabetically, which is how the real
     // release listing serves it.
-    const std::string body =
-        R"({"tag_name": "v1.2.3", "assets": [)" + asset(decoy) + ", " + asset(mine) + "]}";
+    const std::string body = R"({"tag_name": "v1.2.3", "assets": [)" + asset_json(decoy) + ", " +
+                             asset_json(mine) + "]}";
 
     UpdateChecker::ReleaseInfo info;
     std::string error;
@@ -2303,7 +2231,7 @@ TEST_CASE("parse_github_release: a platform prefix does not select a longer plat
         // A wrong-platform tarball bricks the device it lands on; an empty
         // download_url leaves the update unavailable instead.
         const std::string only_decoy =
-            R"({"tag_name": "v1.2.3", "assets": [)" + asset(decoy) + "]}";
+            R"({"tag_name": "v1.2.3", "assets": [)" + asset_json(decoy) + "]}";
         UpdateChecker::ReleaseInfo sparse;
         REQUIRE(helix::parse_github_release(only_decoy, sparse, error));
         CHECK(sparse.download_url.empty());

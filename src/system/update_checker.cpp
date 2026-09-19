@@ -124,18 +124,6 @@ using AppConstants::Update::config_backup_fallback;
 using AppConstants::Update::env_backup_fallback;
 
 /**
- * @brief Strip 'v' or 'V' prefix from version tag
- *
- * GitHub releases use "v1.2.3" format, but version comparison needs "1.2.3"
- */
-std::string strip_version_prefix(const std::string& tag) {
-    if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) {
-        return tag.substr(1);
-    }
-    return tag;
-}
-
-/**
  * @brief Safely get string value from JSON, handling null
  */
 std::string json_string_or_empty(const json& j, const std::string& key) {
@@ -615,6 +603,16 @@ std::string strip_ansi_codes(const std::string& s) {
 // Outside the anonymous namespace: declared in the header and exercised
 // directly by tests/unit/test_update_checker.cpp.
 namespace helix {
+/**
+ * @brief Strip 'v' or 'V' prefix from version tag
+ */
+std::string strip_version_prefix(const std::string& tag) {
+    if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) {
+        return tag.substr(1);
+    }
+    return tag;
+}
+
 /**
  * @brief Parse ReleaseInfo from GitHub API JSON response string
  */

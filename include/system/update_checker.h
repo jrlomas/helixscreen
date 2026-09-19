@@ -728,4 +728,16 @@ class UpdateChecker {
 namespace helix {
 bool parse_github_release(const std::string& json_str, UpdateChecker::ReleaseInfo& info,
                           std::string& error);
+
+/**
+ * @brief Strip a leading 'v' or 'V' from a GitHub release tag
+ *
+ * GitHub releases are tagged "v1.2.3" but version comparison needs "1.2.3".
+ * Declared in the header so the rule is unit-tested against the shipped
+ * function rather than a local twin of it.
+ *
+ * @param tag Release tag as GitHub serves it
+ * @return The tag without its version prefix
+ */
+std::string strip_version_prefix(const std::string& tag);
 } // namespace helix

@@ -861,10 +861,16 @@ std::string app_get_install_root() {
     return "";
 }
 
-// Stub for app_get_cache_dir (production reads the cascade; tests do not need a root)
-// Returns empty string — matches the production fallback when cache resolution fails.
+// The production body, minus its memo. app_globals.o is excluded from the test
+// link; a constant "" here would hide every cache decision a caller makes
+// behind a value production almost never returns. Dropping the memo is what
+// lets a test point HELIX_CACHE_DIR somewhere and see the cascade answer for
+// that value rather than for whichever test called first.
 std::string app_get_cache_dir() {
-    return "";
+    std::string p = get_helix_cache_dir(""); // base, no subdir
+    while (p.size() > 1 && p.back() == '/')
+        p.pop_back();
+    return p;
 }
 
 // Stub for app_get_runtime_dir (tests use a writable temp dir)

@@ -181,6 +181,7 @@
 #include "system/crash_handler.h"
 #include "system/crash_history.h"
 #include "system/crash_reporter.h"
+#include "system/diagnostics.h"
 #include "system/telemetry_manager.h"
 #include "system/update_checker.h"
 #include "system_settings_manager.h"
@@ -677,6 +678,11 @@ int Application::run(int argc, char** argv) {
 
     spdlog::info("[Application] ========================");
     spdlog::info("[Application] HelixScreen {} ({})", helix_version(), helix_git_hash());
+
+    // Every path this process uses is chosen by a cascade with a user override
+    // on every rung, so the log has to carry the resolved values: a support case
+    // on an overridden box cannot be answered from the rules alone.
+    helix::diagnostics::log_diagnostics();
     spdlog::debug("[Application] Target: {}x{}", m_screen_width, m_screen_height);
     spdlog::debug("[Application] DPI: {}{}", (m_args.dpi > 0 ? m_args.dpi : LV_DPI_DEF),
                   (m_args.dpi > 0 ? " (custom)" : " (default)"));

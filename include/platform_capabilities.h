@@ -24,6 +24,7 @@
  */
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace helix {
@@ -67,6 +68,10 @@ struct CpuInfo {
     int core_count = 0;    ///< Number of logical CPU cores
     float bogomips = 0.0f; ///< BogoMIPS value (approximate speed indicator)
     int cpu_mhz = 0;       ///< CPU frequency in MHz (if available)
+    /// Human-readable CPU name. Which key carries it is architecture-specific
+    /// ("model name" on x86, "Hardware" on ARM, "cpu model" on MIPS), so the
+    /// parser tries each; "" when none of them appears.
+    std::string model;
 };
 
 /**
@@ -151,6 +156,15 @@ struct PlatformCapabilities {
  * @return Total RAM in MB, or 0 if parsing fails
  */
 size_t parse_meminfo_total_mb(const std::string& content);
+
+/**
+ * @brief Read one "<Key>: <N> kB" line out of /proc/meminfo content
+ *
+ * @param content Full content of /proc/meminfo
+ * @param key     Field name without the colon, e.g. "MemTotal", "MemAvailable"
+ * @return The value in kB, or 0 when the key is absent or unparseable
+ */
+uint64_t parse_meminfo_kb(const std::string& content, const std::string& key);
 
 /**
  * @brief Parse CPU information from /proc/cpuinfo content

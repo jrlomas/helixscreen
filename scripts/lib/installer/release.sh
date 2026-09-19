@@ -421,9 +421,9 @@ _UNVERIFIED_HTTP_REFUSED=false
 #
 # The no-hash-over-HTTP rejection is a WARNING, not an error, because it fires
 # mid-cascade in the normal case: generate-manifest.sh withholds zip_url /
-# zip_sha256 from the BusyBox platforms in ZIP_EXCLUDE_PLATFORMS (ad5m, ad5x,
-# cc1, k1, k2, snapmaker-u1 — helixscreen#993), so on exactly the HTTP-only
-# devices the zip candidate has no hash and must be skipped before the tar.gz
+# zip_sha256 from the platforms in its ZIP_EXCLUDE_PLATFORMS list
+# (helixscreen#993), so on exactly those HTTP-only devices the zip candidate
+# has no hash and must be skipped before the tar.gz
 # candidate, which does have one, succeeds. Only download_release's final
 # all-candidates-exhausted message spells out the override.
 _verify_archive_hash() {

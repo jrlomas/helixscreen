@@ -13,6 +13,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cctype>
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -131,27 +132,29 @@ int get_macos_cpu_cores() {
 // /proc/meminfo parsing
 // ============================================================================
 
-size_t parse_meminfo_total_mb(const std::string& content) {
-    if (content.empty()) {
+uint64_t parse_meminfo_kb(const std::string& content, const std::string& key) {
+    if (content.empty() || key.empty()) {
         return 0;
     }
 
-    // Look for "MemTotal:" line
     // Format: "MemTotal:        3884136 kB"
-    std::regex memtotal_regex(R"(MemTotal:\s+(\d+)\s+kB)");
+    std::regex field_regex(key + R"(:\s+(\d+)\s+kB)");
     std::smatch match;
 
-    if (std::regex_search(content, match, memtotal_regex) && match.size() > 1) {
+    if (std::regex_search(content, match, field_regex) && match.size() > 1) {
         try {
-            size_t kb = std::stoull(match[1].str());
-            return kb / 1024; // Convert kB to MB
+            return std::stoull(match[1].str());
         } catch (const std::exception& e) {
-            spdlog::warn("Failed to parse MemTotal value: {}", e.what());
+            spdlog::warn("Failed to parse {} value: {}", key, e.what());
             return 0;
         }
     }
 
     return 0;
+}
+
+size_t parse_meminfo_total_mb(const std::string& content) {
+    return static_cast<size_t>(parse_meminfo_kb(content, "MemTotal") / 1024);
 }
 
 // ============================================================================
@@ -192,6 +195,25 @@ CpuInfo parse_cpuinfo(const std::string& content) {
             info.cpu_mhz = static_cast<int>(std::stof(match[1].str()));
         } catch (const std::exception&) {
             // Ignore parse failures
+        }
+    }
+
+    // CPU name. No architecture publishes it under the same key: x86 has
+    // "model name", ARM has "Hardware", MIPS has "cpu model", and some boards
+    // only carry "Processor". First hit wins; a kernel with none of them leaves
+    // the field empty for the caller to label.
+    for (const char* key : {"model name", "Hardware", "cpu model", "Processor", "machine"}) {
+        std::regex model_regex(std::string(key) + R"(\s*:\s*([^\n]+))");
+        if (!std::regex_search(content, match, model_regex) || match.size() <= 1) {
+            continue;
+        }
+        std::string value = match[1].str();
+        while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
+            value.pop_back();
+        }
+        if (!value.empty()) {
+            info.model = value;
+            break;
         }
     }
 
