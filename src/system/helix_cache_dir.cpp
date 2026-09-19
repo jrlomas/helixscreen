@@ -105,7 +105,10 @@ static std::vector<CacheCandidate> cache_path_candidates(const std::string& subd
 #elif defined(HELIX_PLATFORM_MIPS)
     // K1 series: /usr/data IS the large user partition here, unlike on the K2.
     // The cache sits in a sibling of the payload rather than inside it, because
-    // the payload is what an update replaces.
+    // the payload is what an update replaces. This binary also serves the AD5X,
+    // where /usr/data exists only in the ZMOD chroot (persistent — cache lands
+    // here) and never in the Forge-X chroot (can_create_dir fails and the
+    // cascade falls through to XDG, same as the dedicated AD5X build did).
     out.push_back({"/usr/data/helixscreen-state/cache/" + subdir, "MIPS", true});
 #elif defined(HELIX_PLATFORM_ANDROID) || defined(__ANDROID__)
     // Use SDL's Android internal storage path (app-private, no permissions needed)

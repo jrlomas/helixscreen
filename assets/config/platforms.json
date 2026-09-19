@@ -200,6 +200,7 @@
         "docker_target": "mips-docker",
         "build_dir": "build/mips",
         "splash_3d_target": "gen-splash-3d-k1",
+        "notes": "The board ships inside the unified mips package; this asset_name is the transition alias release-mips publishes with identical content.",
         "gen_images_target": "gen-images",
         "in_release_matrix": true,
         "detectable": true,
@@ -263,6 +264,55 @@
         "extra_splash_3d_reason": "Plain K1 and K1 Max are unmeasured. A 480x400 variant would select `small`; generating it alongside the derived class costs ~1.5MB and guarantees no K1 ships without a splash. Drop it once measured."
       }
     },
+    "mips": {
+      "display_name": "Unified MIPS (Creality K1 series + FlashForge AD5X)",
+      "panel": {
+        "variable": true,
+        "verified": true,
+        "source": "Both boards measured 2026-09-11: K1C 480x800 rotate 270, AD5X 800x480 rotate 0 — 800x480 effective on each. Which one this binary lands on is a runtime fact (helix::ad5x_mod_layout_present), so the panel is unknown at package time.",
+        "notes": "Ships every size class: the k1 entry's small-class hedge (plain K1 / K1 Max unmeasured) is subsumed by keeping them all."
+      },
+      "storage": {
+        "root": "detected",
+        "state_root": "detected",
+        "cache_dir": "detected",
+        "log_file": "detected",
+        "notes": "Per-board: see the k1 entry (/usr/data/helixscreen) and the ad5x entry (/srv/helixscreen inside the mod chroot). The installer's detect_mod_flavor() picks between them; nothing here can name one root."
+      },
+      "service": {
+        "init_system": "sysv",
+        "init_system_pinned": false,
+        "init_script": "detected",
+        "start_order": null,
+        "needs_procd_shim": false,
+        "notes": "K1 boards install S99helixscreen, AD5X installs S80helixscreen; detect_mod_flavor() decides."
+      },
+      "klipper": {
+        "home": "detected",
+        "user": "root",
+        "group": "root",
+        "config_dir": null
+      },
+      "moonraker": {
+        "update_manager": true
+      },
+      "sound": {
+        "has_sound": true,
+        "has_tracker": true,
+        "source": "Makefile sound section (SOUND_CXXFLAGS / TRACKER_CXXFLAGS by PLATFORM_TARGET)",
+        "notes": "Compiled in for the AD5X piezo (jz_pwm backend, probed at runtime). On the K1 no backend probe succeeds and the k1 preset disables the speaker, so nothing plays there."
+      },
+      "package": {
+        "asset_name": "helixscreen-mips.zip",
+        "docker_target": "mips-docker",
+        "build_dir": "build/mips",
+        "splash_3d_target": "gen-splash-3d-mips",
+        "gen_images_target": "gen-images",
+        "in_release_matrix": true,
+        "detectable": true,
+        "notes": "ONE binary for k1 and ad5x; helix_self_update_asset maps k1/k1-dynamic/ad5x/mips all to this asset. release-mips additionally publishes identical-content helixscreen-k1.zip and helixscreen-ad5x.zip aliases so already-deployed binaries can still find an update by their own computed asset name; drop the aliases once no released binary reports k1 or ad5x."
+      }
+    },
     "ad5x": {
       "display_name": "Flashforge Adventurer 5X",
       "panel": {
@@ -304,9 +354,10 @@
       },
       "package": {
         "asset_name": "helixscreen-ad5x.zip",
-        "docker_target": "ad5x-docker",
-        "build_dir": "build/ad5x",
+        "docker_target": "mips-docker",
+        "build_dir": "build/mips",
         "splash_3d_target": "gen-splash-3d-ad5x",
+        "notes": "The board ships inside the unified mips package; this asset_name is the transition alias release-mips publishes with identical content.",
         "gen_images_target": "gen-images",
         "in_release_matrix": true,
         "detectable": true,

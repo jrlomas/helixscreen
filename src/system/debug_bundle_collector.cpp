@@ -517,9 +517,16 @@ json DebugBundleCollector::collect_printer_info(const PrinterSnapshot& snap) {
         // generation should prefer platform_model when it differs from model
         // so AD5X devices stop showing as "5M Pro" in the bundle list.
         const std::string platform = UpdateChecker::get_platform_key();
-        const std::string platform_model = platform_has_printer_hardware(platform)
-                                               ? UpdateChecker::get_platform_display_name(platform)
-                                               : std::string{};
+        std::string display = UpdateChecker::get_platform_display_name(platform);
+        if (platform == "mips") {
+            // The unified MIPS key names a board family, not hardware; the
+            // mismatch check below needs the actual board, which the
+            // mod-layout probe answers (AD5X vs K1 series).
+            display = UpdateChecker::get_platform_display_name(
+                helix::ad5x_mod_layout_present() ? "ad5x" : "k1");
+        }
+        const std::string platform_model =
+            platform_has_printer_hardware(platform) ? display : std::string{};
         if (!platform_model.empty()) {
             printer["platform_model"] = platform_model;
             // Substring match handles trim variations ("5M" vs "5M Pro"). If

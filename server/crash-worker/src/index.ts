@@ -242,25 +242,32 @@ export function isVersionShapeValid(version: string): boolean {
  * Every platform key a HelixScreen build can report.
  *
  * This mirrors the return values of UpdateChecker::get_platform_key() in
- * src/system/update_checker.cpp, which is compile-time except for the one
- * runtime k1/ad5x split, so a genuine build cannot report anything else.
- * tests/shell/test_update_platform_coverage.bats fails if the two lists drift,
- * which is what keeps this from becoming a stale second copy.
+ * src/system/update_checker.cpp, plus the retired keys below, which stay for
+ * as long as old binaries exist in the field: a deployed binary keeps sending
+ * its compile-time key forever, and the worker refusing it silently drops
+ * that platform's crash reports. Removing a retired key is a fleet decision
+ * (telemetry: the key no longer appears in checkins), not a code cleanup.
+ * tests/shell/test_update_platform_coverage.bats fails if the current keys
+ * drift or a retired key loses its reason, which is what keeps this from
+ * becoming a stale second copy.
  *
  * Adding a platform means deploying this worker as well as shipping the app,
  * or the new platform's first crash reports are refused.
  */
 const KNOWN_PLATFORMS = new Set([
+  // Current keys (get_platform_key()).
   "ad5m",
-  "ad5x",
   "cc1",
   "esp32",
-  "k1",
   "k2",
+  "mips",
   "pi",
   "pi32",
   "snapmaker-u1",
   "x86",
+  // Retired keys, accepted while pre-unify binaries remain deployed.
+  "k1", // k1 -> mips (unified MIPS package); k1-series builds report it
+  "ad5x", // ad5x -> mips (unified MIPS package); AD5X builds report it
 ]);
 
 export function isKnownPlatform(platform: string): boolean {

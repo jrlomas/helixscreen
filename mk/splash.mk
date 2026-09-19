@@ -86,6 +86,7 @@ SPLASH_EXTRA_OBJS := \
     $(BUILD_DIR)/splash/fbdev_size_helper.o \
     $(BUILD_DIR)/splash/pending_startup_warnings.o \
     $(BUILD_DIR)/splash/log_redact.o \
+    $(BUILD_DIR)/splash/platform_info.o \
     $(BUILD_DIR)/splash/prerender_size_class.o \
     $(BUILD_DIR)/splash/splash_asset_choice.o \
     $(BUILD_DIR)/splash/helix_lvgl_anomaly_stub.o
@@ -139,6 +140,13 @@ $(BUILD_DIR)/splash/backlight_backend.o: src/api/backlight_backend.cpp $(LIBHV_L
 # Compile notification stub for splash (with dependency tracking)
 $(BUILD_DIR)/splash/ui_notification_stub.o: tools/ui_notification_stub.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(ABI_STAMP) | $(BUILD_DIR)/splash
 	@echo "[CXX] $< (splash stub)"
+	$(Q)$(CXX) $(SPLASH_CXXFLAGS) $(DEPFLAGS) -c $< -o $@
+
+# touch_calibration.cpp (in DISPLAY_LIB, linked --whole-archive) picks its
+# default fit via the mod-layout probe on the unified MIPS build, so the probe
+# implementation is a hard link dependency here too. Zero deps beyond spdlog.
+$(BUILD_DIR)/splash/platform_info.o: src/system/platform_info.cpp $(ABI_STAMP) | $(BUILD_DIR)/splash
+	@echo "[CXX] $< (splash)"
 	$(Q)$(CXX) $(SPLASH_CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 # Compile log_redact for splash. Splash calls none of it; input_device_scanner.cpp

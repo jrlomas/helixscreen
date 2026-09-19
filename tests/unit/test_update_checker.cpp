@@ -109,7 +109,12 @@ std::string json_string_or_empty(const json& j, const std::string& key) {
     return "";
 }
 
-ParsedRelease parse_github_release(const std::string& json_str) {
+// Mirrors the shipped parser's version/tag/body semantics only. It has no
+// platform filtering, so assertions built on it cannot judge asset selection:
+// it takes the first name containing ".tar.gz", where production matches the
+// platform key and refuses anything else. helix::parse_github_release is the
+// shipped parser; reach for it when the assertion is about which asset wins.
+ParsedRelease parse_release_fixture(const std::string& json_str) {
     ParsedRelease result;
 
     try {
@@ -189,7 +194,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             }]
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
 
         REQUIRE(release.valid);
         REQUIRE(release.tag_name == "v1.2.3");
@@ -213,7 +218,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             ]
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
 
         REQUIRE(release.valid);
         REQUIRE(release.download_url == "https://example.com/helixscreen.tar.gz");
@@ -225,7 +230,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "tag_name": "v3.0.0"
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
 
         REQUIRE(release.valid);
         REQUIRE(release.version == "3.0.0");
@@ -241,7 +246,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "assets": []
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
 
         REQUIRE(release.valid);
         REQUIRE(release.version == "1.0.0");
@@ -255,7 +260,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "published_at": "2025-01-01T00:00:00Z"
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
 
         REQUIRE(release.valid);
         // null should be converted to empty string by .value() default
@@ -268,12 +273,12 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "body": "missing comma"
         })";
 
-        auto release = parse_github_release(invalid_json);
+        auto release = parse_release_fixture(invalid_json);
         REQUIRE_FALSE(release.valid);
     }
 
     SECTION("rejects empty JSON object") {
-        auto release = parse_github_release("{}");
+        auto release = parse_release_fixture("{}");
         REQUIRE_FALSE(release.valid);
     }
 
@@ -282,12 +287,12 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "tag_name": "not-a-version"
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
         REQUIRE_FALSE(release.valid);
     }
 
     SECTION("rejects empty string") {
-        auto release = parse_github_release("");
+        auto release = parse_release_fixture("");
         REQUIRE_FALSE(release.valid);
     }
 
@@ -296,7 +301,7 @@ TEST_CASE("GitHub release JSON parsing", "[update_checker][json]") {
             "tag_name": "1.5.0"
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
 
         REQUIRE(release.valid);
         REQUIRE(release.tag_name == "1.5.0");
@@ -336,17 +341,17 @@ TEST_CASE("Version prefix stripping", "[update_checker][version]") {
 
 TEST_CASE("Update checker error scenarios", "[update_checker][error]") {
     SECTION("empty response body") {
-        auto release = parse_github_release("");
+        auto release = parse_release_fixture("");
         REQUIRE_FALSE(release.valid);
     }
 
     SECTION("non-JSON response") {
-        auto release = parse_github_release("<!DOCTYPE html><html>Error</html>");
+        auto release = parse_release_fixture("<!DOCTYPE html><html>Error</html>");
         REQUIRE_FALSE(release.valid);
     }
 
     SECTION("JSON array instead of object") {
-        auto release = parse_github_release("[1, 2, 3]");
+        auto release = parse_release_fixture("[1, 2, 3]");
         REQUIRE_FALSE(release.valid);
     }
 
@@ -355,7 +360,7 @@ TEST_CASE("Update checker error scenarios", "[update_checker][error]") {
             "tag_name": {"nested": "object"}
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
         REQUIRE_FALSE(release.valid);
     }
 }
@@ -591,7 +596,7 @@ TEST_CASE("Real-world update scenarios", "[update_checker][scenarios]") {
             ]
         })";
 
-        auto release = parse_github_release(github_response);
+        auto release = parse_release_fixture(github_response);
 
         REQUIRE(release.valid);
         REQUIRE(release.version == "1.5.0");
@@ -682,7 +687,7 @@ TEST_CASE("JSON edge cases", "[update_checker][json][edge]") {
             "body": "Fixed emoji display \ud83d\ude80 and Chinese chars \u4e2d\u6587"
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
         REQUIRE(release.valid);
         REQUIRE_FALSE(release.release_notes.empty());
     }
@@ -691,7 +696,7 @@ TEST_CASE("JSON edge cases", "[update_checker][json][edge]") {
         std::string long_body(10000, 'x');
         std::string json_str = R"({"tag_name": "v1.0.0", "body": ")" + long_body + R"("})";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
         REQUIRE(release.valid);
         REQUIRE(release.release_notes.length() == 10000);
     }
@@ -705,7 +710,7 @@ TEST_CASE("JSON edge cases", "[update_checker][json][edge]") {
             }]
         })";
 
-        auto release = parse_github_release(json_str);
+        auto release = parse_release_fixture(json_str);
         REQUIRE(release.valid);
         REQUIRE_FALSE(release.download_url.empty());
     }
@@ -1566,8 +1571,8 @@ TEST_CASE("get_platform_key returns a known platform", "[update_checker][platfor
     // here — AND a matching #elif in get_platform_key — silently bricks
     // in-app updates for that platform (falls through to "pi", so the device
     // downloads the Pi tarball and ends up with missing shared libs).
-    std::vector<std::string> known_platforms = {"pi", "pi32", "x86", "ad5m",  "k1",
-                                                "k2", "ad5x", "cc1", "esp32", "snapmaker-u1"};
+    std::vector<std::string> known_platforms = {"pi",   "pi32", "x86", "ad5m",  "k1",          "k2",
+                                                "ad5x", "mips", "cc1", "esp32", "snapmaker-u1"};
     bool found = false;
     for (const auto& p : known_platforms) {
         if (platform == p) {
@@ -1609,53 +1614,8 @@ TEST_CASE("get_platform_key matches compiled binary architecture",
     } else if (platform == "pi") {
         REQUIRE(elf_class == 2); // ELFCLASS64
     }
-    // Other platforms (k1, k2, ad5x, cc1) may vary — no assertion
+    // Other platforms (k1, k2, ad5x, mips, cc1) may vary — no assertion
 #endif
-}
-
-TEST_CASE("mips_runtime_platform_key classifies an AD5X mod layout as ad5x, not k1",
-          "[update_checker][platform]") {
-    // The mips binary ships for K1 and AD5X alike, so the split is a runtime
-    // question. A Forge-X rig carries none of the ZMOD markers (no /ZMOD, no
-    // /usr/prog, and no /usr/data inside the chroot) — only the mod git tree —
-    // so the classification must ask the same layout question the launcher and
-    // log collector ask, or the rig self-updates from K1 builds. Layouts are
-    // built under a temp root (the probe_root seam); the real / is never
-    // touched. Both spellings of the mod tree count: the chroot binds
-    // /usr/data at /opt, so exactly one is reachable per side.
-    SECTION("Forge-X chroot spelling (/opt/config/mod) -> ad5x") {
-        std::string root = make_temp_dir("helix_mips_fx");
-        std::filesystem::create_directories(root + "/opt/config/mod/.shell");
-        create_file(root + "/opt/config/mod/.shell/platform.sh", "#!/bin/sh\n");
-        REQUIRE(UpdateChecker::mips_runtime_platform_key(root) == "ad5x");
-        remove_dir(root);
-    }
-    SECTION("Forge-X host-side spelling (/usr/data/config/mod) -> ad5x") {
-        std::string root = make_temp_dir("helix_mips_fxh");
-        std::filesystem::create_directories(root + "/usr/data/config/mod/.shell");
-        create_file(root + "/usr/data/config/mod/.shell/platform.sh", "#!/bin/sh\n");
-        REQUIRE(UpdateChecker::mips_runtime_platform_key(root) == "ad5x");
-        remove_dir(root);
-    }
-    SECTION("ZMOD marker file -> ad5x") {
-        std::string root = make_temp_dir("helix_mips_zmod");
-        std::filesystem::create_directories(root);
-        create_file(root + "/ZMOD", "marker\n");
-        REQUIRE(UpdateChecker::mips_runtime_platform_key(root) == "ad5x");
-        remove_dir(root);
-    }
-    SECTION("FlashForge /usr/prog dir -> ad5x") {
-        std::string root = make_temp_dir("helix_mips_prog");
-        std::filesystem::create_directories(root + "/usr/prog");
-        REQUIRE(UpdateChecker::mips_runtime_platform_key(root) == "ad5x");
-        remove_dir(root);
-    }
-    SECTION("plain layout (K1) -> k1") {
-        std::string root = make_temp_dir("helix_mips_plain");
-        std::filesystem::create_directories(root);
-        REQUIRE(UpdateChecker::mips_runtime_platform_key(root) == "k1");
-        remove_dir(root);
-    }
 }
 
 TEST_CASE("get_platform_display_name returns non-empty string for all known platforms",
@@ -1664,8 +1624,8 @@ TEST_CASE("get_platform_display_name returns non-empty string for all known plat
     // Every key that get_platform_key() can return MUST have a display name.
     // Keep in sync with platform_canonical_model in debug_bundle_collector.cpp
     // (and UpdateChecker::get_platform_display_name once centralised).
-    std::vector<std::string> known_platforms = {"pi", "pi32", "x86", "ad5m",  "k1",
-                                                "k2", "ad5x", "cc1", "esp32", "snapmaker-u1"};
+    std::vector<std::string> known_platforms = {"pi",   "pi32", "x86", "ad5m",  "k1",          "k2",
+                                                "ad5x", "mips", "cc1", "esp32", "snapmaker-u1"};
 
     for (const auto& key : known_platforms) {
         INFO("platform key: " << key);
@@ -1682,6 +1642,7 @@ TEST_CASE("get_platform_display_name returns correct strings for known platforms
     REQUIRE(UpdateChecker::get_platform_display_name("x86") == "x86 Desktop");
     REQUIRE(UpdateChecker::get_platform_display_name("ad5m") == "FlashForge Adventurer 5M");
     REQUIRE(UpdateChecker::get_platform_display_name("ad5x") == "FlashForge Adventurer 5X");
+    REQUIRE(UpdateChecker::get_platform_display_name("mips") == "MIPS (K1 series / AD5X)");
     REQUIRE(UpdateChecker::get_platform_display_name("k1") == "Creality K1");
     REQUIRE(UpdateChecker::get_platform_display_name("k2") == "Creality K2 Plus");
     REQUIRE(UpdateChecker::get_platform_display_name("cc1") == "Elegoo Centauri Carbon");
@@ -2301,6 +2262,52 @@ TEST_CASE("compare_channel_version: prerelease suffixes order by precedence",
     // serving a beta of the version already installed is behind it.
     CHECK(compare_channel_version("1.0.0-beta", "1.0.0") == ChannelVersionRelation::Newer);
     CHECK(compare_channel_version("1.1.0", "1.1.0-rc.1") == ChannelVersionRelation::Older);
+}
+
+// ============================================================================
+// GitHub-fallback asset selection (drives self-update on the fallback path)
+// ============================================================================
+//
+// A release carries one tarball per platform key, and some keys are prefixes
+// of others (k1 and k1-dynamic). Selection must anchor the version's 'v'
+// directly after this build's platform key, or the shorter key grabs the
+// longer platform's tarball. The host test build reports platform "pi"; the
+// decoy below extends it exactly the way k1-dynamic extends k1.
+
+TEST_CASE("parse_github_release: a platform prefix does not select a longer platform's tarball",
+          "[update_checker][github]") {
+    const std::string platform = UpdateChecker::get_platform_key();
+    // "pi" on a host test build; the test only needs SOME known key.
+    REQUIRE_FALSE(platform.empty());
+
+    const auto asset = [](const std::string& name) {
+        return R"({"name": ")" + name + R"(", "browser_download_url": "https://x/)" + name +
+               R"(", "size": 123})";
+    };
+    const std::string mine = "helixscreen-" + platform + "-v1.2.3.tar.gz";
+    const std::string decoy = "helixscreen-" + platform + "-dynamic-v0.99.0.tar.gz";
+    // Decoy first: it also sorts first alphabetically, which is how the real
+    // release listing serves it.
+    const std::string body =
+        R"({"tag_name": "v1.2.3", "assets": [)" + asset(decoy) + ", " + asset(mine) + "]}";
+
+    UpdateChecker::ReleaseInfo info;
+    std::string error;
+    REQUIRE(helix::parse_github_release(body, info, error));
+    CHECK(info.version == "1.2.3");
+    REQUIRE_FALSE(info.download_url.empty());
+    CHECK(info.download_url.find(mine) != std::string::npos);
+    CHECK(info.download_url.find(decoy) == std::string::npos);
+
+    SECTION("only the longer platform's tarball present: no asset, not the wrong one") {
+        // A wrong-platform tarball bricks the device it lands on; an empty
+        // download_url leaves the update unavailable instead.
+        const std::string only_decoy =
+            R"({"tag_name": "v1.2.3", "assets": [)" + asset(decoy) + "]}";
+        UpdateChecker::ReleaseInfo sparse;
+        REQUIRE(helix::parse_github_release(only_decoy, sparse, error));
+        CHECK(sparse.download_url.empty());
+    }
 }
 
 TEST_CASE("ReleaseInfo::is_downgrade defaults to false", "[update_checker][channel]") {

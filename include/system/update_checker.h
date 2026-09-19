@@ -407,20 +407,6 @@ class UpdateChecker {
     static std::string get_platform_key();
 
     /**
-     * @brief Runtime K1-vs-AD5X split for the mips build.
-     *
-     * The mips binary ships for K1 and AD5X alike; get_platform_key() calls
-     * this under HELIX_PLATFORM_MIPS. The AD5X side is the AD5X mod-tree
-     * layout question (ZMOD markers or a reachable Forge-X mod tree) answered
-     * by helix::ad5x_mod_layout_present() — the same rule the launcher
-     * and log collector use. Returns a KNOWN platform key: "ad5x" or "k1".
-     *
-     * @param probe_root  root the layout probes resolve under (test seam;
-     *                    default "/", the running environment)
-     */
-    static std::string mips_runtime_platform_key(const std::string& probe_root = "/");
-
-    /**
      * @brief Map a platform key to its human-readable display name.
      * @param key  Platform key as returned by get_platform_key().
      * @return Display name (e.g. "Raspberry Pi", "Creality K1").
@@ -724,3 +710,22 @@ class UpdateChecker {
     /// on a possibly-freed `this` (#1165, #1146).
     helix::AsyncLifetimeGuard async_lifetime_;
 };
+
+/**
+ * @brief Parse a GitHub release API response into ReleaseInfo
+ *
+ * Declared in the header so the asset-selection rule — a platform key must
+ * anchor its tarball exactly, so k1 never selects the k1-dynamic asset whose
+ * name carries the k1 prefix — is unit-tested against the shipped function
+ * rather than a local twin of it.
+ *
+ * @param json_str GitHub releases API response body
+ * @param info Parsed release info; download_url stays empty when no asset
+ *             matches this build's platform (never a wrong-platform fallback)
+ * @param error Failure reason when the response is not a valid release
+ * @return true when the release parsed to a usable version
+ */
+namespace helix {
+bool parse_github_release(const std::string& json_str, UpdateChecker::ReleaseInfo& info,
+                          std::string& error);
+} // namespace helix

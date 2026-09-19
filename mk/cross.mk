@@ -318,56 +318,6 @@ else ifeq ($(PLATFORM_TARGET),ad5m-br)
     STRIP_BINARY := no
     FONT_TIERS := medium large
 
-else ifeq ($(PLATFORM_TARGET),ad5x)
-    # -------------------------------------------------------------------------
-    # AD5X: Ingenic X2600, 800x480, multi-color IFS
-    # Specs: 800x480 display
-    # -------------------------------------------------------------------------
-    CROSS_COMPILE ?= mipsel-buildroot-linux-gnu-
-    TARGET_ARCH := mips32r5
-    TARGET_TRIPLE := mipsel-buildroot-linux-gnu
-    # Memory-optimized build flags:
-    # -Os: Optimize for size (vs -O2 for speed)
-    # -flto: Link-Time Optimization for dead code elimination
-    # -ffunction-sections/-fdata-sections: Allow linker to remove unused sections
-    # -Wno-error=conversion: LVGL headers have int32_t->float conversions that GCC flags
-    # -DHELIX_RELEASE_BUILD: Disables debug features like LV_USE_ASSERT_STYLE
-    # NOTE: the ad5x framebuffer is 32bpp (ARGB8888) but LVGL renders RGB565 -
-    # lv_conf.h puts HELIX_PLATFORM_AD5X in the 16bpp branch, so the flush path
-    # converts. Probe it rather than trust this comment:
-    #   gcc -DHELIX_PLATFORM_AD5X -DLV_CONF_INCLUDE_SIMPLE -I. -Ilib/lvgl ...
-    # -funwind-tables: Emit DWARF unwind info so backtrace() can walk the full
-    # call stack in crash reports. Small code size cost, zero runtime cost.
-    TARGET_CFLAGS := -march=mips32r5 -mtune=mips32r5 -mabi=32 -mnan=2008 -mfp64 \
-        -Os -flto -ffunction-sections -fdata-sections -fno-omit-frame-pointer -funwind-tables \
-        -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_AD5X
-    # AMS: IFS stays ON - the AD5X's own filament system. Do NOT copy ad5m's IFS=0 here.
-    HELIX_HAS_CFS := 0
-    HELIX_HAS_ACE := 0
-    HELIX_HAS_QIDI := 0
-    HELIX_HAS_SNAPMAKER := 0
-    # -Wl,--gc-sections: Remove unused sections during linking (works with -ffunction-sections)
-    # -flto: Must match compiler flag for LTO to work
-    # -static: worth ~18% of a core here. Measured same-board against a dynamic build of
-    # the same commit: every render tag drops by x0.82 (starfield L2 steady 42% -> 37% of
-    # a core, frame 25.5 -> 21.1 ms), which is the PLT/GOT indirection a dynamic link pays
-    # on every cross-object call. Nothing on this target dlopens: the release ships no .so,
-    # and glibc 2.34+ builds nss_files/nss_dns into libc, so static getaddrinfo resolves.
-    TARGET_LDFLAGS := -Wl,--gc-sections -flto -static
-    # SSL enabled for HTTPS/WSS support with Moonraker
-    ENABLE_SSL := yes
-    DISPLAY_BACKEND := fbdev
-    ENABLE_SDL := no
-    ENABLE_GLES_3D := no
-    # AD5X: 385 MB free, no swap, so a saver is affordable. A running saver costs no
-    # detectable RSS, and the load gate measures CPU on the board and steps down.
-    ENABLE_SCREENSAVER := yes
-    ENABLE_EVDEV := yes
-    BUILD_SUBDIR := ad5x
-    # Strip binary for size on memory-constrained device
-    STRIP_BINARY := yes
-    FONT_TIERS := medium large
-
 else ifeq ($(PLATFORM_TARGET),cc1)
     # -------------------------------------------------------------------------
     # Elegoo Centauri Carbon 1 - Allwinner R528 (armv7-a Cortex-A7)
@@ -430,68 +380,92 @@ else ifeq ($(PLATFORM_TARGET),cc1)
     # the runtime-loaded translation .bin infrastructure lands, we can ship
     # English compiled-in + all others on disk and get the ~500 KB win back.
 
-else ifneq ($(filter mips k1,$(PLATFORM_TARGET)),)
+else ifneq ($(filter mips k1 ad5x,$(PLATFORM_TARGET)),)
     # -------------------------------------------------------------------------
-    # MIPS32 Devices (Creality K1) - Ingenic XBurst2
-    # K1: Ingenic X2000E, 2 cores, 480x800 panel used rotated (800x480), 256MB RAM
-    # MIPS32r2, musl libc, fbdev display, evdev touch
-    # -------------------------------------------------------------------------
-    # FULLY STATIC BUILD with musl: Cleaner than glibc static linking.
-    # No getaddrinfo warnings, smaller binaries, guaranteed portability.
-    # Uses Bootlin's mips32el musl toolchain (same as pellcorp/grumpyscreen).
-    CROSS_COMPILE ?= mipsel-buildroot-linux-musl-
-    TARGET_ARCH := mips32r2
-    TARGET_TRIPLE := mipsel-buildroot-linux-musl
-    # Optimized build flags for Ingenic MIPS32r2 (XBurst2):
+    # Unified MIPS32 build - ONE binary for the Creality K1 series and the
+    # FlashForge AD5X (all Ingenic XBurst2/X2600, 800x480-effective, fbdev,
+    # evdev touch). `mips`, `k1` and `ad5x` are three spellings of this one
+    # target; the board is told apart at runtime, never at compile time.
     #
+    # The ABI that makes this possible: -mnan=2008 -mfp64 is an ELF-level
+    # contract the kernel enforces at exec. The K1 kernels and the AD5X's
+    # accept a nan2008 ELF (a static mips32r2/nan2008/fp64 probe ran on both,
+    # 2026-09-17), so nan2008 - required by the AD5X - is the shared encoding,
+    # and -march=mips32r2 is the shared ISA floor: the K1 advertises only
+    # mips32r2, so r5-only instructions are the one thing this build gives up
+    # relative to a dedicated AD5X target.
+    #
+    # FULLY STATIC BUILD with the ct-ng musl toolchain (helixscreen/toolchain-mips:
+    # GCC 13.2, musl 1.2.4, everything -mnan=2008 -mfp64). Static makes the target's
+    # libc irrelevant on both boards. glibc cannot serve this target: on mips o32 +
+    # nan2008 its configure pins arch_minimum_kernel=4.5.0 and silently resets any
+    # lower --enable-kernel, so every -static glibc binary aborts on the K1's
+    # 4.4.94 kernel with "FATAL: kernel too old". musl has no kernel floor, and the
+    # K1 ships a musl screen binary on that very kernel today.
+    CROSS_COMPILE ?= mipsel-k1-linux-musl-
+    TARGET_ARCH := mips32r2
+    TARGET_TRIPLE := mipsel-k1-linux-musl
     # Architecture flags:
-    # -march=mips32r2: Target instruction set (X2000E/X2600 are MIPS32 R5 compatible)
-    # -mtune=mips32r2: Tune for MIPS32r2 pipeline
+    # -march/-mtune=mips32r2: the ISA floor both boards advertise
+    # -mnan=2008: the NaN encoding both kernels exec (legacy-NaN does NOT run
+    #   on the AD5X - rejected with ENOEXEC, which BusyBox shells misreport as
+    #   `syntax error: unexpected "("`)
+    # -mfp64: full 64-bit FPU, matches both boards' FPU abiflags
     #
     # Size optimization:
     # -Os: Optimize for size
-    # -fomit-frame-pointer: Don't keep frame pointer (saves registers/stack)
     # -funwind-tables: Emit DWARF unwind info for crash backtrace quality
     # -fmerge-all-constants: Merge duplicate string/numeric constants
     # -fno-ident: Don't embed GCC version string
     #
     # LTO and dead code elimination:
     # -flto=auto: Link-Time Optimization with parallel jobs
-    # -ffunction-sections/-fdata-sections: Enable per-function/data sections
+    # -ffunction-sections/-fdata-sections: per-function/data sections for --gc-sections
     #
     # Note: -mno-abicalls/-mno-shared omitted - they break configure tests
     # for submodule builds even though final binary is static
     #
-    TARGET_CFLAGS := -march=mips32r2 -mtune=mips32r2 \
+    TARGET_CFLAGS := -march=mips32r2 -mtune=mips32r2 -mnan=2008 -mfp64 \
         -Os -flto=auto -ffunction-sections -fdata-sections \
         -fno-omit-frame-pointer -funwind-tables \
         -fmerge-all-constants -fno-ident \
         -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_MIPS
-    # AMS: CFS stays ON - K1/K1C/K1 Max all ship a 'with CFS' variant in the printer DB.
-    HELIX_HAS_IFS := 0
+    # AMS: BOTH vendor filament systems stay ON - CFS for the K1/K1C/K1 Max
+    # 'with CFS' variants, IFS for the AD5X. AmsState picks per detected
+    # printer at runtime.
     HELIX_HAS_ACE := 0
     HELIX_HAS_QIDI := 0
     HELIX_HAS_SNAPMAKER := 0
     # Linker flags:
     # -Wl,--gc-sections: Remove unused sections (works with -ffunction-sections)
-    # -flto=auto: Match compiler LTO flag, uses all CPUs
-    # -static: Fully static binary - musl makes this clean and portable
+    # -static: worth ~18% of a core on the AD5X. Measured same-board against a
+    # dynamic build of the same commit: every render tag drops by x0.82
+    # (starfield L2 steady 42% -> 37% of a core, frame 25.5 -> 21.1 ms), which
+    # is the PLT/GOT indirection a dynamic link pays on every cross-object
+    # call. Nothing on this target dlopens: the release ships no .so, and
+    # musl builds its resolver into the static libc, so static getaddrinfo
+    # resolves. Nothing runs outside a chroot on the AD5X, so the stock
+    # rootfs libc never sees the binary.
     # -Wl,-O2: Linker optimization level
     # -Wl,--as-needed: Only link libraries that are actually used
+    # -flto=auto: Match compiler LTO flag, uses all CPUs
     TARGET_LDFLAGS := -Wl,--gc-sections -Wl,-O2 -Wl,--as-needed -flto=auto -static
     # SSL enabled for HTTPS/WSS support (updates, remote Moonraker)
     ENABLE_SSL := yes
     DISPLAY_BACKEND := fbdev
     ENABLE_SDL := no
     ENABLE_GLES_3D := no
-    # K1C: 130 MB free, swap file untouched, so a saver is affordable. A running saver costs no
-    # detectable RSS, and the load gate measures CPU on the board and steps down.
+    # Savers are affordable on both: K1C 130 MB free / AD5X 385 MB, swap
+    # untouched. A running saver costs no detectable RSS, and the load gate
+    # measures CPU on the board and steps down.
     ENABLE_SCREENSAVER := yes
     ENABLE_EVDEV := yes
     BUILD_SUBDIR := mips
     # Strip binary for size on memory-constrained device
     STRIP_BINARY := yes
-    FONT_TIERS := small medium
+    # Union of the two packages this target replaced (k1: small medium,
+    # ad5x: medium large). Panels differ per board, so both ends ship.
+    FONT_TIERS := small medium large
 
 else ifeq ($(PLATFORM_TARGET),k1-dynamic)
     # -------------------------------------------------------------------------
@@ -508,6 +482,9 @@ else ifeq ($(PLATFORM_TARGET),k1-dynamic)
     TARGET_ARCH := mips32r2
     TARGET_TRIPLE := mipsel-k1-linux-gnu
     # NaN2008 + FP64 flags are critical for ABI compatibility with K1 firmware
+    # GCC 7.x is also pinned for ABI reasons: this build runs against the
+    # device's libstdc++ 6.0.24 (GCC 7.x). The static mips build has no such
+    # runtime, which is why it can move to a newer compiler.
     # No LTO: GCC 7.5 static toolchain doesn't ship liblto_plugin.so
     # -isystem include/compat: Filesystem shim — GCC 7 only has <experimental/filesystem>
     # -funwind-tables: Emit DWARF unwind info so backtrace() can walk the full
@@ -1096,7 +1073,7 @@ cc1:
 	$(Q)$(MAKE) PLATFORM_TARGET=cc1 -j$(NPROC) all
 
 mips:
-	@echo "$(CYAN)$(BOLD)Cross-compiling for MIPS32 devices K1...$(RESET)"
+	@echo "$(CYAN)$(BOLD)Cross-compiling the unified MIPS32 binary (K1 series + AD5X)...$(RESET)"
 	$(Q)$(MAKE) PLATFORM_TARGET=mips -j$(NPROC) all
 
 k1: mips
@@ -1302,21 +1279,10 @@ ad5m-docker: ensure-docker
 		|| echo "$(YELLOW)⚠ Could not extract CA certificates (HTTPS may rely on device certs)$(RESET)"
 	@$(MAKE) --no-print-directory maybe-stop-colima
 
-ad5x-docker: ensure-docker
-	@echo "$(CYAN)$(BOLD)Cross-compiling for Adventurer 5X via Docker...$(RESET)"
-	@if ! docker image inspect helixscreen/toolchain-ad5x >/dev/null 2>&1; then \
-		echo "$(YELLOW)Docker image not found. Building toolchain first...$(RESET)"; \
-		$(MAKE) docker-toolchain-ad5x; \
-	fi
-	$(call ensure-ccache-dir,ad5x)
-	$(Q)scripts/cross-compile-lock.sh docker run --rm --user $$(id -u):$$(id -g) -v "$(CURDIR)":/src $(DOCKER_HOST_CONTEXT) -w /src $(call docker-ccache-args,ad5x) helixscreen/toolchain-ad5x \
-		make PLATFORM_TARGET=ad5x SKIP_OPTIONAL_DEPS=1 $(DOCKER_REMOTE_CONTROL) $(DOCKER_DIAG_UPLOADS) -j$(NPROC_DOCKER_RUN)
-	@# Extract CA certificates from Docker image for HTTPS verification on device
-	@mkdir -p build/ad5x/certs
-	@docker run --rm helixscreen/toolchain-ad5x cat /etc/ssl/certs/ca-certificates.crt > build/ad5x/certs/ca-certificates.crt 2>/dev/null \
-		&& echo "$(GREEN)✓ CA certificates extracted$(RESET)" \
-		|| echo "$(YELLOW)⚠ Could not extract CA certificates (HTTPS may rely on device certs)$(RESET)"
-	@$(MAKE) --no-print-directory maybe-stop-colima
+# ad5x is a spelling of the unified mips target: same toolchain image, same
+# binary out of build/mips. Kept so `make ad5x-docker` muscle memory and the
+# docs that name it keep working.
+ad5x-docker: mips-docker
 
 cc1-docker: ensure-docker
 	@echo "$(CYAN)$(BOLD)Cross-compiling for Centauri Carbon 1 via Docker...$(RESET)"
@@ -1344,18 +1310,20 @@ cc1-docker: ensure-docker
 	@$(MAKE) --no-print-directory maybe-stop-colima
 
 mips-docker: ensure-docker
-	@echo "$(CYAN)$(BOLD)Cross-compiling for MIPS32 devices via Docker...$(RESET)"
-	@if ! docker image inspect helixscreen/toolchain-k1 >/dev/null 2>&1; then \
+	@echo "$(CYAN)$(BOLD)Cross-compiling the unified MIPS32 binary (K1 + AD5X) via Docker...$(RESET)"
+	@if ! docker image inspect helixscreen/toolchain-mips >/dev/null 2>&1; then \
 		echo "$(YELLOW)Docker image not found. Building toolchain first...$(RESET)"; \
-		$(MAKE) docker-toolchain-k1; \
+		$(MAKE) docker-toolchain-mips; \
 	fi
-	$(call ensure-ccache-dir,k1)
-	# Do not inherit host jobserver flags into containerized make.
-	$(Q)scripts/cross-compile-lock.sh docker run --rm --user $$(id -u):$$(id -g) -e MAKEFLAGS= -v "$(CURDIR)":/src $(DOCKER_HOST_CONTEXT) -w /src $(call docker-ccache-args,k1) helixscreen/toolchain-k1 \
+	$(call ensure-ccache-dir,mips)
+	# Do not inherit host jobserver flags into containerized make. The mips
+	# toolchain image is the one that builds the unified binary, so its ccache
+	# dir is the one with hits in it.
+	$(Q)scripts/cross-compile-lock.sh docker run --rm --user $$(id -u):$$(id -g) -e MAKEFLAGS= -v "$(CURDIR)":/src $(DOCKER_HOST_CONTEXT) -w /src $(call docker-ccache-args,mips) helixscreen/toolchain-mips \
 		make PLATFORM_TARGET=mips SKIP_OPTIONAL_DEPS=1 $(DOCKER_REMOTE_CONTROL) $(DOCKER_DIAG_UPLOADS) -j$(NPROC_DOCKER_RUN)
 	@# Extract CA certificates from Docker image for HTTPS verification on device
 	@mkdir -p build/mips/certs
-	@docker run --rm helixscreen/toolchain-k1 cat /etc/ssl/certs/ca-certificates.crt > build/mips/certs/ca-certificates.crt 2>/dev/null \
+	@docker run --rm helixscreen/toolchain-mips cat /etc/ssl/certs/ca-certificates.crt > build/mips/certs/ca-certificates.crt 2>/dev/null \
 		&& echo "$(GREEN)✓ CA certificates extracted$(RESET)" \
 		|| echo "$(YELLOW)⚠ Could not extract CA certificates (HTTPS may rely on device certs)$(RESET)"
 	@$(MAKE) --no-print-directory maybe-stop-colima
@@ -1462,7 +1430,7 @@ maybe-stop-colima:
 	fi
 
 # Build Docker toolchain images
-docker-toolchains: docker-toolchain-pi docker-toolchain-pi32 docker-toolchain-ad5m docker-toolchain-ad5x docker-toolchain-cc1 docker-toolchain-k1 docker-toolchain-k1-dynamic docker-toolchain-k2 docker-toolchain-snapmaker-u1 docker-toolchain-x86
+docker-toolchains: docker-toolchain-pi docker-toolchain-pi32 docker-toolchain-ad5m docker-toolchain-ad5x docker-toolchain-cc1 docker-toolchain-k1 docker-toolchain-mips docker-toolchain-k1-dynamic docker-toolchain-k2 docker-toolchain-snapmaker-u1 docker-toolchain-x86
 	@echo "$(GREEN)$(BOLD)All Docker toolchains built successfully$(RESET)"
 
 docker-toolchain-pi: ensure-buildx
@@ -1488,6 +1456,10 @@ docker-toolchain-cc1: ensure-buildx
 docker-toolchain-k1: ensure-buildx
 	@echo "$(CYAN)Building MIPS32 K1 toolchain Docker image...$(RESET)"
 	$(Q)docker buildx build -t helixscreen/toolchain-k1 -f docker/Dockerfile.k1 docker/
+
+docker-toolchain-mips: ensure-buildx
+	@echo "$(CYAN)Building unified MIPS (K1 + AD5X) toolchain Docker image...$(RESET)"
+	$(Q)docker buildx build -t helixscreen/toolchain-mips -f docker/Dockerfile.mips docker/
 
 docker-toolchain-k1-dynamic: ensure-buildx
 	@echo "$(CYAN)Building Creality K1 series (dynamic) toolchain Docker image...$(RESET)"
@@ -2223,17 +2195,17 @@ AD5X_DEPLOY_DIR ?= /opt/config/mod/.bin/helixscreen
 # a Makefile's: the board may be mid-print.
 .PHONY: deploy-ad5x-bin
 deploy-ad5x-bin:
-	@test -f build/ad5x/bin/helix-screen || { echo "$(RED)Error: build/ad5x/bin/helix-screen not found. Run 'make ad5x-docker' first.$(RESET)"; exit 1; }
+	@test -f build/mips/bin/helix-screen || { echo "$(RED)Error: build/mips/bin/helix-screen not found. Run 'make mips-docker' first.$(RESET)"; exit 1; }
 	@echo "$(CYAN)Deploying binaries only to $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin...$(RESET)"
 	ssh $(AD5X_SSH_TARGET) "mkdir -p $(AD5X_DEPLOY_DIR)/bin"
 	@echo "$(DIM)Backing up the current binary (cp -a: BusyBox cp has no -n)...$(RESET)"
 	ssh $(AD5X_SSH_TARGET) "cd $(AD5X_DEPLOY_DIR)/bin && cp -a helix-screen helix-screen.prev-deploy"
 	@echo "$(DIM)Stopping the app: a running binary cannot be overwritten (Text file busy).$(RESET)"
 	ssh $(AD5X_SSH_TARGET) "killall helix-watchdog helix-screen helix-splash 2>/dev/null; sleep 3; killall -9 helix-watchdog helix-screen helix-splash 2>/dev/null; rm -f /tmp/helix-screen.lock; true"
-	scp -O build/ad5x/bin/helix-screen build/ad5x/bin/helix-splash $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/
-	@if [ -f build/ad5x/bin/helix-watchdog ]; then scp -O build/ad5x/bin/helix-watchdog $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/; fi
+	scp -O build/mips/bin/helix-screen build/mips/bin/helix-splash $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/
+	@if [ -f build/mips/bin/helix-watchdog ]; then scp -O build/mips/bin/helix-watchdog $(AD5X_SSH_TARGET):$(AD5X_DEPLOY_DIR)/bin/; fi
 	@echo "$(GREEN)✓ Binaries deployed$(RESET)"
-	$(call sync-device-features,$(AD5X_SSH_TARGET),$(AD5X_DEPLOY_DIR),build/ad5x/bin)
+	$(call sync-device-features,$(AD5X_SSH_TARGET),$(AD5X_DEPLOY_DIR),build/mips/bin)
 	@echo ""
 	@echo "$(CYAN)Restarting through the chroot...$(RESET)"
 	@# The app's glibc lives in a mod chroot, so a plain ssh invocation fails on
@@ -2872,8 +2844,10 @@ define release-clean-assets
 	@rm -f "$(1)/assets/images/orcaslicer test cube.PNG" 2>/dev/null || true
 	@# assets/sounds is ~900 KB of MOD/MED tracker modules, playable only where
 	@# the tracker player is compiled in. AD5M has sound but deliberately no
-	@# tracker (its single core busy-waits and kills prints) and CC1/K1/K2/MIPS
-	@# have neither. Which platform that is gets asked of the manifest below,
+	@# tracker (its single core busy-waits and kills prints); CC1/K2 have
+	@# neither; the unified MIPS build carries the tracker for the AD5X (the
+	@# K1 never finds a backend, so it never plays there). Which platform that
+	@# is gets asked of the manifest below,
 	@# because this recipe runs on the HOST: PLATFORM_TARGET is unset here and
 	@# defaults to native, so a TRACKER_CXXFLAGS test answers for the machine
 	@# doing the packaging rather than the printer receiving it.
@@ -2986,7 +2960,7 @@ define assert-diag-uploads
 	fi
 endef
 
-.PHONY: release-pi release-pi32 release-ad5m release-cc1 release-k1 release-ad5x release-k1-dynamic release-k2 release-snapmaker-u1 release-x86 release-all release-clean pi-fbdev-docker pi32-fbdev-docker pi-all-docker pi32-all-docker x86-fbdev-docker x86-all-docker
+.PHONY: release-pi release-pi32 release-ad5m release-cc1 release-mips release-k1 release-ad5x release-k1-dynamic release-k2 release-snapmaker-u1 release-x86 release-all release-clean pi-fbdev-docker pi32-fbdev-docker pi-all-docker pi32-all-docker x86-fbdev-docker x86-all-docker
 
 # Package Pi release
 release-pi: | build/pi/bin/helix-screen build/pi/bin/helix-splash build/pi-fbdev/bin/helix-screen
@@ -3141,57 +3115,6 @@ release-ad5m: | build/ad5m/bin/helix-screen build/ad5m/bin/helix-splash
 	@ls -lh $(RELEASE_DIR)/helixscreen-ad5m-$(RELEASE_VERSION).tar.gz $(RELEASE_DIR)/helixscreen-ad5m.zip
 
 # Package AD5X release
-release-ad5x: | build/ad5x/bin/helix-screen build/ad5x/bin/helix-splash
-	@echo "$(CYAN)$(BOLD)Packaging AD5X release v$(VERSION)...$(RESET)"
-	$(call assert-no-remote-control,build/ad5x/bin)
-	$(call assert-diag-uploads,build/ad5x/bin)
-	@mkdir -p $(RELEASE_DIR)/helixscreen/bin
-	@cp build/ad5x/bin/helix-screen build/ad5x/bin/helix-splash $(RELEASE_DIR)/helixscreen/bin/
-	@if [ -f build/ad5x/bin/helix-watchdog ]; then cp build/ad5x/bin/helix-watchdog $(RELEASE_DIR)/helixscreen/bin/; fi
-	@cp scripts/helix-launcher.sh $(RELEASE_DIR)/helixscreen/bin/
-	$(call release-copy-xml-config,$(RELEASE_DIR)/helixscreen)
-	@# Install AD5X preset as default config (skips hardware wizard on first run)
-	@rm -f $(RELEASE_DIR)/helixscreen/config/settings-test.json $(RELEASE_DIR)/helixscreen/config/helixconfig.json $(RELEASE_DIR)/helixscreen/config/helixconfig-test.json
-	$(call release-strip-pii,$(RELEASE_DIR)/helixscreen)
-	@cp assets/config/presets/ad5x.json $(RELEASE_DIR)/helixscreen/config/settings.json
-	@echo "  $(DIM)Included pre-configured config/settings.json for AD5X$(RESET)"
-	@cp scripts/$(INSTALLER_FILENAME) $(RELEASE_DIR)/helixscreen/
-	@chmod +x $(RELEASE_DIR)/helixscreen/$(INSTALLER_FILENAME)
-	@mkdir -p $(RELEASE_DIR)/helixscreen/scripts
-	@cp scripts/uninstall.sh $(RELEASE_DIR)/helixscreen/scripts/
-	@cp -r scripts/kiauh $(RELEASE_DIR)/helixscreen/scripts/
-	@mkdir -p $(RELEASE_DIR)/helixscreen/assets
-	@for asset in $(RELEASE_ASSETS); do \
-		if [ -d "$$asset" ]; then cp -r "$$asset" $(RELEASE_DIR)/helixscreen/assets/; fi; \
-	done
-	@for f in $(RELEASE_ASSET_FILES); do \
-		if [ -f "$$f" ]; then cp "$$f" $(RELEASE_DIR)/helixscreen/assets/; fi; \
-	done
-	@# Copy pre-rendered images from build directory (splash + printer images)
-	@if [ -d "build/assets/images/prerendered" ]; then \
-		mkdir -p $(RELEASE_DIR)/helixscreen/assets/images/prerendered; \
-		cp -r build/assets/images/prerendered/* $(RELEASE_DIR)/helixscreen/assets/images/prerendered/; \
-	fi
-	@if [ -d "build/assets/images/printers/prerendered" ]; then \
-		mkdir -p $(RELEASE_DIR)/helixscreen/assets/images/printers/prerendered; \
-		cp -r build/assets/images/printers/prerendered/* $(RELEASE_DIR)/helixscreen/assets/images/printers/prerendered/; \
-	fi
-	@# Bundle CA certificates for HTTPS verification (fallback if device lacks system certs)
-	@if [ -f "build/ad5x/certs/ca-certificates.crt" ]; then \
-		mkdir -p $(RELEASE_DIR)/helixscreen/certs; \
-		cp build/ad5x/certs/ca-certificates.crt $(RELEASE_DIR)/helixscreen/certs/; \
-		echo "  $(DIM)Included CA certificates for HTTPS$(RESET)"; \
-	fi
-	@find $(RELEASE_DIR)/helixscreen -name '.DS_Store' -delete 2>/dev/null || true
-	$(call release-clean-assets,$(RELEASE_DIR)/helixscreen,ad5x)
-	@xattr -cr $(RELEASE_DIR)/helixscreen 2>/dev/null || true
-	$(call write-release-info,ad5x)
-	@cd $(RELEASE_DIR)/helixscreen && zip -qr ../helixscreen-ad5x.zip .
-	@cd $(RELEASE_DIR) && COPYFILE_DISABLE=1 tar $(TAR_OWNER_FLAGS) -czvf helixscreen-ad5x-$(RELEASE_VERSION).tar.gz helixscreen
-	@rm -rf $(RELEASE_DIR)/helixscreen
-	@echo "$(GREEN)✓ Created $(RELEASE_DIR)/helixscreen-ad5x-$(RELEASE_VERSION).tar.gz + helixscreen-ad5x.zip$(RESET)"
-	@ls -lh $(RELEASE_DIR)/helixscreen-ad5x-$(RELEASE_VERSION).tar.gz $(RELEASE_DIR)/helixscreen-ad5x.zip
-
 # Package CC1 release
 release-cc1: | build/cc1/bin/helix-screen build/cc1/bin/helix-splash
 	@echo "$(CYAN)$(BOLD)Packaging CC1 release v$(VERSION)...$(RESET)"
@@ -3244,9 +3167,13 @@ release-cc1: | build/cc1/bin/helix-screen build/cc1/bin/helix-splash
 	@echo "$(GREEN)✓ Created $(RELEASE_DIR)/helixscreen-cc1-$(RELEASE_VERSION).tar.gz + helixscreen-cc1.zip$(RESET)"
 	@ls -lh $(RELEASE_DIR)/helixscreen-cc1-$(RELEASE_VERSION).tar.gz $(RELEASE_DIR)/helixscreen-cc1.zip
 
-# Package K1 release
-release-k1: | build/mips/bin/helix-screen build/mips/bin/helix-splash
-	@echo "$(CYAN)$(BOLD)Packaging K1 release v$(VERSION)...$(RESET)"
+# Package the unified MIPS release: one binary serving the Creality K1 series
+# and the FlashForge AD5X. No config/settings.json is baked in - the payload
+# ships both presets (assets/config/presets/k1.json and ad5x.json, already in
+# RELEASE_ASSETS) and the installer writes the detected board's preset as the
+# first-run default, which is what the per-package bake used to do.
+release-mips: | build/mips/bin/helix-screen build/mips/bin/helix-splash
+	@echo "$(CYAN)$(BOLD)Packaging unified MIPS (K1 + AD5X) release v$(VERSION)...$(RESET)"
 	$(call assert-no-remote-control,build/mips/bin)
 	$(call assert-diag-uploads,build/mips/bin)
 	@mkdir -p $(RELEASE_DIR)/helixscreen/bin
@@ -3254,11 +3181,8 @@ release-k1: | build/mips/bin/helix-screen build/mips/bin/helix-splash
 	@if [ -f build/mips/bin/helix-watchdog ]; then cp build/mips/bin/helix-watchdog $(RELEASE_DIR)/helixscreen/bin/; fi
 	@cp scripts/helix-launcher.sh $(RELEASE_DIR)/helixscreen/bin/
 	$(call release-copy-xml-config,$(RELEASE_DIR)/helixscreen)
-	@# Install K1 preset as default config (skips hardware wizard on first run)
 	@rm -f $(RELEASE_DIR)/helixscreen/config/settings-test.json $(RELEASE_DIR)/helixscreen/config/helixconfig.json $(RELEASE_DIR)/helixscreen/config/helixconfig-test.json
 	$(call release-strip-pii,$(RELEASE_DIR)/helixscreen)
-	@cp assets/config/presets/k1.json $(RELEASE_DIR)/helixscreen/config/settings.json
-	@echo "  $(DIM)Included pre-configured config/settings.json for K1$(RESET)"
 	@cp scripts/$(INSTALLER_FILENAME) $(RELEASE_DIR)/helixscreen/
 	@chmod +x $(RELEASE_DIR)/helixscreen/$(INSTALLER_FILENAME)
 	@mkdir -p $(RELEASE_DIR)/helixscreen/scripts
@@ -3287,14 +3211,28 @@ release-k1: | build/mips/bin/helix-screen build/mips/bin/helix-splash
 		echo "  $(DIM)Included CA certificates for HTTPS$(RESET)"; \
 	fi
 	@find $(RELEASE_DIR)/helixscreen -name '.DS_Store' -delete 2>/dev/null || true
-	$(call release-clean-assets,$(RELEASE_DIR)/helixscreen,k1)
+	$(call release-clean-assets,$(RELEASE_DIR)/helixscreen,mips)
 	@xattr -cr $(RELEASE_DIR)/helixscreen 2>/dev/null || true
-	$(call write-release-info,k1)
-	@cd $(RELEASE_DIR)/helixscreen && zip -qr ../helixscreen-k1.zip .
-	@cd $(RELEASE_DIR) && COPYFILE_DISABLE=1 tar $(TAR_OWNER_FLAGS) -czvf helixscreen-k1-$(RELEASE_VERSION).tar.gz helixscreen
+	$(call write-release-info,mips)
+	@cd $(RELEASE_DIR)/helixscreen && zip -qr ../helixscreen-mips.zip .
+	@cd $(RELEASE_DIR) && COPYFILE_DISABLE=1 tar $(TAR_OWNER_FLAGS) -czvf helixscreen-mips-$(RELEASE_VERSION).tar.gz helixscreen
 	@rm -rf $(RELEASE_DIR)/helixscreen
-	@echo "$(GREEN)✓ Created $(RELEASE_DIR)/helixscreen-k1-$(RELEASE_VERSION).tar.gz + helixscreen-k1.zip$(RESET)"
-	@ls -lh $(RELEASE_DIR)/helixscreen-k1-$(RELEASE_VERSION).tar.gz $(RELEASE_DIR)/helixscreen-k1.zip
+	@# Transition aliases: every released K1/AD5X binary computes its
+	@# self-update asset from its own platform key ("k1"/"ad5x") and downloads
+	@# by that name, so the names must keep existing with unified content until
+	@# no deployed binary reports those keys anymore. The in-app updater
+	@# prefers the versioned tar.gz, Moonraker the unversioned zip - ship both.
+	@cp $(RELEASE_DIR)/helixscreen-mips.zip $(RELEASE_DIR)/helixscreen-k1.zip
+	@cp $(RELEASE_DIR)/helixscreen-mips.zip $(RELEASE_DIR)/helixscreen-ad5x.zip
+	@cp $(RELEASE_DIR)/helixscreen-mips-$(RELEASE_VERSION).tar.gz $(RELEASE_DIR)/helixscreen-k1-$(RELEASE_VERSION).tar.gz
+	@cp $(RELEASE_DIR)/helixscreen-mips-$(RELEASE_VERSION).tar.gz $(RELEASE_DIR)/helixscreen-ad5x-$(RELEASE_VERSION).tar.gz
+	@echo "$(GREEN)✓ Created $(RELEASE_DIR)/helixscreen-mips-$(RELEASE_VERSION).tar.gz + helixscreen-mips.zip (+ k1/ad5x transition aliases)$(RESET)"
+	@ls -lh $(RELEASE_DIR)/helixscreen-mips-$(RELEASE_VERSION).tar.gz $(RELEASE_DIR)/helixscreen-mips.zip
+
+# Spellings kept so `make release-k1` / `release-ad5x` muscle memory keeps
+# working; both produce the identical unified package.
+release-k1: release-mips
+release-ad5x: release-mips
 
 # Package K1 Dynamic release
 release-k1-dynamic: | build/k1-dynamic/bin/helix-screen build/k1-dynamic/bin/helix-splash
@@ -3494,7 +3432,7 @@ release-x86: | build/x86/bin/helix-screen build/x86/bin/helix-splash build/x86-f
 	@ls -lh $(RELEASE_DIR)/helixscreen-x86-$(RELEASE_VERSION).tar.gz $(RELEASE_DIR)/helixscreen-x86.zip
 
 # Package all releases
-release-all: release-pi release-pi32 release-ad5m release-cc1 release-k1 release-ad5x release-k1-dynamic release-k2 release-snapmaker-u1 release-x86
+release-all: release-pi release-pi32 release-ad5m release-cc1 release-mips release-k1-dynamic release-k2 release-snapmaker-u1 release-x86
 	@echo "$(GREEN)$(BOLD)✓ All releases packaged in $(RELEASE_DIR)/$(RESET)"
 	@ls -lh $(RELEASE_DIR)/*.tar.gz $(RELEASE_DIR)/*.zip
 
@@ -3506,7 +3444,7 @@ release-clean:
 # Aliases for package-* — trigger the full build + package workflow.
 # The legacy scripts/package.sh wrapper was deleted; these targets are now
 # the single entry point for building release artifacts.
-.PHONY: package-ad5m package-cc1 package-pi package-pi32 package-k1 package-ad5x package-k1-dynamic package-k2 package-snapmaker-u1 package-x86 package-all package-clean
+.PHONY: package-ad5m package-cc1 package-pi package-pi32 package-mips package-k1 package-ad5x package-k1-dynamic package-k2 package-snapmaker-u1 package-x86 package-all package-clean
 
 # THE marker that separates a production build from a developer one. Everything
 # a developer builds gets the helixctl server (see the ENABLE_REMOTE_CONTROL
@@ -3528,13 +3466,16 @@ package-ad5m: ad5m-docker gen-images-ad5m gen-splash-3d-ad5m gen-printer-images 
 package-cc1: cc1-docker gen-images gen-splash-3d-cc1 gen-printer-images release-cc1
 package-pi: pi-all-docker gen-images gen-splash-3d-pi gen-printer-images release-pi
 package-pi32: pi32-all-docker gen-images gen-splash-3d-pi32 gen-printer-images release-pi32
-package-k1: mips-docker gen-images gen-splash-3d-k1 gen-printer-images release-k1
-package-ad5x: ad5x-docker gen-images gen-splash-3d-ad5x gen-printer-images release-ad5x
+package-mips: mips-docker gen-images gen-splash-3d-mips gen-printer-images release-mips
+# Board-spelled entries of the same unified package: identical build and
+# release, narrowed only to that board's splash classes.
+package-k1: mips-docker gen-images gen-splash-3d-k1 gen-printer-images release-mips
+package-ad5x: mips-docker gen-images gen-splash-3d-ad5x gen-printer-images release-mips
 package-k1-dynamic: k1-dynamic-docker gen-images gen-splash-3d-k1-dynamic gen-printer-images release-k1-dynamic
 package-k2: k2-docker gen-images gen-splash-3d-k2 gen-printer-images release-k2
 package-snapmaker-u1: snapmaker-u1-docker gen-images gen-splash-3d-snapmaker-u1 gen-printer-images release-snapmaker-u1
 package-x86: x86-all-docker gen-images gen-splash-3d-x86 gen-printer-images release-x86
-package-all: package-ad5m package-cc1 package-pi package-pi32 package-k1 package-ad5x package-k1-dynamic package-k2 package-snapmaker-u1 package-x86
+package-all: package-ad5m package-cc1 package-pi package-pi32 package-mips package-k1-dynamic package-k2 package-snapmaker-u1 package-x86
 package-clean: release-clean
 
 # Convenience aliases (verb-target → target-verb)

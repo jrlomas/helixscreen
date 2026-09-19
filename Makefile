@@ -473,19 +473,20 @@ endif
 # Mock backends (enabled by default, disable with ENABLE_MOCKS=no for production)
 ENABLE_MOCKS ?= yes
 
-# PWM sysfs buzzer backend — ad5m/ad5m-br/ad5x only.
+# PWM sysfs buzzer backend — ad5m/ad5m-br only.
 #
 # The backend's own runtime probe is just "does /sys/class/pwm/pwmchip0 exist",
 # which is true on boards whose PWM controller drives something else entirely: a
 # CC1 has 8 channels there, no beeper on any of them, and its backlight on the
 # same controller. So the probe cannot be trusted to decide this — the platform
 # must. M300 (the PRINTER's beeper, over gcode) is deliberately NOT gated and
-# keeps working everywhere.
+# keeps working everywhere. Neither MIPS board exposes a sysfs pwmchip (the
+# AD5X piezo goes through jz_pwm below, the K1 has no audio at all).
 #
 # Decided HERE, above APP_OBJS, and not down in the sound-flags section: APP_OBJS
 # is computed from APP_SRCS a few lines below, so a filter-out placed after it is
 # a silent no-op that still compiles and still links the backend.
-ifneq (,$(filter ad5m ad5m-br ad5x,$(PLATFORM_TARGET)))
+ifneq (,$(filter ad5m ad5m-br,$(PLATFORM_TARGET)))
     PWM_SOUND_CXXFLAGS := -DHELIX_HAS_PWM_SOUND
     # Auto-export: the stock AD5M kernel ships the beeper channel unexported
     # and nothing materializes pwm6, so initialize() writes the channel to
@@ -500,10 +501,11 @@ endif
 
 # AD5X piezo via the jz_pwm DMA engine, exec'd through fx-pwm - there is no
 # sysfs pwmchip on the X2600, so the sysfs PWM backend above cannot drive it.
-# Gated to ad5x AND probed at runtime (/dev/jz_pwm + the fx-pwm binary): a
-# host build that happens to carry the binary simply falls through the
-# backend ladder, and remote-UI installs keep the M300 path.
-ifneq (,$(filter ad5x,$(PLATFORM_TARGET)))
+# Compiled into the unified MIPS build and probed at runtime (/dev/jz_pwm + the
+# fx-pwm binary): the K1 carries /dev/jz_pwm but no fx-pwm, so the probe fails
+# there and the ladder falls through; a host build that happens to carry the
+# binary simply falls through too, and remote-UI installs keep the M300 path.
+ifneq (,$(filter mips k1 ad5x,$(PLATFORM_TARGET)))
     JZ_PWM_CXXFLAGS := -DHELIX_HAS_JZ_PWM
 else
     APP_SRCS := $(filter-out $(SRC_DIR)/system/jz_pwm_sound_backend.cpp,$(APP_SRCS))
@@ -887,8 +889,8 @@ else ifneq ($(CROSS_COMPILE)$(filter x86 x86-fbdev x86-both,$(PLATFORM_TARGET)),
             -lstdc++ -lz -lm -lpthread -lrt -ldl -latomic -lgcc_s
     else ifneq ($(filter mips k1 ad5x,$(PLATFORM_TARGET)),)
         # No system library path: these toolchains are self-contained.
-        # mips/k1 use musl and link fully static; ad5x uses Buildroot glibc and
-        # resolves its libs from the mod chroot at runtime, never the host's /usr/lib.
+        # The unified MIPS build (mips/k1/ad5x) uses the ct-ng musl toolchain
+        # and links fully static, so nothing resolves from a host or chroot at runtime.
         # -latomic: Required for 64-bit atomics on 32-bit MIPS (std::atomic<int64_t>)
         LDFLAGS := $(LIBHV_LIBS) $(FMT_LIBS) $(WPA_CLIENT_LIB) $(LIBNL_LIBS) -latomic -ldl -lz -lm -lpthread
     else ifeq ($(PLATFORM_TARGET),k2)
@@ -1093,8 +1095,9 @@ endif
 # Sound system — synth, sequencer, backends (PWM/M300/SDL/ALSA), themes
 # Tracker player — MOD/MED file playback with PCM samples (requires HELIX_HAS_SOUND)
 #
-# HELIX_HAS_SOUND:   Pi, x86, AD5M family, native — any platform with audio output
-# HELIX_HAS_TRACKER: Pi, x86, native, ad5x — platforms cleared for tracker playback
+# HELIX_HAS_SOUND:   Pi, x86, AD5M family, unified MIPS, native — any platform
+#                    with audio output
+# HELIX_HAS_TRACKER: Pi, x86, native, unified MIPS — platforms cleared for tracker playback
 # ad5m/ad5m-br: tone-only. The PWM backend answers supports_render_source() false —
 #   the piezo demodulates a duty-modulated carrier as static — so tracker playback
 #   falls back to the set_voice note path on the sequencer thread: SCHED_OTHER, a
@@ -1109,13 +1112,13 @@ TRACKER_CXXFLAGS :=
 ifneq (,$(filter pi pi-fbdev pi-both pi32 pi32-fbdev pi32-both x86 x86-fbdev x86-both,$(PLATFORM_TARGET)))
     SOUND_CXXFLAGS := -DHELIX_HAS_SOUND
     TRACKER_CXXFLAGS := -DHELIX_HAS_TRACKER
-else ifneq (,$(filter ad5m ad5m-br ad5x,$(PLATFORM_TARGET)))
+else ifneq (,$(filter ad5m ad5m-br mips k1 ad5x,$(PLATFORM_TARGET)))
     # PWM buzzer for tone-mode SFX only. Auto-export still applies to
     # ad5m/ad5m-br above; only tracker playback is withheld.
     SOUND_CXXFLAGS := -DHELIX_HAS_SOUND
-    ifneq (,$(filter ad5x,$(PLATFORM_TARGET)))
-        # ad5x: the jz_pwm backend drives the tracker's PC-speaker (synth
-        # fallback) path — per-note buffers, no PCM render loop involved.
+    ifneq (,$(filter mips k1 ad5x,$(PLATFORM_TARGET)))
+        # Unified MIPS: the jz_pwm backend drives the tracker's PC-speaker
+        # (synth fallback) path — per-note buffers, no PCM render loop involved.
         TRACKER_CXXFLAGS := -DHELIX_HAS_TRACKER
     endif
 else ifeq ($(PLATFORM_TARGET),native)

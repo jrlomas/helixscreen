@@ -16,6 +16,27 @@ if [ -z "$BATS_TEST_TMPDIR" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Release-target derivation from mk/cross.mk
+# ---------------------------------------------------------------------------
+
+# Real release packaging targets: every `release-<plat>:` target minus
+# aggregates (release-all, release-clean*) minus pure aliases - a target whose
+# recipe is only `release-x: release-y` delegates to a target this list
+# already covers. Shared by test_release_packaging_artifacts.bats and
+# test_symbol_ci.bats; a second hand-written copy is how the two drift.
+# Args: $1 = path to mk/cross.mk (default: mk/cross.mk)
+release_targets() {
+    local cross_mk="${1:-mk/cross.mk}"
+    grep -oE '^release-[a-z0-9-]+:' "$cross_mk" \
+        | sed 's/:$//' \
+        | grep -vxE 'release-all|release-clean|release-clean-assets' \
+        | while IFS= read -r t; do
+            grep -qE "^${t}: *release-[a-z0-9-]+$" "$cross_mk" || echo "$t"
+        done \
+        | sort -u
+}
+
 # Mocking a command: which mechanism, and where each one stops
 #
 # The suite has two, and they fail at different boundaries. Pick by asking what

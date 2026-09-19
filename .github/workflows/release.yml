@@ -85,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [pi, pi32, ad5m, cc1, k1, ad5x, k2, x86, snapmaker-u1]
+        platform: [pi, pi32, ad5m, cc1, mips, k2, x86, snapmaker-u1]
         include:
           - platform: pi
             display_name: "Raspberry Pi"
@@ -97,16 +97,11 @@ jobs:
             display_name: "Flashforge AD5M"
           - platform: cc1
             display_name: "Elegoo Centauri Carbon 1"
-          - platform: k1
-            display_name: "Creality K1 Series"
-            docker_image: k1
+          - platform: mips
+            display_name: "Unified MIPS (K1 Series + AD5X)"
+            docker_image: ad5x
             build_target: mips
             build_dir: mips
-          - platform: ad5x
-            display_name: "Flashforge AD5X"
-            docker_image: ad5x
-            build_target: ad5x
-            build_dir: ad5x
           - platform: k2
             display_name: "Creality K2 Series"
           - platform: x86
@@ -233,9 +228,19 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: release-${{ matrix.platform }}
+        # The k1/ad5x globs only match in the mips build, whose Makefile
+        # target copies the unified archive under the retired board keys so
+        # deployed binaries whose get_platform_key() still reports them keep
+        # finding an update asset (self-update survives the rename). On every
+        # other platform they match nothing, which is inert: upload-artifact
+        # warns only when NO path matches at all.
         path: |
           releases/helixscreen-${{ matrix.platform }}-*.tar.gz
           releases/helixscreen-${{ matrix.platform }}.zip
+          releases/helixscreen-k1-*.tar.gz
+          releases/helixscreen-k1.zip
+          releases/helixscreen-ad5x-*.tar.gz
+          releases/helixscreen-ad5x.zip
         retention-days: 7
 
     - name: Upload symbol map artifact
@@ -796,11 +801,11 @@ jobs:
         ./helix-screen
         ```
 
-        ### Creality K1 Series (Simple AF)
+        ### Creality K1 Series / FlashForge AD5X (one binary)
         ```bash
         # Download and extract
-        wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/helixscreen-k1-${{ steps.version.outputs.version }}.tar.gz
-        tar -xzf helixscreen-k1-${{ steps.version.outputs.version }}.tar.gz
+        wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/helixscreen-mips-${{ steps.version.outputs.version }}.tar.gz
+        tar -xzf helixscreen-mips-${{ steps.version.outputs.version }}.tar.gz
         cd helixscreen
 
         # Run

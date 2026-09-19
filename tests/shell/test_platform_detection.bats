@@ -891,10 +891,16 @@ _mock_m1_gate() {
     [ "$output" = "ad5m" ]
 }
 
-@test "get_download_platform: k1 → k1 (identity)" {
+@test "get_download_platform: k1 → mips (unified MIPS binary)" {
     run get_download_platform "k1"
     [ "$status" -eq 0 ]
-    [ "$output" = "k1" ]
+    [ "$output" = "mips" ]
+}
+
+@test "get_download_platform: ad5x → mips (unified MIPS binary)" {
+    run get_download_platform "ad5x"
+    [ "$status" -eq 0 ]
+    [ "$output" = "mips" ]
 }
 
 @test "get_download_platform: k2 → k2 (identity)" {

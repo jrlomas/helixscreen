@@ -97,6 +97,7 @@ WATCHDOG_EXTRA_OBJS := $(BUILD_DIR)/watchdog/config.o \
                        $(BUILD_DIR)/watchdog/fbdev_size_helper.o \
                        $(BUILD_DIR)/watchdog/pending_startup_warnings.o \
                        $(BUILD_DIR)/watchdog/log_redact.o \
+                       $(BUILD_DIR)/watchdog/platform_info.o \
                        $(BUILD_DIR)/watchdog/helix_lvgl_anomaly_stub.o
 
 # Compile config for watchdog (with HELIX_WATCHDOG to guard get_runtime_config dependency)
@@ -173,6 +174,13 @@ $(BUILD_DIR)/watchdog/fbdev_size_helper.o: src/api/fbdev_size_helper.cpp $(LIBHV
 
 # PendingStartupWarnings queue (referenced by both display backends). Added for #766.
 $(BUILD_DIR)/watchdog/pending_startup_warnings.o: src/system/pending_startup_warnings.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(ABI_STAMP) | $(BUILD_DIR)/watchdog
+	@echo "[CXX] $< (watchdog)"
+	$(Q)$(CXX) $(WATCHDOG_CXXFLAGS) $(DEPFLAGS) -c $< -o $@
+
+# touch_calibration.cpp (in DISPLAY_LIB, linked --whole-archive) picks its
+# default fit via the mod-layout probe on the unified MIPS build, so the probe
+# implementation is a hard link dependency here too. Zero deps beyond spdlog.
+$(BUILD_DIR)/watchdog/platform_info.o: src/system/platform_info.cpp $(ABI_STAMP) | $(BUILD_DIR)/watchdog
 	@echo "[CXX] $< (watchdog)"
 	$(Q)$(CXX) $(WATCHDOG_CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 

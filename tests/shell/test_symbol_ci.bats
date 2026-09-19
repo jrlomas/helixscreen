@@ -25,21 +25,23 @@ ci_platforms() {
         | tr ',' '\n' | tr -d ' ' | grep -v '^$' | sort -u
 }
 
-# Platforms mk/cross.mk can package. release-all is an aggregate and
-# release-clean/-clean-assets ship nothing, so none of them is a platform.
+# Platforms mk/cross.mk can package: the shared release_targets() derivation
+# (aggregates and pure delegation aliases already excluded), with the
+# deliberately-unbuilt alternates removed below.
 make_platforms() {
-    grep -oE '^release-[a-z0-9-]+:' "$CROSS_MK" \
-        | sed -e 's/:$//' -e 's/^release-//' \
-        | grep -vxE 'all|clean|clean-assets' \
+    release_targets "$CROSS_MK" \
+        | sed -e 's/^release-//' \
         | grep -vxE "$CI_EXEMPT" \
         | sort -u
 }
 
 # Make targets that are deliberately not release platforms. k1-dynamic is an
 # alternate toolchain (glibc/dynamic) for hardware the matrix already ships as
-# k1, not a separate product — CI has never built it. Anything added here needs
-# the same kind of reason, and the guard below checks the target still exists so
-# the exemption cannot outlive its target.
+# mips, not a separate product - CI has never built it. Board spellings need
+# no entry here: release-k1/release-ad5x are pure delegation aliases, which
+# release_targets() already excludes. Anything added here needs the same kind
+# of reason, and the guard below checks the target still exists so the
+# exemption cannot outlive its target.
 CI_EXEMPT='k1-dynamic'
 
 @test "release.yml build matrix and mk/cross.mk agree on the platform set" {

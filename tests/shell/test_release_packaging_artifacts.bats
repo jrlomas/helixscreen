@@ -25,13 +25,6 @@ CROSS_MK="${HELIX_TEST_CROSS_MK:-mk/cross.mk}"
 # could arrive without one — and the numbers still cleared the bar. The stale
 # 7-element array in the second test had already missed release-ad5x,
 # release-cc1 and release-x86.
-release_targets() {
-    grep -oE '^release-[a-z0-9-]+:' "$CROSS_MK" \
-        | sed 's/:$//' \
-        | grep -vxE 'release-all|release-clean|release-clean-assets' \
-        | sort -u
-}
-
 # Recipe body of target $1: the lines after it, up to the first line that is
 # neither indented nor blank.
 release_recipe() {
@@ -44,7 +37,7 @@ release_recipe() {
 
 @test "every release target calls release-clean-assets" {
     local targets
-    targets=$(release_targets)
+    targets=$(release_targets "$CROSS_MK")
     # A regex that stops matching would empty the list and pass vacuously.
     [ "$(printf '%s\n' "$targets" | wc -l)" -ge 8 ] || fail "release_targets() found only: $targets"
 
@@ -72,7 +65,7 @@ release_recipe() {
     # to run the version-matched installer. A target that skips the cp ships a
     # package whose self-update fails with "Installer not found".
     local targets
-    targets=$(release_targets)
+    targets=$(release_targets "$CROSS_MK")
     [ "$(printf '%s\n' "$targets" | wc -l)" -ge 8 ] || fail "release_targets() found only: $targets"
 
     local t missing=""

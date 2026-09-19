@@ -12,9 +12,10 @@ namespace helix {
 namespace ui {
 
 // Detect low-performance platforms at compile time or runtime.
-// Returns true on K1/K2/MIPS (weak CPUs) or constrained-memory devices.
+// Returns true on K2 (compile time) or constrained-memory devices (runtime:
+// the K1C's 214MB qualifies, the AD5X's 485MB does not).
 bool reduced_effects() {
-#if defined(HELIX_PLATFORM_K2) || defined(HELIX_PLATFORM_MIPS)
+#if defined(HELIX_PLATFORM_K2)
     return true;
 #else
     static const bool cached = helix::get_system_memory_info().is_constrained_device();
