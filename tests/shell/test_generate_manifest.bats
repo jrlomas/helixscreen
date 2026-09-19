@@ -163,12 +163,12 @@ teardown() {
 # those clients reject an intact zip as "Corrupt download" and can never reach
 # the release that fixes them. Serving those platforms the tar.gz keeps the
 # self-update path alive. The gate is the ONLY lever that reaches an already
-# deployed binary — the client-side fix cannot bootstrap itself.
+# deployed binary — the client-side fix cannot bootstrap itself, and removing a
+# platform is one-way for anything still below v0.99.102.
 #
 
 @test "zip_url is gated off by default for BusyBox platforms" {
     printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-pi.zip"
-    printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-k1.zip"
     printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-ad5m.zip"
 
     bash "$SCRIPT" \
@@ -177,9 +177,7 @@ teardown() {
         --base-url "https://releases.helixscreen.org/dev" \
         --output "$TEST_DIR/manifest.json"
 
-    # k1 and ad5m must NOT be offered a zip.
-    run jq -e '.assets.k1.zip_url' "$TEST_DIR/manifest.json"
-    [ "$status" -ne 0 ]
+    # ad5m must NOT be offered a zip.
     run jq -e '.assets.ad5m.zip_url' "$TEST_DIR/manifest.json"
     [ "$status" -ne 0 ]
 
@@ -190,7 +188,7 @@ teardown() {
 }
 
 @test "gated platforms still get a complete tar.gz asset" {
-    printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-k1.zip"
+    printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-ad5m.zip"
 
     bash "$SCRIPT" \
         --version "0.9.5" --tag "v0.9.5" --notes "Test" \
@@ -200,15 +198,15 @@ teardown() {
 
     # A gated platform is not a dropped platform — the tar.gz must be intact,
     # or the client has nothing at all to download.
-    run jq -re '.assets.k1.url' "$TEST_DIR/manifest.json"
+    run jq -re '.assets.ad5m.url' "$TEST_DIR/manifest.json"
     [ "$status" -eq 0 ]
-    [ "$output" = "https://releases.helixscreen.org/dev/helixscreen-k1-v0.9.5.tar.gz" ]
+    [ "$output" = "https://releases.helixscreen.org/dev/helixscreen-ad5m-v0.9.5.tar.gz" ]
 
-    run jq -re '.assets.k1.sha256' "$TEST_DIR/manifest.json"
+    run jq -re '.assets.ad5m.sha256' "$TEST_DIR/manifest.json"
     [ "$status" -eq 0 ]
     [ "${#output}" -eq 64 ]
 
-    run jq -re '.assets.k1.size' "$TEST_DIR/manifest.json"
+    run jq -re '.assets.ad5m.size' "$TEST_DIR/manifest.json"
     [ "$status" -eq 0 ]
     [ "$output" -gt 0 ]
 }
@@ -228,13 +226,13 @@ teardown() {
 
     for plat in ad5m ad5x cc1 k1 k2 snapmaker-u1; do
         run jq -e ".assets[\"${plat}\"].zip_url" "$TEST_DIR/manifest.json"
-        [ "$status" -ne 0 ]
+        [ "$status" -ne 0 ] || fail "$plat is offered a zip its fleet cannot verify"
     done
 }
 
 @test "--zip-exclude replaces the default gate list" {
     printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-pi.zip"
-    printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-k1.zip"
+    printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-ad5m.zip"
 
     bash "$SCRIPT" \
         --version "0.9.5" --tag "v0.9.5" --notes "Test" \
@@ -246,10 +244,10 @@ teardown() {
     # pi is now gated...
     run jq -e '.assets.pi.zip_url' "$TEST_DIR/manifest.json"
     [ "$status" -ne 0 ]
-    # ...and k1 is not, because the flag REPLACES the default list.
-    run jq -re '.assets.k1.zip_url' "$TEST_DIR/manifest.json"
+    # ...and ad5m is not, although the built-in list holds it: the flag REPLACES.
+    run jq -re '.assets.ad5m.zip_url' "$TEST_DIR/manifest.json"
     [ "$status" -eq 0 ]
-    [[ "$output" == "https://releases.helixscreen.org/dev/helixscreen-k1.zip" ]]
+    [[ "$output" == "https://releases.helixscreen.org/dev/helixscreen-ad5m.zip" ]]
 }
 
 @test "--zip-exclude '' re-enables zip for every platform" {
@@ -286,8 +284,25 @@ teardown() {
     [ "$status" -ne 0 ]
 }
 
+@test "--no-include-zip refuses to drop a zip-only platform" {
+    # sonic-pad ships a zip and no tarball, and is outside the gate list, so the
+    # flag alone is what leaves nothing to serve it. A quiet exit 0 would emit a
+    # manifest missing a whole platform.
+    printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-sonic-pad.zip"
+
+    run bash "$SCRIPT" \
+        --version "0.9.5" --tag "v0.9.5" --notes "Test" \
+        --dir "$TEST_DIR" \
+        --base-url "https://releases.helixscreen.org/dev" \
+        --output "$TEST_DIR/manifest.json" \
+        --no-include-zip
+    [ "$status" -ne 0 ]
+    contains "sonic-pad" "$output"
+    contains "nothing to serve" "$output"
+}
+
 @test "gated platforms are reported on stdout, never silently dropped" {
-    printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-k1.zip"
+    printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-ad5m.zip"
 
     run bash "$SCRIPT" \
         --version "0.9.5" --tag "v0.9.5" --notes "Test" \
@@ -296,12 +311,12 @@ teardown() {
         --output "$TEST_DIR/manifest.json"
     [ "$status" -eq 0 ]
     # A gate that hides what it dropped reads as "everything shipped".
-    contains "k1" "$output"
-    [[ "$output" == *"zip"* ]]
+    [[ "$output" == *"zip gated off"* ]] || fail "gate said nothing: $output"
+    contains "ad5m" "$output"
 }
 
 @test "no zip gate noise when the gated platform has no .zip at all" {
-    # k1 tarball exists but no k1 zip — nothing was withheld, so nothing to report.
+    # ad5m tarball exists but no ad5m zip — nothing withheld, nothing to report.
     run bash "$SCRIPT" \
         --version "0.9.5" --tag "v0.9.5" --notes "Test" \
         --dir "$TEST_DIR" \
@@ -507,10 +522,129 @@ teardown() {
         run jq -re --arg k "$key" '.assets[$k].sha256' "$alias_dir/manifest.json"
         [ "$status" -eq 0 ] || fail "$key entry missing from the manifest"
         [ "$output" = "$mips_sha" ] || fail "$key digest differs from mips"
-        # k1/ad5x carry deployed BusyBox verifiers: tar.gz only, no zip_url.
-        run jq -re --arg k "$key" '.assets[$k].zip_sha256 // "none"' "$alias_dir/manifest.json"
-        [ "$output" = "none" ] || fail "$key unexpectedly offers a zip"
     done
 
     rm -rf "$alias_dir"
+}
+
+#
+# Zip-only platforms
+#
+# The zip carries no version (helixscreen-{platform}.zip), so a platform can be
+# discovered from either asset. A missing tar.gz drops only the legacy
+# url/sha256/size fields; the zip asset still reaches the manifest.
+#
+
+@test "a zip-only platform reaches the manifest with zip fields and no legacy url" {
+    local zip_dir
+    zip_dir="$(mktemp -d)"
+    printf 'PK\003\004zip-only-pi' > "$zip_dir/helixscreen-pi.zip"
+
+    run bash "$SCRIPT" \
+        --version "1.2.3" --tag "v1.2.3" --notes "Zip only" \
+        --dir "$zip_dir" \
+        --base-url "https://releases.helixscreen.org/stable" \
+        --output "$zip_dir/manifest.json"
+    [ "$status" -eq 0 ] || fail "generate-manifest.sh exited $status: $output"
+
+    run jq -re '.assets.pi.zip_url' "$zip_dir/manifest.json"
+    [ "$status" -eq 0 ] || fail "pi missing from the manifest"
+    [ "$output" = "https://releases.helixscreen.org/stable/helixscreen-pi.zip" ] \
+        || fail "zip_url wrong: $output"
+
+    run jq -re '.assets.pi.zip_sha256' "$zip_dir/manifest.json"
+    [ "${#output}" -eq 64 ] || fail "zip_sha256 wrong length: $output"
+    run jq -re '.assets.pi.zip_size' "$zip_dir/manifest.json"
+    [ "$output" -gt 0 ] || fail "zip_size not positive: $output"
+
+    # The legacy fields describe a tar.gz that does not exist — they must be absent
+    # rather than present and pointing at nothing.
+    for field in url sha256 size; do
+        run jq -e ".assets.pi.${field}" "$zip_dir/manifest.json"
+        [ "$status" -ne 0 ] || fail "legacy $field emitted for a zip-only platform"
+    done
+
+    rm -rf "$zip_dir"
+}
+
+@test "a hyphenated platform key survives zip-only discovery intact" {
+    # There is no version half to split off a zip name, so the whole key —
+    # hyphens included — is the platform.
+    local zip_dir
+    zip_dir="$(mktemp -d)"
+    printf 'PK\003\004dyn' > "$zip_dir/helixscreen-k1-dynamic.zip"
+
+    run bash "$SCRIPT" \
+        --version "1.2.3" --tag "v1.2.3" --notes "Hyphens" \
+        --dir "$zip_dir" \
+        --base-url "https://releases.helixscreen.org/stable" \
+        --output "$zip_dir/manifest.json"
+    [ "$status" -eq 0 ] || fail "generate-manifest.sh exited $status: $output"
+
+    run jq -re '.assets | keys | join(",")' "$zip_dir/manifest.json"
+    [ "$output" = "k1-dynamic" ] || fail "platform key wrong: [$output]"
+
+    rm -rf "$zip_dir"
+}
+
+@test "a tarball-only platform carries the legacy fields and no zip fields" {
+    bash "$SCRIPT" \
+        --version "0.9.5" --tag "v0.9.5" --notes "Test" \
+        --dir "$TEST_DIR" \
+        --base-url "https://releases.helixscreen.org/dev" \
+        --output "$TEST_DIR/manifest.json"
+
+    run jq -rc '.assets.pi | keys_unsorted | join(",")' "$TEST_DIR/manifest.json"
+    [ "$output" = "url,sha256,size" ] || fail "tarball-only field set changed: $output"
+}
+
+@test "a platform with both assets emits the same fields in the same order" {
+    # Zip-only support must change nothing that ships today: while both assets
+    # exist, the entry is field-for-field what it has always been.
+    printf 'PK\003\004dummyzip' > "$TEST_DIR/helixscreen-pi.zip"
+    bash "$SCRIPT" \
+        --version "0.9.5" --tag "v0.9.5" --notes "Test" \
+        --dir "$TEST_DIR" \
+        --base-url "https://releases.helixscreen.org/dev" \
+        --output "$TEST_DIR/manifest.json"
+
+    run jq -rc '.assets.pi | keys_unsorted | join(",")' "$TEST_DIR/manifest.json"
+    [ "$output" = "url,sha256,size,zip_url,zip_sha256,zip_size" ] \
+        || fail "combined field order changed: $output"
+}
+
+@test "a directory with neither asset exits non-zero" {
+    local bare_dir
+    bare_dir="$(mktemp -d)"
+    # Files that are not release assets must not be mistaken for one.
+    echo unrelated > "$bare_dir/README.txt"
+    echo unrelated > "$bare_dir/helixscreen-notes.txt"
+
+    run bash "$SCRIPT" \
+        --version "1.2.3" --tag "v1.2.3" --notes "Nothing" \
+        --dir "$bare_dir" \
+        --base-url "https://releases.helixscreen.org/stable" \
+        --output "$bare_dir/manifest.json"
+    [ "$status" -ne 0 ] || fail "a manifest was produced from no assets"
+
+    rm -rf "$bare_dir"
+}
+
+@test "a gated platform with only a zip is a hard error, never a dropped platform" {
+    # Withholding the zip is safe only while a tar.gz remains to serve instead.
+    # With neither, the platform would vanish from the manifest and its clients
+    # would stop being offered any update at all.
+    local gated_dir
+    gated_dir="$(mktemp -d)"
+    printf 'PK\003\004dummyzip' > "$gated_dir/helixscreen-ad5m.zip"
+
+    run bash "$SCRIPT" \
+        --version "1.2.3" --tag "v1.2.3" --notes "Stranded" \
+        --dir "$gated_dir" \
+        --base-url "https://releases.helixscreen.org/stable" \
+        --output "$gated_dir/manifest.json"
+    [ "$status" -ne 0 ] || fail "ad5m silently dropped out of the manifest"
+    [[ "$output" == *"ad5m"* ]] || fail "the error does not name the platform: $output"
+
+    rm -rf "$gated_dir"
 }
