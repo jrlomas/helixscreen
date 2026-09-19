@@ -334,9 +334,8 @@ void PrinterPrintState::reset_for_new_print() {
     // For different files, the metadata callback updates both values.
     lv_subject_set_int(&print_time_left_, estimated_print_time_);
     // DON'T clear estimated_print_time_ - it belongs to the file, not the session
-    // Reset EMA so it seeds from the first real measurement
-    smoothed_remaining_ = 0.0;
-    has_smoothed_remaining_ = false;
+    // Reset the estimator so it seeds from the first real measurement
+    eta_estimator_.reset();
     spdlog::trace("[PrinterPrintState] Reset print progress for new print (slicer_est={}s)",
                   estimated_print_time_);
 }
@@ -684,59 +683,16 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
             int print_time = lv_subject_get_int(&print_duration_);
             int progress = lv_subject_get_int(&print_progress_);
 
-            // During pre-print phase: combine prep remaining with slicer print estimate
-            int preprint_remaining = lv_subject_get_int(&preprint_remaining_);
-            if (progress == 0 && preprint_remaining > 0 && estimated_print_time_ > 0) {
-                int total_remaining = preprint_remaining + estimated_print_time_;
-                if (lv_subject_get_int(&print_time_left_) != total_remaining) {
-                    lv_subject_set_int(&print_time_left_, total_remaining);
-                }
-            } else if (progress >= 1 && progress < 5 && estimated_print_time_ > 0) {
-                // Early print: use slicer estimate directly (extrapolation too noisy)
-                int remaining = estimated_print_time_ * (100 - progress) / 100;
-                if (lv_subject_get_int(&print_time_left_) != remaining) {
-                    lv_subject_set_int(&print_time_left_, remaining);
-                }
-            } else if (progress >= 1 && progress < 100 && print_time > 0) {
-                double raw_remaining =
-                    static_cast<double>(print_time) * (100 - progress) / progress;
+            PrintEtaInputs eta_in;
+            eta_in.progress_pct = progress;
+            eta_in.print_duration_s = print_time;
+            eta_in.slicer_estimate_s = estimated_print_time_;
+            eta_in.preprint_remaining_s = lv_subject_get_int(&preprint_remaining_);
 
-                // At low progress (<15%), blend with slicer estimate to dampen the
-                // noisy extrapolation from small samples
-                if (progress < 15 && estimated_print_time_ > 0) {
-                    double slicer_weight = (15.0 - progress) / 15.0;
-                    double slicer_remaining = estimated_print_time_ * (100.0 - progress) / 100.0;
-                    raw_remaining =
-                        slicer_weight * slicer_remaining + (1.0 - slicer_weight) * raw_remaining;
-                }
-
-                // Exponential smoothing: alpha increases with progress so the estimate
-                // is very stable early on and converges faster as data improves.
-                // At 1%: alpha=0.06 (very slow), at 15%: alpha=0.20, at 25%+: alpha=0.30
-                double alpha = std::min(0.3, 0.05 + progress * 0.01);
-                if (!has_smoothed_remaining_) {
-                    smoothed_remaining_ = raw_remaining;
-                    has_smoothed_remaining_ = true;
-                } else {
-                    smoothed_remaining_ =
-                        alpha * raw_remaining + (1.0 - alpha) * smoothed_remaining_;
-                }
-
-                int remaining = static_cast<int>(smoothed_remaining_);
-                if (lv_subject_get_int(&print_time_left_) != remaining) {
-                    lv_subject_set_int(&print_time_left_, remaining);
-                }
-            } else if (progress >= 1 && progress < 100 && print_time == 0 &&
-                       estimated_print_time_ > 0) {
-                // Fallback: use slicer estimate when print_duration hasn't started yet
-                int remaining = estimated_print_time_ * (100 - progress) / 100;
-                if (lv_subject_get_int(&print_time_left_) != remaining) {
-                    lv_subject_set_int(&print_time_left_, remaining);
-                }
-            } else if (progress >= 100) {
-                if (lv_subject_get_int(&print_time_left_) != 0) {
-                    lv_subject_set_int(&print_time_left_, 0);
-                }
+            const int remaining = eta_estimator_.remaining_seconds(eta_in);
+            if (remaining != PrintEtaEstimator::NO_ESTIMATE &&
+                lv_subject_get_int(&print_time_left_) != remaining) {
+                lv_subject_set_int(&print_time_left_, remaining);
             }
         }
     }
