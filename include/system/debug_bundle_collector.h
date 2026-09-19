@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "system/diagnostics.h"
 #include "touch_calibration.h"
 
 #include <cstdint>
@@ -104,6 +105,25 @@ class DebugBundleCollector {
 
     /// Individual collectors (public for testing)
     static nlohmann::json collect_system_info();
+
+    /**
+     * @brief The resolved paths, identity, machine and log facts.
+     *
+     * Every path in this app is picked by a cascade whose every rung is
+     * overridable, and one release-asset key can serve several filesystem
+     * layouts, so a bundle that carries only the rules cannot say where
+     * anything actually landed.
+     *
+     * No LVGL access — safe from the HttpExecutor thread upload_async()
+     * collects on.
+     */
+    static nlohmann::json collect_diagnostics_info();
+
+    /// Serialize an explicit Diagnostics. Pure and static so the redaction and
+    /// the field set are testable without a live process. Host-shaped values
+    /// (paths, the Moonraker URL, the kernel and CPU strings) pass through
+    /// sanitize_value(); the numbers do not.
+    static nlohmann::json build_diagnostics_info(const diagnostics::Diagnostics& diag);
     /// Pure assembly from a snapshot — touches no LVGL and no PrinterState, so
     /// it is safe on the collect worker and testable without either.
     static nlohmann::json collect_printer_info(const PrinterSnapshot& snap);

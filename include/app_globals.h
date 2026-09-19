@@ -397,10 +397,16 @@ std::string get_helix_cache_dir(const std::string& subdir);
  * lower tier silently splits the cache across two locations.
  *
  * @param subdir Subdirectory name (e.g., "gcode_temp", "thumbs")
+ * @param tier_out When non-null, receives a static label naming the rung that
+ *        won ("HELIX_CACHE_DIR", "config", "AD5M", "CC1", "K2", "MIPS",
+ *        "Android"), or nullptr for a fall-through rung (XDG, $HOME, /var/tmp,
+ *        /tmp) and when nothing is usable. Which rung answered is what a
+ *        diagnostic needs: the path alone cannot say whether an override, a
+ *        config setting or the platform default produced it.
  * @return Full path the cascade resolves to, or empty string if no candidate
  *         is usable. A non-empty result may not exist yet.
  */
-std::string peek_helix_cache_dir(const std::string& subdir);
+std::string peek_helix_cache_dir(const std::string& subdir, const char** tier_out = nullptr);
 
 /**
  * @brief Remove cache directories an older layout left on the wrong filesystem.

@@ -20,6 +20,7 @@
 #include "printer_state.h"
 #include "system/crash_history.h"
 #include "system/diag_upload_gate.h"
+#include "system/diagnostics.h"
 #include "system/helix_paths.h"
 #include "system/log_collector.h"
 #include "system/moonraker_local_probe.h"
@@ -78,6 +79,16 @@ json DebugBundleCollector::collect(const BundleOptions& options) {
     } catch (const std::exception& e) {
         spdlog::warn("[DebugBundle] Failed to collect system info: {}", e.what());
         bundle["system"] = json{{"error", e.what()}};
+    }
+
+    // The resolved layout. A sibling of `system` rather than a nesting of it:
+    // `system` answers what the machine is, this answers where this process put
+    // everything on it, which is the half an overridden box makes unguessable.
+    try {
+        bundle["diagnostics"] = collect_diagnostics_info();
+    } catch (const std::exception& e) {
+        spdlog::warn("[DebugBundle] Failed to collect diagnostics: {}", e.what());
+        bundle["diagnostics"] = json{{"error", e.what()}};
     }
 
     // Why the in-app updater is (or isn't) usable on this device. Kept as a
@@ -359,6 +370,55 @@ json DebugBundleCollector::collect_system_info() {
     }
 
     return sys;
+}
+
+json DebugBundleCollector::collect_diagnostics_info() {
+    return build_diagnostics_info(diagnostics::collect());
+}
+
+json DebugBundleCollector::build_diagnostics_info(const diagnostics::Diagnostics& diag) {
+    json out;
+
+    // A path carries the account name it sits under and the Moonraker URL is an
+    // address, so both leave through sanitize_value().
+    out["paths"] = json{
+        {"install_root", sanitize_value(diag.paths.install_root)},
+        {"config_dir", sanitize_value(diag.paths.config_dir)},
+        {"settings_file", sanitize_value(diag.paths.settings_file)},
+        {"cache_dir", sanitize_value(diag.paths.cache_dir)},
+        {"cache_tier", diag.paths.cache_tier},
+        {"state_dir", sanitize_value(diag.paths.state_dir)},
+        {"log_file", sanitize_value(diag.paths.log_file)},
+        {"updater_staging_dir", sanitize_value(diag.paths.updater_staging_dir)},
+    };
+
+    out["identity"] = json{
+        {"platform_key", diag.identity.platform_key},
+        {"mod_flavor", diag.identity.mod_flavor},
+        {"printer_model", diag.identity.printer_model},
+        {"host_arch", diag.identity.host_arch},
+    };
+
+    out["machine"] = json{
+        {"cpu_model", sanitize_value(diag.machine.cpu_model)},
+        {"cpu_cores", diag.machine.cpu_cores},
+        {"mem_total_kb", diag.machine.mem_total_kb},
+        {"mem_available_kb", diag.machine.mem_available_kb},
+        {"uptime_seconds", static_cast<int64_t>(diag.machine.uptime_seconds)},
+        {"loadavg", diag.machine.loadavg},
+        {"kernel_release", sanitize_value(diag.machine.kernel_release)},
+        {"kernel_arch", diag.machine.kernel_arch},
+    };
+
+    out["log"] = json{
+        {"destination", sanitize_value(diag.log.destination)},
+        {"level", diag.log.level},
+        {"file", sanitize_value(diag.log.file)},
+    };
+
+    out["moonraker_url"] = sanitize_value(diag.moonraker_url);
+
+    return out;
 }
 
 // =============================================================================

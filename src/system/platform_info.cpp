@@ -3,7 +3,6 @@
 
 #include <spdlog/spdlog.h>
 
-#include <cstdio>
 #include <string>
 #include <sys/stat.h>
 #include <sys/utsname.h>
@@ -84,7 +83,14 @@ static std::string rooted(const std::string& probe_root, const char* abs_path) {
     return root + abs_path;
 }
 
-bool ad5x_mod_layout_present(const std::string& probe_root) {
+bool ad5x_mod_layout_present(const std::string& probe_root, const char** flavor_out) {
+    auto found = [&](const char* flavor) {
+        if (flavor_out != nullptr) {
+            *flavor_out = flavor;
+        }
+        return true;
+    };
+
     // ZMOD hosts carry FlashForge's /usr/prog dir or the /ZMOD marker file. A
     // Forge-X chroot has neither — and not even /usr/data, which the chroot
     // binds at /opt — but the mod's git tree stays reachable, and
@@ -94,39 +100,15 @@ bool ad5x_mod_layout_present(const std::string& probe_root) {
     struct ::stat st {};
     if ((::stat(rooted(probe_root, "/ZMOD").c_str(), &st) == 0 && S_ISREG(st.st_mode)) ||
         (::stat(rooted(probe_root, "/usr/prog").c_str(), &st) == 0 && S_ISDIR(st.st_mode))) {
-        return true;
+        return found("ZMOD");
     }
     for (const char* mod_tree : {"/opt/config/mod", "/usr/data/config/mod"}) {
         const std::string probe = rooted(probe_root, mod_tree) + "/.shell/platform.sh";
         if (::stat(probe.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
-            return true;
+            return found("Forge-X");
         }
     }
     return false;
-}
-
-void log_platform_info() {
-    struct utsname uts {};
-    if (uname(&uts) == 0) {
-        spdlog::info("[Application] Platform: {} {} {} ({})", uts.sysname, uts.release, uts.machine,
-                     uts.nodename);
-    }
-
-    // Total RAM from /proc/meminfo (Linux only)
-    FILE* f = fopen("/proc/meminfo", "r");
-    if (f) {
-        unsigned long mem_total_kb = 0;
-        if (fscanf(f, "MemTotal: %lu kB", &mem_total_kb) == 1 && mem_total_kb > 0) {
-            spdlog::info("[Application] Memory: {} MB", mem_total_kb / 1024);
-        }
-        fclose(f);
-    }
-
-    // Display backend env var (if forced)
-    const char* backend_env = std::getenv("HELIX_DISPLAY_BACKEND");
-    if (backend_env && backend_env[0] != '\0') {
-        spdlog::info("[Application] Display backend (env): {}", backend_env);
-    }
 }
 
 std::string host_arch_string() {

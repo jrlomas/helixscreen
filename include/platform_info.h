@@ -51,7 +51,13 @@ bool is_printer_embedded();
 /// suites pin both to one truth table. All probes resolve under `probe_root`
 /// (default "/") so tests can feed a fake layout without touching the real
 /// root filesystem. stat-only; never opens anything.
-bool ad5x_mod_layout_present(const std::string& probe_root = "/");
+///
+/// `flavor_out`, when non-null, receives a static "ZMOD" or "Forge-X" naming
+/// which arm matched, and is left untouched on a false return. One platform key
+/// can serve a K1 and both AD5X firmware populations, so the arm is what tells
+/// three different filesystem layouts apart in a diagnostic.
+bool ad5x_mod_layout_present(const std::string& probe_root = "/",
+                             const char** flavor_out = nullptr);
 
 /// Test helper: override the platform check. Pass -1 to reset to compile-time default.
 void set_platform_override(int override_value);
@@ -63,9 +69,6 @@ void set_printer_embedded_override(int override_value);
 /// Test helper: override the external-updates default. Pass -1 to reset to the
 /// compile-time platform answer.
 void set_external_updates_default_override(int override_value);
-
-/// Log platform info (kernel, arch, hostname, memory) at INFO level
-void log_platform_info();
 
 /// Short human-readable host arch line for the About screen and debug bundles.
 /// Format: "<kernel-arch> · <N>-bit userspace" — surfaces the common

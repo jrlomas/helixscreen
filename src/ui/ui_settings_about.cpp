@@ -34,10 +34,10 @@ inline constexpr int CONTRIBUTOR_COUNT = sizeof(CONTRIBUTORS) / sizeof(CONTRIBUT
 #include "format_utils.h"
 #include "helix_version.h"
 #include "i_moonraker_api.h"
-#include "logging_init.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "platform_info.h"
 #include "static_panel_registry.h"
+#include "system/diagnostics.h"
 #include "system/update_checker.h"
 #include "system_settings_manager.h"
 #include "theme_manager.h"
@@ -119,14 +119,18 @@ void AboutSettingsOverlay::init_subjects() {
         UI_MANAGED_SUBJECT_STRING(about_copyright_subject_, about_copyright_buf_,
                                   about_copyright_buf_, "about_copyright", subjects_);
 
+        // One producer, read here as plain data. Nothing on this screen leaves
+        // the machine, so the values are the raw ones.
+        const helix::diagnostics::Diagnostics diag = helix::diagnostics::collect();
+
         UI_MANAGED_SUBJECT_STRING(install_root_value_subject_, install_root_value_buf_,
-                                  app_get_install_root().c_str(), "install_root_value", subjects_);
+                                  diag.paths.install_root.c_str(), "install_root_value", subjects_);
         UI_MANAGED_SUBJECT_STRING(config_dir_value_subject_, config_dir_value_buf_,
-                                  app_get_config_dir().c_str(), "config_dir_value", subjects_);
+                                  diag.paths.config_dir.c_str(), "config_dir_value", subjects_);
         UI_MANAGED_SUBJECT_STRING(cache_dir_value_subject_, cache_dir_value_buf_,
-                                  app_get_cache_dir().c_str(), "cache_dir_value", subjects_);
+                                  diag.paths.cache_dir.c_str(), "cache_dir_value", subjects_);
         {
-            std::string dest = helix::logging::effective_destination();
+            std::string dest = diag.log.destination;
             if (dest.empty()) {
                 dest = "\xe2\x80\x94"; // em dash when init hasn't completed
             }
@@ -134,7 +138,7 @@ void AboutSettingsOverlay::init_subjects() {
                                       "log_dest_value", subjects_);
         }
         UI_MANAGED_SUBJECT_STRING(host_arch_value_subject_, host_arch_value_buf_,
-                                  helix::host_arch_string().c_str(), "host_arch_value", subjects_);
+                                  diag.identity.host_arch.c_str(), "host_arch_value", subjects_);
     });
 }
 

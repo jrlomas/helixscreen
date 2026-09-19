@@ -134,11 +134,16 @@ static std::vector<CacheCandidate> cache_path_candidates(const std::string& subd
     return out;
 }
 
-std::string peek_helix_cache_dir(const std::string& subdir) {
+std::string peek_helix_cache_dir(const std::string& subdir, const char** tier_out) {
     for (const CacheCandidate& c : cache_path_candidates(subdir)) {
-        if (cache_candidate_viable(c.path))
+        if (cache_candidate_viable(c.path)) {
+            if (tier_out != nullptr)
+                *tier_out = c.tier;
             return c.path;
+        }
     }
+    if (tier_out != nullptr)
+        *tier_out = nullptr;
     return "";
 }
 
