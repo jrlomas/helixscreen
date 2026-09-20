@@ -545,28 +545,38 @@ sudo usermod -aG video $USER
 
 **Solutions:**
 
-HelixScreen auto-detects resolution from DRM and framebuffer backends. If auto-detection picks the wrong resolution, override it with the `-s` flag:
+HelixScreen auto-detects resolution from DRM and framebuffer backends. If auto-detection picks the wrong resolution, set `HELIX_SCREEN_SIZE` in your `helixscreen.env` file (typically `~/helixscreen/config/helixscreen.env`, which is a symlink to `~/printer_data/config/helixscreen/helixscreen.env`):
 
 ```bash
-# In helixscreen.service ExecStart, add -s with a named size or WxH:
-ExecStart=/opt/helixscreen/bin/helix-launcher.sh -s large
-# or: -s 1024x600
+HELIX_SCREEN_SIZE=large
+# or: HELIX_SCREEN_SIZE=1024x600
 # Named sizes: micro, tiny, small, medium, large, xlarge
 ```
 
-Then reload:
+Then restart:
 ```bash
-sudo systemctl daemon-reload
 sudo systemctl restart helixscreen
 ```
 
+Confirm it took effect in the log:
+```bash
+journalctl -u helixscreen -b | grep "Screen size from HELIX_SCREEN_SIZE"
+```
+
+> **Do not edit `/etc/systemd/system/helixscreen.service`.** HelixScreen rewrites that unit
+> from its install-dir template on every start, so an `ExecStart` edit is gone before the app
+> launches. `helixscreen.env` is the supported place for persistent settings: it lives in your
+> Klipper config directory, survives updates, and is restored from backup if an update wipes it.
+> If you need a systemd-level change anyway, use a drop-in (`sudo systemctl edit --force
+> helixscreen`). Drop-ins under `helixscreen.service.d/` are left alone by the refresh.
+
 ---
 
-### Resolution stuck at the wrong size, or `-s` has no effect
+### Resolution stuck at the wrong size, or the size override has no effect
 
 **Symptoms:**
 - HelixScreen shows a "Cannot set HelixScreen to selected resolution" message on startup
-- Display is locked at 800x480 (or similar) even though you passed `-s large` or `-s 1024x600`
+- Display is locked at 800x480 (or similar) even though you set `HELIX_SCREEN_SIZE=large` or `HELIX_SCREEN_SIZE=1024x600`
 - System journal contains `[DRM Backend]` or `[fbdev Backend]` warnings about the requested size
 
 **Cause:** HelixScreen can only use resolutions the kernel exposes to it. If the kernel display driver is misconfigured, or if a fallback driver like `simpledrm` is active, the display is locked to whatever the bootloader programmed at power-on — HelixScreen cannot override this at runtime.
@@ -597,7 +607,7 @@ sudo systemctl restart helixscreen
 ```bash
 cat /sys/class/drm/card0-HDMI-A-1/modes
 ```
-This lists the resolutions the DRM driver will accept for the `-s` flag.
+This lists the resolutions the DRM driver will accept for `HELIX_SCREEN_SIZE`.
 
 ---
 
@@ -629,7 +639,7 @@ sudo systemctl restart helixscreen
 
 Adjust in steps (e.g. 110, 100, 90 or 160, 200, 240) until the interface looks right. Lower DPI = tighter/smaller; higher DPI = larger/roomier.
 
-> **Tip:** If instead the *whole layout tier* is wrong — for example a compact phone-style layout on a big screen, or vice versa — the resolution rather than the DPI is being mis-detected. Force a layout size with `HELIX_SCREEN_SIZE` (named preset `micro`/`tiny`/`small`/`medium`/`large`/`xlarge`, or `WxH` like `1024x600`), which is the persistent equivalent of the `-s` flag covered in [Wrong screen size or resolution](#wrong-screen-size-or-resolution).
+> **Tip:** If instead the *whole layout tier* is wrong — for example a compact phone-style layout on a big screen, or vice versa — the resolution rather than the DPI is being mis-detected. Force a layout size with `HELIX_SCREEN_SIZE` (named preset `micro`/`tiny`/`small`/`medium`/`large`/`xlarge`, or `WxH` like `1024x600`), covered in [Wrong screen size or resolution](#wrong-screen-size-or-resolution).
 
 ---
 
@@ -2000,13 +2010,16 @@ sudo ./bin/helix-launcher.sh --debug --log-dest=console
 # Reproduce the issue, then Ctrl+C to stop
 ```
 
-**Option C: Environment variable**
+**Option C: Environment variable (persistent, works on every platform)**
 
-Add to the service file:
+Add to your `helixscreen.env` (typically `~/helixscreen/config/helixscreen.env`), then restart:
 ```ini
-[Service]
-Environment="HELIX_LOG_LEVEL=debug"
+HELIX_LOG_LEVEL=debug
 ```
+
+Editing `/etc/systemd/system/helixscreen.service` directly does not work: the unit is rewritten
+from the install-dir template on every start. See the note under
+[Wrong screen size or resolution](#wrong-screen-size-or-resolution).
 
 #### Flashforge Adventurer 5M / Forge-X (SysV init)
 

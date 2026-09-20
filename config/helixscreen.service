@@ -16,6 +16,13 @@
 # Logs (application logs to systemd journal automatically):
 #   sudo journalctl -u helixscreen -f
 #   sudo journalctl -t helix -f          # Filter by syslog identifier
+#
+# DO NOT EDIT THE DEPLOYED COPY of this file in /etc/systemd/system/.
+# The ExecStartPre refresh-service-units.sh hook below re-copies it from
+# INSTALL_DIR/config/ on every start, so local edits are discarded before the
+# app launches. Persistent settings belong in helixscreen.env; a systemd-level
+# change belongs in a drop-in (systemctl edit --force helixscreen), which the
+# refresh leaves alone.
 
 [Unit]
 Description=HelixScreen 3D Printer Touch UI
