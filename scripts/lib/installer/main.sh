@@ -879,6 +879,7 @@ main() {
 
     cleanup_old_install
     cleanup_migrated_install
+    cleanup_superseded_payload
     cleanup_stale_cache_dirs
     retire_legacy_config_backups
 

@@ -3,7 +3,8 @@
 # Module: release
 # Release download and extraction
 #
-# Reads: GITHUB_REPO, TMP_DIR, INSTALL_DIR, SUDO
+# Reads: GITHUB_REPO, TMP_DIR, INSTALL_DIR, SUDO, MIGRATE_FROM_DIR,
+#        HELIX_MOD_PAYLOAD, HOST_MOD_ROOT (payload supersession sweep)
 # Writes: CLEANUP_TMP, BACKUP_CONFIG, BACKUP_ENV, ORIGINAL_INSTALL_EXISTS
 
 # Source guard
@@ -2246,36 +2247,88 @@ migrate_state_root() {
     return 0
 }
 
+# The install at INSTALL_DIR is complete enough that an outgoing root may be
+# removed: the binary is runnable and the operator's config was carried. Both
+# have to pass before the outgoing tree stops being the device's only working
+# install. $1 names the kept root in the refusal messages.
+replacement_install_verifies() {
+    if [ ! -x "${INSTALL_DIR}/bin/helix-screen" ]; then
+        log_warn "Keeping ${1:-the old install}: ${INSTALL_DIR} has no runnable binary"
+        return 1
+    fi
+    if [ ! -f "${INSTALL_DIR}/config/settings.json" ]; then
+        log_warn "Keeping ${1:-the old install}: configuration was not carried over"
+        return 1
+    fi
+    return 0
+}
+
+# Remove the tree an install that has been replaced left behind. Gates: the
+# replacement verifies (above), the outgoing path is an install root (final
+# component exactly "helixscreen" - never a bare mount or data root), and it
+# is not where this run installed.
+remove_superseded_install_tree() {
+    _rsit_old="${1:-}"
+    [ -n "$_rsit_old" ] || return 0
+    [ "$_rsit_old" != "$INSTALL_DIR" ] || return 0
+    [ -d "$_rsit_old" ] || return 0
+    replacement_install_verifies "$_rsit_old" || return 0
+
+    case "$_rsit_old" in
+        */helixscreen) ;;
+        *)
+            log_warn "Refusing to remove unexpected install path: $_rsit_old"
+            return 0 ;;
+    esac
+
+    rm -rf "$_rsit_old" 2>/dev/null || $SUDO rm -rf "$_rsit_old" 2>/dev/null || true
+    log_success "Removed the previous install at ${_rsit_old}"
+}
+
 # Remove the tree a migration moved away from.
 # Runs after the service is up, so a failure at any earlier step leaves a
 # complete and bootable install at the old path.
 cleanup_migrated_install() {
-    _cmi_old="${MIGRATE_FROM_DIR:-}"
-    [ -n "$_cmi_old" ] || return 0
-    [ "$_cmi_old" != "$INSTALL_DIR" ] || return 0
-    [ -d "$_cmi_old" ] || return 0
+    [ -n "${MIGRATE_FROM_DIR:-}" ] || return 0
+    remove_superseded_install_tree "$MIGRATE_FROM_DIR"
+}
 
-    # Both tests have to pass before the old tree stops being the device's only
-    # working install.
-    if [ ! -x "${INSTALL_DIR}/bin/helix-screen" ]; then
-        log_warn "Keeping ${_cmi_old}: ${INSTALL_DIR} has no runnable binary"
+# Remove the payload install the mod's previous default root
+# ($HOST_MOD_ROOT/.bin/helixscreen, inside the mod's git tree) left behind:
+# its tree on the host and the HOST-side init script an install at that root
+# wrote. Left in place, that init fires at boot beside this install's chroot
+# init and the two fight over the display - and its stop is name-based, so
+# stopping either instance kills both. The tree is tens of MB the mod's data
+# partition pays for until the mod's own OTA happens to reap it.
+#
+# Scope is exactly the one root our own installer used at that era - never a
+# discovered path, never the legacy standalone population
+# (payload_legacy_adopt_or_warn owns that one). The tree and the init are one
+# superseded install: both go, or both stay while the replacement at
+# INSTALL_DIR cannot be verified. Runs after the service is up, like
+# cleanup_migrated_install.
+cleanup_superseded_payload() {
+    [ "${HELIX_MOD_PAYLOAD:-}" = "1" ] || return 0
+    [ -n "${HOST_MOD_ROOT:-}" ] || return 0
+
+    _csp_old="${HOST_MOD_ROOT}/.bin/helixscreen"
+    [ "$_csp_old" != "$INSTALL_DIR" ] || return 0
+    replacement_install_verifies "the payload install at ${_csp_old}" || return 0
+
+    # Positive identification before an irreversible delete: the tree must
+    # carry our binary. Anything else inside the mod's tree belongs to the
+    # mod, and a tree already reaped by the mod's OTA leaves nothing to check.
+    if [ -d "$_csp_old" ] && [ ! -x "${_csp_old}/bin/helix-screen" ]; then
+        log_warn "Keeping ${_csp_old}: no HelixScreen payload found inside"
         return 0
     fi
-    if [ ! -f "${INSTALL_DIR}/config/settings.json" ]; then
-        log_warn "Keeping ${_cmi_old}: configuration was not carried over"
-        return 0
+
+    remove_superseded_host_init "$HOST_MOD_ROOT"
+
+    if [ -d "$_csp_old" ]; then
+        remove_superseded_install_tree "$_csp_old"
     fi
-
-    # Only ever remove a path whose final component is exactly "helixscreen".
-    case "$_cmi_old" in
-        */helixscreen) ;;
-        *)
-            log_warn "Refusing to remove unexpected migration source: $_cmi_old"
-            return 0 ;;
-    esac
-
-    rm -rf "$_cmi_old" 2>/dev/null || $SUDO rm -rf "$_cmi_old" 2>/dev/null || true
-    log_success "Removed the previous install at ${_cmi_old}"
+    return 0
 }
 
 cleanup_old_install() {
