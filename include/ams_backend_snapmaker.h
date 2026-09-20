@@ -191,6 +191,13 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     AmsError do_select_slot(int slot_index) override;
     AmsError do_change_tool(int tool_number) override;
 
+    /// Batch load/unload as ONE AUTO_FEEDING script. The firmware serializes
+    /// channels itself (FEED_AUTO's process-wide channel_active gate) and
+    /// Moonraker holds the script response until every line has run, so the
+    /// script needs no sequencer. Klipper aborts the remaining lines when one
+    /// raises, so every index is validated before anything is sent.
+    AmsError do_filament_batch(const std::vector<int>& slots, bool load) override;
+
     /// On the U1 a slot select IS a physical tool change — do_select_slot()
     /// forwards to do_change_tool(), which emits `T{n}` and moves the carriage.
     [[nodiscard]] bool select_slot_moves_toolhead() const override {
@@ -313,6 +320,21 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     [[nodiscard]] static std::string preprint_gcode(const std::set<int>& tools_used,
                                                     const std::map<int, int>& remap);
 
+    /// One multi-line AUTO_FEEDING script covering @p slots, in the order given:
+    /// `AUTO_FEEDING EXTRUDER={n} LOAD=1` (or `UNLOAD=1`), newline-joined with
+    /// no trailing newline. Empty @p slots yields the empty string; the caller
+    /// (do_filament_batch) refuses that before sending. Pure, same reasoning as
+    /// preprint_gcode() above — reads no member state, so it unit-tests
+    /// without a backend or connection.
+    [[nodiscard]] static std::string batch_feed_gcode(const std::vector<int>& slots, bool load);
+
+    /// The U1's four independent feeders can be driven as one batch: the
+    /// firmware sequences per-extruder AUTO_FEEDING itself. Gates the batch
+    /// Load/Unload affordance in the UI.
+    [[nodiscard]] bool supports_batch_filament_ops() const override {
+        return true;
+    }
+
     /// Applied logical-tool -> physical-head routing for the CURRENT print.
     ///
     /// The capability question generic code asks; the vendor knowledge (that the
@@ -351,6 +373,11 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     friend class RunoutScopeTestAccess;
 
     static constexpr int NUM_TOOLS = 4;
+
+    /// RPC timeout budget for ONE batch feed op. AUTO_FEEDING heats from cold +
+    /// feeds + flushes; measured ~86s live (see prepare_for_resume), so 150s is
+    /// the headroom the resume path already uses. A batch scales this per op.
+    static constexpr uint32_t BATCH_FEED_OP_TIMEOUT_MS = 150000;
 
     /// Firmware routing: logical tool index -> physical head index, mirrored from
     /// print_task_config.extruder_map_table (32 logical entries, 4 heads).

@@ -513,6 +513,56 @@ AmsError AmsBackendSnapmaker::do_unload_filament(int slot_index) {
     return execute_gcode(fmt::format("AUTO_FEEDING EXTRUDER={} UNLOAD=1", extruder));
 }
 
+AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, bool load) {
+    if (slots.empty()) {
+        return AmsErrorHelper::invalid_parameter("batch filament op with no slots");
+    }
+    for (int slot : slots) {
+        if (auto err = validate_slot_index(slot); err.result != AmsResult::SUCCESS) {
+            return err;
+        }
+    }
+    if (!api_) {
+        return AmsErrorHelper::not_connected("IMoonrakerAPI not available");
+    }
+    const std::string chain = batch_feed_gcode(slots, load);
+    const char* tag = backend_log_tag();
+    spdlog::info("{} Executing G-code: {}", tag, chain);
+    // Sent through api_ rather than the shared execute_gcode() so the timeout
+    // can scale per op — the shared overloads pin AMS_OPERATION_TIMEOUT_MS
+    // (300s), which a 4-head cold batch can outlast. Callbacks capture no `this`
+    // and only log: the claim is already released by the time either fires, and
+    // the operation's completion is owned by the firmware phase the sidebar
+    // tracks, not by this RPC's return.
+    api_->execute_gcode(
+        chain, [tag]() { spdlog::debug("{} batch G-code executed successfully", tag); },
+        [tag, chain](const MoonrakerError& err) {
+            if (err.type == MoonrakerErrorType::TIMEOUT) {
+                spdlog::warn("{} G-code response timed out (may still be running): {}", tag, chain);
+            } else {
+                spdlog::error("{} G-code failed: {} - {}", tag, chain, err.message);
+            }
+        },
+        static_cast<uint32_t>(slots.size()) * BATCH_FEED_OP_TIMEOUT_MS,
+        /*silent=*/true, /*on_queued=*/nullptr,
+        // The callbacks above only log. Claiming the report would silence
+        // Klipper's `!!` broadcast, which is the surface that would actually
+        // explain a failed feed to the user.
+        /*caller_surfaces_errors=*/false);
+    return AmsErrorHelper::success();
+}
+
+std::string AmsBackendSnapmaker::batch_feed_gcode(const std::vector<int>& slots, bool load) {
+    std::string chain;
+    for (int slot : slots) {
+        if (!chain.empty()) {
+            chain += '\n';
+        }
+        chain += fmt::format("AUTO_FEEDING EXTRUDER={} {}", slot, load ? "LOAD=1" : "UNLOAD=1");
+    }
+    return chain;
+}
+
 bool AmsBackendSnapmaker::can_unload_from_toolhead(int slot_index) const {
     std::lock_guard<std::mutex> lock(mutex_);
     if (slot_index < 0 || slot_index >= NUM_TOOLS) {

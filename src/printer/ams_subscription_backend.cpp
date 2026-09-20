@@ -268,7 +268,8 @@ void AmsSubscriptionBackend::release_filament_op_claim() {
     filament_op_claimed_action_ = AmsAction::IDLE;
 }
 
-AmsError AmsSubscriptionBackend::run_filament_op(FilamentOp op, int arg) {
+AmsError AmsSubscriptionBackend::run_filament_op(FilamentOp op, int arg,
+                                                 const std::vector<int>* batch) {
     // Order of refusals is load-bearing and matches what check_preconditions()
     // has always produced: not-started, then busy, then print-active.
     if (auto e = claim_filament_op(op, filament_op_gate() == FilamentOpGate::Standard);
@@ -295,6 +296,9 @@ AmsError AmsSubscriptionBackend::run_filament_op(FilamentOp op, int arg) {
     // it here would deadlock on the first two and serialize the network on the
     // third. The claim is a flag, not a lock: a contending op is refused
     // immediately rather than blocked behind the send.
+    if (batch != nullptr) {
+        return do_filament_batch(*batch, op == FilamentOp::Load);
+    }
     switch (op) {
     case FilamentOp::Load:
         return do_load_filament(arg);
@@ -322,6 +326,14 @@ AmsError AmsSubscriptionBackend::select_slot(int slot_index) {
 
 AmsError AmsSubscriptionBackend::change_tool(int tool_number) {
     return run_filament_op(FilamentOp::ChangeTool, tool_number);
+}
+
+AmsError AmsSubscriptionBackend::load_filament_batch(const std::vector<int>& slots) {
+    return run_filament_op(FilamentOp::Load, -1, &slots);
+}
+
+AmsError AmsSubscriptionBackend::unload_filament_batch(const std::vector<int>& slots) {
+    return run_filament_op(FilamentOp::Unload, -1, &slots);
 }
 
 AmsError AmsSubscriptionBackend::state_preconditions_unlocked() const {

@@ -87,6 +87,14 @@ class AmsSubscriptionBackend : public AmsBackend {
     AmsError select_slot(int slot_index) final;
     AmsError change_tool(int tool_number) final;
 
+    /// Batch load/unload, through the SAME gate and claim as the per-slot ops
+    /// above: one claim covers the whole batch, so a batch cannot start while
+    /// any other filament op is in flight, and no per-slot op can start mid
+    /// batch. Backends opt in via do_filament_batch(); everyone else inherits
+    /// the base not_supported refusal.
+    AmsError load_filament_batch(const std::vector<int>& slots) final;
+    AmsError unload_filament_batch(const std::vector<int>& slots) final;
+
     // --- Shared utilities (public for AmsState and tests) ---
     void emit_event(const std::string& event, const std::string& data = "");
     /// Common gating before an AMS action runs.
@@ -255,6 +263,16 @@ class AmsSubscriptionBackend : public AmsBackend {
     virtual AmsError do_select_slot(int slot_index) = 0;
     virtual AmsError do_change_tool(int tool_number) = 0;
 
+    /// Backend implementation of a batch load (@p load true) or unload, reached
+    /// only after the gate has passed — same contract as the per-slot do_*
+    /// hooks above. Default refuses: a backend that has not opted in answers
+    /// not_supported even through the shared gate.
+    virtual AmsError do_filament_batch(const std::vector<int>& slots, bool load) {
+        (void)slots;
+        (void)load;
+        return AmsErrorHelper::not_supported("Batch filament ops");
+    }
+
     /// Does a slot SELECT move the toolhead on this backend?
     ///
     /// Load, unload and tool change are toolhead motion on every backend and are
@@ -387,7 +405,10 @@ class AmsSubscriptionBackend : public AmsBackend {
 
     /// Gate, claim, then dispatch. The four public entry points are one line
     /// each on top of this, so there is exactly one place the gate can run.
-    AmsError run_filament_op(FilamentOp op, int arg);
+    /// @param batch When non-null, dispatch goes to do_filament_batch() instead
+    ///        of the per-slot hook; @p arg is ignored. Only the batch entry
+    ///        points pass it, and they pass FilamentOp::Load / Unload.
+    AmsError run_filament_op(FilamentOp op, int arg, const std::vector<int>* batch = nullptr);
 
     /// True from the instant a filament op wins the gate until its do_* hook
     /// returns. Guarded by mutex_.
