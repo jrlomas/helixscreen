@@ -14,7 +14,9 @@
         action_button_height="#button_height_sm" action_button_pad="#space_xs"
         action_button_disabled_subject="theme_apply_disabled" hide_action_button_2="false" action_button_2_text="Edit"
         action_button_2_text_tag="Edit" action_button_2_callback="on_edit_colors_clicked"
-        action_button_2_bg_color="#secondary">
+        action_button_2_bg_color="#secondary" action_button_2_min_width="72">
+    <!-- 72 pins the micro header_bar's own slot-2 floor: overlay_panel forwards
+         the base header_bar's 90, which is 18px this tier's title gives up. -->
     <lv_obj name="overlay_content"
             width="100%" flex_grow="1" style_pad_all="#space_sm" flex_flow="column" style_pad_gap="#space_sm"
             scrollable="true">
