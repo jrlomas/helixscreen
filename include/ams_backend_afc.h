@@ -1062,6 +1062,17 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
      */
     [[nodiscard]] PathSegment compute_filament_segment_unlocked() const;
 
+    /**
+     * @brief Reduce the parsed unit roster to one system-wide topology (no locking)
+     *
+     * Internal helper called from locked contexts to avoid deadlock, since
+     * get_unit_topology() holds mutex_ and falls back to the system answer.
+     *
+     * @return the units' shared topology, MIXED when they disagree, HUB when
+     *         no unit objects have been parsed yet
+     */
+    [[nodiscard]] PathTopology compute_topology_unlocked() const;
+
     /// Whether the extruder is free of filament. Caller holds mutex_.
     /// Combines the physical toolhead sensors, AFC.current (current_load) and
     /// per-lane tool_loaded rather than system_info_.filament_loaded, which is
