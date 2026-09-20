@@ -775,12 +775,12 @@ create_ad5x_payload_tarball() {
 # INSTALL_DIR at the mod's payload root.
 setup_mod_host() {
     MOD_ROOT="$BATS_TEST_TMPDIR/usr/data/config/mod"
-    mkdir -p "$MOD_ROOT/.shell" "$MOD_ROOT/.bin/helixscreen/config"
+    INSTALL_DIR="$BATS_TEST_TMPDIR/usr/data/config/mod_data/helixscreen"
+    mkdir -p "$MOD_ROOT/.shell" "$INSTALL_DIR/config"
     touch "$MOD_ROOT/.shell/platform.sh"
     HOST_MOD_ROOT="$MOD_ROOT"
     HOST_MOD_CHROOT="$BATS_TEST_TMPDIR/usr/data/.mod/.forge-x"
     HOST_SERVICE_MECHANISM="mod-managed"
-    INSTALL_DIR="$MOD_ROOT/.bin/helixscreen"
     # The payload-update contract: the mod-owned guard stands down for it.
     HELIX_MOD_PAYLOAD=1
     printf 'HELIX_CONFIG_DIR=/opt/config/mod_data/helixscreen/config\nHELIX_LOG_LEVEL=info\n' \

@@ -101,8 +101,8 @@ setup() {
     HOST_CHROOT_STATE="outside:$HOST_MOD_CHROOT"
     HOST_SERVICE_MECHANISM="mod-managed"
     HOST_OWNS_COMPETING_UIS=1
-    HOST_INSTALL_ROOT="$MOD_ROOT/.bin/helixscreen"
-    HOST_CONFIG_DIR="$SANDBOX/usr/data/config/mod_data/helixscreen/config"
+    HOST_INSTALL_ROOT="$(dirname "$MOD_ROOT")/mod_data/helixscreen"
+    HOST_CONFIG_DIR="${HOST_INSTALL_ROOT}/config"
     HOST_MOONRAKER_USER_CONF="$SANDBOX/usr/data/config/mod_data/user.moonraker.conf"
     HOST_PLATFORM_HOOK_KEY="ad5x-forgex"
     HOST_LEGACY_INSTALL_ROOT=""
@@ -265,11 +265,11 @@ create_payload_tarball() {
     refute_grep 'update_manager helixscreen' "$HOST_MOONRAKER_USER_CONF"
 }
 
-@test "payload install: --auto-update writes the stanza into user.moonraker.conf only" {
-    # Positive control for the A4 refusal: the stanza lands when the payload
-    # root is OUTSIDE the mod's tree (the durable shape --payload-root
-    # provides). At a mod-owned root the option is refused instead - see the
-    # "--auto-update is refused" test below.
+@test "payload install: --auto-update is refused even at a root outside the mod tree" {
+    # Where the root sits does not make the stanza safe. Moonraker's type:web
+    # updater rmtree()s path: and the stanza carries no persistent_files, so it
+    # destroys config/ - which lives inside the root - whether or not the mod
+    # owns that path. A payload is updated by the mod's OTA and by nothing else.
     local durable="$SANDBOX/usr/data/helixscreen"
     mkdir -p "$SANDBOX/usr/data/config/mod_data" "$durable/bin"
     create_fake_mips_elf "$durable/bin/helix-screen"
@@ -281,11 +281,13 @@ create_payload_tarball() {
     HELIX_MOD_PAYLOAD_UPDATES=1
     INSTALL_DIR="$durable"
 
-    configure_moonraker_updates "ad5x"
+    run configure_moonraker_updates "ad5x"
+    [ "$status" -eq 0 ] || fail "the refusal aborted the install: $output"
 
-    grep -q '^\[update_manager helixscreen\]' "$HOST_MOONRAKER_USER_CONF" \
-        || fail "the opted-in stanza did not land in the mod's user conf"
-    cmp -s "$BATS_TEST_TMPDIR/mod-conf.original" "$MOD_ROOT/moonraker.conf"
+    ! grep -q 'update_manager helixscreen' "$HOST_MOONRAKER_USER_CONF" \
+        || fail "the stanza was armed at a payload root"
+    cmp -s "$BATS_TEST_TMPDIR/mod-conf.original" "$MOD_ROOT/moonraker.conf" \
+        || fail "the mod's own moonraker.conf was modified"
 }
 
 # ============================================================================
@@ -325,20 +327,16 @@ create_payload_tarball() {
 
     find "$MOD_ROOT" | sort > "$BATS_TEST_TMPDIR/modtree.after"
 
-    # Nothing was added anywhere under the mod tree.
+    # The mod's tree is untouched in full - the payload root sits BESIDE it,
+    # so an uninstall must leave the tree byte-identical, nothing added or
+    # removed.
     [ -z "$(comm -13 "$BATS_TEST_TMPDIR/modtree.before" "$BATS_TEST_TMPDIR/modtree.after")" ] \
         || fail "uninstall left new files under the mod tree"
+    [ -z "$(comm -23 "$BATS_TEST_TMPDIR/modtree.before" "$BATS_TEST_TMPDIR/modtree.after")" ] \
+        || fail "uninstall removed paths under the mod tree"
 
-    # The only removals are the payload subtree itself.
-    local removed path
-    removed=$(comm -23 "$BATS_TEST_TMPDIR/modtree.before" "$BATS_TEST_TMPDIR/modtree.after")
-    [ -n "$removed" ] || fail "the payload root was not removed"
-    while IFS= read -r path; do
-        case "$path" in
-            "$INSTALL_DIR"|"$INSTALL_DIR"/*) ;;
-            *) fail "uninstall removed a non-payload path under the mod tree: $path" ;;
-        esac
-    done <<< "$removed"
+    # The payload subtree itself is gone, root and all.
+    [ ! -e "$INSTALL_DIR" ] || fail "the payload root survived the uninstall"
 
     # Display mode restored from the install-time record.
     grep -q "display = 'GUPPY'" "$SANDBOX/usr/data/config/mod_data/variables.cfg" \
@@ -473,28 +471,27 @@ esac
 }
 
 @test "mode block: warns that a payload root inside the mod tree does not survive a Forge-X OTA" {
+    # The warning reaches an operator-chosen IN-TREE root (--payload-root into
+    # the mod's git tree) - the probed default lives outside it.
     HELIX_MOD_PAYLOAD=1
-    MOD_PAYLOAD_ROOT=""
-    INSTALL_DIR="$HOST_INSTALL_ROOT"
+    MOD_PAYLOAD_ROOT="$MOD_ROOT/.bin/helixscreen"
+    INSTALL_DIR="$MOD_ROOT/.bin/helixscreen"
 
     run mod_payload_mode_block
     [ "$status" -eq 0 ]
-    [ "$INSTALL_DIR" = "$HOST_INSTALL_ROOT" ]
+    [ "$INSTALL_DIR" = "$MOD_ROOT/.bin/helixscreen" ]
     contains "inside the firmware mod's git tree" "$output"
     contains "OTA" "$output"
-    # The suggested durable root is derived from the rig's own data mount
-    # (M2): this fixture is the AD5X shape, whose mount is the sandbox's
-    # /usr/data - the parent of the probed .mod namespace.
-    [[ "$output" == *"--payload-root $SANDBOX/usr/data/helixscreen"* ]] \
-        || fail "the AD5X shape must suggest its own data mount, not a pinned literal"
+    # The suggested durable root is the mod_data sibling - the same place the
+    # probed default lives, derived per shape: this fixture is the AD5X's.
+    [[ "$output" == *"--payload-root $SANDBOX/usr/data/config/mod_data/helixscreen"* ]] \
+        || fail "the AD5X shape must suggest its own mod_data sibling, not a pinned literal"
 }
 
 @test "mode block: the OTA escape-hatch example is the rig's own data mount, per shape" {
-    # M2: the hard-coded /usr/data/helixscreen example sent AD5M operators at
-    # a partition their rig does not have (their DATA_MNT is /data), landing
-    # the payload on the root filesystem if followed. The example derives
-    # from the probe - the parent of the mod's .mod namespace, which is each
-    # board's data mount: /usr/data on the AD5X, /data on the AD5M.
+    # M2: the example derives from the probe - mod_data beside the mod tree,
+    # the same sibling the probed default uses, so an AD5M operator is never
+    # sent at an AD5X-only spelling.
     mkdir -p "$SANDBOX/opt/config/mod/.shell" "$SANDBOX/data/.mod/.forge-x/usr/bin"
     touch "$SANDBOX/opt/config/mod/.shell/platform.sh"
     export HELIX_MOD_TREE_CANDIDATES="$SANDBOX/opt/config/mod"
@@ -514,12 +511,13 @@ esac
 
     HELIX_MOD_PAYLOAD=1
     MOD_PAYLOAD_ROOT=""
-    INSTALL_DIR="$HOST_INSTALL_ROOT"
+    # An in-tree root, so the warning (and its example) fires at all.
+    INSTALL_DIR="$HOST_MOD_ROOT/.bin/helixscreen"
 
     run mod_payload_mode_block
     [ "$status" -eq 0 ]
-    [[ "$output" == *"--payload-root $SANDBOX/data/helixscreen"* ]] \
-        || fail "the AD5M shape must suggest its own data mount (/data), not the AD5X's"
+    [[ "$output" == *"--payload-root $SANDBOX/opt/config/mod_data/helixscreen"* ]] \
+        || fail "the AD5M shape must suggest its own mod_data sibling, not the AD5X's"
     [[ "$output" != *"usr/data/helixscreen"* ]] \
         || fail "suggested the AD5X-only path on an AD5M rig"
 }
@@ -611,7 +609,7 @@ esac
     # mod's payload tree (set_install_paths must stand down too). No env
     # INSTALL_DIR: platform.sh captured one at source time from setup().
     HELIX_MOD_PAYLOAD=""
-    HOST_INSTALL_ROOT="$MOD_ROOT/.bin/helixscreen"
+    HOST_INSTALL_ROOT="$(dirname "$MOD_ROOT")/mod_data/helixscreen"
     _USER_INSTALL_DIR=""
     detect_tmp_dir() { TMP_DIR="$BATS_TEST_TMPDIR/tmp"; }
     set_install_paths "ad5x" "forge_x"
@@ -628,7 +626,7 @@ esac
     HELIX_MOD_PAYLOAD="1"
     STANDALONE_INSTALL=""
     _USER_INSTALL_DIR=""
-    HOST_INSTALL_ROOT="$MOD_ROOT/.bin/helixscreen"
+    HOST_INSTALL_ROOT="$(dirname "$MOD_ROOT")/mod_data/helixscreen"
     HOST_MOD_CHROOT="$SANDBOX/usr/data/.mod/.forge-x"
     detect_tmp_dir() { TMP_DIR="$BATS_TEST_TMPDIR/tmp"; }
 
@@ -644,7 +642,7 @@ esac
     HELIX_MOD_PAYLOAD="1"
     STANDALONE_INSTALL=""
     _USER_INSTALL_DIR=""
-    HOST_INSTALL_ROOT="$MOD_ROOT/.bin/helixscreen"
+    HOST_INSTALL_ROOT="$(dirname "$MOD_ROOT")/mod_data/helixscreen"
     HOST_MOD_CHROOT="$SANDBOX/data/.mod/.forge-x"
     detect_tmp_dir() { TMP_DIR="$BATS_TEST_TMPDIR/tmp"; }
 
@@ -661,7 +659,7 @@ esac
     HELIX_MOD_PAYLOAD=""
     STANDALONE_INSTALL="1"
     _USER_INSTALL_DIR=""
-    HOST_INSTALL_ROOT="$MOD_ROOT/.bin/helixscreen"
+    HOST_INSTALL_ROOT="$(dirname "$MOD_ROOT")/mod_data/helixscreen"
     HOST_MOD_CHROOT="$SANDBOX/data/.mod/.forge-x"
     detect_tmp_dir() { TMP_DIR="$BATS_TEST_TMPDIR/tmp"; }
 
@@ -725,8 +723,15 @@ esac
     refute_grep 'update_manager helixscreen' "$HOST_MOONRAKER_USER_CONF"
 
     mod_payload_mode_block > "$BATS_TEST_TMPDIR/mode-block.out" 2>&1
-    grep -q "OTA" "$BATS_TEST_TMPDIR/mode-block.out" \
-        || fail "the OTA warning did not print on a bare mod-host install"
+    # The probed default lives OUTSIDE the mod's git tree now, so the bare
+    # install has nothing to warn about: no OTA warning, and the guard does
+    # not claim the root (the deliberate disarm).
+    ! grep -q "OTA" "$BATS_TEST_TMPDIR/mode-block.out" \
+        || fail "the OTA warning fired at the out-of-tree default root"
+    ! host_path_is_mod_owned "$INSTALL_DIR" \
+        || fail "the mod-owned guard claims the payload root"
+    [ "$INSTALL_DIR" = "$SANDBOX/usr/data/config/mod_data/helixscreen" ] \
+        || fail "INSTALL_DIR='$INSTALL_DIR' - not the mod_data sibling"
 }
 
 @test "--standalone on a mod host does a normal install with the warning" {
@@ -1384,7 +1389,11 @@ seed_legacy_install() {
 # pointed at; a payload root OUTSIDE the mod tree (OD1's durable shape) still
 # gets the stanza (the positive control is the reworked test above).
 
-@test "--auto-update is refused while the payload root is inside the mod's tree" {
+@test "--auto-update is refused at an in-tree payload root too" {
+    # The companion to the outside-the-tree case above: the refusal is keyed on
+    # the install being a payload, so an operator-chosen in-tree root is refused
+    # for the same reason and not a location-specific one.
+    INSTALL_DIR="$MOD_ROOT/.bin/helixscreen"
     mkdir -p "$INSTALL_DIR/bin" "$SANDBOX/usr/data/config/mod_data"
     printf '[authorization]\n' > "$HOST_MOONRAKER_USER_CONF"
     HELIX_MOD_PAYLOAD=1
@@ -1400,8 +1409,8 @@ seed_legacy_install() {
         *) fail "the refusal does not name the payload root";;
     esac
     case "$output" in
-        *--payload-root*) ;;
-        *) fail "the refusal does not point at the durable-root escape";;
+        *"payload install"*) ;;
+        *) fail "the refusal does not state that a payload install is the reason";;
     esac
 }
 
@@ -1509,6 +1518,22 @@ STUB
     resolve_chroot_daemon_dir
 
     [ "$HELIX_CHROOT_DAEMON_DIR" = "$SANDBOX/opt/config/mod/.bin/helixscreen" ] \
+        || fail "HELIX_CHROOT_DAEMON_DIR='$HELIX_CHROOT_DAEMON_DIR'"
+}
+
+@test "chroot daemon dir: the mod_data payload root swaps to the bound spelling" {
+    # The probed default lives BESIDE the mod tree, not under it, so the
+    # sibling path must still map onto the spelling the chroot binds.
+    HOST_MOD_ROOT="$SANDBOX/usr/data/config/mod"
+    HOST_MOD_CHROOT="$SANDBOX/chroot"
+    INSTALL_DIR="$SANDBOX/usr/data/config/mod_data/helixscreen"
+    export HELIX_MOD_TREE_CANDIDATES="$SANDBOX/usr/data/config/mod $SANDBOX/opt/config/mod"
+    # Only the /opt spelling exists inside the chroot.
+    mkdir -p "${HOST_MOD_CHROOT}${SANDBOX}/opt/config/mod_data/helixscreen"
+
+    resolve_chroot_daemon_dir
+
+    [ "$HELIX_CHROOT_DAEMON_DIR" = "$SANDBOX/opt/config/mod_data/helixscreen" ] \
         || fail "HELIX_CHROOT_DAEMON_DIR='$HELIX_CHROOT_DAEMON_DIR'"
 }
 

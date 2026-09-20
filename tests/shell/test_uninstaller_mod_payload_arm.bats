@@ -40,7 +40,8 @@ setup() {
     . "$WORKTREE_ROOT/scripts/uninstall.sh"
 
     # An AD5X-shaped mod host, post payload install:
-    #   - payload root (.bin/helixscreen) inside the mod tree
+    #   - payload root at the mod_data sibling of the mod tree (the probed
+    #     default), recorded by the install
     #   - display mode taken over (HEADLESS) with the arrival recorded (STOCK)
     #   - an --auto-update stanza in the mod's user.moonraker.conf
     #
@@ -49,7 +50,7 @@ setup() {
     SANDBOX="$BATS_TEST_TMPDIR/root"
     MOD_ROOT="$SANDBOX/usr/data/config/mod"
     MOD_DATA="$SANDBOX/usr/data/config/mod_data"
-    PAYLOAD_ROOT="$MOD_ROOT/.bin/helixscreen"
+    PAYLOAD_ROOT="$MOD_DATA/helixscreen"
     USER_CONF="$MOD_DATA/user.moonraker.conf"
 
     mkdir -p "$MOD_ROOT/.shell" \
@@ -71,7 +72,7 @@ setup() {
 # HelixScreen auto-update stanza (written by the installer's --auto-update)
 [update_manager helixscreen]
 type: web
-path: /usr/data/config/mod/.bin/helixscreen
+path: /usr/data/config/mod_data/helixscreen
 
 [server]
 host: 0.0.0.0
@@ -123,9 +124,11 @@ EOF
         || fail "an unrelated section was dropped"
 }
 
-@test "unarmed run leaves the mod tree alone" {
-    # Without the arm the mod-owned refusal must stand: nothing the arm does
-    # may happen as a side effect of a plain uninstall run.
+@test "unarmed run leaves the payload root alone" {
+    # Without the arm nothing the arm does may happen as a side effect of a
+    # plain uninstall run: the removal is gated on HELIX_MOD_PAYLOAD itself,
+    # which stands guard wherever the root sits - inside the mod's namespaces
+    # or, like the default, beside them.
     HELIX_MOD_PAYLOAD=""
 
     run uninstall_mod_payload
