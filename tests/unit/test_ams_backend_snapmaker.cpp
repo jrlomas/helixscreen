@@ -2292,6 +2292,72 @@ TEST_CASE_METHOD(SnapmakerFixture, "Snapmaker prepare_for_resume authors a trans
     CHECK(captured.user_msg == std::string(expected));
 }
 
+TEST_CASE_METHOD(
+    SnapmakerFixture,
+    "Snapmaker prepare_for_resume: defect id 532 code 1 is Terminal via id+code matcher",
+    "[ams][snapmaker][resume]") {
+    lv_init_safe();
+    PrinterState& ps = get_printer_state();
+    PrinterStateTestAccess::reset(ps);
+    ps.init_subjects(false);
+
+    // Message deliberately avoids the "dirty bed" substring so only the
+    // id+code matcher can classify this frame Terminal.
+    json paused = {{"print_stats",
+                    {{"state", "paused"},
+                     {"exception", {{"id", 532}, {"code", 1}, {"message", "unlabeled defect"}}}}},
+                   {"virtual_sdcard", {{"is_active", false}}}};
+    ps.update_from_status(paused);
+    REQUIRE(ps.get_print_exception_id() == 532);
+    REQUIRE(ps.get_print_exception_code() == 1);
+
+    helix::test::RegisteredBackend<AmsBackendSnapmaker> backend_reg(nullptr, nullptr);
+    AmsBackendSnapmaker& backend = *backend_reg;
+
+    AmsError captured{AmsResult::SUCCESS}; // poison
+    bool callback_fired = false;
+    backend.prepare_for_resume(/*slot_index=*/0, [&](const AmsError& err) {
+        callback_fired = true;
+        captured = err;
+    });
+
+    REQUIRE(callback_fired);
+    REQUIRE(captured.result == AmsResult::RESUME_REQUIRES_RESTART);
+}
+
+TEST_CASE_METHOD(SnapmakerFixture,
+                 "Snapmaker prepare_for_resume: defect id 532 code 2 (noodle) attempts resume",
+                 "[ams][snapmaker][resume]") {
+    lv_init_safe();
+    PrinterState& ps = get_printer_state();
+    PrinterStateTestAccess::reset(ps);
+    ps.init_subjects(false);
+
+    // The firmware PAUSEs (does not cancel) for every defect_detection code,
+    // so a noodle pause must take the recoverable path, not the restart modal.
+    json paused = {{"print_stats",
+                    {{"state", "paused"},
+                     {"exception", {{"id", 532}, {"code", 2}, {"message", "detected noodle"}}}}},
+                   {"virtual_sdcard", {{"is_active", false}}}};
+    ps.update_from_status(paused);
+    REQUIRE(ps.get_print_exception_id() == 532);
+    REQUIRE(ps.get_print_exception_code() == 2);
+
+    helix::test::RegisteredBackend<AmsBackendSnapmaker> backend_reg(nullptr, nullptr);
+    AmsBackendSnapmaker& backend = *backend_reg;
+
+    AmsError captured{AmsResult::RESUME_REQUIRES_RESTART}; // poison
+    bool callback_fired = false;
+    // slot 0 with sensor_present=true (default) → recoverable path returns SUCCESS
+    backend.prepare_for_resume(/*slot_index=*/0, [&](const AmsError& err) {
+        callback_fired = true;
+        captured = err;
+    });
+
+    REQUIRE(callback_fired);
+    REQUIRE(captured.result == AmsResult::SUCCESS);
+}
+
 TEST_CASE_METHOD(SnapmakerFixture, "Snapmaker prepare_for_resume proceeds normally when SD active",
                  "[ams][snapmaker][resume]") {
     lv_init_safe();

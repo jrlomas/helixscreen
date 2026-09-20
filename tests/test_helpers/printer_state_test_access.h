@@ -36,6 +36,13 @@ class PrinterPrintStateTestAccess {
         pps.slicer_progress_active_ = false;
         pps.eta_estimator_.reset();
         pps.sdcard_active_ = false;
+        // print_stats.exception parses under Moonraker delta semantics: an
+        // absent key leaves these unchanged, so a latched exception survives
+        // status frames that never mention it. Clear them here or a test that
+        // latches one poisons every later classify_pause consumer.
+        pps.print_exception_id_ = -1;
+        pps.print_exception_code_ = -1;
+        pps.print_exception_message_.clear();
         // The job being prepared is session-scoped: it outlives
         // reset_for_new_print() by design, since it exists precisely for the
         // window before the printer reports the job. Leaving it set leaks a
