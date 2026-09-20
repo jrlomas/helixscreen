@@ -50,6 +50,8 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <string>
+#include <system_error>
 #include <thread>
 
 namespace helix::ui {
@@ -458,18 +460,34 @@ class UpdateQueue {
             std::swap(to_process, pending_);
         }
 
-        // Execute all pending updates - safe because no render is in progress
+        // Execute all pending updates - safe because no render is in progress.
+        //
+        // std::system_error is matched ahead of std::exception (it derives
+        // from runtime_error) so the log can carry the numeric code and
+        // category that what()'s strerror text alone does not reveal.
         while (!to_process.empty()) {
             try {
                 auto& entry = to_process.front();
                 current_tag_ = entry.tag;
                 entry.callback();
+            } catch (const std::system_error& e) {
+                callback_exception_count_.fetch_add(1, std::memory_order_relaxed);
+                spdlog::error("[UpdateQueue] Exception in queued callback [{}]: {} code {} ({:#x}) "
+                              "category {}: {}",
+                              describe_entry(to_process.front()),
+                              crash_handler::current_exception_type_name(), e.code().value(),
+                              static_cast<unsigned int>(e.code().value()),
+                              e.code().category().name(), e.what());
             } catch (const std::exception& e) {
                 callback_exception_count_.fetch_add(1, std::memory_order_relaxed);
-                spdlog::error("[UpdateQueue] Exception in queued callback: {}", e.what());
+                spdlog::error("[UpdateQueue] Exception in queued callback [{}]: {}: {}",
+                              describe_entry(to_process.front()),
+                              crash_handler::current_exception_type_name(), e.what());
             } catch (...) {
                 callback_exception_count_.fetch_add(1, std::memory_order_relaxed);
-                spdlog::error("[UpdateQueue] Unknown exception in queued callback");
+                spdlog::error("[UpdateQueue] Exception in queued callback [{}]: {} (no message)",
+                              describe_entry(to_process.front()),
+                              crash_handler::current_exception_type_name());
             }
             // Retain the N most-recently-completed tags so a post-callback
             // crash (heap corruption detonating on the next main-thread malloc,
@@ -496,6 +514,24 @@ class UpdateQueue {
             current_tag_ = nullptr;
             to_process.pop();
         }
+    }
+
+    /**
+     * @brief Producer identity of a queued entry, for exception logs
+     *
+     * The tag when the producer passed one; otherwise the recorded enqueue
+     * call site, which is the only identity an untagged callback has. Built
+     * only on the exception path — the drain loop's steady state allocates
+     * nothing per callback.
+     */
+    static std::string describe_entry(const TaggedCallback& entry) {
+        if (entry.tag != nullptr) {
+            return entry.tag;
+        }
+        if (entry.file != nullptr) {
+            return std::string(entry.file) + ":" + std::to_string(entry.line) + " (untagged)";
+        }
+        return "<untagged>";
     }
 
     mutable std::mutex mutex_;

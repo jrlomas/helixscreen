@@ -249,7 +249,9 @@ void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int s
                 // not exist, so that record goes. An unreachable
                 // server proves nothing about the record and takes
                 // the error path instead, leaving it standing.
-                helix::ui::queue_update([spoolman_id, slot_index, backend_index]() {
+                helix::ui::queue_update("SpoolmanManager::slot_unresolvable", [spoolman_id,
+                                                                               slot_index,
+                                                                               backend_index]() {
                     note_identity_unresolvable(spoolman_id);
                     if (s_shutdown_flag.load(std::memory_order_acquire)) {
                         return;
@@ -403,7 +405,7 @@ void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int s
 
             // Track failure for circuit breaker (post to UI thread for
             // thread-safe access to SpoolmanManager and ToastManager)
-            helix::ui::queue_update([]() {
+            helix::ui::queue_update("SpoolmanManager::cb_failure", []() {
                 if (s_shutdown_flag.load(std::memory_order_acquire)) {
                     return;
                 }
@@ -599,6 +601,7 @@ void SpoolmanManager::refresh_spoolman_weights() {
                     spdlog::warn("[SpoolmanManager] External spool Spoolman #{} not found",
                                  ext_spoolman_id);
                     helix::ui::queue_update(
+                        "SpoolmanManager::ext_unresolvable",
                         [ext_spoolman_id]() { note_identity_unresolvable(ext_spoolman_id); });
                     return;
                 }
@@ -607,40 +610,42 @@ void SpoolmanManager::refresh_spoolman_weights() {
                 float new_remaining = static_cast<float>(spool.remaining_weight_g);
                 float new_total = static_cast<float>(spool.initial_weight_g);
 
-                helix::ui::queue_update([ext_spoolman_id, new_remaining, new_total, spool]() {
-                    if (s_shutdown_flag.load(std::memory_order_acquire)) {
-                        return;
-                    }
+                helix::ui::queue_update(
+                    "SpoolmanManager::ext_weights",
+                    [ext_spoolman_id, new_remaining, new_total, spool]() {
+                        if (s_shutdown_flag.load(std::memory_order_acquire)) {
+                            return;
+                        }
 
-                    // Before the unchanged-weights early return below, same as
-                    // the AMS slot path.
-                    const bool identity_is_new = cache_identity(spool);
+                        // Before the unchanged-weights early return below, same as
+                        // the AMS slot path.
+                        const bool identity_is_new = cache_identity(spool);
 
-                    AmsState& state = AmsState::instance();
-                    if (identity_is_new) {
-                        state.bump_slots_version();
-                    }
-                    auto ext = state.get_external_spool_info();
-                    if (!ext.has_value() || ext->spoolman_id != ext_spoolman_id) {
+                        AmsState& state = AmsState::instance();
+                        if (identity_is_new) {
+                            state.bump_slots_version();
+                        }
+                        auto ext = state.get_external_spool_info();
+                        if (!ext.has_value() || ext->spoolman_id != ext_spoolman_id) {
+                            spdlog::debug(
+                                "[SpoolmanManager] External spool changed, skipping stale update");
+                            return;
+                        }
+
+                        // Skip if weights unchanged
+                        if (ext->remaining_weight_g == new_remaining &&
+                            ext->total_weight_g == new_total) {
+                            return;
+                        }
+
+                        ext->remaining_weight_g = new_remaining;
+                        ext->total_weight_g = new_total;
+                        state.set_external_spool_info(*ext);
+
                         spdlog::debug(
-                            "[SpoolmanManager] External spool changed, skipping stale update");
-                        return;
-                    }
-
-                    // Skip if weights unchanged
-                    if (ext->remaining_weight_g == new_remaining &&
-                        ext->total_weight_g == new_total) {
-                        return;
-                    }
-
-                    ext->remaining_weight_g = new_remaining;
-                    ext->total_weight_g = new_total;
-                    state.set_external_spool_info(*ext);
-
-                    spdlog::debug(
-                        "[SpoolmanManager] Updated external spool weights: {:.0f}g / {:.0f}g",
-                        new_remaining, new_total);
-                });
+                            "[SpoolmanManager] Updated external spool weights: {:.0f}g / {:.0f}g",
+                            new_remaining, new_total);
+                    });
             },
             [ext_spoolman_id](const MoonrakerError& err) {
                 spdlog::warn("[SpoolmanManager] Failed to fetch external spool Spoolman #{}: {}",

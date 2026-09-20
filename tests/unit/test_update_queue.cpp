@@ -3,7 +3,10 @@
 
 #include "lvgl_test_fixture.h"
 #include "observer_factory.h"
+#include "test_helpers/log_capture.h"
 #include "test_helpers/update_queue_test_access.h"
+
+#include <system_error>
 
 #include "../catch_amalgamated.hpp"
 
@@ -265,4 +268,70 @@ TEST_CASE_METHOD(LVGLTestFixture, "empty drain leaves buffered and later work in
 
     CHECK(frozen_ran);
     CHECK(nested_ran);
+}
+
+// A callback that throws must not take the drain batch with it, and the log
+// must identify the producer and the exception well enough to act on: the
+// tag, the type name, and for std::system_error the numeric code both ways —
+// what()'s strerror text alone can render a pointer-shaped code as a bare
+// "Unknown error -1288124992" with no hint of which callback threw it.
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a throwing system_error callback is contained and fully identified",
+                 "[update_queue]") {
+    auto& q = UpdateQueue::instance();
+    const auto before = UpdateQueueTestAccess::callback_exception_count();
+    bool ran_after_throw = false;
+
+    helix::TextLogCapture capture;
+
+    q.queue("ThrowingProducer::boom", []() {
+        // A pointer-shaped error value: no real errno is anywhere near this
+        // large. Decimal plus hex in the log is what makes that visible.
+        throw std::system_error(static_cast<int>(0xB338C5C0u), std::generic_category());
+    });
+    q.queue("AfterThrow::still_runs", [&ran_after_throw]() { ran_after_throw = true; });
+    UpdateQueueTestAccess::drain_all(q);
+
+    CHECK(UpdateQueueTestAccess::callback_exception_count() == before + 1);
+    CHECK(ran_after_throw);
+
+    const auto logged = capture.get_captured();
+    CHECK(capture.contains("[ThrowingProducer::boom]"));
+    CHECK(capture.contains("std::system_error"));
+    CHECK(capture.contains("-1288124992"));
+    CHECK(capture.contains("b338c5c0"));
+    CHECK(capture.contains("Unknown error -1288124992"));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "an untagged throwing callback is named by its enqueue site",
+                 "[update_queue]") {
+    auto& q = UpdateQueue::instance();
+    const auto before = UpdateQueueTestAccess::callback_exception_count();
+
+    helix::TextLogCapture capture;
+
+    q.queue([]() { throw std::runtime_error("boom"); });
+    UpdateQueueTestAccess::drain_all(q);
+
+    CHECK(UpdateQueueTestAccess::callback_exception_count() == before + 1);
+    CHECK(capture.contains("std::runtime_error"));
+    CHECK(capture.contains("boom"));
+    // The untagged enqueue recorded this file as its call site.
+    CHECK(capture.contains("test_update_queue.cpp"));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a non-std exception names its type with no message",
+                 "[update_queue]") {
+    auto& q = UpdateQueue::instance();
+    const auto before = UpdateQueueTestAccess::callback_exception_count();
+
+    helix::TextLogCapture capture;
+
+    q.queue("IntThrower::raw", []() { throw 42; });
+    UpdateQueueTestAccess::drain_all(q);
+
+    CHECK(UpdateQueueTestAccess::callback_exception_count() == before + 1);
+    CHECK(capture.contains("IntThrower::raw"));
+    CHECK(capture.contains("int"));
+    CHECK(capture.contains("(no message)"));
 }

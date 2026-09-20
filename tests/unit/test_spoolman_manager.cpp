@@ -14,6 +14,7 @@
 #include "ui_update_queue.h"
 
 #include "../test_helpers/ad5x_ifs_test_access.h"
+#include "../test_helpers/log_capture.h"
 #include "../test_helpers/registered_backend.h"
 #include "../test_helpers/seeded_override.h"
 #include "../test_helpers/tool_state_test_access.h"
@@ -1114,4 +1115,30 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
     CHECK(helix::ams::resolve(reload).material == std::string("PETG"));
     CHECK(helix::ams::resolve(reload).brand == std::string("Sunlu"));
     CHECK(helix::ams::resolve(reload).color_rgb == 0xBCBCBCu);
+}
+
+// A Spoolman fetch that times out is an ordinary network failure: the error
+// callback reports it and nothing more. In particular no exception may reach
+// the UpdateQueue drain — a throw there means some queued callback blew up,
+// which reads in the log as an error with no producer.
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a failed external-spool fetch reaches no queued callback",
+                 "[spoolman]") {
+    SlotInfo ext;
+    ext.spoolman_id = 135;
+    ext.material = "PLA";
+    AmsState::instance().set_external_spool_info_in_memory(ext);
+
+    const auto exceptions_before = helix::ui::UpdateQueueTestAccess::callback_exception_count();
+    api.spoolman_mock().set_mock_spoolman_enabled(false);
+
+    helix::TextLogCapture capture;
+    poll();
+
+    // The error path ran and reported where the fetch failed.
+    CHECK(capture.contains("Failed to fetch external spool Spoolman #135"));
+    // And it threw nothing into the drain.
+    CHECK(helix::ui::UpdateQueueTestAccess::callback_exception_count() == exceptions_before);
+
+    AmsState::instance().clear_external_spool_info();
 }
