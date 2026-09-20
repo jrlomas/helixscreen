@@ -12,6 +12,7 @@
 
 #include "system/crash_history.h"
 #include "system/crash_reporter.h"
+#include "system/diagnostics.h"
 
 #include <chrono>
 #include <filesystem>
@@ -215,6 +216,38 @@ TEST_CASE_METHOD(CrashReporterTestFixture,
     // RAM and CPU should be non-negative (0 is acceptable if detection fails)
     REQUIRE(report.ram_total_mb >= 0);
     REQUIRE(report.cpu_cores >= 0);
+}
+
+TEST_CASE_METHOD(CrashReporterTestFixture,
+                 "CrashReporter: collect_report sources system context from diagnostics",
+                 "[crash_reporter]") {
+    write_crash_file();
+    auto report = CrashReporter::instance().collect_report();
+    const helix::diagnostics::Diagnostics diag = helix::diagnostics::collect();
+
+    // Every startup-context field must equal the producer's value, so a
+    // separate lookup cannot quietly drift back in.
+    CHECK(report.platform == diag.identity.platform_key);
+    CHECK(report.printer_model == diag.identity.printer_model);
+    CHECK(report.mod_flavor == diag.identity.mod_flavor);
+    CHECK(report.config_dir == diag.paths.config_dir);
+    CHECK(report.cache_dir == diag.paths.cache_dir);
+    CHECK(report.cache_tier == diag.paths.cache_tier);
+    CHECK(report.ram_total_mb == static_cast<int>(diag.machine.mem_total_kb / 1024));
+    CHECK(report.cpu_cores == diag.machine.cpu_cores);
+
+    // mod_flavor is "none" at minimum. config_dir stays "" until Config
+    // initializes, which this bare fixture never does; the equality checks
+    // above are what pin it.
+    REQUIRE_FALSE(report.mod_flavor.empty());
+
+    // The JSON payload carries the new fields; cache_tier is present even when
+    // the cascade fell through to a rung with no name.
+    json j = CrashReporter::instance().report_to_json(report);
+    CHECK(j.contains("mod_flavor"));
+    CHECK(j.contains("config_dir"));
+    CHECK(j.contains("cache_dir"));
+    CHECK(j.contains("cache_tier"));
 }
 
 // ============================================================================
