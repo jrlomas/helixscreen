@@ -106,4 +106,31 @@ inline double clamp_jog_delta(double current, double uncommitted, double delta, 
     return clamped;
 }
 
+/// Outcome of clamping one jog delta against an axis's limits.
+struct JogClampResult {
+    double allowed; ///< Permitted delta; 0.0 when the axis cannot move at all.
+    bool warn;      ///< Raise the "blocked" message now.
+    bool latch;     ///< The caller's new per-axis latch value; store it unconditionally.
+};
+
+/// Clamp a jog delta against an axis's limits and decide whether this attempt
+/// is the first blocked one of an approach.
+///
+/// `already_warned` is the caller's latch for this axis. `latch` in the result
+/// is its new value and is always meaningful, so a caller assigns it without
+/// branching: a jog that moves clears the latch, so retreating from a limit and
+/// returning to it warns again.
+///
+/// Partial travel is not a block. A request for 10mm that yields 2mm moves 2mm
+/// and says nothing; only a request that yields nothing is worth a message.
+inline JogClampResult clamp_jog_with_warn(double current, double uncommitted, double delta,
+                                          double min, double max, bool already_warned) {
+    const double allowed = clamp_jog_delta(current, uncommitted, delta, min, max);
+    const bool blocked = std::abs(allowed) <= AxisMove::EPSILON_MM;
+    if (!blocked) {
+        return {allowed, false, false};
+    }
+    return {0.0, !already_warned, true};
+}
+
 } // namespace helix

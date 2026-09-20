@@ -22,6 +22,7 @@
 #include "printer_state.h"
 #include "subject_managed_panel.h"
 #include "theme_manager.h"
+#include "toolhead_homing.h"
 #include "unit_conversions.h"
 
 #include <spdlog/spdlog.h>
@@ -308,8 +309,7 @@ void MotionPanel::on_deactivating(DeactivateReason reason) {
     // in-flight ack callback — fully reset the coalescer so it can't get stuck
     // in_flight forever, and re-arm the edge warnings.
     jog_coalescer_.reset();
-    x_edge_warned_ = false;
-    y_edge_warned_ = false;
+    edge_warned_.fill(false);
 }
 
 void MotionPanel::on_ui_destroyed() {
@@ -585,7 +585,17 @@ void MotionPanel::handle_z_button(const char* name) {
         spdlog::debug("[{}] Bed-moves printer: inverted Z direction for bed movement", get_name());
     }
 
-    spdlog::debug("[{}] Z jog: {:+.0f}mm (bed_moves={})", get_name(), distance, bed_moves_);
+    // Bounds are in gcode space, so this must follow the inversion above.
+    const auto bounds = get_printer_state().get_axis_bounds();
+    if (bounds.has_z && helix::axis_is_homed(get_printer_state(), helix::Axis::Z)) {
+        distance = clamp_axis_and_warn(helix::Axis::Z, current_z_, jog_coalescer_.uncommitted_z(),
+                                       distance, bounds.z_min, bounds.z_max);
+        if (distance == 0.0) {
+            return;
+        }
+    }
+
+    spdlog::debug("[{}] Z jog: {:+.2f}mm (bed_moves={})", get_name(), distance, bed_moves_);
 
     dispatch_jog({0.0, 0.0, distance});
 }
@@ -678,49 +688,51 @@ void MotionPanel::jog(JogDirection direction, float distance_mm) {
     // Soft-stop: clamp against the PREDICTED position (current + uncommitted
     // coalescer travel) so queued taps can't walk past the envelope. Skip when
     // bounds aren't known yet (fresh connect) or the axis isn't homed.
-    helix::AxisBounds bounds = get_printer_state().get_axis_bounds();
-    const char* homed_axes = lv_subject_get_string(get_printer_state().get_homed_axes_subject());
-    bool x_homed = homed_axes && strchr(homed_axes, 'x') != nullptr;
-    bool y_homed = homed_axes && strchr(homed_axes, 'y') != nullptr;
+    const auto bounds = get_printer_state().get_axis_bounds();
 
     double ddx = static_cast<double>(dx);
     double ddy = static_cast<double>(dy);
 
-    if (ddx != 0.0 && bounds.has_x && x_homed) {
-        ddx = helix::clamp_jog_delta(current_x_, jog_coalescer_.uncommitted_x(), ddx, bounds.x_min,
-                                     bounds.x_max);
-        // Epsilon, not == 0.0: clamping against a predicted position that is a
-        // hair inside the envelope returns a sub-micron residual (199.9999995,
-        // +1, max=200 -> ~5e-7). That is a blocked jog, not a real move — an
-        // exact compare skipped the warning and dispatched a no-op instead.
-        if (std::abs(ddx) <= helix::AxisMove::EPSILON_MM) {
-            ddx = 0.0;
-            if (!x_edge_warned_) {
-                NOTIFY_WARNING(lv_tr("X jog blocked at bed edge"));
-                x_edge_warned_ = true;
-            }
-        } else {
-            x_edge_warned_ = false;
-        }
+    if (ddx != 0.0 && bounds.has_x && helix::axis_is_homed(get_printer_state(), helix::Axis::X)) {
+        ddx = clamp_axis_and_warn(helix::Axis::X, current_x_, jog_coalescer_.uncommitted_x(), ddx,
+                                  bounds.x_min, bounds.x_max);
     }
-    if (ddy != 0.0 && bounds.has_y && y_homed) {
-        ddy = helix::clamp_jog_delta(current_y_, jog_coalescer_.uncommitted_y(), ddy, bounds.y_min,
-                                     bounds.y_max);
-        if (std::abs(ddy) <= helix::AxisMove::EPSILON_MM) {
-            ddy = 0.0;
-            if (!y_edge_warned_) {
-                NOTIFY_WARNING(lv_tr("Y jog blocked at bed edge"));
-                y_edge_warned_ = true;
-            }
-        } else {
-            y_edge_warned_ = false;
-        }
+    if (ddy != 0.0 && bounds.has_y && helix::axis_is_homed(get_printer_state(), helix::Axis::Y)) {
+        ddy = clamp_axis_and_warn(helix::Axis::Y, current_y_, jog_coalescer_.uncommitted_y(), ddy,
+                                  bounds.y_min, bounds.y_max);
     }
 
     if (ddx == 0.0 && ddy == 0.0) {
         return;
     }
     dispatch_jog({ddx, ddy, 0.0});
+}
+
+double MotionPanel::clamp_axis_and_warn(helix::Axis axis, double current, double uncommitted,
+                                        double delta, float min, float max) {
+    // axis.h ships axis_index() for exactly this; do not hand-cast.
+    const int idx = helix::axis_index(axis);
+    const auto result =
+        helix::clamp_jog_with_warn(current, uncommitted, delta, static_cast<double>(min),
+                                   static_cast<double>(max), edge_warned_[idx]);
+    edge_warned_[idx] = result.latch;
+
+    if (result.warn) {
+        // Three literals rather than an assembled string: the translation
+        // extractor scans for lv_tr() literals and cannot see a runtime key.
+        switch (axis) {
+        case helix::Axis::X:
+            NOTIFY_WARNING(lv_tr("X jog blocked at bed edge"));
+            break;
+        case helix::Axis::Y:
+            NOTIFY_WARNING(lv_tr("Y jog blocked at bed edge"));
+            break;
+        case helix::Axis::Z:
+            NOTIFY_WARNING(lv_tr("Z jog blocked at axis limit"));
+            break;
+        }
+    }
+    return result.allowed;
 }
 
 void MotionPanel::dispatch_jog(const helix::AxisMove& delta) {

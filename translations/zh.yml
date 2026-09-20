@@ -3197,6 +3197,7 @@ translations:
   Z Offset: Z 偏移
   Z Range: Z 范围
   Z Tilt Adjust...: 正在调整Z倾斜...
+  Z jog blocked at axis limit: ''
   Z motor calibration failed: Z 电机校准失败
   Z probes for bed leveling and mesh generation: 用于热床调平和网格生成的 Z 探针
   'Z-Off:': Z 偏移：

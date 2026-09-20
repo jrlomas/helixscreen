@@ -5,9 +5,12 @@
 
 #include "ui_observer_guard.h"
 
+#include "axis.h"
 #include "jog_coalescer.h"
 #include "overlay_base.h"
 #include "subject_managed_panel.h"
+
+#include <array>
 
 /**
  * @file ui_panel_motion.h
@@ -98,6 +101,11 @@ class MotionPanel : public OverlayBase {
     void handle_z_button(const char* name);
     void set_jog_mode(helix::JogMode mode); // Switch between Fine/Coarse/Turbo jog mode
 
+    /// Clamp one axis against its bounds, raising at most one warning per
+    /// approach. Returns the permitted delta, 0.0 when fully blocked.
+    double clamp_axis_and_warn(helix::Axis axis, double current, double uncommitted, double delta,
+                               float min, float max);
+
   private:
     // RAII subject manager - auto-deinits all registered subjects on destruction
     SubjectManager subjects_;
@@ -140,8 +148,10 @@ class MotionPanel : public OverlayBase {
     bool callbacks_registered_ = false;
 
     helix::JogCoalescer jog_coalescer_;
-    bool x_edge_warned_ = false; // dedupe "blocked at bed edge" warnings
-    bool y_edge_warned_ = false;
+    /// Per-axis "blocked at limit" latch, indexed with helix::axis_index().
+    /// Repeated attempts against a limit must not each raise a toast, and
+    /// hold-to-repeat makes that a flood rather than a nuisance.
+    std::array<bool, 3> edge_warned_{};
 
     // Route a tap/flush through the coalescer and send if idle.
     void dispatch_jog(const helix::AxisMove& delta);
