@@ -288,6 +288,86 @@ TEST_CASE("PrinterDiscovery detects z_tilt", "[printer_discovery]") {
 }
 
 // ============================================================================
+// Capability Detection Tests - Screws Tilt (upstream + Snapmaker U1 dialect)
+// ============================================================================
+
+TEST_CASE("PrinterDiscovery detects standard screws_tilt_adjust", "[printer_discovery]") {
+    SECTION("objects/list entry") {
+        PrinterDiscovery hw;
+        json objects = {"extruder", "heater_bed", "screws_tilt_adjust"};
+        hw.parse_objects(objects);
+        REQUIRE(hw.has_screws_tilt());
+        REQUIRE(hw.screws_tilt_dialect() == ScrewsTiltDialect::Standard);
+    }
+
+    SECTION("configfile key fallback") {
+        // screws_tilt_adjust has no get_status(), so Klipper never lists it in
+        // objects/list — configfile.settings is the reliable source.
+        PrinterDiscovery hw;
+        json config = {{"screws_tilt_adjust", json::object()}};
+        hw.parse_config_keys(config);
+        REQUIRE(hw.has_screws_tilt());
+        REQUIRE(hw.screws_tilt_dialect() == ScrewsTiltDialect::Standard);
+    }
+}
+
+TEST_CASE("PrinterDiscovery detects the Snapmaker auto_screws_tilt_adjust dialect",
+          "[printer_discovery]") {
+    SECTION("objects/list entry sets the capability and the dialect") {
+        PrinterDiscovery hw;
+        json objects = {"extruder", "heater_bed", "auto_screws_tilt_adjust"};
+        hw.parse_objects(objects);
+        REQUIRE(hw.has_screws_tilt());
+        REQUIRE(hw.screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto);
+    }
+
+    SECTION("configfile key sets the capability and the dialect") {
+        PrinterDiscovery hw;
+        json config = {{"auto_screws_tilt_adjust",
+                        {{"screw1", "15,15"}, {"screw1_name", "front left screw"}}}};
+        hw.parse_config_keys(config);
+        REQUIRE(hw.has_screws_tilt());
+        REQUIRE(hw.screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto);
+    }
+}
+
+TEST_CASE("PrinterDiscovery resolves both screws-tilt dialects present to Standard",
+          "[printer_discovery]") {
+    // A user can drop upstream [screws_tilt_adjust] into a U1's
+    // extended/klipper/*.cfg alongside Snapmaker's own section, so both can be
+    // detected at once. SCREWS_TILT_CALCULATE is the simpler, working path, so
+    // Standard wins.
+    SECTION("both objects/list entries") {
+        PrinterDiscovery hw;
+        json objects = {"extruder", "screws_tilt_adjust", "auto_screws_tilt_adjust"};
+        hw.parse_objects(objects);
+        REQUIRE(hw.has_screws_tilt());
+        REQUIRE(hw.screws_tilt_dialect() == ScrewsTiltDialect::Standard);
+    }
+
+    SECTION("both configfile keys") {
+        PrinterDiscovery hw;
+        json config = {{"screws_tilt_adjust", json::object()},
+                       {"auto_screws_tilt_adjust",
+                        {{"screw1", "15,15"}, {"screw1_name", "front left screw"}}}};
+        hw.parse_config_keys(config);
+        REQUIRE(hw.has_screws_tilt());
+        REQUIRE(hw.screws_tilt_dialect() == ScrewsTiltDialect::Standard);
+    }
+}
+
+TEST_CASE("PrinterDiscovery without any screws_tilt module reports no capability",
+          "[printer_discovery]") {
+    PrinterDiscovery hw;
+    hw.parse_objects(json::array({"extruder", "heater_bed", "bed_mesh"}));
+    hw.parse_config_keys(json::object({{"extruder", json::object()}}));
+    REQUIRE_FALSE(hw.has_screws_tilt());
+    // The dialect is meaningless until some screws_tilt module is detected; the
+    // default must not claim the Snapmaker dialect.
+    REQUIRE(hw.screws_tilt_dialect() == ScrewsTiltDialect::Standard);
+}
+
+// ============================================================================
 // Capability Detection Tests - Probes
 // ============================================================================
 

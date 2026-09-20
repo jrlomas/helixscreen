@@ -1,0 +1,345 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_auto_screws_tilt_collector.cpp
+ * @brief AutoScrewsTiltCollector driven through the mock client
+ *
+ * The collector chains five dependent RPCs against the firmware, and the
+ * invariant these tests pin is the exit discipline: EVERY terminal path -
+ * success, a failed command anywhere in the chain, a refused plate check -
+ * releases the firmware's SCREWS_TILT_ADJUST state through the gated
+ * AUTO_SCREWS_TILT_ADJUST_EXIT. A leaked state makes unrelated filament
+ * operations refuse forever, clearable only by an explicit EXIT_TO_IDLE.
+ *
+ * Also pinned: the command order, the plate gate's fail-closed refusal, the
+ * dialect dispatch in calculate_screws_tilt(), and connect-time
+ * reconciliation of a leftover state.
+ */
+
+#include "../../include/moonraker_api.h"
+#include "../../include/moonraker_client_mock.h"
+#include "../../include/printer_state.h"
+#include "../../lvgl/lvgl.h"
+#include "../test_helpers/update_queue_test_access.h"
+#include "../ui_test_utils.h"
+#include "auto_screws_tilt_adjust.h"
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <string>
+#include <thread>
+
+#include "../catch_amalgamated.hpp"
+
+using namespace helix;
+
+namespace {
+struct LVGLInitializerAutoScrews {
+    LVGLInitializerAutoScrews() {
+        static bool initialized = false;
+        if (!initialized) {
+            lv_init_safe();
+            lv_display_t* disp = lv_display_create(800, 480);
+            alignas(64) static lv_color_t buf[800 * 10];
+            lv_display_set_buffers(disp, buf, NULL, sizeof(buf), LV_DISPLAY_RENDER_MODE_PARTIAL);
+            initialized = true;
+        }
+    }
+};
+
+static LVGLInitializerAutoScrews lvgl_init;
+} // namespace
+
+class AutoScrewsCollectorTestFixture {
+  public:
+    AutoScrewsCollectorTestFixture()
+        : mock_client_(MoonrakerClientMock::PrinterType::GENERIC_COREXY) {
+        state_.init_subjects(false);
+        // execute_gcode() halted gate would otherwise reject every command.
+        state_.set_klippy_state_sync(helix::KlippyState::READY);
+        api_ = std::make_unique<MoonrakerAPI>(mock_client_, state_);
+
+        // The U1's module as the sole screws-tilt object is what makes the
+        // dialect SnapmakerAuto.
+        mock_client_.set_additional_objects({"auto_screws_tilt_adjust"});
+        // The firmware holds the calibration state while the collector runs;
+        // the gated exit asks about exactly this.
+        mock_client_.set_object_status("machine_state_manager", {{"main_state", 8}});
+    }
+
+    ~AutoScrewsCollectorTestFixture() {
+        helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+        api_.reset();
+    }
+
+    /// The U1's probed points: a clearly tilted bed.
+    void set_module_results() {
+        mock_client_.set_object_status("auto_screws_tilt_adjust", {{"target_z", 0.4},
+                                                                   {"base_point1", 0.15},
+                                                                   {"base_point2", 0.55},
+                                                                   {"base_point3", 0.325},
+                                                                   {"base_point4", 0.575}});
+    }
+
+    void set_plate(bool present) {
+        mock_client_.set_object_status("extruder_offset_calibration",
+                                       {{"bed_plate_check", present}});
+    }
+
+    /// Drop the plate object entirely: the query comes back without it.
+    void set_plate_unreadable() {
+        mock_client_.set_object_status("extruder_offset_calibration", json::object());
+    }
+
+    void drop_held_state() {
+        mock_client_.set_object_status("machine_state_manager", json::object());
+    }
+
+    [[nodiscard]] bool sent(const std::string& command) const {
+        const auto& history = mock_client_.gcode_script_history();
+        return std::find(history.begin(), history.end(), command) != history.end();
+    }
+
+    [[nodiscard]] bool sent_containing(const std::string& fragment) const {
+        for (const auto& script : mock_client_.gcode_script_history()) {
+            if (script.find(fragment) != std::string::npos) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void start_collection() {
+        api_->advanced().calculate_screws_tilt(
+            [this](const std::vector<ScrewTiltResult>& screws) {
+                captured_screw_count_ = screws.size();
+                result_received_.store(true);
+            },
+            [this](const MoonrakerError& err) {
+                captured_error_ = err.message;
+                error_received_.store(true);
+            });
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    MoonrakerClientMock mock_client_;
+    PrinterState state_;
+    std::unique_ptr<MoonrakerAPI> api_;
+
+    std::atomic<bool> result_received_{false};
+    std::atomic<bool> error_received_{false};
+    size_t captured_screw_count_ = 0;
+    std::string captured_error_;
+};
+
+// ============================================================================
+// The exit discipline
+// ============================================================================
+
+TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
+                 "auto screws collector sends the gated exit on success",
+                 "[calibration][screws_tilt][auto_screws]") {
+    REQUIRE(mock_client_.hardware().screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto);
+    set_plate(false);
+    set_module_results();
+
+    start_collection();
+
+    SECTION("the five commands run in order, then the state-gated exit") {
+        REQUIRE(result_received_.load());
+        REQUIRE_FALSE(error_received_.load());
+        REQUIRE(captured_screw_count_ == 4);
+
+        const auto& history = mock_client_.gcode_script_history();
+        REQUIRE(history.size() == 5);
+        REQUIRE(history[0] == auto_screws::CMD_ENTRY);
+        REQUIRE(history[1] == auto_screws::CMD_HOMING);
+        REQUIRE(history[2] == auto_screws::CMD_DETECT_PLATE);
+        REQUIRE(history[3] == auto_screws::CMD_PROBE_REFERENCE_POINTS);
+        REQUIRE(history[4] == auto_screws::CMD_EXIT);
+    }
+
+    SECTION("no exit when the firmware state is not ours to leave") {
+        // Re-run with the state object unreadable: the gated exit must hold
+        // its fire rather than send the command the firmware macro would
+        // throw on.
+        mock_client_.clear_gcode_script_history();
+        result_received_.store(false);
+        drop_held_state();
+        set_plate(false);
+        set_module_results();
+
+        start_collection();
+
+        REQUIRE(result_received_.load());
+        REQUIRE_FALSE(sent(auto_screws::CMD_EXIT));
+    }
+}
+
+TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
+                 "auto screws collector sends the gated exit when any step fails",
+                 "[calibration][screws_tilt][auto_screws]") {
+    set_plate(false);
+    set_module_results();
+
+    const struct {
+        const char* command;
+        MoonrakerErrorType type;
+    } steps[] = {
+        {auto_screws::CMD_ENTRY, MoonrakerErrorType::JSON_RPC_ERROR},
+        {auto_screws::CMD_HOMING, MoonrakerErrorType::TIMEOUT},
+        {auto_screws::CMD_DETECT_PLATE, MoonrakerErrorType::JSON_RPC_ERROR},
+        {auto_screws::CMD_PROBE_REFERENCE_POINTS, MoonrakerErrorType::JSON_RPC_ERROR},
+    };
+
+    for (const auto& step : steps) {
+        CAPTURE(step.command);
+        mock_client_.clear_gcode_script_history();
+        error_received_.store(false);
+        captured_error_.clear();
+
+        mock_client_.force_next_gcode_error(step.type, "step failed", step.command);
+
+        start_collection();
+
+        REQUIRE(error_received_.load());
+        REQUIRE_FALSE(result_received_.load());
+        REQUIRE(captured_error_.find(step.command) != std::string::npos);
+
+        // The run failed, and the firmware state is still released.
+        REQUIRE(sent(auto_screws::CMD_EXIT));
+
+        // A failure ends the chain: nothing runs past the failed command
+        // except the exit.
+        const bool failed_before_probe =
+            std::string(step.command) != auto_screws::CMD_PROBE_REFERENCE_POINTS;
+        if (failed_before_probe) {
+            REQUIRE_FALSE(sent(auto_screws::CMD_PROBE_REFERENCE_POINTS));
+        }
+    }
+}
+
+// ============================================================================
+// The plate gate: fail closed, never probe through the sheet
+// ============================================================================
+
+TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
+                 "auto screws plate gate refuses a present or unreadable sheet",
+                 "[calibration][screws_tilt][auto_screws]") {
+    set_module_results();
+
+    SECTION("a detected PEI sheet fails the run with instructions") {
+        set_plate(true);
+        start_collection();
+
+        REQUIRE(error_received_.load());
+        REQUIRE_FALSE(result_received_.load());
+        REQUIRE(captured_error_.find("Remove the PEI sheet") != std::string::npos);
+        REQUIRE_FALSE(sent(auto_screws::CMD_PROBE_REFERENCE_POINTS));
+        REQUIRE(sent(auto_screws::CMD_EXIT));
+    }
+
+    SECTION("an unreadable plate state also refuses - absence is not evidence") {
+        set_plate_unreadable();
+        start_collection();
+
+        REQUIRE(error_received_.load());
+        REQUIRE_FALSE(result_received_.load());
+        REQUIRE(captured_error_.find("Could not confirm the PEI sheet") != std::string::npos);
+        REQUIRE_FALSE(sent(auto_screws::CMD_PROBE_REFERENCE_POINTS));
+        REQUIRE(sent(auto_screws::CMD_EXIT));
+    }
+}
+
+// ============================================================================
+// Dialect dispatch in calculate_screws_tilt()
+// ============================================================================
+
+TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
+                 "calculate_screws_tilt dispatches on the screws-tilt dialect",
+                 "[calibration][screws_tilt][auto_screws]") {
+    SECTION("SnapmakerAuto runs the five-command sequence") {
+        REQUIRE(mock_client_.hardware().screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto);
+        set_plate(false);
+        set_module_results();
+
+        start_collection();
+
+        REQUIRE(result_received_.load());
+        REQUIRE(sent(auto_screws::CMD_ENTRY));
+        REQUIRE_FALSE(sent_containing("SCREWS_TILT_CALCULATE"));
+    }
+
+    SECTION("Standard sends SCREWS_TILT_CALCULATE and no auto commands") {
+        // A printer without the U1's module: the default mock hardware.
+        MoonrakerClientMock stock_client(MoonrakerClientMock::PrinterType::GENERIC_COREXY);
+        PrinterState stock_state;
+        stock_state.init_subjects(false);
+        stock_state.set_klippy_state_sync(helix::KlippyState::READY);
+        MoonrakerAPI stock_api(stock_client, stock_state);
+        REQUIRE(stock_client.hardware().screws_tilt_dialect() == ScrewsTiltDialect::Standard);
+
+        std::atomic<bool> stock_done{false};
+        stock_api.advanced().calculate_screws_tilt(
+            [&](const std::vector<ScrewTiltResult>&) { stock_done.store(true); },
+            [](const MoonrakerError&) {});
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // The standard command may carry probe preparation, so match on the
+        // command appearing in a script rather than an exact history entry.
+        bool saw_standard = false;
+        for (const auto& script : stock_client.gcode_script_history()) {
+            if (script.find("SCREWS_TILT_CALCULATE") != std::string::npos) {
+                saw_standard = true;
+            }
+            REQUIRE(script.find("AUTO_SCREWS_TILT_ADJUST") == std::string::npos);
+        }
+        REQUIRE(saw_standard);
+    }
+}
+
+// ============================================================================
+// Connect-time reconciliation of a leftover state
+// ============================================================================
+
+TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
+                 "reconcile_on_connect clears stale states and leaves in-flight ones",
+                 "[calibration][screws_tilt][auto_screws]") {
+    const json held = {{"machine_state_manager", {{"main_state", 8}}}};
+
+    SECTION("a stale probe step gets EXIT_TO_IDLE") {
+        mock_client_.set_object_status("machine_state_manager", {{"main_state", 8}});
+        mock_client_.set_object_status("auto_screws_tilt_adjust", {{"probe_step", "adjust_idle"}});
+
+        auto_screws::reconcile_on_connect(mock_client_, held);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        REQUIRE(sent(auto_screws::CMD_EXIT_TO_IDLE));
+    }
+
+    SECTION("work in flight is left to its driver") {
+        mock_client_.set_object_status("machine_state_manager", {{"main_state", 8}});
+        mock_client_.set_object_status("auto_screws_tilt_adjust",
+                                       {{"probe_step", "adjust_probing"}});
+
+        auto_screws::reconcile_on_connect(mock_client_, held);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        REQUIRE(mock_client_.gcode_script_history().empty());
+    }
+
+    SECTION("a state that is not held sends nothing") {
+        const json idle = {{"machine_state_manager", {{"main_state", 0}}}};
+        auto_screws::reconcile_on_connect(mock_client_, idle);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        REQUIRE(mock_client_.gcode_script_history().empty());
+    }
+
+    SECTION("no machine_state_manager in the snapshot sends nothing") {
+        auto_screws::reconcile_on_connect(mock_client_, json::object());
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        REQUIRE(mock_client_.gcode_script_history().empty());
+    }
+}

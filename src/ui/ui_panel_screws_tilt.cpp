@@ -11,6 +11,7 @@
 #include "ui_utils.h"
 
 #include "app_globals.h"
+#include "auto_screws_tilt_adjust.h"
 #include "i_moonraker_api.h"
 #include "i_moonraker_client.h"
 #include "printer_state.h"
@@ -305,6 +306,13 @@ void ScrewsTiltPanel::on_deactivating(DeactivateReason reason) {
             spdlog::info("[ScrewsTilt] Aborting probe on deactivate");
             api_->execute_gcode("ABORT", nullptr, nullptr);
         }
+        // Printers whose firmware holds an explicit calibration state (the
+        // U1) must be told to leave it, or unrelated operations stay refused.
+        // Gated on the dialect so other printers spend no query on a cancel.
+        if (client_ &&
+            client_->hardware().screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
+            auto_screws::request_exit(*client_);
+        }
     }
 
     // Clean up dynamic indicators
@@ -444,6 +452,13 @@ void ScrewsTiltPanel::start_screws_tilt_command() {
 
 void ScrewsTiltPanel::cancel_probing() {
     spdlog::info("[ScrewsTilt] Probing cancelled by user");
+    // The run is cancelled from the UI side; a firmware that holds an
+    // explicit calibration state (the U1) needs the gated exit or it stays
+    // in it, refusing unrelated operations. Gated on the dialect so other
+    // printers spend no query per cancel.
+    if (client_ && client_->hardware().screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
+        auto_screws::request_exit(*client_);
+    }
     set_state(State::IDLE);
 }
 
@@ -788,22 +803,29 @@ void ScrewsTiltPanel::query_screw_thread() {
             }
 
             const auto& settings = response["result"]["status"]["configfile"]["settings"];
-            if (!settings.contains("screws_tilt_adjust") ||
-                !settings["screws_tilt_adjust"].is_object()) {
-                spdlog::debug("[ScrewsTilt] No screws_tilt_adjust section — assuming "
-                              "{:.1f}mm/turn",
-                              screw_pitch_mm_);
-                return;
+            // Upstream first, then the U1's own module, which carries the
+            // same screw_thread key. No U1 config spells it yet; the default
+            // stands until one does, and only the displayed turn count would
+            // move - the level verdict is pitch-invariant.
+            const json* thread_value = nullptr;
+            for (const char* section_name : {"screws_tilt_adjust", auto_screws::MODULE_NAME}) {
+                const auto section = settings.find(section_name);
+                if (section == settings.end() || !section->is_object()) {
+                    continue;
+                }
+                const auto screw_thread = section->find("screw_thread");
+                if (screw_thread != section->end() && screw_thread->is_string()) {
+                    thread_value = &*screw_thread;
+                    break;
+                }
             }
-
-            const auto& section = settings["screws_tilt_adjust"];
-            if (!section.contains("screw_thread") || !section["screw_thread"].is_string()) {
+            if (!thread_value) {
                 spdlog::debug("[ScrewsTilt] No screw_thread key — assuming {:.1f}mm/turn",
                               screw_pitch_mm_);
                 return;
             }
 
-            std::string thread = section["screw_thread"].get<std::string>();
+            std::string thread = thread_value->get<std::string>();
             screw_pitch_mm_ = screw_thread_pitch_mm(thread);
             spdlog::info("[ScrewsTilt] screw_thread={} -> {:.1f}mm/turn, level window {} min",
                          thread, screw_pitch_mm_, screw_level_tolerance_minutes(screw_pitch_mm_));

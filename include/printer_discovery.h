@@ -41,6 +41,14 @@ struct DetectedAmsSystem {
     std::string name; // Human-readable: "Happy Hare", "AFC", "Tool Changer"
 };
 
+/// Which screws-tilt module a printer runs. Upstream [screws_tilt_adjust]
+/// reports through SCREWS_TILT_CALCULATE console lines; the Snapmaker U1 ships
+/// its own [auto_screws_tilt_adjust] whose results arrive as a status object.
+enum class ScrewsTiltDialect {
+    Standard,      ///< upstream [screws_tilt_adjust]
+    SnapmakerAuto, ///< Snapmaker U1 [auto_screws_tilt_adjust]
+};
+
 class PrinterDiscovery {
   public:
     PrinterDiscovery() = default;
@@ -289,6 +297,17 @@ class PrinterDiscovery {
                 has_exclude_object_ = true;
             } else if (name == "screws_tilt_adjust") {
                 has_screws_tilt_ = true;
+                has_standard_screws_tilt_ = true;
+            }
+            // Snapmaker U1's own module: same capability, but its results
+            // arrive as a status object (target_z, base_point1..4, probe_step),
+            // not SCREWS_TILT_CALCULATE console lines. Unlike the upstream
+            // section it DOES publish get_status(), so objects/list — this
+            // path — is the primary detection; parse_config_keys() is the
+            // fallback for a printer whose object list does not carry it.
+            else if (name == "auto_screws_tilt_adjust") {
+                has_screws_tilt_ = true;
+                has_snapmaker_auto_screws_tilt_ = true;
             }
             // NOTE: screws_tilt_adjust may not appear in objects/list (no get_status()).
             // Also detected in parse_config_keys() as fallback.
@@ -789,9 +808,17 @@ class PrinterDiscovery {
 
             // screws_tilt_adjust doesn't implement get_status() in Klipper,
             // so it may not appear in objects/list. Detect from configfile as fallback.
+            // The Snapmaker U1's auto_screws_tilt_adjust is the same story. The
+            // dialect is derived from both flags at read time, so key iteration
+            // order cannot decide a printer that configures the two sections.
             if (key == "screws_tilt_adjust") {
                 has_screws_tilt_ = true;
+                has_standard_screws_tilt_ = true;
                 spdlog::debug("[PrinterDiscovery] screws_tilt_adjust detected from config");
+            } else if (key == "auto_screws_tilt_adjust") {
+                has_screws_tilt_ = true;
+                has_snapmaker_auto_screws_tilt_ = true;
+                spdlog::debug("[PrinterDiscovery] auto_screws_tilt_adjust detected from config");
             }
         }
     }
@@ -962,6 +989,8 @@ class PrinterDiscovery {
         has_timelapse_ = false;
         has_exclude_object_ = false;
         has_screws_tilt_ = false;
+        has_standard_screws_tilt_ = false;
+        has_snapmaker_auto_screws_tilt_ = false;
         has_klippain_shaketune_ = false;
         has_speaker_ = false;
         has_fan_feedback_ = false;
@@ -1170,6 +1199,18 @@ class PrinterDiscovery {
 
     [[nodiscard]] bool has_screws_tilt() const {
         return has_screws_tilt_;
+    }
+
+    /// Which screws-tilt module backs the capability. Standard whenever
+    /// upstream [screws_tilt_adjust] is configured, alone or alongside
+    /// Snapmaker's — SCREWS_TILT_CALCULATE works and is the simpler path.
+    /// SnapmakerAuto only when the U1's module is the sole one. Also the
+    /// answer for a printer with neither module: the dialect is meaningless
+    /// until the capability exists, and must not claim the U1's.
+    [[nodiscard]] ScrewsTiltDialect screws_tilt_dialect() const {
+        return (has_snapmaker_auto_screws_tilt_ && !has_standard_screws_tilt_)
+                   ? ScrewsTiltDialect::SnapmakerAuto
+                   : ScrewsTiltDialect::Standard;
     }
 
     [[nodiscard]] bool has_klippain_shaketune() const {
@@ -1730,6 +1771,8 @@ class PrinterDiscovery {
     bool has_timelapse_ = false;
     bool has_exclude_object_ = false;
     bool has_screws_tilt_ = false;
+    bool has_standard_screws_tilt_ = false;       ///< upstream [screws_tilt_adjust]
+    bool has_snapmaker_auto_screws_tilt_ = false; ///< U1 [auto_screws_tilt_adjust]
     int qidi_box_slot_count_ = 0; ///< Count of `box_stepper slot<N>` objects (QIDI Box)
     bool has_klippain_shaketune_ = false;
     bool has_speaker_ = false;

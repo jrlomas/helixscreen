@@ -454,14 +454,14 @@ Per-extruder filament feed state. Left module serves extruder0/1, right serves e
 
 Known `channel_state` values: `"idle"`, `"preloading"`, `"loading"`, `"load_finish"`, `"unloading"`
 
-### `machine_state_manager` — Machine state (NOT HANDLED)
+### `machine_state_manager` — Machine state
 
 | Field | Example | Handled | Notes |
 |-------|---------|---------|-------|
-| `main_state` | `0` | ❌ | Top-level machine state (0=idle) |
+| `main_state` | `0` | ✅ | Screws-tilt state (8): gated exit, connect-time reconcile |
 | `action_code` | `0` | ❌ | Current action code |
 
-Likely redundant with `print_stats.state` for most purposes.
+Subscribed only when `mmu_type()` reports SnapSwap; the screws-tilt code reads it via `printer.objects.query` regardless.
 
 ### `defect_detection` — Print defect detection (NOT SUBSCRIBED)
 

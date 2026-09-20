@@ -777,6 +777,22 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     }
 
     /**
+     * @brief Report a status object from printer.objects.query, replacing any
+     *        the mock already builds under that name
+     *
+     * @param name   Klipper object name, e.g. "machine_state_manager"
+     * @param status Its status fields; served only when a query asks for the object
+     */
+    void set_object_status(const std::string& name, const json& status) {
+        object_status_overrides_[name] = status;
+    }
+
+    /// Status objects set_object_status() added.
+    [[nodiscard]] const json& object_status_overrides() const {
+        return object_status_overrides_;
+    }
+
+    /**
      * @brief Check if mock accelerometer is enabled
      * @return true if accelerometer should be reported as available
      */
@@ -1838,7 +1854,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     double extruder_max_temp_{300.0};    ///< Extruder max_temp reported in configfile.settings
     double extruder_min_temp_{0.0};      ///< Extruder min_temp reported in configfile.settings
     double extruder_min_extrude_temp_{170.0}; ///< Extruder min_extrude_temp in configfile.settings
-    json extra_config_settings_ = json::object(); ///< set_config_settings_section() sections
+    json extra_config_settings_ = json::object();   ///< set_config_settings_section() sections
+    json object_status_overrides_ = json::object(); ///< set_object_status() statuses
     double resonance_min_freq_{5.0};   ///< [resonance_tester] min_freq the mock reports/sweeps
     double resonance_max_freq_{135.0}; ///< [resonance_tester] max_freq the mock reports/sweeps
     bool mmu_enabled_{true};           ///< MMU available (default true for existing tests)

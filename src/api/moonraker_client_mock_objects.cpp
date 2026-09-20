@@ -473,6 +473,14 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
                     {"gcode_y_offset", self->tool_offset(tool_number, helix::Axis::Y)},
                     {"gcode_z_offset", self->tool_offset(tool_number, helix::Axis::Z)}};
             }
+
+            // Test-set status objects (set_object_status()): served only when
+            // the query asks for the object, like every branch above.
+            for (const auto& [name, status] : self->object_status_overrides().items()) {
+                if (objects.contains(name)) {
+                    status_obj[name] = status;
+                }
+            }
         }
 
         if (success_cb) {
