@@ -587,9 +587,26 @@ SlotInfo* AmsBackendAfc::cached_slot_locked(int slot_index) {
 // get_current_action(), get_current_tool(), get_current_slot(), is_filament_loaded()
 // provided by AmsSubscriptionBackend
 
+PathTopology AmsBackendAfc::compute_topology_unlocked() const {
+    // AFC mixes hardware within one installation, so the system-wide answer is
+    // its units' only where they agree. HUB when the roster is empty: unit
+    // objects carry the lane/extruder membership topology is inferred from, and
+    // lane-only frames arrive before them.
+    if (unit_infos_.empty()) {
+        return PathTopology::HUB;
+    }
+    const PathTopology first = unit_infos_.front().topology;
+    for (const auto& ui : unit_infos_) {
+        if (ui.topology != first) {
+            return PathTopology::MIXED;
+        }
+    }
+    return first;
+}
+
 PathTopology AmsBackendAfc::get_topology() const {
-    // AFC uses a hub topology (Box Turtle / Armored Turtle style)
-    return PathTopology::HUB;
+    std::lock_guard<std::mutex> lock(mutex_);
+    return compute_topology_unlocked();
 }
 
 PathTopology AmsBackendAfc::get_unit_topology(int unit_index) const {
@@ -606,7 +623,7 @@ PathTopology AmsBackendAfc::get_unit_topology(int unit_index) const {
         }
         return system_info_.units[unit_index].topology;
     }
-    return get_topology(); // Fallback to system-wide topology
+    return compute_topology_unlocked(); // Fallback to system-wide topology
 }
 
 PathSegment AmsBackendAfc::get_filament_segment() const {
