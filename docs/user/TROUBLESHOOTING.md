@@ -603,6 +603,35 @@ journalctl -u helixscreen -b | grep "Screen size from HELIX_SCREEN_SIZE"
    ```
    You should see something like `card0-HDMI-A-1`. If you still see only `card0` and `dmesg | grep -i drm` mentions `simpledrm`, the vc4 overlay did not load — double-check /boot/firmware/config.txt for typos and any conflicting `dtoverlay` lines.
 
+**Fix on Armbian (BTT CB1 / CB2, Manta, and other Allwinner / Rockchip SBCs):**
+
+Armbian has no config.txt. Kernel parameters go in /boot/armbianEnv.txt instead.
+
+1. Find your connector name:
+   ```bash
+   ls /sys/class/drm/
+   ```
+   Look for a `card0-*` entry such as `card0-HDMI-A-1`. The connector name is everything
+   after `card0-`.
+
+2. Force the mode on the kernel command line:
+   ```bash
+   sudo nano /boot/armbianEnv.txt
+   ```
+   Add or extend the `extraargs` line (many images ship without one, so add it if missing):
+   ```
+   extraargs=video=HDMI-A-1:800x480@60
+   ```
+   Keep any existing `extraargs` values on the same line, separated by spaces. If the kernel
+   thinks nothing is connected, append `e` to force the connector on: `800x480@60e`.
+
+3. Reboot, then confirm the mode took, using the check below.
+
+> **A mode list of exactly `1024x768`, `800x600`, `848x480`, `800x480`, `640x480` and nothing
+> else is the kernel's built-in fallback set**, which means no EDID was read from the panel at
+> all. Forcing the mode as above is the fix. The panel does not have to supply working EDID for
+> a forced mode to drive it, so you do not need to replace the screen or the cable.
+
 **Check what modes the kernel knows about:**
 ```bash
 cat /sys/class/drm/card0-HDMI-A-1/modes
