@@ -3,6 +3,7 @@
 
 #include "settings_manager.h"
 
+#include "ui_panel_motion.h"
 #include "ui_subject_registry.h"
 
 #include "ams_backend.h"
@@ -84,6 +85,37 @@ static int style_to_dropdown_index(helix::ToolheadStyle style) {
     return 0; // Unknown styles map to Auto
 }
 
+namespace {
+/// The one place a (mode, ring) pair becomes a config key.
+std::string jog_distance_key(helix::JogMode mode, bool outer) {
+    const char* mode_name = "coarse";
+    switch (mode) {
+    case helix::JogMode::Fine:
+        mode_name = "fine";
+        break;
+    case helix::JogMode::Coarse:
+        mode_name = "coarse";
+        break;
+    case helix::JogMode::Turbo:
+        mode_name = "turbo";
+        break;
+    }
+    return std::string("motion/") + mode_name + (outer ? "_outer" : "_inner");
+}
+
+float jog_distance_default(helix::JogMode mode, bool outer) {
+    switch (mode) {
+    case helix::JogMode::Fine:
+        return outer ? 1.0f : 0.1f;
+    case helix::JogMode::Coarse:
+        return outer ? 10.0f : 1.0f;
+    case helix::JogMode::Turbo:
+        return outer ? 50.0f : 10.0f;
+    }
+    return outer ? 10.0f : 1.0f;
+}
+} // namespace
+
 SettingsManager& SettingsManager::instance() {
     static SettingsManager instance;
     return instance;
@@ -141,6 +173,19 @@ void SettingsManager::init_subjects() {
     int jog_speed_z = config->get<int>(config->df() + "motion/jog_speed_z", 600);
     jog_speed_z = std::clamp(jog_speed_z, 60, 60000);
     UI_MANAGED_SUBJECT_INT(jog_speed_z_subject_, jog_speed_z, "settings_jog_speed_z", subjects_);
+
+    // Jog step distances (Fine/Coarse/Turbo x inner/outer, mm). Read on every
+    // jog rather than bound to a widget, so a cache is enough; the settings
+    // overlay re-reads on open.
+    static_assert(JOG_MODE_COUNT == 3, "jog_distances_ cache is sized for three modes");
+    for (int m = 0; m < JOG_MODE_COUNT; ++m) {
+        const JogMode mode = static_cast<JogMode>(m);
+        for (int outer = 0; outer < 2; ++outer) {
+            float mm = config->get<float>(config->df() + jog_distance_key(mode, outer),
+                                          jog_distance_default(mode, outer));
+            jog_distances_[m][outer] = std::clamp(mm, 0.01f, 200.0f);
+        }
+    }
 
     // QIDI Box eject distance magnitude (default: 878 mm, range 100-2000).
     // Stored positive; negated when assembled into the FORCE_MOVE gcode.
@@ -525,6 +570,43 @@ void SettingsManager::set_jog_speed_z(int mm_per_min) {
 
     TelemetryManager::instance().notify_setting_changed("jog_speed_z", old_val,
                                                         std::to_string(mm_per_min));
+}
+
+// ============================================================================
+// Jog Step Distances
+// ============================================================================
+
+float SettingsManager::get_jog_distance(JogMode mode, bool outer) const {
+    // Clamp on read as well as write, so nothing reading the cache can turn a
+    // bad value into a zero-length jog.
+    return std::clamp(jog_distances_[static_cast<int>(mode)][outer ? 1 : 0], 0.01f, 200.0f);
+}
+
+void SettingsManager::set_jog_distance(JogMode mode, bool outer, float mm) {
+    mm = std::clamp(mm, 0.01f, 200.0f);
+    spdlog::info("[SettingsManager] set_jog_distance({} = {} mm)", jog_distance_key(mode, outer),
+                 mm);
+
+    auto old_val = std::to_string(jog_distances_[static_cast<int>(mode)][outer ? 1 : 0]);
+
+    // 1. Update the cache (jogs read it directly)
+    jog_distances_[static_cast<int>(mode)][outer ? 1 : 0] = mm;
+
+    // 2. Persist to config
+    Config* config = Config::get_instance();
+    config->set<float>(config->df() + jog_distance_key(mode, outer), mm);
+    config->save();
+
+    TelemetryManager::instance().notify_setting_changed(jog_distance_key(mode, outer), old_val,
+                                                        std::to_string(mm));
+}
+
+void SettingsManager::reset_jog_distances() {
+    for (int m = 0; m < JOG_MODE_COUNT; ++m) {
+        const JogMode mode = static_cast<JogMode>(m);
+        for (int outer = 0; outer < 2; ++outer)
+            set_jog_distance(mode, outer, jog_distance_default(mode, outer));
+    }
 }
 
 int SettingsManager::get_qidi_eject_distance() const {
