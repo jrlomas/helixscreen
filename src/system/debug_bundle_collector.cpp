@@ -74,8 +74,19 @@ json DebugBundleCollector::collect(const BundleOptions& options) {
     std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%dT%H:%M:%SZ", &tm_buf);
     bundle["timestamp"] = time_buf;
 
+    // One evaluation feeds both `system` and `diagnostics`, so the sections
+    // cannot disagree about the machine. collect() is stat() and small /proc
+    // reads; the default-constructed fallback degrades exactly the two
+    // sections it feeds if it ever throws.
+    diagnostics::Diagnostics diag;
     try {
-        bundle["system"] = collect_system_info();
+        diag = diagnostics::collect();
+    } catch (const std::exception& e) {
+        spdlog::warn("[DebugBundle] Failed to collect diagnostics: {}", e.what());
+    }
+
+    try {
+        bundle["system"] = collect_system_info(diag);
     } catch (const std::exception& e) {
         spdlog::warn("[DebugBundle] Failed to collect system info: {}", e.what());
         bundle["system"] = json{{"error", e.what()}};
@@ -85,7 +96,7 @@ json DebugBundleCollector::collect(const BundleOptions& options) {
     // `system` answers what the machine is, this answers where this process put
     // everything on it, which is the half an overridden box makes unguessable.
     try {
-        bundle["diagnostics"] = collect_diagnostics_info();
+        bundle["diagnostics"] = build_diagnostics_info(diag);
     } catch (const std::exception& e) {
         spdlog::warn("[DebugBundle] Failed to collect diagnostics: {}", e.what());
         bundle["diagnostics"] = json{{"error", e.what()}};
@@ -351,29 +362,16 @@ json DebugBundleCollector::build_touch_info(const TouchRangeDiagnostics& diag) {
     return touch;
 }
 
-json DebugBundleCollector::collect_system_info() {
+json DebugBundleCollector::collect_system_info(const diagnostics::Diagnostics& diag) {
     json sys;
 
-    sys["platform"] = UpdateChecker::get_platform_key();
-    sys["host_arch"] = helix::host_arch_string();
-
-    auto caps = PlatformCapabilities::detect();
-    sys["total_ram_mb"] = caps.total_ram_mb;
-    sys["cpu_cores"] = caps.cpu_cores;
-
-    // Read uptime from /proc/uptime if available
-    std::ifstream uptime_file("/proc/uptime");
-    if (uptime_file.good()) {
-        double uptime_sec = 0.0;
-        uptime_file >> uptime_sec;
-        sys["uptime_seconds"] = static_cast<int>(uptime_sec);
-    }
+    sys["platform"] = diag.identity.platform_key;
+    sys["host_arch"] = diag.identity.host_arch;
+    sys["total_ram_mb"] = diag.machine.mem_total_kb / 1024;
+    sys["cpu_cores"] = diag.machine.cpu_cores;
+    sys["uptime_seconds"] = static_cast<int>(diag.machine.uptime_seconds);
 
     return sys;
-}
-
-json DebugBundleCollector::collect_diagnostics_info() {
-    return build_diagnostics_info(diagnostics::collect());
 }
 
 json DebugBundleCollector::build_diagnostics_info(const diagnostics::Diagnostics& diag) {

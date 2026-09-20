@@ -6,12 +6,12 @@
 #include "helix_version.h"
 #include "hv/requests.h"
 #include "json_utils.h"
-#include "platform_capabilities.h"
 #include "system/crash_handler.h"
 #include "system/crash_history.h"
+#include "system/debug_bundle_collector.h"
 #include "system/diag_upload_gate.h"
+#include "system/diagnostics.h"
 #include "system/log_collector.h"
-#include "system/update_checker.h"
 
 #include <spdlog/spdlog.h>
 
@@ -329,17 +329,24 @@ CrashReporter::CrashReport CrashReporter::collect_report() {
         }
     }
 
-    // Collect additional system context
-    report.platform = UpdateChecker::get_platform_key();
+    // Collect additional system context. This runs on the normal startup path
+    // (the signal handler only wrote crash.txt), so the diagnostics snapshot —
+    // which allocates and reads /proc — is safe here and only its populated
+    // strings are read afterwards when a report is assembled.
+    const helix::diagnostics::Diagnostics diag = helix::diagnostics::collect();
+    report.platform = diag.identity.platform_key;
+    report.printer_model = diag.identity.printer_model;
+    report.mod_flavor = diag.identity.mod_flavor;
+    report.config_dir = diag.paths.config_dir;
+    report.cache_dir = diag.paths.cache_dir;
+    report.cache_tier = diag.paths.cache_tier;
+    report.ram_total_mb = static_cast<int>(diag.machine.mem_total_kb / 1024);
+    report.cpu_cores = diag.machine.cpu_cores;
 #ifdef HELIX_BINARY_VARIANT
     report.display_info = HELIX_BINARY_VARIANT;
 #else
     report.display_info = "unknown";
 #endif
-
-    auto caps = helix::PlatformCapabilities::detect();
-    report.ram_total_mb = static_cast<int>(caps.total_ram_mb);
-    report.cpu_cores = caps.cpu_cores;
 
     // Log tail — collect a generous buffer (the new reporting session writes
     // its own boot lines, which flood a small tail). We then filter to lines
@@ -367,9 +374,8 @@ CrashReporter::CrashReport CrashReporter::collect_report() {
         }
     }
 
-    // Printer/Klipper info — these may not be available at startup
-    // (no Moonraker connection yet), so left empty until connected
-    // The modal or caller can populate these later if Moonraker is available
+    // printer_model comes from the saved config (no Moonraker needed);
+    // klipper_version needs a live connection and stays empty here.
 
     spdlog::info(
         "[CrashReporter] Collected report: {} (signal {}), platform={}, RAM={}MB, cores={}",
@@ -425,6 +431,13 @@ nlohmann::json CrashReporter::report_to_json(const CrashReport& report) {
     j["display_backend"] = report.display_info;
     j["ram_mb"] = report.ram_total_mb;
     j["cpu_cores"] = report.cpu_cores;
+    j["mod_flavor"] = report.mod_flavor;
+    // Paths can embed a username, and this JSON reaches a public GitHub issue,
+    // so they pass through the same redaction the debug bundle applies to the
+    // same values; the local text report keeps them raw.
+    j["config_dir"] = helix::DebugBundleCollector::sanitize_value(report.config_dir);
+    j["cache_dir"] = helix::DebugBundleCollector::sanitize_value(report.cache_dir);
+    j["cache_tier"] = report.cache_tier;
 
     // Compile-time channel marker, same contract as the debug bundle's: the
     // endpoint rejects or flags reports from unmarked clients
@@ -648,11 +661,18 @@ std::string CrashReporter::report_to_text(const CrashReport& report) {
 
     ss << "--- System Info ---\n";
     ss << "Platform:  " << report.platform << "\n";
+    ss << "Mod:       " << report.mod_flavor << "\n";
     ss << "RAM:       " << report.ram_total_mb << " MB\n";
     ss << "CPU Cores: " << report.cpu_cores << "\n";
     ss << "Display:   " << report.display_info << "\n";
     ss << "Printer:   " << report.printer_model << "\n";
-    ss << "Klipper:   " << report.klipper_version << "\n\n";
+    ss << "Klipper:   " << report.klipper_version << "\n";
+    ss << "Config:    " << report.config_dir << "\n";
+    ss << "Cache:     " << report.cache_dir;
+    if (!report.cache_tier.empty()) {
+        ss << " (" << report.cache_tier << ")";
+    }
+    ss << "\n\n";
 
     if (!report.backtrace.empty()) {
         ss << "--- Backtrace ---\n";
@@ -716,7 +736,7 @@ std::string CrashReporter::generate_github_url(const CrashReport& report) {
     body << "## Crash Summary\n";
     body << "- **Signal:** " << report.signal << " (" << report.signal_name << ")\n";
     body << "- **Version:** " << report.app_version << "\n";
-    body << "- **Platform:** " << report.platform << "\n";
+    body << "- **Platform:** " << report.platform << " (" << report.mod_flavor << ")\n";
     body << "- **Uptime:** " << report.uptime_sec << "s\n";
     if (!report.exception_what.empty()) {
         body << "- **Exception:** " << report.exception_what << "\n";

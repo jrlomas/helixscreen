@@ -577,18 +577,34 @@ export function formatIssueBody(r: CrashReport, fingerprint: string, resolved: R
   }
 
   // System info section (all fields optional)
-  if (r.platform || r.display_backend || r.ram_mb || r.cpu_cores || r.printer_model || r.klipper_version) {
+  if (
+    r.platform ||
+    r.display_backend ||
+    r.ram_mb ||
+    r.cpu_cores ||
+    r.printer_model ||
+    r.klipper_version ||
+    r.mod_flavor ||
+    r.config_dir ||
+    r.cache_dir
+  ) {
     md += `\n## System Info
 
 | Field | Value |
 |-------|-------|
 `;
     if (r.platform) md += `| **Platform** | ${mdEscape(r.platform)} |\n`;
+    if (r.mod_flavor) md += `| **Mod flavor** | ${mdEscape(r.mod_flavor)} |\n`;
     if (r.display_backend) md += `| **Display** | ${mdEscape(r.display_backend)} |\n`;
     if (r.ram_mb) md += `| **RAM** | ${r.ram_mb} MB |\n`;
     if (r.cpu_cores) md += `| **CPU** | ${r.cpu_cores} cores |\n`;
     if (r.printer_model) md += `| **Printer** | ${mdEscape(r.printer_model)} |\n`;
     if (r.klipper_version) md += `| **Klipper** | ${mdEscape(r.klipper_version)} |\n`;
+    if (r.config_dir) md += `| **Config dir** | \`${mdEscape(r.config_dir)}\` |\n`;
+    if (r.cache_dir) {
+      const tier = r.cache_tier ? ` (${mdEscape(r.cache_tier)})` : "";
+      md += `| **Cache** | \`${mdEscape(r.cache_dir)}\`${tier} |\n`;
+    }
   }
 
   // Backtrace section — with resolved symbols when available
