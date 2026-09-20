@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "ui_coalesced_timer.h"
 #include "ui_panel_motion.h"
 
 #include "lvgl/lvgl.h"
@@ -27,6 +28,24 @@
 class IMoonrakerAPI; // NAMESPACE_OK: matches the global-namespace interface in i_moonraker_api.h
 
 namespace helix::settings {
+
+/**
+ * @brief One row per control. The value doubles as the user_data on each
+ * setting_value_field in motion_settings_overlay.xml, so the order here
+ * and the numbers there must agree. FIELD_SPECS in the .cpp is indexed by
+ * the same value.
+ */
+enum class Field : int {
+    JogSpeedXY = 0,
+    JogSpeedZ,
+    FineInner,
+    FineOuter,
+    CoarseInner,
+    CoarseOuter,
+    TurboInner,
+    TurboOuter,
+    Count
+};
 
 /**
  * @class MotionSettingsOverlay
@@ -63,24 +82,6 @@ class MotionSettingsOverlay : public OverlayBase {
      */
     void show(lv_obj_t* parent_screen);
 
-    /**
-     * @brief One row per control. The value doubles as the user_data on each
-     * setting_value_field in motion_settings_overlay.xml, so the order here
-     * and the numbers there must agree. FIELD_SPECS in the .cpp is indexed by
-     * the same value.
-     */
-    enum class Field : int {
-        JogSpeedXY = 0,
-        JogSpeedZ,
-        FineInner,
-        FineOuter,
-        CoarseInner,
-        CoarseOuter,
-        TurboInner,
-        TurboOuter,
-        Count
-    };
-
     //
     // === Event Handlers (public for static callbacks) ===
     //
@@ -109,6 +110,10 @@ class MotionSettingsOverlay : public OverlayBase {
 
     /// Persist any pending slider value (called by the debounce timer).
     void persist_pending_speed();
+
+    /// Stored mm/min clamped to what the printer currently permits, so the
+    /// field, the slider and the emitted move always agree.
+    int effective_mm_min(int stored_mm_min) const;
 
     /// One of the overlay's speed sliders, or nullptr before create().
     lv_obj_t* speed_slider(bool is_z) const;
@@ -141,7 +146,8 @@ class MotionSettingsOverlay : public OverlayBase {
     /// Debounced SettingsManager write for slider drags: a drag fires
     /// value_changed per pixel and each write persists to disk. Indexed
     /// [XY, Z]; 0 means nothing pending (the settings clamp floor is 60).
-    lv_timer_t* persist_timer_{nullptr};
+    static constexpr uint32_t PERSIST_DEBOUNCE_MS = 250;
+    helix::ui::CoalescedTimer persist_timer_{PERSIST_DEBOUNCE_MS};
     int pending_mm_min_[2]{0, 0};
 
     //
@@ -183,5 +189,37 @@ MotionSettingsOverlay& get_motion_settings_overlay();
  * both share one creation/registration path.
  */
 void show_motion_settings_overlay();
+
+/// SettingsManager's step-distance clamp range, in mm. It clamps with inline
+/// literals and exposes no accessor, so this is the one spelling the keypad
+/// rules below see; keep the two in step.
+constexpr float JOG_DISTANCE_MIN_MM = 0.01f;
+constexpr float JOG_DISTANCE_MAX_MM = 200.0f;
+
+/// Min/max for one row's numeric keypad.
+struct KeypadBounds {
+    float min;
+    float max;
+};
+
+/// Bounds for one row's keypad. Distance rows are coupled: an outer row's
+/// floor is its mode's current inner step and an inner row's ceiling is its
+/// mode's current outer, so inner can never exceed outer. Speed rows have no
+/// coupled pair — the two arguments carry the row's slider range and pass
+/// through unchanged.
+inline KeypadBounds keypad_bounds(Field field, float inner_mm, float outer_mm) {
+    switch (field) {
+    case Field::FineOuter:
+    case Field::CoarseOuter:
+    case Field::TurboOuter:
+        return {inner_mm, JOG_DISTANCE_MAX_MM};
+    case Field::FineInner:
+    case Field::CoarseInner:
+    case Field::TurboInner:
+        return {JOG_DISTANCE_MIN_MM, outer_mm};
+    default: // speed rows: passthrough of the slider range
+        return {inner_mm, outer_mm};
+    }
+}
 
 } // namespace helix::settings

@@ -201,3 +201,20 @@ TEST_CASE("clamp_jog_with_warn: a bed-moves printer clamps the gcode-space delta
     const auto r = helix::clamp_jog_with_warn(1.0, 0.0, gcode_delta, 0.0, 250.0, false);
     REQUIRE(r.allowed == Catch::Approx(-1.0));
 }
+
+TEST_CASE("effective_jog_speed_mm_min: within limits passes through", "[jog_coalescer]") {
+    CHECK(helix::effective_jog_speed_mm_min(6000, 0.0, 30000.0) == 6000);
+    CHECK(helix::effective_jog_speed_mm_min(600, 0.0, 30000.0) == 600);
+}
+
+TEST_CASE("effective_jog_speed_mm_min: stored above the ceiling clamps to the ceiling",
+          "[jog_coalescer]") {
+    // A ceiling stored before the printer's configfile reply lowered it.
+    CHECK(helix::effective_jog_speed_mm_min(42000, 0.0, 30000.0) == 30000);
+    CHECK(helix::effective_jog_speed_mm_min(50000, 0.0, 30000.0) == 30000);
+}
+
+TEST_CASE("effective_jog_speed_mm_min: stored below the floor clamps to the floor",
+          "[jog_coalescer]") {
+    CHECK(helix::effective_jog_speed_mm_min(30, 60.0, 30000.0) == 60);
+}

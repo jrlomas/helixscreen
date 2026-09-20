@@ -10,12 +10,14 @@
 
 #include "app_globals.h"
 #include "i_moonraker_api.h"
+#include "jog_coalescer.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "settings_manager.h"
 #include "static_panel_registry.h"
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -37,14 +39,6 @@ int mm_min_to_mm_s(int mm_per_min) {
 int mm_s_to_mm_min(int mm_per_sec) {
     return mm_per_sec * 60;
 }
-
-/// Settings clamp range for a step distance, in mm.
-constexpr float DIST_MIN_MM = 0.01f;
-constexpr float DIST_MAX_MM = 200.0f;
-
-/// Slider debounce: a drag fires value_changed per pixel and each
-/// SettingsManager write persists to disk, so the write waits for a pause.
-constexpr uint32_t PERSIST_DEBOUNCE_MS = 250;
 
 /// One row per control. `title` is both the keypad header and the row's
 /// translation_tag in motion_settings_overlay.xml, so it resolves with no
@@ -69,8 +63,28 @@ constexpr FieldSpec FIELD_SPECS[] = {
 };
 
 constexpr size_t FIELD_COUNT = sizeof(FIELD_SPECS) / sizeof(FIELD_SPECS[0]);
-static_assert(FIELD_COUNT == static_cast<size_t>(MotionSettingsOverlay::Field::Count),
+static_assert(FIELD_COUNT == static_cast<size_t>(Field::Count),
               "FIELD_SPECS must have one entry per Field");
+
+/// The coupled keypad bounds pair each distance row with FIELD_SPECS[i ^ 1];
+/// that only works while the distance rows start at an even index and each
+/// adjacent pair is the same mode with opposite rings. A misordered insert
+/// must fail here, not resolve silently to the row's own value.
+constexpr bool distance_pairs_alternate() {
+    for (size_t i = static_cast<size_t>(Field::FineInner); i < FIELD_COUNT; ++i) {
+        if (FIELD_SPECS[i].mode != FIELD_SPECS[i ^ 1].mode) {
+            return false;
+        }
+        if (FIELD_SPECS[i].outer == FIELD_SPECS[i ^ 1].outer) {
+            return false;
+        }
+    }
+    return true;
+}
+static_assert(static_cast<int>(Field::FineInner) % 2 == 0,
+              "distance rows must start at an even Field index");
+static_assert(distance_pairs_alternate(),
+              "distance rows must pair same-mode inner/outer at i, i^1");
 
 /// XML value_subject names, in Field order.
 constexpr const char* const SUBJECT_NAMES[FIELD_COUNT] = {
@@ -79,7 +93,7 @@ constexpr const char* const SUBJECT_NAMES[FIELD_COUNT] = {
 };
 
 bool field_in_range(int raw) {
-    return raw >= 0 && raw < static_cast<int>(MotionSettingsOverlay::Field::Count);
+    return raw >= 0 && raw < static_cast<int>(Field::Count);
 }
 
 } // namespace
@@ -114,10 +128,8 @@ MotionSettingsOverlay::MotionSettingsOverlay() {
 }
 
 MotionSettingsOverlay::~MotionSettingsOverlay() {
-    if (persist_timer_) {
-        lv_timer_delete(persist_timer_);
-        persist_timer_ = nullptr;
-    }
+    // persist_timer_ cancels itself as a member; a still-pending write dies
+    // with the overlay, which on_deactivating already flushed on the way out.
     deinit_subjects();
 }
 
@@ -224,10 +236,10 @@ void MotionSettingsOverlay::on_activate() {
 void MotionSettingsOverlay::on_deactivating(DeactivateReason) {
     spdlog::debug("[{}] on_deactivating()", get_name());
 
-    // Flush any pending debounced persist before leaving
-    if (persist_timer_) {
-        lv_timer_delete(persist_timer_);
-        persist_timer_ = nullptr;
+    // Flush a pending debounced write before leaving. Cancelling alone would
+    // drop the user's last drag: the timer cancels, it does not run.
+    if (persist_timer_.pending()) {
+        persist_timer_.cancel();
         persist_pending_speed();
     }
 }
@@ -243,7 +255,7 @@ void MotionSettingsOverlay::format_display(size_t i) {
     if (spec.is_speed) {
         const int mm_min = spec.is_z ? settings.get_jog_speed_z() : settings.get_jog_speed_xy();
         std::snprintf(display_buffers_[i], sizeof(display_buffers_[i]), "%d mm/s",
-                      mm_min_to_mm_s(mm_min));
+                      mm_min_to_mm_s(effective_mm_min(mm_min)));
     } else {
         // %g trims trailing zeros, so the defaults read 0.1, 1, 10 and 50.
         std::snprintf(display_buffers_[i], sizeof(display_buffers_[i]), "%g mm",
@@ -258,12 +270,25 @@ void MotionSettingsOverlay::refresh_displays() {
     }
 }
 
+int MotionSettingsOverlay::effective_mm_min(int stored_mm_min) const {
+    if (api_) {
+        // The same bounds is_safe_feedrate() enforces at emission, so what the
+        // field shows is what the move uses.
+        const SafetyLimits& limits = api_->get_safety_limits();
+        return helix::effective_jog_speed_mm_min(stored_mm_min, limits.min_feedrate_mm_min,
+                                                 limits.max_feedrate_mm_min);
+    }
+    // Settings clamp range for callers with no API to ask: stored values
+    // already sit inside it, so this is a passthrough in practice.
+    return helix::effective_jog_speed_mm_min(stored_mm_min, 0.0, 60000.0);
+}
+
 int MotionSettingsOverlay::max_jog_mm_s() const {
     if (api_) {
         // IMoonrakerAPI::get_safety_limits() is the same source is_safe_feedrate()
         // checks against, so the slider cannot offer a speed the move would reject.
         const SafetyLimits& limits = api_->get_safety_limits();
-        return static_cast<int>(limits.max_feedrate_mm_min / 60.0);
+        return std::max(1, static_cast<int>(limits.max_feedrate_mm_min / 60.0));
     }
     // Settings clamp ceiling, for callers with no API to ask.
     return mm_min_to_mm_s(60000);
@@ -298,7 +323,9 @@ void MotionSettingsOverlay::refresh_sliders() {
         lv_obj_t* slider = lv_obj_find_by_name(overlay_root_, row.slider);
         if (slider) {
             lv_slider_set_range(slider, 1, max_mm_s);
-            lv_slider_set_value(slider, mm_min_to_mm_s(row.mm_min), LV_ANIM_OFF);
+            // The effective value, not the stored one: LVGL clamps the slider
+            // to this range anyway, and the field must agree with it.
+            lv_slider_set_value(slider, mm_min_to_mm_s(effective_mm_min(row.mm_min)), LV_ANIM_OFF);
         }
     }
 }
@@ -312,18 +339,9 @@ void MotionSettingsOverlay::handle_jog_speed_changed(bool is_z, int mm_s) {
         is_z ? static_cast<size_t>(Field::JogSpeedZ) : static_cast<size_t>(Field::JogSpeedXY);
 
     pending_mm_min_[is_z ? 1 : 0] = mm_s_to_mm_min(mm_s);
-    if (persist_timer_) {
-        lv_timer_reset(persist_timer_);
-    } else {
-        persist_timer_ = lv_timer_create(
-            [](lv_timer_t* t) {
-                auto* self = static_cast<MotionSettingsOverlay*>(lv_timer_get_user_data(t));
-                self->persist_timer_ = nullptr;
-                self->persist_pending_speed();
-            },
-            PERSIST_DEBOUNCE_MS, this);
-        lv_timer_set_repeat_count(persist_timer_, 1);
-    }
+    // Trailing-edge debounce: a drag re-requests per pixel, and the write
+    // fires once, 250ms after the burst stops, with the latest value.
+    persist_timer_.schedule([this]() { persist_pending_speed(); });
 
     std::snprintf(display_buffers_[i], sizeof(display_buffers_[i]), "%d mm/s", mm_s);
     lv_subject_copy_string(&display_subjects_[i], display_buffers_[i]);
@@ -356,21 +374,22 @@ void MotionSettingsOverlay::handle_field_clicked(Field field) {
         }
         // Bounds come from the row's slider, whose range was derived from the
         // printer's reported feedrate limit, so the two cannot disagree.
-        config.min_value = static_cast<float>(lv_slider_get_min_value(slider));
-        config.max_value = static_cast<float>(lv_slider_get_max_value(slider));
-        config.initial_value = static_cast<float>(
-            mm_min_to_mm_s(spec.is_z ? settings.get_jog_speed_z() : settings.get_jog_speed_xy()));
+        const KeypadBounds bounds =
+            keypad_bounds(field, static_cast<float>(lv_slider_get_min_value(slider)),
+                          static_cast<float>(lv_slider_get_max_value(slider)));
+        config.min_value = bounds.min;
+        config.max_value = bounds.max;
+        config.initial_value = static_cast<float>(mm_min_to_mm_s(effective_mm_min(
+            spec.is_z ? settings.get_jog_speed_z() : settings.get_jog_speed_xy())));
         config.allow_decimal = false;
         config.unit_label = "mm/s";
     } else {
-        // Coupled bounds: the inner step's ceiling is its own outer step and
-        // the outer's floor is its own inner, so inner can never exceed outer.
-        const FieldSpec& paired = FIELD_SPECS[i ^ 1];
+        const KeypadBounds bounds =
+            keypad_bounds(field, settings.get_jog_distance(spec.mode, false),
+                          settings.get_jog_distance(spec.mode, true));
         config.initial_value = settings.get_jog_distance(spec.mode, spec.outer);
-        config.min_value =
-            spec.outer ? settings.get_jog_distance(paired.mode, paired.outer) : DIST_MIN_MM;
-        config.max_value =
-            spec.outer ? DIST_MAX_MM : settings.get_jog_distance(paired.mode, paired.outer);
+        config.min_value = bounds.min;
+        config.max_value = bounds.max;
         config.allow_decimal = true;
         config.unit_label = "mm";
     }
@@ -394,6 +413,8 @@ void MotionSettingsOverlay::handle_keypad_value(Field field, double value) {
     if (spec.is_speed) {
         lv_obj_t* slider = speed_slider(spec.is_z);
         if (!slider) {
+            spdlog::warn("[{}] No slider for field {}; dropping typed value {}", get_name(),
+                         static_cast<int>(field), value);
             return;
         }
         const int mm_s = static_cast<int>(value);

@@ -133,4 +133,12 @@ inline JogClampResult clamp_jog_with_warn(double current, double uncommitted, do
     return {0.0, !already_warned, true};
 }
 
+/// The jog feedrate actually used, given what the user stored and what the
+/// printer permits. Storage keeps the user's choice so a machine with a higher
+/// ceiling gets it back; emission can never exceed the limit. Bounds are plain
+/// doubles so this header stays dependency-free — pass a SafetyLimits' fields.
+inline int effective_jog_speed_mm_min(int stored_mm_min, double min_mm_min, double max_mm_min) {
+    return static_cast<int>(std::clamp(static_cast<double>(stored_mm_min), min_mm_min, max_mm_min));
+}
+
 } // namespace helix

@@ -17,6 +17,7 @@
 #include "config.h"
 #include "format_utils.h"
 #include "i_moonraker_api.h"
+#include "jog_coalescer.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
 #include "printer_state.h"
@@ -774,8 +775,13 @@ void MotionPanel::send_jog_move(const helix::AxisMove& move) {
         return;
     }
     auto& settings = SettingsManager::instance();
-    const double xy_feedrate = settings.get_jog_speed_xy();
-    const double z_feedrate = settings.get_jog_speed_z();
+    // Storage keeps the user's choice; emission is clamped to what the printer
+    // currently permits, or move_relative would reject the jog outright.
+    const SafetyLimits& limits = api->get_safety_limits();
+    const double xy_feedrate = static_cast<double>(helix::effective_jog_speed_mm_min(
+        settings.get_jog_speed_xy(), limits.min_feedrate_mm_min, limits.max_feedrate_mm_min));
+    const double z_feedrate = static_cast<double>(helix::effective_jog_speed_mm_min(
+        settings.get_jog_speed_z(), limits.min_feedrate_mm_min, limits.max_feedrate_mm_min));
 
     api->motion().move_relative(
         move.dx, move.dy, move.dz, xy_feedrate, z_feedrate,
