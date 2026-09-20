@@ -118,6 +118,12 @@
     <prop name="action_button_2_callback" type="string" default=""/>
     <prop name="hide_action_button_2" type="string" default="true"/>
     <prop name="action_button_2_hidden_subject" type="string" default=""/>
+    <!-- Expression form of the above, for a button hidden by a threshold or
+         compound condition on global subjects (e.g. "ui_breakpoint lt 2").
+         Empty default leaves the flag alone; unlike disabled_cond's "0" a
+         constant here would fire once at bind and un-hide the slot for every
+         consumer that never asked for the button. -->
+    <prop name="action_button_2_hidden_cond" type="string" default=""/>
     <prop name="action_button_2_disabled_subject" type="string" default=""/>
     <!-- Dedicated E-Stop spacer (rightmost). When estop_visible_subject
          resolves to 1, the spacer takes layout width, shifting the title and
@@ -166,6 +172,10 @@
                hidden="$hide_action_button_2" icon="$action_button_2_icon" icon_size="$action_button_2_icon_size"
                text="$action_button_2_text" translation_tag="$action_button_2_text_tag">
       <bind_state_if_eq subject="$action_button_2_disabled_subject" state="disabled" ref_value="1"/>
+      <!-- Cond form precedes the subject form, letting the subject form win
+           when both are supplied - same ordering contract as slot 1's
+           disabled bindings. -->
+      <bind_flag_if cond="$action_button_2_hidden_cond" flag="hidden"/>
       <bind_flag_if_eq subject="$action_button_2_hidden_subject" flag="hidden" ref_value="1"/>
       <event_cb trigger="clicked" callback="$action_button_2_callback"/>
     </ui_button>

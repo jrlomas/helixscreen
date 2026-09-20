@@ -104,7 +104,7 @@ bool field_in_range(int raw) {
 
 static std::unique_ptr<MotionSettingsOverlay> g_motion_settings_overlay;
 
-MotionSettingsOverlay& get_motion_settings_overlay() {
+static MotionSettingsOverlay& get_motion_settings_overlay() {
     if (!g_motion_settings_overlay) {
         g_motion_settings_overlay = std::make_unique<MotionSettingsOverlay>();
         StaticPanelRegistry::instance().register_destroy(

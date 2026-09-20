@@ -76,12 +76,6 @@ class MotionSettingsOverlay : public OverlayBase {
     void on_activate() override;
     void on_deactivating(DeactivateReason reason) override;
 
-    /**
-     * @brief Show the overlay (lazy create + push)
-     * @param parent_screen Screen to create the overlay on
-     */
-    void show(lv_obj_t* parent_screen);
-
     //
     // === Event Handlers (public for static callbacks) ===
     //
@@ -99,6 +93,17 @@ class MotionSettingsOverlay : public OverlayBase {
     void handle_reset_distances();
 
   private:
+    // show() and the instance accessor are reachable only from
+    // ui_settings_motion.cpp: opening the overlay any other way skips
+    // set_api(), and the speed sliders silently lose their ceiling.
+    friend void show_motion_settings_overlay();
+
+    /**
+     * @brief Show the overlay (lazy create + push)
+     * @param parent_screen Screen to create the overlay on
+     */
+    void show(lv_obj_t* parent_screen);
+
     /// Format one row's display buffer from SettingsManager.
     void format_display(size_t i);
 
@@ -178,9 +183,6 @@ class MotionSettingsOverlay : public OverlayBase {
     /// ui_keypad_callback_t; user_data carries the overlay.
     static void on_keypad_value(float value, void* user_data);
 };
-
-/// Global instance accessor; creates on first use and registers cleanup.
-MotionSettingsOverlay& get_motion_settings_overlay();
 
 /**
  * @brief The single opener for the Motion settings overlay

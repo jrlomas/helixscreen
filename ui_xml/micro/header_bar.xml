@@ -76,6 +76,9 @@
     <prop name="action_button_2_callback" type="string" default=""/>
     <prop name="hide_action_button_2" type="string" default="true"/>
     <prop name="action_button_2_hidden_subject" type="string" default=""/>
+    <!-- Expression form of the above; mirrors the base header_bar, including
+         the empty default (see its comment for why not a constant). -->
+    <prop name="action_button_2_hidden_cond" type="string" default=""/>
     <prop name="action_button_2_disabled_subject" type="string" default=""/>
     <!-- Dedicated E-Stop spacer (rightmost). Mirrors the base header_bar; see
          its comment. The floating circle lives at the panel root, not here. -->
@@ -121,6 +124,7 @@
                icon_size="$action_button_2_icon_size" text="$action_button_2_text"
                translation_tag="$action_button_2_text_tag">
       <bind_state_if_eq subject="$action_button_2_disabled_subject" state="disabled" ref_value="1"/>
+      <bind_flag_if cond="$action_button_2_hidden_cond" flag="hidden"/>
       <bind_flag_if_eq subject="$action_button_2_hidden_subject" flag="hidden" ref_value="1"/>
       <event_cb trigger="clicked" callback="$action_button_2_callback"/>
     </ui_button>
