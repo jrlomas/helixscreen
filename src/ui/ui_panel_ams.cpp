@@ -323,7 +323,8 @@ void AmsPanel::init_subjects() {
     // Slot count observer for dynamic slot creation (non-scoped mode only).
     // Deferred via object_lifetime_ to avoid deleting children during LVGL layout refresh (#563).
     slot_count_observer_ = observe_int_sync<AmsPanel>(
-        AmsState::instance().get_slot_count_subject(), this, [](AmsPanel* self, int new_count) {
+        AmsState::instance().get_slot_count_subject(), this,
+        [](AmsPanel* self, int new_count) {
             if (!self->panel_)
                 return;
             if (!self->slot_creation_pending_) {
@@ -334,7 +335,8 @@ void AmsPanel::init_subjects() {
                     self->create_slots(new_count);
                 });
             }
-        });
+        },
+        AmsState::instance().get_subjects_lifetime());
 
     // Path state observers for filament path visualization.
     // Deferred via object_lifetime_ to avoid modifying widgets during LVGL layout refresh (#563).
@@ -359,7 +361,8 @@ void AmsPanel::init_subjects() {
 
     // Backend count observer for multi-backend selector
     backend_count_observer_ = observe_int_sync<AmsPanel>(
-        AmsState::instance().get_backend_count_subject(), this, [](AmsPanel* self, int /*count*/) {
+        AmsState::instance().get_backend_count_subject(), this,
+        [](AmsPanel* self, int /*count*/) {
             if (!self->backend_rebuild_pending_) {
                 self->backend_rebuild_pending_ = true;
                 self->object_lifetime_.defer("AmsPanel::rebuild_backend_selector", [self]() {
@@ -367,7 +370,8 @@ void AmsPanel::init_subjects() {
                     self->rebuild_backend_selector();
                 });
             }
-        });
+        },
+        AmsState::instance().get_subjects_lifetime());
 
     // Observe external spool color changes to reactively update bypass in path canvas.
     // NOTE: set_external_spool_info() calls lv_subject_set_int() directly (not via
@@ -401,7 +405,8 @@ void AmsPanel::init_subjects() {
     // after the panel is built.
     supports_bypass_observer_ = observe_int_sync<AmsPanel>(
         AmsState::instance().get_supports_bypass_subject(), this,
-        [](AmsPanel* self, int /*supported*/) { self->update_bypass_spool_from_state(); });
+        [](AmsPanel* self, int /*supported*/) { self->update_bypass_spool_from_state(); },
+        AmsState::instance().get_subjects_lifetime());
 
     // The ring marks the node the printer is actually feeding from. Engaging
     // bypass touches no slot, so nothing else on this panel refreshes for it.
@@ -773,13 +778,13 @@ void AmsPanel::setup_slot_path_observers(int slot_count) {
         int global_idx = i + slot_offset;
         // Segment subject — how far filament extends along this lane's path.
         if (auto* seg_subj = state.get_slot_segment_subject(global_idx)) {
-            slot_path_observers_.push_back(
-                helix::ui::observe_int_sync<AmsPanel>(seg_subj, this, on_slot_path_change));
+            slot_path_observers_.push_back(helix::ui::observe_int_sync<AmsPanel>(
+                seg_subj, this, on_slot_path_change, state.get_subjects_lifetime()));
         }
         // Toolhead-present subject — live per-slot motion/switch sensor.
         if (auto* th_subj = state.get_slot_toolhead_present_subject(global_idx)) {
-            slot_path_observers_.push_back(
-                helix::ui::observe_int_sync<AmsPanel>(th_subj, this, on_slot_path_change));
+            slot_path_observers_.push_back(helix::ui::observe_int_sync<AmsPanel>(
+                th_subj, this, on_slot_path_change, state.get_subjects_lifetime()));
         }
     }
     spdlog::debug("[AmsPanel] Wired {} per-slot path observers (offset={})",

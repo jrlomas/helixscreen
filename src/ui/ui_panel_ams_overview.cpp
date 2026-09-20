@@ -157,12 +157,14 @@ void AmsOverviewPanel::init_subjects() {
                             self->refresh_units();
                     });
                 }
-            });
+            },
+            AmsState::instance().get_subjects_lifetime());
 
         // Observe current_slot to reactively update lane highlights when the active
         // slot changes (e.g., slot selected without load/unload).
         current_slot_observer_ = observe_int_sync<AmsOverviewPanel>(
-            AmsState::instance().get_current_slot_subject(), this, [](AmsOverviewPanel* self, int) {
+            AmsState::instance().get_current_slot_subject(), this,
+            [](AmsOverviewPanel* self, int) {
                 if (!self->panel_)
                     return;
                 if (self->detail_unit_index_ >= 0) {
@@ -177,7 +179,8 @@ void AmsOverviewPanel::init_subjects() {
                             self->refresh_units();
                     });
                 }
-            });
+            },
+            AmsState::instance().get_subjects_lifetime());
 
         // Observe external spool color changes to reactively update bypass display.
         // NOTE: set_external_spool_info() calls lv_subject_set_int() directly (not via
