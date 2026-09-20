@@ -3,7 +3,8 @@
 # Module: service
 # Service installation and management (systemd and SysV)
 #
-# Reads: INIT_SYSTEM, INSTALL_DIR, INIT_SCRIPT_DEST, SERVICE_NAME, SUDO
+# Reads: INIT_SYSTEM, INSTALL_DIR, INIT_SCRIPT_DEST, SERVICE_NAME, SUDO,
+#        HELIX_MOD_TREE_CANDIDATES, HELIX_HOST_INITD_DIR (stale-init sweep)
 
 # Source guard
 [ -n "${_HELIX_SERVICE_SOURCED:-}" ] && return 0
@@ -56,6 +57,42 @@ _has_no_new_privs() {
 _set_init_script_daemon_dir() {
     _daemon_dir="${HELIX_CHROOT_DAEMON_DIR:-$INSTALL_DIR}"
     _sed_inplace "s|DAEMON_DIR=.*|DAEMON_DIR=\"${_daemon_dir}\"|" "$INIT_SCRIPT_DEST"
+}
+
+# Remove a HOST-side init script this install superseded. The payload's own
+# init lives inside the mod's chroot; an install from the in-mod-tree root
+# era wrote one on the host, and it still fires at boot. The discriminator is
+# the root a script NAMES - its DAEMON_DIR line - never its filename: a
+# script naming the current INSTALL_DIR is a boot path this run depends on
+# (an adopted legacy root's, for one), and a script naming any other root is
+# not ours to interpret. No DAEMON_DIR line, no verdict - the script stays.
+# $@: every spelling of the superseded root's mod tree. The tree is reachable
+# by more than one host path, and the init names whichever spelling its
+# install resolved; HELIX_MOD_TREE_CANDIDATES covers the rest.
+# HELIX_HOST_INITD_DIR is the test seam; nothing on a device ever sets it.
+remove_superseded_host_init() {
+    local _rshi_dir="${HELIX_HOST_INITD_DIR:-/etc/init.d}"
+    local _rshi_roots="" _rshi_cand _rshi_init _rshi_named
+    # shellcheck disable=SC2086  # word splitting is the point: a candidate path list
+    for _rshi_cand in "$@" ${HELIX_MOD_TREE_CANDIDATES:-/usr/data/config/mod /opt/config/mod}; do
+        [ -n "$_rshi_cand" ] || continue
+        _rshi_roots="${_rshi_roots}${_rshi_cand}/.bin/helixscreen "
+    done
+    [ -n "$_rshi_roots" ] || return 0
+
+    for _rshi_init in "$_rshi_dir"/*helixscreen*; do
+        [ -f "$_rshi_init" ] || continue
+        _rshi_named="$(sed -n 's|^DAEMON_DIR="\([^"]*\)".*|\1|p' "$_rshi_init" 2>/dev/null)"
+        [ -n "$_rshi_named" ] || continue
+        [ "$_rshi_named" != "$INSTALL_DIR" ] || continue
+        case " $_rshi_roots" in
+            *" $_rshi_named "*) ;;
+            *) continue ;;
+        esac
+        rm -f "$_rshi_init" 2>/dev/null || $SUDO rm -f "$_rshi_init" 2>/dev/null || true
+        log_success "Removed the stale init script at ${_rshi_init} (it named ${_rshi_named})"
+    done
+    return 0
 }
 
 _migrate_init_script_hooks_path() {
