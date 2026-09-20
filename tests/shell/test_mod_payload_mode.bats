@@ -265,11 +265,11 @@ create_payload_tarball() {
     refute_grep 'update_manager helixscreen' "$HOST_MOONRAKER_USER_CONF"
 }
 
-@test "payload install: --auto-update writes the stanza into user.moonraker.conf only" {
-    # Positive control for the A4 refusal: the stanza lands when the payload
-    # root is OUTSIDE the mod's tree (the durable shape --payload-root
-    # provides). At a mod-owned root the option is refused instead - see the
-    # "--auto-update is refused" test below.
+@test "payload install: --auto-update is refused even at a root outside the mod tree" {
+    # Where the root sits does not make the stanza safe. Moonraker's type:web
+    # updater rmtree()s path: and the stanza carries no persistent_files, so it
+    # destroys config/ - which lives inside the root - whether or not the mod
+    # owns that path. A payload is updated by the mod's OTA and by nothing else.
     local durable="$SANDBOX/usr/data/helixscreen"
     mkdir -p "$SANDBOX/usr/data/config/mod_data" "$durable/bin"
     create_fake_mips_elf "$durable/bin/helix-screen"
@@ -281,11 +281,13 @@ create_payload_tarball() {
     HELIX_MOD_PAYLOAD_UPDATES=1
     INSTALL_DIR="$durable"
 
-    configure_moonraker_updates "ad5x"
+    run configure_moonraker_updates "ad5x"
+    [ "$status" -eq 0 ] || fail "the refusal aborted the install: $output"
 
-    grep -q '^\[update_manager helixscreen\]' "$HOST_MOONRAKER_USER_CONF" \
-        || fail "the opted-in stanza did not land in the mod's user conf"
-    cmp -s "$BATS_TEST_TMPDIR/mod-conf.original" "$MOD_ROOT/moonraker.conf"
+    ! grep -q 'update_manager helixscreen' "$HOST_MOONRAKER_USER_CONF" \
+        || fail "the stanza was armed at a payload root"
+    cmp -s "$BATS_TEST_TMPDIR/mod-conf.original" "$MOD_ROOT/moonraker.conf" \
+        || fail "the mod's own moonraker.conf was modified"
 }
 
 # ============================================================================
@@ -1387,9 +1389,10 @@ seed_legacy_install() {
 # pointed at; a payload root OUTSIDE the mod tree (OD1's durable shape) still
 # gets the stanza (the positive control is the reworked test above).
 
-@test "--auto-update is refused while the payload root is inside the mod's tree" {
-    # The refusal covers an operator-chosen in-tree root; the probed default
-    # (outside the tree, like every blessed --payload-root) keeps the stanza.
+@test "--auto-update is refused at an in-tree payload root too" {
+    # The companion to the outside-the-tree case above: the refusal is keyed on
+    # the install being a payload, so an operator-chosen in-tree root is refused
+    # for the same reason and not a location-specific one.
     INSTALL_DIR="$MOD_ROOT/.bin/helixscreen"
     mkdir -p "$INSTALL_DIR/bin" "$SANDBOX/usr/data/config/mod_data"
     printf '[authorization]\n' > "$HOST_MOONRAKER_USER_CONF"
@@ -1406,8 +1409,8 @@ seed_legacy_install() {
         *) fail "the refusal does not name the payload root";;
     esac
     case "$output" in
-        *--payload-root*) ;;
-        *) fail "the refusal does not point at the durable-root escape";;
+        *"payload install"*) ;;
+        *) fail "the refusal does not state that a payload install is the reason";;
     esac
 }
 
