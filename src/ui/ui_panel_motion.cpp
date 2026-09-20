@@ -20,6 +20,7 @@
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
 #include "printer_state.h"
+#include "settings_manager.h"
 #include "subject_managed_panel.h"
 #include "theme_manager.h"
 #include "toolhead_homing.h"
@@ -28,12 +29,33 @@
 #include <spdlog/spdlog.h>
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 
 #include "hv/json.hpp"
 
 using namespace helix;
+
+/// Trim trailing zeros so 0.1 reads "0.1" and 10.0 reads "10", matching the
+/// labels the shipped table used.
+static void format_distance_label(char* buf, size_t n, float mm) {
+    if (mm == std::floor(mm)) {
+        std::snprintf(buf, n, "%.0f", static_cast<double>(mm));
+    } else {
+        std::snprintf(buf, n, "%g", static_cast<double>(mm));
+    }
+}
+
+helix::JogModeDistances helix::get_jog_mode_distances(JogMode mode) {
+    auto& settings = SettingsManager::instance();
+    JogModeDistances d{};
+    d.inner = settings.get_jog_distance(mode, /*outer=*/false);
+    d.outer = settings.get_jog_distance(mode, /*outer=*/true);
+    format_distance_label(d.inner_label, sizeof(d.inner_label), d.inner);
+    format_distance_label(d.outer_label, sizeof(d.outer_label), d.outer);
+    return d;
+}
 
 // Strip Klipper error prefixes, parse JSON error objects, and truncate for toast display.
 // Some Klipper builds (e.g. K1C) send errors as JSON:
@@ -751,12 +773,12 @@ void MotionPanel::send_jog_move(const helix::AxisMove& move) {
         jog_coalescer_.on_error();
         return;
     }
-    // XY: 6000 mm/min (100 mm/s); Z: 600 mm/min (10 mm/s) — same as before.
-    constexpr double JOG_FEEDRATE = 6000.0;
-    constexpr double Z_FEEDRATE = 600.0;
+    auto& settings = SettingsManager::instance();
+    const double xy_feedrate = settings.get_jog_speed_xy();
+    const double z_feedrate = settings.get_jog_speed_z();
 
     api->motion().move_relative(
-        move.dx, move.dy, move.dz, JOG_FEEDRATE, Z_FEEDRATE,
+        move.dx, move.dy, move.dz, xy_feedrate, z_feedrate,
         lifetime_.bg_cb("MotionPanel::on_jog_ack",
                         [this]() {
                             if (auto flush = jog_coalescer_.on_ack()) {
