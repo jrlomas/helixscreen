@@ -227,6 +227,44 @@ void PrinterPrintState::publish_progress_display(int percent) {
     }
 }
 
+void PrinterPrintState::commit_progress(int percent) {
+    if (percent > 100) {
+        percent = 100;
+    }
+    if (percent < 0) {
+        percent = 0;
+    }
+
+    // print_stats is parsed before this runs, and publish_lifecycle_state() with
+    // it, so the lifecycle already describes THIS payload rather than the
+    // previous tick's.
+    const PrintState lifecycle = get_print_lifecycle();
+
+    // A paused print is not advancing, so no payload arriving during the pause
+    // carries a new position. Klipper expires the M73 value behind
+    // display_status.progress and substitutes virtual_sdcard's byte position into
+    // the same field, and a pause is precisely when M73 stops being refreshed. On
+    // a multi-material print that byte position runs far ahead of the slicer's
+    // time estimate - the wipe tower is dense and quick - so accepting it here
+    // walks the bar to a number the print has not reached, then walks it back on
+    // resume.
+    if (lifecycle == PrintState::Paused) {
+        return;
+    }
+
+    // A finished print never counts down: a late sample a fraction short of where
+    // it stopped must not drag the number backwards.
+    const bool is_terminal_state =
+        (lifecycle == PrintState::Complete || lifecycle == PrintState::Cancelled ||
+         lifecycle == PrintState::Error);
+
+    const int current_progress = lv_subject_get_int(&print_progress_);
+    if ((!is_terminal_state || percent >= current_progress) && current_progress != percent) {
+        lv_subject_set_int(&print_progress_, percent);
+    }
+    publish_progress_display(percent);
+}
+
 void PrinterPrintState::freeze_progress_display(bool complete) {
     if (complete) {
         // A finished print is 100% even when the last virtual_sdcard sample
@@ -296,9 +334,8 @@ void PrinterPrintState::reset_for_new_print() {
     // For different files, the metadata callback updates both values.
     lv_subject_set_int(&print_time_left_, estimated_print_time_);
     // DON'T clear estimated_print_time_ - it belongs to the file, not the session
-    // Reset EMA so it seeds from the first real measurement
-    smoothed_remaining_ = 0.0;
-    has_smoothed_remaining_ = false;
+    // Reset the estimator so it seeds from the first real measurement
+    eta_estimator_.reset();
     spdlog::trace("[PrinterPrintState] Reset print progress for new print (slicer_est={}s)",
                   estimated_print_time_);
 }
@@ -646,59 +683,16 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
             int print_time = lv_subject_get_int(&print_duration_);
             int progress = lv_subject_get_int(&print_progress_);
 
-            // During pre-print phase: combine prep remaining with slicer print estimate
-            int preprint_remaining = lv_subject_get_int(&preprint_remaining_);
-            if (progress == 0 && preprint_remaining > 0 && estimated_print_time_ > 0) {
-                int total_remaining = preprint_remaining + estimated_print_time_;
-                if (lv_subject_get_int(&print_time_left_) != total_remaining) {
-                    lv_subject_set_int(&print_time_left_, total_remaining);
-                }
-            } else if (progress >= 1 && progress < 5 && estimated_print_time_ > 0) {
-                // Early print: use slicer estimate directly (extrapolation too noisy)
-                int remaining = estimated_print_time_ * (100 - progress) / 100;
-                if (lv_subject_get_int(&print_time_left_) != remaining) {
-                    lv_subject_set_int(&print_time_left_, remaining);
-                }
-            } else if (progress >= 1 && progress < 100 && print_time > 0) {
-                double raw_remaining =
-                    static_cast<double>(print_time) * (100 - progress) / progress;
+            PrintEtaInputs eta_in;
+            eta_in.progress_pct = progress;
+            eta_in.print_duration_s = print_time;
+            eta_in.slicer_estimate_s = estimated_print_time_;
+            eta_in.preprint_remaining_s = lv_subject_get_int(&preprint_remaining_);
 
-                // At low progress (<15%), blend with slicer estimate to dampen the
-                // noisy extrapolation from small samples
-                if (progress < 15 && estimated_print_time_ > 0) {
-                    double slicer_weight = (15.0 - progress) / 15.0;
-                    double slicer_remaining = estimated_print_time_ * (100.0 - progress) / 100.0;
-                    raw_remaining =
-                        slicer_weight * slicer_remaining + (1.0 - slicer_weight) * raw_remaining;
-                }
-
-                // Exponential smoothing: alpha increases with progress so the estimate
-                // is very stable early on and converges faster as data improves.
-                // At 1%: alpha=0.06 (very slow), at 15%: alpha=0.20, at 25%+: alpha=0.30
-                double alpha = std::min(0.3, 0.05 + progress * 0.01);
-                if (!has_smoothed_remaining_) {
-                    smoothed_remaining_ = raw_remaining;
-                    has_smoothed_remaining_ = true;
-                } else {
-                    smoothed_remaining_ =
-                        alpha * raw_remaining + (1.0 - alpha) * smoothed_remaining_;
-                }
-
-                int remaining = static_cast<int>(smoothed_remaining_);
-                if (lv_subject_get_int(&print_time_left_) != remaining) {
-                    lv_subject_set_int(&print_time_left_, remaining);
-                }
-            } else if (progress >= 1 && progress < 100 && print_time == 0 &&
-                       estimated_print_time_ > 0) {
-                // Fallback: use slicer estimate when print_duration hasn't started yet
-                int remaining = estimated_print_time_ * (100 - progress) / 100;
-                if (lv_subject_get_int(&print_time_left_) != remaining) {
-                    lv_subject_set_int(&print_time_left_, remaining);
-                }
-            } else if (progress >= 100) {
-                if (lv_subject_get_int(&print_time_left_) != 0) {
-                    lv_subject_set_int(&print_time_left_, 0);
-                }
+            const int remaining = eta_estimator_.remaining_seconds(eta_in);
+            if (remaining != PrintEtaEstimator::NO_ESTIMATE &&
+                lv_subject_get_int(&print_time_left_) != remaining) {
+                lv_subject_set_int(&print_time_left_, remaining);
             }
         }
     }
@@ -706,7 +700,15 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
     // Parse display_status (M73 progress + M117 message)
     if (status.contains("display_status")) {
         const auto& display = status["display_status"];
-        if (display.contains("progress") && display["progress"].is_number()) {
+        // Not while paused. Klipper expires the M73 value behind this field and
+        // substitutes virtual_sdcard's byte position, and a pause is exactly when
+        // M73 stops being refreshed. commit_progress() declines to publish during
+        // the pause, but recording the substituted value here would outlive it: a
+        // later display_status carrying only an M117 message leaves this member
+        // untouched and still reaches the publish below, handing it the byte
+        // position as though it were the slicer's estimate.
+        if (display.contains("progress") && display["progress"].is_number() &&
+            get_print_lifecycle() != PrintState::Paused) {
             double raw = display["progress"].get<double>();
             slicer_progress_ = raw;
             if (raw > 0.0 && !slicer_progress_active_) {
@@ -734,22 +736,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
     // update print_progress_ directly from slicer value
     if (slicer_progress_active_ && status.contains("display_status") &&
         !status.contains("virtual_sdcard")) {
-        int progress_pct = static_cast<int>(slicer_progress_ * 100.0 + 0.5);
-        if (progress_pct > 100)
-            progress_pct = 100;
-        if (progress_pct < 0)
-            progress_pct = 0;
-
-        auto current_state = static_cast<PrintJobState>(lv_subject_get_int(&print_state_enum_));
-        bool is_terminal_state =
-            (current_state == PrintJobState::COMPLETE ||
-             current_state == PrintJobState::CANCELLED || current_state == PrintJobState::ERROR);
-        int current_progress = lv_subject_get_int(&print_progress_);
-        if ((!is_terminal_state || progress_pct >= current_progress) &&
-            current_progress != progress_pct) {
-            lv_subject_set_int(&print_progress_, progress_pct);
-        }
-        publish_progress_display(progress_pct);
+        commit_progress(static_cast<int>(slicer_progress_ * 100.0 + 0.5));
     }
 
     // Per-extruder filament_used (from Klipper's extruder/extruder1/... objects).
@@ -842,25 +829,8 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
                 if (slicer_progress_active_) {
                     // Slicer active and display_status present — use slicer value
                     progress_pct = static_cast<int>(slicer_progress_ * 100.0 + 0.5);
-                    if (progress_pct > 100)
-                        progress_pct = 100;
-                    if (progress_pct < 0)
-                        progress_pct = 0;
                 }
-
-                // Guard: Don't reset progress to 0 in terminal print states
-                auto current_state =
-                    static_cast<PrintJobState>(lv_subject_get_int(&print_state_enum_));
-                bool is_terminal_state = (current_state == PrintJobState::COMPLETE ||
-                                          current_state == PrintJobState::CANCELLED ||
-                                          current_state == PrintJobState::ERROR);
-
-                int current_progress = lv_subject_get_int(&print_progress_);
-                if ((!is_terminal_state || progress_pct >= current_progress) &&
-                    current_progress != progress_pct) {
-                    lv_subject_set_int(&print_progress_, progress_pct);
-                }
-                publish_progress_display(progress_pct);
+                commit_progress(progress_pct);
             }
 
             // virtual_sdcard.layer / layer_count are the FALLBACK source —

@@ -5,6 +5,7 @@
 
 #include "async_lifetime_guard.h"
 #include "gcode_pause_scan.h"
+#include "print_eta_estimator.h"
 #include "print_job_ref.h"
 #include "print_lifecycle_state.h"
 #include "subject_managed_panel.h"
@@ -862,6 +863,12 @@ class PrinterPrintState {
     /// No-ops while progress_frozen_ is set.
     void publish_progress_display(int percent);
 
+    /// Take a candidate percentage from a status payload and decide whether it
+    /// becomes the print's progress. The sole writer of print_progress_, so the
+    /// clamp, the terminal-state ratchet and the paused hold are stated once and
+    /// every source is judged by the same rules.
+    void commit_progress(int percent);
+
     /// Hold the current display progress until the next print starts. Called on
     /// the transition into COMPLETE/CANCELLED/ERROR; completion pins 100 first.
     void freeze_progress_display(bool complete);
@@ -1006,10 +1013,8 @@ class PrinterPrintState {
     // Slicer estimated total print time (not a subject - no XML binding needed)
     int estimated_print_time_ = 0;
 
-    // Exponential moving average for time remaining estimate.
-    // Smooths out wild jumps at low progress where the extrapolation is noisy.
-    double smoothed_remaining_ = 0.0;
-    bool has_smoothed_remaining_ = false;
+    // The remaining-time ladder, including its smoothing state.
+    PrintEtaEstimator eta_estimator_;
 
     // Layer tracking: true when real layer data received from print_stats.info or gcode fallback.
     // When false, current_layer is estimated from progress * total_layers.
