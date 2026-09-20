@@ -79,6 +79,18 @@ detection declines it and leaves the printer here (prestonbrown/helixscreen#1426
 U1 + ACE Pro mod, DnG-Crafts/U1-Ace, registers `ace_device`, matches no ACE pattern at all,
 and reaches this backend without the exception being involved.
 
+`AmsType::AFC` has the same exception for one stub. PAXX ships **AFC-Lite**, a status-only
+layer that impersonates [AFC](FILAMENT_BACKEND_AFC.md) so Fluidd and Mainsail will draw their
+AFC panel for the U1's four extruders; its own docs call it "a status reporting stub" that
+"does not implement actual AFC hardware control", and every macro it defines wraps the U1's
+native `AUTO_FEEDING` / `SET_PRINT_FILAMENT_CONFIG`. Its unit reports empty `extruders` and
+`hubs`, so AFC infers the unit as `HUB` and the path draws one nozzle behind a hub for a
+four-toolhead machine. An `AFC_unit` object beside `filament_detect` is therefore declined and
+the printer stays here. The discriminator is exact: real AFC's AFC_unit.py is a base class
+with no `load_config_prefix`, so every real unit registers its own hardware type
+(`AFC_BoxTurtle`, `AFC_OpenAMS`, `AFC_HTLF`, …) and a Box Turtle genuinely wired to a U1 keeps
+its AFC backend.
+
 ### Status the Backend Reads
 
 The subscription is the standing whole-frame `notify_status_update` hook every
