@@ -775,6 +775,22 @@ bool AmsBackendMock::supports_batch_filament_ops() const {
     return snapmaker_mode_;
 }
 
+bool AmsBackendMock::has_physical_tray() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    // The U1's feeders sit behind the machine, not in a pull-out tray.
+    return !snapmaker_mode_;
+}
+
+bool AmsBackendMock::recovers_filament_on_resume() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return snapmaker_mode_;
+}
+
+bool AmsBackendMock::should_suppress_idle_runout_modal() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return snapmaker_mode_;
+}
+
 AmsError AmsBackendMock::load_filament_batch(const std::vector<int>& slots) {
     return run_filament_batch(slots, /*load=*/true);
 }

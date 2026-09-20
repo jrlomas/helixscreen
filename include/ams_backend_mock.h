@@ -150,6 +150,14 @@ class AmsBackendMock : public AmsBackend {
     AmsError load_filament_batch(const std::vector<int>& slots) override;
     AmsError unload_filament_batch(const std::vector<int>& slots) override;
 
+    // Capability answers the U1 gives and the base class does not. Each one
+    // inverts a base default, so a mock that stayed silent rehearsed the
+    // opposite branch of every path that asks. Pinned against the real backend
+    // by tests/unit/test_ams_mock_snapmaker_parity.cpp.
+    [[nodiscard]] bool has_physical_tray() const override;
+    [[nodiscard]] bool recovers_filament_on_resume() const override;
+    [[nodiscard]] bool should_suppress_idle_runout_modal() const override;
+
     // Recovery
     AmsError recover() override;
     AmsError reset() override;
@@ -571,6 +579,8 @@ class AmsBackendMock : public AmsBackend {
             return helix::ui::LaneNoun::Gate;
         case AmsType::TOOL_CHANGER:
             return helix::ui::LaneNoun::Tool;
+        case AmsType::SNAPMAKER:
+            return helix::ui::LaneNoun::Feeder;
         default:
             return helix::ui::LaneNoun::Slot;
         }
