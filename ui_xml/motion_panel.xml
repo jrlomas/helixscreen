@@ -48,7 +48,8 @@
                 hide_action_button_2="false" action_button_2_icon="cog" action_button_2_icon_size="sm"
                 action_button_2_bg_color="#elevated_bg" action_button_2_radius="9999"
                 action_button_2_width="#button_height_sm" action_button_2_min_width="0"
-                action_button_2_hidden_cond="ui_breakpoint lt 2" action_button_2_callback="on_motion_settings_clicked"/>
+                action_button_2_hidden_cond="ui_breakpoint lt 2"
+                action_button_2_callback="on_motion_header_settings_clicked"/>
     <!-- Content Area: tight padding to header, two columns fill height -->
     <lv_obj name="overlay_content"
             width="100%" flex_grow="1" style_pad_all="#space_sm" style_pad_hor="#space_lg" scrollable="false"

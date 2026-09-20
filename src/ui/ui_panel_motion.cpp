@@ -105,7 +105,7 @@ static void on_motion_z_tilt(lv_event_t* e);
 static void on_jog_mode_fine(lv_event_t* e);
 static void on_jog_mode_coarse(lv_event_t* e);
 static void on_jog_mode_turbo(lv_event_t* e);
-static void on_motion_settings_clicked(lv_event_t* e);
+static void on_motion_header_settings_clicked(lv_event_t* e);
 
 // ============================================================================
 // Global Instance (via DEFINE_GLOBAL_PANEL macro)
@@ -285,7 +285,8 @@ void MotionPanel::register_callbacks() {
     lv_xml_register_event_cb(nullptr, "on_jog_mode_turbo", on_jog_mode_turbo);
 
     // Header cog: opens the Motion settings overlay through its single opener
-    lv_xml_register_event_cb(nullptr, "on_motion_settings_clicked", on_motion_settings_clicked);
+    lv_xml_register_event_cb(nullptr, "on_motion_header_settings_clicked",
+                             on_motion_header_settings_clicked);
 
     callbacks_registered_ = true;
     spdlog::debug("[{}] Event callbacks registered", get_name());
@@ -878,8 +879,8 @@ static void on_jog_mode_turbo(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_END();
 }
 
-static void on_motion_settings_clicked(lv_event_t* e) {
-    LVGL_SAFE_EVENT_CB_BEGIN("[MotionPanel] on_motion_settings_clicked");
+static void on_motion_header_settings_clicked(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[MotionPanel] on_motion_header_settings_clicked");
     (void)e;
     helix::settings::show_motion_settings_overlay();
     LVGL_SAFE_EVENT_CB_END();
