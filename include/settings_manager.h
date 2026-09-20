@@ -219,6 +219,32 @@ class SettingsManager {
     }
 
     // =========================================================================
+    // JOG FEEDRATES (owned by SettingsManager — persisted per-printer)
+    // =========================================================================
+
+    /** @brief Get XY jog feedrate in mm/min (default 6000, range 60-60000) */
+    int get_jog_speed_xy() const;
+
+    /** @brief Set XY jog feedrate in mm/min (clamped 60-60000, persisted) */
+    void set_jog_speed_xy(int mm_per_min);
+
+    /** @brief XY jog feedrate subject (integer: mm/min) for UI binding */
+    lv_subject_t* subject_jog_speed_xy() {
+        return &jog_speed_xy_subject_;
+    }
+
+    /** @brief Get Z jog feedrate in mm/min (default 600, range 60-60000) */
+    int get_jog_speed_z() const;
+
+    /** @brief Set Z jog feedrate in mm/min (clamped 60-60000, persisted) */
+    void set_jog_speed_z(int mm_per_min);
+
+    /** @brief Z jog feedrate subject (integer: mm/min) for UI binding */
+    lv_subject_t* subject_jog_speed_z() {
+        return &jog_speed_z_subject_;
+    }
+
+    // =========================================================================
     // QIDI BOX EJECT (owned by SettingsManager — persisted per-printer)
     // =========================================================================
 
@@ -592,6 +618,8 @@ class SettingsManager {
     lv_subject_t led_enabled_subject_{};
     lv_subject_t z_movement_style_subject_{};
     lv_subject_t extrude_speed_subject_{};
+    lv_subject_t jog_speed_xy_subject_{};
+    lv_subject_t jog_speed_z_subject_{};
     lv_subject_t qidi_eject_distance_subject_{};
     lv_subject_t qidi_eject_velocity_subject_{};
     lv_subject_t toolhead_style_subject_{};

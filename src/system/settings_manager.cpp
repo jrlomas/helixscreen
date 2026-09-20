@@ -132,6 +132,16 @@ void SettingsManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(extrude_speed_subject_, extrude_speed, "settings_extrude_speed",
                            subjects_);
 
+    // Jog feedrates in mm/min. Defaults match the panel's shipped speeds, so an
+    // upgrade changes nothing until the user asks (range 60-60000).
+    int jog_speed_xy = config->get<int>(config->df() + "motion/jog_speed_xy", 6000);
+    jog_speed_xy = std::clamp(jog_speed_xy, 60, 60000);
+    UI_MANAGED_SUBJECT_INT(jog_speed_xy_subject_, jog_speed_xy, "settings_jog_speed_xy", subjects_);
+
+    int jog_speed_z = config->get<int>(config->df() + "motion/jog_speed_z", 600);
+    jog_speed_z = std::clamp(jog_speed_z, 60, 60000);
+    UI_MANAGED_SUBJECT_INT(jog_speed_z_subject_, jog_speed_z, "settings_jog_speed_z", subjects_);
+
     // QIDI Box eject distance magnitude (default: 878 mm, range 100-2000).
     // Stored positive; negated when assembled into the FORCE_MOVE gcode.
     int qidi_eject_distance = config->get<int>(config->df() + "ams/qidi_eject_distance", 878);
@@ -467,6 +477,54 @@ void SettingsManager::set_extrude_speed(int mm_per_sec) {
 
     TelemetryManager::instance().notify_setting_changed("extrude_speed", old_val,
                                                         std::to_string(mm_per_sec));
+}
+
+// ============================================================================
+// Jog Feedrates
+// ============================================================================
+
+int SettingsManager::get_jog_speed_xy() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&jog_speed_xy_subject_));
+}
+
+void SettingsManager::set_jog_speed_xy(int mm_per_min) {
+    mm_per_min = std::clamp(mm_per_min, 60, 60000);
+    spdlog::info("[SettingsManager] set_jog_speed_xy({} mm/min)", mm_per_min);
+
+    auto old_val = std::to_string(lv_subject_get_int(&jog_speed_xy_subject_));
+
+    // 1. Update subject (UI reacts)
+    lv_subject_set_int(&jog_speed_xy_subject_, mm_per_min);
+
+    // 2. Persist to config
+    Config* config = Config::get_instance();
+    config->set<int>(config->df() + "motion/jog_speed_xy", mm_per_min);
+    config->save();
+
+    TelemetryManager::instance().notify_setting_changed("jog_speed_xy", old_val,
+                                                        std::to_string(mm_per_min));
+}
+
+int SettingsManager::get_jog_speed_z() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&jog_speed_z_subject_));
+}
+
+void SettingsManager::set_jog_speed_z(int mm_per_min) {
+    mm_per_min = std::clamp(mm_per_min, 60, 60000);
+    spdlog::info("[SettingsManager] set_jog_speed_z({} mm/min)", mm_per_min);
+
+    auto old_val = std::to_string(lv_subject_get_int(&jog_speed_z_subject_));
+
+    // 1. Update subject (UI reacts)
+    lv_subject_set_int(&jog_speed_z_subject_, mm_per_min);
+
+    // 2. Persist to config
+    Config* config = Config::get_instance();
+    config->set<int>(config->df() + "motion/jog_speed_z", mm_per_min);
+    config->save();
+
+    TelemetryManager::instance().notify_setting_changed("jog_speed_z", old_val,
+                                                        std::to_string(mm_per_min));
 }
 
 int SettingsManager::get_qidi_eject_distance() const {

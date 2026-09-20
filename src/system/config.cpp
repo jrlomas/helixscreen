@@ -99,6 +99,7 @@ json get_default_printer_config(const std::string& moonraker_host) {
         {"moonraker_port", 7125},
         {"heaters", {{"bed", "heater_bed"}, {"hotend", "extruder"}}},
         {"temp_sensors", {{"bed", "heater_bed"}, {"hotend", "extruder"}}},
+        {"motion", {{"jog_speed_xy", 6000}, {"jog_speed_z", 600}}},
         {"fans",
          {{"part", "fan"}, {"hotend", "heater_fan hotend_fan"}, {"chamber", ""}, {"exhaust", ""}}},
         {"leds",
