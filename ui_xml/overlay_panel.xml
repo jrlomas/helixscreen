@@ -34,13 +34,9 @@
     <prop name="action_button_2_text_tag" type="string" default=""/>
     <prop name="action_button_2_icon" type="string" default=""/>
     <prop name="action_button_2_icon_size" type="string" default="sm"/>
-    <prop name="hide_action_button_2_icon" type="string" default="false"/>
-    <prop name="hide_action_button_2_text" type="string" default="false"/>
-    <prop name="action_button_2_icon_color" type="string" default="#text"/>
     <prop name="action_button_2_bg_color" type="string" default="#secondary"/>
     <prop name="action_button_2_radius" type="string" default="#border_radius"/>
     <prop name="action_button_2_width" type="string" default="content"/>
-    <prop name="action_button_2_pad" type="string" default="#space_sm"/>
     <prop name="action_button_2_min_width" type="string" default="90"/>
     <prop name="action_button_2_callback" type="string" default=""/>
     <prop name="hide_action_button_2" type="string" default="true"/>
@@ -95,12 +91,8 @@
                 action_button_hidden_subject="$action_button_hidden_subject"
                 action_button_2_text="$action_button_2_text" action_button_2_text_tag="$action_button_2_text_tag"
                 action_button_2_bg_color="$action_button_2_bg_color" action_button_2_icon="$action_button_2_icon"
-                action_button_2_icon_size="$action_button_2_icon_size"
-                hide_action_button_2_icon="$hide_action_button_2_icon"
-                hide_action_button_2_text="$hide_action_button_2_text"
-                action_button_2_icon_color="$action_button_2_icon_color"
-                action_button_2_radius="$action_button_2_radius" action_button_2_width="$action_button_2_width"
-                action_button_2_pad="$action_button_2_pad" action_button_2_min_width="$action_button_2_min_width"
+                action_button_2_icon_size="$action_button_2_icon_size" action_button_2_radius="$action_button_2_radius"
+                action_button_2_width="$action_button_2_width" action_button_2_min_width="$action_button_2_min_width"
                 action_button_2_callback="$action_button_2_callback" hide_action_button_2="$hide_action_button_2"
                 action_button_2_hidden_subject="$action_button_2_hidden_subject"
                 action_button_2_disabled_subject="$action_button_2_disabled_subject"

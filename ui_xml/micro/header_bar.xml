@@ -66,13 +66,9 @@
     <prop name="action_button_2_text_tag" type="string" default=""/>
     <prop name="action_button_2_icon" type="string" default=""/>
     <prop name="action_button_2_icon_size" type="string" default="sm"/>
-    <prop name="hide_action_button_2_icon" type="string" default="false"/>
-    <prop name="hide_action_button_2_text" type="string" default="false"/>
-    <prop name="action_button_2_icon_color" type="string" default="#text"/>
     <prop name="action_button_2_bg_color" type="string" default="#secondary"/>
     <prop name="action_button_2_radius" type="string" default="#border_radius"/>
     <prop name="action_button_2_width" type="string" default="content"/>
-    <prop name="action_button_2_pad" type="string" default="#space_sm"/>
     <!-- Floor for the text-shaped slot; an icon-only consumer passes a smaller
          value so the button reads as a circle. 72, not the base 90: this tier's
          header is 40px tall and every slot-2 px comes out of the title. -->
