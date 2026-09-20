@@ -236,53 +236,32 @@ static bool parse_camera_arg(const char* camera_str, RuntimeConfig& config) {
     return true;
 }
 
-bool parse_screen_size_string(const char* size_str, int& out_width, int& out_height,
-                              ScreenSize& out_size) {
+bool parse_screen_size_string(const char* size_str, int& out_width, int& out_height) {
     if (strcmp(size_str, "micro") == 0) {
         out_width = UI_SCREEN_MICRO_W;
         out_height = UI_SCREEN_MICRO_H;
-        out_size = ScreenSize::MICRO;
     } else if (strcmp(size_str, "tiny") == 0) {
         out_width = UI_SCREEN_TINY_W;
         out_height = UI_SCREEN_TINY_H;
-        out_size = ScreenSize::TINY;
     } else if (strcmp(size_str, "small") == 0) {
         out_width = UI_SCREEN_SMALL_W;
         out_height = UI_SCREEN_SMALL_H;
-        out_size = ScreenSize::SMALL;
     } else if (strcmp(size_str, "medium") == 0) {
         out_width = UI_SCREEN_MEDIUM_W;
         out_height = UI_SCREEN_MEDIUM_H;
-        out_size = ScreenSize::MEDIUM;
     } else if (strcmp(size_str, "large") == 0) {
         out_width = UI_SCREEN_LARGE_W;
         out_height = UI_SCREEN_LARGE_H;
-        out_size = ScreenSize::LARGE;
     } else if (strcmp(size_str, "xlarge") == 0) {
         out_width = UI_SCREEN_XLARGE_W;
         out_height = UI_SCREEN_XLARGE_H;
-        out_size = ScreenSize::XLARGE;
     } else {
         int w = 0, h = 0;
-        if (sscanf(size_str, "%dx%d", &w, &h) == 2 && w > 0 && h > 0) {
-            out_width = w;
-            out_height = h;
-            if (std::min(w, h) <= UI_SCREEN_MICRO_H && std::max(w, h) <= UI_SCREEN_TINY_W) {
-                out_size = ScreenSize::MICRO;
-            } else if (h <= UI_BREAKPOINT_TINY_MAX) {
-                out_size = ScreenSize::TINY;
-            } else if (h <= UI_BREAKPOINT_SMALL_MAX) {
-                out_size = ScreenSize::SMALL;
-            } else if (h <= UI_BREAKPOINT_MEDIUM_MAX) {
-                out_size = ScreenSize::MEDIUM;
-            } else if (h <= UI_BREAKPOINT_LARGE_MAX) {
-                out_size = ScreenSize::LARGE;
-            } else {
-                out_size = ScreenSize::XLARGE;
-            }
-        } else {
+        if (sscanf(size_str, "%dx%d", &w, &h) != 2 || w <= 0 || h <= 0) {
             return false;
         }
+        out_width = w;
+        out_height = h;
     }
     return true;
 }
@@ -298,8 +277,7 @@ bool parse_cli_args(int argc, char** argv, CliArgs& args, int& screen_width, int
                 return false;
             }
             const char* size_arg = argv[++i];
-            if (!parse_screen_size_string(size_arg, screen_width, screen_height,
-                                          args.screen_size)) {
+            if (!parse_screen_size_string(size_arg, screen_width, screen_height)) {
                 printf("Unknown screen size: %s\n", size_arg);
                 printf("Available sizes: micro, tiny, small, medium, large, xlarge (or WxH "
                        "like 480x400)\n");

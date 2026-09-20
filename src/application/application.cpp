@@ -1289,8 +1289,8 @@ bool Application::parse_args(int argc, char** argv) {
     // Only applies if -s was not passed on the command line
     if (m_screen_width == 0 && m_screen_height == 0) {
         if (auto size_str = EnvConfig::get_screen_size()) {
-            if (helix::parse_screen_size_string(size_str->c_str(), m_screen_width, m_screen_height,
-                                                m_args.screen_size)) {
+            if (helix::parse_screen_size_string(size_str->c_str(), m_screen_width,
+                                                m_screen_height)) {
                 spdlog::info("[Application] Screen size from HELIX_SCREEN_SIZE: {}x{}",
                              m_screen_width, m_screen_height);
             } else {

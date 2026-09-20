@@ -48,7 +48,7 @@ TEST_CASE("CliArgs: default values", "[cli_args]") {
     CliArgs args;
 
     SECTION("screen settings default to auto") {
-        REQUIRE(args.screen_size == ScreenSize::MEDIUM);
+        REQUIRE_FALSE(args.size_was_explicit);
         REQUIRE(args.dpi == -1);
         REQUIRE(args.display_num == -1);
         REQUIRE(args.x_pos == -1);
@@ -89,34 +89,63 @@ TEST_CASE("CliArgs: default values", "[cli_args]") {
 }
 
 // ============================================================================
-// ScreenSize Enum Tests
+// Screen size parsing
 // ============================================================================
 
-TEST_CASE("ScreenSize enum values", "[cli_args]") {
-    SECTION("All enum values are distinct") {
-        REQUIRE(ScreenSize::TINY != ScreenSize::SMALL);
-        REQUIRE(ScreenSize::TINY != ScreenSize::MEDIUM);
-        REQUIRE(ScreenSize::TINY != ScreenSize::LARGE);
-        REQUIRE(ScreenSize::TINY != ScreenSize::XLARGE);
-        REQUIRE(ScreenSize::SMALL != ScreenSize::MEDIUM);
-        REQUIRE(ScreenSize::SMALL != ScreenSize::LARGE);
-        REQUIRE(ScreenSize::SMALL != ScreenSize::XLARGE);
-        REQUIRE(ScreenSize::MEDIUM != ScreenSize::LARGE);
-        REQUIRE(ScreenSize::MEDIUM != ScreenSize::XLARGE);
-        REQUIRE(ScreenSize::LARGE != ScreenSize::XLARGE);
+TEST_CASE("parse_screen_size_string: named presets", "[cli_args]") {
+    int w = 0, h = 0;
+
+    SECTION("each preset resolves to its resolution") {
+        REQUIRE(parse_screen_size_string("micro", w, h));
+        REQUIRE(w == 480);
+        REQUIRE(h == 272);
+
+        REQUIRE(parse_screen_size_string("medium", w, h));
+        REQUIRE(w == 800);
+        REQUIRE(h == 480);
+
+        REQUIRE(parse_screen_size_string("large", w, h));
+        REQUIRE(w == 1024);
+        REQUIRE(h == 600);
+
+        REQUIRE(parse_screen_size_string("xlarge", w, h));
+        REQUIRE(w == 1280);
+        REQUIRE(h == 720);
     }
 
-    SECTION("ScreenSize ordering matches expected breakpoint order") {
-        // Verify enum values are ordered TINY < SMALL < MEDIUM < LARGE < XLARGE
-        REQUIRE(static_cast<int>(ScreenSize::TINY) < static_cast<int>(ScreenSize::SMALL));
-        REQUIRE(static_cast<int>(ScreenSize::SMALL) < static_cast<int>(ScreenSize::MEDIUM));
-        REQUIRE(static_cast<int>(ScreenSize::MEDIUM) < static_cast<int>(ScreenSize::LARGE));
-        REQUIRE(static_cast<int>(ScreenSize::LARGE) < static_cast<int>(ScreenSize::XLARGE));
+    SECTION("names are case-sensitive") {
+        REQUIRE_FALSE(parse_screen_size_string("Large", w, h));
+    }
+}
+
+TEST_CASE("parse_screen_size_string: WxH", "[cli_args]") {
+    int w = 0, h = 0;
+
+    SECTION("landscape and portrait both pass through verbatim") {
+        REQUIRE(parse_screen_size_string("1920x1080", w, h));
+        REQUIRE(w == 1920);
+        REQUIRE(h == 1080);
+
+        REQUIRE(parse_screen_size_string("480x800", w, h));
+        REQUIRE(w == 480);
+        REQUIRE(h == 800);
     }
 
-    SECTION("Default CliArgs screen_size is MEDIUM") {
-        CliArgs args;
-        REQUIRE(args.screen_size == ScreenSize::MEDIUM);
+    SECTION("a rejected string leaves the outputs untouched") {
+        w = -7;
+        h = -9;
+        REQUIRE_FALSE(parse_screen_size_string("not-a-size", w, h));
+        REQUIRE(w == -7);
+        REQUIRE(h == -9);
+    }
+
+    SECTION("malformed and non-positive dimensions are rejected") {
+        REQUIRE_FALSE(parse_screen_size_string("800x", w, h));
+        REQUIRE_FALSE(parse_screen_size_string("x480", w, h));
+        REQUIRE_FALSE(parse_screen_size_string("0x480", w, h));
+        REQUIRE_FALSE(parse_screen_size_string("800x0", w, h));
+        REQUIRE_FALSE(parse_screen_size_string("-800x480", w, h));
+        REQUIRE_FALSE(parse_screen_size_string("", w, h));
     }
 }
 

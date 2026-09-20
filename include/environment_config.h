@@ -126,9 +126,9 @@ class EnvironmentConfig {
      * or WxH format (e.g., "480x400", "1920x1080").
      *
      * Despite the variable's name this is a pixel resolution, not a UI scale
-     * factor: the value picks the display mode and the ScreenSize layout tier
-     * is derived from it in parse_screen_size_string(). HELIX_DPI is the
-     * separate knob for interface scale.
+     * factor: the value picks the display mode, and the layout tier is
+     * classified from the resulting display by breakpoint_for() in
+     * ui_breakpoint.h. HELIX_DPI is the separate knob for interface scale.
      *
      * @return Size string, or nullopt if not set
      */
