@@ -13,6 +13,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -236,28 +237,38 @@ static bool parse_camera_arg(const char* camera_str, RuntimeConfig& config) {
     return true;
 }
 
+/// ASCII-lowercase a copy of s, for matching values a user typed into a flag
+/// or an env file.
+static std::string ascii_lower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return s;
+}
+
 bool parse_screen_size_string(const char* size_str, int& out_width, int& out_height) {
-    if (strcmp(size_str, "micro") == 0) {
+    // Lowercasing also normalises the separator, so 1920X1080 parses.
+    const std::string size = ascii_lower(size_str);
+    if (size == "micro") {
         out_width = UI_SCREEN_MICRO_W;
         out_height = UI_SCREEN_MICRO_H;
-    } else if (strcmp(size_str, "tiny") == 0) {
+    } else if (size == "tiny") {
         out_width = UI_SCREEN_TINY_W;
         out_height = UI_SCREEN_TINY_H;
-    } else if (strcmp(size_str, "small") == 0) {
+    } else if (size == "small") {
         out_width = UI_SCREEN_SMALL_W;
         out_height = UI_SCREEN_SMALL_H;
-    } else if (strcmp(size_str, "medium") == 0) {
+    } else if (size == "medium") {
         out_width = UI_SCREEN_MEDIUM_W;
         out_height = UI_SCREEN_MEDIUM_H;
-    } else if (strcmp(size_str, "large") == 0) {
+    } else if (size == "large") {
         out_width = UI_SCREEN_LARGE_W;
         out_height = UI_SCREEN_LARGE_H;
-    } else if (strcmp(size_str, "xlarge") == 0) {
+    } else if (size == "xlarge") {
         out_width = UI_SCREEN_XLARGE_W;
         out_height = UI_SCREEN_XLARGE_H;
     } else {
         int w = 0, h = 0;
-        if (sscanf(size_str, "%dx%d", &w, &h) != 2 || w <= 0 || h <= 0) {
+        if (sscanf(size.c_str(), "%dx%d", &w, &h) != 2 || w <= 0 || h <= 0) {
             return false;
         }
         out_width = w;
@@ -717,9 +728,7 @@ bool parse_cli_args(int argc, char** argv, CliArgs& args, int& screen_width, int
     // the standalone IFS module mode (real AmsBackendAd5xIfs).
     if (config.test_mode && !config.use_real_ams) {
         if (const char* ams_env = std::getenv("HELIX_MOCK_AMS"); ams_env && ams_env[0]) {
-            std::string mode(ams_env);
-            std::transform(mode.begin(), mode.end(), mode.begin(),
-                           [](unsigned char c) { return std::tolower(c); });
+            const std::string mode = ascii_lower(ams_env);
             if (mode == "medusahc" || mode == "medusa" || mode == "mhc" ||
                 mode == "medusahc-fork" || mode == "medusa-fork") {
                 config.use_real_ams = true;

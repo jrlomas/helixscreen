@@ -99,6 +99,7 @@ bool parse_cli_args(int argc, char** argv, CliArgs& args, int& screen_width, int
  *
  * Accepts named sizes: micro, tiny, small, medium, large, xlarge
  * Or custom WxH format: "480x400", "1920x1080"
+ * Matching is case-insensitive.
  *
  * @param size_str The size string to parse
  * @param out_width Output: parsed width

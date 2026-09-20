@@ -113,8 +113,22 @@ TEST_CASE("parse_screen_size_string: named presets", "[cli_args]") {
         REQUIRE(h == 720);
     }
 
-    SECTION("names are case-sensitive") {
-        REQUIRE_FALSE(parse_screen_size_string("Large", w, h));
+    SECTION("names are case-insensitive") {
+        REQUIRE(parse_screen_size_string("Large", w, h));
+        REQUIRE(w == 1024);
+        REQUIRE(h == 600);
+
+        REQUIRE(parse_screen_size_string("XLARGE", w, h));
+        REQUIRE(w == 1280);
+        REQUIRE(h == 720);
+
+        REQUIRE(parse_screen_size_string("MeDiUm", w, h));
+        REQUIRE(w == 800);
+        REQUIRE(h == 480);
+    }
+
+    SECTION("an unknown name is still rejected whatever its case") {
+        REQUIRE_FALSE(parse_screen_size_string("HUGE", w, h));
     }
 }
 
@@ -129,6 +143,12 @@ TEST_CASE("parse_screen_size_string: WxH", "[cli_args]") {
         REQUIRE(parse_screen_size_string("480x800", w, h));
         REQUIRE(w == 480);
         REQUIRE(h == 800);
+    }
+
+    SECTION("a capital separator parses too") {
+        REQUIRE(parse_screen_size_string("1920X1080", w, h));
+        REQUIRE(w == 1920);
+        REQUIRE(h == 1080);
     }
 
     SECTION("a rejected string leaves the outputs untouched") {
