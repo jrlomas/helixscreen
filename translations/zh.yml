@@ -253,6 +253,8 @@ translations:
   Backup spool switching state unknown: 备用料盘切换状态未知
   Barcode Scanner: 条码扫描器
   Base: 基准
+  Batch load failed: ''
+  Batch unload failed: ''
   Beacon auto-calibrate sent: Beacon自动校准已发送
   Beacon calibrate sent: Beacon校准已发送
   Bed: 热床
@@ -1493,6 +1495,7 @@ translations:
   Listening: 正在监听
   Live view from your webcam: 摄像头实时画面
   Load: 加载
+  Load / Unload: ''
   Load Failed: '装载失败'
   Load Filament: 加载耗材
   Load a filament first before trying to unload: 请先装载耗材，再尝试卸载
@@ -2471,6 +2474,7 @@ translations:
   Select a valid tool: 请选择有效工具
   Select a valid {}: '请选择有效的 {}'
   Select a {}: '请选择 {}'
+  Select at least one: ''
   Select fan: 选择风扇
   Select gate: '选择通道'
   Select macro for first button: 为第一个按钮选择宏

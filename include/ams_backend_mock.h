@@ -143,6 +143,13 @@ class AmsBackendMock : public AmsBackend {
     AmsError select_slot(int slot_index) override;
     AmsError change_tool(int tool_number) override;
 
+    // Batch filament ops: advertised in Snapmaker mode so the picker UI is
+    // drivable in --test. Rehearses the real script (see the .cpp) and then
+    // runs the single-op simulation.
+    [[nodiscard]] bool supports_batch_filament_ops() const override;
+    AmsError load_filament_batch(const std::vector<int>& slots) override;
+    AmsError unload_filament_batch(const std::vector<int>& slots) override;
+
     // Recovery
     AmsError recover() override;
     AmsError reset() override;
@@ -786,6 +793,16 @@ class AmsBackendMock : public AmsBackend {
      * and all-false is the firmware's own "no task configured" signal.
      */
     void set_snapmaker_task_locked(std::vector<int> routing);
+
+    /**
+     * @brief Shared body of load_filament_batch() / unload_filament_batch()
+     *
+     * Validates exactly as the real dispatch does, rehearses the script the
+     * printer would receive, then runs the single-op simulation: the action
+     * machine models one operation at a time, which is all the sidebar stepper
+     * needs from a mock batch.
+     */
+    AmsError run_filament_batch(const std::vector<int>& slots, bool load);
 
     /**
      * @brief Emit event to registered callback

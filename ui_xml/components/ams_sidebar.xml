@@ -62,7 +62,9 @@
           <event_cb trigger="value_changed" callback="ams_sidebar_bypass_toggled"/>
         </ui_switch>
       </lv_obj>
-      <!-- Unload Button (full width) - hidden for tool changers -->
+      <!-- Unload Button (full width): unloads the filament in the ACTIVE head.
+           Gated on ams_is_filament_system, which covers every filament system
+           including the Snapmaker U1, so it shows there and unloads one head. -->
       <!-- Disabled state comes from ams_sidebar_unload_disabled, which
            AmsOperationSidebar::refresh_unload_gating() computes through the
            shared compute_op_button_gating() rule. It folds in the old
@@ -73,6 +75,14 @@
         <bind_flag_if_eq subject="ams_is_filament_system" flag="hidden" ref_value="0"/>
         <bind_state_if_eq subject="ams_sidebar_unload_disabled" state="disabled" ref_value="1"/>
         <event_cb trigger="clicked" callback="ams_sidebar_unload_clicked"/>
+      </ui_button>
+      <!-- Batch Load / Unload (parallel-toolhead systems): opens the picker
+           modal; one firmware script covers every ticked head. -->
+      <ui_button name="btn_batch_filament"
+                 width="100%" variant="secondary" icon="swap_vertical" text="Load / Unload"
+                 translation_tag="Load / Unload">
+        <bind_flag_if_eq subject="ams_sidebar_supports_batch" flag="hidden" ref_value="0"/>
+        <event_cb trigger="clicked" callback="ams_sidebar_batch_clicked"/>
       </ui_button>
       <!-- Reset Button (full width) - hidden for tool changers -->
       <!-- Disabled state comes from ams_sidebar_reset_disabled, which

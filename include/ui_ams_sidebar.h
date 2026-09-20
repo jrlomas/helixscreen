@@ -360,6 +360,7 @@ class AmsOperationSidebar {
     static void on_reset_clicked_cb(lv_event_t* e);
     static void on_check_gates_clicked_cb(lv_event_t* e);
     static void on_settings_clicked_cb(lv_event_t* e);
+    static void on_batch_clicked_cb(lv_event_t* e);
 };
 
 } // namespace helix::ui

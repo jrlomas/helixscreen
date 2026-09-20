@@ -279,6 +279,8 @@ translations:
   Backup spool switching state unknown: Estado da troca para carretel de reserva desconhecido
   Barcode Scanner: Leitor de Código de Barras
   Base: Referência
+  Batch load failed: ''
+  Batch unload failed: ''
   Beacon auto-calibrate sent: Beacon auto-calibração enviada
   Beacon calibrate sent: Beacon calibração enviada
   Bed: Mesa
@@ -1624,6 +1626,7 @@ translations:
   Listening: Escutando
   Live view from your webcam: Visão ao vivo da sua webcam
   Load: Carregar
+  Load / Unload: ''
   Load Failed: 'Falha ao carregar'
   Load Filament: Carregar Filamento
   Load a filament first before trying to unload: Carregue primeiro filamento antes de tentar descarregar
@@ -2667,6 +2670,7 @@ translations:
   Select a valid tool: Selecione uma ferramenta válida
   Select a valid {}: 'Selecione um valor válido para {}'
   Select a {}: 'Selecione {}'
+  Select at least one: ''
   Select fan: Selecionar ventoinha
   Select gate: 'Selecionar gate'
   Select macro for first button: Selecionar macro para o primeiro botão

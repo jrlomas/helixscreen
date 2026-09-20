@@ -252,6 +252,8 @@
   <translation tag="Backup spool switching state unknown" zh="备用料盘切换状态未知"/>
   <translation tag="Barcode Scanner" zh="条码扫描器"/>
   <translation tag="Base" zh="基准"/>
+  <translation tag="Batch load failed"/>
+  <translation tag="Batch unload failed"/>
   <translation tag="Beacon auto-calibrate sent" zh="Beacon自动校准已发送"/>
   <translation tag="Beacon calibrate sent" zh="Beacon校准已发送"/>
   <translation tag="Bed" zh="热床"/>
@@ -1458,6 +1460,7 @@
   <translation tag="Listening" zh="正在监听"/>
   <translation tag="Live view from your webcam" zh="摄像头实时画面"/>
   <translation tag="Load" zh="加载"/>
+  <translation tag="Load / Unload"/>
   <translation tag="Load Failed" zh="装载失败"/>
   <translation tag="Load Filament" zh="加载耗材"/>
   <translation tag="Load a filament first before trying to unload" zh="请先装载耗材，再尝试卸载"/>
@@ -2411,6 +2414,7 @@
   <translation tag="Select a valid tool" zh="请选择有效工具"/>
   <translation tag="Select a valid {}" zh="请选择有效的 {}"/>
   <translation tag="Select a {}" zh="请选择 {}"/>
+  <translation tag="Select at least one"/>
   <translation tag="Select fan" zh="选择风扇"/>
   <translation tag="Select gate" zh="选择通道"/>
   <translation tag="Select macro for first button" zh="为第一个按钮选择宏"/>

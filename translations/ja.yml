@@ -254,6 +254,8 @@ translations:
   Backup spool switching state unknown: バックアップスプール切り替えの状態は不明です
   Barcode Scanner: バーコードスキャナー
   Base: 基準
+  Batch load failed: ''
+  Batch unload failed: ''
   Beacon auto-calibrate sent: Beacon自動キャリブレーション送信済み
   Beacon calibrate sent: Beaconキャリブレーション送信済み
   Bed: ベッド
@@ -1499,6 +1501,7 @@ translations:
   Listening: 聞き取り中
   Live view from your webcam: ウェブカメラのライブ表示
   Load: 装填
+  Load / Unload: ''
   Load Failed: '装填に失敗しました'
   Load Filament: フィラメントを装填
   Load a filament first before trying to unload: 排出する前にまずフィラメントを装填してください
@@ -2480,6 +2483,7 @@ translations:
   Select a valid tool: 有効なツールを選択してください
   Select a valid {}: '有効な{}を選択してください'
   Select a {}: '{}を選択してください'
+  Select at least one: ''
   Select fan: ファンを選択
   Select gate: 'ゲートを選択'
   Select macro for first button: 最初のボタンのマクロを選択

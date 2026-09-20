@@ -252,6 +252,8 @@
   <translation tag="Backup spool switching state unknown" ja="バックアップスプール切り替えの状態は不明です"/>
   <translation tag="Barcode Scanner" ja="バーコードスキャナー"/>
   <translation tag="Base" ja="基準"/>
+  <translation tag="Batch load failed"/>
+  <translation tag="Batch unload failed"/>
   <translation tag="Beacon auto-calibrate sent" ja="Beacon自動キャリブレーション送信済み"/>
   <translation tag="Beacon calibrate sent" ja="Beaconキャリブレーション送信済み"/>
   <translation tag="Bed" ja="ベッド"/>
@@ -1458,6 +1460,7 @@
   <translation tag="Listening" ja="聞き取り中"/>
   <translation tag="Live view from your webcam" ja="ウェブカメラのライブ表示"/>
   <translation tag="Load" ja="装填"/>
+  <translation tag="Load / Unload"/>
   <translation tag="Load Failed" ja="装填に失敗しました"/>
   <translation tag="Load Filament" ja="フィラメントを装填"/>
   <translation tag="Load a filament first before trying to unload" ja="排出する前にまずフィラメントを装填してください"/>
@@ -2411,6 +2414,7 @@
   <translation tag="Select a valid tool" ja="有効なツールを選択してください"/>
   <translation tag="Select a valid {}" ja="有効な{}を選択してください"/>
   <translation tag="Select a {}" ja="{}を選択してください"/>
+  <translation tag="Select at least one"/>
   <translation tag="Select fan" ja="ファンを選択"/>
   <translation tag="Select gate" ja="ゲートを選択"/>
   <translation tag="Select macro for first button" ja="最初のボタンのマクロを選択"/>

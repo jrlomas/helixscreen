@@ -252,6 +252,8 @@
   <translation tag="Backup spool switching state unknown" es="Estado del cambio a bobina de respaldo desconocido"/>
   <translation tag="Barcode Scanner" es="Escáner de Código de Barras"/>
   <translation tag="Base" es="Referencia"/>
+  <translation tag="Batch load failed"/>
+  <translation tag="Batch unload failed"/>
   <translation tag="Beacon auto-calibrate sent" es="Beacon auto-calibración enviada"/>
   <translation tag="Beacon calibrate sent" es="Beacon calibración enviada"/>
   <translation tag="Bed" es="Cama"/>
@@ -1458,6 +1460,7 @@
   <translation tag="Listening" es="Escuchando"/>
   <translation tag="Live view from your webcam" es="Vista en vivo de tu webcam"/>
   <translation tag="Load" es="Cargar"/>
+  <translation tag="Load / Unload"/>
   <translation tag="Load Failed" es="Fallo al cargar"/>
   <translation tag="Load Filament" es="Cargar Filamento"/>
   <translation tag="Load a filament first before trying to unload" es="Cargue primero filamento antes de intentar descargar"/>
@@ -2411,6 +2414,7 @@
   <translation tag="Select a valid tool" es="Seleccione una herramienta válida"/>
   <translation tag="Select a valid {}" es="Seleccione un valor válido para {}"/>
   <translation tag="Select a {}" es="Seleccione {}"/>
+  <translation tag="Select at least one"/>
   <translation tag="Select fan" es="Seleccionar ventilador"/>
   <translation tag="Select gate" es="Seleccionar gate"/>
   <translation tag="Select macro for first button" es="Seleccionar macro para el primer botón"/>

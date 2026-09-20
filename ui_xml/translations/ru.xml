@@ -252,6 +252,8 @@
   <translation tag="Backup spool switching state unknown" ru="Резервная катушка: состояние неизвестно"/>
   <translation tag="Barcode Scanner" ru="Сканер штрих-кодов"/>
   <translation tag="Base" ru="Опорный"/>
+  <translation tag="Batch load failed"/>
+  <translation tag="Batch unload failed"/>
   <translation tag="Beacon auto-calibrate sent" ru="Beacon автокалибровка отправлена"/>
   <translation tag="Beacon calibrate sent" ru="Beacon калибровка отправлена"/>
   <translation tag="Bed" ru="Стол"/>
@@ -1458,6 +1460,7 @@
   <translation tag="Listening" ru="Прослушивание"/>
   <translation tag="Live view from your webcam" ru="Прямая трансляция с веб-камеры"/>
   <translation tag="Load" ru="Загрузить"/>
+  <translation tag="Load / Unload"/>
   <translation tag="Load Failed" ru="Не удалось загрузить"/>
   <translation tag="Load Filament" ru="Загрузить филамент"/>
   <translation tag="Load a filament first before trying to unload" ru="Сначала загрузите филамент, прежде чем пытаться его выгрузить"/>
@@ -2411,6 +2414,7 @@
   <translation tag="Select a valid tool" ru="Выберите корректный инструмент"/>
   <translation tag="Select a valid {}" ru="Выберите допустимое значение для {}"/>
   <translation tag="Select a {}" ru="Выберите {}"/>
+  <translation tag="Select at least one"/>
   <translation tag="Select fan" ru="Выберите вентилятор"/>
   <translation tag="Select gate" ru="Выбор шлюза"/>
   <translation tag="Select macro for first button" ru="Выберите макрос для первой кнопки"/>
