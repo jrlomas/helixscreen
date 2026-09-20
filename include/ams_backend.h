@@ -1031,6 +1031,52 @@ class AmsBackend {
      */
     virtual AmsError unload_filament(int slot_index) = 0;
 
+    // ========================================================================
+    // Batch Filament Operations (parallel-toolhead printers)
+    // ========================================================================
+
+    /**
+     * @brief Whether this backend can load/unload several slots as one operation
+     *
+     * Gates the UI affordance only. A backend that answers true must implement
+     * load_filament_batch() / unload_filament_batch().
+     */
+    [[nodiscard]] virtual bool supports_batch_filament_ops() const {
+        return false;
+    }
+
+    /**
+     * @brief Load filament on several slots as ONE operation (async)
+     *
+     * For parallel-toolhead printers whose firmware serializes per-extruder
+     * feed commands itself, so the whole batch is a single gcode script and no
+     * client-side sequencer is needed. On AmsSubscriptionBackend backends the
+     * batch rides the same gate as the per-slot ops: one in-flight claim
+     * covers the whole batch, and the print-active refusal applies.
+     *
+     * Default: not supported.
+     *
+     * @param slots Slot indices to load (0-based, order preserved)
+     * @return AmsError indicating if the operation was started successfully
+     */
+    virtual AmsError load_filament_batch(const std::vector<int>& slots) {
+        (void)slots;
+        return AmsErrorHelper::not_supported("Batch filament load");
+    }
+
+    /**
+     * @brief Unload filament from several slots as ONE operation (async)
+     *
+     * Same contract as load_filament_batch(), unload direction.
+     *
+     * @param slots Slot indices to unload (0-based, order preserved)
+     * @return AmsError indicating if the operation was started successfully
+     */
+    virtual AmsError unload_filament_batch(const std::vector<int>& slots) {
+        (void)slots;
+        return AmsErrorHelper::not_supported("Batch filament unload");
+    }
+
     /**
      * @brief Unload whichever slot the backend currently considers active.
      *
