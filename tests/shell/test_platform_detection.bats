@@ -284,20 +284,23 @@ _setup_zmod_ad5x_sandbox() {
 
     set_install_paths "ad5x" "forge_x"
 
-    [ "$INSTALL_DIR" = "$SANDBOX/usr/data/config/mod/.bin/helixscreen" ] \
+    [ "$INSTALL_DIR" = "$SANDBOX/usr/data/config/mod_data/helixscreen" ] \
         || fail "INSTALL_DIR='$INSTALL_DIR'"
 }
 
-@test "mod host: a plain (non-payload) run is refused at the install-dir gate" {
+@test "mod host: a plain (non-payload) run lands on the out-of-tree default" {
+    # The probed payload root is ours and sits outside the mod's git tree, so
+    # an unarmed set_install_paths has nothing to refuse at the default. The
+    # mod-owned refusal still meets an in-tree INSTALL_DIR - the operator
+    # seam - which the guard suite drives against this same fixture shape.
     _setup_forgex_ad5x_sandbox
     HELIX_MOD_PAYLOAD=""
     detect_tmp_dir() { TMP_DIR="/tmp/helixscreen-install"; }
-    log_error() { echo "ERROR: $*"; }
 
-    run set_install_paths "ad5x" "forge_x"
-    [ "$status" -ne 0 ]
-    contains "refusing" "$output"
-    [[ "$output" == *"--payload-root"* ]]
+    set_install_paths "ad5x" "forge_x"
+
+    [ "$INSTALL_DIR" = "$SANDBOX/usr/data/config/mod_data/helixscreen" ] \
+        || fail "INSTALL_DIR='$INSTALL_DIR'"
 }
 
 @test "mod host: an explicit user INSTALL_DIR still wins over the mod root" {

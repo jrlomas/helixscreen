@@ -357,11 +357,20 @@ never anything else under the mod's tree.
 
 On a verified mod host a bare install is the payload contract, no flags:
 
+- The payload root is `<mod-tree-parent>/mod_data/helixscreen` - a **sibling of the mod's
+  git tree** (`/opt/config/mod_data/helixscreen` on AD5M, `/usr/data/config/mod_data/`
+  `helixscreen` on AD5X), never inside it: Forge-X's OTA is a `git_repo` update_manager and
+  a Feather "reset" runs `git reset --hard` + `git clean -fd`, which deletes every untracked
+  path in the tree. `mod_data` is the one directory per layout that exists on the host and
+  is chroot-visible on both boards (the `/opt/config` bind) yet outside that reach. Because
+  the root is outside the mod namespaces, `host_path_is_mod_owned` does not match it - the
+  guard protects the *mod's* files, and this root is ours.
 - Contents are replaced **in place** - the root's inode never changes; `config/` and
   `platform/` survive every update; an existing `helixscreen.env` is preserved byte-identical
   (the incoming one lands beside it as `.env.new`).
-- **No service is installed anywhere.** The mod's bootstrap (.shell/helixscreen.sh) starts
-  the UI; nothing on the host iterates an `/etc/init.d` we would write.
+- **No service is installed on the host.** The service lands inside the mod chroot's
+  `/etc/init.d`, which the mod's own bootstrap (`<chroot>/.root/start.sh`) starts at boot; nothing
+  host-side iterates an `/etc/init.d`, and the installer never starts the UI itself.
 - **Nothing is written to any mod-owned Moonraker conf.** The mod's `moonraker.conf` is
   git-tracked - dirtying it breaks their OTA. The sanctioned include point is
   `mod_data/user.moonraker.conf`, and even that only gains an `[update_manager helixscreen]`
@@ -403,7 +412,8 @@ AD5M Forge-X hosts that installed HelixScreen before this contract run a standal
 and offers **adopt-or-warn**: adopting makes the legacy root the payload root (outside the
 mod's tree - also the OTA-durable answer - recorded like any payload root), and **keeps the
 S90 service, which is then the payload's only boot path** (the mod's bootstrap only starts
-its own tree; the payload contract installs no service; the S90 bakes `DAEMON_DIR` at
+its own tree; the payload contract installs no HOST service, and the adopted root keeps
+its S90 as the only boot path; the S90 bakes `DAEMON_DIR` at
 install time so it boots the adopted root's refreshed `bin/`). Declining proceeds at the
 mod's default with the exact manual migration commands printed. Neither branch deletes or
 de-execs anything; the operator executes those steps.
@@ -427,7 +437,7 @@ record never falls back to rewriting a display mode the rig did not have.
 | **Klipper user** | Detected via systemd service owner, process table, printer_data scan, or well-known users (biqu, pi, mks) |
 | **Init system** | systemd (service template with `@@HELIX_USER@@` substitution) |
 | **Runtime deps** | `libdrm2`, `libinput10` installed via apt |
-| **Config symlink** | `~/printer_data/config/helixscreen` -> `$INSTALL_DIR/config` for web UI access |
+| **Config symlink** | Per-file: user-owned config lives in `~/printer_data/config/helixscreen/` and each `$INSTALL_DIR/config/<file>` is a symlink into it (`setup_config_symlink`). Per-file, not a directory symlink, because the install's `config/` also holds packaged files an update replaces - only `HELIX_USER_CONFIG_FILES` (settings.json, helixscreen.env, .disabled_services, tool_spools.json, crash_history.json) and `HELIX_USER_CONFIG_DIRS` (custom_images, themes, printer_database.d) outlive an update |
 
 #### Pi install-directory cascade
 
@@ -464,12 +474,15 @@ See `UPDATE_SYSTEM.md` for how `self_update_supported()` reads the resulting tre
 
 ### FlashForge Adventurer 5M -- Forge-X Firmware (`ad5m`, `forge_x`)
 
+The `--standalone` layout on this firmware (the payload contract above is what a bare
+install uses):
+
 | Setting | Value |
 |---------|-------|
 | **Detection** | `armv7l` + kernel contains `ad5m` or `5.4.61` |
 | **Firmware** | Forge-X detected by `/opt/config/mod/.root` directory |
-| **Install dir** | `/opt/helixscreen` |
-| **Init script** | `/etc/init.d/S90helixscreen` |
+| **Install dir** | `/opt/helixscreen` (`--standalone` only) |
+| **Init script** | `/etc/init.d/S90helixscreen` (host-side, `--standalone` only) |
 | **Previous UI** | `/opt/config/mod/.root/S80guppyscreen` |
 
 **ForgeX-specific patches (all reversible on uninstall):**
@@ -481,6 +494,24 @@ See `UPDATE_SYSTEM.md` for how `self_update_supported()` reads the resulting tre
 - **screen.sh backlight patch**: Blocks non-100 backlight changes when HelixScreen active (allows S99root init cycle)
 - **screen.sh drawing patch**: Skips `draw_splash`, `draw_loading`, `boot_message` when HelixScreen active
 - **logged wrapper**: Wraps `/opt/config/mod/.bin/exec/logged` to strip `--send-to-screen` flag (prevents direct framebuffer writes)
+
+### FlashForge Adventurer -- Forge-X Payload Mode (`ad5m`/`ad5x`, `forge_x`)
+
+What a bare install actually does on a verified Forge-X host (either board - the probe keys
+on the mod's shape, `mips` selects the AD5X hook, everything else the AD5M's):
+
+| Setting | Value |
+|---------|-------|
+| **Detection** | mod tree + Buildroot chroot probed by `host_profile.sh` (.shell/platform.sh marker) |
+| **Install dir** | `<mod-tree-parent>/mod_data/helixscreen` - `/opt/config/mod_data/helixscreen` (AD5M), `/usr/data/config/mod_data/helixscreen` (AD5X). A **sibling** of the mod's git tree: the OTA's `git clean -fd` and a Feather reset cannot reach it, and the `/opt/config` bind makes it chroot-visible on both boards |
+| **Config** | `mod_data/helixscreen/config` - interior to the payload root, preserved by every in-place update |
+| **Init script** | inside the mod chroot: `<chroot>/etc/init.d/S90helixscreen` (AD5M) / `S80helixscreen` (AD5X), started by the mod's `<chroot>/.root/start.sh` |
+| **Cache / logs** | AD5M: `/data/.helixscreen/{cache,logs}`. AD5X: `/opt/config/mod_data/helixscreen-state/cache` and `/opt/config/mod_data/log/helix.log` - never inside the payload root, which every update replaces |
+| **Payload root record** | `mod_data/helixscreen_payload_root` (the uninstaller's `flag > record > default` resolver) |
+| **Uninstall** | `install.sh --uninstall` auto-arms; the standalone `uninstall.sh` needs `--mod-payload` (optionally `--payload-root`) |
+
+Runtime caches never live inside the payload root: an update replaces everything in it
+except `config/` and `platform/`, so a cache there would be wiped on every refresh.
 
 ### FlashForge Adventurer 5M -- Klipper Mod (`ad5m`, `klipper_mod`)
 

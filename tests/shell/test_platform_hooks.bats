@@ -583,8 +583,8 @@ INIT_SCRIPT="config/helixscreen.init"
 }
 
 @test "ad5x-forgex hooks keep durable state out of the synced payload tree" {
-    # The payload root is replaceable on every update (and their OTA git-cleans
-    # it), so runtime caches must live in mod_data beside the mod's own state.
+    # The payload root is replaceable on every update, so runtime caches must
+    # live outside it, in mod_data beside the mod's own state.
     run sh -c '
         HOOKS_DIR="'"$HOOKS_DIR"'"
         . "$HOOKS_DIR/hooks-ad5x-forgex.sh"
@@ -595,6 +595,6 @@ INIT_SCRIPT="config/helixscreen.init"
         echo "file=$HELIX_LOG_FILE"
     '
     [ "$status" -eq 0 ]
-    contains "cache=/opt/config/mod_data/helixscreen/cache" "$output"
+    contains "cache=/opt/config/mod_data/helixscreen-state/cache" "$output"
     [[ "$output" == *"file=/opt/config/mod_data/log/helix.log"* ]]
 }

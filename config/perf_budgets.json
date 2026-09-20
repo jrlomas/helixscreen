@@ -22,7 +22,7 @@
     {
       "name": "ad5m",
       "ssh": "root@192.168.1.67",
-      "binary": "/opt/config/mod/.bin/helixscreen/bin/helix-screen",
+      "binary": "/opt/config/mod_data/helixscreen/bin/helix-screen",
       "service_stop": "",
       "service_start": "",
       "extra_flags": "",

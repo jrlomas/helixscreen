@@ -56,7 +56,7 @@ HELIX_INSTALL_DIRS="/root/printer_software/helixscreen /opt/helixscreen /mnt/UDI
 # it first. Swept on uninstall, since nothing else ever removes them.
 # Mirrors kStateRoots in include/helix_install_roots.h.
 # shellcheck disable=SC2034  # consumed by uninstall.sh
-HELIX_STATE_DIRS="/mnt/UDISK/helixscreen-state /mnt/UDISK/helixscreen /data/.helixscreen /data/helixscreen /usr/data/helixscreen-state /user-resource/helixscreen-state /userdata/helixscreen-state /srv/helixscreen-state"
+HELIX_STATE_DIRS="/mnt/UDISK/helixscreen-state /mnt/UDISK/helixscreen /data/.helixscreen /data/helixscreen /usr/data/helixscreen-state /user-resource/helixscreen-state /userdata/helixscreen-state /srv/helixscreen-state /opt/config/mod_data/helixscreen-state"
 
 # Mounts release.sh's detect_rollback_dir() tries, in order, for an
 # off-partition update-backup when the install filesystem is too tight to
@@ -837,10 +837,18 @@ host_profile_probe() {
     if [ -n "$HOST_MOD_ROOT" ] && [ -n "$HOST_MOD_CHROOT" ]; then
         HOST_SERVICE_MECHANISM="mod-managed"
         HOST_OWNS_COMPETING_UIS=1
-        HOST_INSTALL_ROOT="$HOST_MOD_ROOT/.bin/helixscreen"
-        # mod_data is a sibling of the mod tree on every layout: /usr/data on
-        # the AD5X (Z-Mod), /opt on the AD5M (Forge-X) — derive, never pin.
-        HOST_CONFIG_DIR="$(dirname "$HOST_MOD_ROOT")/mod_data/helixscreen/config"
+        # The payload root is a SIBLING of the mod's git tree, never inside
+        # it: Forge-X's OTA (a git_repo update_manager) and a Feather reset
+        # run git clean -fd / reset --hard across the tree, and anything of
+        # ours inside it is untracked baggage they delete. mod_data is the
+        # one directory per layout that exists on the host and survives that
+        # (/usr/data on the AD5X, /opt on the AD5M) — derive, never pin.
+        HOST_INSTALL_ROOT="$(dirname "$HOST_MOD_ROOT")/mod_data/helixscreen"
+        # Being outside the tree also means host_path_is_mod_owned does not
+        # match this root — deliberately. The mod-owned guard exists to keep
+        # our rm -rf off the MOD's files; the payload root is ours, and the
+        # armed payload contract owns its removal.
+        HOST_CONFIG_DIR="${HOST_INSTALL_ROOT}/config"
         HOST_MOONRAKER_USER_CONF="$(dirname "$HOST_MOD_ROOT")/mod_data/user.moonraker.conf"
         # The hook key names the RIG, not the mod: the two payload layouts
         # differ (the AD5M hook's cache paths assume the host's own /data,
@@ -952,17 +960,6 @@ host_mod_destruct_blocked() {
 # forgex_mod_data() delegates here so installer state files share one path.
 host_mod_data() {
     printf '%s\n' "$(dirname "${HOST_MOD_ROOT:-/opt/config/mod}")/mod_data"
-}
-
-# The mod's data mount (its descriptor's DATA_MNT): the parent of the .mod
-# namespace — /usr/data on the AD5X, /data on the AD5M. The one location per
-# board where a payload root outside the mod's git tree both exists and
-# survives an OTA, which is why the OD1 escape-hatch example derives from
-# here rather than a hard-coded AD5X path. Echoes nothing when the probe
-# found no chroot (callers keep their own fallback).
-host_mod_data_mount() {
-    [ -n "${HOST_MOD_CHROOT:-}" ] || return 0
-    printf '%s\n' "$(dirname "$(dirname "$HOST_MOD_CHROOT")")"
 }
 
 # Where the payload root of the LAST payload install is recorded, beside the
@@ -1926,9 +1923,9 @@ detect_tmp_dir() {
 # with no UI.
 #
 # Sets HELIX_CHROOT_DAEMON_DIR to a spelling that resolves in-chroot, trying
-# INSTALL_DIR first and then the same path under each other mod-tree candidate.
-# Leaves it empty and warns when none does: a wrong DAEMON_DIR fails silently,
-# so it must be said out loud here.
+# INSTALL_DIR first and then the same parent-relative path through each other
+# mod-tree candidate's spelling. Leaves it empty and warns when none does: a
+# wrong DAEMON_DIR fails silently, so it must be said out loud here.
 # shellcheck disable=SC2034  # consumed by service.sh (install_service_sysv)
 resolve_chroot_daemon_dir() {
     HELIX_CHROOT_DAEMON_DIR=""
@@ -1941,11 +1938,15 @@ resolve_chroot_daemon_dir() {
     fi
 
     local cand suffix candidate
-    suffix="${INSTALL_DIR#"${HOST_MOD_ROOT}"}"
+    # The suffix is relative to the mod tree's PARENT, because the payload
+    # root is a mod_data sibling of the tree, not a child of it. Every
+    # candidate shares that parent, so dirname restores the prefix whatever
+    # spelling the probe found.
+    suffix="${INSTALL_DIR#"$(dirname "${HOST_MOD_ROOT}")"}"
     # shellcheck disable=SC2086  # word splitting is the point: a candidate list
     for cand in ${HELIX_MOD_TREE_CANDIDATES:-/usr/data/config/mod /opt/config/mod}; do
         [ "$cand" = "${HOST_MOD_ROOT:-}" ] && continue
-        candidate="${cand}${suffix}"
+        candidate="$(dirname "$cand")${suffix}"
         if [ -d "${HOST_MOD_CHROOT}${candidate}" ]; then
             # shellcheck disable=SC2034  # consumed by service.sh (install_service_sysv)
             HELIX_CHROOT_DAEMON_DIR="$candidate"
@@ -2248,7 +2249,7 @@ set_install_paths() {
             log_info "Mod host: honoring the explicitly requested install directory"
         elif [ "${STANDALONE_INSTALL:-}" != "1" ]; then
             INSTALL_DIR="$HOST_INSTALL_ROOT"
-            log_info "Mod host: install root is the firmware mod's payload tree"
+            log_info "Mod host: install root is the mod's payload dir beside its tree"
             # The payload boots from inside the mod's chroot, so its init
             # script goes in the chroot's /etc/init.d, not the host's. The mod
             # runs `chroot $MOD .root/start.sh`, which starts every S* it finds
@@ -5561,8 +5562,9 @@ add_update_manager_section() {
     # through here (fresh add + migrate_to_web_type), so this one guard covers
     # every UNARMED stanza write. Armed payload runs are exempt BY DESIGN - the
     # armed path is instead refused upstream in configure_moonraker_updates
-    # whenever INSTALL_DIR is mod-owned, so the exemption this guard grants can
-    # never put an updater against the mod's tree.
+    # whenever INSTALL_DIR is mod-owned (an operator-chosen in-tree root; the
+    # probed default lives outside the mod's namespaces), so the exemption
+    # this guard grants can never put an updater against the mod's tree.
     host_refuse_mod_owned "arming the Moonraker updater against" "$INSTALL_DIR"
 
     fs=$(file_sudo "$conf")

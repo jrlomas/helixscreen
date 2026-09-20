@@ -215,8 +215,9 @@ add_update_manager_section() {
     # through here (fresh add + migrate_to_web_type), so this one guard covers
     # every UNARMED stanza write. Armed payload runs are exempt BY DESIGN - the
     # armed path is instead refused upstream in configure_moonraker_updates
-    # whenever INSTALL_DIR is mod-owned, so the exemption this guard grants can
-    # never put an updater against the mod's tree.
+    # whenever INSTALL_DIR is mod-owned (an operator-chosen in-tree root; the
+    # probed default lives outside the mod's namespaces), so the exemption
+    # this guard grants can never put an updater against the mod's tree.
     host_refuse_mod_owned "arming the Moonraker updater against" "$INSTALL_DIR"
 
     fs=$(file_sudo "$conf")
