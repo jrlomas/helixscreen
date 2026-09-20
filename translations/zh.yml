@@ -535,6 +535,8 @@ translations:
   Closer: 更近
   Closer = more squish | Farther = less squish: 更近 = 更多挤压 | 更远 = 更少挤压
   Coarse: 粗调
+  Coarse Inner: ''
+  Coarse Outer: ''
   Code: 代码
   Coil Temperature: 线圈温度
   Collect logs and system info for support: 收集日志和系统信息以供支持
@@ -779,6 +781,7 @@ translations:
   Distance from hub to toolhead: '从集线器到工具头的距离'
   Distance from lane extruder to hub: '从耗材通道挤出机到集线器的距离'
   Distance from toolhead sensor to nozzle tip: '从工具头传感器到喷嘴尖端的距离'
+  Distance moved per jog button tap: ''
   Do not power off your printer.: 请勿关闭打印机电源。
   Do not touch the printer during calibration: 校准期间请勿触碰打印机
   Dock: 归位
@@ -1143,6 +1146,8 @@ translations:
   'Filter Fan: Off': '滤网风扇: 关'
   'Filter Fan: On': '滤网风扇: 开'
   Fine: 细调
+  Fine Inner: ''
+  Fine Outer: ''
   Finish: 完成
   Finish or cancel the print before loading, unloading, or changing filament: 在装载、卸载或更换耗材之前，请先完成或取消打印
   Finishing clean...: 即将完成清洁...
@@ -1408,7 +1413,10 @@ translations:
   It's a new spool: 这是新料盘
   Jammed at the Toolhead: 工具头处堵塞
   Job Queue: 任务队列
+  Jog Speed XY: ''
+  Jog Speed Z: ''
   'Jog failed: {}': '移动失败: {}'
+  Jog speeds and step distances: ''
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: 加入
     HelixScreen 的 Discord 社区，参与讨论、获取技巧、故障排除帮助和功能请求。
   Joining Wi-Fi disconnects the wired network.: 加入 WiFi 会断开有线网络连接。
@@ -2275,6 +2283,7 @@ translations:
   Reset: 重置
   Reset Blade Counter: '重置刀片计数器'
   Reset CFS: 重置 CFS
+  Reset Distances: ''
   Reset Endless Spool: '重置无限料盘'
   Reset Endless Spool?: '要重置无限料盘吗？'
   Reset Home Screen?: 重置主屏幕？
@@ -2973,6 +2982,8 @@ translations:
   Tune: 调优
   Tuning tower enabled - start a print to test: 调优塔已启用 - 开始打印以测试
   Turbo: 极速
+  Turbo Inner: ''
+  Turbo Outer: ''
   Turn Off: 关闭
   Turn Off WiFi?: 关闭 WiFi？
   Turn On: 开启
@@ -3166,6 +3177,7 @@ translations:
   X: X
   X Axis: X 轴
   X Offset: X 偏移
+  X and Y jog feedrate: ''
   X axis applied, but Y axis failed: X 轴已应用，但 Y 轴失败
   X axis done, starting Y...: 'X 轴完成，开始 Y 轴...'
   X jog blocked at bed edge: X 轴移动已限制在热床边缘
@@ -3198,6 +3210,7 @@ translations:
   Z Range: Z 范围
   Z Tilt Adjust...: 正在调整Z倾斜...
   Z jog blocked at axis limit: ''
+  Z jog feedrate: ''
   Z motor calibration failed: Z 电机校准失败
   Z probes for bed leveling and mesh generation: 用于热床调平和网格生成的 Z 探针
   'Z-Off:': Z 偏移：

@@ -530,6 +530,8 @@
   <translation tag="Closer" en="Closer"/>
   <translation tag="Closer = more squish | Farther = less squish" en="Closer = more squish | Farther = less squish"/>
   <translation tag="Coarse" en="Coarse"/>
+  <translation tag="Coarse Inner" en="Coarse Inner"/>
+  <translation tag="Coarse Outer" en="Coarse Outer"/>
   <translation tag="Code" en="Code"/>
   <translation tag="Coil Temperature" en="Coil Temperature"/>
   <translation tag="Collect logs and system info for support" en="Collect logs and system info for support"/>
@@ -767,6 +769,7 @@
   <translation tag="Distance from hub to toolhead" en="Distance from hub to toolhead"/>
   <translation tag="Distance from lane extruder to hub" en="Distance from lane extruder to hub"/>
   <translation tag="Distance from toolhead sensor to nozzle tip" en="Distance from toolhead sensor to nozzle tip"/>
+  <translation tag="Distance moved per jog button tap" en="Distance moved per jog button tap"/>
   <translation tag="Do not power off your printer." en="Do not power off your printer."/>
   <translation tag="Do not touch the printer during calibration" en="Do not touch the printer during calibration"/>
   <translation tag="Dock" en="Dock"/>
@@ -1124,6 +1127,8 @@
   <translation tag="Filter Fan: Off" en="Filter Fan: Off"/>
   <translation tag="Filter Fan: On" en="Filter Fan: On"/>
   <translation tag="Fine" en="Fine"/>
+  <translation tag="Fine Inner" en="Fine Inner"/>
+  <translation tag="Fine Outer" en="Fine Outer"/>
   <translation tag="Finish" en="Finish"/>
   <translation tag="Finish or cancel the print before loading, unloading, or changing filament" en="Finish or cancel the print before loading, unloading, or changing filament"/>
   <translation tag="Finishing clean..." en="Finishing clean..."/>
@@ -1379,7 +1384,10 @@
   <translation tag="It&apos;s a new spool" en="It&apos;s a new spool"/>
   <translation tag="Jammed at the Toolhead" en="Jammed at the Toolhead"/>
   <translation tag="Job Queue" en="Job Queue"/>
+  <translation tag="Jog Speed XY" en="Jog Speed XY"/>
+  <translation tag="Jog Speed Z" en="Jog Speed Z"/>
   <translation tag="Jog failed: {}" en="Jog failed: {}"/>
+  <translation tag="Jog speeds and step distances" en="Jog speeds and step distances"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." en="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests."/>
   <translation tag="Joining Wi-Fi disconnects the wired network." en="Joining Wi-Fi disconnects the wired network."/>
   <translation tag="Just now" en="Just now"/>
@@ -2222,6 +2230,7 @@
   <translation tag="Reset" en="Reset"/>
   <translation tag="Reset Blade Counter" en="Reset Blade Counter"/>
   <translation tag="Reset CFS" en="Reset CFS"/>
+  <translation tag="Reset Distances" en="Reset Distances"/>
   <translation tag="Reset Endless Spool" en="Reset Endless Spool"/>
   <translation tag="Reset Endless Spool?" en="Reset Endless Spool?"/>
   <translation tag="Reset Home Screen?" en="Reset Home Screen?"/>
@@ -2876,6 +2885,8 @@
   <translation tag="Tune" en="Tune"/>
   <translation tag="Tuning tower enabled - start a print to test" en="Tuning tower enabled - start a print to test"/>
   <translation tag="Turbo" en="Turbo"/>
+  <translation tag="Turbo Inner" en="Turbo Inner"/>
+  <translation tag="Turbo Outer" en="Turbo Outer"/>
   <translation tag="Turn Off" en="Turn Off"/>
   <translation tag="Turn Off WiFi?" en="Turn Off WiFi?"/>
   <translation tag="Turn On" en="Turn On"/>
@@ -3062,6 +3073,7 @@
   <translation tag="X" en="X"/>
   <translation tag="X Axis" en="X Axis"/>
   <translation tag="X Offset" en="X Offset"/>
+  <translation tag="X and Y jog feedrate" en="X and Y jog feedrate"/>
   <translation tag="X axis applied, but Y axis failed" en="X axis applied, but Y axis failed"/>
   <translation tag="X axis done, starting Y..." en="X axis done, starting Y..."/>
   <translation tag="X jog blocked at bed edge" en="X jog blocked at bed edge"/>
@@ -3091,6 +3103,7 @@
   <translation tag="Z Range" en="Z Range"/>
   <translation tag="Z Tilt Adjust..." en="Z Tilt Adjust..."/>
   <translation tag="Z jog blocked at axis limit" en="Z jog blocked at axis limit"/>
+  <translation tag="Z jog feedrate" en="Z jog feedrate"/>
   <translation tag="Z motor calibration failed" en="Z motor calibration failed"/>
   <translation tag="Z probes for bed leveling and mesh generation" en="Z probes for bed leveling and mesh generation"/>
   <translation tag="Z-Off:" en="Z-Off:"/>

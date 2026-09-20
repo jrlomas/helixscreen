@@ -530,6 +530,8 @@
   <translation tag="Closer" fr="Plus près"/>
   <translation tag="Closer = more squish | Farther = less squish" fr="Plus proche = plus écrasé | Plus loin = moins écrasé"/>
   <translation tag="Coarse" fr="Gros"/>
+  <translation tag="Coarse Inner"/>
+  <translation tag="Coarse Outer"/>
   <translation tag="Code" fr="Code"/>
   <translation tag="Coil Temperature" fr="Température de la bobine"/>
   <translation tag="Collect logs and system info for support" fr="Collecter les journaux et infos système pour le support"/>
@@ -767,6 +769,7 @@
   <translation tag="Distance from hub to toolhead" fr="Distance du hub à la tête d&apos;outil"/>
   <translation tag="Distance from lane extruder to hub" fr="Distance de l&apos;extrudeur de voie au hub"/>
   <translation tag="Distance from toolhead sensor to nozzle tip" fr="Distance du capteur de tête d&apos;outil à la pointe de la buse"/>
+  <translation tag="Distance moved per jog button tap"/>
   <translation tag="Do not power off your printer." fr="N&apos;éteignez pas votre imprimante."/>
   <translation tag="Do not touch the printer during calibration" fr="Ne touchez pas l&apos;imprimante pendant la calibration"/>
   <translation tag="Dock" fr="Ranger"/>
@@ -1124,6 +1127,8 @@
   <translation tag="Filter Fan: Off" fr="Ventilateur de filtration : éteint"/>
   <translation tag="Filter Fan: On" fr="Ventilateur de filtration : allumé"/>
   <translation tag="Fine" fr="Fin"/>
+  <translation tag="Fine Inner"/>
+  <translation tag="Fine Outer"/>
   <translation tag="Finish" fr="Terminer"/>
   <translation tag="Finish or cancel the print before loading, unloading, or changing filament" fr="Terminez ou annulez l&apos;impression avant de charger, décharger ou changer le filament"/>
   <translation tag="Finishing clean..." fr="Finalisation du nettoyage..."/>
@@ -1379,7 +1384,10 @@
   <translation tag="It&apos;s a new spool" fr="C&apos;est une nouvelle bobine"/>
   <translation tag="Jammed at the Toolhead" fr="Bourrage à la tête d&apos;outil"/>
   <translation tag="Job Queue" fr="File d&apos;impression"/>
+  <translation tag="Jog Speed XY"/>
+  <translation tag="Jog Speed Z"/>
   <translation tag="Jog failed: {}" fr="Échec du déplacement : {}"/>
+  <translation tag="Jog speeds and step distances"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." fr="Rejoignez la communauté HelixScreen sur Discord pour discuter, obtenir des conseils, de l&apos;aide au dépannage et proposer des fonctionnalités."/>
   <translation tag="Joining Wi-Fi disconnects the wired network." fr="Rejoindre le WiFi déconnecte le réseau filaire."/>
   <translation tag="Just now" fr="À l&apos;instant"/>
@@ -2222,6 +2230,7 @@
   <translation tag="Reset" fr="Réinitialiser"/>
   <translation tag="Reset Blade Counter" fr="Réinitialiser le compteur de lame"/>
   <translation tag="Reset CFS" fr="Réinitialiser le CFS"/>
+  <translation tag="Reset Distances"/>
   <translation tag="Reset Endless Spool" fr="Réinitialiser la bobine infinie"/>
   <translation tag="Reset Endless Spool?" fr="Réinitialiser la bobine infinie ?"/>
   <translation tag="Reset Home Screen?" fr="Réinitialiser l&apos;écran d&apos;accueil ?"/>
@@ -2876,6 +2885,8 @@
   <translation tag="Tune" fr="Régler"/>
   <translation tag="Tuning tower enabled - start a print to test" fr="Tour de réglage activée - lancez une impression pour tester"/>
   <translation tag="Turbo" fr="Turbo"/>
+  <translation tag="Turbo Inner"/>
+  <translation tag="Turbo Outer"/>
   <translation tag="Turn Off" fr="Éteindre"/>
   <translation tag="Turn Off WiFi?" fr="Désactiver le WiFi ?"/>
   <translation tag="Turn On" fr="Allumer"/>
@@ -3062,6 +3073,7 @@
   <translation tag="X" fr="X"/>
   <translation tag="X Axis" fr="Axe X"/>
   <translation tag="X Offset" fr="Décalage X"/>
+  <translation tag="X and Y jog feedrate"/>
   <translation tag="X axis applied, but Y axis failed" fr="Axe X appliqué, mais l&apos;axe Y a échoué"/>
   <translation tag="X axis done, starting Y..." fr="Axe X terminé, démarrage de Y..."/>
   <translation tag="X jog blocked at bed edge" fr="Déplacement X bloqué au bord du plateau"/>
@@ -3091,6 +3103,7 @@
   <translation tag="Z Range" fr="Plage Z"/>
   <translation tag="Z Tilt Adjust..." fr="Ajustement inclinaison Z..."/>
   <translation tag="Z jog blocked at axis limit"/>
+  <translation tag="Z jog feedrate"/>
   <translation tag="Z motor calibration failed" fr="Échec de l&apos;étalonnage du moteur Z"/>
   <translation tag="Z probes for bed leveling and mesh generation" fr="Sondes Z pour la mise à niveau du plateau et la génération de maillage"/>
   <translation tag="Z-Off:" fr="Z-Off :"/>

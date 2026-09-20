@@ -601,6 +601,8 @@ translations:
   Closer = more squish | Farther = less squish: Näher = mehr Quetschung | Weiter =
     weniger Quetschung
   Coarse: Grob
+  Coarse Inner: ''
+  Coarse Outer: ''
   Code: Code
   Coil Temperature: Spulentemperatur
   Collect logs and system info for support: Protokolle und Systemdaten für Support
@@ -857,6 +859,7 @@ translations:
   Distance from hub to toolhead: 'Abstand vom Hub zum Werkzeugkopf'
   Distance from lane extruder to hub: 'Abstand vom Spurextruder zum Hub'
   Distance from toolhead sensor to nozzle tip: 'Abstand vom Werkzeugkopfsensor zur Düsenspitze'
+  Distance moved per jog button tap: ''
   Do not power off your printer.: Drucker nicht ausschalten.
   Do not touch the printer during calibration: Drucker während der Kalibrierung nicht
     berühren
@@ -1248,6 +1251,8 @@ translations:
   'Filter Fan: Off': 'Filterlüfter: Aus'
   'Filter Fan: On': 'Filterlüfter: Ein'
   Fine: Fein
+  Fine Inner: ''
+  Fine Outer: ''
   Finish: Fertig
   Finish or cancel the print before loading, unloading, or changing filament: Beenden oder brechen Sie den Druck ab, bevor Sie Filament laden, entladen oder wechseln
   Finishing clean...: Reinigung abschließen...
@@ -1535,7 +1540,10 @@ translations:
   It's a new spool: Es ist eine neue Spule
   Jammed at the Toolhead: Stau am Werkzeugkopf
   Job Queue: Auftragswarteschlange
+  Jog Speed XY: ''
+  Jog Speed Z: ''
   'Jog failed: {}': 'Bewegung fehlgeschlagen: {}'
+  Jog speeds and step distances: ''
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Tritt
     der HelixScreen-Community auf Discord bei für Diskussionen, Tipps, Hilfe zur Fehlerbehebung
     und Funktionswünsche.
@@ -2456,6 +2464,7 @@ translations:
   Reset: Zurücksetzen
   Reset Blade Counter: 'Klingenzähler zurücksetzen'
   Reset CFS: CFS zurücksetzen
+  Reset Distances: ''
   Reset Endless Spool: 'Endlosspule zurücksetzen'
   Reset Endless Spool?: 'Endlosspule zurücksetzen?'
   Reset Home Screen?: Startbildschirm zurücksetzen?
@@ -3237,6 +3246,8 @@ translations:
   Tuning tower enabled - start a print to test: Tuning-Tower aktiviert - starten Sie
     einen Druck zum Testen
   Turbo: Turbo
+  Turbo Inner: ''
+  Turbo Outer: ''
   Turn Off: Ausschalten
   Turn Off WiFi?: WiFi ausschalten?
   Turn On: Einschalten
@@ -3442,6 +3453,7 @@ translations:
   X: X
   X Axis: X-Achse
   X Offset: X-Offset
+  X and Y jog feedrate: ''
   X axis applied, but Y axis failed: X-Achse angewendet, aber Y-Achse fehlgeschlagen
   X axis done, starting Y...: 'X-Achse fertig, starte Y...'
   X jog blocked at bed edge: X-Bewegung an Bettkante blockiert
@@ -3478,6 +3490,7 @@ translations:
   Z Range: Z-Bereich
   Z Tilt Adjust...: Z-Neigung anpassen...
   Z jog blocked at axis limit: ''
+  Z jog feedrate: ''
   Z motor calibration failed: Kalibrierung des Z-Motors fehlgeschlagen
   Z probes for bed leveling and mesh generation: Z-Sonden für Bettnivellierung und
     Netzerzeugung

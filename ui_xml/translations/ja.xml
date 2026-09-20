@@ -530,6 +530,8 @@
   <translation tag="Closer" ja="近く"/>
   <translation tag="Closer = more squish | Farther = less squish" ja="近い = より圧縮 | 遠い = 圧縮少なめ"/>
   <translation tag="Coarse" ja="粗動"/>
+  <translation tag="Coarse Inner"/>
+  <translation tag="Coarse Outer"/>
   <translation tag="Code" ja="コード"/>
   <translation tag="Coil Temperature" ja="コイル温度"/>
   <translation tag="Collect logs and system info for support" ja="サポート用にログとシステム情報を収集"/>
@@ -767,6 +769,7 @@
   <translation tag="Distance from hub to toolhead" ja="ハブからツールヘッドまでの距離"/>
   <translation tag="Distance from lane extruder to hub" ja="レーンのエクストルーダーからハブまでの距離"/>
   <translation tag="Distance from toolhead sensor to nozzle tip" ja="ツールヘッドセンサーからノズル先端までの距離"/>
+  <translation tag="Distance moved per jog button tap"/>
   <translation tag="Do not power off your printer." ja="プリンターの電源を切らないでください。"/>
   <translation tag="Do not touch the printer during calibration" ja="キャリブレーション中はプリンターに触れないでください"/>
   <translation tag="Dock" ja="ドック"/>
@@ -1124,6 +1127,8 @@
   <translation tag="Filter Fan: Off" ja="フィルターファン: オフ"/>
   <translation tag="Filter Fan: On" ja="フィルターファン: オン"/>
   <translation tag="Fine" ja="微動"/>
+  <translation tag="Fine Inner"/>
+  <translation tag="Fine Outer"/>
   <translation tag="Finish" ja="完了"/>
   <translation tag="Finish or cancel the print before loading, unloading, or changing filament" ja="フィラメントの装填・排出・交換の前に、印刷を完了またはキャンセルしてください"/>
   <translation tag="Finishing clean..." ja="清掃の仕上げ中..."/>
@@ -1379,7 +1384,10 @@
   <translation tag="It&apos;s a new spool" ja="新しいスプールです"/>
   <translation tag="Jammed at the Toolhead" ja="ツールヘッドで詰まり"/>
   <translation tag="Job Queue" ja="ジョブキュー"/>
+  <translation tag="Jog Speed XY"/>
+  <translation tag="Jog Speed Z"/>
   <translation tag="Jog failed: {}" ja="ジョグに失敗しました: {}"/>
+  <translation tag="Jog speeds and step distances"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." ja="Discord で HelixScreen コミュニティに参加して、ディスカッション、ヒント、トラブルシューティング支援、機能リクエストを共有しましょう。"/>
   <translation tag="Joining Wi-Fi disconnects the wired network." ja="WiFi に接続すると、有線ネットワークが切断されます。"/>
   <translation tag="Just now" ja="たった今"/>
@@ -2222,6 +2230,7 @@
   <translation tag="Reset" ja="リセット"/>
   <translation tag="Reset Blade Counter" ja="ブレードカウンターをリセット"/>
   <translation tag="Reset CFS" ja="CFSをリセット"/>
+  <translation tag="Reset Distances"/>
   <translation tag="Reset Endless Spool" ja="エンドレススプールをリセット"/>
   <translation tag="Reset Endless Spool?" ja="エンドレススプールをリセットしますか？"/>
   <translation tag="Reset Home Screen?" ja="ホーム画面をリセットしますか？"/>
@@ -2876,6 +2885,8 @@
   <translation tag="Tune" ja="チューニング"/>
   <translation tag="Tuning tower enabled - start a print to test" ja="チューニングタワー有効 - 印刷を開始してテストしてください"/>
   <translation tag="Turbo" ja="ターボ"/>
+  <translation tag="Turbo Inner"/>
+  <translation tag="Turbo Outer"/>
   <translation tag="Turn Off" ja="オフにする"/>
   <translation tag="Turn Off WiFi?" ja="WiFiをオフにしますか？"/>
   <translation tag="Turn On" ja="オンにする"/>
@@ -3062,6 +3073,7 @@
   <translation tag="X" ja="X"/>
   <translation tag="X Axis" ja="X軸"/>
   <translation tag="X Offset" ja="Xオフセット"/>
+  <translation tag="X and Y jog feedrate"/>
   <translation tag="X axis applied, but Y axis failed" ja="X軸は適用されましたが、Y軸は失敗しました"/>
   <translation tag="X axis done, starting Y..." ja="X軸が完了しました。Y軸を開始します..."/>
   <translation tag="X jog blocked at bed edge" ja="X軸移動はベッド端でブロックされました"/>
@@ -3091,6 +3103,7 @@
   <translation tag="Z Range" ja="Z 範囲"/>
   <translation tag="Z Tilt Adjust..." ja="Zチルト調整中..."/>
   <translation tag="Z jog blocked at axis limit"/>
+  <translation tag="Z jog feedrate"/>
   <translation tag="Z motor calibration failed" ja="Z モーターの校正に失敗しました"/>
   <translation tag="Z probes for bed leveling and mesh generation" ja="ベッドレベリングとメッシュ生成用 Z プローブ"/>
   <translation tag="Z-Off:" ja="Z-Off:"/>

@@ -595,6 +595,8 @@ translations:
   Closer = more squish | Farther = less squish: Más cerca = más aplastamiento | Más
     lejos = menos aplastamiento
   Coarse: Grueso
+  Coarse Inner: ''
+  Coarse Outer: ''
   Code: Código
   Coil Temperature: Temperatura de Bobina
   Collect logs and system info for support: Recopilar registros e info del sistema
@@ -854,6 +856,7 @@ translations:
   Distance from hub to toolhead: 'Distancia del hub al cabezal'
   Distance from lane extruder to hub: 'Distancia del extrusor del carril al hub'
   Distance from toolhead sensor to nozzle tip: 'Distancia del sensor del cabezal a la punta de la boquilla'
+  Distance moved per jog button tap: ''
   Do not power off your printer.: No apague la impresora.
   Do not touch the printer during calibration: No toque la impresora durante la calibración
   Dock: Acoplar
@@ -1239,6 +1242,8 @@ translations:
   'Filter Fan: Off': 'Ventilador de filtro: Apagado'
   'Filter Fan: On': 'Ventilador de filtro: Encendido'
   Fine: Fino
+  Fine Inner: ''
+  Fine Outer: ''
   Finish: Finalizar
   Finish or cancel the print before loading, unloading, or changing filament: Termine o cancele la impresión antes de cargar, descargar o cambiar el filamento
   Finishing clean...: Terminando limpieza...
@@ -1527,7 +1532,10 @@ translations:
   It's a new spool: Es una bobina nueva
   Jammed at the Toolhead: Atascado en el cabezal
   Job Queue: Cola de trabajos
+  Jog Speed XY: ''
+  Jog Speed Z: ''
   'Jog failed: {}': 'Error en movimiento: {}'
+  Jog speeds and step distances: ''
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Únase
     a la comunidad de HelixScreen en Discord para discusión, consejos, ayuda con la
     solución de problemas y solicitudes de funciones.
@@ -2451,6 +2459,7 @@ translations:
   Reset: Restablecer
   Reset Blade Counter: 'Restablecer el contador de cuchilla'
   Reset CFS: Restablecer CFS
+  Reset Distances: ''
   Reset Endless Spool: 'Restablecer la bobina infinita'
   Reset Endless Spool?: '¿Restablecer la bobina infinita?'
   Reset Home Screen?: ¿Restablecer pantalla de inicio?
@@ -3231,6 +3240,8 @@ translations:
   Tuning tower enabled - start a print to test: Torre de ajuste activada - inicie
     una impresión para probar
   Turbo: Turbo
+  Turbo Inner: ''
+  Turbo Outer: ''
   Turn Off: Apagar
   Turn Off WiFi?: ¿Desactivar WiFi?
   Turn On: Encender
@@ -3437,6 +3448,7 @@ translations:
   X: X
   X Axis: Eje X
   X Offset: Desfase X
+  X and Y jog feedrate: ''
   X axis applied, but Y axis failed: Eje X aplicado, pero eje Y falló
   X axis done, starting Y...: 'Eje X terminado, empezando con Y...'
   X jog blocked at bed edge: Movimiento X bloqueado en el borde de la cama
@@ -3472,6 +3484,7 @@ translations:
   Z Range: Rango Z
   Z Tilt Adjust...: Ajuste de inclinación Z...
   Z jog blocked at axis limit: ''
+  Z jog feedrate: ''
   Z motor calibration failed: Falló la calibración del motor Z
   Z probes for bed leveling and mesh generation: Sondas Z para nivelación de cama
     y generación de malla

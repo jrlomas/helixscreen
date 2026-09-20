@@ -530,6 +530,8 @@
   <translation tag="Closer" ru="Ближе"/>
   <translation tag="Closer = more squish | Farther = less squish" ru="Ближе = больше сжатие | Дальше = меньше сжатие"/>
   <translation tag="Coarse" ru="Грубо"/>
+  <translation tag="Coarse Inner"/>
+  <translation tag="Coarse Outer"/>
   <translation tag="Code" ru="Код"/>
   <translation tag="Coil Temperature" ru="Температура катушки"/>
   <translation tag="Collect logs and system info for support" ru="Собрать логи и информацию о системе для поддержки"/>
@@ -767,6 +769,7 @@
   <translation tag="Distance from hub to toolhead" ru="Расстояние от хаба до печатающей головки"/>
   <translation tag="Distance from lane extruder to hub" ru="Расстояние от канала экструдера до хаба"/>
   <translation tag="Distance from toolhead sensor to nozzle tip" ru="Расстояние от датчика печатающей головки до кончика сопла"/>
+  <translation tag="Distance moved per jog button tap"/>
   <translation tag="Do not power off your printer." ru="Не выключайте принтер."/>
   <translation tag="Do not touch the printer during calibration" ru="Не трогайте принтер во время калибровки"/>
   <translation tag="Dock" ru="Парковать"/>
@@ -1124,6 +1127,8 @@
   <translation tag="Filter Fan: Off" ru="Вентилятор фильтра: Выкл"/>
   <translation tag="Filter Fan: On" ru="Вентилятор фильтра: Вкл"/>
   <translation tag="Fine" ru="Точно"/>
+  <translation tag="Fine Inner"/>
+  <translation tag="Fine Outer"/>
   <translation tag="Finish" ru="Завершить"/>
   <translation tag="Finish or cancel the print before loading, unloading, or changing filament" ru="Завершите или отмените печать перед загрузкой, выгрузкой или сменой филамента"/>
   <translation tag="Finishing clean..." ru="Завершение очистки..."/>
@@ -1379,7 +1384,10 @@
   <translation tag="It&apos;s a new spool" ru="Это новая катушка"/>
   <translation tag="Jammed at the Toolhead" ru="Замятие в печатающей головке"/>
   <translation tag="Job Queue" ru="Очередь заданий"/>
+  <translation tag="Jog Speed XY"/>
+  <translation tag="Jog Speed Z"/>
   <translation tag="Jog failed: {}" ru="Перемещение не удалось: {}"/>
+  <translation tag="Jog speeds and step distances"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." ru="Присоединяйтесь к сообществу HelixScreen в Discord для обсуждений, советов, помощи в устранении неполадок и предложений новых функций."/>
   <translation tag="Joining Wi-Fi disconnects the wired network." ru="Подключение к Wi-Fi отключает проводную сеть."/>
   <translation tag="Just now" ru="Только что"/>
@@ -2222,6 +2230,7 @@
   <translation tag="Reset" ru="Сброс"/>
   <translation tag="Reset Blade Counter" ru="Сбросить счётчик лезвия"/>
   <translation tag="Reset CFS" ru="Сброс CFS"/>
+  <translation tag="Reset Distances"/>
   <translation tag="Reset Endless Spool" ru="Сбросить бесконечную катушку"/>
   <translation tag="Reset Endless Spool?" ru="Сбросить бесконечную катушку?"/>
   <translation tag="Reset Home Screen?" ru="Сбросить главный экран?"/>
@@ -2876,6 +2885,8 @@
   <translation tag="Tune" ru="Настройка"/>
   <translation tag="Tuning tower enabled - start a print to test" ru="Башня настройки включена — начните печать для теста"/>
   <translation tag="Turbo" ru="Турбо"/>
+  <translation tag="Turbo Inner"/>
+  <translation tag="Turbo Outer"/>
   <translation tag="Turn Off" ru="Выключить"/>
   <translation tag="Turn Off WiFi?" ru="Выключить WiFi?"/>
   <translation tag="Turn On" ru="Включить"/>
@@ -3062,6 +3073,7 @@
   <translation tag="X" ru="X"/>
   <translation tag="X Axis" ru="Ось X"/>
   <translation tag="X Offset" ru="Смещение X"/>
+  <translation tag="X and Y jog feedrate"/>
   <translation tag="X axis applied, but Y axis failed" ru="Ось X применена, но ось Y не удалась"/>
   <translation tag="X axis done, starting Y..." ru="Ось X готова, запуск Y..."/>
   <translation tag="X jog blocked at bed edge" ru="Перемещение по X заблокировано на краю стола"/>
@@ -3091,6 +3103,7 @@
   <translation tag="Z Range" ru="Диапазон Z"/>
   <translation tag="Z Tilt Adjust..." ru="Регулировка наклона Z..."/>
   <translation tag="Z jog blocked at axis limit"/>
+  <translation tag="Z jog feedrate"/>
   <translation tag="Z motor calibration failed" ru="Не удалась калибровка двигателя Z"/>
   <translation tag="Z probes for bed leveling and mesh generation" ru="Z-зонды для выравнивания стола и создания сетки"/>
   <translation tag="Z-Off:" ru="Z-Off:"/>
