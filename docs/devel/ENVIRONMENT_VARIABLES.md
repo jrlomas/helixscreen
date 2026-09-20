@@ -329,6 +329,8 @@ what it can still show you: that the probe runs, cycles, times out, and hands of
 
 Override the screen resolution. Alternative to the `-s` / `--size` command-line flag, useful for persistent configuration via `helixscreen.env` or systemd `EnvironmentFile`.
 
+The name says size, but the value is a resolution: it selects the display mode, and the layout breakpoint is classified from that resolution rather than set directly. `HELIX_DPI` is the separate knob for UI scale.
+
 | Property | Value |
 |----------|-------|
 | **Values** | Named preset: `micro`, `tiny`, `small`, `medium`, `large`, `xlarge` — or custom `WxH` format (e.g., `480x400`, `1920x1080`) |

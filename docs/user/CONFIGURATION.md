@@ -1938,7 +1938,10 @@ helix-screen --screenshot 5
 
 ## Environment Variables
 
-These can be set in the systemd service file or before running the binary:
+These belong in your helixscreen.env file (typically `~/helixscreen/config/helixscreen.env`),
+or in the environment before running the binary by hand. Do not put them in
+/etc/systemd/system/helixscreen.service: that unit is rewritten from the install-dir
+template on every start, so edits to it are discarded before the app launches.
 
 **Display & Input:**
 
@@ -1950,7 +1953,7 @@ These can be set in the systemd service file or before running the binary:
 | `HELIX_COLOR_SWAP_RB` | Swap red/blue channels (`1` to enable) — fixes inverted colors on some displays |
 | `HELIX_BACKLIGHT_DEVICE` | Force the backlight control method: `sysfs`, `allwinner`, `brightness` (Creality Sonic Pad), or `none` to disable. Fixes a brightness slider that does nothing |
 | `HELIX_DPI` | Override display DPI / UI scale (`50`–`500`, default `160`) — lower for oversized UI, higher for cramped UI |
-| `HELIX_SCREEN_SIZE` | Force screen size / layout (`micro`, `tiny`, `small`, `medium`, `large`, `xlarge`, `xxlarge`, or `WxH`) — persistent equivalent of `-s` |
+| `HELIX_SCREEN_SIZE` | Force screen resolution (`micro`, `tiny`, `small`, `medium`, `large`, `xlarge`, or `WxH`) — persistent equivalent of `-s`. Despite the name this is a resolution, not a UI scale; use `HELIX_DPI` to scale the interface |
 | `HELIX_TOUCH_DEVICE` | Override touch input device (e.g., `/dev/input/event1`) |
 | `HELIX_TOUCH_SWAP_AXES` | Swap X/Y touch axes (`1` to enable) |
 | `HELIX_TOUCH_CALIBRATE` | Force touch calibration on next launch (`1` to enable) |

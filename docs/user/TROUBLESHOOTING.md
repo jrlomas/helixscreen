@@ -553,6 +553,12 @@ HELIX_SCREEN_SIZE=large
 # Named sizes: micro, tiny, small, medium, large, xlarge
 ```
 
+Despite the name, this is a resolution, not a UI scale factor. The named values are
+aliases for resolutions (`large` is 1024x600), and the layout follows from whichever
+resolution you set. If the resolution is already correct and only the interface looks
+too big or too small, you want `HELIX_DPI` instead, covered in
+[UI elements look too large or too small](#ui-elements-look-too-large-or-too-small).
+
 Then restart:
 ```bash
 sudo systemctl restart helixscreen
