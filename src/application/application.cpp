@@ -240,20 +240,16 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
-// abi::__cxa_current_exception_type() — names the exception being handled
-// without RTTI on the static type. See the catch blocks below.
 #include <climits>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
-#include <cxxabi.h>
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <sys/file.h>
 #include <sys/stat.h>
-#include <typeinfo>
 #include <unistd.h>
 
 #ifdef __APPLE__
@@ -277,20 +273,6 @@ extern std::string g_log_file_cli;
 extern std::string g_log_level_cli;
 
 namespace {
-
-// Mangled type name of the exception currently being handled, for the catch-all
-// loggers below.
-//
-// Replaces typeid(e).name(), which needs RTTI — the firmware builds -fno-rtti.
-// __cxa_current_exception_type() is part of the Itanium ABI's exception-handling
-// support, which is unaffected by -fno-rtti, and it reports the type that was
-// thrown rather than the type of the handler's parameter. Null when no exception
-// is in flight; inside a catch block it never is, but the callers do not depend
-// on that.
-const char* current_exception_type_name() {
-    const std::type_info* ti = abi::__cxa_current_exception_type();
-    return ti ? ti->name() : "<unknown>";
-}
 
 // Android lifecycle: background/foreground state set from SDL event handler
 std::atomic<bool> s_app_backgrounded{false};
@@ -1182,10 +1164,10 @@ int Application::run(int argc, char** argv) {
         }
 
     } catch (const std::exception& e) {
-        const char* type_name = current_exception_type_name();
+        const std::string type_name = crash_handler::current_exception_type_name();
         spdlog::error("[Application] Caught exception during post-UI init: {} ({})", e.what(),
                       type_name);
-        crash_handler::breadcrumb::note("post_init_catch", type_name);
+        crash_handler::breadcrumb::note("post_init_catch", type_name.c_str());
         crash_handler::breadcrumb::dump_to_fd(STDERR_FILENO);
         try {
             TelemetryManager::instance().record_error("post_init", "unhandled_exception", e.what());
@@ -4401,10 +4383,10 @@ int Application::main_loop() {
             // and continue. If catches pile up faster than RUNAWAY_THRESHOLD
             // / RUNAWAY_WINDOW_MS, exit cleanly so the watchdog sees a
             // graceful shutdown instead of an infinite throw-catch tight loop.
-            const char* type_name = current_exception_type_name();
+            const std::string type_name = crash_handler::current_exception_type_name();
             spdlog::error("[Application] Caught exception in main loop: {} ({})", e.what(),
                           type_name);
-            crash_handler::breadcrumb::note("loop_catch", type_name);
+            crash_handler::breadcrumb::note("loop_catch", type_name.c_str());
             // Dump breadcrumbs so the next user log captures which observer/
             // callback path threw — root cause of #931 needs this trail.
             crash_handler::breadcrumb::dump_to_fd(STDERR_FILENO);
