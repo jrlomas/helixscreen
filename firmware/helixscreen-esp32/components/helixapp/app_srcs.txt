@@ -107,6 +107,7 @@ src/plugin/injection_point_manager.cpp
 src/print/active_print_media_manager.cpp
 src/print/filament_sensor_manager.cpp
 src/print/preprint_predictor.cpp
+src/print/print_eta_estimator.cpp
 src/print/thumbnail_write_journal.cpp
 src/print/print_completion.cpp
 src/print/print_file_data.cpp
@@ -208,6 +209,7 @@ src/system/capability_overrides.cpp
 src/system/cjk_font_manager.cpp
 src/system/config.cpp
 src/system/config_backup.cpp
+src/system/diagnostics.cpp
 src/system/display_settings_manager.cpp
 src/system/filament_favorites.cpp
 src/system/helix_plugin_installer.cpp
