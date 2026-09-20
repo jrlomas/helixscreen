@@ -124,10 +124,18 @@ host_profile_probe() {
     if [ -n "$HOST_MOD_ROOT" ] && [ -n "$HOST_MOD_CHROOT" ]; then
         HOST_SERVICE_MECHANISM="mod-managed"
         HOST_OWNS_COMPETING_UIS=1
-        HOST_INSTALL_ROOT="$HOST_MOD_ROOT/.bin/helixscreen"
-        # mod_data is a sibling of the mod tree on every layout: /usr/data on
-        # the AD5X (Z-Mod), /opt on the AD5M (Forge-X) — derive, never pin.
-        HOST_CONFIG_DIR="$(dirname "$HOST_MOD_ROOT")/mod_data/helixscreen/config"
+        # The payload root is a SIBLING of the mod's git tree, never inside
+        # it: Forge-X's OTA (a git_repo update_manager) and a Feather reset
+        # run git clean -fd / reset --hard across the tree, and anything of
+        # ours inside it is untracked baggage they delete. mod_data is the
+        # one directory per layout that exists on the host and survives that
+        # (/usr/data on the AD5X, /opt on the AD5M) — derive, never pin.
+        HOST_INSTALL_ROOT="$(dirname "$HOST_MOD_ROOT")/mod_data/helixscreen"
+        # Being outside the tree also means host_path_is_mod_owned does not
+        # match this root — deliberately. The mod-owned guard exists to keep
+        # our rm -rf off the MOD's files; the payload root is ours, and the
+        # armed payload contract owns its removal.
+        HOST_CONFIG_DIR="${HOST_INSTALL_ROOT}/config"
         HOST_MOONRAKER_USER_CONF="$(dirname "$HOST_MOD_ROOT")/mod_data/user.moonraker.conf"
         # The hook key names the RIG, not the mod: the two payload layouts
         # differ (the AD5M hook's cache paths assume the host's own /data,
@@ -239,17 +247,6 @@ host_mod_destruct_blocked() {
 # forgex_mod_data() delegates here so installer state files share one path.
 host_mod_data() {
     printf '%s\n' "$(dirname "${HOST_MOD_ROOT:-/opt/config/mod}")/mod_data"
-}
-
-# The mod's data mount (its descriptor's DATA_MNT): the parent of the .mod
-# namespace — /usr/data on the AD5X, /data on the AD5M. The one location per
-# board where a payload root outside the mod's git tree both exists and
-# survives an OTA, which is why the OD1 escape-hatch example derives from
-# here rather than a hard-coded AD5X path. Echoes nothing when the probe
-# found no chroot (callers keep their own fallback).
-host_mod_data_mount() {
-    [ -n "${HOST_MOD_CHROOT:-}" ] || return 0
-    printf '%s\n' "$(dirname "$(dirname "$HOST_MOD_CHROOT")")"
 }
 
 # Where the payload root of the LAST payload install is recorded, beside the

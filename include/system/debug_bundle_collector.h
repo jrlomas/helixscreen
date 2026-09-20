@@ -104,7 +104,10 @@ class DebugBundleCollector {
     static PrinterSnapshot snapshot_printer_state();
 
     /// Individual collectors (public for testing)
-    static nlohmann::json collect_system_info();
+    /// A projection of the caller's Diagnostics onto the legacy `system` keys
+    /// (scripts/debug-bundle.sh --summary/--pretty read them); pure, so the
+    /// projection is testable against a synthetic snapshot.
+    static nlohmann::json collect_system_info(const diagnostics::Diagnostics& diag);
 
     /**
      * @brief The resolved paths, identity, machine and log facts.
@@ -115,9 +118,9 @@ class DebugBundleCollector {
      * anything actually landed.
      *
      * No LVGL access — safe from the HttpExecutor thread upload_async()
-     * collects on.
+     * collects on. Reached through build_diagnostics_info() with the same
+     * Diagnostics that feeds `system`, so the two sections cannot disagree.
      */
-    static nlohmann::json collect_diagnostics_info();
 
     /// Serialize an explicit Diagnostics. Pure and static so the redaction and
     /// the field set are testable without a live process. Host-shaped values

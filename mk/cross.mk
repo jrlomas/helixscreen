@@ -2180,8 +2180,9 @@ deploy-ad5m-bin:
 AD5X_HOST ?=
 AD5X_USER ?= root
 AD5X_SSH_TARGET = $(if $(AD5X_HOST),$(AD5X_USER)@$(AD5X_HOST),$(error AD5X_HOST is required. The AD5X does not resolve via mDNS. Use: make deploy-ad5x-bin AD5X_HOST=192.168.x.x))
-# Forge-X payload root, same shape as the AD5M's.
-AD5X_DEPLOY_DIR ?= /opt/config/mod/.bin/helixscreen
+# Forge-X payload root (mod_data sibling of the mod tree, /opt spelling:
+# the bind init_buildroot exposes inside the chroot).
+AD5X_DEPLOY_DIR ?= /opt/config/mod_data/helixscreen
 
 # Binaries only. Deliberately does NOT restart the app, and that is not an
 # oversight: helix-screen on this board links against Forge-X's alternate glibc,

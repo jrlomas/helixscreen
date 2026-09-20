@@ -68,7 +68,6 @@
     "deny": [],
     "ask": []
   },
-  "outputStyle": "~/.claude/output-styles/real.md",
   "hooks": {
     "SessionStart": [
       {
@@ -82,5 +81,9 @@
         ]
       }
     ]
+  },
+  "outputStyle": "~/.claude/output-styles/real.md",
+  "enabledPlugins": {
+    "ponytail@ponytail": true
   }
 }

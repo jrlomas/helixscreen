@@ -3549,9 +3549,10 @@ TEST_CASE("AFC MIXED unit: a direct-fed lane and a hub-routed lane disagree on u
     CHECK_FALSE(helper.needs_unload_before_load(info, direct_slot));
     CHECK(helper.needs_unload_before_load(info, hub_slot));
 
-    // Guard rail — the backend-wide topology says HUB, so a get_topology()-keyed
-    // rule would have answered "swap" for the direct lane too. That is the bug.
-    REQUIRE(helper.get_topology() == PathTopology::HUB);
+    // Guard rail — the backend-wide topology names the shape of the unit, never
+    // which lane took which route, so a get_topology()-keyed rule cannot tell the
+    // direct lane from the hub-routed one. That is the bug.
+    REQUIRE(helper.get_topology() == PathTopology::MIXED);
 }
 
 TEST_CASE("AFC uniform HUB unit: an unparsed lane does not masquerade as direct-fed",
@@ -3673,6 +3674,73 @@ TEST_CASE("AFC all-direct lanes classified as PARALLEL topology", "[ams][afc][to
     for (bool routed : unit_infos[0].lane_is_hub_routed) {
         REQUIRE(routed == false);
     }
+}
+
+TEST_CASE("AFC system topology follows its units: a toolchanger unit reports PARALLEL",
+          "[ams][afc][topology]") {
+    // The filament path canvas renders from get_topology(), so the system-level
+    // answer decides whether the panel draws one nozzle behind a hub or one per
+    // toolhead. A Box Turtle in toolchanger mode feeds four of them.
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_zero_based(4);
+    helper.initialize_slots_from_discovery();
+    helper.setup_toolchanger(4);
+
+    nlohmann::json afc_state;
+    afc_state["units"] = nlohmann::json::array({"Box_Turtle Turtle_1"});
+    helper.feed_afc_state(afc_state);
+
+    nlohmann::json unit_data;
+    unit_data["lanes"] = nlohmann::json::array({"lane0", "lane1", "lane2", "lane3"});
+    unit_data["extruders"] =
+        nlohmann::json::array({"extruder", "extruder1", "extruder2", "extruder3"});
+    unit_data["hubs"] = nlohmann::json::array();
+    unit_data["buffers"] = nlohmann::json::array();
+
+    nlohmann::json params;
+    params["AFC_BoxTurtle Turtle_1"] = unit_data;
+    helper.feed_status_update(params);
+
+    REQUIRE(helper.get_unit_topology(0) == PathTopology::PARALLEL);
+    REQUIRE(helper.get_topology() == PathTopology::PARALLEL);
+}
+
+TEST_CASE("AFC system topology is MIXED when its units disagree", "[ams][afc][topology]") {
+    // One installation may carry both shapes at once: a Box Turtle feeding four
+    // toolheads beside an OpenAMS merging four lanes into one. No single unit's
+    // answer describes the machine, so the system reports MIXED and the renderer
+    // falls to the per-lane routing vector.
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_zero_based(8);
+    helper.initialize_slots_from_discovery();
+    helper.setup_toolchanger(4);
+
+    nlohmann::json afc_state;
+    afc_state["units"] = nlohmann::json::array({"Box_Turtle Turtle_1", "OpenAMS AMS_1"});
+    helper.feed_afc_state(afc_state);
+
+    nlohmann::json bt_data;
+    bt_data["lanes"] = nlohmann::json::array({"lane0", "lane1", "lane2", "lane3"});
+    bt_data["extruders"] =
+        nlohmann::json::array({"extruder", "extruder1", "extruder2", "extruder3"});
+    bt_data["hubs"] = nlohmann::json::array();
+    bt_data["buffers"] = nlohmann::json::array();
+
+    nlohmann::json ams1_data;
+    ams1_data["lanes"] = nlohmann::json::array({"lane4", "lane5", "lane6", "lane7"});
+    ams1_data["extruders"] = nlohmann::json::array({"extruder4"});
+    ams1_data["hubs"] = nlohmann::json::array({"Hub_1"});
+    ams1_data["buffers"] = nlohmann::json::array();
+
+    nlohmann::json params;
+    params["AFC_BoxTurtle Turtle_1"] = bt_data;
+    params["AFC_OpenAMS AMS_1"] = ams1_data;
+    helper.feed_status_update(params);
+
+    const auto& unit_infos = helper.get_unit_infos();
+    REQUIRE(unit_infos.size() == 2);
+    REQUIRE(unit_infos[0].topology != unit_infos[1].topology);
+    REQUIRE(helper.get_topology() == PathTopology::MIXED);
 }
 
 TEST_CASE("AFC direct_load hub field classified as direct (not hub-routed)",

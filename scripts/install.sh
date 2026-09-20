@@ -67,7 +67,7 @@ HELIX_INSTALL_DIRS="/root/printer_software/helixscreen /opt/helixscreen /mnt/UDI
 # it first. Swept on uninstall, since nothing else ever removes them.
 # Mirrors kStateRoots in include/helix_install_roots.h.
 # shellcheck disable=SC2034  # consumed by uninstall.sh
-HELIX_STATE_DIRS="/mnt/UDISK/helixscreen-state /mnt/UDISK/helixscreen /data/.helixscreen /data/helixscreen /usr/data/helixscreen-state /user-resource/helixscreen-state /userdata/helixscreen-state /srv/helixscreen-state"
+HELIX_STATE_DIRS="/mnt/UDISK/helixscreen-state /mnt/UDISK/helixscreen /data/.helixscreen /data/helixscreen /usr/data/helixscreen-state /user-resource/helixscreen-state /userdata/helixscreen-state /srv/helixscreen-state /opt/config/mod_data/helixscreen-state"
 
 # Mounts release.sh's detect_rollback_dir() tries, in order, for an
 # off-partition update-backup when the install filesystem is too tight to
@@ -848,10 +848,18 @@ host_profile_probe() {
     if [ -n "$HOST_MOD_ROOT" ] && [ -n "$HOST_MOD_CHROOT" ]; then
         HOST_SERVICE_MECHANISM="mod-managed"
         HOST_OWNS_COMPETING_UIS=1
-        HOST_INSTALL_ROOT="$HOST_MOD_ROOT/.bin/helixscreen"
-        # mod_data is a sibling of the mod tree on every layout: /usr/data on
-        # the AD5X (Z-Mod), /opt on the AD5M (Forge-X) — derive, never pin.
-        HOST_CONFIG_DIR="$(dirname "$HOST_MOD_ROOT")/mod_data/helixscreen/config"
+        # The payload root is a SIBLING of the mod's git tree, never inside
+        # it: Forge-X's OTA (a git_repo update_manager) and a Feather reset
+        # run git clean -fd / reset --hard across the tree, and anything of
+        # ours inside it is untracked baggage they delete. mod_data is the
+        # one directory per layout that exists on the host and survives that
+        # (/usr/data on the AD5X, /opt on the AD5M) — derive, never pin.
+        HOST_INSTALL_ROOT="$(dirname "$HOST_MOD_ROOT")/mod_data/helixscreen"
+        # Being outside the tree also means host_path_is_mod_owned does not
+        # match this root — deliberately. The mod-owned guard exists to keep
+        # our rm -rf off the MOD's files; the payload root is ours, and the
+        # armed payload contract owns its removal.
+        HOST_CONFIG_DIR="${HOST_INSTALL_ROOT}/config"
         HOST_MOONRAKER_USER_CONF="$(dirname "$HOST_MOD_ROOT")/mod_data/user.moonraker.conf"
         # The hook key names the RIG, not the mod: the two payload layouts
         # differ (the AD5M hook's cache paths assume the host's own /data,
@@ -963,17 +971,6 @@ host_mod_destruct_blocked() {
 # forgex_mod_data() delegates here so installer state files share one path.
 host_mod_data() {
     printf '%s\n' "$(dirname "${HOST_MOD_ROOT:-/opt/config/mod}")/mod_data"
-}
-
-# The mod's data mount (its descriptor's DATA_MNT): the parent of the .mod
-# namespace — /usr/data on the AD5X, /data on the AD5M. The one location per
-# board where a payload root outside the mod's git tree both exists and
-# survives an OTA, which is why the OD1 escape-hatch example derives from
-# here rather than a hard-coded AD5X path. Echoes nothing when the probe
-# found no chroot (callers keep their own fallback).
-host_mod_data_mount() {
-    [ -n "${HOST_MOD_CHROOT:-}" ] || return 0
-    printf '%s\n' "$(dirname "$(dirname "$HOST_MOD_CHROOT")")"
 }
 
 # Where the payload root of the LAST payload install is recorded, beside the
@@ -1937,9 +1934,9 @@ detect_tmp_dir() {
 # with no UI.
 #
 # Sets HELIX_CHROOT_DAEMON_DIR to a spelling that resolves in-chroot, trying
-# INSTALL_DIR first and then the same path under each other mod-tree candidate.
-# Leaves it empty and warns when none does: a wrong DAEMON_DIR fails silently,
-# so it must be said out loud here.
+# INSTALL_DIR first and then the same parent-relative path through each other
+# mod-tree candidate's spelling. Leaves it empty and warns when none does: a
+# wrong DAEMON_DIR fails silently, so it must be said out loud here.
 # shellcheck disable=SC2034  # consumed by service.sh (install_service_sysv)
 resolve_chroot_daemon_dir() {
     HELIX_CHROOT_DAEMON_DIR=""
@@ -1952,11 +1949,15 @@ resolve_chroot_daemon_dir() {
     fi
 
     local cand suffix candidate
-    suffix="${INSTALL_DIR#"${HOST_MOD_ROOT}"}"
+    # The suffix is relative to the mod tree's PARENT, because the payload
+    # root is a mod_data sibling of the tree, not a child of it. Every
+    # candidate shares that parent, so dirname restores the prefix whatever
+    # spelling the probe found.
+    suffix="${INSTALL_DIR#"$(dirname "${HOST_MOD_ROOT}")"}"
     # shellcheck disable=SC2086  # word splitting is the point: a candidate list
     for cand in ${HELIX_MOD_TREE_CANDIDATES:-/usr/data/config/mod /opt/config/mod}; do
         [ "$cand" = "${HOST_MOD_ROOT:-}" ] && continue
-        candidate="${cand}${suffix}"
+        candidate="$(dirname "$cand")${suffix}"
         if [ -d "${HOST_MOD_CHROOT}${candidate}" ]; then
             # shellcheck disable=SC2034  # consumed by service.sh (install_service_sysv)
             HELIX_CHROOT_DAEMON_DIR="$candidate"
@@ -2259,7 +2260,7 @@ set_install_paths() {
             log_info "Mod host: honoring the explicitly requested install directory"
         elif [ "${STANDALONE_INSTALL:-}" != "1" ]; then
             INSTALL_DIR="$HOST_INSTALL_ROOT"
-            log_info "Mod host: install root is the firmware mod's payload tree"
+            log_info "Mod host: install root is the mod's payload dir beside its tree"
             # The payload boots from inside the mod's chroot, so its init
             # script goes in the chroot's /etc/init.d, not the host's. The mod
             # runs `chroot $MOD .root/start.sh`, which starts every S* it finds
@@ -8017,36 +8018,88 @@ migrate_state_root() {
     return 0
 }
 
+# The install at INSTALL_DIR is complete enough that an outgoing root may be
+# removed: the binary is runnable and the operator's config was carried. Both
+# have to pass before the outgoing tree stops being the device's only working
+# install. $1 names the kept root in the refusal messages.
+replacement_install_verifies() {
+    if [ ! -x "${INSTALL_DIR}/bin/helix-screen" ]; then
+        log_warn "Keeping ${1:-the old install}: ${INSTALL_DIR} has no runnable binary"
+        return 1
+    fi
+    if [ ! -f "${INSTALL_DIR}/config/settings.json" ]; then
+        log_warn "Keeping ${1:-the old install}: configuration was not carried over"
+        return 1
+    fi
+    return 0
+}
+
+# Remove the tree an install that has been replaced left behind. Gates: the
+# replacement verifies (above), the outgoing path is an install root (final
+# component exactly "helixscreen" - never a bare mount or data root), and it
+# is not where this run installed.
+remove_superseded_install_tree() {
+    _rsit_old="${1:-}"
+    [ -n "$_rsit_old" ] || return 0
+    [ "$_rsit_old" != "$INSTALL_DIR" ] || return 0
+    [ -d "$_rsit_old" ] || return 0
+    replacement_install_verifies "$_rsit_old" || return 0
+
+    case "$_rsit_old" in
+        */helixscreen) ;;
+        *)
+            log_warn "Refusing to remove unexpected install path: $_rsit_old"
+            return 0 ;;
+    esac
+
+    rm -rf "$_rsit_old" 2>/dev/null || $SUDO rm -rf "$_rsit_old" 2>/dev/null || true
+    log_success "Removed the previous install at ${_rsit_old}"
+}
+
 # Remove the tree a migration moved away from.
 # Runs after the service is up, so a failure at any earlier step leaves a
 # complete and bootable install at the old path.
 cleanup_migrated_install() {
-    _cmi_old="${MIGRATE_FROM_DIR:-}"
-    [ -n "$_cmi_old" ] || return 0
-    [ "$_cmi_old" != "$INSTALL_DIR" ] || return 0
-    [ -d "$_cmi_old" ] || return 0
+    [ -n "${MIGRATE_FROM_DIR:-}" ] || return 0
+    remove_superseded_install_tree "$MIGRATE_FROM_DIR"
+}
 
-    # Both tests have to pass before the old tree stops being the device's only
-    # working install.
-    if [ ! -x "${INSTALL_DIR}/bin/helix-screen" ]; then
-        log_warn "Keeping ${_cmi_old}: ${INSTALL_DIR} has no runnable binary"
+# Remove the payload install the mod's previous default root
+# ($HOST_MOD_ROOT/.bin/helixscreen, inside the mod's git tree) left behind:
+# its tree on the host and the HOST-side init script an install at that root
+# wrote. Left in place, that init fires at boot beside this install's chroot
+# init and the two fight over the display - and its stop is name-based, so
+# stopping either instance kills both. The tree is tens of MB the mod's data
+# partition pays for until the mod's own OTA happens to reap it.
+#
+# Scope is exactly the one root our own installer used at that era - never a
+# discovered path, never the legacy standalone population
+# (payload_legacy_adopt_or_warn owns that one). The tree and the init are one
+# superseded install: both go, or both stay while the replacement at
+# INSTALL_DIR cannot be verified. Runs after the service is up, like
+# cleanup_migrated_install.
+cleanup_superseded_payload() {
+    [ "${HELIX_MOD_PAYLOAD:-}" = "1" ] || return 0
+    [ -n "${HOST_MOD_ROOT:-}" ] || return 0
+
+    _csp_old="${HOST_MOD_ROOT}/.bin/helixscreen"
+    [ "$_csp_old" != "$INSTALL_DIR" ] || return 0
+    replacement_install_verifies "the payload install at ${_csp_old}" || return 0
+
+    # Positive identification before an irreversible delete: the tree must
+    # carry our binary. Anything else inside the mod's tree belongs to the
+    # mod, and a tree already reaped by the mod's OTA leaves nothing to check.
+    if [ -d "$_csp_old" ] && [ ! -x "${_csp_old}/bin/helix-screen" ]; then
+        log_warn "Keeping ${_csp_old}: no HelixScreen payload found inside"
         return 0
     fi
-    if [ ! -f "${INSTALL_DIR}/config/settings.json" ]; then
-        log_warn "Keeping ${_cmi_old}: configuration was not carried over"
-        return 0
+
+    remove_superseded_host_init "$HOST_MOD_ROOT"
+
+    if [ -d "$_csp_old" ]; then
+        remove_superseded_install_tree "$_csp_old"
     fi
-
-    # Only ever remove a path whose final component is exactly "helixscreen".
-    case "$_cmi_old" in
-        */helixscreen) ;;
-        *)
-            log_warn "Refusing to remove unexpected migration source: $_cmi_old"
-            return 0 ;;
-    esac
-
-    rm -rf "$_cmi_old" 2>/dev/null || $SUDO rm -rf "$_cmi_old" 2>/dev/null || true
-    log_success "Removed the previous install at ${_cmi_old}"
+    return 0
 }
 
 cleanup_old_install() {
@@ -8130,6 +8183,42 @@ _has_no_new_privs() {
 _set_init_script_daemon_dir() {
     _daemon_dir="${HELIX_CHROOT_DAEMON_DIR:-$INSTALL_DIR}"
     _sed_inplace "s|DAEMON_DIR=.*|DAEMON_DIR=\"${_daemon_dir}\"|" "$INIT_SCRIPT_DEST"
+}
+
+# Remove a HOST-side init script this install superseded. The payload's own
+# init lives inside the mod's chroot; an install from the in-mod-tree root
+# era wrote one on the host, and it still fires at boot. The discriminator is
+# the root a script NAMES - its DAEMON_DIR line - never its filename: a
+# script naming the current INSTALL_DIR is a boot path this run depends on
+# (an adopted legacy root's, for one), and a script naming any other root is
+# not ours to interpret. No DAEMON_DIR line, no verdict - the script stays.
+# $@: every spelling of the superseded root's mod tree. The tree is reachable
+# by more than one host path, and the init names whichever spelling its
+# install resolved; HELIX_MOD_TREE_CANDIDATES covers the rest.
+# HELIX_HOST_INITD_DIR is the test seam; nothing on a device ever sets it.
+remove_superseded_host_init() {
+    local _rshi_dir="${HELIX_HOST_INITD_DIR:-/etc/init.d}"
+    local _rshi_roots="" _rshi_cand _rshi_init _rshi_named
+    # shellcheck disable=SC2086  # word splitting is the point: a candidate path list
+    for _rshi_cand in "$@" ${HELIX_MOD_TREE_CANDIDATES:-/usr/data/config/mod /opt/config/mod}; do
+        [ -n "$_rshi_cand" ] || continue
+        _rshi_roots="${_rshi_roots}${_rshi_cand}/.bin/helixscreen "
+    done
+    [ -n "$_rshi_roots" ] || return 0
+
+    for _rshi_init in "$_rshi_dir"/*helixscreen*; do
+        [ -f "$_rshi_init" ] || continue
+        _rshi_named="$(sed -n 's|^DAEMON_DIR="\([^"]*\)".*|\1|p' "$_rshi_init" 2>/dev/null)"
+        [ -n "$_rshi_named" ] || continue
+        [ "$_rshi_named" != "$INSTALL_DIR" ] || continue
+        case " $_rshi_roots" in
+            *" $_rshi_named "*) ;;
+            *) continue ;;
+        esac
+        rm -f "$_rshi_init" 2>/dev/null || $SUDO rm -f "$_rshi_init" 2>/dev/null || true
+        log_success "Removed the stale init script at ${_rshi_init} (it named ${_rshi_named})"
+    done
+    return 0
 }
 
 _migrate_init_script_hooks_path() {
@@ -9296,8 +9385,9 @@ add_update_manager_section() {
     # through here (fresh add + migrate_to_web_type), so this one guard covers
     # every UNARMED stanza write. Armed payload runs are exempt BY DESIGN - the
     # armed path is instead refused upstream in configure_moonraker_updates
-    # whenever INSTALL_DIR is mod-owned, so the exemption this guard grants can
-    # never put an updater against the mod's tree.
+    # whenever INSTALL_DIR is mod-owned (an operator-chosen in-tree root; the
+    # probed default lives outside the mod's namespaces), so the exemption
+    # this guard grants can never put an updater against the mod's tree.
     host_refuse_mod_owned "arming the Moonraker updater against" "$INSTALL_DIR"
 
     fs=$(file_sudo "$conf")
@@ -9881,21 +9971,23 @@ configure_moonraker_updates() {
         return 0
     fi
 
-    # --auto-update is refused while the payload root sits INSIDE the mod's
-    # tree: the stanza's updater REPLACES the whole root on update, which
-    # would destroy the config/ and platform/ preservation the payload
-    # contract exists to provide. The option is refused, not the install -
-    # completing without the updater armed is the safe outcome (nothing
-    # remote-triggered can touch the root). The durable shape is a payload
-    # root outside the tree (--payload-root), which keeps the stanza.
+    # --auto-update is refused for every payload install, wherever the root
+    # sits. Moonraker's type:web updater rmtree()s `path:` before extracting
+    # and the generated stanza carries no persistent_files, so it destroys the
+    # config/ and platform/ preservation the payload contract exists to
+    # provide - and config/ lives inside the root. Where the root sits changes
+    # nothing: a payload's lifecycle belongs to the mod's OTA, not to a second
+    # updater that cannot see the contract. The option is refused, not the
+    # install; completing without the updater armed is the safe outcome,
+    # because nothing remote-triggered can then touch the root.
     if [ "${HELIX_MOD_PAYLOAD_UPDATES:-}" = "1" ] \
-       && host_path_is_mod_owned "${INSTALL_DIR:-}" 2>/dev/null; then
-        log_error "--auto-update refused: the payload root is inside the firmware mod's tree:"
+       && [ "${HELIX_MOD_PAYLOAD:-}" = "1" ]; then
+        log_error "--auto-update refused: this is a payload install."
         log_error "  ${INSTALL_DIR}"
         log_error "Moonraker's type:web updater replaces the whole root on update, destroying"
         log_error "the config/ and platform/ preservation the payload contract provides."
-        log_error "Re-run with --payload-root outside the mod's tree (e.g. /usr/data/helixscreen)."
-        # TODO(#1505): a persistent_files-aware stanza could make a mod-owned
+        log_error "The mod's own OTA updates a payload install; arm nothing else against it."
+        # TODO(#1505): a persistent_files-aware stanza could make a payload
         # root safe for --auto-update; refused until that is decided.
         return 0
     fi
@@ -12669,23 +12761,21 @@ mod_payload_mode_block() {
 
     # A payload root inside the mod's git tree does not survive a Forge-X
     # OTA -- their update_manager is type: git_repo and git clean -fd removes
-    # .bin/helixscreen, which is untracked there.
+    # every untracked path in it, a payload included.
     # Only the payload contract can reach a mod-owned INSTALL_DIR
     # (set_install_paths' install-dir gate refuses it otherwise), so this
-    # fires in payload mode and never else.
+    # fires in payload mode and never else. The probed default lives outside
+    # the tree, so this reaches only an operator-chosen in-tree root.
     if host_path_is_mod_owned "${INSTALL_DIR:-}"; then
         log_warn "This payload root lives inside the firmware mod's git tree."
         log_warn "A Forge-X OTA removes it: their updater cleans untracked files"
         log_warn "in the mod's repo. Prefer a root outside the tree:"
-        # The example must exist on THIS rig: the mod's data mount (/usr/data
-        # on the AD5X, /data on the AD5M), not the hard-coded AD5X path an
-        # AD5M operator would follow onto a partition their rig does not
-        # have. Unprobed corner (flag-armed, no chroot): fall back to the
-        # AD5X literal.
-        local od1_mount
-        od1_mount="$(host_mod_data_mount)"
-        [ -n "$od1_mount" ] || od1_mount="/usr/data"
-        log_warn "  --payload-root $od1_mount/helixscreen"
+        # Point at the default's own location: mod_data beside the mod tree,
+        # the same root a bare install uses -- never a bare
+        # <data-mount>/helixscreen path, which on the AD5M lands inside the
+        # partition the vendor symlinks into Moonraker's gcodes root.
+        # host_mod_data()'s fallback spelling exists on both layouts.
+        log_warn "  --payload-root $(host_mod_data)/helixscreen"
     fi
 
     if [ "${HELIX_MOD_PAYLOAD:-}" != "1" ]; then
@@ -13193,6 +13283,7 @@ main() {
 
     cleanup_old_install
     cleanup_migrated_install
+    cleanup_superseded_payload
     cleanup_stale_cache_dirs
     retire_legacy_config_backups
 

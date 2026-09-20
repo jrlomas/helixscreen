@@ -357,23 +357,21 @@ mod_payload_mode_block() {
 
     # A payload root inside the mod's git tree does not survive a Forge-X
     # OTA -- their update_manager is type: git_repo and git clean -fd removes
-    # .bin/helixscreen, which is untracked there.
+    # every untracked path in it, a payload included.
     # Only the payload contract can reach a mod-owned INSTALL_DIR
     # (set_install_paths' install-dir gate refuses it otherwise), so this
-    # fires in payload mode and never else.
+    # fires in payload mode and never else. The probed default lives outside
+    # the tree, so this reaches only an operator-chosen in-tree root.
     if host_path_is_mod_owned "${INSTALL_DIR:-}"; then
         log_warn "This payload root lives inside the firmware mod's git tree."
         log_warn "A Forge-X OTA removes it: their updater cleans untracked files"
         log_warn "in the mod's repo. Prefer a root outside the tree:"
-        # The example must exist on THIS rig: the mod's data mount (/usr/data
-        # on the AD5X, /data on the AD5M), not the hard-coded AD5X path an
-        # AD5M operator would follow onto a partition their rig does not
-        # have. Unprobed corner (flag-armed, no chroot): fall back to the
-        # AD5X literal.
-        local od1_mount
-        od1_mount="$(host_mod_data_mount)"
-        [ -n "$od1_mount" ] || od1_mount="/usr/data"
-        log_warn "  --payload-root $od1_mount/helixscreen"
+        # Point at the default's own location: mod_data beside the mod tree,
+        # the same root a bare install uses -- never a bare
+        # <data-mount>/helixscreen path, which on the AD5M lands inside the
+        # partition the vendor symlinks into Moonraker's gcodes root.
+        # host_mod_data()'s fallback spelling exists on both layouts.
+        log_warn "  --payload-root $(host_mod_data)/helixscreen"
     fi
 
     if [ "${HELIX_MOD_PAYLOAD:-}" != "1" ]; then
@@ -881,6 +879,7 @@ main() {
 
     cleanup_old_install
     cleanup_migrated_install
+    cleanup_superseded_payload
     cleanup_stale_cache_dirs
     retire_legacy_config_backups
 

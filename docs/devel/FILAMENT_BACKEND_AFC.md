@@ -60,6 +60,12 @@ AFC topology is inferred from the extruder count per unit:
 
 This is stored per-unit in `unit_topologies_[]` and queried via `get_unit_topology(unit_index)`.
 
+`get_topology()` reduces those units to the one answer the filament path canvas renders from:
+the units' shared topology where they agree, `MIXED` where they do not, and `HUB` before any
+unit object has been parsed (lane-only frames arrive first, and the object-format unit path
+never populates the roster). A single Box Turtle in toolchanger mode therefore reports
+`PARALLEL` system-wide and draws four toolheads rather than one nozzle behind a hub.
+
 ### The `map` Field Problem
 
 AFC assigns each lane a virtual tool number via the `map` field (e.g., `"T4"`). **For HUB units, AFC gives each lane a unique map value even though all lanes physically feed the same extruder.**

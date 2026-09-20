@@ -64,6 +64,13 @@ export interface CrashReport {
   printer_model?: string;
   klipper_version?: string;
   display_backend?: string;
+  /** Which firmware population this is ("ZMOD", "Forge-X", "none") — one
+   *  platform key serves several, so this is what tells a K1 from an AD5X. */
+  mod_flavor?: string;
+  /** Resolved config/cache locations and which cache cascade rung won. */
+  config_dir?: string;
+  cache_dir?: string;
+  cache_tier?: string;
   log_tail?: string[];
   stack_base?: string;
   stack_dump?: string[];

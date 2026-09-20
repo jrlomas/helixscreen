@@ -883,9 +883,9 @@ detect_tmp_dir() {
 # with no UI.
 #
 # Sets HELIX_CHROOT_DAEMON_DIR to a spelling that resolves in-chroot, trying
-# INSTALL_DIR first and then the same path under each other mod-tree candidate.
-# Leaves it empty and warns when none does: a wrong DAEMON_DIR fails silently,
-# so it must be said out loud here.
+# INSTALL_DIR first and then the same parent-relative path through each other
+# mod-tree candidate's spelling. Leaves it empty and warns when none does: a
+# wrong DAEMON_DIR fails silently, so it must be said out loud here.
 # shellcheck disable=SC2034  # consumed by service.sh (install_service_sysv)
 resolve_chroot_daemon_dir() {
     HELIX_CHROOT_DAEMON_DIR=""
@@ -898,11 +898,15 @@ resolve_chroot_daemon_dir() {
     fi
 
     local cand suffix candidate
-    suffix="${INSTALL_DIR#"${HOST_MOD_ROOT}"}"
+    # The suffix is relative to the mod tree's PARENT, because the payload
+    # root is a mod_data sibling of the tree, not a child of it. Every
+    # candidate shares that parent, so dirname restores the prefix whatever
+    # spelling the probe found.
+    suffix="${INSTALL_DIR#"$(dirname "${HOST_MOD_ROOT}")"}"
     # shellcheck disable=SC2086  # word splitting is the point: a candidate list
     for cand in ${HELIX_MOD_TREE_CANDIDATES:-/usr/data/config/mod /opt/config/mod}; do
         [ "$cand" = "${HOST_MOD_ROOT:-}" ] && continue
-        candidate="${cand}${suffix}"
+        candidate="$(dirname "$cand")${suffix}"
         if [ -d "${HOST_MOD_CHROOT}${candidate}" ]; then
             # shellcheck disable=SC2034  # consumed by service.sh (install_service_sysv)
             HELIX_CHROOT_DAEMON_DIR="$candidate"
@@ -1205,7 +1209,7 @@ set_install_paths() {
             log_info "Mod host: honoring the explicitly requested install directory"
         elif [ "${STANDALONE_INSTALL:-}" != "1" ]; then
             INSTALL_DIR="$HOST_INSTALL_ROOT"
-            log_info "Mod host: install root is the firmware mod's payload tree"
+            log_info "Mod host: install root is the mod's payload dir beside its tree"
             # The payload boots from inside the mod's chroot, so its init
             # script goes in the chroot's /etc/init.d, not the host's. The mod
             # runs `chroot $MOD .root/start.sh`, which starts every S* it finds

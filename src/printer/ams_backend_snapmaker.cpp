@@ -694,6 +694,7 @@ void AmsBackendSnapmaker::prepare_for_resume(int slot_index, ResumeReadyCallback
     // old blunt virtual_sdcard gate.
     helix::PauseSignals sig;
     sig.exception_id = get_printer_state().get_print_exception_id();
+    sig.exception_code = get_printer_state().get_print_exception_code();
     // On these firmware pauses print_stats.message is empty — the reason text
     // lives in exception.message. Fall back to print_stats.message when the
     // exception carries no text (e.g. non-Snapmaker pause paths).

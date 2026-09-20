@@ -327,7 +327,7 @@
         "state_root": "/srv/helixscreen-state",
         "cache_dir": "/srv/helixscreen-state/cache",
         "log_file": "/opt/config/mod_data/log/helix.log",
-        "notes": "log_file is deliberately off the install tree so ZMOD's archiver collects it. cache_dir and log_file are independent fields, not derived from root."
+        "notes": "log_file is deliberately off the install tree so ZMOD's archiver collects it. cache_dir and log_file are independent fields, not derived from root. Forge-X payload mode (probed like the AD5M's) roots at /usr/data/config/mod_data/helixscreen (the /opt/config spelling of the same directory), with its cache at /opt/config/mod_data/helixscreen-state/cache and its log beside the mod's own at /opt/config/mod_data/log/helix.log."
       },
       "service": {
         "init_system": "sysv",
@@ -386,8 +386,9 @@
         "log_file_by_firmware": {
           "klipper_mod": "/data/.helixscreen/logs/helix.log",
           "zmod": "/opt/config/mod_data/log/helix.log",
-          "forge_x": null
-        }
+          "forge_x": "/data/.helixscreen/logs/helix.log"
+        },
+        "notes": "Forge-X payload mode (the default on a verified mod host) installs at <mod-tree-parent>/mod_data/helixscreen - /opt/config/mod_data/helixscreen on the AD5M, /usr/data/config/mod_data/helixscreen on the AD5X - a sibling of the mod's git tree, outside the reach of the OTA's git clean. Its service is the chroot's /etc/init.d/S90helixscreen and its cache/logs under /data/.helixscreen. root, root_by_firmware and init_script_by_firmware describe the --standalone layout; the payload root is deliberately absent from them because those fields feed the shared install-root lists, which the generic uninstall sweep walks."
       },
       "service": {
         "init_system": "sysv",
@@ -413,7 +414,7 @@
         "home": "/root",
         "user": "root",
         "group": "root",
-        "config_dir": null
+        "config_dir": "/root/printer_data/config"
       },
       "moonraker": {
         "update_manager": false,

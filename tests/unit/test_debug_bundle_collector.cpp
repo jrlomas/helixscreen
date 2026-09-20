@@ -76,15 +76,45 @@ TEST_CASE("DebugBundleCollector: collect() returns valid JSON with expected keys
 // collect_system_info() tests [debug-bundle]
 // ============================================================================
 
-TEST_CASE("DebugBundleCollector: collect_system_info() has platform and ram", "[debug-bundle]") {
-    json sys = helix::DebugBundleCollector::collect_system_info();
+TEST_CASE("DebugBundleCollector: collect_system_info() projects its Diagnostics",
+          "[debug-bundle]") {
+    // A synthetic snapshot: the values are distinctive on purpose, so the test
+    // goes red the moment collect_system_info() computes anything itself
+    // instead of reading the snapshot it was handed.
+    helix::diagnostics::Diagnostics diag;
+    diag.identity.platform_key = "k1c-sim";
+    diag.identity.host_arch = "arm-sim";
+    diag.machine.cpu_cores = 7;
+    diag.machine.mem_total_kb = 3ULL * 1024 * 1024;
+    diag.machine.uptime_seconds = 3610.9;
 
-    REQUIRE(sys.contains("platform"));
-    REQUIRE(sys["platform"].is_string());
-    REQUIRE_FALSE(sys["platform"].get<std::string>().empty());
+    json sys = helix::DebugBundleCollector::collect_system_info(diag);
 
-    REQUIRE(sys.contains("total_ram_mb"));
-    REQUIRE(sys.contains("cpu_cores"));
+    CHECK(sys.at("platform") == json("k1c-sim"));
+    CHECK(sys.at("host_arch") == json("arm-sim"));
+    CHECK(sys.at("total_ram_mb") == json(3072));
+    CHECK(sys.at("cpu_cores") == json(7));
+    CHECK(sys.at("uptime_seconds") == json(3610));
+}
+
+TEST_CASE("DebugBundleCollector: system section agrees with diagnostics section",
+          "[debug-bundle]") {
+    json bundle = helix::DebugBundleCollector::collect();
+
+    REQUIRE(bundle.contains("system"));
+    REQUIRE(bundle.contains("diagnostics"));
+    const json& sys = bundle["system"];
+    const json& ident = bundle["diagnostics"]["identity"];
+    const json& mach = bundle["diagnostics"]["machine"];
+
+    // Both sections come from one diagnostics::collect() call, so any
+    // disagreement here means a second computation crept back in.
+    CHECK(sys.at("platform") == ident.at("platform_key"));
+    CHECK(sys.at("host_arch") == ident.at("host_arch"));
+    CHECK(sys.at("cpu_cores") == mach.at("cpu_cores"));
+    CHECK(sys.at("total_ram_mb") == json(mach.at("mem_total_kb").get<uint64_t>() / 1024));
+    CHECK(sys.at("uptime_seconds") ==
+          json(static_cast<int>(mach.at("uptime_seconds").get<double>())));
 }
 
 // ============================================================================
@@ -349,8 +379,8 @@ TEST_CASE("DebugBundleCollector: sanitize_value redacts email addresses",
     REQUIRE(result.find("[REDACTED_EMAIL]") != std::string::npos);
 
     SECTION("multi-label domains and a bare two-letter TLD still redact") {
-        for (const char* addr : {"a@b.co", "first.last+tag@mail.example.co.uk", "x@y-z.io",
-                                 "admin@123.com"}) {
+        for (const char* addr :
+             {"a@b.co", "first.last+tag@mail.example.co.uk", "x@y-z.io", "admin@123.com"}) {
             auto redacted = helix::DebugBundleCollector::sanitize_value(addr);
             CAPTURE(addr);
             REQUIRE(redacted == "[REDACTED_EMAIL]");
@@ -525,18 +555,18 @@ TEST_CASE("DebugBundleCollector: sanitize_json redacts hardware serial numbers",
     json out = helix::DebugBundleCollector::sanitize_json(system_info);
     const json& info = out["result"]["system_info"];
 
-    REQUIRE(info["cpu_info"]["serial_number"].get<std::string>() == "[REDACTED]");
-    REQUIRE(info["sd_info"]["serial_number"].get<std::string>() == "[REDACTED]");
+    REQUIRE(info.at("cpu_info").at("serial_number").get<std::string>() == "[REDACTED]");
+    REQUIRE(info.at("sd_info").at("serial_number").get<std::string>() == "[REDACTED]");
 
     // The model and capacity next to them are diagnostic and must survive --
     // a key-pattern that swallowed the whole object would pass the two checks
     // above and gut the section.
-    REQUIRE(info["cpu_info"]["model"].get<std::string>() == "Raspberry Pi 4 Model B Rev 1.4");
-    REQUIRE(info["cpu_info"]["cpu_count"].get<int>() == 4);
-    REQUIRE(info["sd_info"]["manufacturer"].get<std::string>() == "Sandisk");
-    REQUIRE(info["sd_info"]["capacity"].get<std::string>() == "29.7 GiB");
+    REQUIRE(info.at("cpu_info").at("model").get<std::string>() == "Raspberry Pi 4 Model B Rev 1.4");
+    REQUIRE(info.at("cpu_info").at("cpu_count").get<int>() == 4);
+    REQUIRE(info.at("sd_info").at("manufacturer").get<std::string>() == "Sandisk");
+    REQUIRE(info.at("sd_info").at("capacity").get<std::string>() == "29.7 GiB");
 
-    const json& addrs = info["network"]["wlan0"]["ip_addresses"];
+    const json& addrs = info.at("network").at("wlan0").at("ip_addresses");
     REQUIRE(addrs[0]["address"].get<std::string>() == "192.168.1.50");
     REQUIRE(addrs[1]["address"].get<std::string>() == "fe80::1");
     REQUIRE(addrs[2]["address"].get<std::string>() == "fd12:3456:789a::1");
