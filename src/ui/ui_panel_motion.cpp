@@ -37,8 +37,8 @@
 
 using namespace helix;
 
-/// Trim trailing zeros so 0.1 reads "0.1" and 10.0 reads "10", matching the
-/// labels the shipped table used.
+/// Trim trailing zeros so 0.1 reads "0.1" and 10.0 reads "10"; the default
+/// distances must render as 0.1, 1, 10 and 50.
 static void format_distance_label(char* buf, size_t n, float mm) {
     if (mm == std::floor(mm)) {
         std::snprintf(buf, n, "%.0f", static_cast<double>(mm));
