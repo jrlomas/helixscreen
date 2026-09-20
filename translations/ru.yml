@@ -274,6 +274,8 @@ translations:
   Backup spool switching state unknown: 'Резервная катушка: состояние неизвестно'
   Barcode Scanner: Сканер штрих-кодов
   Base: Опорный
+  Batch load failed: ''
+  Batch unload failed: ''
   Beacon auto-calibrate sent: Beacon автокалибровка отправлена
   Beacon calibrate sent: Beacon калибровка отправлена
   Bed: Стол
@@ -1603,6 +1605,7 @@ translations:
   Listening: Прослушивание
   Live view from your webcam: Прямая трансляция с веб-камеры
   Load: Загрузить
+  Load / Unload: ''
   Load Failed: 'Не удалось загрузить'
   Load Filament: Загрузить филамент
   Load a filament first before trying to unload: Сначала загрузите филамент, прежде чем пытаться его выгрузить
@@ -2635,6 +2638,7 @@ translations:
   Select a valid tool: Выберите корректный инструмент
   Select a valid {}: 'Выберите допустимое значение для {}'
   Select a {}: 'Выберите {}'
+  Select at least one: ''
   Select fan: Выберите вентилятор
   Select gate: 'Выбор шлюза'
   Select macro for first button: Выберите макрос для первой кнопки

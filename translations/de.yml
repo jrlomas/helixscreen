@@ -285,6 +285,8 @@ translations:
   Backup spool switching state unknown: 'Reserve-Spulen-Wechsel: Status unbekannt'
   Barcode Scanner: Barcode-Scanner
   Base: Referenz
+  Batch load failed: ''
+  Batch unload failed: ''
   Beacon auto-calibrate sent: Beacon Auto-Kalibrierung gesendet
   Beacon calibrate sent: Beacon Kalibrierung gesendet
   Bed: Heizbett
@@ -1631,6 +1633,7 @@ translations:
   Listening: Zuhören
   Live view from your webcam: Livebild Ihrer Webcam
   Load: Laden
+  Load / Unload: ''
   Load Failed: 'Laden fehlgeschlagen'
   Load Filament: Filament laden
   Load a filament first before trying to unload: Laden Sie zuerst Filament, bevor Sie entladen
@@ -2672,6 +2675,7 @@ translations:
   Select a valid tool: Wählen Sie ein gültiges Werkzeug
   Select a valid {}: 'Wählen Sie einen gültigen Wert für {}'
   Select a {}: 'Wählen Sie {} aus'
+  Select at least one: ''
   Select fan: Lüfter auswählen
   Select gate: 'Gate auswählen'
   Select macro for first button: Makro für erste Taste auswählen

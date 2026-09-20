@@ -353,6 +353,8 @@ src/ui/ui_ams_loading_error_modal.cpp
 src/ui/ui_ams_mini_status.cpp
 src/ui/ui_ams_selector_menu.cpp
 src/ui/ui_afc_fault_path.cpp
+src/ui/ui_multiselect.cpp
+src/ui/ui_batch_filament_modal.cpp
 src/ui/ui_ams_sidebar.cpp
 src/ui/ui_ams_slot.cpp
 src/ui/ui_buffer_meter.cpp

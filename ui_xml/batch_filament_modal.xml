@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- Copyright (C) 2025-2026 356C LLC -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Batch filament picker - tick rows, then Load or Unload them as one operation -->
+<!-- Rows are populated by BatchFilamentModal; backdrop created by Modal system -->
+<component>
+  <view name="batch_filament_modal"
+        extends="ui_dialog" width="70%" height="content" align="center" flex_flow="column" style_flex_main_place="start"
+        style_pad_gap="0">
+    <!-- Content area -->
+    <lv_obj width="100%"
+            height="content" style_pad_all="#space_lg" flex_flow="column" style_flex_cross_place="center"
+            style_pad_gap="#space_md">
+      <text_heading width="100%" text="Load / Unload" translation_tag="Load / Unload" style_text_align="center"/>
+      <ui_multiselect name="batch_multiselect"/>
+    </lv_obj>
+    <!-- Tertiary is the leading slot: Cancel sits left of the two actions so the
+         picker can be closed without dispatching anything. -->
+    <modal_button_row tertiary_text="Cancel"
+                      tertiary_tag="Cancel" hide_tertiary="false" secondary_text="Unload" secondary_tag="Unload"
+                      primary_text="Load" primary_tag="Load"/>
+  </view>
+</component>

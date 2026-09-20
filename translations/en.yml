@@ -270,6 +270,8 @@ translations:
   Backup spool switching state unknown: Backup spool switching state unknown
   Barcode Scanner: Barcode Scanner
   Base: Base
+  Batch load failed: Batch load failed
+  Batch unload failed: Batch unload failed
   Beacon auto-calibrate sent: Beacon auto-calibrate sent
   Beacon calibrate sent: Beacon calibrate sent
   Bed: Bed
@@ -1585,6 +1587,7 @@ translations:
   Listening: Listening
   Live view from your webcam: Live view from your webcam
   Load: Load
+  Load / Unload: Load / Unload
   Load Failed: Load Failed
   Load Filament: Load Filament
   Load a filament first before trying to unload: Load a filament first before trying to unload
@@ -2613,6 +2616,7 @@ translations:
   Select a valid tool: Select a valid tool
   Select a valid {}: Select a valid {}
   Select a {}: Select a {}
+  Select at least one: Select at least one
   Select fan: Select fan
   Select gate: Select gate
   Select macro for first button: Select macro for first button

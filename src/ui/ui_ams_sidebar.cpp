@@ -4,6 +4,7 @@
 #include "ui_ams_sidebar.h"
 
 #include "ui_ams_device_operations_overlay.h"
+#include "ui_batch_filament_modal.h"
 #include "ui_button.h"
 #include "ui_callback_helpers.h"
 #include "ui_error_reporting.h"
@@ -63,6 +64,7 @@ constexpr const char* HOME_CONFIRM_LOAD_DECLINE_TAG =
 lv_subject_t s_unload_disabled;
 lv_subject_t s_reset_disabled;
 lv_subject_t s_check_gates_disabled;
+lv_subject_t s_supports_batch;
 bool s_gating_subjects_initialized = false;
 
 void init_button_gating_subjects() {
@@ -74,9 +76,13 @@ void init_button_gating_subjects() {
     lv_subject_init_int(&s_unload_disabled, 1);
     lv_subject_init_int(&s_reset_disabled, 1);
     lv_subject_init_int(&s_check_gates_disabled, 1);
+    // Start hidden: the batch button exists only on backends that implement
+    // batch ops, and no backend is known until the first refresh.
+    lv_subject_init_int(&s_supports_batch, 0);
     lv_xml_register_subject(nullptr, "ams_sidebar_unload_disabled", &s_unload_disabled);
     lv_xml_register_subject(nullptr, "ams_sidebar_reset_disabled", &s_reset_disabled);
     lv_xml_register_subject(nullptr, "ams_sidebar_check_gates_disabled", &s_check_gates_disabled);
+    lv_xml_register_subject(nullptr, "ams_sidebar_supports_batch", &s_supports_batch);
     s_gating_subjects_initialized = true;
 
     StaticSubjectRegistry::instance().register_deinit("AmsSidebarButtonGating", []() {
@@ -84,6 +90,7 @@ void init_button_gating_subjects() {
             lv_subject_deinit(&s_unload_disabled);
             lv_subject_deinit(&s_reset_disabled);
             lv_subject_deinit(&s_check_gates_disabled);
+            lv_subject_deinit(&s_supports_batch);
             s_gating_subjects_initialized = false;
             spdlog::trace("[AmsSidebar] Button gating subjects deinitialized");
         }
@@ -121,6 +128,7 @@ void AmsOperationSidebar::register_callbacks_static() {
         {"ams_sidebar_reset_clicked", on_reset_clicked_cb},
         {"ams_sidebar_check_gates_clicked", on_check_gates_clicked_cb},
         {"ams_sidebar_settings_clicked", on_settings_clicked_cb},
+        {"ams_sidebar_batch_clicked", on_batch_clicked_cb},
     });
 }
 
@@ -196,6 +204,22 @@ void AmsOperationSidebar::on_settings_clicked_cb(lv_event_t* e) {
     auto* event_target = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
     lv_obj_t* parent = lv_obj_get_screen(event_target);
     overlay.show(parent);
+
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void AmsOperationSidebar::on_batch_clicked_cb(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[AmsSidebar] on_batch_clicked");
+    LV_UNUSED(e);
+
+    // The button is hidden wherever the backend lacks batch ops, but a tap can
+    // race a backend switch; the show() re-checks rather than forwarding a
+    // guaranteed not_supported refusal.
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (backend && backend->supports_batch_filament_ops()) {
+        spdlog::info("[AmsSidebar] Opening batch filament picker");
+        BatchFilamentModal::show_owned();
+    }
 
     LVGL_SAFE_EVENT_CB_END();
 }
@@ -1121,6 +1145,11 @@ void AmsOperationSidebar::refresh_button_gating() {
     const auto machine = read_machine_op_gating();
     lv_subject_set_int(&s_reset_disabled, machine.reset_disabled ? 1 : 0);
     lv_subject_set_int(&s_check_gates_disabled, machine.check_gates_disabled ? 1 : 0);
+
+    // Batch support is a per-backend answer, so a tab switch moves it.
+    AmsBackend* backend = AmsState::instance().get_backend();
+    lv_subject_set_int(&s_supports_batch,
+                       backend && backend->supports_batch_filament_ops() ? 1 : 0);
 }
 
 void AmsOperationSidebar::handle_unload() {

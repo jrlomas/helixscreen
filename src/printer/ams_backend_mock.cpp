@@ -770,6 +770,72 @@ AmsError AmsBackendMock::unload_filament(int /*slot_index*/) {
     return AmsErrorHelper::success();
 }
 
+bool AmsBackendMock::supports_batch_filament_ops() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return snapmaker_mode_;
+}
+
+AmsError AmsBackendMock::load_filament_batch(const std::vector<int>& slots) {
+    return run_filament_batch(slots, /*load=*/true);
+}
+
+AmsError AmsBackendMock::unload_filament_batch(const std::vector<int>& slots) {
+    return run_filament_batch(slots, /*load=*/false);
+}
+
+AmsError AmsBackendMock::run_filament_batch(const std::vector<int>& slots, bool load) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!running_) {
+            return AmsErrorHelper::not_connected("Mock backend not started");
+        }
+
+        if (system_info_.action != AmsAction::IDLE) {
+            return AmsErrorHelper::busy(ams_action_to_string(system_info_.action));
+        }
+
+        if (slots.empty()) {
+            return AmsErrorHelper::invalid_parameter("batch filament op with no slots");
+        }
+
+        for (int slot : slots) {
+            if (!slots_.is_valid_index(slot)) {
+                return AmsErrorHelper::invalid_slot(lane_noun_locked(), slot,
+                                                    slots_.slot_count() - 1);
+            }
+            if (load) {
+                const auto* entry = slots_.get(slot);
+                if (!entry || entry->info.status == SlotStatus::EMPTY) {
+                    return AmsErrorHelper::slot_not_available(lane_noun_locked(), slot);
+                }
+            }
+        }
+
+#if HELIX_HAS_SNAPMAKER
+        // The real script, not a re-implementation: the mock rehearses what the
+        // printer would be sent (same reasoning as build_preprint_gcode).
+        spdlog::info("[AmsBackendMock] Batch {} G-code: {}", load ? "load" : "unload",
+                     AmsBackendSnapmaker::batch_feed_gcode(slots, load));
+#endif
+
+        system_info_.action = load ? AmsAction::LOADING : AmsAction::UNLOADING;
+        system_info_.operation_detail = std::string(load ? "Batch load: " : "Batch unload: ") +
+                                        std::to_string(slots.size()) +
+                                        (slots.size() == 1 ? " slot" : " slots");
+        filament_segment_ = load ? PathSegment::SPOOL : PathSegment::NOZZLE;
+    }
+
+    emit_event(EVENT_STATE_CHANGED);
+    if (load) {
+        schedule_completion(AmsAction::LOADING, EVENT_LOAD_COMPLETE, slots.front());
+    } else {
+        schedule_completion(AmsAction::UNLOADING, EVENT_UNLOAD_COMPLETE);
+    }
+
+    return AmsErrorHelper::success();
+}
+
 AmsError AmsBackendMock::select_slot(int slot_index) {
     {
         std::lock_guard<std::mutex> lock(mutex_);

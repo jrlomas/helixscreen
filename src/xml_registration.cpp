@@ -511,6 +511,7 @@ void register_xml_components() {
     register_xml("macro_enhance_modal.xml");
     register_xml("action_prompt_modal.xml");
     register_xml("info_qr_modal.xml");
+    register_xml("batch_filament_modal.xml");
     register_xml("color_picker.xml");
     register_color_picker_component_constants("color_picker");
 
