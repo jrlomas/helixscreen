@@ -259,6 +259,7 @@ translations:
     Prüfung der Schraubenhöhen
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: Automatisches Nachfüllen ist an, aber es gibt keine zwei Slots mit passendem Filament, daher wird bei Filamentende nichts gewechselt
   Auto-render video: Video automatisch rendern
+  'Auto-replenish filament': ''
   Auto-tuning Shapers...: Shaper automatisch abstimmen...
   Auto-uninstall only works on local Moonraker: Auto-Deinstallation funktioniert nur
     bei lokalem Moonraker
@@ -822,6 +823,7 @@ translations:
   Deploy: Ausfahren
   Describe the issue (optional): Problem beschreiben (optional)
   Detailed: Detailliert
+  'Detect filament tangles': ''
   Detecting plate...: Platte erkennen...
   Detecting printer type...: Druckertyp wird erkannt...
   Detecting...: Wird erkannt...
@@ -2204,6 +2206,7 @@ translations:
   Priming...: Primen...
   Print: Drucken
   Print Anyway: Trotzdem drucken
+  'Print Behaviour': ''
   Print Cancelled: Druck abgebrochen
   Print Complete!: Druck abgeschlossen!
   Print Completion Alert: Druckabschluss-Benachrichtigung
@@ -2455,6 +2458,7 @@ translations:
   Replace: "Ersetzen"
   Replace Profile?: "Profil ersetzen?"
   Replay Welcome Tour: Willkommens-Rundgang erneut abspielen
+  'Replenish ignores colour': ''
   Replenishing filament...: Filament nachfüllen...
   Report saved to crash_report.txt: Bericht in crash_report.txt gespeichert
   Reprint: Erneut drucken
@@ -2963,6 +2967,7 @@ translations:
   TOOLS: WERKZEUGE
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Dauert 3-5 Min. Nicht unterbrechen.
+  'Tangle sensitivity': ''
   Tap + to add: Zum Hinzufügen + tippen
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Zum Wiederherstellen auf Firmware-Neustart tippen. Beim K2 wird dabei auch die rpi-MCU-Bridge neu gestartet
   Tap again to confirm this orientation: Erneut tippen, um diese Ausrichtung zu bestätigen
@@ -3260,6 +3265,7 @@ translations:
   Turbo: Turbo
   Turbo Inner: Turbo Innen
   Turbo Outer: Turbo Außen
+  'Turn LED off when the print ends': ''
   Turn Off: Ausschalten
   Turn Off WiFi?: WiFi ausschalten?
   Turn On: Einschalten
@@ -3308,6 +3314,7 @@ translations:
   Unload Distance: 'Entladeweg'
   Unload Failed: 'Entladen fehlgeschlagen'
   Unload Filament: Filament entladen
+  'Unload at end': ''
   Unload failed: Entladen fehlgeschlagen
   Unload filament: 'Filament entladen'
   Unload from toolhead first: 'Entladen Sie zuerst aus dem Werkzeugkopf'

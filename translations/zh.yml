@@ -229,6 +229,7 @@ translations:
   Auto-probe or manually check screw heights: 自动探测或手动检查螺丝高度
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: 自动续料已开启，但没有两个槽位装有相同的耗材，因此耗材用尽时不会切换
   Auto-render video: 自动渲染视频
+  'Auto-replenish filament': ''
   Auto-tuning Shapers...: 正在自动校准整形器...
   Auto-uninstall only works on local Moonraker: 自动卸载仅适用于本地 Moonraker
   Automatic: 自动
@@ -745,6 +746,7 @@ translations:
   Deploy: 部署
   Describe the issue (optional): 描述问题（可选）
   Detailed: 详细
+  'Detect filament tangles': ''
   Detecting plate...: 正在检测热床板...
   Detecting printer type...: 正在检测打印机类型...
   Detecting...: 正在检测...
@@ -2041,6 +2043,7 @@ translations:
   Priming...: 正在预挤...
   Print: 打印
   Print Anyway: 仍要打印
+  'Print Behaviour': ''
   Print Cancelled: 打印已取消
   Print Complete!: 打印完成！
   Print Completion Alert: 打印完成提醒
@@ -2274,6 +2277,7 @@ translations:
   Replace: "替换"
   Replace Profile?: "替换配置？"
   Replay Welcome Tour: 重播欢迎漫游
+  'Replenish ignores colour': ''
   Replenishing filament...: 正在补充耗材...
   Report saved to crash_report.txt: 报告已保存到 crash_report.txt
   Reprint: 重新打印
@@ -2739,6 +2743,7 @@ translations:
   TOOLS: 工具
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: 需要 3-5 分钟。请勿中断。
+  'Tangle sensitivity': ''
   Tap + to add: 点击 + 添加
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: 点按“重启固件”以恢复。在 K2 上这也会重启 rpi MCU 桥接
   Tap again to confirm this orientation: 再次点击确认此方向
@@ -2996,6 +3001,7 @@ translations:
   Turbo: 极速
   Turbo Inner: 极速内圈
   Turbo Outer: 极速外圈
+  'Turn LED off when the print ends': ''
   Turn Off: 关闭
   Turn Off WiFi?: 关闭 WiFi？
   Turn On: 开启
@@ -3041,6 +3047,7 @@ translations:
   Unload Distance: '卸载距离'
   Unload Failed: '卸载失败'
   Unload Filament: 卸载耗材
+  'Unload at end': ''
   Unload failed: 卸载失败
   Unload filament: '卸载耗材'
   Unload from toolhead first: '请先从工具头卸载'

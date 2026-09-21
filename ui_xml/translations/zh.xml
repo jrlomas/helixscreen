@@ -228,6 +228,7 @@
   <translation tag="Auto-probe or manually check screw heights" zh="自动探测或手动检查螺丝高度"/>
   <translation tag="Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout" zh="自动续料已开启，但没有两个槽位装有相同的耗材，因此耗材用尽时不会切换"/>
   <translation tag="Auto-render video" zh="自动渲染视频"/>
+  <translation tag="Auto-replenish filament"/>
   <translation tag="Auto-tuning Shapers..." zh="正在自动校准整形器..."/>
   <translation tag="Auto-uninstall only works on local Moonraker" zh="自动卸载仅适用于本地 Moonraker"/>
   <translation tag="Automatic" zh="自动"/>
@@ -735,6 +736,7 @@
   <translation tag="Deploy" zh="部署"/>
   <translation tag="Describe the issue (optional)" zh="描述问题（可选）"/>
   <translation tag="Detailed" zh="详细"/>
+  <translation tag="Detect filament tangles"/>
   <translation tag="Detecting plate..." zh="正在检测热床板..."/>
   <translation tag="Detecting printer type..." zh="正在检测打印机类型..."/>
   <translation tag="Detecting..." zh="正在检测..."/>
@@ -1995,6 +1997,7 @@
   <translation tag="Priming..." zh="正在预挤..."/>
   <translation tag="Print" zh="打印"/>
   <translation tag="Print Anyway" zh="仍要打印"/>
+  <translation tag="Print Behaviour"/>
   <translation tag="Print Cancelled" zh="打印已取消"/>
   <translation tag="Print Complete!" zh="打印完成！"/>
   <translation tag="Print Completion Alert" zh="打印完成提醒"/>
@@ -2221,6 +2224,7 @@
   <translation tag="Replace" zh="替换"/>
   <translation tag="Replace Profile?" zh="替换配置？"/>
   <translation tag="Replay Welcome Tour" zh="重播欢迎漫游"/>
+  <translation tag="Replenish ignores colour"/>
   <translation tag="Replenishing filament..." zh="正在补充耗材..."/>
   <translation tag="Report saved to crash_report.txt" zh="报告已保存到 crash_report.txt"/>
   <translation tag="Reprint" zh="重新打印"/>
@@ -2672,6 +2676,7 @@
   <translation tag="TOOLS" zh="工具"/>
   <translation tag="TPU" zh="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." zh="需要 3-5 分钟。请勿中断。"/>
+  <translation tag="Tangle sensitivity"/>
   <translation tag="Tap + to add" zh="点击 + 添加"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" zh="点按“重启固件”以恢复。在 K2 上这也会重启 rpi MCU 桥接"/>
   <translation tag="Tap again to confirm this orientation" zh="再次点击确认此方向"/>
@@ -2898,6 +2903,7 @@
   <translation tag="Turbo" zh="极速"/>
   <translation tag="Turbo Inner" zh="极速内圈"/>
   <translation tag="Turbo Outer" zh="极速外圈"/>
+  <translation tag="Turn LED off when the print ends"/>
   <translation tag="Turn Off" zh="关闭"/>
   <translation tag="Turn Off WiFi?" zh="关闭 WiFi？"/>
   <translation tag="Turn On" zh="开启"/>
@@ -2942,6 +2948,7 @@
   <translation tag="Unload Distance" zh="卸载距离"/>
   <translation tag="Unload Failed" zh="卸载失败"/>
   <translation tag="Unload Filament" zh="卸载耗材"/>
+  <translation tag="Unload at end"/>
   <translation tag="Unload failed" zh="卸载失败"/>
   <translation tag="Unload filament" zh="卸载耗材"/>
   <translation tag="Unload from toolhead first" zh="请先从工具头卸载"/>

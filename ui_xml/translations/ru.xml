@@ -228,6 +228,7 @@
   <translation tag="Auto-probe or manually check screw heights" ru="Автозондирование или ручная проверка высоты винтов"/>
   <translation tag="Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout" ru="Автопополнение включено, но нет двух слотов с совпадающим филаментом, поэтому переключение при обрыве не сработает"/>
   <translation tag="Auto-render video" ru="Автоматический рендер видео"/>
+  <translation tag="Auto-replenish filament"/>
   <translation tag="Auto-tuning Shapers..." ru="Автонастройка Input Shaper..."/>
   <translation tag="Auto-uninstall only works on local Moonraker" ru="Автоудаление работает только с локальным Moonraker"/>
   <translation tag="Automatic" ru="Автоматический"/>
@@ -735,6 +736,7 @@
   <translation tag="Deploy" ru="Развернуть"/>
   <translation tag="Describe the issue (optional)" ru="Опишите проблему (необязательно)"/>
   <translation tag="Detailed" ru="Подробно"/>
+  <translation tag="Detect filament tangles"/>
   <translation tag="Detecting plate..." ru="Обнаружение пластины..."/>
   <translation tag="Detecting printer type..." ru="Определение типа принтера..."/>
   <translation tag="Detecting..." ru="Обнаружение..."/>
@@ -1995,6 +1997,7 @@
   <translation tag="Priming..." ru="Грунтование..."/>
   <translation tag="Print" ru="Печать"/>
   <translation tag="Print Anyway" ru="Всё равно печатать"/>
+  <translation tag="Print Behaviour"/>
   <translation tag="Print Cancelled" ru="Печать отменена"/>
   <translation tag="Print Complete!" ru="Печать завершена!"/>
   <translation tag="Print Completion Alert" ru="Уведомление о завершении печати"/>
@@ -2221,6 +2224,7 @@
   <translation tag="Replace" ru="Заменить"/>
   <translation tag="Replace Profile?" ru="Заменить профиль?"/>
   <translation tag="Replay Welcome Tour" ru="Повторить приветственный тур"/>
+  <translation tag="Replenish ignores colour"/>
   <translation tag="Replenishing filament..." ru="Пополнение филамента..."/>
   <translation tag="Report saved to crash_report.txt" ru="Отчёт сохранён в crash_report.txt"/>
   <translation tag="Reprint" ru="Повторить печать"/>
@@ -2672,6 +2676,7 @@
   <translation tag="TOOLS" ru="ИНСТРУМЕНТЫ"/>
   <translation tag="TPU" ru="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." ru="Занимает 3-5 мин. Не прерывайте."/>
+  <translation tag="Tangle sensitivity"/>
   <translation tag="Tap + to add" ru="Нажмите +, чтобы добавить"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" ru="Нажмите «Перезапуск прошивки» для восстановления. На K2 это также перезапускает мост MCU rpi"/>
   <translation tag="Tap again to confirm this orientation" ru="Нажмите ещё раз для подтверждения ориентации"/>
@@ -2898,6 +2903,7 @@
   <translation tag="Turbo" ru="Турбо"/>
   <translation tag="Turbo Inner" ru="Турбо (внутренний)"/>
   <translation tag="Turbo Outer" ru="Турбо (внешний)"/>
+  <translation tag="Turn LED off when the print ends"/>
   <translation tag="Turn Off" ru="Выключить"/>
   <translation tag="Turn Off WiFi?" ru="Выключить WiFi?"/>
   <translation tag="Turn On" ru="Включить"/>
@@ -2942,6 +2948,7 @@
   <translation tag="Unload Distance" ru="Расстояние выгрузки"/>
   <translation tag="Unload Failed" ru="Не удалось выгрузить"/>
   <translation tag="Unload Filament" ru="Выгрузить филамент"/>
+  <translation tag="Unload at end"/>
   <translation tag="Unload failed" ru="Ошибка выгрузки"/>
   <translation tag="Unload filament" ru="Выгрузка филамента"/>
   <translation tag="Unload from toolhead first" ru="Сначала выгрузите из печатающей головки"/>

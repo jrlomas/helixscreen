@@ -228,6 +228,7 @@
   <translation tag="Auto-probe or manually check screw heights" ja="自動プローブまたは手動でネジの高さを確認"/>
   <translation tag="Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout" ja="自動補充はオンですが、フィラメントが一致するスロットが2つないため、フィラメント切れになっても何も切り替わりません"/>
   <translation tag="Auto-render video" ja="動画を自動レンダリング"/>
+  <translation tag="Auto-replenish filament"/>
   <translation tag="Auto-tuning Shapers..." ja="シェーパーを自動調整中..."/>
   <translation tag="Auto-uninstall only works on local Moonraker" ja="自動アンインストールはローカルの Moonraker でのみ動作します"/>
   <translation tag="Automatic" ja="自動"/>
@@ -735,6 +736,7 @@
   <translation tag="Deploy" ja="展開"/>
   <translation tag="Describe the issue (optional)" ja="問題の詳細（任意）"/>
   <translation tag="Detailed" ja="詳細"/>
+  <translation tag="Detect filament tangles"/>
   <translation tag="Detecting plate..." ja="プレートを検出中..."/>
   <translation tag="Detecting printer type..." ja="プリンタータイプを検出中..."/>
   <translation tag="Detecting..." ja="検出中..."/>
@@ -1995,6 +1997,7 @@
   <translation tag="Priming..." ja="プライミング中..."/>
   <translation tag="Print" ja="印刷"/>
   <translation tag="Print Anyway" ja="それでも印刷"/>
+  <translation tag="Print Behaviour"/>
   <translation tag="Print Cancelled" ja="印刷キャンセル"/>
   <translation tag="Print Complete!" ja="印刷完了！"/>
   <translation tag="Print Completion Alert" ja="印刷完了通知"/>
@@ -2221,6 +2224,7 @@
   <translation tag="Replace" ja="置き換え"/>
   <translation tag="Replace Profile?" ja="プロファイルを置き換えますか？"/>
   <translation tag="Replay Welcome Tour" ja="ウェルカムツアーを再生"/>
+  <translation tag="Replenish ignores colour"/>
   <translation tag="Replenishing filament..." ja="フィラメントを補充中..."/>
   <translation tag="Report saved to crash_report.txt" ja="crash_report.txt にレポートを保存しました"/>
   <translation tag="Reprint" ja="再印刷"/>
@@ -2672,6 +2676,7 @@
   <translation tag="TOOLS" ja="ツール"/>
   <translation tag="TPU" ja="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." ja="3〜5分かかります。中断しないでください。"/>
+  <translation tag="Tangle sensitivity"/>
   <translation tag="Tap + to add" ja="+ をタップして追加"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" ja="「ファームウェア再起動」をタップして復旧してください。K2 では rpi MCU ブリッジも再起動されます"/>
   <translation tag="Tap again to confirm this orientation" ja="もう一度タップしてこの向きを確定"/>
@@ -2898,6 +2903,7 @@
   <translation tag="Turbo" ja="ターボ"/>
   <translation tag="Turbo Inner" ja="ターボ・内側"/>
   <translation tag="Turbo Outer" ja="ターボ・外側"/>
+  <translation tag="Turn LED off when the print ends"/>
   <translation tag="Turn Off" ja="オフにする"/>
   <translation tag="Turn Off WiFi?" ja="WiFiをオフにしますか？"/>
   <translation tag="Turn On" ja="オンにする"/>
@@ -2942,6 +2948,7 @@
   <translation tag="Unload Distance" ja="アンロード距離"/>
   <translation tag="Unload Failed" ja="取り出しに失敗しました"/>
   <translation tag="Unload Filament" ja="フィラメントを排出"/>
+  <translation tag="Unload at end"/>
   <translation tag="Unload failed" ja="排出に失敗しました"/>
   <translation tag="Unload filament" ja="フィラメントをアンロード"/>
   <translation tag="Unload from toolhead first" ja="先にツールヘッドから取り出してください"/>

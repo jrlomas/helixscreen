@@ -245,6 +245,7 @@ translations:
   Auto-probe or manually check screw heights: Auto-probe or manually check screw heights
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout
   Auto-render video: Auto-render video
+  'Auto-replenish filament': 'Auto-replenish filament'
   'Auto-tuning Shapers...': 'Auto-tuning Shapers...'
   Auto-uninstall only works on local Moonraker: Auto-uninstall only works on local
     Moonraker
@@ -794,6 +795,7 @@ translations:
   Deploy: Deploy
   Describe the issue (optional): Describe the issue (optional)
   Detailed: Detailed
+  'Detect filament tangles': 'Detect filament tangles'
   'Detecting plate...': 'Detecting plate...'
   Detecting printer type...: Detecting printer type...
   Detecting...: Detecting...
@@ -2155,6 +2157,7 @@ translations:
   Priming...: Priming...
   Print: Print
   Print Anyway: Print Anyway
+  'Print Behaviour': 'Print Behaviour'
   Print Cancelled: Print Cancelled
   Print Complete!: Print Complete!
   Print Completion Alert: Print Completion Alert
@@ -2401,6 +2404,7 @@ translations:
   Replace: Replace
   Replace Profile?: Replace Profile?
   Replay Welcome Tour: Replay Welcome Tour
+  'Replenish ignores colour': 'Replenish ignores colour'
   'Replenishing filament...': 'Replenishing filament...'
   Report saved to crash_report.txt: Report saved to crash_report.txt
   Reprint: Reprint
@@ -2901,6 +2905,7 @@ translations:
   TOOLS: TOOLS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Takes 3-5 min. Do not interrupt.
+  'Tangle sensitivity': 'Tangle sensitivity'
   Tap + to add: Tap + to add
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge
   Tap again to confirm this orientation: Tap again to confirm this orientation
@@ -3186,6 +3191,7 @@ translations:
   Turbo: Turbo
   Turbo Inner: Turbo Inner
   Turbo Outer: Turbo Outer
+  'Turn LED off when the print ends': 'Turn LED off when the print ends'
   Turn Off: Turn Off
   Turn Off WiFi?: Turn Off WiFi?
   Turn On: Turn On
@@ -3234,6 +3240,7 @@ translations:
   Unload Distance: Unload Distance
   Unload Failed: Unload Failed
   Unload Filament: Unload Filament
+  'Unload at end': 'Unload at end'
   Unload failed: Unload failed
   Unload filament: Unload filament
   Unload from toolhead first: Unload from toolhead first

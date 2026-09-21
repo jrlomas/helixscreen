@@ -249,6 +249,7 @@ translations:
     высоты винтов
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: Автопополнение включено, но нет двух слотов с совпадающим филаментом, поэтому переключение при обрыве не сработает
   Auto-render video: Автоматический рендер видео
+  'Auto-replenish filament': ''
   Auto-tuning Shapers...: Автонастройка Input Shaper...
   Auto-uninstall only works on local Moonraker: Автоудаление работает только с локальным
     Moonraker
@@ -805,6 +806,7 @@ translations:
   Deploy: Развернуть
   Describe the issue (optional): Опишите проблему (необязательно)
   Detailed: Подробно
+  'Detect filament tangles': ''
   Detecting plate...: Обнаружение пластины...
   Detecting printer type...: Определение типа принтера...
   Detecting...: Обнаружение...
@@ -2172,6 +2174,7 @@ translations:
   Priming...: Грунтование...
   Print: Печать
   Print Anyway: Всё равно печатать
+  'Print Behaviour': ''
   Print Cancelled: Печать отменена
   Print Complete!: Печать завершена!
   Print Completion Alert: Уведомление о завершении печати
@@ -2422,6 +2425,7 @@ translations:
   Replace: "Заменить"
   Replace Profile?: "Заменить профиль?"
   Replay Welcome Tour: Повторить приветственный тур
+  'Replenish ignores colour': ''
   Replenishing filament...: Пополнение филамента...
   Report saved to crash_report.txt: Отчёт сохранён в crash_report.txt
   Reprint: Повторить печать
@@ -2927,6 +2931,7 @@ translations:
   TOOLS: ИНСТРУМЕНТЫ
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Занимает 3-5 мин. Не прерывайте.
+  'Tangle sensitivity': ''
   Tap + to add: Нажмите +, чтобы добавить
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Нажмите «Перезапуск прошивки» для восстановления. На K2 это также перезапускает мост MCU rpi
   Tap again to confirm this orientation: Нажмите ещё раз для подтверждения ориентации
@@ -3213,6 +3218,7 @@ translations:
   Turbo: Турбо
   Turbo Inner: Турбо (внутренний)
   Turbo Outer: Турбо (внешний)
+  'Turn LED off when the print ends': ''
   Turn Off: Выключить
   Turn Off WiFi?: Выключить WiFi?
   Turn On: Включить
@@ -3261,6 +3267,7 @@ translations:
   Unload Distance: 'Расстояние выгрузки'
   Unload Failed: 'Не удалось выгрузить'
   Unload Filament: Выгрузить филамент
+  'Unload at end': ''
   Unload failed: Ошибка выгрузки
   Unload filament: 'Выгрузка филамента'
   Unload from toolhead first: 'Сначала выгрузите из печатающей головки'

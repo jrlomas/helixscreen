@@ -230,6 +230,7 @@ translations:
   Auto-probe or manually check screw heights: 自動プローブまたは手動でネジの高さを確認
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: 自動補充はオンですが、フィラメントが一致するスロットが2つないため、フィラメント切れになっても何も切り替わりません
   Auto-render video: 動画を自動レンダリング
+  'Auto-replenish filament': ''
   Auto-tuning Shapers...: シェーパーを自動調整中...
   Auto-uninstall only works on local Moonraker: 自動アンインストールはローカルの Moonraker でのみ動作します
   Automatic: 自動
@@ -747,6 +748,7 @@ translations:
   Deploy: 展開
   Describe the issue (optional): 問題の詳細（任意）
   Detailed: 詳細
+  'Detect filament tangles': ''
   Detecting plate...: プレートを検出中...
   Detecting printer type...: プリンタータイプを検出中...
   Detecting...: 検出中...
@@ -2049,6 +2051,7 @@ translations:
   Priming...: プライミング中...
   Print: 印刷
   Print Anyway: それでも印刷
+  'Print Behaviour': ''
   Print Cancelled: 印刷キャンセル
   Print Complete!: 印刷完了！
   Print Completion Alert: 印刷完了通知
@@ -2283,6 +2286,7 @@ translations:
   Replace: "置き換え"
   Replace Profile?: "プロファイルを置き換えますか？"
   Replay Welcome Tour: ウェルカムツアーを再生
+  'Replenish ignores colour': ''
   Replenishing filament...: フィラメントを補充中...
   Report saved to crash_report.txt: crash_report.txt にレポートを保存しました
   Reprint: 再印刷
@@ -2747,6 +2751,7 @@ translations:
   TOOLS: ツール
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: 3〜5分かかります。中断しないでください。
+  'Tangle sensitivity': ''
   Tap + to add: + をタップして追加
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: 「ファームウェア再起動」をタップして復旧してください。K2 では rpi MCU ブリッジも再起動されます
   Tap again to confirm this orientation: もう一度タップしてこの向きを確定
@@ -3006,6 +3011,7 @@ translations:
   Turbo: ターボ
   Turbo Inner: ターボ・内側
   Turbo Outer: ターボ・外側
+  'Turn LED off when the print ends': ''
   Turn Off: オフにする
   Turn Off WiFi?: WiFiをオフにしますか？
   Turn On: オンにする
@@ -3051,6 +3057,7 @@ translations:
   Unload Distance: 'アンロード距離'
   Unload Failed: '取り出しに失敗しました'
   Unload Filament: フィラメントを排出
+  'Unload at end': ''
   Unload failed: 排出に失敗しました
   Unload filament: 'フィラメントをアンロード'
   Unload from toolhead first: '先にツールヘッドから取り出してください'

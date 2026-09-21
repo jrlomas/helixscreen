@@ -228,6 +228,7 @@
   <translation tag="Auto-probe or manually check screw heights" it="Sondaggio automatico o controllo manuale dell&apos;altezza delle viti"/>
   <translation tag="Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout" it="Il rifornimento automatico è attivo, ma nessuna coppia di slot ha filamento compatibile, quindi nulla cambierà all&apos;esaurimento"/>
   <translation tag="Auto-render video" it="Rendering video automatico"/>
+  <translation tag="Auto-replenish filament"/>
   <translation tag="Auto-tuning Shapers..." it="Regolazione automatica degli shaper in corso..."/>
   <translation tag="Auto-uninstall only works on local Moonraker" it="La disinstallazione automatica funziona solo su Moonraker locale"/>
   <translation tag="Automatic" it="Automatico"/>
@@ -735,6 +736,7 @@
   <translation tag="Deploy" it="Rileva"/>
   <translation tag="Describe the issue (optional)" it="Descrivi il problema (facoltativo)"/>
   <translation tag="Detailed" it="Dettagliato"/>
+  <translation tag="Detect filament tangles"/>
   <translation tag="Detecting plate..." it="Rilevamento piano..."/>
   <translation tag="Detecting printer type..." it="Rilevamento tipo stampante..."/>
   <translation tag="Detecting..." it="Rilevamento in corso..."/>
@@ -1995,6 +1997,7 @@
   <translation tag="Priming..." it="Preparazione ugello..."/>
   <translation tag="Print" it="Stampa"/>
   <translation tag="Print Anyway" it="Stampa comunque"/>
+  <translation tag="Print Behaviour"/>
   <translation tag="Print Cancelled" it="Stampa annullata"/>
   <translation tag="Print Complete!" it="Stampa completata!"/>
   <translation tag="Print Completion Alert" it="Avviso completamento stampa"/>
@@ -2221,6 +2224,7 @@
   <translation tag="Replace" it="Sostituisci"/>
   <translation tag="Replace Profile?" it="Sostituire profilo?"/>
   <translation tag="Replay Welcome Tour" it="Rivedi il tour di benvenuto"/>
+  <translation tag="Replenish ignores colour"/>
   <translation tag="Replenishing filament..." it="Rifornimento filamento..."/>
   <translation tag="Report saved to crash_report.txt" it="Report salvato in crash_report.txt"/>
   <translation tag="Reprint" it="Ristampa"/>
@@ -2672,6 +2676,7 @@
   <translation tag="TOOLS" it="STRUMENTI"/>
   <translation tag="TPU" it="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." it="Richiede 3-5 min. Non interrompere."/>
+  <translation tag="Tangle sensitivity"/>
   <translation tag="Tap + to add" it="Tocca + per aggiungere"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" it="Toccare Riavvia firmware per ripristinare. Sulla K2 questo riavvia anche il bridge MCU rpi"/>
   <translation tag="Tap again to confirm this orientation" it="Tocca di nuovo per confermare questo orientamento"/>
@@ -2898,6 +2903,7 @@
   <translation tag="Turbo" it="Turbo"/>
   <translation tag="Turbo Inner" it="Turbo interno"/>
   <translation tag="Turbo Outer" it="Turbo esterno"/>
+  <translation tag="Turn LED off when the print ends"/>
   <translation tag="Turn Off" it="Spegni"/>
   <translation tag="Turn Off WiFi?" it="Disattivare il WiFi?"/>
   <translation tag="Turn On" it="Accendi"/>
@@ -2942,6 +2948,7 @@
   <translation tag="Unload Distance" it="Distanza di scarico"/>
   <translation tag="Unload Failed" it="Scaricamento non riuscito"/>
   <translation tag="Unload Filament" it="Scarica filamento"/>
+  <translation tag="Unload at end"/>
   <translation tag="Unload failed" it="Scarico non riuscito"/>
   <translation tag="Unload filament" it="Scarica il filamento"/>
   <translation tag="Unload from toolhead first" it="Scarica prima dalla testina"/>

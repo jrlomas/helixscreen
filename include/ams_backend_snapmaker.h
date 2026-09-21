@@ -375,6 +375,26 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         return print_preferences_;
     }
 
+    /// The Print Behaviour section shown on the AMS device-operations
+    /// overlay. Absent until the firmware has reported a preference, so the
+    /// overlay never offers a setting whose state it does not know.
+    [[nodiscard]] std::vector<helix::printer::DeviceSection> get_device_sections() const override;
+
+    /// One DeviceAction per reported preference: toggles, a sensitivity
+    /// dropdown, and one end-unload toggle per reported toolhead.
+    [[nodiscard]] std::vector<helix::printer::DeviceAction> get_device_actions() const override;
+
+    /// Sends the SET_PRINT_PREFERENCES line build_preference_gcode() maps the
+    /// action id to. Unknown ids are reported as not supported.
+    AmsError execute_device_action(const std::string& action_id,
+                                   const std::any& value = {}) override;
+
+    /// The command one action produces, or empty when the id is not ours.
+    /// Separated from execute_device_action so the mapping is testable without
+    /// a Moonraker client.
+    [[nodiscard]] std::string build_preference_gcode(const std::string& action_id,
+                                                     const std::any& value) const;
+
     // Static parsers (public for testing)
     static ExtruderToolState parse_extruder_state(const nlohmann::json& json);
     static SnapmakerRfidInfo parse_rfid_info(const nlohmann::json& json);
