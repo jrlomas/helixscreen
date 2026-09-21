@@ -20,6 +20,7 @@ translations:
   '%s has about %.0fg but %s needs about %.0fg. Start anyway?': '%s has about %.0fg but %s needs about %.0fg. Start anyway?'
   '%s has no filament loaded — this print will run out.': '%s has no filament loaded — this print will run out.'
   '%s needs filament in %s, which is empty — this print will run out.': '%s needs filament in %s, which is empty — this print will run out.'
+  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': '%s uses %s, which has filament but no material set — the printer will not start until you set it.'
   '%s: %.0fg of %.0fg needed': '%s: %.0fg of %.0fg needed'
   '%u layers': '%u layers'
   '%zu changes': '%zu changes'
@@ -1180,6 +1181,7 @@ translations:
   Filament jam detected: Filament jam detected
   Filament jammed at the extruder gear: Filament jammed at the extruder gear
   Filament never reached the CFS hub sensor: Filament never reached the CFS hub sensor
+  Filament not set: Filament not set
   Filament operation failed: Filament operation failed
   Filament operation timed out: Filament operation timed out
   Filament ran out: Filament ran out
@@ -2743,6 +2745,8 @@ translations:
   Slot Blocked: Slot Blocked
   Slot Not Available: Slot Not Available
   Slot colors, materials, and levels: Slot colors, materials, and levels
+  ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
+  : Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
   Slots: Slots
   Small labels help keep controls calm and focused.: Small labels help keep controls
     calm and focused.

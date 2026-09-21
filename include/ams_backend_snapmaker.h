@@ -234,6 +234,15 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // delay. on_ready is always called on the main thread.
     void prepare_for_resume(int slot_index, ResumeReadyCallback on_ready) override;
 
+    // The firmware refuses RESUME while a used extruder still has no material
+    // assigned, and raises that refusal oneshot: it reaches us only on the `!!`
+    // broadcast, while print_stats.exception keeps whatever paused the print.
+    // Left to error_classify::classify(), an uncoded `!!` on a paused printer is
+    // handed a Resume button, and this is the one fault that refuses it again on
+    // every tap.
+    [[nodiscard]] std::optional<helix::ErrorEvent>
+    classify_error(const std::string& raw_line, const helix::ClassifyContext& ctx) const override;
+
     // True when the motion sensor reports runout but the port sensor still
     // reads filament present — i.e. the encoder is stale (e.g., it never
     // saw the start-of-print purge) but physical filament is in the buffer.
@@ -302,7 +311,8 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // Builds the firmware-native pre-print command sequence for print_task_config.
     // tools_used: logical tools the gcode body uses (ParsedGCodeFile::tools_used_indices).
     // remap:      logical tool -> physical head, ONLY for tools the user changed from identity.
-    //             Tools absent from `remap` use default_head(t) = (t>=0 && t<=3) ? t : 0.
+    //             Tools absent from `remap` take default_routing().head(t); a tool the
+    //             routing gives no head is left out of the map entirely.
     // Returns newline-joined gcode (NO trailing newline), or "" when tools_used is empty.
     // Pure — no api_/network access, trivially unit-testable.
     [[nodiscard]] std::string build_preprint_gcode(const std::set<int>& tools_used,

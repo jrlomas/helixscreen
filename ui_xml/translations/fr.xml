@@ -20,6 +20,7 @@
   <translation tag="%s has about %.0fg but %s needs about %.0fg. Start anyway?" fr="%s contient environ %.0fg mais %s nécessite environ %.0fg. Démarrer quand même ?"/>
   <translation tag="%s has no filament loaded — this print will run out." fr="%s n&apos;a pas de filament chargé — cette impression manquera de filament."/>
   <translation tag="%s needs filament in %s, which is empty — this print will run out." fr="%s nécessite du filament dans %s, qui est vide — cette impression manquera de filament."/>
+  <translation tag="%s uses %s, which has filament but no material set — the printer will not start until you set it."/>
   <translation tag="%s: %.0fg of %.0fg needed" fr="%s : %.0fg sur %.0fg requis"/>
   <translation tag="%u layers" fr="%u couches"/>
   <translation tag="%zu changes" fr="%zu modifications"/>
@@ -1099,6 +1100,7 @@
   <translation tag="Filament jam detected" fr="Bourrage de filament détecté"/>
   <translation tag="Filament jammed at the extruder gear" fr="Filament coincé au niveau de l&apos;engrenage d&apos;extrudeur"/>
   <translation tag="Filament never reached the CFS hub sensor" fr="Le filament n&apos;a jamais atteint le capteur du hub CFS"/>
+  <translation tag="Filament not set"/>
   <translation tag="Filament operation failed" fr="Échec de l&apos;opération filament"/>
   <translation tag="Filament operation timed out" fr="Opération filament — délai dépassé"/>
   <translation tag="Filament ran out" fr="Le filament est épuisé"/>
@@ -2529,6 +2531,7 @@
   <translation tag="Slot Blocked" fr="Slot bloqué"/>
   <translation tag="Slot Not Available" fr="Slot non disponible"/>
   <translation tag="Slot colors, materials, and levels" fr="Couleurs, matériaux et niveaux des slots"/>
+  <translation tag="Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print."/>
   <translation tag="Slots" fr="Slots"/>
   <translation tag="Small labels help keep controls calm and focused." fr="Les petites étiquettes aident à garder les contrôles calmes et concentrés."/>
   <translation tag="Snapmaker SnapSwap" fr="Snapmaker SnapSwap"/>

@@ -40,6 +40,7 @@ SeverityVisual severity_visual(helix::ToolCheck::Severity sev) {
     case helix::ToolCheck::Severity::MaterialMismatch:
         return {"alert", "warning"};
     case helix::ToolCheck::Severity::EmptySlot:
+    case helix::ToolCheck::Severity::UnknownMaterial:
         return {"close", "danger"};
     }
     return {"check", "success"};
@@ -104,6 +105,20 @@ void PreflightCheckModal::on_show() {
         const auto slots = AmsState::instance().collect_available_slots();
         std::string text;
         for (const auto& check : result_.checks) {
+            if (check.severity == helix::ToolCheck::Severity::UnknownMaterial) {
+                char buf[192];
+                const auto* seated = find_seated_slot(slots, check);
+                const std::string lane_text =
+                    seated ? helix::ui::lane_label(seated->noun, seated->unit_display_name,
+                                                   seated->local_slot_index)
+                           : helix::ui::lane_label(helix::ui::LaneNoun::Slot, check.mapped_slot);
+                snprintf(buf, sizeof(buf),
+                         lv_tr("%s uses %s, which has filament but no material set — the "
+                               "printer will not start until you set it."),
+                         helix::ui::tool_label(check.tool_index).c_str(), lane_text.c_str());
+                text = buf;
+                break;
+            }
             if (check.severity == helix::ToolCheck::Severity::EmptySlot) {
                 char buf[160];
                 if (check.mapped_slot < 0) {
