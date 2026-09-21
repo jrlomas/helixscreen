@@ -2231,6 +2231,7 @@
   <translation tag="Reset Blade Counter" zh="重置刀片计数器"/>
   <translation tag="Reset CFS" zh="重置 CFS"/>
   <translation tag="Reset Distances"/>
+  <translation tag="Reset Distances?"/>
   <translation tag="Reset Endless Spool" zh="重置无限料盘"/>
   <translation tag="Reset Endless Spool?" zh="要重置无限料盘吗？"/>
   <translation tag="Reset Home Screen?" zh="重置主屏幕？"/>
@@ -2804,6 +2805,7 @@
   <translation tag="This will reset all settings to defaults. This action cannot be undone." zh="这将把所有设置重置为默认值。此操作无法撤销。"/>
   <translation tag="This will restart Klipper firmware. Any active operations will be interrupted." zh="将重启Klipper固件。所有正在进行的操作将被中断。"/>
   <translation tag="This will restart Klipper." zh="这将重启 Klipper。"/>
+  <translation tag="This will restore the default jog step distances for all three modes."/>
   <translation tag="This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect." zh="这将保存 Z 偏移并重启 Klipper 以写入配置。打印机将短暂断开连接。"/>
   <translation tag="This writes the tool offsets to the printer&apos;s config and restarts Klipper, which takes a few seconds. Until then they apply only to this session." zh="这会将工具偏移写入打印机配置并重启 Klipper，需要几秒钟。在此之前，它们仅在本次会话中生效。"/>
   <translation tag="Thorough" zh="全面"/>

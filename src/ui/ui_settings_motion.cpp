@@ -5,6 +5,7 @@
 
 #include "ui_component_keypad.h"
 #include "ui_event_safety.h"
+#include "ui_modal.h"
 #include "ui_nav_manager.h"
 #include "ui_toast_manager.h"
 
@@ -32,6 +33,14 @@ namespace {
 
 /// Settings store mm/min because that is what the motion API takes; the UI
 /// speaks mm/s to match Extrude Speed and the web interfaces.
+///
+/// Truncation, not rounding: max_jog_mm_s() floors the printer's ceiling for
+/// the same reason a move above it is rejected, and a rounded-up display would
+/// read one above the slider's own maximum. The cost is that a stored feedrate
+/// that is not a multiple of 60 - only reachable by editing settings.json by
+/// hand - shows as the next mm/s down, and becomes that value if the user
+/// touches the control. Nothing writes it back on its own: lv_slider_set_value
+/// raises no value-changed event.
 int mm_min_to_mm_s(int mm_per_min) {
     return mm_per_min / 60;
 }
@@ -42,7 +51,7 @@ int mm_s_to_mm_min(int mm_per_sec) {
 
 /// One row per control. `title` is both the keypad header and the row's
 /// translation_tag in motion_settings_overlay.xml, so it resolves with no
-/// extra keys. Indexed by MotionSettingsOverlay::Field.
+/// extra keys. Indexed by Field.
 struct FieldSpec {
     const char* title; ///< Keypad header and row label
     bool is_speed;     ///< mm/s slider row (true) or mm distance row (false)
@@ -66,10 +75,10 @@ constexpr size_t FIELD_COUNT = sizeof(FIELD_SPECS) / sizeof(FIELD_SPECS[0]);
 static_assert(FIELD_COUNT == static_cast<size_t>(Field::Count),
               "FIELD_SPECS must have one entry per Field");
 
-/// The coupled keypad bounds pair each distance row with FIELD_SPECS[i ^ 1];
-/// that only works while the distance rows start at an even index and each
-/// adjacent pair is the same mode with opposite rings. A misordered insert
-/// must fail here, not resolve silently to the row's own value.
+/// Each mode occupies one adjacent inner/outer pair, starting at an even
+/// index. Field, this table and the user_data numbers in
+/// motion_settings_overlay.xml all share that order, so a row inserted in the
+/// wrong place must fail here rather than mislabel a live control.
 constexpr bool distance_pairs_alternate() {
     for (size_t i = static_cast<size_t>(Field::FineInner); i < FIELD_COUNT; ++i) {
         if (FIELD_SPECS[i].mode != FIELD_SPECS[i ^ 1].mode) {
@@ -431,9 +440,21 @@ void MotionSettingsOverlay::handle_keypad_value(Field field, double value) {
 }
 
 void MotionSettingsOverlay::handle_reset_distances() {
-    spdlog::info("[{}] Resetting jog distances to defaults", get_name());
-    SettingsManager::instance().reset_jog_distances();
-    refresh_displays();
+    helix::ui::ConfirmOptions opts;
+    // The dialog outlives its exit animation, so the confirm callback needs a
+    // token that survives this overlay being deactivated behind the modal.
+    opts.owner_token = object_lifetime_.token();
+
+    helix::ui::modal_confirm(
+        lv_tr("Reset Distances?"),
+        lv_tr("This will restore the default jog step distances for all three modes."),
+        ModalSeverity::Warning, lv_tr("Reset"),
+        [this] {
+            spdlog::info("[{}] Resetting jog distances to defaults", get_name());
+            SettingsManager::instance().reset_jog_distances();
+            refresh_displays();
+        },
+        opts);
 }
 
 // ============================================================================

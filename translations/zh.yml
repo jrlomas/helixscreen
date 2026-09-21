@@ -2284,6 +2284,7 @@ translations:
   Reset Blade Counter: '重置刀片计数器'
   Reset CFS: 重置 CFS
   Reset Distances: ''
+  Reset Distances?: ''
   Reset Endless Spool: '重置无限料盘'
   Reset Endless Spool?: '要重置无限料盘吗？'
   Reset Home Screen?: 重置主屏幕？
@@ -2899,6 +2900,7 @@ translations:
   This will reset all settings to defaults. This action cannot be undone.: 这将把所有设置重置为默认值。此操作无法撤销。
   This will restart Klipper firmware. Any active operations will be interrupted.: 将重启Klipper固件。所有正在进行的操作将被中断。
   This will restart Klipper.: 这将重启 Klipper。
+  This will restore the default jog step distances for all three modes.: ''
   This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect.: 这将保存 Z 偏移并重启 Klipper 以写入配置。打印机将短暂断开连接。
   ? This writes the tool offsets to the printer's config and restarts Klipper, which takes a few seconds. Until then they apply only to this session.
   : 这会将工具偏移写入打印机配置并重启 Klipper，需要几秒钟。在此之前，它们仅在本次会话中生效。

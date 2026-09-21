@@ -2456,6 +2456,7 @@ translations:
   Reset Blade Counter: 'Ripristina il contatore della lama'
   Reset CFS: Ripristina CFS
   Reset Distances: ''
+  Reset Distances?: ''
   Reset Endless Spool: 'Ripristina la bobina infinita'
   Reset Endless Spool?: 'Ripristinare la bobina infinita?'
   Reset Home Screen?: Ripristinare la schermata iniziale?
@@ -3153,6 +3154,7 @@ translations:
   This will restart Klipper firmware. Any active operations will be interrupted.: Il
     firmware Klipper verrà riavviato. Le operazioni attive saranno interrotte.
   This will restart Klipper.: Questo riavvierà Klipper.
+  This will restore the default jog step distances for all three modes.: ''
   This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect.: Questo salverà lo Z-offset e riavvierà Klipper per scrivere la configurazione. La stampante si disconnetterà brevemente.
   ? This writes the tool offsets to the printer's config and restarts Klipper, which takes a few seconds. Until then they apply only to this session.
   : Questo scrive gli offset degli strumenti nella configurazione della stampante e riavvia Klipper, operazione che richiede alcuni secondi. Fino ad allora valgono solo per questa sessione.

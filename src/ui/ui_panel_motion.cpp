@@ -328,7 +328,15 @@ void MotionPanel::on_activate() {
             lv_obj_set_width(jog_pad_, size);
             lv_obj_set_height(jog_pad_, size);
         }
+        // Jog step distances are settings, and both the header cog and
+        // Settings > Printing > Motion can change them while this panel sits on
+        // the stack. The ring labels are painted from the draw callback, so a
+        // repaint is all they need to re-read the new values.
+        lv_obj_invalidate(jog_pad_);
     }
+
+    // The Z button labels are subject-bound and have no repaint to ride in on.
+    update_z_button_labels();
 }
 
 void MotionPanel::on_deactivating(DeactivateReason reason) {

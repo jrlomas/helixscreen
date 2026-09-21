@@ -2433,6 +2433,7 @@ translations:
   Reset Blade Counter: 'Сбросить счётчик лезвия'
   Reset CFS: Сброс CFS
   Reset Distances: ''
+  Reset Distances?: ''
   Reset Endless Spool: 'Сбросить бесконечную катушку'
   Reset Endless Spool?: 'Сбросить бесконечную катушку?'
   Reset Home Screen?: Сбросить главный экран?
@@ -3114,6 +3115,7 @@ translations:
   This will restart Klipper firmware. Any active operations will be interrupted.: Прошивка
     Klipper будет перезапущена. Активные операции будут прерваны.
   This will restart Klipper.: Это перезапустит Klipper.
+  This will restore the default jog step distances for all three modes.: ''
   This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect.: Z-offset будет сохранён, и Klipper перезапустится для записи конфигурации. Принтер ненадолго отключится.
   ? This writes the tool offsets to the printer's config and restarts Klipper, which takes a few seconds. Until then they apply only to this session.
   : Смещения инструментов будут записаны в конфигурацию принтера, и Klipper перезапустится, это займёт несколько секунд. До этого они действуют только в текущем сеансе.

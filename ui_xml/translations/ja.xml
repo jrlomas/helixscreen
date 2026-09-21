@@ -2231,6 +2231,7 @@
   <translation tag="Reset Blade Counter" ja="ブレードカウンターをリセット"/>
   <translation tag="Reset CFS" ja="CFSをリセット"/>
   <translation tag="Reset Distances"/>
+  <translation tag="Reset Distances?"/>
   <translation tag="Reset Endless Spool" ja="エンドレススプールをリセット"/>
   <translation tag="Reset Endless Spool?" ja="エンドレススプールをリセットしますか？"/>
   <translation tag="Reset Home Screen?" ja="ホーム画面をリセットしますか？"/>
@@ -2804,6 +2805,7 @@
   <translation tag="This will reset all settings to defaults. This action cannot be undone." ja="これはすべての設定をデフォルトにリセットします。この操作は元に戻せません。"/>
   <translation tag="This will restart Klipper firmware. Any active operations will be interrupted." ja="Klipperファームウェアを再起動します。実行中の操作は中断されます。"/>
   <translation tag="This will restart Klipper." ja="これにより Klipper が再起動します。"/>
+  <translation tag="This will restore the default jog step distances for all three modes."/>
   <translation tag="This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect." ja="Z-offset を保存し、設定を書き込むために Klipper を再起動します。プリンターは一時的に切断されます。"/>
   <translation tag="This writes the tool offsets to the printer&apos;s config and restarts Klipper, which takes a few seconds. Until then they apply only to this session." ja="ツールオフセットをプリンターの設定に書き込み、Klipper を再起動します。数秒かかります。それまでは、このセッションにのみ適用されます。"/>
   <translation tag="Thorough" ja="徹底的"/>

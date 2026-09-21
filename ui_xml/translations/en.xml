@@ -2231,6 +2231,7 @@
   <translation tag="Reset Blade Counter" en="Reset Blade Counter"/>
   <translation tag="Reset CFS" en="Reset CFS"/>
   <translation tag="Reset Distances" en="Reset Distances"/>
+  <translation tag="Reset Distances?" en="Reset Distances?"/>
   <translation tag="Reset Endless Spool" en="Reset Endless Spool"/>
   <translation tag="Reset Endless Spool?" en="Reset Endless Spool?"/>
   <translation tag="Reset Home Screen?" en="Reset Home Screen?"/>
@@ -2804,6 +2805,7 @@
   <translation tag="This will reset all settings to defaults. This action cannot be undone." en="This will reset all settings to defaults. This action cannot be undone."/>
   <translation tag="This will restart Klipper firmware. Any active operations will be interrupted." en="This will restart Klipper firmware. Any active operations will be interrupted."/>
   <translation tag="This will restart Klipper." en="This will restart Klipper."/>
+  <translation tag="This will restore the default jog step distances for all three modes." en="This will restore the default jog step distances for all three modes."/>
   <translation tag="This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect." en="This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect."/>
   <translation tag="This writes the tool offsets to the printer&apos;s config and restarts Klipper, which takes a few seconds. Until then they apply only to this session." en="This writes the tool offsets to the printer&apos;s config and restarts Klipper, which takes a few seconds. Until then they apply only to this session."/>
   <translation tag="Thorough" en="Thorough"/>
