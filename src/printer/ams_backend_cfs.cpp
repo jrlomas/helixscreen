@@ -1291,42 +1291,50 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
             // A bay this frame did not describe is not in new_info and is filed
             // nothing. One ingest replaces a source's record whole, so a lane
             // the box said nothing about keeps the reading it last stated.
-            for (const auto& unit : new_info.units) {
-                for (const auto& slot : unit.slots) {
-                    const helix::ams::LaneId lane = lane_id(slot.global_index);
+            {
+                // Both calls below document mutex_ as a precondition:
+                // reconcile_lane_binding() consumes the slot's own-write expectation,
+                // and clear_persisted_override() mutates overrides_. ingest() is
+                // unaffected, taking only the lane store's own lock.
+                std::lock_guard<std::mutex> lock(mutex_);
+                for (const auto& unit : new_info.units) {
+                    for (const auto& slot : unit.slots) {
+                        const helix::ams::LaneId lane = lane_id(slot.global_index);
 
-                    helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
-                    sensed.present = slot_status_reports_filament(slot.status);
-                    helix::ams::ingest(lane, sensed);
+                        helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
+                        sensed.present = slot_status_reports_filament(slot.status);
+                        helix::ams::ingest(lane, sensed);
 
-                    // What the box remembers reading off a tag, which is a
-                    // cache of a past declaration and never evidence of what is
-                    // loaded. `name` says which PRODUCT the bay holds, a
-                    // different question from what a spool is called.
-                    helix::ams::Observation cache(helix::ams::ObservationSource::VendorCache);
-                    if (!slot.material.empty())
-                        cache.material = slot.material;
-                    if (!slot.brand.empty())
-                        cache.brand = slot.brand;
-                    if (!slot.spool_name.empty())
-                        cache.product_name = slot.spool_name;
-                    if (helix::ams::is_declarable_color(slot.color_rgb))
-                        cache.color_rgb = slot.color_rgb;
-                    if (slot.spoolman_id > 0)
-                        cache.spoolman_id = slot.spoolman_id;
-                    helix::ams::ingest(lane, cache);
+                        // What the box remembers reading off a tag, which is a
+                        // cache of a past declaration and never evidence of what is
+                        // loaded. `name` says which PRODUCT the bay holds, a
+                        // different question from what a spool is called.
+                        helix::ams::Observation cache(helix::ams::ObservationSource::VendorCache);
+                        if (!slot.material.empty())
+                            cache.material = slot.material;
+                        if (!slot.brand.empty())
+                            cache.brand = slot.brand;
+                        if (!slot.spool_name.empty())
+                            cache.product_name = slot.spool_name;
+                        if (helix::ams::is_declarable_color(slot.color_rgb))
+                            cache.color_rgb = slot.color_rgb;
+                        if (slot.spoolman_id > 0)
+                            cache.spoolman_id = slot.spoolman_id;
+                        helix::ams::ingest(lane, cache);
 
-                    // Whether the identity declared on this bay still names
-                    // what is in it. The id is new_info's, which is the flat
-                    // schema's own parse; the stock schema states none and
-                    // leaves this at 0, where the re-bind arm cannot fire.
-                    // Nor can the eject arm: printer_reports_spool_ids() is
-                    // false here, so a bay reading 0 is the everyday reading
-                    // and never an eject.
-                    if (reconcile_lane_binding(slot.global_index, slot.spoolman_id) !=
-                        helix::ams::BindingVerdict::Holds) {
-                        helix::ams::clear_persisted_override(override_store_.get(), overrides_,
-                                                             slot.global_index, backend_log_tag());
+                        // Whether the identity declared on this bay still names
+                        // what is in it. The id is new_info's, which is the flat
+                        // schema's own parse; the stock schema states none and
+                        // leaves this at 0, where the re-bind arm cannot fire.
+                        // Nor can the eject arm: printer_reports_spool_ids() is
+                        // false here, so a bay reading 0 is the everyday reading
+                        // and never an eject.
+                        if (reconcile_lane_binding(slot.global_index, slot.spoolman_id) !=
+                            helix::ams::BindingVerdict::Holds) {
+                            helix::ams::clear_persisted_override(override_store_.get(), overrides_,
+                                                                 slot.global_index,
+                                                                 backend_log_tag());
+                        }
                     }
                 }
             }
