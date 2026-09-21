@@ -27,6 +27,7 @@
 #include "filament_op_router.h"
 #include "filament_sensor_manager.h"
 #include "format_utils.h"
+#include "job_queue_state.h"
 #include "klipper_extruder_naming.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api.h"
@@ -338,7 +339,8 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
 
     auto& fsm = helix::FilamentSensorManager::instance();
     filament_runout_observer_ = observe_int_sync<PrintStatusWidget>(
-        fsm.get_any_runout_subject(), this, [](PrintStatusWidget* self, int any_runout) {
+        fsm.get_any_runout_subject(), this,
+        [](PrintStatusWidget* self, int any_runout) {
             if (!self->widget_obj_)
                 return;
             spdlog::debug("[PrintStatusWidget] Filament runout subject changed: {}", any_runout);
@@ -348,17 +350,21 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
                 self->runout_modal_shown_ = false;
                 self->saw_filament_present_ = true;
             }
-        });
+        },
+        fsm.get_subjects_lifetime());
 
     // Observe job queue count to show/hide queue row
     auto* jq_count_subj = lv_xml_get_subject(nullptr, "job_queue_count");
+    auto* jqs = get_job_queue_state();
     if (jq_count_subj) {
         job_queue_count_observer_ = helix::ui::observe_int_sync<PrintStatusWidget>(
-            jq_count_subj, this, [](PrintStatusWidget* self, int /*count*/) {
+            jq_count_subj, this,
+            [](PrintStatusWidget* self, int /*count*/) {
                 if (!self->widget_obj_)
                     return;
                 self->update_job_queue_row_visibility();
-            });
+            },
+            jqs ? jqs->get_subjects_lifetime() : SubjectLifetime{});
     }
 
     // Register history observer to update idle thumbnail when history loads.

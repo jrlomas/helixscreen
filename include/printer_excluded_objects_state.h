@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ui_observer_guard.h"
+
 #include "subject_managed_panel.h"
 
 #include <glm/vec2.hpp>
@@ -214,11 +216,25 @@ class PrinterExcludedObjectsState {
         return !defined_objects_.empty();
     }
 
+    /// Death signal for the subjects this object owns.
+    ///
+    /// deinit_subjects() frees every observer node on them without bumping
+    /// the ObserverGuard invalidation epoch, so outside observers must pass
+    /// this to observe_*(), or their guards call lv_observer_remove() on a
+    /// freed node.
+    [[nodiscard]] SubjectLifetime get_subjects_lifetime() const {
+        return subjects_lifetime_;
+    }
+
   private:
     friend class PrinterExcludedObjectsStateTestAccess;
 
     SubjectManager subjects_;
     bool subjects_initialized_ = false;
+    /// See get_subjects_lifetime(). Created with the object and REPLACED (never
+    /// nulled) by deinit_subjects(): an empty token reads as "dead" and would
+    /// suppress removal for live observers.
+    SubjectLifetime subjects_lifetime_ = std::make_shared<bool>(true);
 
     // Excluded objects version subject (incremented when excluded_objects_ changes)
     lv_subject_t excluded_objects_version_{};

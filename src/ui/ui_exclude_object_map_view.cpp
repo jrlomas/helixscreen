@@ -218,16 +218,18 @@ void ExcludeObjectMapView::create(lv_obj_t* parent, helix::PrinterExcludedObject
         };
 
         excluded_version_obs_ = observe_int_sync<ExcludeObjectMapView>(
-            state_->get_excluded_objects_version_subject(), this, rebuild_handler);
+            state_->get_excluded_objects_version_subject(), this, rebuild_handler,
+            state_->get_subjects_lifetime());
 
-        defined_version_obs_ =
-            observe_int_sync<ExcludeObjectMapView>(state_->get_defined_objects_version_subject(),
-                                                   this, [](ExcludeObjectMapView* self, int) {
-                                                       if (!self->root_)
-                                                           return;
-                                                       self->build_object_rects();
-                                                       self->build_key_bar();
-                                                   });
+        defined_version_obs_ = observe_int_sync<ExcludeObjectMapView>(
+            state_->get_defined_objects_version_subject(), this,
+            [](ExcludeObjectMapView* self, int) {
+                if (!self->root_)
+                    return;
+                self->build_object_rects();
+                self->build_key_bar();
+            },
+            state_->get_subjects_lifetime());
     }
 
     spdlog::info("[ExcludeObjectMapView] Created successfully");

@@ -287,7 +287,8 @@ void FilamentRunoutHandler::show_runout_guidance_modal() {
             spdlog::info(
                 "[FilamentRunoutHandler] Runout cleared externally — auto-closing guidance modal");
             self->hide_runout_guidance_modal();
-        });
+        },
+        helix::FilamentSensorManager::instance().get_subjects_lifetime());
 }
 
 // ============================================================================

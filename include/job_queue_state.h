@@ -70,6 +70,16 @@ class JobQueueState {
     /// Initialize LVGL subjects (call before XML creation)
     void init_subjects();
 
+    /// Death signal for the subjects this object owns.
+    ///
+    /// deinit_subjects() and the destructor both free every observer node on
+    /// them without bumping the ObserverGuard invalidation epoch, so outside
+    /// observers must pass this to observe_*(), or their guards call
+    /// lv_observer_remove() on a freed node.
+    [[nodiscard]] SubjectLifetime get_subjects_lifetime() const {
+        return subjects_lifetime_;
+    }
+
   private:
     friend class JobQueueStateTestAccess;
 
@@ -115,6 +125,10 @@ class JobQueueState {
     // rebuilds them, so a queue mutation that does not move this subject is
     // invisible until the next resize.
     lv_subject_t job_queue_count_subject_;
+    /// See get_subjects_lifetime(). Created with the object and REPLACED (never
+    /// nulled) by deinit_subjects() and the destructor: an empty token reads as
+    /// "dead" and would suppress removal for live observers.
+    SubjectLifetime subjects_lifetime_ = std::make_shared<bool>(true);
 
     // Async callback safety guard
     helix::AsyncLifetimeGuard lifetime_;

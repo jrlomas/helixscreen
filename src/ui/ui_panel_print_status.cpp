@@ -699,13 +699,15 @@ void PrintStatusPanel::init_subjects() {
         lv_subject_t* s = lv_xml_get_subject(nullptr, "filament_sensor_count");
         if (s) {
             auto token = lifetime_.token();
-            filament_sensor_count_observer_ =
-                observe_int_sync<PrintStatusPanel>(s, this, [token](PrintStatusPanel* self, int) {
+            filament_sensor_count_observer_ = observe_int_sync<PrintStatusPanel>(
+                s, this,
+                [token](PrintStatusPanel* self, int) {
                     if (token.expired())
                         return;
                     self->recompute_fans_density();
                     self->recompute_fans_fit();
-                });
+                },
+                FilamentSensorManager::instance().get_subjects_lifetime());
         }
     }
 
@@ -755,12 +757,14 @@ void PrintStatusPanel::init_subjects() {
         lv_subject_t* s = FilamentSensorManager::instance().get_runout_detected_subject();
         if (s) {
             auto token = lifetime_.token();
-            scoped_runout_observer_ =
-                observe_int_sync<PrintStatusPanel>(s, this, [token](PrintStatusPanel* self, int) {
+            scoped_runout_observer_ = observe_int_sync<PrintStatusPanel>(
+                s, this,
+                [token](PrintStatusPanel* self, int) {
                     if (token.expired())
                         return;
                     self->recompute_scoped_runout();
-                });
+                },
+                FilamentSensorManager::instance().get_subjects_lifetime());
         }
     }
     {

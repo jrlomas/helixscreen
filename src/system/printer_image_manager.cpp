@@ -63,6 +63,17 @@ void PrinterImageManager::init(const std::string& config_dir) {
 void PrinterImageManager::deinit_subjects() {
     if (!subjects_initialized_)
         return;
+
+    // Death signal BEFORE the subject goes away: deinit frees every observer
+    // node on it, so outside ObserverGuards must learn it is gone or their next
+    // reset() calls lv_observer_remove() on freed memory. Replaced, not
+    // cleared — an empty token reads as "dead" and would suppress removal for
+    // observers registered after this teardown.
+    if (subjects_lifetime_) {
+        *subjects_lifetime_ = false;
+    }
+    subjects_lifetime_ = std::make_shared<bool>(true);
+
     lv_subject_deinit(&image_changed_subject_);
     subjects_initialized_ = false;
 }

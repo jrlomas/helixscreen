@@ -43,6 +43,16 @@ void JobQueueState::watch_connection_state() {
 JobQueueState::~JobQueueState() {
     connection_observer_.reset();
 
+    // Death signal BEFORE the subjects die with the object: their observer
+    // nodes go away with them, so outside ObserverGuards must learn they are
+    // gone or their next reset() calls lv_observer_remove() on freed memory.
+    // Replaced, not cleared — an empty token reads as "dead" and would
+    // suppress removal for observers registered after this teardown.
+    if (subjects_lifetime_) {
+        *subjects_lifetime_ = false;
+    }
+    subjects_lifetime_ = std::make_shared<bool>(true);
+
     // lifetime_'s destructor invalidates its own tokens automatically
 
     if (client_) {
@@ -88,6 +98,16 @@ void JobQueueState::init_subjects() {
 void JobQueueState::deinit_subjects() {
     if (!subjects_initialized_)
         return;
+
+    // Death signal BEFORE the subjects go away: deinit frees every observer
+    // node on them, so outside ObserverGuards must learn they are gone or their
+    // next reset() calls lv_observer_remove() on freed memory. Replaced, not
+    // cleared — an empty token reads as "dead" and would suppress removal for
+    // observers registered after this teardown.
+    if (subjects_lifetime_) {
+        *subjects_lifetime_ = false;
+    }
+    subjects_lifetime_ = std::make_shared<bool>(true);
 
     lv_subject_deinit(&job_queue_count_subject_);
     lv_subject_deinit(&job_queue_summary_subject_);

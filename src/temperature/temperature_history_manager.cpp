@@ -477,6 +477,7 @@ void TemperatureHistoryManager::subscribe_to_subjects() {
                 }
             },
             this);
+        sensor_count_observer_.set_alive_token(sensor_mgr.get_subjects_lifetime());
     }
 
     resubscribe();

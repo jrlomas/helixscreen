@@ -230,6 +230,18 @@ class TemperatureSensorManager : public ISensorManager {
     [[nodiscard]] lv_subject_t* get_sensor_count_subject();
 
     /**
+     * @brief Death signal for the set-level subjects this singleton owns.
+     *
+     * deinit_subjects() frees every observer node on them without bumping the
+     * ObserverGuard invalidation epoch, so outside observers must pass this to
+     * observe_*(), or their guards call lv_observer_remove() on a freed node.
+     * Per-sensor subjects have their own tokens via get_temp_subject().
+     */
+    [[nodiscard]] SubjectLifetime get_subjects_lifetime() const {
+        return subjects_lifetime_;
+    }
+
+    /**
      * @brief Enable synchronous mode for testing
      *
      * When enabled, update_from_status() calls update_subjects() synchronously
@@ -299,6 +311,10 @@ class TemperatureSensorManager : public ISensorManager {
     // LVGL subjects
     bool subjects_initialized_ = false;
     SubjectManager subjects_;
+    /// See get_subjects_lifetime(). Created with the object and REPLACED (never
+    /// nulled) by deinit_subjects(): an empty token reads as "dead" and would
+    /// suppress removal for live observers.
+    SubjectLifetime subjects_lifetime_ = std::make_shared<bool>(true);
     lv_subject_t sensor_count_{};
 };
 
