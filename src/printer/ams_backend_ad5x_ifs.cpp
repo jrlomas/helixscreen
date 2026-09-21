@@ -1895,8 +1895,8 @@ PathSegment AmsBackendAd5xIfs::infer_error_segment() const {
 // --- Filament operations ---
 
 AmsError AmsBackendAd5xIfs::do_load_filament(int slot_index) {
-    if (!validate_slot_index(slot_index)) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, NUM_PORTS - 1);
+    if (auto err = validate_slot_index(slot_index); !err.success()) {
+        return err;
     }
 
     int port = slot_index + 1;
@@ -2186,8 +2186,8 @@ void AmsBackendAd5xIfs::finalize_op_after_macro(bool is_unload) {
 }
 
 AmsError AmsBackendAd5xIfs::do_select_slot(int slot_index) {
-    if (!validate_slot_index(slot_index)) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, NUM_PORTS - 1);
+    if (auto err = validate_slot_index(slot_index); !err.success()) {
+        return err;
     }
 
     // Standalone module: it has no point-without-load command — selection IS a
@@ -2281,8 +2281,8 @@ AmsError AmsBackendAd5xIfs::eject_lane(int slot_index) {
         // The dispatch stamp is that test (#1250).
         note_filament_op_dispatch_locked();
 
-        if (!validate_slot_index(slot_index)) {
-            return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, NUM_PORTS - 1);
+        if (auto err = validate_slot_index(slot_index); !err.success()) {
+            return err;
         }
 
         // Refuse to cold-eject the lane currently seated at the toolhead: the
@@ -2807,8 +2807,8 @@ void AmsBackendAd5xIfs::settle_port_locked(int slot_index, uint32_t color_rgb,
 
 AmsError AmsBackendAd5xIfs::apply_user_edit(int slot_index, const SlotInfo& info,
                                             const helix::ams::Observation& declared) {
-    if (!validate_slot_index(slot_index)) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, NUM_PORTS - 1);
+    if (auto err = validate_slot_index(slot_index); !err.success()) {
+        return err;
     }
 
     auto idx = static_cast<size_t>(slot_index);
@@ -2973,8 +2973,8 @@ void AmsBackendAd5xIfs::persist_external_identity_impl(int slot_index,
 }
 
 AmsError AmsBackendAd5xIfs::sync_external_identity(int slot_index, const SlotInfo& info) {
-    if (!validate_slot_index(slot_index)) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, NUM_PORTS - 1);
+    if (auto err = validate_slot_index(slot_index); !err.success()) {
+        return err;
     }
 
     {
@@ -6648,8 +6648,11 @@ void AmsBackendAd5xIfs::persist_seated_slot_locked(int slot0) {
     }
 }
 
-bool AmsBackendAd5xIfs::validate_slot_index(int slot_index) const {
-    return slot_index >= 0 && slot_index < NUM_PORTS;
+AmsError AmsBackendAd5xIfs::validate_slot_index(int slot_index) const {
+    if (slot_index < 0 || slot_index >= NUM_PORTS) {
+        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, NUM_PORTS - 1);
+    }
+    return AmsErrorHelper::success();
 }
 
 // ensure_homed_then() provided by AmsSubscriptionBackend

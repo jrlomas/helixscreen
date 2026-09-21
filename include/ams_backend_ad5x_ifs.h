@@ -1153,7 +1153,7 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     void log_seated_state_locked(const char* where) const;
 
   private:
-    bool validate_slot_index(int slot_index) const;
+    AmsError validate_slot_index(int slot_index) const;
     void check_action_timeout();
     // Reset the indeterminate ("Working…") no-progress clock. Called on every
     // genuine load/unload progress signal. Caller must hold mutex_.
