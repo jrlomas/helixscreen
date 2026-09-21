@@ -44,6 +44,7 @@ void PrinterCapabilitiesState::init_subjects(bool register_xml) {
     INIT_SUBJECT_INT(printer_has_timelapse, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(printer_has_purge_line, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(printer_has_firmware_retraction, 0, subjects_, register_xml);
+    INIT_SUBJECT_INT(printer_has_individual_xyz_homing, 1, subjects_, register_xml);
     INIT_SUBJECT_INT(printer_bed_moves, 0, subjects_, register_xml); // 0=gantry moves, 1=bed moves
     INIT_SUBJECT_INT(printer_has_chamber_sensor, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(printer_has_chamber_heater, 0, subjects_, register_xml);
@@ -273,6 +274,16 @@ void PrinterCapabilitiesState::set_purge_line(bool has_purge_line) {
 void PrinterCapabilitiesState::set_hide_manual_z_calibration(bool hide) {
     set_capability_int(hide_manual_z_calibration_, hide ? 1 : 0);
     spdlog::debug("[PrinterCapabilitiesState] Hide manual Z calibration: {}", hide);
+}
+
+void PrinterCapabilitiesState::set_has_individual_xyz_homing(bool has_invididual_xyz_homing) {
+    int new_value = has_invididual_xyz_homing ? 1 : 0;
+    // Only log when value actually changes (this gets called frequently from status updates)
+    if (lv_subject_get_int(&printer_has_individual_xyz_homing_) != new_value) {
+        lv_subject_set_int(&printer_has_individual_xyz_homing_, new_value);
+        spdlog::info("[PrinterCapabilitiesState] Has individual XYZ homing: {}",
+                     has_invididual_xyz_homing);
+    };
 }
 
 void PrinterCapabilitiesState::set_bed_moves(bool bed_moves) {
