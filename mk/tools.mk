@@ -104,8 +104,13 @@ VALIDATE_XML_SRC := $(TOOLS_DIR)/validate_xml_constants.cpp
 VALIDATE_XML_BIN := $(BIN_DIR)/validate-xml-constants
 VALIDATE_XML_OBJ := $(OBJ_DIR)/tools/validate_xml_constants.o
 
-# Validator reuses main app objects - filter out main.o to avoid duplicate main symbol
-VALIDATE_XML_APP_OBJS := $(filter-out $(OBJ_DIR)/main.o,$(APP_OBJS) $(APP_C_OBJS) $(OBJCPP_OBJS))
+# Validator reuses main app objects - filter out main.o to avoid duplicate main
+# symbol. remote_client.o goes too: its only caller is main.o, and it is the
+# one object that needs linenoise — the validator has no REPL and would
+# otherwise have to link linenoise solely to satisfy an object nothing reaches.
+# The rest of src/remote/ stays: Application::shutdown() calls the control
+# server, so those objects are live here.
+VALIDATE_XML_APP_OBJS := $(filter-out $(OBJ_DIR)/main.o $(OBJ_DIR)/remote/remote_client.o,$(APP_OBJS) $(APP_C_OBJS) $(OBJCPP_OBJS))
 
 # Full dependencies (app objects + LVGL + fonts + lv_markdown + quirc + translations)
 # Note: lv_markdown, quirc, and translations are needed because app objects may reference them
