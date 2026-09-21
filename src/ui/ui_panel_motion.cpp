@@ -10,6 +10,7 @@
 #include "ui_panel_common.h"
 #include "ui_panel_controls.h"
 #include "ui_panel_singleton_macros.h"
+#include "ui_settings_motion.h"
 #include "ui_subject_registry.h"
 #include "ui_utils.h"
 
@@ -17,22 +18,46 @@
 #include "config.h"
 #include "format_utils.h"
 #include "i_moonraker_api.h"
+#include "jog_coalescer.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
 #include "printer_state.h"
+#include "settings_manager.h"
 #include "subject_managed_panel.h"
 #include "theme_manager.h"
+#include "toolhead_homing.h"
 #include "unit_conversions.h"
 
 #include <spdlog/spdlog.h>
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 
 #include "hv/json.hpp"
 
 using namespace helix;
+
+/// Trim trailing zeros so 0.1 reads "0.1" and 10.0 reads "10"; the default
+/// distances must render as 0.1, 1, 10 and 50.
+static void format_distance_label(char* buf, size_t n, float mm) {
+    if (mm == std::floor(mm)) {
+        std::snprintf(buf, n, "%.0f", static_cast<double>(mm));
+    } else {
+        std::snprintf(buf, n, "%g", static_cast<double>(mm));
+    }
+}
+
+helix::JogModeDistances helix::get_jog_mode_distances(JogMode mode) {
+    auto& settings = SettingsManager::instance();
+    JogModeDistances d{};
+    d.inner = settings.get_jog_distance(mode, /*outer=*/false);
+    d.outer = settings.get_jog_distance(mode, /*outer=*/true);
+    format_distance_label(d.inner_label, sizeof(d.inner_label), d.inner);
+    format_distance_label(d.outer_label, sizeof(d.outer_label), d.outer);
+    return d;
+}
 
 // Strip Klipper error prefixes, parse JSON error objects, and truncate for toast display.
 // Some Klipper builds (e.g. K1C) send errors as JSON:
@@ -80,6 +105,7 @@ static void on_motion_z_tilt(lv_event_t* e);
 static void on_jog_mode_fine(lv_event_t* e);
 static void on_jog_mode_coarse(lv_event_t* e);
 static void on_jog_mode_turbo(lv_event_t* e);
+static void on_motion_header_settings_clicked(lv_event_t* e);
 
 // ============================================================================
 // Global Instance (via DEFINE_GLOBAL_PANEL macro)
@@ -258,6 +284,10 @@ void MotionPanel::register_callbacks() {
     lv_xml_register_event_cb(nullptr, "on_jog_mode_coarse", on_jog_mode_coarse);
     lv_xml_register_event_cb(nullptr, "on_jog_mode_turbo", on_jog_mode_turbo);
 
+    // Header cog: opens the Motion settings overlay through its single opener
+    lv_xml_register_event_cb(nullptr, "on_motion_header_settings_clicked",
+                             on_motion_header_settings_clicked);
+
     callbacks_registered_ = true;
     spdlog::debug("[{}] Event callbacks registered", get_name());
 }
@@ -298,7 +328,15 @@ void MotionPanel::on_activate() {
             lv_obj_set_width(jog_pad_, size);
             lv_obj_set_height(jog_pad_, size);
         }
+        // Jog step distances are settings, and both the header cog and
+        // Settings > Printing > Motion can change them while this panel sits on
+        // the stack. The ring labels are painted from the draw callback, so a
+        // repaint is all they need to re-read the new values.
+        lv_obj_invalidate(jog_pad_);
     }
+
+    // The Z button labels are subject-bound and have no repaint to ride in on.
+    update_z_button_labels();
 }
 
 void MotionPanel::on_deactivating(DeactivateReason reason) {
@@ -308,8 +346,7 @@ void MotionPanel::on_deactivating(DeactivateReason reason) {
     // in-flight ack callback — fully reset the coalescer so it can't get stuck
     // in_flight forever, and re-arm the edge warnings.
     jog_coalescer_.reset();
-    x_edge_warned_ = false;
-    y_edge_warned_ = false;
+    edge_warned_.fill(false);
 }
 
 void MotionPanel::on_ui_destroyed() {
@@ -585,7 +622,17 @@ void MotionPanel::handle_z_button(const char* name) {
         spdlog::debug("[{}] Bed-moves printer: inverted Z direction for bed movement", get_name());
     }
 
-    spdlog::debug("[{}] Z jog: {:+.0f}mm (bed_moves={})", get_name(), distance, bed_moves_);
+    // Bounds are in gcode space, so this must follow the inversion above.
+    const auto bounds = get_printer_state().get_axis_bounds();
+    if (bounds.has_z && helix::axis_is_homed(get_printer_state(), helix::Axis::Z)) {
+        distance = clamp_axis_and_warn(helix::Axis::Z, current_z_, jog_coalescer_.uncommitted_z(),
+                                       distance, bounds.z_min, bounds.z_max);
+        if (distance == 0.0) {
+            return;
+        }
+    }
+
+    spdlog::debug("[{}] Z jog: {:+.2f}mm (bed_moves={})", get_name(), distance, bed_moves_);
 
     dispatch_jog({0.0, 0.0, distance});
 }
@@ -678,49 +725,51 @@ void MotionPanel::jog(JogDirection direction, float distance_mm) {
     // Soft-stop: clamp against the PREDICTED position (current + uncommitted
     // coalescer travel) so queued taps can't walk past the envelope. Skip when
     // bounds aren't known yet (fresh connect) or the axis isn't homed.
-    helix::AxisBounds bounds = get_printer_state().get_axis_bounds();
-    const char* homed_axes = lv_subject_get_string(get_printer_state().get_homed_axes_subject());
-    bool x_homed = homed_axes && strchr(homed_axes, 'x') != nullptr;
-    bool y_homed = homed_axes && strchr(homed_axes, 'y') != nullptr;
+    const auto bounds = get_printer_state().get_axis_bounds();
 
     double ddx = static_cast<double>(dx);
     double ddy = static_cast<double>(dy);
 
-    if (ddx != 0.0 && bounds.has_x && x_homed) {
-        ddx = helix::clamp_jog_delta(current_x_, jog_coalescer_.uncommitted_x(), ddx, bounds.x_min,
-                                     bounds.x_max);
-        // Epsilon, not == 0.0: clamping against a predicted position that is a
-        // hair inside the envelope returns a sub-micron residual (199.9999995,
-        // +1, max=200 -> ~5e-7). That is a blocked jog, not a real move — an
-        // exact compare skipped the warning and dispatched a no-op instead.
-        if (std::abs(ddx) <= helix::AxisMove::EPSILON_MM) {
-            ddx = 0.0;
-            if (!x_edge_warned_) {
-                NOTIFY_WARNING(lv_tr("X jog blocked at bed edge"));
-                x_edge_warned_ = true;
-            }
-        } else {
-            x_edge_warned_ = false;
-        }
+    if (ddx != 0.0 && bounds.has_x && helix::axis_is_homed(get_printer_state(), helix::Axis::X)) {
+        ddx = clamp_axis_and_warn(helix::Axis::X, current_x_, jog_coalescer_.uncommitted_x(), ddx,
+                                  bounds.x_min, bounds.x_max);
     }
-    if (ddy != 0.0 && bounds.has_y && y_homed) {
-        ddy = helix::clamp_jog_delta(current_y_, jog_coalescer_.uncommitted_y(), ddy, bounds.y_min,
-                                     bounds.y_max);
-        if (std::abs(ddy) <= helix::AxisMove::EPSILON_MM) {
-            ddy = 0.0;
-            if (!y_edge_warned_) {
-                NOTIFY_WARNING(lv_tr("Y jog blocked at bed edge"));
-                y_edge_warned_ = true;
-            }
-        } else {
-            y_edge_warned_ = false;
-        }
+    if (ddy != 0.0 && bounds.has_y && helix::axis_is_homed(get_printer_state(), helix::Axis::Y)) {
+        ddy = clamp_axis_and_warn(helix::Axis::Y, current_y_, jog_coalescer_.uncommitted_y(), ddy,
+                                  bounds.y_min, bounds.y_max);
     }
 
     if (ddx == 0.0 && ddy == 0.0) {
         return;
     }
     dispatch_jog({ddx, ddy, 0.0});
+}
+
+double MotionPanel::clamp_axis_and_warn(helix::Axis axis, double current, double uncommitted,
+                                        double delta, float min, float max) {
+    // axis.h ships axis_index() for exactly this; do not hand-cast.
+    const int idx = helix::axis_index(axis);
+    const auto result =
+        helix::clamp_jog_with_warn(current, uncommitted, delta, static_cast<double>(min),
+                                   static_cast<double>(max), edge_warned_[idx]);
+    edge_warned_[idx] = result.latch;
+
+    if (result.warn) {
+        // Three literals rather than an assembled string: the translation
+        // extractor scans for lv_tr() literals and cannot see a runtime key.
+        switch (axis) {
+        case helix::Axis::X:
+            NOTIFY_WARNING(lv_tr("X jog blocked at bed edge"));
+            break;
+        case helix::Axis::Y:
+            NOTIFY_WARNING(lv_tr("Y jog blocked at bed edge"));
+            break;
+        case helix::Axis::Z:
+            NOTIFY_WARNING(lv_tr("Z jog blocked at axis limit"));
+            break;
+        }
+    }
+    return result.allowed;
 }
 
 void MotionPanel::dispatch_jog(const helix::AxisMove& delta) {
@@ -739,12 +788,17 @@ void MotionPanel::send_jog_move(const helix::AxisMove& move) {
         jog_coalescer_.on_error();
         return;
     }
-    // XY: 6000 mm/min (100 mm/s); Z: 600 mm/min (10 mm/s) — same as before.
-    constexpr double JOG_FEEDRATE = 6000.0;
-    constexpr double Z_FEEDRATE = 600.0;
+    auto& settings = SettingsManager::instance();
+    // Storage keeps the user's choice; emission is clamped to what the printer
+    // currently permits, or move_relative would reject the jog outright.
+    const SafetyLimits& limits = api->get_safety_limits();
+    const double xy_feedrate = static_cast<double>(helix::effective_jog_speed_mm_min(
+        settings.get_jog_speed_xy(), limits.min_feedrate_mm_min, limits.max_feedrate_mm_min));
+    const double z_feedrate = static_cast<double>(helix::effective_jog_speed_mm_min(
+        settings.get_jog_speed_z(), limits.min_feedrate_mm_min, limits.max_feedrate_mm_min));
 
     api->motion().move_relative(
-        move.dx, move.dy, move.dz, JOG_FEEDRATE, Z_FEEDRATE,
+        move.dx, move.dy, move.dz, xy_feedrate, z_feedrate,
         lifetime_.bg_cb("MotionPanel::on_jog_ack",
                         [this]() {
                             if (auto flush = jog_coalescer_.on_ack()) {
@@ -830,6 +884,13 @@ static void on_jog_mode_turbo(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[MotionPanel] on_jog_mode_turbo");
     (void)e;
     get_global_motion_panel().set_jog_mode(JogMode::Turbo);
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+static void on_motion_header_settings_clicked(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[MotionPanel] on_motion_header_settings_clicked");
+    (void)e;
+    helix::settings::show_motion_settings_overlay();
     LVGL_SAFE_EVENT_CB_END();
 }
 

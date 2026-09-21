@@ -180,18 +180,18 @@ class AmsOperationSidebar {
     // Watches AmsState's ams_operation_indeterminate subject (#1065 row 14). When
     // 1 the live "Heat 225/230" readout is frozen by a starved status feed, so
     // the Heat step swaps to an indeterminate "Working…" busy label instead of a
-    // number that reads as a hang. Static-lifetime singleton subject (like
-    // ams_operation_phase) — a plain ObserverGuard with no SubjectLifetime is
-    // correct; cleaned up via reset() in cleanup().
+    // number that reads as a hang. AmsState::deinit_subjects() frees this
+    // subject's observer nodes, so the guard carries AmsState's subjects
+    // lifetime; cleaned up via reset() in cleanup().
     ObserverGuard indeterminate_observer_;
 
     // Drives the step bar's current step when the active backend supplies a
     // specialized step model (get_operation_step_index_subject). The subject is
-    // backend-supplied and always a STATIC singleton (firmware-phase subject for
-    // the U1, narration toolchange-step subject for AFC-style backends), so a
-    // member ObserverGuard with no SubjectLifetime is correct — cleaned up via
-    // reset() in cleanup(). When null the sidebar uses the legacy coarse
-    // AmsAction→index fallback.
+    // backend-supplied: AmsState's toolchange_step or ams_operation_phase for
+    // every backend shipping today, which is why recreate_step_progress_for_
+    // operation() passes AmsState's lifetime only when it recognizes one of
+    // those two. Cleaned up via reset() in cleanup(). When null the sidebar uses
+    // the legacy coarse AmsAction→index fallback.
     ObserverGuard step_index_observer_;
     // The subject the step_index_observer_ watches (nullptr => legacy fallback).
     // Set in recreate_step_progress_for_operation from the active backend.

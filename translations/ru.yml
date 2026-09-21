@@ -588,6 +588,8 @@ translations:
   Closer = more squish | Farther = less squish: Ближе = больше сжатие | Дальше = меньше
     сжатие
   Coarse: Грубо
+  Coarse Inner: ''
+  Coarse Outer: ''
   Code: Код
   Coil Temperature: Температура катушки
   Collect logs and system info for support: Собрать логи и информацию о системе для
@@ -842,6 +844,7 @@ translations:
   Distance from hub to toolhead: 'Расстояние от хаба до печатающей головки'
   Distance from lane extruder to hub: 'Расстояние от канала экструдера до хаба'
   Distance from toolhead sensor to nozzle tip: 'Расстояние от датчика печатающей головки до кончика сопла'
+  Distance moved per jog button tap: ''
   Do not power off your printer.: Не выключайте принтер.
   Do not touch the printer during calibration: Не трогайте принтер во время калибровки
   Dock: Парковать
@@ -1224,6 +1227,8 @@ translations:
   'Filter Fan: Off': 'Вентилятор фильтра: Выкл'
   'Filter Fan: On': 'Вентилятор фильтра: Вкл'
   Fine: Точно
+  Fine Inner: ''
+  Fine Outer: ''
   Finish: Завершить
   Finish or cancel the print before loading, unloading, or changing filament: Завершите или отмените печать перед загрузкой, выгрузкой или сменой филамента
   Finishing clean...: Завершение очистки...
@@ -1510,7 +1515,10 @@ translations:
   It's a new spool: Это новая катушка
   Jammed at the Toolhead: Замятие в печатающей головке
   Job Queue: Очередь заданий
+  Jog Speed XY: ''
+  Jog Speed Z: ''
   'Jog failed: {}': 'Перемещение не удалось: {}'
+  Jog speeds and step distances: ''
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Присоединяйтесь
     к сообществу HelixScreen в Discord для обсуждений, советов, помощи в устранении
     неполадок и предложений новых функций.
@@ -2427,6 +2435,8 @@ translations:
   Reset: Сброс
   Reset Blade Counter: 'Сбросить счётчик лезвия'
   Reset CFS: Сброс CFS
+  Reset Distances: ''
+  Reset Distances?: ''
   Reset Endless Spool: 'Сбросить бесконечную катушку'
   Reset Endless Spool?: 'Сбросить бесконечную катушку?'
   Reset Home Screen?: Сбросить главный экран?
@@ -3109,6 +3119,7 @@ translations:
   This will restart Klipper firmware. Any active operations will be interrupted.: Прошивка
     Klipper будет перезапущена. Активные операции будут прерваны.
   This will restart Klipper.: Это перезапустит Klipper.
+  This will restore the default jog step distances for all three modes.: ''
   This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect.: Z-offset будет сохранён, и Klipper перезапустится для записи конфигурации. Принтер ненадолго отключится.
   ? This writes the tool offsets to the printer's config and restarts Klipper, which takes a few seconds. Until then they apply only to this session.
   : Смещения инструментов будут записаны в конфигурацию принтера, и Klipper перезапустится, это займёт несколько секунд. До этого они действуют только в текущем сеансе.
@@ -3194,6 +3205,8 @@ translations:
   Tuning tower enabled - start a print to test: Башня настройки включена — начните
     печать для теста
   Turbo: Турбо
+  Turbo Inner: ''
+  Turbo Outer: ''
   Turn Off: Выключить
   Turn Off WiFi?: Выключить WiFi?
   Turn On: Включить
@@ -3396,6 +3409,7 @@ translations:
   X: X
   X Axis: Ось X
   X Offset: Смещение X
+  X and Y jog feedrate: ''
   X axis applied, but Y axis failed: Ось X применена, но ось Y не удалась
   X axis done, starting Y...: 'Ось X готова, запуск Y...'
   X jog blocked at bed edge: Перемещение по X заблокировано на краю стола
@@ -3430,6 +3444,8 @@ translations:
   Z Offset: Z Offset
   Z Range: Диапазон Z
   Z Tilt Adjust...: Регулировка наклона Z...
+  Z jog blocked at axis limit: ''
+  Z jog feedrate: ''
   Z motor calibration failed: Не удалась калибровка двигателя Z
   Z probes for bed leveling and mesh generation: Z-зонды для выравнивания стола и
     создания сетки

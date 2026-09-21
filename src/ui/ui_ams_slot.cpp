@@ -840,7 +840,7 @@ static void setup_slot_observers(AmsSlotData* data) {
                     apply_current_slot_highlight(d, lv_subject_get_int(slot_subject));
                 }
             },
-            AmsState::instance().get_subjects_lifetime());
+            state.get_subjects_lifetime());
     }
 
     // Per-slot active-loaded observer: the SINGLE source driving the active-lane

@@ -100,6 +100,7 @@ class PrintingSettingsOverlay : public OverlayBase {
     static void on_gcode_mode_changed(lv_event_t* e);
     static void on_z_movement_style_changed(lv_event_t* e);
     static void on_machine_limits_clicked(lv_event_t* e);
+    static void on_motion_settings_clicked(lv_event_t* e);
     static void on_retraction_row_clicked(lv_event_t* e);
     static void on_material_temps_clicked(lv_event_t* e);
     static void on_timelapse_settings_clicked(lv_event_t* e);

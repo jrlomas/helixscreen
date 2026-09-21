@@ -485,6 +485,7 @@ src/ui/ui_settings_led.cpp
 src/ui/ui_settings_machine_limits.cpp
 src/ui/ui_settings_macro_buttons.cpp
 src/ui/ui_settings_material_temps.cpp
+src/ui/ui_settings_motion.cpp
 src/ui/ui_settings_printing.cpp
 src/ui/ui_settings_safety.cpp
 src/ui/ui_settings_security.cpp

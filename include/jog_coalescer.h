@@ -106,4 +106,51 @@ inline double clamp_jog_delta(double current, double uncommitted, double delta, 
     return clamped;
 }
 
+/// Outcome of clamping one jog delta against an axis's limits.
+struct JogClampResult {
+    double allowed; ///< Permitted delta; 0.0 when the axis cannot move at all.
+    bool warn;      ///< Raise the "blocked" message now.
+    bool latch;     ///< The caller's new per-axis latch value; store it unconditionally.
+};
+
+/// Clamp a jog delta against an axis's limits and decide whether this attempt
+/// is the first blocked one of an approach.
+///
+/// `already_warned` is the caller's latch for this axis. `latch` in the result
+/// is its new value and is always meaningful, so a caller assigns it without
+/// branching: a jog that moves clears the latch, so retreating from a limit and
+/// returning to it warns again.
+///
+/// Partial travel is not a block. A request for 10mm that yields 2mm moves 2mm
+/// and says nothing; only a request that yields nothing is worth a message.
+///
+/// "Yields nothing" is an epsilon test, not `== 0.0`: a predicted position a
+/// hair inside the envelope leaves a sub-micron residual, which an exact
+/// compare reads as travel and the warning never fires.
+inline JogClampResult clamp_jog_with_warn(double current, double uncommitted, double delta,
+                                          double min, double max, bool already_warned) {
+    const double allowed = clamp_jog_delta(current, uncommitted, delta, min, max);
+    const bool blocked = std::abs(allowed) <= AxisMove::EPSILON_MM;
+    if (!blocked) {
+        return {allowed, false, false};
+    }
+    return {0.0, !already_warned, true};
+}
+
+/// The jog feedrate actually used, given what the user stored and what the
+/// printer permits. Storage keeps the user's choice so a machine with a higher
+/// ceiling gets it back; emission can never exceed the limit. Bounds are plain
+/// doubles so this header stays dependency-free — pass a SafetyLimits' fields.
+inline int effective_jog_speed_mm_min(int stored_mm_min, double min_mm_min, double max_mm_min) {
+    // min-then-max rather than std::clamp: the bounds are caller-supplied, and
+    // std::clamp is undefined when min > max while this form resolves any
+    // ordering to the maximum.
+    const double v = static_cast<double>(stored_mm_min);
+    const double bounded = std::min(std::max(v, min_mm_min), max_mm_min);
+    // Only the raised case rounds up: truncating a fractional min_mm_min lands
+    // one below the floor is_safe_feedrate() enforces, while a value pulled
+    // down to a fractional max_mm_min has to stay under it.
+    return static_cast<int>(bounded > v ? std::ceil(bounded) : bounded);
+}
+
 } // namespace helix

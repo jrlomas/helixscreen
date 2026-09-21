@@ -252,25 +252,52 @@ echo ""
 }
 
 # ====================================================================
+# XML Validator Tool Build
+# ====================================================================
+# qc_xml_const / qc_xml_attr pass vacuously when their binaries are missing,
+# and nothing in a normal build produces them — `make` builds only the app.
+# This step builds both tools ahead of those gates, serially and before the
+# parallel batch, so two gates never run make against one tree at once.
+# Failing to build is a red gate, not a skip: a validator that silently
+# doesn't exist is a validator that silently passes.
+qc_xml_tools() {
+  local EXIT_CODE=0
+  # Same bounded share the build-verification phase uses: this is a real make
+  # invocation, and unbounded -j from a hook is N unbounded builds at once.
+  local TOOL_JOBS
+  TOOL_JOBS="${HELIX_QC_JOBS:-$(scripts/helix-claim jobs 2>/dev/null || echo 6)}"
+echo "🔧 Building XML validator tools..."
+
+if make SKIP_COMPILE_COMMANDS=1 -j"$TOOL_JOBS" validate-xml-constants validate-xml-attrs >/tmp/qc_xml_tools.out 2>&1; then
+  echo "✅ XML validator tools ready"
+else
+  echo ""
+  echo "❌ XML validator tools failed to build"
+  sed -n '1,40p' /tmp/qc_xml_tools.out
+  EXIT_CODE=1
+fi
+
+echo ""
+  return $EXIT_CODE
+}
+
+# ====================================================================
 # XML Constant Set Validation
 # ====================================================================
 qc_xml_const() {
   local EXIT_CODE=0
-echo "🔤 Validating XML constant sets..."
+echo "🔤 XML constant set gate..."
 
 if [ -x "build/bin/validate-xml-constants" ]; then
-  if ./build/bin/validate-xml-constants; then
-    : # Success message already printed by tool
-  else
-    echo ""
-    echo "   Incomplete constant sets can cause runtime warnings."
-    echo "   - Responsive px: Need ALL of _small, _medium, _large (or none)"
-    echo "   - Theme colors: Need BOTH _light and _dark (or neither)"
-    EXIT_CODE=1
-  fi
+  # Not enforced while the validator cannot resolve theme tokens: every
+  # constant defined in assets/config/themes reads as undefined, so enforcing
+  # would fail every XML-touching commit on false positives, and a wall of
+  # noise nobody reads is worse than an honest pause. Enforcement returns
+  # with prestonbrown/helixscreen#1698.
+  echo "⏸️  validate-xml-constants built, not enforced - it cannot resolve theme tokens yet (prestonbrown/helixscreen#1698)"
 else
   echo "⚠️  validate-xml-constants not built - skipping"
-  echo "   Run 'make' to build validation tools"
+  echo "   qc_xml_tools above should have built it - check its failure"
 fi
 
 echo ""
@@ -318,7 +345,7 @@ if [ -x "build/bin/validate-xml-attributes" ]; then
   fi
 else
   echo "⚠️  validate-xml-attributes not built - skipping"
-  echo "   Run 'make validate-xml-attrs' to build validation tool"
+  echo "   qc_xml_tools above should have built it - check its failure"
 fi
 
 echo ""
@@ -3343,7 +3370,7 @@ qc_run_buffered() {
 
 # qc_xml_linter always regenerates the schema; qc_phase2 only rewrites files
 # when asked to fix them.
-QC_SERIAL="qc_xml_linter"
+QC_SERIAL="qc_xml_tools qc_xml_linter"
 if [ "$AUTO_FIX" = true ]; then QC_SERIAL="$QC_SERIAL qc_phase2"; fi
 qc_workflow_submodules() {
   local EXIT_CODE=0
@@ -3371,7 +3398,7 @@ echo ""
   return $EXIT_CODE
 }
 
-QC_ALL="qc_phase1 qc_xml_const qc_xml_attr qc_dup_names qc_xml_linter qc_xml_subtests qc_hidden_tests qc_overlay_width qc_icon_names qc_design_pixels qc_phase2 qc_icon_font qc_mdi_codepoints qc_todo_markers qc_mem_safety qc_null_safety qc_l081 qc_net_pii qc_decl_ui qc_namespace qc_spdlog_only qc_design_tokens qc_test_mirrors qc_test_tautology qc_test_widget_registry qc_doc_refs qc_lvgl_event_codes qc_translation_fmt qc_base_locale qc_translation_coverage qc_cjk_fonts qc_shellcheck qc_installer_reachability qc_patch_drift qc_workflow_submodules qc_bats_inert"
+QC_ALL="qc_phase1 qc_xml_tools qc_xml_const qc_xml_attr qc_dup_names qc_xml_linter qc_xml_subtests qc_hidden_tests qc_overlay_width qc_icon_names qc_design_pixels qc_phase2 qc_icon_font qc_mdi_codepoints qc_todo_markers qc_mem_safety qc_null_safety qc_l081 qc_net_pii qc_decl_ui qc_namespace qc_spdlog_only qc_design_tokens qc_test_mirrors qc_test_tautology qc_test_widget_registry qc_doc_refs qc_lvgl_event_codes qc_translation_fmt qc_base_locale qc_translation_coverage qc_cjk_fonts qc_shellcheck qc_installer_reachability qc_patch_drift qc_workflow_submodules qc_bats_inert"
 
 QC_PARALLEL=""
 for fn in $QC_ALL; do
@@ -3390,6 +3417,9 @@ qc_trigger_re() {
   case "$1" in
     qc_xml_const|qc_xml_attr|qc_dup_names|qc_xml_linter|qc_xml_subtests)
                         echo '\.xml$|^src/ui/|^tools/xml-linter/' ;;
+    # Builds the binaries the two gates above run; also wakes on the
+    # validators' own sources so an edit to a tool rebuilds it.
+    qc_xml_tools)        echo '\.xml$|^src/ui/|^tools/validate_xml|^tools/xml-linter/' ;;
     qc_overlay_width)   echo '\.xml$|\.(cpp|h)$' ;;
     qc_design_pixels)   echo '\.xml$' ;;
     qc_phase2)          echo '\.(cpp|c|h|mm|xml)$' ;;

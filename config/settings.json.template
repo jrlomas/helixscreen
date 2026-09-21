@@ -272,19 +272,6 @@
           "gcode": "HELIX_BED_LEVEL_IF_NEEDED"
         }
       },
-      "safety_limits": {
-        "max_temperature_celsius": 400.0,
-        "min_temperature_celsius": 0.0,
-        "max_fan_speed_percent": 100.0,
-        "min_fan_speed_percent": 0.0,
-        "max_feedrate_mm_min": 50000.0,
-        "min_feedrate_mm_min": 0.0,
-        "max_relative_distance_mm": 1000.0,
-        "min_relative_distance_mm": -1000.0,
-        "max_absolute_position_mm": 1000.0,
-        "min_absolute_position_mm": 0.0,
-        "_comment": "Safety limits for G-code generation. Explicit values override Moonraker auto-detection. Defaults are conservative for most FDM printers. High-temp printers may need max_temperature_celsius > 400. Leave unset to auto-detect from printer.cfg via Moonraker."
-      },
       "chamber_heater": "auto",
       "_chamber_heater_comment": "Chamber heater assignment. 'auto' (detect by name heuristics), 'none' (disable), or Klipper object name (e.g., 'heater_generic chamber'). Default: 'auto'.",
       "chamber_sensor": "auto",

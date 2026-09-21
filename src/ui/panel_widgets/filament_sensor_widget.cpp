@@ -12,6 +12,7 @@
 #include "app_globals.h"
 #include "filament_op_dispatch.h"
 #include "filament_op_execute.h"
+#include "filament_sensor_manager.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
 #include "panel_widget_registry.h"
@@ -375,7 +376,7 @@ void FilamentSensorWidget::rebind_source() {
             (void)self;
             lv_subject_set_int(&tile_state_subject_, value);
         },
-        source_lifetime_);
+        FilamentSensorManager::instance().get_subjects_lifetime());
 }
 
 } // namespace helix

@@ -13,9 +13,9 @@ You are automating the HelixScreen release process. Follow each step in order. H
 Collect all of these before starting:
 
 ```bash
-git rev-parse --abbrev-ref HEAD          # Must be "main"
+git rev-parse --abbrev-ref HEAD          # "main", or the release/X.Y line this version belongs to
 git status --porcelain | grep -v -E '\.claude-recall/(LESSONS\.md|LESSONS\.md\.lock|CLAUDE\.md|injection-stats\.json|stats\.json)'  # Must be empty (ignoring recall files)
-git fetch origin && git status -sb        # Must be up-to-date with origin/main
+git fetch origin && git status -sb        # Must be up-to-date with this branch's upstream
 cat VERSION.txt                           # Current version
 git describe --tags --abbrev=0 2>/dev/null  # Last tag (e.g., v0.9.3)
 git log $(git describe --tags --abbrev=0 2>/dev/null)..HEAD --oneline  # Commits since last tag
@@ -31,10 +31,22 @@ All of these must pass. If ANY fails, STOP and tell the user why.
 
 | Check | How | Fail action |
 |-------|-----|-------------|
-| On `main` branch | `git rev-parse --abbrev-ref HEAD` = "main" | STOP: "Switch to main first" |
+| Branch is releasable | `git rev-parse --abbrev-ref HEAD` is `main` or `release/X.Y`. Store it as `BRANCH`. | STOP: "{branch} is neither main nor a release/X.Y line" |
 | Clean working tree | `git status --porcelain` is empty after ignoring `LESSONS.md`, `LESSONS.md.lock`, `CLAUDE.md`, `injection-stats.json`, and `stats.json` in `.claude-recall/`. All five are recall's own state, rewritten by any session; since worktrees route their writes here (`PROJECT_DIR`, see `setup-worktree.sh`), they are dirty most of the time and are not a reason to hold a release. Commit them with it. | STOP: "Uncommitted changes — commit or stash first" |
-| Up to date with origin | `git fetch origin` then check `git status -sb` for "behind" | STOP: "Branch is behind origin/main — pull first" |
+| Up to date with origin | `git fetch origin` then check `git status -sb` for "behind" | STOP: "Branch is behind origin/$BRANCH — pull first" |
 | Tags fetched | `git fetch --tags origin` | Just do it silently |
+
+**Which branch may release which version.** A patch on a shipped line lives on that
+line's branch, never on `main`, because `main` carries the next minor's development.
+Tagging `1.0.1` from a `main` reading `1.1.0-beta.1` would publish 1.1 work as a 1.0
+patch, and tags only move forward, so there is no taking it back. `main` may release any
+version; a `release/X.Y` branch may release only `X.Y.*`. STEP 1 enforces the pairing
+once the version is resolved.
+
+Every `main` hardcoded below is really `$BRANCH`: the upstream comparison, the CI query,
+and the push. A release-line branch also lags `main`'s own tooling, so check before
+reaching for it - `scripts/version-compare.sh` and `make full-test-run` may not exist
+there. The equivalents are a careful manual semver comparison and `make test-all`.
 
 ---
 
@@ -80,6 +92,16 @@ All of these must pass. If ANY fails, STOP and tell the user why.
   `1` is the only answer that may proceed. `0` or `-1` is a STOP. A non-zero exit
   means it refused to rank the pair rather than guessing — also a STOP, never read
   that as agreement.
+- The version must belong to `$BRANCH`. On a `release/X.Y` branch, `NEW_VERSION` must
+  start with `X.Y.`; on `main` anything valid passes:
+  ```bash
+  case "$BRANCH" in
+    release/*) case "$NEW_VERSION" in
+                 "${BRANCH#release/}".*) ;;
+                 *) echo "STOP: $NEW_VERSION does not belong to $BRANCH"; exit 1 ;;
+               esac ;;
+  esac
+  ```
 - If validation fails → STOP with clear error
 
 Store the resolved version as `NEW_VERSION` (without `v` prefix) for all subsequent steps.
@@ -104,14 +126,14 @@ lint/validation failures surface before the long test build.
   failing check. Look for the `❌` lines; `⚠️` lines (clang-format / XML formatting) are
   advisory and do NOT fail the script.
 
-Do not release on a red `main`. Before starting, also confirm CI is green for the commit
+Do not release on a red branch. Before starting, also confirm CI is green for the commit
 being released:
 
 ```bash
 # EVERY workflow, not just Code Quality. Build compiles with clang on Ubuntu while
 # local builds here use g++, so a clang-only diagnostic under -Werror is red on CI
 # and green on the release machine - checking one workflow reads as all-clear.
-gh run list --limit 20 --json conclusion,status,workflowName,headSha \
+gh run list --branch "$BRANCH" --limit 20 --json conclusion,status,workflowName,headSha \
   --jq '.[] | select(.conclusion == "failure") | "\(.workflowName)\t\(.headSha[0:9])"'
 ```
 
@@ -120,6 +142,11 @@ If ANY workflow's latest run is a `failure`, treat it as a STOP — fix it first
 v0.99.118 nearly shipped with the Ubuntu `Build` job red for an hour, because the gate
 only looked at Code Quality: `Build Status` even prints "tolerated because this is an
 integration branch", so main stays red without anything stopping a release.)
+
+Without `--branch` this reads whichever branch ran most recently, so on a release line it
+happily reports `main`'s runs as if they were yours. A workflow that does not apply to the
+line being released is not a reason to stop, but say which one you are setting aside and
+why, rather than passing over it silently.
 
 ### C++ tests
 ```bash
@@ -335,7 +362,7 @@ Use AskUserQuestion:
 
 ### If "Push it":
 ```bash
-git push origin main
+git push origin "$BRANCH"
 git push origin "v{NEW_VERSION}"
 ```
 Then show: "Pushed! Watch the build: https://github.com/prestonbrown/helixscreen/actions"
@@ -346,7 +373,7 @@ auto-rebuilding helixscreen.org from the new tag's `docs/user/`. No manual
 website deploy needed. Prereleases skip this.
 
 ### If "Keep local":
-Show: "Release commit and tag created locally. Push when ready:\n`git push origin main && git push origin v{NEW_VERSION}`"
+Show: "Release commit and tag created locally. Push when ready:\n`git push origin $BRANCH && git push origin v{NEW_VERSION}`"
 
 ### If "Undo":
 **Ask for explicit confirmation** before running destructive commands:
@@ -362,10 +389,11 @@ Show: "Undone. Commit removed (changes preserved as staged), tag deleted."
 
 | Error | Action |
 |-------|--------|
-| Not on main | STOP with message, do not offer to switch |
+| Branch neither `main` nor `release/X.Y` | STOP with message, do not offer to switch |
+| Version does not match the release line | STOP: "v{NEW_VERSION} does not belong to {BRANCH}" |
 | Dirty working tree | STOP with message, do not offer to stash |
 | Behind origin | STOP with message, do not offer to pull |
-| Quality checks fail | STOP with the `❌` output — do not release on a red `main` |
+| Quality checks fail | STOP with the `❌` output — do not release on a red branch |
 | Tests fail | STOP with failure output |
 | Version not greater | STOP: "v{NEW_VERSION} is not greater than v{LAST_TAG}" |
 | User aborts at any checkpoint | STOP cleanly, no partial state |

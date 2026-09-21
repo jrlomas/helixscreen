@@ -11,6 +11,8 @@
 
 #include "ui_batch_filament_modal.h"
 
+#include "lvgl/src/others/translation/lv_translation.h"
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -46,5 +48,31 @@ TEST_CASE("BatchFilamentModal selected keys convert to slot indices", "[ams][bat
     }
     SECTION("empty selection stays empty") {
         REQUIRE(BatchFilamentModal::selected_slots({}).empty());
+    }
+}
+
+TEST_CASE("BatchFilamentModal row label names the lane contents", "[ams][batch]") {
+    using helix::SlotInfo;
+    using helix::ui::LaneNoun;
+
+    SECTION("a loaded lane names its material") {
+        SlotInfo info;
+        info.material = "PETG";
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 0, info, true) ==
+                "Feeder 1 (PETG)");
+    }
+    SECTION("a lane known to be empty says so") {
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 1, SlotInfo{}, false) ==
+                std::string("Feeder 2 (") + lv_tr("Empty") + ")");
+    }
+    SECTION("an unanswerable presence leaves the lane name bare") {
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 2, SlotInfo{}, std::nullopt) ==
+                "Feeder 3");
+    }
+    SECTION("material wins over presence, so a stale nullopt cannot blank a loaded lane") {
+        SlotInfo info;
+        info.material = "PLA";
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Slot, 0, info, std::nullopt) ==
+                "Slot 1 (PLA)");
     }
 }

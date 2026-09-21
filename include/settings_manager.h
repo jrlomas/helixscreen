@@ -14,6 +14,11 @@
 namespace helix {
 class IMoonrakerClient;
 
+/// Jog step mode selector — defined in ui_panel_motion.h. Declared here so the
+/// jog-distance accessors can take it without pulling the motion panel's UI
+/// machinery into every settings consumer.
+enum class JogMode;
+
 /** @brief Z movement style override (Auto=detect from kinematics, or force) */
 enum class ZMovementStyle { AUTO = 0, BED_MOVES = 1, NOZZLE_MOVES = 2 };
 
@@ -217,6 +222,36 @@ class SettingsManager {
     lv_subject_t* subject_extrude_speed() {
         return &extrude_speed_subject_;
     }
+
+    // =========================================================================
+    // JOG FEEDRATES (owned by SettingsManager — persisted per-printer)
+    // =========================================================================
+
+    /** @brief Get XY jog feedrate in mm/min (default 6000, range 60-60000) */
+    int get_jog_speed_xy() const;
+
+    /** @brief Set XY jog feedrate in mm/min (clamped 60-60000, persisted) */
+    void set_jog_speed_xy(int mm_per_min);
+
+    /** @brief Get Z jog feedrate in mm/min (default 600, range 60-60000) */
+    int get_jog_speed_z() const;
+
+    /** @brief Set Z jog feedrate in mm/min (clamped 60-60000, persisted) */
+    void set_jog_speed_z(int mm_per_min);
+
+    // =========================================================================
+    // JOG STEP DISTANCES (owned by SettingsManager — persisted per-printer)
+    // =========================================================================
+
+    /** @brief Get the jog step distance in mm for a mode and ring
+     *  (defaults 0.1/1, 1/10, 10/50; clamped 0.01-200 on read and write) */
+    float get_jog_distance(JogMode mode, bool outer) const;
+
+    /** @brief Set the jog step distance in mm (clamped 0.01-200, persisted) */
+    void set_jog_distance(JogMode mode, bool outer, float mm);
+
+    /** @brief Restore all six jog distances to the shipped defaults (persisted) */
+    void reset_jog_distances();
 
     // =========================================================================
     // QIDI BOX EJECT (owned by SettingsManager — persisted per-printer)
@@ -592,6 +627,12 @@ class SettingsManager {
     lv_subject_t led_enabled_subject_{};
     lv_subject_t z_movement_style_subject_{};
     lv_subject_t extrude_speed_subject_{};
+    lv_subject_t jog_speed_xy_subject_{};
+    lv_subject_t jog_speed_z_subject_{};
+    // Jog step distances in mm, [static_cast<int>(JogMode)][outer]. Cached
+    // config values rather than subjects: read on every jog, not widget-bound.
+    // Sized for the three JogMode values; static_assert in init_subjects().
+    float jog_distances_[3][2]{};
     lv_subject_t qidi_eject_distance_subject_{};
     lv_subject_t qidi_eject_velocity_subject_{};
     lv_subject_t toolhead_style_subject_{};

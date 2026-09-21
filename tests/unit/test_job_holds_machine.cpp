@@ -471,6 +471,7 @@ constexpr const char* kNoMachineControlFiles[] = {
     "ui_xml/modal_button_row.xml",
     "ui_xml/modal_dialog.xml",
     "ui_xml/modal_header.xml",
+    "ui_xml/motion_settings_overlay.xml",
     "ui_xml/navigation_bar.xml",
     "ui_xml/network_settings_overlay.xml",
     "ui_xml/network_test_modal.xml",

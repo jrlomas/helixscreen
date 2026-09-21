@@ -45,6 +45,18 @@ std::vector<int> BatchFilamentModal::selected_slots(const std::vector<std::strin
     return slots;
 }
 
+std::string BatchFilamentModal::row_label(LaneNoun noun, int slot, const SlotInfo& info,
+                                          std::optional<bool> present) {
+    const std::string lane = lane_label(noun, slot);
+    if (!info.material.empty()) {
+        return lane + " (" + info.material + ")"; // material: no i18n
+    }
+    if (present && !*present) {
+        return lane + " (" + lv_tr("Empty") + ")";
+    }
+    return lane;
+}
+
 void BatchFilamentModal::on_show() {
     wire_ok_button("btn_primary");
     wire_cancel_button("btn_secondary");
@@ -61,19 +73,25 @@ void BatchFilamentModal::on_show() {
     }
 
     const AmsSystemInfo info = backend->get_system_info();
+    std::vector<SlotInfo> slots;
     std::vector<std::optional<bool>> at_toolhead;
     std::vector<MultiSelectItem> items;
+    slots.reserve(static_cast<size_t>(info.total_slots));
     at_toolhead.reserve(static_cast<size_t>(info.total_slots));
     items.reserve(static_cast<size_t>(info.total_slots));
     for (int slot = 0; slot < info.total_slots; ++slot) {
-        at_toolhead.push_back(slot_presence(backend->get_slot_info(slot)));
+        slots.push_back(backend->get_slot_info(slot));
+        at_toolhead.push_back(slot_presence(slots.back()));
     }
     // One tick set serves both buttons, so it favors the direction with
     // a physical precondition: Unload on the heads that have filament at the
     // toolhead.
     const std::vector<bool> ticked = prefill_selection(at_toolhead, /*for_load=*/false);
     for (int slot = 0; slot < info.total_slots; ++slot) {
-        items.push_back({std::to_string(slot), lane_label(backend->lane_noun(), slot),
+        items.push_back({std::to_string(slot),
+                         BatchFilamentModal::row_label(backend->lane_noun(), slot,
+                                                       slots[static_cast<size_t>(slot)],
+                                                       at_toolhead[static_cast<size_t>(slot)]),
                          ticked[static_cast<size_t>(slot)]});
     }
     multiselect_.attach(container);

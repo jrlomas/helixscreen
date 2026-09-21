@@ -579,6 +579,8 @@ translations:
   Closer = more squish | Farther = less squish: Closer = more squish | Farther = less
     squish
   Coarse: Coarse
+  Coarse Inner: Coarse Inner
+  Coarse Outer: Coarse Outer
   Code: Code
   Coil Temperature: Coil Temperature
   Collect logs and system info for support: Collect logs and system info for support
@@ -831,6 +833,7 @@ translations:
   Distance from hub to toolhead: Distance from hub to toolhead
   Distance from lane extruder to hub: Distance from lane extruder to hub
   Distance from toolhead sensor to nozzle tip: Distance from toolhead sensor to nozzle tip
+  Distance moved per jog button tap: Distance moved per jog button tap
   Do not power off your printer.: Do not power off your printer.
   Do not touch the printer during calibration: Do not touch the printer during calibration
   Dock: Dock
@@ -1210,6 +1213,8 @@ translations:
   'Filter Fan: Off': 'Filter Fan: Off'
   'Filter Fan: On': 'Filter Fan: On'
   Fine: Fine
+  Fine Inner: Fine Inner
+  Fine Outer: Fine Outer
   Finish: Finish
   Finish or cancel the print before loading, unloading, or changing filament: Finish or cancel the print before loading, unloading, or changing filament
   'Finishing clean...': 'Finishing clean...'
@@ -1495,7 +1500,10 @@ translations:
   It's a new spool: It's a new spool
   Jammed at the Toolhead: Jammed at the Toolhead
   Job Queue: Job Queue
+  Jog Speed XY: Jog Speed XY
+  Jog Speed Z: Jog Speed Z
   'Jog failed: {}': 'Jog failed: {}'
+  Jog speeds and step distances: Jog speeds and step distances
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Join
     the HelixScreen community on Discord for discussion, tips, troubleshooting help,
     and feature requests.
@@ -2406,6 +2414,8 @@ translations:
   Reset: Reset
   Reset Blade Counter: Reset Blade Counter
   Reset CFS: Reset CFS
+  Reset Distances: Reset Distances
+  Reset Distances?: Reset Distances?
   Reset Endless Spool: Reset Endless Spool
   Reset Endless Spool?: Reset Endless Spool?
   Reset Home Screen?: Reset Home Screen?
@@ -3082,6 +3092,7 @@ translations:
   This will restart Klipper firmware. Any active operations will be interrupted.: This
     will restart Klipper firmware. Any active operations will be interrupted.
   This will restart Klipper.: This will restart Klipper.
+  This will restore the default jog step distances for all three modes.: This will restore the default jog step distances for all three modes.
   This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect.: This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect.
   ? This writes the tool offsets to the printer's config and restarts Klipper, which takes a few seconds. Until then they apply only to this session.
   : This writes the tool offsets to the printer's config and restarts Klipper, which takes a few seconds. Until then they apply only to this session.
@@ -3167,6 +3178,8 @@ translations:
   Tuning tower enabled - start a print to test: Tuning tower enabled - start a print
     to test
   Turbo: Turbo
+  Turbo Inner: Turbo Inner
+  Turbo Outer: Turbo Outer
   Turn Off: Turn Off
   Turn Off WiFi?: Turn Off WiFi?
   Turn On: Turn On
@@ -3371,6 +3384,7 @@ translations:
   X: X
   X Axis: X Axis
   X Offset: X Offset
+  X and Y jog feedrate: X and Y jog feedrate
   X axis applied, but Y axis failed: X axis applied, but Y axis failed
   X axis done, starting Y...: X axis done, starting Y...
   X jog blocked at bed edge: X jog blocked at bed edge
@@ -3405,6 +3419,8 @@ translations:
   Z Offset: Z Offset
   Z Range: Z Range
   Z Tilt Adjust...: Z Tilt Adjust...
+  Z jog blocked at axis limit: Z jog blocked at axis limit
+  Z jog feedrate: Z jog feedrate
   Z motor calibration failed: Z motor calibration failed
   Z probes for bed leveling and mesh generation: Z probes for bed leveling and mesh
     generation
