@@ -1197,11 +1197,13 @@ lv_obj_t* ui_ams_mini_status_create(lv_obj_t* parent, int32_t height) {
         // use-after-free when deferred callback executes after widget deletion.
         // The registry lookup acts as a validity check. (fixes #83)
         data->slots_version_observer = observe_int_sync<lv_obj_t>(
-            slots_version_subject, container, [](lv_obj_t* obj, int /* version */) {
+            slots_version_subject, container,
+            [](lv_obj_t* obj, int /* version */) {
                 auto* d = get_data(obj);
                 if (d)
                     sync_from_ams_state(d);
-            });
+            },
+            helix::AmsState::instance().get_subjects_lifetime());
 
         // Sync initial state if AMS already has data — defer so layout is
         // fully resolved before rebuild_bars queries container dimensions.
@@ -1547,11 +1549,13 @@ static void* ui_ams_mini_status_xml_create(lv_xml_parser_state_t* state, const c
         // use-after-free when deferred callback executes after widget deletion.
         // The registry lookup acts as a validity check. (fixes #83)
         data->slots_version_observer = observe_int_sync<lv_obj_t>(
-            slots_version_subject, container, [](lv_obj_t* obj, int /* version */) {
+            slots_version_subject, container,
+            [](lv_obj_t* obj, int /* version */) {
                 auto* d = get_data(obj);
                 if (d)
                     sync_from_ams_state(d);
-            });
+            },
+            helix::AmsState::instance().get_subjects_lifetime());
 
         // Sync initial state if AMS already has data — defer so layout is
         // fully resolved before rebuild_bars queries container dimensions.

@@ -23,6 +23,8 @@
 #include "ui_update_queue.h"
 
 #include "../lvgl_ui_test_fixture.h"
+#include "ams_state.h"
+#include "filament_sensor_manager.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "printer_state.h"
 #include "test_helpers/print_status_panel_test_access.h"
@@ -271,4 +273,44 @@ TEST_CASE_METHOD(PrintStatusTeardownFixture,
     lv_obj_delete(new_root);
     UpdateQueue::instance().drain();
     root_ = nullptr;
+}
+
+// PrintStatusPanel observes subjects owned by two other singletons. Each of
+// them frees every observer node it holds in its own deinit_subjects(), so the
+// panel's guards have to carry that owner's SubjectLifetime: without it a guard
+// stays truthy with a dangling lv_observer_t* and its reset() removes an
+// observer that no longer exists. The panel is a process-global, so any test
+// that tears one of those singletons down leaves the trap armed for whoever
+// destroys the panel next.
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "PrintStatusPanel guards survive an owner singleton's subject teardown",
+                 "[print_status][teardown][uaf][observer]") {
+    helix::AmsState::instance().init_subjects(true);
+    helix::FilamentSensorManager::instance().init_subjects();
+
+    // The lookups the panel performs must resolve, or it attaches nothing and
+    // the teardown below would be trivially safe.
+    REQUIRE(lv_xml_get_subject(nullptr, "ams_slot_count") != nullptr);
+    REQUIRE(lv_xml_get_subject(nullptr, "toolchange_visible") != nullptr);
+    REQUIRE(lv_xml_get_subject(nullptr, "filament_sensor_count") != nullptr);
+
+    auto panel = std::make_unique<PrintStatusPanel>(state(), nullptr);
+    panel->init_subjects();
+
+    // Frees the observer nodes the panel just attached to both singletons.
+    helix::AmsState::instance().deinit_subjects();
+    helix::FilamentSensorManager::instance().deinit_subjects();
+
+    // Every guard reset() lands here. Each one that never learned its subject
+    // died calls lv_observer_remove() on a freed node.
+    panel->deinit_subjects();
+    panel.reset();
+    UpdateQueue::instance().drain();
+
+    SUCCEED("panel teardown completed without walking freed observer nodes");
+
+    // Restore both singletons for the rest of the binary: deinit_subjects()
+    // withdrew their XML names, and later tests resolve them by name.
+    helix::AmsState::instance().init_subjects(true);
+    helix::FilamentSensorManager::instance().init_subjects();
 }
