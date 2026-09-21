@@ -13,6 +13,7 @@
     <prop name="primary_icon" type="string" default=""/>
     <prop name="secondary_icon" type="string" default=""/>
     <prop name="primary_variant" type="string" default="primary"/>
+    <prop name="secondary_variant" type="string" default="primary"/>
     <prop name="show_secondary" type="string" default="true"/>
     <!-- Optional leading (tertiary) action, e.g. "Reset to defaults". Hidden by default
          so the many existing two-button callers are unaffected (a hidden flex child drops
@@ -44,8 +45,8 @@
            border doesn't stack against divider_vertical (previously looked
            like a triple-thick edge between Cancel and Save). -->
       <ui_button name="btn_secondary"
-                 height="100%" flex_grow="1" style_radius="0" style_border_width="0" focusable="false"
-                 icon="$secondary_icon" text="$secondary_text" translation_tag="$secondary_tag">
+                 height="100%" variant="$secondary_variant" flex_grow="1" style_radius="0" style_border_width="0"
+                 focusable="false" icon="$secondary_icon" text="$secondary_text" translation_tag="$secondary_tag">
         <event_cb trigger="clicked" callback="$secondary_callback"/>
       </ui_button>
       <!-- Vertical divider -->
