@@ -14,6 +14,7 @@
 #include "ui_overlay_timelapse_settings.h"
 #include "ui_settings_machine_limits.h"
 #include "ui_settings_material_temps.h"
+#include "ui_settings_motion.h"
 
 #include "app_globals.h"
 #include "display_settings_manager.h"
@@ -74,6 +75,7 @@ void PrintingSettingsOverlay::register_callbacks() {
         {"on_gcode_mode_changed", on_gcode_mode_changed},
         {"on_z_movement_style_changed", on_z_movement_style_changed},
         {"on_machine_limits_clicked", on_machine_limits_clicked},
+        {"on_motion_settings_clicked", on_motion_settings_clicked},
         {"on_material_temps_clicked", on_material_temps_clicked},
         // on_retraction_row_clicked is registered by RetractionSettingsOverlay
         // on_timelapse_settings_clicked is registered by SettingsPanel
@@ -294,6 +296,12 @@ void PrintingSettingsOverlay::on_z_movement_style_changed(lv_event_t* e) {
 void PrintingSettingsOverlay::on_machine_limits_clicked(lv_event_t* /*e*/) {
     LVGL_SAFE_EVENT_CB_BEGIN("[PrintingSettingsOverlay] on_machine_limits_clicked");
     get_printing_settings_overlay().handle_machine_limits_clicked();
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void PrintingSettingsOverlay::on_motion_settings_clicked(lv_event_t* /*e*/) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[PrintingSettingsOverlay] on_motion_settings_clicked");
+    helix::settings::show_motion_settings_overlay();
     LVGL_SAFE_EVENT_CB_END();
 }
 

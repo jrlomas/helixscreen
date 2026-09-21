@@ -995,7 +995,8 @@ void PrintStartController::observe_ams_data_for_confirmation() {
     }
 
     ams_data_observer_ = observe_int_sync<PrintStartController>(
-        subject, this, [](PrintStartController* self, int) { self->check_restore_confirmed(); });
+        subject, this, [](PrintStartController* self, int) { self->check_restore_confirmed(); },
+        AmsState::instance().get_subjects_lifetime());
 }
 
 void PrintStartController::check_restore_confirmed() {

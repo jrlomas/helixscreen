@@ -4,6 +4,9 @@
 #include "ui_modal.h"
 #include "ui_multiselect.h"
 
+#include "ams_types.h"
+#include "display_numbering.h"
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -39,6 +42,13 @@ class BatchFilamentModal : public Modal {
 
     // Pure: multiselect keys are slot indices as decimal strings.
     static std::vector<int> selected_slots(const std::vector<std::string>& keys);
+
+    // Pure: row text. The lane name, plus what is in the lane. The tick state
+    // stops describing the machine the moment the user changes it, so the
+    // contents are named in the row. An unanswerable presence leaves the lane
+    // name bare rather than asserting "Empty".
+    static std::string row_label(LaneNoun noun, int slot, const SlotInfo& info,
+                                 std::optional<bool> present);
 
   protected:
     void on_show() override;

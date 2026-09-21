@@ -56,11 +56,13 @@ void arm_manual_pull_prompt() {
     const bool watchable = toolhead && lv_subject_get_int(toolhead) == TOOLHEAD_DETECTED;
     if (watchable) {
         s_toolhead_observer = observe_int_sync<FilamentSensorManager>(
-            toolhead, &sensors, [](FilamentSensorManager*, int detected) {
+            toolhead, &sensors,
+            [](FilamentSensorManager*, int detected) {
                 if (detected == TOOLHEAD_CLEAR) {
                     fire("toolhead sensor");
                 }
-            });
+            },
+            sensors.get_subjects_lifetime());
     }
 
     if (!s_registered) {

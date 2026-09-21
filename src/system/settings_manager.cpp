@@ -3,6 +3,7 @@
 
 #include "settings_manager.h"
 
+#include "ui_panel_motion.h"
 #include "ui_subject_registry.h"
 
 #include "ams_backend.h"
@@ -84,6 +85,37 @@ static int style_to_dropdown_index(helix::ToolheadStyle style) {
     return 0; // Unknown styles map to Auto
 }
 
+namespace {
+/// The one place a (mode, ring) pair becomes a config key.
+std::string jog_distance_key(helix::JogMode mode, bool outer) {
+    const char* mode_name = "coarse";
+    switch (mode) {
+    case helix::JogMode::Fine:
+        mode_name = "fine";
+        break;
+    case helix::JogMode::Coarse:
+        mode_name = "coarse";
+        break;
+    case helix::JogMode::Turbo:
+        mode_name = "turbo";
+        break;
+    }
+    return std::string("motion/") + mode_name + (outer ? "_outer" : "_inner");
+}
+
+float jog_distance_default(helix::JogMode mode, bool outer) {
+    switch (mode) {
+    case helix::JogMode::Fine:
+        return outer ? 1.0f : 0.1f;
+    case helix::JogMode::Coarse:
+        return outer ? 10.0f : 1.0f;
+    case helix::JogMode::Turbo:
+        return outer ? 50.0f : 10.0f;
+    }
+    return outer ? 10.0f : 1.0f;
+}
+} // namespace
+
 SettingsManager& SettingsManager::instance() {
     static SettingsManager instance;
     return instance;
@@ -131,6 +163,29 @@ void SettingsManager::init_subjects() {
     extrude_speed = std::clamp(extrude_speed, 1, 50);
     UI_MANAGED_SUBJECT_INT(extrude_speed_subject_, extrude_speed, "settings_extrude_speed",
                            subjects_);
+
+    // Jog feedrates in mm/min. Defaults match the panel's shipped speeds, so an
+    // upgrade changes nothing until the user asks (range 60-60000).
+    int jog_speed_xy = config->get<int>(config->df() + "motion/jog_speed_xy", 6000);
+    jog_speed_xy = std::clamp(jog_speed_xy, 60, 60000);
+    UI_MANAGED_SUBJECT_INT(jog_speed_xy_subject_, jog_speed_xy, "settings_jog_speed_xy", subjects_);
+
+    int jog_speed_z = config->get<int>(config->df() + "motion/jog_speed_z", 600);
+    jog_speed_z = std::clamp(jog_speed_z, 60, 60000);
+    UI_MANAGED_SUBJECT_INT(jog_speed_z_subject_, jog_speed_z, "settings_jog_speed_z", subjects_);
+
+    // Jog step distances (Fine/Coarse/Turbo x inner/outer, mm). Read on every
+    // jog rather than bound to a widget, so a cache is enough; the settings
+    // overlay re-reads on open.
+    static_assert(JOG_MODE_COUNT == 3, "jog_distances_ cache is sized for three modes");
+    for (int m = 0; m < JOG_MODE_COUNT; ++m) {
+        const JogMode mode = static_cast<JogMode>(m);
+        for (int outer = 0; outer < 2; ++outer) {
+            float mm = config->get<float>(config->df() + jog_distance_key(mode, outer),
+                                          jog_distance_default(mode, outer));
+            jog_distances_[m][outer] = std::clamp(mm, 0.01f, 200.0f);
+        }
+    }
 
     // QIDI Box eject distance magnitude (default: 878 mm, range 100-2000).
     // Stored positive; negated when assembled into the FORCE_MOVE gcode.
@@ -467,6 +522,93 @@ void SettingsManager::set_extrude_speed(int mm_per_sec) {
 
     TelemetryManager::instance().notify_setting_changed("extrude_speed", old_val,
                                                         std::to_string(mm_per_sec));
+}
+
+// ============================================================================
+// Jog Feedrates
+// ============================================================================
+
+int SettingsManager::get_jog_speed_xy() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&jog_speed_xy_subject_));
+}
+
+void SettingsManager::set_jog_speed_xy(int mm_per_min) {
+    mm_per_min = std::clamp(mm_per_min, 60, 60000);
+    spdlog::info("[SettingsManager] set_jog_speed_xy({} mm/min)", mm_per_min);
+
+    auto old_val = std::to_string(lv_subject_get_int(&jog_speed_xy_subject_));
+
+    // 1. Update subject (UI reacts)
+    lv_subject_set_int(&jog_speed_xy_subject_, mm_per_min);
+
+    // 2. Persist to config
+    Config* config = Config::get_instance();
+    config->set<int>(config->df() + "motion/jog_speed_xy", mm_per_min);
+    config->save();
+
+    TelemetryManager::instance().notify_setting_changed("jog_speed_xy", old_val,
+                                                        std::to_string(mm_per_min));
+}
+
+int SettingsManager::get_jog_speed_z() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&jog_speed_z_subject_));
+}
+
+void SettingsManager::set_jog_speed_z(int mm_per_min) {
+    mm_per_min = std::clamp(mm_per_min, 60, 60000);
+    spdlog::info("[SettingsManager] set_jog_speed_z({} mm/min)", mm_per_min);
+
+    auto old_val = std::to_string(lv_subject_get_int(&jog_speed_z_subject_));
+
+    // 1. Update subject (UI reacts)
+    lv_subject_set_int(&jog_speed_z_subject_, mm_per_min);
+
+    // 2. Persist to config
+    Config* config = Config::get_instance();
+    config->set<int>(config->df() + "motion/jog_speed_z", mm_per_min);
+    config->save();
+
+    TelemetryManager::instance().notify_setting_changed("jog_speed_z", old_val,
+                                                        std::to_string(mm_per_min));
+}
+
+// ============================================================================
+// Jog Step Distances
+// ============================================================================
+
+float SettingsManager::get_jog_distance(JogMode mode, bool outer) const {
+    // Clamp on read as well as write, so nothing reading the cache can turn a
+    // bad value into a zero-length jog. Both writers (the loader and the
+    // setter) clamp before the cache ever sees a value, so this binds only
+    // for a third writer — do not delete it as redundant.
+    return std::clamp(jog_distances_[static_cast<int>(mode)][outer ? 1 : 0], 0.01f, 200.0f);
+}
+
+void SettingsManager::set_jog_distance(JogMode mode, bool outer, float mm) {
+    mm = std::clamp(mm, 0.01f, 200.0f);
+    spdlog::info("[SettingsManager] set_jog_distance({} = {} mm)", jog_distance_key(mode, outer),
+                 mm);
+
+    auto old_val = std::to_string(jog_distances_[static_cast<int>(mode)][outer ? 1 : 0]);
+
+    // 1. Update the cache (jogs read it directly)
+    jog_distances_[static_cast<int>(mode)][outer ? 1 : 0] = mm;
+
+    // 2. Persist to config
+    Config* config = Config::get_instance();
+    config->set<float>(config->df() + jog_distance_key(mode, outer), mm);
+    config->save();
+
+    TelemetryManager::instance().notify_setting_changed(jog_distance_key(mode, outer), old_val,
+                                                        std::to_string(mm));
+}
+
+void SettingsManager::reset_jog_distances() {
+    for (int m = 0; m < JOG_MODE_COUNT; ++m) {
+        const JogMode mode = static_cast<JogMode>(m);
+        for (int outer = 0; outer < 2; ++outer)
+            set_jog_distance(mode, outer, jog_distance_default(mode, outer));
+    }
 }
 
 int SettingsManager::get_qidi_eject_distance() const {

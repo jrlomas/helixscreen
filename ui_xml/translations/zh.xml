@@ -532,6 +532,8 @@
   <translation tag="Closer" zh="更近"/>
   <translation tag="Closer = more squish | Farther = less squish" zh="更近 = 更多挤压 | 更远 = 更少挤压"/>
   <translation tag="Coarse" zh="粗调"/>
+  <translation tag="Coarse Inner"/>
+  <translation tag="Coarse Outer"/>
   <translation tag="Code" zh="代码"/>
   <translation tag="Coil Temperature" zh="线圈温度"/>
   <translation tag="Collect logs and system info for support" zh="收集日志和系统信息以供支持"/>
@@ -769,6 +771,7 @@
   <translation tag="Distance from hub to toolhead" zh="从集线器到工具头的距离"/>
   <translation tag="Distance from lane extruder to hub" zh="从耗材通道挤出机到集线器的距离"/>
   <translation tag="Distance from toolhead sensor to nozzle tip" zh="从工具头传感器到喷嘴尖端的距离"/>
+  <translation tag="Distance moved per jog button tap"/>
   <translation tag="Do not power off your printer." zh="请勿关闭打印机电源。"/>
   <translation tag="Do not touch the printer during calibration" zh="校准期间请勿触碰打印机"/>
   <translation tag="Dock" zh="归位"/>
@@ -1126,6 +1129,8 @@
   <translation tag="Filter Fan: Off" zh="滤网风扇: 关"/>
   <translation tag="Filter Fan: On" zh="滤网风扇: 开"/>
   <translation tag="Fine" zh="细调"/>
+  <translation tag="Fine Inner"/>
+  <translation tag="Fine Outer"/>
   <translation tag="Finish" zh="完成"/>
   <translation tag="Finish or cancel the print before loading, unloading, or changing filament" zh="在装载、卸载或更换耗材之前，请先完成或取消打印"/>
   <translation tag="Finishing clean..." zh="即将完成清洁..."/>
@@ -1381,7 +1386,10 @@
   <translation tag="It&apos;s a new spool" zh="这是新料盘"/>
   <translation tag="Jammed at the Toolhead" zh="工具头处堵塞"/>
   <translation tag="Job Queue" zh="任务队列"/>
+  <translation tag="Jog Speed XY"/>
+  <translation tag="Jog Speed Z"/>
   <translation tag="Jog failed: {}" zh="移动失败: {}"/>
+  <translation tag="Jog speeds and step distances"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." zh="加入 HelixScreen 的 Discord 社区，参与讨论、获取技巧、故障排除帮助和功能请求。"/>
   <translation tag="Joining Wi-Fi disconnects the wired network." zh="加入 WiFi 会断开有线网络连接。"/>
   <translation tag="Just now" zh="刚刚"/>
@@ -2225,6 +2233,8 @@
   <translation tag="Reset" zh="重置"/>
   <translation tag="Reset Blade Counter" zh="重置刀片计数器"/>
   <translation tag="Reset CFS" zh="重置 CFS"/>
+  <translation tag="Reset Distances"/>
+  <translation tag="Reset Distances?"/>
   <translation tag="Reset Endless Spool" zh="重置无限料盘"/>
   <translation tag="Reset Endless Spool?" zh="要重置无限料盘吗？"/>
   <translation tag="Reset Home Screen?" zh="重置主屏幕？"/>
@@ -2799,6 +2809,7 @@
   <translation tag="This will reset all settings to defaults. This action cannot be undone." zh="这将把所有设置重置为默认值。此操作无法撤销。"/>
   <translation tag="This will restart Klipper firmware. Any active operations will be interrupted." zh="将重启Klipper固件。所有正在进行的操作将被中断。"/>
   <translation tag="This will restart Klipper." zh="这将重启 Klipper。"/>
+  <translation tag="This will restore the default jog step distances for all three modes."/>
   <translation tag="This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect." zh="这将保存 Z 偏移并重启 Klipper 以写入配置。打印机将短暂断开连接。"/>
   <translation tag="This writes the tool offsets to the printer&apos;s config and restarts Klipper, which takes a few seconds. Until then they apply only to this session." zh="这会将工具偏移写入打印机配置并重启 Klipper，需要几秒钟。在此之前，它们仅在本次会话中生效。"/>
   <translation tag="Thorough" zh="全面"/>
@@ -2880,6 +2891,8 @@
   <translation tag="Tune" zh="调优"/>
   <translation tag="Tuning tower enabled - start a print to test" zh="调优塔已启用 - 开始打印以测试"/>
   <translation tag="Turbo" zh="极速"/>
+  <translation tag="Turbo Inner"/>
+  <translation tag="Turbo Outer"/>
   <translation tag="Turn Off" zh="关闭"/>
   <translation tag="Turn Off WiFi?" zh="关闭 WiFi？"/>
   <translation tag="Turn On" zh="开启"/>
@@ -3066,6 +3079,7 @@
   <translation tag="X" zh="X"/>
   <translation tag="X Axis" zh="X 轴"/>
   <translation tag="X Offset" zh="X 偏移"/>
+  <translation tag="X and Y jog feedrate"/>
   <translation tag="X axis applied, but Y axis failed" zh="X 轴已应用，但 Y 轴失败"/>
   <translation tag="X axis done, starting Y..." zh="X 轴完成，开始 Y 轴..."/>
   <translation tag="X jog blocked at bed edge" zh="X 轴移动已限制在热床边缘"/>
@@ -3094,6 +3108,8 @@
   <translation tag="Z Offset" zh="Z 偏移"/>
   <translation tag="Z Range" zh="Z 范围"/>
   <translation tag="Z Tilt Adjust..." zh="正在调整Z倾斜..."/>
+  <translation tag="Z jog blocked at axis limit"/>
+  <translation tag="Z jog feedrate"/>
   <translation tag="Z motor calibration failed" zh="Z 电机校准失败"/>
   <translation tag="Z probes for bed leveling and mesh generation" zh="用于热床调平和网格生成的 Z 探针"/>
   <translation tag="Z-Off:" zh="Z 偏移："/>

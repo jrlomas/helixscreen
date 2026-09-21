@@ -84,8 +84,9 @@ static void on_widget_created(lv_obj_t* widget) {
         // Capture widget (lv_obj_t*) instead of data pointer to prevent
         // use-after-free when deferred callback executes after widget deletion.
         // The registry lookup acts as a validity check. (fixes #83)
-        data->color_observer =
-            observe_int_sync<lv_obj_t>(color_subject, widget, [](lv_obj_t* obj, int color_int) {
+        data->color_observer = observe_int_sync<lv_obj_t>(
+            color_subject, widget,
+            [](lv_obj_t* obj, int color_int) {
                 auto it = s_registry.find(obj);
                 if (it == s_registry.end() || !it->second)
                     return;
@@ -95,7 +96,8 @@ static void on_widget_created(lv_obj_t* widget) {
                 lv_color_t color = lv_color_hex(static_cast<uint32_t>(color_int));
                 lv_obj_set_style_bg_color(d->color_swatch, color, 0);
                 spdlog::trace("[AmsCurrentTool] Color updated to 0x{:06X}", color_int);
-            });
+            },
+            helix::AmsState::instance().get_subjects_lifetime());
     }
 
     // Register cleanup callback

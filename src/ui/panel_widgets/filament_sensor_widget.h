@@ -124,14 +124,10 @@ class FilamentSensorWidget : public PanelWidget {
 
     RunoutGuidanceModal tap_modal_;
     SourcePicker source_picker_{*this};
+    /// Every subject tile_source_subject() can name is FilamentSensorManager's,
+    /// so rebind_source() passes that manager's subjects lifetime; it re-reads
+    /// it on each rebind, after reset()ing this guard.
     ObserverGuard source_observer_;
-    /// Death signal for the role subject rebind_source() observes. No
-    /// FilamentSensorManager accessor hands back an owner-backed lifetime today
-    /// (unlike TemperatureSensorManager::get_temp_subject), so this stays an
-    /// empty shared_ptr - observe_int_sync's `if (lifetime)` gate treats that as
-    /// "no token" and skips set_alive_token(), same as omitting the parameter.
-    /// Declared so the call site upgrades trivially if that accessor is added.
-    SubjectLifetime source_lifetime_;
 
     // MUST stay the LAST non-static member (the statics below are never torn
     // down with the instance, so they do not count): reverse-declaration

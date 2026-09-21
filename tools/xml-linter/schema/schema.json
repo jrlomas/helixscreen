@@ -1719,6 +1719,9 @@
         "hide_target_below_bp": {
           "type": "string"
         },
+        "size_target_subject": {
+          "type": "string"
+        },
         "bind_current": {
           "type": "string"
         },
@@ -3014,6 +3017,7 @@
     "chip_height",
     "chip_min_width",
     "chip_radius",
+    "col_filename_min_width",
     "col_modified_width",
     "col_size_width",
     "col_status_width",

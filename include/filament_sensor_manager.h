@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "ui_observer_guard.h"
+
 #include "filament_sensor_types.h"
 #include "json_fwd.h"
 #include "lvgl.h"
@@ -148,6 +150,18 @@ class FilamentSensorManager : public helix::sensors::ISensorManager {
      * Called by StaticSubjectRegistry during application shutdown.
      */
     void deinit_subjects();
+
+    /**
+     * @brief Death signal for every subject this manager owns.
+     *
+     * deinit_subjects() frees the observer nodes on all of them at once, so an
+     * observer whose owner outlives this manager's teardown must pass this
+     * token to observe_*(). Without it the guard's reset() calls
+     * lv_observer_remove() on a freed node.
+     */
+    [[nodiscard]] SubjectLifetime get_subjects_lifetime() const {
+        return subjects_lifetime_;
+    }
 
     /**
      * @brief Discover sensors from PrinterCapabilities
@@ -649,6 +663,10 @@ class FilamentSensorManager : public helix::sensors::ISensorManager {
     // LVGL subjects
     bool subjects_initialized_ = false;
     SubjectManager subjects_;
+    /// See get_subjects_lifetime(). Created with the object and REPLACED (never
+    /// nulled) by deinit_subjects(): an empty token reads as "dead" and would
+    /// suppress removal for live observers.
+    SubjectLifetime subjects_lifetime_ = std::make_shared<bool>(true);
     lv_subject_t runout_detected_;
     lv_subject_t scoped_runout_; ///< Print-scoped runout (FIX B); driven by PrintStatusPanel
     lv_subject_t toolhead_detected_;

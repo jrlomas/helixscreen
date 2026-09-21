@@ -698,11 +698,23 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
                 ui_step_progress_create(step_progress_container_, steps.data(), current_step_count_,
                                         false, "ams_step_progress");
             if (step_progress_) {
-                // Observe the backend-supplied current-step subject. The subject
-                // is always a STATIC singleton (firmware phase or narration step),
-                // so a member ObserverGuard with no SubjectLifetime is correct.
+                // Observe the backend-supplied current-step subject. Every
+                // backend shipping today routes it through AmsState (narration
+                // toolchange_step, or the firmware operation_phase the U1, the
+                // AD5X IFS and the tool changer all mirror), and those die
+                // together in AmsState::deinit_subjects() — so an observer on
+                // one must carry that death signal or its reset() removes a
+                // freed node. A backend that owns its own subject outlives that
+                // teardown and must NOT get the token: suppressing a removal it
+                // still needs orphans a live observer node.
                 step_index_subject_ = backend->get_operation_step_index_subject(op_type);
                 if (step_index_subject_) {
+                    auto& ams = AmsState::instance();
+                    SubjectLifetime step_lifetime;
+                    if (step_index_subject_ == ams.get_toolchange_step_subject() ||
+                        step_index_subject_ == ams.get_ams_operation_phase_subject()) {
+                        step_lifetime = ams.get_subjects_lifetime();
+                    }
                     // #1046 I-1: for narration-driven bars, seed the shared step
                     // subject to step 0 (heat) at operation start — BEFORE observing,
                     // so the initial observer fire highlights heat immediately and the
@@ -711,15 +723,17 @@ void AmsOperationSidebar::recreate_step_progress_for_operation(StepOperationType
                     // prior operation's template before this recreate ran (#1046 M-1).
                     // Firmware-phase subjects (e.g. Snapmaker) mirror live hardware
                     // and MUST NOT be seeded — gate on the shared narration subject.
-                    if (step_index_subject_ == AmsState::instance().get_toolchange_step_subject()) {
+                    if (step_index_subject_ == ams.get_toolchange_step_subject()) {
                         lv_subject_set_int(step_index_subject_, 0);
                     }
                     step_index_observer_ = observe_int_sync<AmsOperationSidebar>(
-                        step_index_subject_, this, [](AmsOperationSidebar* self, int index) {
+                        step_index_subject_, this,
+                        [](AmsOperationSidebar* self, int index) {
                             if (!self->active_ || !self->step_progress_)
                                 return;
                             self->apply_backend_step_index(index);
-                        });
+                        },
+                        step_lifetime);
                 }
                 spdlog::debug("[AmsSidebar] Created backend step bar: {} steps for op_type={} "
                               "(index_subject={})",

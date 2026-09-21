@@ -532,6 +532,8 @@
   <translation tag="Closer" it="Più vicino"/>
   <translation tag="Closer = more squish | Farther = less squish" it="Più vicino = più schiacciamento | Più lontano = meno schiacciamento"/>
   <translation tag="Coarse" it="Grossolano"/>
+  <translation tag="Coarse Inner"/>
+  <translation tag="Coarse Outer"/>
   <translation tag="Code" it="Codice"/>
   <translation tag="Coil Temperature" it="Temperatura bobina"/>
   <translation tag="Collect logs and system info for support" it="Raccogli log e info di sistema per il supporto"/>
@@ -769,6 +771,7 @@
   <translation tag="Distance from hub to toolhead" it="Distanza dall&apos;hub alla testina"/>
   <translation tag="Distance from lane extruder to hub" it="Distanza dall&apos;estrusore della corsia all&apos;hub"/>
   <translation tag="Distance from toolhead sensor to nozzle tip" it="Distanza dal sensore della testina alla punta dell&apos;ugello"/>
+  <translation tag="Distance moved per jog button tap"/>
   <translation tag="Do not power off your printer." it="Non spegnere la stampante."/>
   <translation tag="Do not touch the printer during calibration" it="Non toccare la stampante durante la calibrazione"/>
   <translation tag="Dock" it="Aggancia"/>
@@ -1126,6 +1129,8 @@
   <translation tag="Filter Fan: Off" it="Ventola filtro: Off"/>
   <translation tag="Filter Fan: On" it="Ventola filtro: On"/>
   <translation tag="Fine" it="Preciso"/>
+  <translation tag="Fine Inner"/>
+  <translation tag="Fine Outer"/>
   <translation tag="Finish" it="Fine"/>
   <translation tag="Finish or cancel the print before loading, unloading, or changing filament" it="Termina o annulla la stampa prima di caricare, scaricare o cambiare il filamento"/>
   <translation tag="Finishing clean..." it="Completamento pulizia..."/>
@@ -1381,7 +1386,10 @@
   <translation tag="It&apos;s a new spool" it="È una nuova bobina"/>
   <translation tag="Jammed at the Toolhead" it="Inceppato nella testina"/>
   <translation tag="Job Queue" it="Coda lavori"/>
+  <translation tag="Jog Speed XY"/>
+  <translation tag="Jog Speed Z"/>
   <translation tag="Jog failed: {}" it="Movimento fallito: {}"/>
+  <translation tag="Jog speeds and step distances"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." it="Unisciti alla community di HelixScreen su Discord per discussioni, consigli, aiuto nella risoluzione dei problemi e richieste di funzionalità."/>
   <translation tag="Joining Wi-Fi disconnects the wired network." it="Connettersi al Wi-Fi disconnette la rete cablata."/>
   <translation tag="Just now" it="Adesso"/>
@@ -2225,6 +2233,8 @@
   <translation tag="Reset" it="Ripristina"/>
   <translation tag="Reset Blade Counter" it="Ripristina il contatore della lama"/>
   <translation tag="Reset CFS" it="Ripristina CFS"/>
+  <translation tag="Reset Distances"/>
+  <translation tag="Reset Distances?"/>
   <translation tag="Reset Endless Spool" it="Ripristina la bobina infinita"/>
   <translation tag="Reset Endless Spool?" it="Ripristinare la bobina infinita?"/>
   <translation tag="Reset Home Screen?" it="Ripristinare la schermata iniziale?"/>
@@ -2799,6 +2809,7 @@
   <translation tag="This will reset all settings to defaults. This action cannot be undone." it="Questo ripristinerà tutte le impostazioni ai valori predefiniti. Questa azione non può essere annullata."/>
   <translation tag="This will restart Klipper firmware. Any active operations will be interrupted." it="Il firmware Klipper verrà riavviato. Le operazioni attive saranno interrotte."/>
   <translation tag="This will restart Klipper." it="Questo riavvierà Klipper."/>
+  <translation tag="This will restore the default jog step distances for all three modes."/>
   <translation tag="This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect." it="Questo salverà lo Z-offset e riavvierà Klipper per scrivere la configurazione. La stampante si disconnetterà brevemente."/>
   <translation tag="This writes the tool offsets to the printer&apos;s config and restarts Klipper, which takes a few seconds. Until then they apply only to this session." it="Questo scrive gli offset degli strumenti nella configurazione della stampante e riavvia Klipper, operazione che richiede alcuni secondi. Fino ad allora valgono solo per questa sessione."/>
   <translation tag="Thorough" it="Approfondito"/>
@@ -2880,6 +2891,8 @@
   <translation tag="Tune" it="Regola"/>
   <translation tag="Tuning tower enabled - start a print to test" it="Torre di regolazione abilitata - avvia una stampa per testare"/>
   <translation tag="Turbo" it="Turbo"/>
+  <translation tag="Turbo Inner"/>
+  <translation tag="Turbo Outer"/>
   <translation tag="Turn Off" it="Spegni"/>
   <translation tag="Turn Off WiFi?" it="Disattivare il WiFi?"/>
   <translation tag="Turn On" it="Accendi"/>
@@ -3066,6 +3079,7 @@
   <translation tag="X" it="X"/>
   <translation tag="X Axis" it="Asse X"/>
   <translation tag="X Offset" it="Offset X"/>
+  <translation tag="X and Y jog feedrate"/>
   <translation tag="X axis applied, but Y axis failed" it="Asse X applicato, ma asse Y fallito"/>
   <translation tag="X axis done, starting Y..." it="Asse X completato, avvio di Y..."/>
   <translation tag="X jog blocked at bed edge" it="Movimento X bloccato al bordo del piano"/>
@@ -3094,6 +3108,8 @@
   <translation tag="Z Offset" it="Z Offset"/>
   <translation tag="Z Range" it="Intervallo Z"/>
   <translation tag="Z Tilt Adjust..." it="Regolazione inclinazione Z..."/>
+  <translation tag="Z jog blocked at axis limit"/>
+  <translation tag="Z jog feedrate"/>
   <translation tag="Z motor calibration failed" it="Calibrazione del motore Z non riuscita"/>
   <translation tag="Z probes for bed leveling and mesh generation" it="Sonde Z per livellamento piano e generazione mesh"/>
   <translation tag="Z-Off:" it="Z-Off:"/>

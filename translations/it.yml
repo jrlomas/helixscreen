@@ -594,6 +594,8 @@ translations:
   Closer = more squish | Farther = less squish: Più vicino = più schiacciamento |
     Più lontano = meno schiacciamento
   Coarse: Grossolano
+  Coarse Inner: ''
+  Coarse Outer: ''
   Code: Codice
   Coil Temperature: Temperatura bobina
   Collect logs and system info for support: Raccogli log e info di sistema per il
@@ -851,6 +853,7 @@ translations:
   Distance from hub to toolhead: 'Distanza dall''hub alla testina'
   Distance from lane extruder to hub: 'Distanza dall''estrusore della corsia all''hub'
   Distance from toolhead sensor to nozzle tip: 'Distanza dal sensore della testina alla punta dell''ugello'
+  Distance moved per jog button tap: ''
   Do not power off your printer.: Non spegnere la stampante.
   Do not touch the printer during calibration: Non toccare la stampante durante la
     calibrazione
@@ -1238,6 +1241,8 @@ translations:
   'Filter Fan: Off': 'Ventola filtro: Off'
   'Filter Fan: On': 'Ventola filtro: On'
   Fine: Preciso
+  Fine Inner: ''
+  Fine Outer: ''
   Finish: Fine
   Finish or cancel the print before loading, unloading, or changing filament: Termina o annulla la stampa prima di caricare, scaricare o cambiare il filamento
   Finishing clean...: Completamento pulizia...
@@ -1526,7 +1531,10 @@ translations:
   It's a new spool: È una nuova bobina
   Jammed at the Toolhead: Inceppato nella testina
   Job Queue: Coda lavori
+  Jog Speed XY: ''
+  Jog Speed Z: ''
   'Jog failed: {}': 'Movimento fallito: {}'
+  Jog speeds and step distances: ''
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Unisciti
     alla community di HelixScreen su Discord per discussioni, consigli, aiuto nella
     risoluzione dei problemi e richieste di funzionalità.
@@ -2450,6 +2458,8 @@ translations:
   Reset: Ripristina
   Reset Blade Counter: 'Ripristina il contatore della lama'
   Reset CFS: Ripristina CFS
+  Reset Distances: ''
+  Reset Distances?: ''
   Reset Endless Spool: 'Ripristina la bobina infinita'
   Reset Endless Spool?: 'Ripristinare la bobina infinita?'
   Reset Home Screen?: Ripristinare la schermata iniziale?
@@ -3148,6 +3158,7 @@ translations:
   This will restart Klipper firmware. Any active operations will be interrupted.: Il
     firmware Klipper verrà riavviato. Le operazioni attive saranno interrotte.
   This will restart Klipper.: Questo riavvierà Klipper.
+  This will restore the default jog step distances for all three modes.: ''
   This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect.: Questo salverà lo Z-offset e riavvierà Klipper per scrivere la configurazione. La stampante si disconnetterà brevemente.
   ? This writes the tool offsets to the printer's config and restarts Klipper, which takes a few seconds. Until then they apply only to this session.
   : Questo scrive gli offset degli strumenti nella configurazione della stampante e riavvia Klipper, operazione che richiede alcuni secondi. Fino ad allora valgono solo per questa sessione.
@@ -3233,6 +3244,8 @@ translations:
   Tuning tower enabled - start a print to test: Torre di regolazione abilitata - avvia
     una stampa per testare
   Turbo: Turbo
+  Turbo Inner: ''
+  Turbo Outer: ''
   Turn Off: Spegni
   Turn Off WiFi?: Disattivare il WiFi?
   Turn On: Accendi
@@ -3440,6 +3453,7 @@ translations:
   X: X
   X Axis: Asse X
   X Offset: Offset X
+  X and Y jog feedrate: ''
   X axis applied, but Y axis failed: Asse X applicato, ma asse Y fallito
   X axis done, starting Y...: 'Asse X completato, avvio di Y...'
   X jog blocked at bed edge: Movimento X bloccato al bordo del piano
@@ -3474,6 +3488,8 @@ translations:
   Z Offset: Z Offset
   Z Range: Intervallo Z
   Z Tilt Adjust...: Regolazione inclinazione Z...
+  Z jog blocked at axis limit: ''
+  Z jog feedrate: ''
   Z motor calibration failed: Calibrazione del motore Z non riuscita
   Z probes for bed leveling and mesh generation: Sonde Z per livellamento piano e
     generazione mesh
