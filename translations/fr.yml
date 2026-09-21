@@ -1480,6 +1480,7 @@ translations:
   Initiate blade change procedure: 'Lancer la procédure de changement de lame'
   Input: Entrée
   Input Shaper: Input Shaper
+  Input Shaper Calibration: ''
   Input Shaper Help: Aide Input Shaper
   Input Shaping: Input Shaping
   Input shaper calibration sensors: Capteurs de calibration Input Shaper
@@ -2201,6 +2202,7 @@ translations:
   Press Abort to stop: Appuyez sur Abandonner pour arrêter
   Press Scan to search: Appuyez sur Scanner pour rechercher
   'Pressure:': 'Pression :'
+  Pressure Advance Calibration: ''
   Preview Sounds: Aperçu des sons
   Previous: Précédent
   Price: Prix

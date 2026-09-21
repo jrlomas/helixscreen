@@ -1447,6 +1447,7 @@ translations:
   Initiate blade change procedure: 'Начать процедуру замены лезвия'
   Input: Ввод
   Input Shaper: Input Shaper
+  Input Shaper Calibration: ''
   Input Shaper Help: Справка по Input Shaper
   Input Shaping: Компенсация вибраций
   Input shaper calibration sensors: Датчики калибровки Input Shaper'а
@@ -2160,6 +2161,7 @@ translations:
   Press Abort to stop: Нажмите «Прервать», чтобы остановить
   Press Scan to search: Нажмите «Поиск» для сканирования
   'Pressure:': 'Давление:'
+  Pressure Advance Calibration: ''
   Preview Sounds: Предпросмотр звуков
   Previous: Прежняя
   Price: Цена

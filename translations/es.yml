@@ -1466,6 +1466,7 @@ translations:
   Initiate blade change procedure: 'Iniciar el procedimiento de cambio de cuchilla'
   Input: Entrada
   Input Shaper: Moldeador de Entrada
+  Input Shaper Calibration: ''
   Input Shaper Help: Ayuda de Input Shaper
   Input Shaping: Moldeado de Entrada
   Input shaper calibration sensors: Sensores de calibración de moldeador de entrada
@@ -2185,6 +2186,7 @@ translations:
   Press Abort to stop: Pulse Abortar para detener
   Press Scan to search: Presione Escanear para buscar
   'Pressure:': 'Presión:'
+  Pressure Advance Calibration: ''
   Preview Sounds: Vista previa de sonidos
   Previous: Anterior
   Price: Precio

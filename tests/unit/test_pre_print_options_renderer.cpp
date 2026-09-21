@@ -651,3 +651,44 @@ TEST_CASE_METHOD(LVGLUITestFixture,
 
     helix::MacroParamCache::instance().clear();
 }
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "PrePrintOptionsRenderer: Snapmaker U1 live DB renders four preference toggles",
+                 "[print_file_detail][pre_print_options][db][snapmaker_u1]") {
+    // Every U1 row drives SET_PRINT_PREFERENCES, which is a setter: an absent
+    // parameter leaves the stored preference at its previous value, so each
+    // option must emit its line even when switched OFF or turning one off would
+    // silently keep the old setting.
+    auto set = PrinterDetector::get_pre_print_option_set("Snapmaker U1");
+    REQUIRE_FALSE(set.empty());
+    REQUIRE(set.options.size() == 4);
+
+    for (const char* id : {"bed_mesh", "shaper_calibrate", "flow_calibrate", "u1_timelapse"}) {
+        CAPTURE(id);
+        const PrePrintOption* opt = set.find(id);
+        REQUIRE(opt != nullptr);
+        REQUIRE(opt->strategy_kind == PrePrintStrategyKind::PreStartGcode);
+
+        const auto* gcode = std::get_if<PrePrintStrategyPreStartGcode>(&opt->strategy);
+        REQUIRE(gcode != nullptr);
+        REQUIRE(gcode->emit_when_disabled);
+        REQUIRE(gcode->gcode_template.find("SET_PRINT_PREFERENCES") != std::string::npos);
+        REQUIRE(gcode->gcode_template.find("{value}") != std::string::npos);
+
+        // SET_PRINT_PREFERENCES is registered in Python, not as a [gcode_macro],
+        // so it never appears in the macro list; a requires_macro gate would
+        // hide every row.
+        REQUIRE(opt->requires_macro.empty());
+    }
+
+    // PrinterState::apply_dynamic_options() erases every option whose id is
+    // "timelapse" before synthesising the moonraker-timelapse one, so the
+    // firmware-backed row must not claim that id.
+    REQUIRE(set.find("timelapse") == nullptr);
+
+    PrePrintOptionsRenderer renderer;
+    lv_obj_t* container = lv_obj_create(test_screen());
+    renderer.populate(container, set, nullptr, nullptr);
+    REQUIRE(renderer.row_count() == set.options.size());
+    REQUIRE(renderer.get_switch("bed_mesh") != nullptr);
+}

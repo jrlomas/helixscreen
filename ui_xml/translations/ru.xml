@@ -1328,6 +1328,7 @@
   <translation tag="Initiate blade change procedure" ru="Начать процедуру замены лезвия"/>
   <translation tag="Input" ru="Ввод"/>
   <translation tag="Input Shaper" ru="Input Shaper"/>
+  <translation tag="Input Shaper Calibration"/>
   <translation tag="Input Shaper Help" ru="Справка по Input Shaper"/>
   <translation tag="Input Shaping" ru="Компенсация вибраций"/>
   <translation tag="Input shaper calibration sensors" ru="Датчики калибровки Input Shaper&apos;а"/>
@@ -1982,6 +1983,7 @@
   <translation tag="Presets" ru="Пресеты"/>
   <translation tag="Press Abort to stop" ru="Нажмите «Прервать», чтобы остановить"/>
   <translation tag="Press Scan to search" ru="Нажмите «Поиск» для сканирования"/>
+  <translation tag="Pressure Advance Calibration"/>
   <translation tag="Pressure:" ru="Давление:"/>
   <translation tag="Preview Sounds" ru="Предпросмотр звуков"/>
   <translation tag="Previous" ru="Прежняя"/>
