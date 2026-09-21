@@ -41,6 +41,7 @@
     <prop name="action_button_2_callback" type="string" default=""/>
     <prop name="hide_action_button_2" type="string" default="true"/>
     <prop name="action_button_2_hidden_subject" type="string" default=""/>
+    <prop name="action_button_2_hidden_cond" type="string" default=""/>
     <prop name="action_button_2_disabled_subject" type="string" default=""/>
     <!-- Dedicated E-Stop spacer, forwarded to header_bar. Empty default = hidden. -->
     <prop name="estop_visible_subject" type="string" default=""/>
@@ -95,6 +96,7 @@
                 action_button_2_width="$action_button_2_width" action_button_2_min_width="$action_button_2_min_width"
                 action_button_2_callback="$action_button_2_callback" hide_action_button_2="$hide_action_button_2"
                 action_button_2_hidden_subject="$action_button_2_hidden_subject"
+                action_button_2_hidden_cond="$action_button_2_hidden_cond"
                 action_button_2_disabled_subject="$action_button_2_disabled_subject"
                 title_badge_image="$title_badge_image" title_badge_subject="$title_badge_subject"
                 estop_visible_subject="$estop_visible_subject" back_button_callback="$back_button_callback"/>

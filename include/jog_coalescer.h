@@ -123,6 +123,10 @@ struct JogClampResult {
 ///
 /// Partial travel is not a block. A request for 10mm that yields 2mm moves 2mm
 /// and says nothing; only a request that yields nothing is worth a message.
+///
+/// "Yields nothing" is an epsilon test, not `== 0.0`: a predicted position a
+/// hair inside the envelope leaves a sub-micron residual, which an exact
+/// compare reads as travel and the warning never fires.
 inline JogClampResult clamp_jog_with_warn(double current, double uncommitted, double delta,
                                           double min, double max, bool already_warned) {
     const double allowed = clamp_jog_delta(current, uncommitted, delta, min, max);
@@ -142,7 +146,11 @@ inline int effective_jog_speed_mm_min(int stored_mm_min, double min_mm_min, doub
     // std::clamp is undefined when min > max while this form resolves any
     // ordering to the maximum.
     const double v = static_cast<double>(stored_mm_min);
-    return static_cast<int>(std::min(std::max(v, min_mm_min), max_mm_min));
+    const double bounded = std::min(std::max(v, min_mm_min), max_mm_min);
+    // Only the raised case rounds up: truncating a fractional min_mm_min lands
+    // one below the floor is_safe_feedrate() enforces, while a value pulled
+    // down to a fractional max_mm_min has to stay under it.
+    return static_cast<int>(bounded > v ? std::ceil(bounded) : bounded);
 }
 
 } // namespace helix

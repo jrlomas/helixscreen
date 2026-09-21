@@ -16,6 +16,7 @@
 #include "../../include/ui_panel_motion.h" // helix::JogMode
 #include "../lvgl_test_fixture.h"
 
+#include <string>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
@@ -23,11 +24,13 @@
 namespace {
 
 struct LabelTaskInfo {
-    const char* text;
+    std::string text;
     uint32_t text_local;
 };
 
-/// Records every label draw task the pad enqueues during a refresh.
+/// Records every label draw task the pad enqueues during a refresh. The text
+/// is copied here rather than after the refresh: a task that owns its string
+/// frees it when the task is destroyed.
 void capture_label_tasks(lv_event_t* e) {
     lv_draw_task_t* task = lv_event_get_draw_task(e);
     if (!task || lv_draw_task_get_type(task) != LV_DRAW_TASK_TYPE_LABEL) {
@@ -35,7 +38,7 @@ void capture_label_tasks(lv_event_t* e) {
     }
     auto* out = static_cast<std::vector<LabelTaskInfo>*>(lv_event_get_user_data(e));
     const lv_draw_label_dsc_t* dsc = lv_draw_task_get_label_dsc(task);
-    out->push_back({dsc->text, dsc->text_local});
+    out->push_back({dsc->text ? dsc->text : "", dsc->text_local});
 }
 
 } // namespace
@@ -95,10 +98,23 @@ TEST_CASE_METHOD(LVGLTestFixture, "Jog pad label draw tasks own their text", "[j
 
     // The pad's ring labels are formatted into a by-value struct that dies with
     // the draw callback's frame, while on threaded builds the render thread reads
-    // the text later. Every label task must therefore own its own copy.
+    // the text later, so each of those tasks must own its own copy. The axis
+    // labels are string literals with static storage and need no copy.
+    const helix::JogModeDistances dist = helix::get_jog_mode_distances(helix::JogMode::Coarse);
+    int ring_labels = 0;
+    int axis_labels = 0;
     for (const auto& t : tasks) {
-        CHECK(t.text_local == 1);
+        if (t.text == dist.inner_label || t.text == dist.outer_label) {
+            ++ring_labels;
+            CHECK(t.text_local == 1);
+        } else if (t.text == "Y+" || t.text == "X+" || t.text == "Y-" || t.text == "X-") {
+            ++axis_labels;
+            CHECK(t.text_local == 0);
+        }
     }
+    // Both kinds must actually have been drawn, or the loop above says nothing.
+    CHECK(ring_labels > 0);
+    CHECK(axis_labels > 0);
 
     lv_obj_delete(pad);
 }

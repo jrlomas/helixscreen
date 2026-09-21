@@ -172,9 +172,10 @@
                hidden="$hide_action_button_2" icon="$action_button_2_icon" icon_size="$action_button_2_icon_size"
                text="$action_button_2_text" translation_tag="$action_button_2_text_tag">
       <bind_state_if_eq subject="$action_button_2_disabled_subject" state="disabled" ref_value="1"/>
-      <!-- Cond form precedes the subject form, letting the subject form win
-           when both are supplied - same ordering contract as slot 1's
-           disabled bindings. -->
+      <!-- Both bindings drive the same hidden flag, so order settles only the
+           value at bind time, where the subject form lands last. After that
+           whichever input changed most recently decides. Supply one form or
+           the other. -->
       <bind_flag_if cond="$action_button_2_hidden_cond" flag="hidden"/>
       <bind_flag_if_eq subject="$action_button_2_hidden_subject" flag="hidden" ref_value="1"/>
       <event_cb trigger="clicked" callback="$action_button_2_callback"/>

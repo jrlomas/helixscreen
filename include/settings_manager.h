@@ -233,21 +233,11 @@ class SettingsManager {
     /** @brief Set XY jog feedrate in mm/min (clamped 60-60000, persisted) */
     void set_jog_speed_xy(int mm_per_min);
 
-    /** @brief XY jog feedrate subject (integer: mm/min) for UI binding */
-    lv_subject_t* subject_jog_speed_xy() {
-        return &jog_speed_xy_subject_;
-    }
-
     /** @brief Get Z jog feedrate in mm/min (default 600, range 60-60000) */
     int get_jog_speed_z() const;
 
     /** @brief Set Z jog feedrate in mm/min (clamped 60-60000, persisted) */
     void set_jog_speed_z(int mm_per_min);
-
-    /** @brief Z jog feedrate subject (integer: mm/min) for UI binding */
-    lv_subject_t* subject_jog_speed_z() {
-        return &jog_speed_z_subject_;
-    }
 
     // =========================================================================
     // JOG STEP DISTANCES (owned by SettingsManager — persisted per-printer)
