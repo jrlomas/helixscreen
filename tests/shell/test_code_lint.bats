@@ -2657,8 +2657,19 @@ EOF
 
 override_store_offenders() {
     local root="${1:-src}"
-    grep -rnE 'override_store_[[:space:]]*=[[:space:]]*std::make_unique' \
-        --include='*.cpp' --include='*.h' "$root" 2>/dev/null || true
+    # Keyed on the TYPE, not on the member name: splitting the build from the
+    # assignment is the natural thing to write once the argument list grows,
+    # and a name-keyed grep reads a two-line
+    #     auto s = std::make_unique<FilamentSlotOverrideStore>(...);
+    #     override_store_ = std::move(s);
+    # as clean. A seventh backend naming its member something else evades a
+    # name-keyed grep too. Every construction of the type is therefore an
+    # offender unless it is one of the three the allowlist names.
+    grep -rnE 'make_unique<[^>]*FilamentSlotOverrideStore|new[[:space:]]+[A-Za-z:]*FilamentSlotOverrideStore' \
+        --include='*.cpp' --include='*.h' "$root" 2>/dev/null \
+        | grep -v 'printer/filament_slot_override_store\.cpp' \
+        | grep -v 'lane_publish_store_' \
+        || true
 }
 
 @test "override_store_ is only ever assigned from make_loaded_override_store()" {
@@ -2672,8 +2683,9 @@ override_store_offenders() {
 }
 
 @test "the override-store lifecycle gate fires on a hand-written construction" {
-    # Meta-test: a gate that cannot fail is not a gate. This is the shape six
-    # backends carried, and the one Happy Hare wrote the first line of.
+    # A gate that cannot fail is not a gate. Three spellings, all of which
+    # persist nothing: the direct assignment, the split build-then-move, and a
+    # differently-named member in a backend that never says override_store_.
     local d="${BATS_TEST_TMPDIR}/offender"
     mkdir -p "$d"
     cat > "$d/ams_backend_thing.cpp" <<'EOF'
@@ -2681,11 +2693,19 @@ void AmsBackendThing::on_started() {
     override_store_ = std::make_unique<helix::ams::FilamentSlotOverrideStore>(
         api_, "thing", helix::ams::lane_key_style_for(get_type()));
 }
+void AmsBackendThing::restart() {
+    auto s = std::make_unique<helix::ams::FilamentSlotOverrideStore>(
+        api_, "thing", helix::ams::lane_key_style_for(get_type()));
+    override_store_ = std::move(s);
+}
+void AmsBackendThing::third() {
+    slot_store_.reset(new helix::ams::FilamentSlotOverrideStore(api_, "thing", style));
+}
 EOF
     run override_store_offenders "$d"
     [ "$status" -eq 0 ]
-    [ "${#lines[@]}" -eq 1 ]
-    contains "override_store_" "$output"
+    [ "${#lines[@]}" -eq 3 ]
+    contains "FilamentSlotOverrideStore" "$output"
 }
 
 @test "the override-store gate stays quiet on the helper and on the publish store" {
