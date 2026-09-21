@@ -70,10 +70,13 @@ calibrated.
 
 ## Mechanism: no new strategy kind
 
-The handoff claimed this needs "a second strategy kind". It does not. Four already exist
+The handoff claimed this needs "a second strategy kind". It does not. Four are declared
 (`MacroParam`, `PreStartGcode`, `QueueAheadJob`, `RuntimeCommand`, parsed in
 `src/printer/pre_print_option.cpp#parse_strategy_kind`), and `PreStartGcode` already does
-exactly what is needed. Creality K2 uses the same shape today.
+exactly what is needed. Only two are usable: `QueueAheadJob` has no consumer at all (its
+case in `ui_print_preparation_manager.cpp#collect_macro_skip_params` logs "strategy not
+yet wired up" and ignores the option), and `RuntimeCommand` recognises only the
+`timelapse:on`/`timelapse:off` sentinels, so it has no database user by design. Creality K2 uses the same shape today.
 
 ```json
 {"id": "u1_bed_level", "category": "mechanical", "order": 10,
@@ -92,6 +95,17 @@ The U1 has no `pre_print_options` block in `assets/config/printer_database.json`
 so this is purely additive.
 
 ## Seeding toggles from live state
+
+**Step 4 is required for correctness, not polish.** HelixScreen persists no toggle state
+at all: `include/ui_pre_print_options_renderer.h#populate` initialises each row from
+`default_enabled` and says re-calling it "resets state to defaults - caller must persist
+any user toggles externally if needed", and nothing in `src/system/` keys a setting on an
+option id. Everywhere else that is harmless, because the toggle only shapes one job. On
+the U1 it is not: the value written lands in a preference the firmware keeps across prints
+and reboots. Without live seeding the rows would show the static database defaults while
+the machine held something else, and would misreport the very state they are changing -
+and Fluidd and the phone app would disagree with us. The firmware is the persistence
+layer; this step is what reads it back.
 
 These preferences persist across prints and reboots. A per-job list whose defaults come
 from a static `default_enabled` would drift from what the machine actually holds, and
