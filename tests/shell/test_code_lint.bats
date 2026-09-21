@@ -2639,3 +2639,72 @@ EOF
     [ "$status" -eq 1 ]
     contains "'p' from getenv() is read at line 3" "$output"
 }
+
+# --- The override-store lifecycle goes through make_loaded_override_store() ---
+#
+# A FilamentSlotOverrideStore is only useful once it has been loaded into the
+# map the backend reads. helix::ams::make_loaded_override_store() returns the
+# store together with that map, so "constructed but never loaded" has no
+# spelling. Assigning override_store_ from a bare make_unique reopens it, and
+# the failure is silent: every save_async and clear_async site is guarded on
+# override_store_, so a backend that skipped the load still answers every
+# in-session read from overrides_ while persisting nothing. Nothing goes red
+# until the next launch, by which time the user's colours are gone.
+#
+# AFC's and Happy Hare's lane_publish_store_ is deliberately not covered. It
+# publishes to the shared namespace their Klipper plugins own and holds no map
+# to load, so it has no lifecycle to forget.
+
+override_store_offenders() {
+    local root="${1:-src}"
+    grep -rnE 'override_store_[[:space:]]*=[[:space:]]*std::make_unique' \
+        --include='*.cpp' --include='*.h' "$root" 2>/dev/null || true
+}
+
+@test "override_store_ is only ever assigned from make_loaded_override_store()" {
+    run override_store_offenders src
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+
+    run override_store_offenders include
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "the override-store lifecycle gate fires on a hand-written construction" {
+    # Meta-test: a gate that cannot fail is not a gate. This is the shape six
+    # backends carried, and the one Happy Hare wrote the first line of.
+    local d="${BATS_TEST_TMPDIR}/offender"
+    mkdir -p "$d"
+    cat > "$d/ams_backend_thing.cpp" <<'EOF'
+void AmsBackendThing::on_started() {
+    override_store_ = std::make_unique<helix::ams::FilamentSlotOverrideStore>(
+        api_, "thing", helix::ams::lane_key_style_for(get_type()));
+}
+EOF
+    run override_store_offenders "$d"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    contains "override_store_" "$output"
+}
+
+@test "the override-store gate stays quiet on the helper and on the publish store" {
+    # The silent half: the sanctioned spelling moves a store the helper built,
+    # and the publish store is a different member with no map behind it.
+    local d="${BATS_TEST_TMPDIR}/quiet"
+    mkdir -p "$d"
+    cat > "$d/ams_backend_ok.cpp" <<'EOF'
+void AmsBackendOk::on_started() {
+    auto loaded = helix::ams::make_loaded_override_store(api_, "ok", get_type(),
+                                                         backend_log_tag());
+    std::lock_guard<std::mutex> lock(mutex_);
+    override_store_ = std::move(loaded.store);
+    overrides_ = std::move(loaded.overrides);
+    lane_publish_store_ = std::make_unique<helix::ams::FilamentSlotOverrideStore>(
+        api_, "ok", style, "lane_data");
+}
+EOF
+    run override_store_offenders "$d"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
