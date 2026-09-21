@@ -1432,6 +1432,7 @@ translations:
   Initiate blade change procedure: Initiate blade change procedure
   Input: Input
   Input Shaper: Input Shaper
+  Input Shaper Calibration: Input Shaper Calibration
   Input Shaper Help: Input Shaper Help
   Input Shaping: Input Shaping
   Input shaper calibration sensors: Input shaper calibration sensors
@@ -2143,6 +2144,7 @@ translations:
   Press Abort to stop: Press Abort to stop
   Press Scan to search: Press Scan to search
   'Pressure:': 'Pressure:'
+  Pressure Advance Calibration: Pressure Advance Calibration
   Preview Sounds: Preview Sounds
   Previous: Previous
   Price: Price

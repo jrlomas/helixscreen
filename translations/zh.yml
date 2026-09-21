@@ -1355,6 +1355,7 @@ translations:
   Initiate blade change procedure: '启动刀片更换流程'
   Input: 输入
   Input Shaper: 输入整形器
+  Input Shaper Calibration: ''
   Input Shaper Help: 输入整形器帮助
   Input Shaping: 输入整形
   Input shaper calibration sensors: 输入整形器校准传感器
@@ -2029,6 +2030,7 @@ translations:
   Press Abort to stop: 按中止以停止
   Press Scan to search: 按扫描搜索
   'Pressure:': '压力:'
+  Pressure Advance Calibration: ''
   Preview Sounds: 预览声音
   Previous: 上一步
   Price: 价格

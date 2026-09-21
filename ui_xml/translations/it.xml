@@ -1328,6 +1328,7 @@
   <translation tag="Initiate blade change procedure" it="Avvia la procedura di cambio lama"/>
   <translation tag="Input" it="Input"/>
   <translation tag="Input Shaper" it="Input Shaper"/>
+  <translation tag="Input Shaper Calibration"/>
   <translation tag="Input Shaper Help" it="Guida Input Shaper"/>
   <translation tag="Input Shaping" it="Input Shaping"/>
   <translation tag="Input shaper calibration sensors" it="Sensori calibrazione input shaper"/>
@@ -1982,6 +1983,7 @@
   <translation tag="Presets" it="Preset"/>
   <translation tag="Press Abort to stop" it="Premi Interrompi per fermare"/>
   <translation tag="Press Scan to search" it="Premi Scansiona per cercare"/>
+  <translation tag="Pressure Advance Calibration"/>
   <translation tag="Pressure:" it="Pressione:"/>
   <translation tag="Preview Sounds" it="Anteprima suoni"/>
   <translation tag="Previous" it="Precedente"/>

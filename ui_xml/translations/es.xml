@@ -1328,6 +1328,7 @@
   <translation tag="Initiate blade change procedure" es="Iniciar el procedimiento de cambio de cuchilla"/>
   <translation tag="Input" es="Entrada"/>
   <translation tag="Input Shaper" es="Moldeador de Entrada"/>
+  <translation tag="Input Shaper Calibration"/>
   <translation tag="Input Shaper Help" es="Ayuda de Input Shaper"/>
   <translation tag="Input Shaping" es="Moldeado de Entrada"/>
   <translation tag="Input shaper calibration sensors" es="Sensores de calibración de moldeador de entrada"/>
@@ -1982,6 +1983,7 @@
   <translation tag="Presets" es="Preajustes"/>
   <translation tag="Press Abort to stop" es="Pulse Abortar para detener"/>
   <translation tag="Press Scan to search" es="Presione Escanear para buscar"/>
+  <translation tag="Pressure Advance Calibration"/>
   <translation tag="Pressure:" es="Presión:"/>
   <translation tag="Preview Sounds" es="Vista previa de sonidos"/>
   <translation tag="Previous" es="Anterior"/>

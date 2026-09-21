@@ -1328,6 +1328,7 @@
   <translation tag="Initiate blade change procedure" zh="启动刀片更换流程"/>
   <translation tag="Input" zh="输入"/>
   <translation tag="Input Shaper" zh="输入整形器"/>
+  <translation tag="Input Shaper Calibration"/>
   <translation tag="Input Shaper Help" zh="输入整形器帮助"/>
   <translation tag="Input Shaping" zh="输入整形"/>
   <translation tag="Input shaper calibration sensors" zh="输入整形器校准传感器"/>
@@ -1982,6 +1983,7 @@
   <translation tag="Presets" zh="预设"/>
   <translation tag="Press Abort to stop" zh="按中止以停止"/>
   <translation tag="Press Scan to search" zh="按扫描搜索"/>
+  <translation tag="Pressure Advance Calibration"/>
   <translation tag="Pressure:" zh="压力:"/>
   <translation tag="Preview Sounds" zh="预览声音"/>
   <translation tag="Previous" zh="上一步"/>

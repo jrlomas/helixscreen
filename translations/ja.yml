@@ -1360,6 +1360,7 @@ translations:
   Initiate blade change procedure: 'ブレード交換手順を開始'
   Input: 入力
   Input Shaper: インプットシェーパー
+  Input Shaper Calibration: ''
   Input Shaper Help: 入力シェーパーヘルプ
   Input Shaping: インプットシェーピング
   Input shaper calibration sensors: インプットシェーパーキャリブレーションセンサー
@@ -2037,6 +2038,7 @@ translations:
   Press Abort to stop: 中止するには「中止」を押してください
   Press Scan to search: スキャンを押して検索
   'Pressure:': '圧力:'
+  Pressure Advance Calibration: ''
   Preview Sounds: サウンドをプレビュー
   Previous: 前回
   Price: 価格

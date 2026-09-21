@@ -1328,6 +1328,7 @@
   <translation tag="Initiate blade change procedure" ja="ブレード交換手順を開始"/>
   <translation tag="Input" ja="入力"/>
   <translation tag="Input Shaper" ja="インプットシェーパー"/>
+  <translation tag="Input Shaper Calibration"/>
   <translation tag="Input Shaper Help" ja="入力シェーパーヘルプ"/>
   <translation tag="Input Shaping" ja="インプットシェーピング"/>
   <translation tag="Input shaper calibration sensors" ja="インプットシェーパーキャリブレーションセンサー"/>
@@ -1982,6 +1983,7 @@
   <translation tag="Presets" ja="プリセット"/>
   <translation tag="Press Abort to stop" ja="中止するには「中止」を押してください"/>
   <translation tag="Press Scan to search" ja="スキャンを押して検索"/>
+  <translation tag="Pressure Advance Calibration"/>
   <translation tag="Pressure:" ja="圧力:"/>
   <translation tag="Preview Sounds" ja="サウンドをプレビュー"/>
   <translation tag="Previous" ja="前回"/>
