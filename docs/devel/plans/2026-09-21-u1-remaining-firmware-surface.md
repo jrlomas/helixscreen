@@ -1229,7 +1229,15 @@ bool plate_still_on_bed(const std::string& error_message) {
 }
 ```
 
-Remove `PLATE_NOT_REMOVED_TEXT` from `include/auto_screws_tilt_adjust.h`. Keep `PLATE_NOT_REMOVED_CODE` only if something else still references it; otherwise remove it too and let the decoder own the identity.
+Remove **both** `PLATE_NOT_REMOVED_TEXT` and `PLATE_NOT_REMOVED_CODE` from
+`include/auto_screws_tilt_adjust.h`. This is settled, not a judgement call: the only
+references anywhere are this module's own `plate_still_on_bed` and two tests
+(`tests/unit/test_auto_screws_tilt.cpp:403-404`,
+`tests/unit/test_auto_screws_tilt_collector.cpp:228-229`), both of which you are updating.
+Nothing generic consumes them. Leaving the code constant behind would be two hand-written
+copies of one identity — the decoder's table and this header — which is exactly the drift
+the DRY rule exists to stop. Update those two test files to build their fixture strings from
+the literal code instead.
 
 Update the case in `tests/unit/test_auto_screws_tilt.cpp` that feeds the bare phrase: it must now feed a message carrying the code. If the existing test asserted the phrase alone classifies, that assertion is now wrong and should be replaced, not deleted — assert instead that a phrase WITHOUT a code no longer classifies.
 
