@@ -1327,22 +1327,43 @@ git commit -m "feat(snapmaker): subscribe exception_manager and read standing fa
   - `std::map<FilamentKey, FilamentTemperatures> parse_filament_temperatures(const std::string& response)`
   - `struct FilamentKey { std::string vendor, main_type, sub_type; }` with `operator<`
 
-- [ ] **Step 1: Capture a real response first**
+- [ ] **Step 1: The response is already captured — read it, do not re-send the gcode**
 
-This task cannot be written blind — the response format of `FILAMENT_PARA_GET_ALL_INFO` is not documented anywhere in our tree. Before writing the parser, ask Preston for printer access and capture it:
+Captured 2026-09-21 from the U1 at `192.168.30.103` and saved verbatim at
+`.superpowers/sdd/2026-09-21-u1-remaining-firmware-surface/filament-para-all-info-response.txt`
+(15,679 bytes, firmware `version: '0.0.10'`). Copy what you need from that file into the
+test as a fixture — three representative filaments is enough, but keep the exact shape.
 
-```bash
-curl -s -X POST 'http://192.168.30.103:7125/printer/gcode/script' \
-  -H 'Content-Type: application/json' \
-  -d '{"script":"FILAMENT_PARA_GET_ALL_INFO"}'
-curl -s 'http://192.168.30.103:7125/server/gcode_store?count=50' | python3 -m json.tool
-```
+Four properties of that response change how the parser must be written. None of them are
+guesses; all four are read off the capture and off the printer's live `print_task_config`.
 
-Save the response verbatim into the test file as a fixture. If it turns out to be enormous, trim to three representative filaments but keep the exact shape — do NOT hand-write a plausible format.
+1. **It is a Python dict literal, not JSON.** Keys and strings are single-quoted and the
+   booleans are `True`/`False`. `nlohmann::json::parse` rejects it outright. Either
+   normalise first (`'` -> `"`, `True` -> `true`, `False` -> `false`) or write a small
+   dedicated reader. Normalising is safe here only because no key or value in the capture
+   contains a quote or those words — assert that on the input rather than assuming it, and
+   return an empty map when the assertion fails.
+2. **It arrives as ONE console line prefixed `// `**, on the `response` channel of
+   `/server/gcode_store`. Strip that prefix before parsing.
+3. **The shape is `<TYPE>` -> `"vendor_" + <Vendor>` -> `"sub_" + <SubType>` -> leaf.**
+   Three top-level keys are NOT filament types and must be skipped: `version`,
+   `hard_filaments_max_flow_k`, `soft_filaments_max_flow_k`. This capture carries 16
+   types. The leaf holds `load_temp`, `unload_temp`, `clean_nozzle_temp`, `is_soft`,
+   `flow_temp`, and five per-nozzle-diameter maps keyed `'02'`/`'04'`/`'06'`/`'08'`.
+   **The three temperatures this task wants sit on the leaf, not per diameter** — so
+   `FilamentKey` needs no nozzle-diameter member, despite what the paragraph above says.
+4. **Lookup needs a fallback chain, and the printer's own current state proves it.**
+   Live `print_task_config` reports slot 3 as vendor `Generic`, type `PETG`, sub-type
+   `SnapSpeed`. The table has `PETG.vendor_generic` but no `sub_SnapSpeed` beneath it, and
+   the status spells the vendor `Generic` where the table key is `vendor_generic`. So
+   resolution is: case-insensitive vendor match, then exact sub-type, then `sub_generic`,
+   then `vendor_generic.sub_generic`, then nullopt. **A parser that only matches exactly
+   answers nullopt for a spool loaded in the machine right now** — that is the case the
+   test must cover.
 
 - [ ] **Step 2: Write the failing test against the captured fixture**
 
-Assert: a known vendor/type/sub-type resolves to its temperatures; an unknown one yields nullopt rather than a default; a malformed response yields an empty map rather than throwing.
+Assert: a known vendor/type/sub-type resolves to its temperatures (`PLA`/`Snapmaker`/`SnapSpeed` -> load 250, unload 250, clean 170); the live `PETG`/`Generic`/`SnapSpeed` case resolves through the fallback chain to `PETG.vendor_generic.sub_generic` (load 270, unload 270, clean 205) rather than answering nullopt; a type absent from the table yields nullopt rather than a default; and a malformed response yields an empty map rather than throwing.
 
 - [ ] **Step 3: Implement the provider table**
 
@@ -1374,6 +1395,8 @@ git commit -m "feat(printer): prefer the firmware's own per-filament temperature
 - Create: `src/printer/power_loss_sensor.cpp`
 - Create: `tests/unit/test_power_loss_sensor.cpp`
 - Modify: `firmware/helixscreen-esp32/components/helixapp/app_srcs.txt`
+
+**The printer publishes five of these objects**, not one: a bare `power_loss_check` (the mains monitor, `initialized: 1` on the live machine) and `power_loss_check e0` through `e3` (per-extruder, all `initialized: 0` with `voltage_type: 255`). The detection predicate must match the bare name exactly — a prefix or substring test picks up an uninitialised sibling — and `required_status_objects` returns only `power_loss_check`.
 
 **Interfaces:**
 - Consumes: `PrinterDiscovery`.
