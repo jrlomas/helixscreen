@@ -195,6 +195,10 @@ knows something you cannot see from their branch.
   right answer, not whose branch it came from.
 - **Before filing or commenting publicly on shared ground, ask whether a peer is already
   on it.** Two sessions posting on one issue is the common failure.
+- **Keep it short.** Lead with what you want from them, then the facts they need to answer.
+  Branch names and SHAs, not narrated history; a bulleted split, not prose describing one.
+  A peer is mid-task and reading your message is a tax on their attention - a 500-word
+  message that a 120-word one would have carried is a worse message, not a thorough one.
 
 What is shared here:
 
