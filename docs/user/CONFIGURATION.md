@@ -738,7 +738,6 @@ Located in the `printer` section:
       "last_snapshot": {}
     },
     "default_macros": { ... },
-    "safety_limits": { ... },
     "capability_overrides": { ... }
   }
 }
@@ -1733,33 +1732,17 @@ No nudge of any kind appears while a print is running.
 
 ## Safety Limits
 
-Located in `printer.safety_limits`:
+HelixScreen checks every temperature, move, and fan command it sends against a set of safety limits: a temperature ceiling for each heater, axis travel limits, a maximum feedrate, and fan speed bounds.
 
-```json
-{
-  "printer": {
-    "safety_limits": {
-      "max_temperature_celsius": 400.0,
-      "min_temperature_celsius": 0.0,
-      "max_fan_speed_percent": 100.0,
-      "min_fan_speed_percent": 0.0,
-      "max_feedrate_mm_min": 50000.0,
-      "min_feedrate_mm_min": 0.0,
-      "max_relative_distance_mm": 1000.0,
-      "min_relative_distance_mm": -1000.0,
-      "max_absolute_position_mm": 1000.0,
-      "min_absolute_position_mm": 0.0
-    }
-  }
-}
-```
+The limits are read automatically from your printer's own Klipper configuration:
 
-These override auto-detected limits. Useful for:
-- High-temp printers (increase `max_temperature_celsius`)
-- Very large printers (increase position limits)
-- Safety restrictions (decrease maximums)
+- Each heater is capped at its own `max_temp`, so a 290 °C nozzle and a 120 °C heated bed are each limited correctly
+- Axis travel limits come from your steppers' `position_min` and `position_max`
+- The maximum feedrate comes from your printer's `max_velocity`
 
-Leave unset (or remove the section) to use Moonraker auto-detection from printer.cfg.
+Generous built-in defaults apply where your configuration is silent, and auto-detection only ever widens those defaults, so a high-temperature hotend or a very large build volume is picked up automatically with no setting to change.
+
+Safety limits are not settable in `settings.json`. If a limit is wrong for your printer, change the value in `printer.cfg`: that is the one source every tool respects, including Mainsail, Fluidd, and your slicer. Editing a curated set of those values directly from HelixScreen is proposed in [issue #1699](https://github.com/prestonbrown/helixscreen/issues/1699).
 
 ---
 
@@ -2107,18 +2090,6 @@ Environment="HELIX_TOUCH_DEVICE=/dev/input/event0"
       "unload_filament": { "label": "Unload", "gcode": "UNLOAD_FILAMENT" },
       "macro_1": { "label": "Clean Nozzle", "gcode": "HELIX_CLEAN_NOZZLE" },
       "macro_2": { "label": "Bed Level", "gcode": "HELIX_BED_LEVEL_IF_NEEDED" }
-    },
-    "safety_limits": {
-      "max_temperature_celsius": 400.0,
-      "min_temperature_celsius": 0.0,
-      "max_fan_speed_percent": 100.0,
-      "min_fan_speed_percent": 0.0,
-      "max_feedrate_mm_min": 50000.0,
-      "min_feedrate_mm_min": 0.0,
-      "max_relative_distance_mm": 1000.0,
-      "min_relative_distance_mm": -1000.0,
-      "max_absolute_position_mm": 1000.0,
-      "min_absolute_position_mm": 0.0
     },
     "capability_overrides": {
       "bed_mesh": "auto",
