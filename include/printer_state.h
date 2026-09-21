@@ -32,6 +32,7 @@
 #include "subject_managed_panel.h"
 
 #include <atomic>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -1871,6 +1872,13 @@ class PrinterState {
      */
     void set_timelapse_default_enabled(bool enabled);
 
+    /// Merge the settings a self-storing firmware currently holds into the
+    /// pre-print option defaults, keyed by option id, and resynthesise if any
+    /// changed. Safe from any thread. Merges rather than replaces: Moonraker
+    /// sends deltas, so a frame mentioning one setting is silent about the
+    /// rest, not a report that they are off.
+    void merge_firmware_option_defaults(std::map<std::string, bool> defaults);
+
     /**
      * @brief Set HelixPrint plugin installation status
      *
@@ -2567,6 +2575,10 @@ class PrinterState {
     /// Main-thread-only: written and read inside apply_dynamic_options() and its
     /// setter, both of which run on the main thread via queue_update.
     bool timelapse_default_enabled_ = false;
+
+    /// What the firmware reports for each pre-print option it stores itself.
+    /// Main thread only. Empty on printers whose firmware stores none.
+    std::map<std::string, bool> firmware_option_defaults_;
 
     // ============================================================================
     // Main-thread internal methods (run from queued callbacks)

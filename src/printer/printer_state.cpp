@@ -34,6 +34,7 @@
 #include "lvgl/src/display/lv_display_private.h" // For rendering_in_progress check
 #include "lvgl_debug_invalidate.h"
 #include "macro_manager.h"
+#include "pre_print_preferences.h"
 #include "printer_cache_registry.h"
 #include "probe_sensor_manager.h"
 #include "runtime_config.h"
@@ -424,6 +425,12 @@ void PrinterState::update_from_status(const json& state, double eventtime,
                      helix::zoffset::persistence_provider_name(discovery_));
         clear_z_offset_external_persistence_internal();
     }
+
+    // Some firmwares keep pre-print option settings across prints and gate the
+    // sliced gcode on what they hold, which makes them the authority on what
+    // the toggles show. Silent on printers that store none.
+    merge_firmware_option_defaults(
+        helix::preprint_prefs::read_persisted_defaults(discovery_, state));
 
     // Delegate print updates to print state component
     print_domain_.update_from_status(state);
@@ -995,6 +1002,30 @@ void PrinterState::set_timelapse_default_enabled(bool enabled) {
     });
 }
 
+void PrinterState::merge_firmware_option_defaults(std::map<std::string, bool> defaults) {
+    if (defaults.empty()) {
+        return;
+    }
+    // Both the member write and the resynthesis touch LVGL subjects, and status
+    // frames arrive on the websocket thread.
+    async_lifetime_.defer(
+        "PrinterState::merge_firmware_option_defaults", [this, defaults = std::move(defaults)]() {
+            bool changed = false;
+            for (const auto& [option_id, enabled] : defaults) {
+                auto it = firmware_option_defaults_.find(option_id);
+                if (it == firmware_option_defaults_.end() || it->second != enabled) {
+                    firmware_option_defaults_[option_id] = enabled;
+                    changed = true;
+                }
+            }
+            if (!changed) {
+                return;
+            }
+            apply_dynamic_options();
+            update_gcode_modification_visibility();
+        });
+}
+
 void PrinterState::set_helix_plugin_installed(bool installed) {
     // Thread-safe: Use ui_queue_update to update LVGL subject from any thread
     // We handle the async dispatch here because we need to update composite subjects after
@@ -1358,13 +1389,33 @@ void PrinterState::apply_dynamic_options() {
         break;
     }
 
+    // Firmware that stores these settings itself is the authority on what each
+    // toggle shows. A database default would otherwise claim a state the
+    // machine does not hold, and disagree with every other client reading the
+    // same printer.
+    for (auto& opt : pre_print_option_set_.options) {
+        auto it = firmware_option_defaults_.find(opt.id);
+        if (it != firmware_option_defaults_.end()) {
+            opt.default_enabled = it->second;
+        }
+    }
+
+    // A printer whose firmware owns timelapse declares its own option for that
+    // capability in the database, and that option is the one that works: it
+    // writes a firmware preference, where the plugin row writes through
+    // Moonraker. Synthesising on top of it gives the user two timelapse
+    // toggles, and on firmware that ships a compatibility stub for the plugin
+    // API the synthesised one silently does nothing. The database wins.
+    const bool database_owns_timelapse = pre_print_option_set_.declares_capability("timelapse");
+
     // Timelapse: append when the moonraker-timelapse plugin reports available.
     // Strategy is RuntimeCommand with sentinel values that
     // PrintPreparationManager::start_print() recognizes (see the dispatch
     // for command_enabled / command_disabled prefixed with "timelapse:").
     // These are NOT gcode lines — start_print() routes them to
     // `api_->timelapse().set_timelapse_enabled(...)`.
-    if (lv_subject_get_int(capabilities_state_.get_printer_has_timelapse_subject()) == 1) {
+    if (!database_owns_timelapse &&
+        lv_subject_get_int(capabilities_state_.get_printer_has_timelapse_subject()) == 1) {
         PrePrintOption tl;
         tl.id = "timelapse";
         tl.label_key = "Timelapse";

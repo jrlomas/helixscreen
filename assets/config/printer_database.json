@@ -6480,6 +6480,7 @@
           },
           {
             "id": "u1_timelapse",
+            "capability": "timelapse",
             "category": "monitoring",
             "order": 10,
             "default_enabled": false,
