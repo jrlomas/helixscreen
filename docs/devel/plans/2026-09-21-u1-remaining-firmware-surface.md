@@ -606,9 +606,10 @@ Expected: compile failure — no `build_preference_gcode`.
 In `include/ams_backend_snapmaker.h` public section:
 
 ```cpp
-    std::vector<DeviceSection> get_device_sections() const override;
-    std::vector<DeviceAction> get_device_actions() const override;
-    bool execute_device_action(const std::string& action_id, const std::any& value) override;
+    [[nodiscard]] std::vector<helix::printer::DeviceSection> get_device_sections() const override;
+    [[nodiscard]] std::vector<helix::printer::DeviceAction> get_device_actions() const override;
+    AmsError execute_device_action(const std::string& action_id,
+                                   const std::any& value = {}) override;
 
     /// The command one action produces, or empty when the id is not ours.
     /// Separated from execute_device_action so the mapping is testable without
@@ -617,14 +618,29 @@ In `include/ams_backend_snapmaker.h` public section:
                                                      const std::any& value) const;
 ```
 
-Check the base signatures in `include/ams_backend.h` and match them exactly, including constness.
+These are copied from `include/ams_backend_afc.h:491-513`. Four backends already override this
+triple — AFC, Happy Hare, CFS and Toolchanger — and all four spell it exactly this way.
+Three details are load-bearing and were wrong in an earlier draft of this plan:
+`execute_device_action` returns **`AmsError`**, not `bool`; the vector element types are
+**`helix::printer::`-qualified** (`ams_backend_snapmaker.h` sits in `namespace helix`, and
+these types live in `helix::printer`, so unqualified spellings do not resolve); and the two
+getters carry `[[nodiscard]]`. Confirm against `include/ams_backend.h:2200-2227` before you
+write them.
+
+Inside the **bodies** the unqualified spellings below are correct, but only because of a
+using-declaration you must add, matching what the repo already does: in the `.cpp`, a
+function-local `using helix::printer::ActionType;` / `using helix::printer::DeviceAction;`
+(the shape at `src/printer/ams_backend_afc.cpp:5977-5978`); in the test file, a
+file-scope `using namespace helix::printer;` (what `tests/unit/test_afc_device_actions_config.cpp`
+and nine sibling AMS tests do). Only the out-of-line **declarations and definitions** need the
+full `helix::printer::` qualification.
 
 - [ ] **Step 4: Implement**
 
 ```cpp
 // src/printer/ams_backend_snapmaker.cpp
 
-std::vector<DeviceSection> AmsBackendSnapmaker::get_device_sections() const {
+std::vector<helix::printer::DeviceSection> AmsBackendSnapmaker::get_device_sections() const {
     if (print_preferences_.empty()) {
         return {}; // nothing reported yet - an empty section is worse than none
     }
@@ -635,7 +651,7 @@ std::vector<DeviceSection> AmsBackendSnapmaker::get_device_sections() const {
     return {s};
 }
 
-std::vector<DeviceAction> AmsBackendSnapmaker::get_device_actions() const {
+std::vector<helix::printer::DeviceAction> AmsBackendSnapmaker::get_device_actions() const {
     std::vector<DeviceAction> out;
     const auto& p = print_preferences_;
 
@@ -722,17 +738,17 @@ std::string AmsBackendSnapmaker::build_preference_gcode(const std::string& actio
     return helix::snapmaker::write_print_preferences_gcode(changes);
 }
 
-bool AmsBackendSnapmaker::execute_device_action(const std::string& action_id,
-                                                const std::any& value) {
+AmsError AmsBackendSnapmaker::execute_device_action(const std::string& action_id,
+                                                    const std::any& value) {
     const std::string gcode = build_preference_gcode(action_id, value);
     if (gcode.empty()) {
-        return false;
+        return AmsErrorHelper::not_supported(action_id);
     }
     // The mid-print guard refuses END_UNLOAD_FILAMENT while printing or paused
     // unless FORCE=1, which we deliberately do not pass. The refusal arrives as
     // an exception and is classified in Task 5 rather than swallowed here.
     send_gcode(gcode);
-    return true;
+    return AmsErrorHelper::success();
 }
 ```
 
