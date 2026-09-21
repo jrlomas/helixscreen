@@ -169,36 +169,16 @@ scripts/teardown-worktree.sh my-branch -n    # ...or just print the plan
 
 The protocol is global CLAUDE.md § Peer Sessions.
 
-**Talk to the other session first.** When you find work that overlaps yours - a claim on a
-tree you need, a branch touching your files, a second fix for the bug you are fixing -
-message them BEFORE you read their diff, pick a winner, or plan a rebase. Coordination is
-the first move, not the fallback after you have worked out an answer alone. Two sessions
-each deciding for themselves is how one of them loses work, and the other session usually
-knows something you cannot see from their branch.
+**Message the other session first.** Overlapping work - a claim on a tree you need, a
+branch touching your files - gets a message BEFORE you read their diff, pick a winner or
+plan a rebase, including before you file or comment publicly on it.
 
-- **A claim says a resource is taken. It never says what the holder is doing, or how far
-  along.** `helix-claim list` gives you the owner pid, socket and session id, not intent.
-  Ask.
-- **Claims change hands.** A STALE `worktree:` claim beside a LIVE `build:` claim on the
-  same name usually means a second session picked up abandoned work. Whoever you spoke to
-  an hour ago may not hold it now, so re-read `helix-claim list` before acting on what you
-  were told.
-- **Map before you address.** `ListAgents` gives names; `helix-claim list` gives session
-  ids and `uds:` socket paths. They do not cross-reference. If you cannot map one to the
-  other, say so in the message and address the handful of candidates rather than guessing
-  at one.
-- **A successful send is not a delivery, and silence is not agreement.** Never merge,
-  rebase or delete on the strength of an unanswered message.
-- **Say what you have, what they have, and offer to do the reconciliation.** A peer who
-  can see your branch's scope can tell you in one reply which half is redundant, and will
-  often correct a premise you were about to act on. Take the correction; the point is the
-  right answer, not whose branch it came from.
-- **Before filing or commenting publicly on shared ground, ask whether a peer is already
-  on it.** Two sessions posting on one issue is the common failure.
-- **Keep it short.** Lead with what you want from them, then the facts they need to answer.
-  Branch names and SHAs, not narrated history; a bulleted split, not prose describing one.
-  A peer is mid-task and reading your message is a tax on their attention - a 500-word
-  message that a 120-word one would have carried is a worse message, not a thorough one.
+- Keep it short: the ask first, then the branch names and SHAs they need to answer.
+- A claim says a resource is taken, never what the holder is doing or how far along. Ask.
+- `ListAgents` names and `helix-claim` session ids do not cross-reference. If you cannot
+  map one to the other, address the candidates and say so.
+- A successful send is not a delivery and silence is not agreement. Never merge, rebase or
+  delete on an unanswered message.
 
 What is shared here:
 
