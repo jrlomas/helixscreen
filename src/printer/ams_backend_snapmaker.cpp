@@ -1673,6 +1673,30 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
         if (status.contains("print_task_config") && status["print_task_config"].is_object()) {
             const auto& ptc = status["print_task_config"];
 
+            // Firmware-stored preferences. Merged field by field, because a delta
+            // frame that mentions one setting says nothing about the others.
+            // Held as told, never filed as lane observations — these are a write
+            // surface like the filament_type/vendor/color fields below.
+            const auto incoming = snapmaker::read_print_preferences(status);
+            if (incoming.auto_replenish) {
+                print_preferences_.auto_replenish = incoming.auto_replenish;
+            }
+            if (incoming.replenish_ignore_color) {
+                print_preferences_.replenish_ignore_color = incoming.replenish_ignore_color;
+            }
+            if (incoming.filament_entangle_detect) {
+                print_preferences_.filament_entangle_detect = incoming.filament_entangle_detect;
+            }
+            if (incoming.end_led_turn_off) {
+                print_preferences_.end_led_turn_off = incoming.end_led_turn_off;
+            }
+            if (incoming.filament_entangle_sen) {
+                print_preferences_.filament_entangle_sen = incoming.filament_entangle_sen;
+            }
+            if (!incoming.end_unload_filament.empty()) {
+                print_preferences_.end_unload_filament = incoming.end_unload_filament;
+            }
+
             // extruder_map_table: [int x32] — logical tool -> physical head. The
             // firmware's own routing authority for the running print (see the
             // member's doc comment). Mirrored verbatim; interpretation belongs to

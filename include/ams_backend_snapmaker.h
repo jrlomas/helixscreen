@@ -8,6 +8,7 @@
 #include "filament_slot_override_store.h"
 #include "lane_echo.h"
 #include "lane_observation.h"
+#include "snapmaker_print_preferences.h"
 
 #include <array>
 #include <map>
@@ -355,6 +356,12 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// last_task_extruder_map_.
     [[nodiscard]] std::vector<int> last_print_tool_mapping() const override;
 
+    /// What the firmware last reported for its stored print preferences
+    /// (print_task_config). Empty until a frame carrying one arrives.
+    [[nodiscard]] const snapmaker::PrintPreferences& print_preferences() const {
+        return print_preferences_;
+    }
+
     // Static parsers (public for testing)
     static ExtruderToolState parse_extruder_state(const nlohmann::json& json);
     static SnapmakerRfidInfo parse_rfid_info(const nlohmann::json& json);
@@ -421,6 +428,14 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// Empty until a configured task has been seen. Written only from
     /// handle_status_update under mutex_; read by last_print_tool_mapping().
     std::vector<int> last_task_extruder_map_;
+
+    /// What the firmware last reported for its stored print preferences.
+    /// Merged across frames: Moonraker sends deltas, so a frame that omits a
+    /// setting is silent about it rather than reporting it off.
+    ///
+    /// Like every other print_task_config field, these are a write surface, not
+    /// a sensor — held as told, never filed as a lane observation.
+    snapmaker::PrintPreferences print_preferences_;
 
     /// Per-extruder cached state
     std::array<ExtruderToolState, NUM_TOOLS> extruder_states_;
