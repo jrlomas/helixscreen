@@ -145,3 +145,83 @@ TEST_CASE("clamp_jog_delta: honours a negative min envelope", "[jog_coalescer]")
     CHECK_THAT(helix::clamp_jog_delta(-5.0, 0.0, 2.0, -5.0, 200.0),
                Catch::Matchers::WithinAbs(2.0, 1e-9));
 }
+
+TEST_CASE("clamp_jog_with_warn: clamps at the axis maximum without warning", "[jog_coalescer]") {
+    // At Z=248 on a 250mm axis, a +10 request may only travel 2. Partial travel
+    // is not a block, so nothing is warned and the latch clears.
+    const auto r = helix::clamp_jog_with_warn(248.0, 0.0, 10.0, 0.0, 250.0, false);
+    REQUIRE(r.allowed == Catch::Approx(2.0));
+    REQUIRE_FALSE(r.warn);
+    REQUIRE_FALSE(r.latch);
+}
+
+TEST_CASE("clamp_jog_with_warn: clamps at the axis minimum", "[jog_coalescer]") {
+    const auto r = helix::clamp_jog_with_warn(1.0, 0.0, -10.0, 0.0, 250.0, false);
+    REQUIRE(r.allowed == Catch::Approx(-1.0));
+    REQUIRE_FALSE(r.warn);
+}
+
+TEST_CASE("clamp_jog_with_warn: a fully blocked jog warns exactly once", "[jog_coalescer]") {
+    // First attempt at the limit warns and sets the latch.
+    const auto first = helix::clamp_jog_with_warn(250.0, 0.0, 10.0, 0.0, 250.0, false);
+    REQUIRE(first.allowed == 0.0);
+    REQUIRE(first.warn);
+    REQUIRE(first.latch);
+
+    // Second attempt, latch already set: still blocked, but silent. This is the
+    // case hold-to-repeat turns into a toast flood without the latch.
+    const auto second = helix::clamp_jog_with_warn(250.0, 0.0, 10.0, 0.0, 250.0, true);
+    REQUIRE(second.allowed == 0.0);
+    REQUIRE_FALSE(second.warn);
+    REQUIRE(second.latch);
+}
+
+TEST_CASE("clamp_jog_with_warn: retreating clears the latch so the next approach warns",
+          "[jog_coalescer]") {
+    const auto away = helix::clamp_jog_with_warn(100.0, 0.0, -10.0, 0.0, 250.0, true);
+    REQUIRE(away.allowed == Catch::Approx(-10.0));
+    REQUIRE_FALSE(away.latch);
+
+    const auto again = helix::clamp_jog_with_warn(250.0, 0.0, 10.0, 0.0, 250.0, away.latch);
+    REQUIRE(again.warn);
+}
+
+TEST_CASE("clamp_jog_with_warn: accounts for an uncommitted pending move", "[jog_coalescer]") {
+    // 240 now, 8mm already queued, so only 2 of a further 10 may go.
+    const auto r = helix::clamp_jog_with_warn(240.0, 8.0, 10.0, 0.0, 250.0, false);
+    REQUIRE(r.allowed == Catch::Approx(2.0));
+}
+
+TEST_CASE("clamp_jog_with_warn: a bed-moves printer clamps the gcode-space delta",
+          "[jog_coalescer]") {
+    // On a bed-moves printer the UP button produces gcode Z-. At Z=1 that must
+    // clamp to -1. Passing the pre-inversion +10 would wrongly allow +2, which
+    // is why MotionPanel clamps AFTER applying bed_moves_.
+    const double gcode_delta = -10.0;
+    const auto r = helix::clamp_jog_with_warn(1.0, 0.0, gcode_delta, 0.0, 250.0, false);
+    REQUIRE(r.allowed == Catch::Approx(-1.0));
+}
+
+TEST_CASE("effective_jog_speed_mm_min: within limits passes through", "[jog_coalescer]") {
+    CHECK(helix::effective_jog_speed_mm_min(6000, 0.0, 30000.0) == 6000);
+    CHECK(helix::effective_jog_speed_mm_min(600, 0.0, 30000.0) == 600);
+}
+
+TEST_CASE("effective_jog_speed_mm_min: stored above the ceiling clamps to the ceiling",
+          "[jog_coalescer]") {
+    // A ceiling stored before the printer's configfile reply lowered it.
+    CHECK(helix::effective_jog_speed_mm_min(42000, 0.0, 30000.0) == 30000);
+    CHECK(helix::effective_jog_speed_mm_min(50000, 0.0, 30000.0) == 30000);
+}
+
+TEST_CASE("effective_jog_speed_mm_min: stored below the floor clamps to the floor",
+          "[jog_coalescer]") {
+    CHECK(helix::effective_jog_speed_mm_min(30, 60.0, 30000.0) == 60);
+}
+
+TEST_CASE("effective_jog_speed_mm_min: inverted bounds resolve to the maximum", "[jog_coalescer]") {
+    // A caller that supplies min > max gets a defined answer rather than UB.
+    // This cannot redden on libstdc++, whose std::clamp already lowers to
+    // min(max(v, lo), hi): a mutation run shows the revert surviving.
+    CHECK(helix::effective_jog_speed_mm_min(6000, 30000.0, 600.0) == 600);
+}

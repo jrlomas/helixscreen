@@ -539,6 +539,8 @@ translations:
   Closer: 近く
   Closer = more squish | Farther = less squish: 近い = より圧縮 | 遠い = 圧縮少なめ
   Coarse: 粗動
+  Coarse Inner: ''
+  Coarse Outer: ''
   Code: コード
   Coil Temperature: コイル温度
   Collect logs and system info for support: サポート用にログとシステム情報を収集
@@ -784,6 +786,7 @@ translations:
   Distance from hub to toolhead: 'ハブからツールヘッドまでの距離'
   Distance from lane extruder to hub: 'レーンのエクストルーダーからハブまでの距離'
   Distance from toolhead sensor to nozzle tip: 'ツールヘッドセンサーからノズル先端までの距離'
+  Distance moved per jog button tap: ''
   Do not power off your printer.: プリンターの電源を切らないでください。
   Do not touch the printer during calibration: キャリブレーション中はプリンターに触れないでください
   Dock: ドック
@@ -1149,6 +1152,8 @@ translations:
   'Filter Fan: Off': 'フィルターファン: オフ'
   'Filter Fan: On': 'フィルターファン: オン'
   Fine: 微動
+  Fine Inner: ''
+  Fine Outer: ''
   Finish: 完了
   Finish or cancel the print before loading, unloading, or changing filament: フィラメントの装填・排出・交換の前に、印刷を完了またはキャンセルしてください
   Finishing clean...: 清掃の仕上げ中...
@@ -1415,7 +1420,10 @@ translations:
   It's a new spool: 新しいスプールです
   Jammed at the Toolhead: ツールヘッドで詰まり
   Job Queue: ジョブキュー
+  Jog Speed XY: ''
+  Jog Speed Z: ''
   'Jog failed: {}': 'ジョグに失敗しました: {}'
+  Jog speeds and step distances: ''
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Discord
     で HelixScreen コミュニティに参加して、ディスカッション、ヒント、トラブルシューティング支援、機能リクエストを共有しましょう。
   Joining Wi-Fi disconnects the wired network.: WiFi に接続すると、有線ネットワークが切断されます。
@@ -2287,6 +2295,8 @@ translations:
   Reset: リセット
   Reset Blade Counter: 'ブレードカウンターをリセット'
   Reset CFS: CFSをリセット
+  Reset Distances: ''
+  Reset Distances?: ''
   Reset Endless Spool: 'エンドレススプールをリセット'
   Reset Endless Spool?: 'エンドレススプールをリセットしますか？'
   Reset Home Screen?: ホーム画面をリセットしますか？
@@ -2904,6 +2914,7 @@ translations:
   This will reset all settings to defaults. This action cannot be undone.: これはすべての設定をデフォルトにリセットします。この操作は元に戻せません。
   This will restart Klipper firmware. Any active operations will be interrupted.: Klipperファームウェアを再起動します。実行中の操作は中断されます。
   This will restart Klipper.: これにより Klipper が再起動します。
+  This will restore the default jog step distances for all three modes.: ''
   This will save the Z-offset and restart Klipper to write the configuration. The printer will briefly disconnect.: Z-offset を保存し、設定を書き込むために Klipper を再起動します。プリンターは一時的に切断されます。
   ? This writes the tool offsets to the printer's config and restarts Klipper, which takes a few seconds. Until then they apply only to this session.
   : ツールオフセットをプリンターの設定に書き込み、Klipper を再起動します。数秒かかります。それまでは、このセッションにのみ適用されます。
@@ -2987,6 +2998,8 @@ translations:
   Tune: チューニング
   Tuning tower enabled - start a print to test: チューニングタワー有効 - 印刷を開始してテストしてください
   Turbo: ターボ
+  Turbo Inner: ''
+  Turbo Outer: ''
   Turn Off: オフにする
   Turn Off WiFi?: WiFiをオフにしますか？
   Turn On: オンにする
@@ -3180,6 +3193,7 @@ translations:
   X: X
   X Axis: X軸
   X Offset: Xオフセット
+  X and Y jog feedrate: ''
   X axis applied, but Y axis failed: X軸は適用されましたが、Y軸は失敗しました
   X axis done, starting Y...: 'X軸が完了しました。Y軸を開始します...'
   X jog blocked at bed edge: X軸移動はベッド端でブロックされました
@@ -3211,6 +3225,8 @@ translations:
   Z Offset: Zオフセット
   Z Range: Z 範囲
   Z Tilt Adjust...: Zチルト調整中...
+  Z jog blocked at axis limit: ''
+  Z jog feedrate: ''
   Z motor calibration failed: Z モーターの校正に失敗しました
   Z probes for bed leveling and mesh generation: ベッドレベリングとメッシュ生成用 Z プローブ
   'Z-Off:': 'Z-Off:'

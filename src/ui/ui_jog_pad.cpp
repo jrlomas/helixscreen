@@ -363,6 +363,13 @@ static void jog_pad_draw_cb(lv_event_t* e) {
     // Draw distance labels showing movement amounts for each ring (scaled fonts)
     lv_draw_label_dsc_t label_dsc;
     lv_draw_label_dsc_init(&label_dsc);
+    // Name the object on the descriptor, as lv_obj_init_draw_label_dsc() does
+    // for the built-in widgets: LV_EVENT_DRAW_TASK_ADDED is sent only for
+    // tasks whose descriptor carries one.
+    label_dsc.base.obj = obj;
+    // On threaded builds the draw task outlives this callback and reads the
+    // text on the render thread, so the task must own a copy of the string.
+    label_dsc.text_local = 1;
     label_dsc.color = state->jog_color_distance_labels;
     label_dsc.font = get_distance_font(radius);
     label_dsc.align = LV_TEXT_ALIGN_CENTER;
@@ -397,6 +404,9 @@ static void jog_pad_draw_cb(lv_event_t* e) {
     lv_draw_label(layer, &label_dsc, &label_area);
 
     // Draw axis labels (cardinal directions) with scaled font
+    // These are string literals, so the render thread can read them straight
+    // from the task and lv_draw_label need not strdup each one per redraw.
+    label_dsc.text_local = 0;
     label_dsc.color = state->jog_color_axis_labels;
     label_dsc.font = get_label_font(radius);
 
