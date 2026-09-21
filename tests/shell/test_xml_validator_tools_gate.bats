@@ -35,3 +35,13 @@ setup() {
     contains '\.xml$' "$output"
     contains '^tools/validate_xml' "$output"
 }
+
+# qc_xml_const runs neither red nor silently: while the validator cannot
+# resolve theme tokens, the hook must say so and name the follow-up. Delete
+# this pin together with the pause when #1698 restores enforcement.
+@test "constants gate states its non-enforcement reason while paused" {
+    run bash -c "sed -n '/^qc_xml_const() {/,/^}/p' scripts/quality-checks.sh"
+    [ "$status" -eq 0 ] || fail "qc_xml_const not extractable"
+    contains 'not enforced' "$output"
+    contains 'helixscreen#1698' "$output"
+}

@@ -286,18 +286,15 @@ echo ""
 # ====================================================================
 qc_xml_const() {
   local EXIT_CODE=0
-echo "🔤 Validating XML constant sets..."
+echo "🔤 XML constant set gate..."
 
 if [ -x "build/bin/validate-xml-constants" ]; then
-  if ./build/bin/validate-xml-constants; then
-    : # Success message already printed by tool
-  else
-    echo ""
-    echo "   Incomplete constant sets can cause runtime warnings."
-    echo "   - Responsive px: Need ALL of _small, _medium, _large (or none)"
-    echo "   - Theme colors: Need BOTH _light and _dark (or neither)"
-    EXIT_CODE=1
-  fi
+  # Not enforced while the validator cannot resolve theme tokens: every
+  # constant defined in assets/config/themes reads as undefined, so enforcing
+  # would fail every XML-touching commit on false positives, and a wall of
+  # noise nobody reads is worse than an honest pause. Enforcement returns
+  # with prestonbrown/helixscreen#1698.
+  echo "⏸️  validate-xml-constants built, not enforced - it cannot resolve theme tokens yet (prestonbrown/helixscreen#1698)"
 else
   echo "⚠️  validate-xml-constants not built - skipping"
   echo "   qc_xml_tools above should have built it - check its failure"
