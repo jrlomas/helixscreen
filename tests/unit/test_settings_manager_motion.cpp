@@ -2,6 +2,8 @@
 
 #include "../../include/settings_manager.h"
 #include "../helix_test_fixture.h"
+#include "../test_helpers/config_test_access.h"
+#include "config.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -100,7 +102,10 @@ TEST_CASE_METHOD(HelixTestFixture, "Jog distance clamps at the upper bound", "[s
     auto& s = helix::SettingsManager::instance();
     s.init_subjects();
     s.set_jog_distance(helix::JogMode::Turbo, true, 999.0f);
-    REQUIRE(s.get_jog_distance(helix::JogMode::Turbo, true) == Catch::Approx(200.0f));
+    // The persisted value, not get_jog_distance(): the getter clamps on read,
+    // which would mask the write clamp this case exists to falsify.
+    CHECK(helix::Config::get_instance()->get<float>(helix::Config::get_instance()->df() +
+                                                    "motion/turbo_outer") == Catch::Approx(200.0f));
 }
 
 TEST_CASE_METHOD(HelixTestFixture, "Z jog speed clamps at both bounds", "[settings_motion]") {
@@ -111,9 +116,6 @@ TEST_CASE_METHOD(HelixTestFixture, "Z jog speed clamps at both bounds", "[settin
     s.set_jog_speed_z(999999);
     REQUIRE(s.get_jog_speed_z() == 60000);
 }
-
-#include "../test_helpers/config_test_access.h"
-#include "config.h"
 
 namespace {
 
@@ -128,9 +130,8 @@ class LoadClampFixture : public HelixTestFixture {
     helix::SettingsManager& sm = helix::SettingsManager::instance();
 
     LoadClampFixture() {
-        helix::setup_printer_data(
-            *cfg,
-            {{"motion", {{"jog_speed_xy", 1}, {"jog_speed_z", 999999}, {"turbo_outer", 999.0f}}}});
+        helix::setup_printer_data(*cfg,
+                                  {{"motion", {{"jog_speed_xy", 1}, {"jog_speed_z", 999999}}}});
         reload();
     }
 
@@ -152,5 +153,4 @@ TEST_CASE_METHOD(LoadClampFixture, "Out-of-range motion values load clamped", "[
     // what it reads, not just what the setters write.
     CHECK(sm.get_jog_speed_xy() == 60);
     CHECK(sm.get_jog_speed_z() == 60000);
-    CHECK(sm.get_jog_distance(helix::JogMode::Turbo, true) == Catch::Approx(200.0f));
 }

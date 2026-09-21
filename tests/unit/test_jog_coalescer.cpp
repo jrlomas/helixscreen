@@ -221,5 +221,7 @@ TEST_CASE("effective_jog_speed_mm_min: stored below the floor clamps to the floo
 
 TEST_CASE("effective_jog_speed_mm_min: inverted bounds resolve to the maximum", "[jog_coalescer]") {
     // A caller that supplies min > max gets a defined answer rather than UB.
+    // This cannot redden on libstdc++, whose std::clamp already lowers to
+    // min(max(v, lo), hi): a mutation run shows the revert surviving.
     CHECK(helix::effective_jog_speed_mm_min(6000, 30000.0, 600.0) == 600);
 }

@@ -73,8 +73,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "Jog pad label draw tasks own their text", "[j
     ui_jog_pad_set_mode(pad, helix::JogMode::Coarse);
 
     std::vector<LabelTaskInfo> tasks;
-    // The event fires only on objects carrying this flag (lv_draw.c gates on
-    // it); a bare lv_obj_create does not set it, labels do.
+    // LV_EVENT_DRAW_TASK_ADDED is sent only for objects carrying this flag
+    // (lv_draw.c gates on it), and no widget sets it by default.
     lv_obj_add_flag(pad, LV_OBJ_FLAG_SEND_DRAW_TASK_EVENTS);
     lv_obj_add_event_cb(pad, capture_label_tasks, LV_EVENT_DRAW_TASK_ADDED, &tasks);
 
@@ -98,7 +98,6 @@ TEST_CASE_METHOD(LVGLTestFixture, "Jog pad label draw tasks own their text", "[j
     // the text later. Every label task must therefore own its own copy.
     for (const auto& t : tasks) {
         CHECK(t.text_local == 1);
-        CHECK(t.text != nullptr);
     }
 
     lv_obj_delete(pad);

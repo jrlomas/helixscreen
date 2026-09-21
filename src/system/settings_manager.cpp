@@ -578,7 +578,9 @@ void SettingsManager::set_jog_speed_z(int mm_per_min) {
 
 float SettingsManager::get_jog_distance(JogMode mode, bool outer) const {
     // Clamp on read as well as write, so nothing reading the cache can turn a
-    // bad value into a zero-length jog.
+    // bad value into a zero-length jog. Both writers (the loader and the
+    // setter) clamp before the cache ever sees a value, so this binds only
+    // for a third writer — do not delete it as redundant.
     return std::clamp(jog_distances_[static_cast<int>(mode)][outer ? 1 : 0], 0.01f, 200.0f);
 }
 
