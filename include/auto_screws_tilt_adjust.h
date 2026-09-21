@@ -68,25 +68,29 @@ inline constexpr int MAIN_STATE_SCREWS_TILT_ADJUST = 8;
 /// Klipper object name, and configfile section name, of the module.
 inline constexpr const char* MODULE_NAME = "auto_screws_tilt_adjust";
 
-/// PEI-sheet presence rides on the extruder-offset calibration object, not
-/// on this module's own status.
-inline constexpr const char* PLATE_OBJECT = "extruder_offset_calibration";
-inline constexpr const char* PLATE_FIELD = "bed_plate_check";
-
 /// The firmware command sequence that replaces SCREWS_TILT_CALCULATE. ENTRY
 /// switches main_state to SCREWS_TILT_ADJUST; the remaining commands are
 /// valid only inside that state.
 inline constexpr const char* CMD_ENTRY = "AUTO_SCREWS_TILT_ADJUST_ENTRY";
 inline constexpr const char* CMD_HOMING = "AUTO_SCREWS_TILT_ADJUST_HOMING";
-inline constexpr const char* CMD_DETECT_PLATE = "AUTO_SCREWS_TILT_ADJUST_DETECT_PLATE";
+/// DETECT_BED_PLATE is an assertion, not a query: PRESENCE=0 asserts the PEI
+/// sheet is OFF the bed, and the firmware raises PLATE_NOT_REMOVED_CODE when
+/// it is not. The wizard's AUTO_SCREWS_TILT_ADJUST_DETECT_PLATE wrapper runs
+/// it with no arguments, so PRESENCE defaults to 1 - the opposite assertion -
+/// and errors exactly when the sheet is off. PRESENCE=0 is sent directly so
+/// the command's own verdict is the gate.
+inline constexpr const char* CMD_DETECT_BED_PLATE = "DETECT_BED_PLATE PRESENCE=0";
+
+/// The error DETECT_BED_PLATE PRESENCE=0 raises when the PEI sheet is still
+/// on the bed: Klipper's code and the phrase its message carries. Either may
+/// be the surviving half after Moonraker wraps the message.
+inline constexpr const char* PLATE_NOT_REMOVED_CODE = "0003-0530-0000-0011";
+inline constexpr const char* PLATE_NOT_REMOVED_TEXT = "has not been removed";
 inline constexpr const char* CMD_PROBE_REFERENCE_POINTS =
     "AUTO_SCREWS_TILT_ADJUST_PROBE_REFERENCE_POINTS";
 /// Restores IDLE and lifts Z. Throws inside the firmware unless main_state
 /// is SCREWS_TILT_ADJUST, so every send is gated on the state being ours.
 inline constexpr const char* CMD_EXIT = "AUTO_SCREWS_TILT_ADJUST_EXIT";
-/// The bare state restore CMD_EXIT wraps: the form a connect-time cleanup
-/// can send without the macro's extra moves.
-inline constexpr const char* CMD_EXIT_TO_IDLE = "EXIT_TO_IDLE REQ_FROM_STATE=SCREWS_TILT_ADJUST";
 
 /**
  * @brief True only when the held calibration state is stale and safe to clear
@@ -105,10 +109,11 @@ inline constexpr const char* CMD_EXIT_TO_IDLE = "EXIT_TO_IDLE REQ_FROM_STATE=SCR
 /// HelixScreen reads.
 [[nodiscard]] std::optional<int> main_state_from_status(const nlohmann::json& status);
 
-/// PLATE_OBJECT.PLATE_FIELD out of an objects.query response. true = PEI
-/// sheet on the bed; nullopt = unknown (object or field absent), which is
-/// not the same as absent-from-bed.
-[[nodiscard]] std::optional<bool> plate_present_from_query(const nlohmann::json& response);
+/// True when a DETECT_BED_PLATE PRESENCE=0 failure message is the firmware
+/// reporting the PEI sheet is still on the bed (matched on the Klipper error
+/// code or the phrase it carries). False for any other failure, which is a
+/// genuine detection problem - callers must refuse, not probe, either way.
+[[nodiscard]] bool plate_still_on_bed(const std::string& error_message);
 
 /// The module's status object plus its configfile section, taken from one
 /// objects.query response and mapped through parse_auto_screws_tilt.
@@ -131,8 +136,11 @@ void request_exit(IMoonrakerClient& client);
  * A previous session that died mid-run can leave main_state at
  * SCREWS_TILT_ADJUST, which makes unrelated firmware operations refuse.
  * When the discovery snapshot says the state is held, probe_step decides:
- * stale states get CMD_EXIT_TO_IDLE; anything in flight is left to whoever
- * is driving it. @p client must outlive the round trip.
+ * stale states get CMD_EXIT - the wizard's own exit, which also restores the
+ * configured idle timeout, clears probe_step and lifts Z; a bare state
+ * restore would leave the idle timeout at the wizard's pause value, so
+ * heaters and steppers never idle out. Anything in flight is left to
+ * whoever is driving it. @p client must outlive the round trip.
  */
 void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initial_status);
 

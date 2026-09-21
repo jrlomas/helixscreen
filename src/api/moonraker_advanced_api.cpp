@@ -1249,10 +1249,10 @@ namespace helix {
  * unrelated filament operations refuse forever, so the gated exit on every
  * path is mandatory, not best-effort.
  *
- * The plate gate between _DETECT_PLATE and probing is equally mandatory:
- * probing through the PEI sheet shifts per-corner tilt far beyond the
- * probe's own noise floor, so a detected sheet fails the run with
- * instructions instead of producing wrong numbers.
+ * The plate gate between homing and probing is equally mandatory: probing
+ * through the PEI sheet shifts per-corner tilt far beyond the probe's own
+ * noise floor, so a detected sheet fails the run with instructions instead
+ * of producing wrong numbers.
  */
 class AutoScrewsTiltCollector : public std::enable_shared_from_this<AutoScrewsTiltCollector> {
   public:
@@ -1301,42 +1301,35 @@ class AutoScrewsTiltCollector : public std::enable_shared_from_this<AutoScrewsTi
     }
 
     void on_homing_done() {
-        send_step(auto_screws::CMD_DETECT_PLATE, &AutoScrewsTiltCollector::on_plate_checked);
+        detect_plate();
     }
 
-    void on_plate_checked() {
-        check_plate();
-    }
-
-    void check_plate() {
+    /// The plate gate. DETECT_BED_PLATE PRESENCE=0 is an assertion, not a
+    /// query, so the command's own outcome is the verdict: success means the
+    /// sheet is off and the run proceeds to probing; the not-removed error
+    /// means the sheet is on and the run refuses with instructions; any other
+    /// error is a genuine detection failure and refuses too - an outcome we
+    /// cannot classify is not evidence the sheet is off, and probing through
+    /// it skews per-corner tilt by more than the adjustment tolerance.
+    void detect_plate() {
         auto self = shared_from_this();
-        json params = {{"objects", json::object({{auto_screws::PLATE_OBJECT,
-                                                  json::array({auto_screws::PLATE_FIELD})}})}};
-        client_.send_jsonrpc(
-            "printer.objects.query", params,
-            [self](const json& response) {
-                const std::optional<bool> present = auto_screws::plate_present_from_query(response);
-                if (!present) {
-                    // An unreadable plate state is not evidence the sheet is off.
-                    // Probing through it skews per-corner tilt by more than the
-                    // adjustment tolerance, and the user turns wheels on that number.
-                    self->complete_error(
-                        "Could not confirm the PEI sheet is off the bed. Remove it and try "
-                        "again: probing through the sheet gives wrong results");
-                    return;
-                }
-                if (*present) {
+        api_.execute_gcode(
+            auto_screws::CMD_DETECT_BED_PLATE,
+            [self]() {
+                self->send_step(auto_screws::CMD_PROBE_REFERENCE_POINTS,
+                                &AutoScrewsTiltCollector::on_probe_done);
+            },
+            [self](const MoonrakerError& err) {
+                if (auto_screws::plate_still_on_bed(err.message)) {
                     self->complete_error(
                         "Remove the PEI sheet from the bed, then start again: probing through "
                         "the sheet gives wrong results");
                     return;
                 }
-                self->send_step(auto_screws::CMD_PROBE_REFERENCE_POINTS,
-                                &AutoScrewsTiltCollector::on_probe_done);
+                self->complete_error(std::string(auto_screws::CMD_DETECT_BED_PLATE) +
+                                     " failed: " + err.message);
             },
-            [self](const MoonrakerError& err) {
-                self->complete_error(std::string("plate check failed: ") + err.message);
-            });
+            MoonrakerAdvancedAPI::CALIBRATION_TIMEOUT_MS);
     }
 
     void on_probe_done() {

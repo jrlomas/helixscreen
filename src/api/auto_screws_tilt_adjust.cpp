@@ -140,20 +140,9 @@ const nlohmann::json* query_status(const nlohmann::json& response) {
 
 } // namespace
 
-std::optional<bool> plate_present_from_query(const nlohmann::json& response) {
-    const nlohmann::json* status = query_status(response);
-    if (!status) {
-        return std::nullopt;
-    }
-    const auto plate = status->find(PLATE_OBJECT);
-    if (plate == status->end() || !plate->is_object()) {
-        return std::nullopt;
-    }
-    const auto check = plate->find(PLATE_FIELD);
-    if (check == plate->end() || !check->is_boolean()) {
-        return std::nullopt;
-    }
-    return check->get<bool>();
+bool plate_still_on_bed(const std::string& error_message) {
+    return error_message.find(PLATE_NOT_REMOVED_CODE) != std::string::npos ||
+           error_message.find(PLATE_NOT_REMOVED_TEXT) != std::string::npos;
 }
 
 AutoScrewsTiltResults results_from_query(const nlohmann::json& response) {
@@ -240,7 +229,12 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initia
         }
         spdlog::info("[AutoScrewsTilt] Clearing a stale screws-tilt state (probe_step={})",
                      probe_step);
-        client.gcode_script(CMD_EXIT_TO_IDLE);
+        // CMD_EXIT needs exactly reconcile's own precondition (main_state ==
+        // SCREWS_TILT_ADJUST), just re-read above. If the state changed
+        // between that read and this send, the macro throws - a benign race
+        // the fire-and-forget RPC layer logs; there is nothing to retry
+        // against a state we no longer hold.
+        client.gcode_script(CMD_EXIT);
     });
 }
 

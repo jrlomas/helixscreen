@@ -394,32 +394,26 @@ TEST_CASE("auto_screws main_state_from_status reads the one field we subscribe f
     }
 }
 
-TEST_CASE("auto_screws plate_present_from_query reads bed_plate_check",
+TEST_CASE("auto_screws plate_still_on_bed matches the not-removed failure",
           "[calibration][screws_tilt][auto_screws]") {
-    using helix::auto_screws::plate_present_from_query;
+    using helix::auto_screws::plate_still_on_bed;
 
-    SECTION("true means the PEI sheet is on the bed") {
-        const json response =
-            query_response({{"extruder_offset_calibration", {{"bed_plate_check", true}}}});
-        REQUIRE(plate_present_from_query(response) == std::optional<bool>(true));
+    SECTION("the Klipper error code, wrapped however Moonraker carries it") {
+        REQUIRE(plate_still_on_bed(std::string("Klippy Host Error: '") +
+                                   helix::auto_screws::PLATE_NOT_REMOVED_CODE + ": The plate " +
+                                   helix::auto_screws::PLATE_NOT_REMOVED_TEXT + "'"));
     }
 
-    SECTION("false means bare bed") {
-        const json response =
-            query_response({{"extruder_offset_calibration", {{"bed_plate_check", false}}}});
-        REQUIRE(plate_present_from_query(response) == std::optional<bool>(false));
+    SECTION("the phrase alone still matches") {
+        REQUIRE(plate_still_on_bed("The plate has not been removed"));
     }
 
-    SECTION("absent object or field is unknown, not false") {
-        REQUIRE_FALSE(plate_present_from_query(query_response(json{{"toolhead", json::object()}}))
-                          .has_value());
-        REQUIRE_FALSE(plate_present_from_query(
-                          query_response({{"extruder_offset_calibration", json::object()}}))
-                          .has_value());
-    }
-
-    SECTION("a response with no status at all is unknown") {
-        REQUIRE_FALSE(plate_present_from_query(json{{"error", {{"code", -32600}}}}).has_value());
+    SECTION("any other failure is a genuine detection problem") {
+        REQUIRE_FALSE(plate_still_on_bed("inductance coil fault"));
+        REQUIRE_FALSE(plate_still_on_bed(""));
+        // The opposite assertion's error: the sheet is OFF and PRESENCE=1
+        // was asked to confirm it ON. Not our verdict.
+        REQUIRE_FALSE(plate_still_on_bed("0003-0530-0000-0010: The plate has been removed"));
     }
 }
 
