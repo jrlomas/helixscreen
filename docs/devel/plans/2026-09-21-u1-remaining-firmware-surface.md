@@ -1027,13 +1027,21 @@ git commit -m "feat(snapmaker): decode the U1's structured fault codes" \
 
 ---
 
-## Task 5: Classify Snapmaker errors from codes, not phrases
+## Task 5: Classify firmware faults from codes, not phrases
 
-`GcodeErrorRouter::process_line` already asks `AmsState::instance().get_backend()->classify_error(line, ctx)` first, and `AmsBackendSnapmaker` does not override it — the base returns nullopt, so every U1 fault falls through to generic handling. Override it with Task 4's decoder, and retire the phrase matchers.
+**This does NOT go on `AmsBackendSnapmaker`.** `GcodeErrorRouter::process_line` asks the AMS backend first as a *domain-aware* pass, and the faults here — plate removal, the mid-print preference guard — are not AMS faults. Putting them there would have the filament module classifying bed-levelling failures.
+
+The codebase already decided this once: `include/klipper_error_table.h#klipper_error_lookup` keeps its code table deliberately outside any backend, because "codes arrive on a channel every printer has". Snapmaker's structured codes arrive on that same channel. The vendor rule is one module per *capability*, and `AmsBackendSnapmaker`'s slot is spent on AMS — which is why `snapmaker_resume.cpp` and `u1_stock_detection_source.cpp` already exist as separate Snapmaker modules for separate capabilities.
+
+So: a capability module shaped like `z_offset_persistence`, feeding `process_line` as a second classifier beside `error_classify::classify`. Detection predicate is "this firmware exposes `exception_manager`", not "this is a Snapmaker".
+
+Note `include/error_event.h` already declares `ErrorSource::SNAPMAKER` and nothing ever sets it — this is its first real producer.
 
 **Files:**
-- Modify: `include/ams_backend_snapmaker.h`
-- Modify: `src/printer/ams_backend_snapmaker.cpp`
+- Create: `include/firmware_fault_codes.h`
+- Create: `src/printer/firmware_fault_codes.cpp`
+- Modify: `src/application/gcode_error_router.cpp#GcodeErrorRouter::process_line`
+- Modify: `firmware/helixscreen-esp32/components/helixapp/app_srcs.txt`
 - Modify: `include/auto_screws_tilt_adjust.h` (drop `PLATE_NOT_REMOVED_TEXT`)
 - Modify: `src/api/auto_screws_tilt_adjust.cpp#plate_still_on_bed`
 - Test: `tests/unit/test_snapmaker_error_classify.cpp` *(new)*
@@ -1093,28 +1101,67 @@ TEST_CASE("a line with no code is left to the generic path", "[snapmaker][classi
 Run: `make t F='[snapmaker][classify]'`
 Expected: FAIL — base `classify_error` returns nullopt, so the first case fails.
 
-- [ ] **Step 3: Implement the override**
+- [ ] **Step 3: Implement the capability module**
 
-Read `include/ams_backend.h#AmsBackend::classify_error` for the exact signature and the `AmsError` fields, then in `src/printer/ams_backend_snapmaker.cpp`:
+Read `include/error_event.h` for `ErrorEvent`'s real fields and `ErrorSource`, and `src/application/error_classify.cpp#classify` for the shape a classifier returns, before writing this — the sketch below names fields that must be checked against the real struct.
 
 ```cpp
-std::optional<AmsError> AmsBackendSnapmaker::classify_error(const std::string& line,
-                                                            const ClassifyContext& ctx) const {
-    const auto code = helix::snapmaker::decode_exception_code(line);
-    if (!code) {
-        return std::nullopt; // not a structured fault; let the generic path have it
-    }
-    AmsError err;
-    const std::string_view ours = helix::snapmaker::exception_message(*code);
-    // Our wording when we have it; the firmware's own text when we do not. A
-    // confident wrong message is worse than an unpolished right one.
-    err.message = ours.empty() ? line : std::string(ours);
-    err.severity = helix::snapmaker::severity_of(code->level);
-    return err;
+// include/firmware_fault_codes.h
+// SPDX-License-Identifier: GPL-3.0-or-later
+#pragma once
+
+#include "error_event.h"
+
+#include <optional>
+#include <string>
+
+namespace helix {
+class PrinterDiscovery;
 }
+
+/**
+ * @file firmware_fault_codes.h
+ * @brief Firmwares that report faults as structured codes rather than prose.
+ *
+ * Some firmware raises faults with a numeric identity and embeds it in the
+ * error text. Matching the sentence instead is brittle: the wording belongs to
+ * the firmware, it changes between releases, and it is not translated.
+ *
+ * This is the one module that knows which firmwares do that and how to read
+ * their codes. `GcodeErrorRouter` asks the question and never names a firmware.
+ * Adding another is a row in the provider table.
+ */
+namespace helix::faultcodes {
+
+/// True when this firmware reports structured fault codes.
+[[nodiscard]] bool firmware_reports_fault_codes(const PrinterDiscovery& hw);
+
+/// Status objects carrying standing faults, for the subscription builder.
+[[nodiscard]] std::vector<std::string> required_status_objects(const PrinterDiscovery& hw);
+
+/// Classify one error line. nullopt when the line carries no code this
+/// firmware owns, so the generic classifier still gets its turn.
+[[nodiscard]] std::optional<ErrorEvent> classify(const PrinterDiscovery& hw,
+                                                 const std::string& line);
+
+} // namespace helix::faultcodes
 ```
 
-Map `ExceptionSeverity` onto whatever severity type `AmsError` actually carries — check the struct rather than assuming it matches.
+The Snapmaker provider row delegates to Task 4's `decode_exception_code` / `exception_message` / `severity_of`. Keep those in `snapmaker_exceptions.*` — that file is the vendor's code table, this one is the capability question over it.
+
+- [ ] **Step 3b: Wire it into the router**
+
+In `src/application/gcode_error_router.cpp#GcodeErrorRouter::process_line`, after the AMS backend's domain pass and **before** the generic `error_classify::classify` fallback:
+
+```cpp
+    // Firmware that reports structured fault codes gets asked before the
+    // phrase-based classifier: a code is a stable identity, the sentence is not.
+    if (auto fw = helix::faultcodes::classify(discovery(), line); fw) {
+        return *fw;
+    }
+```
+
+Use whatever this class already has to reach `PrinterDiscovery` — grep the file rather than assuming a `discovery()` accessor exists.
 
 - [ ] **Step 4: Retire the phrase fallback in the plate gate**
 
