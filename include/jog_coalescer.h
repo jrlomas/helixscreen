@@ -138,7 +138,11 @@ inline JogClampResult clamp_jog_with_warn(double current, double uncommitted, do
 /// ceiling gets it back; emission can never exceed the limit. Bounds are plain
 /// doubles so this header stays dependency-free — pass a SafetyLimits' fields.
 inline int effective_jog_speed_mm_min(int stored_mm_min, double min_mm_min, double max_mm_min) {
-    return static_cast<int>(std::clamp(static_cast<double>(stored_mm_min), min_mm_min, max_mm_min));
+    // min-then-max rather than std::clamp: the bounds are caller-supplied, and
+    // std::clamp is undefined when min > max while this form resolves any
+    // ordering to the maximum.
+    const double v = static_cast<double>(stored_mm_min);
+    return static_cast<int>(std::min(std::max(v, min_mm_min), max_mm_min));
 }
 
 } // namespace helix

@@ -218,3 +218,8 @@ TEST_CASE("effective_jog_speed_mm_min: stored below the floor clamps to the floo
           "[jog_coalescer]") {
     CHECK(helix::effective_jog_speed_mm_min(30, 60.0, 30000.0) == 60);
 }
+
+TEST_CASE("effective_jog_speed_mm_min: inverted bounds resolve to the maximum", "[jog_coalescer]") {
+    // A caller that supplies min > max gets a defined answer rather than UB.
+    CHECK(helix::effective_jog_speed_mm_min(6000, 30000.0, 600.0) == 600);
+}

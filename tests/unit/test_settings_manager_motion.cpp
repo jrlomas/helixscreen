@@ -95,3 +95,62 @@ TEST_CASE_METHOD(HelixTestFixture, "keypad_bounds: speed rows pass the slider ra
     CHECK(b.min == Catch::Approx(1.0f));
     CHECK(b.max == Catch::Approx(500.0f));
 }
+
+TEST_CASE_METHOD(HelixTestFixture, "Jog distance clamps at the upper bound", "[settings_motion]") {
+    auto& s = helix::SettingsManager::instance();
+    s.init_subjects();
+    s.set_jog_distance(helix::JogMode::Turbo, true, 999.0f);
+    REQUIRE(s.get_jog_distance(helix::JogMode::Turbo, true) == Catch::Approx(200.0f));
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "Z jog speed clamps at both bounds", "[settings_motion]") {
+    auto& s = helix::SettingsManager::instance();
+    s.init_subjects();
+    s.set_jog_speed_z(0);
+    REQUIRE(s.get_jog_speed_z() == 60);
+    s.set_jog_speed_z(999999);
+    REQUIRE(s.get_jog_speed_z() == 60000);
+}
+
+#include "../test_helpers/config_test_access.h"
+#include "config.h"
+
+namespace {
+
+// Seeds the config the load path reads, then rebuilds the subject cache the
+// way a printer switch does. init_subjects() is one-shot for the process, so
+// the rebuild needs the deinit/init pair — and the destructor must put the
+// defaults back, or every later init_subjects() call in the binary no-ops and
+// reads this test's values (same hazard as test_settings_manager_scoping.cpp).
+class LoadClampFixture : public HelixTestFixture {
+  protected:
+    helix::Config* cfg = helix::Config::get_instance();
+    helix::SettingsManager& sm = helix::SettingsManager::instance();
+
+    LoadClampFixture() {
+        helix::setup_printer_data(
+            *cfg,
+            {{"motion", {{"jog_speed_xy", 1}, {"jog_speed_z", 999999}, {"turbo_outer", 999.0f}}}});
+        reload();
+    }
+
+    ~LoadClampFixture() override {
+        helix::test::reset_config_singleton();
+        reload();
+    }
+
+    void reload() {
+        sm.deinit_subjects();
+        sm.init_subjects();
+    }
+};
+
+} // namespace
+
+TEST_CASE_METHOD(LoadClampFixture, "Out-of-range motion values load clamped", "[settings_motion]") {
+    // The protection against a hand-edited settings.json: the loader clamps
+    // what it reads, not just what the setters write.
+    CHECK(sm.get_jog_speed_xy() == 60);
+    CHECK(sm.get_jog_speed_z() == 60000);
+    CHECK(sm.get_jog_distance(helix::JogMode::Turbo, true) == Catch::Approx(200.0f));
+}
