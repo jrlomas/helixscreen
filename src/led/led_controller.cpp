@@ -74,18 +74,13 @@ void LedController::init(IMoonrakerAPI* api, IMoonrakerClient* client) {
         helix::xml::register_subject_in_current_scope("led_controllable", &led_controllable_);
         helix::xml::register_subject_in_current_scope("led_command_in_flight",
                                                       &led_command_in_flight_);
+        subjects_.register_subject(&led_config_version_);
+        subjects_.register_subject(&led_controllable_, "led_controllable");
+        subjects_.register_subject(&led_command_in_flight_, "led_command_in_flight");
         version_subject_initialized_ = true;
-        subjects_lifetime_ = std::make_shared<bool>(true);
         StaticSubjectRegistry::instance().register_deinit("LedController", [this]() {
-            if (version_subject_initialized_) {
-                if (subjects_lifetime_) {
-                    *subjects_lifetime_ = false;
-                }
-                lv_subject_deinit(&led_config_version_);
-                lv_subject_deinit(&led_controllable_);
-                lv_subject_deinit(&led_command_in_flight_);
-                version_subject_initialized_ = false;
-            }
+            subjects_.deinit_all();
+            version_subject_initialized_ = false;
         });
     }
 

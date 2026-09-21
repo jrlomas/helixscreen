@@ -105,12 +105,15 @@ class SubjectManager {
     SubjectManager(const SubjectManager&) = delete;
     SubjectManager& operator=(const SubjectManager&) = delete;
 
-    // Movable (transfers subject ownership)
+    // Movable (transfers subject ownership). The moved-from manager gets a
+    // fresh live token: get_subjects_lifetime() must never hand out an empty
+    // one, which observe_*() reads as no defence at all.
     SubjectManager(SubjectManager&& other) noexcept
         : subjects_(std::move(other.subjects_)), subject_names_(std::move(other.subject_names_)),
           subjects_lifetime_(std::move(other.subjects_lifetime_)) {
         other.subjects_.clear();
         other.subject_names_.clear();
+        other.subjects_lifetime_ = std::make_shared<bool>(true);
     }
 
     SubjectManager& operator=(SubjectManager&& other) noexcept {
@@ -121,6 +124,7 @@ class SubjectManager {
             subjects_lifetime_ = std::move(other.subjects_lifetime_);
             other.subjects_.clear();
             other.subject_names_.clear();
+            other.subjects_lifetime_ = std::make_shared<bool>(true);
         }
         return *this;
     }

@@ -108,3 +108,29 @@ TEST_CASE_METHOD(LVGLTestFixture, "a reused SubjectManager hands out a live toke
     CHECK_FALSE(*second);
     CHECK_FALSE(*first);
 }
+
+TEST_CASE_METHOD(LVGLTestFixture, "a moved-from SubjectManager still hands out a live token",
+                 "[observer][raii]") {
+    SubjectManager source;
+    auto token = source.get_subjects_lifetime();
+    REQUIRE(token != nullptr);
+    REQUIRE(*token);
+
+    SubjectManager moved(std::move(source));
+
+    // The death signal follows the subjects into the moved-to manager.
+    REQUIRE(*token);
+
+    // The moved-from manager keeps the documented invariant. An empty token is
+    // not inert: observe_*() builds a guard with no defence at all, and
+    // set_alive_token() reads null as already-dead.
+    auto fresh = source.get_subjects_lifetime();
+    REQUIRE(fresh != nullptr);
+    REQUIRE(*fresh);
+    REQUIRE(fresh != token);
+
+    // Only the manager that now owns the subjects flips the pre-move token.
+    moved.deinit_all();
+    CHECK_FALSE(*token);
+    CHECK(*fresh);
+}
