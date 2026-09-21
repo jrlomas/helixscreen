@@ -9,7 +9,8 @@ namespace helix {
 
 bool PreflightResult::has_block() const {
     return std::any_of(checks.begin(), checks.end(), [](const ToolCheck& c) {
-        return c.severity == ToolCheck::Severity::EmptySlot;
+        return c.severity == ToolCheck::Severity::EmptySlot ||
+               c.severity == ToolCheck::Severity::UnknownMaterial;
     });
 }
 
@@ -82,6 +83,18 @@ PreflightResult PreflightValidator::validate(const std::vector<GcodeToolInfo>& t
         if (slot == nullptr || slot->is_empty) {
             c.slot_present = false;
             c.severity = ToolCheck::Severity::EmptySlot;
+        } else if (slot->material == "NONE") {
+            // A Snapmaker U1 slot holding a spool it has no identity for. The
+            // filament is seated, so this is not an empty slot, but the
+            // firmware refuses RESUME for that extruder until a material is
+            // assigned -- starting anyway only defers the failure until after
+            // the heat, home and probe. An unreported material is the empty
+            // string and stays out of this arm: "not known" is not the same
+            // claim as "declared unusable", and blocking it would stop prints
+            // on every backend that reports no material at all.
+            c.slot_present = true;
+            c.color_ok = FilamentMapper::colors_match(t.color_rgb, slot->color_rgb);
+            c.severity = ToolCheck::Severity::UnknownMaterial;
         } else {
             c.slot_present = true;
             c.color_ok = FilamentMapper::colors_match(t.color_rgb, slot->color_rgb);

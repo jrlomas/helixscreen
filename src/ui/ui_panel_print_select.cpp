@@ -2981,10 +2981,13 @@ void PrintSelectPanel::apply_remap(const std::vector<helix::ToolMapping>& update
         // (SET_PRINT_EXTRUDER_MAP via build_preprint_gcode) happens at print-start
         // through PrintStartController, which reads get_effective_remap() — that
         // identity-filters, so only changed tools emit a line.
-        auto default_head = [](int tool) { return (tool >= 0 && tool <= 3) ? tool : 0; };
+        // The same routing get_effective_remap()'s identity filter asks, so this
+        // log names exactly the mappings that will actually be emitted rather
+        // than a second opinion about which head a tool defaults to.
+        const helix::FirmwareRouting routing = AmsState::instance().collect_firmware_routing();
         for (const auto& m : updated) {
             if (m.tool_index >= 0 && m.mapped_slot >= 0 &&
-                m.mapped_slot != default_head(m.tool_index)) {
+                m.mapped_slot != routing.head(m.tool_index)) {
                 spdlog::debug("[{}] U1 remap applied: tool {} -> head {}", get_name(), m.tool_index,
                               m.mapped_slot);
             }
