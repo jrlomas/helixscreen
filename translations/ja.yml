@@ -1121,6 +1121,7 @@ translations:
   Filament jam detected: フィラメントの詰まりを検出しました
   Filament jammed at the extruder gear: エクストルーダーギアでフィラメントが詰まりました
   Filament never reached the CFS hub sensor: フィラメントが CFS ハブセンサーに到達しませんでした
+  Filament not set: ''
   Filament operation failed: フィラメント操作に失敗しました
   Filament operation timed out: フィラメント操作がタイムアウトしました
   Filament ran out: フィラメントがなくなりました
@@ -2598,6 +2599,8 @@ translations:
   Slot Blocked: 'スロットがブロックされています'
   Slot Not Available: 'スロットは利用できません'
   Slot colors, materials, and levels: スロットの色、素材、残量
+  ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
+  : ''
   Slots: スロット
   Small labels help keep controls calm and focused.: 小さなラベルはコントロールを落ち着いた集中した状態に保ちます。
   Snapmaker SnapSwap: Snapmaker SnapSwap

@@ -1180,6 +1180,7 @@ translations:
   Filament jam detected: Filament jam detected
   Filament jammed at the extruder gear: Filament jammed at the extruder gear
   Filament never reached the CFS hub sensor: Filament never reached the CFS hub sensor
+  Filament not set: Filament not set
   Filament operation failed: Filament operation failed
   Filament operation timed out: Filament operation timed out
   Filament ran out: Filament ran out
@@ -2741,6 +2742,8 @@ translations:
   Slot Blocked: Slot Blocked
   Slot Not Available: Slot Not Available
   Slot colors, materials, and levels: Slot colors, materials, and levels
+  ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
+  : Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
   Slots: Slots
   Small labels help keep controls calm and focused.: Small labels help keep controls
     calm and focused.

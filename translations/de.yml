@@ -1221,6 +1221,7 @@ translations:
   Filament jam detected: Filamentstau erkannt
   Filament jammed at the extruder gear: Filament am Extruderrad verklemmt
   Filament never reached the CFS hub sensor: Filament hat den CFS-Hub-Sensor nie erreicht
+  Filament not set: ''
   Filament operation failed: Filament-Vorgang fehlgeschlagen
   Filament operation timed out: Filament-Vorgang Zeitüberschreitung
   Filament ran out: Filament ist aufgebraucht
@@ -2803,6 +2804,8 @@ translations:
   Slot Blocked: 'Slot blockiert'
   Slot Not Available: 'Slot nicht verfügbar'
   Slot colors, materials, and levels: Slotfarben, Materialien und Füllstände
+  ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
+  : ''
   Slots: Slots
   Small labels help keep controls calm and focused.: Kleine Beschriftungen helfen,
     Steuerelemente ruhig und fokussiert zu halten.

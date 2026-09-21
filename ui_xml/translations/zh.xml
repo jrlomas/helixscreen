@@ -1099,6 +1099,7 @@
   <translation tag="Filament jam detected" zh="检测到耗材堵塞"/>
   <translation tag="Filament jammed at the extruder gear" zh="耗材卡在挤出机齿轮处"/>
   <translation tag="Filament never reached the CFS hub sensor" zh="耗材未到达 CFS 集线器传感器"/>
+  <translation tag="Filament not set"/>
   <translation tag="Filament operation failed" zh="耗材操作失败"/>
   <translation tag="Filament operation timed out" zh="耗材操作超时"/>
   <translation tag="Filament ran out" zh="耗材已用尽"/>
@@ -2527,6 +2528,7 @@
   <translation tag="Slot Blocked" zh="槽位被阻塞"/>
   <translation tag="Slot Not Available" zh="槽位不可用"/>
   <translation tag="Slot colors, materials, and levels" zh="槽位的颜色、材料和余量"/>
+  <translation tag="Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print."/>
   <translation tag="Slots" zh="槽位"/>
   <translation tag="Small labels help keep controls calm and focused." zh="小标签有助于保持控件简洁专注。"/>
   <translation tag="Snapmaker SnapSwap" zh="Snapmaker SnapSwap"/>

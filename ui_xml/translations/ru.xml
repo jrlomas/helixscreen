@@ -1099,6 +1099,7 @@
   <translation tag="Filament jam detected" ru="Обнаружен затор филамента"/>
   <translation tag="Filament jammed at the extruder gear" ru="Филамент застрял в шестерне экструдера"/>
   <translation tag="Filament never reached the CFS hub sensor" ru="Филамент не дошёл до датчика хаба CFS"/>
+  <translation tag="Filament not set"/>
   <translation tag="Filament operation failed" ru="Операция с филаментом не удалась"/>
   <translation tag="Filament operation timed out" ru="Операция с филаментом — время ожидания истекло"/>
   <translation tag="Filament ran out" ru="Филамент закончился"/>
@@ -2527,6 +2528,7 @@
   <translation tag="Slot Blocked" ru="Слот заблокирован"/>
   <translation tag="Slot Not Available" ru="Слот недоступен"/>
   <translation tag="Slot colors, materials, and levels" ru="Цвета, материалы и уровни слотов"/>
+  <translation tag="Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print."/>
   <translation tag="Slots" ru="Слоты"/>
   <translation tag="Small labels help keep controls calm and focused." ru="Мелкие надписи помогают сохранять элементы управления аккуратными."/>
   <translation tag="Snapmaker SnapSwap" ru="Snapmaker SnapSwap"/>

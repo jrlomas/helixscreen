@@ -1211,6 +1211,7 @@ translations:
   Filament jam detected: Atasco de filamento detectado
   Filament jammed at the extruder gear: Filamento atascado en el engranaje del extrusor
   Filament never reached the CFS hub sensor: El filamento nunca llegó al sensor del concentrador del CFS
+  Filament not set: ''
   Filament operation failed: Falló la operación de filamento
   Filament operation timed out: Operación de filamento — tiempo de espera agotado
   Filament ran out: Se acabó el filamento
@@ -2795,6 +2796,8 @@ translations:
   Slot Blocked: 'Ranura bloqueada'
   Slot Not Available: 'Ranura no disponible'
   Slot colors, materials, and levels: Colores, materiales y niveles de ranura
+  ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
+  : ''
   Slots: Ranuras
   Small labels help keep controls calm and focused.: Las etiquetas pequeñas ayudan
     a mantener los controles calmados y enfocados.

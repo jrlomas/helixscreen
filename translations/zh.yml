@@ -1117,6 +1117,7 @@ translations:
   Filament jam detected: 检测到耗材堵塞
   Filament jammed at the extruder gear: 耗材卡在挤出机齿轮处
   Filament never reached the CFS hub sensor: 耗材未到达 CFS 集线器传感器
+  Filament not set: ''
   Filament operation failed: 耗材操作失败
   Filament operation timed out: 耗材操作超时
   Filament ran out: 耗材已用尽
@@ -2589,6 +2590,8 @@ translations:
   Slot Blocked: '槽位被阻塞'
   Slot Not Available: '槽位不可用'
   Slot colors, materials, and levels: 槽位的颜色、材料和余量
+  ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
+  : ''
   Slots: 槽位
   Small labels help keep controls calm and focused.: 小标签有助于保持控件简洁专注。
   Snapmaker SnapSwap: Snapmaker SnapSwap

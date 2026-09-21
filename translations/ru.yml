@@ -1195,6 +1195,7 @@ translations:
   Filament jam detected: Обнаружен затор филамента
   Filament jammed at the extruder gear: Филамент застрял в шестерне экструдера
   Filament never reached the CFS hub sensor: Филамент не дошёл до датчика хаба CFS
+  Filament not set: ''
   Filament operation failed: Операция с филаментом не удалась
   Filament operation timed out: Операция с филаментом — время ожидания истекло
   Filament ran out: Филамент закончился
@@ -2766,6 +2767,8 @@ translations:
   Slot Blocked: 'Слот заблокирован'
   Slot Not Available: 'Слот недоступен'
   Slot colors, materials, and levels: Цвета, материалы и уровни слотов
+  ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
+  : ''
   Slots: Слоты
   Small labels help keep controls calm and focused.: Мелкие надписи помогают сохранять
     элементы управления аккуратными.

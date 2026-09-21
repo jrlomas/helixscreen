@@ -1099,6 +1099,7 @@
   <translation tag="Filament jam detected" de="Filamentstau erkannt"/>
   <translation tag="Filament jammed at the extruder gear" de="Filament am Extruderrad verklemmt"/>
   <translation tag="Filament never reached the CFS hub sensor" de="Filament hat den CFS-Hub-Sensor nie erreicht"/>
+  <translation tag="Filament not set"/>
   <translation tag="Filament operation failed" de="Filament-Vorgang fehlgeschlagen"/>
   <translation tag="Filament operation timed out" de="Filament-Vorgang Zeitüberschreitung"/>
   <translation tag="Filament ran out" de="Filament ist aufgebraucht"/>
@@ -2527,6 +2528,7 @@
   <translation tag="Slot Blocked" de="Slot blockiert"/>
   <translation tag="Slot Not Available" de="Slot nicht verfügbar"/>
   <translation tag="Slot colors, materials, and levels" de="Slotfarben, Materialien und Füllstände"/>
+  <translation tag="Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print."/>
   <translation tag="Slots" de="Slots"/>
   <translation tag="Small labels help keep controls calm and focused." de="Kleine Beschriftungen helfen, Steuerelemente ruhig und fokussiert zu halten."/>
   <translation tag="Snapmaker SnapSwap" de="Snapmaker SnapSwap"/>

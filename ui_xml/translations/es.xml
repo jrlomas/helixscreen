@@ -1099,6 +1099,7 @@
   <translation tag="Filament jam detected" es="Atasco de filamento detectado"/>
   <translation tag="Filament jammed at the extruder gear" es="Filamento atascado en el engranaje del extrusor"/>
   <translation tag="Filament never reached the CFS hub sensor" es="El filamento nunca llegó al sensor del concentrador del CFS"/>
+  <translation tag="Filament not set"/>
   <translation tag="Filament operation failed" es="Falló la operación de filamento"/>
   <translation tag="Filament operation timed out" es="Operación de filamento — tiempo de espera agotado"/>
   <translation tag="Filament ran out" es="Se acabó el filamento"/>
@@ -2527,6 +2528,7 @@
   <translation tag="Slot Blocked" es="Ranura bloqueada"/>
   <translation tag="Slot Not Available" es="Ranura no disponible"/>
   <translation tag="Slot colors, materials, and levels" es="Colores, materiales y niveles de ranura"/>
+  <translation tag="Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print."/>
   <translation tag="Slots" es="Ranuras"/>
   <translation tag="Small labels help keep controls calm and focused." es="Las etiquetas pequeñas ayudan a mantener los controles calmados y enfocados."/>
   <translation tag="Snapmaker SnapSwap" es="Snapmaker SnapSwap"/>
