@@ -358,7 +358,10 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
 
     /// What the firmware last reported for its stored print preferences
     /// (print_task_config). Empty until a frame carrying one arrives.
-    [[nodiscard]] const snapmaker::PrintPreferences& print_preferences() const {
+    /// Returns a copy under mutex_: the member is written on the WebSocket
+    /// thread, so a reference would hand a UI-thread caller a torn read.
+    [[nodiscard]] snapmaker::PrintPreferences print_preferences() const {
+        std::lock_guard<std::mutex> lock(mutex_);
         return print_preferences_;
     }
 
@@ -435,6 +438,9 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     ///
     /// Like every other print_task_config field, these are a write surface, not
     /// a sensor — held as told, never filed as a lane observation.
+    ///
+    /// Written only from handle_status_update under mutex_; read by
+    /// print_preferences().
     snapmaker::PrintPreferences print_preferences_;
 
     /// Per-extruder cached state

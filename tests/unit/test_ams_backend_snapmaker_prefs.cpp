@@ -47,6 +47,29 @@ TEST_CASE("a later frame that changes a preference wins", "[ams][snapmaker][pref
     REQUIRE(backend.print_preferences().end_led_turn_off.value() == false);
 }
 
+TEST_CASE("every preference survives a later frame that carries none of them",
+          "[ams][snapmaker][prefs]") {
+    // One assertion per merge arm: deleting any single arm stops its field
+    // surviving here, so no arm can lose coverage quietly.
+    HelixTestFixture fixture;
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+    SnapmakerTestAccess::handle_status(
+        backend, frame({{"auto_replenish_filament", true},
+                        {"replenish_ignore_color", false},
+                        {"filament_entangle_detect", true},
+                        {"end_led_turn_off", false},
+                        {"filament_entangle_sen", "high"},
+                        {"end_unload_filament", {true, false, true, false}}}));
+    SnapmakerTestAccess::handle_status(backend, frame({{"filament_type", {"PLA"}}}));
+    const auto prefs = backend.print_preferences();
+    REQUIRE(prefs.auto_replenish.value() == true);
+    REQUIRE(prefs.replenish_ignore_color.value() == false);
+    REQUIRE(prefs.filament_entangle_detect.value() == true);
+    REQUIRE(prefs.end_led_turn_off.value() == false);
+    REQUIRE(prefs.filament_entangle_sen.value() == "high");
+    REQUIRE(prefs.end_unload_filament == std::vector<bool>{true, false, true, false});
+}
+
 TEST_CASE("a backend that has seen no preference field reports an empty set",
           "[ams][snapmaker][prefs]") {
     HelixTestFixture fixture;
