@@ -175,8 +175,9 @@ plan a rebase, including before you file or comment publicly on it.
 
 - Keep it short: the ask first, then the branch names and SHAs they need to answer.
 - A claim says a resource is taken, never what the holder is doing or how far along. Ask.
-- `ListAgents` names and `helix-claim` session ids do not cross-reference. If you cannot
-  map one to the other, address the candidates and say so.
+- Address a peer by the `message=uds:...sock` in their `helix-claim list` row. Every live
+  claim carries one; `ListAgents` names do not map to claims, so guessing one reaches the
+  wrong session.
 - A successful send is not a delivery and silence is not agreement. Never merge, rebase or
   delete on an unanswered message.
 
