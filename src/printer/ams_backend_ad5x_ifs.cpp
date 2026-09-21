@@ -222,25 +222,17 @@ void AmsBackendAd5xIfs::on_started() {
     // on this (main) thread; the Moonraker DB callback fires on the libhv
     // event loop, so the two threads don't interfere.
     if (api_) {
-        override_store_ = std::make_unique<helix::ams::FilamentSlotOverrideStore>(
-            api_, "ifs", helix::ams::lane_key_style_for(get_type()));
-        // Do the (potentially 5s) MR DB round-trip OUTSIDE the lock, then swap in
-        // under mutex_. AmsSubscriptionBackend::start() registers the WebSocket
-        // notify subscription before on_started() is invoked, so a status
-        // notification could in principle fire on the libhv thread while we're
-        // still inside load_blocking. Holding mutex_ during the swap ensures
-        // the parse path (which reads overrides_ under mutex_) sees a coherent
-        // map rather than a torn write.
-        auto loaded = override_store_->load_blocking();
-        helix::ams::ingest_legacy_records(*override_store_, helix::ams::LegacyLockKeys::LaneData,
-                                          backend_index());
-        const auto loaded_count = loaded.size();
+        auto loaded =
+            helix::ams::make_loaded_override_store(api_, "ifs", get_type(), backend_log_tag());
+        if (loaded.store) {
+            helix::ams::ingest_legacy_records(*loaded.store, helix::ams::LegacyLockKeys::LaneData,
+                                              backend_index());
+        }
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            overrides_ = std::move(loaded);
+            override_store_ = std::move(loaded.store);
+            overrides_ = std::move(loaded.overrides);
         }
-        spdlog::info("{} Loaded {} slot overrides from filament_slot store", backend_log_tag(),
-                     loaded_count);
 
         // Restore the last-known seated lane (#1065 power-cycle floor). The
         // firmware forgets the seated channel across a reboot, so this is the only

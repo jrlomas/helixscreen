@@ -350,20 +350,17 @@ void AmsBackendCfs::on_started() {
     // lane_data happens automatically inside load_blocking the first time
     // lane_data is empty (Task 8).
     if (api_) {
-        override_store_ = std::make_unique<helix::ams::FilamentSlotOverrideStore>(
-            api_, "cfs", helix::ams::lane_key_style_for(get_type()));
-        // Do the (potentially 5s) MR DB round-trip OUTSIDE the lock, then swap
-        // in under mutex_. Holding mutex_ during the swap ensures the parse
-        // path sees a coherent map rather than a torn write.
-        auto loaded = override_store_->load_blocking();
-        helix::ams::ingest_legacy_records(*override_store_, helix::ams::LegacyLockKeys::LaneData,
-                                          backend_index());
-        const auto loaded_count = loaded.size();
+        auto loaded =
+            helix::ams::make_loaded_override_store(api_, "cfs", get_type(), backend_log_tag());
+        if (loaded.store) {
+            helix::ams::ingest_legacy_records(*loaded.store, helix::ams::LegacyLockKeys::LaneData,
+                                              backend_index());
+        }
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            overrides_ = std::move(loaded);
+            override_store_ = std::move(loaded.store);
+            overrides_ = std::move(loaded.overrides);
         }
-        spdlog::info("[AMS CFS] Loaded {} slot overrides from filament_slot store", loaded_count);
     }
 
     // Query initial state explicitly since the subscription response may have
