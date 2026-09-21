@@ -56,6 +56,31 @@ TEST_CASE("snapmaker prefs: integer and boolean spellings both read", "[snapmake
     REQUIRE(p.filament_entangle_detect.value() == false);
 }
 
+TEST_CASE("snapmaker prefs: a nested reprint_info copy is never read", "[snapmaker][prefs]") {
+    // The live print_task_config frame carries a nested reprint_info object
+    // with its own same-named fields. The stored preferences are the top-level
+    // ones, so a lookup that reached into reprint_info would pick up the other
+    // object's values.
+    const nlohmann::json reprint_info = {
+        {"end_unload_filament", {true, true, true, true}},
+        {"auto_bed_leveling", true},
+        {"flow_calibrate", false},
+        {"time_lapse_camera", true},
+        {"extruders_used", {0, 1, 2, 3}},
+    };
+    auto both = read_print_preferences(ptc({
+        {"auto_replenish_filament", true},
+        {"end_unload_filament", {false, false, false, false}},
+        {"reprint_info", reprint_info},
+    }));
+    REQUIRE(both.auto_replenish.value() == true);
+    REQUIRE(both.end_unload_filament == std::vector<bool>{false, false, false, false});
+
+    auto nested_only = read_print_preferences(ptc({{"reprint_info", reprint_info}}));
+    REQUIRE(nested_only.end_unload_filament.empty());
+    REQUIRE_FALSE(nested_only.auto_replenish.has_value());
+}
+
 TEST_CASE("snapmaker prefs: the write sends ONLY what changed", "[snapmaker][prefs]") {
     // SET_PRINT_PREFERENCES is a setter: an omitted parameter keeps its stored
     // value, so sending untouched fields would rewrite settings the user did
