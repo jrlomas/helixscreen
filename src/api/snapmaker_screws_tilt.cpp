@@ -1,7 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "auto_screws_tilt_adjust.h"
+#include "snapmaker_screws_tilt.h"
 
 #include "i_moonraker_client.h"
 #include "spdlog/spdlog.h"
@@ -87,7 +87,8 @@ AutoScrewsTiltResults parse_auto_screws_tilt(const nlohmann::json& status,
     return results;
 }
 
-namespace auto_screws {
+namespace snapmaker {
+namespace screws_tilt {
 
 bool stale_calibration_state(int main_state, const std::string& probe_step) {
     if (main_state != MAIN_STATE_SCREWS_TILT_ADJUST) {
@@ -238,6 +239,7 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initia
     });
 }
 
-} // namespace auto_screws
+} // namespace screws_tilt
+} // namespace snapmaker
 
 } // namespace helix

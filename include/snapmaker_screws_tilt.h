@@ -12,7 +12,7 @@
 #include "hv/json.hpp"
 
 /**
- * @file auto_screws_tilt_adjust.h
+ * @file snapmaker_screws_tilt.h
  * @brief Mapper for the Snapmaker U1 [auto_screws_tilt_adjust] status object
  *
  * The U1's firmware module replaces upstream SCREWS_TILT_CALCULATE console
@@ -58,7 +58,8 @@ AutoScrewsTiltResults parse_auto_screws_tilt(const nlohmann::json& status,
                                              const nlohmann::json& config_section,
                                              float pitch_mm = SCREW_PITCH_DEFAULT_MM);
 
-namespace auto_screws {
+namespace snapmaker {
+namespace screws_tilt {
 
 /// machine_state_manager.main_state while the firmware holds the
 /// screws-tilt calibration state. IDLE is 0; the module defines other
@@ -144,5 +145,6 @@ void request_exit(IMoonrakerClient& client);
  */
 void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initial_status);
 
-} // namespace auto_screws
+} // namespace screws_tilt
+} // namespace snapmaker
 } // namespace helix

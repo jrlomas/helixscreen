@@ -1062,10 +1062,10 @@ Note `include/error_event.h` already declares `ErrorSource::SNAPMAKER` and nothi
 - Create: `src/printer/firmware_fault_codes.cpp`
 - Modify: `src/application/gcode_error_router.cpp#GcodeErrorRouter::process_line`
 - Modify: `firmware/helixscreen-esp32/components/helixapp/app_srcs.txt`
-- Modify: `include/auto_screws_tilt_adjust.h` (drop `PLATE_NOT_REMOVED_TEXT`)
-- Modify: `src/api/auto_screws_tilt_adjust.cpp#plate_still_on_bed`
+- Modify: `include/snapmaker_screws_tilt.h` (drop `PLATE_NOT_REMOVED_TEXT`)
+- Modify: `src/api/snapmaker_screws_tilt.cpp#plate_still_on_bed`
 - Test: `tests/unit/test_snapmaker_error_classify.cpp` *(new)*
-- Modify: `tests/unit/test_auto_screws_tilt.cpp` (the phrase case becomes a code case)
+- Modify: `tests/unit/test_snapmaker_screws_tilt.cpp` (the phrase case becomes a code case)
 
 **Interfaces:**
 - Consumes: `decode_exception_code`, `exception_message`, `severity_of` (Task 4); `ErrorEvent`, `ErrorSource`, `ErrorSeverity` from `include/error_event.h`; `PrinterDiscovery`.
@@ -1220,7 +1220,7 @@ Use whatever this class already has to reach `PrinterDiscovery` — grep the fil
 
 - [ ] **Step 4: Retire the phrase fallback in the plate gate**
 
-In `src/api/auto_screws_tilt_adjust.cpp#plate_still_on_bed`, drop the `PLATE_NOT_REMOVED_TEXT` branch and decode the code instead:
+In `src/api/snapmaker_screws_tilt.cpp#plate_still_on_bed`, drop the `PLATE_NOT_REMOVED_TEXT` branch and decode the code instead:
 
 ```cpp
 bool plate_still_on_bed(const std::string& error_message) {
@@ -1230,16 +1230,16 @@ bool plate_still_on_bed(const std::string& error_message) {
 ```
 
 Remove **both** `PLATE_NOT_REMOVED_TEXT` and `PLATE_NOT_REMOVED_CODE` from
-`include/auto_screws_tilt_adjust.h`. This is settled, not a judgement call: the only
+`include/snapmaker_screws_tilt.h`. This is settled, not a judgement call: the only
 references anywhere are this module's own `plate_still_on_bed` and two tests
-(`tests/unit/test_auto_screws_tilt.cpp:403-404`,
-`tests/unit/test_auto_screws_tilt_collector.cpp:228-229`), both of which you are updating.
+(`tests/unit/test_snapmaker_screws_tilt.cpp:403-404`,
+`tests/unit/test_snapmaker_screws_tilt_collector.cpp:228-229`), both of which you are updating.
 Nothing generic consumes them. Leaving the code constant behind would be two hand-written
 copies of one identity — the decoder's table and this header — which is exactly the drift
 the DRY rule exists to stop. Update those two test files to build their fixture strings from
 the literal code instead.
 
-Update the case in `tests/unit/test_auto_screws_tilt.cpp` that feeds the bare phrase: it must now feed a message carrying the code. If the existing test asserted the phrase alone classifies, that assertion is now wrong and should be replaced, not deleted — assert instead that a phrase WITHOUT a code no longer classifies.
+Update the case in `tests/unit/test_snapmaker_screws_tilt.cpp` that feeds the bare phrase: it must now feed a message carrying the code. If the existing test asserted the phrase alone classifies, that assertion is now wrong and should be replaced, not deleted — assert instead that a phrase WITHOUT a code no longer classifies.
 
 - [ ] **Step 5: Run the tests and watch them pass**
 
@@ -1259,8 +1259,8 @@ git commit -m "fix(snapmaker): classify U1 faults by code instead of English wor
   -- include/firmware_fault_codes.h src/printer/firmware_fault_codes.cpp \
      src/application/gcode_error_router.cpp \
      firmware/helixscreen-esp32/components/helixapp/app_srcs.txt \
-     include/auto_screws_tilt_adjust.h src/api/auto_screws_tilt_adjust.cpp \
-     tests/unit/test_snapmaker_error_classify.cpp tests/unit/test_auto_screws_tilt.cpp
+     include/snapmaker_screws_tilt.h src/api/snapmaker_screws_tilt.cpp \
+     tests/unit/test_snapmaker_error_classify.cpp tests/unit/test_snapmaker_screws_tilt.cpp
 ```
 
 ---

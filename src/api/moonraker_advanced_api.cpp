@@ -10,7 +10,6 @@
 
 #include "accel_sensor_manager.h"
 #include "app_globals.h"
-#include "auto_screws_tilt_adjust.h"
 #include "bed_mesh_probe_parser.h"
 #include "gcode_unknown_command.h"
 #include "json_utils.h"
@@ -21,6 +20,7 @@
 #include "probe_preparation.h"
 #include "screws_tilt_parser.h"
 #include "shaper_csv_parser.h"
+#include "snapmaker_screws_tilt.h"
 #include "spdlog/spdlog.h"
 #include "standard_macros.h"
 
@@ -1264,7 +1264,7 @@ class AutoScrewsTiltCollector : public std::enable_shared_from_this<AutoScrewsTi
 
     void start() {
         spdlog::info("[AutoScrewsTiltCollector] Starting the U1 screws-tilt sequence");
-        send_step(auto_screws::CMD_ENTRY, &AutoScrewsTiltCollector::on_entry_done);
+        send_step(snapmaker::screws_tilt::CMD_ENTRY, &AutoScrewsTiltCollector::on_entry_done);
     }
 
   private:
@@ -1297,7 +1297,7 @@ class AutoScrewsTiltCollector : public std::enable_shared_from_this<AutoScrewsTi
     }
 
     void on_entry_done() {
-        send_step(auto_screws::CMD_HOMING, &AutoScrewsTiltCollector::on_homing_done);
+        send_step(snapmaker::screws_tilt::CMD_HOMING, &AutoScrewsTiltCollector::on_homing_done);
     }
 
     void on_homing_done() {
@@ -1314,19 +1314,19 @@ class AutoScrewsTiltCollector : public std::enable_shared_from_this<AutoScrewsTi
     void detect_plate() {
         auto self = shared_from_this();
         api_.execute_gcode(
-            auto_screws::CMD_DETECT_BED_PLATE,
+            snapmaker::screws_tilt::CMD_DETECT_BED_PLATE,
             [self]() {
-                self->send_step(auto_screws::CMD_PROBE_REFERENCE_POINTS,
+                self->send_step(snapmaker::screws_tilt::CMD_PROBE_REFERENCE_POINTS,
                                 &AutoScrewsTiltCollector::on_probe_done);
             },
             [self](const MoonrakerError& err) {
-                if (auto_screws::plate_still_on_bed(err.message)) {
+                if (snapmaker::screws_tilt::plate_still_on_bed(err.message)) {
                     self->complete_error(
                         "Remove the PEI sheet from the bed, then start again: probing through "
                         "the sheet gives wrong results");
                     return;
                 }
-                self->complete_error(std::string(auto_screws::CMD_DETECT_BED_PLATE) +
+                self->complete_error(std::string(snapmaker::screws_tilt::CMD_DETECT_BED_PLATE) +
                                      " failed: " + err.message);
             },
             MoonrakerAdvancedAPI::CALIBRATION_TIMEOUT_MS);
@@ -1338,12 +1338,13 @@ class AutoScrewsTiltCollector : public std::enable_shared_from_this<AutoScrewsTi
 
     void collect_results() {
         auto self = shared_from_this();
-        json params = {{"objects", json::object({{auto_screws::MODULE_NAME, nullptr},
+        json params = {{"objects", json::object({{snapmaker::screws_tilt::MODULE_NAME, nullptr},
                                                  {"configfile", json::array({"settings"})}})}};
         client_.send_jsonrpc(
             "printer.objects.query", params,
             [self](const json& response) {
-                AutoScrewsTiltResults results = auto_screws::results_from_query(response);
+                AutoScrewsTiltResults results =
+                    snapmaker::screws_tilt::results_from_query(response);
                 if (!results.ok()) {
                     self->complete_error(results.error);
                     return;
@@ -1365,7 +1366,7 @@ class AutoScrewsTiltCollector : public std::enable_shared_from_this<AutoScrewsTi
         // on_success_ renders, so the panel never waits on it. What this
         // guarantees is that the state is released, not that it is released
         // before the results appear.
-        auto_screws::request_exit(client_);
+        snapmaker::screws_tilt::request_exit(client_);
         if (on_success_) {
             on_success_(screws);
         }
@@ -1376,9 +1377,9 @@ class AutoScrewsTiltCollector : public std::enable_shared_from_this<AutoScrewsTi
             return;
         }
         spdlog::error("[AutoScrewsTiltCollector] Error: {}", message);
-        auto_screws::request_exit(client_);
+        snapmaker::screws_tilt::request_exit(client_);
         if (on_error_) {
-            on_error_(MoonrakerError::json_rpc_error(auto_screws::MODULE_NAME, message));
+            on_error_(MoonrakerError::json_rpc_error(snapmaker::screws_tilt::MODULE_NAME, message));
         }
     }
 

@@ -6,7 +6,7 @@
 #include "ui_update_queue.h"
 
 #include "accel_sensor_manager.h"
-#include "auto_screws_tilt_adjust.h"
+#include "snapmaker_screws_tilt.h"
 #if HELIX_HAS_IFS
 #include "ams_backend_ad5x_ifs.h"
 #endif
@@ -1649,7 +1649,7 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                     // its state unless its own probe step proves nothing is
                     // running.
                     if (hw.screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-                        auto_screws::reconcile_on_connect(client_, status);
+                        snapmaker::screws_tilt::reconcile_on_connect(client_, status);
                     }
                 }
             } else if (sub_response.contains("error")) {
