@@ -489,6 +489,12 @@ class LedController {
         return &led_config_version_;
     }
 
+    /// Death signal for led_config_version_ and sibling subjects; pass to
+    /// observe_*() — the registry deinit frees their observer nodes.
+    [[nodiscard]] SubjectLifetime get_subjects_lifetime() const {
+        return subjects_lifetime_;
+    }
+
     /// Boolean subject (0/1) reflecting whether at least one strip is selected and
     /// therefore controllable. Drives visibility of action-style UI (Print Status
     /// light toggle, Home LED widgets). Registered globally as "led_controllable"
@@ -609,6 +615,10 @@ class LedController {
     // singleton-lifetime subject (no lifetime-token overload).
     ObserverGuard klippy_observer_;
     bool version_subject_initialized_ = false;
+    /// Death signal for the three subjects above. Flipped by the registry
+    /// deinit that lv_subject_deinit()s them and renewed by init(), so
+    /// observers can always fetch a live token.
+    SubjectLifetime subjects_lifetime_ = std::make_shared<bool>(true);
 
     /// Push the current selected_strips_ emptiness into led_controllable_.
     /// Cheap no-op if the value is unchanged. Safe before subject init (skips).

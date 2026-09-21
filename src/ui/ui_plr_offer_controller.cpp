@@ -52,7 +52,8 @@ PlrOfferController::PlrOfferController() {
     // wizard-suppressed offer fires. See evaluate_offer for the full rationale.
     wizard_observer_ = observe_int_sync(
         &get_wizard_active_subject(), this,
-        [](PlrOfferController* self, int value) { self->on_wizard_active_changed(value); });
+        [](PlrOfferController* self, int value) { self->on_wizard_active_changed(value); },
+        get_app_globals_subjects_lifetime());
 }
 
 void PlrOfferController::evaluate_offer() {

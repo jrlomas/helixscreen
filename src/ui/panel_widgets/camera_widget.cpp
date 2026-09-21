@@ -282,7 +282,8 @@ void CameraWidget::on_activate() {
     if (!edit_mode_observer_) {
         lv_subject_t* edit_subj = &get_home_edit_mode_subject();
         edit_mode_observer_ = helix::ui::observe_int_sync<CameraWidget>(
-            edit_subj, this, [](CameraWidget* self, int /*val*/) { self->update_stream_fps(); });
+            edit_subj, this, [](CameraWidget* self, int /*val*/) { self->update_stream_fps(); },
+            get_app_globals_subjects_lifetime());
     }
 
     if (!compact_) {

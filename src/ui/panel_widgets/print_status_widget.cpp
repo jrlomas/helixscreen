@@ -445,10 +445,12 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
     // hides on shrink-to-micro and returns on grow-past-micro.
     if (auto* bp_subj = theme_manager_get_breakpoint_subject()) {
         breakpoint_observer_ = observe_int_sync<PrintStatusWidget>(
-            bp_subj, this, [](PrintStatusWidget* self, int /*bp*/) {
+            bp_subj, this,
+            [](PrintStatusWidget* self, int /*bp*/) {
                 if (self->widget_obj_)
                     self->apply_visibility_config();
-            });
+            },
+            subject_never_freed());
     }
 
     // Explicit visibility pass — observer fires may be deferred; ensure correct

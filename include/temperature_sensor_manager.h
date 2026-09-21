@@ -238,7 +238,7 @@ class TemperatureSensorManager : public ISensorManager {
      * Per-sensor subjects have their own tokens via get_temp_subject().
      */
     [[nodiscard]] SubjectLifetime get_subjects_lifetime() const {
-        return subjects_lifetime_;
+        return subjects_.get_subjects_lifetime();
     }
 
     /**
@@ -311,10 +311,6 @@ class TemperatureSensorManager : public ISensorManager {
     // LVGL subjects
     bool subjects_initialized_ = false;
     SubjectManager subjects_;
-    /// See get_subjects_lifetime(). Created with the object and REPLACED (never
-    /// nulled) by deinit_subjects(): an empty token reads as "dead" and would
-    /// suppress removal for live observers.
-    SubjectLifetime subjects_lifetime_ = std::make_shared<bool>(true);
     lv_subject_t sensor_count_{};
 };
 
