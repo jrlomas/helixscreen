@@ -310,7 +310,8 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // Builds the firmware-native pre-print command sequence for print_task_config.
     // tools_used: logical tools the gcode body uses (ParsedGCodeFile::tools_used_indices).
     // remap:      logical tool -> physical head, ONLY for tools the user changed from identity.
-    //             Tools absent from `remap` use default_head(t) = (t>=0 && t<=3) ? t : 0.
+    //             Tools absent from `remap` take default_routing().head(t); a tool the
+    //             routing gives no head is left out of the map entirely.
     // Returns newline-joined gcode (NO trailing newline), or "" when tools_used is empty.
     // Pure — no api_/network access, trivially unit-testable.
     [[nodiscard]] std::string build_preprint_gcode(const std::set<int>& tools_used,

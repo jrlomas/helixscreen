@@ -2178,20 +2178,32 @@ std::string AmsBackendSnapmaker::preprint_gcode(const std::set<int>& tools_used,
         return "";
     }
 
-    // Firmware default extruder map is [0,1,2,3,0,0,...]: logical tools 0-3 map
-    // to physical heads 0-3, and every extended tool (4-31) without an explicit
-    // user remap falls to firmware-identity head 0.
-    //
-    // NOTE: extended tools 4-31 collapsing to head 0 is the firmware-default
-    // behavior; a future pass may add a richer extended-tool mapping policy.
-    const auto default_head = [](int t) { return (t >= 0 && t <= 3) ? t : 0; };
+    // Ask the backend's own routing table rather than restating it here.
+    // FilamentMapper::identity_filtered_remap() decides which mappings count as
+    // genuine remaps from this same table; a second copy of it would let the two
+    // halves disagree about which head a tool defaults to, filtering a mapping
+    // out as identity while resolving it somewhere else.
+    const helix::FirmwareRouting routing = default_routing();
 
     // Resolve every used logical tool to the head it must print from: the user's
-    // remap when there is one, the firmware default otherwise.
+    // remap when there is one, the firmware default otherwise. A tool the routing
+    // gives no head (-1) is dropped: MAP_EXTRUDER=-1 clears the firmware's
+    // `>= PHYSICAL_EXTRUDER_NUM` bounds check and then indexes
+    // extruder_map_table[-1], which in Python is the LAST entry.
     std::map<int, int> resolved;
     for (int t : tools_used) {
         auto it = remap.find(t);
-        resolved[t] = (it != remap.end()) ? it->second : default_head(t);
+        const int head = (it != remap.end()) ? it->second : routing.head(t);
+        if (head < 0) {
+            spdlog::warn("[Snapmaker] preprint: tool {} has no head in the firmware routing - "
+                         "leaving it out of the extruder map",
+                         t);
+            continue;
+        }
+        resolved[t] = head;
+    }
+    if (resolved.empty()) {
+        return "";
     }
 
     std::vector<std::string> lines;
