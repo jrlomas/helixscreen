@@ -1225,12 +1225,14 @@ lv_obj_t* ui_ams_mini_status_create(lv_obj_t* parent, int32_t height) {
     // the active-loaded flags untouched.
     lv_subject_t* current_slot_subject = helix::AmsState::instance().get_current_slot_subject();
     if (current_slot_subject) {
-        data->current_slot_observer = observe_int_sync<lv_obj_t>(current_slot_subject, container,
-                                                                 [](lv_obj_t* obj, int /* slot */) {
-                                                                     auto* d = get_data(obj);
-                                                                     if (d)
-                                                                         sync_from_ams_state(d);
-                                                                 });
+        data->current_slot_observer = observe_int_sync<lv_obj_t>(
+            current_slot_subject, container,
+            [](lv_obj_t* obj, int /* slot */) {
+                auto* d = get_data(obj);
+                if (d)
+                    sync_from_ams_state(d);
+            },
+            helix::AmsState::instance().get_subjects_lifetime());
     }
 
     spdlog::trace("[AmsMiniStatus] Created (height={})", height);
@@ -1576,12 +1578,14 @@ static void* ui_ams_mini_status_xml_create(lv_xml_parser_state_t* state, const c
     // the active-loaded flags untouched.
     lv_subject_t* current_slot_subject = helix::AmsState::instance().get_current_slot_subject();
     if (current_slot_subject) {
-        data->current_slot_observer = observe_int_sync<lv_obj_t>(current_slot_subject, container,
-                                                                 [](lv_obj_t* obj, int /* slot */) {
-                                                                     auto* d = get_data(obj);
-                                                                     if (d)
-                                                                         sync_from_ams_state(d);
-                                                                 });
+        data->current_slot_observer = observe_int_sync<lv_obj_t>(
+            current_slot_subject, container,
+            [](lv_obj_t* obj, int /* slot */) {
+                auto* d = get_data(obj);
+                if (d)
+                    sync_from_ams_state(d);
+            },
+            helix::AmsState::instance().get_subjects_lifetime());
     }
 
     spdlog::trace("[AmsMiniStatus] Created via XML (responsive height)");

@@ -419,25 +419,31 @@ void AmsEnvironmentOverlay::on_activate() {
 
     if (auto* s = ams.get_env_ind_temp_text_subject(acting_unit_index())) {
         env_temp_observer_ = observe_string<AmsEnvironmentOverlay>(
-            s, this, [refresh_if_visible](AmsEnvironmentOverlay* self, const char*) {
+            s, this,
+            [refresh_if_visible](AmsEnvironmentOverlay* self, const char*) {
                 refresh_if_visible(self);
-            });
+            },
+            ams.get_subjects_lifetime());
     }
     if (auto* s = ams.get_env_ind_humidity_text_subject(acting_unit_index())) {
         env_humidity_observer_ = observe_string<AmsEnvironmentOverlay>(
-            s, this, [refresh_if_visible](AmsEnvironmentOverlay* self, const char*) {
+            s, this,
+            [refresh_if_visible](AmsEnvironmentOverlay* self, const char*) {
                 refresh_if_visible(self);
-            });
+            },
+            ams.get_subjects_lifetime());
     }
     if (auto* s = ams.get_dryer_active_subject()) {
         dryer_active_observer_ = observe_int_sync<AmsEnvironmentOverlay>(
             s, this,
-            [refresh_if_visible](AmsEnvironmentOverlay* self, int) { refresh_if_visible(self); });
+            [refresh_if_visible](AmsEnvironmentOverlay* self, int) { refresh_if_visible(self); },
+            ams.get_subjects_lifetime());
     }
     if (auto* s = ams.get_dryer_current_temp_subject()) {
         dryer_temp_observer_ = observe_int_sync<AmsEnvironmentOverlay>(
             s, this,
-            [refresh_if_visible](AmsEnvironmentOverlay* self, int) { refresh_if_visible(self); });
+            [refresh_if_visible](AmsEnvironmentOverlay* self, int) { refresh_if_visible(self); },
+            ams.get_subjects_lifetime());
     }
 
     // Pull current state immediately on activation.

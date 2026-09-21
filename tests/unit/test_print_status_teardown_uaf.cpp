@@ -285,6 +285,20 @@ TEST_CASE_METHOD(PrintStatusTeardownFixture,
 TEST_CASE_METHOD(LVGLUITestFixture,
                  "PrintStatusPanel guards survive an owner singleton's subject teardown",
                  "[print_status][teardown][uaf][observer]") {
+    // Both singletons are process-globals whose subjects every later test in
+    // this binary resolves by XML name, and deinit_subjects() withdraws those
+    // names. Restoring from a destructor, not from the end of the test body,
+    // means a failed CHECK or a throw between here and there cannot leave the
+    // rest of the shard with a nameless AmsState. AmsState::deinit_subjects()
+    // also runs clear_backends(); zero registered backends is the state
+    // RegisteredBackend leaves behind, so that side of it needs no restoring.
+    struct SubjectOwnerRestore {
+        ~SubjectOwnerRestore() {
+            helix::AmsState::instance().init_subjects(true);
+            helix::FilamentSensorManager::instance().init_subjects();
+        }
+    } restore_owner_subjects;
+
     helix::AmsState::instance().init_subjects(true);
     helix::FilamentSensorManager::instance().init_subjects();
 
@@ -308,9 +322,4 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     UpdateQueue::instance().drain();
 
     SUCCEED("panel teardown completed without walking freed observer nodes");
-
-    // Restore both singletons for the rest of the binary: deinit_subjects()
-    // withdrew their XML names, and later tests resolve them by name.
-    helix::AmsState::instance().init_subjects(true);
-    helix::FilamentSensorManager::instance().init_subjects();
 }

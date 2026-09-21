@@ -315,3 +315,34 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: 2x->1x restores bar view", "[ui][
     REQUIRE_FALSE(lv_obj_has_flag(bars, LV_OBJ_FLAG_HIDDEN)); // bars visible again
     lv_obj_delete(w);
 }
+
+// Both observers the widget attaches watch AmsState-owned subjects, and
+// AmsState::deinit_subjects() frees every observer node on them at once. A
+// guard that never learned its subject died stays truthy with a dangling
+// lv_observer_t*, so on_delete()'s reset() removes an observer that no longer
+// exists. The widget is deleted AFTER the owner's teardown here because that is
+// the order a test binary produces: one test tears the singleton down, a later
+// one destroys a widget built before it.
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_mini: observers survive AmsState's subject teardown",
+                 "[ui][ams_mini][teardown][observer]") {
+    struct SubjectOwnerRestore {
+        ~SubjectOwnerRestore() {
+            helix::AmsState::instance().init_subjects(true);
+        }
+    } restore_ams_subjects;
+
+    helix::AmsState::instance().init_subjects(true);
+    REQUIRE(helix::AmsState::instance().get_current_slot_subject() != nullptr);
+
+    ui_ams_mini_status_init();
+    lv_obj_t* w = ui_ams_mini_status_create(test_screen(), 60);
+    REQUIRE(w != nullptr);
+    helix::ui::UpdateQueue::instance().drain();
+
+    helix::AmsState::instance().deinit_subjects();
+
+    lv_obj_delete(w);
+    helix::ui::UpdateQueue::instance().drain();
+
+    SUCCEED("widget teardown completed without walking freed observer nodes");
+}
