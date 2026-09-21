@@ -1740,7 +1740,7 @@ The limits are read automatically from your printer's own Klipper configuration:
 - Axis travel limits come from your steppers' `position_min` and `position_max`
 - The maximum feedrate comes from your printer's `max_velocity`
 
-Generous built-in defaults apply where your configuration is silent, and auto-detection only ever widens those defaults, so a high-temperature hotend or a very large build volume is picked up automatically with no setting to change.
+Generous built-in defaults apply where your configuration is silent. Where your Klipper configuration states a value, that value governs, so a high-temperature hotend or a very large build volume is picked up automatically with no setting to change.
 
 Safety limits are not settable in `settings.json`. If a limit is wrong for your printer, change the value in `printer.cfg`: that is the one source every tool respects, including Mainsail, Fluidd, and your slicer. Editing a curated set of those values directly from HelixScreen is proposed in [issue #1699](https://github.com/prestonbrown/helixscreen/issues/1699).
 
