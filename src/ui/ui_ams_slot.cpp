@@ -816,13 +816,15 @@ static void setup_slot_observers(AmsSlotData* data) {
 
     if (current_slot_subject) {
         data->current_slot_observer = observe_int_sync<lv_obj_t>(
-            current_slot_subject, obj, [](lv_obj_t* o, int current_slot) {
+            current_slot_subject, obj,
+            [](lv_obj_t* o, int current_slot) {
                 auto* d = get_slot_data(o);
                 if (d) {
                     evaluate_pulse_state(d);
                     apply_current_slot_highlight(d, current_slot);
                 }
-            });
+            },
+            AmsState::instance().get_subjects_lifetime());
     }
     if (filament_loaded_subject) {
         // When filament_loaded changes, re-evaluate highlight using current_slot value
@@ -859,23 +861,27 @@ static void setup_slot_observers(AmsSlotData* data) {
     // Action observer: auto-pulse this slot during active filament operations
     lv_subject_t* action_subject = state.get_ams_action_subject();
     if (action_subject) {
-        data->action_observer =
-            observe_int_sync<lv_obj_t>(action_subject, obj, [](lv_obj_t* o, int /*action*/) {
+        data->action_observer = observe_int_sync<lv_obj_t>(
+            action_subject, obj,
+            [](lv_obj_t* o, int /*action*/) {
                 auto* d = get_slot_data(o);
                 if (d)
                     evaluate_pulse_state(d);
-            });
+            },
+            AmsState::instance().get_subjects_lifetime());
     }
 
     // Target slot observer: re-evaluate pulse when swap target changes
     lv_subject_t* target_subject = state.get_pending_target_slot_subject();
     if (target_subject) {
-        data->target_slot_observer =
-            observe_int_sync<lv_obj_t>(target_subject, obj, [](lv_obj_t* o, int /*target*/) {
+        data->target_slot_observer = observe_int_sync<lv_obj_t>(
+            target_subject, obj,
+            [](lv_obj_t* o, int /*target*/) {
                 auto* d = get_slot_data(o);
                 if (d)
                     evaluate_pulse_state(d);
-            });
+            },
+            AmsState::instance().get_subjects_lifetime());
     }
 
     // Update slot badge with 1-based display number
