@@ -572,9 +572,9 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
         },
         static_cast<uint32_t>(slots.size()) * BATCH_FEED_OP_TIMEOUT_MS,
         /*silent=*/true, /*on_queued=*/nullptr,
-        // The callbacks above only log. Claiming the report would silence
-        // Klipper's `!!` broadcast, which is the surface that would actually
-        // explain a failed feed to the user.
+        // The callbacks above log and schedule the interlock clear; neither
+        // claims the error report, so Klipper's `!!` broadcast still surfaces
+        // — the explanation a failed feed actually needs.
         /*caller_surfaces_errors=*/false);
     return AmsErrorHelper::success();
 }
@@ -1828,15 +1828,21 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                             } else if (state == (batch_.load ? "load_finish" : "unload_finish")) {
                                 ++batch_.cursor;
                                 batch_.active = batch_.cursor < batch_.heads.size();
-                                // "Load 2 of 4" — the head now in progress, or
-                                // the full count once every head has verified.
-                                // The words arrive pretranslated from dispatch
-                                // (main thread); this parse runs on the
-                                // WebSocket thread, which must not call lv_tr.
-                                system_info_.operation_detail =
-                                    fmt::format("{} {} {} {}", batch_.direction_label,
-                                                std::min(batch_.cursor + 1, batch_.heads.size()),
-                                                batch_.of_label, batch_.heads.size());
+                                if (batch_.active) {
+                                    // "Load 2 of 4" — the head now in progress.
+                                    // The words arrive pretranslated from
+                                    // dispatch (main thread); this parse runs
+                                    // on the WebSocket thread, which must not
+                                    // call lv_tr.
+                                    system_info_.operation_detail = fmt::format(
+                                        "{} {} {} {}", batch_.direction_label, batch_.cursor + 1,
+                                        batch_.of_label, batch_.heads.size());
+                                } else {
+                                    // Every head verified. Nothing is in
+                                    // progress, and no later frame clears the
+                                    // line once the action is IDLE.
+                                    system_info_.operation_detail.clear();
+                                }
                                 changed = true;
                             }
                         }

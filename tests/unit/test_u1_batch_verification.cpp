@@ -141,7 +141,8 @@ TEST_CASE_METHOD(MockBatchFixture, "A batch advances its cursor as heads finish"
     const auto plan = backend().batch_plan();
     CHECK(plan.cursor == 2);
     CHECK_FALSE(plan.active);
-    CHECK(backend().get_system_info().operation_detail.find("2 of 2") != std::string::npos);
+    // The final head ends the batch; no progress line outlives it.
+    CHECK(backend().get_system_info().operation_detail.empty());
 }
 
 TEST_CASE_METHOD(MockBatchFixture, "A failed head stops the batch at its cursor", "[ams][batch]") {

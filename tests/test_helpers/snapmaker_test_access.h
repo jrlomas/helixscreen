@@ -85,6 +85,17 @@ class SnapmakerTestAccess {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.use_batch_macro_ = enabled;
     }
+    /// Arm a batch plan exactly as do_filament_batch would, so the
+    /// cursor-advance parse can be driven frame by frame; the mock client
+    /// delivers a whole batch's frames in one drain.
+    static void set_batch_plan(AmsBackendSnapmaker& b, std::vector<int> heads, bool load,
+                               std::string direction_label, std::string of_label) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.batch_ = AmsBackendSnapmaker::BatchPlan{std::move(heads),   load,
+                                                  /*cursor=*/0,
+                                                  /*active=*/true,    std::move(direction_label),
+                                                  std::move(of_label)};
+    }
     static void set_current_slot(AmsBackendSnapmaker& b, int slot_index) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.system_info_.current_slot = slot_index;

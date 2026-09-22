@@ -377,6 +377,30 @@ TEST_CASE_METHOD(BatchFixture, "A feeder delta keeps the fields it does not ment
 }
 
 // ============================================================================
+// batch cursor — the progress line the channel parse renders per head
+// ============================================================================
+
+TEST_CASE_METHOD(BatchFixture, "A finished batch leaves no progress line behind",
+                 "[snapmaker][batch]") {
+    helix::SnapmakerTestAccess::set_batch_plan(backend(), {0, 1}, /*load=*/true, "Load", "of");
+
+    SECTION("mid-batch, the line names the head now in progress") {
+        set_channel(0, "load_finish", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
+        CHECK(backend().batch_plan().cursor == 1);
+        CHECK(backend().batch_plan().active);
+        CHECK(backend().get_system_info().operation_detail == "Load 2 of 2");
+    }
+
+    SECTION("the final head verifies and clears the line") {
+        set_channel(0, "load_finish", "ok", true, true, false);
+        set_channel(1, "load_finish", "ok", true, true, false);
+        CHECK(backend().batch_plan().cursor == 2);
+        CHECK_FALSE(backend().batch_plan().active);
+        CHECK(backend().get_system_info().operation_detail.empty());
+    }
+}
+
+// ============================================================================
 // slot_op_eligibility — the direction-dependent refusal, from channel state
 // ============================================================================
 
