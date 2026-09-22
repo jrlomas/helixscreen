@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "hv/json.hpp"
 
 namespace helix {
@@ -22,8 +24,14 @@ namespace u1_batch {
  * snapshotted at START - the right cleanup when idle, the wrong targets
  * mid-print. Runs on the WebSocket thread beside auto_screws' reconcile;
  * touches no LVGL.
+ *
+ * @param macro_object  The macro's status object key as written in
+ *        printer.cfg ("gcode_macro <name>"). Klipper preserves the config's
+ *        case in object keys, so the caller supplies the discovered spelling
+ *        (PrinterDiscovery::macro_config_name()) rather than a guessed one.
  */
-void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initial_status);
+void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initial_status,
+                          const std::string& macro_object);
 
 } // namespace u1_batch
 } // namespace helix

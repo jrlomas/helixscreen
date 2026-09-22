@@ -611,3 +611,37 @@ TEST_CASE("Subscription: ZMOD printers subscribe save_variables for the persiste
         REQUIRE(subs.contains("save_variables"));
     }
 }
+
+TEST_CASE("Subscription: the U1 batch macro subscribes under its config-case key",
+          "[moonraker][subscription]") {
+    SECTION("uppercase config subscribes the uppercase object") {
+        DiscoveryFixture fx;
+        fx.add("filament_detect", {});
+        fx.add("gcode_macro AUTO_FEEDING_BATCH", {});
+        json subs = fx.build();
+
+        REQUIRE(subs.contains("gcode_macro AUTO_FEEDING_BATCH"));
+    }
+
+    SECTION("lowercase config subscribes the lowercase object, not a guessed caps key") {
+        // Klipper keeps the config's case in status object keys, so a
+        // subscription spelled in caps never matches — and an object Moonraker
+        // does not know rejects the WHOLE subscription (blank printer state).
+        DiscoveryFixture fx;
+        fx.add("filament_detect", {});
+        fx.add("gcode_macro auto_feeding_batch", {});
+        json subs = fx.build();
+
+        REQUIRE(subs.contains("gcode_macro auto_feeding_batch"));
+        REQUIRE_FALSE(subs.contains("gcode_macro AUTO_FEEDING_BATCH"));
+    }
+
+    SECTION("no batch macro -> no batch object subscribed") {
+        DiscoveryFixture fx;
+        fx.add("filament_detect", {});
+        json subs = fx.build();
+
+        REQUIRE_FALSE(subs.contains("gcode_macro AUTO_FEEDING_BATCH"));
+        REQUIRE_FALSE(subs.contains("gcode_macro auto_feeding_batch"));
+    }
+}

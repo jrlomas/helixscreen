@@ -10,18 +10,16 @@ namespace helix::u1_batch {
 
 namespace {
 
-/// Klipper object name of the batch macro; `doing` is the save-variable
-/// PRINT_PRESTART_CHECK refuses prints over.
-constexpr const char* MACRO_OBJECT = "gcode_macro AUTO_FEEDING_BATCH";
-
 /// Clears `doing` and restores the hotend targets the batch snapshotted at
-/// its START.
+/// its START. The command alias is uppercased regardless of the config's
+/// spelling; the status object key is not (see macro_config_name()).
 constexpr const char* CMD_END = "AUTO_FEEDING_BATCH ACTION=END";
 
 } // namespace
 
-void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status) {
-    const auto macro = status.find(MACRO_OBJECT);
+void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status,
+                          const std::string& macro_object) {
+    const auto macro = status.find(macro_object);
     if (macro == status.end() || !macro->is_object()) {
         return;
     }

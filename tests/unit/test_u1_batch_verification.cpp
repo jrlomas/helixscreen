@@ -224,7 +224,7 @@ TEST_CASE("A stranded batch interlock is cleared at connect", "[ams][batch]") {
             "extruder1_temp":0,"extruder2_temp":0,"extruder3_temp":0},
             "print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
 
-    helix::u1_batch::reconcile_on_connect(client, status);
+    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
 
     CHECK(client.sent_contains("AUTO_FEEDING_BATCH ACTION=END"));
 }
@@ -235,7 +235,7 @@ TEST_CASE("A batch interlock during a print is left alone", "[ams][batch]") {
         R"({"gcode_macro AUTO_FEEDING_BATCH":{"doing":true},
             "print_stats":{"state":"printing"},"virtual_sdcard":{"is_active":true}})");
 
-    helix::u1_batch::reconcile_on_connect(client, status);
+    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
 
     CHECK_FALSE(client.sent_contains("AUTO_FEEDING_BATCH"));
 }
@@ -245,7 +245,7 @@ TEST_CASE("No doing variable in the payload is a no-op", "[ams][batch]") {
     const auto status = nlohmann::json::parse(
         R"({"print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
 
-    helix::u1_batch::reconcile_on_connect(client, status);
+    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
 
     CHECK(client.sent_gcode.empty());
 }
@@ -263,8 +263,23 @@ TEST_CASE("A non-bool doing variable is a no-op that does not throw", "[ams][bat
             {"virtual_sdcard", {{"is_active", false}}},
         };
 
-        REQUIRE_NOTHROW(helix::u1_batch::reconcile_on_connect(client, status));
+        REQUIRE_NOTHROW(helix::u1_batch::reconcile_on_connect(client, status,
+                                                              "gcode_macro AUTO_FEEDING_BATCH"));
 
         CHECK(client.sent_gcode.empty());
     }
+}
+
+TEST_CASE("The reconcile reads the macro under the config-case object key", "[ams][batch]") {
+    // Klipper preserves the config's case in status object keys, so a printer
+    // with [gcode_macro auto_feeding_batch] publishes its state under the
+    // lowercase spelling the discovery hands us.
+    RecordingFakeClient client;
+    const auto status = nlohmann::json::parse(
+        R"({"gcode_macro auto_feeding_batch":{"doing":true},
+            "print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
+
+    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro auto_feeding_batch");
+
+    CHECK(client.sent_contains("AUTO_FEEDING_BATCH ACTION=END"));
 }

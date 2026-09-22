@@ -1448,9 +1448,13 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
             subscription_objects[fmt::format("filament_motion_sensor e{}_filament", i)] = nullptr;
         }
         // The batch macro's `doing` variable drives batch-feed progress, so it
-        // needs a subscription to be readable while a feed runs.
-        if (hw.has_auto_feeding_batch()) {
-            subscription_objects["gcode_macro AUTO_FEEDING_BATCH"] = nullptr;
+        // needs a subscription to be readable while a feed runs. Klipper
+        // keeps the config's case for the status object key, so subscribe
+        // under the name as written in printer.cfg; a guessed name makes
+        // Moonraker reject the whole subscription.
+        const std::string batch_macro = hw.macro_config_name("AUTO_FEEDING_BATCH");
+        if (!batch_macro.empty()) {
+            subscription_objects[fmt::format("gcode_macro {}", batch_macro)] = nullptr;
         }
     }
 
@@ -1661,9 +1665,12 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                     // by a lost connection strands the macro's `doing`, which
                     // refuses every print start until cleared. Clearing is
                     // safe only when no print owns the interlock - the guard
-                    // lives in the reconcile itself.
-                    if (hw.has_auto_feeding_batch()) {
-                        u1_batch::reconcile_on_connect(client_, status);
+                    // lives in the reconcile itself. The lookup key is the
+                    // config-case object name, matching the subscription.
+                    const std::string batch_macro = hw.macro_config_name("AUTO_FEEDING_BATCH");
+                    if (!batch_macro.empty()) {
+                        u1_batch::reconcile_on_connect(client_, status,
+                                                       fmt::format("gcode_macro {}", batch_macro));
                     }
                 }
             } else if (sub_response.contains("error")) {
