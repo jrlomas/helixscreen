@@ -1570,9 +1570,11 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                         // change" — treating it as false would clear the port
                         // sensor and drop the slot to EMPTY on a frame that
                         // said nothing about filament at all.
+                        std::optional<bool> detected_opt;
                         auto fd_it = ch.find("filament_detected");
                         if (fd_it != ch.end() && fd_it->is_boolean()) {
                             const bool detected = fd_it->get<bool>();
+                            detected_opt = detected;
                             // Mirror into port_sensor_filament_present_ so
                             // is_stuck_motion_sensor_runout can distinguish a real
                             // runout (both sensors false) from a stale motion-sensor
@@ -1612,18 +1614,34 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
 
                         // Keep the raw fields for eligibility queries; the
                         // latch below collapses them to a single bit.
-                        ChannelSnapshot snap;
-                        snap.state = state;
-                        snap.error = error;
-                        snap.filament_detected =
-                            helix::json_util::safe_bool(ch, "filament_detected", false);
-                        snap.module_exist = helix::json_util::safe_bool(ch, "module_exist", false);
-                        snap.disable_auto = helix::json_util::safe_bool(ch, "disable_auto", false);
-                        // The feeder frame does not carry the motion sensor's
-                        // enabled flag; keep the last value the sensor objects
-                        // reported rather than resetting it.
-                        snap.sensor_enabled =
-                            channel_snapshots_[static_cast<size_t>(i)].sensor_enabled;
+                        // Status frames are deltas: start from the previous
+                        // snapshot and overwrite only the keys this frame
+                        // carries, so a channel_state-only frame leaves
+                        // filament_detected/module_exist standing and a
+                        // filament_detected-only frame does not blank state
+                        // (the feeder frame never carries the motion sensor's
+                        // enabled flag, so that field rides the same rule).
+                        // Absent-or-null is "no change" for every field.
+                        ChannelSnapshot snap = channel_snapshots_[static_cast<size_t>(i)];
+                        const auto state_it = ch.find("channel_state");
+                        if (state_it != ch.end() && state_it->is_string()) {
+                            snap.state = state_it->get_ref<const std::string&>();
+                        }
+                        const auto error_it = ch.find("channel_error");
+                        if (error_it != ch.end() && error_it->is_string()) {
+                            snap.error = error_it->get_ref<const std::string&>();
+                        }
+                        if (detected_opt.has_value()) {
+                            snap.filament_detected = *detected_opt;
+                        }
+                        const auto module_it = ch.find("module_exist");
+                        if (module_it != ch.end() && module_it->is_boolean()) {
+                            snap.module_exist = module_it->get<bool>();
+                        }
+                        const auto disable_it = ch.find("disable_auto");
+                        if (disable_it != ch.end() && disable_it->is_boolean()) {
+                            snap.disable_auto = disable_it->get<bool>();
+                        }
                         channel_snapshots_[static_cast<size_t>(i)] = std::move(snap);
 
                         const ChannelStateInfo info = classify_channel_state(state);

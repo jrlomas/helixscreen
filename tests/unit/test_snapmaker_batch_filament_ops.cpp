@@ -340,6 +340,42 @@ TEST_CASE_METHOD(BatchFixture, "Snapmaker keeps the per-channel feeder fields",
     CHECK_FALSE(snap.disable_auto);
 }
 
+TEST_CASE_METHOD(BatchFixture, "A feeder delta keeps the fields it does not mention",
+                 "[snapmaker][batch]") {
+    feed_status(R"({"filament_feed left":{"extruder0":{
+        "channel_state":"load_finish","channel_error":"ok","filament_detected":true,
+        "module_exist":true,"disable_auto":false}}})");
+
+    SECTION("a channel_state-only frame leaves the booleans standing") {
+        feed_status(R"({"filament_feed left":{"extruder0":{
+            "channel_state":"unload_finish"}}})");
+        const auto snap = backend().channel_snapshot(0);
+        CHECK(snap.state == "unload_finish");
+        CHECK(snap.filament_detected); // not cleared by a frame silent on it
+        CHECK(snap.module_exist);
+        CHECK_FALSE(snap.disable_auto);
+    }
+
+    SECTION("a filament_detected-only frame leaves state standing") {
+        feed_status(R"({"filament_feed left":{"extruder0":{"filament_detected":false}}})");
+        const auto snap = backend().channel_snapshot(0);
+        CHECK(snap.state == "load_finish"); // not blanked by a frame silent on it
+        CHECK_FALSE(snap.filament_detected);
+        CHECK(snap.module_exist);
+    }
+
+    SECTION("an error token persists until a frame carries a real value again") {
+        feed_status(R"({"filament_feed left":{"extruder0":{"channel_error":"jam"}}})");
+        CHECK(backend().channel_snapshot(0).error == "jam");
+        // A frame omitting channel_error keeps the token...
+        feed_status(R"({"filament_feed left":{"extruder0":{"channel_state":"load_finish"}}})");
+        CHECK(backend().channel_snapshot(0).error == "jam");
+        // ...and an explicit "ok" clears it.
+        feed_status(R"({"filament_feed left":{"extruder0":{"channel_error":"ok"}}})");
+        CHECK(backend().channel_snapshot(0).error == "ok");
+    }
+}
+
 // ============================================================================
 // slot_op_eligibility — the direction-dependent refusal, from channel state
 // ============================================================================
