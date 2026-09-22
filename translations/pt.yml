@@ -2801,7 +2801,7 @@ translations:
     não é rastreado.
   Size: Tamanho
   Skip: Pular
-  Skipped: ''
+  Skipped: 'Ignorado'
   Sleep While Printing: Suspender Durante Impressão
   Sleep adjusted to match dim timeout: Tempo de suspensão ajustado
   Sliced colors: Cores fatiadas
@@ -3536,9 +3536,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-offset salvo - Klipper reiniciando...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
-  already loaded: ''
+  already loaded: 'já carregado'
   bed: mesa
-  busy: ''
+  busy: 'ocupado'
   by Preston Brown: por Preston Brown
   chamber heater: aquecedor da câmara
   complete: concluído
@@ -3551,7 +3551,7 @@ translations:
   eSpooler Mode: 'Modo eSpooler'
   eSpooler, clog detection, and sensor settings: 'Configurações de eSpooler, detecção de entupimento e sensores'
   elapsed: decorrido
-  empty: ''
+  empty: 'vazio'
   enable: habilitar
   enabled: habilitado
   error: erro
@@ -3559,19 +3559,19 @@ translations:
   extruder(s): extrusor(es)
   extruders: extrusores
   fans: ventoinhas
-  feeder error: ''
-  feeder not in automatic mode: ''
-  filament sensor disabled: ''
+  feeder error: 'erro do alimentador'
+  feeder not in automatic mode: 'alimentador não está em modo automático'
+  filament sensor disabled: 'sensor de filamento desativado'
   heated bed: mesa aquecida
   idle: ocioso
   in unit {} slot {}: na unidade {} slot {}
   layers: camadas
   left: restante
-  loaded: ''
+  loaded: 'carregado'
   mm before clog: mm antes da obstrução
   needs: precisa
   not detected: não detectado
-  not loaded: ''
+  not loaded: 'não carregado'
   nozzle: bico
   of: de
   'off': desligado
@@ -3585,7 +3585,7 @@ translations:
   passive: passivo
   printer default: padrão da impressora
   prints: impressões
-  ready to load: ''
+  ready to load: 'pronto para carregar'
   remaining: restante
   remaining before clog detection triggers: restante antes da detecção de obstrução
     ser acionada
