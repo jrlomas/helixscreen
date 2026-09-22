@@ -11,6 +11,10 @@
 #include <string>
 #include <vector>
 
+namespace helix {
+class AmsBackend;
+}
+
 namespace helix::ui {
 
 /**
@@ -49,6 +53,20 @@ class BatchFilamentModal : public Modal {
     // name bare rather than asserting "Empty".
     static std::string row_label(LaneNoun noun, int slot, const SlotInfo& info,
                                  std::optional<bool> present);
+
+    /// What each picker row needs from the backend. Lane presence answers the
+    /// label ("what is in this lane"); toolhead state answers the Unload tick
+    /// ("is this head loaded"). They disagree on a lane holding filament that
+    /// has not been fed to the nozzle.
+    struct BatchRowSource {
+        std::vector<SlotInfo> slots;
+        std::vector<std::optional<bool>> lane_presence;
+        std::vector<std::optional<bool>> at_toolhead;
+    };
+
+    // Pure: gather every row's inputs. Extracted so the gathering itself is
+    // testable against a backend whose lane and toolhead answers disagree.
+    static BatchRowSource collect_rows(const AmsBackend& backend);
 
   protected:
     void on_show() override;

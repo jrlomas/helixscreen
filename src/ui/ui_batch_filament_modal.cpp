@@ -57,6 +57,20 @@ std::string BatchFilamentModal::row_label(LaneNoun noun, int slot, const SlotInf
     return lane;
 }
 
+BatchFilamentModal::BatchRowSource BatchFilamentModal::collect_rows(const AmsBackend& backend) {
+    BatchRowSource rows;
+    const int total = backend.get_system_info().total_slots;
+    rows.slots.reserve(static_cast<size_t>(total));
+    rows.lane_presence.reserve(static_cast<size_t>(total));
+    rows.at_toolhead.reserve(static_cast<size_t>(total));
+    for (int slot = 0; slot < total; ++slot) {
+        rows.slots.push_back(backend.get_slot_info(slot));
+        rows.lane_presence.push_back(slot_presence(rows.slots.back()));
+        rows.at_toolhead.push_back(backend.can_unload_from_toolhead(slot));
+    }
+    return rows;
+}
+
 void BatchFilamentModal::on_show() {
     wire_ok_button("btn_primary");
     wire_cancel_button("btn_secondary");
@@ -72,27 +86,19 @@ void BatchFilamentModal::on_show() {
         return;
     }
 
-    const AmsSystemInfo info = backend->get_system_info();
-    std::vector<SlotInfo> slots;
-    std::vector<std::optional<bool>> at_toolhead;
-    std::vector<MultiSelectItem> items;
-    slots.reserve(static_cast<size_t>(info.total_slots));
-    at_toolhead.reserve(static_cast<size_t>(info.total_slots));
-    items.reserve(static_cast<size_t>(info.total_slots));
-    for (int slot = 0; slot < info.total_slots; ++slot) {
-        slots.push_back(backend->get_slot_info(slot));
-        at_toolhead.push_back(slot_presence(slots.back()));
-    }
+    const BatchRowSource rows = collect_rows(*backend);
     // One tick set serves both buttons, so it favors the direction with
     // a physical precondition: Unload on the heads that have filament at the
     // toolhead.
-    const std::vector<bool> ticked = prefill_selection(at_toolhead, /*for_load=*/false);
-    for (int slot = 0; slot < info.total_slots; ++slot) {
+    const std::vector<bool> ticked = prefill_selection(rows.at_toolhead, /*for_load=*/false);
+
+    std::vector<MultiSelectItem> items;
+    items.reserve(rows.slots.size());
+    for (size_t slot = 0; slot < rows.slots.size(); ++slot) {
         items.push_back({std::to_string(slot),
-                         BatchFilamentModal::row_label(backend->lane_noun(), slot,
-                                                       slots[static_cast<size_t>(slot)],
-                                                       at_toolhead[static_cast<size_t>(slot)]),
-                         ticked[static_cast<size_t>(slot)]});
+                         row_label(backend->lane_noun(), static_cast<int>(slot), rows.slots[slot],
+                                   rows.lane_presence[slot]),
+                         ticked[slot]});
     }
     multiselect_.attach(container);
     multiselect_.set_items(items);

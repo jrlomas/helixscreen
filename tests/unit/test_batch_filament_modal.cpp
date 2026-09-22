@@ -11,6 +11,7 @@
 
 #include "ui_batch_filament_modal.h"
 
+#include "ams_backend_snapmaker.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 
 #include <optional>
@@ -20,6 +21,31 @@
 #include "../catch_amalgamated.hpp"
 
 using helix::ui::BatchFilamentModal;
+
+namespace {
+/// Every lane holds filament; only heads 0 and 2 are loaded at the toolhead.
+/// This is the live rig state: four channels reporting filament_detected with
+/// two at load_finish and two at preload_finish.
+class DisagreeingBackend : public helix::AmsBackendSnapmaker {
+  public:
+    DisagreeingBackend() : helix::AmsBackendSnapmaker(nullptr, nullptr) {}
+
+    helix::AmsSystemInfo get_system_info() const override {
+        helix::AmsSystemInfo info;
+        info.total_slots = 4;
+        return info;
+    }
+    helix::SlotInfo get_slot_info(int slot_index) const override {
+        helix::SlotInfo slot;
+        slot.slot_index = slot_index;
+        slot.status = helix::SlotStatus::AVAILABLE; // lane has filament
+        return slot;
+    }
+    bool can_unload_from_toolhead(int slot_index) const override {
+        return slot_index == 0 || slot_index == 2;
+    }
+};
+} // namespace
 
 TEST_CASE("BatchFilamentModal prefill ticks by direction", "[ams][batch]") {
     using o = std::optional<bool>;
@@ -37,6 +63,21 @@ TEST_CASE("BatchFilamentModal prefill ticks by direction", "[ams][batch]") {
         REQUIRE(BatchFilamentModal::prefill_selection({}, true).empty());
         REQUIRE(BatchFilamentModal::prefill_selection({}, false).empty());
     }
+}
+
+TEST_CASE("BatchFilamentModal collects toolhead state separately from lane presence",
+          "[ams][batch]") {
+    DisagreeingBackend backend;
+
+    const auto rows = BatchFilamentModal::collect_rows(backend);
+
+    REQUIRE(rows.slots.size() == 4);
+    CHECK(rows.lane_presence == std::vector<std::optional<bool>>{true, true, true, true});
+    CHECK(rows.at_toolhead == std::vector<std::optional<bool>>{true, false, true, false});
+
+    // The whole point: Unload pre-ticks the loaded heads, not every full lane.
+    CHECK(BatchFilamentModal::prefill_selection(rows.at_toolhead, /*for_load=*/false) ==
+          std::vector<bool>{true, false, true, false});
 }
 
 TEST_CASE("BatchFilamentModal selected keys convert to slot indices", "[ams][batch]") {
