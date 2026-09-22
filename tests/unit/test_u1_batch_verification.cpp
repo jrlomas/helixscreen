@@ -9,6 +9,7 @@
 
 #include "ui_update_queue.h"
 
+#include "../fake_moonraker_client.h"
 #include "../lvgl_test_fixture.h"
 #include "ams_backend_snapmaker.h"
 #include "ams_types.h"
@@ -17,6 +18,7 @@
 #include "printer_state.h"
 #include "test_helpers/registered_backend.h"
 #include "test_helpers/snapmaker_test_access.h"
+#include "u1_batch_reconcile.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -82,6 +84,24 @@ struct MockBatchFixture : public LVGLTestFixture {
         }
         FAIL("pump_until_idle: backend never returned to IDLE (action="
              << helix::ams_action_to_string(backend().get_current_action()) << ")");
+    }
+};
+
+/// FakeMoonrakerClient with gcode_script recorded, so a reconcile test can
+/// assert on what would have gone to the printer. Nothing else needs to do
+/// anything: reconcile_on_connect only sends.
+struct RecordingFakeClient : helix::test::FakeMoonrakerClient {
+    std::vector<std::string> sent_gcode;
+
+    int gcode_script(const std::string& gcode) override {
+        sent_gcode.push_back(gcode);
+        return 0;
+    }
+
+    bool sent_contains(const std::string& fragment) const {
+        return std::any_of(sent_gcode.begin(), sent_gcode.end(), [&fragment](const auto& line) {
+            return line.find(fragment) != std::string::npos;
+        });
     }
 };
 
@@ -195,4 +215,37 @@ TEST_CASE_METHOD(MockBatchFixture, "The AUTO_FEEDING_BATCH shape advances the cu
     const auto plan = backend().batch_plan();
     CHECK(plan.cursor == 2);
     CHECK_FALSE(plan.active);
+}
+
+TEST_CASE("A stranded batch interlock is cleared at connect", "[ams][batch]") {
+    RecordingFakeClient client;
+    const auto status = nlohmann::json::parse(
+        R"({"gcode_macro AUTO_FEEDING_BATCH":{"doing":true,"extruder0_temp":0,
+            "extruder1_temp":0,"extruder2_temp":0,"extruder3_temp":0},
+            "print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
+
+    helix::u1_batch::reconcile_on_connect(client, status);
+
+    CHECK(client.sent_contains("AUTO_FEEDING_BATCH ACTION=END"));
+}
+
+TEST_CASE("A batch interlock during a print is left alone", "[ams][batch]") {
+    RecordingFakeClient client;
+    const auto status = nlohmann::json::parse(
+        R"({"gcode_macro AUTO_FEEDING_BATCH":{"doing":true},
+            "print_stats":{"state":"printing"},"virtual_sdcard":{"is_active":true}})");
+
+    helix::u1_batch::reconcile_on_connect(client, status);
+
+    CHECK_FALSE(client.sent_contains("AUTO_FEEDING_BATCH"));
+}
+
+TEST_CASE("No doing variable in the payload is a no-op", "[ams][batch]") {
+    RecordingFakeClient client;
+    const auto status = nlohmann::json::parse(
+        R"({"print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
+
+    helix::u1_batch::reconcile_on_connect(client, status);
+
+    CHECK(client.sent_gcode.empty());
 }

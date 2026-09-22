@@ -30,6 +30,7 @@
 #include "sensor_state.h"
 #include "tool_offsets.h"
 #include "toolchanger_addon.h"
+#include "u1_batch_reconcile.h"
 #include "unit_conversions.h"
 #include "webcam_service_health.h"
 #include "z_offset_persistence.h"
@@ -1655,6 +1656,14 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                     // running.
                     if (hw.screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
                         auto_screws::reconcile_on_connect(client_, status);
+                    }
+                    // Same shape, one interlock over: a batch feed interrupted
+                    // by a lost connection strands the macro's `doing`, which
+                    // refuses every print start until cleared. Clearing is
+                    // safe only when no print owns the interlock - the guard
+                    // lives in the reconcile itself.
+                    if (hw.has_auto_feeding_batch()) {
+                        u1_batch::reconcile_on_connect(client_, status);
                     }
                 }
             } else if (sub_response.contains("error")) {

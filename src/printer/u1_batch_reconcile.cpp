@@ -1,0 +1,42 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "u1_batch_reconcile.h"
+
+#include "i_moonraker_client.h"
+#include "spdlog/spdlog.h"
+
+namespace helix::u1_batch {
+
+namespace {
+
+/// Klipper object name of the batch macro; `doing` is the save-variable
+/// PRINT_PRESTART_CHECK refuses prints over.
+constexpr const char* MACRO_OBJECT = "gcode_macro AUTO_FEEDING_BATCH";
+
+/// Clears `doing` and restores the hotend targets the batch snapshotted at
+/// its START.
+constexpr const char* CMD_END = "AUTO_FEEDING_BATCH ACTION=END";
+
+} // namespace
+
+void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status) {
+    const auto macro = status.find(MACRO_OBJECT);
+    if (macro == status.end() || !macro->is_object() || !macro->value("doing", false)) {
+        return;
+    }
+    // A print in flight owns the interlock: ACTION=END restores the targets
+    // snapshotted at batch START, which mid-print are the wrong values to
+    // restore. Only an idle printer gets the cleanup.
+    const std::string print_state =
+        status.value("print_stats", nlohmann::json::object()).value("state", std::string());
+    if (print_state == "printing" || print_state == "paused" ||
+        status.value("virtual_sdcard", nlohmann::json::object()).value("is_active", false)) {
+        spdlog::info("[U1Batch] Batch interlock held with a print in flight - leaving it alone");
+        return;
+    }
+    spdlog::info("[U1Batch] Clearing a stranded AUTO_FEEDING_BATCH interlock");
+    client.gcode_script(CMD_END);
+}
+
+} // namespace helix::u1_batch
