@@ -1,7 +1,7 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Mock-side prerequisite for U1 batch verification: MoonrakerClientMock
+// Mock-side prerequisite for batch-feed verification: MoonrakerClientMock
 // answers AUTO_FEEDING with the channel_state sequence the feeder firmware
 // reports, so AmsBackendSnapmaker's status parse — and the batch cursor that
 // will be built on top of it — has real transitions to observe in a unit
@@ -13,12 +13,12 @@
 #include "../lvgl_test_fixture.h"
 #include "ams_backend_snapmaker.h"
 #include "ams_types.h"
+#include "batch_feed_reconcile.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
 #include "test_helpers/registered_backend.h"
 #include "test_helpers/snapmaker_test_access.h"
-#include "u1_batch_reconcile.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -314,7 +314,7 @@ TEST_CASE("A stranded batch interlock is cleared at connect", "[ams][batch]") {
             "extruder1_temp":0,"extruder2_temp":0,"extruder3_temp":0},
             "print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
 
-    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
+    helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
 
     CHECK(client.sent_contains("AUTO_FEEDING_BATCH ACTION=END"));
 }
@@ -325,7 +325,7 @@ TEST_CASE("A batch interlock during a print is left alone", "[ams][batch]") {
         R"({"gcode_macro AUTO_FEEDING_BATCH":{"doing":true},
             "print_stats":{"state":"printing"},"virtual_sdcard":{"is_active":true}})");
 
-    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
+    helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
 
     CHECK_FALSE(client.sent_contains("AUTO_FEEDING_BATCH"));
 }
@@ -342,7 +342,7 @@ TEST_CASE("This session's own live batch is left alone", "[ams][batch]") {
         {"virtual_sdcard", {{"is_active", false}}},
     };
 
-    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH",
+    helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH",
                                           /*local_batch_active=*/true);
 
     CHECK(client.sent_gcode.empty());
@@ -353,7 +353,7 @@ TEST_CASE("No doing variable in the payload is a no-op", "[ams][batch]") {
     const auto status = nlohmann::json::parse(
         R"({"print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
 
-    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
+    helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
 
     CHECK(client.sent_gcode.empty());
 }
@@ -371,7 +371,7 @@ TEST_CASE("A non-bool doing variable is a no-op that does not throw", "[ams][bat
             {"virtual_sdcard", {{"is_active", false}}},
         };
 
-        REQUIRE_NOTHROW(helix::u1_batch::reconcile_on_connect(client, status,
+        REQUIRE_NOTHROW(helix::batch_feeding::reconcile_on_connect(client, status,
                                                               "gcode_macro AUTO_FEEDING_BATCH"));
 
         CHECK(client.sent_gcode.empty());
@@ -392,7 +392,7 @@ TEST_CASE("An unreadable print state leaves the interlock alone", "[ams][batch]"
             {"virtual_sdcard", {{"is_active", false}}},
         };
 
-        REQUIRE_NOTHROW(helix::u1_batch::reconcile_on_connect(client, status,
+        REQUIRE_NOTHROW(helix::batch_feeding::reconcile_on_connect(client, status,
                                                               "gcode_macro AUTO_FEEDING_BATCH"));
 
         CHECK(client.sent_gcode.empty());
@@ -411,7 +411,7 @@ TEST_CASE("A null virtual_sdcard does not stop an otherwise idle cleanup", "[ams
     };
 
     REQUIRE_NOTHROW(
-        helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH"));
+        helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH"));
 
     CHECK(client.sent_contains("AUTO_FEEDING_BATCH ACTION=END"));
 }
@@ -425,7 +425,7 @@ TEST_CASE("The reconcile reads the macro under the config-case object key", "[am
         R"({"gcode_macro auto_feeding_batch":{"doing":true},
             "print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
 
-    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro auto_feeding_batch");
+    helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro auto_feeding_batch");
 
     CHECK(client.sent_contains("AUTO_FEEDING_BATCH ACTION=END"));
 }

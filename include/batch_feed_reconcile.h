@@ -11,7 +11,7 @@ namespace helix {
 
 class IMoonrakerClient;
 
-namespace u1_batch {
+namespace batch_feeding {
 
 /**
  * @brief Connect-time cleanup of a stranded AUTO_FEEDING_BATCH interlock
@@ -40,5 +40,5 @@ namespace u1_batch {
 void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initial_status,
                           const std::string& macro_object, bool local_batch_active = false);
 
-} // namespace u1_batch
+} // namespace batch_feeding
 } // namespace helix

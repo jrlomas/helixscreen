@@ -8,6 +8,7 @@
 #include "accel_sensor_manager.h"
 #include "ams_state.h"
 #include "auto_screws_tilt_adjust.h"
+#include "batch_feed_reconcile.h"
 #if HELIX_HAS_IFS
 #include "ams_backend_ad5x_ifs.h"
 #endif
@@ -31,7 +32,6 @@
 #include "sensor_state.h"
 #include "tool_offsets.h"
 #include "toolchanger_addon.h"
-#include "u1_batch_reconcile.h"
 #include "unit_conversions.h"
 #include "webcam_service_health.h"
 #include "z_offset_persistence.h"
@@ -1682,9 +1682,9 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                                 local_batch_active = backend->filament_batch_in_flight();
                             }
                         }
-                        u1_batch::reconcile_on_connect(client_, status,
-                                                       fmt::format("gcode_macro {}", batch_macro),
-                                                       local_batch_active);
+                        batch_feeding::reconcile_on_connect(
+                            client_, status, fmt::format("gcode_macro {}", batch_macro),
+                            local_batch_active);
                     }
                 }
             } else if (sub_response.contains("error")) {

@@ -1,12 +1,12 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "u1_batch_reconcile.h"
+#include "batch_feed_reconcile.h"
 
 #include "i_moonraker_client.h"
 #include "spdlog/spdlog.h"
 
-namespace helix::u1_batch {
+namespace helix::batch_feeding {
 
 namespace {
 
@@ -39,7 +39,7 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status
     // (each reconnect, each klippy-ready), not only at startup, so a
     // WebSocket blip during a five-minute batch lands here too.
     if (local_batch_active) {
-        spdlog::info("[U1Batch] Batch interlock held by a batch this session dispatched - leaving "
+        spdlog::info("[BatchFeed] Batch interlock held by a batch this session dispatched - leaving "
                      "it alone");
         return;
     }
@@ -59,7 +59,7 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status
     }
     const std::string& print_state = state->get_ref<const std::string&>();
     if (print_state == "printing" || print_state == "paused") {
-        spdlog::info("[U1Batch] Batch interlock held with a print in flight - leaving it alone");
+        spdlog::info("[BatchFeed] Batch interlock held with a print in flight - leaving it alone");
         return;
     }
     // virtual_sdcard is a second veto rather than a precondition: print_stats
@@ -69,12 +69,12 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status
         const auto active = sdcard->find("is_active");
         if (active != sdcard->end() && active->is_boolean() && active->get<bool>()) {
             spdlog::info(
-                "[U1Batch] Batch interlock held with a print in flight - leaving it alone");
+                "[BatchFeed] Batch interlock held with a print in flight - leaving it alone");
             return;
         }
     }
-    spdlog::info("[U1Batch] Clearing a stranded AUTO_FEEDING_BATCH interlock");
+    spdlog::info("[BatchFeed] Clearing a stranded AUTO_FEEDING_BATCH interlock");
     client.gcode_script(CMD_END);
 }
 
-} // namespace helix::u1_batch
+} // namespace helix::batch_feeding
