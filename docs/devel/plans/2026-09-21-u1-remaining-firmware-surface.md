@@ -1441,11 +1441,12 @@ One proven consumer is still the deliverable — do not convert every site in th
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "feat(printer): prefer the firmware's own per-filament temperatures where it has them" \
-  -m "The U1 publishes load, unload and clean-nozzle temperatures per vendor, type, sub-type and nozzle diameter via FILAMENT_PARA_GET_ALL_INFO; our generic material table was overriding a better answer. Capability question, so a second firmware is one provider row." \
-  -m "Mutation: returning the generic table when the firmware has a value turns [filament][temps] red." \
+git commit -m "feat(printer): carry the firmware's own per-filament temperatures where it has them" \
+  -m "The U1 publishes load, unload and clean-nozzle temperatures per vendor, type and sub-type via FILAMENT_PARA_GET_ALL_INFO. They enter the resolver as a vendor preset, so they beat the generic material table and still lose to a temperature the user set in the Material Temps overlay. Capability question, so a second firmware is one provider row." \
+  -m "Mutation: <name the one you actually ran>." \
   -- include/filament_temperature_source.h src/printer/filament_temperature_source.cpp \
      tests/unit/test_filament_temperature_source.cpp \
+     src/printer/active_material_provider.cpp include/active_material_provider.h \
      firmware/helixscreen-esp32/components/helixapp/app_srcs.txt
 ```
 
