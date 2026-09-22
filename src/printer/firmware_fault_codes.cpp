@@ -133,4 +133,20 @@ std::optional<std::vector<std::string>> read_standing_faults(const PrinterDiscov
     return p ? p->read_standing(status) : std::nullopt;
 }
 
+nlohmann::json fault_status_subset(const nlohmann::json& status) {
+    nlohmann::json subset = nlohmann::json::object();
+    if (!status.is_object()) {
+        return subset;
+    }
+    for (const auto& p : kProviders) {
+        for (const auto& obj : p.status_objects) {
+            auto it = status.find(obj);
+            if (it != status.end()) {
+                subset[obj] = *it;
+            }
+        }
+    }
+    return subset;
+}
+
 } // namespace helix::faultcodes

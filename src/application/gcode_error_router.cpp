@@ -114,11 +114,22 @@ GcodeErrorRouter::GcodeErrorRouter(IMoonrakerAPI* api, IMoonrakerClient* client,
         lifetime_.bg_cb("GcodeErrorRouter::on_connected", [this]() { on_connected(); }));
 
     // Standing faults. notify_status_update delivers the status delta on the
-    // WS thread; the same bg_cb delivery as above defers the body to main,
-    // where reading printer state and presenting are safe.
-    standing_notify_id_ = client_->register_notify_update(
+    // WS thread, several times a second on every printer. Only frames carrying
+    // a fault object are deferred to main, trimmed to that object, where
+    // reading printer state and presenting are safe.
+    auto deliver =
         lifetime_.bg_cb("GcodeErrorRouter::on_status_update",
-                        [this](const nlohmann::json& msg) { on_notify_status_update(msg); }));
+                        [this](const nlohmann::json& msg) { on_notify_status_update(msg); });
+    standing_notify_id_ =
+        client_->register_notify_update([deliver](const nlohmann::json& msg) mutable {
+            if (!msg.contains("params") || !msg["params"].is_array() || msg["params"].empty()) {
+                return;
+            }
+            nlohmann::json subset = faultcodes::fault_status_subset(msg["params"][0]);
+            if (!subset.empty()) {
+                deliver(nlohmann::json{{"params", nlohmann::json::array({std::move(subset)})}});
+            }
+        });
 }
 
 GcodeErrorRouter::~GcodeErrorRouter() {

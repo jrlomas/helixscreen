@@ -48,4 +48,10 @@ namespace helix::faultcodes {
 [[nodiscard]] std::optional<std::vector<std::string>>
 read_standing_faults(const PrinterDiscovery& hw, const nlohmann::json& status);
 
+/// The part of a status frame any fault-code firmware reads: only the status
+/// objects some provider subscribes to, or an empty object when the frame
+/// carries none. Needs no discovery, so the WS thread can use it to skip
+/// the many frames that have nothing to do with faults.
+[[nodiscard]] nlohmann::json fault_status_subset(const nlohmann::json& status);
+
 } // namespace helix::faultcodes

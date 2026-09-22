@@ -207,6 +207,19 @@ TEST_CASE("read_standing_faults tells silent apart from empty", "[snapmaker][sta
         faultcodes::read_standing_faults(plain, standing_frame({power_loss_entry()})).has_value());
 }
 
+TEST_CASE("fault_status_subset keeps only fault objects", "[snapmaker][standing]") {
+    nlohmann::json frame = standing_frame({power_loss_entry()});
+    frame["toolhead"] = {{"homed_axes", "xyz"}};
+    const nlohmann::json subset = faultcodes::fault_status_subset(frame);
+    REQUIRE(subset.size() == 1);
+    REQUIRE(subset == standing_frame({power_loss_entry()}));
+
+    nlohmann::json unrelated;
+    unrelated["toolhead"] = {{"homed_axes", "xyz"}};
+    REQUIRE(faultcodes::fault_status_subset(unrelated).empty());
+    REQUIRE(faultcodes::fault_status_subset(nlohmann::json::array()).empty());
+}
+
 TEST_CASE("read_standing_faults emits console-equivalent coded lines", "[snapmaker][standing]") {
     const auto lines =
         faultcodes::read_standing_faults(coded_firmware(), standing_frame({power_loss_entry()}));
