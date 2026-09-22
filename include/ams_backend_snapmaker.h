@@ -180,6 +180,19 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // current_slot. Drives the active-lane highlight per tool.
     [[nodiscard]] bool slot_is_actively_loaded(int slot_index) const override;
 
+    /// Raw per-channel feeder fields as the firmware last reported them.
+    /// Eligibility answers from these; presence alone cannot distinguish a
+    /// lane holding filament from a head that is loaded.
+    struct ChannelSnapshot {
+        std::string state;       ///< channel_state, e.g. "load_finish"
+        std::string error{"ok"}; ///< channel_error
+        bool filament_detected{false};
+        bool module_exist{false};
+        bool disable_auto{false};
+    };
+
+    [[nodiscard]] ChannelSnapshot channel_snapshot(int slot_index) const;
+
   protected:
     // Operations. Every one of these drives the toolhead: AUTO_FEEDING forwards
     // to FEED_AUTO, which homes before it feeds, and `T{n}` moves the carriage.
@@ -470,6 +483,13 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// motion sensor (sensor_filament_present_) still owns mid-print runout —
     /// a different question ("did the ACTIVE lane run out during extrusion").
     std::array<bool, NUM_TOOLS> loaded_at_toolhead_{{false, false, false, false}};
+
+    /// Last filament_feed frame's raw per-channel fields (channel_state,
+    /// channel_error, filament_detected, module_exist, disable_auto), written
+    /// by handle_status_update before classification. Each write replaces the
+    /// whole entry, defaulting any field that frame omitted. Read by
+    /// channel_snapshot().
+    std::array<ChannelSnapshot, NUM_TOOLS> channel_snapshots_{};
 
     /// Validate slot index is within range
     AmsError validate_slot_index(int slot_index) const;

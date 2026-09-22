@@ -599,6 +599,14 @@ bool AmsBackendSnapmaker::slot_is_actively_loaded(int slot_index) const {
     return slot && slot->status == SlotStatus::LOADED;
 }
 
+AmsBackendSnapmaker::ChannelSnapshot AmsBackendSnapmaker::channel_snapshot(int slot_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (slot_index < 0 || slot_index >= NUM_TOOLS) {
+        return {};
+    }
+    return channel_snapshots_[slot_index];
+}
+
 AmsError AmsBackendSnapmaker::do_select_slot(int slot_index) {
     return do_change_tool(slot_index);
 }
@@ -1499,6 +1507,18 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                         // gate, "ok" by classify_channel_state.
                         auto state = helix::json_util::safe_string(ch, "channel_state", "");
                         auto error = helix::json_util::safe_string(ch, "channel_error", "ok");
+
+                        // Keep the raw fields for eligibility queries; the
+                        // latch below collapses them to a single bit.
+                        ChannelSnapshot snap;
+                        snap.state = state;
+                        snap.error = error;
+                        snap.filament_detected =
+                            helix::json_util::safe_bool(ch, "filament_detected", false);
+                        snap.module_exist = helix::json_util::safe_bool(ch, "module_exist", false);
+                        snap.disable_auto = helix::json_util::safe_bool(ch, "disable_auto", false);
+                        channel_snapshots_[static_cast<size_t>(i)] = std::move(snap);
+
                         const ChannelStateInfo info = classify_channel_state(state);
 
                         // Mirror the granular firmware sub-phase into the system

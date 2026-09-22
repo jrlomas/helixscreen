@@ -17,6 +17,7 @@
 
 #include "../lvgl_test_fixture.h"
 #include "../test_helpers/print_state_test_drivers.h"
+#include "../test_helpers/snapmaker_test_access.h"
 #include "ams_backend.h"
 #include "ams_backend_happy_hare.h"
 #include "ams_backend_snapmaker.h"
@@ -25,6 +26,7 @@
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
+#include "test_helpers/registered_backend.h"
 
 #include <condition_variable>
 #include <memory>
@@ -118,9 +120,28 @@ struct BatchFixture : public LVGLTestFixture {
         return mock_client.gcode_script_history();
     }
 
+    /// A registered Snapmaker backend with the concrete type visible, for
+    /// tests that reach what only AmsBackendSnapmaker exposes. Registered
+    /// through AmsState so lane funnels accept its lane ids.
+    helix::AmsBackendSnapmaker& backend() {
+        if (!raw_backend_) {
+            raw_backend_ =
+                std::make_unique<helix::test::RegisteredBackend<helix::AmsBackendSnapmaker>>(
+                    nullptr, nullptr);
+        }
+        return **raw_backend_;
+    }
+
+    /// Feed one raw JSON status frame to the backend's status handler — the
+    /// same entry point the WebSocket drives.
+    void feed_status(const std::string& json_text) {
+        helix::SnapmakerTestAccess::handle_status(backend(), nlohmann::json::parse(json_text));
+    }
+
     MoonrakerClientMock mock_client;
     helix::PrinterState state;
     std::unique_ptr<MoonrakerAPIMock> api;
+    std::unique_ptr<helix::test::RegisteredBackend<helix::AmsBackendSnapmaker>> raw_backend_;
 };
 
 } // namespace
@@ -247,4 +268,23 @@ TEST_CASE_METHOD(BatchFixture, "A batch is refused while printing", "[ams][batch
     REQUIRE(mock_client.last_send_script() == "AUTO_FEEDING EXTRUDER=0 LOAD=1\n"
                                               "AUTO_FEEDING EXTRUDER=1 LOAD=1");
     REQUIRE(sent_gcodes().size() == 2);
+}
+
+// ============================================================================
+// channel_snapshot — the per-channel feeder fields the status parse keeps
+// ============================================================================
+
+TEST_CASE_METHOD(BatchFixture, "Snapmaker keeps the per-channel feeder fields",
+                 "[snapmaker][batch]") {
+    feed_status(R"({"filament_feed left":{"extruder0":{
+        "channel_state":"load_finish","channel_error":"ok","filament_detected":true,
+        "module_exist":true,"disable_auto":false}}})");
+
+    const auto snap = backend().channel_snapshot(0);
+
+    CHECK(snap.state == "load_finish");
+    CHECK(snap.error == "ok");
+    CHECK(snap.filament_detected);
+    CHECK(snap.module_exist);
+    CHECK_FALSE(snap.disable_auto);
 }
