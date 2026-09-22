@@ -20,7 +20,7 @@
   <translation tag="%s has about %.0fg but %s needs about %.0fg. Start anyway?" pt="%s tem cerca de %.0fg, mas %s precisa de cerca de %.0fg. Iniciar mesmo assim?"/>
   <translation tag="%s has no filament loaded — this print will run out." pt="%s não tem filamento carregado — esta impressão vai acabar."/>
   <translation tag="%s needs filament in %s, which is empty — this print will run out." pt="%s precisa de filamento e %s não o tem — esta impressão vai acabar."/>
-  <translation tag="%s uses %s, which has filament but no material set — the printer will not start until you set it."/>
+  <translation tag="%s uses %s, which has filament but no material set — the printer will not start until you set it." pt="%s usa %s, que tem filamento mas nenhum material definido — a impressora não vai começar até você defini-lo."/>
   <translation tag="%s: %.0fg of %.0fg needed" pt="%s: %.0fg de %.0fg necessários"/>
   <translation tag="%u layers" pt="%u camadas"/>
   <translation tag="%zu changes" pt="%zu alterações"/>
@@ -228,7 +228,7 @@
   <translation tag="Auto-probe or manually check screw heights" pt="Sondagem automática ou verificação manual da altura dos parafusos"/>
   <translation tag="Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout" pt="O reabastecimento automático está ligado, mas nenhum par de slots tem filamento compatível, então nada trocará ao acabar o filamento"/>
   <translation tag="Auto-render video" pt="Renderizar vídeo automaticamente"/>
-  <translation tag="Auto-replenish filament"/>
+  <translation tag="Auto-replenish filament" pt="Reabastecer filamento automaticamente"/>
   <translation tag="Auto-tuning Shapers..." pt="Ajuste automático de Shapers..."/>
   <translation tag="Auto-uninstall only works on local Moonraker" pt="A desinstalação automática só funciona no Moonraker local"/>
   <translation tag="Automatic" pt="Automático"/>
@@ -736,7 +736,7 @@
   <translation tag="Deploy" pt="Implantar"/>
   <translation tag="Describe the issue (optional)" pt="Descreva o problema (opcional)"/>
   <translation tag="Detailed" pt="Detalhado"/>
-  <translation tag="Detect filament tangles"/>
+  <translation tag="Detect filament tangles" pt="Detectar emaranhados de filamento"/>
   <translation tag="Detecting plate..." pt="Detectando placa..."/>
   <translation tag="Detecting printer type..." pt="Detectando tipo de impressora..."/>
   <translation tag="Detecting..." pt="Detectando..."/>
@@ -1102,7 +1102,7 @@
   <translation tag="Filament jam detected" pt="Entupimento de filamento detectado"/>
   <translation tag="Filament jammed at the extruder gear" pt="Filamento preso na engrenagem do extrusor"/>
   <translation tag="Filament never reached the CFS hub sensor" pt="O filamento nunca chegou ao sensor do hub do CFS"/>
-  <translation tag="Filament not set"/>
+  <translation tag="Filament not set" pt="Filamento não definido"/>
   <translation tag="Filament operation failed" pt="Falha na operação de filamento"/>
   <translation tag="Filament operation timed out" pt="Operação de filamento — tempo esgotado"/>
   <translation tag="Filament ran out" pt="O filamento acabou"/>
@@ -1332,7 +1332,7 @@
   <translation tag="Initiate blade change procedure" pt="Iniciar o procedimento de troca de lâmina"/>
   <translation tag="Input" pt="Entrada"/>
   <translation tag="Input Shaper" pt="Input Shaper"/>
-  <translation tag="Input Shaper Calibration"/>
+  <translation tag="Input Shaper Calibration" pt="Calibração do input shaper"/>
   <translation tag="Input Shaper Help" pt="Ajuda do Input Shaper"/>
   <translation tag="Input Shaping" pt="Input Shaping"/>
   <translation tag="Input shaper calibration sensors" pt="Sensores de calibração do input shaper"/>
@@ -1965,7 +1965,7 @@
   <translation tag="Power" pt="Energia"/>
   <translation tag="Power Devices" pt="Dispositivos de energia"/>
   <translation tag="Power off the printer or screen" pt="Desligar a impressora ou a tela"/>
-  <translation tag="Power was lost during the print; the printer stopped and saved its progress"/>
+  <translation tag="Power was lost during the print; the printer stopped and saved its progress" pt="A energia caiu durante a impressão; a impressora parou e salvou o progresso"/>
   <translation tag="Pre-heat the extruder first" pt="Pré-aqueça o extrusor primeiro"/>
   <translation tag="Pre-print command failed: {}" pt="Falha no comando pré-impressão: {}"/>
   <translation tag="Pre-print homing..." pt="Posicionamento pré-impressão..."/>
@@ -1988,7 +1988,7 @@
   <translation tag="Presets" pt="Predefinições"/>
   <translation tag="Press Abort to stop" pt="Pressione Abortar para parar"/>
   <translation tag="Press Scan to search" pt="Pressione Escanear para buscar"/>
-  <translation tag="Pressure Advance Calibration"/>
+  <translation tag="Pressure Advance Calibration" pt="Calibração do pressure advance"/>
   <translation tag="Pressure:" pt="Pressão:"/>
   <translation tag="Preview Sounds" pt="Visualizar Sons"/>
   <translation tag="Previous" pt="Anterior"/>
@@ -1998,7 +1998,7 @@
   <translation tag="Priming..." pt="Preparando..."/>
   <translation tag="Print" pt="Imprimir"/>
   <translation tag="Print Anyway" pt="Imprimir Mesmo Assim"/>
-  <translation tag="Print Behaviour"/>
+  <translation tag="Print Behaviour" pt="Comportamento de impressão"/>
   <translation tag="Print Cancelled" pt="Impressão Cancelada"/>
   <translation tag="Print Complete!" pt="Impressão Concluída!"/>
   <translation tag="Print Completion Alert" pt="Alerta de Conclusão de Impressão"/>
@@ -2226,7 +2226,7 @@
   <translation tag="Replace" pt="Substituir"/>
   <translation tag="Replace Profile?" pt="Substituir Perfil?"/>
   <translation tag="Replay Welcome Tour" pt="Repetir Tour de Boas-Vindas"/>
-  <translation tag="Replenish ignores colour"/>
+  <translation tag="Replenish ignores colour" pt="O reabastecimento ignora a cor"/>
   <translation tag="Replenishing filament..." pt="Reabastecendo filamento..."/>
   <translation tag="Report saved to crash_report.txt" pt="Relatório salvo em crash_report.txt"/>
   <translation tag="Reprint" pt="Reimprimir"/>
@@ -2537,7 +2537,7 @@
   <translation tag="Slot Blocked" pt="Slot bloqueado"/>
   <translation tag="Slot Not Available" pt="Slot não disponível"/>
   <translation tag="Slot colors, materials, and levels" pt="Cores, materiais e níveis dos slots"/>
-  <translation tag="Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print."/>
+  <translation tag="Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print." pt="O slot {} não tem tipo de filamento definido, então a impressora não vai retomar. Defina o material dele no painel de filamento e retome a impressão."/>
   <translation tag="Slots" pt="Slots"/>
   <translation tag="Small labels help keep controls calm and focused." pt="Rótulos pequenos ajudam a manter os controles calmos e focados."/>
   <translation tag="Snapmaker SnapSwap" pt="Snapmaker SnapSwap"/>
@@ -2678,7 +2678,7 @@
   <translation tag="TOOLS" pt="FERRAMENTAS"/>
   <translation tag="TPU" pt="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." pt="Leva 3-5 min. Não interrompa."/>
-  <translation tag="Tangle sensitivity"/>
+  <translation tag="Tangle sensitivity" pt="Sensibilidade a emaranhados"/>
   <translation tag="Tap + to add" pt="Toque em + para adicionar"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" pt="Toque em Reiniciar firmware para recuperar. Na K2 isso também reinicia a ponte MCU rpi"/>
   <translation tag="Tap again to confirm this orientation" pt="Toque novamente para confirmar esta orientação"/>
@@ -2906,7 +2906,7 @@
   <translation tag="Turbo" pt="Turbo"/>
   <translation tag="Turbo Inner" pt="Turbo Interno"/>
   <translation tag="Turbo Outer" pt="Turbo Externo"/>
-  <translation tag="Turn LED off when the print ends"/>
+  <translation tag="Turn LED off when the print ends" pt="Desligar o LED ao terminar a impressão"/>
   <translation tag="Turn Off" pt="Desligar"/>
   <translation tag="Turn Off WiFi?" pt="Desligar WiFi?"/>
   <translation tag="Turn On" pt="Ligar"/>
@@ -2951,7 +2951,7 @@
   <translation tag="Unload Distance" pt="Distância de descarregamento"/>
   <translation tag="Unload Failed" pt="Falha ao descarregar"/>
   <translation tag="Unload Filament" pt="Descarregar Filamento"/>
-  <translation tag="Unload at end"/>
+  <translation tag="Unload at end" pt="Descarregar ao terminar"/>
   <translation tag="Unload failed" pt="Falha ao descarregar"/>
   <translation tag="Unload filament" pt="Descarregar filamento"/>
   <translation tag="Unload from toolhead first" pt="Descarregue primeiro do cabeçote"/>

@@ -20,7 +20,7 @@ translations:
   '%s has about %.0fg but %s needs about %.0fg. Start anyway?': '%s の残量は約 %.0fg ですが、%s には約 %.0fg 必要です。それでも開始しますか？'
   '%s has no filament loaded — this print will run out.': '%s にフィラメントが装填されていません — この印刷は途中で切れます。'
   '%s needs filament in %s, which is empty — this print will run out.': '%s は %s のフィラメントを必要としますが、空です — この印刷は途中で切れます。'
-  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': ''
+  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': '%s は %s を使用しますが、フィラメントはあるのに材料が設定されていません。設定するまでプリンターは開始しません。'
   '%s: %.0fg of %.0fg needed': '%s: %.0fg（必要 %.0fg）'
   '%u layers': '%uレイヤー'
   '%zu changes': '%zu件の変更'
@@ -230,7 +230,7 @@ translations:
   Auto-probe or manually check screw heights: 自動プローブまたは手動でネジの高さを確認
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: 自動補充はオンですが、フィラメントが一致するスロットが2つないため、フィラメント切れになっても何も切り替わりません
   Auto-render video: 動画を自動レンダリング
-  'Auto-replenish filament': ''
+  'Auto-replenish filament': 'フィラメントを自動補充'
   Auto-tuning Shapers...: シェーパーを自動調整中...
   Auto-uninstall only works on local Moonraker: 自動アンインストールはローカルの Moonraker でのみ動作します
   Automatic: 自動
@@ -748,7 +748,7 @@ translations:
   Deploy: 展開
   Describe the issue (optional): 問題の詳細（任意）
   Detailed: 詳細
-  'Detect filament tangles': ''
+  'Detect filament tangles': 'フィラメントの絡みを検出'
   Detecting plate...: プレートを検出中...
   Detecting printer type...: プリンタータイプを検出中...
   Detecting...: 検出中...
@@ -1124,7 +1124,7 @@ translations:
   Filament jam detected: フィラメントの詰まりを検出しました
   Filament jammed at the extruder gear: エクストルーダーギアでフィラメントが詰まりました
   Filament never reached the CFS hub sensor: フィラメントが CFS ハブセンサーに到達しませんでした
-  Filament not set: ''
+  Filament not set: 'フィラメント未設定'
   Filament operation failed: フィラメント操作に失敗しました
   Filament operation timed out: フィラメント操作がタイムアウトしました
   Filament ran out: フィラメントがなくなりました
@@ -1364,7 +1364,7 @@ translations:
   Initiate blade change procedure: 'ブレード交換手順を開始'
   Input: 入力
   Input Shaper: インプットシェーパー
-  Input Shaper Calibration: ''
+  Input Shaper Calibration: 'インプットシェーパーキャリブレーション'
   Input Shaper Help: 入力シェーパーヘルプ
   Input Shaping: インプットシェーピング
   Input shaper calibration sensors: インプットシェーパーキャリブレーションセンサー
@@ -2019,7 +2019,7 @@ translations:
   Power: 電源
   Power Devices: 電源デバイス
   Power off the printer or screen: プリンターまたは画面の電源をオフにします
-  'Power was lost during the print; the printer stopped and saved its progress': ''
+  'Power was lost during the print; the printer stopped and saved its progress': '印刷中に電源が失われました。プリンターは停止し、進行状況を保存しました'
   Pre-heat the extruder first: 先にエクストルーダーを予熱してください
   'Pre-print command failed: {}': '印刷前コマンドに失敗しました: {}'
   Pre-print homing...: 印刷前ホーミング中...
@@ -2043,7 +2043,7 @@ translations:
   Press Abort to stop: 中止するには「中止」を押してください
   Press Scan to search: スキャンを押して検索
   'Pressure:': '圧力:'
-  Pressure Advance Calibration: ''
+  Pressure Advance Calibration: 'プレッシャーアドバンスキャリブレーション'
   Preview Sounds: サウンドをプレビュー
   Previous: 前回
   Price: 価格
@@ -2052,7 +2052,7 @@ translations:
   Priming...: プライミング中...
   Print: 印刷
   Print Anyway: それでも印刷
-  'Print Behaviour': ''
+  'Print Behaviour': '印刷の動作'
   Print Cancelled: 印刷キャンセル
   Print Complete!: 印刷完了！
   Print Completion Alert: 印刷完了通知
@@ -2288,7 +2288,7 @@ translations:
   Replace: "置き換え"
   Replace Profile?: "プロファイルを置き換えますか？"
   Replay Welcome Tour: ウェルカムツアーを再生
-  'Replenish ignores colour': ''
+  'Replenish ignores colour': '補充時に色を無視'
   Replenishing filament...: フィラメントを補充中...
   Report saved to crash_report.txt: crash_report.txt にレポートを保存しました
   Reprint: 再印刷
@@ -2609,7 +2609,7 @@ translations:
   Slot Not Available: 'スロットは利用できません'
   Slot colors, materials, and levels: スロットの色、素材、残量
   ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
-  : ''
+  : 'スロット {} にフィラメントの種類が設定されていないため、プリンターは再開しません。フィラメントパネルで材料を設定してから印刷を再開してください。'
   Slots: スロット
   Small labels help keep controls calm and focused.: 小さなラベルはコントロールを落ち着いた集中した状態に保ちます。
   Snapmaker SnapSwap: Snapmaker SnapSwap
@@ -2753,7 +2753,7 @@ translations:
   TOOLS: ツール
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: 3〜5分かかります。中断しないでください。
-  'Tangle sensitivity': ''
+  'Tangle sensitivity': '絡み検出の感度'
   Tap + to add: + をタップして追加
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: 「ファームウェア再起動」をタップして復旧してください。K2 では rpi MCU ブリッジも再起動されます
   Tap again to confirm this orientation: もう一度タップしてこの向きを確定
@@ -3014,7 +3014,7 @@ translations:
   Turbo: ターボ
   Turbo Inner: ターボ・内側
   Turbo Outer: ターボ・外側
-  'Turn LED off when the print ends': ''
+  'Turn LED off when the print ends': '印刷終了時に LED を消灯'
   Turn Off: オフにする
   Turn Off WiFi?: WiFiをオフにしますか？
   Turn On: オンにする
@@ -3060,7 +3060,7 @@ translations:
   Unload Distance: 'アンロード距離'
   Unload Failed: '取り出しに失敗しました'
   Unload Filament: フィラメントを排出
-  'Unload at end': ''
+  'Unload at end': '終了時に排出'
   Unload failed: 排出に失敗しました
   Unload filament: 'フィラメントをアンロード'
   Unload from toolhead first: '先にツールヘッドから取り出してください'

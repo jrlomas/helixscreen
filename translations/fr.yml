@@ -20,7 +20,7 @@ translations:
   '%s has about %.0fg but %s needs about %.0fg. Start anyway?': '%s contient environ %.0fg mais %s nécessite environ %.0fg. Démarrer quand même ?'
   '%s has no filament loaded — this print will run out.': '%s n''a pas de filament chargé — cette impression manquera de filament.'
   '%s needs filament in %s, which is empty — this print will run out.': '%s nécessite du filament dans %s, qui est vide — cette impression manquera de filament.'
-  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': ''
+  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': '%s utilise %s, qui contient du filament mais aucun matériau défini — l''imprimante ne démarrera pas tant qu''il n''est pas défini.'
   '%s: %.0fg of %.0fg needed': '%s : %.0fg sur %.0fg requis'
   '%u layers': '%u couches'
   '%zu changes': '%zu modifications'
@@ -259,7 +259,7 @@ translations:
     des hauteurs de vis
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: 'Le réapprovisionnement automatique est activé, mais aucune paire de slots ne contient le même filament : rien ne changera en fin de filament'
   Auto-render video: Rendu vidéo automatique
-  'Auto-replenish filament': ''
+  'Auto-replenish filament': 'Réapprovisionner le filament automatiquement'
   Auto-tuning Shapers...: Réglage automatique des Shapers...
   Auto-uninstall only works on local Moonraker: La désinstallation automatique ne
     fonctionne que sur Moonraker local
@@ -824,7 +824,7 @@ translations:
   Deploy: Déployer
   Describe the issue (optional): Décrivez le problème (optionnel)
   Detailed: Détaillé
-  'Detect filament tangles': ''
+  'Detect filament tangles': 'Détecter les nœuds de filament'
   Detecting plate...: Détection du plateau...
   Detecting printer type...: Détection du type d'imprimante...
   Detecting...: Détection...
@@ -1228,7 +1228,7 @@ translations:
   Filament jam detected: Bourrage de filament détecté
   Filament jammed at the extruder gear: Filament coincé au niveau de l'engrenage d'extrudeur
   Filament never reached the CFS hub sensor: Le filament n'a jamais atteint le capteur du hub CFS
-  Filament not set: ''
+  Filament not set: 'Filament non défini'
   Filament operation failed: Échec de l'opération filament
   Filament operation timed out: Opération filament — délai dépassé
   Filament ran out: Le filament est épuisé
@@ -1484,7 +1484,7 @@ translations:
   Initiate blade change procedure: 'Lancer la procédure de changement de lame'
   Input: Entrée
   Input Shaper: Input Shaper
-  Input Shaper Calibration: ''
+  Input Shaper Calibration: 'Calibration Input Shaper'
   Input Shaper Help: Aide Input Shaper
   Input Shaping: Input Shaping
   Input shaper calibration sensors: Capteurs de calibration Input Shaper
@@ -2182,7 +2182,7 @@ translations:
   Power: Alimentation
   Power Devices: Appareils électriques
   Power off the printer or screen: Éteindre l'imprimante ou l'écran
-  'Power was lost during the print; the printer stopped and saved its progress': ''
+  'Power was lost during the print; the printer stopped and saved its progress': 'Une coupure de courant est survenue pendant l''impression ; l''imprimante s''est arrêtée et a enregistré sa progression'
   Pre-heat the extruder first: Préchauffez d'abord l'extrudeur
   'Pre-print command failed: {}': 'Échec de la commande pré-impression : {}'
   Pre-print homing...: Référence pré-impression...
@@ -2207,7 +2207,7 @@ translations:
   Press Abort to stop: Appuyez sur Abandonner pour arrêter
   Press Scan to search: Appuyez sur Scanner pour rechercher
   'Pressure:': 'Pression :'
-  Pressure Advance Calibration: ''
+  Pressure Advance Calibration: 'Calibration Pressure Advance'
   Preview Sounds: Aperçu des sons
   Previous: Précédent
   Price: Prix
@@ -2216,7 +2216,7 @@ translations:
   Priming...: Amorçage...
   Print: Imprimer
   Print Anyway: Imprimer quand même
-  'Print Behaviour': ''
+  'Print Behaviour': 'Comportement d''impression'
   Print Cancelled: Impression annulée
   Print Complete!: Impression terminée !
   Print Completion Alert: Alerte de fin d'impression
@@ -2472,7 +2472,7 @@ translations:
   Replace: "Remplacer"
   Replace Profile?: "Remplacer le profil ?"
   Replay Welcome Tour: Rejouer la visite de bienvenue
-  'Replenish ignores colour': ''
+  'Replenish ignores colour': 'Le réapprovisionnement ignore la couleur'
   Replenishing filament...: Réapprovisionnement en filament...
   Report saved to crash_report.txt: Rapport enregistré dans crash_report.txt
   Reprint: Réimprimer
@@ -2830,7 +2830,7 @@ translations:
   Slot Not Available: 'Slot non disponible'
   Slot colors, materials, and levels: Couleurs, matériaux et niveaux des slots
   ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
-  : ''
+  : 'Le slot {} n''a aucun type de filament défini, l''imprimante ne reprendra donc pas. Définissez son matériau dans le panneau filament, puis reprenez l''impression.'
   Slots: Slots
   Small labels help keep controls calm and focused.: Les petites étiquettes aident
     à garder les contrôles calmes et concentrés.
@@ -2988,7 +2988,7 @@ translations:
   TOOLS: OUTILS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Prend 3-5 min. Ne pas interrompre.
-  'Tangle sensitivity': ''
+  'Tangle sensitivity': 'Sensibilité aux nœuds'
   Tap + to add: Touchez + pour ajouter
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Appuyez sur Redémarrer le firmware pour récupérer. Sur la K2, cela redémarre aussi le pont MCU rpi
   Tap again to confirm this orientation: Appuyez à nouveau pour confirmer cette orientation
@@ -3292,7 +3292,7 @@ translations:
   Turbo: Turbo
   Turbo Inner: Turbo intérieur
   Turbo Outer: Turbo extérieur
-  'Turn LED off when the print ends': ''
+  'Turn LED off when the print ends': 'Éteindre la LED à la fin de l''impression'
   Turn Off: Éteindre
   Turn Off WiFi?: Désactiver le WiFi ?
   Turn On: Allumer
@@ -3341,7 +3341,7 @@ translations:
   Unload Distance: 'Distance de déchargement'
   Unload Failed: 'Échec du déchargement'
   Unload Filament: Décharger le filament
-  'Unload at end': ''
+  'Unload at end': 'Décharger à la fin'
   Unload failed: Échec du déchargement
   Unload filament: 'Décharger le filament'
   Unload from toolhead first: 'Déchargez d''abord depuis la tête d''outil'

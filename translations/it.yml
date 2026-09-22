@@ -20,7 +20,7 @@ translations:
   '%s has about %.0fg but %s needs about %.0fg. Start anyway?': '%s ha circa %.0fg ma %s ne richiede circa %.0fg. Avviare comunque?'
   '%s has no filament loaded — this print will run out.': '%s non ha filamento caricato — questa stampa lo esaurirà.'
   '%s needs filament in %s, which is empty — this print will run out.': '%s richiede filamento e %s non ne ha — questa stampa lo esaurirà.'
-  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': ''
+  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': '%s usa %s, che ha filamento ma nessun materiale impostato — la stampante non partirà finché non lo imposti.'
   '%s: %.0fg of %.0fg needed': '%s: %.0fg di %.0fg necessari'
   '%u layers': '%u strati'
   '%zu changes': '%zu modifiche'
@@ -255,7 +255,7 @@ translations:
     dell'altezza delle viti
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: Il rifornimento automatico è attivo, ma nessuna coppia di slot ha filamento compatibile, quindi nulla cambierà all'esaurimento
   Auto-render video: Rendering video automatico
-  'Auto-replenish filament': ''
+  'Auto-replenish filament': 'Rifornisci filamento automaticamente'
   Auto-tuning Shapers...: Regolazione automatica degli shaper in corso...
   Auto-uninstall only works on local Moonraker: La disinstallazione automatica funziona
     solo su Moonraker locale
@@ -814,7 +814,7 @@ translations:
   Deploy: Rileva
   Describe the issue (optional): Descrivi il problema (facoltativo)
   Detailed: Dettagliato
-  'Detect filament tangles': ''
+  'Detect filament tangles': 'Rileva grovigli del filamento'
   Detecting plate...: Rilevamento piano...
   Detecting printer type...: Rilevamento tipo stampante...
   Detecting...: Rilevamento in corso...
@@ -1211,7 +1211,7 @@ translations:
   Filament jam detected: Blocco del filamento rilevato
   Filament jammed at the extruder gear: Filamento inceppato nell'ingranaggio dell'estrusore
   Filament never reached the CFS hub sensor: Il filamento non ha mai raggiunto il sensore dell'hub CFS
-  Filament not set: ''
+  Filament not set: 'Filamento non impostato'
   Filament operation failed: Operazione filamento fallita
   Filament operation timed out: Operazione filamento — tempo scaduto
   Filament ran out: Il filamento è esaurito
@@ -1467,7 +1467,7 @@ translations:
   Initiate blade change procedure: 'Avvia la procedura di cambio lama'
   Input: Input
   Input Shaper: Input Shaper
-  Input Shaper Calibration: ''
+  Input Shaper Calibration: 'Calibrazione input shaper'
   Input Shaper Help: Guida Input Shaper
   Input Shaping: Input Shaping
   Input shaper calibration sensors: Sensori calibrazione input shaper
@@ -2165,7 +2165,7 @@ translations:
   Power: Alimentazione
   Power Devices: Dispositivi di alimentazione
   Power off the printer or screen: Spegni la stampante o lo schermo
-  'Power was lost during the print; the printer stopped and saved its progress': ''
+  'Power was lost during the print; the printer stopped and saved its progress': 'È mancata la corrente durante la stampa; la stampante si è fermata e ha salvato l''avanzamento'
   Pre-heat the extruder first: Preriscaldare prima l'estrusore
   'Pre-print command failed: {}': 'Comando pre-stampa fallito: {}'
   Pre-print homing...: Homing pre-stampa...
@@ -2190,7 +2190,7 @@ translations:
   Press Abort to stop: Premi Interrompi per fermare
   Press Scan to search: Premi Scansiona per cercare
   'Pressure:': 'Pressione:'
-  Pressure Advance Calibration: ''
+  Pressure Advance Calibration: 'Calibrazione pressure advance'
   Preview Sounds: Anteprima suoni
   Previous: Precedente
   Price: Prezzo
@@ -2199,7 +2199,7 @@ translations:
   Priming...: Preparazione ugello...
   Print: Stampa
   Print Anyway: Stampa comunque
-  'Print Behaviour': ''
+  'Print Behaviour': 'Comportamento di stampa'
   Print Cancelled: Stampa annullata
   Print Complete!: Stampa completata!
   Print Completion Alert: Avviso completamento stampa
@@ -2450,7 +2450,7 @@ translations:
   Replace: "Sostituisci"
   Replace Profile?: "Sostituire profilo?"
   Replay Welcome Tour: Rivedi il tour di benvenuto
-  'Replenish ignores colour': ''
+  'Replenish ignores colour': 'Il rifornimento ignora il colore'
   Replenishing filament...: Rifornimento filamento...
   Report saved to crash_report.txt: Report salvato in crash_report.txt
   Reprint: Ristampa
@@ -2805,7 +2805,7 @@ translations:
   Slot Not Available: 'Slot non disponibile'
   Slot colors, materials, and levels: Colori, materiali e livelli slot
   ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
-  : ''
+  : 'Lo slot {} non ha un tipo di filamento impostato, quindi la stampante non riprenderà. Imposta il suo materiale nel pannello filamento, poi riprendi la stampa.'
   Slots: Slot
   Small labels help keep controls calm and focused.: Le etichette piccole aiutano
     a mantenere i controlli ordinati e mirati.
@@ -2963,7 +2963,7 @@ translations:
   TOOLS: STRUMENTI
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Richiede 3-5 min. Non interrompere.
-  'Tangle sensitivity': ''
+  'Tangle sensitivity': 'Sensibilità ai grovigli'
   Tap + to add: Tocca + per aggiungere
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Toccare Riavvia firmware per ripristinare. Sulla K2 questo riavvia anche il bridge MCU rpi
   Tap again to confirm this orientation: Tocca di nuovo per confermare questo orientamento
@@ -3260,7 +3260,7 @@ translations:
   Turbo: Turbo
   Turbo Inner: Turbo interno
   Turbo Outer: Turbo esterno
-  'Turn LED off when the print ends': ''
+  'Turn LED off when the print ends': 'Spegni il LED a fine stampa'
   Turn Off: Spegni
   Turn Off WiFi?: Disattivare il WiFi?
   Turn On: Accendi
@@ -3309,7 +3309,7 @@ translations:
   Unload Distance: 'Distanza di scarico'
   Unload Failed: 'Scaricamento non riuscito'
   Unload Filament: Scarica filamento
-  'Unload at end': ''
+  'Unload at end': 'Scarica alla fine'
   Unload failed: Scarico non riuscito
   Unload filament: 'Scarica il filamento'
   Unload from toolhead first: 'Scarica prima dalla testina'

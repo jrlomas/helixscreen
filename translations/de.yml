@@ -20,7 +20,7 @@ translations:
   '%s has about %.0fg but %s needs about %.0fg. Start anyway?': '%s hat etwa %.0fg, aber %s benötigt etwa %.0fg. Trotzdem starten?'
   '%s has no filament loaded — this print will run out.': 'Bei %s ist kein Filament geladen — bei diesem Druck geht das Filament aus.'
   '%s needs filament in %s, which is empty — this print will run out.': '%s benötigt Filament, aber %s ist leer — bei diesem Druck geht das Filament aus.'
-  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': ''
+  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': '%s verwendet %s: dort liegt Filament, aber kein Material ist gesetzt — der Drucker startet erst, wenn Sie es setzen.'
   '%s: %.0fg of %.0fg needed': '%s: %.0fg von %.0fg benötigt'
   '%u layers': '%u Schichten'
   '%zu changes': '%zu Änderungen'
@@ -259,7 +259,7 @@ translations:
     Prüfung der Schraubenhöhen
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: Automatisches Nachfüllen ist an, aber es gibt keine zwei Slots mit passendem Filament, daher wird bei Filamentende nichts gewechselt
   Auto-render video: Video automatisch rendern
-  'Auto-replenish filament': ''
+  'Auto-replenish filament': 'Filament automatisch nachfüllen'
   Auto-tuning Shapers...: Shaper automatisch abstimmen...
   Auto-uninstall only works on local Moonraker: Auto-Deinstallation funktioniert nur
     bei lokalem Moonraker
@@ -823,7 +823,7 @@ translations:
   Deploy: Ausfahren
   Describe the issue (optional): Problem beschreiben (optional)
   Detailed: Detailliert
-  'Detect filament tangles': ''
+  'Detect filament tangles': 'Filamentverwicklungen erkennen'
   Detecting plate...: Platte erkennen...
   Detecting printer type...: Druckertyp wird erkannt...
   Detecting...: Wird erkannt...
@@ -1224,7 +1224,7 @@ translations:
   Filament jam detected: Filamentstau erkannt
   Filament jammed at the extruder gear: Filament am Extruderrad verklemmt
   Filament never reached the CFS hub sensor: Filament hat den CFS-Hub-Sensor nie erreicht
-  Filament not set: ''
+  Filament not set: 'Filament nicht gesetzt'
   Filament operation failed: Filament-Vorgang fehlgeschlagen
   Filament operation timed out: Filament-Vorgang Zeitüberschreitung
   Filament ran out: Filament ist aufgebraucht
@@ -1478,7 +1478,7 @@ translations:
   Initiate blade change procedure: 'Den Klingenwechsel starten'
   Input: Eingabe
   Input Shaper: Input Shaper
-  Input Shaper Calibration: ''
+  Input Shaper Calibration: 'Input-Shaper-Kalibrierung'
   Input Shaper Help: Input Shaper Hilfe
   Input Shaping: Input Shaping
   Input shaper calibration sensors: Input-Shaper-Kalibrierungssensoren
@@ -2174,7 +2174,7 @@ translations:
   Power: Strom
   Power Devices: Stromgeräte
   Power off the printer or screen: Drucker oder Bildschirm ausschalten
-  'Power was lost during the print; the printer stopped and saved its progress': ''
+  'Power was lost during the print; the printer stopped and saved its progress': 'Während des Drucks fiel der Strom aus; der Drucker hat angehalten und den Fortschritt gespeichert'
   Pre-heat the extruder first: Zuerst den Extruder vorheizen
   'Pre-print command failed: {}': 'Vor-Druck-Befehl fehlgeschlagen: {}'
   Pre-print homing...: Referenzieren vor dem Druck...
@@ -2198,7 +2198,7 @@ translations:
   Press Abort to stop: Zum Stoppen Abbrechen drücken
   Press Scan to search: Scannen drücken zum Suchen
   'Pressure:': 'Druck:'
-  Pressure Advance Calibration: ''
+  Pressure Advance Calibration: 'Pressure-Advance-Kalibrierung'
   Preview Sounds: Sounds vorhören
   Previous: Zurück
   Price: Preis
@@ -2207,7 +2207,7 @@ translations:
   Priming...: Primen...
   Print: Drucken
   Print Anyway: Trotzdem drucken
-  'Print Behaviour': ''
+  'Print Behaviour': 'Druckverhalten'
   Print Cancelled: Druck abgebrochen
   Print Complete!: Druck abgeschlossen!
   Print Completion Alert: Druckabschluss-Benachrichtigung
@@ -2460,7 +2460,7 @@ translations:
   Replace: "Ersetzen"
   Replace Profile?: "Profil ersetzen?"
   Replay Welcome Tour: Willkommens-Rundgang erneut abspielen
-  'Replenish ignores colour': ''
+  'Replenish ignores colour': 'Nachfüllen ignoriert Farbe'
   Replenishing filament...: Filament nachfüllen...
   Report saved to crash_report.txt: Bericht in crash_report.txt gespeichert
   Reprint: Erneut drucken
@@ -2814,7 +2814,7 @@ translations:
   Slot Not Available: 'Slot nicht verfügbar'
   Slot colors, materials, and levels: Slotfarben, Materialien und Füllstände
   ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
-  : ''
+  : 'Für Slot {} ist kein Filamenttyp gesetzt, daher setzt der Drucker nicht fort. Setzen Sie sein Material im Filament-Panel und setzen Sie den Druck dann fort.'
   Slots: Slots
   Small labels help keep controls calm and focused.: Kleine Beschriftungen helfen,
     Steuerelemente ruhig und fokussiert zu halten.
@@ -2969,7 +2969,7 @@ translations:
   TOOLS: WERKZEUGE
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Dauert 3-5 Min. Nicht unterbrechen.
-  'Tangle sensitivity': ''
+  'Tangle sensitivity': 'Verwicklungsempfindlichkeit'
   Tap + to add: Zum Hinzufügen + tippen
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Zum Wiederherstellen auf Firmware-Neustart tippen. Beim K2 wird dabei auch die rpi-MCU-Bridge neu gestartet
   Tap again to confirm this orientation: Erneut tippen, um diese Ausrichtung zu bestätigen
@@ -3268,7 +3268,7 @@ translations:
   Turbo: Turbo
   Turbo Inner: Turbo Innen
   Turbo Outer: Turbo Außen
-  'Turn LED off when the print ends': ''
+  'Turn LED off when the print ends': 'LED am Druckende ausschalten'
   Turn Off: Ausschalten
   Turn Off WiFi?: WiFi ausschalten?
   Turn On: Einschalten
@@ -3317,7 +3317,7 @@ translations:
   Unload Distance: 'Entladeweg'
   Unload Failed: 'Entladen fehlgeschlagen'
   Unload Filament: Filament entladen
-  'Unload at end': ''
+  'Unload at end': 'Am Ende entladen'
   Unload failed: Entladen fehlgeschlagen
   Unload filament: 'Filament entladen'
   Unload from toolhead first: 'Entladen Sie zuerst aus dem Werkzeugkopf'
