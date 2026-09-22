@@ -3,8 +3,6 @@
 
 #include "snapmaker_exceptions.h"
 
-#include "lvgl/src/others/translation/lv_translation.h"
-
 #include <array>
 #include <cctype>
 
@@ -136,15 +134,9 @@ std::vector<ActiveException> read_active_exceptions(const nlohmann::json& status
         active.code.id = field_int(entry, "id");
         active.code.index = field_int(entry, "index");
         active.code.code = field_int(entry, "code");
-        if (const auto known = exception_message(active.code); !known.empty()) {
-            // The table holds the English source; the fault banner renders
-            // this string, so it translates here.
-            active.message = lv_tr(std::string(known).c_str());
-        } else {
-            auto firmware_text = entry.find("message");
-            if (firmware_text != entry.end() && firmware_text->is_string()) {
-                active.message = firmware_text->get<std::string>();
-            }
+        auto firmware_text = entry.find("message");
+        if (firmware_text != entry.end() && firmware_text->is_string()) {
+            active.message = firmware_text->get<std::string>();
         }
         active.persistent = field_persistent(entry, "is_persistent");
         out.push_back(std::move(active));

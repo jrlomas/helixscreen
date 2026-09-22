@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "hv/json.hpp"
+
 namespace helix {
 class PrinterDiscovery;
 } // namespace helix
@@ -35,5 +37,15 @@ namespace helix::faultcodes {
 /// firmware owns, so the generic classifier still gets its turn.
 [[nodiscard]] std::optional<ErrorEvent> classify(const PrinterDiscovery& hw,
                                                  const std::string& line);
+
+/// The faults currently standing, one console-equivalent coded line each
+/// (`!! LLLL-IIII-XXXX-CCCC <firmware message>` in the same format classify
+/// parses), so the consumer feeds them through the same path a console line
+/// takes. nullopt when the frame says nothing about faults -- a Moonraker
+/// delta frame omits unchanged objects, and that must NOT read as "all
+/// cleared"; an empty vector is the firmware explicitly reporting none. Pure
+/// and untranslated, so it is safe on any thread.
+[[nodiscard]] std::optional<std::vector<std::string>>
+read_standing_faults(const PrinterDiscovery& hw, const nlohmann::json& status);
 
 } // namespace helix::faultcodes

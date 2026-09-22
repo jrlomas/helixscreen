@@ -112,6 +112,13 @@ GcodeErrorRouter::GcodeErrorRouter(IMoonrakerAPI* api, IMoonrakerClient* client,
     client_->add_connected_observer(
         REPLAY_OBSERVER_NAME,
         lifetime_.bg_cb("GcodeErrorRouter::on_connected", [this]() { on_connected(); }));
+
+    // Standing faults. notify_status_update delivers the status delta on the
+    // WS thread; the same bg_cb delivery as above defers the body to main,
+    // where reading printer state and presenting are safe.
+    standing_notify_id_ = client_->register_notify_update(
+        lifetime_.bg_cb("GcodeErrorRouter::on_status_update",
+                        [this](const nlohmann::json& msg) { on_notify_status_update(msg); }));
 }
 
 GcodeErrorRouter::~GcodeErrorRouter() {
@@ -124,6 +131,9 @@ GcodeErrorRouter::~GcodeErrorRouter() {
     if (client_) {
         client_->unregister_method_callback("notify_gcode_response", NOTIFY_HANDLER_NAME);
         client_->remove_connected_observer(REPLAY_OBSERVER_NAME);
+        if (standing_notify_id_ != INVALID_SUBSCRIPTION_ID) {
+            client_->unsubscribe_notify_update(standing_notify_id_);
+        }
     }
 }
 
@@ -353,7 +363,7 @@ void GcodeErrorRouter::present_deferred_toast(const std::string& text,
     lv_timer_set_repeat_count(dt, 1);
 }
 
-void GcodeErrorRouter::process_line(const std::string& line) {
+void GcodeErrorRouter::process_line(const std::string& line, bool standing_fault) {
     if (line.empty())
         return;
 
@@ -382,6 +392,13 @@ void GcodeErrorRouter::process_line(const std::string& line) {
         ev = error_classify::classify(line, ctx);
     if (!ev)
         return;
+
+    // A fault standing in the firmware's list is current by definition: the
+    // INFO suppression exists for chatty console lines, so a standing fault
+    // surfaces at least as a toast.
+    if (standing_fault && ev->severity == ErrorSeverity::INFO) {
+        ev->severity = ErrorSeverity::WARNING;
+    }
 
     spdlog::error("[GcodeError] sev={} src={} code={}: {}", static_cast<int>(ev->severity),
                   static_cast<int>(ev->source), ev->code.empty() ? "-" : ev->code, ev->detail);
@@ -486,7 +503,39 @@ void GcodeErrorRouter::on_notify_gcode_response(const nlohmann::json& msg) {
     }
 }
 
+void GcodeErrorRouter::on_notify_status_update(const nlohmann::json& msg) {
+    if (!msg.contains("params") || !msg["params"].is_array() || msg["params"].empty() ||
+        !msg["params"][0].is_object()) {
+        return;
+    }
+    const nlohmann::json& status = msg["params"][0];
+
+    const auto standing =
+        faultcodes::read_standing_faults(get_printer_state().get_discovery(), status);
+    if (!standing) {
+        // The frame said nothing about faults: a delta that omits the fault
+        // object is silence, not "all cleared".
+        return;
+    }
+
+    std::set<std::string> next(standing->begin(), standing->end());
+    for (const auto& line : next) {
+        if (standing_fault_lines_.count(line) == 0) {
+            ++standing_fed_count_;
+            process_line(line, /*standing_fault=*/true);
+        }
+    }
+    // Lines that vanished leave the set, so a re-raised fault surfaces again.
+    standing_fault_lines_ = std::move(next);
+}
+
 void GcodeErrorRouter::on_connected() {
+    // A fresh connection re-surfaces standing faults: the subscription's
+    // first full frame follows this, and every line it carries reads as new.
+    // Klippy-ready transitions land here too, which is what re-surfaces a
+    // persistent fault across a firmware restart.
+    standing_fault_lines_.clear();
+
     if (!client_)
         return;
     // [L072] get_gcode_store's success callback fires on the WS thread when

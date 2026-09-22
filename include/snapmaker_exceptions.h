@@ -56,7 +56,9 @@ enum class ExceptionSeverity { Informational, Pause, Cancel };
 /// One fault the firmware reports as currently standing.
 struct ActiveException {
     ExceptionCode code;
-    /// Our wording when we have it, else the firmware's own message.
+    /// The firmware's own message string, verbatim and untranslated. Status
+    /// frames arrive off the main thread, so wording for the screen belongs
+    /// to the render path (faultcodes::classify), never here.
     std::string message;
     /// True when the fault survives a firmware restart.
     bool persistent = false;
