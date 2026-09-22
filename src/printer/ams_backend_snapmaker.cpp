@@ -2429,14 +2429,23 @@ std::string AmsBackendSnapmaker::build_preference_gcode(const std::string& actio
         changes.filament_entangle_sen = std::any_cast<std::string>(value);
     } else if (action_id.rfind("snapmaker_end_unload_t", 0) == 0) {
         const std::string suffix = action_id.substr(sizeof("snapmaker_end_unload_t") - 1);
-        if (suffix.empty() || !std::all_of(suffix.begin(), suffix.end(),
-                                           [](unsigned char c) { return std::isdigit(c) != 0; })) {
+        // Malformed ids stop here: an empty or non-numeric suffix names no
+        // tool, and an all-digit one ten chars or longer overflows stoul
+        // (which throws) — no real tool index is that large.
+        if (suffix.empty() || suffix.size() >= 10 ||
+            !std::all_of(suffix.begin(), suffix.end(),
+                         [](unsigned char c) { return std::isdigit(c) != 0; })) {
             return {};
         }
         // END_UNLOAD_FILAMENT takes the whole list, so the untouched tools
-        // travel at their current values or they are cleared.
+        // travel at their current values or they are cleared. The snapshot is
+        // taken without holding mutex_ across the send that follows: a frame
+        // updating a different tool in that window loses to this write, which
+        // is the user-write-wins ordering.
         const size_t tool = static_cast<size_t>(std::stoul(suffix));
         auto list = print_preferences().end_unload_filament;
+        // A tool past the reported list is a stale id from before the firmware
+        // reported fewer toolheads.
         if (tool >= list.size()) {
             return {};
         }

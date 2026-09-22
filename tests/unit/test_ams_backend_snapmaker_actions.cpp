@@ -35,6 +35,7 @@ TEST_CASE("snapmaker exposes its firmware settings as device actions",
     HelixTestFixture fixture;
     AmsBackendSnapmaker backend(nullptr, nullptr);
     SnapmakerTestAccess::handle_status(backend, frame({{"auto_replenish_filament", true},
+                                                       {"replenish_ignore_color", false},
                                                        {"filament_entangle_detect", false},
                                                        {"filament_entangle_sen", "medium"},
                                                        {"end_led_turn_off", true}}));
@@ -44,6 +45,16 @@ TEST_CASE("snapmaker exposes its firmware settings as device actions",
     REQUIRE(rep != nullptr);
     REQUIRE(rep->type == ActionType::TOGGLE);
     REQUIRE(std::any_cast<bool>(rep->current_value) == true);
+
+    const DeviceAction* color = find_action(actions, "snapmaker_replenish_ignore_color");
+    REQUIRE(color != nullptr);
+    REQUIRE(color->type == ActionType::TOGGLE);
+    REQUIRE(std::any_cast<bool>(color->current_value) == false);
+
+    const DeviceAction* tangle = find_action(actions, "snapmaker_entangle_detect");
+    REQUIRE(tangle != nullptr);
+    REQUIRE(tangle->type == ActionType::TOGGLE);
+    REQUIRE(std::any_cast<bool>(tangle->current_value) == false);
 
     const DeviceAction* sen = find_action(actions, "snapmaker_entangle_sen");
     REQUIRE(sen != nullptr);
@@ -99,4 +110,27 @@ TEST_CASE("an unknown action id produces no gcode", "[ams][snapmaker][actions]")
     HelixTestFixture fixture;
     AmsBackendSnapmaker backend(nullptr, nullptr);
     REQUIRE(backend.build_preference_gcode("not_a_real_action", std::any(true)).empty());
+}
+
+TEST_CASE("the replenish and tangle toggles each emit only their own field",
+          "[ams][snapmaker][actions]") {
+    HelixTestFixture fixture;
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+    SnapmakerTestAccess::handle_status(
+        backend, frame({{"replenish_ignore_color", false}, {"filament_entangle_detect", true}}));
+    REQUIRE(backend.build_preference_gcode("snapmaker_replenish_ignore_color", std::any(true)) ==
+            "SET_PRINT_PREFERENCES REPLENISH_IGNORE_COLOR=1");
+    REQUIRE(backend.build_preference_gcode("snapmaker_entangle_detect", std::any(false)) ==
+            "SET_PRINT_PREFERENCES FILAMENT_ENTANGLE_DETECT=0");
+}
+
+TEST_CASE("an overlong tool suffix is refused rather than parsed", "[ams][snapmaker][actions]") {
+    // stoul throws out_of_range past ULONG_MAX, and this mapping runs inside
+    // the UI callback that invoked the action. No real tool index is that
+    // large, so an all-digit suffix this long can only be a malformed id.
+    HelixTestFixture fixture;
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+    REQUIRE(
+        backend.build_preference_gcode("snapmaker_end_unload_t99999999999999999999", std::any(true))
+            .empty());
 }
