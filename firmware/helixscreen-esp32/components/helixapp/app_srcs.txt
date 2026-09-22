@@ -163,6 +163,7 @@ src/printer/macro_param_cache.cpp
 src/printer/pause_cause.cpp
 src/printer/power_device_state.cpp
 src/printer/pre_print_option.cpp
+src/printer/pre_print_preferences.cpp
 src/printer/preflight_validator.cpp
 src/printer/print_lifecycle_state.cpp
 src/printer/print_start_checks.cpp
@@ -544,6 +545,7 @@ src/ui/ui_progress_bar.cpp
 src/ui/ui_ams_detail.cpp
 src/system/helix_paths.cpp
 src/printer/filament_slot_override_store.cpp
+src/api/auto_screws_tilt_adjust.cpp
 src/api/wifi_ui_utils.cpp
 # Task 13: wifi_manager.cpp/wifi_backend.cpp were platform-seamed (stub in
 # helixapp_platform_stubs2.cpp) through Task 12 — now real, backed by

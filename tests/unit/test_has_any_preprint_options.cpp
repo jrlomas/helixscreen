@@ -29,6 +29,8 @@
 #include "printer_discovery.h"
 #include "printer_state.h"
 
+#include <algorithm>
+
 #include "../catch_amalgamated.hpp"
 
 using namespace helix;
@@ -230,4 +232,57 @@ TEST_CASE("has_any_preprint_options: simplified expression equivalent to old per
         state.set_hardware(hardware_with(false, false, false, false, false));
         REQUIRE(read_aggregate(state) == 0);
     }
+}
+
+// ---------------------------------------------------------------------------
+// A firmware that owns timelapse declares an option for that capability in the
+// database. Synthesising the plugin row on top of it gives the user two
+// timelapse toggles, and where the plugin API is served by a compatibility stub
+// the synthesised one silently does nothing.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("a database option owning the timelapse capability suppresses the synthesized row",
+          "[printer_state][preprint][timelapse][capability]") {
+    lv_init_safe();
+    PrinterState& state = fresh_state();
+
+    state.set_printer_type_sync("Snapmaker U1");
+    state.set_timelapse_available(true);
+    state.set_timelapse_default_enabled(true);
+    UpdateQueueTestAccess::drain(UpdateQueue::instance());
+
+    const PrePrintOptionSet& set = state.get_pre_print_option_set();
+    REQUIRE(set.declares_capability("timelapse"));
+    REQUIRE(set.find("u1_timelapse") != nullptr);
+    REQUIRE(set.find("timelapse") == nullptr);
+
+    const int timelapse_rows = static_cast<int>(
+        std::count_if(set.options.begin(), set.options.end(),
+                      [](const PrePrintOption& o) { return o.capability_key() == "timelapse"; }));
+    REQUIRE(timelapse_rows == 1);
+}
+
+TEST_CASE("a printer with no database timelapse option still gets the synthesized row",
+          "[printer_state][preprint][timelapse][capability]") {
+    // The control for the case above: suppression must key on the database
+    // declaring the capability, not on the plugin being available.
+    lv_init_safe();
+    PrinterState& state = fresh_state();
+
+    state.set_printer_type_sync("Voron 2.4");
+    state.set_timelapse_available(true);
+    state.set_timelapse_default_enabled(true);
+    UpdateQueueTestAccess::drain(UpdateQueue::instance());
+
+    // The synthesized row carries id "timelapse", so it declares that
+    // capability itself - what distinguishes the two cases is WHICH row
+    // provides it, and that there is still exactly one.
+    const PrePrintOptionSet& set = state.get_pre_print_option_set();
+    REQUIRE(set.find("timelapse") != nullptr);
+    REQUIRE(set.find("u1_timelapse") == nullptr);
+
+    const int timelapse_rows = static_cast<int>(
+        std::count_if(set.options.begin(), set.options.end(),
+                      [](const PrePrintOption& o) { return o.capability_key() == "timelapse"; }));
+    REQUIRE(timelapse_rows == 1);
 }

@@ -20,6 +20,7 @@
   <translation tag="%s has about %.0fg but %s needs about %.0fg. Start anyway?" it="%s ha circa %.0fg ma %s ne richiede circa %.0fg. Avviare comunque?"/>
   <translation tag="%s has no filament loaded — this print will run out." it="%s non ha filamento caricato — questa stampa lo esaurirà."/>
   <translation tag="%s needs filament in %s, which is empty — this print will run out." it="%s richiede filamento e %s non ne ha — questa stampa lo esaurirà."/>
+  <translation tag="%s uses %s, which has filament but no material set — the printer will not start until you set it."/>
   <translation tag="%s: %.0fg of %.0fg needed" it="%s: %.0fg di %.0fg necessari"/>
   <translation tag="%u layers" it="%u strati"/>
   <translation tag="%zu changes" it="%zu modifiche"/>
@@ -1099,6 +1100,7 @@
   <translation tag="Filament jam detected" it="Blocco del filamento rilevato"/>
   <translation tag="Filament jammed at the extruder gear" it="Filamento inceppato nell&apos;ingranaggio dell&apos;estrusore"/>
   <translation tag="Filament never reached the CFS hub sensor" it="Il filamento non ha mai raggiunto il sensore dell&apos;hub CFS"/>
+  <translation tag="Filament not set"/>
   <translation tag="Filament operation failed" it="Operazione filamento fallita"/>
   <translation tag="Filament operation timed out" it="Operazione filamento — tempo scaduto"/>
   <translation tag="Filament ran out" it="Il filamento è esaurito"/>
@@ -1328,6 +1330,7 @@
   <translation tag="Initiate blade change procedure" it="Avvia la procedura di cambio lama"/>
   <translation tag="Input" it="Input"/>
   <translation tag="Input Shaper" it="Input Shaper"/>
+  <translation tag="Input Shaper Calibration"/>
   <translation tag="Input Shaper Help" it="Guida Input Shaper"/>
   <translation tag="Input Shaping" it="Input Shaping"/>
   <translation tag="Input shaper calibration sensors" it="Sensori calibrazione input shaper"/>
@@ -1982,6 +1985,7 @@
   <translation tag="Presets" it="Preset"/>
   <translation tag="Press Abort to stop" it="Premi Interrompi per fermare"/>
   <translation tag="Press Scan to search" it="Premi Scansiona per cercare"/>
+  <translation tag="Pressure Advance Calibration"/>
   <translation tag="Pressure:" it="Pressione:"/>
   <translation tag="Preview Sounds" it="Anteprima suoni"/>
   <translation tag="Previous" it="Precedente"/>
@@ -2527,6 +2531,7 @@
   <translation tag="Slot Blocked" it="Slot bloccato"/>
   <translation tag="Slot Not Available" it="Slot non disponibile"/>
   <translation tag="Slot colors, materials, and levels" it="Colori, materiali e livelli slot"/>
+  <translation tag="Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print."/>
   <translation tag="Slots" it="Slot"/>
   <translation tag="Small labels help keep controls calm and focused." it="Le etichette piccole aiutano a mantenere i controlli ordinati e mirati."/>
   <translation tag="Snapmaker SnapSwap" it="Snapmaker SnapSwap"/>

@@ -431,8 +431,8 @@ class PrintSelectDetailView : public OverlayBase {
      *
      * Built from the mapping card's current mappings. Contains ONLY real
      * remaps: an entry tool_index → mapped_slot is included only when
-     * mapped_slot >= 0 AND mapped_slot != default_head(tool_index), where
-     * default_head(t) = (t in [0,3]) ? t : 0. Tools mapped to their identity
+     * mapped_slot >= 0 AND mapped_slot != the head the backend's FirmwareRouting
+     * gives that tool. Tools mapped to their identity
      * head are omitted (the firmware default already routes them).
      *
      * On Snapmaker U1 today the mapping card is hidden so get_mappings() is

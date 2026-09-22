@@ -6,6 +6,7 @@
 #include "ui_update_queue.h"
 
 #include "accel_sensor_manager.h"
+#include "auto_screws_tilt_adjust.h"
 #if HELIX_HAS_IFS
 #include "ams_backend_ad5x_ifs.h"
 #endif
@@ -1618,7 +1619,7 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
 
     client_.send_jsonrpc(
         "printer.objects.subscribe", subscribe_params,
-        [this, seq, num_subscribed](json sub_response) {
+        [this, seq, num_subscribed, hw](json sub_response) {
             if (is_stale() || !is_current_sequence(seq))
                 return;
             if (sub_response.contains("result")) {
@@ -1638,6 +1639,17 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                                      status["print_stats"].dump());
                     } else {
                         spdlog::warn("[Moonraker Client] INITIAL status has NO print_stats!");
+                    }
+
+                    // A previous session can leave the U1's firmware holding
+                    // its screws-tilt calibration state, which refuses
+                    // unrelated filament operations until cleared. Connect
+                    // time is the only moment to act - never a live poll - so
+                    // a calibration another client is actively driving keeps
+                    // its state unless its own probe step proves nothing is
+                    // running.
+                    if (hw.screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
+                        auto_screws::reconcile_on_connect(client_, status);
                     }
                 }
             } else if (sub_response.contains("error")) {

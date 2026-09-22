@@ -6440,27 +6440,57 @@
           "reason": "Per-tool fan e3_fan (Snapmaker U1 naming)"
         },
         {
-          "type": "object_exists",
-          "field": "printer_objects",
-          "pattern": "purifier",
-          "confidence": 75,
-          "reason": "Built-in air purifier (Snapmaker U1 feature)"
-        },
-        {
-          "type": "macro_match",
-          "field": "macros",
-          "pattern": "EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_ALL",
-          "confidence": 85,
-          "reason": "U1-specific multi-tool probe calibration macro"
-        },
-        {
           "type": "cpu_arch_match",
           "field": "cpu_arch",
           "pattern": "aarch64",
           "confidence": 10,
           "reason": "ARM64 architecture (low confidence, stacks with other signals)"
         }
-      ]
+      ],
+      "pre_print_options": {
+        "options": [
+          {
+            "id": "bed_mesh",
+            "category": "mechanical",
+            "order": 10,
+            "default_enabled": true,
+            "strategy": "pre_start_gcode",
+            "gcode_template": "SET_PRINT_PREFERENCES BED_LEVEL={value}",
+            "emit_when_disabled": true
+          },
+          {
+            "id": "shaper_calibrate",
+            "category": "mechanical",
+            "order": 20,
+            "default_enabled": false,
+            "label_key": "Input Shaper Calibration",
+            "strategy": "pre_start_gcode",
+            "gcode_template": "SET_PRINT_PREFERENCES SHAPER_CALIBRATE={value}",
+            "emit_when_disabled": true
+          },
+          {
+            "id": "flow_calibrate",
+            "category": "quality",
+            "order": 10,
+            "default_enabled": false,
+            "label_key": "Pressure Advance Calibration",
+            "strategy": "pre_start_gcode",
+            "gcode_template": "SET_PRINT_PREFERENCES FLOW_CALIBRATE={value}",
+            "emit_when_disabled": true
+          },
+          {
+            "id": "u1_timelapse",
+            "capability": "timelapse",
+            "category": "monitoring",
+            "order": 10,
+            "default_enabled": false,
+            "label_key": "Record Timelapse",
+            "strategy": "pre_start_gcode",
+            "gcode_template": "SET_PRINT_PREFERENCES TIME_LAPSE_CAMERA={value}",
+            "emit_when_disabled": true
+          }
+        ]
+      }
     },
     {
       "id": "lemontron",

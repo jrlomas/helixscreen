@@ -123,7 +123,23 @@ using PrePrintStrategyPayload =
  * (translation_loader.cpp), so a semantic key renders RAW in the English UI.
  */
 struct PrePrintOption {
-    std::string id;              ///< Stable identifier, e.g. "bed_mesh", "ai_detect"
+    std::string id; ///< Stable identifier, e.g. "bed_mesh", "ai_detect"
+
+    /// What this option controls, when that is not simply its `id`. Options
+    /// synthesised in C++ for a plugin are skipped when a database option
+    /// already declares the same capability, so a printer whose firmware owns
+    /// the feature does not get a second, redundant row for it. Defaults to
+    /// `id`, so an option that needs no distinction declares nothing. Read
+    /// through capability_key(), never directly.
+    std::string capability;
+
+    /// What this option controls: its declared `capability`, or its `id` when
+    /// it declares none. Callers compare through this, never the raw field, so
+    /// an option that omits it still answers for itself.
+    [[nodiscard]] const std::string& capability_key() const {
+        return capability.empty() ? id : capability;
+    }
+
     std::string label_key;       ///< i18n key for the toggle label
     std::string description_key; ///< i18n key for the helper description (optional)
     std::string icon;            ///< Material Design icon codepoint string (optional)
@@ -179,6 +195,9 @@ struct PrePrintOptionSet {
 
     /// Returns nullptr if no option with the given id is present.
     const PrePrintOption* find(const std::string& id) const;
+
+    /// True when some option in this set controls `capability`.
+    bool declares_capability(const std::string& capability) const;
 };
 
 // ----------------------------------------------------------------------------
