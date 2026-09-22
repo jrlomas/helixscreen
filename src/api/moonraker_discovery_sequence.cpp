@@ -25,6 +25,7 @@
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "power_device_state.h"
+#include "power_loss_sensor.h"
 #include "print_start_profile.h"
 #include "printer_detector.h"
 #include "printer_state.h"
@@ -1406,6 +1407,14 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     // printed to the console again, so without this subscription it stays
     // invisible. See include/firmware_fault_codes.h.
     for (const auto& obj : helix::faultcodes::required_status_objects(hw)) {
+        subscription_objects[obj] = nullptr;
+    }
+
+    // Firmware that monitors incoming mains keeps the live reading in its own
+    // status object. The reading is diagnostic — the debug bundle's
+    // printer-state query surfaces it — and never gates recovery.
+    // See include/power_loss_sensor.h.
+    for (const auto& obj : helix::power_loss::required_status_objects(hw)) {
         subscription_objects[obj] = nullptr;
     }
 

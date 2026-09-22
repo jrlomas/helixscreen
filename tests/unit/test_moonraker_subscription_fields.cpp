@@ -604,6 +604,31 @@ TEST_CASE("Subscription: fault-code firmware subscribes its standing-fault objec
     }
 }
 
+TEST_CASE("Subscription: mains-monitor firmware subscribes its power-loss object",
+          "[moonraker][subscription]") {
+    SECTION("power_loss_check discovered -> subscribed") {
+        // The debug bundle's printer-state query reads this object, so the
+        // subscription keeps it arriving in status frames too.
+        DiscoveryFixture fx;
+        fx.add("power_loss_check", {});
+        json subs = fx.build();
+
+        REQUIRE(subs.contains("power_loss_check"));
+    }
+
+    SECTION("per-extruder siblings alone -> not subscribed") {
+        // The firmware also publishes power_loss_check e0..e3, all
+        // uninitialised. Only the bare name is the mains monitor; a prefix
+        // match would subscribe a sibling that never takes a reading.
+        DiscoveryFixture fx;
+        fx.add("power_loss_check e0", {});
+        fx.add("power_loss_check e1", {});
+        json subs = fx.build();
+
+        REQUIRE_FALSE(subs.contains("power_loss_check"));
+    }
+}
+
 TEST_CASE("Subscription: ZMOD printers subscribe save_variables for the persisted z-offset",
           "[moonraker][subscription][zmod]") {
     SECTION("SAVE_ZMOD_DATA present -> save_variables subscribed") {
