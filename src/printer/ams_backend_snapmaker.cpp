@@ -734,10 +734,14 @@ AmsBackend::FilamentOpEligibility AmsBackendSnapmaker::slot_op_eligibility(int s
     if (!snap.filament_detected) {
         return E::Empty;
     }
-    // Only these four are settled states. Anything else is mid-operation or
+    // Only these five are settled states. Anything else is mid-operation or
     // unrecognised, and a batch must not act on a head it cannot describe.
+    // manual_sta_finish is a persistent terminal: a head that finished a
+    // manual feed sits in it until the next operation, so reading it as
+    // Busy would refuse every batch naming that head.
     const bool settled = snap.state == "wait_insert" || snap.state == "preload_finish" ||
-                         snap.state == "load_finish" || snap.state == "unload_finish";
+                         snap.state == "load_finish" || snap.state == "unload_finish" ||
+                         snap.state == "manual_sta_finish";
     if (!settled) {
         return E::Busy;
     }

@@ -419,6 +419,16 @@ TEST_CASE_METHOD(BatchFixture, "Snapmaker eligibility follows channel state",
         CHECK(backend().slot_op_eligibility(0, /*load=*/false) == E::Eligible);
         CHECK(backend().slot_op_eligibility(0, /*load=*/true) == E::AlreadyLoaded);
     }
+    SECTION("a manual feed that finished on the printer is settled") {
+        // manual_sta_finish is a persistent terminal: a head that completed a
+        // manual EXTRUDE sits in it until the next operation. It is not a
+        // load (the classifier leaves the loaded latch clear), so an unload
+        // still refuses with NotLoaded while a load may proceed.
+        set_channel(0, "manual_sta_finish", "ok", /*detected=*/true, /*module=*/true,
+                    /*no_auto=*/false);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/true) == E::Eligible);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/false) == E::NotLoaded);
+    }
     SECTION("wait_insert with no filament is empty in both directions") {
         set_channel(0, "wait_insert", "ok", /*detected=*/false, true, false);
         CHECK(backend().slot_op_eligibility(0, true) == E::Empty);
