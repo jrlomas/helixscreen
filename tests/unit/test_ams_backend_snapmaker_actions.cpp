@@ -134,3 +134,32 @@ TEST_CASE("an overlong tool suffix is refused rather than parsed", "[ams][snapma
         backend.build_preference_gcode("snapmaker_end_unload_t99999999999999999999", std::any(true))
             .empty());
 }
+
+TEST_CASE("a value whose type does not match the action is refused, not thrown",
+          "[ams][snapmaker][actions]") {
+    // The overlay types each action's value by the control it renders, so a
+    // mismatched type is a malformed payload and must read as "not ours" —
+    // the same refusal a malformed id gets — because a bad_any_cast out of
+    // here would escape the UI-thread action callback uncaught.
+    HelixTestFixture fixture;
+    AmsBackendSnapmaker backend(nullptr, nullptr);
+    SnapmakerTestAccess::handle_status(backend, frame({{"end_unload_filament", {false, false}}}));
+    REQUIRE(backend.build_preference_gcode("snapmaker_auto_replenish", std::any(std::string("on")))
+                .empty());
+    REQUIRE(
+        backend
+            .build_preference_gcode("snapmaker_replenish_ignore_color", std::any(std::string("on")))
+            .empty());
+    REQUIRE(backend.build_preference_gcode("snapmaker_entangle_detect", std::any(std::string("on")))
+                .empty());
+    REQUIRE(backend.build_preference_gcode("snapmaker_end_led_off", std::any(std::string("on")))
+                .empty());
+    REQUIRE(backend.build_preference_gcode("snapmaker_end_unload_t0", std::any(std::string("on")))
+                .empty());
+    REQUIRE(backend.build_preference_gcode("snapmaker_entangle_sen", std::any(true)).empty());
+
+    // The public entry the UI callback drives must refuse the same way rather
+    // than let the exception cross the virtual.
+    const AmsError err = backend.execute_device_action("snapmaker_end_led_off", std::any(1));
+    REQUIRE(err.result == AmsResult::NOT_SUPPORTED);
+}

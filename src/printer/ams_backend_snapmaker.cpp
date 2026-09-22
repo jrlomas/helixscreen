@@ -2428,16 +2428,40 @@ std::string AmsBackendSnapmaker::build_preference_gcode(const std::string& actio
                                                         const std::any& value) const {
     snapmaker::PrintPreferences changes;
 
+    // Values arrive from the UI thread's action callback, so every cast is
+    // pointer-form: a value whose type does not match the action reads as
+    // absent and refuses like a malformed id, never as a bad_any_cast out
+    // of the callback.
     if (action_id == "snapmaker_auto_replenish") {
-        changes.auto_replenish = std::any_cast<bool>(value);
+        if (const auto* v = std::any_cast<bool>(&value)) {
+            changes.auto_replenish = *v;
+        } else {
+            return {};
+        }
     } else if (action_id == "snapmaker_replenish_ignore_color") {
-        changes.replenish_ignore_color = std::any_cast<bool>(value);
+        if (const auto* v = std::any_cast<bool>(&value)) {
+            changes.replenish_ignore_color = *v;
+        } else {
+            return {};
+        }
     } else if (action_id == "snapmaker_entangle_detect") {
-        changes.filament_entangle_detect = std::any_cast<bool>(value);
+        if (const auto* v = std::any_cast<bool>(&value)) {
+            changes.filament_entangle_detect = *v;
+        } else {
+            return {};
+        }
     } else if (action_id == "snapmaker_end_led_off") {
-        changes.end_led_turn_off = std::any_cast<bool>(value);
+        if (const auto* v = std::any_cast<bool>(&value)) {
+            changes.end_led_turn_off = *v;
+        } else {
+            return {};
+        }
     } else if (action_id == "snapmaker_entangle_sen") {
-        changes.filament_entangle_sen = std::any_cast<std::string>(value);
+        if (const auto* v = std::any_cast<std::string>(&value)) {
+            changes.filament_entangle_sen = *v;
+        } else {
+            return {};
+        }
     } else if (action_id.rfind("snapmaker_end_unload_t", 0) == 0) {
         const std::string suffix = action_id.substr(sizeof("snapmaker_end_unload_t") - 1);
         // Malformed ids stop here: a suffix that is not a parsable index
@@ -2457,7 +2481,11 @@ std::string AmsBackendSnapmaker::build_preference_gcode(const std::string& actio
         if (tool >= list.size()) {
             return {};
         }
-        list[tool] = std::any_cast<bool>(value);
+        const auto* v = std::any_cast<bool>(&value);
+        if (v == nullptr) {
+            return {};
+        }
+        list[tool] = *v;
         changes.end_unload_filament = std::move(list);
     } else {
         return {};
