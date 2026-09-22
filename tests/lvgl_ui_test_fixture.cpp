@@ -247,6 +247,15 @@ void LVGLUITestFixture::cleanup() {
         m_xml_registered = false;
     }
 
+    // safe_delete_deferred_raw() reparents a child onto lv_layer_top() and hands
+    // it to lv_obj_delete_async(). LVGL drains that list from lv_timer_handler(),
+    // which the app calls continuously and a test need never call - so without
+    // this the object stays on the top layer holding a raw lv_style_t* into the
+    // component scope that the next registration frees. Two passes: the first
+    // can schedule more deletes as parents go away.
+    process_lvgl(5);
+    process_lvgl(5);
+
     m_fully_initialized = false;
     spdlog::debug("[LVGLUITestFixture] Cleanup complete");
 }
