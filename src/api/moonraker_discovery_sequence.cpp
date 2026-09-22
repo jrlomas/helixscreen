@@ -13,6 +13,7 @@
 #include "app_globals.h"
 #include "chamber_heater_backend.h"
 #include "config.h"
+#include "filament_temperature_source.h"
 #include "firmware_fault_codes.h"
 #include "helix_version.h"
 #include "humidity_sensor_types.h"
@@ -1634,6 +1635,12 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
             if (sub_response.contains("result")) {
                 spdlog::info("[Moonraker Client] Subscription complete: {} objects subscribed",
                              num_subscribed);
+
+                // Per-filament operation temperatures are static firmware
+                // data published on the console, not through status, so the
+                // one capture belongs at connect time. No-ops on a printer
+                // whose firmware publishes none.
+                filament_temps::capture_on_connect(client_, hw);
 
                 // Process initial state from subscription response
                 // Moonraker returns current values in result.status

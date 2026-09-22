@@ -389,7 +389,13 @@ resolve_load_preheat_material(int target_slot, const SlotInfo* target_slot_info,
         if (mat.material_info.nozzle_min <= 0) {
             return std::nullopt;
         }
-        return PreheatTarget{load_preheat_temp(mat.material_info), mat.display_name};
+        // A firmware that publishes its own load temperature measured it for
+        // the load; the DB midpoint is a print-range derivation standing in
+        // for one, so the firmware's number wins where it exists.
+        const int temp = (mat.firmware_temps && mat.firmware_temps->load_c)
+                             ? *mat.firmware_temps->load_c
+                             : load_preheat_temp(mat.material_info);
+        return PreheatTarget{temp, mat.display_name};
     };
 
     // The bypass row IS the external spool — never look at an AMS lane for it.
