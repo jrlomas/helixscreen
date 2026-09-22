@@ -79,6 +79,12 @@ class SnapmakerTestAccess {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.port_sensor_filament_present_[slot_index] = present;
     }
+    /// Force the AUTO_FEEDING_BATCH capability cache: a unit test has no
+    /// discovery phase, so on_started() never populates it.
+    static void set_use_batch_macro(AmsBackendSnapmaker& b, bool enabled) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.use_batch_macro_ = enabled;
+    }
     static void set_current_slot(AmsBackendSnapmaker& b, int slot_index) {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.system_info_.current_slot = slot_index;

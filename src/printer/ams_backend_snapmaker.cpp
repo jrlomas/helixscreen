@@ -533,6 +533,7 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
     {
         std::lock_guard<std::mutex> lock(mutex_);
         use_batch_macro = use_batch_macro_;
+        batch_ = BatchPlan{slots, load, /*cursor=*/0, /*active=*/true};
     }
     const std::string chain = batch_feed_gcode(slots, load, use_batch_macro);
     const char* tag = backend_log_tag();
@@ -589,6 +590,11 @@ std::string AmsBackendSnapmaker::batch_feed_gcode(const std::vector<int>& slots,
     }
     chain += "\nAUTO_FEEDING_BATCH ACTION=END";
     return chain;
+}
+
+AmsBackendSnapmaker::BatchPlan AmsBackendSnapmaker::batch_plan() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return batch_;
 }
 
 bool AmsBackendSnapmaker::can_unload_from_toolhead(int slot_index) const {
@@ -1740,6 +1746,34 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                             // the action untouched — a stray idle mid-op must not
                             // clobber an in-progress LOADING/UNLOADING. The latch
                             // already handled wait_insert's clear above.
+                        }
+
+                        // Batch verification. Only the plan's cursor head can
+                        // advance the cursor, so a sibling channel repeating its
+                        // settled state in this frame is inert. The direction's
+                        // own terminal is matched exactly: preload_finish and
+                        // manual_sta_finish end a single-op lifecycle but a load
+                        // batch counts a head only at load_finish (unload at
+                        // unload_finish). A *_fail on the cursor head stops the
+                        // batch where it stands; the error branch above has
+                        // already set operation_detail to the failure message,
+                        // which must win over a progress line. Runs after the
+                        // terminal resolution so its operation_detail.clear()
+                        // cannot wipe the progress string this writes.
+                        if (batch_.active && i == batch_.heads[batch_.cursor]) {
+                            if (info.is_fail) {
+                                batch_.active = false;
+                            } else if (state == (batch_.load ? "load_finish" : "unload_finish")) {
+                                ++batch_.cursor;
+                                batch_.active = batch_.cursor < batch_.heads.size();
+                                // "Load 2 of 4" — the head now in progress, or
+                                // the full count once every head has verified.
+                                system_info_.operation_detail = fmt::format(
+                                    "{} {} {} {}", batch_.load ? lv_tr("Load") : lv_tr("Unload"),
+                                    std::min(batch_.cursor + 1, batch_.heads.size()), lv_tr("of"),
+                                    batch_.heads.size());
+                                changed = true;
+                            }
                         }
 
                         // Diagnostic: trace the firmware channel_state sequence during

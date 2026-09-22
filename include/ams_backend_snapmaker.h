@@ -368,6 +368,21 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         return true;
     }
 
+    /// The dispatched batch and how far it has verified. heads is in dispatch
+    /// order; cursor counts heads that reached the direction's terminal
+    /// channel_state. active spans dispatch until every head verified or a
+    /// head failed.
+    struct BatchPlan {
+        std::vector<int> heads; ///< in dispatch order
+        bool load{false};
+        size_t cursor{0}; ///< how many heads have reached their terminal state
+        bool active{false};
+    };
+
+    /// Snapshot of the in-flight batch plan (all defaults when none was
+    /// dispatched). The failure-recovery path and tests read this.
+    [[nodiscard]] BatchPlan batch_plan() const;
+
     /// Applied logical-tool -> physical-head routing for the CURRENT print.
     ///
     /// The capability question generic code asks; the vendor knowledge (that the
@@ -553,6 +568,10 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// populated before this backend is constructed. Selects the script shape
     /// do_filament_batch() builds. All access under mutex_.
     bool use_batch_macro_ = false;
+
+    /// The batch do_filament_batch() dispatched, verified head-by-head in
+    /// handle_status_update's channel_state parse. All access under mutex_.
+    BatchPlan batch_;
 
     // Persistent per-slot overrides. Writers (on_started bulk load,
     // apply_user_edit, check_hardware_event_clear) all hold mutex_.

@@ -16,7 +16,9 @@
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
 #include "test_helpers/registered_backend.h"
+#include "test_helpers/snapmaker_test_access.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -110,4 +112,48 @@ TEST_CASE_METHOD(MockBatchFixture, "Mock walks an unload through its heat step",
 
     CHECK(backend().channel_snapshot(2).state == "unload_finish");
     CHECK_FALSE(backend().channel_snapshot(2).filament_detected);
+}
+
+TEST_CASE_METHOD(MockBatchFixture, "A batch advances its cursor as heads finish", "[ams][batch]") {
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    pump_until_idle();
+
+    const auto plan = backend().batch_plan();
+    CHECK(plan.cursor == 2);
+    CHECK_FALSE(plan.active);
+    CHECK(backend().get_system_info().operation_detail.find("2 of 2") != std::string::npos);
+}
+
+TEST_CASE_METHOD(MockBatchFixture, "A failed head stops the batch at its cursor", "[ams][batch]") {
+    ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    // A *_fail state leaves the action at ERROR, which no later frame resolves
+    // to IDLE in this walk, so pump_until_idle would spin to its bound. The
+    // frames are all queued by dispatch; one drain observes the final state.
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto plan = backend().batch_plan();
+    CHECK(plan.cursor == 1); // head 0 finished, head 1 did not
+    CHECK_FALSE(plan.active);
+    CHECK(backend().get_system_info().operation_detail.find("2") != std::string::npos);
+}
+
+TEST_CASE_METHOD(MockBatchFixture, "The AUTO_FEEDING_BATCH shape advances the cursor too",
+                 "[ams][batch]") {
+    // Discovery never runs in a unit test, so the capability cache starts
+    // false; force the START/DOING/END script shape and prove the cursor still
+    // verifies each head through it.
+    helix::SnapmakerTestAccess::set_use_batch_macro(backend(), true);
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    // The mock records each script LINE separately; prove the START sentinel
+    // of the batch shape actually went out, not a bare-AUTO_FEEDING fallback.
+    const auto& history = mock_client.gcode_script_history();
+    REQUIRE(std::any_of(history.begin(), history.end(), [](const std::string& line) {
+        return line.find("AUTO_FEEDING_BATCH ACTION=START") != std::string::npos;
+    }));
+    pump_until_idle();
+
+    const auto plan = backend().batch_plan();
+    CHECK(plan.cursor == 2);
+    CHECK_FALSE(plan.active);
 }
