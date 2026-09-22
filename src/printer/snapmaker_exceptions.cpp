@@ -39,6 +39,27 @@ bool four_digits(const std::string& s, size_t at) {
     return true;
 }
 
+/// Read one of the exceptions array's numeric fields. A field that arrives as
+/// any other type reads as 0: the shape of a printer's payload is data, not a
+/// contract violation to throw on, so a string field is never parsed.
+int field_int(const nlohmann::json& entry, const char* key) {
+    auto it = entry.find(key);
+    return it != entry.end() && it->is_number_integer() ? it->get<int>() : 0;
+}
+
+/// Read the persistence flag. Both spellings are live: a Python bool
+/// serialises true/false, an int serialises 0/1.
+bool field_persistent(const nlohmann::json& entry, const char* key) {
+    auto it = entry.find(key);
+    if (it == entry.end()) {
+        return false;
+    }
+    if (it->is_boolean()) {
+        return it->get<bool>();
+    }
+    return it->is_number_integer() && it->get<int>() != 0;
+}
+
 } // namespace
 
 std::optional<ExceptionCode> decode_exception_code(const std::string& text) {
@@ -84,6 +105,46 @@ ExceptionSeverity severity_of(int level) {
     default:
         return ExceptionSeverity::Cancel;
     }
+}
+
+bool status_carries_exceptions(const nlohmann::json& status) {
+    if (!status.is_object()) {
+        return false;
+    }
+    auto manager = status.find("exception_manager");
+    if (manager == status.end() || !manager->is_object()) {
+        return false;
+    }
+    auto exceptions = manager->find("exceptions");
+    return exceptions != manager->end() && exceptions->is_array();
+}
+
+std::vector<ActiveException> read_active_exceptions(const nlohmann::json& status) {
+    std::vector<ActiveException> out;
+    if (!status_carries_exceptions(status)) {
+        return out;
+    }
+    for (const auto& entry : status.at("exception_manager").at("exceptions")) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        ActiveException active;
+        active.code.level = field_int(entry, "level");
+        active.code.id = field_int(entry, "id");
+        active.code.index = field_int(entry, "index");
+        active.code.code = field_int(entry, "code");
+        if (const auto known = exception_message(active.code); !known.empty()) {
+            active.message = std::string(known);
+        } else {
+            auto firmware_text = entry.find("message");
+            if (firmware_text != entry.end() && firmware_text->is_string()) {
+                active.message = firmware_text->get<std::string>();
+            }
+        }
+        active.persistent = field_persistent(entry, "is_persistent");
+        out.push_back(std::move(active));
+    }
+    return out;
 }
 
 } // namespace helix::snapmaker

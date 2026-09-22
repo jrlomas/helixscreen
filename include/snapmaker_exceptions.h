@@ -5,6 +5,9 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
+
+#include "hv/json.hpp"
 
 /**
  * @file snapmaker_exceptions.h
@@ -17,6 +20,11 @@
  *
  * Levels mirror what the firmware will do about it: 1 nothing, 2 pause,
  * 3 cancel.
+ *
+ * The same faults also stand in a list - `exception_manager.exceptions` in the
+ * status object - including persistent ones that survived a restart and were
+ * never printed to the console this session. read_active_exceptions() reads
+ * that list entry by entry.
  */
 namespace helix::snapmaker {
 
@@ -44,5 +52,25 @@ enum class ExceptionSeverity { Informational, Pause, Cancel };
 /// What the firmware will do about a fault at this level. An unrecognised level
 /// reads as Cancel: assuming the worst is the safe direction.
 [[nodiscard]] ExceptionSeverity severity_of(int level);
+
+/// One fault the firmware reports as currently standing.
+struct ActiveException {
+    ExceptionCode code;
+    /// Our wording when we have it, else the firmware's own message.
+    std::string message;
+    /// True when the fault survives a firmware restart.
+    bool persistent = false;
+};
+
+/// True when this frame actually carries the exceptions array. Moonraker sends
+/// delta frames, so a frame that omits `exception_manager` is silent about
+/// faults, not reporting that none stand; a caller that cleared a fault banner
+/// without asking this would clear it on every quiet frame.
+[[nodiscard]] bool status_carries_exceptions(const nlohmann::json& status);
+
+/// The faults currently standing, one ActiveException per array entry. Each
+/// entry's fields arrive as numbers and are read individually; a field that
+/// arrives as any other type reads as unset rather than being parsed.
+[[nodiscard]] std::vector<ActiveException> read_active_exceptions(const nlohmann::json& status);
 
 } // namespace helix::snapmaker

@@ -4,6 +4,7 @@
 #include "snapmaker_exceptions.h"
 
 #include "../catch_amalgamated.hpp"
+#include "hv/json.hpp"
 
 using namespace helix::snapmaker;
 
@@ -64,4 +65,97 @@ TEST_CASE("levels map to what the firmware will do", "[snapmaker][exceptions]") 
     REQUIRE(severity_of(2) == ExceptionSeverity::Pause);
     REQUIRE(severity_of(3) == ExceptionSeverity::Cancel);
     REQUIRE(severity_of(99) == ExceptionSeverity::Cancel); // unknown: assume the worst
+}
+
+TEST_CASE("active exceptions read out of a status frame", "[snapmaker][exceptions]") {
+    nlohmann::json s = nlohmann::json::object();
+    s["exception_manager"] = {{"exceptions",
+                               {{{"id", 530},
+                                 {"index", 0},
+                                 {"code", 11},
+                                 {"level", 3},
+                                 {"message", "The plate has not been removed"},
+                                 {"is_persistent", 0}}}}};
+    auto v = read_active_exceptions(s);
+    REQUIRE(v.size() == 1);
+    REQUIRE(v[0].code.id == 530);
+    REQUIRE(v[0].message.find("Remove the PEI sheet") != std::string::npos);
+    REQUIRE(v[0].persistent == false);
+}
+
+TEST_CASE("an empty exception list means no active faults", "[snapmaker][exceptions]") {
+    nlohmann::json s = nlohmann::json::object();
+    s["exception_manager"] = {{"exceptions", nlohmann::json::array()}};
+    REQUIRE(read_active_exceptions(s).empty());
+}
+
+TEST_CASE("a frame without exception_manager is silent, not empty", "[snapmaker][exceptions]") {
+    // Distinguishing these matters: "no faults" clears a banner, "the frame did
+    // not mention faults" must leave it alone.
+    nlohmann::json s = nlohmann::json::object();
+    s["toolhead"] = {{"homed_axes", "xyz"}};
+    REQUIRE_FALSE(status_carries_exceptions(s));
+    REQUIRE(status_carries_exceptions(
+        nlohmann::json{{"exception_manager", {{"exceptions", nlohmann::json::array()}}}}));
+}
+
+TEST_CASE("every standing fault is read, not just the first", "[snapmaker][exceptions]") {
+    // The list is read entry by entry; the array is never flattened into one
+    // payload, which would lose everything after the first fault.
+    nlohmann::json s = nlohmann::json::object();
+    s["exception_manager"] = {{"exceptions",
+                               {{{"id", 530},
+                                 {"index", 0},
+                                 {"code", 11},
+                                 {"level", 3},
+                                 {"message", "The plate has not been removed"},
+                                 {"is_persistent", false}},
+                                {{"id", 531},
+                                 {"index", 0},
+                                 {"code", 16},
+                                 {"level", 2},
+                                 {"message", "Cannot change while printing"},
+                                 {"is_persistent", true}}}}};
+    auto v = read_active_exceptions(s);
+    REQUIRE(v.size() == 2);
+    REQUIRE(v[1].code.id == 531);
+    REQUIRE(v[1].code.level == 2);
+    REQUIRE(v[1].persistent == true);
+}
+
+TEST_CASE("a fault with no wording keeps the firmware's message", "[snapmaker][exceptions]") {
+    // The entry also omits `level`: the firmware raises such faults at level 3
+    // (cancel), and a missing level reads 0, which maps to Cancel as well.
+    nlohmann::json s = nlohmann::json::object();
+    s["exception_manager"] = {{"exceptions",
+                               {{{"id", 999},
+                                 {"index", 0},
+                                 {"code", 1},
+                                 {"message", "Firmware's own words"},
+                                 {"is_persistent", true}}}}};
+    auto v = read_active_exceptions(s);
+    REQUIRE(v.size() == 1);
+    REQUIRE(v[0].message == "Firmware's own words");
+    REQUIRE(v[0].code.level == 0);
+    REQUIRE(severity_of(v[0].code.level) == ExceptionSeverity::Cancel);
+    REQUIRE(v[0].persistent == true);
+}
+
+TEST_CASE("a numeric field arriving as a string reads as unset, never parsed",
+          "[snapmaker][exceptions]") {
+    // A payload's shape is data, not a contract violation to throw on: the
+    // field is skipped, and id 530 with code 0 is no fault we know wording
+    // for, so the firmware's own text stands.
+    nlohmann::json s = nlohmann::json::object();
+    s["exception_manager"] = {{"exceptions",
+                               {{{"id", 530},
+                                 {"index", 0},
+                                 {"code", "0011"},
+                                 {"level", 3},
+                                 {"message", "whatever"},
+                                 {"is_persistent", 0}}}}};
+    auto v = read_active_exceptions(s);
+    REQUIRE(v.size() == 1);
+    REQUIRE(v[0].code.code == 0);
+    REQUIRE(v[0].message == "whatever");
 }

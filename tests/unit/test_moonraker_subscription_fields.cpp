@@ -579,6 +579,31 @@ TEST_CASE("Subscription: MCU objects narrow to PerformanceSource reads",
     }
 }
 
+TEST_CASE("Subscription: fault-code firmware subscribes its standing-fault object",
+          "[moonraker][subscription]") {
+    SECTION("exception_manager discovered -> subscribed") {
+        // A fault that survived a restart is never printed to the console
+        // again, so the exceptions array in this object is the only channel
+        // that carries it.
+        DiscoveryFixture fx;
+        fx.add("exception_manager", {});
+        json subs = fx.build();
+
+        REQUIRE(subs.contains("exception_manager"));
+    }
+
+    SECTION("no fault-code object -> not subscribed") {
+        // Printers whose firmware does not report structured faults must not
+        // subscribe an object nothing reads.
+        DiscoveryFixture fx;
+        fx.add("gcode_macro START_PRINT", {});
+        fx.add("extruder", {"heater"});
+        json subs = fx.build();
+
+        REQUIRE_FALSE(subs.contains("exception_manager"));
+    }
+}
+
 TEST_CASE("Subscription: ZMOD printers subscribe save_variables for the persisted z-offset",
           "[moonraker][subscription][zmod]") {
     SECTION("SAVE_ZMOD_DATA present -> save_variables subscribed") {

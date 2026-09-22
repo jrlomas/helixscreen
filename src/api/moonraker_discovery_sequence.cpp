@@ -13,6 +13,7 @@
 #include "app_globals.h"
 #include "chamber_heater_backend.h"
 #include "config.h"
+#include "firmware_fault_codes.h"
 #include "helix_version.h"
 #include "humidity_sensor_types.h"
 #include "hv/requests.h"
@@ -1396,6 +1397,14 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     // whatever object stores it; without this the Z-offset row reads 0.000
     // whenever such a printer is idle. See include/z_offset_persistence.h.
     for (const auto& obj : helix::zoffset::required_status_objects(hw)) {
+        subscription_objects[obj] = nullptr;
+    }
+
+    // Firmware that reports faults as structured codes keeps the standing
+    // list in its own status object; a fault that survived a restart is never
+    // printed to the console again, so without this subscription it stays
+    // invisible. See include/firmware_fault_codes.h.
+    for (const auto& obj : helix::faultcodes::required_status_objects(hw)) {
         subscription_objects[obj] = nullptr;
     }
 
