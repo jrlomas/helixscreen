@@ -2742,6 +2742,14 @@ TEST_CASE_METHOD(SnapmakerFixture, "Snapmaker claims the not-edit-filament resum
         }
     }
 
+    SECTION("an overlong extruder index is refused rather than parsed") {
+        // This line arrives from the firmware, so its digit run is not ours to
+        // trust: past the parse range stoi throws, and an escaping throw here
+        // leaves classify_error on the main thread.
+        REQUIRE_FALSE(backend.classify_error("!! e99999999999999999999 not edit filament", paused)
+                          .has_value());
+    }
+
     SECTION("keeps the firmware wording for cross-channel dedup") {
         auto ev = backend.classify_error("!! e2 not edit filament", paused);
         REQUIRE(ev.has_value());

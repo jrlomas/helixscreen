@@ -37,6 +37,17 @@ namespace helix {
 
 namespace {
 
+/// A digit run short enough to parse as an index without overflowing. Ten or
+/// more digits exceeds the narrowest supported target's parse range, and both
+/// stoi and stoul report that by throwing, so the length is checked before the
+/// parse instead of the throw being caught after it. No real extruder or tool
+/// index comes anywhere near that many digits.
+[[nodiscard]] bool is_parsable_index(std::string_view digits) {
+    return !digits.empty() && digits.size() < 10 &&
+           std::all_of(digits.begin(), digits.end(),
+                       [](unsigned char c) { return std::isdigit(c) != 0; });
+}
+
 // Snapmaker's recognized filament SUB_TYPE product lines. The RFID read path
 // stores SUB_TYPE into SlotInfo::spool_name (see handle_status_update), but a
 // user can edit spool_name to a free-form string ("My Custom Spool"). Both the
@@ -2312,7 +2323,7 @@ AmsBackendSnapmaker::classify_error(const std::string& raw_line,
         return std::nullopt;
     }
     const std::string digits = detail.substr(1, suffix_pos - 1);
-    if (digits.find_first_not_of("0123456789") != std::string::npos) {
+    if (!is_parsable_index(digits)) {
         return std::nullopt;
     }
 
@@ -2429,12 +2440,9 @@ std::string AmsBackendSnapmaker::build_preference_gcode(const std::string& actio
         changes.filament_entangle_sen = std::any_cast<std::string>(value);
     } else if (action_id.rfind("snapmaker_end_unload_t", 0) == 0) {
         const std::string suffix = action_id.substr(sizeof("snapmaker_end_unload_t") - 1);
-        // Malformed ids stop here: an empty or non-numeric suffix names no
-        // tool, and an all-digit one ten chars or longer overflows stoul
-        // (which throws) — no real tool index is that large.
-        if (suffix.empty() || suffix.size() >= 10 ||
-            !std::all_of(suffix.begin(), suffix.end(),
-                         [](unsigned char c) { return std::isdigit(c) != 0; })) {
+        // Malformed ids stop here: a suffix that is not a parsable index
+        // names no tool.
+        if (!is_parsable_index(suffix)) {
             return {};
         }
         // END_UNLOAD_FILAMENT takes the whole list, so the untouched tools
