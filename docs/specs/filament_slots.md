@@ -299,7 +299,9 @@ who put it there:
 - A field the record names in `helix_declared`, or, on a record with no
   `spool_id` whose `helix_declared` does not name that field, a colour or
   material beside a true `helix_locked_*`, outranks whatever the printer
-  reports for that lane. This is what keeps a deliberate choice
+  reports for that lane. A declaration stands only over a value the record
+  carries: a field named in the set with no value behind it claims nothing,
+  and the printer's report stands. This is what keeps a deliberate choice
   from being erased by the next status poll.
 - A record naming a `spool_id` is read as the spool server's statement about
   that lane's identity, and ranks above a firmware report, except a colour its

@@ -619,7 +619,7 @@ TEST_CASE_METHOD(HelixTestFixture,
     // is a durable declaration, so nothing may record one. The record the
     // clear leaves behind declares nothing, and the value the next firmware
     // frame states lands on the lane again after a reload. Material rides the
-    // same test because its refill was traced by reading and never run
+    // same test to pin the half that already behaved this way
     // (prestonbrown/helixscreen#1661).
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
