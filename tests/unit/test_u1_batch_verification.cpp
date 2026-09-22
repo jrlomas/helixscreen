@@ -270,6 +270,44 @@ TEST_CASE("A non-bool doing variable is a no-op that does not throw", "[ams][bat
     }
 }
 
+TEST_CASE("An unreadable print state leaves the interlock alone", "[ams][batch]") {
+    // Klipper publishes an object as null until its first get_status has run,
+    // and chained .value() on a null throws rather than yielding the default.
+    // An unconfirmable print state must read as "cannot confirm" and send
+    // nothing: a stranded interlock is recoverable, ending a live batch is not.
+    for (const nlohmann::json print_stats :
+         {nlohmann::json(nullptr), nlohmann::json(7), nlohmann::json{{"state", 3}}}) {
+        RecordingFakeClient client;
+        const nlohmann::json status = {
+            {"gcode_macro AUTO_FEEDING_BATCH", {{"doing", true}}},
+            {"print_stats", print_stats},
+            {"virtual_sdcard", {{"is_active", false}}},
+        };
+
+        REQUIRE_NOTHROW(helix::u1_batch::reconcile_on_connect(client, status,
+                                                              "gcode_macro AUTO_FEEDING_BATCH"));
+
+        CHECK(client.sent_gcode.empty());
+    }
+}
+
+TEST_CASE("A null virtual_sdcard does not stop an otherwise idle cleanup", "[ams][batch]") {
+    // print_stats is the authoritative state; virtual_sdcard is a second veto
+    // and is absent on some setups, so an unreadable one must not throw and
+    // must not suppress the cleanup a confirmed-idle print state allows.
+    RecordingFakeClient client;
+    const nlohmann::json status = {
+        {"gcode_macro AUTO_FEEDING_BATCH", {{"doing", true}}},
+        {"print_stats", {{"state", "standby"}}},
+        {"virtual_sdcard", nullptr},
+    };
+
+    REQUIRE_NOTHROW(
+        helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH"));
+
+    CHECK(client.sent_contains("AUTO_FEEDING_BATCH ACTION=END"));
+}
+
 TEST_CASE("The reconcile reads the macro under the config-case object key", "[ams][batch]") {
     // Klipper preserves the config's case in status object keys, so a printer
     // with [gcode_macro auto_feeding_batch] publishes its state under the
