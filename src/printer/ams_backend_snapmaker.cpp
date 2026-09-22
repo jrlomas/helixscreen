@@ -1593,23 +1593,19 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                 }
             }
 
-            // Parse filament state per channel — filament_detect.state is [int, int, int, int]
-            // 1 = filament present, 0 = no filament / no tag
+            // Parse filament state per channel — filament_detect.state is
+            // [int, int, int, int], the entrance/tag reader per channel. It
+            // reads 0 once filament has been fed THROUGH it to the toolhead,
+            // so a 0 is not "no filament": lane presence is declared at the
+            // parse convergence point from the port sensor and the
+            // loaded-at-toolhead latch, and this array only seeds a status
+            // for slots nothing better has spoken for.
             if (fd.contains("state") && fd["state"].is_array()) {
                 const auto& state_arr = fd["state"];
                 for (int i = 0; i < NUM_TOOLS && i < static_cast<int>(state_arr.size()); i++) {
                     if (!state_arr[i].is_number())
                         continue;
                     int state_val = state_arr[i].get<int>();
-
-                    // The state array is this frame's own key, so a frame that
-                    // omits it says nothing rather than retracting what the
-                    // last one sensed. What the array says is the reading, even
-                    // where the more authoritative extruder state below keeps
-                    // the slot's own stamp.
-                    helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
-                    sensed.present = (state_val != 0);
-                    helix::ams::ingest(lane_id(i), sensed);
 
                     auto* slot = system_info_.units[0].get_slot(i);
                     if (slot) {
@@ -1658,6 +1654,7 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                             // is orthogonal to the port sensor reading.
                             if (i >= 0 && i < NUM_TOOLS) {
                                 port_sensor_filament_present_[i] = detected;
+                                feed_presence_seen_[i] = true;
                             }
                             auto* slot = system_info_.units[0].get_slot(i);
                             if (slot) {
@@ -1719,6 +1716,13 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                         channel_snapshots_[static_cast<size_t>(i)] = std::move(snap);
 
                         const ChannelStateInfo info = classify_channel_state(state);
+
+                        // A channel reporting any state at all makes the
+                        // lane's presence inputs live for the
+                        // convergence-point ingest below.
+                        if (!state.empty()) {
+                            feed_presence_seen_[i] = true;
+                        }
 
                         // Mirror the granular firmware sub-phase into the system
                         // info so the sidebar step bar can show the real
@@ -2282,6 +2286,24 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                 override_store_.get(), overrides_, i, slot->color_rgb, slot->material,
                 slot->status == SlotStatus::AVAILABLE, helix::ams::MirrorPolicy::OverwriteAlways,
                 backend_log_tag(), helix::ams::declared_on_lane(lane_id(i)));
+
+            // Lane presence: the port/buffer sensor OR the loaded-at-toolhead
+            // latch. The port sensor is the spool-side reading; the latch
+            // carries filament fed through to the nozzle — the point at which
+            // the entrance/tag reader (filament_detect.state) drops to 0, so
+            // that array is not a presence source. Declared here, at the
+            // tail of the parse, so both member arrays already hold this
+            // frame's values when the lane resolves below; the arrays persist
+            // across delta frames, so a frame silent on both signals leaves
+            // the last reading standing. A lane filament_feed has never
+            // reported stays silent too: the array defaults are "no reading
+            // yet", not "no filament".
+            if (feed_presence_seen_[i]) {
+                helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
+                sensed.present = port_sensor_filament_present_[i] || loaded_at_toolhead_[i];
+                helix::ams::ingest(lane_id(i), sensed);
+            }
+
             apply_resolved_lane(*slot, i);
         }
 
