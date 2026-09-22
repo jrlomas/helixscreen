@@ -338,15 +338,14 @@ Extended Firmware endpoint that 404s on stock firmware; the override still persi
 2. `is_stuck_motion_sensor_runout()` has no caller — revive when a verifiable
    "filament at the gear" signal exists (`src/printer/ams_backend_snapmaker.cpp`). Checked
    2026-08-21: the status model carries **no dedicated feeder/gear-presence field** -
-   lane presence is derived from the settled slot status at the parse
-   convergence point (`slot_status_reports_filament`), the same shape as every
-   other backend; the status itself is stamped by the extruder pins, the
-   `filament_feed` per-extruder `filament_detected` port sensor and
-   `print_task_config.filament_exist`. `filament_detect.state` is the
+   lane presence resolves from two signals: the `filament_feed` per-extruder
+   `filament_detected` port sensor OR the `filament_feed.channel_state`
+   loaded-at-toolhead latch (`load_finish` sets it; `unload_finish` /
+   `wait_insert` / `preload_finish` clear it). `filament_detect.state` is the
    entrance/tag reading and reads 0 once filament is fed through, so it backs
    no presence claim; the per-tool motion sensor is a runout signal for the
-   active tool, not lane presence. The gear-presence candidate is the
-   `filament_feed.channel_state` pair: `load_finish`
+   active tool, not lane presence. The gear-presence candidate is that same
+   channel_state pair: `load_finish`
    (fed to nozzle) vs `preload_finish` (firmware assist stops short of the gear) -
    both already parsed into the channel-state machine
    (`src/printer/ams_backend_snapmaker.cpp#classify_channel_state`, `:569-576`). What is missing is rig

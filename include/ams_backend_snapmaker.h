@@ -594,6 +594,14 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// a different question ("did the ACTIVE lane run out during extrusion").
     std::array<bool, NUM_TOOLS> loaded_at_toolhead_{{false, false, false, false}};
 
+    /// Per-slot "filament_feed has reported this lane" — set the first time a
+    /// frame carries a boolean filament_detected or a channel_state for the
+    /// lane, and never cleared. Until it is set, the convergence-point presence
+    /// ingest stays silent: the port/latch arrays rest on their defaults
+    /// ("no reading yet", not "no filament"), and declaring those defaults
+    /// would empty a lane whose only signal so far is the toolhead pin state.
+    std::array<bool, NUM_TOOLS> feed_presence_seen_{{false, false, false, false}};
+
     /// Last filament_feed frame's raw per-channel fields (channel_state,
     /// channel_error, filament_detected, module_exist, disable_auto), written
     /// by handle_status_update before classification. Each write replaces the
