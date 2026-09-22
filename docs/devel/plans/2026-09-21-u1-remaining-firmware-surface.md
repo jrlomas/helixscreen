@@ -6,7 +6,7 @@
 
 **Architecture:** Four of the settings share one mechanism: read from the `print_task_config` status object, write with `SET_PRINT_PREFERENCES`. Task 1 builds that read/write pair once; Tasks 2-3 hold the preferences on the Snapmaker backend and surface them as `DeviceAction`s, which the existing `AmsDeviceSectionDetailOverlay` renders with no UI work. Tasks 4-6 move Snapmaker error classification off phrase matching onto the firmware's `exception_manager` codes, through a `firmware_fault_codes` capability module that `GcodeErrorRouter` consults before the generic classifier. Tasks 7-8 are independent reads of two objects nothing currently consumes.
 
-**Tech Stack:** C++20, LVGL 9.5, Catch2, `hv/json.hpp` (libhv's bundled nlohmann), Moonraker JSON-RPC over WebSocket.
+**Tech Stack:** C++17, LVGL 9.5, Catch2, `hv/json.hpp` (libhv's bundled nlohmann), Moonraker JSON-RPC over WebSocket.
 
 **Spec:** `docs/devel/plans/2026-09-21-u1-per-print-preferences-design.md` (the preceding design; its firmware model, the `SET_PRINT_PREFERENCES` field table and the eleven-field placement table are the source for Tasks 1-5).
 
@@ -17,7 +17,7 @@
 - **Moonraker sends DELTA frames.** A field absent from a frame is silent, never false. Merge, never replace. See `reference_moonraker_delta_frames_wipe_struct_state`.
 - **`SET_PRINT_PREFERENCES` is a setter.** An omitted parameter leaves the stored value unchanged; only send parameters you intend to change.
 - **A mid-print guard** refuses `BED_LEVEL`, `FLOW_CALIBRATE`, `SHAPER_CALIBRATE`, `TIME_LAPSE_CAMERA` and `END_UNLOAD_FILAMENT` while printing or paused unless `FORCE=1`. Do not pass `FORCE`. Expect and surface the refusal (exception id 531).
-- **spdlog only**, SPDX headers, no RTTI, `#include "hv/json.hpp"`.
+- **spdlog only**, SPDX headers, no RTTI, `#include "hv/json.hpp"` The tree builds `-std=c++17` (`Makefile:191,194`) and `make strict` adds `-Werror`, so a C++20-only construct — a defaulted `operator==`/`<=>`, designated initialisers, `std::span`, concepts — is a build break on a supported target, not a warning.
 - **Every behaviour change needs a test that fails when the behaviour is removed**, and one line in the commit body naming the mutation that proved it.
 - **Commit body:** subject plus ~4 lines. No Tests/Verification/Mutation essay.
 - **Test tags** go on every new `TEST_CASE`; run with `make t F='[tag]'`.

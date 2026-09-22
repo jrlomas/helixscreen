@@ -25,7 +25,9 @@ struct ExceptionCode {
     int id = 0;
     int index = 0;
     int code = 0;
-    bool operator==(const ExceptionCode&) const = default;
+    bool operator==(const ExceptionCode& other) const {
+        return level == other.level && id == other.id && index == other.index && code == other.code;
+    }
 };
 
 enum class ExceptionSeverity { Informational, Pause, Cancel };
