@@ -532,6 +532,16 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
     bool use_batch_macro;
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        // The in-flight claim spans only this dispatch call, and `action`
+        // returns to IDLE at each head's terminal — so the preheat gap
+        // between heads would otherwise admit a second batch whose
+        // ACTION=START the firmware's `doing` interlock refuses, and that
+        // refusal fires the RPC-error recovery's ACTION=END into the batch
+        // still running.
+        if (batch_.active) {
+            return AmsErrorHelper::busy(
+                ams_action_to_string(batch_.load ? AmsAction::LOADING : AmsAction::UNLOADING));
+        }
         use_batch_macro = use_batch_macro_;
         // Resolve the progress words here on the caller's (main) thread: the
         // cursor-advance parse reads them from the WebSocket thread, which

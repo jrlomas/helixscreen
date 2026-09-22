@@ -145,6 +145,23 @@ TEST_CASE_METHOD(MockBatchFixture, "A batch advances its cursor as heads finish"
     CHECK(backend().get_system_info().operation_detail.empty());
 }
 
+TEST_CASE_METHOD(MockBatchFixture, "A second batch is refused while one is running",
+                 "[ams][batch]") {
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    // Dispatch is fire-and-forget: the frames are queued, not yet walked, so
+    // the plan is mid-batch exactly as it is during the inter-head preheat
+    // gap on hardware.
+    const auto refused = backend().unload_filament_batch({2});
+    CHECK(refused.result == helix::AmsResult::BUSY);
+
+    pump_until_idle();
+    REQUIRE_FALSE(backend().batch_plan().active);
+    // The finished batch admits the next one — the refusal is a live-plan
+    // gate, not a wedge.
+    REQUIRE(backend().unload_filament_batch({2}).success());
+    pump_until_idle();
+}
+
 TEST_CASE_METHOD(MockBatchFixture, "A failed head stops the batch at its cursor", "[ams][batch]") {
     ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
     REQUIRE(backend().load_filament_batch({0, 1}).success());
