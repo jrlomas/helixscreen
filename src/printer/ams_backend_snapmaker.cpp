@@ -533,7 +533,12 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
     {
         std::lock_guard<std::mutex> lock(mutex_);
         use_batch_macro = use_batch_macro_;
-        batch_ = BatchPlan{slots, load, /*cursor=*/0, /*active=*/true};
+        // Resolve the progress words here on the caller's (main) thread: the
+        // cursor-advance parse reads them from the WebSocket thread, which
+        // must not call lv_tr into LVGL's pack list.
+        batch_ = BatchPlan{
+            slots,      load, /*cursor=*/0, /*active=*/true, load ? lv_tr("Load") : lv_tr("Unload"),
+            lv_tr("of")};
     }
     const std::string chain = batch_feed_gcode(slots, load, use_batch_macro);
     const char* tag = backend_log_tag();
@@ -1825,10 +1830,13 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                                 batch_.active = batch_.cursor < batch_.heads.size();
                                 // "Load 2 of 4" — the head now in progress, or
                                 // the full count once every head has verified.
-                                system_info_.operation_detail = fmt::format(
-                                    "{} {} {} {}", batch_.load ? lv_tr("Load") : lv_tr("Unload"),
-                                    std::min(batch_.cursor + 1, batch_.heads.size()), lv_tr("of"),
-                                    batch_.heads.size());
+                                // The words arrive pretranslated from dispatch
+                                // (main thread); this parse runs on the
+                                // WebSocket thread, which must not call lv_tr.
+                                system_info_.operation_detail =
+                                    fmt::format("{} {} {} {}", batch_.direction_label,
+                                                std::min(batch_.cursor + 1, batch_.heads.size()),
+                                                batch_.of_label, batch_.heads.size());
                                 changed = true;
                             }
                         }

@@ -377,6 +377,11 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         bool load{false};
         size_t cursor{0}; ///< how many heads have reached their terminal state
         bool active{false};
+        /// Progress-line words, translated at dispatch time (main thread): the
+        /// cursor-advance parse that renders them runs on the WebSocket
+        /// thread, which must not call lv_tr into LVGL's pack list.
+        std::string direction_label; ///< "Load" / "Unload"
+        std::string of_label;        ///< "of", as in "Load 2 of 4"
     };
 
     /// Snapshot of the in-flight batch plan (all defaults when none was
