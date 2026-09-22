@@ -177,9 +177,9 @@ void feed_mmu(AmsBackendHappyHare& backend, const nlohmann::json& mmu) {
 
 /// One filament_detect object plus optional filament_feed channels, through
 /// the notify envelope handle_status_update unwraps. RFID identity arrives
-/// under the filament_detect key; lane presence arrives from the feed's port
-/// sensor and channel_state latch — the state array is the entrance/tag
-/// reading and backs no presence claim.
+/// under the filament_detect key; lane presence is derived from the settled
+/// slot status, which the feed channels stamp — the state array is the
+/// entrance/tag reading and backs no presence claim.
 void feed_filament_detect(AmsBackendSnapmaker& backend, const nlohmann::json& fd,
                           const nlohmann::json& feed = nlohmann::json::object()) {
     nlohmann::json params;

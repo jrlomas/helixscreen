@@ -290,9 +290,9 @@ std::vector<BackendCensus> census_of_every_backend() {
                                         {"WEIGHT", 1000},
                                         {"CARD_UID", nlohmann::json::array({144, 32, 196, 2})},
                                     }})}});
-        // Lane presence is the port sensor, not the state array (the
-        // entrance/tag reading), so the census drive needs the feed object
-        // for sensed.present to be filed.
+        // Lane presence is derived from the settled slot status, which the
+        // feed channels stamp; the state array is the entrance/tag reading
+        // and backs no presence claim.
         frame["params"][0]["filament_feed left"] =
             nlohmann::json{{"extruder0", nlohmann::json{{"filament_detected", true}}}};
         SnapmakerTestAccess::handle_status(*harness, frame);

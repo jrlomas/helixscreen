@@ -552,28 +552,28 @@ TEST_CASE_METHOD(
 // all four lanes loaded it reads [0,1,0,1] — 0 for exactly the heads whose
 // filament has been fed THROUGH to the toolhead — while the port sensor
 // (filament_feed .extruderN.filament_detected) reads true on all four and
-// channel_state alternates load_finish/preload_finish. Presence must therefore
-// resolve from the port sensor OR the loaded-at-toolhead latch, never from
-// the tag reading.
+// channel_state alternates load_finish/preload_finish. Presence therefore
+// resolves from the settled slot status at the parse convergence point, the
+// same shape as every other backend — never from the tag reading.
 TEST_CASE_METHOD(SnapmakerFixture,
-                 "Snapmaker lane presence comes from the port sensor and load latch, not "
+                 "Snapmaker lane presence comes from the settled slot status, not "
                  "filament_detect.state",
                  "[ams][snapmaker]") {
     helix::test::RegisteredBackend<AmsBackendSnapmaker> backend_reg(nullptr, nullptr);
     AmsBackendSnapmaker& backend = *backend_reg;
 
     // Heads 0/2 fed to the toolhead (load_finish); heads 1/3 preloaded short
-    // of the gear (preload_finish, latch clear). Port sensor sees filament on
-    // 0-2; head 3 reads port=false so its presence rides the latch alone.
+    // of the gear (preload_finish). The port sensor sees filament in all four
+    // lanes — the measured rig shape.
     json feed = json{
         {"filament_feed left",
          json{{"extruder0", json{{"filament_detected", true}, {"channel_state", "load_finish"}}},
               {"extruder1",
                json{{"filament_detected", true}, {"channel_state", "preload_finish"}}}}},
         {"filament_feed right",
-         json{
-             {"extruder2", json{{"filament_detected", true}, {"channel_state", "load_finish"}}},
-             {"extruder3", json{{"filament_detected", false}, {"channel_state", "load_finish"}}}}}};
+         json{{"extruder2", json{{"filament_detected", true}, {"channel_state", "load_finish"}}},
+              {"extruder3",
+               json{{"filament_detected", true}, {"channel_state", "preload_finish"}}}}}};
     SnapmakerTestAccess::handle_status(backend, feed);
 
     // The entrance/tag reading: 0 for the two heads fed through it.
@@ -586,10 +586,10 @@ TEST_CASE_METHOD(SnapmakerFixture,
         CHECK(backend.get_slot_info(2).is_present());
         // The user-visible consequence: Unload is offered for a loaded head.
         CHECK(backend.can_unload_from_toolhead(0));
-        CHECK(backend.can_unload_from_toolhead(3));
+        CHECK(backend.can_unload_from_toolhead(2));
     }
 
-    SECTION("a preloaded head (latch clear) rides the port sensor") {
+    SECTION("a preloaded head (port sensor true) stays present") {
         CHECK(backend.get_slot_info(1).is_present());
         CHECK(backend.get_slot_info(1).status != SlotStatus::EMPTY);
     }
@@ -606,6 +606,22 @@ TEST_CASE_METHOD(SnapmakerFixture,
         CHECK(backend.get_slot_info(0).is_present());
         CHECK(backend.get_slot_info(0).status != SlotStatus::EMPTY);
     }
+}
+
+// The convergence-point presence ingest treats UNKNOWN as the machine
+// declining to state, not as an empty bay: a lane no frame has mentioned
+// keeps its status and files no presence record.
+TEST_CASE_METHOD(SnapmakerFixture, "Snapmaker lane untouched by any frame stays UNKNOWN, not EMPTY",
+                 "[ams][snapmaker]") {
+    helix::test::RegisteredBackend<AmsBackendSnapmaker> backend_reg(nullptr, nullptr);
+    AmsBackendSnapmaker& backend = *backend_reg;
+
+    // A toolhead-only frame speaks about the active tool and nothing else.
+    SnapmakerTestAccess::handle_status(backend, json{{"toolhead", json{{"extruder", "extruder"}}}});
+
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::LOADED);
+    CHECK(backend.get_slot_info(1).status == SlotStatus::UNKNOWN);
+    CHECK(backend.get_slot_info(3).status == SlotStatus::UNKNOWN);
 }
 
 // channel_error scoping — the firmware reports channel_error="no_filament" for
