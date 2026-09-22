@@ -19,12 +19,13 @@ class IMoonrakerClient;
  *
  * Every printer has the internal filament DB's generic material table. Some
  * firmwares additionally carry their own per-vendor, per-sub-type temperature
- * table in firmware and publish it on request as one console response line —
- * a Python dict literal, not JSON, prefixed "// " on the response channel.
- * Those temperatures describe the LOAD, UNLOAD and CLEAN-NOZZLE operations,
- * not the printable range: PLA loads at 250°C against a print range nowhere
- * near it, so they are carried as their own fields and never folded into a
- * material's nozzle_min/nozzle_max.
+ * table in firmware and publish it on request through the console: several
+ * response lines, one per nozzle config, each a flat Python dict literal —
+ * not JSON — prefixed "// " on the response channel, whose keys are spelled
+ * {vendor}_{main_type}_{sub_type}_{field}. Those temperatures describe the
+ * LOAD and UNLOAD operations, not the printable range: PLA loads at 250°C
+ * against a print range nowhere near it, so they are carried as their own
+ * fields and never folded into a material's nozzle_min/nozzle_max.
  *
  * This is the one module that knows which firmwares publish the table and the
  * exact shape of the response. Generic code (the active-material resolver, the
@@ -34,17 +35,15 @@ class IMoonrakerClient;
  */
 namespace helix::filament_temps {
 
-/// One leaf of the firmware's table: the temperatures its own load, unload and
-/// clean-nozzle sequences use. Each may be absent in a given leaf.
+/// One leaf of the firmware's table: the temperatures its own load and
+/// unload sequences use. Each may be absent in a given leaf.
 struct FilamentTemperatures {
     std::optional<int> load_c;
     std::optional<int> unload_c;
-    std::optional<int> clean_nozzle_c;
 };
 
-/// Identity of one table leaf. All three parts are stored lowercased and
-/// stripped of the response's "vendor_" / "sub_" key prefixes, so lookups
-/// compare case-insensitively against slot-reported names.
+/// Identity of one table leaf. All three parts are stored lowercased, so
+/// lookups compare case-insensitively against slot-reported names.
 struct FilamentKey {
     std::string vendor;
     std::string main_type;
@@ -69,13 +68,24 @@ struct FilamentKey {
 [[nodiscard]] std::string filament_temperature_query_gcode(const PrinterDiscovery& hw);
 
 /// Parse one console response line ("// {...}") into the table it carries.
-/// The response is a Python dict literal: single-quoted keys and strings,
-/// True/False booleans. The parse only accepts that spelling — any double
-/// quote, backslash or boolean-looking word in a non-literal position means
-/// the schema is not what this parser is for, and the answer is an EMPTY map
-/// rather than a corrupted one. Same for input that does not parse.
+/// The response is a flat Python dict literal: single-quoted keys and
+/// strings, True/False booleans, scalar values, keys spelled
+/// {vendor}_{main_type}_{sub_type}_{field} where main_type carries hyphens
+/// and sub_type may carry a space. The parse only accepts that spelling —
+/// any double quote, backslash or boolean-looking word in a non-literal
+/// position means the schema is not what this parser is for, and the answer
+/// is an EMPTY map rather than a corrupted one. Same for input that does not
+/// parse.
 [[nodiscard]] std::map<FilamentKey, FilamentTemperatures>
 parse_filament_temperatures(const std::string& response);
+
+/// Fold one parsed response line into an accumulating table. The firmware
+/// answers the query with one dict per nozzle config listing overlapping
+/// materials, so capture keeps the union: a leaf already present keeps its
+/// values, and a line lacking a field does not erase what an earlier line
+/// supplied.
+void merge_filament_temperatures(std::map<FilamentKey, FilamentTemperatures>& table,
+                                 const std::map<FilamentKey, FilamentTemperatures>& line);
 
 /// Publish the table parsed out of a response, replacing any previous one.
 /// Called from the response thread; safe against concurrent lookups.
@@ -89,14 +99,15 @@ void clear_filament_temperatures();
 ///
 /// The slot's identity reaches the firmware's table with its own spellings:
 /// brand is the vendor, material the main type, and spool_name carries the
-/// SUB_TYPE product line on the firmwares in this table. Resolution walks a
-/// fallback chain, because the machine's own slots do not spell their names
-/// the way the table's keys do:
+/// SUB_TYPE product line on the firmwares in this table. Resolution walks
+/// the same four-key fallback the firmware's own lookup probes, because the
+/// machine's own slots do not spell their names the way the table's keys do:
 ///
 ///   1. the slot's vendor (case-insensitive) with the slot's sub-type
 ///   2. the slot's vendor with sub_type "generic"
-///   3. vendor "generic" with sub_type "generic"
-///   4. nullopt
+///   3. vendor "generic" with the slot's sub-type
+///   4. vendor "generic" with sub_type "generic"
+///   5. nullopt
 ///
 /// A spool physically loaded in the machine can sit at step 2 — the status
 /// may name a vendor/sub-type pair the table has no leaf for. nullopt (also
@@ -107,9 +118,10 @@ lookup_filament_temperatures(const SlotInfo& slot);
 
 /// Connect-time capture: drop any previously published table and, when the
 /// printer's firmware publishes one, send the query gcode and read the
-/// response line back out of the gcode store. The table is static firmware
-/// data, so once per connection is enough. No-ops (keeping the table empty)
-/// on a printer without the capability.
+/// response lines back out of the gcode store, merging every line that
+/// parses. The table is static firmware data, so once per connection is
+/// enough. No-ops (keeping the table empty) on a printer without the
+/// capability.
 void capture_on_connect(IMoonrakerClient& client, const PrinterDiscovery& hw);
 
 } // namespace helix::filament_temps

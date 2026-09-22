@@ -43,6 +43,11 @@ const Provider* match(const PrinterDiscovery& hw) {
     return nullptr;
 }
 
+bool ends_with(const std::string& s, const char* suffix) {
+    const size_t slen = std::strlen(suffix);
+    return s.size() >= slen && s.compare(s.size() - slen, slen, suffix) == 0;
+}
+
 std::string lower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -87,12 +92,11 @@ void replace_all(std::string& s, const std::string& from, const std::string& to)
 
 /// Read one leaf temperature: an integer the firmware reports, bounded like a
 /// temperature. Anything else is absence, never a guess.
-std::optional<int> leaf_temp(const nlohmann::json& leaf, const char* field) {
-    auto it = leaf.find(field);
-    if (it == leaf.end() || !it->is_number_integer()) {
+std::optional<int> scalar_temp(const nlohmann::json& value) {
+    if (!value.is_number_integer()) {
         return std::nullopt;
     }
-    const int64_t v = it->get<int64_t>();
+    const int64_t v = value.get<int64_t>();
     if (v < 0 || v > 999) {
         return std::nullopt;
     }
@@ -146,36 +150,57 @@ parse_filament_temperatures(const std::string& response) {
     if (!root.is_object()) {
         return table;
     }
-    for (auto type_it = root.begin(); type_it != root.end(); ++type_it) {
-        // version and the two flow ceilings are table metadata, not types.
-        if (type_it.key() == "version" || type_it.key() == "hard_filaments_max_flow_k" ||
-            type_it.key() == "soft_filaments_max_flow_k" || !type_it.value().is_object()) {
+    for (auto field = root.begin(); field != root.end(); ++field) {
+        // Keys are {vendor}_{main_type}_{sub_type}_{field}; only load_temp
+        // and unload_temp are temperatures. print_temp, flow_k*, vol_speed,
+        // is_soft, version, the flow ceilings and the process_* keys are not
+        // ours.
+        const std::string& key = field.key();
+        const bool unload = ends_with(key, "_unload_temp");
+        if (!unload && !ends_with(key, "_load_temp")) {
             continue;
         }
-        for (auto vendor_it = type_it.value().begin(); vendor_it != type_it.value().end();
-             ++vendor_it) {
-            const std::string& vkey = vendor_it.key();
-            if (vkey.rfind("vendor_", 0) != 0 || !vendor_it.value().is_object()) {
-                continue;
-            }
-            for (auto sub_it = vendor_it.value().begin(); sub_it != vendor_it.value().end();
-                 ++sub_it) {
-                const std::string& skey = sub_it.key();
-                if (skey.rfind("sub_", 0) != 0 || !sub_it.value().is_object()) {
-                    continue;
-                }
-                FilamentTemperatures temps;
-                temps.load_c = leaf_temp(sub_it.value(), "load_temp");
-                temps.unload_c = leaf_temp(sub_it.value(), "unload_temp");
-                temps.clean_nozzle_c = leaf_temp(sub_it.value(), "clean_nozzle_temp");
-                if (temps.load_c || temps.unload_c || temps.clean_nozzle_c) {
-                    table[FilamentKey{lower(vkey.substr(7)), lower(type_it.key()),
-                                      lower(skey.substr(4))}] = temps;
-                }
-            }
+        const std::string stem = key.substr(0, key.size() - (unload ? 12 : 10));
+        // Split from the left: vendor, main_type, and the REST as sub_type,
+        // so a sub_type holding a space or an underscore survives (main_type
+        // itself never carries an underscore - the firmware spells it with
+        // hyphens). A stem without three parts is skipped, not guessed.
+        const size_t first_us = stem.find('_');
+        if (first_us == std::string::npos) {
+            continue;
+        }
+        const size_t second_us = stem.find('_', first_us + 1);
+        if (second_us == std::string::npos) {
+            continue;
+        }
+        const std::optional<int> temp = scalar_temp(field.value());
+        if (!temp) {
+            continue;
+        }
+        FilamentTemperatures& leaf =
+            table[FilamentKey{lower(stem.substr(0, first_us)),
+                              lower(stem.substr(first_us + 1, second_us - first_us - 1)),
+                              lower(stem.substr(second_us + 1))}];
+        if (unload) {
+            leaf.unload_c = temp;
+        } else {
+            leaf.load_c = temp;
         }
     }
     return table;
+}
+
+void merge_filament_temperatures(std::map<FilamentKey, FilamentTemperatures>& table,
+                                 const std::map<FilamentKey, FilamentTemperatures>& line) {
+    for (const auto& entry : line) {
+        FilamentTemperatures& leaf = table[entry.first];
+        if (!leaf.load_c) {
+            leaf.load_c = entry.second.load_c;
+        }
+        if (!leaf.unload_c) {
+            leaf.unload_c = entry.second.unload_c;
+        }
+    }
 }
 
 void store_filament_temperatures(const std::map<FilamentKey, FilamentTemperatures>& table) {
@@ -207,6 +232,9 @@ std::optional<FilamentTemperatures> lookup_filament_temperatures(const SlotInfo&
     if (auto t = at(vendor, "generic")) {
         return t;
     }
+    if (auto t = at("generic", sub)) {
+        return t;
+    }
     return at("generic", "generic");
 }
 
@@ -223,23 +251,27 @@ void capture_on_connect(IMoonrakerClient& client, const PrinterDiscovery& hw) {
             return;
         }
         // Script completion means every line it printed is already in the
-        // store, so read back and keep the newest line that parses.
+        // store. The firmware answers with one dict per nozzle config, each
+        // listing a different subset of the materials, so merge every
+        // response line instead of keeping a single one.
         client.get_gcode_store(
             32,
             [](const std::vector<GcodeStoreEntry>& entries) {
+                std::map<FilamentKey, FilamentTemperatures> table;
                 for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
                     if (it->type != "response") {
                         continue;
                     }
-                    auto table = parse_filament_temperatures(it->message);
-                    if (!table.empty()) {
-                        store_filament_temperatures(table);
-                        spdlog::info("[FilamentTemps] Published {} per-filament temperature leaves",
-                                     table.size());
-                        return;
-                    }
+                    merge_filament_temperatures(table, parse_filament_temperatures(it->message));
                 }
-                spdlog::warn("[FilamentTemps] No temperature table in the gcode store after query");
+                if (table.empty()) {
+                    spdlog::warn(
+                        "[FilamentTemps] No temperature table in the gcode store after query");
+                    return;
+                }
+                store_filament_temperatures(table);
+                spdlog::info("[FilamentTemps] Published {} per-filament temperature leaves",
+                             table.size());
             },
             [](const MoonrakerError&) {});
     });

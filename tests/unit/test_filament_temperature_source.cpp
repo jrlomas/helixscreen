@@ -5,14 +5,14 @@
  *
  * Run with: ./build/bin/helix-tests "[snapmaker][filament-temps]"
  *
- * The fixture below is the U1's FILAMENT_PARA_GET_ALL_INFO response, captured
- * verbatim from the machine (firmware table version 0.0.10): one console line
- * on the response channel, a Python dict literal, temperatures on the leaf of
- * TYPE -> vendor_X -> sub_Y. The capture also drives the fallback-chain cases:
- * the machine's own live slot 3 reports vendor "Generic", type PETG, sub-type
- * "SnapSpeed", and the table has neither vendor "Generic" nor sub "SnapSpeed"
- * spelled that way — an exact-only lookup answers nothing for a spool that is
- * physically loaded in the machine.
+ * The fixture below is the U1's FILAMENT_PARA_GET_ALL_INFO answer, captured
+ * verbatim from the machine: one console line on the response channel per
+ * nozzle config, each a flat Python dict literal whose keys are spelled
+ * {vendor}_{main_type}_{sub_type}_{field}. One invocation prints five dicts
+ * listing overlapping subsets of the materials, so capture merges them into
+ * the union. Every dict also carries keys the temperature table does not own
+ * (print_temp, flow_k*, vol_speed, is_soft, version, the flow ceilings,
+ * process_*), which the parser must skip.
  */
 #include "active_material_provider.h"
 #include "ams_types.h"
@@ -32,46 +32,18 @@ using filament_temps::FilamentTemperatures;
 
 namespace {
 
-/// One full leaf, exactly as the firmware prints it, so the parser has to walk
-/// past the per-nozzle-diameter flow maps to reach the temperatures.
-const char* FULL_LEAF_PLA_GENERIC =
-    "{'load_temp': 250, 'unload_temp': 250, 'clean_nozzle_temp': 170, "
-    "'is_soft': False, 'flow_temp': 220, "
-    "'flow_k': {'02': 0.2, '04': 0.02, '06': 0.012, '08': 0.008}, "
-    "'flow_slow_v': {'02': 0.17, '04': 0.63, '06': 1.386, '08': 2.44}, "
-    "'flow_fast_v': {'02': 0.83, '04': 4.99, '06': 4.99, '08': 4.99}, "
-    "'flow_accel': {'02': 40.5, '04': 153.6, '06': 339.6, '08': 598.3}, "
-    "'flow_k_min': {'02': 0.03, '04': 0.005, '06': 0, '08': 0}, "
-    "'flow_k_max': {'02': 0.3, '04': 0.04, '06': 0.03, '08': 0.02}}";
-
-/// Remaining leaves keep the field layout but drop the flow maps the parser
-/// must ignore anyway; every temperature below is the capture's own value.
-std::string fixture_response() {
-    auto leaf = [](int load, int unload, int clean, bool soft, int flow) {
-        std::string s = "{'load_temp': " + std::to_string(load) +
-                        ", 'unload_temp': " + std::to_string(unload) +
-                        ", 'clean_nozzle_temp': " + std::to_string(clean) + ", 'is_soft': ";
-        s += soft ? "True" : "False";
-        s += ", 'flow_temp': " + std::to_string(flow) + "}";
-        return s;
-    };
-    std::string t = "// {'version': '0.0.10', 'hard_filaments_max_flow_k': 0.4, "
-                    "'soft_filaments_max_flow_k': 0.5, ";
-    t += "'PLA': {'vendor_generic': {'sub_generic': " + std::string(FULL_LEAF_PLA_GENERIC);
-    t += ", 'sub_SnapSpeed': " + leaf(250, 250, 170, false, 220) + "}, ";
-    t += "'vendor_Snapmaker': {'sub_generic': " + leaf(250, 250, 170, false, 220);
-    t += ", 'sub_Silk': " + leaf(250, 250, 180, false, 230);
-    t += ", 'sub_SnapSpeed': " + leaf(250, 250, 170, false, 220) + "}, ";
-    t += "'vendor_Polymaker': {'sub_generic': " + leaf(250, 250, 170, false, 220);
-    t += ", 'sub_Silk': " + leaf(250, 250, 180, false, 230) + "}}, ";
-    t += "'PETG': {'vendor_generic': {'sub_generic': " + leaf(270, 270, 205, false, 255);
-    t += ", 'sub_HF': " + leaf(270, 270, 170, false, 220) + "}, ";
-    t += "'vendor_Snapmaker': {'sub_generic': " + leaf(270, 270, 205, false, 255) + "}}, ";
-    t +=
-        "'PETG-HF': {'vendor_generic': {'sub_generic': " + leaf(270, 270, 170, false, 220) + "}}, ";
-    t += "'TPU': {'vendor_generic': {'sub_generic': " + leaf(250, 250, 190, true, 240) + "}}}";
-    return t;
-}
+/// One complete response line from the real printer, captured verbatim:
+/// seven materials, all vendor generic, hyphenated main types (PETG-CF,
+/// PA6-CF) and one space-bearing sub type (TPU 95A HF).
+const char* REAL_RESPONSE_LINE =
+    "// {'version': '1.0.0', 'hard_filaments_max_flow_k': 0.4, 'soft_filaments_max_flow_k': 0.6, "
+    "'generic_PLA_generic_load_temp': 250, 'generic_PLA_generic_unload_temp': 250, "
+    "'generic_PETG_generic_load_temp': 270, 'generic_PETG_generic_unload_temp': 270, "
+    "'generic_ABS_generic_load_temp': 280, 'generic_ABS_generic_unload_temp': 280, "
+    "'generic_ASA_generic_load_temp': 280, 'generic_ASA_generic_unload_temp': 280, "
+    "'generic_PETG-CF_generic_load_temp': 270, 'generic_PETG-CF_generic_unload_temp': 270, "
+    "'generic_TPU_95A HF_load_temp': 250, 'generic_TPU_95A HF_unload_temp': 250, "
+    "'generic_PA6-CF_generic_load_temp': 290, 'generic_PA6-CF_generic_unload_temp': 290}";
 
 /// Wipes both the published firmware table and any staged user override, so a
 /// case never reads what a previous case stored. Same pattern as
@@ -91,7 +63,7 @@ struct FilamentTempsFixture {
     }
 
     void store_captured_table() const {
-        auto table = filament_temps::parse_filament_temperatures(fixture_response());
+        auto table = filament_temps::parse_filament_temperatures(REAL_RESPONSE_LINE);
         REQUIRE(!table.empty());
         filament_temps::store_filament_temperatures(table);
     }
@@ -113,87 +85,173 @@ SlotInfo slot(const char* brand, const char* material, const char* sub_type) {
 
 TEST_CASE("filament-temps parse: the captured response yields the table",
           "[snapmaker][filament-temps]") {
-    auto table = filament_temps::parse_filament_temperatures(fixture_response());
+    auto table = filament_temps::parse_filament_temperatures(REAL_RESPONSE_LINE);
 
-    // 12 leaves across 4 types; version and the two flow ceilings are not types.
-    REQUIRE(table.size() == 12);
-    REQUIRE(table.find(FilamentKey{"snapmaker", "pla", "snapspeed"}) != table.end());
-    REQUIRE(table.find(FilamentKey{"generic", "petg", "generic"}) != table.end());
-    REQUIRE(table.find(FilamentKey{"generic", "version", "generic"}) == table.end());
+    // Seven materials; version and the two flow ceilings ride along in the
+    // same dict and must not become leaves.
+    REQUIRE(table.size() == 7);
+    CHECK(table.find(FilamentKey{"generic", "pla", "generic"}) != table.end());
+    CHECK(table.find(FilamentKey{"generic", "petg", "generic"}) != table.end());
+    CHECK(table.find(FilamentKey{"generic", "abs", "generic"}) != table.end());
+    CHECK(table.find(FilamentKey{"generic", "asa", "generic"}) != table.end());
+    CHECK(table.find(FilamentKey{"generic", "petg-cf", "generic"}) != table.end());
+    CHECK(table.find(FilamentKey{"generic", "tpu", "95a hf"}) != table.end());
+    CHECK(table.find(FilamentKey{"generic", "pa6-cf", "generic"}) != table.end());
 }
 
-TEST_CASE("filament-temps parse: an exact leaf reads its three temperatures",
+TEST_CASE("filament-temps parse: hyphenated main types and spaced sub types round-trip",
           "[snapmaker][filament-temps]") {
-    auto table = filament_temps::parse_filament_temperatures(fixture_response());
-    auto it = table.find(FilamentKey{"snapmaker", "pla", "snapspeed"});
+    auto table = filament_temps::parse_filament_temperatures(REAL_RESPONSE_LINE);
+
+    auto pa6 = table.find(FilamentKey{"generic", "pa6-cf", "generic"});
+    REQUIRE(pa6 != table.end());
+    CHECK(pa6->second.load_c.value() == 290);
+    CHECK(pa6->second.unload_c.value() == 290);
+
+    auto tpu = table.find(FilamentKey{"generic", "tpu", "95a hf"});
+    REQUIRE(tpu != table.end());
+    CHECK(tpu->second.load_c.value() == 250);
+    CHECK(tpu->second.unload_c.value() == 250);
+}
+
+TEST_CASE("filament-temps parse: only the two temperature suffixes are ours",
+          "[snapmaker][filament-temps]") {
+    auto table = filament_temps::parse_filament_temperatures(
+        "// {'generic_PLA_Silk_load_temp': 240, 'Snapmaker_PLA_Basic_print_temp': 225, "
+        "'generic_PLA_Silk_vol_speed': 42, 'generic_PLA_Silk_is_soft': False, "
+        "'generic_PLA_Silk_flow_k': 0.02, 'generic_PLA_load_temp': 999, "
+        "'process_print_accel': 5000}");
+    // print_temp / vol_speed / flow_k / process_* keys are skipped, and the
+    // two-part stem "generic_PLA" has no sub_type to split out, so it is
+    // skipped too rather than guessed into a leaf.
+    REQUIRE(table.size() == 1);
+    auto it = table.find(FilamentKey{"generic", "pla", "silk"});
     REQUIRE(it != table.end());
-    CHECK(it->second.load_c.value() == 250);
-    CHECK(it->second.unload_c.value() == 250);
-    CHECK(it->second.clean_nozzle_c.value() == 170);
+    CHECK(it->second.load_c.value() == 240);
+    CHECK_FALSE(it->second.unload_c.has_value());
 }
 
-TEST_CASE("filament-temps parse: malformed input yields an empty map, never a throw",
+TEST_CASE("filament-temps parse: banner and malformed lines yield an empty map, never a throw",
           "[snapmaker][filament-temps]") {
-    // Truncated mid-leaf, as a dropped websocket frame would leave it.
+    // FILAMENT_PARA_GET_ALL_INFO prints this banner before the dicts.
     CHECK(filament_temps::parse_filament_temperatures(
-              "// {'version': '0.0.10', 'PLA': {'vendor_generic': {")
+              "// [filament_parameters] get all filament parameters")
+              .empty());
+    // Truncated mid-dict, as a dropped websocket frame would leave it.
+    CHECK(filament_temps::parse_filament_temperatures(
+              "// {'version': '1.0.0', 'generic_PLA_generic_load_temp': 25")
               .empty());
     // A JSON body: the normalisation only accepts the firmware's own quoting,
     // and says so by refusing rather than corrupting.
-    CHECK(filament_temps::parse_filament_temperatures(R"(// {"version": "0.0.10"})").empty());
+    CHECK(
+        filament_temps::parse_filament_temperatures(R"(// {"generic_PLA_generic_load_temp": 250})")
+            .empty());
     CHECK(filament_temps::parse_filament_temperatures("// ok").empty());
     CHECK(filament_temps::parse_filament_temperatures("").empty());
 }
 
 // ============================================================================
-// lookup_filament_temperatures() — the fallback chain
+// merge_filament_temperatures() — one dict per nozzle config, union is the table
 // ============================================================================
 
-TEST_CASE_METHOD(FilamentTempsFixture,
-                 "filament-temps lookup: exact vendor/type/sub resolves directly",
-                 "[snapmaker][filament-temps]") {
-    store_captured_table();
-    auto t = filament_temps::lookup_filament_temperatures(slot("Snapmaker", "PLA", "SnapSpeed"));
+TEST_CASE("filament-temps merge: two response lines yield the union",
+          "[snapmaker][filament-temps]") {
+    auto table = filament_temps::parse_filament_temperatures(REAL_RESPONSE_LINE);
+    REQUIRE(table.size() == 7);
+
+    // A second nozzle config's dict: PLA again (load only this time) plus a
+    // material the first line does not carry.
+    auto line = filament_temps::parse_filament_temperatures(
+        "// {'generic_PLA_generic_load_temp': 250, 'generic_PETG-HF_generic_load_temp': 260, "
+        "'generic_PETG-HF_generic_unload_temp': 260}");
+    REQUIRE(line.size() == 2);
+
+    filament_temps::merge_filament_temperatures(table, line);
+    REQUIRE(table.size() == 8);
+
+    auto hf = table.find(FilamentKey{"generic", "petg-hf", "generic"});
+    REQUIRE(hf != table.end());
+    CHECK(hf->second.load_c.value() == 260);
+    CHECK(hf->second.unload_c.value() == 260);
+
+    // A leaf both lines list keeps its values: the second line carries no
+    // unload_temp, and absence does not erase what the first line supplied.
+    auto pla = table.find(FilamentKey{"generic", "pla", "generic"});
+    REQUIRE(pla != table.end());
+    CHECK(pla->second.load_c.value() == 250);
+    CHECK(pla->second.unload_c.value() == 250);
+}
+
+// ============================================================================
+// lookup_filament_temperatures() — the firmware's four-key fallback chain
+// ============================================================================
+
+TEST_CASE("filament-temps lookup: exact vendor/type/sub resolves directly",
+          "[snapmaker][filament-temps]") {
+    FilamentTempsFixture fixture;
+    fixture.store_captured_table();
+    auto t = filament_temps::lookup_filament_temperatures(slot("Generic", "TPU", "95A HF"));
     REQUIRE(t.has_value());
     CHECK(t->load_c.value() == 250);
     CHECK(t->unload_c.value() == 250);
-    CHECK(t->clean_nozzle_c.value() == 170);
 }
 
-TEST_CASE_METHOD(FilamentTempsFixture,
-                 "filament-temps lookup: the live Generic/PETG/SnapSpeed spool resolves",
-                 "[snapmaker][filament-temps]") {
-    // Slot 3 as the machine itself reports it: the table's PETG row has no
-    // sub_SnapSpeed, so this resolves through sub_generic — exact-only would
-    // answer nullopt for a spool loaded in the machine right now.
-    store_captured_table();
+TEST_CASE("filament-temps lookup: a sub the table lacks falls back to sub generic",
+          "[snapmaker][filament-temps]") {
+    // The machine's own slots spell product-line names the table has no leaf
+    // for; vendor generic with sub generic still answers for a physically
+    // loaded spool.
+    FilamentTempsFixture fixture;
+    fixture.store_captured_table();
     auto t = filament_temps::lookup_filament_temperatures(slot("Generic", "PETG", "SnapSpeed"));
     REQUIRE(t.has_value());
     CHECK(t->load_c.value() == 270);
     CHECK(t->unload_c.value() == 270);
-    CHECK(t->clean_nozzle_c.value() == 205);
 }
 
-TEST_CASE_METHOD(FilamentTempsFixture,
-                 "filament-temps lookup: an unknown vendor falls back to vendor_generic",
-                 "[snapmaker][filament-temps]") {
-    store_captured_table();
-    auto t = filament_temps::lookup_filament_temperatures(slot("Polymaker", "PETG-HF", "Silk"));
+TEST_CASE("filament-temps lookup: an unknown vendor falls back to vendor generic with the sub",
+          "[snapmaker][filament-temps]") {
+    FilamentTempsFixture fixture;
+    fixture.store_captured_table();
+    // The table has no vendor "BrandX" and no tpu/generic leaf, so only the
+    // (generic, sub) rung can answer this one.
+    auto t = filament_temps::lookup_filament_temperatures(slot("BrandX", "TPU", "95A HF"));
     REQUIRE(t.has_value());
-    CHECK(t->load_c.value() == 270);
-    CHECK(t->clean_nozzle_c.value() == 170);
+    CHECK(t->load_c.value() == 250);
+    CHECK(t->unload_c.value() == 250);
 }
 
-TEST_CASE_METHOD(FilamentTempsFixture,
-                 "filament-temps lookup: a type the table does not carry is nullopt",
-                 "[snapmaker][filament-temps]") {
-    store_captured_table();
+TEST_CASE("filament-temps lookup: the generic/sub rung fires before generic/generic",
+          "[snapmaker][filament-temps]") {
+    FilamentTempsFixture fixture;
+    auto table = filament_temps::parse_filament_temperatures(
+        "// {'generic_PLA_Silk_load_temp': 240, 'generic_PLA_generic_load_temp': 220}");
+    REQUIRE(table.size() == 2);
+    filament_temps::store_filament_temperatures(table);
+
+    // (generic, silk) answers 240; rung 4 would answer 220, so this pins the
+    // firmware's order between the last two rungs.
+    auto t = filament_temps::lookup_filament_temperatures(slot("BrandX", "PLA", "Silk"));
+    REQUIRE(t.has_value());
+    CHECK(t->load_c.value() == 240);
+
+    // Nothing matches the sub, so the final (generic, generic) rung answers.
+    t = filament_temps::lookup_filament_temperatures(slot("BrandX", "PLA", "Junk"));
+    REQUIRE(t.has_value());
+    CHECK(t->load_c.value() == 220);
+}
+
+TEST_CASE("filament-temps lookup: a type the table does not carry is nullopt",
+          "[snapmaker][filament-temps]") {
+    FilamentTempsFixture fixture;
+    fixture.store_captured_table();
     CHECK_FALSE(
         filament_temps::lookup_filament_temperatures(slot("Generic", "NITINOL", "")).has_value());
 }
 
-TEST_CASE_METHOD(FilamentTempsFixture, "filament-temps lookup: no published table answers nullopt",
-                 "[snapmaker][filament-temps]") {
+TEST_CASE("filament-temps lookup: no published table answers nullopt",
+          "[snapmaker][filament-temps]") {
+    FilamentTempsFixture fixture;
     CHECK_FALSE(
         filament_temps::lookup_filament_temperatures(slot("Generic", "PETG", "")).has_value());
 }
@@ -231,9 +289,8 @@ TEST_CASE_METHOD(FilamentTempsFixture,
     REQUIRE(m.firmware_temps.has_value());
     CHECK(m.firmware_temps->load_c.value() == 270);
     CHECK(m.firmware_temps->unload_c.value() == 270);
-    CHECK(m.firmware_temps->clean_nozzle_c.value() == 205);
-    // Load/unload/clean are OPERATION temperatures; the DB's print range for
-    // PETG stands untouched beside them.
+    // Load/unload are OPERATION temperatures; the DB's print range for PETG
+    // stands untouched beside them.
     CHECK(m.material_info.nozzle_min == 230);
     CHECK(m.material_info.nozzle_max == 260);
 }
