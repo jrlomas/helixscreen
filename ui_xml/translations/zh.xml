@@ -2520,6 +2520,7 @@
   <translation tag="Single toggle macro. State is not tracked." zh="单个切换宏。不跟踪状态。"/>
   <translation tag="Size" zh="大小"/>
   <translation tag="Skip" zh="跳过"/>
+  <translation tag="Skipped"/>
   <translation tag="Sleep While Printing" zh="打印时休眠"/>
   <translation tag="Sleep adjusted to match dim timeout" zh="休眠超时已调整"/>
   <translation tag="Sliced colors" zh="切片颜色"/>
@@ -3133,7 +3134,9 @@
   <translation tag="Z-offset saved - Klipper restarting..." zh="Z 偏移已保存 - Klipper 重启中..."/>
   <translation tag="Z:" zh="Z:"/>
   <translation tag="Z: 0.000" zh="Z: 0.000"/>
+  <translation tag="already loaded"/>
   <translation tag="bed" zh="热床"/>
+  <translation tag="busy"/>
   <translation tag="by Preston Brown" zh="by Preston Brown"/>
   <translation tag="chamber heater" zh="腔体加热器"/>
   <translation tag="complete" zh="完成"/>
@@ -3146,6 +3149,7 @@
   <translation tag="eSpooler Mode" zh="eSpooler 模式"/>
   <translation tag="eSpooler, clog detection, and sensor settings" zh="eSpooler、堵塞检测与传感器设置"/>
   <translation tag="elapsed" zh="已用时"/>
+  <translation tag="empty"/>
   <translation tag="enable" zh="启用"/>
   <translation tag="enabled" zh="已启用"/>
   <translation tag="error" zh="错误"/>
@@ -3153,14 +3157,19 @@
   <translation tag="extruder(s)" zh="挤出机"/>
   <translation tag="extruders" zh="挤出机"/>
   <translation tag="fans" zh="风扇"/>
+  <translation tag="feeder error"/>
+  <translation tag="feeder not in automatic mode"/>
+  <translation tag="filament sensor disabled"/>
   <translation tag="heated bed" zh="热床"/>
   <translation tag="idle" zh="空闲"/>
   <translation tag="in unit {} slot {}" zh="在单元 {} 槽位 {}"/>
   <translation tag="layers" zh="层"/>
   <translation tag="left" zh="剩余"/>
+  <translation tag="loaded"/>
   <translation tag="mm before clog" zh="毫米后堵料"/>
   <translation tag="needs" zh="需要"/>
   <translation tag="not detected" zh="未检测到"/>
+  <translation tag="not loaded"/>
   <translation tag="nozzle" zh="喷嘴"/>
   <translation tag="of" zh="的"/>
   <translation tag="off" zh="关闭"/>
@@ -3169,6 +3178,7 @@
   <translation tag="passive" zh="被动"/>
   <translation tag="printer default" zh="打印机默认"/>
   <translation tag="prints" zh="打印次数"/>
+  <translation tag="ready to load"/>
   <translation tag="remaining" zh="剩余"/>
   <translation tag="remaining before clog detection triggers" zh="剩余即触发堵料检测"/>
   <translation tag="rendering" zh="渲染中"/>

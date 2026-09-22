@@ -2520,6 +2520,7 @@
   <translation tag="Single toggle macro. State is not tracked." ru="Один макрос переключения. Состояние не отслеживается."/>
   <translation tag="Size" ru="Размер"/>
   <translation tag="Skip" ru="Пропустить"/>
+  <translation tag="Skipped"/>
   <translation tag="Sleep While Printing" ru="Спящий режим при печати"/>
   <translation tag="Sleep adjusted to match dim timeout" ru="Таймаут сна изменён"/>
   <translation tag="Sliced colors" ru="Цвета из слайсера"/>
@@ -3133,7 +3134,9 @@
   <translation tag="Z-offset saved - Klipper restarting..." ru="Z-смещение сохранено — Klipper перезапускается..."/>
   <translation tag="Z:" ru="Z:"/>
   <translation tag="Z: 0.000" ru="Z: 0.000"/>
+  <translation tag="already loaded"/>
   <translation tag="bed" ru="стол"/>
+  <translation tag="busy"/>
   <translation tag="by Preston Brown" ru="от Preston Brown"/>
   <translation tag="chamber heater" ru="нагреватель камеры"/>
   <translation tag="complete" ru="завершено"/>
@@ -3146,6 +3149,7 @@
   <translation tag="eSpooler Mode" ru="Режим eSpooler"/>
   <translation tag="eSpooler, clog detection, and sensor settings" ru="Настройки eSpooler, обнаружения засора и датчиков"/>
   <translation tag="elapsed" ru="прошло"/>
+  <translation tag="empty"/>
   <translation tag="enable" ru="включить"/>
   <translation tag="enabled" ru="включено"/>
   <translation tag="error" ru="ошибка"/>
@@ -3153,14 +3157,19 @@
   <translation tag="extruder(s)" ru="экструдер(ы)"/>
   <translation tag="extruders" ru="экструдеры"/>
   <translation tag="fans" ru="вентиляторы"/>
+  <translation tag="feeder error"/>
+  <translation tag="feeder not in automatic mode"/>
+  <translation tag="filament sensor disabled"/>
   <translation tag="heated bed" ru="подогреваемый стол"/>
   <translation tag="idle" ru="простой"/>
   <translation tag="in unit {} slot {}" ru="в блоке {} слот {}"/>
   <translation tag="layers" ru="слои"/>
   <translation tag="left" ru="осталось"/>
+  <translation tag="loaded"/>
   <translation tag="mm before clog" ru="мм до засора"/>
   <translation tag="needs" ru="требуется"/>
   <translation tag="not detected" ru="не обнаружено"/>
+  <translation tag="not loaded"/>
   <translation tag="nozzle" ru="сопло"/>
   <translation tag="of" ru="из"/>
   <translation tag="off" ru="выкл"/>
@@ -3169,6 +3178,7 @@
   <translation tag="passive" ru="пассивно"/>
   <translation tag="printer default" ru="по умолчанию для принтера"/>
   <translation tag="prints" ru="печатей"/>
+  <translation tag="ready to load"/>
   <translation tag="remaining" ru="осталось"/>
   <translation tag="remaining before clog detection triggers" ru="осталось до срабатывания обнаружения засора"/>
   <translation tag="rendering" ru="рендеринг"/>

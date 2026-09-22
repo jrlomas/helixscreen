@@ -96,24 +96,38 @@ TEST_CASE("BatchFilamentModal row label names the lane contents", "[ams][batch]"
     using helix::SlotInfo;
     using helix::ui::LaneNoun;
 
-    SECTION("a loaded lane names its material") {
+    SECTION("a lane feeding the toolhead says loaded") {
         SlotInfo info;
         info.material = "PETG";
-        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 0, info, true) ==
-                "Feeder 1 (PETG)");
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 0, info, true, true) ==
+                std::string("Feeder 1 (PETG - ") + lv_tr("loaded") + ")");
     }
-    SECTION("a lane known to be empty says so") {
-        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 1, SlotInfo{}, false) ==
-                std::string("Feeder 2 (") + lv_tr("Empty") + ")");
+    SECTION("a full lane not yet fed says ready to load") {
+        SlotInfo info;
+        info.material = "PLA";
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 1, info, true, false) ==
+                std::string("Feeder 2 (PLA - ") + lv_tr("ready to load") + ")");
+    }
+    SECTION("a lane known to be empty says so, with no loaded/ready suffix") {
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 2, SlotInfo{}, false, false) ==
+                std::string("Feeder 3 (") + lv_tr("Empty") + ")");
     }
     SECTION("an unanswerable presence leaves the lane name bare") {
-        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 2, SlotInfo{}, std::nullopt) ==
-                "Feeder 3");
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 3, SlotInfo{}, std::nullopt,
+                                              false) == "Feeder 4");
     }
     SECTION("material wins over presence, so a stale nullopt cannot blank a loaded lane") {
         SlotInfo info;
         info.material = "PLA";
-        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Slot, 0, info, std::nullopt) ==
-                "Slot 1 (PLA)");
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Slot, 0, info, std::nullopt, true) ==
+                std::string("Slot 1 (PLA - ") + lv_tr("loaded") + ")");
     }
+}
+
+TEST_CASE("BatchFilamentModal drops ineligible slots before dispatch", "[ams][batch]") {
+    using E = helix::AmsBackend::FilamentOpEligibility;
+    const std::vector<E> per_slot{E::Eligible, E::NotLoaded, E::Eligible, E::Error};
+
+    CHECK(BatchFilamentModal::eligible_only({0, 1, 2, 3}, per_slot) == std::vector<int>{0, 2});
+    CHECK(BatchFilamentModal::eligible_only({1, 3}, per_slot).empty());
 }

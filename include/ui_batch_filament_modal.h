@@ -4,16 +4,13 @@
 #include "ui_modal.h"
 #include "ui_multiselect.h"
 
+#include "ams_backend.h"
 #include "ams_types.h"
 #include "display_numbering.h"
 
 #include <optional>
 #include <string>
 #include <vector>
-
-namespace helix {
-class AmsBackend;
-}
 
 namespace helix::ui {
 
@@ -47,12 +44,21 @@ class BatchFilamentModal : public Modal {
     // Pure: multiselect keys are slot indices as decimal strings.
     static std::vector<int> selected_slots(const std::vector<std::string>& keys);
 
-    // Pure: row text. The lane name, plus what is in the lane. The tick state
-    // stops describing the machine the moment the user changes it, so the
-    // contents are named in the row. An unanswerable presence leaves the lane
-    // name bare rather than asserting "Empty".
+    // Pure: row text. The lane name, plus what is in the lane and where it
+    // stands: a lane carrying material says loaded (at the toolhead) or ready
+    // to load, a lane known empty says Empty with no loaded/ready suffix, and
+    // an unanswerable presence leaves the lane name bare. The tick state stops
+    // describing the machine the moment the user changes it, so the contents
+    // are named in the row.
     static std::string row_label(LaneNoun noun, int slot, const SlotInfo& info,
-                                 std::optional<bool> present);
+                                 std::optional<bool> present, bool at_toolhead);
+
+    // Pure: the selected slots the backend says can take this operation.
+    // Eligibility is direction-dependent, so this runs on button press, not
+    // when the rows are built. Out-of-range slots are dropped, not trusted.
+    static std::vector<int>
+    eligible_only(const std::vector<int>& selected,
+                  const std::vector<AmsBackend::FilamentOpEligibility>& per_slot);
 
     /// What each picker row needs from the backend. Lane presence answers the
     /// label ("what is in this lane"); toolhead state answers the Unload tick

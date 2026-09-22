@@ -2759,6 +2759,7 @@ translations:
     не отслеживается.
   Size: Размер
   Skip: Пропустить
+  Skipped: ''
   Sleep While Printing: Спящий режим при печати
   Sleep adjusted to match dim timeout: Таймаут сна изменён
   Sliced colors: Цвета из слайсера
@@ -3472,7 +3473,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-смещение сохранено — Klipper перезапускается...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: ''
   bed: стол
+  busy: ''
   by Preston Brown: от Preston Brown
   chamber heater: нагреватель камеры
   complete: завершено
@@ -3485,6 +3488,7 @@ translations:
   eSpooler Mode: 'Режим eSpooler'
   eSpooler, clog detection, and sensor settings: 'Настройки eSpooler, обнаружения засора и датчиков'
   elapsed: прошло
+  empty: ''
   enable: включить
   enabled: включено
   error: ошибка
@@ -3492,14 +3496,19 @@ translations:
   extruder(s): экструдер(ы)
   extruders: экструдеры
   fans: вентиляторы
+  feeder error: ''
+  feeder not in automatic mode: ''
+  filament sensor disabled: ''
   heated bed: подогреваемый стол
   idle: простой
   in unit {} slot {}: 'в блоке {} слот {}'
   layers: слои
   left: осталось
+  loaded: ''
   mm before clog: мм до засора
   needs: требуется
   not detected: не обнаружено
+  not loaded: ''
   nozzle: сопло
   of: из
   'off': выкл
@@ -3513,6 +3522,7 @@ translations:
   passive: пассивно
   printer default: по умолчанию для принтера
   prints: печатей
+  ready to load: ''
   remaining: осталось
   remaining before clog detection triggers: осталось до срабатывания обнаружения засора
   rendering: рендеринг

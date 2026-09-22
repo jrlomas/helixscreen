@@ -2734,6 +2734,7 @@ translations:
   Single toggle macro. State is not tracked.: Single toggle macro. State is not tracked.
   Size: Size
   Skip: Skip
+  Skipped: Skipped
   Sleep While Printing: Sleep While Printing
   Sleep adjusted to match dim timeout: Sleep adjusted to match dim timeout
   Sliced colors: Sliced colors
@@ -3447,7 +3448,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-offset saved - Klipper restarting...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: already loaded
   bed: bed
+  busy: busy
   by Preston Brown: by Preston Brown
   chamber heater: chamber heater
   complete: complete
@@ -3460,6 +3463,7 @@ translations:
   eSpooler Mode: eSpooler Mode
   eSpooler, clog detection, and sensor settings: eSpooler, clog detection, and sensor settings
   elapsed: elapsed
+  empty: empty
   enable: enable
   enabled: enabled
   error: error
@@ -3467,14 +3471,19 @@ translations:
   extruder(s): extruder(s)
   extruders: extruders
   fans: fans
+  feeder error: feeder error
+  feeder not in automatic mode: feeder not in automatic mode
+  filament sensor disabled: filament sensor disabled
   heated bed: heated bed
   idle: idle
   in unit {} slot {}: in unit {} slot {}
   layers: layers
   left: left
+  loaded: loaded
   mm before clog: mm before clog
   needs: needs
   not detected: not detected
+  not loaded: not loaded
   nozzle: nozzle
   of: of
   'off': 'off'
@@ -3483,6 +3492,7 @@ translations:
   passive: passive
   printer default: printer default
   prints: prints
+  ready to load: ready to load
   remaining: remaining
   remaining before clog detection triggers: remaining before clog detection triggers
   rendering: rendering

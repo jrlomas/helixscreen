@@ -2812,6 +2812,7 @@ translations:
     pas suivi.
   Size: Taille
   Skip: Passer
+  Skipped: ''
   Sleep While Printing: Veille pendant impression
   Sleep adjusted to match dim timeout: Délai de veille ajusté
   Sliced colors: Couleurs tranchées
@@ -3551,7 +3552,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-offset enregistré - Redémarrage de Klipper...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: ''
   bed: plateau
+  busy: ''
   by Preston Brown: par Preston Brown
   chamber heater: chauffage du caisson
   complete: terminé
@@ -3564,6 +3567,7 @@ translations:
   eSpooler Mode: 'Mode eSpooler'
   eSpooler, clog detection, and sensor settings: 'Paramètres eSpooler, détection de bourrage et capteurs'
   elapsed: écoulé
+  empty: ''
   enable: activer
   enabled: activé
   error: erreur
@@ -3571,14 +3575,19 @@ translations:
   extruder(s): extrudeur(s)
   extruders: extrudeurs
   fans: ventilateurs
+  feeder error: ''
+  feeder not in automatic mode: ''
+  filament sensor disabled: ''
   heated bed: plateau chauffant
   idle: inactif
   in unit {} slot {}: dans l'unité {} slot {}
   layers: couches
   left: restant
+  loaded: ''
   mm before clog: mm avant bouchon
   needs: nécessite
   not detected: non détecté
+  not loaded: ''
   nozzle: buse
   of: de
   'off': éteint
@@ -3592,6 +3601,7 @@ translations:
   passive: passif
   printer default: par défaut de l’imprimante
   prints: impressions
+  ready to load: ''
   remaining: restant
   remaining before clog detection triggers: restant avant le déclenchement de la détection
     de bouchon

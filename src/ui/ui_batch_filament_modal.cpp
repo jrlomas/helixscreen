@@ -16,6 +16,17 @@
 
 namespace helix::ui {
 
+// filament_op_eligibility_reason() returns runtime-chosen strings, so the
+// extractor cannot see them at the lv_tr() call site in dispatch(). This never
+// runs; it lists every reason as a literal key.
+// clang-format off
+static void eligibility_reason_translation_hints_() {
+    (void)lv_tr("empty"); (void)lv_tr("already loaded"); (void)lv_tr("not loaded");
+    (void)lv_tr("feeder not in automatic mode"); (void)lv_tr("filament sensor disabled");
+    (void)lv_tr("busy"); (void)lv_tr("feeder error");
+}
+// clang-format on
+
 bool BatchFilamentModal::show_owned() {
     auto modal = std::make_unique<BatchFilamentModal>();
     if (!modal->show(lv_screen_active())) {
@@ -46,15 +57,30 @@ std::vector<int> BatchFilamentModal::selected_slots(const std::vector<std::strin
 }
 
 std::string BatchFilamentModal::row_label(LaneNoun noun, int slot, const SlotInfo& info,
-                                          std::optional<bool> present) {
+                                          std::optional<bool> present, bool at_toolhead) {
     const std::string lane = lane_label(noun, slot);
     if (!info.material.empty()) {
-        return lane + " (" + info.material + ")"; // material: no i18n
+        const char* where = at_toolhead ? lv_tr("loaded") : lv_tr("ready to load");
+        return lane + " (" + info.material + " - " + where + ")"; // material: no i18n
     }
     if (present && !*present) {
         return lane + " (" + lv_tr("Empty") + ")";
     }
     return lane;
+}
+
+std::vector<int>
+BatchFilamentModal::eligible_only(const std::vector<int>& selected,
+                                  const std::vector<AmsBackend::FilamentOpEligibility>& per_slot) {
+    std::vector<int> keep;
+    keep.reserve(selected.size());
+    for (int slot : selected) {
+        const auto idx = static_cast<size_t>(slot);
+        if (idx < per_slot.size() && per_slot[idx] == AmsBackend::FilamentOpEligibility::Eligible) {
+            keep.push_back(slot);
+        }
+    }
+    return keep;
 }
 
 BatchFilamentModal::BatchRowSource BatchFilamentModal::collect_rows(const AmsBackend& backend) {
@@ -95,10 +121,11 @@ void BatchFilamentModal::on_show() {
     std::vector<MultiSelectItem> items;
     items.reserve(rows.slots.size());
     for (size_t slot = 0; slot < rows.slots.size(); ++slot) {
-        items.push_back({std::to_string(slot),
-                         row_label(backend->lane_noun(), static_cast<int>(slot), rows.slots[slot],
-                                   rows.lane_presence[slot]),
-                         ticked[slot]});
+        items.push_back(
+            {std::to_string(slot),
+             row_label(backend->lane_noun(), static_cast<int>(slot), rows.slots[slot],
+                       rows.lane_presence[slot], rows.at_toolhead[slot].value_or(false)),
+             ticked[slot]});
     }
     multiselect_.attach(container);
     multiselect_.set_items(items);
@@ -127,10 +154,34 @@ void BatchFilamentModal::dispatch(bool load) {
         return; // keep the picker open — nothing was dispatched
     }
 
+    std::vector<AmsBackend::FilamentOpEligibility> per_slot;
+    const AmsSystemInfo sys = backend->get_system_info();
+    per_slot.reserve(static_cast<size_t>(sys.total_slots));
+    for (int slot = 0; slot < sys.total_slots; ++slot) {
+        per_slot.push_back(backend->slot_op_eligibility(slot, load));
+    }
+    const std::vector<int> runnable = eligible_only(slots, per_slot);
+    if (runnable.size() != slots.size()) {
+        // Name the first head we are dropping and why; a batch that silently
+        // shrinks is worse than one that explains itself.
+        for (int slot : slots) {
+            const auto e = per_slot[static_cast<size_t>(slot)];
+            if (e != AmsBackend::FilamentOpEligibility::Eligible) {
+                NOTIFY_WARNING("{} {}: {}", lv_tr("Skipped"),
+                               lane_label(backend->lane_noun(), slot),
+                               lv_tr(filament_op_eligibility_reason(e)));
+                break;
+            }
+        }
+    }
+    if (runnable.empty()) {
+        return; // keep the picker open — nothing was dispatched
+    }
+
     spdlog::info("[BatchFilamentModal] {} batch on {} slot(s)", load ? "Load" : "Unload",
-                 slots.size());
+                 runnable.size());
     AmsError error =
-        load ? backend->load_filament_batch(slots) : backend->unload_filament_batch(slots);
+        load ? backend->load_filament_batch(runnable) : backend->unload_filament_batch(runnable);
     if (!error.success()) {
         helix::ui::notify_ams_error(error, load ? lv_tr("Batch load failed")
                                                 : lv_tr("Batch unload failed"));

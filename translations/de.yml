@@ -2796,6 +2796,7 @@ translations:
     nicht verfolgt.
   Size: Größe
   Skip: Überspringen
+  Skipped: ''
   Sleep While Printing: Ruhemodus beim Drucken
   Sleep adjusted to match dim timeout: Ruhemodus-Zeitlimit angepasst
   Sliced colors: Slice-Farben
@@ -3524,7 +3525,9 @@ translations:
     gestartet...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: ''
   bed: Bett
+  busy: ''
   by Preston Brown: von Preston Brown
   chamber heater: Kammerheizung
   complete: abgeschlossen
@@ -3537,6 +3540,7 @@ translations:
   eSpooler Mode: 'eSpooler-Modus'
   eSpooler, clog detection, and sensor settings: 'eSpooler-, Verstopfungserkennungs- und Sensoreinstellungen'
   elapsed: vergangen
+  empty: ''
   enable: aktivieren
   enabled: aktiviert
   error: Fehler
@@ -3544,14 +3548,19 @@ translations:
   extruder(s): Extruder
   extruders: Extruder
   fans: Lüfter
+  feeder error: ''
+  feeder not in automatic mode: ''
+  filament sensor disabled: ''
   heated bed: Heizbett
   idle: Leerlauf
   in unit {} slot {}: 'in Einheit {} Slot {}'
   layers: Schichten
   left: übrig
+  loaded: ''
   mm before clog: mm vor Verstopfung
   needs: benötigt
   not detected: nicht erkannt
+  not loaded: ''
   nozzle: Düse
   of: von
   'off': aus
@@ -3565,6 +3574,7 @@ translations:
   passive: passiv
   printer default: Druckerstandard
   prints: Drucke
+  ready to load: ''
   remaining: verbleibend
   remaining before clog detection triggers: verbleibend bis Verstopfungserkennung
     auslöst

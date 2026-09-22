@@ -2520,6 +2520,7 @@
   <translation tag="Single toggle macro. State is not tracked." it="Singola macro toggle. Lo stato non è tracciato."/>
   <translation tag="Size" it="Dimensione"/>
   <translation tag="Skip" it="Salta"/>
+  <translation tag="Skipped"/>
   <translation tag="Sleep While Printing" it="Sospensione Durante Stampa"/>
   <translation tag="Sleep adjusted to match dim timeout" it="Timeout standby regolato"/>
   <translation tag="Sliced colors" it="Colori sezionati"/>
@@ -3133,7 +3134,9 @@
   <translation tag="Z-offset saved - Klipper restarting..." it="Z-offset salvato - Riavvio Klipper..."/>
   <translation tag="Z:" it="Z:"/>
   <translation tag="Z: 0.000" it="Z: 0.000"/>
+  <translation tag="already loaded"/>
   <translation tag="bed" it="piano"/>
+  <translation tag="busy"/>
   <translation tag="by Preston Brown" it="di Preston Brown"/>
   <translation tag="chamber heater" it="riscaldatore camera"/>
   <translation tag="complete" it="completato"/>
@@ -3146,6 +3149,7 @@
   <translation tag="eSpooler Mode" it="Modalità eSpooler"/>
   <translation tag="eSpooler, clog detection, and sensor settings" it="Impostazioni eSpooler, rilevamento intasamenti e sensori"/>
   <translation tag="elapsed" it="trascorso"/>
+  <translation tag="empty"/>
   <translation tag="enable" it="abilita"/>
   <translation tag="enabled" it="abilitato"/>
   <translation tag="error" it="errore"/>
@@ -3153,14 +3157,19 @@
   <translation tag="extruder(s)" it="estrusore/i"/>
   <translation tag="extruders" it="estrusori"/>
   <translation tag="fans" it="ventole"/>
+  <translation tag="feeder error"/>
+  <translation tag="feeder not in automatic mode"/>
+  <translation tag="filament sensor disabled"/>
   <translation tag="heated bed" it="piano riscaldato"/>
   <translation tag="idle" it="inattivo"/>
   <translation tag="in unit {} slot {}" it="nell&apos;unità {} slot {}"/>
   <translation tag="layers" it="layer"/>
   <translation tag="left" it="rimanente"/>
+  <translation tag="loaded"/>
   <translation tag="mm before clog" it="mm prima dell&apos;intasamento"/>
   <translation tag="needs" it="richiede"/>
   <translation tag="not detected" it="non rilevato"/>
+  <translation tag="not loaded"/>
   <translation tag="nozzle" it="ugello"/>
   <translation tag="of" it="di"/>
   <translation tag="off" it="spento"/>
@@ -3169,6 +3178,7 @@
   <translation tag="passive" it="passivo"/>
   <translation tag="printer default" it="predefinito stampante"/>
   <translation tag="prints" it="stampe"/>
+  <translation tag="ready to load"/>
   <translation tag="remaining" it="rimanente"/>
   <translation tag="remaining before clog detection triggers" it="rimanente prima che si attivi il rilevamento intasamento"/>
   <translation tag="rendering" it="rendering"/>
