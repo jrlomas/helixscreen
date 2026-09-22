@@ -1,0 +1,113 @@
+// Copyright (C) 2025-2026 356C LLC
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Mock-side prerequisite for U1 batch verification: MoonrakerClientMock
+// answers AUTO_FEEDING with the channel_state sequence the feeder firmware
+// reports, so AmsBackendSnapmaker's status parse — and the batch cursor that
+// will be built on top of it — has real transitions to observe in a unit
+// test, through the same handle_status_update path the live WebSocket drives.
+
+#include "ui_update_queue.h"
+
+#include "../lvgl_test_fixture.h"
+#include "ams_backend_snapmaker.h"
+#include "ams_types.h"
+#include "moonraker_api_mock.h"
+#include "moonraker_client_mock.h"
+#include "printer_state.h"
+#include "test_helpers/registered_backend.h"
+
+#include <cstdlib>
+#include <memory>
+#include <string>
+
+#include "../catch_amalgamated.hpp"
+
+namespace {
+
+/// setenv with RAII restore, so one case's fail-slot cannot leak into the next.
+struct ScopedEnvVar {
+    std::string name;
+    std::string saved;
+    bool was_set = false;
+
+    ScopedEnvVar(std::string n, const char* value) : name(std::move(n)) {
+        if (const char* old = ::getenv(name.c_str())) {
+            saved = old;
+            was_set = true;
+        }
+        ::setenv(name.c_str(), value, /*overwrite=*/1);
+    }
+    ~ScopedEnvVar() {
+        if (was_set) {
+            ::setenv(name.c_str(), saved.c_str(), 1);
+        } else {
+            ::unsetenv(name.c_str());
+        }
+    }
+};
+
+/// A production AmsBackendSnapmaker over the mock API + client, so a batch
+/// dispatch runs the real gcode path and the mock client's simulated feeder
+/// frames flow back through the subscription the same way live frames do.
+struct MockBatchFixture : public LVGLTestFixture {
+    MoonrakerClientMock mock_client{MoonrakerClientMock::PrinterType::VORON_24};
+    helix::PrinterState state;
+    std::unique_ptr<MoonrakerAPIMock> api;
+    std::unique_ptr<helix::test::RegisteredBackend<helix::AmsBackendSnapmaker>> backend_;
+
+    MockBatchFixture() {
+        state.init_subjects(false);
+        api = std::make_unique<MoonrakerAPIMock>(mock_client, state);
+        backend_ = std::make_unique<helix::test::RegisteredBackend<helix::AmsBackendSnapmaker>>(
+            api.get(), &mock_client);
+        REQUIRE(backend().start().success());
+    }
+
+    helix::AmsBackendSnapmaker& backend() {
+        return **backend_;
+    }
+
+    /// Run the queued feeder frames until the queue is empty and the backend
+    /// is back at idle. Bounded so a wedged walk fails the test instead of
+    /// hanging the suite.
+    void pump_until_idle() {
+        for (int i = 0; i < 100; ++i) {
+            helix::ui::UpdateQueue::instance().drain();
+            if (backend().get_current_action() == helix::AmsAction::IDLE) {
+                return;
+            }
+        }
+        FAIL("pump_until_idle: backend never returned to IDLE (action="
+             << helix::ams_action_to_string(backend().get_current_action()) << ")");
+    }
+};
+
+} // namespace
+
+TEST_CASE_METHOD(MockBatchFixture, "Mock walks each head to its terminal channel state",
+                 "[ams][batch][mock]") {
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    pump_until_idle();
+
+    CHECK(backend().channel_snapshot(0).state == "load_finish");
+    CHECK(backend().channel_snapshot(1).state == "load_finish");
+}
+
+TEST_CASE_METHOD(MockBatchFixture, "Mock can fail a named head", "[ams][batch][mock]") {
+    ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(backend().channel_snapshot(0).state == "load_finish");
+    CHECK(backend().channel_snapshot(1).state == "load_fail");
+}
+
+TEST_CASE_METHOD(MockBatchFixture, "Mock walks an unload through its heat step",
+                 "[ams][batch][mock]") {
+    REQUIRE(backend().unload_filament_batch({2}).success());
+    pump_until_idle();
+
+    CHECK(backend().channel_snapshot(2).state == "unload_finish");
+    CHECK_FALSE(backend().channel_snapshot(2).filament_detected);
+}
