@@ -28,25 +28,6 @@ struct Provider {
     std::optional<ErrorEvent> (*classify_event)(const Provider& p, const std::string& text);
 };
 
-/// True when `text` starts with a Klipper error prefix, returning the line
-/// with that prefix stripped. The gcode-response channel mixes errors in with
-/// `//` comments and `ok` acks, and a comment quoting a code must not raise
-/// an error toast.
-std::optional<std::string> error_line_text(const std::string& line) {
-    if (line.size() >= 2 && line[0] == '!' && line[1] == '!') {
-        return (line.size() >= 3 && line[2] == ' ') ? line.substr(3) : line.substr(2);
-    }
-    if (line.size() >= 6) {
-        std::string p = line.substr(0, 5);
-        std::transform(p.begin(), p.end(), p.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (p == "error" && line[5] == ':') {
-            return (line.size() >= 7 && line[6] == ' ') ? line.substr(7) : line.substr(6);
-        }
-    }
-    return std::nullopt;
-}
-
 ErrorSeverity severity_of_event(const snapmaker::ExceptionSeverity& s) {
     switch (s) {
     case snapmaker::ExceptionSeverity::Informational:
@@ -113,11 +94,11 @@ std::optional<ErrorEvent> classify(const PrinterDiscovery& hw, const std::string
     if (!p) {
         return std::nullopt;
     }
-    const auto text = error_line_text(line);
-    if (!text) {
+    const GcodeErrorLine parsed = parse_gcode_error_line(line);
+    if (parsed.prefix == GcodeErrorPrefix::None) {
         return std::nullopt;
     }
-    return p->classify_event(*p, *text);
+    return p->classify_event(*p, parsed.text);
 }
 
 } // namespace helix::faultcodes
