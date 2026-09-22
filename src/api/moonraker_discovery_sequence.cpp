@@ -1446,6 +1446,11 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
         for (int i = 0; i < 4; ++i) {
             subscription_objects[fmt::format("filament_motion_sensor e{}_filament", i)] = nullptr;
         }
+        // The batch macro's `doing` variable drives batch-feed progress, so it
+        // needs a subscription to be readable while a feed runs.
+        if (hw.has_auto_feeding_batch()) {
+            subscription_objects["gcode_macro AUTO_FEEDING_BATCH"] = nullptr;
+        }
     }
 
     // QIDI Box — box_extras carries box_drying_state.box<N>.{dry_state, end_time}
