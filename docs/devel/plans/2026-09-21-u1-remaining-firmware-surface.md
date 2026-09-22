@@ -1408,9 +1408,35 @@ Assert: a known vendor/type/sub-type resolves to its temperatures (`PLA`/`Snapma
 
 Same shape as `include/z_offset_persistence.h` and `include/pre_print_preferences.h`: a provider row keyed on a detection predicate (`filament_parameters` present in `hw.printer_objects()`, guarded by `hw.objects_reported()`), with the capability questions as free functions. No vendor name escapes this module.
 
-- [ ] **Step 4: Wire one consumer, not all of them**
+- [ ] **Step 4: Wire it into the system that owns the decision**
 
-Find the current load/unload temperature decision (grep the call shape, not a guessed name — start from where a filament load sets a target and work back). Change **one** call site to prefer the firmware's value when the capability answers, falling back to the existing table otherwise. Do not convert every site in this task; one proven consumer is the deliverable.
+**Do not grep for a call site — the owning system is already identified.** It is
+`src/printer/active_material_provider.cpp#get_active_material`, and it implements a documented
+**three-tier, per-field** precedence (#961):
+
+1. **User override** (the Material Temps overlay) — highest
+2. **Vendor preset** — `slot.nozzle_temp_*`, described in that file as "written by backend from
+   RFID/cfg/Klipper config"
+3. **Internal filament DB default** (`filament::find_material`) — lowest
+
+The layering is deliberately per-field: if the user overrode only `nozzle_min`, the vendor preset
+still wins on `nozzle_max`. `filament::get_material_override` returns the *sparse* override
+precisely so tier 2 can tell which fields the user actually set.
+
+**The firmware's values are a tier-2 vendor preset, NOT a new top tier.** An earlier draft of this
+step said to "prefer the firmware's value, falling back to the existing table" — that is a
+two-tier framing and it is wrong: it would let the firmware silently overwrite a temperature the
+user deliberately set in the overlay, which is the single thing this resolver exists to prevent.
+Whatever you add must lose to a user override on the same field.
+
+**Mind the semantic gap before you assign anything.** `nozzle_min`/`nozzle_max` describe a
+*printing* range. The U1 publishes `load_temp`, `unload_temp` and `clean_nozzle_temp`, which are
+*operation* temperatures — PLA reads `load_temp: 250` against a print range nowhere near that.
+They are not the same quantity, so do not fold them into `nozzle_min`/`nozzle_max`. Either carry
+them as their own fields on the result, or wire only the operation that actually wants them (a
+load or unload sequence). Say in your report which you chose and why.
+
+One proven consumer is still the deliverable — do not convert every site in this task.
 
 - [ ] **Step 5: Commit**
 
