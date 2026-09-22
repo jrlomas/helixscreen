@@ -18,38 +18,16 @@
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
 #include "test_helpers/registered_backend.h"
+#include "test_helpers/scoped_env.h"
 #include "test_helpers/snapmaker_test_access.h"
 
 #include <algorithm>
-#include <cstdlib>
 #include <memory>
 #include <string>
 
 #include "../catch_amalgamated.hpp"
 
 namespace {
-
-/// setenv with RAII restore, so one case's fail-slot cannot leak into the next.
-struct ScopedEnvVar {
-    std::string name;
-    std::string saved;
-    bool was_set = false;
-
-    ScopedEnvVar(std::string n, const char* value) : name(std::move(n)) {
-        if (const char* old = ::getenv(name.c_str())) {
-            saved = old;
-            was_set = true;
-        }
-        ::setenv(name.c_str(), value, /*overwrite=*/1);
-    }
-    ~ScopedEnvVar() {
-        if (was_set) {
-            ::setenv(name.c_str(), saved.c_str(), 1);
-        } else {
-            ::unsetenv(name.c_str());
-        }
-    }
-};
 
 /// A production AmsBackendSnapmaker over the mock API + client, so a batch
 /// dispatch runs the real gcode path and the mock client's simulated feeder
@@ -117,7 +95,7 @@ TEST_CASE_METHOD(MockBatchFixture, "Mock walks each head to its terminal channel
 }
 
 TEST_CASE_METHOD(MockBatchFixture, "Mock can fail a named head", "[ams][batch][mock]") {
-    ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
+    helix::ScopedEnv fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
     REQUIRE(backend().load_filament_batch({0, 1}).success());
     helix::ui::UpdateQueue::instance().drain();
 
@@ -176,8 +154,8 @@ TEST_CASE_METHOD(MockBatchFixture, "A doing=false reading retires an active plan
 TEST_CASE_METHOD(MockBatchFixture, "doing readings other than false leave the plan alone",
                  "[ams][batch]") {
     helix::SnapmakerTestAccess::set_batch_macro_object(backend(), "gcode_macro AUTO_FEEDING_BATCH");
-    for (const nlohmann::json doing : {nlohmann::json(true), nlohmann::json(1),
-                                       nlohmann::json("false"), nlohmann::json(nullptr)}) {
+    for (const auto& doing : {nlohmann::json(true), nlohmann::json(1), nlohmann::json("false"),
+                              nlohmann::json(nullptr)}) {
         REQUIRE(backend().load_filament_batch({0, 1}).success());
         REQUIRE(backend().batch_plan().active);
 
@@ -194,7 +172,7 @@ TEST_CASE_METHOD(MockBatchFixture, "doing readings other than false leave the pl
 }
 
 TEST_CASE_METHOD(MockBatchFixture, "A failed head stops the batch at its cursor", "[ams][batch]") {
-    ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
+    helix::ScopedEnv fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
     REQUIRE(backend().load_filament_batch({0, 1}).success());
     // A *_fail state leaves the action at ERROR, which no later frame resolves
     // to IDLE in this walk, so pump_until_idle would spin to its bound. The
@@ -209,7 +187,7 @@ TEST_CASE_METHOD(MockBatchFixture, "A failed head stops the batch at its cursor"
 
 TEST_CASE_METHOD(MockBatchFixture, "A failed head ends the firmware batch", "[ams][batch]") {
     helix::SnapmakerTestAccess::set_use_batch_macro(backend(), true);
-    ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
+    helix::ScopedEnv fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
     REQUIRE(backend().load_filament_batch({0, 1}).success());
     // A *_fail leaves the action at ERROR, which no later frame resolves to
     // IDLE in this walk, so pump_until_idle would spin to its bound. One
@@ -274,7 +252,7 @@ TEST_CASE_METHOD(MockBatchFixture, "A stale batch RPC failure leaves the interlo
 
 TEST_CASE_METHOD(MockBatchFixture, "Without the macro nothing extra is sent", "[ams][batch]") {
     helix::SnapmakerTestAccess::set_use_batch_macro(backend(), false);
-    ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "0");
+    helix::ScopedEnv fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "0");
     REQUIRE(backend().load_filament_batch({0}).success());
     // Fail case: single drain, same reason as above.
     helix::ui::UpdateQueue::instance().drain();
@@ -343,7 +321,7 @@ TEST_CASE("This session's own live batch is left alone", "[ams][batch]") {
     };
 
     helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH",
-                                          /*local_batch_active=*/true);
+                                               /*local_batch_active=*/true);
 
     CHECK(client.sent_gcode.empty());
 }
@@ -362,8 +340,7 @@ TEST_CASE("A non-bool doing variable is a no-op that does not throw", "[ams][bat
     // `doing` is a save-variable: nothing pins its JSON type across firmware
     // versions, and .value("doing", false) throws type_error.302 on any
     // non-bool, unwinding through the subscribe response callback.
-    for (const nlohmann::json doing :
-         {nlohmann::json(1), nlohmann::json("1"), nlohmann::json(nullptr)}) {
+    for (const auto& doing : {nlohmann::json(1), nlohmann::json("1"), nlohmann::json(nullptr)}) {
         RecordingFakeClient client;
         const nlohmann::json status = {
             {"gcode_macro AUTO_FEEDING_BATCH", {{"doing", doing}}},
@@ -371,8 +348,8 @@ TEST_CASE("A non-bool doing variable is a no-op that does not throw", "[ams][bat
             {"virtual_sdcard", {{"is_active", false}}},
         };
 
-        REQUIRE_NOTHROW(helix::batch_feeding::reconcile_on_connect(client, status,
-                                                              "gcode_macro AUTO_FEEDING_BATCH"));
+        REQUIRE_NOTHROW(helix::batch_feeding::reconcile_on_connect(
+            client, status, "gcode_macro AUTO_FEEDING_BATCH"));
 
         CHECK(client.sent_gcode.empty());
     }
@@ -383,7 +360,7 @@ TEST_CASE("An unreadable print state leaves the interlock alone", "[ams][batch]"
     // and chained .value() on a null throws rather than yielding the default.
     // An unconfirmable print state must read as "cannot confirm" and send
     // nothing: a stranded interlock is recoverable, ending a live batch is not.
-    for (const nlohmann::json print_stats :
+    for (const auto& print_stats :
          {nlohmann::json(nullptr), nlohmann::json(7), nlohmann::json{{"state", 3}}}) {
         RecordingFakeClient client;
         const nlohmann::json status = {
@@ -392,8 +369,8 @@ TEST_CASE("An unreadable print state leaves the interlock alone", "[ams][batch]"
             {"virtual_sdcard", {{"is_active", false}}},
         };
 
-        REQUIRE_NOTHROW(helix::batch_feeding::reconcile_on_connect(client, status,
-                                                              "gcode_macro AUTO_FEEDING_BATCH"));
+        REQUIRE_NOTHROW(helix::batch_feeding::reconcile_on_connect(
+            client, status, "gcode_macro AUTO_FEEDING_BATCH"));
 
         CHECK(client.sent_gcode.empty());
     }
@@ -410,8 +387,8 @@ TEST_CASE("A null virtual_sdcard does not stop an otherwise idle cleanup", "[ams
         {"virtual_sdcard", nullptr},
     };
 
-    REQUIRE_NOTHROW(
-        helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH"));
+    REQUIRE_NOTHROW(helix::batch_feeding::reconcile_on_connect(client, status,
+                                                               "gcode_macro AUTO_FEEDING_BATCH"));
 
     CHECK(client.sent_contains("AUTO_FEEDING_BATCH ACTION=END"));
 }
