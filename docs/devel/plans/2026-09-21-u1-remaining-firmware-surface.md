@@ -800,6 +800,21 @@ Navigate to the AMS device-operations overlay, open the Print Behaviour section,
 
 `exception_manager` raises `{id, index, code, message, level, oneshot, is_persistent}`, and codes appear in error text as `level-id-index-code` (e.g. `0003-0530-0000-0011` = level 3, module 530, index 0, code 11 — the plate-removal refusal). Levels are `1=none, 2=pause, 3=cancel`. Decode it once, in one place.
 
+**Read against the firmware, 2026-09-21** — `/home/lava/klipper/klippy/exception_manager.py` on the
+live U1 (note the path: it is `klippy/`, NOT `klippy/extras/`; a grep of `extras/` returns empty
+and reads as absence). Three facts from it bind this task:
+
+1. **Both code forms are real.** `_parse_basic_code` (`:83-96`) takes **3** parts, `id-index-code`,
+   with no level. `_parse_structured_code` (`:99-112`) takes **4**, `level-id-index-code`. The
+   three-part case below is therefore guarding a format the firmware genuinely emits, not a
+   hypothetical — do not weaken or delete it.
+2. **`level` defaults to 3**, in both `raise_exception` (`:238`) and `cmd_RAISE_EXCEPTION`
+   (`:315`). So an exception raised without an explicit level is a **Cancel**, not an
+   informational one. `severity_of` must not treat a missing or zero level as benign.
+3. **The firmware's own key validation is `key.replace('-','').isdigit()`** (`_validate_coded_key`,
+   `:114-117`) — digits and dashes only. A decoder looser than the producer will accept strings
+   the firmware would have rejected, so match that tightness rather than exceeding it.
+
 **Files:**
 - Create: `include/snapmaker_exceptions.h`
 - Create: `src/printer/snapmaker_exceptions.cpp`
