@@ -383,6 +383,13 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// dispatched). The failure-recovery path and tests read this.
     [[nodiscard]] BatchPlan batch_plan() const;
 
+    /// Sends AUTO_FEEDING_BATCH ACTION=END. Klipper aborts the rest of a
+    /// script when one line raises, so a failed head strands the firmware's
+    /// `doing` interlock — which refuses every print start and resume until
+    /// cleared. No-op when use_batch_macro_ is false: firmware without the
+    /// macro has no interlock, and the command would be bogus there.
+    void end_firmware_batch();
+
     /// Applied logical-tool -> physical-head routing for the CURRENT print.
     ///
     /// The capability question generic code asks; the vendor knowledge (that the

@@ -138,6 +138,45 @@ TEST_CASE_METHOD(MockBatchFixture, "A failed head stops the batch at its cursor"
     CHECK(backend().get_system_info().operation_detail.find("2") != std::string::npos);
 }
 
+TEST_CASE_METHOD(MockBatchFixture, "A failed head ends the firmware batch", "[ams][batch]") {
+    helix::SnapmakerTestAccess::set_use_batch_macro(backend(), true);
+    ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    // A *_fail leaves the action at ERROR, which no later frame resolves to
+    // IDLE in this walk, so pump_until_idle would spin to its bound. One
+    // drain observes the failure AND the recovery it triggers.
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto plan = backend().batch_plan();
+    REQUIRE(plan.cursor == 1);  // head 0 verified; head 1 failed — the case the
+    REQUIRE_FALSE(plan.active); // recovery answers
+    // Prove the macro shape was actually dispatched, not the bare fallback.
+    const auto& history = mock_client.gcode_script_history();
+    REQUIRE(std::any_of(history.begin(), history.end(), [](const std::string& line) {
+        return line.find("AUTO_FEEDING_BATCH ACTION=START") != std::string::npos;
+    }));
+    // The chain itself ends with an ACTION=END line and the mock delivers
+    // every line even though real Klipper would abort the script at the
+    // raise, so the recovery is proven by a SECOND exact-line END beyond the
+    // chain's own.
+    CHECK(std::count(history.begin(), history.end(), "AUTO_FEEDING_BATCH ACTION=END") >= 2);
+}
+
+TEST_CASE_METHOD(MockBatchFixture, "Without the macro nothing extra is sent", "[ams][batch]") {
+    helix::SnapmakerTestAccess::set_use_batch_macro(backend(), false);
+    ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "0");
+    REQUIRE(backend().load_filament_batch({0}).success());
+    // Fail case: single drain, same reason as above.
+    helix::ui::UpdateQueue::instance().drain();
+
+    // Firmware without AUTO_FEEDING_BATCH has no interlock to clear, so the
+    // recovery must not invent the macro out of thin air.
+    const auto& history = mock_client.gcode_script_history();
+    CHECK(std::none_of(history.begin(), history.end(), [](const std::string& line) {
+        return line.find("AUTO_FEEDING_BATCH") != std::string::npos;
+    }));
+}
+
 TEST_CASE_METHOD(MockBatchFixture, "The AUTO_FEEDING_BATCH shape advances the cursor too",
                  "[ams][batch]") {
     // Discovery never runs in a unit test, so the capability cache starts

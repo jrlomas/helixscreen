@@ -540,18 +540,30 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
     spdlog::info("{} Executing G-code: {}", tag, chain);
     // Sent through api_ rather than the shared execute_gcode() so the timeout
     // can scale per op — the shared overloads pin AMS_OPERATION_TIMEOUT_MS
-    // (300s), which a 4-head cold batch can outlast. Callbacks capture no `this`
-    // and only log: the claim is already released by the time either fires, and
-    // the operation's completion is owned by the firmware phase the sidebar
-    // tracks, not by this RPC's return.
+    // (300s), which a 4-head cold batch can outlast. The operation's
+    // completion is owned by the firmware phase the sidebar tracks, not by
+    // this RPC's return; the error path reaches `this` only through the
+    // lifetime token, which marshals to main and skips a dead owner.
+    auto tok = lifetime_.token();
     api_->execute_gcode(
         chain, [tag]() { spdlog::debug("{} batch G-code executed successfully", tag); },
-        [tag, chain](const MoonrakerError& err) {
+        [this, tok, tag, chain](const MoonrakerError& err) mutable {
             if (err.type == MoonrakerErrorType::TIMEOUT) {
                 spdlog::warn("{} G-code response timed out (may still be running): {}", tag, chain);
             } else {
                 spdlog::error("{} G-code failed: {} - {}", tag, chain, err.message);
             }
+            // The whole chain was rejected or its response was lost; either
+            // way the trailing ACTION=END line cannot be counted on, and the
+            // `doing` interlock strands the printer without it.
+            tok.defer("AmsBackendSnapmaker::do_filament_batch.recover",
+                      [this, tag, msg = err.message] {
+                          const auto plan = batch_plan();
+                          spdlog::warn("{} batch RPC failed at head {} ({}): clearing the "
+                                       "firmware batch interlock",
+                                       tag, plan.active ? plan.heads[plan.cursor] : -1, msg);
+                          end_firmware_batch();
+                      });
         },
         static_cast<uint32_t>(slots.size()) * BATCH_FEED_OP_TIMEOUT_MS,
         /*silent=*/true, /*on_queued=*/nullptr,
@@ -595,6 +607,18 @@ std::string AmsBackendSnapmaker::batch_feed_gcode(const std::vector<int>& slots,
 AmsBackendSnapmaker::BatchPlan AmsBackendSnapmaker::batch_plan() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return batch_;
+}
+
+void AmsBackendSnapmaker::end_firmware_batch() {
+    bool use_batch_macro;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        use_batch_macro = use_batch_macro_;
+    }
+    if (!use_batch_macro) {
+        return; // no interlock exists on this firmware
+    }
+    execute_gcode("AUTO_FEEDING_BATCH ACTION=END");
 }
 
 bool AmsBackendSnapmaker::can_unload_from_toolhead(int slot_index) const {
@@ -1297,6 +1321,11 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
     // it is released, because reaching into AmsState while holding ours inverts
     // the order add_backend() acquires them in.
     std::vector<int> unloaded_lanes;
+    // The cursor head's *_fail state, when the active batch hit one this
+    // parse. Same deferral rule as unloaded_lanes: end_firmware_batch() sends
+    // gcode, which must not run under mutex_.
+    int batch_failed_head = -1;
+    std::string batch_failed_state;
 
     // Per-slot UID observed THIS parse. Empty string means no RFID info in
     // this notification (incremental update, or slot not included). Only
@@ -1763,6 +1792,8 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                         if (batch_.active && i == batch_.heads[batch_.cursor]) {
                             if (info.is_fail) {
                                 batch_.active = false;
+                                batch_failed_head = i;
+                                batch_failed_state = state;
                             } else if (state == (batch_.load ? "load_finish" : "unload_finish")) {
                                 ++batch_.cursor;
                                 batch_.active = batch_.cursor < batch_.heads.size();
@@ -2137,6 +2168,12 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
     // filament out of the lane.
     for (int lane : unloaded_lanes) {
         AmsState::instance().mark_slot_unloaded(lane);
+    }
+
+    if (batch_failed_head >= 0) {
+        spdlog::warn("{} head {} reached '{}' — clearing the firmware batch interlock",
+                     backend_log_tag(), batch_failed_head, batch_failed_state);
+        end_firmware_batch();
     }
 
     if (changed) {
