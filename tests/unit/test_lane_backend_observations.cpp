@@ -2452,6 +2452,72 @@ TEST_CASE_METHOD(LVGLTestFixture, "a Snapmaker write firmware refused withholds 
     CHECK(*read.vendor_cache->color_rgb == 0x00FF00u);
 }
 
+TEST_CASE_METHOD(LVGLTestFixture, "a Snapmaker refusal answers only the edit it was sent for",
+                 "[lane][ingest][snapmaker]") {
+    // Two saves in a row: the first POST is refused, and its failure answer
+    // marshals to the main thread only after the second save has staged its
+    // own declaration. The refusal belongs to the first edit, so it may not
+    // cancel the second's guard.
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    RestResponse not_found;
+    not_found.success = false;
+    not_found.status_code = 404;
+    not_found.error = "Not Found";
+    api.rest_mock().mock_queue_post_response("/printer/filament_detect/set", not_found);
+
+    SnapmakerHarness harness(&api, nullptr);
+
+    const auto tag_uid = nlohmann::json::array({144, 32, 196, 2});
+    feed_filament_detect(*harness, nlohmann::json{
+                                       {"state", nlohmann::json::array({1})},
+                                       {"info", nlohmann::json::array({nlohmann::json{
+                                                    {"MAIN_TYPE", "PLA"},
+                                                    {"CARD_UID", tag_uid},
+                                                }})},
+                                   });
+
+    auto first = harness->get_slot_info(0);
+    first.material = "PETG";
+    REQUIRE(helix::test::apply_edit(*harness, 0, first).success());
+    REQUIRE(api.rest_mock().mock_get_post_history().size() == 1);
+
+    // The second save is accepted; it restages the slot before the first's
+    // refusal is delivered.
+    RestResponse ok;
+    ok.success = true;
+    ok.status_code = 200;
+    ok.data = {{"result", "ok"}};
+    api.rest_mock().mock_queue_post_response("/printer/filament_detect/set", ok);
+    auto second = harness->get_slot_info(0);
+    second.material = "ABS";
+    REQUIRE(helix::test::apply_edit(*harness, 0, second).success());
+
+    // The refusal of the first edit arrives now.
+    helix::ui::UpdateQueue::instance().drain();
+
+    // Firmware repeats the second write back on the same spool. WEIGHT is the
+    // control that a record was filed at all; the material is an echo of the
+    // edit whose write is still outstanding and must not file.
+    feed_filament_detect(*harness, nlohmann::json{
+                                       {"state", nlohmann::json::array({1})},
+                                       {"info", nlohmann::json::array({nlohmann::json{
+                                                    {"MAIN_TYPE", "ABS"},
+                                                    {"WEIGHT", 1000},
+                                                    {"CARD_UID", tag_uid},
+                                                }})},
+                                   });
+
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.vendor_cache.has_value());
+    REQUIRE(echoed.vendor_cache->total_weight_g.has_value());
+    CHECK(*echoed.vendor_cache->total_weight_g == 1000.0F);
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+}
+
 TEST_CASE_METHOD(LVGLTestFixture,
                  "Snapmaker withholds only the fields the user moved, not the whole write-back",
                  "[lane][ingest][snapmaker]") {

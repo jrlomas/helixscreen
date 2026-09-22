@@ -945,9 +945,12 @@ AmsError AmsBackendSnapmaker::apply_user_edit(int slot_index, const SlotInfo& in
         // Recorded before dispatch, because the guard has to be armed before
         // any echo can arrive. A write firmware never accepted disarms it from
         // the response callback below.
+        // Zero when the slot is out of range and nothing was staged; the
+        // matched abandon() below then finds no entry and drops nothing.
+        std::uint64_t staged_sequence = 0;
         if (slot_index >= 0 && slot_index < NUM_TOOLS) {
             std::lock_guard<std::mutex> lock(mutex_);
-            own_write_echoes_.stage(slot_index, declared);
+            staged_sequence = own_write_echoes_.stage(slot_index, declared);
             if (auto* staged = own_write_echoes_.staged(slot_index)) {
                 // The POST has to have carried the key. A field the user
                 // cleared is omitted from the body, so firmware keeps the
@@ -986,7 +989,7 @@ AmsError AmsBackendSnapmaker::apply_user_edit(int slot_index, const SlotInfo& in
         auto tok = lifetime_.token();
         api_->rest().call_rest_post(
             "/printer/filament_detect/set", payload,
-            [this, tok, tag, slot_index](const RestResponse& resp) mutable {
+            [this, tok, tag, slot_index, staged_sequence](const RestResponse& resp) mutable {
                 bool accepted = resp.success;
                 if (!resp.success) {
                     // 404 on stock firmware (no Extended Firmware extension)
@@ -1026,10 +1029,13 @@ AmsError AmsBackendSnapmaker::apply_user_edit(int slot_index, const SlotInfo& in
                 // genuine tag reading until the UID changes, which is the harm
                 // it exists to prevent, pointed the other way. Stock firmware
                 // has no such endpoint at all, so this is the common path.
+                // Matched to the staging this response answers: the user can
+                // have saved a second edit meanwhile, whose guard this failure
+                // has no claim on.
                 tok.defer("AmsBackendSnapmaker::apply_user_edit.abandon_echo",
-                          [this, slot_index]() {
+                          [this, slot_index, staged_sequence]() {
                               std::lock_guard<std::mutex> lock(mutex_);
-                              own_write_echoes_.abandon(slot_index);
+                              own_write_echoes_.abandon(slot_index, staged_sequence);
                           });
             });
     }

@@ -226,6 +226,36 @@ TEST_CASE("a second edit replaces the declaration the first armed", "[lane][echo
     CHECK(*record.color_rgb == 0x00FF00u);
 }
 
+TEST_CASE("an abandon naming a superseded staging is a no-op", "[lane][echo]") {
+    OwnWriteEchoes echoes;
+    const std::uint64_t superseded = echoes.stage(0, declaration());
+
+    // A second edit replaced the first's staging while the first's dispatch
+    // was still out; only material moved this time.
+    Observation second(ObservationSource::LocalUser);
+    second.material = "ABS";
+    const std::uint64_t current = echoes.stage(0, second);
+    echoes.arm(0, "TAG-A");
+
+    // The first write's failure answer landed after the second edit staged.
+    // Cancelling the second edit's guard here would file its echo as firmware
+    // truth, so a stamp naming a superseded staging may drop nothing.
+    echoes.abandon(0, superseded);
+    Observation record(ObservationSource::VendorCache);
+    record.material = "ABS";
+    record.brand = "Polymaker";
+    CHECK(echoes.withhold(0, "TAG-A", record) == 1);
+    CHECK_FALSE(record.material.has_value());
+    CHECK(record.brand == "Polymaker");
+
+    // The stamp of the staging that actually holds the slot still drops it.
+    echoes.abandon(0, current);
+    Observation after(ObservationSource::VendorCache);
+    after.material = "ABS";
+    CHECK(echoes.withhold(0, "TAG-A", after) == 0);
+    CHECK(after.material == "ABS");
+}
+
 TEST_CASE("slots do not share a declaration", "[lane][echo]") {
     OwnWriteEchoes echoes = armed();
 

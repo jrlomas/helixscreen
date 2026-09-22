@@ -4,6 +4,7 @@
 
 #include "lane_observation.h"
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 
@@ -49,7 +50,13 @@ class OwnWriteEchoes {
     /// Replaces whatever this slot held. Pair every stage() with arm() or
     /// abandon(): a staging left unarmed withholds nothing, but it lingers
     /// until the next stage() replaces it.
-    void stage(int slot_index, Observation declared);
+    ///
+    /// @return The staging's sequence stamp. A backend whose dispatch can fail
+    ///         after the call returns — an HTTP response, a timer — captures
+    ///         the stamp and passes it to the matched abandon(), so a failure
+    ///         answer landing after a later edit restaged the slot cancels
+    ///         only the edit it belongs to.
+    std::uint64_t stage(int slot_index, Observation declared);
 
     /// The staged declaration, for the caller to prune down to the fields its
     /// write actually carried and to relocate any field its read path spells
@@ -77,7 +84,17 @@ class OwnWriteEchoes {
     void arm(int slot_index, std::string boundary);
 
     /// The write never went out, so no echo is coming. Drops the staging.
+    ///
+    /// This form drops whatever the slot holds, whatever edit staged it. It is
+    /// for a caller that knows no write is outstanding — a boundary event on
+    /// this slot — not for an answer about one particular dispatch.
     void abandon(int slot_index);
+
+    /// The matched form: the failure answer of the staging @p staged_sequence
+    /// came from. A stamp naming a staging this slot no longer holds belongs
+    /// to a superseded edit and drops nothing, so a slow failure of edit 1
+    /// cannot cancel edit 2's guard.
+    void abandon(int slot_index, std::uint64_t staged_sequence);
 
     /// Remove from @p producer_record every field whose value repeats this
     /// slot's armed declaration, and return how many were removed. The count
@@ -108,9 +125,12 @@ class OwnWriteEchoes {
         /// False between stage() and arm(). withhold() ignores an unarmed
         /// entry, so a backend that stages and then bails suppresses nothing.
         bool armed{false};
+        /// Which edit staged this entry; matched abandon() answers to it.
+        std::uint64_t sequence{0};
     };
 
     std::unordered_map<int, Entry> entries_;
+    std::uint64_t next_sequence_{0};
 };
 
 } // namespace helix::ams

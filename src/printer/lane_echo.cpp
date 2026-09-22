@@ -72,11 +72,13 @@ bool declares_anything(const Observation& obs) {
 
 } // namespace
 
-void OwnWriteEchoes::stage(int slot_index, Observation declared) {
+std::uint64_t OwnWriteEchoes::stage(int slot_index, Observation declared) {
     Entry& entry = entries_[slot_index];
     entry.declared = std::move(declared);
     entry.boundary.clear();
     entry.armed = false;
+    entry.sequence = ++next_sequence_;
+    return entry.sequence;
 }
 
 Observation* OwnWriteEchoes::staged(int slot_index) {
@@ -98,6 +100,13 @@ void OwnWriteEchoes::arm(int slot_index, std::string boundary) {
 
 void OwnWriteEchoes::abandon(int slot_index) {
     entries_.erase(slot_index);
+}
+
+void OwnWriteEchoes::abandon(int slot_index, std::uint64_t staged_sequence) {
+    auto it = entries_.find(slot_index);
+    if (it != entries_.end() && it->second.sequence == staged_sequence) {
+        entries_.erase(it);
+    }
 }
 
 int OwnWriteEchoes::withhold(int slot_index, const std::string& boundary,
