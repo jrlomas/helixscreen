@@ -181,6 +181,30 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // current_slot. Drives the active-lane highlight per tool.
     [[nodiscard]] bool slot_is_actively_loaded(int slot_index) const override;
 
+    /// Raw per-channel feeder fields as the firmware last reported them.
+    /// Eligibility answers from these; presence alone cannot distinguish a
+    /// lane holding filament from a head that is loaded.
+    struct ChannelSnapshot {
+        std::string state;       ///< channel_state, e.g. "load_finish"
+        std::string error{"ok"}; ///< channel_error
+        bool filament_detected{false};
+        bool module_exist{false};
+        bool disable_auto{false};
+        /// The head's filament_motion_sensor `enabled` flag. Arrives from the
+        /// sensor status objects, not the feeder frame, so a feeder write
+        /// carries the previous value forward instead of defaulting it.
+        bool sensor_enabled{false};
+    };
+
+    [[nodiscard]] ChannelSnapshot channel_snapshot(int slot_index) const;
+
+    /// Eligibility answered from the feeder's own channel fields: only a
+    /// settled state on a fault-free, auto-mode channel with its motion
+    /// sensor armed can take an operation, and the answer flips with the
+    /// requested direction.
+    [[nodiscard]] FilamentOpEligibility slot_op_eligibility(int slot_index,
+                                                            bool load) const override;
+
   protected:
     // Operations. Every one of these drives the toolhead: AUTO_FEEDING forwards
     // to FEED_AUTO, which homes before it feeds, and `T{n}` moves the carriage.
@@ -331,13 +355,22 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     [[nodiscard]] static std::string preprint_gcode(const std::set<int>& tools_used,
                                                     const std::map<int, int>& remap);
 
-    /// One multi-line AUTO_FEEDING script covering @p slots, in the order given:
-    /// `AUTO_FEEDING EXTRUDER={n} LOAD=1` (or `UNLOAD=1`), newline-joined with
-    /// no trailing newline. Empty @p slots yields the empty string; the caller
-    /// (do_filament_batch) refuses that before sending. Pure, same reasoning as
-    /// preprint_gcode() above — reads no member state, so it unit-tests
-    /// without a backend or connection.
-    [[nodiscard]] static std::string batch_feed_gcode(const std::vector<int>& slots, bool load);
+    /// One multi-line feed script covering @p slots, in the order given,
+    /// newline-joined with no trailing newline. Empty @p slots yields the
+    /// empty string in the per-line shape (a bare START/END pair in the batch
+    /// shape); the caller (do_filament_batch) refuses empty before sending.
+    ///
+    /// @p use_batch_macro selects the shape: false joins one
+    /// `AUTO_FEEDING EXTRUDER={n} LOAD=1` (or `UNLOAD=1`) line per slot; true
+    /// drives the firmware's AUTO_FEEDING_BATCH state machine, which owns
+    /// preheat and target-restore between the START and END sentinels. The
+    /// default false is the shape every firmware accepts; do_filament_batch
+    /// passes the capability cached in use_batch_macro_.
+    ///
+    /// Pure, same reasoning as preprint_gcode() above — reads no member state,
+    /// so it unit-tests without a backend or connection.
+    [[nodiscard]] static std::string batch_feed_gcode(const std::vector<int>& slots, bool load,
+                                                      bool use_batch_macro = false);
 
     /// The U1's four independent feeders can be driven as one batch: the
     /// firmware sequences per-extruder AUTO_FEEDING itself. Gates the batch
@@ -345,6 +378,45 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     [[nodiscard]] bool supports_batch_filament_ops() const override {
         return true;
     }
+
+    /// The dispatched batch and how far it has verified. heads is in dispatch
+    /// order; cursor counts heads that reached the direction's terminal
+    /// channel_state. active spans dispatch until every head verified or a
+    /// head failed.
+    struct BatchPlan {
+        std::vector<int> heads; ///< in dispatch order
+        bool load{false};
+        size_t cursor{0}; ///< how many heads have reached their terminal state
+        bool active{false};
+        /// Progress-line words, translated at dispatch time (main thread): the
+        /// cursor-advance parse that renders them runs on the WebSocket
+        /// thread, which must not call lv_tr into LVGL's pack list.
+        std::string direction_label; ///< "Load" / "Unload"
+        std::string of_label;        ///< "of", as in "Load 2 of 4"
+        /// Identifies THIS dispatch. The deferred RPC-failure recovery
+        /// compares it against the live plan, so a failure answered after
+        /// the plan completed — or one belonging to an earlier, replaced
+        /// plan — cannot act on stale authority.
+        uint64_t dispatch_id{0};
+    };
+
+    /// Snapshot of the in-flight batch plan (all defaults when none was
+    /// dispatched). The failure-recovery path and tests read this.
+    [[nodiscard]] BatchPlan batch_plan() const;
+
+    /// True while a batch this process dispatched is still unverified, so
+    /// connect-time cleanup can tell its own live batch from an interlock
+    /// stranded by an earlier session.
+    [[nodiscard]] bool filament_batch_in_flight() const override {
+        return batch_plan().active;
+    }
+
+    /// Sends AUTO_FEEDING_BATCH ACTION=END. Klipper aborts the rest of a
+    /// script when one line raises, so a failed head strands the firmware's
+    /// `doing` interlock — which refuses every print start and resume until
+    /// cleared. No-op when use_batch_macro_ is false: firmware without the
+    /// macro has no interlock, and the command would be bogus there.
+    void end_firmware_batch();
 
     /// Applied logical-tool -> physical-head routing for the CURRENT print.
     ///
@@ -522,6 +594,14 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// a different question ("did the ACTIVE lane run out during extrusion").
     std::array<bool, NUM_TOOLS> loaded_at_toolhead_{{false, false, false, false}};
 
+    /// Last filament_feed frame's raw per-channel fields (channel_state,
+    /// channel_error, filament_detected, module_exist, disable_auto), written
+    /// by handle_status_update before classification. Each write replaces the
+    /// whole entry, defaulting any feeder field that frame omitted;
+    /// sensor_enabled arrives from the motion-sensor objects instead and is
+    /// carried across a feeder write. Read by channel_snapshot().
+    std::array<ChannelSnapshot, NUM_TOOLS> channel_snapshots_{};
+
     /// Validate slot index is within range
     AmsError validate_slot_index(int slot_index) const;
 
@@ -557,6 +637,26 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // fires clear_async. Brand / color_name / total_weight_g are preserved —
     // firmware populates them from the RFID tag.
     void clear_override_locked(int slot_index, SlotInfo& slot);
+
+    /// Whether the connected firmware ships the AUTO_FEEDING_BATCH macro,
+    /// cached from PrinterDiscovery in on_started() — discovery is fully
+    /// populated before this backend is constructed. Selects the script shape
+    /// do_filament_batch() builds. All access under mutex_.
+    bool use_batch_macro_ = false;
+
+    /// The status-object key the batch macro publishes under ("gcode_macro "
+    /// + the config-case macro name; empty when the firmware lacks the
+    /// macro). The subscription and the doing-parse must agree on this
+    /// spelling: Klipper preserves the config's case in object keys. All
+    /// access under mutex_.
+    std::string batch_macro_object_;
+
+    /// The batch do_filament_batch() dispatched, verified head-by-head in
+    /// handle_status_update's channel_state parse. All access under mutex_.
+    BatchPlan batch_;
+
+    /// Source of BatchPlan::dispatch_id; monotonic per backend. Under mutex_.
+    uint64_t next_batch_dispatch_id_ = 1;
 
     // Persistent per-slot overrides. Writers (on_started bulk load,
     // apply_user_edit, check_hardware_event_clear) all hold mutex_.

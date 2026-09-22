@@ -2590,6 +2590,7 @@ translations:
   Single toggle macro. State is not tracked.: 单个切换宏。不跟踪状态。
   Size: 大小
   Skip: 跳过
+  Skipped: ''
   Sleep While Printing: 打印时休眠
   Sleep adjusted to match dim timeout: 休眠超时已调整
   Sliced colors: 切片颜色
@@ -3254,7 +3255,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z 偏移已保存 - Klipper 重启中...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: ''
   bed: 热床
+  busy: ''
   by Preston Brown: by Preston Brown
   chamber heater: 腔体加热器
   complete: 完成
@@ -3267,6 +3270,7 @@ translations:
   eSpooler Mode: 'eSpooler 模式'
   eSpooler, clog detection, and sensor settings: 'eSpooler、堵塞检测与传感器设置'
   elapsed: 已用时
+  empty: ''
   enable: 启用
   enabled: 已启用
   error: 错误
@@ -3274,14 +3278,19 @@ translations:
   extruder(s): 挤出机
   extruders: 挤出机
   fans: 风扇
+  feeder error: ''
+  feeder not in automatic mode: ''
+  filament sensor disabled: ''
   heated bed: 热床
   idle: 空闲
   in unit {} slot {}: 在单元 {} 槽位 {}
   layers: 层
   left: 剩余
+  loaded: ''
   mm before clog: 毫米后堵料
   needs: 需要
   not detected: 未检测到
+  not loaded: ''
   nozzle: 喷嘴
   of: 的
   'off': 关闭
@@ -3295,6 +3304,7 @@ translations:
   passive: 被动
   printer default: 打印机默认
   prints: 打印次数
+  ready to load: ''
   remaining: 剩余
   remaining before clog detection triggers: 剩余即触发堵料检测
   rendering: 渲染中

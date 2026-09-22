@@ -2528,6 +2528,7 @@
   <translation tag="Single toggle macro. State is not tracked." ja="単一のトグルマクロ。状態は追跡されません。"/>
   <translation tag="Size" ja="サイズ"/>
   <translation tag="Skip" ja="スキップ"/>
+  <translation tag="Skipped"/>
   <translation tag="Sleep While Printing" ja="印刷中のスリープ"/>
   <translation tag="Sleep adjusted to match dim timeout" ja="スリープタイムアウトを調整しました"/>
   <translation tag="Sliced colors" ja="スライスした色"/>
@@ -3146,7 +3147,9 @@
   <translation tag="Z-offset saved - Klipper restarting..." ja="Z-offset を保存しました - Klipper を再起動中..."/>
   <translation tag="Z:" ja="Z:"/>
   <translation tag="Z: 0.000" ja="Z: 0.000"/>
+  <translation tag="already loaded"/>
   <translation tag="bed" ja="ベッド"/>
+  <translation tag="busy"/>
   <translation tag="by Preston Brown" ja="by Preston Brown"/>
   <translation tag="chamber heater" ja="チャンバーヒーター"/>
   <translation tag="complete" ja="完了"/>
@@ -3159,6 +3162,7 @@
   <translation tag="eSpooler Mode" ja="eSpoolerモード"/>
   <translation tag="eSpooler, clog detection, and sensor settings" ja="eSpooler、詰まり検出、センサーの設定"/>
   <translation tag="elapsed" ja="経過"/>
+  <translation tag="empty"/>
   <translation tag="enable" ja="有効化"/>
   <translation tag="enabled" ja="有効"/>
   <translation tag="error" ja="エラー"/>
@@ -3166,14 +3170,19 @@
   <translation tag="extruder(s)" ja="エクストルーダー"/>
   <translation tag="extruders" ja="エクストルーダー"/>
   <translation tag="fans" ja="ファン"/>
+  <translation tag="feeder error"/>
+  <translation tag="feeder not in automatic mode"/>
+  <translation tag="filament sensor disabled"/>
   <translation tag="heated bed" ja="ヒートベッド"/>
   <translation tag="idle" ja="アイドル"/>
   <translation tag="in unit {} slot {}" ja="ユニット {} スロット {}"/>
   <translation tag="layers" ja="レイヤー"/>
   <translation tag="left" ja="残り"/>
+  <translation tag="loaded"/>
   <translation tag="mm before clog" ja="詰まりまでの距離 (mm)"/>
   <translation tag="needs" ja="必要"/>
   <translation tag="not detected" ja="未検出"/>
+  <translation tag="not loaded"/>
   <translation tag="nozzle" ja="ノズル"/>
   <translation tag="of" ja="の"/>
   <translation tag="off" ja="オフ"/>
@@ -3182,6 +3191,7 @@
   <translation tag="passive" ja="パッシブ"/>
   <translation tag="printer default" ja="プリンター既定"/>
   <translation tag="prints" ja="印刷"/>
+  <translation tag="ready to load"/>
   <translation tag="remaining" ja="残り"/>
   <translation tag="remaining before clog detection triggers" ja="残りで詰まり検出が作動します"/>
   <translation tag="rendering" ja="レンダリング中"/>

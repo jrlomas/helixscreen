@@ -11,6 +11,7 @@
 
 #include "ui_batch_filament_modal.h"
 
+#include "ams_backend_snapmaker.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 
 #include <optional>
@@ -20,6 +21,31 @@
 #include "../catch_amalgamated.hpp"
 
 using helix::ui::BatchFilamentModal;
+
+namespace {
+/// Every lane holds filament; only heads 0 and 2 are loaded at the toolhead.
+/// This is the live rig state: four channels reporting filament_detected with
+/// two at load_finish and two at preload_finish.
+class DisagreeingBackend : public helix::AmsBackendSnapmaker {
+  public:
+    DisagreeingBackend() : helix::AmsBackendSnapmaker(nullptr, nullptr) {}
+
+    helix::AmsSystemInfo get_system_info() const override {
+        helix::AmsSystemInfo info;
+        info.total_slots = 4;
+        return info;
+    }
+    helix::SlotInfo get_slot_info(int slot_index) const override {
+        helix::SlotInfo slot;
+        slot.slot_index = slot_index;
+        slot.status = helix::SlotStatus::AVAILABLE; // lane has filament
+        return slot;
+    }
+    bool can_unload_from_toolhead(int slot_index) const override {
+        return slot_index == 0 || slot_index == 2;
+    }
+};
+} // namespace
 
 TEST_CASE("BatchFilamentModal prefill ticks by direction", "[ams][batch]") {
     using o = std::optional<bool>;
@@ -39,6 +65,21 @@ TEST_CASE("BatchFilamentModal prefill ticks by direction", "[ams][batch]") {
     }
 }
 
+TEST_CASE("BatchFilamentModal collects toolhead state separately from lane presence",
+          "[ams][batch]") {
+    DisagreeingBackend backend;
+
+    const auto rows = BatchFilamentModal::collect_rows(backend);
+
+    REQUIRE(rows.slots.size() == 4);
+    CHECK(rows.lane_presence == std::vector<std::optional<bool>>{true, true, true, true});
+    CHECK(rows.at_toolhead == std::vector<std::optional<bool>>{true, false, true, false});
+
+    // The whole point: Unload pre-ticks the loaded heads, not every full lane.
+    CHECK(BatchFilamentModal::prefill_selection(rows.at_toolhead, /*for_load=*/false) ==
+          std::vector<bool>{true, false, true, false});
+}
+
 TEST_CASE("BatchFilamentModal selected keys convert to slot indices", "[ams][batch]") {
     SECTION("keys in row order become slots") {
         REQUIRE(BatchFilamentModal::selected_slots({"0", "2", "3"}) == std::vector<int>{0, 2, 3});
@@ -55,24 +96,53 @@ TEST_CASE("BatchFilamentModal row label names the lane contents", "[ams][batch]"
     using helix::SlotInfo;
     using helix::ui::LaneNoun;
 
-    SECTION("a loaded lane names its material") {
+    SECTION("a lane feeding the toolhead says loaded") {
         SlotInfo info;
         info.material = "PETG";
-        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 0, info, true) ==
-                "Feeder 1 (PETG)");
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 0, info, true, true) ==
+                std::string("Feeder 1 (PETG - ") + lv_tr("loaded") + ")");
     }
-    SECTION("a lane known to be empty says so") {
-        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 1, SlotInfo{}, false) ==
-                std::string("Feeder 2 (") + lv_tr("Empty") + ")");
+    SECTION("a full lane not yet fed says ready to load") {
+        SlotInfo info;
+        info.material = "PLA";
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 1, info, true, false) ==
+                std::string("Feeder 2 (PLA - ") + lv_tr("ready to load") + ")");
+    }
+    SECTION("a lane known to be empty says so, with no loaded/ready suffix") {
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 2, SlotInfo{}, false, false) ==
+                std::string("Feeder 3 (") + lv_tr("Empty") + ")");
     }
     SECTION("an unanswerable presence leaves the lane name bare") {
-        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 2, SlotInfo{}, std::nullopt) ==
-                "Feeder 3");
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Feeder, 3, SlotInfo{}, std::nullopt,
+                                              false) == "Feeder 4");
     }
     SECTION("material wins over presence, so a stale nullopt cannot blank a loaded lane") {
         SlotInfo info;
         info.material = "PLA";
-        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Slot, 0, info, std::nullopt) ==
-                "Slot 1 (PLA)");
+        REQUIRE(BatchFilamentModal::row_label(LaneNoun::Slot, 0, info, std::nullopt, true) ==
+                std::string("Slot 1 (PLA - ") + lv_tr("loaded") + ")");
+    }
+}
+
+TEST_CASE("BatchFilamentModal sifts eligible slots and names the first refusal", "[ams][batch]") {
+    using E = helix::AmsBackend::FilamentOpEligibility;
+    const std::vector<E> per_slot = {E::Eligible, E::Empty, E::Eligible, E::Busy};
+
+    SECTION("eligible slots keep their order; the first refusal is named") {
+        const auto sift = BatchFilamentModal::sift_eligible({0, 1, 2, 3}, per_slot);
+        CHECK(sift.eligible == std::vector<int>{0, 2});
+        CHECK(sift.dropped == 1);
+        CHECK(sift.drop_reason == E::Empty);
+    }
+    SECTION("nothing selected that is refused: nothing dropped") {
+        const auto sift = BatchFilamentModal::sift_eligible({0, 2}, per_slot);
+        CHECK(sift.eligible == std::vector<int>{0, 2});
+        CHECK(sift.dropped == -1);
+    }
+    SECTION("a slot past the eligibility table is dropped without reading it") {
+        // total_slots can shrink between the picker opening and the press.
+        const auto sift = BatchFilamentModal::sift_eligible({0, 4, 5}, per_slot);
+        CHECK(sift.eligible == std::vector<int>{0});
+        CHECK(sift.dropped == -1); // no reason exists for an undescribable slot
     }
 }

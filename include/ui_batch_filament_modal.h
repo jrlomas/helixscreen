@@ -4,6 +4,7 @@
 #include "ui_modal.h"
 #include "ui_multiselect.h"
 
+#include "ams_backend.h"
 #include "ams_types.h"
 #include "display_numbering.h"
 
@@ -43,12 +44,43 @@ class BatchFilamentModal : public Modal {
     // Pure: multiselect keys are slot indices as decimal strings.
     static std::vector<int> selected_slots(const std::vector<std::string>& keys);
 
-    // Pure: row text. The lane name, plus what is in the lane. The tick state
-    // stops describing the machine the moment the user changes it, so the
-    // contents are named in the row. An unanswerable presence leaves the lane
-    // name bare rather than asserting "Empty".
+    // Pure: row text. The lane name, plus what is in the lane and where it
+    // stands: a lane carrying material says loaded (at the toolhead) or ready
+    // to load, a lane known empty says Empty with no loaded/ready suffix, and
+    // an unanswerable presence leaves the lane name bare. The tick state stops
+    // describing the machine the moment the user changes it, so the contents
+    // are named in the row.
     static std::string row_label(LaneNoun noun, int slot, const SlotInfo& info,
-                                 std::optional<bool> present);
+                                 std::optional<bool> present, bool at_toolhead);
+
+    // Pure: the selected slots the backend says can take this operation,
+    // plus the first one it refused and why. Eligibility is
+    // direction-dependent, so this runs on button press, not when the rows
+    // are built. Out-of-range slots are dropped, not trusted — and there is
+    // no eligibility value to read past the table's end, so no refusal to
+    // name either.
+    struct EligibilitySift {
+        std::vector<int> eligible; ///< selected slots that can run
+        int dropped = -1;          ///< first selected slot refused, -1 when none
+        AmsBackend::FilamentOpEligibility drop_reason = AmsBackend::FilamentOpEligibility::Busy;
+    };
+    static EligibilitySift
+    sift_eligible(const std::vector<int>& selected,
+                  const std::vector<AmsBackend::FilamentOpEligibility>& per_slot);
+
+    /// What each picker row needs from the backend. Lane presence answers the
+    /// label ("what is in this lane"); toolhead state answers the Unload tick
+    /// ("is this head loaded"). They disagree on a lane holding filament that
+    /// has not been fed to the nozzle.
+    struct BatchRowSource {
+        std::vector<SlotInfo> slots;
+        std::vector<std::optional<bool>> lane_presence;
+        std::vector<std::optional<bool>> at_toolhead;
+    };
+
+    // Pure: gather every row's inputs. Extracted so the gathering itself is
+    // testable against a backend whose lane and toolhead answers disagree.
+    static BatchRowSource collect_rows(const AmsBackend& backend);
 
   protected:
     void on_show() override;

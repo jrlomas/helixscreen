@@ -2599,6 +2599,7 @@ translations:
   Single toggle macro. State is not tracked.: 単一のトグルマクロ。状態は追跡されません。
   Size: サイズ
   Skip: スキップ
+  Skipped: ''
   Sleep While Printing: 印刷中のスリープ
   Sleep adjusted to match dim timeout: スリープタイムアウトを調整しました
   Sliced colors: スライスした色
@@ -3265,7 +3266,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-offset を保存しました - Klipper を再起動中...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: ''
   bed: ベッド
+  busy: ''
   by Preston Brown: by Preston Brown
   chamber heater: チャンバーヒーター
   complete: 完了
@@ -3278,6 +3281,7 @@ translations:
   eSpooler Mode: 'eSpoolerモード'
   eSpooler, clog detection, and sensor settings: 'eSpooler、詰まり検出、センサーの設定'
   elapsed: 経過
+  empty: ''
   enable: 有効化
   enabled: 有効
   error: エラー
@@ -3285,14 +3289,19 @@ translations:
   extruder(s): エクストルーダー
   extruders: エクストルーダー
   fans: ファン
+  feeder error: ''
+  feeder not in automatic mode: ''
+  filament sensor disabled: ''
   heated bed: ヒートベッド
   idle: アイドル
   in unit {} slot {}: 'ユニット {} スロット {}'
   layers: レイヤー
   left: 残り
+  loaded: ''
   mm before clog: 詰まりまでの距離 (mm)
   needs: 必要
   not detected: 未検出
+  not loaded: ''
   nozzle: ノズル
   of: の
   'off': オフ
@@ -3306,6 +3315,7 @@ translations:
   passive: パッシブ
   printer default: プリンター既定
   prints: 印刷
+  ready to load: ''
   remaining: 残り
   remaining before clog detection triggers: 残りで詰まり検出が作動します
   rendering: レンダリング中

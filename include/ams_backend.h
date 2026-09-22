@@ -1046,6 +1046,17 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether a batch this process dispatched is still unverified
+     *
+     * Connect-time cleanup asks this to tell its own live batch from an
+     * interlock stranded by an earlier session; true means cleanup must
+     * leave the interlock alone.
+     */
+    [[nodiscard]] virtual bool filament_batch_in_flight() const {
+        return false;
+    }
+
+    /**
      * @brief Load filament on several slots as ONE operation (async)
      *
      * For parallel-toolhead printers whose firmware serializes per-extruder
@@ -1075,6 +1086,38 @@ class AmsBackend {
     virtual AmsError unload_filament_batch(const std::vector<int>& slots) {
         (void)slots;
         return AmsErrorHelper::not_supported("Batch filament unload");
+    }
+
+    /// Why a slot cannot take a filament operation right now. Direction
+    /// matters: a lane can be eligible for unload and not for load in the
+    /// same instant.
+    enum class FilamentOpEligibility {
+        Eligible,
+        Empty,             ///< no filament in the lane
+        AlreadyLoaded,     ///< load requested on a head that is already loaded
+        NotLoaded,         ///< unload requested on a head with nothing at the nozzle
+        FeederUnavailable, ///< module absent or not in automatic mode
+        SensorDisabled,    ///< load needs the head's motion sensor enabled
+        Busy,              ///< transient or unrecognised channel state
+        Error,             ///< the feeder reports a fault
+    };
+
+    /**
+     * @brief Classify whether a slot can take a filament operation
+     *
+     * Backends that can see per-lane state answer from it; the default stays
+     * permissive so backends without that visibility keep ungated behaviour.
+     *
+     * @param slot_index Slot to ask about (0-based)
+     * @param load true for the load direction, false for unload
+     * @return a classification; callers render it via
+     *         filament_op_eligibility_reason()
+     */
+    [[nodiscard]] virtual FilamentOpEligibility slot_op_eligibility(int slot_index,
+                                                                    bool load) const {
+        (void)slot_index;
+        (void)load;
+        return FilamentOpEligibility::Eligible;
     }
 
     /**
@@ -3007,5 +3050,9 @@ class AmsBackend {
     mutable std::mutex authored_mappings_mutex_;
     std::map<int, int> authored_mappings_;
 };
+
+/// User-facing reason for an eligibility refusal. Returns "" for Eligible.
+/// English only here; callers wrap with lv_tr() at the use site.
+const char* filament_op_eligibility_reason(AmsBackend::FilamentOpEligibility e);
 
 } // namespace helix

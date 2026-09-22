@@ -2528,6 +2528,7 @@
   <translation tag="Single toggle macro. State is not tracked." de="Einzelnes Umschalt-Makro. Status wird nicht verfolgt." en="Single toggle macro. State is not tracked." es="Macro de alternancia único. El estado no se rastrea." fr="Macro à bascule unique. L&apos;état n&apos;est pas suivi." it="Singola macro toggle. Lo stato non è tracciato." ja="単一のトグルマクロ。状態は追跡されません。" pt="Macro de alternância única. O estado não é rastreado." ru="Один макрос переключения. Состояние не отслеживается." zh="单个切换宏。不跟踪状态。"/>
   <translation tag="Size" de="Größe" en="Size" es="Tamaño" fr="Taille" it="Dimensione" ja="サイズ" pt="Tamanho" ru="Размер" zh="大小"/>
   <translation tag="Skip" de="Überspringen" en="Skip" es="Omitir" fr="Passer" it="Salta" ja="スキップ" pt="Pular" ru="Пропустить" zh="跳过"/>
+  <translation tag="Skipped" en="Skipped"/>
   <translation tag="Sleep While Printing" de="Ruhemodus beim Drucken" en="Sleep While Printing" es="Apagar pantalla al imprimir" fr="Veille pendant impression" it="Sospensione Durante Stampa" ja="印刷中のスリープ" pt="Suspender Durante Impressão" ru="Спящий режим при печати" zh="打印时休眠"/>
   <translation tag="Sleep adjusted to match dim timeout" de="Ruhemodus-Zeitlimit angepasst" en="Sleep adjusted to match dim timeout" es="Tiempo de suspensión ajustado" fr="Délai de veille ajusté" it="Timeout standby regolato" ja="スリープタイムアウトを調整しました" pt="Tempo de suspensão ajustado" ru="Таймаут сна изменён" zh="休眠超时已调整"/>
   <translation tag="Sliced colors" de="Slice-Farben" en="Sliced colors" es="Colores laminados" fr="Couleurs tranchées" it="Colori sezionati" ja="スライスした色" pt="Cores fatiadas" ru="Цвета из слайсера" zh="切片颜色"/>
@@ -3146,7 +3147,9 @@
   <translation tag="Z-offset saved - Klipper restarting..." de="Z-Offset gespeichert - Klipper wird neu gestartet..." en="Z-offset saved - Klipper restarting..." es="Z-offset guardado - Klipper reiniciando..." fr="Z-offset enregistré - Redémarrage de Klipper..." it="Z-offset salvato - Riavvio Klipper..." ja="Z-offset を保存しました - Klipper を再起動中..." pt="Z-offset salvo - Klipper reiniciando..." ru="Z-смещение сохранено — Klipper перезапускается..." zh="Z 偏移已保存 - Klipper 重启中..."/>
   <translation tag="Z:" de="Z:" en="Z:" es="Z:" fr="Z:" it="Z:" ja="Z:" pt="Z:" ru="Z:" zh="Z:"/>
   <translation tag="Z: 0.000" de="Z: 0.000" en="Z: 0.000" es="Z: 0.000" fr="Z: 0.000" it="Z: 0.000" ja="Z: 0.000" pt="Z: 0.000" ru="Z: 0.000" zh="Z: 0.000"/>
+  <translation tag="already loaded" en="already loaded"/>
   <translation tag="bed" de="Bett" en="bed" es="cama" fr="plateau" it="piano" ja="ベッド" pt="mesa" ru="стол" zh="热床"/>
+  <translation tag="busy" en="busy"/>
   <translation tag="by Preston Brown" de="von Preston Brown" en="by Preston Brown" es="por Preston Brown" fr="par Preston Brown" it="di Preston Brown" ja="by Preston Brown" pt="por Preston Brown" ru="от Preston Brown" zh="by Preston Brown"/>
   <translation tag="chamber heater" de="Kammerheizung" en="chamber heater" es="calentador de cámara" fr="chauffage du caisson" it="riscaldatore camera" ja="チャンバーヒーター" pt="aquecedor da câmara" ru="нагреватель камеры" zh="腔体加热器"/>
   <translation tag="complete" de="abgeschlossen" en="complete" es="completo" fr="terminé" it="completato" ja="完了" pt="concluído" ru="завершено" zh="完成"/>
@@ -3159,6 +3162,7 @@
   <translation tag="eSpooler Mode" de="eSpooler-Modus" en="eSpooler Mode" es="Modo eSpooler" fr="Mode eSpooler" it="Modalità eSpooler" ja="eSpoolerモード" pt="Modo eSpooler" ru="Режим eSpooler" zh="eSpooler 模式"/>
   <translation tag="eSpooler, clog detection, and sensor settings" de="eSpooler-, Verstopfungserkennungs- und Sensoreinstellungen" en="eSpooler, clog detection, and sensor settings" es="Ajustes de eSpooler, detección de atascos y sensores" fr="Paramètres eSpooler, détection de bourrage et capteurs" it="Impostazioni eSpooler, rilevamento intasamenti e sensori" ja="eSpooler、詰まり検出、センサーの設定" pt="Configurações de eSpooler, detecção de entupimento e sensores" ru="Настройки eSpooler, обнаружения засора и датчиков" zh="eSpooler、堵塞检测与传感器设置"/>
   <translation tag="elapsed" de="vergangen" en="elapsed" es="transcurrido" fr="écoulé" it="trascorso" ja="経過" pt="decorrido" ru="прошло" zh="已用时"/>
+  <translation tag="empty" en="empty"/>
   <translation tag="enable" de="aktivieren" en="enable" es="habilitar" fr="activer" it="abilita" ja="有効化" pt="habilitar" ru="включить" zh="启用"/>
   <translation tag="enabled" de="aktiviert" en="enabled" es="activado" fr="activé" it="abilitato" ja="有効" pt="habilitado" ru="включено" zh="已启用"/>
   <translation tag="error" de="Fehler" en="error" es="error" fr="erreur" it="errore" ja="エラー" pt="erro" ru="ошибка" zh="错误"/>
@@ -3166,14 +3170,19 @@
   <translation tag="extruder(s)" de="Extruder" en="extruder(s)" es="extrusor(es)" fr="extrudeur(s)" it="estrusore/i" ja="エクストルーダー" pt="extrusor(es)" ru="экструдер(ы)" zh="挤出机"/>
   <translation tag="extruders" de="Extruder" en="extruders" es="extrusores" fr="extrudeurs" it="estrusori" ja="エクストルーダー" pt="extrusores" ru="экструдеры" zh="挤出机"/>
   <translation tag="fans" de="Lüfter" en="fans" es="ventiladores" fr="ventilateurs" it="ventole" ja="ファン" pt="ventoinhas" ru="вентиляторы" zh="风扇"/>
+  <translation tag="feeder error" en="feeder error"/>
+  <translation tag="feeder not in automatic mode" en="feeder not in automatic mode"/>
+  <translation tag="filament sensor disabled" en="filament sensor disabled"/>
   <translation tag="heated bed" de="Heizbett" en="heated bed" es="cama caliente" fr="plateau chauffant" it="piano riscaldato" ja="ヒートベッド" pt="mesa aquecida" ru="подогреваемый стол" zh="热床"/>
   <translation tag="idle" de="Leerlauf" en="idle" es="inactivo" fr="inactif" it="inattivo" ja="アイドル" pt="ocioso" ru="простой" zh="空闲"/>
   <translation tag="in unit {} slot {}" de="in Einheit {} Slot {}" en="in unit {} slot {}" es="en la unidad {} ranura {}" fr="dans l&apos;unité {} slot {}" it="nell&apos;unità {} slot {}" ja="ユニット {} スロット {}" pt="na unidade {} slot {}" ru="в блоке {} слот {}" zh="在单元 {} 槽位 {}"/>
   <translation tag="layers" de="Schichten" en="layers" es="capas" fr="couches" it="layer" ja="レイヤー" pt="camadas" ru="слои" zh="层"/>
   <translation tag="left" de="übrig" en="left" es="restante" fr="restant" it="rimanente" ja="残り" pt="restante" ru="осталось" zh="剩余"/>
+  <translation tag="loaded" en="loaded"/>
   <translation tag="mm before clog" de="mm vor Verstopfung" en="mm before clog" es="mm antes de obstrucción" fr="mm avant bouchon" it="mm prima dell&apos;intasamento" ja="詰まりまでの距離 (mm)" pt="mm antes da obstrução" ru="мм до засора" zh="毫米后堵料"/>
   <translation tag="needs" de="benötigt" en="needs" es="necesita" fr="nécessite" it="richiede" ja="必要" pt="precisa" ru="требуется" zh="需要"/>
   <translation tag="not detected" de="nicht erkannt" en="not detected" es="no detectado" fr="non détecté" it="non rilevato" ja="未検出" pt="não detectado" ru="не обнаружено" zh="未检测到"/>
+  <translation tag="not loaded" en="not loaded"/>
   <translation tag="nozzle" de="Düse" en="nozzle" es="boquilla" fr="buse" it="ugello" ja="ノズル" pt="bico" ru="сопло" zh="喷嘴"/>
   <translation tag="of" de="von" en="of" es="de" fr="de" it="di" ja="の" pt="de" ru="из" zh="的"/>
   <translation tag="off" de="aus" en="off" es="apagado" fr="éteint" it="spento" ja="オフ" pt="desligado" ru="выкл" zh="关闭"/>
@@ -3182,6 +3191,7 @@
   <translation tag="passive" de="passiv" en="passive" es="pasivo" fr="passif" it="passivo" ja="パッシブ" pt="passivo" ru="пассивно" zh="被动"/>
   <translation tag="printer default" de="Druckerstandard" en="printer default" es="valor por defecto de la impresora" fr="par défaut de l’imprimante" it="predefinito stampante" ja="プリンター既定" pt="padrão da impressora" ru="по умолчанию для принтера" zh="打印机默认"/>
   <translation tag="prints" de="Drucke" en="prints" es="impresiones" fr="impressions" it="stampe" ja="印刷" pt="impressões" ru="печатей" zh="打印次数"/>
+  <translation tag="ready to load" en="ready to load"/>
   <translation tag="remaining" de="verbleibend" en="remaining" es="restante" fr="restant" it="rimanente" ja="残り" pt="restante" ru="осталось" zh="剩余"/>
   <translation tag="remaining before clog detection triggers" de="verbleibend bis Verstopfungserkennung auslöst" en="remaining before clog detection triggers" es="restante antes de que se active la detección de obstrucción" fr="restant avant le déclenchement de la détection de bouchon" it="rimanente prima che si attivi il rilevamento intasamento" ja="残りで詰まり検出が作動します" pt="restante antes da detecção de obstrução ser acionada" ru="осталось до срабатывания обнаружения засора" zh="剩余即触发堵料检测"/>
   <translation tag="rendering" de="wird gerendert" en="rendering" es="renderizando" fr="rendu en cours" it="rendering" ja="レンダリング中" pt="renderizando" ru="рендеринг" zh="渲染中"/>

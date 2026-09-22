@@ -2528,6 +2528,7 @@
   <translation tag="Single toggle macro. State is not tracked." en="Single toggle macro. State is not tracked."/>
   <translation tag="Size" en="Size"/>
   <translation tag="Skip" en="Skip"/>
+  <translation tag="Skipped" en="Skipped"/>
   <translation tag="Sleep While Printing" en="Sleep While Printing"/>
   <translation tag="Sleep adjusted to match dim timeout" en="Sleep adjusted to match dim timeout"/>
   <translation tag="Sliced colors" en="Sliced colors"/>
@@ -3146,7 +3147,9 @@
   <translation tag="Z-offset saved - Klipper restarting..." en="Z-offset saved - Klipper restarting..."/>
   <translation tag="Z:" en="Z:"/>
   <translation tag="Z: 0.000" en="Z: 0.000"/>
+  <translation tag="already loaded" en="already loaded"/>
   <translation tag="bed" en="bed"/>
+  <translation tag="busy" en="busy"/>
   <translation tag="by Preston Brown" en="by Preston Brown"/>
   <translation tag="chamber heater" en="chamber heater"/>
   <translation tag="complete" en="complete"/>
@@ -3159,6 +3162,7 @@
   <translation tag="eSpooler Mode" en="eSpooler Mode"/>
   <translation tag="eSpooler, clog detection, and sensor settings" en="eSpooler, clog detection, and sensor settings"/>
   <translation tag="elapsed" en="elapsed"/>
+  <translation tag="empty" en="empty"/>
   <translation tag="enable" en="enable"/>
   <translation tag="enabled" en="enabled"/>
   <translation tag="error" en="error"/>
@@ -3166,14 +3170,19 @@
   <translation tag="extruder(s)" en="extruder(s)"/>
   <translation tag="extruders" en="extruders"/>
   <translation tag="fans" en="fans"/>
+  <translation tag="feeder error" en="feeder error"/>
+  <translation tag="feeder not in automatic mode" en="feeder not in automatic mode"/>
+  <translation tag="filament sensor disabled" en="filament sensor disabled"/>
   <translation tag="heated bed" en="heated bed"/>
   <translation tag="idle" en="idle"/>
   <translation tag="in unit {} slot {}" en="in unit {} slot {}"/>
   <translation tag="layers" en="layers"/>
   <translation tag="left" en="left"/>
+  <translation tag="loaded" en="loaded"/>
   <translation tag="mm before clog" en="mm before clog"/>
   <translation tag="needs" en="needs"/>
   <translation tag="not detected" en="not detected"/>
+  <translation tag="not loaded" en="not loaded"/>
   <translation tag="nozzle" en="nozzle"/>
   <translation tag="of" en="of"/>
   <translation tag="off" en="off"/>
@@ -3182,6 +3191,7 @@
   <translation tag="passive" en="passive"/>
   <translation tag="printer default" en="printer default"/>
   <translation tag="prints" en="prints"/>
+  <translation tag="ready to load" en="ready to load"/>
   <translation tag="remaining" en="remaining"/>
   <translation tag="remaining before clog detection triggers" en="remaining before clog detection triggers"/>
   <translation tag="rendering" en="rendering"/>

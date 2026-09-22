@@ -2528,6 +2528,7 @@
   <translation tag="Single toggle macro. State is not tracked." pt="Macro de alternância única. O estado não é rastreado."/>
   <translation tag="Size" pt="Tamanho"/>
   <translation tag="Skip" pt="Pular"/>
+  <translation tag="Skipped"/>
   <translation tag="Sleep While Printing" pt="Suspender Durante Impressão"/>
   <translation tag="Sleep adjusted to match dim timeout" pt="Tempo de suspensão ajustado"/>
   <translation tag="Sliced colors" pt="Cores fatiadas"/>
@@ -3146,7 +3147,9 @@
   <translation tag="Z-offset saved - Klipper restarting..." pt="Z-offset salvo - Klipper reiniciando..."/>
   <translation tag="Z:" pt="Z:"/>
   <translation tag="Z: 0.000" pt="Z: 0.000"/>
+  <translation tag="already loaded"/>
   <translation tag="bed" pt="mesa"/>
+  <translation tag="busy"/>
   <translation tag="by Preston Brown" pt="por Preston Brown"/>
   <translation tag="chamber heater" pt="aquecedor da câmara"/>
   <translation tag="complete" pt="concluído"/>
@@ -3159,6 +3162,7 @@
   <translation tag="eSpooler Mode" pt="Modo eSpooler"/>
   <translation tag="eSpooler, clog detection, and sensor settings" pt="Configurações de eSpooler, detecção de entupimento e sensores"/>
   <translation tag="elapsed" pt="decorrido"/>
+  <translation tag="empty"/>
   <translation tag="enable" pt="habilitar"/>
   <translation tag="enabled" pt="habilitado"/>
   <translation tag="error" pt="erro"/>
@@ -3166,14 +3170,19 @@
   <translation tag="extruder(s)" pt="extrusor(es)"/>
   <translation tag="extruders" pt="extrusores"/>
   <translation tag="fans" pt="ventoinhas"/>
+  <translation tag="feeder error"/>
+  <translation tag="feeder not in automatic mode"/>
+  <translation tag="filament sensor disabled"/>
   <translation tag="heated bed" pt="mesa aquecida"/>
   <translation tag="idle" pt="ocioso"/>
   <translation tag="in unit {} slot {}" pt="na unidade {} slot {}"/>
   <translation tag="layers" pt="camadas"/>
   <translation tag="left" pt="restante"/>
+  <translation tag="loaded"/>
   <translation tag="mm before clog" pt="mm antes da obstrução"/>
   <translation tag="needs" pt="precisa"/>
   <translation tag="not detected" pt="não detectado"/>
+  <translation tag="not loaded"/>
   <translation tag="nozzle" pt="bico"/>
   <translation tag="of" pt="de"/>
   <translation tag="off" pt="desligado"/>
@@ -3182,6 +3191,7 @@
   <translation tag="passive" pt="passivo"/>
   <translation tag="printer default" pt="padrão da impressora"/>
   <translation tag="prints" pt="impressões"/>
+  <translation tag="ready to load"/>
   <translation tag="remaining" pt="restante"/>
   <translation tag="remaining before clog detection triggers" pt="restante antes da detecção de obstrução ser acionada"/>
   <translation tag="rendering" pt="renderizando"/>
