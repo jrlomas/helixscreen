@@ -45,80 +45,138 @@
 
 The picker's own header comment says the tick set means "filament at the toolhead", and the variable is named `at_toolhead`, but it is filled from `slot_presence()`, which is lane occupancy. On the rig all four lanes hold filament while only two are loaded, so Unload pre-ticks two heads that have nothing at the nozzle. `AmsBackend::can_unload_from_toolhead()` already answers the real question and `AmsBackendSnapmaker` already overrides it with the `loaded_at_toolhead_` latch.
 
+`prefill_selection` is already correct as a pure function, so testing it proves nothing - the defect is entirely at the call site in `on_show`, which no pure test reaches. So extract the data gathering into a pure function first, then fix what it collects. The file already follows this shape: `prefill_selection`, `selected_slots` and `row_label` are pure statics for exactly this reason.
+
 **Files:**
-- Modify: `src/ui/ui_batch_filament_modal.cpp` (`on_show`)
-- Modify: `include/ui_batch_filament_modal.h` (`prefill_selection` doc comment)
+- Modify: `src/ui/ui_batch_filament_modal.cpp` (`on_show`, new `collect_rows`)
+- Modify: `include/ui_batch_filament_modal.h` (declare `BatchRowSource` + `collect_rows`)
 - Test: `tests/unit/test_batch_filament_modal.cpp`
 
 **Interfaces:**
-- Consumes: `AmsBackend::can_unload_from_toolhead(int) const` (existing), `slot_presence(const SlotInfo&)` (existing)
-- Produces: nothing new. `prefill_selection` keeps its signature.
+- Consumes: `AmsBackend::can_unload_from_toolhead(int) const`, `AmsBackend::get_slot_info(int) const`, `AmsBackend::get_system_info() const` (all existing, all const).
+- Produces:
+
+```cpp
+    /// What each picker row needs from the backend. Lane presence answers the
+    /// label ("what is in this lane"); toolhead state answers the Unload tick
+    /// ("is this head loaded"). They disagree on a lane holding filament that
+    /// has not been fed to the nozzle.
+    struct BatchRowSource {
+        std::vector<SlotInfo> slots;
+        std::vector<std::optional<bool>> lane_presence;
+        std::vector<std::optional<bool>> at_toolhead;
+    };
+
+    static BatchRowSource collect_rows(const AmsBackend& backend);
+```
+
+Task 4 consumes `collect_rows` and extends `BatchRowSource` with an eligibility vector.
 
 - [ ] **Step 1: Write the failing test**
 
 In `tests/unit/test_batch_filament_modal.cpp`:
 
 ```cpp
-TEST_CASE("BatchFilamentModal unload pre-tick follows toolhead state, not lane presence",
+namespace {
+/// Every lane holds filament; only heads 0 and 2 are loaded at the toolhead.
+/// This is the live rig state: four channels reporting filament_detected with
+/// two at load_finish and two at preload_finish.
+class DisagreeingBackend : public helix::AmsBackendSnapmaker {
+  public:
+    DisagreeingBackend() : helix::AmsBackendSnapmaker(nullptr, nullptr) {}
+
+    helix::AmsSystemInfo get_system_info() const override {
+        helix::AmsSystemInfo info;
+        info.total_slots = 4;
+        return info;
+    }
+    helix::SlotInfo get_slot_info(int slot_index) const override {
+        helix::SlotInfo slot;
+        slot.slot_index = slot_index;
+        slot.status = helix::SlotStatus::AVAILABLE; // lane has filament
+        return slot;
+    }
+    bool can_unload_from_toolhead(int slot_index) const override {
+        return slot_index == 0 || slot_index == 2;
+    }
+};
+} // namespace
+
+TEST_CASE("BatchFilamentModal collects toolhead state separately from lane presence",
           "[ams][batch]") {
-    // A U1 lane can hold filament while nothing is at its toolhead: the feeder
-    // reports filament_detected and the channel sits at preload_finish. Only
-    // the heads that are actually loaded may be pre-ticked for Unload.
-    const std::vector<std::optional<bool>> at_toolhead{true, false, true, false};
+    DisagreeingBackend backend;
 
-    const std::vector<bool> unload = helix::ui::BatchFilamentModal::prefill_selection(
-        at_toolhead, /*for_load=*/false);
+    const auto rows = BatchFilamentModal::collect_rows(backend);
 
-    CHECK(unload == std::vector<bool>{true, false, true, false});
+    REQUIRE(rows.slots.size() == 4);
+    CHECK(rows.lane_presence ==
+          std::vector<std::optional<bool>>{true, true, true, true});
+    CHECK(rows.at_toolhead ==
+          std::vector<std::optional<bool>>{true, false, true, false});
+
+    // The whole point: Unload pre-ticks the loaded heads, not every full lane.
+    CHECK(BatchFilamentModal::prefill_selection(rows.at_toolhead, /*for_load=*/false) ==
+          std::vector<bool>{true, false, true, false});
 }
 ```
 
-- [ ] **Step 2: Run it and confirm it passes already**
+Add the includes the fake needs (`ams_backend_snapmaker.h`).
+
+- [ ] **Step 2: Run to verify it fails**
 
 Run: `make t F='[ams][batch]'`
-Expected: PASS. `prefill_selection` is already correct as a pure function - the defect is at its call site, which this test cannot reach. This step exists to prove the pure function is not the bug before changing anything.
+Expected: FAIL to compile - no member named `collect_rows` in `BatchFilamentModal`.
 
-- [ ] **Step 3: Fix the call site**
+- [ ] **Step 3: Implement `collect_rows`**
 
-In `src/ui/ui_batch_filament_modal.cpp`, inside `on_show`, replace the single presence vector with two, because the row label and the tick now need different questions:
+In `src/ui/ui_batch_filament_modal.cpp`:
 
 ```cpp
-    const AmsSystemInfo info = backend->get_system_info();
-    std::vector<SlotInfo> slots;
-    std::vector<std::optional<bool>> lane_presence; // does the lane hold filament (row label)
-    std::vector<std::optional<bool>> at_toolhead;   // is the head loaded (unload pre-tick)
+BatchFilamentModal::BatchRowSource BatchFilamentModal::collect_rows(const AmsBackend& backend) {
+    BatchRowSource rows;
+    const int total = backend.get_system_info().total_slots;
+    rows.slots.reserve(static_cast<size_t>(total));
+    rows.lane_presence.reserve(static_cast<size_t>(total));
+    rows.at_toolhead.reserve(static_cast<size_t>(total));
+    for (int slot = 0; slot < total; ++slot) {
+        rows.slots.push_back(backend.get_slot_info(slot));
+        rows.lane_presence.push_back(slot_presence(rows.slots.back()));
+        rows.at_toolhead.push_back(backend.can_unload_from_toolhead(slot));
+    }
+    return rows;
+}
+```
+
+- [ ] **Step 4: Rewire `on_show` onto it**
+
+Replace the inline gathering loop in `on_show` with:
+
+```cpp
+    const BatchRowSource rows = collect_rows(*backend);
+    const std::vector<bool> ticked = prefill_selection(rows.at_toolhead, /*for_load=*/false);
+
     std::vector<MultiSelectItem> items;
-    slots.reserve(static_cast<size_t>(info.total_slots));
-    lane_presence.reserve(static_cast<size_t>(info.total_slots));
-    at_toolhead.reserve(static_cast<size_t>(info.total_slots));
-    items.reserve(static_cast<size_t>(info.total_slots));
-    for (int slot = 0; slot < info.total_slots; ++slot) {
-        slots.push_back(backend->get_slot_info(slot));
-        lane_presence.push_back(slot_presence(slots.back()));
-        at_toolhead.push_back(backend->can_unload_from_toolhead(slot));
+    items.reserve(rows.slots.size());
+    for (size_t slot = 0; slot < rows.slots.size(); ++slot) {
+        items.push_back({std::to_string(slot),
+                         row_label(backend->lane_noun(), static_cast<int>(slot), rows.slots[slot],
+                                   rows.lane_presence[slot]),
+                         ticked[slot]});
     }
 ```
 
-and pass `lane_presence` to `row_label` while `prefill_selection` keeps taking `at_toolhead`:
-
-```cpp
-        items.push_back({std::to_string(slot),
-                         BatchFilamentModal::row_label(backend->lane_noun(), slot,
-                                                       slots[static_cast<size_t>(slot)],
-                                                       lane_presence[static_cast<size_t>(slot)]),
-                         ticked[static_cast<size_t>(slot)]});
-```
-
-- [ ] **Step 4: Correct the header comment**
-
-In `include/ui_batch_filament_modal.h`, the `prefill_selection` comment already describes toolhead semantics. It is now true rather than aspirational, so leave the wording and delete only the stale clause about the backend refusing an empty lane if it no longer holds. Verify by reading it; change nothing that is still accurate.
+`row_label` keeps taking lane presence, so `"(Empty)"` still means "this lane has no filament" and is unaffected.
 
 - [ ] **Step 5: Run the suite**
 
 Run: `make t F='[batch]'`
-Expected: PASS, including the existing `prefill ticks by direction` and `row label names the lane contents` cases.
+Expected: PASS, including the existing `prefill ticks by direction` and `row label names the lane contents` cases, which are unchanged.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Prove the test can fail**
+
+Revert `collect_rows` to push `slot_presence(...)` into `at_toolhead` instead of `can_unload_from_toolhead(slot)` and re-run. The new case must go red on the `at_toolhead` and `prefill_selection` assertions. Restore the fix. Name this in the commit body.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/ui/ui_batch_filament_modal.cpp include/ui_batch_filament_modal.h tests/unit/test_batch_filament_modal.cpp
