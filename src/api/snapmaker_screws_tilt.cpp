@@ -4,6 +4,7 @@
 #include "snapmaker_screws_tilt.h"
 
 #include "i_moonraker_client.h"
+#include "snapmaker_exceptions.h"
 #include "spdlog/spdlog.h"
 
 #include <algorithm>
@@ -142,8 +143,8 @@ const nlohmann::json* query_status(const nlohmann::json& response) {
 } // namespace
 
 bool plate_still_on_bed(const std::string& error_message) {
-    return error_message.find(PLATE_NOT_REMOVED_CODE) != std::string::npos ||
-           error_message.find(PLATE_NOT_REMOVED_TEXT) != std::string::npos;
+    const auto code = snapmaker::decode_exception_code(error_message);
+    return code && code->id == 530 && code->index == 0 && code->code == 11;
 }
 
 AutoScrewsTiltResults results_from_query(const nlohmann::json& response) {

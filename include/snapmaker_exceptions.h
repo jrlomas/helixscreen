@@ -30,7 +30,7 @@ struct ExceptionCode {
 
 enum class ExceptionSeverity { Informational, Pause, Cancel };
 
-/// Find a four-part `level-id-index-code` anywhere in `text`.
+/// Find the FIRST four-part `level-id-index-code` anywhere in `text`.
 /// nullopt when there is none - including for the firmware's three-part basic
 /// form, which omits the level and would otherwise decode shifted by one field.
 [[nodiscard]] std::optional<ExceptionCode> decode_exception_code(const std::string& text);

@@ -27,8 +27,8 @@
  * (screw1..4 as "x,y" and screw1_name..4_name).
  */
 
-#include "snapmaker_screws_tilt.h"
 #include "calibration_types.h"
+#include "snapmaker_screws_tilt.h"
 
 #include <json.hpp> // nlohmann/json from libhv
 
@@ -398,14 +398,14 @@ TEST_CASE("auto_screws plate_still_on_bed matches the not-removed failure",
           "[calibration][screws_tilt][auto_screws]") {
     using helix::snapmaker::screws_tilt::plate_still_on_bed;
 
-    SECTION("the Klipper error code, wrapped however Moonraker carries it") {
-        REQUIRE(plate_still_on_bed(std::string("Klippy Host Error: '") +
-                                   helix::snapmaker::screws_tilt::PLATE_NOT_REMOVED_CODE + ": The plate " +
-                                   helix::snapmaker::screws_tilt::PLATE_NOT_REMOVED_TEXT + "'"));
+    SECTION("the fault code, wrapped however Moonraker carries it") {
+        REQUIRE(plate_still_on_bed(
+            "Klippy Host Error: '0003-0530-0000-0011: The plate has not been removed'"));
     }
 
-    SECTION("the phrase alone still matches") {
-        REQUIRE(plate_still_on_bed("The plate has not been removed"));
+    SECTION("a phrase without a code does not match") {
+        // The code is the identity; the wording is the firmware's to change.
+        REQUIRE_FALSE(plate_still_on_bed("The plate has not been removed"));
     }
 
     SECTION("any other failure is a genuine detection problem") {
@@ -433,7 +433,8 @@ TEST_CASE("auto_screws results_from_query maps a probe-result query response",
     }
 
     SECTION("a missing configfile section still maps - coords and names are optional") {
-        const json response = query_response({{helix::snapmaker::screws_tilt::MODULE_NAME, TILTED_STATUS}});
+        const json response =
+            query_response({{helix::snapmaker::screws_tilt::MODULE_NAME, TILTED_STATUS}});
 
         const AutoScrewsTiltResults res = results_from_query(response);
         REQUIRE(res.ok());

@@ -40,6 +40,18 @@ TEST_CASE("the plate-removal code maps to its message", "[snapmaker][exceptions]
             "gives wrong results");
 }
 
+TEST_CASE("the mid-print preference guard maps to its message", "[snapmaker][exceptions]") {
+    const auto c = decode_exception_code("0002-0531-0000-0016");
+    REQUIRE(c.has_value());
+    REQUIRE(exception_message(*c) == "That setting cannot be changed while a print is running");
+}
+
+TEST_CASE("a code followed by a fifth group is not ours", "[snapmaker][exceptions]") {
+    // A fifth dash-group means the payload is not level-id-index-code, so even
+    // a window whose four groups all parse must be left alone.
+    REQUIRE_FALSE(decode_exception_code("0003-0530-0000-0011-abcd").has_value());
+}
+
 TEST_CASE("an unknown code has no message rather than a wrong one", "[snapmaker][exceptions]") {
     // A wrong-but-confident message is worse than falling back to the
     // firmware's own text.

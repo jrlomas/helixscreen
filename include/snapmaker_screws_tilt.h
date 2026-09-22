@@ -75,18 +75,13 @@ inline constexpr const char* MODULE_NAME = "auto_screws_tilt_adjust";
 inline constexpr const char* CMD_ENTRY = "AUTO_SCREWS_TILT_ADJUST_ENTRY";
 inline constexpr const char* CMD_HOMING = "AUTO_SCREWS_TILT_ADJUST_HOMING";
 /// DETECT_BED_PLATE is an assertion, not a query: PRESENCE=0 asserts the PEI
-/// sheet is OFF the bed, and the firmware raises PLATE_NOT_REMOVED_CODE when
+/// sheet is OFF the bed, and the firmware raises fault 530/0/11 when
 /// it is not. The wizard's AUTO_SCREWS_TILT_ADJUST_DETECT_PLATE wrapper runs
 /// it with no arguments, so PRESENCE defaults to 1 - the opposite assertion -
 /// and errors exactly when the sheet is off. PRESENCE=0 is sent directly so
 /// the command's own verdict is the gate.
 inline constexpr const char* CMD_DETECT_BED_PLATE = "DETECT_BED_PLATE PRESENCE=0";
 
-/// The error DETECT_BED_PLATE PRESENCE=0 raises when the PEI sheet is still
-/// on the bed: Klipper's code and the phrase its message carries. Either may
-/// be the surviving half after Moonraker wraps the message.
-inline constexpr const char* PLATE_NOT_REMOVED_CODE = "0003-0530-0000-0011";
-inline constexpr const char* PLATE_NOT_REMOVED_TEXT = "has not been removed";
 inline constexpr const char* CMD_PROBE_REFERENCE_POINTS =
     "AUTO_SCREWS_TILT_ADJUST_PROBE_REFERENCE_POINTS";
 /// Restores IDLE and lifts Z. Throws inside the firmware unless main_state
@@ -111,8 +106,9 @@ inline constexpr const char* CMD_EXIT = "AUTO_SCREWS_TILT_ADJUST_EXIT";
 [[nodiscard]] std::optional<int> main_state_from_status(const nlohmann::json& status);
 
 /// True when a DETECT_BED_PLATE PRESENCE=0 failure message is the firmware
-/// reporting the PEI sheet is still on the bed (matched on the Klipper error
-/// code or the phrase it carries). False for any other failure, which is a
+/// reporting the PEI sheet is still on the bed (matched on the structured
+/// fault code the message carries; the wording around it is the firmware's to
+/// change and proves nothing). False for any other failure, which is a
 /// genuine detection problem - callers must refuse, not probe, either way.
 [[nodiscard]] bool plate_still_on_bed(const std::string& error_message);
 

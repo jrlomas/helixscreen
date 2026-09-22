@@ -13,6 +13,7 @@
 #include "error_event.h"
 #include "error_modal_view.h"
 #include "fault_surface_correlation.h"
+#include "firmware_fault_codes.h"
 #include "i_moonraker_api.h"
 #include "i_moonraker_client.h"
 #include "moonraker_error.h"
@@ -367,11 +368,16 @@ void GcodeErrorRouter::process_line(const std::string& line) {
     // nothing to resume.
     ctx.is_printing = get_printer_state().get_print_job_state() == PrintJobState::PRINTING;
 
-    // Ask the active AMS backend first (domain-aware); else the generic
-    // classifier. get_backend() may return nullptr -- guarded.
+    // Ask the active AMS backend first (domain-aware), then any firmware that
+    // reports faults as structured codes, else the generic classifier.
+    // get_backend() may return nullptr -- guarded.
     std::optional<ErrorEvent> ev;
     if (auto* backend = AmsState::instance().get_backend())
         ev = backend->classify_error(line, ctx);
+    // Firmware that reports structured fault codes gets asked before the
+    // phrase-based classifier: a code is a stable identity, the sentence is not.
+    if (!ev)
+        ev = faultcodes::classify(get_printer_state().get_discovery(), line);
     if (!ev)
         ev = error_classify::classify(line, ctx);
     if (!ev)

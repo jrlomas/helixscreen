@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#pragma once
+
+#include "error_event.h"
+
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace helix {
+class PrinterDiscovery;
+} // namespace helix
+
+/**
+ * @file firmware_fault_codes.h
+ * @brief Firmwares that report faults as structured codes rather than prose.
+ *
+ * Some firmware raises faults with a numeric identity and embeds it in the
+ * error text. Matching the sentence instead is brittle: the wording belongs to
+ * the firmware, it changes between releases, and it is not translated.
+ *
+ * This is the one module that knows which firmwares do that and how to read
+ * their codes. `GcodeErrorRouter` asks the question and never names a firmware.
+ * Adding another is a row in the provider table.
+ */
+namespace helix::faultcodes {
+
+/// True when this firmware reports structured fault codes.
+[[nodiscard]] bool firmware_reports_fault_codes(const PrinterDiscovery& hw);
+
+/// Status objects carrying standing faults, for the subscription builder.
+[[nodiscard]] std::vector<std::string> required_status_objects(const PrinterDiscovery& hw);
+
+/// Classify one error line. nullopt when the line carries no code this
+/// firmware owns, so the generic classifier still gets its turn.
+[[nodiscard]] std::optional<ErrorEvent> classify(const PrinterDiscovery& hw,
+                                                 const std::string& line);
+
+} // namespace helix::faultcodes

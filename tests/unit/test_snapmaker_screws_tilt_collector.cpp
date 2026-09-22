@@ -225,8 +225,7 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
     SECTION("the not-removed error refuses with removal instructions") {
         mock_client_.force_next_gcode_error(
             MoonrakerErrorType::JSON_RPC_ERROR,
-            std::string("Klippy Host Error: '") + snapmaker::screws_tilt::PLATE_NOT_REMOVED_CODE +
-                ": The plate " + snapmaker::screws_tilt::PLATE_NOT_REMOVED_TEXT + "'",
+            "Klippy Host Error: '0003-0530-0000-0011: The plate has not been removed'",
             "DETECT_BED_PLATE");
 
         start_collection();
