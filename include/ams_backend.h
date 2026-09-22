@@ -1046,6 +1046,17 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether a batch this process dispatched is still unverified
+     *
+     * Connect-time cleanup asks this to tell its own live batch from an
+     * interlock stranded by an earlier session; true means cleanup must
+     * leave the interlock alone.
+     */
+    [[nodiscard]] virtual bool filament_batch_in_flight() const {
+        return false;
+    }
+
+    /**
      * @brief Load filament on several slots as ONE operation (async)
      *
      * For parallel-toolhead printers whose firmware serializes per-extruder

@@ -330,6 +330,24 @@ TEST_CASE("A batch interlock during a print is left alone", "[ams][batch]") {
     CHECK_FALSE(client.sent_contains("AUTO_FEEDING_BATCH"));
 }
 
+TEST_CASE("This session's own live batch is left alone", "[ams][batch]") {
+    // A filament batch never leaves print_stats standby, so a mid-batch
+    // reconnect lands here with every print guard reading idle — exactly the
+    // shape that clears a stranded interlock. Only the caller's "this process
+    // dispatched a live batch" vouches for the interlock.
+    RecordingFakeClient client;
+    const nlohmann::json status = {
+        {"gcode_macro AUTO_FEEDING_BATCH", {{"doing", true}}},
+        {"print_stats", {{"state", "standby"}}},
+        {"virtual_sdcard", {{"is_active", false}}},
+    };
+
+    helix::u1_batch::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH",
+                                          /*local_batch_active=*/true);
+
+    CHECK(client.sent_gcode.empty());
+}
+
 TEST_CASE("No doing variable in the payload is a no-op", "[ams][batch]") {
     RecordingFakeClient client;
     const auto status = nlohmann::json::parse(

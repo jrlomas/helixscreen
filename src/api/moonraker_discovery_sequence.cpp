@@ -6,6 +6,7 @@
 #include "ui_update_queue.h"
 
 #include "accel_sensor_manager.h"
+#include "ams_state.h"
 #include "auto_screws_tilt_adjust.h"
 #if HELIX_HAS_IFS
 #include "ams_backend_ad5x_ifs.h"
@@ -1669,8 +1670,21 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                     // config-case object name, matching the subscription.
                     const std::string batch_macro = hw.macro_config_name("AUTO_FEEDING_BATCH");
                     if (!batch_macro.empty()) {
+                        // A batch this process dispatched and has not seen
+                        // complete owns the interlock, so the reconcile must
+                        // not clear it on a mid-batch reconnect. The backends
+                        // answer the capability question; which one runs
+                        // batches is vendor knowledge that stays there.
+                        bool local_batch_active = false;
+                        auto& ams = AmsState::instance();
+                        for (int i = 0; i < ams.backend_count() && !local_batch_active; ++i) {
+                            if (const auto* backend = ams.get_backend(i)) {
+                                local_batch_active = backend->filament_batch_in_flight();
+                            }
+                        }
                         u1_batch::reconcile_on_connect(client_, status,
-                                                       fmt::format("gcode_macro {}", batch_macro));
+                                                       fmt::format("gcode_macro {}", batch_macro),
+                                                       local_batch_active);
                     }
                 }
             } else if (sub_response.contains("error")) {

@@ -393,6 +393,13 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// dispatched). The failure-recovery path and tests read this.
     [[nodiscard]] BatchPlan batch_plan() const;
 
+    /// True while a batch this process dispatched is still unverified, so
+    /// connect-time cleanup can tell its own live batch from an interlock
+    /// stranded by an earlier session.
+    [[nodiscard]] bool filament_batch_in_flight() const override {
+        return batch_plan().active;
+    }
+
     /// Sends AUTO_FEEDING_BATCH ACTION=END. Klipper aborts the rest of a
     /// script when one line raises, so a failed head strands the firmware's
     /// `doing` interlock — which refuses every print start and resume until

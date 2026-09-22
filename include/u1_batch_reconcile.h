@@ -29,9 +29,16 @@ namespace u1_batch {
  *        printer.cfg ("gcode_macro <name>"). Klipper preserves the config's
  *        case in object keys, so the caller supplies the discovered spelling
  *        (PrinterDiscovery::macro_config_name()) rather than a guessed one.
+ * @param local_batch_active  Whether THIS process has a batch it dispatched
+ *        and has not seen complete (AmsBackend::filament_batch_in_flight()).
+ *        True means the interlock belongs to a live batch of ours and is
+ *        left alone. False after a process restart mid-batch, where the
+ *        reconcile clears an interlock the still-running batch owns —
+ *        accepted, since the restart already orphaned the plan that tracked
+ *        it, and refusing would strand the interlock forever.
  */
 void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initial_status,
-                          const std::string& macro_object);
+                          const std::string& macro_object, bool local_batch_active = false);
 
 } // namespace u1_batch
 } // namespace helix

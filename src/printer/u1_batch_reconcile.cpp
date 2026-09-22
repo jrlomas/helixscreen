@@ -18,7 +18,7 @@ constexpr const char* CMD_END = "AUTO_FEEDING_BATCH ACTION=END";
 } // namespace
 
 void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status,
-                          const std::string& macro_object) {
+                          const std::string& macro_object, bool local_batch_active) {
     const auto macro = status.find(macro_object);
     if (macro == status.end() || !macro->is_object()) {
         return;
@@ -29,6 +29,18 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status
     // callback and discovery never completes on any connect.
     const auto doing = macro->find("doing");
     if (doing == macro->end() || !doing->is_boolean() || !doing->get<bool>()) {
+        return;
+    }
+    // A batch this process dispatched and has not seen complete owns the
+    // interlock: a filament batch is not a print, so print_stats stays
+    // standby throughout and the print guards below cannot vouch for it,
+    // yet ACTION=END restores the targets snapshotted at that batch's
+    // START — zeroing mid-batch hotends. This runs on every rediscovery
+    // (each reconnect, each klippy-ready), not only at startup, so a
+    // WebSocket blip during a five-minute batch lands here too.
+    if (local_batch_active) {
+        spdlog::info("[U1Batch] Batch interlock held by a batch this session dispatched - leaving "
+                     "it alone");
         return;
     }
     // A print in flight owns the interlock: ACTION=END restores the targets
