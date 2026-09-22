@@ -101,11 +101,12 @@ TEST_CASE("snapmaker prefs: booleans render as 1/0 and the enum renders bare",
     REQUIRE(g.find("FILAMENT_ENTANGLE_SEN=high") != std::string::npos);
 }
 
-TEST_CASE("snapmaker prefs: the per-tool array renders as a comma list", "[snapmaker][prefs]") {
+TEST_CASE("snapmaker prefs: the per-tool array renders as a Python list literal",
+          "[snapmaker][prefs]") {
     PrintPreferences changes;
     changes.end_unload_filament = {true, false, true, false};
     REQUIRE(write_print_preferences_gcode(changes) ==
-            "SET_PRINT_PREFERENCES END_UNLOAD_FILAMENT=1,0,1,0");
+            "SET_PRINT_PREFERENCES END_UNLOAD_FILAMENT=[1,0,1,0]");
 }
 
 TEST_CASE("snapmaker prefs: nothing to change renders an empty string", "[snapmaker][prefs]") {

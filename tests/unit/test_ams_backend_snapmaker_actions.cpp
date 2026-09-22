@@ -103,7 +103,7 @@ TEST_CASE("executing the per-tool toggle rewrites the whole array", "[ams][snapm
     SnapmakerTestAccess::handle_status(
         backend, frame({{"end_unload_filament", {true, false, true, false}}}));
     const std::string g = backend.build_preference_gcode("snapmaker_end_unload_t1", std::any(true));
-    REQUIRE(g == "SET_PRINT_PREFERENCES END_UNLOAD_FILAMENT=1,1,1,0");
+    REQUIRE(g == "SET_PRINT_PREFERENCES END_UNLOAD_FILAMENT=[1,1,1,0]");
 }
 
 TEST_CASE("an unknown action id produces no gcode", "[ams][snapmaker][actions]") {

@@ -84,12 +84,17 @@ std::string write_print_preferences_gcode(const PrintPreferences& changes) {
         append(out, "FILAMENT_ENTANGLE_SEN", *changes.filament_entangle_sen);
     }
     if (!changes.end_unload_filament.empty()) {
-        std::string csv;
+        // A Python list literal: the firmware parses the value with
+        // ast.literal_eval and rejects anything that is not a list, and
+        // Klipper splits gcode parameters on whitespace, so the value
+        // carries no spaces.
+        std::string list_literal = "[";
         for (size_t i = 0; i < changes.end_unload_filament.size(); ++i) {
-            csv += (i ? "," : "");
-            csv += changes.end_unload_filament[i] ? "1" : "0";
+            list_literal += (i ? "," : "");
+            list_literal += changes.end_unload_filament[i] ? "1" : "0";
         }
-        append(out, "END_UNLOAD_FILAMENT", csv);
+        list_literal += "]";
+        append(out, "END_UNLOAD_FILAMENT", list_literal);
     }
     return out;
 }
