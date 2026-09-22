@@ -231,6 +231,47 @@ TEST_CASE_METHOD(MockBatchFixture, "A failed head ends the firmware batch", "[am
     CHECK(std::count(history.begin(), history.end(), "AUTO_FEEDING_BATCH ACTION=END") >= 2);
 }
 
+TEST_CASE_METHOD(MockBatchFixture,
+                 "A batch RPC failure clears the interlock of the still-live plan",
+                 "[ams][batch]") {
+    helix::SnapmakerTestAccess::set_use_batch_macro(backend(), true);
+    mock_client.force_next_gcode_error(MoonrakerErrorType::TIMEOUT, "timed out",
+                                       "AUTO_FEEDING_BATCH ACTION=START");
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    // The mock simulates every script line before delivering the error, so
+    // the queued frames would verify the plan out and the recovery would
+    // rightly decline. Re-arm over heads the frames do not name, keeping the
+    // dispatch id — the state a genuinely lost response leaves behind: plan
+    // active, no terminal in flight.
+    const auto dispatched = backend().batch_plan();
+    helix::SnapmakerTestAccess::set_batch_plan(backend(), {2, 3}, dispatched.load,
+                                               dispatched.direction_label, dispatched.of_label,
+                                               dispatched.dispatch_id);
+    helix::ui::UpdateQueue::instance().drain();
+
+    // The chain's own trailing END plus the recovery's second one.
+    const auto& history = mock_client.gcode_script_history();
+    CHECK(std::count(history.begin(), history.end(), "AUTO_FEEDING_BATCH ACTION=END") >= 2);
+    // The recovery's END finishes the batch; the plan must not survive it.
+    CHECK_FALSE(backend().batch_plan().active);
+}
+
+TEST_CASE_METHOD(MockBatchFixture, "A stale batch RPC failure leaves the interlock alone",
+                 "[ams][batch]") {
+    helix::SnapmakerTestAccess::set_use_batch_macro(backend(), true);
+    mock_client.force_next_gcode_error(MoonrakerErrorType::TIMEOUT, "timed out",
+                                       "AUTO_FEEDING_BATCH ACTION=START");
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    // Every head verifies before the deferred recovery runs — the late-
+    // TIMEOUT shape: a four-head batch finished at minute 4, the RPC times
+    // out at minute 10, and END would zero hotends preheated since.
+    helix::ui::UpdateQueue::instance().drain();
+
+    REQUIRE_FALSE(backend().batch_plan().active);
+    const auto& history = mock_client.gcode_script_history();
+    CHECK(std::count(history.begin(), history.end(), "AUTO_FEEDING_BATCH ACTION=END") == 1);
+}
+
 TEST_CASE_METHOD(MockBatchFixture, "Without the macro nothing extra is sent", "[ams][batch]") {
     helix::SnapmakerTestAccess::set_use_batch_macro(backend(), false);
     ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "0");

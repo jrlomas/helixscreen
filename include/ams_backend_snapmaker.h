@@ -382,6 +382,11 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         /// thread, which must not call lv_tr into LVGL's pack list.
         std::string direction_label; ///< "Load" / "Unload"
         std::string of_label;        ///< "of", as in "Load 2 of 4"
+        /// Identifies THIS dispatch. The deferred RPC-failure recovery
+        /// compares it against the live plan, so a failure answered after
+        /// the plan completed — or one belonging to an earlier, replaced
+        /// plan — cannot act on stale authority.
+        uint64_t dispatch_id{0};
     };
 
     /// Snapshot of the in-flight batch plan (all defaults when none was
@@ -591,6 +596,9 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// The batch do_filament_batch() dispatched, verified head-by-head in
     /// handle_status_update's channel_state parse. All access under mutex_.
     BatchPlan batch_;
+
+    /// Source of BatchPlan::dispatch_id; monotonic per backend. Under mutex_.
+    uint64_t next_batch_dispatch_id_ = 1;
 
     // Persistent per-slot overrides. Writers (on_started bulk load,
     // apply_user_edit, check_hardware_event_clear) all hold mutex_.

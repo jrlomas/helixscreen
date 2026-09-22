@@ -536,6 +536,7 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
         return AmsErrorHelper::not_connected("IMoonrakerAPI not available");
     }
     bool use_batch_macro;
+    uint64_t dispatch_id;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         // The in-flight claim spans only this dispatch call, and `action`
@@ -552,9 +553,11 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
         // Resolve the progress words here on the caller's (main) thread: the
         // cursor-advance parse reads them from the WebSocket thread, which
         // must not call lv_tr into LVGL's pack list.
-        batch_ = BatchPlan{
-            slots,      load, /*cursor=*/0, /*active=*/true, load ? lv_tr("Load") : lv_tr("Unload"),
-            lv_tr("of")};
+        batch_ = BatchPlan{slots,           load,
+                           /*cursor=*/0,
+                           /*active=*/true, load ? lv_tr("Load") : lv_tr("Unload"),
+                           lv_tr("of"),     next_batch_dispatch_id_};
+        dispatch_id = next_batch_dispatch_id_++;
     }
     const std::string chain = batch_feed_gcode(slots, load, use_batch_macro);
     const char* tag = backend_log_tag();
@@ -568,21 +571,43 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
     auto tok = lifetime_.token();
     api_->execute_gcode(
         chain, [tag]() { spdlog::debug("{} batch G-code executed successfully", tag); },
-        [this, tok, tag, chain](const MoonrakerError& err) mutable {
+        [this, tok, tag, chain, dispatch_id](const MoonrakerError& err) mutable {
             if (err.type == MoonrakerErrorType::TIMEOUT) {
                 spdlog::warn("{} G-code response timed out (may still be running): {}", tag, chain);
             } else {
                 spdlog::error("{} G-code failed: {} - {}", tag, chain, err.message);
             }
-            // The whole chain was rejected or its response was lost; either
-            // way the trailing ACTION=END line cannot be counted on, and the
-            // `doing` interlock strands the printer without it.
             tok.defer("AmsBackendSnapmaker::do_filament_batch.recover",
-                      [this, tag, msg = err.message] {
-                          const auto plan = batch_plan();
+                      [this, tag, msg = err.message, dispatch_id] {
+                          // The failure carries authority only while the plan
+                          // it failed is still the live one: a TIMEOUT can
+                          // land long after every head verified, and END
+                          // then restores the targets snapshotted at that
+                          // batch's START over a preheat the user started
+                          // since.
+                          bool clear_interlock;
+                          int failed_head;
+                          {
+                              std::lock_guard<std::mutex> lock(mutex_);
+                              clear_interlock = batch_.active && batch_.dispatch_id == dispatch_id;
+                              failed_head = clear_interlock ? batch_.heads[batch_.cursor] : -1;
+                              if (clear_interlock) {
+                                  // The recovery's own END finishes the
+                                  // batch: leaving the plan active would let
+                                  // later unrelated channel traffic advance a
+                                  // zombie cursor.
+                                  batch_.active = false;
+                              }
+                          }
+                          if (!clear_interlock) {
+                              spdlog::info("{} batch RPC failure for dispatch {} is stale — "
+                                           "interlock left alone",
+                                           tag, dispatch_id);
+                              return;
+                          }
                           spdlog::warn("{} batch RPC failed at head {} ({}): clearing the "
                                        "firmware batch interlock",
-                                       tag, plan.active ? plan.heads[plan.cursor] : -1, msg);
+                                       tag, failed_head, msg);
                           end_firmware_batch();
                       });
         },
