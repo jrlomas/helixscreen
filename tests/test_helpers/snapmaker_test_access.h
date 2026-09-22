@@ -85,6 +85,12 @@ class SnapmakerTestAccess {
         std::lock_guard<std::mutex> lock(b.mutex_);
         b.use_batch_macro_ = enabled;
     }
+    /// Same reason as set_use_batch_macro: the status-object key the doing
+    /// parse matches against comes from discovery, which a unit test skips.
+    static void set_batch_macro_object(AmsBackendSnapmaker& b, std::string object) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        b.batch_macro_object_ = std::move(object);
+    }
     /// Arm a batch plan exactly as do_filament_batch would, so the
     /// cursor-advance parse can be driven frame by frame; the mock client
     /// delivers a whole batch's frames in one drain.

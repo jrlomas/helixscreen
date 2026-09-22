@@ -581,6 +581,13 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// do_filament_batch() builds. All access under mutex_.
     bool use_batch_macro_ = false;
 
+    /// The status-object key the batch macro publishes under ("gcode_macro "
+    /// + the config-case macro name; empty when the firmware lacks the
+    /// macro). The subscription and the doing-parse must agree on this
+    /// spelling: Klipper preserves the config's case in object keys. All
+    /// access under mutex_.
+    std::string batch_macro_object_;
+
     /// The batch do_filament_batch() dispatched, verified head-by-head in
     /// handle_status_update's channel_state parse. All access under mutex_.
     BatchPlan batch_;

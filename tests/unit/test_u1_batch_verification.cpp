@@ -162,6 +162,37 @@ TEST_CASE_METHOD(MockBatchFixture, "A second batch is refused while one is runni
     pump_until_idle();
 }
 
+TEST_CASE_METHOD(MockBatchFixture, "A doing=false reading retires an active plan", "[ams][batch]") {
+    helix::SnapmakerTestAccess::set_batch_macro_object(backend(), "gcode_macro AUTO_FEEDING_BATCH");
+    REQUIRE(backend().load_filament_batch({0, 1}).success());
+    REQUIRE(backend().batch_plan().active);
+
+    helix::SnapmakerTestAccess::handle_status(
+        backend(), nlohmann::json{{"gcode_macro AUTO_FEEDING_BATCH", {{"doing", false}}}});
+
+    CHECK_FALSE(backend().batch_plan().active);
+}
+
+TEST_CASE_METHOD(MockBatchFixture, "doing readings other than false leave the plan alone",
+                 "[ams][batch]") {
+    helix::SnapmakerTestAccess::set_batch_macro_object(backend(), "gcode_macro AUTO_FEEDING_BATCH");
+    for (const nlohmann::json doing : {nlohmann::json(true), nlohmann::json(1),
+                                       nlohmann::json("false"), nlohmann::json(nullptr)}) {
+        REQUIRE(backend().load_filament_batch({0, 1}).success());
+        REQUIRE(backend().batch_plan().active);
+
+        helix::SnapmakerTestAccess::handle_status(
+            backend(), nlohmann::json{{"gcode_macro AUTO_FEEDING_BATCH", {{"doing", doing}}}});
+        CHECK(backend().batch_plan().active);
+
+        // Retire via the parse's own false reading, so the next iteration's
+        // dispatch is not refused by the live-plan gate.
+        helix::SnapmakerTestAccess::handle_status(
+            backend(), nlohmann::json{{"gcode_macro AUTO_FEEDING_BATCH", {{"doing", false}}}});
+        CHECK_FALSE(backend().batch_plan().active);
+    }
+}
+
 TEST_CASE_METHOD(MockBatchFixture, "A failed head stops the batch at its cursor", "[ams][batch]") {
     ScopedEnvVar fail_slot("HELIX_MOCK_BATCH_FAIL_SLOT", "1");
     REQUIRE(backend().load_filament_batch({0, 1}).success());

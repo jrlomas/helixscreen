@@ -308,7 +308,13 @@ AmsBackendSnapmaker::AmsBackendSnapmaker(IMoonrakerAPI* api, helix::IMoonrakerCl
 void AmsBackendSnapmaker::on_started() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        use_batch_macro_ = get_printer_state().get_discovery().has_auto_feeding_batch();
+        // One lookup answers both the script-shape question and the object
+        // key: the macro's config-case name is non-empty exactly when the
+        // firmware ships it.
+        const std::string macro =
+            get_printer_state().get_discovery().macro_config_name("AUTO_FEEDING_BATCH");
+        use_batch_macro_ = !macro.empty();
+        batch_macro_object_ = macro.empty() ? std::string{} : "gcode_macro " + macro;
     }
 
     // Load persisted per-slot overrides (brand, spool name, spoolman IDs, etc.)
@@ -1871,6 +1877,26 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                                           system_info_.current_slot);
                         }
                     }
+                }
+            }
+        }
+
+        // The batch macro's `doing` save-variable is the firmware's own word
+        // on whether a batch script is running. A false reading retires any
+        // plan this process still holds active: the script ended without the
+        // cursor head reaching a terminal or a *_fail (lost response, script
+        // abort, a feeder wedging mid-feed), and no channel_state detector
+        // covers that end.
+        if (!batch_macro_object_.empty()) {
+            const auto macro = status.find(batch_macro_object_);
+            if (macro != status.end() && macro->is_object()) {
+                const auto doing = macro->find("doing");
+                if (doing != macro->end() && doing->is_boolean() && !doing->get<bool>() &&
+                    batch_.active) {
+                    batch_.active = false;
+                    changed = true;
+                    spdlog::info("{} batch macro reports doing=false — retiring the active plan",
+                                 backend_log_tag());
                 }
             }
         }
