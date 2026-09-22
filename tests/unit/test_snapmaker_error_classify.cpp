@@ -110,3 +110,47 @@ TEST_CASE_METHOD(LVGLUITestFixture, "the router surfaces our wording for a coded
 
     get_printer_state().set_hardware(PrinterDiscovery{});
 }
+
+// ============================================================================
+// Translation: the fault table holds the English source; the wording becomes
+// user-facing at the detail/message assignment, which is where lv_tr() lives.
+// ============================================================================
+
+#include "translation_loader.h"
+
+TEST_CASE_METHOD(LVGLUITestFixture, "the known fault wording reaches the user translated",
+                 "[snapmaker][classify][i18n]") {
+    helix::ui::ensure_translation_loaded("de");
+    lv_translation_set_language("de");
+
+    // The code is the identity, so a German-locale user classifies from the
+    // code whatever the firmware's sentence says; the surfaced detail must be
+    // the catalog's German sentence, which only happens if the table's
+    // wording goes through lv_tr.
+    auto e =
+        faultcodes::classify(coded_firmware(), "!! 0003-0530-0000-0011 platten nicht entfernt");
+    REQUIRE(e.has_value());
+    REQUIRE(e->detail.find("Entferne die PEI-Platte") != std::string::npos);
+
+    lv_translation_set_language(helix::ui::kIdentityLocale);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "a standing fault's message is translated",
+                 "[snapmaker][exceptions][i18n]") {
+    helix::ui::ensure_translation_loaded("de");
+    lv_translation_set_language("de");
+
+    nlohmann::json s = nlohmann::json::object();
+    s["exception_manager"] = {{"exceptions",
+                               {{{"id", 530},
+                                 {"index", 0},
+                                 {"code", 11},
+                                 {"level", 3},
+                                 {"message", "The plate has not been removed"},
+                                 {"is_persistent", 0}}}}};
+    const auto v = snapmaker::read_active_exceptions(s);
+    REQUIRE(v.size() == 1);
+    REQUIRE(v[0].message.find("Entferne die PEI-Platte") != std::string::npos);
+
+    lv_translation_set_language(helix::ui::kIdentityLocale);
+}

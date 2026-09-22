@@ -2,6 +2,7 @@
 
 #include "firmware_fault_codes.h"
 
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "printer_discovery.h"
 #include "snapmaker_exceptions.h"
 
@@ -55,7 +56,9 @@ std::optional<ErrorEvent> classify_snapmaker(const Provider& p, const std::strin
     // A fault we have no wording for still classifies, carrying the
     // firmware's own sentence rather than a fabricated one.
     if (const auto known = snapmaker::exception_message(*code); !known.empty()) {
-        e.detail = std::string(known);
+        // The table holds the English source; this is where the wording
+        // becomes user-facing, so it translates here.
+        e.detail = lv_tr(std::string(known).c_str());
     } else {
         e.detail = text;
     }

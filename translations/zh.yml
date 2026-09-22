@@ -2011,6 +2011,7 @@ translations:
   Power: 电源
   Power Devices: 电源设备
   Power off the printer or screen: 关闭打印机或屏幕电源
+  'Power was lost during the print; the printer stopped and saved its progress': ''
   Pre-heat the extruder first: 请先预热挤出机
   'Pre-print command failed: {}': '打印前命令失败: {}'
   Pre-print homing...: 打印前归位...
