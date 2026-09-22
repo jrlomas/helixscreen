@@ -1088,19 +1088,9 @@ class AmsBackend {
         return AmsErrorHelper::not_supported("Batch filament unload");
     }
 
-    /**
-     * @brief Why a slot cannot take a filament operation right now
-     *
-     * Backends that can see per-lane state answer from it; the default stays
-     * permissive so backends without that visibility keep today's ungated
-     * behaviour. Direction matters: a lane can be eligible for unload and
-     * not for load in the same instant.
-     *
-     * @param slot_index Slot to ask about (0-based)
-     * @param load true for the load direction, false for unload
-     * @return a classification; callers render it via
-     *         filament_op_eligibility_reason()
-     */
+    /// Why a slot cannot take a filament operation right now. Direction
+    /// matters: a lane can be eligible for unload and not for load in the
+    /// same instant.
     enum class FilamentOpEligibility {
         Eligible,
         Empty,             ///< no filament in the lane
@@ -1112,6 +1102,17 @@ class AmsBackend {
         Error,             ///< the feeder reports a fault
     };
 
+    /**
+     * @brief Classify whether a slot can take a filament operation
+     *
+     * Backends that can see per-lane state answer from it; the default stays
+     * permissive so backends without that visibility keep ungated behaviour.
+     *
+     * @param slot_index Slot to ask about (0-based)
+     * @param load true for the load direction, false for unload
+     * @return a classification; callers render it via
+     *         filament_op_eligibility_reason()
+     */
     [[nodiscard]] virtual FilamentOpEligibility slot_op_eligibility(int slot_index,
                                                                     bool load) const {
         (void)slot_index;
