@@ -115,7 +115,7 @@ TEST_CASE("every standing fault is read, not just the first", "[snapmaker][excep
                                  {"code", 16},
                                  {"level", 2},
                                  {"message", "Cannot change while printing"},
-                                 {"is_persistent", true}}}}};
+                                 {"is_persistent", 1}}}}};
     auto v = read_active_exceptions(s);
     REQUIRE(v.size() == 2);
     REQUIRE(v[1].code.id == 531);
