@@ -1509,15 +1509,40 @@ TEST_CASE("power loss sensor: a frame that omits the object answers nothing",
 
 Provider table on the same shape as Tasks 7 and `z_offset_persistence`. Subscribe the object from the discovery sequence via `required_status_objects`, as Task 6 does for `exception_manager`.
 
-- [ ] **Step 3: Decide what PLR does with it — and write that decision down**
+- [ ] **Step 3: Diagnostic only — the firmware settles this, it is not a judgement call**
 
-This is a judgement call and must not be guessed at in code. Read the existing PLR path (`project_u1_power_loss_recovery`, `tests/unit/test_plr_state.cpp`) and pick ONE of:
+An earlier draft offered three options and asked Preston to choose. Reading
+`/home/lava/klipper/klippy/extras/power_loss_check.py` on the live U1 closes it: **`power_loss_flag`
+is a live MCU-pushed state, not a latch**, and when it trips on the master the firmware does
 
-- **(a) Diagnostic only.** Surface the sensor in the debug bundle and the printer-info surface. No behaviour change. Lowest risk; makes the next investigation possible.
-- **(b) Corroborate the recovery prompt.** When PLR offers to resume, say whether the firmware confirms it saw a power loss. Changes wording, not behaviour.
-- **(c) Gate the prompt.** Only offer recovery when the sensor agrees. **Do not choose this without Preston** — a sensor that reads unknown on some units would suppress a recovery the user wanted.
+```python
+error = '{"coded": "0003-0522-0000-0017", "msg":"mcu: Power loss triggered", "oneshot": 0}'
+self.printer.invoke_shutdown(error)
+```
 
-Default to (a) unless Preston says otherwise, and record the choice in the commit body. Whatever is chosen, the sensor must never make recovery LESS available than it is today without an explicit decision.
+Klipper shuts down on the event and restarts on recovery. So at the moment we would offer to
+resume, the flag reads **0** — mains is fine, which is precisely why the machine booted.
+Gating the recovery prompt on the sensor would therefore suppress **every legitimate recovery
+offer**, not merely some; and corroborating the prompt fails for the same reason, because
+there is nothing left to corroborate against. Surface it diagnostically (the printer-info
+surface and the debug bundle) and change no recovery behaviour.
+
+What the sensor is genuinely good for is the *present* state of incoming mains — `voltage_type`
+(110v / 220v / detecting) and `duty_percent` — i.e. "mains looks marginal", never "a loss
+happened".
+
+**The power-loss EVENT is a structured fault code, and Tasks 4-6 already handle that shape.**
+`0003-0522-0000-0017` decodes as level 3, id 522, index 0, code 17, "mcu: Power loss
+triggered". It is **not** in Task 4's table. Add it there with wording of our own, so a power
+loss reads as a power loss rather than as an unrecognised shutdown. Note it travels in
+`invoke_shutdown`'s JSON `coded` field rather than necessarily through `exception_manager`, so
+confirm Task 5's classifier actually sees that text before claiming the path works — if it does
+not, say so in the report rather than asserting a wiring you have not exercised.
+
+Also correct the framing above: our PLR is not "blind". For `PlrBackendType::SNAPMAKER`,
+`src/ui/ui_plr_offer_controller.cpp` documents that the firmware already validated the snapshot
+against MCU flash on boot, so `pl_env_valid` *is* availability — passive, but firmware-validated,
+unlike Creality's active probe.
 
 - [ ] **Step 4: Commit**
 
