@@ -8,15 +8,6 @@
 
 namespace helix::batch_feeding {
 
-namespace {
-
-/// Clears `doing` and restores the hotend targets the batch snapshotted at
-/// its START. The command alias is uppercased regardless of the config's
-/// spelling; the status object key is not (see macro_config_name()).
-constexpr const char* CMD_END = "AUTO_FEEDING_BATCH ACTION=END";
-
-} // namespace
-
 void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status,
                           const std::string& macro_object, bool local_batch_active) {
     const auto macro = status.find(macro_object);
@@ -39,8 +30,9 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status
     // (each reconnect, each klippy-ready), not only at startup, so a
     // WebSocket blip during a five-minute batch lands here too.
     if (local_batch_active) {
-        spdlog::info("[BatchFeed] Batch interlock held by a batch this session dispatched - leaving "
-                     "it alone");
+        spdlog::info(
+            "[BatchFeed] Batch interlock held by a batch this session dispatched - leaving "
+            "it alone");
         return;
     }
     // A print in flight owns the interlock: ACTION=END restores the targets
@@ -74,7 +66,7 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status
         }
     }
     spdlog::info("[BatchFeed] Clearing a stranded AUTO_FEEDING_BATCH interlock");
-    client.gcode_script(CMD_END);
+    client.gcode_script(END_GCODE);
 }
 
 } // namespace helix::batch_feeding

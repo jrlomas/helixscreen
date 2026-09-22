@@ -8,6 +8,7 @@
 #include "ams_error.h"
 #include "ams_state.h"
 #include "app_globals.h"
+#include "batch_feed_reconcile.h"
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
 #include "json_utils.h"
@@ -646,7 +647,8 @@ std::string AmsBackendSnapmaker::batch_feed_gcode(const std::vector<int>& slots,
             chain += fmt::format(" NEXT_EXTRUDER={}", slots[i + 1]);
         }
     }
-    chain += "\nAUTO_FEEDING_BATCH ACTION=END";
+    chain += '\n';
+    chain += batch_feeding::END_GCODE;
     return chain;
 }
 
@@ -664,7 +666,7 @@ void AmsBackendSnapmaker::end_firmware_batch() {
     if (!use_batch_macro) {
         return; // no interlock exists on this firmware
     }
-    execute_gcode("AUTO_FEEDING_BATCH ACTION=END");
+    execute_gcode(batch_feeding::END_GCODE);
 }
 
 bool AmsBackendSnapmaker::can_unload_from_toolhead(int slot_index) const {
