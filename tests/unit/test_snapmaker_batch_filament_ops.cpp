@@ -138,6 +138,24 @@ struct BatchFixture : public LVGLTestFixture {
         helix::SnapmakerTestAccess::handle_status(backend(), nlohmann::json::parse(json_text));
     }
 
+    /// One frame carrying the feeder channel and its motion sensor — the two
+    /// objects slot_op_eligibility answers from. The sensor reads enabled, as
+    /// it does on the rig; the SensorDisabled section re-feeds it false.
+    void set_channel(int slot, const char* state, const char* error, bool detected, bool module,
+                     bool no_auto) {
+        nlohmann::json frame = {
+            {"filament_feed " + std::string(slot < 2 ? "left" : "right"),
+             {{"extruder" + std::to_string(slot),
+               {{"channel_state", state},
+                {"channel_error", error},
+                {"filament_detected", detected},
+                {"module_exist", module},
+                {"disable_auto", no_auto}}}}},
+            {"filament_motion_sensor e" + std::to_string(slot) + "_filament", {{"enabled", true}}},
+        };
+        feed_status(frame.dump());
+    }
+
     MoonrakerClientMock mock_client;
     helix::PrinterState state;
     std::unique_ptr<MoonrakerAPIMock> api;
@@ -287,4 +305,65 @@ TEST_CASE_METHOD(BatchFixture, "Snapmaker keeps the per-channel feeder fields",
     CHECK(snap.filament_detected);
     CHECK(snap.module_exist);
     CHECK_FALSE(snap.disable_auto);
+}
+
+// ============================================================================
+// slot_op_eligibility — the direction-dependent refusal, from channel state
+// ============================================================================
+
+TEST_CASE_METHOD(BatchFixture, "Snapmaker eligibility follows channel state",
+                 "[snapmaker][batch]") {
+    using E = helix::AmsBackend::FilamentOpEligibility;
+
+    SECTION("preload_finish with filament loads, does not unload") {
+        set_channel(0, "preload_finish", "ok", /*detected=*/true, /*module=*/true,
+                    /*no_auto=*/false);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/true) == E::Eligible);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/false) == E::NotLoaded);
+    }
+    SECTION("load_finish unloads, does not load") {
+        set_channel(0, "load_finish", "ok", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/false) == E::Eligible);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/true) == E::AlreadyLoaded);
+    }
+    SECTION("wait_insert with no filament is empty in both directions") {
+        set_channel(0, "wait_insert", "ok", /*detected=*/false, true, false);
+        CHECK(backend().slot_op_eligibility(0, true) == E::Empty);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Empty);
+    }
+    SECTION("a feeder fault beats everything") {
+        set_channel(0, "load_finish", "jam", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Error);
+    }
+    SECTION("manual mode or absent module refuses an otherwise eligible head") {
+        set_channel(0, "preload_finish", "ok", true, /*module=*/true, /*no_auto=*/true);
+        CHECK(backend().slot_op_eligibility(0, true) == E::FeederUnavailable);
+        set_channel(1, "preload_finish", "ok", true, /*module=*/false, /*no_auto=*/false);
+        CHECK(backend().slot_op_eligibility(1, true) == E::FeederUnavailable);
+    }
+    SECTION("an unrecognised state is busy, never eligible") {
+        set_channel(0, "loading", "ok", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, true) == E::Busy);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Busy);
+    }
+    SECTION("a disabled motion sensor blocks an otherwise eligible load") {
+        set_channel(0, "unload_finish", "ok", true, true, false);
+        feed_status(R"({"filament_motion_sensor e0_filament":{"enabled":false}})");
+        CHECK(backend().slot_op_eligibility(0, true) == E::SensorDisabled);
+        feed_status(R"({"filament_motion_sensor e0_filament":{"enabled":true}})");
+        CHECK(backend().slot_op_eligibility(0, true) == E::Eligible);
+    }
+    SECTION("an out-of-range slot is busy") {
+        CHECK(backend().slot_op_eligibility(9, true) == E::Busy);
+        CHECK(backend().slot_op_eligibility(-1, false) == E::Busy);
+    }
+}
+
+TEST_CASE_METHOD(BatchFixture, "A backend without the override stays permissive", "[ams][batch]") {
+    // The default must not change behaviour for AFC, Happy Hare, ACE or AD5X.
+    BatchlessBackend backend;
+    CHECK(backend.slot_op_eligibility(0, /*load=*/true) ==
+          helix::AmsBackend::FilamentOpEligibility::Eligible);
+    CHECK(backend.slot_op_eligibility(9, /*load=*/false) ==
+          helix::AmsBackend::FilamentOpEligibility::Eligible);
 }

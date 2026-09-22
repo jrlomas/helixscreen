@@ -189,9 +189,20 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         bool filament_detected{false};
         bool module_exist{false};
         bool disable_auto{false};
+        /// The head's filament_motion_sensor `enabled` flag. Arrives from the
+        /// sensor status objects, not the feeder frame, so a feeder write
+        /// carries the previous value forward instead of defaulting it.
+        bool sensor_enabled{false};
     };
 
     [[nodiscard]] ChannelSnapshot channel_snapshot(int slot_index) const;
+
+    /// Eligibility answered from the feeder's own channel fields: only a
+    /// settled state on a fault-free, auto-mode channel with its motion
+    /// sensor armed can take an operation, and the answer flips with the
+    /// requested direction.
+    [[nodiscard]] FilamentOpEligibility slot_op_eligibility(int slot_index,
+                                                            bool load) const override;
 
   protected:
     // Operations. Every one of these drives the toolhead: AUTO_FEEDING forwards
@@ -487,8 +498,9 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// Last filament_feed frame's raw per-channel fields (channel_state,
     /// channel_error, filament_detected, module_exist, disable_auto), written
     /// by handle_status_update before classification. Each write replaces the
-    /// whole entry, defaulting any field that frame omitted. Read by
-    /// channel_snapshot().
+    /// whole entry, defaulting any feeder field that frame omitted;
+    /// sensor_enabled arrives from the motion-sensor objects instead and is
+    /// carried across a feeder write. Read by channel_snapshot().
     std::array<ChannelSnapshot, NUM_TOOLS> channel_snapshots_{};
 
     /// Validate slot index is within range

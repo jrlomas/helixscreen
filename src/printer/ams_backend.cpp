@@ -1009,4 +1009,26 @@ helix::printer::ToolMappingOrigin AmsBackend::tool_mapping_origin() const {
     return helix::printer::ToolMappingOrigin::Unvouched;
 }
 
+const char* filament_op_eligibility_reason(AmsBackend::FilamentOpEligibility e) {
+    switch (e) {
+    case AmsBackend::FilamentOpEligibility::Eligible:
+        return "";
+    case AmsBackend::FilamentOpEligibility::Empty:
+        return "empty";
+    case AmsBackend::FilamentOpEligibility::AlreadyLoaded:
+        return "already loaded";
+    case AmsBackend::FilamentOpEligibility::NotLoaded:
+        return "not loaded";
+    case AmsBackend::FilamentOpEligibility::FeederUnavailable:
+        return "feeder not in automatic mode";
+    case AmsBackend::FilamentOpEligibility::SensorDisabled:
+        return "filament sensor disabled";
+    case AmsBackend::FilamentOpEligibility::Busy:
+        return "busy";
+    case AmsBackend::FilamentOpEligibility::Error:
+        return "feeder error";
+    }
+    return "";
+}
+
 } // namespace helix

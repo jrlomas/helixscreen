@@ -607,6 +607,44 @@ AmsBackendSnapmaker::ChannelSnapshot AmsBackendSnapmaker::channel_snapshot(int s
     return channel_snapshots_[slot_index];
 }
 
+AmsBackend::FilamentOpEligibility AmsBackendSnapmaker::slot_op_eligibility(int slot_index,
+                                                                           bool load) const {
+    using E = FilamentOpEligibility;
+    if (slot_index < 0 || slot_index >= NUM_TOOLS) {
+        return E::Busy;
+    }
+    const ChannelSnapshot snap = channel_snapshot(slot_index);
+
+    if (snap.error != "ok") {
+        return E::Error;
+    }
+    // Only these four are settled states. Anything else is mid-operation or
+    // unrecognised, and a batch must not act on a head it cannot describe.
+    const bool settled = snap.state == "wait_insert" || snap.state == "preload_finish" ||
+                         snap.state == "load_finish" || snap.state == "unload_finish";
+    if (!settled) {
+        return E::Busy;
+    }
+    if (!snap.filament_detected) {
+        return E::Empty;
+    }
+    const bool loaded = snap.state == "load_finish";
+    if (load && loaded) {
+        return E::AlreadyLoaded;
+    }
+    if (!load && !loaded) {
+        return E::NotLoaded;
+    }
+    // Eligible on state; now the feeder has to be able to act.
+    if (!snap.module_exist || snap.disable_auto) {
+        return E::FeederUnavailable;
+    }
+    if (load && !snap.sensor_enabled) {
+        return E::SensorDisabled;
+    }
+    return E::Eligible;
+}
+
 AmsError AmsBackendSnapmaker::do_select_slot(int slot_index) {
     return do_change_tool(slot_index);
 }
@@ -1517,6 +1555,11 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                             helix::json_util::safe_bool(ch, "filament_detected", false);
                         snap.module_exist = helix::json_util::safe_bool(ch, "module_exist", false);
                         snap.disable_auto = helix::json_util::safe_bool(ch, "disable_auto", false);
+                        // The feeder frame does not carry the motion sensor's
+                        // enabled flag; keep the last value the sensor objects
+                        // reported rather than resetting it.
+                        snap.sensor_enabled =
+                            channel_snapshots_[static_cast<size_t>(i)].sensor_enabled;
                         channel_snapshots_[static_cast<size_t>(i)] = std::move(snap);
 
                         const ChannelStateInfo info = classify_channel_state(state);
@@ -1891,6 +1934,14 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                 continue;
             if (!it.value().is_object())
                 continue;
+            // `enabled` rides the same status objects and gates loading: a
+            // sensor the firmware has disabled cannot confirm feed. Absent
+            // means no change (delta frames omit held values).
+            auto enabled_it = it.value().find("enabled");
+            if (enabled_it != it.value().end() && enabled_it->is_boolean()) {
+                channel_snapshots_[static_cast<size_t>(tool_idx)].sensor_enabled =
+                    enabled_it->get<bool>();
+            }
             // filament_detected: Klipper emits as bool; default true (no runout)
             // so missing field == "no change" via the contains check. Use .find()
             // + is_boolean() (per [L087]) rather than .value() which would throw

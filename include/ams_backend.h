@@ -1078,6 +1078,37 @@ class AmsBackend {
     }
 
     /**
+     * @brief Why a slot cannot take a filament operation right now
+     *
+     * Backends that can see per-lane state answer from it; the default stays
+     * permissive so backends without that visibility keep today's ungated
+     * behaviour. Direction matters: a lane can be eligible for unload and
+     * not for load in the same instant.
+     *
+     * @param slot_index Slot to ask about (0-based)
+     * @param load true for the load direction, false for unload
+     * @return a classification; callers render it via
+     *         filament_op_eligibility_reason()
+     */
+    enum class FilamentOpEligibility {
+        Eligible,
+        Empty,             ///< no filament in the lane
+        AlreadyLoaded,     ///< load requested on a head that is already loaded
+        NotLoaded,         ///< unload requested on a head with nothing at the nozzle
+        FeederUnavailable, ///< module absent or not in automatic mode
+        SensorDisabled,    ///< load needs the head's motion sensor enabled
+        Busy,              ///< transient or unrecognised channel state
+        Error,             ///< the feeder reports a fault
+    };
+
+    [[nodiscard]] virtual FilamentOpEligibility slot_op_eligibility(int slot_index,
+                                                                    bool load) const {
+        (void)slot_index;
+        (void)load;
+        return FilamentOpEligibility::Eligible;
+    }
+
+    /**
      * @brief Unload whichever slot the backend currently considers active.
      *
      * Convenience that resolves the active slot from system_info_.current_slot
@@ -3007,5 +3038,9 @@ class AmsBackend {
     mutable std::mutex authored_mappings_mutex_;
     std::map<int, int> authored_mappings_;
 };
+
+/// User-facing reason for an eligibility refusal. Returns "" for Eligible.
+/// English only here; callers wrap with lv_tr() at the use site.
+const char* filament_op_eligibility_reason(AmsBackend::FilamentOpEligibility e);
 
 } // namespace helix
