@@ -124,10 +124,25 @@ TEST_CASE("BatchFilamentModal row label names the lane contents", "[ams][batch]"
     }
 }
 
-TEST_CASE("BatchFilamentModal drops ineligible slots before dispatch", "[ams][batch]") {
+TEST_CASE("BatchFilamentModal sifts eligible slots and names the first refusal", "[ams][batch]") {
     using E = helix::AmsBackend::FilamentOpEligibility;
-    const std::vector<E> per_slot{E::Eligible, E::NotLoaded, E::Eligible, E::Error};
+    const std::vector<E> per_slot = {E::Eligible, E::Empty, E::Eligible, E::Busy};
 
-    CHECK(BatchFilamentModal::eligible_only({0, 1, 2, 3}, per_slot) == std::vector<int>{0, 2});
-    CHECK(BatchFilamentModal::eligible_only({1, 3}, per_slot).empty());
+    SECTION("eligible slots keep their order; the first refusal is named") {
+        const auto sift = BatchFilamentModal::sift_eligible({0, 1, 2, 3}, per_slot);
+        CHECK(sift.eligible == std::vector<int>{0, 2});
+        CHECK(sift.dropped == 1);
+        CHECK(sift.drop_reason == E::Empty);
+    }
+    SECTION("nothing selected that is refused: nothing dropped") {
+        const auto sift = BatchFilamentModal::sift_eligible({0, 2}, per_slot);
+        CHECK(sift.eligible == std::vector<int>{0, 2});
+        CHECK(sift.dropped == -1);
+    }
+    SECTION("a slot past the eligibility table is dropped without reading it") {
+        // total_slots can shrink between the picker opening and the press.
+        const auto sift = BatchFilamentModal::sift_eligible({0, 4, 5}, per_slot);
+        CHECK(sift.eligible == std::vector<int>{0});
+        CHECK(sift.dropped == -1); // no reason exists for an undescribable slot
+    }
 }

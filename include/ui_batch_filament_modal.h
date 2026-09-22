@@ -53,11 +53,19 @@ class BatchFilamentModal : public Modal {
     static std::string row_label(LaneNoun noun, int slot, const SlotInfo& info,
                                  std::optional<bool> present, bool at_toolhead);
 
-    // Pure: the selected slots the backend says can take this operation.
-    // Eligibility is direction-dependent, so this runs on button press, not
-    // when the rows are built. Out-of-range slots are dropped, not trusted.
-    static std::vector<int>
-    eligible_only(const std::vector<int>& selected,
+    // Pure: the selected slots the backend says can take this operation,
+    // plus the first one it refused and why. Eligibility is
+    // direction-dependent, so this runs on button press, not when the rows
+    // are built. Out-of-range slots are dropped, not trusted — and there is
+    // no eligibility value to read past the table's end, so no refusal to
+    // name either.
+    struct EligibilitySift {
+        std::vector<int> eligible; ///< selected slots that can run
+        int dropped = -1;          ///< first selected slot refused, -1 when none
+        AmsBackend::FilamentOpEligibility drop_reason = AmsBackend::FilamentOpEligibility::Busy;
+    };
+    static EligibilitySift
+    sift_eligible(const std::vector<int>& selected,
                   const std::vector<AmsBackend::FilamentOpEligibility>& per_slot);
 
     /// What each picker row needs from the backend. Lane presence answers the

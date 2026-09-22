@@ -69,18 +69,27 @@ std::string BatchFilamentModal::row_label(LaneNoun noun, int slot, const SlotInf
     return lane;
 }
 
-std::vector<int>
-BatchFilamentModal::eligible_only(const std::vector<int>& selected,
+BatchFilamentModal::EligibilitySift
+BatchFilamentModal::sift_eligible(const std::vector<int>& selected,
                                   const std::vector<AmsBackend::FilamentOpEligibility>& per_slot) {
-    std::vector<int> keep;
-    keep.reserve(selected.size());
+    EligibilitySift out;
+    out.eligible.reserve(selected.size());
     for (int slot : selected) {
         const auto idx = static_cast<size_t>(slot);
-        if (idx < per_slot.size() && per_slot[idx] == AmsBackend::FilamentOpEligibility::Eligible) {
-            keep.push_back(slot);
+        // total_slots can shrink between the picker opening and the press;
+        // a slot past the eligibility table has no value to read and no
+        // refusal to name.
+        if (idx >= per_slot.size()) {
+            continue;
+        }
+        if (per_slot[idx] == AmsBackend::FilamentOpEligibility::Eligible) {
+            out.eligible.push_back(slot);
+        } else if (out.dropped < 0) {
+            out.dropped = slot;
+            out.drop_reason = per_slot[idx];
         }
     }
-    return keep;
+    return out;
 }
 
 BatchFilamentModal::BatchRowSource BatchFilamentModal::collect_rows(const AmsBackend& backend) {
@@ -160,28 +169,22 @@ void BatchFilamentModal::dispatch(bool load) {
     for (int slot = 0; slot < sys.total_slots; ++slot) {
         per_slot.push_back(backend->slot_op_eligibility(slot, load));
     }
-    const std::vector<int> runnable = eligible_only(slots, per_slot);
-    if (runnable.size() != slots.size()) {
+    const EligibilitySift sift = sift_eligible(slots, per_slot);
+    if (sift.dropped >= 0) {
         // Name the first head we are dropping and why; a batch that silently
         // shrinks is worse than one that explains itself.
-        for (int slot : slots) {
-            const auto e = per_slot[static_cast<size_t>(slot)];
-            if (e != AmsBackend::FilamentOpEligibility::Eligible) {
-                NOTIFY_WARNING("{} {}: {}", lv_tr("Skipped"),
-                               lane_label(backend->lane_noun(), slot),
-                               lv_tr(filament_op_eligibility_reason(e)));
-                break;
-            }
-        }
+        NOTIFY_WARNING("{} {}: {}", lv_tr("Skipped"),
+                       lane_label(backend->lane_noun(), sift.dropped),
+                       lv_tr(filament_op_eligibility_reason(sift.drop_reason)));
     }
-    if (runnable.empty()) {
+    if (sift.eligible.empty()) {
         return; // keep the picker open — nothing was dispatched
     }
 
     spdlog::info("[BatchFilamentModal] {} batch on {} slot(s)", load ? "Load" : "Unload",
-                 runnable.size());
-    AmsError error =
-        load ? backend->load_filament_batch(runnable) : backend->unload_filament_batch(runnable);
+                 sift.eligible.size());
+    AmsError error = load ? backend->load_filament_batch(sift.eligible)
+                          : backend->unload_filament_batch(sift.eligible);
     if (!error.success()) {
         helix::ui::notify_ams_error(error, load ? lv_tr("Batch load failed")
                                                 : lv_tr("Batch unload failed"));
