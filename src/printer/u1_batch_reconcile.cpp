@@ -22,7 +22,15 @@ constexpr const char* CMD_END = "AUTO_FEEDING_BATCH ACTION=END";
 
 void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status) {
     const auto macro = status.find(MACRO_OBJECT);
-    if (macro == status.end() || !macro->is_object() || !macro->value("doing", false)) {
+    if (macro == status.end() || !macro->is_object()) {
+        return;
+    }
+    // `doing` is a save-variable whose JSON type is only as strict as the
+    // firmware that wrote it: a non-bool value is "no reading", never a
+    // crash — an exception here unwinds through the subscribe response
+    // callback and discovery never completes on any connect.
+    const auto doing = macro->find("doing");
+    if (doing == macro->end() || !doing->is_boolean() || !doing->get<bool>()) {
         return;
     }
     // A print in flight owns the interlock: ACTION=END restores the targets

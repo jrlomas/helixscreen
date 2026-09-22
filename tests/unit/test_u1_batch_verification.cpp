@@ -249,3 +249,22 @@ TEST_CASE("No doing variable in the payload is a no-op", "[ams][batch]") {
 
     CHECK(client.sent_gcode.empty());
 }
+
+TEST_CASE("A non-bool doing variable is a no-op that does not throw", "[ams][batch]") {
+    // `doing` is a save-variable: nothing pins its JSON type across firmware
+    // versions, and .value("doing", false) throws type_error.302 on any
+    // non-bool, unwinding through the subscribe response callback.
+    for (const nlohmann::json doing :
+         {nlohmann::json(1), nlohmann::json("1"), nlohmann::json(nullptr)}) {
+        RecordingFakeClient client;
+        const nlohmann::json status = {
+            {"gcode_macro AUTO_FEEDING_BATCH", {{"doing", doing}}},
+            {"print_stats", {{"state", "standby"}}},
+            {"virtual_sdcard", {{"is_active", false}}},
+        };
+
+        REQUIRE_NOTHROW(helix::u1_batch::reconcile_on_connect(client, status));
+
+        CHECK(client.sent_gcode.empty());
+    }
+}
