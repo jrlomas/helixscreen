@@ -612,12 +612,15 @@ TEST_CASE_METHOD(HelixTestFixture, "An edit that moves the brand claims the bran
     CHECK(resolved.color_rgb == 0xFF0000u);
 }
 
-TEST_CASE_METHOD(HelixTestFixture, "An edit that clears the brand keeps it cleared past a restart",
-                 "[lane][migration]") {
-    // A cleared brand is still the user's declaration, and the record's
-    // declared set is the only place that survives a restart. Filing it as
-    // absent would let the very next firmware frame's brand come back,
-    // undoing the clear on every reload.
+TEST_CASE_METHOD(HelixTestFixture,
+                 "An edit that clears a field yields it back to the machine after a restart",
+                 "[lane][migration][1661]") {
+    // A clear means "I don't know", not "this lane has none": no field's clear
+    // is a durable declaration, so nothing may record one. The record the
+    // clear leaves behind declares nothing, and the value the next firmware
+    // frame states lands on the lane again after a reload. Material rides the
+    // same test because its refill was traced by reading and never run
+    // (prestonbrown/helixscreen#1661).
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
     state.init_subjects(false);
@@ -626,26 +629,64 @@ TEST_CASE_METHOD(HelixTestFixture, "An edit that clears the brand keeps it clear
 
     const helix::SlotInfo before = firmware_lane();
     helix::SlotInfo edited = before;
-    edited.brand = "";
 
-    const auto ovr = helix::ams::user_override_from_slot_info(before, edited, nullptr);
-    const nlohmann::json declared = helix::ams::declared_field_names(ovr.declared);
-    REQUIRE(declared.is_array());
-    CHECK(declared.size() == 1);
-    CHECK(declared.at(0) == "brand");
-    CHECK(ovr.brand.empty());
+    const auto cleared = [&]() {
+        const auto ovr = helix::ams::user_override_from_slot_info(before, edited, nullptr);
+        CHECK_FALSE(ovr.declared.any());
 
-    const helix::ams::LaneId lane = reload_into_lane(store, ovr);
-    const auto sources = lane_sources(lane);
+        const helix::ams::LaneId lane = reload_into_lane(store, ovr);
+        CHECK_FALSE(lane_sources(lane).local_user.has_value());
+
+        ingest(lane, correcting_frame());
+        return resolved_lane(lane);
+    };
+
+    SECTION("brand") {
+        edited.brand.clear();
+        CHECK(cleared().brand == "Corrected Brand");
+    }
+    SECTION("spool name") {
+        edited.spool_name.clear();
+        CHECK(cleared().spool_name == "Corrected Spool");
+    }
+    SECTION("vendor id") {
+        edited.spoolman_vendor_id = 0;
+        CHECK(cleared().spoolman_vendor_id == 9);
+    }
+    SECTION("material") {
+        edited.material.clear();
+        CHECK(cleared().material == "PETG");
+    }
+}
+
+TEST_CASE_METHOD(HelixTestFixture,
+                 "a stored record declaring a field it holds nothing in loads as undeclared",
+                 "[lane][migration][1661]") {
+    // A record already on a user's printer can name a field in its declared set
+    // that it carries no value for, written by a build that recorded clears. A
+    // declaration stands over a value, so the name reads as no declaration
+    // rather than as an error or a durable empty, and the machine's value
+    // lands on the lane.
+    using helix::ams::from_lane_data_record;
+    using helix::ams::sources_from_record;
+
+    const nlohmann::json wire{{"lane", 0},
+                              {"spool_name", "Bench Spool"},
+                              {"helix_declared", nlohmann::json::array({"brand", "spool_name"})}};
+    const auto parsed = from_lane_data_record(wire);
+    REQUIRE(parsed.has_value());
+
+    const auto sources = sources_from_record(parsed->second, wire, LegacyLockKeys::LaneData);
     REQUIRE(sources.local_user.has_value());
-    REQUIRE(sources.local_user->brand.has_value());
-    CHECK(sources.local_user->brand->empty());
+    CHECK(sources.local_user->spool_name == "Bench Spool");
+    CHECK_FALSE(sources.local_user->brand.has_value());
 
+    const helix::ams::LaneId lane = lane_id_for(0, 0);
+    CHECK(file_lane_sources(lane, sources));
     Observation frame(ObservationSource::VendorCache);
     frame.brand = "Firmware Brand";
     ingest(lane, frame);
-    REQUIRE(resolved_lane(lane).brand.has_value());
-    CHECK(resolved_lane(lane).brand->empty());
+    CHECK(resolved_lane(lane).brand == "Firmware Brand");
 }
 
 TEST_CASE_METHOD(HelixTestFixture, "An edit that moves the material locks it against the machine",

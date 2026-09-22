@@ -288,7 +288,7 @@ unlinked one is split:
 | What the record holds | Filed as |
 |-----------------------|----------|
 | a `spool_id` above zero | `Spoolman` for the whole identity, except a colour the record's `helix_declared` names, which is `LocalUser`: the colour ladder puts a person above the server. A `helix_locked_*` key on a linked record is not read, since a release 1.0 writer set it on links and meter flushes alike |
-| a field named in the record's `helix_declared` set, colour and material included | `LocalUser`, an emptied brand, spool name or vendor id included: the set is the one home that can say a user cleared a field. Colour and material need a value |
+| a field named in the record's `helix_declared` set, colour and material included | `LocalUser`. A declaration stands over a value the record carries, for every field alike: a clear is not a declaration but "whatever the machine reports", so a field the record holds nothing in is never declared, and a name for it in the set (a record written by a build that recorded clears) reads as no declaration |
 | on a record with no `spool_id`, a colour or material its `helix_declared` does not name, beside a `helix_locked_*` key present and true **on the wire** | `LocalUser`: how a record written before the set could name colour and material is read. Absent or false is `Remembered` |
 | `catalog_id` / `product_name` | `LocalUser` regardless of what the record declares: firmware has no concept of a catalog product, so a value there can only be a pick |
 | anything else the record carries | `Remembered`, which the resolver ranks **below** the current firmware frame |
