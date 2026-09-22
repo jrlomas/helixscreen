@@ -41,6 +41,16 @@ TEST_CASE("the plate-removal code maps to its message", "[snapmaker][exceptions]
             "gives wrong results");
 }
 
+TEST_CASE("the power-loss code maps to its message", "[snapmaker][exceptions]") {
+    // The firmware raises this one through invoke_shutdown rather than
+    // exception_manager; without wording it would surface as an unrecognised
+    // shutdown instead of naming the power loss.
+    const auto c = decode_exception_code("0003-0522-0000-0017");
+    REQUIRE(c.has_value());
+    REQUIRE(exception_message(*c) ==
+            "Power was lost during the print; the printer stopped and saved its progress");
+}
+
 TEST_CASE("the mid-print preference guard maps to its message", "[snapmaker][exceptions]") {
     const auto c = decode_exception_code("0002-0531-0000-0016");
     REQUIRE(c.has_value());

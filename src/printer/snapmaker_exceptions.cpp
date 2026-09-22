@@ -19,7 +19,8 @@ struct KnownException {
     const char* message;
 };
 
-constexpr std::array<KnownException, 2> kKnown{{
+constexpr std::array<KnownException, 3> kKnown{{
+    {522, 0, 17, "Power was lost during the print; the printer stopped and saved its progress"},
     {530, 0, 11,
      "Remove the PEI sheet from the bed, then start again: probing through the sheet "
      "gives wrong results"},

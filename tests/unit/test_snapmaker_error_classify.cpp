@@ -74,6 +74,20 @@ TEST_CASE("a firmware without the code channel classifies nothing", "[snapmaker]
             .has_value());
 }
 
+TEST_CASE("a power-loss shutdown's coded payload classifies", "[snapmaker][classify]") {
+    // The firmware reports a mains loss through invoke_shutdown with the code
+    // in a JSON "coded" field, not through exception_manager. The decoder
+    // scans anywhere in the line, so an error-prefixed line carrying that
+    // payload reads our wording rather than an unrecognised shutdown's.
+    auto e = faultcodes::classify(coded_firmware(),
+                                  R"(error: {"coded": "0003-0522-0000-0017", )"
+                                  R"("msg":"mcu: Power loss triggered", "oneshot": 0})");
+    REQUIRE(e.has_value());
+    REQUIRE(e->code == "0003-0522-0000-0017");
+    REQUIRE(e->detail.find("Power was lost") != std::string::npos);
+    REQUIRE(e->severity == ErrorSeverity::CRITICAL);
+}
+
 TEST_CASE_METHOD(LVGLUITestFixture, "the router surfaces our wording for a coded fault",
                  "[snapmaker][classify]") {
     // Install the capability on the singleton the router reads, then drive the
