@@ -42,4 +42,15 @@ inline const std::vector<std::string>& clean_nozzle() {
     return kPatterns;
 }
 
+/**
+ * @brief The macro that wraps a multi-head filament feed
+ *
+ * Named in four places: the discovery scan that sets the capability flag, the
+ * subscription that requests the macro object, the reconcile that reads its
+ * `doing` interlock from that object, and the backend that resolves the
+ * config-case object key. A drift between any two makes the interlock lookup
+ * miss a key nothing requested, and the cleanup silently does nothing.
+ */
+inline constexpr const char* AUTO_FEEDING_BATCH = "AUTO_FEEDING_BATCH";
+
 } // namespace helix::macro_patterns

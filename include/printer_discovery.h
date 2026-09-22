@@ -567,7 +567,7 @@ class PrinterDiscovery {
                 // snapshot/restore and next-head preheat. Absent on firmware
                 // before 1.6, so the batch path falls back to bare
                 // AUTO_FEEDING per head when this is false.
-                if (upper_macro == "AUTO_FEEDING_BATCH") {
+                if (upper_macro == macro_patterns::AUTO_FEEDING_BATCH) {
                     has_auto_feeding_batch_ = true;
                 }
 

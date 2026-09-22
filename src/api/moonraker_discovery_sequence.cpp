@@ -22,6 +22,7 @@
 #include "macro_executor.h"
 #include "macro_fan_analyzer.h"
 #include "macro_param_cache.h"
+#include "macro_patterns.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "power_device_state.h"
@@ -1453,7 +1454,8 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
         // keeps the config's case for the status object key, so subscribe
         // under the name as written in printer.cfg; a guessed name makes
         // Moonraker reject the whole subscription.
-        const std::string batch_macro = hw.macro_config_name("AUTO_FEEDING_BATCH");
+        const std::string batch_macro =
+            hw.macro_config_name(helix::macro_patterns::AUTO_FEEDING_BATCH);
         if (!batch_macro.empty()) {
             subscription_objects[fmt::format("gcode_macro {}", batch_macro)] = nullptr;
         }
@@ -1668,7 +1670,8 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                     // safe only when no print owns the interlock - the guard
                     // lives in the reconcile itself. The lookup key is the
                     // config-case object name, matching the subscription.
-                    const std::string batch_macro = hw.macro_config_name("AUTO_FEEDING_BATCH");
+                    const std::string batch_macro =
+                        hw.macro_config_name(helix::macro_patterns::AUTO_FEEDING_BATCH);
                     if (!batch_macro.empty()) {
                         // A batch this process dispatched and has not seen
                         // complete owns the interlock, so the reconcile must

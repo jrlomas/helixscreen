@@ -17,6 +17,7 @@
 #include "lane_source_store.h"
 #include "lane_translation.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "macro_patterns.h"
 #include "moonraker_api.h"
 #include "pause_cause.h"
 #include "post_op_cooldown_manager.h"
@@ -312,8 +313,8 @@ void AmsBackendSnapmaker::on_started() {
         // One lookup answers both the script-shape question and the object
         // key: the macro's config-case name is non-empty exactly when the
         // firmware ships it.
-        const std::string macro =
-            get_printer_state().get_discovery().macro_config_name("AUTO_FEEDING_BATCH");
+        const std::string macro = get_printer_state().get_discovery().macro_config_name(
+            helix::macro_patterns::AUTO_FEEDING_BATCH);
         use_batch_macro_ = !macro.empty();
         batch_macro_object_ = macro.empty() ? std::string{} : "gcode_macro " + macro;
     }
