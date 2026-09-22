@@ -194,6 +194,39 @@ TEST_CASE("Snapmaker batch_feed_gcode joins one AUTO_FEEDING line per slot", "[s
     }
 }
 
+TEST_CASE("Snapmaker batch_feed_gcode drives AUTO_FEEDING_BATCH when the firmware has it",
+          "[snapmaker][batch]") {
+    SECTION("load with next-head preheat") {
+        const std::string chain = helix::AmsBackendSnapmaker::batch_feed_gcode(
+            {0, 2, 3}, /*load=*/true, /*use_batch_macro=*/true);
+
+        CHECK(chain == "AUTO_FEEDING_BATCH ACTION=START\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=0 LOAD=1 NEXT_EXTRUDER=2\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=2 LOAD=1 NEXT_EXTRUDER=3\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=3 LOAD=1\n"
+                       "AUTO_FEEDING_BATCH ACTION=END");
+    }
+
+    SECTION("unload keeps the batch sentinels") {
+        const std::string chain = helix::AmsBackendSnapmaker::batch_feed_gcode(
+            {1, 3}, /*load=*/false, /*use_batch_macro=*/true);
+
+        CHECK(chain == "AUTO_FEEDING_BATCH ACTION=START\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=1 UNLOAD=1 NEXT_EXTRUDER=3\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=3 UNLOAD=1\n"
+                       "AUTO_FEEDING_BATCH ACTION=END");
+    }
+
+    SECTION("single slot has no NEXT_EXTRUDER") {
+        const std::string chain = helix::AmsBackendSnapmaker::batch_feed_gcode(
+            {2}, /*load=*/true, /*use_batch_macro=*/true);
+
+        CHECK(chain == "AUTO_FEEDING_BATCH ACTION=START\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=2 LOAD=1\n"
+                       "AUTO_FEEDING_BATCH ACTION=END");
+    }
+}
+
 // ============================================================================
 // do_filament_batch — validation and the single-script dispatch
 // ============================================================================

@@ -306,6 +306,11 @@ AmsBackendSnapmaker::AmsBackendSnapmaker(IMoonrakerAPI* api, helix::IMoonrakerCl
 // ============================================================================
 
 void AmsBackendSnapmaker::on_started() {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        use_batch_macro_ = get_printer_state().get_discovery().has_auto_feeding_batch();
+    }
+
     // Load persisted per-slot overrides (brand, spool name, spoolman IDs, etc.)
     // from the Moonraker DB lane_data namespace BEFORE any status parse runs.
     // AmsSubscriptionBackend::start() registers the WebSocket subscription
@@ -524,7 +529,12 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
     if (!api_) {
         return AmsErrorHelper::not_connected("IMoonrakerAPI not available");
     }
-    const std::string chain = batch_feed_gcode(slots, load);
+    bool use_batch_macro;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        use_batch_macro = use_batch_macro_;
+    }
+    const std::string chain = batch_feed_gcode(slots, load, use_batch_macro);
     const char* tag = backend_log_tag();
     spdlog::info("{} Executing G-code: {}", tag, chain);
     // Sent through api_ rather than the shared execute_gcode() so the timeout
@@ -551,14 +561,33 @@ AmsError AmsBackendSnapmaker::do_filament_batch(const std::vector<int>& slots, b
     return AmsErrorHelper::success();
 }
 
-std::string AmsBackendSnapmaker::batch_feed_gcode(const std::vector<int>& slots, bool load) {
-    std::string chain;
-    for (int slot : slots) {
-        if (!chain.empty()) {
-            chain += '\n';
+std::string AmsBackendSnapmaker::batch_feed_gcode(const std::vector<int>& slots, bool load,
+                                                  bool use_batch_macro) {
+    const char* dir = load ? "LOAD=1" : "UNLOAD=1";
+    if (!use_batch_macro) {
+        std::string chain;
+        for (int slot : slots) {
+            if (!chain.empty()) {
+                chain += '\n';
+            }
+            chain += fmt::format("AUTO_FEEDING EXTRUDER={} {}", slot, dir);
         }
-        chain += fmt::format("AUTO_FEEDING EXTRUDER={} {}", slot, load ? "LOAD=1" : "UNLOAD=1");
+        return chain;
     }
+
+    // START snapshots every hotend target and raises the `doing` interlock;
+    // END restores those targets mid-print and zeroes them when idle. The
+    // firmware refuses a print start while `doing` is set, so END must run.
+    // NEXT_EXTRUDER names the next selected head so the firmware preheats it
+    // while the current one runs; it is omitted on the last.
+    std::string chain = "AUTO_FEEDING_BATCH ACTION=START";
+    for (size_t i = 0; i < slots.size(); ++i) {
+        chain += fmt::format("\nAUTO_FEEDING_BATCH ACTION=DOING EXTRUDER={} {}", slots[i], dir);
+        if (i + 1 < slots.size()) {
+            chain += fmt::format(" NEXT_EXTRUDER={}", slots[i + 1]);
+        }
+    }
+    chain += "\nAUTO_FEEDING_BATCH ACTION=END";
     return chain;
 }
 

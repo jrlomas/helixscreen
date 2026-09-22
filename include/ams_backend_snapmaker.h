@@ -344,13 +344,22 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     [[nodiscard]] static std::string preprint_gcode(const std::set<int>& tools_used,
                                                     const std::map<int, int>& remap);
 
-    /// One multi-line AUTO_FEEDING script covering @p slots, in the order given:
-    /// `AUTO_FEEDING EXTRUDER={n} LOAD=1` (or `UNLOAD=1`), newline-joined with
-    /// no trailing newline. Empty @p slots yields the empty string; the caller
-    /// (do_filament_batch) refuses that before sending. Pure, same reasoning as
-    /// preprint_gcode() above — reads no member state, so it unit-tests
-    /// without a backend or connection.
-    [[nodiscard]] static std::string batch_feed_gcode(const std::vector<int>& slots, bool load);
+    /// One multi-line feed script covering @p slots, in the order given,
+    /// newline-joined with no trailing newline. Empty @p slots yields the
+    /// empty string in the per-line shape (a bare START/END pair in the batch
+    /// shape); the caller (do_filament_batch) refuses empty before sending.
+    ///
+    /// @p use_batch_macro selects the shape: false joins one
+    /// `AUTO_FEEDING EXTRUDER={n} LOAD=1` (or `UNLOAD=1`) line per slot; true
+    /// drives the firmware's AUTO_FEEDING_BATCH state machine, which owns
+    /// preheat and target-restore between the START and END sentinels. The
+    /// default false is the shape every firmware accepts; do_filament_batch
+    /// passes the capability cached in use_batch_macro_.
+    ///
+    /// Pure, same reasoning as preprint_gcode() above — reads no member state,
+    /// so it unit-tests without a backend or connection.
+    [[nodiscard]] static std::string batch_feed_gcode(const std::vector<int>& slots, bool load,
+                                                      bool use_batch_macro = false);
 
     /// The U1's four independent feeders can be driven as one batch: the
     /// firmware sequences per-extruder AUTO_FEEDING itself. Gates the batch
@@ -538,6 +547,12 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     // fires clear_async. Brand / color_name / total_weight_g are preserved —
     // firmware populates them from the RFID tag.
     void clear_override_locked(int slot_index, SlotInfo& slot);
+
+    /// Whether the connected firmware ships the AUTO_FEEDING_BATCH macro,
+    /// cached from PrinterDiscovery in on_started() — discovery is fully
+    /// populated before this backend is constructed. Selects the script shape
+    /// do_filament_batch() builds. All access under mutex_.
+    bool use_batch_macro_ = false;
 
     // Persistent per-slot overrides. Writers (on_started bulk load,
     // apply_user_edit, check_hardware_event_clear) all hold mutex_.
