@@ -674,8 +674,19 @@ AmsBackend::FilamentOpEligibility AmsBackendSnapmaker::slot_op_eligibility(int s
     }
     const ChannelSnapshot snap = channel_snapshot(slot_index);
 
-    if (snap.error != "ok") {
+    // The firmware reports channel_error="no_filament" for ANY empty lane, and
+    // ""/"none" when a channel has nothing to say — none of the three is a
+    // hard fault, or every empty feeder would read as an error.
+    const bool hard_fault = snap.error != "ok" && !snap.error.empty() && snap.error != "none" &&
+                            snap.error != "no_filament";
+    if (hard_fault) {
         return E::Error;
+    }
+    // An empty lane answers Empty ahead of the settled-state test: an idle
+    // empty lane reports an unsettled state ("none"/"inited"), and presence
+    // is knowable even when the state vocabulary is not.
+    if (!snap.filament_detected) {
+        return E::Empty;
     }
     // Only these four are settled states. Anything else is mid-operation or
     // unrecognised, and a batch must not act on a head it cannot describe.
@@ -683,9 +694,6 @@ AmsBackend::FilamentOpEligibility AmsBackendSnapmaker::slot_op_eligibility(int s
                          snap.state == "load_finish" || snap.state == "unload_finish";
     if (!settled) {
         return E::Busy;
-    }
-    if (!snap.filament_detected) {
-        return E::Empty;
     }
     const bool loaded = snap.state == "load_finish";
     if (load && loaded) {

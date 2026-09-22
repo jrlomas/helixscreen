@@ -404,6 +404,24 @@ TEST_CASE_METHOD(BatchFixture, "Snapmaker eligibility follows channel state",
         set_channel(0, "load_finish", "jam", true, true, false);
         CHECK(backend().slot_op_eligibility(0, false) == E::Error);
     }
+    SECTION("an empty lane's no_filament token is Empty, not a feeder error") {
+        // The firmware reports no_filament for any lane without filament;
+        // on a settled state it must not read as a fault.
+        set_channel(0, "wait_insert", "no_filament", /*detected=*/false, true, false);
+        CHECK(backend().slot_op_eligibility(0, true) == E::Empty);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Empty);
+    }
+    SECTION("an unsettled empty lane is still Empty") {
+        // An idle empty lane reports an unsettled state; presence wins.
+        set_channel(0, "none", "no_filament", false, true, false);
+        CHECK(backend().slot_op_eligibility(0, true) == E::Empty);
+    }
+    SECTION("blank and none error tokens are not faults") {
+        set_channel(0, "load_finish", "none", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Eligible);
+        set_channel(0, "load_finish", "", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Eligible);
+    }
     SECTION("manual mode or absent module refuses an otherwise eligible head") {
         set_channel(0, "preload_finish", "ok", true, /*module=*/true, /*no_auto=*/true);
         CHECK(backend().slot_op_eligibility(0, true) == E::FeederUnavailable);
