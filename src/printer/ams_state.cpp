@@ -3489,6 +3489,19 @@ void AmsState::set_external_spool_info_in_memory(const SlotInfo& info) {
 
 void AmsState::set_external_spool_info(const SlotInfo& info) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
+    // Moving the binding to a different spool retires the previous spool's
+    // records, exactly as a slot edit's binding change does: its Spoolman
+    // record, the user's pick, the kept identity and the meter's count all
+    // describe a spool that is no longer bound, and resolve() would keep
+    // ranking them onto the new one. Every persistent writer passes through
+    // here (the edit funnel, the active-spool sync), so the reconcile lives
+    // at the funnel rather than at each caller.
+    const int previous_id = raw_external_spool_info().value_or(SlotInfo{}).spoolman_id;
+    if (previous_id != info.spoolman_id) {
+        helix::ams::drop_previous_spool_declarations(helix::ams::BYPASS_LANE_ID);
+        helix::ams::drop_lane_source(helix::ams::BYPASS_LANE_ID,
+                                     helix::ams::ObservationSource::Metered);
+    }
     in_memory_external_spool_.reset(); // Persistent write wins; let SettingsManager be the source.
     helix::SettingsManager::instance().set_external_spool_info(info);
     notify_external_spool_changed(info);
@@ -3589,11 +3602,9 @@ void AmsState::apply_external_spool_store(const SlotInfo& info) {
     if (info.spoolman_id > 0 || !info.material.empty()) {
         set_external_spool_info(info);
         // The edit files on the bypass lane like a slot edit files on its
-        // lane: when the binding moves, the previous spool's declarations go
-        // with it, then the user's own values stand as LocalUser.
-        if (original.spoolman_id != info.spoolman_id) {
-            helix::ams::drop_previous_spool_declarations(helix::ams::BYPASS_LANE_ID);
-        }
+        // lane: set_external_spool_info() has already taken the previous
+        // spool's records with any binding move, and the user's own values
+        // now stand as LocalUser.
         helix::ams::commit_slot_edit(helix::ams::BYPASS_LANE_ID,
                                      helix::ams::user_edit_observation(original, info));
     } else {

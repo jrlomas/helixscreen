@@ -485,6 +485,58 @@ TEST_CASE("re-linking the external spool drops the previous spool's lane record"
     CHECK(shown->remaining_weight_g == 600.0f);
 }
 
+TEST_CASE("re-binding through the sync funnel drops the previous spool's pick and meter",
+          "[external_spool][1632]") {
+    ExternalSpoolCommitFixture fixture;
+
+    // Spool 1 bound and polled: its record stands, the user picked a colour
+    // for it, and a meter count from the last print is still on the lane.
+    SlotInfo first;
+    first.spoolman_id = 1;
+    first.material = "PLA";
+    first.remaining_weight_g = 400.0f;
+    first.total_weight_g = 1000.0f;
+    AmsState::instance().set_external_spool_info(first);
+    REQUIRE(SpoolmanManager::file_spool_on_lane(helix::ams::BYPASS_LANE_ID, server_spool_1()));
+
+    helix::ams::Observation pick(helix::ams::ObservationSource::LocalUser);
+    pick.color_rgb = 0x00FF00;
+    pick.color_name = "Picked for spool 1";
+    helix::ams::commit_slot_edit(helix::ams::BYPASS_LANE_ID, pick);
+
+    helix::ams::Observation metered(helix::ams::ObservationSource::Metered);
+    metered.remaining_weight_g = 490.0f;
+    helix::ams::ingest(helix::ams::BYPASS_LANE_ID, metered);
+
+    // The setup reached the branch: the pick outranks the spool's colour, and
+    // the meter's count is on the lane.
+    const auto before = helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID);
+    REQUIRE(before.local_user.has_value());
+    REQUIRE(before.metered.has_value());
+    REQUIRE(AmsState::instance().get_external_spool_info()->color_rgb == 0x00FF00);
+
+    // Another client sets the active spool: the notify handler's write, which
+    // reaches the lane through this same setter.
+    SlotInfo second;
+    second.spoolman_id = 2;
+    second.material = "PETG";
+    second.color_rgb = 0xFF0000;
+    second.remaining_weight_g = 600.0f;
+    second.total_weight_g = 750.0f;
+    AmsState::instance().set_external_spool_info(second);
+
+    // All three of spool 1's records are gone, so nothing of it paints spool 2.
+    const auto sources = helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID);
+    CHECK_FALSE(sources.spoolman.has_value());
+    CHECK_FALSE(sources.local_user.has_value());
+    CHECK_FALSE(sources.metered.has_value());
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->spoolman_id == 2);
+    CHECK(shown->color_rgb == 0xFF0000);
+    CHECK(shown->remaining_weight_g == 600.0f);
+}
+
 TEST_CASE("clearing the external spool resets the bypass lane", "[external_spool][1632]") {
     ExternalSpoolCommitFixture fixture;
 
