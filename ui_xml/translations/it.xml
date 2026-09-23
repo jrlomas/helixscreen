@@ -2083,7 +2083,7 @@
   <translation tag="Printing label..." it="Stampa etichetta in corso..."/>
   <translation tag="Printing test label..." it="Stampa etichetta di prova..."/>
   <translation tag="Printing with the wrong material can cause clogs, poor adhesion, or failed prints." it="Stampare con il materiale sbagliato può causare ostruzioni, scarsa adesione o stampe fallite."/>
-  <translation tag="Printing: start after this job"/>
+  <translation tag="Printing: start after this job" it="In stampa: avvia dopo questa stampa"/>
   <translation tag="Prints" it="Stampe"/>
   <translation tag="Prints Trend" it="Tendenza stampe"/>
   <translation tag="Private:" it="Privato:"/>

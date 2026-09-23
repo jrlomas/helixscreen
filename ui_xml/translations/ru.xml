@@ -2083,7 +2083,7 @@
   <translation tag="Printing label..." ru="Печать этикетки..."/>
   <translation tag="Printing test label..." ru="Печать тестовой этикетки..."/>
   <translation tag="Printing with the wrong material can cause clogs, poor adhesion, or failed prints." ru="Печать неподходящим материалом может привести к засорам, плохой адгезии или неудачным печатям."/>
-  <translation tag="Printing: start after this job"/>
+  <translation tag="Printing: start after this job" ru="Идёт печать: начать после этой печати"/>
   <translation tag="Prints" ru="Печати"/>
   <translation tag="Prints Trend" ru="Тренд печатей"/>
   <translation tag="Private:" ru="Закрытая:"/>

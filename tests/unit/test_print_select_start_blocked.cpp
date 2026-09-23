@@ -93,9 +93,13 @@ TEST_CASE_METHOD(StartBlockedFixture, "print select blocks start and states why 
     }
 
     // Terminal states release the block and clear the reason.
-    set_print_state(PrintJobState::COMPLETE);
-    CHECK(can_print() == 1);
-    CHECK(blocked_reason().empty());
+    for (PrintJobState s :
+         {PrintJobState::COMPLETE, PrintJobState::CANCELLED, PrintJobState::ERROR}) {
+        set_print_state(s);
+        CAPTURE(static_cast<int>(s));
+        CHECK(can_print() == 1);
+        CHECK(blocked_reason().empty());
+    }
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture, "a panel initialized mid-print starts blocked",

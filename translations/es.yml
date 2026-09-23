@@ -2297,7 +2297,7 @@ translations:
   Printing test label...: Imprimiendo etiqueta de prueba...
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: Imprimir
     con el material incorrecto puede causar atascos, mala adhesión o impresiones fallidas.
-  'Printing: start after this job': ''
+  'Printing: start after this job': 'Imprimiendo: inicia tras esta impresión'
   Prints: Impresiones
   Prints Trend: Tendencia de Impresiones
   'Private:': 'Privado:'

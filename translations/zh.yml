@@ -2131,7 +2131,7 @@ translations:
   Printing label...: 正在打印标签...
   Printing test label...: 正在打印测试标签...
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: 使用错误的耗材打印可能导致堵塞、附着力差或打印失败。
-  'Printing: start after this job': ''
+  'Printing: start after this job': '打印中：本次打印完成后开始'
   Prints: 打印次数
   Prints Trend: 打印趋势
   'Private:': 私有：
