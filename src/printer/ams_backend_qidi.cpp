@@ -878,6 +878,19 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
         sensed.present = slot_status_reports_filament(s->status);
         helix::ams::ingest(lane_id(i), sensed);
     }
+
+    // Lay each slot's resolved lane over the machine paint, last, so a field
+    // the user declared outranks this frame's tag reading: an edit stays on
+    // screen between its SAVE_VARIABLE dispatch and the echo, and a stored
+    // edit shows again after a restart. Only fields some source observed are
+    // written, so a lane no one declared against keeps the tag's own paint,
+    // and the status overlay runs through presence filed from the reconciled
+    // stamp above, which is what has_per_slot_loaded_authority() promises.
+    for (int i = 0; i < slot_count; ++i) {
+        if (auto* slot = system_info_.get_slot_global(i)) {
+            apply_resolved_lane(*slot, i);
+        }
+    }
 }
 
 void AmsBackendQidi::apply_filas_list(const std::string& content) {
@@ -1059,6 +1072,10 @@ SlotInfo AmsBackendQidi::get_slot_info(int slot_index) const {
     }
     const auto* slot = system_info_.get_slot_global(slot_index);
     return slot ? *slot : SlotInfo{};
+}
+
+SlotInfo* AmsBackendQidi::cached_slot_locked(int slot_index) {
+    return system_info_.get_slot_global(slot_index);
 }
 
 bool AmsBackendQidi::is_bypass_active() const {

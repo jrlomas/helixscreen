@@ -131,6 +131,12 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     }
 
   protected:
+    // The Box's slots are painted SlotInfo state that persists between
+    // save_variables polls, not re-read from firmware each pass, so a lane
+    // written from outside the parse (a person's edit) names the slot here and
+    // repaint_slot_from_lane() reaches it before the next poll arrives.
+    SlotInfo* cached_slot_locked(int slot_index) override;
+
     // Operations. Gated by AmsSubscriptionBackend's NVI wrapper.
     // select_slot_moves_toolhead() stays false: do_select_slot() is
     // not_supported here — load_filament is the only path.
@@ -330,8 +336,8 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// Observe one slot's tag fingerprint and clear a standing user edit when
     /// it changed for a reason other than our own identity push. Caller must
     /// hold mutex_. Returns whether the change cleared an override.
-    [[nodiscard]] bool check_hardware_event_clear(SlotInfo& slot, int slot_index,
-                                                  const std::string& observed_uid);
+    bool check_hardware_event_clear(SlotInfo& slot, int slot_index,
+                                    const std::string& observed_uid);
 
     /// Erase the slot's override in both stores (the in-memory map and the
     /// persisted record) and reset the override-exclusive fields on the live
