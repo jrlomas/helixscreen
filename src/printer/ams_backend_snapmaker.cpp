@@ -1465,12 +1465,7 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                 has_extruder_data = true;
             }
         }
-        // Re-assert when the tool changed OR when only current_slot drifted
-        // from it: a filament operation's working head moves current_slot
-        // alone (see the channel_state loop), and carriage evidence must be
-        // able to take it back without waiting for the tool itself to change.
-        if (has_extruder_data &&
-            (active != system_info_.current_tool || active != system_info_.current_slot)) {
+        if (has_extruder_data && active != system_info_.current_tool) {
             // Demote previous active tool from LOADED to AVAILABLE
             if (system_info_.current_tool >= 0 && system_info_.current_tool < NUM_TOOLS) {
                 auto* prev_slot = system_info_.units[0].get_slot(system_info_.current_tool);
@@ -1630,6 +1625,7 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
         // Parse filament_feed left/right — top-level Klipper objects (not nested in
         // filament_detect) Each contains per-extruder state: filament_detected, channel_state,
         // channel_error
+        int in_progress_head = -1;
         for (const auto& feed_key : {"filament_feed left", "filament_feed right"}) {
             if (status.contains(feed_key) && status[feed_key].is_object()) {
                 const auto& feed = status[feed_key];
@@ -1743,26 +1739,12 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                             }
                         }
 
-                        // The sidebar header names the head being WORKED ON,
-                        // not the one physically on the carriage. During a
-                        // batch the plan knows it (the cursor head); outside a
-                        // batch, the head reporting an in-progress state is
-                        // the one. The toolhead pins the active-tool block
-                        // above reads still name the previous tool through
-                        // most of an unload, which is exactly when the header
-                        // must already say which head is being unloaded.
-                        // current_tool keeps the carriage truth; only
-                        // current_slot (the header's source) follows the work.
-                        int working_head = -1;
-                        if (batch_.active) {
-                            working_head = batch_.heads[batch_.cursor];
-                        } else if (info.action == AmsAction::LOADING ||
-                                   info.action == AmsAction::UNLOADING) {
-                            working_head = i;
-                        }
-                        if (working_head >= 0 && system_info_.current_slot != working_head) {
-                            system_info_.current_slot = working_head;
-                            changed = true;
+                        // Capture the head whose channel is mid-op; the single
+                        // derivation of operation_working_slot below decides
+                        // what the header names from it (batch cursor wins).
+                        if (in_progress_head < 0 && (info.action == AmsAction::LOADING ||
+                                                     info.action == AmsAction::UNLOADING)) {
+                            in_progress_head = i;
                         }
 
                         // "Loaded at toolhead" latch (the core fix). Driven purely
@@ -1955,6 +1937,26 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                     }
                 }
             }
+        }
+
+        // ONE derivation of "the head an operation is working on": the batch
+        // cursor while a plan is active, else the head whose channel reported
+        // an in-progress state, else none. A toolhead-only delta carries no
+        // channel evidence, so mid-op it keeps the previous answer instead of
+        // flapping the header back to the carriage tool. current_slot is NOT
+        // touched here: it stays the carriage answer its other consumers
+        // (bypass unload, filament panel gating, the loaded card) read.
+        int working_slot = -1;
+        if (batch_.active) {
+            working_slot = batch_.heads[batch_.cursor];
+        } else if (system_info_.action == AmsAction::LOADING ||
+                   system_info_.action == AmsAction::UNLOADING) {
+            working_slot =
+                (in_progress_head >= 0) ? in_progress_head : system_info_.operation_working_slot;
+        }
+        if (system_info_.operation_working_slot != working_slot) {
+            system_info_.operation_working_slot = working_slot;
+            changed = true;
         }
 
         // The batch macro's `doing` save-variable is the firmware's own word

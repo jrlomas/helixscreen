@@ -27,6 +27,7 @@
 #include "ams_error.h"
 #include "ams_types.h"
 #include "app_globals.h"
+#include "helix-xml/src/xml/lv_xml.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
@@ -601,27 +602,39 @@ TEST_CASE_METHOD(BatchFixture, "A backend without the override stays permissive"
 }
 
 // ============================================================================
-// The sidebar header names the head being WORKED ON: current_slot follows the
-// batch cursor (or the in-progress channel outside a batch), not the tool the
-// carriage happens to hold mid-operation.
+// operation_working_slot: the one derivation of "the head an operation is
+// working on" (batch cursor while a batch runs, else the in-progress channel,
+// else none). The sidebar header reads it through AmsState; current_slot
+// stays the carriage answer throughout.
 // ============================================================================
 
-TEST_CASE_METHOD(BatchFixture, "A batch unload's header names the head being unloaded",
+TEST_CASE_METHOD(BatchFixture,
+                 "A batch unload's working head is the cursor head, not the carriage tool",
                  "[snapmaker][batch][ams]") {
     // The device sequence: batch-unloading heads 1 and 3 while the carriage
-    // still reports tool 3 (the previous head). Before the fix the header read
-    // "3" for ~30s per head, until the toolhead evidence caught up.
+    // still reports tool 3 (the previous head). The header must name the head
+    // being unloaded, and the carriage answers must not move at all.
     feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
     REQUIRE(backend().get_system_info().current_slot == 3);
+    REQUIRE(backend().get_system_info().units[0].get_slot(3)->status == helix::SlotStatus::LOADED);
 
     helix::SnapmakerTestAccess::set_batch_plan(backend(), {1, 3}, /*load=*/false, "Unload", "of");
     set_channel(1, "unload_homing", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
-    CHECK(backend().get_system_info().current_slot == 1);
+    CHECK(backend().get_system_info().operation_working_slot == 1);
+
+    // A toolhead-only delta mid-batch carries no channel evidence: the working
+    // head stays 1, the carriage slot stays 3, and slot 3's status does not
+    // flap through a demote/re-promote cycle.
+    feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
+    CHECK(backend().get_system_info().operation_working_slot == 1);
+    CHECK(backend().get_system_info().current_slot == 3);
+    CHECK(backend().get_system_info().units[0].get_slot(3)->status == helix::SlotStatus::LOADED);
 
     // The cursor advances to head 3; its in-progress frame renames the header
     // without any toolhead evidence moving yet.
     set_channel(1, "unload_finish", "ok", true, true, false);
     set_channel(3, "unload_homing", "ok", true, true, false);
+    CHECK(backend().get_system_info().operation_working_slot == 3);
     CHECK(backend().get_system_info().current_slot == 3);
 
     SECTION("the cursor head wins over a stray in-progress frame") {
@@ -630,23 +643,40 @@ TEST_CASE_METHOD(BatchFixture, "A batch unload's header names the head being unl
         // the batch is working.
         helix::SnapmakerTestAccess::set_batch_plan(backend(), {0, 2}, /*load=*/true, "Load", "of");
         set_channel(2, "load_feeding", "ok", true, true, false);
-        CHECK(backend().get_system_info().current_slot == 0);
+        CHECK(backend().get_system_info().operation_working_slot == 0);
+    }
+
+    SECTION("the header subject names the working head, not the carriage tool") {
+        helix::AmsState::instance().init_subjects(true);
+        helix::AmsState::instance().sync_from_backend();
+        lv_subject_t* header = lv_xml_get_subject(nullptr, "ams_current_slot_text");
+        REQUIRE(header != nullptr);
+        // Head 3 is 0-based; lane labels are 1-based over the heads. The
+        // fixture resets the language, so the format renders as written.
+        CHECK(std::string(lv_subject_get_string(header)) ==
+              "Current: " + helix::ui::lane_label(backend().lane_noun(), 3));
     }
 }
 
-TEST_CASE_METHOD(BatchFixture, "A standalone unload's header names the unloading head",
+TEST_CASE_METHOD(BatchFixture, "A standalone unload's working head is the unloading head",
                  "[snapmaker][batch][ams]") {
     feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
     REQUIRE(backend().get_system_info().current_slot == 3);
 
     // No batch armed: the head reporting an in-progress state is the one.
     set_channel(1, "unload_homing", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
-    CHECK(backend().get_system_info().current_slot == 1);
+    CHECK(backend().get_system_info().operation_working_slot == 1);
+    CHECK(backend().get_system_info().current_slot == 3);
 
-    // At rest (terminal state, nothing in progress) the toolhead evidence is
-    // the truth again and nothing fights it.
-    set_channel(1, "unload_finish", "ok", true, true, false);
+    // A toolhead-only delta mid-op carries no channel evidence, so the
+    // working head keeps its answer rather than flapping to the carriage tool.
     feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
+    CHECK(backend().get_system_info().operation_working_slot == 1);
+
+    // At rest (terminal state resolves the action) no head is being worked
+    // and the header falls back to the carriage tool.
+    set_channel(1, "unload_finish", "ok", true, true, false);
+    CHECK(backend().get_system_info().operation_working_slot == -1);
     CHECK(backend().get_system_info().current_slot == 3);
 }
 
