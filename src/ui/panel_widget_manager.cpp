@@ -467,6 +467,20 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
     const CellMetrics place_metrics = grid_cell_metrics(content_w, content_h, grid_dims.cols,
                                                         grid_dims.rows, GridLayout::gutter_px());
 
+    // Hand the measured tracks to every tile BEFORE the placement pass asks
+    // fits_at(). TileSizing's whole-cell floor must be measured against the
+    // tracks this content box actually built: quantising to the nearest whole
+    // cell can deliver a track smaller than the tier's GRID_CELL target
+    // (31.25px against 34 at 480x272), and a tile left on the nominal target
+    // rejects its authored span, grows, and lands on a later anchor.
+    for (auto& slot : enabled_widgets) {
+        if (slot.instance) {
+            if (TileSizing* sizing = slot.instance->tile_sizing()) {
+                sizing->set_cell_metrics(place_metrics);
+            }
+        }
+    }
+
     // Correlate widget entries with config entries to get grid positions
     const auto& entries = widget_config.page_entries(page_index);
 
@@ -798,7 +812,7 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
 
     for (const auto& p : placed) {
         if (p.colspan != p.want_colspan || p.rowspan != p.want_rowspan) {
-            spdlog::debug("[PanelWidgetManager] Widget '{}' placed at reduced span {}x{} "
+            spdlog::debug("[PanelWidgetManager] Widget '{}' placed at span {}x{} "
                           "(wanted {}x{}, grid is {}x{})",
                           enabled_widgets[p.slot_index].widget_id, p.colspan, p.rowspan,
                           p.want_colspan, p.want_rowspan, grid.cols(), grid.rows());
@@ -900,8 +914,10 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
     lv_obj_set_style_pad_row(container, gutter, 0);
 
     // Compute cell pixel dimensions for size callbacks and card backgrounds.
-    // Same content box the track counts came from, so the two cannot disagree.
-    CellMetrics metrics = grid_cell_metrics(content_w, content_h, cols, grid_rows, gutter);
+    // Same derivation the placement pass used, not a second one: the promise a
+    // widget is sized against and the fits_at() answers that seated it must
+    // come from one CellMetrics.
+    const CellMetrics& metrics = place_metrics;
     int cell_w = static_cast<int>(metrics.cell_w);
     int cell_h = static_cast<int>(metrics.cell_h);
     spdlog::debug("[PanelWidgetManager] Track geometry: {:.2f}x{:.2f}px, gutter {}px",
@@ -1219,7 +1235,6 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
             if (slot.instance && !slot.hardware_gated) {
                 if (auto* sizing = slot.instance->tile_sizing()) {
                     sizing->set_content_root(widget);
-                    sizing->set_cell_metrics(metrics);
                 }
                 slot.instance->attach(widget, lv_scr_act());
 
