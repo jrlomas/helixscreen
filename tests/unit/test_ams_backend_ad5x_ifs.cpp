@@ -11761,6 +11761,65 @@ TEST_CASE("a dropped Spoolman record takes its brand off an AD5X port",
     helix::ui::UpdateQueue::instance().drain();
 }
 
+TEST_CASE("an external CHANGE_ZCOLOR retires the released colour's name",
+          "[ams][ad5x_ifs][lane][1672]") {
+    // The colour name is lane-only identity on IFS: firmware has no name key
+    // and a Spoolman record cannot carry one, so the struct holds whatever the
+    // user's edit wrote until a paint retires it. The release that fires on an
+    // external CHANGE_ZCOLOR strips the name from the override and the lane's
+    // records - "the name travels with the colour it names" - but writes
+    // neither store onto the struct, so the paint that follows is the only
+    // thing that can take the name off the port.
+    Ad5xIfsTmpCacheDir tmp("change_zcolor_retires_colour_name");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    helix::test::RegisteredBackend<AmsBackendAd5xIfs> backend_reg(&api, nullptr);
+    AmsBackendAd5xIfs& backend = *backend_reg;
+    Ad5xIfsTestAccess::set_running(backend, true);
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
+
+    Ad5xIfsTestAccess::set_port_presence(backend, 0, true);
+    Ad5xIfsTestAccess::set_color(backend, 0, "FEF043");
+    Ad5xIfsTestAccess::set_material(backend, 0, "PLA");
+
+    // The colour has to MOVE for the lock to land, and the brand gives the
+    // record identity worth keeping, so the external edit takes the Strip
+    // release rather than the full clear (which would empty the struct
+    // directly and prove nothing about the paint).
+    SlotInfo edit;
+    edit.brand = "Sunlu";
+    edit.material = "PLA";
+    edit.color_rgb = 0x1A73E8;
+    edit.color_name = "Sky Blue";
+    REQUIRE(helix::test::apply_edit(backend, 0, edit).success());
+
+    SlotInfo before = backend.get_slot_info(0);
+    REQUIRE(before.color_name == "Sky Blue");
+    auto staged = Ad5xIfsTestAccess::get_override(backend, 0);
+    REQUIRE(staged.has_value());
+    REQUIRE(staged->color_name == "Sky Blue");
+
+    // AD5X native LCD load/insert: a bare CHANGE_ZCOLOR. SLOT is 1-based.
+    REQUIRE_FALSE(
+        Ad5xIfsTestAccess::on_gcode_response_line(backend, "CHANGE_ZCOLOR SLOT=1 TYPE=PLA"));
+
+    SlotInfo after = backend.get_slot_info(0);
+    CHECK(after.color_name.empty());
+    // The brand is firmware-uncarryable identity: it survives the same edit.
+    CHECK(after.brand == "Sunlu");
+    auto ovr_after = Ad5xIfsTestAccess::get_override(backend, 0);
+    REQUIRE(ovr_after.has_value());
+    CHECK(ovr_after->color_name.empty());
+    CHECK(ovr_after->brand == "Sunlu");
+}
+
 TEST_CASE("an external AD5X type change leaves a linked lane's Spoolman material standing",
           "[ams][ad5x_ifs][filament_slot_override][1653]") {
     // A linked spool owns its material. Firmware's own type still shows beneath
