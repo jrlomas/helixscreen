@@ -9,10 +9,10 @@
 # HelixScreen Installer
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+#   curl -sSL https://releases.helixscreen.org/install.sh | sh
 #
 # Or download and run:
-#   wget https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh
+#   wget https://releases.helixscreen.org/install.sh
 #   chmod +x install.sh
 #   ./install.sh
 #
@@ -1417,6 +1417,11 @@ detect_platform() {
 # Echoes: platform key to use when constructing release archive URLs
 get_download_platform() {
     local detected=$1
+    # k1 and ad5x download their own board-name assets: every release line
+    # publishes them (the release/1.0 line builds them natively; main-line
+    # releases upload them as aliases of the unified mips build, see the
+    # upload step in .github/workflows/release.yml), so the board name is the
+    # one download name every release carries.
     case "$detected" in
         m1)
             # Artillery M1 Pro is a Debian SBC. The pi/pi32 binary runs as-is.
@@ -1428,10 +1433,6 @@ get_download_platform() {
             else
                 echo "pi"
             fi
-            ;;
-        k1|ad5x)
-            # Board spellings of the unified MIPS binary.
-            echo "mips"
             ;;
         *)
             echo "$detected"
@@ -1453,17 +1454,19 @@ get_download_platform() {
 #
 # Convention: a platform's asset is helixscreen-<platform>.zip. The borrows:
 # m1 -> pi/pi32 by userspace bitness (get_download_platform), and the MIPS board
-# spellings -> the unified mips asset. ONE static binary serves the Creality K1
-# series and the FlashForge AD5X; k1, ad5x and the k1-dynamic dev/debug variant
-# (not built by the release matrix) all ride helixscreen-mips.zip. release-mips
-# also publishes identical-content helixscreen-k1.zip / -ad5x.zip aliases so
-# already-deployed binaries that compute those names still find an update.
+# spellings -> the unified mips asset, mapped right here because
+# get_download_platform names fresh-install downloads by board. ONE static
+# binary serves the Creality K1 series and the FlashForge AD5X; k1, ad5x and
+# the k1-dynamic dev/debug variant (not built by the release matrix) all ride
+# helixscreen-mips.zip. release-mips also publishes identical-content
+# helixscreen-k1.zip / -ad5x.zip aliases so already-deployed binaries that
+# compute those names still find an update.
 #
 # Args: platform (detected platform key)
 # Echoes: release asset filename, e.g. helixscreen-pi.zip
 helix_self_update_asset() {
     case "$1" in
-        k1-dynamic) echo "helixscreen-mips.zip" ;;
+        k1|ad5x|k1-dynamic) echo "helixscreen-mips.zip" ;;
         *)          echo "helixscreen-$(get_download_platform "$1").zip" ;;
     esac
 }
@@ -13132,6 +13135,19 @@ main() {
     fi
     log_info "Target version: ${BOLD}${version}${NC}"
 
+    # Download/stage the release archive BEFORE any step that modifies the
+    # running printer (stock-UI disable, competing-UI shutdown, old-install
+    # cleanup, service stop): a failed download must leave the machine exactly
+    # as it was - stock UI enabled, old install intact, service running. The
+    # download also needs the network, and stopping UIs can take it away
+    # (e.g. Snapmaker U1's stock GUI owns wpa_supplicant, so restarting it
+    # drops WiFi/SSH mid-update).
+    if [ -n "$local_tarball" ]; then
+        use_local_tarball "$local_tarball"
+    else
+        download_release "$version" "$download_platform"
+    fi
+
     # Configure platform-specific settings before stopping UIs
     configure_platform
 
@@ -13141,17 +13157,6 @@ main() {
     # Clean old installation if requested
     if [ "$clean_mode" = true ]; then
         clean_old_installation "$platform"
-    fi
-
-    # Download/stage the release archive BEFORE stopping the service.
-    # Stopping helixscreen first can disrupt the network on some platforms
-    # (e.g. Snapmaker U1 where platform_post_stop restarts the stock GUI which
-    # owns wpa_supplicant and drops WiFi/SSH mid-update). Staging first also
-    # means a failed download leaves the running service untouched.
-    if [ -n "$local_tarball" ]; then
-        use_local_tarball "$local_tarball"
-    else
-        download_release "$version" "$download_platform"
     fi
 
     if [ "$update_mode" = true ]; then
