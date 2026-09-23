@@ -384,6 +384,32 @@ enter for it.
 
 ## 6. Clear semantics
 
+Clear Spool erases everything HelixScreen and the printer's firmware remember
+about that slot; what's left afterwards is only what the hardware can
+physically read right now. How close each backend gets to that bar is set by
+what its firmware can be told to forget:
+
+- **AD5X IFS, AFC, CFS on Kalico and Tool Changer** reach it — their write
+  paths cover the firmware-held fields, and the tool changer's store is the
+  only record there is, so dropping it erases everything.
+- **Happy Hare and QIDI Box** keep firmware-side state (the gate map, the
+  box's `SAVE_VARIABLE`s) past a clear for now; nuclear firmware wipes for
+  both are landing on their own branches.
+- **ACE, Snapmaker and stock CFS cannot** — read-only API, no empty spelling
+  for a slot value, and the tag is re-read on the next probe — so their
+  tag-derived and firmware-held values survive a clear.
+
+The gesture also refuses while its lane feeds an active print
+(`clear_spool_blocked_by_print()` in `include/filament_op_slot_resolver.h`):
+the job holds the machine (`job_holds_machine()`) and the lane is the one at
+the toolhead (`AmsBackend::slot_is_actively_loaded()`), so the material and
+colour the print's own surfaces are displaying survive until the job ends.
+The context menu greys the button with the reason (`ams_slot_can_clear` /
+`ams_slot_clear_hint`); the dispatch guard in `ams_dispatch_backend_action()`
+is the authority for a caller holding a menu rendered before the print
+started. Other lanes stay clearable mid-print, and a free machine clears any
+lane, loaded or not.
+
 Four distinct clear paths, handled separately:
 
 - **User-initiated clear.** The AMS context menu's "Clear Spool" gesture

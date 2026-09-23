@@ -187,6 +187,13 @@ class AmsContextMenu : public ContextMenu {
     static lv_subject_t slot_unload_hint_subject_;
     static lv_subject_t slot_unload_hint_visible_subject_;
     static char slot_unload_hint_buf_[128];
+    /// 1 = Clear Spool enabled, 0 = the lane feeds the active print, so the
+    /// clear must wait (clear_spool_blocked_by_print()). The reason rides the
+    /// hint pair below, same shape as the unload hint.
+    static lv_subject_t slot_can_clear_subject_;
+    static lv_subject_t slot_clear_hint_subject_;
+    static lv_subject_t slot_clear_hint_visible_subject_;
+    static char slot_clear_hint_buf_[192];
     static bool subjects_initialized_;
 
     // === Backend reference for dropdown operations ===

@@ -11,9 +11,12 @@
 #include "ui_utils.h"
 
 #include "ams_state.h"
+#include "app_globals.h" // get_printer_state — the print lifecycle the clear guard reads
 #include "display_numbering.h"
-#include "filament_op_dispatch.h" // EXTERNAL_SPOOL_SLOT — the bypass sentinel
+#include "filament_op_dispatch.h"      // EXTERNAL_SPOOL_SLOT — the bypass sentinel
+#include "filament_op_slot_resolver.h" // clear_spool_blocked_by_print — the print guard
 #include "printer_detector.h"
+#include "printer_state.h" // PrinterState, complete for get_print_lifecycle()
 #include "ui/ams_drawing_utils.h"
 
 #if HELIX_HAS_CFS
@@ -772,6 +775,17 @@ bool ams_dispatch_backend_action(AmsContextMenu::MenuAction action, int slot,
         if (slot == EXTERNAL_SPOOL_SLOT) {
             AmsState::instance().commit_external_spool_edit(SlotInfo{});
             NOTIFY_INFO(lv_tr("External spool cleared"));
+            break;
+        }
+
+        // The menu greys its Clear button for this case, but this function is
+        // public and its callers can hold a menu built before the print
+        // started, so the guard here is the authority: the lane a job is
+        // drawing from is the lane whose material and colour the print's own
+        // surfaces are displaying (prestonbrown/helixscreen#1661).
+        if (helix::ui::clear_spool_blocked_by_print(get_printer_state().get_print_lifecycle(),
+                                                    backend->slot_is_actively_loaded(slot))) {
+            NOTIFY_WARNING("{}", helix::ui::clear_spool_blocked_hint(backend->lane_noun(), slot));
             break;
         }
 

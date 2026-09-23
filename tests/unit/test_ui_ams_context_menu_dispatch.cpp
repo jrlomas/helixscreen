@@ -22,8 +22,12 @@
 
 #include "../lvgl_ui_test_fixture.h"
 #include "../test_helpers/backend_user_edit.h"
+#include "../test_helpers/print_state_test_drivers.h"
+#include "../ui_test_utils.h"
 #include "ams_backend_mock.h"
 #include "ams_state.h"
+#include "app_globals.h"
+#include "filament_op_slot_resolver.h"
 
 #include <cstddef>
 #include <memory>
@@ -162,4 +166,131 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams context menu: subjects outlive every me
     CHECK(lv_xml_get_subject(nullptr, "ams_slot_can_load") == can_load_before);
     second.reset();
     CHECK(lv_xml_get_subject(nullptr, "ams_slot_can_load") == can_load_before);
+}
+
+// ============================================================================
+// Clear Spool vs an active print
+// ============================================================================
+
+namespace {
+
+/// Pin the print lifecycle for one case and restore a machine-free state on
+/// the way out, even when an assertion throws. The lifecycle subject outlives
+/// every test in this binary (the fixture resets plain data, not subject
+/// values), and CLEAR_SPOOL's behaviour depends on it — a case that died with
+/// Printing latched would change what any later test's clear is allowed to do.
+struct LifecycleGuard {
+    explicit LifecycleGuard(PrintState state) {
+        if (state == PrintState::Preparing) {
+            // Preparing is phase-derived, not a print_stats state, so the wire
+            // driver cannot name it — the enum value is the sanctioned route
+            // (print_state_test_drivers.h).
+            lv_subject_set_int(get_printer_state().get_print_lifecycle_subject(),
+                               static_cast<int>(PrintState::Preparing));
+        } else {
+            helix::test::set_wire_state(get_printer_state(), wire_job_state(state));
+        }
+    }
+    ~LifecycleGuard() {
+        helix::test::set_wire_state(get_printer_state(), helix::PrintJobState::STANDBY);
+    }
+
+  private:
+    static helix::PrintJobState wire_job_state(PrintState state) {
+        switch (state) {
+        case PrintState::Printing:
+            return helix::PrintJobState::PRINTING;
+        case PrintState::Paused:
+            return helix::PrintJobState::PAUSED;
+        case PrintState::Idle:
+        case PrintState::Complete:
+        case PrintState::Cancelled:
+        case PrintState::Error:
+        case PrintState::Preparing:
+            break;
+        }
+        return helix::PrintJobState::STANDBY;
+    }
+};
+
+} // namespace
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "ams dispatch: Clear Spool refuses on the lane feeding an active print",
+                 "[ui][ams][context_menu][dispatch][1661]") {
+    install_mock_backend();
+    auto* backend = static_cast<helix::AmsBackendMock*>(helix::AmsState::instance().get_backend());
+    REQUIRE(backend != nullptr);
+
+    // The warning hook is the seam the commit-slot tests use for this same
+    // dispatch function; severity is pinned by which hook the toast lands in
+    // (an info-severity toast would reach the info hook and this stays empty).
+    std::vector<std::string> warnings;
+    helix::ui::set_test_notification_warning_hook(
+        [&](const std::string& msg) { warnings.push_back(msg); });
+
+    // create_mock() seeds slot 0 as the loaded, current lane — the one a job
+    // draws from. Everything the clear would erase is still there afterwards.
+    REQUIRE(backend->slot_is_actively_loaded(0));
+
+    size_t warnings_index = 0;
+    for (const PrintState busy :
+         {PrintState::Preparing, PrintState::Printing, PrintState::Paused}) {
+        INFO("lifecycle = " << static_cast<int>(busy));
+        LifecycleGuard hold(busy);
+
+        const helix::SlotInfo before = backend->get_slot_info(0);
+        REQUIRE_FALSE(before.material.empty()); // something to refuse erasing
+
+        // Handled (true) with a refusal toast, not silently swallowed.
+        REQUIRE(helix::ui::ams_dispatch_backend_action(MenuAction::CLEAR_SPOOL, 0, nullptr));
+        // Exactly one refusal per lifecycle state, so a state that stops
+        // refusing fails here rather than being averaged into the final count.
+        CHECK(warnings.size() == warnings_index + 1);
+        ++warnings_index;
+
+        const helix::SlotInfo after = backend->get_slot_info(0);
+        CHECK(after.material == before.material);
+        CHECK(after.color_rgb == before.color_rgb);
+        CHECK(after.color_name == before.color_name);
+        CHECK(after.spoolman_id == before.spoolman_id);
+        CHECK(after.remaining_weight_g == before.remaining_weight_g);
+    }
+
+    helix::ui::set_test_notification_warning_hook(nullptr);
+
+    REQUIRE(warnings.size() == 3);
+    for (const std::string& message : warnings) {
+        // The mock speaks Happy Hare, whose positions are gates (1-based).
+        CHECK(message.find("Gate 1") != std::string::npos);
+        CHECK(message.find("feeding the current print") != std::string::npos);
+    }
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "ams dispatch: Clear Spool still clears other lanes mid-print and any lane idle",
+                 "[ui][ams][context_menu][dispatch][1661]") {
+    install_mock_backend();
+    auto* backend = static_cast<helix::AmsBackendMock*>(helix::AmsState::instance().get_backend());
+    REQUIRE(backend != nullptr);
+
+    SECTION("a lane the job is not drawing from clears mid-print") {
+        LifecycleGuard hold(PrintState::Printing);
+        REQUIRE_FALSE(backend->slot_is_actively_loaded(1));
+        REQUIRE(helix::ui::ams_dispatch_backend_action(MenuAction::CLEAR_SPOOL, 1, nullptr));
+
+        const helix::SlotInfo after = backend->get_slot_info(1);
+        CHECK(after.material.empty());
+        CHECK(after.spoolman_id == 0);
+    }
+
+    SECTION("the loaded lane clears once the machine is free") {
+        LifecycleGuard hold(PrintState::Idle);
+        REQUIRE(backend->slot_is_actively_loaded(0));
+        REQUIRE(helix::ui::ams_dispatch_backend_action(MenuAction::CLEAR_SPOOL, 0, nullptr));
+
+        const helix::SlotInfo after = backend->get_slot_info(0);
+        CHECK(after.material.empty());
+        CHECK(after.spoolman_id == 0);
+    }
 }

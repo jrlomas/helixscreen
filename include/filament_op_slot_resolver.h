@@ -220,6 +220,37 @@ struct MachineOpGating {
 }
 
 /**
+ * @brief Whether Clear Spool must refuse on this lane right now.
+ *
+ * Clearing erases what HelixScreen and the firmware remember about the lane —
+ * and while a job holds the machine, the lane actively loaded into the toolhead
+ * is the one that job is drawing from. Clearing it mid-job wipes the material
+ * and colour every print surface is displaying for the running print, so the
+ * gesture refuses until the job ends. Other lanes stay clearable (the job is
+ * not printing from them), and a free machine clears any lane, loaded or not.
+ *
+ * job_holds_machine(), deliberately NOT print_blocks_filament_op(): that
+ * predicate's whole point is letting PAUSED through for the pause-then-swap
+ * filament ops, but a clear is not moving filament — it is deleting the
+ * feeding lane's identity out from under the job that will resume from it.
+ * Preparing refuses for the same reason: the job is committed and will draw
+ * from this lane.
+ *
+ * Both surfaces that ask (the context menu's affordance and
+ * ams_dispatch_backend_action()'s guard) call this, so the rule cannot fork
+ * between what is offered and what is refused.
+ *
+ * @param lifecycle             The derived PrintState (print_lifecycle subject).
+ * @param slot_actively_loaded  AmsBackend::slot_is_actively_loaded(slot): the
+ *                              backend's own answer for "is this the lane at
+ *                              the toolhead".
+ */
+[[nodiscard]] inline bool clear_spool_blocked_by_print(PrintState lifecycle,
+                                                       bool slot_actively_loaded) {
+    return job_holds_machine(lifecycle) && slot_actively_loaded;
+}
+
+/**
  * @brief The AMS sidebar's Unload button as an OpButtonState.
  *
  * That button has a fixed shape: its availability is the aggregate "something is

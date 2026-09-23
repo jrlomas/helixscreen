@@ -37,6 +37,10 @@ lv_subject_t AmsContextMenu::slot_mounts_tool_subject_;
 lv_subject_t AmsContextMenu::slot_unload_hint_subject_;
 lv_subject_t AmsContextMenu::slot_unload_hint_visible_subject_;
 char AmsContextMenu::slot_unload_hint_buf_[128];
+lv_subject_t AmsContextMenu::slot_can_clear_subject_;
+lv_subject_t AmsContextMenu::slot_clear_hint_subject_;
+lv_subject_t AmsContextMenu::slot_clear_hint_visible_subject_;
+char AmsContextMenu::slot_clear_hint_buf_[192];
 
 // ============================================================================
 // Construction / Destruction
@@ -53,6 +57,10 @@ void AmsContextMenu::init_subjects() {
     lv_subject_init_int(&slot_unload_hint_visible_subject_, 0);
     lv_subject_init_string(&slot_unload_hint_subject_, slot_unload_hint_buf_, nullptr,
                            sizeof(slot_unload_hint_buf_), "");
+    lv_subject_init_int(&slot_can_clear_subject_, 1);
+    lv_subject_init_int(&slot_clear_hint_visible_subject_, 0);
+    lv_subject_init_string(&slot_clear_hint_subject_, slot_clear_hint_buf_, nullptr,
+                           sizeof(slot_clear_hint_buf_), "");
 
     lv_xml_register_subject(nullptr, "ams_slot_is_loaded", &slot_is_loaded_subject_);
     lv_xml_register_subject(nullptr, "ams_slot_can_load", &slot_can_load_subject_);
@@ -61,6 +69,10 @@ void AmsContextMenu::init_subjects() {
     lv_xml_register_subject(nullptr, "ams_slot_unload_hint", &slot_unload_hint_subject_);
     lv_xml_register_subject(nullptr, "ams_slot_unload_hint_visible",
                             &slot_unload_hint_visible_subject_);
+    lv_xml_register_subject(nullptr, "ams_slot_can_clear", &slot_can_clear_subject_);
+    lv_xml_register_subject(nullptr, "ams_slot_clear_hint", &slot_clear_hint_subject_);
+    lv_xml_register_subject(nullptr, "ams_slot_clear_hint_visible",
+                            &slot_clear_hint_visible_subject_);
 
     subjects_initialized_ = true;
 }
@@ -253,6 +265,14 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
             lv_obj_clear_flag(btn_clear, LV_OBJ_FLAG_HIDDEN);
         }
 
+        // The bypass clear erases the external spool's own assignment, not a
+        // lane's metadata, so a print never blocks it. The subjects are shared
+        // with the lane menu (one menu on screen at a time), so a lane's
+        // refusal must not bleed into this menu's button and hint.
+        lv_subject_set_int(&slot_can_clear_subject_, 1);
+        lv_subject_copy_string(&slot_clear_hint_subject_, "");
+        lv_subject_set_int(&slot_clear_hint_visible_subject_, 0);
+
         // Show "Select Spool" and "Scan QR Code" if Spoolman is available
         auto* spoolman_subj = lv_xml_get_subject(nullptr, "printer_has_spoolman");
         bool has_spoolman = spoolman_subj && lv_subject_get_int(spoolman_subj) == 1;
@@ -402,6 +422,21 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
         if (btn_clear && should_show_clear_spool(slot_info)) {
             lv_obj_clear_flag(btn_clear, LV_OBJ_FLAG_HIDDEN);
         }
+
+        // The lane feeding the running print is the lane whose material and
+        // colour the print's own surfaces are displaying; clearing it mid-job
+        // deletes that out from under the job. The button greys out with the
+        // reason beside it, and ams_dispatch_backend_action() refuses the same
+        // case independently — a menu rendered before the print started keeps
+        // its old subject values until it is rebuilt.
+        const bool clear_blocked = helix::ui::clear_spool_blocked_by_print(
+            lifecycle, backend_->slot_is_actively_loaded(slot_index));
+        lv_subject_set_int(&slot_can_clear_subject_, clear_blocked ? 0 : 1);
+        const std::string clear_hint =
+            clear_blocked ? helix::ui::clear_spool_blocked_hint(backend_->lane_noun(), slot_index)
+                          : std::string();
+        lv_subject_copy_string(&slot_clear_hint_subject_, clear_hint.c_str());
+        lv_subject_set_int(&slot_clear_hint_visible_subject_, clear_hint.empty() ? 0 : 1);
     }
 
     // The header names the position in the backend's own word ("Lane 3",
