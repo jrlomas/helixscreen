@@ -4800,7 +4800,7 @@ _host_ships_a_stock_ui() {
 # Stop the QIDI stock screen in the two shapes COMPETING_UIS cannot name.
 # Sets found_any in the caller's scope, like the sibling handlers.
 stop_qidi_competing_uis() {
-    local bin unit unit_path
+    local bin unit unit_path stopped=false
 
     # Units before binaries: the stock screen unit sets Restart=always with
     # StartLimitIntervalSec=0, and its start script runs the client a second
@@ -4820,6 +4820,7 @@ stop_qidi_competing_uis() {
         $SUDO systemctl disable "$unit" 2>/dev/null || true
         record_disabled_service "systemd" "$unit"
         found_any=true
+        stopped=true
     done
 
     for bin in $QIDI_STOCK_UI_BINS; do
@@ -4831,7 +4832,15 @@ stop_qidi_competing_uis() {
         $SUDO chmod a-x "$bin" 2>/dev/null || true
         record_disabled_service "sysv-chmod" "$bin"
         found_any=true
+        stopped=true
     done
+
+    # The stock client also supplies the MQTT link credentials and the QIDI Box
+    # filament state, so replacing it costs more than the screen.
+    if [ "$stopped" = true ]; then
+        log_warn "QIDI Studio box sync, QIDI cloud and QIDI Box filament edits depend on the stock QIDI client"
+        log_warn "and will not work while HelixScreen replaces it. Uninstalling HelixScreen restores them."
+    fi
 }
 
 # Ensure SSH (dropbear) is running and will start on boot.
