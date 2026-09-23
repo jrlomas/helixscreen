@@ -859,6 +859,85 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a denied external spool keeps its freshest identity",
+                 "[spoolman][lane][1632]") {
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA"; // the link-time stub
+    ext.remaining_weight_g = 400.0F;
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+
+    // The server edits the spool to PETG and the next poll carries that; the
+    // delete that follows must keep the PETG view, not revert to the stub.
+    server_spool(1).material = "PETG";
+    poll();
+    REQUIRE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+
+    remove_server_spool(1);
+    poll();
+
+    auto sources = helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID);
+    CHECK_FALSE(sources.spoolman.has_value());
+    // A delete is bookkeeping, not a spool change: what the resolved view
+    // carried goes back on the lane as remembered, the way a denied slot's
+    // does.
+    REQUIRE(sources.remembered.has_value());
+    CHECK(sources.remembered->material == "PETG");
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->material == "PETG");
+    CHECK(shown->brand == "Polymaker");
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a denial in flight does not touch a newer binding",
+                 "[spoolman][lane][1632]") {
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA";
+    ext.remaining_weight_g = 400.0F;
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+    REQUIRE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+
+    remove_server_spool(1);
+    fetch(); // the mock answers inside the call; the denial is queued, not run
+
+    // Another client rebinds the bypass to spool 2 and its own fetch files
+    // before the denial drains.
+    SlotInfo ext2;
+    ext2.spoolman_id = 2;
+    ext2.material = "ABS";
+    ext2.remaining_weight_g = 600.0F;
+    ext2.total_weight_g = 750.0F;
+    AmsState::instance().set_external_spool_info(ext2);
+    SpoolInfo& s2 = server_spool(2);
+    s2.vendor = "Prusa";
+    s2.material = "ABS";
+    s2.initial_weight_g = 750.0;
+    s2.remaining_weight_g = 600.0;
+    REQUIRE(SpoolmanManager::file_spool_on_lane(helix::ams::BYPASS_LANE_ID, s2));
+
+    drain(); // the denial for spool 1 runs now
+
+    auto sources = helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID);
+    REQUIRE(sources.spoolman.has_value());
+    CHECK(sources.spoolman->spoolman_id == 2);
+    CHECK_FALSE(sources.remembered.has_value());
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->spoolman_id == 2);
+    CHECK(shown->remaining_weight_g == 600.0F);
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
                  "SpoolmanManager: a linked lane's catalog pick survives a fetch of its spool",
                  "[spoolman][lane][1653]") {
     helix::test::RegisteredBackend<AmsBackendMock> backend(2);

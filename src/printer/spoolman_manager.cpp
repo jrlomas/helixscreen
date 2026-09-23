@@ -568,12 +568,48 @@ void SpoolmanManager::refresh_spoolman_weights() {
                     helix::ui::queue_update(
                         "SpoolmanManager::ext_unresolvable", [ext_spoolman_id]() {
                             note_identity_unresolvable(ext_spoolman_id);
-                            // Same contract as a denied slot: the record described a
-                            // spool Spoolman no longer knows, so it stops being a
-                            // source the resolved read can rank.
+                            if (s_shutdown_flag.load(std::memory_order_acquire)) {
+                                return;
+                            }
+                            AmsState& state = AmsState::instance();
+                            const auto raw = state.raw_external_spool_info();
+                            if (!raw.has_value() || raw->spoolman_id != ext_spoolman_id) {
+                                // The binding moved while this denial was in
+                                // flight; its records were already retired by
+                                // the rebind, and a newer spool's records are
+                                // not this denial's to touch.
+                                return;
+                            }
+                            // Same contract as a denied slot: the record described
+                            // a spool Spoolman no longer knows, so it stops being
+                            // a source the resolved read can rank. The resolved
+                            // view is captured first, while the record still
+                            // stands, and what it carried goes back on the lane
+                            // as remembered - a delete is bookkeeping, not a
+                            // spool change, and the display keeps the freshest
+                            // identity it had. The kept record names no spool
+                            // (both binding ids zeroed) or the record
+                            // translation would stand the Spoolman record just
+                            // dropped right back up.
+                            const bool had_record =
+                                helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID)
+                                    .spoolman.has_value();
+                            const std::optional<SlotInfo> kept_view =
+                                state.get_external_spool_info();
                             helix::ams::drop_lane_source(helix::ams::BYPASS_LANE_ID,
                                                          helix::ams::ObservationSource::Spoolman);
-                            AmsState::instance().bump_slots_version();
+                            if (had_record && kept_view.has_value()) {
+                                SlotInfo kept = *kept_view;
+                                kept.spoolman_id = 0;
+                                kept.spoolman_filament_id = 0;
+                                const helix::ams::Observation nothing_declared(
+                                    helix::ams::ObservationSource::Remembered);
+                                helix::ams::file_kept_identity(
+                                    helix::ams::BYPASS_LANE_ID, -2,
+                                    helix::ams::user_override_from_slot_info(
+                                        nothing_declared, kept, kept.material, nullptr));
+                            }
+                            state.bump_slots_version();
                         });
                     return;
                 }
