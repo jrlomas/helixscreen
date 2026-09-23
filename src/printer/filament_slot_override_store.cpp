@@ -417,6 +417,11 @@ nlohmann::json to_lane_data_record(int slot_index, const FilamentSlotOverride& o
         j["total_weight_g"] = o.total_weight_g;
     if (!o.color_name.empty())
         j["color_name"] = o.color_name;
+    // Swap-detection bookkeeping, never user data; omitted when empty so a
+    // lane without a fingerprinting backend squats no names in this shared
+    // namespace.
+    if (!o.fingerprint.empty())
+        j["helix_fingerprint"] = o.fingerprint;
     return j;
 }
 
@@ -493,6 +498,10 @@ std::optional<std::pair<int, FilamentSlotOverride>> from_lane_data_record(const 
     // which .value() would throw type_error.302 on.
     o.catalog_id = helix::json_util::safe_string(j, "helix_catalog_id");
     o.product_name = helix::json_util::safe_string(j, "helix_product_name");
+    // Swap-detection bookkeeping. Absent on records written before the key
+    // existed, which is the "first observation is a baseline" compatibility
+    // rule, so the default empty string is the correct reading of its absence.
+    o.fingerprint = helix::json_util::safe_string(j, "helix_fingerprint");
     // Last, because the rule reads what was parsed above: a lock key counts
     // only on an unlinked record, and a colour or material declaration only
     // over a value. The legacy rule for a record with no helix_declared key
@@ -566,6 +575,7 @@ nlohmann::json to_json(const FilamentSlotOverride& o) {
         {"declared", declared_field_names(o.declared)},
         {"bed_temp", o.bed_temp},
         {"nozzle_temp", o.nozzle_temp},
+        {"fingerprint", o.fingerprint},
         {"updated_at", format_iso8601(o.updated_at)},
     };
 }
@@ -603,6 +613,7 @@ FilamentSlotOverride from_json(const nlohmann::json& j) {
     o.product_name = helix::json_util::safe_string(j, "product_name");
     o.bed_temp = helix::json_util::safe_int(j, "bed_temp", 0);
     o.nozzle_temp = helix::json_util::safe_int(j, "nozzle_temp", 0);
+    o.fingerprint = helix::json_util::safe_string(j, "fingerprint");
     if (j.contains("updated_at") && j["updated_at"].is_string()) {
         o.updated_at = parse_iso8601(j["updated_at"].get<std::string>());
     }
@@ -687,6 +698,11 @@ FilamentSlotOverride user_override_from_slot_info(const Observation& declaration
     // profile; the material-DB fallback for fields left at 0 is applied at
     // emit time inside resolved_temps().
     populate_temps_from_slot_info(ovr, edited);
+    // Tracker bookkeeping, not an editable value: the fingerprint describes
+    // the spool the record was last seen against, so a rebuilt record inherits
+    // it from the one it replaces and an edit cannot strand the lane without
+    // one.
+    ovr.fingerprint = prior != nullptr ? prior->fingerprint : std::string{};
     // updated_at left default: save_async stamps a fresh value.
     return ovr;
 }
@@ -1879,13 +1895,25 @@ FingerprintEvent SlotFingerprintTracker::observe(int slot_index, const std::stri
     if (observed.empty())
         return FingerprintEvent::NoSignal;
 
+    // Fires on Baseline/Unchanged/OwnWriteEcho only; see set_baseline_sink.
+    // Runs after the baseline maps are updated for this event where they are
+    // (Baseline stores it below before the call), inline and under the
+    // caller's lock.
+    auto confirm_baseline = [this, slot_index, &observed]() {
+        if (baseline_sink_)
+            baseline_sink_(slot_index, observed);
+    };
+
     auto it = baseline_.find(slot_index);
     if (it == baseline_.end()) {
         baseline_[slot_index] = observed;
+        confirm_baseline();
         return FingerprintEvent::Baseline;
     }
-    if (it->second == observed)
+    if (it->second == observed) {
+        confirm_baseline();
         return FingerprintEvent::Unchanged;
+    }
 
     if (previous)
         *previous = it->second;
@@ -1908,6 +1936,7 @@ FingerprintEvent SlotFingerprintTracker::observe(int slot_index, const std::stri
             exp->second.erase(eit);
             if (exp->second.empty())
                 expected_.erase(exp);
+            confirm_baseline();
             return FingerprintEvent::OwnWriteEcho;
         }
     }
@@ -1966,6 +1995,32 @@ LoadedOverrideStore make_loaded_override_store(IMoonrakerAPI* api, std::string b
     spdlog::info("{} Loaded {} slot overrides from filament_slot store", log_tag,
                  result.overrides.size());
     return result;
+}
+
+void bind_fingerprint_persistence(SlotFingerprintTracker& tracker, FilamentSlotOverrideStore* store,
+                                  std::unordered_map<int, FilamentSlotOverride>& overrides) {
+    for (const auto& [slot, ovr] : overrides) {
+        if (!ovr.fingerprint.empty())
+            tracker.seed_baseline(slot, ovr.fingerprint);
+    }
+    if (!store)
+        return;
+    tracker.set_baseline_sink([&overrides, store](int slot, const std::string& fingerprint) {
+        auto it = overrides.find(slot);
+        // No record means nothing for a swap to clear, so a fingerprint under
+        // it has no job; an equal one means the record is already current.
+        if (it == overrides.end() || it->second.fingerprint == fingerprint)
+            return;
+        it->second.fingerprint = fingerprint;
+        const FilamentSlotOverride snapshot = it->second;
+        store->save_async(slot, snapshot, [slot](bool success, const std::string& err) {
+            if (!success) {
+                spdlog::warn("[FilamentSlotOverrideStore] fingerprint persist for slot {} "
+                             "failed: {}",
+                             slot, err);
+            }
+        });
+    });
 }
 
 bool clear_persisted_override(FilamentSlotOverrideStore* store,

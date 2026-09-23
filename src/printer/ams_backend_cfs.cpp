@@ -360,6 +360,8 @@ void AmsBackendCfs::on_started() {
             std::lock_guard<std::mutex> lock(mutex_);
             override_store_ = std::move(loaded.store);
             overrides_ = std::move(loaded.overrides);
+            helix::ams::bind_fingerprint_persistence(rfid_tracker_, override_store_.get(),
+                                                     overrides_);
         }
     }
 

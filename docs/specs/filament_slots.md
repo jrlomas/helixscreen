@@ -1,6 +1,6 @@
 # Filament Slot Metadata — `lane_data` Convention
 
-**Status**: Informational, v1.9 (2026-09). See [Changelog](#changelog).
+**Status**: Informational, v1.10 (2026-09). See [Changelog](#changelog).
 
 This document describes HelixScreen's use of the `lane_data` Moonraker database
 namespace to share per-slot filament metadata with OrcaSlicer and other tools.
@@ -204,6 +204,7 @@ throw on unknown keys).
 | `helix_locked_color` | boolean | optional | `true` / `false` | Whether the record declares its `color` as the user's own choice, written by HelixScreen from `helix_declared` (true exactly when `helix_declared` names `color_rgb`), so an older reader of the namespace sees the same authorship. **Always emitted when HelixScreen authors the record, `false` included.** HelixScreen reads it only for a record whose `helix_declared` does not name `color_rgb`: on a record with no `spool_id`, a true value beside a colour the record carries is the user's declaration; false, absent, or any value on a record with a `spool_id` is not. | HelixScreen (`to_lane_data_record()`). |
 | `helix_locked_material` | boolean | optional | `true` / `false` | The same statement about `material` / `helix_material`, true exactly when `helix_declared` names `material`. Always emitted, `false` included, and read on the same terms as `helix_locked_color`. | HelixScreen (`to_lane_data_record()`). |
 | `helix_declared` | array of strings | optional | JSON array of field names | The authorship statement for the identity fields, colour and material included. A name in the array says the user entered or cleared that field themselves. The names are HelixScreen's own field names, not this record's key names: `color_rgb` names the field written as `color`, `material` the field written as `material` / `helix_material`, `brand` names the field written as `vendor` / `vendor_name`, `spool_name` the field written as `spool_name` / `name`, and `spoolman_vendor_id` is spelled the same either way. **Always emitted when HelixScreen authors the record, the empty array included**: an empty array says the record claims none of them, which an implementer has to be able to tell from a record written before the key existed. **Absent** means the latter. | HelixScreen (`to_lane_data_record()`). |
+| `helix_fingerprint` | string | optional | backend-specific slot identity | The spool identity HelixScreen's hardware-swap detection last observed on this lane (an RFID CARD_UID list for tag readers, or a composite of the identity fields a box firmware reports). Not user data and not filament metadata: it exists so that after a HelixScreen restart the first observation is compared against the stored value — a mismatch means the spool was swapped while the app was down, which clears the record — instead of every first observation reading as a new baseline. Omitted when empty, which is every record for a lane with no identity-reading hardware and every record written before this key existed; absence is read as "no comparison possible", never as a mismatch. Other tools should carry it through unchanged on rewrite, same as the authorship keys. | HelixScreen (`to_lane_data_record()`). |
 
 Fields are emitted only when present. Empty strings, zero, and negative floats
 are treated as "not set" and omitted from the written record — reducing noise
@@ -345,7 +346,13 @@ Per backend:
 
 Clearing is a `DELETE` on the slot's `lane_data` key. The first observation
 after startup establishes the baseline fingerprint and is NOT treated as a
-swap — otherwise every app launch would wipe overrides.
+swap — otherwise every app launch would wipe overrides. For backends whose
+fingerprint is hardware-read (Snapmaker `CARD_UID`, CFS composites), the
+baseline travels with the record as `helix_fingerprint` (§3), so the first
+observation after a restart is a comparison against the stored value: a match
+is the same spool, a mismatch is a swap made while HelixScreen was not running
+and clears the record. Records without the key — including everything written
+before it existed — keep the first-observation-is-a-baseline rule.
 
 Where firmware reports a spool id while a spool is loaded (AFC, Happy Hare),
 the eject half of that signal is user-configurable in HelixScreen: the
@@ -557,6 +564,12 @@ reader can resolve.
 
 ## Changelog
 
+- **v1.10 (2026-09-22)**: New optional extension key `helix_fingerprint` (§3):
+  the slot identity HelixScreen's hardware-swap detection last observed,
+  persisted so a restart can compare rather than treat every first observation
+  as a baseline (§6). Omitted when empty; absence keeps the old
+  first-observation rule, so records written by earlier versions and by other
+  tools are unaffected.
 - **v1.9 (2026-09-15)**: `helix_declared` names `color_rgb` and `material` as
   well, and `helix_locked_color` / `helix_locked_material` are written from it.
   A reader takes a lock key only for a field `helix_declared` does not name, on
