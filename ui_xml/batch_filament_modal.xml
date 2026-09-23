@@ -17,20 +17,12 @@
       <text_heading name="batch_title" width="100%" bind_text="batch_filament_title_text" style_text_align="center"/>
       <ui_multiselect name="batch_multiselect"/>
     </lv_obj>
-    <!-- Two-button footer hand-rolled like modal_dialog.xml's: the primary
-         caption is the opening direction, so it arrives by subject, which
-         modal_button_row's literal text props cannot express. -->
-    <divider_horizontal/>
-    <lv_obj width="100%" height="#button_height" style_pad_all="0" style_pad_gap="0" flex_flow="row">
-      <ui_button name="btn_secondary"
-                 height="100%" variant="secondary" flex_grow="1" style_radius="0" style_border_width="0"
-                 focusable="false" text="Cancel" translation_tag="Cancel">
-        <!-- NOTE: Callbacks wired programmatically per-instance (a real Cancel), not via XML -->
-      </ui_button>
-      <divider_vertical/>
-      <ui_button name="btn_primary"
-                 height="100%" flex_grow="1" style_radius="0" style_border_width="0" focusable="false"
-                 bind_text="batch_filament_action_text"/>
-    </lv_obj>
+    <!-- The shared footer row. The primary caption names the opening
+         direction, so it arrives by subject; running it feeds or unloads
+         filament, so it carries the toolhead guard. Callbacks are wired
+         programmatically per-instance (a real Cancel), not via XML. -->
+    <modal_button_row secondary_variant="secondary"
+                      secondary_text="Cancel" secondary_tag="Cancel" primary_subject="batch_filament_action_text"
+                      primary_moves_machine="true"/>
   </view>
 </component>

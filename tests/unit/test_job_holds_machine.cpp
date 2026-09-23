@@ -309,6 +309,7 @@ constexpr const char* kGuardAttribute = "moves_machine=\"true\"";
 /// literal "false" as true, so `moves_machine="false"` is an attribute that
 /// carries no guard while reading like a deliberate one.
 constexpr const char* kGuardAttributeName = "moves_machine=\"";
+constexpr const char* kSocketGuard = "moves_machine=\"$";
 
 struct GuardedFile {
     const char* path;
@@ -317,10 +318,15 @@ struct GuardedFile {
 
 /// Files whose controls carry a toolhead guard, and how many each carries.
 constexpr GuardedFile kGuardedFiles[] = {
-    {"ui_xml/ams_device_operations.xml", 1},  {"ui_xml/calibration_tool_offset_panel.xml", 2},
-    {"ui_xml/components/ams_sidebar.xml", 1}, {"ui_xml/components/panel_widget_bypass.xml", 1},
-    {"ui_xml/controls_panel.xml", 10},        {"ui_xml/header_bar.xml", 1},
-    {"ui_xml/micro/controls_panel.xml", 10},  {"ui_xml/micro/header_bar.xml", 1},
+    {"ui_xml/ams_device_operations.xml", 1},
+    {"ui_xml/batch_filament_modal.xml", 1},
+    {"ui_xml/calibration_tool_offset_panel.xml", 2},
+    {"ui_xml/components/ams_sidebar.xml", 1},
+    {"ui_xml/components/panel_widget_bypass.xml", 1},
+    {"ui_xml/controls_panel.xml", 10},
+    {"ui_xml/header_bar.xml", 1},
+    {"ui_xml/micro/controls_panel.xml", 10},
+    {"ui_xml/micro/header_bar.xml", 1},
     {"ui_xml/motion_panel.xml", 2},
 };
 
@@ -431,6 +437,7 @@ constexpr const char* kNoMachineControlFiles[] = {
     "ui_xml/create_vendor_modal.xml",
     "ui_xml/debug_bundle_modal.xml",
     "ui_xml/estop_confirmation_dialog.xml",
+    "ui_xml/exclude_object_modal.xml",
     "ui_xml/factory_reset_modal.xml",
     "ui_xml/fan_dial.xml",
     "ui_xml/fan_rename_modal.xml",
@@ -484,6 +491,7 @@ constexpr const char* kNoMachineControlFiles[] = {
     "ui_xml/portrait/print_tune_panel.xml",
     "ui_xml/power_device_row.xml",
     "ui_xml/print_completion_modal.xml",
+    "ui_xml/print_cancel_confirm_modal.xml",
     "ui_xml/print_file_card.xml",
     "ui_xml/print_file_detail.xml",
     "ui_xml/print_file_list_row.xml",
@@ -614,9 +622,10 @@ std::vector<std::string> walk_ui_xml() {
 /// spell their handler `callback="..."`; the rest are containers made clickable
 /// and the primitive widgets that are clickable by nature.
 bool declares_a_control(const std::string& xml) {
-    for (const char* marker : {"callback=\"", "clickable=\"true\"", "<ui_button", "<lv_button",
-                               "<ui_switch", "<lv_switch", "<lv_slider", "<lv_dropdown",
-                               "<lv_checkbox", "<lv_roller", "<text_input", "<lv_textarea"}) {
+    for (const char* marker :
+         {"callback=\"", "clickable=\"true\"", "<ui_button", "<lv_button", "<ui_switch",
+          "<lv_switch", "<lv_slider", "<lv_dropdown", "<lv_checkbox", "<lv_roller", "<text_input",
+          "<lv_textarea", "<modal_button_row"}) {
         if (xml.find(marker) != std::string::npos) {
             return true;
         }
@@ -656,7 +665,12 @@ struct GuardScan {
 GuardScan scan_guards(const std::string& xml) {
     GuardScan scan;
     scan.recognized = count_occurrences(xml, kGuardAttribute);
-    scan.attributes = count_occurrences(xml, kGuardAttributeName);
+    // A `moves_machine="$prop"` socket is the component plumbing that carries
+    // a caller's decision, not a guard decision itself: the caller's literal
+    // is what the census row at the call site counts, so subtract the socket
+    // here or the template reads as carrying its own guard.
+    scan.attributes =
+        count_occurrences(xml, kGuardAttributeName) - count_occurrences(xml, kSocketGuard);
     return scan;
 }
 
