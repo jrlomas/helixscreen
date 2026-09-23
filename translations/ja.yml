@@ -20,7 +20,7 @@ translations:
   '%s has about %.0fg but %s needs about %.0fg. Start anyway?': '%s の残量は約 %.0fg ですが、%s には約 %.0fg 必要です。それでも開始しますか？'
   '%s has no filament loaded — this print will run out.': '%s にフィラメントが装填されていません — この印刷は途中で切れます。'
   '%s needs filament in %s, which is empty — this print will run out.': '%s は %s のフィラメントを必要としますが、空です — この印刷は途中で切れます。'
-  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': ''
+  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': '%s は %s を使用しますが、フィラメントはあるのに材料が設定されていません。設定するまでプリンターは開始しません。'
   '%s: %.0fg of %.0fg needed': '%s: %.0fg（必要 %.0fg）'
   '%u layers': '%uレイヤー'
   '%zu changes': '%zu件の変更'
@@ -102,6 +102,7 @@ translations:
   A newer version of the helper macros is available: 'ヘルパーマクロの新しいバージョンが利用可能です'
   A picture of your printer: プリンターの画像
   A print is in progress - restart still pending: '印刷中です - 再起動は保留中'
+  A print is running on this gate. HelixScreen cleared its own copy; clear it again once the print finishes.: このゲートで印刷中です。HelixScreen 側のコピーはクリアしました。印刷終了後に再度クリアしてください。
   A spool may be tangled or the drive gear is jammed: スプールが絡まっているか、駆動ギアが詰まっている可能性があります
   ABS: ABS
   ACCELEROMETERS: 加速度センサー
@@ -230,6 +231,7 @@ translations:
   Auto-probe or manually check screw heights: 自動プローブまたは手動でネジの高さを確認
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: 自動補充はオンですが、フィラメントが一致するスロットが2つないため、フィラメント切れになっても何も切り替わりません
   Auto-render video: 動画を自動レンダリング
+  'Auto-replenish filament': 'フィラメントを自動補充'
   Auto-tuning Shapers...: シェーパーを自動調整中...
   Auto-uninstall only works on local Moonraker: 自動アンインストールはローカルの Moonraker でのみ動作します
   Automatic: 自動
@@ -671,7 +673,9 @@ translations:
   Could not update filaments: フィラメントを更新できませんでした
   Could not verify Spoolman status. Moonraker may still be restarting.: Spoolman のステータスを確認できませんでした。Moonraker
     がまだ再起動中の可能性があります。
+  Couldn't clear the printer's gate map: プリンターのゲートマップをクリアできませんでした
   Couldn't save the material name: '材料名を保存できませんでした'
+  Couldn't save the printer's gate map: プリンターのゲートマップを保存できませんでした
   Couldn't save to Spoolman. Nothing changed on this printer.: Spoolman に保存できませんでした。このプリンターでは何も変更されていません。
   Cover open: カバーが開いています
   Crash Report: クラッシュレポート
@@ -747,6 +751,7 @@ translations:
   Deploy: 展開
   Describe the issue (optional): 問題の詳細（任意）
   Detailed: 詳細
+  'Detect filament tangles': 'フィラメントの絡みを検出'
   Detecting plate...: プレートを検出中...
   Detecting printer type...: プリンタータイプを検出中...
   Detecting...: 検出中...
@@ -1122,7 +1127,7 @@ translations:
   Filament jam detected: フィラメントの詰まりを検出しました
   Filament jammed at the extruder gear: エクストルーダーギアでフィラメントが詰まりました
   Filament never reached the CFS hub sensor: フィラメントが CFS ハブセンサーに到達しませんでした
-  Filament not set: ''
+  Filament not set: 'フィラメント未設定'
   Filament operation failed: フィラメント操作に失敗しました
   Filament operation timed out: フィラメント操作がタイムアウトしました
   Filament ran out: フィラメントがなくなりました
@@ -1362,7 +1367,7 @@ translations:
   Initiate blade change procedure: 'ブレード交換手順を開始'
   Input: 入力
   Input Shaper: インプットシェーパー
-  Input Shaper Calibration: ''
+  Input Shaper Calibration: 'インプットシェーパーキャリブレーション'
   Input Shaper Help: 入力シェーパーヘルプ
   Input Shaping: インプットシェーピング
   Input shaper calibration sensors: インプットシェーパーキャリブレーションセンサー
@@ -1512,7 +1517,6 @@ translations:
   Listening: 聞き取り中
   Live view from your webcam: ウェブカメラのライブ表示
   Load: 装填
-  Load / Unload: 装填 / 排出
   Load Failed: '装填に失敗しました'
   Load Filament: フィラメントを装填
   Load a filament first before trying to unload: 排出する前にまずフィラメントを装填してください
@@ -2017,6 +2021,7 @@ translations:
   Power: 電源
   Power Devices: 電源デバイス
   Power off the printer or screen: プリンターまたは画面の電源をオフにします
+  'Power was lost during the print; the printer stopped and saved its progress': '印刷中に電源が失われました。プリンターは停止し、進行状況を保存しました'
   Pre-heat the extruder first: 先にエクストルーダーを予熱してください
   'Pre-print command failed: {}': '印刷前コマンドに失敗しました: {}'
   Pre-print homing...: 印刷前ホーミング中...
@@ -2040,7 +2045,7 @@ translations:
   Press Abort to stop: 中止するには「中止」を押してください
   Press Scan to search: スキャンを押して検索
   'Pressure:': '圧力:'
-  Pressure Advance Calibration: ''
+  Pressure Advance Calibration: 'プレッシャーアドバンスキャリブレーション'
   Preview Sounds: サウンドをプレビュー
   Previous: 前回
   Price: 価格
@@ -2049,6 +2054,7 @@ translations:
   Priming...: プライミング中...
   Print: 印刷
   Print Anyway: それでも印刷
+  'Print Behaviour': '印刷の動作'
   Print Cancelled: 印刷キャンセル
   Print Complete!: 印刷完了！
   Print Completion Alert: 印刷完了通知
@@ -2136,6 +2142,7 @@ translations:
   Printing label...: ラベル印刷中...
   Printing test label...: テストラベル印刷中...
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: 誤った素材で印刷すると、詰まり、密着不良、または印刷失敗の原因となる可能性があります。
+  'Printing: start after this job': '印刷中：このジョブ後に開始'
   Prints: 印刷
   Prints Trend: 印刷傾向
   'Private:': 'プライベート:'
@@ -2272,6 +2279,7 @@ translations:
   Remove PIN: PIN を削除
   Remove Spoolman?: Spoolman を削除しますか？
   Remove plugin from printer: プリンターからプラグインを削除
+  'Remove the PEI sheet from the bed, then start again: probing through the sheet gives wrong results': 'PEIシートをベッドから取り外してから再開してください：シート越しの計測は誤った結果になります'
   Remove the bypass spool from the toolhead first: '先にバイパススプールをツールヘッドから取り外してください'
   Rename: 名前を変更
   Rename Fan: ファン名を変更
@@ -2283,6 +2291,7 @@ translations:
   Replace: "置き換え"
   Replace Profile?: "プロファイルを置き換えますか？"
   Replay Welcome Tour: ウェルカムツアーを再生
+  'Replenish ignores colour': '補充時に色を無視'
   Replenishing filament...: フィラメントを補充中...
   Report saved to crash_report.txt: crash_report.txt にレポートを保存しました
   Reprint: 再印刷
@@ -2593,6 +2602,7 @@ translations:
   Single toggle macro. State is not tracked.: 単一のトグルマクロ。状態は追跡されません。
   Size: サイズ
   Skip: スキップ
+  Skipped: 'スキップ'
   Sleep While Printing: 印刷中のスリープ
   Sleep adjusted to match dim timeout: スリープタイムアウトを調整しました
   Sliced colors: スライスした色
@@ -2603,7 +2613,7 @@ translations:
   Slot Not Available: 'スロットは利用できません'
   Slot colors, materials, and levels: スロットの色、素材、残量
   ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
-  : ''
+  : 'スロット {} にフィラメントの種類が設定されていないため、プリンターは再開しません。フィラメントパネルで材料を設定してから印刷を再開してください。'
   Slots: スロット
   Small labels help keep controls calm and focused.: 小さなラベルはコントロールを落ち着いた集中した状態に保ちます。
   Snapmaker SnapSwap: Snapmaker SnapSwap
@@ -2747,6 +2757,7 @@ translations:
   TOOLS: ツール
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: 3〜5分かかります。中断しないでください。
+  'Tangle sensitivity': '絡み検出の感度'
   Tap + to add: + をタップして追加
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: 「ファームウェア再起動」をタップして復旧してください。K2 では rpi MCU ブリッジも再起動されます
   Tap again to confirm this orientation: もう一度タップしてこの向きを確定
@@ -2802,6 +2813,7 @@ translations:
   Thanks! TOTALLY anonymous usage data helps improve HelixScreen.: ご協力ありがとうございます！完全匿名の使用データが
     HelixScreen の改善に役立ちます。
   That did not sound like a pluck - try again: はじいた音ではないようです - もう一度お試しください
+  'That setting cannot be changed while a print is running': '印刷中はこの設定を変更できません'
   That slot cannot stand in for this one: そのスロットはこのスロットの代わりになりません
   That tool is already loaded: そのツールはすでに装填されています
   The CFS odometer hardware is faulty and needs repair or replacement: CFS の走行距離計ハードウェアが故障しています。修理または交換が必要です
@@ -2894,6 +2906,8 @@ translations:
   This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?: この印刷には約
     %.0fg 必要ですが、スプールの残量は約 %.0fg です。それでも開始しますか？
   This printer cannot calibrate tool offsets automatically: このプリンターはツールオフセットを自動でキャリブレートできません
+  This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.: このプリンターのゲートは Spoolman から設定されます。HelixScreen 側のコピーはクリアしました。Spoolman でスプールを削除してください。
+  This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.: このプリンターのゲートは Spoolman から設定されます。色・素材・スプールの変更は Spoolman で行ってください。
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : このプリンターは {} のようです（信頼度 {}%）が、{} として設定されています。誤ったタイプでは不正確な印刷前オプションとプリセットが適用されます。
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
@@ -3006,6 +3020,7 @@ translations:
   Turbo: ターボ
   Turbo Inner: ターボ・内側
   Turbo Outer: ターボ・外側
+  'Turn LED off when the print ends': '印刷終了時に LED を消灯'
   Turn Off: オフにする
   Turn Off WiFi?: WiFiをオフにしますか？
   Turn On: オンにする
@@ -3051,6 +3066,7 @@ translations:
   Unload Distance: 'アンロード距離'
   Unload Failed: '取り出しに失敗しました'
   Unload Filament: フィラメントを排出
+  'Unload at end': '終了時に排出'
   Unload failed: 排出に失敗しました
   Unload filament: 'フィラメントをアンロード'
   Unload from toolhead first: '先にツールヘッドから取り出してください'
@@ -3255,7 +3271,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-offset を保存しました - Klipper を再起動中...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: '装填済み'
   bed: ベッド
+  busy: 'ビジー状態'
   by Preston Brown: by Preston Brown
   chamber heater: チャンバーヒーター
   complete: 完了
@@ -3268,6 +3286,7 @@ translations:
   eSpooler Mode: 'eSpoolerモード'
   eSpooler, clog detection, and sensor settings: 'eSpooler、詰まり検出、センサーの設定'
   elapsed: 経過
+  empty: '空'
   enable: 有効化
   enabled: 有効
   error: エラー
@@ -3275,14 +3294,19 @@ translations:
   extruder(s): エクストルーダー
   extruders: エクストルーダー
   fans: ファン
+  feeder error: 'フィーダーエラー'
+  feeder not in automatic mode: 'フィーダーが自動モードではありません'
+  filament sensor disabled: 'フィラメントセンサーが無効'
   heated bed: ヒートベッド
   idle: アイドル
   in unit {} slot {}: 'ユニット {} スロット {}'
   layers: レイヤー
   left: 残り
+  loaded: '装填済み'
   mm before clog: 詰まりまでの距離 (mm)
   needs: 必要
   not detected: 未検出
+  not loaded: '未装填'
   nozzle: ノズル
   of: の
   'off': オフ
@@ -3296,6 +3320,7 @@ translations:
   passive: パッシブ
   printer default: プリンター既定
   prints: 印刷
+  ready to load: '装填可能'
   remaining: 残り
   remaining before clog detection triggers: 残りで詰まり検出が作動します
   rendering: レンダリング中

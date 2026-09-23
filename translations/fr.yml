@@ -20,7 +20,7 @@ translations:
   '%s has about %.0fg but %s needs about %.0fg. Start anyway?': '%s contient environ %.0fg mais %s nécessite environ %.0fg. Démarrer quand même ?'
   '%s has no filament loaded — this print will run out.': '%s n''a pas de filament chargé — cette impression manquera de filament.'
   '%s needs filament in %s, which is empty — this print will run out.': '%s nécessite du filament dans %s, qui est vide — cette impression manquera de filament.'
-  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': ''
+  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': '%s utilise %s, qui contient du filament mais aucun matériau défini — l''imprimante ne démarrera pas tant qu''il n''est pas défini.'
   '%s: %.0fg of %.0fg needed': '%s : %.0fg sur %.0fg requis'
   '%u layers': '%u couches'
   '%zu changes': '%zu modifications'
@@ -108,6 +108,7 @@ translations:
   A newer version of the helper macros is available: 'Une version plus récente des macros d''aide est disponible'
   A picture of your printer: Une photo de votre imprimante
   A print is in progress - restart still pending: 'Une impression est en cours - redémarrage en attente'
+  A print is running on this gate. HelixScreen cleared its own copy; clear it again once the print finishes.: Une impression est en cours sur ce gate. HelixScreen a effacé sa propre copie ; effacez-le à nouveau une fois l'impression terminée.
   A spool may be tangled or the drive gear is jammed: Une bobine est peut-être emmêlée ou l'engrenage d'entraînement est bloqué
   ABS: ABS
   ACCELEROMETERS: ACCÉLÉROMÈTRES
@@ -259,6 +260,7 @@ translations:
     des hauteurs de vis
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: 'Le réapprovisionnement automatique est activé, mais aucune paire de slots ne contient le même filament : rien ne changera en fin de filament'
   Auto-render video: Rendu vidéo automatique
+  'Auto-replenish filament': 'Réapprovisionner le filament automatiquement'
   Auto-tuning Shapers...: Réglage automatique des Shapers...
   Auto-uninstall only works on local Moonraker: La désinstallation automatique ne
     fonctionne que sur Moonraker local
@@ -747,7 +749,9 @@ translations:
   Could not update filaments: Impossible de mettre à jour les filaments
   Could not verify Spoolman status. Moonraker may still be restarting.: Impossible
     de vérifier l'état de Spoolman. Moonraker est peut-être encore en cours de redémarrage.
+  Couldn't clear the printer's gate map: Impossible d'effacer la table des gates de l'imprimante
   Couldn't save the material name: 'Impossible d''enregistrer le nom du matériau'
+  Couldn't save the printer's gate map: Impossible d'enregistrer la table des gates de l'imprimante
   Couldn't save to Spoolman. Nothing changed on this printer.: Impossible d'enregistrer dans Spoolman. Rien n'a été modifié sur cette imprimante.
   Cover open: Capot ouvert
   Crash Report: Rapport de plantage
@@ -823,6 +827,7 @@ translations:
   Deploy: Déployer
   Describe the issue (optional): Décrivez le problème (optionnel)
   Detailed: Détaillé
+  'Detect filament tangles': 'Détecter les nœuds de filament'
   Detecting plate...: Détection du plateau...
   Detecting printer type...: Détection du type d'imprimante...
   Detecting...: Détection...
@@ -1226,7 +1231,7 @@ translations:
   Filament jam detected: Bourrage de filament détecté
   Filament jammed at the extruder gear: Filament coincé au niveau de l'engrenage d'extrudeur
   Filament never reached the CFS hub sensor: Le filament n'a jamais atteint le capteur du hub CFS
-  Filament not set: ''
+  Filament not set: 'Filament non défini'
   Filament operation failed: Échec de l'opération filament
   Filament operation timed out: Opération filament — délai dépassé
   Filament ran out: Le filament est épuisé
@@ -1482,7 +1487,7 @@ translations:
   Initiate blade change procedure: 'Lancer la procédure de changement de lame'
   Input: Entrée
   Input Shaper: Input Shaper
-  Input Shaper Calibration: ''
+  Input Shaper Calibration: 'Calibration Input Shaper'
   Input Shaper Help: Aide Input Shaper
   Input Shaping: Input Shaping
   Input shaper calibration sensors: Capteurs de calibration Input Shaper
@@ -1649,7 +1654,6 @@ translations:
   Listening: À l'écoute
   Live view from your webcam: Vue en direct de votre webcam
   Load: Charger
-  Load / Unload: Charger / Décharger
   Load Failed: 'Échec du chargement'
   Load Filament: Charger le filament
   Load a filament first before trying to unload: Chargez d'abord du filament avant d'essayer de le décharger
@@ -2180,6 +2184,7 @@ translations:
   Power: Alimentation
   Power Devices: Appareils électriques
   Power off the printer or screen: Éteindre l'imprimante ou l'écran
+  'Power was lost during the print; the printer stopped and saved its progress': 'Une coupure de courant est survenue pendant l''impression ; l''imprimante s''est arrêtée et a enregistré sa progression'
   Pre-heat the extruder first: Préchauffez d'abord l'extrudeur
   'Pre-print command failed: {}': 'Échec de la commande pré-impression : {}'
   Pre-print homing...: Référence pré-impression...
@@ -2204,7 +2209,7 @@ translations:
   Press Abort to stop: Appuyez sur Abandonner pour arrêter
   Press Scan to search: Appuyez sur Scanner pour rechercher
   'Pressure:': 'Pression :'
-  Pressure Advance Calibration: ''
+  Pressure Advance Calibration: 'Calibration Pressure Advance'
   Preview Sounds: Aperçu des sons
   Previous: Précédent
   Price: Prix
@@ -2213,6 +2218,7 @@ translations:
   Priming...: Amorçage...
   Print: Imprimer
   Print Anyway: Imprimer quand même
+  'Print Behaviour': 'Comportement d''impression'
   Print Cancelled: Impression annulée
   Print Complete!: Impression terminée !
   Print Completion Alert: Alerte de fin d'impression
@@ -2310,6 +2316,7 @@ translations:
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: Imprimer
     avec le mauvais matériau peut provoquer des bouchons, une mauvaise adhérence ou
     des impressions ratées.
+  'Printing: start after this job': 'Impression en cours : démarrez après ce travail'
   Prints: Impressions
   Prints Trend: Tendance des impressions
   'Private:': 'Privé :'
@@ -2456,6 +2463,7 @@ translations:
   Remove PIN: Supprimer le PIN
   Remove Spoolman?: Supprimer Spoolman ?
   Remove plugin from printer: Supprimer le plugin de l'imprimante
+  'Remove the PEI sheet from the bed, then start again: probing through the sheet gives wrong results': 'Retirez la plaque PEI du plateau, puis recommencez : sonder à travers la plaque donne des résultats erronés'
   Remove the bypass spool from the toolhead first: 'Retirez d''abord la bobine de bypass de la tête d''outil'
   Rename: Renommer
   Rename Fan: Renommer le ventilateur
@@ -2467,6 +2475,7 @@ translations:
   Replace: "Remplacer"
   Replace Profile?: "Remplacer le profil ?"
   Replay Welcome Tour: Rejouer la visite de bienvenue
+  'Replenish ignores colour': 'Le réapprovisionnement ignore la couleur'
   Replenishing filament...: Réapprovisionnement en filament...
   Report saved to crash_report.txt: Rapport enregistré dans crash_report.txt
   Reprint: Réimprimer
@@ -2814,6 +2823,7 @@ translations:
     pas suivi.
   Size: Taille
   Skip: Passer
+  Skipped: 'Ignoré'
   Sleep While Printing: Veille pendant impression
   Sleep adjusted to match dim timeout: Délai de veille ajusté
   Sliced colors: Couleurs tranchées
@@ -2824,7 +2834,7 @@ translations:
   Slot Not Available: 'Slot non disponible'
   Slot colors, materials, and levels: Couleurs, matériaux et niveaux des slots
   ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
-  : ''
+  : 'Le slot {} n''a aucun type de filament défini, l''imprimante ne reprendra donc pas. Définissez son matériau dans le panneau filament, puis reprenez l''impression.'
   Slots: Slots
   Small labels help keep controls calm and focused.: Les petites étiquettes aident
     à garder les contrôles calmes et concentrés.
@@ -2982,6 +2992,7 @@ translations:
   TOOLS: OUTILS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Prend 3-5 min. Ne pas interrompre.
+  'Tangle sensitivity': 'Sensibilité aux nœuds'
   Tap + to add: Touchez + pour ajouter
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Appuyez sur Redémarrer le firmware pour récupérer. Sur la K2, cela redémarre aussi le pont MCU rpi
   Tap again to confirm this orientation: Appuyez à nouveau pour confirmer cette orientation
@@ -3039,6 +3050,7 @@ translations:
   Thanks! TOTALLY anonymous usage data helps improve HelixScreen.: Merci ! Les données
     d'utilisation TOTALEMENT anonymes aident à améliorer HelixScreen.
   That did not sound like a pluck - try again: Cela ne ressemblait pas à un pincement - réessayez
+  'That setting cannot be changed while a print is running': 'Ce réglage ne peut pas être modifié pendant une impression'
   That slot cannot stand in for this one: Cet emplacement ne peut pas remplacer celui-ci
   That tool is already loaded: Cet outil est déjà chargé
   The CFS odometer hardware is faulty and needs repair or replacement: Le matériel d'odométrie du CFS est défectueux et doit être réparé ou remplacé
@@ -3157,6 +3169,8 @@ translations:
     impression nécessite environ %.0fg mais il reste environ %.0fg sur la bobine.
     Démarrer quand même ?
   This printer cannot calibrate tool offsets automatically: Cette imprimante ne peut pas calibrer les offsets d'outil automatiquement
+  This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.: Cette imprimante remplit ses gates depuis Spoolman. HelixScreen a effacé sa propre copie ; retirez la bobine dans Spoolman.
+  This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.: Cette imprimante remplit ses gates depuis Spoolman. Effectuez les changements de couleur, matériau et bobine dans Spoolman.
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : Cette imprimante ressemble à un {} ({} % de confiance), mais elle est configurée en {}. Un type erroné applique des options et des préréglages de pré-impression incorrects.
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
@@ -3284,6 +3298,7 @@ translations:
   Turbo: Turbo
   Turbo Inner: Turbo intérieur
   Turbo Outer: Turbo extérieur
+  'Turn LED off when the print ends': 'Éteindre la LED à la fin de l''impression'
   Turn Off: Éteindre
   Turn Off WiFi?: Désactiver le WiFi ?
   Turn On: Allumer
@@ -3332,6 +3347,7 @@ translations:
   Unload Distance: 'Distance de déchargement'
   Unload Failed: 'Échec du déchargement'
   Unload Filament: Décharger le filament
+  'Unload at end': 'Décharger à la fin'
   Unload failed: Échec du déchargement
   Unload filament: 'Décharger le filament'
   Unload from toolhead first: 'Déchargez d''abord depuis la tête d''outil'
@@ -3555,7 +3571,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-offset enregistré - Redémarrage de Klipper...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: 'déjà chargé'
   bed: plateau
+  busy: 'occupé'
   by Preston Brown: par Preston Brown
   chamber heater: chauffage du caisson
   complete: terminé
@@ -3568,6 +3586,7 @@ translations:
   eSpooler Mode: 'Mode eSpooler'
   eSpooler, clog detection, and sensor settings: 'Paramètres eSpooler, détection de bourrage et capteurs'
   elapsed: écoulé
+  empty: 'vide'
   enable: activer
   enabled: activé
   error: erreur
@@ -3575,14 +3594,19 @@ translations:
   extruder(s): extrudeur(s)
   extruders: extrudeurs
   fans: ventilateurs
+  feeder error: 'erreur d''alimentateur'
+  feeder not in automatic mode: 'alimentateur pas en mode automatique'
+  filament sensor disabled: 'capteur de filament désactivé'
   heated bed: plateau chauffant
   idle: inactif
   in unit {} slot {}: dans l'unité {} slot {}
   layers: couches
   left: restant
+  loaded: 'chargé'
   mm before clog: mm avant bouchon
   needs: nécessite
   not detected: non détecté
+  not loaded: 'non chargé'
   nozzle: buse
   of: de
   'off': éteint
@@ -3596,6 +3620,7 @@ translations:
   passive: passif
   printer default: par défaut de l’imprimante
   prints: impressions
+  ready to load: 'prêt à charger'
   remaining: restant
   remaining before clog detection triggers: restant avant le déclenchement de la détection
     de bouchon

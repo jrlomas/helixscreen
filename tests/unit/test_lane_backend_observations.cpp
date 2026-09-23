@@ -175,12 +175,17 @@ void feed_mmu(AmsBackendHappyHare& backend, const nlohmann::json& mmu) {
     HappyHareTestAccess::handle_status_update(backend, notification);
 }
 
-/// One filament_detect object, through the notify envelope handle_status_update
-/// unwraps. RFID identity and channel presence arrive under the same key, which
-/// is why one frame feeds both of this backend's records.
-void feed_filament_detect(AmsBackendSnapmaker& backend, const nlohmann::json& fd) {
+/// One filament_detect object plus optional filament_feed channels, through
+/// the notify envelope handle_status_update unwraps. RFID identity arrives
+/// under the filament_detect key; lane presence arrives from the feed's port
+/// sensor and channel_state latch — the state array is the entrance/tag
+/// reading and backs no presence claim.
+void feed_filament_detect(AmsBackendSnapmaker& backend, const nlohmann::json& fd,
+                          const nlohmann::json& feed = nlohmann::json::object()) {
     nlohmann::json params;
     params["filament_detect"] = fd;
+    if (!feed.empty())
+        params["filament_feed left"] = feed;
     nlohmann::json notification;
     notification["params"] = nlohmann::json::array({params, 0.0});
     SnapmakerTestAccess::handle_status(backend, notification);
@@ -1834,18 +1839,23 @@ TEST_CASE_METHOD(LVGLTestFixture, "Snapmaker's RFID product line is not a spool 
                  "[lane][ingest][snapmaker]") {
     SnapmakerHarness harness(nullptr, nullptr);
 
-    feed_filament_detect(*harness,
-                         nlohmann::json{
-                             {"state", nlohmann::json::array({1, 0, 0, 0})},
-                             {"info", nlohmann::json::array({nlohmann::json{
-                                          {"MAIN_TYPE", "PLA"},
-                                          {"SUB_TYPE", "Silk"},
-                                          {"MANUFACTURER", "Snapmaker"},
-                                          {"ARGB_COLOR", 0xFFED2C2C},
-                                          {"WEIGHT", 1000},
-                                          {"CARD_UID", nlohmann::json::array({144, 32, 196, 2})},
-                                      }})},
-                         });
+    feed_filament_detect(
+        *harness,
+        nlohmann::json{
+            {"state", nlohmann::json::array({1, 0, 0, 0})},
+            {"info", nlohmann::json::array({nlohmann::json{
+                         {"MAIN_TYPE", "PLA"},
+                         {"SUB_TYPE", "Silk"},
+                         {"MANUFACTURER", "Snapmaker"},
+                         {"ARGB_COLOR", 0xFFED2C2C},
+                         {"WEIGHT", 1000},
+                         {"CARD_UID", nlohmann::json::array({144, 32, 196, 2})},
+                     }})},
+        },
+        // Presence from the port sensor, not the state array:
+        // lane 0 holds filament, lane 1 is empty.
+        nlohmann::json{{"extruder0", nlohmann::json{{"filament_detected", true}}},
+                       {"extruder1", nlohmann::json{{"filament_detected", false}}}});
 
     const auto lane = lane_sources(harness.lane(0));
     REQUIRE(lane.sensed.has_value());
@@ -1882,23 +1892,26 @@ TEST_CASE_METHOD(LVGLTestFixture, "Snapmaker's NONE tag states nothing about ide
                  "[lane][ingest][snapmaker]") {
     SnapmakerHarness harness(nullptr, nullptr);
 
-    feed_filament_detect(*harness,
-                         nlohmann::json{
-                             {"state", nlohmann::json::array({1, 1, 0, 0})},
-                             {"info", nlohmann::json::array({
-                                          nlohmann::json{{"MAIN_TYPE", "NONE"}},
-                                          // The positive control, and it has to live in this same
-                                          // info array. The Sensed record cannot play that part:
-                                          // it is filed by the state loop, over a different wire
-                                          // key, so it stays green with the whole identity ingest
-                                          // deleted. A neighbour that DOES declare is what makes
-                                          // lane 0's silence a decision the loop took.
-                                          nlohmann::json{{"MAIN_TYPE", "PLA"}},
-                                      })},
-                         });
+    feed_filament_detect(
+        *harness,
+        nlohmann::json{
+            {"state", nlohmann::json::array({1, 1, 0, 0})},
+            {"info", nlohmann::json::array({
+                         nlohmann::json{{"MAIN_TYPE", "NONE"}},
+                         // The positive control, and it has to live in this same
+                         // info array. The Sensed record cannot play that part:
+                         // it is filed from the feed frame's presence, over a
+                         // different wire key, so it stays green with the whole
+                         // identity ingest deleted. A neighbour that DOES declare
+                         // is what makes lane 0's silence a decision the loop
+                         // took.
+                         nlohmann::json{{"MAIN_TYPE", "PLA"}},
+                     })},
+        },
+        nlohmann::json{{"extruder0", nlohmann::json{{"filament_detected", true}}}});
 
     const auto lane = lane_sources(harness.lane(0));
-    // Presence still came through: the channel senses filament even with no
+    // Presence still came through: the port sensor sees filament even with no
     // readable tag, which is the whole shape of "sensed, not declared".
     REQUIRE(lane.sensed.has_value());
     REQUIRE(lane.sensed->present.has_value());
@@ -2221,17 +2234,22 @@ TEST_CASE_METHOD(LVGLTestFixture, "Snapmaker's print_task_config writes identity
                  "[lane][ingest][snapmaker]") {
     SnapmakerHarness harness(nullptr, nullptr);
 
-    // Two channels sensed, one tag between them. Channel 0 has a tag read for
-    // print_task_config to contend with; channel 1 has none, so what the merged
-    // struct shows there is the write surface's own work and nothing else.
-    feed_filament_detect(*harness, nlohmann::json{
-                                       {"state", nlohmann::json::array({1, 1})},
-                                       {"info", nlohmann::json::array({nlohmann::json{
-                                                    {"MAIN_TYPE", "PLA"},
-                                                    {"MANUFACTURER", "Snapmaker"},
-                                                    {"ARGB_COLOR", 0xFFED2C2C},
-                                                }})},
-                                   });
+    // Two channels sensed by the port sensor, one tag between them. Channel 0
+    // has a tag read for print_task_config to contend with; channel 1 has
+    // none, so what the merged struct shows there is the write surface's own
+    // work and nothing else.
+    feed_filament_detect(
+        *harness,
+        nlohmann::json{
+            {"state", nlohmann::json::array({1, 1})},
+            {"info", nlohmann::json::array({nlohmann::json{
+                         {"MAIN_TYPE", "PLA"},
+                         {"MANUFACTURER", "Snapmaker"},
+                         {"ARGB_COLOR", 0xFFED2C2C},
+                     }})},
+        },
+        nlohmann::json{{"extruder0", nlohmann::json{{"filament_detected", true}}},
+                       {"extruder1", nlohmann::json{{"filament_detected", true}}}});
 
     // SET_PRINT_FILAMENT_CONFIG takes these as gcode parameters, so whoever
     // sent that command set them: the machine's screen, a slicer, a console, or

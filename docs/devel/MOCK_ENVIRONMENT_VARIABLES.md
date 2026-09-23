@@ -424,6 +424,25 @@ HELIX_MOCK_AMS=mixed HELIX_MOCK_AMS_STATE=loading ./build/bin/helix-screen --tes
 ```
 
 
+### `HELIX_MOCK_BATCH_FAIL_SLOT`
+
+Make one feeder channel fail its batch operation. When the mock client simulates
+a Snapmaker U1 `AUTO_FEEDING` / `AUTO_FEEDING_BATCH` line for extruder `n`, that
+channel terminates in `load_fail` / `unload_fail` instead of `load_finish` /
+`unload_finish`, so failure paths (the batch cursor stopping, the firmware
+interlock clear) are reachable in tests and `--test` runs.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Extruder index `0`-`3` |
+| **Default** | unset (every channel reaches its success terminal) |
+| **File** | `src/api/moonraker_client_mock.cpp` |
+
+```bash
+# Head 1 fails its load while heads 0 and 2 succeed
+HELIX_MOCK_BATCH_FAIL_SLOT=1 ./build/bin/helix-screen --test
+```
+
 ### `HELIX_MOCK_DRYER`
 
 Enable filament dryer simulation in mock mode.

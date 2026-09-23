@@ -25,7 +25,9 @@
 
 #include <fstream>
 #include <sstream>
+#if !defined(HELIX_PLATFORM_ESP32)
 #include <sys/utsname.h>
+#endif
 
 namespace helix::diagnostics {
 
@@ -84,11 +86,13 @@ Machine read_machine(const std::string& proc_root) {
         }
     }
 
+#if !defined(HELIX_PLATFORM_ESP32)
     struct utsname uts {};
     if (::uname(&uts) == 0) {
         set_if_present(m.kernel_release, uts.release);
         set_if_present(m.kernel_arch, uts.machine);
     }
+#endif
 
     return m;
 }

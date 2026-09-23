@@ -30,6 +30,10 @@ struct PrinterSnapshot {
     std::string klipper_version; ///< klipper_version subject, "" if unset
     int connection_state = -1;   ///< printer_connection_state subject; -1 = unavailable
     int klippy_state = -1;       ///< klippy_state subject; -1 = unavailable
+    /// Firmware mains-monitor objects this printer publishes
+    /// (helix::power_loss::required_status_objects), for the printer-state
+    /// query. Empty on a printer without one.
+    std::vector<std::string> mains_status_objects;
 };
 
 struct BundleOptions {
@@ -259,8 +263,17 @@ class DebugBundleCollector {
     static std::string collect_log_tail_from_paths(const std::vector<std::string>& paths,
                                                    int num_lines);
 
-    /// Collect Moonraker state via REST (server info, printer state, config)
-    static nlohmann::json collect_moonraker_info();
+    /// Collect Moonraker state via REST (server info, printer state, config).
+    /// The snapshot carries which mains-monitor objects the printer-state
+    /// query should also fetch.
+    static nlohmann::json collect_moonraker_info(const PrinterSnapshot& snap);
+
+    /// The /printer/objects/query path for the printer-state section: the core
+    /// object list plus any firmware mains monitors. Pure and static so the
+    /// conditional join is testable without a live Moonraker — which matters
+    /// because Moonraker answers a query naming an object the firmware does
+    /// not publish with an error, not an empty result.
+    static std::string printer_objects_query(const std::vector<std::string>& extra_objects);
 
     /// Local evidence about a same-host Moonraker, gathered from /proc rather
     /// than from Moonraker. Everything in collect_moonraker_info() goes through

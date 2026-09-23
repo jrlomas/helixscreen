@@ -563,6 +563,14 @@ class PrinterDiscovery {
                     has_speaker_ = true;
                 }
 
+                // AUTO_FEEDING_BATCH wraps a multi-head feed with target
+                // snapshot/restore and next-head preheat. Absent on firmware
+                // before 1.6, so the batch path falls back to bare
+                // AUTO_FEEDING per head when this is false.
+                if (upper_macro == macro_patterns::AUTO_FEEDING_BATCH) {
+                    has_auto_feeding_batch_ = true;
+                }
+
                 // Check for common macro patterns and cache them
                 if (nozzle_clean_macro_.empty()) {
                     // Shared with StandardMacros' CleanNozzle slot — see
@@ -1097,6 +1105,14 @@ class PrinterDiscovery {
 
     [[nodiscard]] bool has_tool_changer() const {
         return has_tool_changer_;
+    }
+
+    /// Whether the firmware ships AUTO_FEEDING_BATCH, the macro that wraps a
+    /// multi-head feed with target snapshot/restore and next-head preheat.
+    /// Absent on firmware before 1.6; the batch path falls back to bare
+    /// AUTO_FEEDING per head when this is false.
+    [[nodiscard]] bool has_auto_feeding_batch() const {
+        return has_auto_feeding_batch_;
     }
 
     /// Whether a pin_watch dock-sensor extra is configured.
@@ -1771,6 +1787,7 @@ class PrinterDiscovery {
     bool has_snapmaker_ = false;
     bool has_afc_lite_ = false;
     bool has_tool_changer_ = false;
+    bool has_auto_feeding_batch_ = false;
     bool has_pin_watch_ = false;
     std::string pin_watch_object_name_;
     bool has_medusahc_ = false;

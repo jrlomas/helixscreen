@@ -1243,6 +1243,11 @@ void AmsBackendAd5xIfs::update_slot_from_state(int slot_index) {
     // Callers hold mutex_, which also covers overrides_ writes from
     // on_started() and apply_user_edit(); apply_resolved_lane() requires that
     // lock, as its declaration in ams_backend.h states.
+    //
+    // The clear runs first because the struct persists across frames: without
+    // it, a field an earlier frame's paint wrote outlives the record that
+    // stated it, and the paint below faithfully keeps it there.
+    prepare_lane_repaint_locked(slot_index, entry->info);
     apply_resolved_lane(entry->info, slot_index);
 }
 
@@ -3007,6 +3012,19 @@ SlotInfo* AmsBackendAd5xIfs::cached_slot_locked(int slot_index) {
     // repaint re-runs the paint alone.
     auto* entry = slots_.get_mut(slot_index);
     return entry ? &entry->info : nullptr;
+}
+
+void AmsBackendAd5xIfs::prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) {
+    const auto it = overrides_.find(slot_index);
+    const helix::ams::FilamentSlotOverride* ovr = it == overrides_.end() ? nullptr : &it->second;
+    helix::ams::clear_lane_only_identity(slot, ovr);
+    // colour_name joins the shared set here and not in the helper: AD5X
+    // firmware has no name key at all, where Happy Hare's gate map states one.
+    if (ovr != nullptr && !ovr->color_name.empty()) {
+        slot.color_name = ovr->color_name;
+    } else {
+        slot.color_name.clear();
+    }
 }
 
 void AmsBackendAd5xIfs::update_slot_weight_impl(int slot_index, float remaining_weight_g,

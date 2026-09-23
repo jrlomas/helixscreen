@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * @file test_auto_screws_tilt_collector.cpp
+ * @file test_snapmaker_screws_tilt_collector.cpp
  * @brief AutoScrewsTiltCollector driven through the mock client
  *
  * The collector chains five dependent RPCs against the firmware, and the
@@ -25,7 +25,7 @@
 #include "../../lvgl/lvgl.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
-#include "auto_screws_tilt_adjust.h"
+#include "snapmaker_screws_tilt.h"
 
 #include <algorithm>
 #include <atomic>
@@ -145,13 +145,13 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
 
         const auto& history = mock_client_.gcode_script_history();
         REQUIRE(history.size() == 5);
-        REQUIRE(history[0] == auto_screws::CMD_ENTRY);
-        REQUIRE(history[1] == auto_screws::CMD_HOMING);
+        REQUIRE(history[0] == snapmaker::screws_tilt::CMD_ENTRY);
+        REQUIRE(history[1] == snapmaker::screws_tilt::CMD_HOMING);
         // The plate gate is DETECT_BED_PLATE PRESENCE=0 itself: success means
         // the sheet is off, so the chain walks straight into probing.
-        REQUIRE(history[2] == auto_screws::CMD_DETECT_BED_PLATE);
-        REQUIRE(history[3] == auto_screws::CMD_PROBE_REFERENCE_POINTS);
-        REQUIRE(history[4] == auto_screws::CMD_EXIT);
+        REQUIRE(history[2] == snapmaker::screws_tilt::CMD_DETECT_BED_PLATE);
+        REQUIRE(history[3] == snapmaker::screws_tilt::CMD_PROBE_REFERENCE_POINTS);
+        REQUIRE(history[4] == snapmaker::screws_tilt::CMD_EXIT);
         REQUIRE_FALSE(sent_containing("AUTO_SCREWS_TILT_ADJUST_DETECT_PLATE"));
     }
 
@@ -167,7 +167,7 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
         start_collection();
 
         REQUIRE(result_received_.load());
-        REQUIRE_FALSE(sent(auto_screws::CMD_EXIT));
+        REQUIRE_FALSE(sent(snapmaker::screws_tilt::CMD_EXIT));
     }
 }
 
@@ -180,10 +180,10 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
         const char* command;
         MoonrakerErrorType type;
     } steps[] = {
-        {auto_screws::CMD_ENTRY, MoonrakerErrorType::JSON_RPC_ERROR},
-        {auto_screws::CMD_HOMING, MoonrakerErrorType::TIMEOUT},
-        {auto_screws::CMD_DETECT_BED_PLATE, MoonrakerErrorType::JSON_RPC_ERROR},
-        {auto_screws::CMD_PROBE_REFERENCE_POINTS, MoonrakerErrorType::JSON_RPC_ERROR},
+        {snapmaker::screws_tilt::CMD_ENTRY, MoonrakerErrorType::JSON_RPC_ERROR},
+        {snapmaker::screws_tilt::CMD_HOMING, MoonrakerErrorType::TIMEOUT},
+        {snapmaker::screws_tilt::CMD_DETECT_BED_PLATE, MoonrakerErrorType::JSON_RPC_ERROR},
+        {snapmaker::screws_tilt::CMD_PROBE_REFERENCE_POINTS, MoonrakerErrorType::JSON_RPC_ERROR},
     };
 
     for (const auto& step : steps) {
@@ -201,14 +201,14 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
         REQUIRE(captured_error_.find(step.command) != std::string::npos);
 
         // The run failed, and the firmware state is still released.
-        REQUIRE(sent(auto_screws::CMD_EXIT));
+        REQUIRE(sent(snapmaker::screws_tilt::CMD_EXIT));
 
         // A failure ends the chain: nothing runs past the failed command
         // except the exit.
         const bool failed_before_probe =
-            std::string(step.command) != auto_screws::CMD_PROBE_REFERENCE_POINTS;
+            std::string(step.command) != snapmaker::screws_tilt::CMD_PROBE_REFERENCE_POINTS;
         if (failed_before_probe) {
-            REQUIRE_FALSE(sent(auto_screws::CMD_PROBE_REFERENCE_POINTS));
+            REQUIRE_FALSE(sent(snapmaker::screws_tilt::CMD_PROBE_REFERENCE_POINTS));
         }
     }
 }
@@ -225,8 +225,7 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
     SECTION("the not-removed error refuses with removal instructions") {
         mock_client_.force_next_gcode_error(
             MoonrakerErrorType::JSON_RPC_ERROR,
-            std::string("Klippy Host Error: '") + auto_screws::PLATE_NOT_REMOVED_CODE +
-                ": The plate " + auto_screws::PLATE_NOT_REMOVED_TEXT + "'",
+            "Klippy Host Error: '0003-0530-0000-0011: The plate has not been removed'",
             "DETECT_BED_PLATE");
 
         start_collection();
@@ -234,8 +233,8 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
         REQUIRE(error_received_.load());
         REQUIRE_FALSE(result_received_.load());
         REQUIRE(captured_error_.find("Remove the PEI sheet") != std::string::npos);
-        REQUIRE_FALSE(sent(auto_screws::CMD_PROBE_REFERENCE_POINTS));
-        REQUIRE(sent(auto_screws::CMD_EXIT));
+        REQUIRE_FALSE(sent(snapmaker::screws_tilt::CMD_PROBE_REFERENCE_POINTS));
+        REQUIRE(sent(snapmaker::screws_tilt::CMD_EXIT));
     }
 
     SECTION("an error we cannot classify also refuses - it is not evidence the sheet is off") {
@@ -249,8 +248,8 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
         REQUIRE(captured_error_.find("DETECT_BED_PLATE") != std::string::npos);
         REQUIRE(captured_error_.find("inductance coil fault") != std::string::npos);
         REQUIRE_FALSE(captured_error_.find("Remove the PEI sheet") != std::string::npos);
-        REQUIRE_FALSE(sent(auto_screws::CMD_PROBE_REFERENCE_POINTS));
-        REQUIRE(sent(auto_screws::CMD_EXIT));
+        REQUIRE_FALSE(sent(snapmaker::screws_tilt::CMD_PROBE_REFERENCE_POINTS));
+        REQUIRE(sent(snapmaker::screws_tilt::CMD_EXIT));
     }
 }
 
@@ -268,7 +267,7 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
         start_collection();
 
         REQUIRE(result_received_.load());
-        REQUIRE(sent(auto_screws::CMD_ENTRY));
+        REQUIRE(sent(snapmaker::screws_tilt::CMD_ENTRY));
         REQUIRE_FALSE(sent_containing("SCREWS_TILT_CALCULATE"));
     }
 
@@ -313,13 +312,13 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
         mock_client_.set_object_status("machine_state_manager", {{"main_state", 8}});
         mock_client_.set_object_status("auto_screws_tilt_adjust", {{"probe_step", "adjust_idle"}});
 
-        auto_screws::reconcile_on_connect(mock_client_, held);
+        snapmaker::screws_tilt::reconcile_on_connect(mock_client_, held);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
         // The bare EXIT_TO_IDLE form leaves idle_timeout at the wizard's
         // pause value, so heaters and steppers never idle out. The macro
         // exit restores the timeout, clears probe_step and lifts Z as well.
-        REQUIRE(sent(auto_screws::CMD_EXIT));
+        REQUIRE(sent(snapmaker::screws_tilt::CMD_EXIT));
         REQUIRE_FALSE(sent_containing("EXIT_TO_IDLE REQ_FROM_STATE"));
     }
 
@@ -328,7 +327,7 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
         mock_client_.set_object_status("auto_screws_tilt_adjust",
                                        {{"probe_step", "adjust_probing"}});
 
-        auto_screws::reconcile_on_connect(mock_client_, held);
+        snapmaker::screws_tilt::reconcile_on_connect(mock_client_, held);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
         REQUIRE(mock_client_.gcode_script_history().empty());
@@ -336,13 +335,13 @@ TEST_CASE_METHOD(AutoScrewsCollectorTestFixture,
 
     SECTION("a state that is not held sends nothing") {
         const json idle = {{"machine_state_manager", {{"main_state", 0}}}};
-        auto_screws::reconcile_on_connect(mock_client_, idle);
+        snapmaker::screws_tilt::reconcile_on_connect(mock_client_, idle);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         REQUIRE(mock_client_.gcode_script_history().empty());
     }
 
     SECTION("no machine_state_manager in the snapshot sends nothing") {
-        auto_screws::reconcile_on_connect(mock_client_, json::object());
+        snapmaker::screws_tilt::reconcile_on_connect(mock_client_, json::object());
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         REQUIRE(mock_client_.gcode_script_history().empty());
     }

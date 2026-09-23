@@ -21,9 +21,16 @@
          action button shifts left rather than sitting under it. The circle
          overflows header_height at micro/tiny (prestonbrown/helixscreen#1204);
          the slot handles that itself, so this panel no longer needs a standalone
-         floating FAB. estop_visible_subject gates it to active prints. -->
+         floating FAB. estop_visible_subject gates it to active prints.
+         The Files action button opens print select mid-print so files can be
+         browsed and managed; the estop gutter keeps it clear of the FAB
+         (prestonbrown/helixscreen#1395). -->
     <header_bar name="overlay_header"
-                title="Print Status" title_tag="Print Status" estop_visible_subject="estop_visible"/>
+                title="Print Status" title_tag="Print Status" estop_visible_subject="estop_visible"
+                hide_action_button_2="false" action_button_2_icon="folder" action_button_2_icon_size="sm"
+                action_button_2_bg_color="#elevated_bg" action_button_2_radius="9999"
+                action_button_2_width="#button_height_sm" action_button_2_min_width="0"
+                action_button_2_callback="on_print_status_files"/>
     <!-- Content Area (portrait: stacked column, viewer on top, controls below) -->
     <lv_obj name="overlay_content"
             width="100%" flex_grow="1" style_pad_left="#space_lg" style_pad_right="#space_lg" style_pad_top="0"

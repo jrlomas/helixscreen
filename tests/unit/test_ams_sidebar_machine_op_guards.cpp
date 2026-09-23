@@ -20,38 +20,21 @@
  */
 
 #include "ui_ams_sidebar.h"
-#include "ui_ams_slot.h"
-#include "ui_endless_spool_arrows.h"
-#include "ui_filament_path_canvas.h"
-#include "ui_spool_canvas.h"
 
 #include "../test_fixtures.h"
 #include "ams_backend_mock.h"
+#include "ams_backend_snapmaker.h"
 #include "ams_state.h"
 #include "helix-xml/src/xml/lv_xml.h"
+#include "test_helpers/ams_sidebar_xml.h"
 
 #include <lvgl.h>
 #include <memory>
+#include <vector>
 
 #include "../catch_amalgamated.hpp"
 
 namespace {
-
-/// The sidebar's own components, registered the way production registers them.
-void register_sidebar_xml_once() {
-    static bool done = false;
-    if (done) {
-        return;
-    }
-    ui_spool_canvas_register();
-    ui_ams_slot_register();
-    ui_filament_path_canvas_register();
-    ui_endless_spool_arrows_register();
-    helix::ui::AmsOperationSidebar::register_callbacks_static();
-    lv_xml_register_component_from_file("A:ui_xml/components/ams_loaded_card.xml");
-    lv_xml_register_component_from_file("A:ui_xml/components/ams_sidebar.xml");
-    done = true;
-}
 
 /// Build the real sidebar from production XML, with AmsState's subjects live so
 /// the bindings resolve against something.
@@ -63,7 +46,7 @@ struct SidebarGuardFixture : public XMLTestFixture {
         helix::AmsState::instance().init_subjects(true);
         helix::AmsState::instance().sync_from_backend();
 
-        register_sidebar_xml_once();
+        helix::test::register_ams_sidebar_xml();
         root_ = static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "ams_sidebar", nullptr));
         REQUIRE(root_ != nullptr);
     }
@@ -91,6 +74,89 @@ struct SidebarGuardFixture : public XMLTestFixture {
     }
 
     lv_obj_t* root_ = nullptr;
+};
+
+/// A batch-capable backend whose per-head state the test fixes: the picker's
+/// rows and the sidebar's Load/Unload gating both read
+/// can_unload_from_toolhead() and get_slot_info(), so this is the seam they
+/// share. Lane presence defaults to UNKNOWN (the backend publishes none),
+/// which the load rule reads as permissive.
+class FixedHeadsBackend : public helix::AmsBackendSnapmaker {
+  public:
+    explicit FixedHeadsBackend(std::vector<bool> unloadable,
+                               std::vector<helix::SlotStatus> presence = {})
+        : helix::AmsBackendSnapmaker(nullptr, nullptr), unloadable_(std::move(unloadable)),
+          presence_(std::move(presence)) {}
+
+    helix::AmsSystemInfo get_system_info() const override {
+        helix::AmsSystemInfo info;
+        info.total_slots = static_cast<int>(unloadable_.size());
+        return info;
+    }
+    helix::SlotInfo get_slot_info(int slot_index) const override {
+        helix::SlotInfo slot;
+        slot.slot_index = slot_index;
+        if (slot_index >= 0 && slot_index < static_cast<int>(presence_.size())) {
+            slot.status = presence_[slot_index];
+        }
+        return slot;
+    }
+    bool can_unload_from_toolhead(int slot_index) const override {
+        return slot_index >= 0 && slot_index < static_cast<int>(unloadable_.size()) &&
+               unloadable_[slot_index];
+    }
+
+  private:
+    std::vector<bool> unloadable_;
+    std::vector<helix::SlotStatus> presence_;
+};
+
+/// Builds the production sidebar over a chosen backend, so the gating subjects
+/// carry the value production would show. setup() ends in
+/// refresh_button_gating(), which is the path under test.
+struct SidebarDirectionGateFixture : public XMLTestFixture {
+    void build(std::unique_ptr<helix::AmsBackend> backend) {
+        helix::AmsState::instance().set_backend(std::move(backend));
+        helix::AmsState::instance().init_subjects(true);
+        helix::AmsState::instance().sync_from_backend();
+
+        helix::test::register_ams_sidebar_xml();
+        // Built the way ams_panel.xml builds it: the sidebar sits inside a
+        // panel, named, and setup() takes the panel. find_by_name matches
+        // descendants, so passing the sidebar itself would not find it.
+        panel_ = lv_obj_create(test_screen());
+        const char* attrs[] = {"name", "ams_operation_sidebar", nullptr};
+        root_ = static_cast<lv_obj_t*>(lv_xml_create(panel_, "ams_sidebar", attrs));
+        REQUIRE(root_ != nullptr);
+        sidebar_ = std::make_unique<helix::ui::AmsOperationSidebar>(state());
+        REQUIRE(sidebar_->setup(panel_));
+    }
+
+    ~SidebarDirectionGateFixture() override {
+        sidebar_.reset(); // cancels the stall watchdog before the tree goes
+        if (panel_ && lv_obj_is_valid(panel_)) {
+            lv_obj_delete(panel_); // takes the sidebar tree with it
+        }
+        panel_ = nullptr;
+        root_ = nullptr;
+        helix::AmsState::instance().set_backend(nullptr);
+    }
+
+    [[nodiscard]] static int gate_value(const char* name) {
+        lv_subject_t* subject = lv_xml_get_subject(nullptr, name);
+        REQUIRE(subject != nullptr);
+        return lv_subject_get_int(subject);
+    }
+
+    [[nodiscard]] lv_obj_t* button(const char* name) const {
+        lv_obj_t* btn = lv_obj_find_by_name(root_, name);
+        REQUIRE(btn != nullptr);
+        return btn;
+    }
+
+    std::unique_ptr<helix::ui::AmsOperationSidebar> sidebar_;
+    lv_obj_t* panel_ = nullptr; // the panel root handed to setup()
+    lv_obj_t* root_ = nullptr;  // the sidebar component itself
 };
 
 } // namespace
@@ -126,4 +192,72 @@ TEST_CASE_METHOD(SidebarGuardFixture,
 
     lv_subject_set_int(subject, 1);
     CHECK(lv_obj_has_state(btn, LV_STATE_DISABLED));
+}
+
+TEST_CASE_METHOD(SidebarDirectionGateFixture,
+                 "AMS sidebar Load and Unload gate per direction on a batch backend",
+                 "[ams][sidebar][batch]") {
+    SECTION("heads loaded with no tool on the carriage keep Unload live") {
+        build(std::make_unique<FixedHeadsBackend>(std::vector<bool>{true, false, true, false}));
+        lv_subject_t* loaded = helix::AmsState::instance().get_filament_loaded_subject();
+        REQUIRE(loaded != nullptr);
+        REQUIRE(lv_subject_get_int(loaded) == 0); // no tool on the carriage
+        CHECK(gate_value("ams_sidebar_supports_batch") == 1);
+        CHECK_FALSE(lv_obj_has_flag(button("btn_batch_load"), LV_OBJ_FLAG_HIDDEN));
+        CHECK(gate_value("ams_sidebar_unload_disabled") == 0);
+        CHECK(gate_value("ams_sidebar_load_disabled") == 0);
+    }
+    SECTION("no head can unload disables Unload, not Load") {
+        build(std::make_unique<FixedHeadsBackend>(std::vector<bool>{false, false, false, false}));
+        CHECK(gate_value("ams_sidebar_unload_disabled") == 1);
+        CHECK(gate_value("ams_sidebar_load_disabled") == 0);
+    }
+    SECTION("every head already loaded disables Load, not Unload") {
+        build(std::make_unique<FixedHeadsBackend>(std::vector<bool>{true, true, true, true}));
+        CHECK(gate_value("ams_sidebar_unload_disabled") == 0);
+        CHECK(gate_value("ams_sidebar_load_disabled") == 1);
+    }
+    SECTION("every feeder empty disables Load too") {
+        // Feeding an empty lane is the no-op the firmware refuses, so an
+        // all-empty rig must not offer Load even though no head is at a
+        // toolhead.
+        using helix::SlotStatus;
+        build(std::make_unique<FixedHeadsBackend>(
+            std::vector<bool>{false, false, false, false},
+            std::vector<SlotStatus>{SlotStatus::EMPTY, SlotStatus::EMPTY, SlotStatus::EMPTY,
+                                    SlotStatus::EMPTY}));
+        CHECK(gate_value("ams_sidebar_unload_disabled") == 1);
+        CHECK(gate_value("ams_sidebar_load_disabled") == 1);
+    }
+    SECTION("an empty lane, a loaded head and a fed head gate per direction") {
+        // Only the fed-not-loaded head can load; only the loaded one can
+        // unload. The empty lane serves neither direction.
+        using helix::SlotStatus;
+        build(std::make_unique<FixedHeadsBackend>(
+            std::vector<bool>{false, true, false},
+            std::vector<SlotStatus>{SlotStatus::EMPTY, SlotStatus::LOADED, SlotStatus::AVAILABLE}));
+        CHECK(gate_value("ams_sidebar_unload_disabled") == 0);
+        CHECK(gate_value("ams_sidebar_load_disabled") == 0);
+    }
+    SECTION("non-batch backends keep the aggregate rule and no Load button") {
+        // The aggregate flag says loaded while no head answers can_unload: the
+        // per-head rule leaking into non-batch backends would grey this out.
+        class LoadedButStuckBackend : public helix::AmsBackendMock {
+          public:
+            LoadedButStuckBackend() : helix::AmsBackendMock(4) {}
+            bool can_unload_from_toolhead(int) const override {
+                return false;
+            }
+        };
+        auto mock = std::make_unique<LoadedButStuckBackend>();
+        REQUIRE(mock->start().success());
+        build(std::move(mock));
+        CHECK(gate_value("ams_sidebar_supports_batch") == 0);
+        CHECK(lv_obj_has_flag(button("btn_batch_load"), LV_OBJ_FLAG_HIDDEN));
+        lv_subject_t* loaded = helix::AmsState::instance().get_filament_loaded_subject();
+        REQUIRE(loaded != nullptr);
+        REQUIRE(lv_subject_get_int(loaded) == 1); // something IS loaded
+        CHECK(gate_value("ams_sidebar_unload_disabled") == 0);
+        CHECK(gate_value("ams_sidebar_load_disabled") == 1);
+    }
 }

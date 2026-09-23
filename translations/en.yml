@@ -102,6 +102,7 @@ translations:
   A newer version of the helper macros is available: A newer version of the helper macros is available
   A picture of your printer: A picture of your printer
   A print is in progress - restart still pending: A print is in progress - restart still pending
+  A print is running on this gate. HelixScreen cleared its own copy; clear it again once the print finishes.: A print is running on this gate. HelixScreen cleared its own copy; clear it again once the print finishes.
   A spool may be tangled or the drive gear is jammed: A spool may be tangled or the drive gear is jammed
   ABS: ABS
   ACCELEROMETERS: ACCELEROMETERS
@@ -245,6 +246,7 @@ translations:
   Auto-probe or manually check screw heights: Auto-probe or manually check screw heights
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout
   Auto-render video: Auto-render video
+  'Auto-replenish filament': 'Auto-replenish filament'
   'Auto-tuning Shapers...': 'Auto-tuning Shapers...'
   Auto-uninstall only works on local Moonraker: Auto-uninstall only works on local
     Moonraker
@@ -718,7 +720,9 @@ translations:
   Could not update filaments: Could not update filaments
   Could not verify Spoolman status. Moonraker may still be restarting.: Could not
     verify Spoolman status. Moonraker may still be restarting.
+  Couldn't clear the printer's gate map: Couldn't clear the printer's gate map
   Couldn't save the material name: Couldn't save the material name
+  Couldn't save the printer's gate map: Couldn't save the printer's gate map
   Couldn't save to Spoolman. Nothing changed on this printer.: Couldn't save to Spoolman. Nothing changed on this printer.
   Cover open: Cover open
   Crash Report: Crash Report
@@ -794,6 +798,7 @@ translations:
   Deploy: Deploy
   Describe the issue (optional): Describe the issue (optional)
   Detailed: Detailed
+  'Detect filament tangles': 'Detect filament tangles'
   'Detecting plate...': 'Detecting plate...'
   Detecting printer type...: Detecting printer type...
   Detecting...: Detecting...
@@ -1598,7 +1603,6 @@ translations:
   Listening: Listening
   Live view from your webcam: Live view from your webcam
   Load: Load
-  Load / Unload: Load / Unload
   Load Failed: Load Failed
   Load Filament: Load Filament
   Load a filament first before trying to unload: Load a filament first before trying to unload
@@ -2123,6 +2127,7 @@ translations:
   Power: Power
   Power Devices: Power Devices
   Power off the printer or screen: Power off the printer or screen
+  'Power was lost during the print; the printer stopped and saved its progress': 'Power was lost during the print; the printer stopped and saved its progress'
   Pre-heat the extruder first: Pre-heat the extruder first
   'Pre-print command failed: {}': 'Pre-print command failed: {}'
   'Pre-print homing...': 'Pre-print homing...'
@@ -2155,6 +2160,7 @@ translations:
   Priming...: Priming...
   Print: Print
   Print Anyway: Print Anyway
+  'Print Behaviour': 'Print Behaviour'
   Print Cancelled: Print Cancelled
   Print Complete!: Print Complete!
   Print Completion Alert: Print Completion Alert
@@ -2247,6 +2253,7 @@ translations:
   Printing test label...: Printing test label...
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: Printing
     with the wrong material can cause clogs, poor adhesion, or failed prints.
+  'Printing: start after this job': 'Printing: start after this job'
   Prints: Prints
   Prints Trend: Prints Trend
   'Private:': 'Private:'
@@ -2390,6 +2397,7 @@ translations:
   Remove PIN: Remove PIN
   Remove Spoolman?: Remove Spoolman?
   Remove plugin from printer: Remove plugin from printer
+  'Remove the PEI sheet from the bed, then start again: probing through the sheet gives wrong results': 'Remove the PEI sheet from the bed, then start again: probing through the sheet gives wrong results'
   Remove the bypass spool from the toolhead first: Remove the bypass spool from the toolhead first
   Rename: Rename
   Rename Fan: Rename Fan
@@ -2401,6 +2409,7 @@ translations:
   Replace: Replace
   Replace Profile?: Replace Profile?
   Replay Welcome Tour: Replay Welcome Tour
+  'Replenish ignores colour': 'Replenish ignores colour'
   'Replenishing filament...': 'Replenishing filament...'
   Report saved to crash_report.txt: Report saved to crash_report.txt
   Reprint: Reprint
@@ -2736,6 +2745,7 @@ translations:
   Single toggle macro. State is not tracked.: Single toggle macro. State is not tracked.
   Size: Size
   Skip: Skip
+  Skipped: Skipped
   Sleep While Printing: Sleep While Printing
   Sleep adjusted to match dim timeout: Sleep adjusted to match dim timeout
   Sliced colors: Sliced colors
@@ -2901,6 +2911,7 @@ translations:
   TOOLS: TOOLS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Takes 3-5 min. Do not interrupt.
+  'Tangle sensitivity': 'Tangle sensitivity'
   Tap + to add: Tap + to add
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge
   Tap again to confirm this orientation: Tap again to confirm this orientation
@@ -2958,6 +2969,7 @@ translations:
   Thanks! TOTALLY anonymous usage data helps improve HelixScreen.: Thanks! TOTALLY
     anonymous usage data helps improve HelixScreen.
   That did not sound like a pluck - try again: That did not sound like a pluck - try again
+  'That setting cannot be changed while a print is running': 'That setting cannot be changed while a print is running'
   That slot cannot stand in for this one: That slot cannot stand in for this one
   That tool is already loaded: That tool is already loaded
   The CFS odometer hardware is faulty and needs repair or replacement: The CFS odometer hardware is faulty and needs repair or replacement
@@ -3062,6 +3074,8 @@ translations:
   This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?: This
     print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?
   This printer cannot calibrate tool offsets automatically: This printer cannot calibrate tool offsets automatically
+  This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.: This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.
+  This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.: This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
@@ -3186,6 +3200,7 @@ translations:
   Turbo: Turbo
   Turbo Inner: Turbo Inner
   Turbo Outer: Turbo Outer
+  'Turn LED off when the print ends': 'Turn LED off when the print ends'
   Turn Off: Turn Off
   Turn Off WiFi?: Turn Off WiFi?
   Turn On: Turn On
@@ -3234,6 +3249,7 @@ translations:
   Unload Distance: Unload Distance
   Unload Failed: Unload Failed
   Unload Filament: Unload Filament
+  'Unload at end': 'Unload at end'
   Unload failed: Unload failed
   Unload filament: Unload filament
   Unload from toolhead first: Unload from toolhead first
@@ -3451,7 +3467,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-offset saved - Klipper restarting...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: already loaded
   bed: bed
+  busy: busy
   by Preston Brown: by Preston Brown
   chamber heater: chamber heater
   complete: complete
@@ -3464,6 +3482,7 @@ translations:
   eSpooler Mode: eSpooler Mode
   eSpooler, clog detection, and sensor settings: eSpooler, clog detection, and sensor settings
   elapsed: elapsed
+  empty: empty
   enable: enable
   enabled: enabled
   error: error
@@ -3471,14 +3490,19 @@ translations:
   extruder(s): extruder(s)
   extruders: extruders
   fans: fans
+  feeder error: feeder error
+  feeder not in automatic mode: feeder not in automatic mode
+  filament sensor disabled: filament sensor disabled
   heated bed: heated bed
   idle: idle
   in unit {} slot {}: in unit {} slot {}
   layers: layers
   left: left
+  loaded: loaded
   mm before clog: mm before clog
   needs: needs
   not detected: not detected
+  not loaded: not loaded
   nozzle: nozzle
   of: of
   'off': 'off'
@@ -3487,6 +3511,7 @@ translations:
   passive: passive
   printer default: printer default
   prints: prints
+  ready to load: ready to load
   remaining: remaining
   remaining before clog detection triggers: remaining before clog detection triggers
   rendering: rendering

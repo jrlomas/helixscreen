@@ -6,13 +6,17 @@
 #include "ui_update_queue.h"
 
 #include "accel_sensor_manager.h"
-#include "auto_screws_tilt_adjust.h"
+#include "ams_state.h"
+#include "batch_feed_reconcile.h"
+#include "snapmaker_screws_tilt.h"
 #if HELIX_HAS_IFS
 #include "ams_backend_ad5x_ifs.h"
 #endif
 #include "app_globals.h"
 #include "chamber_heater_backend.h"
 #include "config.h"
+#include "filament_temperature_source.h"
+#include "firmware_fault_codes.h"
 #include "helix_version.h"
 #include "humidity_sensor_types.h"
 #include "hv/requests.h"
@@ -20,9 +24,11 @@
 #include "macro_executor.h"
 #include "macro_fan_analyzer.h"
 #include "macro_param_cache.h"
+#include "macro_patterns.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "power_device_state.h"
+#include "power_loss_sensor.h"
 #include "print_start_profile.h"
 #include "printer_detector.h"
 #include "printer_state.h"
@@ -1399,6 +1405,22 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
         subscription_objects[obj] = nullptr;
     }
 
+    // Firmware that reports faults as structured codes keeps the standing
+    // list in its own status object; a fault that survived a restart is never
+    // printed to the console again, so without this subscription it stays
+    // invisible. See include/firmware_fault_codes.h.
+    for (const auto& obj : helix::faultcodes::required_status_objects(hw)) {
+        subscription_objects[obj] = nullptr;
+    }
+
+    // Firmware that monitors incoming mains keeps the live reading in its own
+    // status object. The reading is diagnostic — the debug bundle's
+    // printer-state query surfaces it — and never gates recovery.
+    // See include/power_loss_sensor.h.
+    for (const auto& obj : helix::power_loss::required_status_objects(hw)) {
+        subscription_objects[obj] = nullptr;
+    }
+
     // Firmware that keeps a z-offset PER TOOL needs whatever object stores it.
     // Empty for klipper-toolchanger, whose offsets ride on the `tool T*`
     // objects requested above; a machine keeping all four on one macro needs
@@ -1445,6 +1467,16 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
         subscription_objects["machine_state_manager"] = nullptr;
         for (int i = 0; i < 4; ++i) {
             subscription_objects[fmt::format("filament_motion_sensor e{}_filament", i)] = nullptr;
+        }
+        // The batch macro's `doing` variable drives batch-feed progress, so it
+        // needs a subscription to be readable while a feed runs. Klipper
+        // keeps the config's case for the status object key, so subscribe
+        // under the name as written in printer.cfg; a guessed name makes
+        // Moonraker reject the whole subscription.
+        const std::string batch_macro =
+            hw.macro_config_name(helix::macro_patterns::AUTO_FEEDING_BATCH);
+        if (!batch_macro.empty()) {
+            subscription_objects[fmt::format("gcode_macro {}", batch_macro)] = nullptr;
         }
     }
 
@@ -1626,6 +1658,12 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                 spdlog::info("[Moonraker Client] Subscription complete: {} objects subscribed",
                              num_subscribed);
 
+                // Per-filament operation temperatures are static firmware
+                // data published on the console, not through status, so the
+                // one capture belongs at connect time. No-ops on a printer
+                // whose firmware publishes none.
+                filament_temps::capture_on_connect(client_, hw);
+
                 // Process initial state from subscription response
                 // Moonraker returns current values in result.status
                 if (sub_response["result"].contains("status")) {
@@ -1649,7 +1687,32 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                     // its state unless its own probe step proves nothing is
                     // running.
                     if (hw.screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-                        auto_screws::reconcile_on_connect(client_, status);
+                        snapmaker::screws_tilt::reconcile_on_connect(client_, status);
+                    }
+                    // Same shape, one interlock over: a batch feed interrupted
+                    // by a lost connection strands the macro's `doing`, which
+                    // refuses every print start until cleared. Clearing is
+                    // safe only when no print owns the interlock - the guard
+                    // lives in the reconcile itself. The lookup key is the
+                    // config-case object name, matching the subscription.
+                    const std::string batch_macro =
+                        hw.macro_config_name(helix::macro_patterns::AUTO_FEEDING_BATCH);
+                    if (!batch_macro.empty()) {
+                        // A batch this process dispatched and has not seen
+                        // complete owns the interlock, so the reconcile must
+                        // not clear it on a mid-batch reconnect. The backends
+                        // answer the capability question; which one runs
+                        // batches is vendor knowledge that stays there.
+                        bool local_batch_active = false;
+                        auto& ams = AmsState::instance();
+                        for (int i = 0; i < ams.backend_count() && !local_batch_active; ++i) {
+                            if (const auto* backend = ams.get_backend(i)) {
+                                local_batch_active = backend->filament_batch_in_flight();
+                            }
+                        }
+                        batch_feeding::reconcile_on_connect(
+                            client_, status, fmt::format("gcode_macro {}", batch_macro),
+                            local_batch_active);
                     }
                 }
             } else if (sub_response.contains("error")) {

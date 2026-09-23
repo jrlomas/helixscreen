@@ -20,6 +20,17 @@ OverlayBase::~OverlayBase() {
         NavigationManager::instance().unregister_overlay_instance(overlay_root_);
     }
 
+    // During destroy_all() the widget must NOT be deleted here: deletion is
+    // forbidden inside that window because LV_EVENT_DELETE would fire into the
+    // half-destroyed panel set. Hand the root to the registry so destroy_all()'s
+    // caller can free it once the window closes - on a printer switch nothing
+    // else ever would, and the widget would stay a hidden screen child for the
+    // rest of the session. No-op outside the window (destroy_overlay_ui() and
+    // rebuilds own the widget there).
+    if (overlay_root_ && !StaticPanelRegistry::is_destroyed()) {
+        StaticPanelRegistry::instance().record_orphaned_widget(overlay_root_);
+    }
+
     // Guard against Static Destruction Order Fiasco: spdlog may already be
     // destroyed if this overlay wasn't registered with StaticPanelRegistry.
     if (!NavigationManager::is_destroyed()) {
@@ -87,6 +98,13 @@ bool helix::ui::teardown_overlay_ui(lv_obj_t*& root, const char* owner_name, Tea
         // Takes a raw pointer and does not null its argument — the null-out
         // below covers both strategies.
         helix::ui::safe_delete_subtree(root);
+    } else if (StaticPanelRegistry::is_destroying_all()) {
+        // Reached from a registry destroy callback: deletion is forbidden in
+        // the window and safe_delete_deferred() would null silently without
+        // deleting, leaving the widget allocated as a hidden screen child for
+        // the rest of the session. Hand it to destroy_all()'s caller instead;
+        // the null-out below covers the pointers.
+        StaticPanelRegistry::instance().record_orphaned_widget(root);
     } else {
         // Sync `safe_delete` is banned in overlay close callbacks
         // (ui_utils.h) — multiple sync deletions in the same UpdateQueue

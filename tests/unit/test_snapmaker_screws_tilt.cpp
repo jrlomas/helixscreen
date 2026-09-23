@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * @file test_auto_screws_tilt.cpp
+ * @file test_snapmaker_screws_tilt.cpp
  * @brief Mapping the Snapmaker U1 [auto_screws_tilt_adjust] status object
  *
  * The U1 replaces upstream SCREWS_TILT_CALCULATE with a firmware module whose
@@ -27,8 +27,8 @@
  * (screw1..4 as "x,y" and screw1_name..4_name).
  */
 
-#include "auto_screws_tilt_adjust.h"
 #include "calibration_types.h"
+#include "snapmaker_screws_tilt.h"
 
 #include <json.hpp> // nlohmann/json from libhv
 
@@ -324,8 +324,8 @@ TEST_CASE("parse_auto_screws_tilt fails loudly on unusable payloads",
 
 TEST_CASE("auto_screws stale_calibration_state decides a held state is safe to clear",
           "[calibration][screws_tilt][auto_screws]") {
-    using helix::auto_screws::MAIN_STATE_SCREWS_TILT_ADJUST;
-    using helix::auto_screws::stale_calibration_state;
+    using helix::snapmaker::screws_tilt::MAIN_STATE_SCREWS_TILT_ADJUST;
+    using helix::snapmaker::screws_tilt::stale_calibration_state;
 
     SECTION("a terminal or never-started probe step is stale") {
         for (const char* step :
@@ -373,7 +373,7 @@ json query_response(const json& status) {
 
 TEST_CASE("auto_screws main_state_from_status reads the one field we subscribe for",
           "[calibration][screws_tilt][auto_screws]") {
-    using helix::auto_screws::main_state_from_status;
+    using helix::snapmaker::screws_tilt::main_state_from_status;
 
     SECTION("present and numeric") {
         const json status = {{"machine_state_manager", {{"main_state", 8}}}};
@@ -396,16 +396,16 @@ TEST_CASE("auto_screws main_state_from_status reads the one field we subscribe f
 
 TEST_CASE("auto_screws plate_still_on_bed matches the not-removed failure",
           "[calibration][screws_tilt][auto_screws]") {
-    using helix::auto_screws::plate_still_on_bed;
+    using helix::snapmaker::screws_tilt::plate_still_on_bed;
 
-    SECTION("the Klipper error code, wrapped however Moonraker carries it") {
-        REQUIRE(plate_still_on_bed(std::string("Klippy Host Error: '") +
-                                   helix::auto_screws::PLATE_NOT_REMOVED_CODE + ": The plate " +
-                                   helix::auto_screws::PLATE_NOT_REMOVED_TEXT + "'"));
+    SECTION("the fault code, wrapped however Moonraker carries it") {
+        REQUIRE(plate_still_on_bed(
+            "Klippy Host Error: '0003-0530-0000-0011: The plate has not been removed'"));
     }
 
-    SECTION("the phrase alone still matches") {
-        REQUIRE(plate_still_on_bed("The plate has not been removed"));
+    SECTION("a phrase without a code does not match") {
+        // The code is the identity; the wording is the firmware's to change.
+        REQUIRE_FALSE(plate_still_on_bed("The plate has not been removed"));
     }
 
     SECTION("any other failure is a genuine detection problem") {
@@ -419,11 +419,11 @@ TEST_CASE("auto_screws plate_still_on_bed matches the not-removed failure",
 
 TEST_CASE("auto_screws results_from_query maps a probe-result query response",
           "[calibration][screws_tilt][auto_screws]") {
-    using helix::auto_screws::results_from_query;
+    using helix::snapmaker::screws_tilt::results_from_query;
 
     SECTION("status object plus configfile section map to screw results") {
         const json response = query_response(
-            {{helix::auto_screws::MODULE_NAME, TILTED_STATUS},
+            {{helix::snapmaker::screws_tilt::MODULE_NAME, TILTED_STATUS},
              {"configfile", {{"settings", {{"auto_screws_tilt_adjust", U1_CONFIG_SECTION}}}}}});
 
         const AutoScrewsTiltResults res = results_from_query(response);
@@ -433,7 +433,8 @@ TEST_CASE("auto_screws results_from_query maps a probe-result query response",
     }
 
     SECTION("a missing configfile section still maps - coords and names are optional") {
-        const json response = query_response({{helix::auto_screws::MODULE_NAME, TILTED_STATUS}});
+        const json response =
+            query_response({{helix::snapmaker::screws_tilt::MODULE_NAME, TILTED_STATUS}});
 
         const AutoScrewsTiltResults res = results_from_query(response);
         REQUIRE(res.ok());
