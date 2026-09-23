@@ -538,3 +538,53 @@ TEST_CASE_METHOD(BatchFixture, "A backend without the override stays permissive"
     CHECK(backend.slot_op_eligibility(9, /*load=*/false) ==
           helix::AmsBackend::FilamentOpEligibility::Eligible);
 }
+
+// ============================================================================
+// The sidebar header names the head being WORKED ON: current_slot follows the
+// batch cursor (or the in-progress channel outside a batch), not the tool the
+// carriage happens to hold mid-operation.
+// ============================================================================
+
+TEST_CASE_METHOD(BatchFixture, "A batch unload's header names the head being unloaded",
+                 "[snapmaker][batch][ams]") {
+    // The device sequence: batch-unloading heads 1 and 3 while the carriage
+    // still reports tool 3 (the previous head). Before the fix the header read
+    // "3" for ~30s per head, until the toolhead evidence caught up.
+    feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
+    REQUIRE(backend().get_system_info().current_slot == 3);
+
+    helix::SnapmakerTestAccess::set_batch_plan(backend(), {1, 3}, /*load=*/false, "Unload", "of");
+    set_channel(1, "unload_homing", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
+    CHECK(backend().get_system_info().current_slot == 1);
+
+    // The cursor advances to head 3; its in-progress frame renames the header
+    // without any toolhead evidence moving yet.
+    set_channel(1, "unload_finish", "ok", true, true, false);
+    set_channel(3, "unload_homing", "ok", true, true, false);
+    CHECK(backend().get_system_info().current_slot == 3);
+
+    SECTION("the cursor head wins over a stray in-progress frame") {
+        // A late transient from a non-cursor head must not steal the header:
+        // the plan, not the channel that happened to speak, says which head
+        // the batch is working.
+        helix::SnapmakerTestAccess::set_batch_plan(backend(), {0, 2}, /*load=*/true, "Load", "of");
+        set_channel(2, "load_feeding", "ok", true, true, false);
+        CHECK(backend().get_system_info().current_slot == 0);
+    }
+}
+
+TEST_CASE_METHOD(BatchFixture, "A standalone unload's header names the unloading head",
+                 "[snapmaker][batch][ams]") {
+    feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
+    REQUIRE(backend().get_system_info().current_slot == 3);
+
+    // No batch armed: the head reporting an in-progress state is the one.
+    set_channel(1, "unload_homing", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
+    CHECK(backend().get_system_info().current_slot == 1);
+
+    // At rest (terminal state, nothing in progress) the toolhead evidence is
+    // the truth again and nothing fights it.
+    set_channel(1, "unload_finish", "ok", true, true, false);
+    feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
+    CHECK(backend().get_system_info().current_slot == 3);
+}

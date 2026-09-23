@@ -1465,7 +1465,12 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                 has_extruder_data = true;
             }
         }
-        if (has_extruder_data && active != system_info_.current_tool) {
+        // Re-assert when the tool changed OR when only current_slot drifted
+        // from it: a filament operation's working head moves current_slot
+        // alone (see the channel_state loop), and carriage evidence must be
+        // able to take it back without waiting for the tool itself to change.
+        if (has_extruder_data &&
+            (active != system_info_.current_tool || active != system_info_.current_slot)) {
             // Demote previous active tool from LOADED to AVAILABLE
             if (system_info_.current_tool >= 0 && system_info_.current_tool < NUM_TOOLS) {
                 auto* prev_slot = system_info_.units[0].get_slot(system_info_.current_tool);
@@ -1736,6 +1741,28 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                                 system_info_.operation_phase = info.phase;
                                 changed = true;
                             }
+                        }
+
+                        // The sidebar header names the head being WORKED ON,
+                        // not the one physically on the carriage. During a
+                        // batch the plan knows it (the cursor head); outside a
+                        // batch, the head reporting an in-progress state is
+                        // the one. The toolhead pins the active-tool block
+                        // above reads still name the previous tool through
+                        // most of an unload, which is exactly when the header
+                        // must already say which head is being unloaded.
+                        // current_tool keeps the carriage truth; only
+                        // current_slot (the header's source) follows the work.
+                        int working_head = -1;
+                        if (batch_.active) {
+                            working_head = batch_.heads[batch_.cursor];
+                        } else if (info.action == AmsAction::LOADING ||
+                                   info.action == AmsAction::UNLOADING) {
+                            working_head = i;
+                        }
+                        if (working_head >= 0 && system_info_.current_slot != working_head) {
+                            system_info_.current_slot = working_head;
+                            changed = true;
                         }
 
                         // "Loaded at toolhead" latch (the core fix). Driven purely
