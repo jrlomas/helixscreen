@@ -59,6 +59,36 @@ std::optional<int> parse_slot_name(const std::string& val, int slot_count) {
     return std::nullopt;
 }
 
+// Read a slot's palette row id (filament_slot<N> / color_slot<N> /
+// vendor_slot<N>) from a save_variables value. The firmware and HelixScreen
+// write bare ints, but a SAVE_VARIABLE spelled with a quoted VALUE - Qidi
+// Studio emits VALUE="5" - is stored as a string, because save_variables.py
+// evaluates the literal before saving it. Accept an integer, or a string
+// holding nothing but an integer (surrounding whitespace tolerated). Any other
+// value is a writer the ids have no meaning for: logged and ignored, leaving
+// the previously stated id in place.
+std::optional<int> read_slot_id(const nlohmann::json& val, const std::string& key) {
+    if (val.is_number_integer()) {
+        return val.get<int>();
+    }
+    if (val.is_string()) {
+        std::string s = val.get<std::string>();
+        const auto not_space = [](unsigned char c) { return std::isspace(c) == 0; };
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
+        s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
+        const auto is_digit = [](unsigned char c) { return std::isdigit(c) != 0; };
+        if (!s.empty() && std::all_of(s.begin(), s.end(), is_digit)) {
+            try {
+                return std::stoi(s);
+            } catch (const std::exception&) {
+                // More digits than an int holds - no palette row is that big.
+            }
+        }
+    }
+    spdlog::debug("AmsBackendQidi save_variables {} holds a non-integer value; ignored", key);
+    return std::nullopt;
+}
+
 constexpr int QIDI_SLOTS_PER_BOX = 4;
 constexpr int QIDI_MAX_BOXES = 4;
 
@@ -777,17 +807,22 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
             continue;
         }
         const std::string suffix = std::to_string(i);
-        if (auto it = variables.find("filament_slot" + suffix);
-            it != variables.end() && it->is_number_integer()) {
-            slot_rfid_[static_cast<size_t>(i)].filament_id = it->get<int>();
+        const auto read_slot_var = [&variables](const std::string& key) -> std::optional<int> {
+            const auto it = variables.find(key);
+            if (it == variables.end()) {
+                return std::nullopt;
+            }
+            return read_slot_id(*it, key);
+        };
+        auto& ids = slot_rfid_[static_cast<size_t>(i)];
+        if (const auto id = read_slot_var("filament_slot" + suffix)) {
+            ids.filament_id = *id;
         }
-        if (auto it = variables.find("color_slot" + suffix);
-            it != variables.end() && it->is_number_integer()) {
-            slot_rfid_[static_cast<size_t>(i)].color_id = it->get<int>();
+        if (const auto id = read_slot_var("color_slot" + suffix)) {
+            ids.color_id = *id;
         }
-        if (auto it = variables.find("vendor_slot" + suffix);
-            it != variables.end() && it->is_number_integer()) {
-            slot_rfid_[static_cast<size_t>(i)].vendor_id = it->get<int>();
+        if (const auto id = read_slot_var("vendor_slot" + suffix)) {
+            ids.vendor_id = *id;
         }
 
         const auto& rfid = slot_rfid_[static_cast<size_t>(i)];

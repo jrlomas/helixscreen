@@ -2466,3 +2466,36 @@ TEST_CASE("QIDI Box clear skips the firmware zero writes while a print is active
     CHECK_FALSE(QidiBoxTestAccess::get_override(backend, 0).has_value());
     CHECK(backend.get_slot_info(0).material.empty());
 }
+
+TEST_CASE("QIDI Box a quoted SAVE_VARIABLE value paints the slot", "[ams][qidi_box]") {
+    helix::test::RegisteredBackend<RecordingQidiBackend> harness;
+    RecordingQidiBackend& backend = *harness;
+
+    QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
+    // Qidi Studio writes VALUE="5"; save_variables.py evaluates the literal,
+    // so the id arrives as a JSON string rather than an int.
+    QidiBoxTestAccess::parse_vars(
+        backend, json{{"filament_slot0", "1"}, {"color_slot0", "18"}, {"vendor_slot0", "1"}});
+
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(backend.get_slot_info(0).material == "PLA");
+    REQUIRE(backend.get_slot_info(0).brand == "QIDI");
+    REQUIRE(backend.get_slot_info(0).color_rgb == 0xFF362Du);
+}
+
+TEST_CASE("QIDI Box a non-integer slot id keeps the last stated id", "[ams][qidi_box]") {
+    AmsBackendQidi backend(nullptr, nullptr);
+
+    QidiBoxTestAccess::parse_vars(backend, json{
+                                               {"filament_slot0", 42},
+                                               {"color_slot1", 3},
+                                           });
+    // A value that is neither an int nor digits is ignored - the previously
+    // stated id stays. Whitespace around the digits is still digits.
+    QidiBoxTestAccess::parse_vars(backend, json{
+                                               {"filament_slot0", "PLA"},
+                                               {"color_slot1", " 4 "},
+                                           });
+    CHECK(QidiBoxTestAccess::filament_id(backend, 0) == 42);
+    CHECK(QidiBoxTestAccess::color_id(backend, 1) == 4);
+}
