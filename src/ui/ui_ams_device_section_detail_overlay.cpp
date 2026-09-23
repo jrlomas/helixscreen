@@ -15,6 +15,11 @@
 #include "ui_text_input.h"
 #include "ui_utils.h"
 
+#if HELIX_HAS_CFS
+#include "ui_cfs_chute_calibration_overlay.h"
+#include "ui_modal.h"
+#endif
+
 #include "ams_backend.h"
 #include "ams_state.h"
 #include "ams_types.h"
@@ -489,6 +494,32 @@ void AmsDeviceSectionDetailOverlay::create_button_in_row(
 // STATIC CALLBACKS
 // ============================================================================
 
+#if HELIX_HAS_CFS
+/// Cutter calibration confirm: BOX_FIND_CUT_POS homes X/Y and takes about a
+/// minute, so the click asks before moving the printer.
+static void confirm_cutter_calibration(const std::string& label) {
+    helix::ui::ConfirmOptions opts;
+    helix::ui::modal_confirm(
+        lv_tr("Calibrate Cutter"),
+        lv_tr("The printer homes and sweeps the cutter (about 1 minute). Keep the filament "
+              "path clear."),
+        ModalSeverity::Warning, lv_tr("Start"),
+        [label]() {
+            AmsBackend* backend = AmsState::instance().get_backend();
+            if (!backend) {
+                return;
+            }
+            AmsError result = backend->execute_device_action("calibrate_cutter");
+            if (result.success()) {
+                NOTIFY_INFO(lv_tr("{} started"), lv_tr(label.c_str()));
+            } else {
+                helix::ui::notify_ams_error(result);
+            }
+        },
+        opts);
+}
+#endif
+
 void AmsDeviceSectionDetailOverlay::on_action_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[AmsDeviceSectionDetailOverlay] on_action_clicked");
 
@@ -519,15 +550,32 @@ void AmsDeviceSectionDetailOverlay::on_action_clicked(lv_event_t* e) {
                     }
                 }
 
-                AmsError result = backend->execute_device_action(action_id);
-                if (result.success()) {
-                    // Whole sentence, not "{} {}" over two separately translated
-                    // words: German sends the participle to the end of the
-                    // clause and Japanese renders this as 〜を開始しました, and
-                    // neither can be reached by concatenating "label" + "started".
-                    NOTIFY_INFO(lv_tr("{} started"), lv_tr(label.c_str()));
-                } else {
-                    helix::ui::notify_ams_error(result);
+#if HELIX_HAS_CFS
+                // K1 CFS calibration actions route away from the plain
+                // execute-and-toast shape: the chute flow is a guided overlay,
+                // and the cutter sweep homes the printer, which deserves a
+                // confirmation before it moves anything.
+                const bool calibrate_purge_chute =
+                    backend->get_type() == AmsType::CFS && action_id == "calibrate_purge_chute";
+                const bool calibrate_cutter =
+                    backend->get_type() == AmsType::CFS && action_id == "calibrate_cutter";
+                if (calibrate_purge_chute) {
+                    get_cfs_chute_calibration_overlay().show(lv_screen_active());
+                } else if (calibrate_cutter) {
+                    confirm_cutter_calibration(label);
+                } else
+#endif
+                {
+                    AmsError result = backend->execute_device_action(action_id);
+                    if (result.success()) {
+                        // Whole sentence, not "{} {}" over two separately translated
+                        // words: German sends the participle to the end of the
+                        // clause and Japanese renders this as 〜を開始しました, and
+                        // neither can be reached by concatenating "label" + "started".
+                        NOTIFY_INFO(lv_tr("{} started"), lv_tr(label.c_str()));
+                    } else {
+                        helix::ui::notify_ams_error(result);
+                    }
                 }
             }
         }

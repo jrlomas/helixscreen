@@ -301,6 +301,43 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     AmsError execute_device_action(const std::string& action_id,
                                    const std::any& value = {}) override;
 
+    // --- Cutter / purge-chute calibration (K1 stock dialect only) ---
+    //
+    // Choreography verified against a K1 Max klippy.log, fw 2.3.5.33
+    // (prestonbrown/helixscreen#1282). The K2 box firmware has none of these
+    // commands (its cutter check is MOTOR_CHECK_CUT_POS) and the Kalico fork
+    // was never observed to expose them, which is why every entry point here
+    // gates on macro_variant_ == CfsMacroVariant::K1.
+
+    /// BOX_FIND_CUT_POS: the firmware homes X/Y, sweeps the cutter and
+    /// rewrites cut_pos_y in box.cfg (~60s). Result lines arrive on the gcode
+    /// response stream; on_result fires once, on the main thread, with the
+    /// final "Found cut position" line (empty when none was captured).
+    AmsError
+    calibrate_cutter(std::function<void(const std::string& found_line)> on_result = nullptr);
+
+    /// Chute steps 1+2: XYZ_ZERO (~55s full home) then
+    /// COORDINATES_ADJUST_PREPARE (parks Y at the box's safe position).
+    /// on_ready fires on the main thread once both completed and jogging may
+    /// start.
+    AmsError start_chute_calibration(std::function<void()> on_ready = nullptr);
+
+    /// Jog Y by @p delta_mm using the stock screen's exact script form
+    /// (SAVE_GCODE_STATE/G91/G0/M400/RESTORE_GCODE_STATE). The caller clamps
+    /// the delta against live axis bounds; the stepper's own position_min/max
+    /// is the hard limit either way.
+    AmsError jog_chute_y(float delta_mm);
+
+    /// Chute save: COORDINATES_ADJUST_SAVE_POS (the firmware reads the LIVE
+    /// toolhead position and rewrites extrude_pos_x/y in box.cfg; HelixScreen
+    /// sends no coordinate) followed by Y_SAFE to re-park. on_saved fires on
+    /// the main thread after both completed.
+    AmsError save_chute_position(std::function<void()> on_saved = nullptr);
+
+    /// Abort path: re-park Y with CMD=Y_SAFE. Required once PREPARE has run,
+    /// which is the point from which the toolhead is left off-park.
+    AmsError exit_chute_calibration();
+
     // Static parsers (public for testing)
 
     /// Decide which `box` shape this payload is. Stock is the default for

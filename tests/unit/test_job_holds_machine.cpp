@@ -321,6 +321,7 @@ constexpr GuardedFile kGuardedFiles[] = {
     {"ui_xml/ams_device_operations.xml", 1},
     {"ui_xml/batch_filament_modal.xml", 1},
     {"ui_xml/calibration_tool_offset_panel.xml", 2},
+    {"ui_xml/cfs_chute_calibration_overlay.xml", 6},
     {"ui_xml/components/ams_sidebar.xml", 1},
     {"ui_xml/components/panel_widget_bypass.xml", 1},
     {"ui_xml/controls_panel.xml", 10},
