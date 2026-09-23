@@ -654,6 +654,7 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
     // resizes the slot vector and the map has to follow it.
     rebuild_tool_map_locked();
 
+    bool stated_slot[QIDI_MAX_BOXES * QIDI_SLOTS_PER_BOX] = {};
     for (int i = 0; i < slot_count; ++i) {
         auto* slot = system_info_.get_slot_global(i);
         if (!slot) {
@@ -664,6 +665,7 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
         if (slot_it == variables.end() || !slot_it->is_number_integer()) {
             continue;
         }
+        stated_slot[i] = true;
         const int state = slot_it->get<int>();
         switch (state) {
         case 0:
@@ -824,20 +826,18 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
     // and answering "no reading" there would retract a live presence record at
     // the moment a lane jams.
     //
-    // UNKNOWN is the Box declining to state, which is not a statement that the
-    // lane is empty, so a slot resting there keeps whatever the last frame that
-    // did speak established.
+    // A lane the frame said nothing about (no slot<N> key) files nothing, so a
+    // frame that stays silent keeps whatever the last frame that did speak
+    // established. UNKNOWN the frame DID state, and filing it with present
+    // unset retracts the earlier reading the way ACE, AD5X IFS and Happy Hare
+    // treat a machine that declines to state.
     for (int i = 0; i < slot_count; ++i) {
         const auto* s = system_info_.get_slot_global(i);
-        if (!s) {
-            continue;
-        }
-        const auto reports = slot_status_reports_filament(s->status);
-        if (!reports) {
+        if (!s || !stated_slot[i]) {
             continue;
         }
         helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
-        sensed.present = *reports;
+        sensed.present = slot_status_reports_filament(s->status);
         helix::ams::ingest(lane_id(i), sensed);
     }
 }

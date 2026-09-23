@@ -413,13 +413,12 @@ void AmsBackendMock::publish_lane_observations() {
 
     // Outside the lock, like every other event this backend publishes.
     for (const auto& r : readings) {
-        // UNKNOWN is the simulated machine declining to state, which is not a
-        // statement that the lane is empty.
-        if (const auto reports = slot_status_reports_filament(r.status)) {
-            helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
-            sensed.present = *reports;
-            helix::ams::ingest(lane_id(r.slot_index), sensed);
-        }
+        // A record with present unset is the machine declining to state, which
+        // retracts whatever an earlier frame established; the other backends
+        // file UNKNOWN the same way.
+        helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
+        sensed.present = slot_status_reports_filament(r.status);
+        helix::ams::ingest(lane_id(r.slot_index), sensed);
 
         helix::ams::Observation cache(helix::ams::ObservationSource::VendorCache);
         if (!r.material.empty()) {
