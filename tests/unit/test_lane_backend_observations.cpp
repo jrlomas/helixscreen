@@ -30,6 +30,7 @@
 #include "test_helpers/ace_test_access.h"
 #include "test_helpers/ad5x_ifs_test_access.h"
 #include "test_helpers/afc_test_access.h"
+#include "test_helpers/ams_backend_mock_timing_test_access.h"
 #include "test_helpers/backend_user_edit.h"
 #include "test_helpers/cfs_test_access.h"
 #include "test_helpers/happy_hare_test_access.h"
@@ -61,6 +62,7 @@ using helix::AmsBackendAd5xIfs;
 using helix::AmsBackendAfc;
 using helix::AmsBackendHappyHare;
 using helix::AmsBackendMock;
+using helix::AmsBackendMockTimingTestAccess;
 using helix::AmsBackendQidi;
 using helix::AmsBackendSnapmaker;
 using helix::AmsBackendToolChanger;
@@ -2623,6 +2625,40 @@ TEST_CASE_METHOD(LVGLTestFixture, "Qidi's saved ids resolve into a vendor cache"
     CHECK_FALSE(lane.vendor_cache->present.has_value());
 }
 
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a Qidi UNKNOWN state word retracts the standing presence reading",
+                 "[lane][ingest][qidi]") {
+    QidiHarness harness(nullptr, nullptr);
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1}, {"slot0", 1}});
+
+    const auto standing = lane_sources(harness.lane(0));
+    REQUIRE(standing.sensed.has_value());
+    REQUIRE(standing.sensed->present.has_value());
+    CHECK(*standing.sensed->present == true);
+
+    // 99 is no state word the Box vocabulary knows, so the slot files UNKNOWN.
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"slot0", 99}});
+
+    const auto declined = lane_sources(harness.lane(0));
+    REQUIRE(declined.sensed.has_value());
+    CHECK_FALSE(declined.sensed->present.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a Qidi frame silent about a lane leaves its presence standing",
+                 "[lane][ingest][qidi]") {
+    QidiHarness harness(nullptr, nullptr);
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1}, {"slot0", 1}});
+
+    // enable_box speaks about the boxes and says nothing about any lane, so
+    // this frame carries no slot0 key at all.
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"enable_box", 1}});
+
+    const auto standing = lane_sources(harness.lane(0));
+    REQUIRE(standing.sensed.has_value());
+    REQUIRE(standing.sensed->present.has_value());
+    CHECK(*standing.sensed->present == true);
+}
+
 TEST_CASE_METHOD(LVGLTestFixture, "Qidi files nothing for an id its tables do not resolve",
                  "[lane][ingest][qidi]") {
     QidiHarness harness(nullptr, nullptr);
@@ -2845,6 +2881,26 @@ TEST_CASE_METHOD(LVGLTestFixture, "the mock's simulated population becomes lane 
     CHECK_FALSE(lane.vendor_cache->spool_name.has_value());
     CHECK_FALSE(lane.vendor_cache->total_weight_g.has_value());
     CHECK_FALSE(lane.vendor_cache->remaining_weight_g.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "the mock's UNKNOWN status declines to state presence",
+                 "[lane][ingest][mock]") {
+    MockHarness harness(4);
+    REQUIRE(harness->start().success());
+
+    const auto standing = lane_sources(harness.lane(0));
+    REQUIRE(standing.sensed.has_value());
+    REQUIRE(standing.sensed->present.has_value());
+    CHECK(*standing.sensed->present == true);
+
+    // Re-publishing the population after forcing a status is what the next
+    // simulated frame would do.
+    harness->force_slot_status(0, helix::SlotStatus::UNKNOWN);
+    AmsBackendMockTimingTestAccess::publish_lane_observations(*harness);
+
+    const auto declined = lane_sources(harness.lane(0));
+    REQUIRE(declined.sensed.has_value());
+    CHECK_FALSE(declined.sensed->present.has_value());
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "neither the mock's edit nor its sync is a reading",

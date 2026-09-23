@@ -4107,6 +4107,35 @@ TEST_CASE("SlotFingerprintTracker expectations accumulate across writes",
     CHECK_FALSE(swap.has_expected(1));
 }
 
+TEST_CASE("SlotFingerprintTracker forget releases only one write's claims",
+          "[filament_slot_override][ams]") {
+    using helix::ams::FingerprintEvent;
+    helix::ams::SlotFingerprintTracker tracker;
+    tracker.observe(0, "B");
+
+    // Write A dispatches; write B fails to dispatch entirely. B's forget
+    // must leave A's in-flight echo expected, or A's echo reads as a swap
+    // and wipes the edit it was armed to protect.
+    tracker.expect_any_of(0, {"A1", "A2"});
+    const auto b_staged = tracker.expect_any_of(0, {"B1", "B2"});
+    tracker.forget_expected(0, b_staged);
+    REQUIRE(tracker.has_expected(0));
+    CHECK(tracker.observe(0, "A1") == FingerprintEvent::OwnWriteEcho);
+    CHECK(tracker.observe(0, "A2") == FingerprintEvent::OwnWriteEcho);
+    CHECK_FALSE(tracker.has_expected(0));
+
+    // A value two in-flight writes both expect survives one writer giving
+    // up: each staging holds a claim, and a forget releases only its own.
+    tracker.observe(0, "A2");
+    tracker.expect_any_of(0, {"V"});
+    const auto shared_staged = tracker.expect_any_of(0, {"V", "W"});
+    tracker.forget_expected(0, shared_staged);
+    CHECK(tracker.observe(0, "V") == FingerprintEvent::OwnWriteEcho);
+    // W's only claim left with the forget, so W now reads as external.
+    CHECK(tracker.observe(0, "W") == FingerprintEvent::Changed);
+    CHECK_FALSE(tracker.has_expected(0));
+}
+
 TEST_CASE("bind_fingerprint_persistence seeds from records and persists observations",
           "[filament_slot_override][ams]") {
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);

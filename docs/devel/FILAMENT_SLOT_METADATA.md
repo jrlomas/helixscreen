@@ -69,6 +69,7 @@ so the local cache file can round-trip all of them without collision.
 | `AmsBackendSnapmaker` | `snapmaker` | `lane_data` (shared) |
 | `AmsBackendAce` | `ace` | `lane_data` (shared) |
 | `AmsBackendCfs` | `cfs` | `lane_data` (shared) |
+| `AmsBackendQidi` | `qidi` | `lane_data` (shared) |
 | `AmsBackendToolChanger` | `toolchanger` | `lane_data` (shared) |
 | `AmsBackendAfc` | `afc` | `helix-screen-afc-overrides` (private) |
 | `AmsBackendHappyHare` | `happyhare` | `helix-screen-hh-overrides` (private) |
@@ -77,8 +78,10 @@ AFC and Happy Hare must name a private namespace: their own Klipper plugins own
 `lane_data` and rewrite it on boot, so records left there do not survive and the
 plugin's own load back as if the user had authored them.
 
-`AmsBackendQidi` holds no store - QIDI Box persists slot identity through its own
-firmware (`SAVE_VARIABLE VARIABLE=filament_slot{n}`), not through this layer.
+`AmsBackendQidi` runs a store in the shared `lane_data` namespace like the rest;
+its `filament_slot{n}` / `color_slot{n}` / `vendor_slot{n}` save_variables are the
+signal its fingerprint is built from, and the record carries the swap-detection
+baseline across restarts (see `FILAMENT_BACKEND_QIDI_BOX.md` § Slot Metadata).
 
 ### Acquiring the store
 
@@ -222,7 +225,13 @@ override-exclusive fields on the live slot (brand, spool name, Spoolman ids,
 weights, colour name, catalog pick) so the clear shows on the next
 `get_slot_info()`, and fire `clear_async` against the backend's own private
 namespace. Colour and material are left standing, because those come from the
-parse and the lane's firmware values should surface. The `lane_data` records
+parse and the lane's firmware values should surface. `AmsBackendQidi` also
+implements it, with a firmware half: the local clear is the same
+erase/reset/`clear_async` against the shared `lane_data` namespace, and the
+firmware half is three `SAVE_VARIABLE VARIABLE={filament,color,vendor}_slot{n}
+VALUE=0` writes (row ids start at 1, so 0 reads as no identity) gated by
+`refuse_if_printing()` - a tagged spool re-populates the ids on its next
+insert, boot or RFID read. The `lane_data` records
 their Klipper plugins write are a separate thing and HelixScreen does not touch
 them. For AFC that is not merely etiquette: AFC.py `delete_lane_data()`
 wipes the whole namespace at the start of every PREP and refills it one lane at
@@ -393,7 +402,7 @@ Four distinct clear paths, handled separately:
 
 - **User-initiated clear.** The edit modal's "Clear metadata" button calls
   `AmsBackend::clear_slot_override(slot_index)`. This is the public API
-  contract; IFS/Snapmaker/ACE/CFS override it to DELETE their store entry.
+  contract; IFS/Snapmaker/ACE/CFS/QIDI override it to DELETE their store entry.
 - **Clear Spool (slot detail menu).** A different door from the modal's button: the
   funnel builds an all-blank `SlotInfo` and routes it through
   `AmsState::commit_slot_edit()`, so the override record is rewritten blank rather than
@@ -425,11 +434,12 @@ Four distinct clear paths, handled separately:
 
 ### Swap fingerprints: persistence across restarts
 
-CFS (stock and flat schema) and Snapmaker run their hardware-event clear
-through the shared `SlotFingerprintTracker`
+CFS (stock and flat schema), Snapmaker and QIDI Box run their hardware-event
+clear through the shared `SlotFingerprintTracker`
 (`include/filament_slot_override_store.h`). Each observed identity string
 (stock CFS material-code|color composite, the flat schema's
-material/brand/name/color composite, Snapmaker's `CARD_UID`) classifies as
+material/brand/name/color composite, Snapmaker's `CARD_UID`, QIDI Box's
+filament|color|vendor row-id composite) classifies as
 `NoSignal`, `Baseline`, `Unchanged`, `OwnWriteEcho` or `Changed`, and only
 `Changed` clears the override. Before pushing a user edit the backend arms
 `expect_any_of()` with the values the write should echo back. Expectations

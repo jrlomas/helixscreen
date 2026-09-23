@@ -37,6 +37,12 @@ class AmsBackendMockTimingTestAccess {
         b.running_ = true;
     }
 
+    /// Re-run the lane-observation publish, so a test can force a slot status
+    /// and observe what the next simulated frame files for it.
+    static void publish_lane_observations(AmsBackendMock& b) {
+        b.publish_lane_observations();
+    }
+
     /// The mock persona ships with filament loaded (the interesting default for
     /// UI runs); tests asserting the empty-toolhead guards need the other state.
     static void force_filament_loaded(AmsBackendMock& b, bool loaded) {

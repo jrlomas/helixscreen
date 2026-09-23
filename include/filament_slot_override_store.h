@@ -503,11 +503,20 @@ class SlotFingerprintTracker {
     /// arrives. Each value is consumed only by an exact match; any other
     /// change clears them all. Empty strings are dropped;
     /// forget_expected() is the explicit drop.
-    void expect_any_of(int slot_index, std::vector<std::string> expected_values);
+    ///
+    /// Returns the values actually staged, for handing back to
+    /// forget_expected() when the write they were armed for fails to
+    /// dispatch. A value an earlier in-flight write also expects is staged
+    /// as a second claim on one entry, so that write's echo stays expected
+    /// after this one gives up.
+    std::vector<std::string> expect_any_of(int slot_index,
+                                           std::vector<std::string> expected_values);
 
-    /// Drop a pending expectation (e.g. the write failed to dispatch, so no
-    /// echo is coming and the next change is genuinely external).
-    void forget_expected(int slot_index);
+    /// Drop the claims one expect_any_of() call staged - that write failed
+    /// to dispatch, so its echo is never coming and the next change is
+    /// genuinely external. Values another in-flight write also expects
+    /// survive: each write holds its own claim.
+    void forget_expected(int slot_index, const std::vector<std::string>& staged_values);
 
     /// Current baseline for a slot, or nullopt when none observed yet.
     [[nodiscard]] std::optional<std::string> baseline(int slot_index) const;
@@ -545,9 +554,11 @@ class SlotFingerprintTracker {
 
   private:
     std::unordered_map<int, std::string> baseline_;
-    /// Pending expected values per slot: the intermediate and final
-    /// composites expect_any_of() registered.
-    std::unordered_map<int, std::vector<std::string>> expected_;
+    /// Pending expected values per slot, each paired with the number of
+    /// in-flight writes that expect it: the intermediate and final composites
+    /// expect_any_of() registered, claim-counted so one write's failed
+    /// dispatch drops only its own claim.
+    std::unordered_map<int, std::vector<std::pair<std::string, int>>> expected_;
     BaselineSink baseline_sink_;
 };
 
