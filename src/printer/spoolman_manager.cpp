@@ -22,7 +22,9 @@
 
 #include "ams_state.h"
 #include "app_globals.h"
+#include "filament_slot_override.h"
 #include "i_moonraker_api.h"
+#include "lane_legacy_migration.h"
 #include "lane_source_store.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
@@ -261,11 +263,31 @@ void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int s
                         const helix::ams::LaneId lane = bound->owner->lane_id(slot_index);
                         const bool had_record = helix::ams::lane_sources(lane).spoolman.has_value();
                         helix::ams::drop_lane_source(lane, helix::ams::ObservationSource::Spoolman);
-                        // A backend serving its slots from a cache
-                        // painted this one while the record stood,
-                        // and the drop raises no backend event to
-                        // resync the slot's subjects.
                         if (had_record) {
+                            // A delete is bookkeeping, not a spool change: the slot
+                            // goes on showing what is loaded. What the slot carried
+                            // goes back on the lane as remembered, the way an unlink
+                            // that kept the identity files it, so it stands until an
+                            // edit or a spool change replaces it. The kept record
+                            // names no spool - both binding ids zeroed, as an
+                            // unlink's record does - or the record translation would
+                            // stand the Spoolman record just dropped right back up.
+                            // The slot struct keeps its own spoolman_id: the manager
+                            // has no identity write path to a backend, and polling
+                            // for this spool already stopped above.
+                            SlotInfo kept = bound->slot;
+                            kept.spoolman_id = 0;
+                            kept.spoolman_filament_id = 0;
+                            const helix::ams::Observation nothing_declared(
+                                helix::ams::ObservationSource::Remembered);
+                            helix::ams::file_kept_identity(
+                                lane, slot_index,
+                                helix::ams::user_override_from_slot_info(nothing_declared, kept,
+                                                                         kept.material, nullptr));
+                            // A backend serving its slots from a cache
+                            // painted this one while the record stood,
+                            // and the drop raises no backend event to
+                            // resync the slot's subjects.
                             bound->owner->repaint_slot_from_lane(slot_index);
                             AmsState::instance().update_slot_for_backend(backend_index, slot_index);
                         }

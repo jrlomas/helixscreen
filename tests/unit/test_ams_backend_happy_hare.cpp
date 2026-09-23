@@ -4017,15 +4017,14 @@ TEST_CASE("an outside re-bind takes the old spool's brand off a Happy Hare gate"
     CHECK(helper.get_slot_info(2).brand == "Sunlu");
 }
 
-TEST_CASE("a dropped Spoolman record takes its brand off a Happy Hare gate",
+TEST_CASE("a spool Spoolman denies keeps the Happy Hare gate's brand as remembered",
           "[ams][happy_hare][happyhare][lane][1672]") {
-    // The re-bind test above retires the old spool when the gate map names a
-    // different one. Here the gate keeps its filament and only the server's
-    // record goes away (an unlink that kept the identity, or a denial dropping
-    // the record). The gate's SlotInfo persists across frames, so a brand an
-    // earlier paint wrote survives every later frame unless each paint starts
-    // from what the gate map states and lets the lane restate what still
-    // stands.
+    // A spool deleted in Spoolman is bookkeeping, not a spool change: the gate
+    // goes on showing what is loaded. The manager's denial path drops the
+    // record and files what the gate showed as remembered, the way an unlink
+    // that kept the identity does, so the identity stands until an edit or a
+    // spool change replaces it. Both lane shapes - one no one edited and one
+    // carrying a person's own pick - must end up showing the same brand.
     helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
     AmsBackendHappyHareTestHelper& helper = *helper_reg;
     helper.initialize_test_gates(4);
@@ -4040,23 +4039,79 @@ TEST_CASE("a dropped Spoolman record takes its brand off a Happy Hare gate",
     helper.repaint_slot_from_lane(1);
     REQUIRE(helper.get_slot_info(1).brand == "Polymaker");
 
-    // The record goes away with no frame in flight: the repaint SpoolmanManager
-    // runs after a denial must not keep showing the dropped record's brand.
-    helix::ams::drop_lane_source(helper.lane_id(1), helix::ams::ObservationSource::Spoolman);
-    helper.repaint_slot_from_lane(1);
-    CHECK(helper.get_slot_info(1).brand.empty());
+    SECTION("an unedited gate") {
+        helix::test::spool_denied_on_lane(helper, 1);
+        helper.repaint_slot_from_lane(1);
+        CHECK(helper.get_slot_info(1).brand == "Polymaker");
 
-    // Restate the record, then drop it again and let the next gate FRAME be
-    // the first thing that runs: each frame starts from what the lane holds
-    // now.
+        // The next gate FRAME must not retire it either: each frame starts
+        // from what the lane holds now, and the lane's remembered record
+        // states it.
+        helper.feed_mmu_gate_status({2, 2, 2, 2});
+        CHECK(helper.get_slot_info(1).brand == "Polymaker");
+    }
+
+    SECTION("a gate a person picked a colour on") {
+        // The editor opens on the lane's current state and moves one field;
+        // the brand stays the server's word while the record stands.
+        SlotInfo edit = helper.get_slot_info(1);
+        edit.color_rgb = 0x1A73E8;
+        edit.color_name = "Sky Blue";
+        REQUIRE(helix::test::apply_edit(helper, 1, edit).success());
+        REQUIRE(helper.has_gate_override(1));
+
+        helix::test::spool_denied_on_lane(helper, 1);
+        helper.repaint_slot_from_lane(1);
+        const SlotInfo after = helper.get_slot_info(1);
+        CHECK(after.brand == "Polymaker");
+        // The person's own pick outranks what is remembered, denial or not.
+        CHECK(after.color_name == "Sky Blue");
+    }
+}
+
+TEST_CASE("a Spoolman record re-filed without its brand clears the Happy Hare gate's brand",
+          "[ams][happy_hare][happyhare][lane][1672]") {
+    // The answer CHANGING is the other half of the contract: a re-filed
+    // record replaces the old one whole, so a server that stopped stating a
+    // brand leaves nothing standing over it, and the gate's SlotInfo - which
+    // persists across frames - must let the brand go rather than keep showing
+    // what an earlier paint wrote.
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+
+    SpoolInfo spool;
+    spool.id = 42;
+    spool.vendor = "Polymaker";
+    spool.filament_name = "PolyLite PETG";
+    spool.material = "PETG";
+    spool.color_hex = "FF00FF";
     helix::test::spool_states(helper, 1, spool);
     helper.repaint_slot_from_lane(1);
     REQUIRE(helper.get_slot_info(1).brand == "Polymaker");
-    helix::ams::drop_lane_source(helper.lane_id(1), helix::ams::ObservationSource::Spoolman);
+
+    // The server re-files the spool with no vendor and no spool name: the
+    // record that lands says nothing about either field. With the repaint the
+    // manager runs, nothing states a brand any more.
+    SpoolInfo brandless = spool;
+    brandless.vendor.clear();
+    brandless.filament_name.clear();
+    helix::test::spool_states(helper, 1, brandless);
+    helper.repaint_slot_from_lane(1);
+    CHECK(helper.get_slot_info(1).brand.empty());
+
+    // Restate the record, then re-file it brandless again and let the next
+    // gate FRAME be the first thing that runs: each frame starts from what
+    // the lane holds now, not from what the struct still carries.
+    helix::test::spool_states(helper, 1, spool);
+    helper.repaint_slot_from_lane(1);
+    REQUIRE(helper.get_slot_info(1).brand == "Polymaker");
+    helix::test::spool_states(helper, 1, brandless);
     helper.feed_mmu_gate_status({2, 2, 2, 2});
     CHECK(helper.get_slot_info(1).brand.empty());
 
-    // A re-filed record paints again, so the reset costs a live link nothing.
+    // A record that states the brand again paints it back, so a server-side
+    // correction still lands.
     helix::test::spool_states(helper, 1, spool);
     helper.feed_mmu_gate_status({2, 2, 2, 2});
     CHECK(helper.get_slot_info(1).brand == "Polymaker");

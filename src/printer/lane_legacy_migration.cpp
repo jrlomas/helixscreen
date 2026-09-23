@@ -30,6 +30,13 @@ bool file_lane_sources(LaneId lane, const LaneSources& sources) {
     return wrote;
 }
 
+void file_kept_identity(LaneId lane, int slot_index, const FilamentSlotOverride& kept) {
+    LaneSources reloads =
+        sources_from_record(kept, to_lane_data_record(slot_index, kept), LegacyLockKeys::LaneData);
+    reloads.metered.reset();
+    file_lane_sources(lane, reloads);
+}
+
 int ingest_legacy_records(const FilamentSlotOverrideStore& store, LegacyLockKeys keys,
                           int backend_index) {
     int populated = 0;

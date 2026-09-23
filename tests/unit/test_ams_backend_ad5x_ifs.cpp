@@ -11708,15 +11708,15 @@ TEST_CASE("clearing an AD5X port takes the linked spool's brand off it",
     CHECK(after.spoolman_id == 0);
 }
 
-TEST_CASE("a dropped Spoolman record takes its brand off an AD5X port",
+TEST_CASE("a spool Spoolman denies keeps the AD5X port's brand as remembered",
           "[ams][ad5x_ifs][lane][1672]") {
-    // The unlink shape the clear test above does not cover: the spool stays
-    // loaded and only the server's record goes away (an unlink that kept the
-    // identity, or a denial dropping the record). The port's SlotInfo
-    // persists across frames, so a brand an earlier paint wrote survives
-    // every later frame unless each paint starts from firmware truth and lets
-    // the lane restate what still stands.
-    Ad5xIfsTmpCacheDir tmp("dropped_record_brand");
+    // A spool deleted in Spoolman is bookkeeping, not a spool change: the port
+    // goes on showing what is loaded. The manager's denial path drops the
+    // record and files what the slot showed as remembered, the way an unlink
+    // that kept the identity does, so the identity stands until an edit or a
+    // spool change replaces it. Both lane shapes - one no one edited and one
+    // carrying a person's own pick - must end up showing the same brand.
+    Ad5xIfsTmpCacheDir tmp("denied_keeps_brand");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
     state.init_subjects(false);
@@ -11738,22 +11738,88 @@ TEST_CASE("a dropped Spoolman record takes its brand off an AD5X port",
     backend.repaint_slot_from_lane(0);
     REQUIRE(backend.get_slot_info(0).brand == "Polymaker");
 
-    // The record goes away with no frame in flight: the repaint SpoolmanManager
-    // runs after a denial must not keep showing the dropped record's brand.
-    helix::ams::drop_lane_source(backend.lane_id(0), helix::ams::ObservationSource::Spoolman);
-    backend.repaint_slot_from_lane(0);
-    CHECK(backend.get_slot_info(0).brand.empty());
+    SECTION("an unedited port") {
+        helix::test::spool_denied_on_lane(backend, 0);
+        backend.repaint_slot_from_lane(0);
+        CHECK(backend.get_slot_info(0).brand == "Polymaker");
 
-    // Restate the record, then drop it again and let the next FRAME be the
-    // first thing that runs: each frame starts from what the lane holds now.
+        // The next FRAME must not retire it either: each frame starts from
+        // what the lane holds now, and the lane's remembered record states it.
+        Ad5xIfsTestAccess::handle_status(backend, make_save_variables(standard_variables()));
+        CHECK(backend.get_slot_info(0).brand == "Polymaker");
+    }
+
+    SECTION("a port a person picked a colour on") {
+        // The editor opens on the lane's current state and moves one field;
+        // the brand stays the server's word while the record stands.
+        SlotInfo edit = backend.get_slot_info(0);
+        edit.color_rgb = 0x1A73E8;
+        edit.color_name = "Sky Blue";
+        REQUIRE(helix::test::apply_edit(backend, 0, edit).success());
+        REQUIRE(Ad5xIfsTestAccess::get_override(backend, 0).has_value());
+
+        helix::test::spool_denied_on_lane(backend, 0);
+        backend.repaint_slot_from_lane(0);
+        const SlotInfo after = backend.get_slot_info(0);
+        CHECK(after.brand == "Polymaker");
+        // The person's own pick outranks what is remembered, denial or not.
+        CHECK(after.color_name == "Sky Blue");
+    }
+
+    helix::ui::UpdateQueue::instance().drain();
+}
+
+TEST_CASE("a Spoolman record re-filed without its brand clears the AD5X port's brand",
+          "[ams][ad5x_ifs][lane][1672]") {
+    // The answer CHANGING is the other half of the contract: a re-filed
+    // record replaces the old one whole, so a server that stopped stating a
+    // brand leaves nothing standing over it, and the port's SlotInfo - which
+    // persists across frames - must let the brand go rather than keep showing
+    // what an earlier paint wrote.
+    Ad5xIfsTmpCacheDir tmp("refiled_without_brand");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    helix::test::RegisteredBackend<AmsBackendAd5xIfs> backend_reg(&api, nullptr);
+    AmsBackendAd5xIfs& backend = *backend_reg;
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
+
+    SpoolInfo spool;
+    spool.id = 42;
+    spool.vendor = "Polymaker";
+    spool.filament_name = "PolyLite PETG";
+    spool.material = "PETG";
+    spool.color_hex = "FF00FF";
     helix::test::spool_states(backend, 0, spool);
     backend.repaint_slot_from_lane(0);
     REQUIRE(backend.get_slot_info(0).brand == "Polymaker");
-    helix::ams::drop_lane_source(backend.lane_id(0), helix::ams::ObservationSource::Spoolman);
+
+    // The server re-files the spool with no vendor and no spool name: the
+    // record that lands says nothing about either field. With the repaint the
+    // manager runs, nothing states a brand any more.
+    SpoolInfo brandless = spool;
+    brandless.vendor.clear();
+    brandless.filament_name.clear();
+    helix::test::spool_states(backend, 0, brandless);
+    backend.repaint_slot_from_lane(0);
+    CHECK(backend.get_slot_info(0).brand.empty());
+
+    // Restate the record, then re-file it brandless again and let the next
+    // FRAME be the first thing that runs: each frame starts from what the lane
+    // holds now, not from what the struct still carries.
+    helix::test::spool_states(backend, 0, spool);
+    backend.repaint_slot_from_lane(0);
+    REQUIRE(backend.get_slot_info(0).brand == "Polymaker");
+    helix::test::spool_states(backend, 0, brandless);
     Ad5xIfsTestAccess::handle_status(backend, make_save_variables(standard_variables()));
     CHECK(backend.get_slot_info(0).brand.empty());
 
-    // A re-filed record paints again, so the reset costs a live link nothing.
+    // A record that states the brand again paints it back, so a server-side
+    // correction still lands.
     helix::test::spool_states(backend, 0, spool);
     Ad5xIfsTestAccess::handle_status(backend, make_save_variables(standard_variables()));
     CHECK(backend.get_slot_info(0).brand == "Polymaker");
