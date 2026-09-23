@@ -76,10 +76,11 @@ namespace {
 /// ties them. A field added to that struct has no name here, so the
 /// static_assert below stops the build and whoever added it has to say which
 /// backends are expected to file it.
-constexpr std::array<const char*, 12> kFieldNames = {
-    "present",     "color_rgb",          "color_name",         "material",
-    "brand",       "spool_name",         "catalog_id",         "product_name",
-    "spoolman_id", "spoolman_vendor_id", "remaining_weight_g", "total_weight_g"};
+constexpr std::array<const char*, 13> kFieldNames = {
+    "present",       "tool_docked", "color_rgb",          "color_name",
+    "material",      "brand",       "spool_name",         "catalog_id",
+    "product_name",  "spoolman_id", "spoolman_vendor_id", "remaining_weight_g",
+    "total_weight_g"};
 
 static_assert(std::tuple_size_v<decltype(std::declval<Observation&>().fields())> ==
                   kFieldNames.size(),
@@ -370,8 +371,10 @@ const std::vector<BackendCensus>& expected_census() {
          {"sensed.present", "vendor_cache.color_rgb", "vendor_cache.material", "vendor_cache.brand",
           "vendor_cache.product_name", "vendor_cache.total_weight_g"}},
         // klipper-toolchanger senses docking and states nothing else. A lane
-        // here carries no identity record at all.
-        {"ToolChanger", {"sensed.present"}},
+        // here carries no identity record at all, and no filament-presence
+        // reading either: the dock answer is a toolhead, not a spool, so it
+        // files under tool_docked and `present` stays unset.
+        {"ToolChanger", {"sensed.tool_docked"}},
     };
     return table;
 }
@@ -515,24 +518,37 @@ TEST_CASE_METHOD(LVGLTestFixture, "a tool changer's presence reading is a dock, 
 
     const auto docked = lane_sources(harness.lane(0));
     REQUIRE(docked.sensed.has_value());
-    REQUIRE(docked.sensed->present.has_value());
-    CHECK(*docked.sensed->present == true);
+    REQUIRE(docked.sensed->tool_docked.has_value());
+    CHECK(*docked.sensed->tool_docked == true);
+    // Filament presence is never stated: the dock answer is a toolhead, so a
+    // consumer asking "is a spool in this bay" must read no answer at all
+    // rather than one about a different question.
+    CHECK_FALSE(docked.sensed->present.has_value());
 
     const auto carriage = lane_sources(harness.lane(1));
     REQUIRE(carriage.sensed.has_value());
-    REQUIRE(carriage.sensed->present.has_value());
-    CHECK(*carriage.sensed->present == true);
+    REQUIRE(carriage.sensed->tool_docked.has_value());
+    CHECK(*carriage.sensed->tool_docked == true);
+    CHECK_FALSE(carriage.sensed->present.has_value());
 
-    // The discriminator: presence tracks the dock. A toolhead removed from the
-    // machine is the only thing that makes this false, and a spool leaving a
-    // toolhead can never make it false.
+    // The discriminator: the dock reading tracks the toolhead. A toolhead
+    // removed from the machine is the only thing that makes this false, and a
+    // spool leaving a toolhead can never make it false.
     const auto removed = lane_sources(harness.lane(2));
     REQUIRE(removed.sensed.has_value());
-    REQUIRE(removed.sensed->present.has_value());
-    CHECK(*removed.sensed->present == false);
+    REQUIRE(removed.sensed->tool_docked.has_value());
+    CHECK(*removed.sensed->tool_docked == false);
+    CHECK_FALSE(removed.sensed->present.has_value());
 
-    // A consumer treating present as "filament is loaded" has nothing here to
-    // tell it otherwise: no identity record exists on any of the three lanes.
+    // Slot status still comes from the backend's own dock-derived stamp, which
+    // is what the UI reads: the lane model records the fact, it does not take
+    // over the status.
+    CHECK(harness->get_slot_info(0).status == helix::SlotStatus::AVAILABLE);
+    CHECK(harness->get_slot_info(1).status == helix::SlotStatus::LOADED);
+    CHECK(harness->get_slot_info(2).status == helix::SlotStatus::EMPTY);
+
+    // A consumer treating tool_docked as an identity statement has nothing
+    // here: no identity record exists on any of the three lanes.
     CHECK_FALSE(docked.vendor_cache.has_value());
     CHECK_FALSE(carriage.vendor_cache.has_value());
     CHECK_FALSE(removed.vendor_cache.has_value());
