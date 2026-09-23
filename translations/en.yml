@@ -102,6 +102,7 @@ translations:
   A newer version of the helper macros is available: A newer version of the helper macros is available
   A picture of your printer: A picture of your printer
   A print is in progress - restart still pending: A print is in progress - restart still pending
+  A print is running on this gate. HelixScreen cleared its own copy; clear it again once the print finishes.: A print is running on this gate. HelixScreen cleared its own copy; clear it again once the print finishes.
   A spool may be tangled or the drive gear is jammed: A spool may be tangled or the drive gear is jammed
   ABS: ABS
   ACCELEROMETERS: ACCELEROMETERS
@@ -719,7 +720,9 @@ translations:
   Could not update filaments: Could not update filaments
   Could not verify Spoolman status. Moonraker may still be restarting.: Could not
     verify Spoolman status. Moonraker may still be restarting.
+  Couldn't clear the printer's gate map: Couldn't clear the printer's gate map
   Couldn't save the material name: Couldn't save the material name
+  Couldn't save the printer's gate map: Couldn't save the printer's gate map
   Couldn't save to Spoolman. Nothing changed on this printer.: Couldn't save to Spoolman. Nothing changed on this printer.
   Cover open: Cover open
   Crash Report: Crash Report
@@ -3070,6 +3073,8 @@ translations:
   This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?: This
     print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?
   This printer cannot calibrate tool offsets automatically: This printer cannot calibrate tool offsets automatically
+  This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.: This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.
+  This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.: This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
