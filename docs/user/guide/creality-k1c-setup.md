@@ -98,7 +98,7 @@ Or use the command line (replace `vX.Y.Z` with the actual version):
 ```bash
 VERSION=vX.Y.Z  # Check latest at https://github.com/prestonbrown/helixscreen/releases/latest
 wget "https://github.com/prestonbrown/helixscreen/releases/download/${VERSION}/helixscreen-k1.zip"
-wget https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh
+wget https://releases.helixscreen.org/install.sh
 ```
 
 **Copy to the printer and install:**

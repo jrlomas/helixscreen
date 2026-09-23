@@ -54,7 +54,7 @@ ssh root@<ip>
 Then run the installer:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+curl -sSL https://releases.helixscreen.org/install.sh | sh
 ```
 
 ### Step 3: Switch back to another UI (optional)
@@ -92,7 +92,7 @@ Check the installed version on the touchscreen (**Settings > Help & About > Abou
 Re-run the installer with `--update`; it preserves your settings:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --update
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --update
 ```
 
 To pin a specific version add `--version vX.Y.Z`, or swap `--update` for `--clean` to reinstall with fresh settings. See [Updating HelixScreen](../INSTALL.md#updating-helixscreen) for the universal details.
@@ -100,7 +100,7 @@ To pin a specific version add `--version vX.Y.Z`, or swap `--update` for `--clea
 ## Uninstalling
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --uninstall
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --uninstall
 ```
 
 The uninstaller reverses the `gui-switcher` registration, including the allowlist wrapper described below, and restores the UI that was running before.

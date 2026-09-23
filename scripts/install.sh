@@ -9,10 +9,10 @@
 # HelixScreen Installer
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+#   curl -sSL https://releases.helixscreen.org/install.sh | sh
 #
 # Or download and run:
-#   wget https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh
+#   wget https://releases.helixscreen.org/install.sh
 #   chmod +x install.sh
 #   ./install.sh
 #
