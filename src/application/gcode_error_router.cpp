@@ -44,6 +44,15 @@ constexpr const char* NOTIFY_HANDLER_NAME = "gcode_error_notifier";
 constexpr const char* REPLAY_OBSERVER_NAME = "gcode_store_replay";
 constexpr const char* FAULT_NOTIFY_HANDLER_NAME = "fault_raise_notifier";
 
+/// Moonraker notify frames carry their payload as the first element of a
+/// params array; a frame without a non-empty one has nothing to read.
+const nlohmann::json* first_notify_param(const nlohmann::json& msg) {
+    if (!msg.contains("params") || !msg["params"].is_array() || msg["params"].empty()) {
+        return nullptr;
+    }
+    return &msg["params"][0];
+}
+
 /// How long a coded raise displaces a pending prose copy of the same fault.
 /// The firmware pushes the pair within milliseconds, so this only has to
 /// outlive the 150ms hold of the prose presentation.
@@ -138,10 +147,11 @@ GcodeErrorRouter::GcodeErrorRouter(IMoonrakerAPI* api, IMoonrakerClient* client,
                         [this](const nlohmann::json& msg) { on_notify_status_update(msg); });
     standing_notify_id_ =
         client_->register_notify_update([deliver](const nlohmann::json& msg) mutable {
-            if (!msg.contains("params") || !msg["params"].is_array() || msg["params"].empty()) {
+            const nlohmann::json* first = first_notify_param(msg);
+            if (first == nullptr) {
                 return;
             }
-            nlohmann::json subset = faultcodes::fault_status_subset(msg["params"][0]);
+            nlohmann::json subset = faultcodes::fault_status_subset(*first);
             if (!subset.empty()) {
                 deliver(nlohmann::json{{"params", nlohmann::json::array({std::move(subset)})}});
             }
@@ -602,10 +612,9 @@ void GcodeErrorRouter::process_line(const std::string& line, bool firmware_repor
 }
 
 void GcodeErrorRouter::on_notify_gcode_response(const nlohmann::json& msg) {
-    if (!msg.contains("params") || !msg["params"].is_array() || msg["params"].empty()) {
+    if (first_notify_param(msg) == nullptr) {
         return;
     }
-
     const auto& params = msg["params"];
     if (params[0].is_array()) {
         for (const auto& line : params[0]) {
@@ -623,11 +632,11 @@ void GcodeErrorRouter::on_notify_gcode_response(const nlohmann::json& msg) {
 }
 
 void GcodeErrorRouter::on_notify_status_update(const nlohmann::json& msg) {
-    if (!msg.contains("params") || !msg["params"].is_array() || msg["params"].empty() ||
-        !msg["params"][0].is_object()) {
+    const nlohmann::json* first = first_notify_param(msg);
+    if (first == nullptr || !first->is_object()) {
         return;
     }
-    const nlohmann::json& status = msg["params"][0];
+    const nlohmann::json& status = *first;
 
     const auto standing =
         faultcodes::read_standing_faults(get_printer_state().get_discovery(), status);
@@ -649,10 +658,11 @@ void GcodeErrorRouter::on_notify_status_update(const nlohmann::json& msg) {
 }
 
 void GcodeErrorRouter::on_notify_fault(const std::string& method, const nlohmann::json& msg) {
-    if (!msg.contains("params") || !msg["params"].is_array() || msg["params"].empty()) {
+    const nlohmann::json* first = first_notify_param(msg);
+    if (first == nullptr) {
         return;
     }
-    const auto note = faultcodes::read_fault_notification(method, msg["params"][0]);
+    const auto note = faultcodes::read_fault_notification(method, *first);
     if (!note) {
         return;
     }

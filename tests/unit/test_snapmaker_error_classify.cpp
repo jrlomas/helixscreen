@@ -448,9 +448,8 @@ TEST_CASE_METHOD(LVGLUITestFixture, "a coded raise notification surfaces our wor
     GcodeErrorRouterTestAccess::on_notify_fault(router, PREFS_METHOD, raise_frame(prefs_entry()));
     helix::ui::UpdateQueue::instance().drain();
 
-    // Before the fix only the console prose reached the screen (logged with
-    // code=-), so OUR 531 wording was unreachable. The notification alone must
-    // surface it: exactly one presentation, naming the coded spelling.
+    // The notification alone must surface our wording, not the console prose:
+    // exactly one presentation, naming the coded spelling.
     process_lvgl(250);
     REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 1);
     REQUIRE(GcodeErrorRouterTestAccess::last_deferred_shown(router) == PREFS_CODE);
