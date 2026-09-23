@@ -398,7 +398,10 @@ Four distinct clear paths, handled separately:
   integration table) and auto-clears when the signal transitions to
   "different spool". The baseline is recorded on first observation after
   startup and NEVER triggers a clear on its own — otherwise every app launch
-  would wipe overrides.
+  would wipe overrides. Backends on the shared fingerprint tracker seed that
+  baseline from the record's persisted fingerprint instead ("Swap
+  fingerprints" below), so a swap that happened while HelixScreen was off is
+  caught on the first frame after start.
 - **Binding-rule clears (re-bind / eject).** The two cross-field rules
   `classify_binding()` decides (§5) drop the lane's declaring sources and the
   backend's persisted record with them: an external re-bind (firmware reports a
@@ -411,6 +414,42 @@ Four distinct clear paths, handled separately:
   color briefly) and clear the override the user just saved. Snapmaker and
   CFS don't need this pre-update: `CARD_UID` and the composite fingerprint
   aren't user-editable.
+
+### Swap fingerprints: persistence across restarts
+
+CFS (stock and flat schema) and Snapmaker run their hardware-event clear
+through the shared `SlotFingerprintTracker`
+(`include/filament_slot_override_store.h`). Each observed identity string
+(stock CFS material-code|color composite, the flat schema's
+material/brand/name/color composite, Snapmaker's `CARD_UID`) classifies as
+`NoSignal`, `Baseline`, `Unchanged`, `OwnWriteEcho` or `Changed`, and only
+`Changed` clears the override. Before pushing a user edit the backend arms
+`expect_any_of()` with the values the write should echo back. Expectations
+accumulate per slot, so two edits inside one poll window each match their own
+echo, while a change no write asked for consumes every pending expectation
+and still reports `Changed`. A failed dispatch drops them
+(`forget_expected()`): a write that never reached the firmware cannot blind
+the slot.
+
+A baseline that lives only in memory misses a swap made while HelixScreen was
+off, so `bind_fingerprint_persistence()` — each of those backends calls it
+right after the store loads — ties the tracker to the records:
+
+- **Seeding.** Every loaded record with a non-empty `fingerprint` seeds the
+  baseline, so the first observation after start compares against the last
+  fingerprint seen before shutdown: different means `Changed` (clears, same
+  as a live swap), same means `Unchanged` (the override survives the
+  restart).
+- **Recording.** The baseline sink writes the current fingerprint onto the
+  record on `Baseline`, `Unchanged` and `OwnWriteEcho`, never `Changed`. A
+  change clears the record, so the new spool's fingerprint is picked up by
+  the first stable observation of the override that follows it.
+- **On-disk key.** The fingerprint rides the record as `helix_fingerprint`
+  in the shared `lane_data` namespace and as bare `fingerprint` in the local
+  cache (§4); the wire format is
+  [`../specs/filament_slots.md`](../specs/filament_slots.md). Records
+  without the key seed nothing and behave as before: first observation is
+  `Baseline`, no clear.
 
 ---
 

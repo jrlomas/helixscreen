@@ -3988,3 +3988,168 @@ TEST_CASE("a Spoolman filing keeps a declared colour on the stored record",
         CHECK_FALSE(persist_override_external_identity(nullptr, overrides, 0, spoolman, "[test]"));
     }
 }
+
+TEST_CASE("slot fingerprint round-trips through the lane_data record and the local cache",
+          "[filament_slot_override][ams]") {
+    FilamentSlotOverride ovr;
+    ovr.brand = "Polymaker";
+    ovr.material = "PLA";
+    ovr.fingerprint = "PLA|Polymaker|PolyLite Orange|FF5500";
+
+    // Wire form: helix_-prefixed (shared namespace), omitted when empty.
+    json wire = helix::ams::to_lane_data_record(0, ovr);
+    CHECK(wire["helix_fingerprint"] == "PLA|Polymaker|PolyLite Orange|FF5500");
+    auto parsed = helix::ams::from_lane_data_record(wire);
+    REQUIRE(parsed.has_value());
+    CHECK(parsed->first == 0);
+    CHECK(parsed->second.fingerprint == "PLA|Polymaker|PolyLite Orange|FF5500");
+
+    ovr.fingerprint.clear();
+    json quiet = helix::ams::to_lane_data_record(0, ovr);
+    CHECK_FALSE(quiet.contains("helix_fingerprint"));
+    auto no_fp = helix::ams::from_lane_data_record(quiet);
+    REQUIRE(no_fp.has_value());
+    CHECK(no_fp->second.fingerprint.empty());
+
+    // Local cache: HelixScreen-private, bare key, always present.
+    FilamentSlotOverride cached;
+    cached.brand = "Polymaker";
+    cached.fingerprint = "1,2,3,4";
+    FilamentSlotOverride cache_round = helix::ams::from_json(helix::ams::to_json(cached));
+    CHECK(cache_round.fingerprint == "1,2,3,4");
+    FilamentSlotOverride cache_absent =
+        helix::ams::from_json(helix::ams::to_json(FilamentSlotOverride{}));
+    CHECK(cache_absent.fingerprint.empty());
+}
+
+TEST_CASE("a user edit carries the prior record's fingerprint forward",
+          "[filament_slot_override][ams]") {
+    helix::SlotInfo original, edited;
+    original.brand = "Polymaker";
+    original.material = "PLA";
+    edited.brand = "Draft";
+    edited.material = "PETG";
+    edited.color_rgb = 0x123456;
+
+    FilamentSlotOverride prior;
+    prior.fingerprint = "PLA|Polymaker|PolyLite Orange|FF5500";
+
+    auto kept = helix::ams::user_override_from_slot_info(original, edited, &prior);
+    CHECK(kept.fingerprint == "PLA|Polymaker|PolyLite Orange|FF5500");
+    auto fresh = helix::ams::user_override_from_slot_info(original, edited, nullptr);
+    CHECK(fresh.fingerprint.empty());
+}
+
+TEST_CASE("SlotFingerprintTracker seeds baselines and confirms through a sink",
+          "[filament_slot_override][ams]") {
+    helix::ams::SlotFingerprintTracker tracker;
+
+    // Seeding fills only a slot with no baseline, never with an empty value.
+    tracker.seed_baseline(0, "A");
+    CHECK(tracker.baseline(0) == "A");
+    tracker.seed_baseline(0, "B"); // a live observation outranks a stored one
+    CHECK(tracker.baseline(0) == "A");
+    tracker.seed_baseline(1, "");
+    CHECK_FALSE(tracker.baseline(1).has_value());
+
+    std::vector<std::pair<int, std::string>> seen;
+    tracker.set_baseline_sink(
+        [&seen](int slot, const std::string& fp) { seen.emplace_back(slot, fp); });
+
+    using helix::ams::FingerprintEvent;
+    CHECK(tracker.observe(1, "X") == FingerprintEvent::Baseline);
+    CHECK(tracker.observe(1, "X") == FingerprintEvent::Unchanged);
+    tracker.expect_any_of(1, {"Y"});
+    CHECK(tracker.observe(1, "Y") == FingerprintEvent::OwnWriteEcho);
+    CHECK(tracker.observe(1, "Z") == FingerprintEvent::Changed);
+    CHECK(tracker.observe(1, "") == FingerprintEvent::NoSignal);
+
+    // Confirmations only: Baseline, Unchanged, OwnWriteEcho. Changed and
+    // NoSignal stay silent.
+    REQUIRE(seen.size() == 3);
+    CHECK(seen[0] == std::make_pair(1, std::string("X")));
+    CHECK(seen[1] == std::make_pair(1, std::string("X")));
+    CHECK(seen[2] == std::make_pair(1, std::string("Y")));
+}
+
+TEST_CASE("SlotFingerprintTracker expectations accumulate across writes",
+          "[filament_slot_override][ams]") {
+    helix::ams::SlotFingerprintTracker tracker;
+    tracker.observe(0, "B");
+
+    // Two writes dispatched before either echo lands: both echo values are
+    // ours, so arming the second must not drop the first's expectation.
+    tracker.expect_any_of(0, {"E1"});
+    tracker.expect_any_of(0, {"E2"});
+    REQUIRE(tracker.has_expected(0));
+
+    CHECK(tracker.observe(0, "E1") == helix::ams::FingerprintEvent::OwnWriteEcho);
+    CHECK(tracker.has_expected(0));
+    CHECK(tracker.observe(0, "E2") == helix::ams::FingerprintEvent::OwnWriteEcho);
+    CHECK_FALSE(tracker.has_expected(0));
+
+    // Both echoes consumed: the next change is a swap.
+    CHECK(tracker.observe(0, "S") == helix::ams::FingerprintEvent::Changed);
+
+    // Re-registering a value already pending adds nothing: an entry is
+    // single-shot per VALUE, so one echo still ends it.
+    tracker.expect_any_of(0, {"V"});
+    tracker.expect_any_of(0, {"V"});
+    CHECK(tracker.observe(0, "V") == helix::ams::FingerprintEvent::OwnWriteEcho);
+    CHECK_FALSE(tracker.has_expected(0));
+
+    // A change no write asked for consumes everything pending — the
+    // swap-while-in-flight guarantee.
+    helix::ams::SlotFingerprintTracker swap;
+    swap.observe(1, "B");
+    swap.expect_any_of(1, {"X", "Y"});
+    CHECK(swap.observe(1, "Z") == helix::ams::FingerprintEvent::Changed);
+    CHECK_FALSE(swap.has_expected(1));
+}
+
+TEST_CASE("bind_fingerprint_persistence seeds from records and persists observations",
+          "[filament_slot_override][ams]") {
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    FilamentSlotOverrideStore store(&api, "ifs");
+    std::unordered_map<int, FilamentSlotOverride> overrides;
+    FilamentSlotOverride with_fp;
+    with_fp.brand = "Polymaker";
+    with_fp.material = "PLA";
+    with_fp.fingerprint = "PLA|Polymaker|PolyLite Orange|FF5500";
+    overrides[0] = with_fp;
+    FilamentSlotOverride without_fp;
+    without_fp.brand = "Bambu";
+    overrides[1] = without_fp;
+
+    helix::ams::SlotFingerprintTracker tracker;
+    helix::ams::bind_fingerprint_persistence(tracker, &store, overrides);
+
+    // Slot 0 seeded from its record; slot 1 had none to give.
+    REQUIRE(tracker.baseline(0) == "PLA|Polymaker|PolyLite Orange|FF5500");
+    CHECK_FALSE(tracker.baseline(1).has_value());
+
+    // A confirming observation persists into the record and the lane_data DB.
+    CHECK(tracker.observe(1, "1,2,3,4") == helix::ams::FingerprintEvent::Baseline);
+    CHECK(overrides[1].fingerprint == "1,2,3,4");
+    auto lane2 = api.mock_get_db_value("lane_data", "lane2");
+    REQUIRE(!lane2.is_null());
+    CHECK(lane2["helix_fingerprint"] == "1,2,3,4");
+
+    // Unchanged with the record already current: no churn to observe.
+    CHECK(tracker.observe(0, "PLA|Polymaker|PolyLite Orange|FF5500") ==
+          helix::ams::FingerprintEvent::Unchanged);
+
+    // Changed must NOT persist: the clear that follows it deletes the record,
+    // and a save racing the delete would resurrect it.
+    CHECK(tracker.observe(0, "PETG|Bambu|Basic Green|00FF00") ==
+          helix::ams::FingerprintEvent::Changed);
+    CHECK(overrides[0].fingerprint == "PLA|Polymaker|PolyLite Orange|FF5500");
+
+    // A slot with no record: observation classifies normally, nothing saved.
+    CHECK(tracker.observe(2, "9,9,9,9") == helix::ams::FingerprintEvent::Baseline);
+    CHECK(api.mock_get_db_value("lane_data", "lane3").is_null());
+}
