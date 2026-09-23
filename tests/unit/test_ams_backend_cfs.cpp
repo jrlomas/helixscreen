@@ -2954,6 +2954,56 @@ TEST_CASE("CFS genuine swap while a color push is in flight still clears the ove
     CHECK_FALSE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
 }
 
+TEST_CASE("CFS two color edits in one poll window both survive their echoes",
+          "[ams][cfs][filament_slot_override][firmware_writeback]") {
+    CfsOverrideRig rig("cfs_double_color_edit");
+
+    json box_before = make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                           {"0FF5500", "0FFFFFF", "00A2989", "0C12E1F"});
+    rig.poll(box_before);
+    REQUIRE(CfsTestAccess::last_rfid_uid(*rig.backend, 0) == "101001|0FF5500");
+
+    // The user retunes the colour twice before firmware has echoed either
+    // write. Both pushes are in flight at once, so both echoes must be
+    // expected simultaneously: the first echo landing after the second push
+    // is still OUR write coming home, not a swap.
+    SlotInfo edit1;
+    edit1.material = "ASA-CF";
+    edit1.color_rgb = 0x1A1A1A;
+    helix::test::edit_slot_as_user(*rig.backend, 0, edit1);
+
+    SlotInfo edit2;
+    edit2.material = "ASA-CF";
+    edit2.color_rgb = 0x2B2B2B;
+    helix::test::edit_slot_as_user(*rig.backend, 0, edit2);
+
+    auto staged = CfsTestAccess::get_override(*rig.backend, 0);
+    REQUIRE(staged.has_value());
+    CHECK(staged->color_rgb == 0x2B2B2Bu);
+
+    // Polls before either echo: firmware still reports the OLD colour.
+    rig.poll(box_before);
+    REQUIRE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
+
+    // First write lands: colour 01A1A1A. The second is still in flight.
+    rig.poll(make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                  {"01A1A1A", "0FFFFFF", "00A2989", "0C12E1F"}));
+    REQUIRE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
+
+    // Second write lands: colour 02B2B2B, the value the user last chose.
+    rig.poll(make_single_unit_box({"101001", "101001", "101001", "101001"},
+                                  {"02B2B2B", "0FFFFFF", "00A2989", "0C12E1F"}));
+    auto settled = CfsTestAccess::get_override(*rig.backend, 0);
+    REQUIRE(settled.has_value());
+    CHECK(settled->color_rgb == 0x2B2B2Bu);
+    CHECK(CfsTestAccess::last_rfid_uid(*rig.backend, 0) == "101001|02B2B2B");
+
+    // With both echoes consumed, a genuine swap is detected normally.
+    rig.poll(make_single_unit_box({"102001", "101001", "101001", "101001"},
+                                  {"000FF00", "0FFFFFF", "00A2989", "0C12E1F"}));
+    CHECK_FALSE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
+}
+
 TEST_CASE("CFS flat-schema fingerprint change clears override (hardware swap detected)",
           "[ams][cfs][flat][filament_slot_override]") {
     CfsOverrideRig rig("cfs_flat_swap_clears");
@@ -3099,6 +3149,56 @@ TEST_CASE("CFS flat-schema dispatch failure drops the echo expectation",
     rig.poll(make_flat_box("ASA-CF", "Polymaker", "PolyLite ASA", "#1A1A1A"));
     CHECK_FALSE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
     CHECK(CfsTestAccess::last_rfid_uid(*rig.backend, 0) == "ASA-CF|Polymaker|PolyLite ASA|1A1A1A");
+}
+
+TEST_CASE("CFS flat-schema two edits in one poll window both survive their echoes",
+          "[ams][cfs][flat][filament_slot_override][firmware_writeback]") {
+    CfsOverrideRig rig("cfs_flat_double_edit");
+
+    json box_before = make_flat_box("PLA", "Polymaker", "PolyLite Orange", "#FF5500");
+    rig.poll(box_before);
+    REQUIRE(CfsTestAccess::last_rfid_uid(*rig.backend, 0) ==
+            "PLA|Polymaker|PolyLite Orange|FF5500");
+
+    // Two identity writes dispatched before firmware has echoed either: the
+    // first write's echo is still OUR value coming home when it lands after
+    // the second push, and must not read as a swap that wipes the edit.
+    SlotInfo edit1;
+    edit1.material = "asa-cf";
+    edit1.brand = "Polymaker";
+    edit1.spool_name = "PolyLite ASA";
+    edit1.color_rgb = 0x1A1A1A;
+    helix::test::edit_slot_as_user(*rig.backend, 0, edit1);
+
+    SlotInfo edit2;
+    edit2.material = "petg";
+    edit2.brand = "Bambu";
+    edit2.spool_name = "Basic Green";
+    edit2.color_rgb = 0x2B2B2B;
+    helix::test::edit_slot_as_user(*rig.backend, 0, edit2);
+
+    auto staged = CfsTestAccess::get_override(*rig.backend, 0);
+    REQUIRE(staged.has_value());
+    CHECK(staged->material == "petg");
+
+    // Firmware still reporting the pre-edit identity: Unchanged.
+    rig.poll(box_before);
+    REQUIRE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
+
+    // First write's echo (material uppercased by _BOX_SLOT_SET).
+    rig.poll(make_flat_box("ASA-CF", "Polymaker", "PolyLite ASA", "#1A1A1A"));
+    REQUIRE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
+
+    // Second write's echo — the identity the user last chose.
+    rig.poll(make_flat_box("PETG", "Bambu", "Basic Green", "#2B2B2B"));
+    auto settled = CfsTestAccess::get_override(*rig.backend, 0);
+    REQUIRE(settled.has_value());
+    CHECK(settled->material == "petg");
+    CHECK(CfsTestAccess::last_rfid_uid(*rig.backend, 0) == "PETG|Bambu|Basic Green|2B2B2B");
+
+    // Both echoes consumed: a genuine swap clears normally.
+    rig.poll(make_flat_box("ABS", "Prusa", "Prusa Orange", "#FF8800"));
+    CHECK_FALSE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
 }
 
 TEST_CASE("CFS restart compares against the fingerprint the record carried",

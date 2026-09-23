@@ -1946,16 +1946,18 @@ FingerprintEvent SlotFingerprintTracker::observe(int slot_index, const std::stri
 
 void SlotFingerprintTracker::expect_any_of(int slot_index,
                                            std::vector<std::string> expected_values) {
-    std::vector<std::string> kept;
-    kept.reserve(expected_values.size());
+    // Accumulate with whatever is still pending from earlier writes on this
+    // slot: a second edit dispatched before the first echo lands leaves both
+    // echoes expected, so neither is misread as a swap when it arrives.
+    auto& pending = expected_[slot_index];
     for (auto& v : expected_values) {
-        if (!v.empty())
-            kept.push_back(std::move(v));
+        if (v.empty())
+            continue;
+        if (std::find(pending.begin(), pending.end(), v) == pending.end())
+            pending.push_back(std::move(v));
     }
-    if (kept.empty())
+    if (pending.empty())
         expected_.erase(slot_index);
-    else
-        expected_[slot_index] = std::move(kept);
 }
 
 void SlotFingerprintTracker::forget_expected(int slot_index) {

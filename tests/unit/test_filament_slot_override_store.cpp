@@ -4072,6 +4072,41 @@ TEST_CASE("SlotFingerprintTracker seeds baselines and confirms through a sink",
     CHECK(seen[2] == std::make_pair(1, std::string("Y")));
 }
 
+TEST_CASE("SlotFingerprintTracker expectations accumulate across writes",
+          "[filament_slot_override][ams]") {
+    helix::ams::SlotFingerprintTracker tracker;
+    tracker.observe(0, "B");
+
+    // Two writes dispatched before either echo lands: both echo values are
+    // ours, so arming the second must not drop the first's expectation.
+    tracker.expect_any_of(0, {"E1"});
+    tracker.expect_any_of(0, {"E2"});
+    REQUIRE(tracker.has_expected(0));
+
+    CHECK(tracker.observe(0, "E1") == helix::ams::FingerprintEvent::OwnWriteEcho);
+    CHECK(tracker.has_expected(0));
+    CHECK(tracker.observe(0, "E2") == helix::ams::FingerprintEvent::OwnWriteEcho);
+    CHECK_FALSE(tracker.has_expected(0));
+
+    // Both echoes consumed: the next change is a swap.
+    CHECK(tracker.observe(0, "S") == helix::ams::FingerprintEvent::Changed);
+
+    // Re-registering a value already pending adds nothing: an entry is
+    // single-shot per VALUE, so one echo still ends it.
+    tracker.expect_any_of(0, {"V"});
+    tracker.expect_any_of(0, {"V"});
+    CHECK(tracker.observe(0, "V") == helix::ams::FingerprintEvent::OwnWriteEcho);
+    CHECK_FALSE(tracker.has_expected(0));
+
+    // A change no write asked for consumes everything pending — the
+    // swap-while-in-flight guarantee.
+    helix::ams::SlotFingerprintTracker swap;
+    swap.observe(1, "B");
+    swap.expect_any_of(1, {"X", "Y"});
+    CHECK(swap.observe(1, "Z") == helix::ams::FingerprintEvent::Changed);
+    CHECK_FALSE(swap.has_expected(1));
+}
+
 TEST_CASE("bind_fingerprint_persistence seeds from records and persists observations",
           "[filament_slot_override][ams]") {
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);

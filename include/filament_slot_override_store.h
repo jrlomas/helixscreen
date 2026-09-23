@@ -472,10 +472,11 @@ enum class FingerprintEvent {
 /// Those intervening polls classify as Unchanged; the echo itself classifies
 /// as OwnWriteEcho.
 ///
-/// Each expectation is single-shot and is consumed by the first change of any
-/// kind, so a genuine physical swap that lands while a write is in flight is
-/// still reported as Changed and never permanently blinds swap detection for
-/// that slot.
+/// Each expectation is single-shot per value: an exact match consumes only its
+/// own entry, and a change to a value no write asked for consumes them all, so
+/// a genuine physical swap that lands while a write is in flight is still
+/// reported as Changed and never permanently blinds swap detection for that
+/// slot.
 ///
 /// A backend that writes TWO fields with one dispatch (CFS writes
 /// material_type then color_value in one script) can land a poll between the
@@ -496,9 +497,12 @@ class SlotFingerprintTracker {
 
     /// Register every value the slot may report between the first and last
     /// echo of a multi-field write (the intermediate composites and the final
-    /// one). Each is consumed only by an exact match; any other change clears
-    /// them all. Empty strings are dropped; an all-empty input is equivalent
-    /// to forget_expected().
+    /// one). Values accumulate with any still pending from an earlier write on
+    /// the same slot: a second edit dispatched before the first echo lands
+    /// leaves both echoes expected, so neither is misread as a swap when it
+    /// arrives. Each value is consumed only by an exact match; any other
+    /// change clears them all. Empty strings are dropped;
+    /// forget_expected() is the explicit drop.
     void expect_any_of(int slot_index, std::vector<std::string> expected_values);
 
     /// Drop a pending expectation (e.g. the write failed to dispatch, so no
