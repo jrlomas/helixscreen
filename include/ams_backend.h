@@ -2949,6 +2949,21 @@ class AmsBackend {
         (void)sensor_names;
     }
 
+    /**
+     * @brief Hand the backend the discovery snapshot its printer reported
+     *
+     * Called before start() with the same PrinterDiscovery that selected this
+     * backend. Backends take discovery-derived configuration here rather than
+     * reading the global PrinterState during start()/on_started(): application
+     * startup builds and starts AMS backends before that global is published,
+     * so a global read is stale on first connect.
+     *
+     * @param discovery Hardware snapshot this backend's printer reported
+     */
+    virtual void set_discovery(const helix::PrinterDiscovery& discovery) {
+        (void)discovery;
+    }
+
     // ========================================================================
     // Mock Support
     // ========================================================================

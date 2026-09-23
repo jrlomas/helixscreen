@@ -320,18 +320,18 @@ AmsBackendSnapmaker::AmsBackendSnapmaker(IMoonrakerAPI* api, helix::IMoonrakerCl
 // Lifecycle
 // ============================================================================
 
-void AmsBackendSnapmaker::on_started() {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        // One lookup answers both the script-shape question and the object
-        // key: the macro's config-case name is non-empty exactly when the
-        // firmware ships it.
-        const std::string macro = get_printer_state().get_discovery().macro_config_name(
-            helix::macro_patterns::AUTO_FEEDING_BATCH);
-        use_batch_macro_ = !macro.empty();
-        batch_macro_object_ = macro.empty() ? std::string{} : "gcode_macro " + macro;
-    }
+void AmsBackendSnapmaker::set_discovery(const helix::PrinterDiscovery& discovery) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    // One lookup answers both the script-shape question and the object
+    // key: the macro's config-case name is non-empty exactly when the
+    // firmware ships it.
+    const std::string macro =
+        discovery.macro_config_name(helix::macro_patterns::AUTO_FEEDING_BATCH);
+    use_batch_macro_ = !macro.empty();
+    batch_macro_object_ = macro.empty() ? std::string{} : "gcode_macro " + macro;
+}
 
+void AmsBackendSnapmaker::on_started() {
     // Load persisted per-slot overrides (brand, spool name, spoolman IDs, etc.)
     // from the Moonraker DB lane_data namespace BEFORE any status parse runs.
     // AmsSubscriptionBackend::start() registers the WebSocket subscription

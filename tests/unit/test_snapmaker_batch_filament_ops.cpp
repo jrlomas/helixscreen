@@ -23,6 +23,7 @@
 #include "ams_backend_snapmaker.h"
 #include "ams_error.h"
 #include "ams_types.h"
+#include "app_globals.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
@@ -262,6 +263,55 @@ TEST_CASE_METHOD(BatchFixture, "Snapmaker batch dispatch sends ONE script for th
         // AmsErrorHelper::invalid_parameter() reports as WRONG_STATE.
         REQUIRE(backend->load_filament_batch({}).result == AmsResult::WRONG_STATE);
         REQUIRE(sent_gcodes().empty());
+    }
+}
+
+// ============================================================================
+// set_discovery — the batch shape comes from the discovery handed to the
+// backend, not the global PrinterState
+// ============================================================================
+
+TEST_CASE_METHOD(BatchFixture, "Batch shape follows the discovery the backend was handed",
+                 "[snapmaker][batch]") {
+    // Startup builds and starts backends from AmsState's hardware argument
+    // BEFORE PrinterState publishes discovery globally, so the capability
+    // must arrive through set_discovery() — never a global read.
+    get_printer_state().set_hardware(helix::PrinterDiscovery{});
+    REQUIRE_FALSE(get_printer_state().get_discovery().has_auto_feeding_batch());
+
+    /// A backend built the way init_backends_from_hardware() builds one:
+    /// discovery applied before start().
+    auto make = [&](const helix::PrinterDiscovery& hw) {
+        auto b = helix::AmsBackend::create(helix::AmsType::SNAPMAKER, api.get(), &mock_client);
+        REQUIRE(b != nullptr);
+        b->set_discovery(hw);
+        REQUIRE(b->start().success());
+        mock_client.clear_gcode_script_history();
+        return b;
+    };
+
+    SECTION("a discovery carrying the macro dispatches the batch state machine") {
+        helix::PrinterDiscovery hw;
+        hw.parse_objects(nlohmann::json::array({"gcode_macro AUTO_FEEDING_BATCH"}));
+        REQUIRE(hw.has_auto_feeding_batch());
+
+        auto backend = make(hw);
+        REQUIRE(backend->load_filament_batch({1, 3}).success());
+        REQUIRE(mock_client.last_send_script() ==
+                "AUTO_FEEDING_BATCH ACTION=START\n"
+                "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=1 LOAD=1 NEXT_EXTRUDER=3\n"
+                "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=3 LOAD=1\n"
+                "AUTO_FEEDING_BATCH ACTION=END");
+    }
+
+    SECTION("a discovery without the macro keeps the per-head fallback") {
+        helix::PrinterDiscovery bare;
+        REQUIRE_FALSE(bare.has_auto_feeding_batch());
+
+        auto backend = make(bare);
+        REQUIRE(backend->load_filament_batch({1, 3}).success());
+        REQUIRE(mock_client.last_send_script() == "AUTO_FEEDING EXTRUDER=1 LOAD=1\n"
+                                                  "AUTO_FEEDING EXTRUDER=3 LOAD=1");
     }
 }
 
