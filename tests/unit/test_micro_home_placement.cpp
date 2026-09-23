@@ -10,12 +10,12 @@
  * whose fits_at() floors sizes against the nominal per-tier track
  * (GridLayout::GRID_CELL) instead rejects the span those same extents describe
  * whenever the content box quantises to a smaller track than the tier targets
- * — 31.25px delivered against a 34px nominal at 480x272 — and the grow walk
+ * (31.25px delivered against a 34px nominal at 480x272), and the grow walk
  * reseats it over a later anchor. The failures cascade into auto-placement and
  * the write-back persists the scramble.
  *
- * These cases drive the real defaults path — a fresh config's pending anchors
- * resolved through default_layout.json, then one populate_widgets() — at
+ * These cases drive the real defaults path: a fresh config's pending anchors
+ * resolved through default_layout.json, then one populate_widgets(), at
  * shipping geometries, and read LVGL's own grid-cell styles back as the
  * oracle: every anchor the table seats must land at its authored cell and
  * span, unchanged.
@@ -23,7 +23,7 @@
  * 320x240 is the honest edge: the micro table is authored against a 12x8
  * grid and this content box (270x232) is an 8x6, so five anchors are out of
  * bounds by design and go through auto-placement. The anchors that DO fit
- * must still land exactly — that is where a bad floor grows them.
+ * must still land exactly; that is where a bad floor grows them.
  */
 
 #include "ui_update_queue.h"
@@ -180,7 +180,7 @@ const AuthoredAnchor kMediumAnchors[] = {
 /// The micro anchors an 8x6 grid can seat. The other five (bed_temperature
 /// col 8, notifications col 10, led col 8, filament col 10, print_status
 /// colspan 12) are out of bounds at this width and go through auto-placement
-/// by design — build_default_grid() drops anchors the measured grid cannot
+/// by design: build_default_grid() drops anchors the measured grid cannot
 /// hold rather than clamping them onto occupied tracks.
 const AuthoredAnchor kMicroCompanionAnchors[] = {
     {"printer_image", 0, 0, 6, 4},
@@ -207,7 +207,7 @@ TEST_CASE_METHOD(DefaultPlacementFixture, "micro default layout lands exactly at
     seed_topology();
 
     // The measured home content box at 480x272 (kShipping in
-    // test_widget_content_fits.cpp): a 12x8 grid with 34.0x31.25px tracks —
+    // test_widget_content_fits.cpp): a 12x8 grid with 34.0x31.25px tracks;
     // the row track sits below the micro tier's 34px nominal target, which is
     // the condition the whole-cell floor must measure, not assume.
     lv_obj_t* container = make_grid_container(430, 264);
@@ -266,7 +266,7 @@ TEST_CASE_METHOD(DefaultPlacementFixture, "micro anchors that fit land exactly a
         check_anchor(container, a);
     }
 
-    // The out-of-bounds anchors still render — auto-placed, not lost.
+    // The out-of-bounds anchors still render, auto-placed rather than lost.
     for (const char* id : {"bed_temperature", "notifications", "led", "filament", "print_status"}) {
         INFO("auto-placed widget '" << id << "' missing from the grid");
         CHECK(lv_obj_find_by_name(container, id) != nullptr);
