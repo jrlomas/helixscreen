@@ -3349,7 +3349,8 @@ TEST_CASE("CFS restart compares against the fingerprint the record carried",
         CfsTestAccess::handle_status(*session1, make_cfs_notification(box_f1));
         auto stored = api.mock_get_db_value("lane_data", "lane1");
         REQUIRE(!stored.is_null());
-        REQUIRE(stored["helix_fingerprint"] == "PLA|Polymaker|PolyLite Orange|FF5500");
+        REQUIRE(stored.contains("helix_fingerprint"));
+        CHECK(stored.at("helix_fingerprint") == "PLA|Polymaker|PolyLite Orange|FF5500");
     }
 
     SECTION("a swap made while the app was down clears the override") {
@@ -3389,7 +3390,8 @@ TEST_CASE("CFS restart compares against the fingerprint the record carried",
         // NEXT restart compares against this spool.
         auto stored = api.mock_get_db_value("lane_data", "lane1");
         REQUIRE(!stored.is_null());
-        CHECK(stored["helix_fingerprint"] == "PETG|Bambu|Basic Green|00FF00");
+        REQUIRE(stored.contains("helix_fingerprint"));
+        CHECK(stored.at("helix_fingerprint") == "PETG|Bambu|Basic Green|00FF00");
     }
 }
 // =============================================================================

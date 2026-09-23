@@ -2580,7 +2580,8 @@ TEST_CASE("QIDI Box a restart compares against the fingerprint the record carrie
             *session1, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
         const auto stored = api.mock_get_db_value("lane_data", "lane1");
         REQUIRE(!stored.is_null());
-        REQUIRE(stored["helix_fingerprint"] == "1|18|1");
+        REQUIRE(stored.contains("helix_fingerprint"));
+        CHECK(stored.at("helix_fingerprint") == "1|18|1");
     }
 
     SECTION("a swap made while the app was down clears the override") {
