@@ -205,6 +205,12 @@ class AmsBackendMock : public AmsBackend {
     AmsError sync_external_identity(int slot_index, const SlotInfo& info) override;
     AmsError set_tool_mapping_impl(int tool_number, int slot_index) override;
 
+    /// The mock keeps no override records to erase - its slot table is written
+    /// whole by apply_user_edit() - so the clear's whole job is dropping the
+    /// lane's standing user rung, which holds picks a sentinel clear never
+    /// engages.
+    void clear_slot_override(int slot_index) override;
+
     // Bypass mode
     AmsError enable_bypass() override;
     AmsError disable_bypass() override;

@@ -259,35 +259,17 @@ class ToolState {
 
     // ---- Per-tool offsets (helix::tool_offsets) -----------------------------
     //
-    // Every subject below comes in an X/Y/Z trio, registered for XML as
-    // per_tool_{x,y,z}_supported, active_tool_{x,y,z}_offset,
-    // active_tool_{x,y,z}_offset_valid and any_tool_{x,y,z}_dirty. A firmware
-    // that keeps only Z leaves the X and Y trio members at 0 forever.
+    // Registered for XML as the per_tool_{x,y,z}_supported trio plus the
+    // any_tool_offset_dirty aggregate. The per-tool values themselves live in
+    // tools_ and are read through the tool_offset_*() accessors below. A
+    // firmware that keeps only Z leaves the X and Y supported members at 0
+    // forever.
 
     /// Whether this printer keeps @p axis's offset per toolhead (1) or not (0).
     /// Gates whether a UI may offer controls for that axis at all.
     lv_subject_t* get_per_tool_axis_supported_subject(Axis axis) {
         return axis_member(axis, per_tool_x_supported_, per_tool_y_supported_,
                            per_tool_z_supported_);
-    }
-    /// The active tool's own offset on @p axis, in microns. Independent of the
-    /// machine-wide gcode_move offset — a tool changer applies both.
-    lv_subject_t* get_active_tool_offset_subject(Axis axis) {
-        return axis_member(axis, active_tool_x_offset_, active_tool_y_offset_,
-                           active_tool_z_offset_);
-    }
-    /// 1 once an offset has been reported for the active tool on @p axis.
-    /// Separate because 0 microns is a legitimate offset and cannot double as
-    /// "nothing known".
-    lv_subject_t* get_active_tool_offset_valid_subject(Axis axis) {
-        return axis_member(axis, active_tool_x_offset_valid_, active_tool_y_offset_valid_,
-                           active_tool_z_offset_valid_);
-    }
-    /// 1 when ANY tool's @p axis offset differs from what is persisted. The Z
-    /// one drives the Z save affordance together with the machine-wide
-    /// gcode_z_offset.
-    lv_subject_t* get_any_tool_axis_dirty_subject(Axis axis) {
-        return axis_member(axis, any_tool_x_dirty_, any_tool_y_dirty_, any_tool_z_dirty_);
     }
     /// 1 when any tool's offset on ANY axis differs from what is persisted.
     /// What a save affordance that covers all three axes binds to.
@@ -319,7 +301,7 @@ class ToolState {
 
     /// Whether a value has ever been reported for @p tool_index's @p axis.
     /// What lets a UI tell a tool sitting at 0.000 from one it knows nothing
-    /// about — for the active tool the *_valid subjects say the same thing.
+    /// about.
     [[nodiscard]] bool tool_offset_known(int tool_index, Axis axis) const;
 
     /// Apply a locally-issued offset change for @p tool_index's @p axis, in
@@ -352,11 +334,7 @@ class ToolState {
     /// Whether init_tools() found a per-tool offset on any axis.
     [[nodiscard]] bool per_tool_offsets_supported() const;
 
-    /// Republish the active tool's offset subjects from tools_. Handles both
-    /// a new value arriving and the active tool changing.
-    void refresh_active_tool_offsets();
-
-    /// Recompute the four dirty subjects from tools_.
+    /// Recompute any_tool_offset_dirty from tools_.
     void refresh_any_tool_dirty();
 
     ToolState() = default;
@@ -384,21 +362,12 @@ class ToolState {
     lv_subject_t show_tool_badge_{};
 
     // Per-tool offsets (helix::tool_offsets). Only a tool changer has any; on
-    // every other printer the *_supported trio stays 0 and the rest are never
-    // published. Individual members rather than arrays because INIT_SUBJECT_INT
-    // derives the XML name from the member name.
+    // every other printer the *_supported trio stays 0 and the aggregate is
+    // never published. Individual members rather than arrays because
+    // INIT_SUBJECT_INT derives the XML name from the member name.
     lv_subject_t per_tool_x_supported_{};
     lv_subject_t per_tool_y_supported_{};
     lv_subject_t per_tool_z_supported_{};
-    lv_subject_t active_tool_x_offset_{};
-    lv_subject_t active_tool_y_offset_{};
-    lv_subject_t active_tool_z_offset_{};
-    lv_subject_t active_tool_x_offset_valid_{};
-    lv_subject_t active_tool_y_offset_valid_{};
-    lv_subject_t active_tool_z_offset_valid_{};
-    lv_subject_t any_tool_x_dirty_{};
-    lv_subject_t any_tool_y_dirty_{};
-    lv_subject_t any_tool_z_dirty_{};
     lv_subject_t any_tool_offset_dirty_{};
 
     std::vector<ToolInfo> tools_;

@@ -56,17 +56,6 @@ enum class Authorship {
     DeclaredSet,
 };
 
-/// Whether a declaration of a field needs a value to stand over.
-enum class EmptyValue {
-    /// Clearing the field is itself a declaration, and the set is the one
-    /// place a stored record can say the user emptied it.
-    Declares,
-    /// A record holding no value for the field declares nothing for it. Every
-    /// mirror policy leaves a declared field alone, so a declaration over
-    /// nothing would stop firmware from ever filling that lane.
-    DeclaresNothing,
-};
-
 /// Who owns a field's value on a lane bound to a spool.
 enum class Owner {
     /// Whichever source the lane ranks highest, a person's edit included.
@@ -80,12 +69,11 @@ enum class Owner {
 /// One field, named once for every translation that carries it. A nullptr
 /// member says that translation does not claim the field, with the reason on
 /// the row.
-template <FieldKind K, Authorship A, EmptyValue E, Owner W, typename SlotMember,
-          typename RecordMember, typename ObsMember>
+template <FieldKind K, Authorship A, Owner W, typename SlotMember, typename RecordMember,
+          typename ObsMember>
 struct FieldRow {
     static constexpr FieldKind kind = K;
     static constexpr Authorship authorship = A;
-    static constexpr EmptyValue empty_value = E;
     static constexpr Owner owner = W;
     std::string_view name; ///< the field's name on the wire, in `helix_declared`
     SlotMember slot;       ///< SlotInfo member the edit path reads
@@ -93,10 +81,10 @@ struct FieldRow {
     ObsMember obs;         ///< where both file the value
 };
 
-template <FieldKind K, Authorship A = Authorship::Unattributed, EmptyValue E = EmptyValue::Declares,
-          Owner W = Owner::Lane, typename S, typename R, typename O>
+template <FieldKind K, Authorship A = Authorship::Unattributed, Owner W = Owner::Lane, typename S,
+          typename R, typename O>
 constexpr auto field(std::string_view name, S slot, R record, O obs) {
-    return FieldRow<K, A, E, W, S, R, O>{name, slot, record, obs};
+    return FieldRow<K, A, W, S, R, O>{name, slot, record, obs};
 }
 
 /// Every Observation field, once. This is the field list both translations
@@ -108,21 +96,20 @@ constexpr auto FIELD_ROSTER = std::make_tuple(
     // Neither is docking: no editor or stored record can state where a
     // toolhead is parked.
     field<FieldKind::Untranslated>("tool_docked", nullptr, nullptr, &Observation::tool_docked),
-    field<FieldKind::Color, Authorship::DeclaredSet, EmptyValue::DeclaresNothing>(
-        "color_rgb", &SlotInfo::color_rgb, &FilamentSlotOverride::color_rgb,
-        &Observation::color_rgb),
+    field<FieldKind::Color, Authorship::DeclaredSet>("color_rgb", &SlotInfo::color_rgb,
+                                                     &FilamentSlotOverride::color_rgb,
+                                                     &Observation::color_rgb),
     // color_name has no authorship of its own: it is the colour's own text and
     // the record path files it only alongside a colour it can file.
     field<FieldKind::Text>("color_name", &SlotInfo::color_name, &FilamentSlotOverride::color_name,
                            &Observation::color_name),
     // Material, brand, spool name and vendor id are what a Spoolman spool states
     // about itself, so on a linked lane the spool owns them.
-    field<FieldKind::Text, Authorship::DeclaredSet, EmptyValue::DeclaresNothing,
-          Owner::SpoolWhenLinked>("material", &SlotInfo::material, &FilamentSlotOverride::material,
-                                  &Observation::material),
-    field<FieldKind::Text, Authorship::DeclaredSet, EmptyValue::Declares, Owner::SpoolWhenLinked>(
+    field<FieldKind::Text, Authorship::DeclaredSet, Owner::SpoolWhenLinked>(
+        "material", &SlotInfo::material, &FilamentSlotOverride::material, &Observation::material),
+    field<FieldKind::Text, Authorship::DeclaredSet, Owner::SpoolWhenLinked>(
         "brand", &SlotInfo::brand, &FilamentSlotOverride::brand, &Observation::brand),
-    field<FieldKind::Text, Authorship::DeclaredSet, EmptyValue::Declares, Owner::SpoolWhenLinked>(
+    field<FieldKind::Text, Authorship::DeclaredSet, Owner::SpoolWhenLinked>(
         "spool_name", &SlotInfo::spool_name, &FilamentSlotOverride::spool_name,
         &Observation::spool_name),
     // The edit path refuses catalog_id and product_name by the rule
@@ -143,10 +130,9 @@ constexpr auto FIELD_ROSTER = std::make_tuple(
     // it carries no authorship bit either.
     field<FieldKind::PositiveId>("spoolman_id", nullptr, &FilamentSlotOverride::spoolman_id,
                                  &Observation::spoolman_id),
-    field<FieldKind::PositiveId, Authorship::DeclaredSet, EmptyValue::Declares,
-          Owner::SpoolWhenLinked>("spoolman_vendor_id", &SlotInfo::spoolman_vendor_id,
-                                  &FilamentSlotOverride::spoolman_vendor_id,
-                                  &Observation::spoolman_vendor_id),
+    field<FieldKind::PositiveId, Authorship::DeclaredSet, Owner::SpoolWhenLinked>(
+        "spoolman_vendor_id", &SlotInfo::spoolman_vendor_id,
+        &FilamentSlotOverride::spoolman_vendor_id, &Observation::spoolman_vendor_id),
     // A weight is a measurement wherever it came from, so the record path
     // files both as Metered without asking who wrote them.
     field<FieldKind::Weight>("remaining_weight_g", &SlotInfo::remaining_weight_g,
@@ -194,6 +180,17 @@ constexpr size_t MATERIAL_INDEX = index_of("material");
 static_assert(COLOR_INDEX < std::tuple_size_v<decltype(FIELD_ROSTER)>, "colour row went missing");
 static_assert(MATERIAL_INDEX < std::tuple_size_v<decltype(FIELD_ROSTER)>,
               "material row went missing");
+// The one cleared text field whose statement must stand rather than withdraw;
+// withdraw_cleared_fields() reaches it by position for the same reason the
+// record path reaches colour and material by name.
+constexpr size_t COLOR_NAME_INDEX = index_of("color_name");
+static_assert(COLOR_NAME_INDEX < std::tuple_size_v<decltype(FIELD_ROSTER)>,
+              "colour name row went missing");
+// The binding's own row: withdraw_cleared_fields() spares it, for the reason
+// named at the use.
+constexpr size_t SPOOLMAN_ID_INDEX = index_of("spoolman_id");
+static_assert(SPOOLMAN_ID_INDEX < std::tuple_size_v<decltype(FIELD_ROSTER)>,
+              "binding row went missing");
 
 /// The roster positions whose row satisfies @p pred, one bit per row.
 template <typename Pred> constexpr uint16_t rows_mask(Pred pred) {
@@ -251,16 +248,19 @@ static_assert(spool_owned_mask() ==
 template <typename Member> constexpr bool skipped = std::is_null_pointer_v<Member>;
 
 /// True when @p record holds a value a declaration of row @p f can stand over.
-/// A row whose empty value is itself a declaration always does.
+/// A clear is no declaration: it means "whatever the machine reports", not
+/// "this lane has none", so every mirror policy and every reload must be free
+/// to fill a field the record holds nothing in (prestonbrown/helixscreen#1661).
 template <typename Row>
 bool can_declare([[maybe_unused]] const Row& f,
                  [[maybe_unused]] const FilamentSlotOverride& record) {
-    if constexpr (Row::empty_value == EmptyValue::Declares) {
-        return true;
-    } else if constexpr (Row::kind == FieldKind::Color) {
+    if constexpr (Row::kind == FieldKind::Color) {
         // color_set is the record's own "a colour is present" flag, and
         // color_rgb is undefined while it is false.
         return record.color_set && is_declarable_color(record.*(f.record));
+    } else if constexpr (Row::kind == FieldKind::PositiveId) {
+        // Zero is "unset" for an id, so a stored zero declares nothing.
+        return record.*(f.record) > 0;
     } else {
         return !(record.*(f.record)).empty();
     }
@@ -351,13 +351,60 @@ Observation user_edit_observation(const SlotInfo& original, const SlotInfo& edit
                     obs.*(f.obs) = after;
             } else {
                 // A cleared text field and a zeroed id are both moves a person
-                // made, so an empty value here is a declaration, not an absence.
+                // made, so the empty value travels as their statement: the lane
+                // and the record show the clear. Whether it claims the field is
+                // a separate question, answered where authorship is amended.
                 if (after != before)
                     obs.*(f.obs) = after;
             }
         }
     });
     return obs;
+}
+
+void withdraw_cleared_fields(Observation& standing, const Observation& edit) {
+    for_each_field_indexed([&](const auto& f, size_t index) {
+        using Row = std::decay_t<decltype(f)>;
+        // Only the kinds that can arrive cleared withdraw. A colour's sentinel
+        // and a weight's -1 never engage, so those fields have no cleared
+        // shape to recognize, and presence is sensed, never declared.
+        if constexpr (Row::kind == FieldKind::Text || Row::kind == FieldKind::PositiveId) {
+            // A colour's name is the one cleared text that must stand: an edit
+            // cannot tell a backspaced name from a pick that never carried
+            // one, and a pick with no name has to keep displacing a
+            // contradictory name the machine reports (resolve(),
+            // lane_resolver.cpp). Clear Spool drops the record whole through
+            // AmsBackend::clear_slot_override() instead, so it needs no
+            // exception here.
+            if (index == COLOR_NAME_INDEX) {
+                return;
+            }
+            // The binding is a statement about the lane's spool, not a field
+            // another field's clear reaches: spoolman_id engages only as that
+            // whole statement (user_edit_observation), so its zero is the
+            // user's unlink and must stand.
+            if (index == SPOOLMAN_ID_INDEX) {
+                return;
+            }
+            // Fields the edit path refuses (nullptr slot member) can never
+            // arrive engaged, so there is nothing of theirs to withdraw.
+            if constexpr (!skipped<decltype(f.slot)>) {
+                const auto& incoming = edit.*(f.obs);
+                if (!incoming.has_value()) {
+                    return;
+                }
+                if constexpr (Row::kind == FieldKind::Text) {
+                    if (incoming->empty()) {
+                        (standing.*(f.obs)).reset();
+                    }
+                } else {
+                    if (*incoming == 0) {
+                        (standing.*(f.obs)).reset();
+                    }
+                }
+            }
+        }
+    });
 }
 
 SlotInfo keep_spool_owned_identity(const SlotInfo& original, const SlotInfo& edited,
@@ -558,20 +605,12 @@ LaneSources sources_from_record(const FilamentSlotOverride& record, const nlohma
                 carried = value > 0;
             }
             if (!carried) {
-                // An empty value is still a declaration when the record's own
-                // declared set names this field and clearing the field is a
-                // declaration at all: that is the one place a stored record
-                // can tell a field the user cleared apart from a field that was
-                // simply never set. legacy_declared answers a different
-                // question - was colour or material ever declared - and cannot
-                // make that distinction, so only the set itself, never its
-                // legacy stand-in, may file an empty value here.
-                if constexpr (Row::empty_value == EmptyValue::Declares) {
-                    if (has_declared && record.declared.test(index)) {
-                        user.*(f.obs) = value;
-                        have_user = true;
-                    }
-                }
+                // An empty value files nothing: it is either a field the user
+                // cleared, which declares nothing and falls to the machine, or
+                // a field no source ever stated. The declared set cannot widen
+                // that into a claim, and legacy_declared answers a different
+                // question - was colour or material ever declared - so it
+                // cannot either.
                 return;
             }
             const bool is_declared = declared_field(index);
@@ -611,15 +650,16 @@ RecordAuthorship amend_authorship(const Observation& observed, const FilamentSlo
     // One rule for every roster row that keeps its authorship in the declared
     // set. No per-kind rule for what this edit declares: the observation was
     // built by comparing the edit against what it opened on, so a field it
-    // carries is one a person moved, whatever value they moved it to. Clearing
-    // a brand is a declaration the same as typing into one, and the set is the
-    // one home that can say so.
+    // carries is one a person moved, whatever value they moved it to.
     //
-    // A colour or material declaration also needs a value to stand over, so
-    // the amended record has to carry one for either half of the rule to set
-    // the bit. An observation only ever carries a declarable colour, but a
-    // material arrives empty from a clear and from a backend whose normalized
-    // spelling came back empty.
+    // A declaration needs a value to stand over, so the amended record has to
+    // carry one for either half of the rule to set the bit. Clearing a field
+    // therefore drops whatever the record declared for it and the field falls
+    // back to the machine: a clear means "I don't know", never "this lane has
+    // none" (prestonbrown/helixscreen#1661). An observation only ever carries a
+    // declarable colour, but a material arrives empty from a clear and from a
+    // backend whose normalized spelling came back empty, and the guard cannot
+    // tell those apart - both fall back to the machine.
     //
     // A record with a spool id never declares a field the spool owns: the
     // spool's own record states it, whatever this edit or an earlier record

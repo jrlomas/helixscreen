@@ -66,6 +66,20 @@ enum class LegacyLockKeys {
 /// AmsBackend::commit_user_edit() (ams_backend.h) files the lane's half.
 [[nodiscard]] Observation user_edit_observation(const SlotInfo& original, const SlotInfo& edited);
 
+/// Take every identity field @p edit engaged as a clear off @p standing: a
+/// cleared text or zeroed id is a withdrawal of the statement, not a value,
+/// so the field comes off whatever it stood over and the machine's own
+/// reading shows through at once (prestonbrown/helixscreen#1661).
+///
+/// Walks FIELD_ROSTER by kind, so an identity field added there joins by its
+/// kind with no line here. Two statements are not field clears and stay: a
+/// colour's name, because a pick with no name must keep displacing a
+/// contradictory name the machine reports; and the spoolman binding, because
+/// its zero is the user's unlink, a whole statement in its own right
+/// (user_edit_observation()). Clear Spool withdraws nothing field by field -
+/// it drops the record whole through AmsBackend::clear_slot_override().
+void withdraw_cleared_fields(Observation& standing, const Observation& edit);
+
 /// Who declared the identity in a stored record.
 ///
 /// A record carrying a spool id is the server's statement. An unlinked record
@@ -129,10 +143,10 @@ enum class LegacyLockKeys {
 /// the observation separates the two.
 ///
 /// Every identity field comes back in the declared set, colour and material
-/// included. A colour or material declaration also needs a value to stand
-/// over, so a field @p amended carries nothing in is never declared however the
-/// edit moved it. Brand, spool name and vendor id have no such guard, because
-/// clearing one of them is itself a declaration.
+/// included. A declaration needs a value to stand over, so a field @p amended
+/// carries nothing in is never declared however the edit moved it: a clear
+/// drops whatever the record declared for the field and hands it back to the
+/// machine rather than recording an emptiness (prestonbrown/helixscreen#1661).
 ///
 /// A record with a spool id never declares a field the spool owns (material,
 /// brand, spool name, Spoolman vendor id), whatever @p observed or @p prior
@@ -161,8 +175,10 @@ enum class LegacyLockKeys {
 /// are how a record written before the set could name colour and material said
 /// who chose them. On a linked record they are not read, because a release 1.0
 /// writer set them on links and meter flushes alike, and a missing key declares
-/// nothing. Either way a colour or material declaration needs a value to stand
-/// over, so neither is declared on a record holding no value for it.
+/// nothing. Either way a declaration needs a value to stand over, so a field
+/// the record holds nothing in is never declared, however its name arrived in
+/// the set: that is what reads a clear recorded by an older build back as no
+/// declaration at all.
 [[nodiscard]] DeclaredFields declared_fields_on_load(const nlohmann::json& wire,
                                                      LegacyLockKeys keys,
                                                      const FilamentSlotOverride& parsed);

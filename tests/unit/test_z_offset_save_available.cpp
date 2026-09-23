@@ -111,8 +111,7 @@ TEST_CASE_METHOD(SaveAvailableFixture,
     // SET_TOOL_PARAMETER is runtime-only. With no affordance here the tool
     // offset dies at the next Klipper restart with nothing on screen to say so.
     set_tool_dirty(true);
-    CHECK(lv_subject_get_int(
-              ToolState::instance().get_any_tool_axis_dirty_subject(helix::Axis::Z)) == 1);
+    CHECK(ToolState::instance().tool_offset_dirty(0, helix::Axis::Z));
     CHECK(published() == 1);
     CHECK(published_via_xml_name() == 1);
 

@@ -3,7 +3,7 @@
 
 #include "snapmaker_exceptions.h"
 
-#include "lvgl/src/others/translation/lv_translation.h"
+#include <spdlog/fmt/fmt.h>
 
 #include <array>
 #include <cctype>
@@ -122,32 +122,37 @@ bool status_carries_exceptions(const nlohmann::json& status) {
     return exceptions != manager->end() && exceptions->is_array();
 }
 
+std::optional<ActiveException> read_exception_entry(const nlohmann::json& entry) {
+    if (!entry.is_object()) {
+        return std::nullopt;
+    }
+    ActiveException active;
+    active.code.level = field_int(entry, "level");
+    active.code.id = field_int(entry, "id");
+    active.code.index = field_int(entry, "index");
+    active.code.code = field_int(entry, "code");
+    auto firmware_text = entry.find("message");
+    if (firmware_text != entry.end() && firmware_text->is_string()) {
+        active.message = firmware_text->get<std::string>();
+    }
+    active.persistent = field_persistent(entry, "is_persistent");
+    return active;
+}
+
+std::string coded_line(const ActiveException& fault) {
+    return fmt::format("!! {:04d}-{:04d}-{:04d}-{:04d} {}", fault.code.level, fault.code.id,
+                       fault.code.index, fault.code.code, fault.message);
+}
+
 std::vector<ActiveException> read_active_exceptions(const nlohmann::json& status) {
     std::vector<ActiveException> out;
     if (!status_carries_exceptions(status)) {
         return out;
     }
     for (const auto& entry : status.at("exception_manager").at("exceptions")) {
-        if (!entry.is_object()) {
-            continue;
+        if (auto active = read_exception_entry(entry)) {
+            out.push_back(std::move(*active));
         }
-        ActiveException active;
-        active.code.level = field_int(entry, "level");
-        active.code.id = field_int(entry, "id");
-        active.code.index = field_int(entry, "index");
-        active.code.code = field_int(entry, "code");
-        if (const auto known = exception_message(active.code); !known.empty()) {
-            // The table holds the English source; the fault banner renders
-            // this string, so it translates here.
-            active.message = lv_tr(std::string(known).c_str());
-        } else {
-            auto firmware_text = entry.find("message");
-            if (firmware_text != entry.end() && firmware_text->is_string()) {
-                active.message = firmware_text->get<std::string>();
-            }
-        }
-        active.persistent = field_persistent(entry, "is_persistent");
-        out.push_back(std::move(active));
     }
     return out;
 }

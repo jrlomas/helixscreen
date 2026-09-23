@@ -56,7 +56,9 @@ enum class ExceptionSeverity { Informational, Pause, Cancel };
 /// One fault the firmware reports as currently standing.
 struct ActiveException {
     ExceptionCode code;
-    /// Our wording when we have it, else the firmware's own message.
+    /// The firmware's own message string, verbatim and untranslated. Status
+    /// frames arrive off the main thread, so wording for the screen belongs
+    /// to the render path (faultcodes::classify), never here.
     std::string message;
     /// True when the fault survives a firmware restart.
     bool persistent = false;
@@ -67,6 +69,16 @@ struct ActiveException {
 /// faults, not reporting that none stand; a caller that cleared a fault banner
 /// without asking this would clear it on every quiet frame.
 [[nodiscard]] bool status_carries_exceptions(const nlohmann::json& status);
+
+/// One fault, whichever channel carried it: an `exceptions` array entry from
+/// the status object, or the entry a raise notification's params carry. Both
+/// use the same field shape. nullopt when the entry is not an object.
+[[nodiscard]] std::optional<ActiveException> read_exception_entry(const nlohmann::json& entry);
+
+/// The console-equivalent line for one fault, `!! LLLL-IIII-XXXX-CCCC <msg>`
+/// in the same format the classify path parses, so a fault read off any
+/// channel feeds through the same pipe a console line takes. Pure.
+[[nodiscard]] std::string coded_line(const ActiveException& fault);
 
 /// The faults currently standing, one ActiveException per array entry. Each
 /// entry's fields arrive as numbers and are read individually; a field that
