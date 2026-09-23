@@ -2336,6 +2336,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
         std::string slot_brand;
         std::string name;
         int spoolman_id = 0;
+        std::vector<std::string> staged_echoes;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             for (const auto& unit : system_info_.units) {
@@ -2358,7 +2359,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
             // With no baseline yet there is nothing to guard — the first
             // observation for a slot is always a baseline and never clears.
             if (!slot_material.empty() && rfid_tracker_.baseline(global_index)) {
-                rfid_tracker_.expect_any_of(
+                staged_echoes = rfid_tracker_.expect_any_of(
                     global_index,
                     {compose_cfs_flat_uid(ascii_uppercase(slot_material), slot_brand, name,
                                           /*has_color=*/true, color_rgb)});
@@ -2372,10 +2373,11 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
         }
         auto err = execute_gcode(gcode);
         if (err.result != AmsResult::SUCCESS) {
-            // No echo is coming, so the expectation must not linger and blind
-            // the next genuine change — same reason as the stock failure path.
+            // No echo is coming for this push's staged values, so release
+            // exactly their claims - an earlier push's in-flight echo stays
+            // expected. Same reason as the stock failure path.
             std::lock_guard<std::mutex> lock(mutex_);
-            rfid_tracker_.forget_expected(global_index);
+            rfid_tracker_.forget_expected(global_index, staged_echoes);
             spdlog::warn("{} slot-set dispatch failed for slot {}: {}", backend_log_tag(),
                          global_index, err.technical_msg);
         }
@@ -2413,6 +2415,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
     // the wrapper never uses could poison its material-DB lookups.
     std::string mat_code;
     std::string expected_material_half;
+    std::vector<std::string> staged_echoes;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto base = rfid_tracker_.baseline(global_index);
@@ -2496,8 +2499,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
                 expected.push_back(intermediate_fp);
             if (final_fp != *base)
                 expected.push_back(final_fp);
-            if (!expected.empty())
-                rfid_tracker_.expect_any_of(global_index, std::move(expected));
+            staged_echoes = rfid_tracker_.expect_any_of(global_index, std::move(expected));
         }
     }
 
@@ -2522,11 +2524,13 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
         // Non-fatal — the override is already in lane_data so user data isn't
         // lost; only the firmware-side LCD won't reflect this edit.
         //
-        // Drop the expectation: no echo is coming, so the next fingerprint
-        // change is genuinely external and must be treated as a swap.
+        // Drop this push's expectation claims: no echo is coming for them, so
+        // the next fingerprint change is genuinely external and must be
+        // treated as a swap. An earlier push whose echo is still in flight
+        // keeps its own claims and stays expected.
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            rfid_tracker_.forget_expected(global_index);
+            rfid_tracker_.forget_expected(global_index, staged_echoes);
             // Same reason: no write landed, so firmware will keep reporting
             // whatever it reported before and nothing of ours is echoing back.
             pushed_material_codes_.erase(global_index);

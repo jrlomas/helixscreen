@@ -1927,12 +1927,14 @@ FingerprintEvent SlotFingerprintTracker::observe(int slot_index, const std::stri
         return FingerprintEvent::Changed;
 
     // Single-shot per value: an exact match consumes only its own entry
-    // (OwnWriteEcho). Any other change means the slot moved somewhere we did
+    // (OwnWriteEcho), however many in-flight writes shared it - the baseline
+    // has advanced to this value, so the next poll of it reads Unchanged.
+    // Any other change means the slot moved somewhere we did
     // not send it, so whatever echoes were outstanding are no longer
     // meaningful — consume them all and return to normal swap detection
     // immediately rather than staying suppressed.
     for (auto eit = exp->second.begin(); eit != exp->second.end(); ++eit) {
-        if (*eit == observed) {
+        if (eit->first == observed) {
             exp->second.erase(eit);
             if (exp->second.empty())
                 expected_.erase(exp);
@@ -1944,24 +1946,50 @@ FingerprintEvent SlotFingerprintTracker::observe(int slot_index, const std::stri
     return FingerprintEvent::Changed;
 }
 
-void SlotFingerprintTracker::expect_any_of(int slot_index,
-                                           std::vector<std::string> expected_values) {
+std::vector<std::string>
+SlotFingerprintTracker::expect_any_of(int slot_index, std::vector<std::string> expected_values) {
     // Accumulate with whatever is still pending from earlier writes on this
     // slot: a second edit dispatched before the first echo lands leaves both
-    // echoes expected, so neither is misread as a swap when it arrives.
-    auto& pending = expected_[slot_index];
+    // echoes expected, so neither is misread as a swap when it arrives. A
+    // value the earlier write already armed gains a second claim on its one
+    // entry rather than a second entry, so one write giving up never drops
+    // the other's echo.
+    std::vector<std::string> staged;
     for (auto& v : expected_values) {
-        if (v.empty())
-            continue;
-        if (std::find(pending.begin(), pending.end(), v) == pending.end())
-            pending.push_back(std::move(v));
+        if (!v.empty())
+            staged.push_back(std::move(v));
     }
-    if (pending.empty())
-        expected_.erase(slot_index);
+    if (staged.empty())
+        return {};
+    auto& pending = expected_[slot_index];
+    for (const auto& v : staged) {
+        const auto it =
+            std::find_if(pending.begin(), pending.end(),
+                         [&v](const std::pair<std::string, int>& e) { return e.first == v; });
+        if (it == pending.end())
+            pending.emplace_back(v, 1);
+        else
+            ++it->second;
+    }
+    return staged;
 }
 
-void SlotFingerprintTracker::forget_expected(int slot_index) {
-    expected_.erase(slot_index);
+void SlotFingerprintTracker::forget_expected(int slot_index,
+                                             const std::vector<std::string>& staged_values) {
+    auto exp = expected_.find(slot_index);
+    if (exp == expected_.end())
+        return;
+    for (const auto& v : staged_values) {
+        for (auto it = exp->second.begin(); it != exp->second.end(); ++it) {
+            if (it->first == v) {
+                if (--it->second <= 0)
+                    exp->second.erase(it);
+                break;
+            }
+        }
+    }
+    if (exp->second.empty())
+        expected_.erase(exp);
 }
 
 std::optional<std::string> SlotFingerprintTracker::baseline(int slot_index) const {

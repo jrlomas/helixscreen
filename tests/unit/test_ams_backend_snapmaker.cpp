@@ -1716,7 +1716,8 @@ TEST_CASE_METHOD(SnapmakerFixture,
             *session1, make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker", uid_f1));
         auto stored = api.mock_get_db_value("lane_data", "T0");
         REQUIRE(!stored.is_null());
-        REQUIRE(stored["helix_fingerprint"] == "1,2,3,4");
+        REQUIRE(stored.contains("helix_fingerprint"));
+        CHECK(stored.at("helix_fingerprint") == "1,2,3,4");
     }
 
     SECTION("a swap made while the app was down clears the override") {
@@ -1759,7 +1760,8 @@ TEST_CASE_METHOD(SnapmakerFixture,
         // NEXT restart compares against this spool.
         auto stored = api.mock_get_db_value("lane_data", "T0");
         REQUIRE(!stored.is_null());
-        CHECK(stored["helix_fingerprint"] == "5,6,7,8");
+        REQUIRE(stored.contains("helix_fingerprint"));
+        CHECK(stored.at("helix_fingerprint") == "5,6,7,8");
     }
 }
 
