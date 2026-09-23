@@ -2554,8 +2554,14 @@ TEST_CASE("QIDI Box a non-integer slot id keeps the last stated id", "[ams][qidi
                                            });
     CHECK(QidiBoxTestAccess::filament_id(backend, 0) == 42);
     CHECK(QidiBoxTestAccess::color_id(backend, 1) == 4);
+    // A negative id names no palette row, in either spelling.
+    QidiBoxTestAccess::parse_vars(backend, json{
+                                               {"filament_slot0", -7},
+                                               {"color_slot1", "-7"},
+                                           });
+    CHECK(QidiBoxTestAccess::filament_id(backend, 0) == 42);
+    CHECK(QidiBoxTestAccess::color_id(backend, 1) == 4);
 }
-
 TEST_CASE("QIDI Box a restart compares against the fingerprint the record carried",
           "[ams][qidi_box]") {
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);

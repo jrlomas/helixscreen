@@ -64,13 +64,19 @@ std::optional<int> parse_slot_name(const std::string& val, int slot_count) {
 // vendor_slot<N>) from a save_variables value. The firmware and HelixScreen
 // write bare ints, but a SAVE_VARIABLE spelled with a quoted VALUE - Qidi
 // Studio emits VALUE="5" - is stored as a string, because save_variables.py
-// evaluates the literal before saving it. Accept an integer, or a string
-// holding nothing but an integer (surrounding whitespace tolerated). Any other
-// value is a writer the ids have no meaning for: logged and ignored, leaving
-// the previously stated id in place.
+// evaluates the literal before saving it. Accept a non-negative integer, or a
+// string holding nothing but a non-negative integer (surrounding whitespace
+// tolerated) - zero IS an id: it is the Box stating the field is unset. Any
+// other value is a writer the ids have no meaning for: logged and ignored,
+// leaving the previously stated id in place.
 std::optional<int> read_slot_id(const nlohmann::json& val, const std::string& key) {
     if (val.is_number_integer()) {
-        return val.get<int>();
+        const int id = val.get<int>();
+        // A negative id has no palette row; the digits-only string branch
+        // already refuses one, so the two spellings of the same write agree.
+        if (id >= 0) {
+            return id;
+        }
     }
     if (val.is_string()) {
         std::string s = val.get<std::string>();
@@ -86,7 +92,8 @@ std::optional<int> read_slot_id(const nlohmann::json& val, const std::string& ke
             }
         }
     }
-    spdlog::debug("AmsBackendQidi save_variables {} holds a non-integer value; ignored", key);
+    spdlog::debug("AmsBackendQidi save_variables {} holds a non-integer or negative value; ignored",
+                  key);
     return std::nullopt;
 }
 
