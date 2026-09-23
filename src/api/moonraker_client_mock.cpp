@@ -1098,6 +1098,15 @@ void MoonrakerClientMock::populate_capabilities() {
                      "4 lane sensors + toolhead");
     }
 
+    // CFS mock mode (HELIX_MOCK_AMS=cfs): the stock K1 `box` status object the
+    // production AmsBackendCfs subscribes and parses. try_create_mock()
+    // declines this value, so real discovery plus the real backend run; pair
+    // with HELIX_MOCK_PRINTER=k1 to latch the K1 stock dialect.
+    if (is_mock_cfs()) {
+        mock_objects.push_back("box");
+        spdlog::info("[MoonrakerClientMock] CFS mock: box status object");
+    }
+
     // Parse objects into hardware discovery (unified hardware access)
     discovery_.modify_hardware([&](PrinterDiscovery& hw) { hw.parse_objects(mock_objects); });
 
@@ -1487,6 +1496,127 @@ MoonrakerClientMock::MedusaVariant MoonrakerClientMock::mock_medusa_variant() {
 
 bool MoonrakerClientMock::is_mock_medusahc() const {
     return mock_medusa_variant() != MedusaVariant::NONE;
+}
+
+bool MoonrakerClientMock::is_mock_cfs() const {
+    // "cfs"/"cfs-k1": the K1 stock dialect. try_create_mock() declines these
+    // values so the production AmsBackendCfs runs (pair with
+    // HELIX_MOCK_PRINTER=k1 to latch the dialect).
+    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
+    if (!ams_env || !ams_env[0]) {
+        return false;
+    }
+    std::string ams_type(ams_env);
+    std::transform(ams_type.begin(), ams_type.end(), ams_type.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return ams_type == "cfs" || ams_type == "cfs-k1";
+}
+
+nlohmann::json MoonrakerClientMock::cfs_box_status_json() const {
+    // Stock K1 `box` frame: T1 = unit 1, one array entry per bay. Bay A
+    // carries a spool; the others report the "none"/-1 sentinels. Same shape
+    // the unit-test fixtures feed parse_stock_box_status().
+    return nlohmann::json::parse(R"({
+        "state": "connect", "filament": 0, "auto_refill": 0, "enable": 1,
+        "same_material": 0,
+        "map": {"T1A": "T1A", "T1B": "T1B", "T1C": "T1C", "T1D": "T1D"},
+        "T1": {"state": "connect", "filament": "None",
+               "vender": ["Creality", "none", "none", "none"],
+               "remain_len": ["1000000", "-1", "-1", "-1"],
+               "color_value": ["0E8E4F", "-1", "-1", "-1"],
+               "material_type": ["000003", "-1", "-1", "-1"]}
+    })");
+}
+
+void MoonrakerClientMock::simulate_cfs_find_cut_pos() {
+    // The real sweep streams a position line every ~0.4s for ~60s and the
+    // gcode/script RPC returns when the macro finishes, so the terminal lines
+    // always precede the RPC ack. The mock reproduces that order by
+    // dispatching the lines synchronously inside gcode_script (the same shape
+    // the G0 out-of-range handler uses for its `!!` broadcast): a listener
+    // registered before the send sees them, and the RPC's completion fires
+    // after. The cut position scales off the persona envelope (a K1 Max
+    // envelope reproduces the verified 304.0 reading).
+    const double cut_y = persona_axis_maximum(printer_type_)[1] - 3.5;
+    char buf[96];
+    snprintf(buf, sizeof(buf), "Found cut position y: %.1f", cut_y);
+    dispatch_gcode_response(buf);
+    snprintf(buf, sizeof(buf), "MODIFY_BOX_CFG: success, cut_pos_y=%.1f,", cut_y);
+    dispatch_gcode_response(buf);
+    snprintf(buf, sizeof(buf), "SAVE_BOX_CFG ok: cut_pos_y=%.1f", cut_y);
+    dispatch_gcode_response(buf);
+}
+
+bool MoonrakerClientMock::apply_cfs_box_custom_command(const std::string& gcode) {
+    const size_t c = gcode.find("CMD=");
+    if (c == std::string::npos) {
+        return false;
+    }
+    size_t start = c + 4;
+    size_t end = gcode.find_first_of(" \t", start);
+    const std::string cmd =
+        gcode.substr(start, end == std::string::npos ? std::string::npos : end - start);
+
+    // Geometry scales off the persona envelope the way the verified K1 Max
+    // values scale off its 307.5: safe_pos_y = y_max - 16 (291.5 on a Max),
+    // extrude x = 80% of the X envelope (~183 on a Max).
+    const auto max = persona_axis_maximum(printer_type_);
+    const double safe_y = max[1] - 16.0;
+    const double extrude_x = max[0] * 0.8;
+
+    // Move to a parked position: homed, motors on, snapshot-dispatched as one
+    // frame (same shape the G0 handler emits).
+    auto park = [&](double x, double y) {
+        {
+            std::lock_guard<std::mutex> pos_lock(pos_mutex_);
+            pos_x_.store(x);
+            pos_y_.store(y);
+        }
+        motors_enabled_.store(true);
+        {
+            std::lock_guard<std::mutex> lock(homed_axes_mutex_);
+            homed_axes_ = "xyz";
+        }
+        reset_idle_timeout();
+        dispatch_status_update(
+            {{"toolhead", {{"homed_axes", "xyz"}, {"position", {x, y, pos_z_.load(), 0.0}}}}});
+    };
+
+    if (cmd == "XYZ_ZERO") {
+        // Full home (incl. PRTouch Z) then park; the real firmware echoes the
+        // park coordinates on the response stream.
+        park(extrude_x, safe_y);
+        char buf[64];
+        snprintf(buf, sizeof(buf), "x_park = %.2f", extrude_x);
+        dispatch_gcode_response(buf);
+        snprintf(buf, sizeof(buf), "y_park = %.2f", safe_y);
+        dispatch_gcode_response(buf);
+        return true;
+    }
+    if (cmd == "COORDINATES_ADJUST_PREPARE") {
+        park(extrude_x, safe_y);
+        return true;
+    }
+    if (cmd == "COORDINATES_ADJUST_SAVE_POS") {
+        // The firmware reads the LIVE toolhead position; mock reports the
+        // same pair the save lines carry.
+        double x, y, z;
+        read_position_snapshot(x, y, z);
+        char buf[112];
+        snprintf(buf, sizeof(buf), "cmd_save_extrude_pos x=%.2f y=%.2f", x, y);
+        dispatch_gcode_response(buf);
+        snprintf(buf, sizeof(buf), "MODIFY_BOX_CFG: success, extrude_pos_x=%.1f,", x);
+        dispatch_gcode_response(buf);
+        snprintf(buf, sizeof(buf), "SAVE_BOX_CFG ok: extrude_pos_x=%.1f,extrude_pos_y=%.1f", x, y);
+        dispatch_gcode_response(buf);
+        return true;
+    }
+    if (cmd == "Y_SAFE") {
+        park(pos_x_.load(), safe_y);
+        return true;
+    }
+    spdlog::debug("[MoonrakerClientMock] BOX_CUSTOM_COMMAND {} not simulated", cmd);
+    return false;
 }
 
 bool MoonrakerClientMock::is_mock_ifs_module() const {
@@ -2447,6 +2577,23 @@ int MoonrakerClientMock::gcode_script(const std::string& raw_gcode) {
         }
     }
 
+    // CFS calibration commands (HELIX_MOCK_AMS=cfs): same token-exact rule as
+    // the blocks above. BOX_FIND_CUT_POS and BOX_CUSTOM_COMMAND are CFS-only
+    // vocabulary, and the chute jog script (BOX_CUSTOM_COMMAND aside) falls
+    // through to the generic G91/G0 simulation below.
+    if (is_mock_cfs()) {
+        const size_t token_end = gcode.find_first_of(" \t");
+        const std::string cmd = gcode.substr(0, token_end);
+        if (cmd == "BOX_FIND_CUT_POS") {
+            spdlog::info("[MoonrakerClientMock] CFS cutter calibration sweep (mock)");
+            simulate_cfs_find_cut_pos();
+            return 0;
+        }
+        if (cmd == "BOX_CUSTOM_COMMAND" && apply_cfs_box_custom_command(gcode)) {
+            return 0;
+        }
+    }
+
     // Snapmaker U1 feeder commands. Unconditional: AUTO_FEEDING is U1-only
     // vocabulary, so no mock printer mode needs to arm it, and no other
     // printer's script can contain the token.
@@ -2576,6 +2723,15 @@ int MoonrakerClientMock::gcode_script(const std::string& raw_gcode) {
         spdlog::info("[MoonrakerClientMock] Display message set to \"{}\" (M117)", text);
         dispatch_status_update({{"display_status", {{"message", text}}}});
         return 0;
+    }
+
+    // SAVE_GCODE_STATE captures the positioning mode for the matching
+    // RESTORE_GCODE_STATE. Handled before the G90/G91 parse so a script
+    // containing both SAVE and G91 (the CFS chute jog form) saves the mode
+    // that G91 is about to change. One level deep: no shipped script nests
+    // SAVE/RESTORE pairs.
+    if (gcode.find("SAVE_GCODE_STATE") != std::string::npos) {
+        saved_gcode_relative_.store(relative_mode_.load());
     }
 
     // Parse motion mode commands (G90/G91)
@@ -2781,6 +2937,13 @@ int MoonrakerClientMock::gcode_script(const std::string& raw_gcode) {
                 dispatch_status_update({{"toolhead", {{"position", {sx, sy, sz, 0.0}}}}});
             }
         }
+    }
+
+    // The matching half of SAVE_GCODE_STATE above: after the move block so a
+    // jog script (SAVE, G91, G0, M400, RESTORE) restores the mode it started
+    // in, the way Klipper's template wrapper does.
+    if (gcode.find("RESTORE_GCODE_STATE") != std::string::npos) {
+        relative_mode_.store(saved_gcode_relative_.load());
     }
 
     // Parse Tn tool change commands (T0, T1, T2, ...)
@@ -5400,6 +5563,12 @@ void MoonrakerClientMock::temperature_simulation_loop() {
                     {"filament_detected", (presence & (1u << i)) != 0}};
             }
             status_obj["filament_switch_sensor toolhead"] = {{"filament_detected", loaded > 0}};
+        }
+
+        // CFS mock: the stock `box` frame AmsBackendCfs parses (bay states,
+        // map, and the vendor/color/material arrays).
+        if (is_mock_cfs()) {
+            status_obj["box"] = cfs_box_status_json();
         }
 
         // Add klippy state if not ready (only send when abnormal)

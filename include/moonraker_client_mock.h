@@ -1619,6 +1619,10 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
 
     // Motion mode state
     std::atomic<bool> relative_mode_{false}; // G90=absolute (false), G91=relative (true)
+    // Mode saved by the last SAVE_GCODE_STATE, for the matching
+    // RESTORE_GCODE_STATE. One deep: the CFS load envelope and the K1 chute
+    // jog script never nest saves.
+    std::atomic<bool> saved_gcode_relative_{false};
     std::atomic<bool> motors_enabled_{true}; // Track motor enable state for idle_timeout
 
     // Idle timeout simulation.
@@ -1923,6 +1927,23 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     /// Apply one IFS-module gcode command token. @return true when the token
     /// was one of ours (the caller then stops walking the generic chain).
     bool apply_ifs_module_gcode(const std::string& cmd, const std::string& gcode);
+
+    // --- CFS mock (K1 stock dialect) ----------------------------------------
+    // HELIX_MOCK_AMS=cfs: pushes the `box` object so real discovery sets
+    // AmsType::CFS and the PRODUCTION AmsBackendCfs runs; try_create_mock()
+    // declines this value, same rule as the MedusaHC / IFS-module modes. Pair
+    // with HELIX_MOCK_PRINTER=k1 to latch the K1 macro dialect. gcode_script()
+    // answers the K1 calibration macros (BOX_FIND_CUT_POS,
+    // BOX_CUSTOM_COMMAND) with the response lines a real box firmware sends.
+    bool is_mock_cfs() const;
+    /// The `box` object frame, stock K1 shape (T1 unit, four bays).
+    [[nodiscard]] nlohmann::json cfs_box_status_json() const;
+    /// Emit the BOX_FIND_CUT_POS response lines synchronously inside
+    /// gcode_script, so they precede the RPC ack the way streamed gcode
+    /// responses do against real hardware (the real sweep takes ~60s).
+    void simulate_cfs_find_cut_pos();
+    /// Apply one BOX_CUSTOM_COMMAND. @return true when CMD= was one of ours.
+    bool apply_cfs_box_custom_command(const std::string& gcode);
     /// Lane in the nozzle (1-4, 0 = none) — the module's `ifs_loaded` record.
     std::atomic<int> ifs_module_loaded_{0};
     /// Per-lane silk presence bitmask, bit i = lane i+1.
