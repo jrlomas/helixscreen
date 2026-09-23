@@ -62,7 +62,7 @@ jobs:
     # -- a timed-out step cancels the job, so "Save ccache" never runs and the
     # next run is cold for the same reason. A cold run has to be able to FINISH
     # once for the cache to exist at all.
-    timeout-minutes: 200
+    timeout-minutes: 260
 
     steps:
     - name: Checkout repository
@@ -196,8 +196,9 @@ jobs:
         ccache -s
 
     - name: Build tests
-      # The larger half, and the one that actually timed out cold at 70.
-      timeout-minutes: 95
+      # The larger half. At -g2 its objects outgrow the 2G ccache, so every run
+      # recompiles evicted TUs; warm runs take 63+ min and cold ones overrun 95.
+      timeout-minutes: 150
       env:
         CC: ccache clang
         CXX: ccache clang++
