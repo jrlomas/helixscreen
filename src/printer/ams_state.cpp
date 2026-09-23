@@ -30,7 +30,9 @@
 #include "filament_sensor_manager.h"
 #include "helix_psram_attr.h"
 #include "i_moonraker_api.h"
+#include "lane_apply.h"
 #include "lane_binding.h"
+#include "lane_resolver.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -3441,13 +3443,33 @@ void AmsState::set_modal_preset(int temp_c, int duration_min) {
 // External Spool (delegates to SettingsManager for persistence)
 // ============================================================================
 
-std::optional<SlotInfo> AmsState::get_external_spool_info() const {
+std::optional<SlotInfo> AmsState::raw_external_spool_info() const {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     // In-memory override takes priority when set (e.g. live tracker updates).
     if (in_memory_external_spool_.has_value()) {
         return in_memory_external_spool_;
     }
     return helix::SettingsManager::instance().get_external_spool_info();
+}
+
+std::optional<SlotInfo> AmsState::get_external_spool_info() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    std::optional<SlotInfo> out = raw_external_spool_info();
+    if (!out.has_value()) {
+        return out;
+    }
+    // The bypass lane carries what the sources say about this spool: the
+    // weight poll's Spoolman record, the consumption meter's count, the
+    // user's own edits. A Spoolman record standing from an earlier binding
+    // names a spool the raw record does not, so it is dropped from the copy
+    // rather than resolved - the same ranking a lane's declared id gets.
+    helix::ams::LaneSources sources = helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID);
+    if (sources.spoolman.has_value() &&
+        sources.spoolman->spoolman_id.value_or(0) != out->spoolman_id) {
+        sources.drop(helix::ams::ObservationSource::Spoolman);
+    }
+    helix::ams::apply_resolved(*out, helix::ams::resolve(sources));
+    return out;
 }
 
 void AmsState::set_external_spool_info_in_memory(const SlotInfo& info) {
@@ -3482,6 +3504,9 @@ void AmsState::clear_external_spool_info() {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     in_memory_external_spool_.reset();
     helix::SettingsManager::instance().clear_external_spool_info();
+    // The raw record's absence has to reach the sources that described it, or
+    // resolve() keeps returning the identity the clear just removed.
+    helix::ams::reset_lane_to_machine_readings(helix::ams::BYPASS_LANE_ID);
     // Force notification even when color was already 0 (e.g. previous spool was
     // black, RGB=0x000000) — observers read full spool info, not just the color.
     if (lv_subject_get_int(&external_spool_color_) == 0) {
@@ -3551,9 +3576,20 @@ AmsError AmsState::commit_slot_edit(int slot_index, const SlotInfo& original,
 
 void AmsState::apply_external_spool_store(const SlotInfo& info) {
     // S5 + S7 — same emptiness predicate as the FilamentPanel completion arm
+    const SlotInfo original = raw_external_spool_info().value_or(SlotInfo{});
     if (info.spoolman_id > 0 || !info.material.empty()) {
         set_external_spool_info(info);
+        // The edit files on the bypass lane like a slot edit files on its
+        // lane: when the binding moves, the previous spool's declarations go
+        // with it, then the user's own values stand as LocalUser.
+        if (original.spoolman_id != info.spoolman_id) {
+            helix::ams::drop_previous_spool_declarations(helix::ams::BYPASS_LANE_ID);
+        }
+        helix::ams::commit_slot_edit(helix::ams::BYPASS_LANE_ID,
+                                     helix::ams::user_edit_observation(original, info));
     } else {
+        // Takes the lane's declarations with it, exactly as it takes the
+        // stored record's identity.
         clear_external_spool_info();
     }
 

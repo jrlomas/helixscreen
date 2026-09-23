@@ -9,9 +9,13 @@
 #include "app_constants.h"
 #include "app_globals.h"
 #include "config.h"
+#include "lane_resolver.h"
+#include "lane_source_store.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "settings_manager.h"
+#include "spoolman_manager.h"
+#include "spoolman_types.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -384,6 +388,117 @@ TEST_CASE("commit_external_spool_edit keeps manual entry without spoolman id",
     CHECK(persisted->material == "PLA");
     // No API call — a manual entry is not a server-side spool assignment
     CHECK(fixture.api.spoolman_mock().get_mock_active_spool_id() == 7);
+}
+
+// ============================================================================
+// The bypass lane (#1632): the external spool's Spoolman record and meter file
+// onto BYPASS_LANE_ID, and get_external_spool_info() reads through resolve().
+// ============================================================================
+
+namespace {
+
+SpoolInfo server_spool_1() {
+    SpoolInfo spool;
+    spool.id = 1;
+    spool.vendor = "Polymaker";
+    spool.filament_name = "Jet Black";
+    spool.material = "PLA";
+    spool.remaining_weight_g = 850.0;
+    spool.initial_weight_g = 1000.0;
+    return spool;
+}
+
+} // namespace
+
+TEST_CASE("the bypass lane's Spoolman record owns the external spool's shown weight",
+          "[external_spool][1632]") {
+    ExternalSpoolCommitFixture fixture;
+
+    // The raw store holds the binding and the meter's count of it.
+    SlotInfo raw;
+    raw.spoolman_id = 1;
+    raw.material = "PLA";
+    raw.remaining_weight_g = 400.0f;
+    raw.total_weight_g = 1000.0f;
+    AmsState::instance().set_external_spool_info(raw);
+
+    // The server's answer, filed the way the poll files it.
+    REQUIRE(SpoolmanManager::file_spool_on_lane(helix::ams::BYPASS_LANE_ID, server_spool_1()));
+
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->remaining_weight_g == 850.0f);
+    CHECK(shown->total_weight_g == 1000.0f);
+    CHECK(shown->spoolman_id == 1);
+    // Identity rides the same record: the brand is the server's, not the
+    // binding stub's blank.
+    CHECK(shown->brand == "Polymaker");
+}
+
+TEST_CASE("the external spool's meter outranks a stale local weight on the bypass lane",
+          "[external_spool][1632]") {
+    ExternalSpoolCommitFixture fixture;
+
+    // A manual entry: no spool, a weight the user stated when they edited.
+    SlotInfo manual;
+    manual.material = "PLA";
+    manual.remaining_weight_g = 500.0f;
+    manual.total_weight_g = 1000.0f;
+    AmsState::instance().commit_external_spool_edit(manual);
+
+    // The consumption sink meters the print, filing what it wrote.
+    helix::ams::Observation metered(helix::ams::ObservationSource::Metered);
+    metered.remaining_weight_g = 490.0f;
+    metered.total_weight_g = 1000.0f;
+    helix::ams::ingest(helix::ams::BYPASS_LANE_ID, metered);
+
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->remaining_weight_g == 490.0f);
+}
+
+TEST_CASE("re-linking the external spool drops the previous spool's lane record",
+          "[external_spool][1632]") {
+    ExternalSpoolCommitFixture fixture;
+
+    SlotInfo first;
+    first.spoolman_id = 1;
+    first.material = "PLA";
+    AmsState::instance().commit_external_spool_edit(first);
+    REQUIRE(SpoolmanManager::file_spool_on_lane(helix::ams::BYPASS_LANE_ID, server_spool_1()));
+    REQUIRE(AmsState::instance().get_external_spool_info()->remaining_weight_g == 850.0f);
+
+    SlotInfo second;
+    second.spoolman_id = 2;
+    second.material = "PETG";
+    second.remaining_weight_g = 600.0f;
+    second.total_weight_g = 750.0f;
+    AmsState::instance().commit_external_spool_edit(second);
+
+    // Spool 1's record describes a spool that is no longer bound; it must not
+    // paint spool 2's display.
+    CHECK_FALSE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->spoolman_id == 2);
+    CHECK(shown->remaining_weight_g == 600.0f);
+}
+
+TEST_CASE("clearing the external spool resets the bypass lane", "[external_spool][1632]") {
+    ExternalSpoolCommitFixture fixture;
+
+    SlotInfo linked;
+    linked.spoolman_id = 1;
+    linked.material = "PLA";
+    AmsState::instance().commit_external_spool_edit(linked);
+    REQUIRE(SpoolmanManager::file_spool_on_lane(helix::ams::BYPASS_LANE_ID, server_spool_1()));
+
+    AmsState::instance().commit_external_spool_edit(SlotInfo{});
+
+    const auto sources = helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID);
+    CHECK_FALSE(sources.spoolman.has_value());
+    CHECK_FALSE(sources.local_user.has_value());
+    CHECK_FALSE(AmsState::instance().get_external_spool_info().has_value());
 }
 
 // ============================================================================

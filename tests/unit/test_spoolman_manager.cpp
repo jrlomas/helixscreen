@@ -776,6 +776,61 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a linked external spool's weight files on the bypass lane",
+                 "[spoolman][lane][1632]") {
+    // No AMS backend: the external spool is the only lane this poll touches.
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA";
+    ext.remaining_weight_g = 400.0F; // the meter's count, in the raw store
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+
+    CHECK(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->remaining_weight_g == 850.0F);
+    CHECK(shown->total_weight_g == 1000.0F);
+
+    // The meter goes on counting in the raw store; the display does not flip
+    // to its number between polls.
+    SlotInfo metered_raw = *shown;
+    metered_raw.remaining_weight_g = 390.0F;
+    AmsState::instance().set_external_spool_info_in_memory(metered_raw);
+    poll();
+
+    shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->remaining_weight_g == 850.0F);
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a spool Spoolman denies takes the bypass lane's record with it",
+                 "[spoolman][lane][1632]") {
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA";
+    ext.remaining_weight_g = 400.0F;
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+    REQUIRE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+
+    remove_server_spool(1);
+    poll();
+
+    CHECK_FALSE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->remaining_weight_g == 400.0F);
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
                  "SpoolmanManager: a linked lane's catalog pick survives a fetch of its spool",
                  "[spoolman][lane][1653]") {
     helix::test::RegisteredBackend<AmsBackendMock> backend(2);
