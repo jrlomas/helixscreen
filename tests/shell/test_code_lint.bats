@@ -1385,13 +1385,13 @@ EOF
 # --- The Z-offset save-availability rule has ONE definition ---
 # "Is there an offset worth saving" is helix::zoffset::save_available(), published
 # to XML as the z_offset_save_available subject. An inline cond= that re-derives
-# it from any_tool_z_dirty is a second copy, and copies agree by convention until
-# one is widened and the others are not: a tool dirty on an axis the stale copy
-# does not ask about gets no save affordance, and SET_TOOL_PARAMETER is
+# it from a tool-dirty subject is a second copy, and copies agree by convention
+# until one is widened and the others are not: a tool dirty on an axis the stale
+# copy does not ask about gets no save affordance, and SET_TOOL_PARAMETER is
 # runtime-only (prestonbrown/helixscreen#1517).
 
 zoffset_save_rule_copies() {
-    grep -rnE 'cond="[^"]*any_tool_z_dirty' "$@" 2>/dev/null || true
+    grep -rnE 'cond="[^"]*any_tool_(offset|[xyz]_)dirty' "$@" 2>/dev/null || true
 }
 
 # Names every XML that offers the save without binding the published rule.
