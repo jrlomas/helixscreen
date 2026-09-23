@@ -34,8 +34,9 @@ std::optional<float> max_spaghetti_probability(const std::string& detection_stdo
  * active this source fetches a JPEG from the local ustreamer snapshot endpoint
  * and runs /usr/bin/detection on it, off the main thread, every pastaTime
  * seconds. A probability at or above pastaTruth/100 (user_print_refer.json
- * ai_control block) is a spaghetti detection: the source pauses the print and
- * emits the event, edge-triggered so a persistent failure fires once.
+ * ai_control block) is a spaghetti detection: the source emits the event and,
+ * unless ai_control.pausePrint is 0, pauses the print, edge-triggered so a
+ * persistent failure fires once.
  */
 class K2StockDetectionSource : public DetectionSource {
   public:
@@ -81,6 +82,11 @@ class K2StockDetectionSource : public DetectionSource {
     void set_capable_for_test(bool v) {
         capable_ = v;
     }
+    /// Test seam: read ai_control from @p path instead of the stock file. Set
+    /// before start(), which is the only reader.
+    void set_config_path_for_test(const std::string& path) {
+        config_path_ = path;
+    }
 
     /// One poll decision: gates, then one background fetch+infer round.
     /// Public because the test pump only runs one-shot timers, so tests drive
@@ -103,10 +109,12 @@ class K2StockDetectionSource : public DetectionSource {
     Callback cb_;
 
     bool capable_ = false;
-    bool busy_ = false;          ///< a poll round is in flight (main thread only)
-    bool last_positive_ = false; ///< edge-trigger: fire only on negative->positive
-    float threshold_ = 0.775f;   ///< pastaTruth / 100
-    int period_s_ = 25;          ///< pastaTime
+    bool busy_ = false;           ///< a poll round is in flight (main thread only)
+    bool last_positive_ = false;  ///< edge-trigger: fire only on negative->positive
+    float threshold_ = 0.775f;    ///< pastaTruth / 100
+    int period_s_ = 25;           ///< pastaTime
+    bool pause_on_detect_ = true; ///< ai_control.pausePrint (1/absent = pause, 0 = notify only)
+    std::string config_path_;     ///< user_print_refer.json, overridable for tests
     std::string snapshot_url_ = "http://127.0.0.1:8080/snapshot";
 
     SnapshotFetcher fetcher_;

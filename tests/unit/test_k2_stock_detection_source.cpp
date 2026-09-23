@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "../test_fixtures.h"
 #include "../test_helpers/config_test_access.h"
+#include "../test_helpers/log_capture.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "k2_stock_detection_source.h"
 #include "printer_state.h"
 #include "settings_manager.h"
+
+#include <cstdio>
+#include <fstream>
+#include <memory>
+#include <optional>
 
 #include "../catch_amalgamated.hpp"
 
@@ -56,7 +62,9 @@ struct PollHarness {
     int runner_exit = 0;
     std::vector<DetectionEvent> events;
 
-    explicit PollHarness(helix::PrinterState* state, IMoonrakerAPI* api) : src(state, api) {
+    explicit PollHarness(helix::PrinterState* state, IMoonrakerAPI* api,
+                         const std::string& config_path = {})
+        : src(state, api) {
         src.set_fetcher([this](const std::string&, const std::string&) {
             ++fetch_calls;
             return fetch_ok;
@@ -67,6 +75,8 @@ struct PollHarness {
         });
         src.set_submitter([](std::function<void()> work) { work(); });
         src.set_callback([this](const DetectionEvent& e) { events.push_back(e); });
+        if (!config_path.empty())
+            src.set_config_path_for_test(config_path);
         // start() probes the real config, so force capability after it.
         src.start();
         src.set_capable_for_test(true);
@@ -184,4 +194,55 @@ TEST_CASE_METHOD(XMLTestFixture, "K2StockSource thresholds and edge triggering",
         h.poll();
         CHECK(h.events.size() == 2);
     }
+}
+
+TEST_CASE_METHOD(XMLTestFixture, "K2StockSource honors ai_control.pausePrint", "[detection][k2]") {
+    // start() reads the ai_control file once, so each section writes the value
+    // it exercises and builds the source against that file.
+    static constexpr const char* AI_JSON = "/tmp/helix_k2_aicontrol_test.json";
+    auto make_harness = [&](std::optional<int> pause_print) {
+        json ai{{"pastaTime", 25}, {"pastaTruth", 77}};
+        if (pause_print.has_value())
+            ai["pausePrint"] = *pause_print;
+        // Closed before the source is built: start() reads the file in the
+        // PollHarness constructor, and an unflushed ofstream is an empty file.
+        {
+            std::ofstream f(AI_JSON);
+            f << json{{"ai_control", ai}}.dump();
+        }
+        return std::make_unique<PollHarness>(&state(), &api(), AI_JSON);
+    };
+    const char* spaghetti_stdout = "label: 1 prob: 0.903177 x:1 y:2 w:3 h:4\n";
+    // MoonrakerJobAPI logs this line on entry to pause_print(), before any
+    // client I/O, so it is the synchronous proof the pause was attempted.
+    helix::TextLogCapture capture;
+
+    SECTION("pausePrint 0: event raised, print NOT paused") {
+        auto h = make_harness(0);
+        h->runner_stdout = spaghetti_stdout;
+        set_print_state(state(), "printing");
+        h->poll();
+        REQUIRE(h->events.size() == 1);
+        CHECK(h->events[0].kind == DetectionKind::Spaghetti);
+        CHECK(h->events[0].message.find("90%") != std::string::npos);
+        CHECK_FALSE(capture.contains("[Moonraker API] Pausing print"));
+    }
+    SECTION("pausePrint 1: event raised and print paused") {
+        auto h = make_harness(1);
+        h->runner_stdout = spaghetti_stdout;
+        set_print_state(state(), "printing");
+        h->poll();
+        REQUIRE(h->events.size() == 1);
+        CHECK(capture.contains("[Moonraker API] Pausing print"));
+    }
+    SECTION("pausePrint absent: pauses (factory default)") {
+        auto h = make_harness(std::nullopt);
+        h->runner_stdout = spaghetti_stdout;
+        set_print_state(state(), "printing");
+        h->poll();
+        REQUIRE(h->events.size() == 1);
+        CHECK(capture.contains("[Moonraker API] Pausing print"));
+    }
+
+    std::remove(AI_JSON);
 }

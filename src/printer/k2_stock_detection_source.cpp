@@ -91,6 +91,7 @@ std::optional<float> max_spaghetti_probability(const std::string& detection_stdo
 
 K2StockDetectionSource::K2StockDetectionSource(helix::PrinterState* state, IMoonrakerAPI* api)
     : state_(state), api_(api) {
+    config_path_ = USER_PRINT_REFER;
     if (!fetcher_)
         fetcher_ = fetch_snapshot_default;
     if (!runner_)
@@ -106,25 +107,30 @@ void K2StockDetectionSource::start() {
         return;
     capable_ = PrinterDetector::is_creality_k2() && access(DETECTION_BIN, X_OK) == 0;
 
-    // Thresholds: the ai_control block the stock stack reads at startup. Fall
-    // back to the factory values (25 s / 77.5 %) when the file is missing or
-    // malformed rather than refusing to detect.
-    if (capable_) {
-        std::ifstream f(USER_PRINT_REFER);
-        if (f) {
-            try {
-                const json j = json::parse(f);
-                const auto& ai = j.at("ai_control");
-                period_s_ = std::clamp(ai.value("pastaTime", period_s_), 5, 600);
-                const double truth = ai.value("pastaTruth", 100.0 * threshold_);
-                threshold_ = static_cast<float>(std::clamp(truth / 100.0, 0.05, 1.0));
-            } catch (const std::exception& e) {
-                spdlog::warn("[K2StockSource] unreadable ai_control ({}), using defaults",
-                             e.what());
-            }
+    // Thresholds and the pause choice: the ai_control block the stock stack
+    // reads at startup. Parsed whether or not this machine is capable (the
+    // file is absent everywhere but a Creality install, so the read is a
+    // no-op elsewhere). Fall back to the factory values (25 s / 77.5 % /
+    // pause) when the file is missing or malformed rather than refusing to
+    // detect.
+    std::ifstream f(config_path_);
+    if (f) {
+        try {
+            const json j = json::parse(f);
+            const auto& ai = j.at("ai_control");
+            period_s_ = std::clamp(ai.value("pastaTime", period_s_), 5, 600);
+            const double truth = ai.value("pastaTruth", 100.0 * threshold_);
+            threshold_ = static_cast<float>(std::clamp(truth / 100.0, 0.05, 1.0));
+            pause_on_detect_ = ai.value("pausePrint", 1) != 0;
+        } catch (const std::exception& e) {
+            spdlog::warn("[K2StockSource] unreadable ai_control ({}), using defaults", e.what());
         }
-        spdlog::info("[K2StockSource] capable: poll every {} s at prob >= {:.3}", period_s_,
-                     threshold_);
+    }
+
+    if (capable_) {
+        spdlog::info("[K2StockSource] capable: poll every {} s at prob >= {:.3}, pause on "
+                     "detect: {}",
+                     period_s_, threshold_, pause_on_detect_ ? "yes" : "no");
     } else {
         spdlog::debug("[K2StockSource] not capable on this machine; poll ticks stay no-ops");
     }
@@ -204,9 +210,9 @@ void K2StockDetectionSource::handle_result(const PollResult& r) {
 
 void K2StockDetectionSource::fire(const PollResult& r) {
     const int pct = static_cast<int>(r.prob * 100.0f + 0.5f);
-    spdlog::warn("[K2StockSource] spaghetti detected ({}%), pausing print", pct);
-    // The stock stack pauses on detection (ai_control.pausePrint=1); match it.
-    if (api_) {
+    spdlog::warn("[K2StockSource] spaghetti detected ({}%), {}", pct,
+                 pause_on_detect_ ? "pausing print" : "pausePrint is off, notifying only");
+    if (pause_on_detect_ && api_) {
         api_->job().pause_print([] { spdlog::info("[K2StockSource] print paused"); },
                                 [](const MoonrakerError& err) {
                                     spdlog::warn("[K2StockSource] pause failed: {}", err.message);
