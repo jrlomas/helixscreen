@@ -537,6 +537,28 @@ TEST_CASE("re-binding through the sync funnel drops the previous spool's pick an
     CHECK(shown->remaining_weight_g == 600.0f);
 }
 
+TEST_CASE("a Spoolman record naming a different spool than the binding is not resolved",
+          "[external_spool][1632]") {
+    ExternalSpoolCommitFixture fixture;
+
+    // The binding names spool 2; spool 1's record arrives on the lane after
+    // that, the shape a late poll answer or a restored config leaves behind.
+    SlotInfo rebound;
+    rebound.spoolman_id = 2;
+    rebound.material = "PETG";
+    rebound.remaining_weight_g = 600.0f;
+    rebound.total_weight_g = 750.0f;
+    AmsState::instance().set_external_spool_info(rebound);
+    REQUIRE(SpoolmanManager::file_spool_on_lane(helix::ams::BYPASS_LANE_ID, server_spool_1()));
+
+    // Spool 1's weight and brand must not paint spool 2's record.
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->spoolman_id == 2);
+    CHECK(shown->remaining_weight_g == 600.0f);
+    CHECK(shown->brand.empty());
+}
+
 TEST_CASE("clearing the external spool resets the bypass lane", "[external_spool][1632]") {
     ExternalSpoolCommitFixture fixture;
 
