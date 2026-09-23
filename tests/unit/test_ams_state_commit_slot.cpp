@@ -1236,8 +1236,7 @@ TEST_CASE("a commit that changes nothing writes no user record", "[ams][commit][
     CHECK(helix::ams::known_lanes().empty());
 }
 
-TEST_CASE("clearing an already-unlinked slot declares no colour and no weight",
-          "[ams][commit][lane]") {
+TEST_CASE("clearing an already-unlinked slot records no declaration", "[ams][commit][lane]") {
     CommitFixture f;
     f.setup(0); // unlinked, so the binding-change rule does not fire
 
@@ -1262,20 +1261,21 @@ TEST_CASE("clearing an already-unlinked slot declares no colour and no weight",
 
     REQUIRE(AmsState::instance().commit_slot_edit(0, original, cleared).success());
 
+    // Nothing in a clear is a value a rung may stand over: the sentinels spell
+    // "no reading", and a cleared text field hands the field to whatever the
+    // machine reports rather than recording an emptiness
+    // (prestonbrown/helixscreen#1661). The colour's NAME is the one empty that
+    // stays: a colour gone means its name gone too, and an empty name beside a
+    // stated colour is how a pick clears a contradictory one (lane_resolver.cpp).
     const auto sources = helix::ams::lane_sources(lane_of(0));
     REQUIRE(sources.local_user.has_value());
-    // The clear is a real declaration: the material is now empty because the
-    // person said so.
-    REQUIRE(sources.local_user->material.has_value());
-    CHECK(*sources.local_user->material == "");
-    // But the sentinels are not values anyone chose. Recorded, they would
-    // outrank every server reading with "no reading".
+    CHECK_FALSE(sources.local_user->material.has_value());
     CHECK_FALSE(sources.local_user->color_rgb.has_value());
     CHECK_FALSE(sources.local_user->remaining_weight_g.has_value());
     CHECK_FALSE(sources.local_user->total_weight_g.has_value());
 }
 
-TEST_CASE("a field cleared to empty is still the user's declaration", "[ams][commit][lane]") {
+TEST_CASE("a field cleared to empty withdraws the standing declaration", "[ams][commit][lane]") {
     CommitFixture f;
     f.setup(0);
 
@@ -1285,17 +1285,28 @@ TEST_CASE("a field cleared to empty is still the user's declaration", "[ams][com
     original = f.backend->get_slot_info(0);
     REQUIRE(original.material == "PETG");
 
-    SlotInfo emptied = original;
+    // The user states a material, then reopens the editor and clears it.
+    SlotInfo typed = original;
+    typed.material = "ABS";
+    REQUIRE(AmsState::instance().commit_slot_edit(0, original, typed).success());
+    {
+        const auto sources = helix::ams::lane_sources(lane_of(0));
+        REQUIRE(sources.local_user.has_value());
+        REQUIRE(sources.local_user->material.has_value());
+        CHECK(*sources.local_user->material == "ABS");
+    }
+
+    SlotInfo emptied = typed;
     emptied.material.clear();
+    REQUIRE(AmsState::instance().commit_slot_edit(0, typed, emptied).success());
 
-    REQUIRE(AmsState::instance().commit_slot_edit(0, original, emptied).success());
-
+    // A clear means "I don't know; whatever the machine reports": it withdraws
+    // the declaration rather than replacing it with an emptiness, so nothing
+    // sits over the field and weaker sources show through at once
+    // (prestonbrown/helixscreen#1661). What the lane then shows is pinned in
+    // test_lane_write_paths.cpp.
     const auto sources = helix::ams::lane_sources(lane_of(0));
-    REQUIRE(sources.local_user.has_value());
-    // "Observed as empty" and "not observed" are different states, and only
-    // the first of them stops a weaker source re-asserting the old material.
-    REQUIRE(sources.local_user->material.has_value());
-    CHECK(*sources.local_user->material == "");
+    CHECK_FALSE(sources.local_user.has_value());
 }
 
 TEST_CASE("an auto-highlighted catalog product is not the user's declaration",
