@@ -1473,7 +1473,6 @@
   <translation tag="Listening" ru="Прослушивание"/>
   <translation tag="Live view from your webcam" ru="Прямая трансляция с веб-камеры"/>
   <translation tag="Load" ru="Загрузить"/>
-  <translation tag="Load / Unload" ru="Загрузить / Выгрузить"/>
   <translation tag="Load Failed" ru="Не удалось загрузить"/>
   <translation tag="Load Filament" ru="Загрузить филамент"/>
   <translation tag="Load a filament first before trying to unload" ru="Сначала загрузите филамент, прежде чем пытаться его выгрузить"/>

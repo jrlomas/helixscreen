@@ -1473,7 +1473,6 @@
   <translation tag="Listening" ja="聞き取り中"/>
   <translation tag="Live view from your webcam" ja="ウェブカメラのライブ表示"/>
   <translation tag="Load" ja="装填"/>
-  <translation tag="Load / Unload" ja="装填 / 排出"/>
   <translation tag="Load Failed" ja="装填に失敗しました"/>
   <translation tag="Load Filament" ja="フィラメントを装填"/>
   <translation tag="Load a filament first before trying to unload" ja="排出する前にまずフィラメントを装填してください"/>

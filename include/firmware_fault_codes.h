@@ -48,6 +48,29 @@ namespace helix::faultcodes {
 [[nodiscard]] std::optional<std::vector<std::string>>
 read_standing_faults(const PrinterDiscovery& hw, const nlohmann::json& status);
 
+/// One fault the firmware pushed at raise time, on whichever websocket method
+/// it raises on.
+struct FaultNotification {
+    /// Console-equivalent coded line, same contract as read_standing_faults.
+    std::string line;
+    /// The firmware's bare message. The console copy of the same fault is the
+    /// code-stripped prose of exactly this string, so it is the identity a
+    /// prose/coded dedup matches on.
+    std::string message;
+};
+
+/// Every push method a fault-code firmware raises faults on, for
+/// method-callback registration. Registering all of them up front is cheap:
+/// a method that never fires is one idle map entry, and discovery (which
+/// arrives after construction) is not needed to spell them.
+[[nodiscard]] std::vector<std::string> notification_methods();
+
+/// Parse one raise notification: `params[0]` of the method this firmware
+/// raises on. nullopt when the payload carries no fault. Pure and
+/// untranslated, so it is safe on any thread.
+[[nodiscard]] std::optional<FaultNotification>
+read_fault_notification(const std::string& method, const nlohmann::json& params0);
+
 /// The part of a status frame any fault-code firmware reads: only the status
 /// objects some provider subscribes to, or an empty object when the frame
 /// carries none. Needs no discovery, so the WS thread can use it to skip
