@@ -218,11 +218,16 @@ void AmsOperationSidebar::on_batch_load_clicked_cb(lv_event_t* e) {
 
     // The button is hidden wherever the backend lacks batch ops, but a tap can
     // race a backend switch; the show() re-checks rather than forwarding a
-    // guaranteed not_supported refusal.
+    // guaranteed not_supported refusal. The busy/print check runs first: the
+    // picker must not open over a running op or an active print.
     AmsBackend* backend = AmsState::instance().get_backend();
     if (backend && backend->supports_batch_filament_ops()) {
-        spdlog::info("[AmsSidebar] Opening batch filament picker (Load)");
-        BatchFilamentModal::show_owned(/*for_load=*/true);
+        auto* self = get_instance_from_event(e);
+        const bool blocked = self && self->refuse_if_busy_or_printing();
+        if (!blocked) {
+            spdlog::info("[AmsSidebar] Opening batch filament picker (Load)");
+            BatchFilamentModal::show_owned(/*for_load=*/true);
+        }
     }
 
     LVGL_SAFE_EVENT_CB_END();
@@ -1125,20 +1130,22 @@ void AmsOperationSidebar::refresh_heat_step_display() {
 
 helix::ui::OpButtonState AmsOperationSidebar::read_unload_gating_state() const {
     // The reads live here; the field mapping they feed is
-    // build_unload_gating_state(), so the sidebar's shape — an availability
-    // answer plus the always-heated unload — is stated once and stays testable
+    // build_unload_gating_state(), so the sidebar's shape, an availability
+    // answer plus the always-heated unload, is stated once and stays testable
     // without an AmsState singleton.
     AmsBackend* backend = AmsState::instance().get_backend();
 
     // On a batch backend this button opens the picker, so its availability is
-    // "some head can unload" — the same per-head answer the picker's rows read
-    // (any_head_for_direction folds prefill_selection, so the two cannot
-    // disagree). Elsewhere this button means "unload whatever is active", so
-    // the aggregate loaded flag is its availability.
+    // "some head can unload", the same per-head answer the picker's rows read
+    // (any_head_for_direction folds head_can_act, so the two cannot disagree).
+    // Elsewhere this button means "unload whatever is active", so the aggregate
+    // loaded flag is its availability.
     bool unload_available = false;
     if (backend && backend->supports_batch_filament_ops()) {
-        unload_available = BatchFilamentModal::any_head_for_direction(
-            BatchFilamentModal::collect_rows(*backend).at_toolhead, /*for_load=*/false);
+        const auto rows = BatchFilamentModal::collect_rows(*backend);
+        unload_available =
+            BatchFilamentModal::any_head_for_direction(rows.at_toolhead, rows.lane_presence,
+                                                       /*for_load=*/false);
     } else {
         lv_subject_t* loaded = AmsState::instance().get_filament_loaded_subject();
         unload_available = loaded && lv_subject_get_int(loaded) == 1;
@@ -1146,7 +1153,7 @@ helix::ui::OpButtonState AmsOperationSidebar::read_unload_gating_state() const {
 
     return helix::ui::build_unload_gating_state(
         /*filament_loaded=*/unload_available,
-        // AmsSystemInfo::is_busy() — the same predicate check_preconditions()
+        // AmsSystemInfo::is_busy(): the same predicate check_preconditions()
         // refuses on, instead of a fourth open-coded `action != IDLE && != ERROR`.
         /*system_busy=*/backend && backend->get_system_info().is_busy(),
         printer_state_.get_print_lifecycle(),
@@ -1156,16 +1163,21 @@ helix::ui::OpButtonState AmsOperationSidebar::read_unload_gating_state() const {
 helix::ui::OpButtonState AmsOperationSidebar::read_batch_load_gating_state() const {
     AmsBackend* backend = AmsState::instance().get_backend();
 
-    // Load availability rides the resolver's slot_has_filament semantics:
-    // nullopt while some head is worth feeding, false when none is — which
-    // compute_op_button_gating() turns into its existing nothing_to_feed
-    // refusal. slot_is_loaded stays false: the picker targets empty toolheads,
-    // so an already-fed head never disables the batch.
+    // What this computes: whether any head can take a load right now (a lane
+    // with filament that is not already at its toolhead), mapped onto the
+    // resolver's slot_has_filament semantics. nullopt while some head is worth
+    // feeding, false when none is, which compute_op_button_gating() turns into
+    // its existing nothing_to_feed refusal. slot_is_loaded stays false: the
+    // picker targets empty toolheads, so an already-fed head never disables the
+    // batch.
     helix::ui::OpButtonState state;
-    const bool any_loadable = backend && backend->supports_batch_filament_ops() &&
-                              BatchFilamentModal::any_head_for_direction(
-                                  BatchFilamentModal::collect_rows(*backend).at_toolhead,
-                                  /*for_load=*/true);
+    bool any_loadable = false;
+    if (backend && backend->supports_batch_filament_ops()) {
+        const auto rows = BatchFilamentModal::collect_rows(*backend);
+        any_loadable =
+            BatchFilamentModal::any_head_for_direction(rows.at_toolhead, rows.lane_presence,
+                                                       /*for_load=*/true);
+    }
     state.slot_has_filament = any_loadable ? std::nullopt : std::optional<bool>(false);
     state.system_busy = backend && backend->get_system_info().is_busy();
     state.print_blocks_op = helix::ui::print_blocks_filament_op(
@@ -1201,12 +1213,47 @@ void AmsOperationSidebar::refresh_button_gating() {
                        backend && backend->supports_batch_filament_ops() ? 1 : 0);
 }
 
+bool AmsOperationSidebar::refuse_if_busy_or_printing() const {
+    // The reads behind one shared refusal: an op already running, or a print
+    // owning the toolhead. The messages are unload-worded because the sidebar's
+    // own Unload button was the live field report, but the Load picker needs
+    // the same two stops.
+    const auto gating_state = read_unload_gating_state();
+    if (gating_state.system_busy) {
+        spdlog::info("[AmsSidebar] Filament op refused: an AMS operation is already running");
+        NOTIFY_WARNING(lv_tr("Wait for the current filament operation to finish"));
+        return true;
+    }
+    if (gating_state.print_blocks_op) {
+        AmsBackend* gating_backend = AmsState::instance().get_backend();
+        const bool self_homes = gating_backend && gating_backend->filament_ops_self_home();
+        spdlog::info("[AmsSidebar] Filament op refused: a print owns the toolhead (self_homes={})",
+                     self_homes);
+        if (self_homes) {
+            // AD5X IFS: the unload macro homes itself, so pausing does not help
+            // - recommending it would send the user into the exact loadcell-Z
+            // collision the backend guard exists to prevent.
+            NOTIFY_WARNING(lv_tr("Cannot unload while a print is active"));
+        } else {
+            // PRINTING on every other backend. A PAUSED print here would not
+            // have reached this branch at all, so pausing IS the recovery.
+            NOTIFY_WARNING(lv_tr("Pause the print first, then load, unload, or change filament"));
+        }
+        return true;
+    }
+    return false;
+}
+
 void AmsOperationSidebar::handle_unload() {
-    // On a batch backend this button opens the picker in the Unload direction —
+    // On a batch backend this button opens the picker in the Unload direction,
     // the same modal the Load button opens, with the direction passed through
-    // so the title, prefill and primary button all name Unload.
+    // so the title, prefill and primary button all name Unload. The busy/print
+    // refusal runs first: the picker must not open over a running op.
     AmsBackend* backend = AmsState::instance().get_backend();
     if (backend && backend->supports_batch_filament_ops()) {
+        if (refuse_if_busy_or_printing()) {
+            return;
+        }
         BatchFilamentModal::show_owned(/*for_load=*/false);
         return;
     }
@@ -1223,31 +1270,11 @@ void AmsOperationSidebar::handle_unload(int slot_index) {
 
     // The button is bound to ams_sidebar_unload_disabled, but a tap can still
     // land in the window between a print starting and the subject settling, and
-    // handle_unload(slot) is also the context menu's dispatch entry. Refuse here
-    // with copy the user can act on rather than forwarding a guaranteed backend
-    // rejection ("Cannot run filament operation while printing" raised while
-    // merely PAUSED was a live field report).
-    const auto gating_state = read_unload_gating_state();
-    if (gating_state.system_busy) {
-        spdlog::info("[AmsSidebar] Unload refused — an AMS operation is already running");
-        NOTIFY_WARNING(lv_tr("Wait for the current filament operation to finish"));
-        return;
-    }
-    if (gating_state.print_blocks_op) {
-        AmsBackend* gating_backend = AmsState::instance().get_backend();
-        const bool self_homes = gating_backend && gating_backend->filament_ops_self_home();
-        spdlog::info("[AmsSidebar] Unload refused — a print owns the toolhead (self_homes={})",
-                     self_homes);
-        if (self_homes) {
-            // AD5X IFS: the unload macro homes itself, so pausing does not help
-            // — recommending it would send the user into the exact loadcell-Z
-            // collision the backend guard exists to prevent.
-            NOTIFY_WARNING(lv_tr("Cannot unload while a print is active"));
-        } else {
-            // PRINTING on every other backend. A PAUSED print here would not
-            // have reached this branch at all, so pausing IS the recovery.
-            NOTIFY_WARNING(lv_tr("Pause the print first, then load, unload, or change filament"));
-        }
+    // handle_unload(slot) is also the context menu's dispatch entry. Refuse
+    // here rather than forwarding a guaranteed backend rejection ("Cannot run
+    // filament operation while printing" raised while merely PAUSED was a live
+    // field report).
+    if (refuse_if_busy_or_printing()) {
         return;
     }
 

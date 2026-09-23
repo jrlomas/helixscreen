@@ -89,20 +89,32 @@ bool BatchFilamentModal::show_owned(bool for_load) {
     return true;
 }
 
+bool BatchFilamentModal::head_can_act(std::optional<bool> at_toolhead,
+                                      std::optional<bool> lane_presence, bool for_load) {
+    const bool loaded_here = at_toolhead.value_or(false);
+    if (!for_load) {
+        return loaded_here;
+    }
+    return !loaded_here && lane_presence.value_or(true);
+}
+
 std::vector<bool>
 BatchFilamentModal::prefill_selection(const std::vector<std::optional<bool>>& at_toolhead,
+                                      const std::vector<std::optional<bool>>& lane_presence,
                                       bool for_load) {
     std::vector<bool> ticked;
     ticked.reserve(at_toolhead.size());
-    for (const auto& present : at_toolhead) {
-        ticked.push_back(for_load ? !(present && *present) : (present && *present));
+    for (size_t i = 0; i < at_toolhead.size(); ++i) {
+        ticked.push_back(head_can_act(
+            at_toolhead[i], i < lane_presence.size() ? lane_presence[i] : std::nullopt, for_load));
     }
     return ticked;
 }
 
-bool BatchFilamentModal::any_head_for_direction(const std::vector<std::optional<bool>>& at_toolhead,
-                                                bool for_load) {
-    const std::vector<bool> ticked = prefill_selection(at_toolhead, for_load);
+bool BatchFilamentModal::any_head_for_direction(
+    const std::vector<std::optional<bool>>& at_toolhead,
+    const std::vector<std::optional<bool>>& lane_presence, bool for_load) {
+    const std::vector<bool> ticked = prefill_selection(at_toolhead, lane_presence, for_load);
     return std::any_of(ticked.begin(), ticked.end(), [](bool tick) { return tick; });
 }
 
@@ -167,7 +179,7 @@ BatchFilamentModal::BatchRowSource BatchFilamentModal::collect_rows(const AmsBac
 
 void BatchFilamentModal::on_show() {
     // btn_primary runs the direction this picker was opened in; btn_secondary
-    // is a real Cancel — Modal::on_cancel() just hides.
+    // is a real Cancel: Modal::on_cancel() just hides.
     wire_ok_button("btn_primary");
     wire_cancel_button("btn_secondary");
 
@@ -180,7 +192,8 @@ void BatchFilamentModal::on_show() {
     }
 
     const BatchRowSource rows = collect_rows(*backend);
-    const std::vector<bool> ticked = prefill_selection(rows.at_toolhead, for_load_);
+    const std::vector<bool> ticked =
+        prefill_selection(rows.at_toolhead, rows.lane_presence, for_load_);
 
     std::vector<MultiSelectItem> items;
     items.reserve(rows.slots.size());

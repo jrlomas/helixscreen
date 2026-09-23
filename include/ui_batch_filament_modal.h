@@ -37,17 +37,26 @@ class BatchFilamentModal : public Modal {
         return "batch_filament_modal";
     }
 
-    // Pure: which rows start ticked. for_load ticks the slots WITHOUT filament
-    // at the toolhead; !for_load ticks the ones with it. nullopt (backend
-    // publishes no presence for the lane) counts as loadable, never as
-    // unloadable — the backend refuses an empty lane, not the picker.
-    static std::vector<bool> prefill_selection(const std::vector<std::optional<bool>>& at_toolhead,
-                                               bool for_load);
+    // Pure: can this head act in this direction? Unload needs its filament at
+    // the toolhead; load needs filament in the lane AND not at the toolhead,
+    // because feeding an empty lane is the no-op the firmware refuses. nullopt
+    // lane presence (backend publishes none) reads as loadable: the backend's
+    // eligibility check refuses an empty lane at dispatch, so the picker does
+    // not guess. nullopt at_toolhead reads as not loaded (never unloadable).
+    static bool head_can_act(std::optional<bool> at_toolhead, std::optional<bool> lane_presence,
+                             bool for_load);
+
+    // Pure: which rows start ticked, exactly the heads that can act in this
+    // direction (head_can_act per row).
+    static std::vector<bool>
+    prefill_selection(const std::vector<std::optional<bool>>& at_toolhead,
+                      const std::vector<std::optional<bool>>& lane_presence, bool for_load);
 
     // Pure: does any head offer this direction? prefill_selection folded to a
     // single bool, so the sidebar's Load/Unload gating and the picker's
     // prefills cannot disagree about which direction a head serves.
     static bool any_head_for_direction(const std::vector<std::optional<bool>>& at_toolhead,
+                                       const std::vector<std::optional<bool>>& lane_presence,
                                        bool for_load);
 
     // Pure: multiselect keys are slot indices as decimal strings.

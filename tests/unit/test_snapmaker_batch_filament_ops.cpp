@@ -13,6 +13,7 @@
 // ops, so it inherits the claim (exactly one filament op in flight, batch or
 // not) and the print-active refusal. The gate tests here pin that inheritance.
 
+#include "ui_ams_sidebar.h"
 #include "ui_batch_filament_modal.h"
 #include "ui_modal.h"
 #include "ui_update_queue.h"
@@ -32,6 +33,7 @@
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
+#include "test_helpers/ams_sidebar_xml.h"
 #include "test_helpers/registered_backend.h"
 
 #include <condition_variable>
@@ -721,6 +723,76 @@ TEST_CASE_METHOD(BatchModalFixture,
         CHECK_FALSE(row_checked(dialog, "3"));
         close_picker(dialog);
     }
+}
+
+TEST_CASE_METHOD(BatchModalFixture, "A Load open with every feeder empty ticks nothing",
+                 "[snapmaker][batch][ams][multiselect]") {
+    // Feeding an empty lane is the no-op the firmware refuses, so the Load
+    // prefill must leave every row unticked when no lane carries filament.
+    REQUIRE(backend().start().success());
+    mock_client.clear_gcode_script_history();
+    for (int slot = 0; slot < 4; ++slot) {
+        set_channel(slot, "idle", "ok", /*detected=*/false, /*module=*/true, /*no_auto=*/false);
+    }
+
+    REQUIRE(helix::ui::BatchFilamentModal::show_owned(/*for_load=*/true));
+    lv_obj_t* dialog = picker_dialog();
+    for (int slot = 0; slot < 4; ++slot) {
+        CHECK_FALSE(row_checked(dialog, std::to_string(slot).c_str()));
+    }
+    close_picker(dialog);
+}
+
+TEST_CASE_METHOD(BatchModalFixture,
+                 "A running op refuses to open the picker from either sidebar button",
+                 "[snapmaker][batch][ams][sidebar]") {
+    // The buttons are disabled through gating subjects, but the refusal must
+    // not live only there: a tap can land in the window between an op starting
+    // and the disabled binding catching up, so each entry re-checks. This test
+    // drives the real sidebar XML because that wiring is the regression.
+    REQUIRE(backend().start().success());
+    helix::AmsState::instance().init_subjects(true);
+    helix::AmsState::instance().sync_from_backend();
+
+    // Built the way ams_panel.xml builds it: a named create inside a panel,
+    // then setup(panel) plants the instance the static callbacks route to.
+    // Panels register ams_sidebar.xml lazily, so the test registers it too.
+    helix::test::register_ams_sidebar_xml();
+    lv_obj_t* panel = lv_obj_create(test_screen());
+    const char* attrs[] = {"name", "ams_operation_sidebar", nullptr};
+    lv_obj_t* sidebar_root = static_cast<lv_obj_t*>(lv_xml_create(panel, "ams_sidebar", attrs));
+    REQUIRE(sidebar_root != nullptr);
+    auto sidebar = std::make_unique<helix::ui::AmsOperationSidebar>(BatchMockHarness::state);
+    REQUIRE(sidebar->setup(panel));
+    REQUIRE(Modal::get_top() == nullptr);
+
+    // Busy with the gating subjects still settled idle: the tap arrives in
+    // that window, so the handler's own re-check is the only refusal left.
+    set_channel(0, "load_feeding", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
+    REQUIRE(backend().get_system_info().is_busy());
+
+    // Each verdict must stand alone: a refusal that opens the picker anyway
+    // would otherwise contaminate the next tap, so close the stray before it.
+    auto tap_expects_no_picker = [this](lv_obj_t* btn) {
+        lv_obj_send_event(btn, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* top = Modal::get_top();
+        CHECK(top == nullptr);
+        if (top) {
+            Modal::hide(top);
+            process_lvgl(200); // free the one-shot instance
+        }
+    };
+
+    lv_obj_t* unload_btn = lv_obj_find_by_name(sidebar_root, "btn_unload");
+    REQUIRE(unload_btn != nullptr);
+    tap_expects_no_picker(unload_btn);
+
+    lv_obj_t* load_btn = lv_obj_find_by_name(sidebar_root, "btn_batch_load");
+    REQUIRE(load_btn != nullptr);
+    tap_expects_no_picker(load_btn);
+
+    sidebar.reset(); // cancel the stall watchdog before the tree goes
+    lv_obj_delete(panel);
 }
 
 TEST_CASE_METHOD(BatchModalFixture,

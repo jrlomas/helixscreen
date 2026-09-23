@@ -353,6 +353,13 @@ class AmsOperationSidebar {
 
     // Action handlers
     void handle_unload();
+
+    /// The busy/print refusal every filament-op entry shares. The buttons are
+    /// bound to the gating subjects, but a tap can land in the window between
+    /// an operation starting and the subject settling, so each entry re-checks
+    /// and refuses with copy the user can act on rather than forwarding a
+    /// guaranteed backend rejection. True means "refused, stop here".
+    [[nodiscard]] bool refuse_if_busy_or_printing() const;
     void handle_bypass_toggle();
     void handle_reset();
     void handle_check_gates();
