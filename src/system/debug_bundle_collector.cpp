@@ -17,6 +17,7 @@
 #include "logging_init.h"
 #include "platform_capabilities.h"
 #include "platform_info.h"
+#include "power_loss_sensor.h"
 #include "printer_state.h"
 #include "system/crash_history.h"
 #include "system/diag_upload_gate.h"
@@ -202,7 +203,8 @@ json DebugBundleCollector::collect(const BundleOptions& options) {
     }
 
     try {
-        bundle["moonraker"] = collect_moonraker_info();
+        bundle["moonraker"] = collect_moonraker_info(
+            options.printer.captured ? options.printer : snapshot_printer_state());
     } catch (const std::exception& e) {
         spdlog::warn("[DebugBundle] Failed to collect moonraker info: {}", e.what());
         bundle["moonraker"] = json{{"error", e.what()}};
@@ -552,6 +554,10 @@ PrinterSnapshot DebugBundleCollector::snapshot_printer_state() {
             snap.connection_state = lv_subject_get_int(conn_subj);
         if (auto* klippy_subj = ps.get_klippy_state_subject())
             snap.klippy_state = lv_subject_get_int(klippy_subj);
+
+        // Discovery is read here with the subjects, on the main thread, so the
+        // worker never races a re-discovery reassigning it.
+        snap.mains_status_objects = helix::power_loss::required_status_objects(ps.get_discovery());
 
         snap.captured = true;
     } catch (const std::exception& e) {
@@ -968,7 +974,19 @@ json DebugBundleCollector::moonraker_get(const std::string& base_url, const std:
     }
 }
 
-json DebugBundleCollector::collect_moonraker_info() {
+std::string
+DebugBundleCollector::printer_objects_query(const std::vector<std::string>& extra_objects) {
+    std::string query = "/printer/objects/query"
+                        "?heater_bed&extruder&print_stats&toolhead&motion_report"
+                        "&fan&display_status&virtual_sdcard";
+    for (const auto& obj : extra_objects) {
+        query += "&";
+        query += obj;
+    }
+    return query;
+}
+
+json DebugBundleCollector::collect_moonraker_info(const PrinterSnapshot& snap) {
     json mr;
     std::string base_url = get_moonraker_url();
 
@@ -1008,12 +1026,12 @@ json DebugBundleCollector::collect_moonraker_info() {
         mr["system_info"] = json{{"error", e.what()}};
     }
 
-    // Current printer state — temps, positions, fans, print progress
+    // Current printer state — temps, positions, fans, print progress, plus
+    // the firmware's mains monitor when it publishes one: present-mains state
+    // (voltage_type, duty_percent) is diagnostic data a support bundle wants.
     try {
         mr["printer_state"] = sanitize_json(
-            moonraker_get(base_url, "/printer/objects/query"
-                                    "?heater_bed&extruder&print_stats&toolhead&motion_report"
-                                    "&fan&display_status&virtual_sdcard"));
+            moonraker_get(base_url, printer_objects_query(snap.mains_status_objects)));
     } catch (const std::exception& e) {
         spdlog::debug("[DebugBundle] printer_state collection failed: {}", e.what());
         mr["printer_state"] = json{{"error", e.what()}};

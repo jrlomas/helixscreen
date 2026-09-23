@@ -228,6 +228,7 @@
   <translation tag="Auto-probe or manually check screw heights" de="Automatisches Abtasten oder manuelle Prüfung der Schraubenhöhen"/>
   <translation tag="Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout" de="Automatisches Nachfüllen ist an, aber es gibt keine zwei Slots mit passendem Filament, daher wird bei Filamentende nichts gewechselt"/>
   <translation tag="Auto-render video" de="Video automatisch rendern"/>
+  <translation tag="Auto-replenish filament" de="Filament automatisch nachfüllen"/>
   <translation tag="Auto-tuning Shapers..." de="Shaper automatisch abstimmen..."/>
   <translation tag="Auto-uninstall only works on local Moonraker" de="Auto-Deinstallation funktioniert nur bei lokalem Moonraker"/>
   <translation tag="Automatic" de="Automatisch"/>
@@ -735,6 +736,7 @@
   <translation tag="Deploy" de="Ausfahren"/>
   <translation tag="Describe the issue (optional)" de="Problem beschreiben (optional)"/>
   <translation tag="Detailed" de="Detailliert"/>
+  <translation tag="Detect filament tangles" de="Filamentverwicklungen erkennen"/>
   <translation tag="Detecting plate..." de="Platte erkennen..."/>
   <translation tag="Detecting printer type..." de="Druckertyp wird erkannt..."/>
   <translation tag="Detecting..." de="Wird erkannt..."/>
@@ -1330,7 +1332,7 @@
   <translation tag="Initiate blade change procedure" de="Den Klingenwechsel starten"/>
   <translation tag="Input" de="Eingabe"/>
   <translation tag="Input Shaper" de="Input Shaper"/>
-  <translation tag="Input Shaper Calibration"/>
+  <translation tag="Input Shaper Calibration" de="Input-Shaper-Kalibrierung"/>
   <translation tag="Input Shaper Help" de="Input Shaper Hilfe"/>
   <translation tag="Input Shaping" de="Input Shaping"/>
   <translation tag="Input shaper calibration sensors" de="Input-Shaper-Kalibrierungssensoren"/>
@@ -1963,6 +1965,7 @@
   <translation tag="Power" de="Strom"/>
   <translation tag="Power Devices" de="Stromgeräte"/>
   <translation tag="Power off the printer or screen" de="Drucker oder Bildschirm ausschalten"/>
+  <translation tag="Power was lost during the print; the printer stopped and saved its progress" de="Während des Drucks fiel der Strom aus; der Drucker hat angehalten und den Fortschritt gespeichert"/>
   <translation tag="Pre-heat the extruder first" de="Zuerst den Extruder vorheizen"/>
   <translation tag="Pre-print command failed: {}" de="Vor-Druck-Befehl fehlgeschlagen: {}"/>
   <translation tag="Pre-print homing..." de="Referenzieren vor dem Druck..."/>
@@ -1985,7 +1988,7 @@
   <translation tag="Presets" de="Voreinstellungen"/>
   <translation tag="Press Abort to stop" de="Zum Stoppen Abbrechen drücken"/>
   <translation tag="Press Scan to search" de="Scannen drücken zum Suchen"/>
-  <translation tag="Pressure Advance Calibration"/>
+  <translation tag="Pressure Advance Calibration" de="Pressure-Advance-Kalibrierung"/>
   <translation tag="Pressure:" de="Druck:"/>
   <translation tag="Preview Sounds" de="Sounds vorhören"/>
   <translation tag="Previous" de="Zurück"/>
@@ -1995,6 +1998,7 @@
   <translation tag="Priming..." de="Primen..."/>
   <translation tag="Print" de="Drucken"/>
   <translation tag="Print Anyway" de="Trotzdem drucken"/>
+  <translation tag="Print Behaviour" de="Druckverhalten"/>
   <translation tag="Print Cancelled" de="Druck abgebrochen"/>
   <translation tag="Print Complete!" de="Druck abgeschlossen!"/>
   <translation tag="Print Completion Alert" de="Druckabschluss-Benachrichtigung"/>
@@ -2210,6 +2214,7 @@
   <translation tag="Remove PIN" de="PIN entfernen"/>
   <translation tag="Remove Spoolman?" de="Spoolman entfernen?"/>
   <translation tag="Remove plugin from printer" de="Plugin vom Drucker entfernen"/>
+  <translation tag="Remove the PEI sheet from the bed, then start again: probing through the sheet gives wrong results" de="Entferne die PEI-Platte vom Bett und starte erneut: Messungen durch die Platte liefern falsche Ergebnisse"/>
   <translation tag="Remove the bypass spool from the toolhead first" de="Zuerst die Bypass-Spule aus dem Werkzeugkopf entfernen"/>
   <translation tag="Rename" de="Umbenennen"/>
   <translation tag="Rename Fan" de="Lüfter umbenennen"/>
@@ -2221,6 +2226,7 @@
   <translation tag="Replace" de="Ersetzen"/>
   <translation tag="Replace Profile?" de="Profil ersetzen?"/>
   <translation tag="Replay Welcome Tour" de="Willkommens-Rundgang erneut abspielen"/>
+  <translation tag="Replenish ignores colour" de="Nachfüllen ignoriert Farbe"/>
   <translation tag="Replenishing filament..." de="Filament nachfüllen..."/>
   <translation tag="Report saved to crash_report.txt" de="Bericht in crash_report.txt gespeichert"/>
   <translation tag="Reprint" de="Erneut drucken"/>
@@ -2522,6 +2528,7 @@
   <translation tag="Single toggle macro. State is not tracked." de="Einzelnes Umschalt-Makro. Status wird nicht verfolgt."/>
   <translation tag="Size" de="Größe"/>
   <translation tag="Skip" de="Überspringen"/>
+  <translation tag="Skipped" de="Übersprungen"/>
   <translation tag="Sleep While Printing" de="Ruhemodus beim Drucken"/>
   <translation tag="Sleep adjusted to match dim timeout" de="Ruhemodus-Zeitlimit angepasst"/>
   <translation tag="Sliced colors" de="Slice-Farben"/>
@@ -2672,6 +2679,7 @@
   <translation tag="TOOLS" de="WERKZEUGE"/>
   <translation tag="TPU" de="TPU"/>
   <translation tag="Takes 3-5 min. Do not interrupt." de="Dauert 3-5 Min. Nicht unterbrechen."/>
+  <translation tag="Tangle sensitivity" de="Verwicklungsempfindlichkeit"/>
   <translation tag="Tap + to add" de="Zum Hinzufügen + tippen"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" de="Zum Wiederherstellen auf Firmware-Neustart tippen. Beim K2 wird dabei auch die rpi-MCU-Bridge neu gestartet"/>
   <translation tag="Tap again to confirm this orientation" de="Erneut tippen, um diese Ausrichtung zu bestätigen"/>
@@ -2722,6 +2730,7 @@
   <translation tag="Thanks! Anonymous usage data helps improve HelixScreen." de="Danke! Anonyme Nutzungsdaten helfen, HelixScreen zu verbessern."/>
   <translation tag="Thanks! TOTALLY anonymous usage data helps improve HelixScreen." de="Danke! VÖLLIG anonyme Nutzungsdaten helfen, HelixScreen zu verbessern."/>
   <translation tag="That did not sound like a pluck - try again" de="Das klang nicht wie ein Zupfen - erneut versuchen"/>
+  <translation tag="That setting cannot be changed while a print is running" de="Diese Einstellung kann während eines laufenden Drucks nicht geändert werden"/>
   <translation tag="That slot cannot stand in for this one" de="Dieser Slot kann nicht für diesen einspringen"/>
   <translation tag="That tool is already loaded" de="Dieses Werkzeug ist bereits geladen"/>
   <translation tag="The CFS odometer hardware is faulty and needs repair or replacement" de="Die Wegmesshardware des CFS ist defekt und muss repariert oder ersetzt werden"/>
@@ -2898,6 +2907,7 @@
   <translation tag="Turbo" de="Turbo"/>
   <translation tag="Turbo Inner" de="Turbo Innen"/>
   <translation tag="Turbo Outer" de="Turbo Außen"/>
+  <translation tag="Turn LED off when the print ends" de="LED am Druckende ausschalten"/>
   <translation tag="Turn Off" de="Ausschalten"/>
   <translation tag="Turn Off WiFi?" de="WiFi ausschalten?"/>
   <translation tag="Turn On" de="Einschalten"/>
@@ -2942,6 +2952,7 @@
   <translation tag="Unload Distance" de="Entladeweg"/>
   <translation tag="Unload Failed" de="Entladen fehlgeschlagen"/>
   <translation tag="Unload Filament" de="Filament entladen"/>
+  <translation tag="Unload at end" de="Am Ende entladen"/>
   <translation tag="Unload failed" de="Entladen fehlgeschlagen"/>
   <translation tag="Unload filament" de="Filament entladen"/>
   <translation tag="Unload from toolhead first" de="Entladen Sie zuerst aus dem Werkzeugkopf"/>
@@ -3136,7 +3147,9 @@
   <translation tag="Z-offset saved - Klipper restarting..." de="Z-Offset gespeichert - Klipper wird neu gestartet..."/>
   <translation tag="Z:" de="Z:"/>
   <translation tag="Z: 0.000" de="Z: 0.000"/>
+  <translation tag="already loaded" de="bereits geladen"/>
   <translation tag="bed" de="Bett"/>
+  <translation tag="busy" de="belegt"/>
   <translation tag="by Preston Brown" de="von Preston Brown"/>
   <translation tag="chamber heater" de="Kammerheizung"/>
   <translation tag="complete" de="abgeschlossen"/>
@@ -3149,6 +3162,7 @@
   <translation tag="eSpooler Mode" de="eSpooler-Modus"/>
   <translation tag="eSpooler, clog detection, and sensor settings" de="eSpooler-, Verstopfungserkennungs- und Sensoreinstellungen"/>
   <translation tag="elapsed" de="vergangen"/>
+  <translation tag="empty" de="leer"/>
   <translation tag="enable" de="aktivieren"/>
   <translation tag="enabled" de="aktiviert"/>
   <translation tag="error" de="Fehler"/>
@@ -3156,14 +3170,19 @@
   <translation tag="extruder(s)" de="Extruder"/>
   <translation tag="extruders" de="Extruder"/>
   <translation tag="fans" de="Lüfter"/>
+  <translation tag="feeder error" de="Zuführungsfehler"/>
+  <translation tag="feeder not in automatic mode" de="Zuführung nicht im Automatikmodus"/>
+  <translation tag="filament sensor disabled" de="Filamentsensor deaktiviert"/>
   <translation tag="heated bed" de="Heizbett"/>
   <translation tag="idle" de="Leerlauf"/>
   <translation tag="in unit {} slot {}" de="in Einheit {} Slot {}"/>
   <translation tag="layers" de="Schichten"/>
   <translation tag="left" de="übrig"/>
+  <translation tag="loaded" de="geladen"/>
   <translation tag="mm before clog" de="mm vor Verstopfung"/>
   <translation tag="needs" de="benötigt"/>
   <translation tag="not detected" de="nicht erkannt"/>
+  <translation tag="not loaded" de="nicht geladen"/>
   <translation tag="nozzle" de="Düse"/>
   <translation tag="of" de="von"/>
   <translation tag="off" de="aus"/>
@@ -3172,6 +3191,7 @@
   <translation tag="passive" de="passiv"/>
   <translation tag="printer default" de="Druckerstandard"/>
   <translation tag="prints" de="Drucke"/>
+  <translation tag="ready to load" de="bereit zum Laden"/>
   <translation tag="remaining" de="verbleibend"/>
   <translation tag="remaining before clog detection triggers" de="verbleibend bis Verstopfungserkennung auslöst"/>
   <translation tag="rendering" de="wird gerendert"/>

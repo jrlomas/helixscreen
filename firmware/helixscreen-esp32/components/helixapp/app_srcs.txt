@@ -134,6 +134,7 @@ src/printer/ams_endless_spool.cpp
 src/printer/ams_environment_zone.cpp
 src/printer/ams_state.cpp
 src/printer/ams_subscription_backend.cpp
+src/printer/batch_feed_reconcile.cpp
 src/printer/lane_echo.cpp
 src/printer/lane_resolver.cpp
 src/printer/lane_apply.cpp
@@ -153,6 +154,7 @@ src/printer/filament_display_name.cpp
 src/printer/filament_macro_profiles.cpp
 src/printer/filament_mapper.cpp
 src/printer/filament_variants.cpp
+src/printer/firmware_fault_codes.cpp
 src/printer/hardware_role_registry.cpp
 src/printer/hardware_validator.cpp
 src/printer/hh_defaults.cpp
@@ -162,6 +164,7 @@ src/printer/macro_modification_manager.cpp
 src/printer/macro_param_cache.cpp
 src/printer/pause_cause.cpp
 src/printer/power_device_state.cpp
+src/printer/power_loss_sensor.cpp
 src/printer/pre_print_option.cpp
 src/printer/pre_print_preferences.cpp
 src/printer/preflight_validator.cpp
@@ -186,6 +189,8 @@ src/printer/printer_temperature_state.cpp
 src/printer/printer_versions_state.cpp
 src/printer/sensor_state.cpp
 src/printer/slot_registry.cpp
+src/printer/snapmaker_exceptions.cpp
+src/printer/snapmaker_print_preferences.cpp
 src/printer/snapmaker_resume.cpp
 src/printer/z_offset_persistence.cpp
 src/printer/plr_backend.cpp
@@ -545,7 +550,8 @@ src/ui/ui_progress_bar.cpp
 src/ui/ui_ams_detail.cpp
 src/system/helix_paths.cpp
 src/printer/filament_slot_override_store.cpp
-src/api/auto_screws_tilt_adjust.cpp
+src/printer/filament_temperature_source.cpp
+src/api/snapmaker_screws_tilt.cpp
 src/api/wifi_ui_utils.cpp
 # Task 13: wifi_manager.cpp/wifi_backend.cpp were platform-seamed (stub in
 # helixapp_platform_stubs2.cpp) through Task 12 — now real, backed by

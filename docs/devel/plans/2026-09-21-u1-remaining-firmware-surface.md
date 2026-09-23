@@ -4,9 +4,9 @@
 
 **Goal:** Expose the seven remaining stock-firmware capabilities on the Snapmaker U1 — four `SET_PRINT_PREFERENCES` settings, structured error reporting, per-filament temperatures, and the power-loss sensor — with no vendor names in generic code.
 
-**Architecture:** Four of the settings share one mechanism: read from the `print_task_config` status object, write with `SET_PRINT_PREFERENCES`. Task 1 builds that read/write pair once; Tasks 2-5 each add a `DeviceAction` that calls it, which the existing `AmsDeviceSectionDetailOverlay` renders with no UI work. Tasks 6-7 move Snapmaker error classification off phrase matching onto the firmware's `exception_manager` codes, through the `AmsBackend::classify_error` hook that already exists and Snapmaker does not yet override. Tasks 8-9 are independent reads of two objects nothing currently consumes.
+**Architecture:** Four of the settings share one mechanism: read from the `print_task_config` status object, write with `SET_PRINT_PREFERENCES`. Task 1 builds that read/write pair once; Tasks 2-3 hold the preferences on the Snapmaker backend and surface them as `DeviceAction`s, which the existing `AmsDeviceSectionDetailOverlay` renders with no UI work. Tasks 4-6 move Snapmaker error classification off phrase matching onto the firmware's `exception_manager` codes, through a `firmware_fault_codes` capability module that `GcodeErrorRouter` consults before the generic classifier. Tasks 7-8 are independent reads of two objects nothing currently consumes.
 
-**Tech Stack:** C++20, LVGL 9.5, Catch2, `hv/json.hpp` (libhv's bundled nlohmann), Moonraker JSON-RPC over WebSocket.
+**Tech Stack:** C++17, LVGL 9.5, Catch2, `hv/json.hpp` (libhv's bundled nlohmann), Moonraker JSON-RPC over WebSocket.
 
 **Spec:** `docs/devel/plans/2026-09-21-u1-per-print-preferences-design.md` (the preceding design; its firmware model, the `SET_PRINT_PREFERENCES` field table and the eleven-field placement table are the source for Tasks 1-5).
 
@@ -17,7 +17,7 @@
 - **Moonraker sends DELTA frames.** A field absent from a frame is silent, never false. Merge, never replace. See `reference_moonraker_delta_frames_wipe_struct_state`.
 - **`SET_PRINT_PREFERENCES` is a setter.** An omitted parameter leaves the stored value unchanged; only send parameters you intend to change.
 - **A mid-print guard** refuses `BED_LEVEL`, `FLOW_CALIBRATE`, `SHAPER_CALIBRATE`, `TIME_LAPSE_CAMERA` and `END_UNLOAD_FILAMENT` while printing or paused unless `FORCE=1`. Do not pass `FORCE`. Expect and surface the refusal (exception id 531).
-- **spdlog only**, SPDX headers, no RTTI, `#include "hv/json.hpp"`.
+- **spdlog only**, SPDX headers, no RTTI, `#include "hv/json.hpp"` The tree builds `-std=c++17` (`Makefile:191,194`) and `make strict` adds `-Werror`, so a C++20-only construct — a defaulted `operator==`/`<=>`, designated initialisers, `std::span`, concepts — is a build break on a supported target, not a warning.
 - **Every behaviour change needs a test that fails when the behaviour is removed**, and one line in the commit body naming the mutation that proved it.
 - **Commit body:** subject plus ~4 lines. No Tests/Verification/Mutation essay.
 - **Test tags** go on every new `TEST_CASE`; run with `make t F='[tag]'`.
@@ -31,11 +31,15 @@
 | `include/snapmaker_print_preferences.h` *(new)* | Typed read of the U1's stored preferences out of a `print_task_config` frame, and construction of the `SET_PRINT_PREFERENCES` line that writes them. Pure; no I/O, no LVGL. |
 | `src/printer/snapmaker_print_preferences.cpp` *(new)* | Implementation of the above. |
 | `tests/unit/test_snapmaker_print_preferences.cpp` *(new)* | Parse/render coverage including delta-silence and the setter semantics. |
-| `include/ams_backend_snapmaker.h` *(modify)* | Hold last-seen preferences; declare the `DeviceAction` overrides and `classify_error`. |
-| `src/printer/ams_backend_snapmaker.cpp` *(modify)* | Parse preferences in `handle_status_update`; expose them as `DeviceAction`s; execute writes; classify errors from structured codes. |
+| `include/ams_backend_snapmaker.h` *(modify)* | Hold last-seen preferences; declare the `DeviceAction` overrides. |
+| `src/printer/ams_backend_snapmaker.cpp` *(modify)* | Parse preferences in `handle_status_update`; expose them as `DeviceAction`s; execute writes. |
 | `include/snapmaker_exceptions.h` *(new)* | Decode `level-id-index-code` strings and map known `(id, index, code)` triples to user-facing text. |
 | `src/printer/snapmaker_exceptions.cpp` *(new)* | The code table. |
 | `tests/unit/test_snapmaker_exceptions.cpp` *(new)* | Decoding, table lookups, and unknown-code fallback. |
+| `include/firmware_fault_codes.h` *(new)* | Capability question: does this firmware report faults as structured codes, and what does one line classify to. Generic code asks this; it never names a vendor. |
+| `src/printer/firmware_fault_codes.cpp` *(new)* | Provider table; the Snapmaker row delegates to `snapmaker_exceptions.*`. |
+| `tests/unit/test_snapmaker_error_classify.cpp` *(new)* | Classification by code, wording-independence, unknown-code passthrough, and the non-coded-firmware guard. |
+| `src/application/gcode_error_router.cpp` *(modify)* | Consult the fault-code classifier before the generic phrase-based one. |
 | `src/api/moonraker_discovery_sequence.cpp` *(modify)* | Subscribe `exception_manager` when the printer reports it. |
 | `include/filament_temperature_source.h` *(new)* | Capability question: does this firmware publish per-filament temperatures, and what are they for a given spool. |
 | `src/printer/filament_temperature_source.cpp` *(new)* | Provider table; Snapmaker row queries `FILAMENT_PARA_GET_ALL_INFO`. |
@@ -602,9 +606,10 @@ Expected: compile failure — no `build_preference_gcode`.
 In `include/ams_backend_snapmaker.h` public section:
 
 ```cpp
-    std::vector<DeviceSection> get_device_sections() const override;
-    std::vector<DeviceAction> get_device_actions() const override;
-    bool execute_device_action(const std::string& action_id, const std::any& value) override;
+    [[nodiscard]] std::vector<helix::printer::DeviceSection> get_device_sections() const override;
+    [[nodiscard]] std::vector<helix::printer::DeviceAction> get_device_actions() const override;
+    AmsError execute_device_action(const std::string& action_id,
+                                   const std::any& value = {}) override;
 
     /// The command one action produces, or empty when the id is not ours.
     /// Separated from execute_device_action so the mapping is testable without
@@ -613,14 +618,29 @@ In `include/ams_backend_snapmaker.h` public section:
                                                      const std::any& value) const;
 ```
 
-Check the base signatures in `include/ams_backend.h` and match them exactly, including constness.
+These are copied from `include/ams_backend_afc.h:491-513`. Four backends already override this
+triple — AFC, Happy Hare, CFS and Toolchanger — and all four spell it exactly this way.
+Three details are load-bearing and were wrong in an earlier draft of this plan:
+`execute_device_action` returns **`AmsError`**, not `bool`; the vector element types are
+**`helix::printer::`-qualified** (`ams_backend_snapmaker.h` sits in `namespace helix`, and
+these types live in `helix::printer`, so unqualified spellings do not resolve); and the two
+getters carry `[[nodiscard]]`. Confirm against `include/ams_backend.h:2200-2227` before you
+write them.
+
+Inside the **bodies** the unqualified spellings below are correct, but only because of a
+using-declaration you must add, matching what the repo already does: in the `.cpp`, a
+function-local `using helix::printer::ActionType;` / `using helix::printer::DeviceAction;`
+(the shape at `src/printer/ams_backend_afc.cpp:5977-5978`); in the test file, a
+file-scope `using namespace helix::printer;` (what `tests/unit/test_afc_device_actions_config.cpp`
+and nine sibling AMS tests do). Only the out-of-line **declarations and definitions** need the
+full `helix::printer::` qualification.
 
 - [ ] **Step 4: Implement**
 
 ```cpp
 // src/printer/ams_backend_snapmaker.cpp
 
-std::vector<DeviceSection> AmsBackendSnapmaker::get_device_sections() const {
+std::vector<helix::printer::DeviceSection> AmsBackendSnapmaker::get_device_sections() const {
     if (print_preferences_.empty()) {
         return {}; // nothing reported yet - an empty section is worse than none
     }
@@ -631,7 +651,7 @@ std::vector<DeviceSection> AmsBackendSnapmaker::get_device_sections() const {
     return {s};
 }
 
-std::vector<DeviceAction> AmsBackendSnapmaker::get_device_actions() const {
+std::vector<helix::printer::DeviceAction> AmsBackendSnapmaker::get_device_actions() const {
     std::vector<DeviceAction> out;
     const auto& p = print_preferences_;
 
@@ -718,17 +738,17 @@ std::string AmsBackendSnapmaker::build_preference_gcode(const std::string& actio
     return helix::snapmaker::write_print_preferences_gcode(changes);
 }
 
-bool AmsBackendSnapmaker::execute_device_action(const std::string& action_id,
-                                                const std::any& value) {
+AmsError AmsBackendSnapmaker::execute_device_action(const std::string& action_id,
+                                                    const std::any& value) {
     const std::string gcode = build_preference_gcode(action_id, value);
     if (gcode.empty()) {
-        return false;
+        return AmsErrorHelper::not_supported(action_id);
     }
     // The mid-print guard refuses END_UNLOAD_FILAMENT while printing or paused
     // unless FORCE=1, which we deliberately do not pass. The refusal arrives as
     // an exception and is classified in Task 5 rather than swallowed here.
     send_gcode(gcode);
-    return true;
+    return AmsErrorHelper::success();
 }
 ```
 
@@ -779,6 +799,21 @@ Navigate to the AMS device-operations overlay, open the Print Behaviour section,
 ## Task 4: Decode the firmware's structured exception codes
 
 `exception_manager` raises `{id, index, code, message, level, oneshot, is_persistent}`, and codes appear in error text as `level-id-index-code` (e.g. `0003-0530-0000-0011` = level 3, module 530, index 0, code 11 — the plate-removal refusal). Levels are `1=none, 2=pause, 3=cancel`. Decode it once, in one place.
+
+**Read against the firmware, 2026-09-21** — `/home/lava/klipper/klippy/exception_manager.py` on the
+live U1 (note the path: it is `klippy/`, NOT `klippy/extras/`; a grep of `extras/` returns empty
+and reads as absence). Three facts from it bind this task:
+
+1. **Both code forms are real.** `_parse_basic_code` (`:83-96`) takes **3** parts, `id-index-code`,
+   with no level. `_parse_structured_code` (`:99-112`) takes **4**, `level-id-index-code`. The
+   three-part case below is therefore guarding a format the firmware genuinely emits, not a
+   hypothetical — do not weaken or delete it.
+2. **`level` defaults to 3**, in both `raise_exception` (`:238`) and `cmd_RAISE_EXCEPTION`
+   (`:315`). So an exception raised without an explicit level is a **Cancel**, not an
+   informational one. `severity_of` must not treat a missing or zero level as benign.
+3. **The firmware's own key validation is `key.replace('-','').isdigit()`** (`_validate_coded_key`,
+   `:114-117`) — digits and dashes only. A decoder looser than the producer will accept strings
+   the firmware would have rejected, so match that tightness rather than exceeding it.
 
 **Files:**
 - Create: `include/snapmaker_exceptions.h`
@@ -1042,14 +1077,19 @@ Note `include/error_event.h` already declares `ErrorSource::SNAPMAKER` and nothi
 - Create: `src/printer/firmware_fault_codes.cpp`
 - Modify: `src/application/gcode_error_router.cpp#GcodeErrorRouter::process_line`
 - Modify: `firmware/helixscreen-esp32/components/helixapp/app_srcs.txt`
-- Modify: `include/auto_screws_tilt_adjust.h` (drop `PLATE_NOT_REMOVED_TEXT`)
-- Modify: `src/api/auto_screws_tilt_adjust.cpp#plate_still_on_bed`
+- Modify: `include/snapmaker_screws_tilt.h` (drop `PLATE_NOT_REMOVED_TEXT`)
+- Modify: `src/api/snapmaker_screws_tilt.cpp#plate_still_on_bed`
 - Test: `tests/unit/test_snapmaker_error_classify.cpp` *(new)*
-- Modify: `tests/unit/test_auto_screws_tilt.cpp` (the phrase case becomes a code case)
+- Modify: `tests/unit/test_snapmaker_screws_tilt.cpp` (the phrase case becomes a code case)
 
 **Interfaces:**
-- Consumes: `decode_exception_code`, `exception_message`, `severity_of` (Task 4); `AmsBackend::classify_error` and `ClassifyContext` from `include/ams_backend.h`.
-- Produces: `std::optional<AmsError> AmsBackendSnapmaker::classify_error(const std::string&, const ClassifyContext&) const`.
+- Consumes: `decode_exception_code`, `exception_message`, `severity_of` (Task 4); `ErrorEvent`, `ErrorSource`, `ErrorSeverity` from `include/error_event.h`; `PrinterDiscovery`.
+- Produces:
+  - `bool helix::faultcodes::firmware_reports_fault_codes(const PrinterDiscovery& hw)`
+  - `std::vector<std::string> helix::faultcodes::required_status_objects(const PrinterDiscovery& hw)` — consumed by Task 6's subscription step
+  - `std::optional<ErrorEvent> helix::faultcodes::classify(const PrinterDiscovery& hw, const std::string& line)`
+
+`ErrorEvent` carries `detail` / `raw_detail` / `source`, **not** a `message` field — check `include/error_event.h` rather than assuming the AMS `AmsError` shape.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1057,49 +1097,78 @@ Note `include/error_event.h` already declares `ErrorSource::SNAPMAKER` and nothi
 // tests/unit/test_snapmaker_error_classify.cpp
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "ams_backend_snapmaker.h"
+#include "firmware_fault_codes.h"
+#include "printer_discovery.h"
+
 #include "../catch_amalgamated.hpp"
 
+using namespace helix;
+
+namespace {
+
+PrinterDiscovery hardware_with_objects(const std::vector<std::string>& names) {
+    PrinterDiscovery hw;
+    nlohmann::json objects = nlohmann::json::array();
+    for (const auto& n : names) {
+        objects.push_back(n);
+    }
+    hw.parse_objects(objects);
+    return hw;
+}
+
+PrinterDiscovery coded_firmware() {
+    return hardware_with_objects({"exception_manager", "print_task_config"});
+}
+
+} // namespace
+
 TEST_CASE("a known fault classifies from its code", "[snapmaker][classify]") {
-    AmsBackendSnapmaker backend;
-    ClassifyContext ctx;
-    auto e = backend.classify_error("!! 0003-0530-0000-0011 The plate has not been removed",
-                                    ctx);
+    auto e = faultcodes::classify(coded_firmware(),
+                                  "!! 0003-0530-0000-0011 The plate has not been removed");
     REQUIRE(e.has_value());
-    REQUIRE(e->message.find("Remove the PEI sheet") != std::string::npos);
+    REQUIRE(e->detail.find("Remove the PEI sheet") != std::string::npos);
+    REQUIRE(e->source == ErrorSource::SNAPMAKER);
 }
 
 TEST_CASE("classification does not depend on the firmware's wording",
           "[snapmaker][classify]") {
     // The whole point: the code is the identity. Firmware reworded, or a
     // locale we do not read, must still classify.
-    AmsBackendSnapmaker backend;
-    ClassifyContext ctx;
-    auto e = backend.classify_error("!! 0003-0530-0000-0011 platen nicht entfernt", ctx);
+    auto e = faultcodes::classify(coded_firmware(),
+                                  "!! 0003-0530-0000-0011 platen nicht entfernt");
     REQUIRE(e.has_value());
-    REQUIRE(e->message.find("Remove the PEI sheet") != std::string::npos);
+    REQUIRE(e->detail.find("Remove the PEI sheet") != std::string::npos);
 }
 
 TEST_CASE("an unknown code keeps the firmware's own text", "[snapmaker][classify]") {
-    AmsBackendSnapmaker backend;
-    ClassifyContext ctx;
-    auto e = backend.classify_error("!! 0002-0999-0000-0007 something we have no wording for",
-                                    ctx);
+    auto e = faultcodes::classify(
+        coded_firmware(), "!! 0002-0999-0000-0007 something we have no wording for");
     REQUIRE(e.has_value());
-    REQUIRE(e->message.find("something we have no wording for") != std::string::npos);
+    REQUIRE(e->detail.find("something we have no wording for") != std::string::npos);
 }
 
 TEST_CASE("a line with no code is left to the generic path", "[snapmaker][classify]") {
-    AmsBackendSnapmaker backend;
-    ClassifyContext ctx;
-    REQUIRE_FALSE(backend.classify_error("!! Must home Z axis first", ctx).has_value());
+    REQUIRE_FALSE(
+        faultcodes::classify(coded_firmware(), "!! Must home Z axis first").has_value());
+}
+
+TEST_CASE("a firmware without the code channel classifies nothing",
+          "[snapmaker][classify]") {
+    // The capability question gates this, not the vendor name: a printer that
+    // does not publish exception_manager must fall through untouched even if a
+    // line happens to look code-shaped.
+    PrinterDiscovery plain = hardware_with_objects({"bed_mesh", "quad_gantry_level"});
+    REQUIRE_FALSE(faultcodes::firmware_reports_fault_codes(plain));
+    REQUIRE_FALSE(
+        faultcodes::classify(plain, "!! 0003-0530-0000-0011 The plate has not been removed")
+            .has_value());
 }
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
 
 Run: `make t F='[snapmaker][classify]'`
-Expected: FAIL — base `classify_error` returns nullopt, so the first case fails.
+Expected: FAIL — `firmware_fault_codes.h` does not exist yet, so the file does not compile.
 
 - [ ] **Step 3: Implement the capability module**
 
@@ -1114,6 +1183,7 @@ Read `include/error_event.h` for `ErrorEvent`'s real fields and `ErrorSource`, a
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace helix {
 class PrinterDiscovery;
@@ -1165,7 +1235,7 @@ Use whatever this class already has to reach `PrinterDiscovery` — grep the fil
 
 - [ ] **Step 4: Retire the phrase fallback in the plate gate**
 
-In `src/api/auto_screws_tilt_adjust.cpp#plate_still_on_bed`, drop the `PLATE_NOT_REMOVED_TEXT` branch and decode the code instead:
+In `src/api/snapmaker_screws_tilt.cpp#plate_still_on_bed`, drop the `PLATE_NOT_REMOVED_TEXT` branch and decode the code instead:
 
 ```cpp
 bool plate_still_on_bed(const std::string& error_message) {
@@ -1174,9 +1244,17 @@ bool plate_still_on_bed(const std::string& error_message) {
 }
 ```
 
-Remove `PLATE_NOT_REMOVED_TEXT` from `include/auto_screws_tilt_adjust.h`. Keep `PLATE_NOT_REMOVED_CODE` only if something else still references it; otherwise remove it too and let the decoder own the identity.
+Remove **both** `PLATE_NOT_REMOVED_TEXT` and `PLATE_NOT_REMOVED_CODE` from
+`include/snapmaker_screws_tilt.h`. This is settled, not a judgement call: the only
+references anywhere are this module's own `plate_still_on_bed` and two tests
+(`tests/unit/test_snapmaker_screws_tilt.cpp:403-404`,
+`tests/unit/test_snapmaker_screws_tilt_collector.cpp:228-229`), both of which you are updating.
+Nothing generic consumes them. Leaving the code constant behind would be two hand-written
+copies of one identity — the decoder's table and this header — which is exactly the drift
+the DRY rule exists to stop. Update those two test files to build their fixture strings from
+the literal code instead.
 
-Update the case in `tests/unit/test_auto_screws_tilt.cpp` that feeds the bare phrase: it must now feed a message carrying the code. If the existing test asserted the phrase alone classifies, that assertion is now wrong and should be replaced, not deleted — assert instead that a phrase WITHOUT a code no longer classifies.
+Update the case in `tests/unit/test_snapmaker_screws_tilt.cpp` that feeds the bare phrase: it must now feed a message carrying the code. If the existing test asserted the phrase alone classifies, that assertion is now wrong and should be replaced, not deleted — assert instead that a phrase WITHOUT a code no longer classifies.
 
 - [ ] **Step 5: Run the tests and watch them pass**
 
@@ -1185,17 +1263,19 @@ Expected: PASS.
 
 - [ ] **Step 6: Prove a test can fail**
 
-Make `classify_error` return nullopt unconditionally, run `make t F='[snapmaker][classify]'`, confirm red, revert.
+Make `helix::faultcodes::classify` return nullopt unconditionally, run `make t F='[snapmaker][classify]'`, confirm red, revert.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git commit -m "fix(snapmaker): classify U1 faults by code instead of English wording" \
-  -m "GcodeErrorRouter already asks the backend first and Snapmaker never answered, so every U1 fault fell through to generic handling. The override decodes level-id-index-code, keeps the firmware's own text for faults we have no wording for, and retires the plate gate's phrase fallback." \
-  -m "Mutation: returning nullopt from classify_error turns [snapmaker][classify] red." \
-  -- include/ams_backend_snapmaker.h src/printer/ams_backend_snapmaker.cpp \
-     include/auto_screws_tilt_adjust.h src/api/auto_screws_tilt_adjust.cpp \
-     tests/unit/test_snapmaker_error_classify.cpp tests/unit/test_auto_screws_tilt.cpp
+  -m "Firmware that reports faults as level-id-index-code now gets asked before the phrase-based classifier, so a reworded or untranslated fault still classifies. Unknown codes keep the firmware's own text, and the plate gate's phrase fallback retires in favour of the code." \
+  -m "Mutation: returning nullopt from helix::faultcodes::classify turns [snapmaker][classify] red." \
+  -- include/firmware_fault_codes.h src/printer/firmware_fault_codes.cpp \
+     src/application/gcode_error_router.cpp \
+     firmware/helixscreen-esp32/components/helixapp/app_srcs.txt \
+     include/snapmaker_screws_tilt.h src/api/snapmaker_screws_tilt.cpp \
+     tests/unit/test_snapmaker_error_classify.cpp tests/unit/test_snapmaker_screws_tilt.cpp
 ```
 
 ---
@@ -1253,7 +1333,7 @@ Add `ActiveException`, `read_active_exceptions` and `status_carries_exceptions` 
 
 - [ ] **Step 3: Subscribe the object**
 
-In `src/api/moonraker_discovery_sequence.cpp#build_subscription_objects`, beside the existing U1-specific subscriptions, add `exception_manager` **only when the printer reports it**. Follow the shape already used for `zoffset::required_status_objects(hw)` — a capability question, not a vendor branch. If `exception_manager` appears in `hw.printer_objects()`, subscribe it.
+In `src/api/moonraker_discovery_sequence.cpp#build_subscription_objects`, beside the existing `zoffset::required_status_objects(hw)` call, append `helix::faultcodes::required_status_objects(hw)` (Task 5). Do **not** re-ask the capability question inline against `hw.printer_objects()` — Task 5 already owns "which firmwares report structured faults, and which objects carry them", and a second copy of that rule here is the duplication the vendor-abstraction rule exists to prevent. This call is also what gives Task 5's `required_status_objects` its consumer.
 
 - [ ] **Step 4: Commit**
 
@@ -1286,39 +1366,87 @@ git commit -m "feat(snapmaker): subscribe exception_manager and read standing fa
   - `std::map<FilamentKey, FilamentTemperatures> parse_filament_temperatures(const std::string& response)`
   - `struct FilamentKey { std::string vendor, main_type, sub_type; }` with `operator<`
 
-- [ ] **Step 1: Capture a real response first**
+- [ ] **Step 1: The response is already captured — read it, do not re-send the gcode**
 
-This task cannot be written blind — the response format of `FILAMENT_PARA_GET_ALL_INFO` is not documented anywhere in our tree. Before writing the parser, ask Preston for printer access and capture it:
+Captured 2026-09-21 from the U1 at `192.168.30.103` and saved verbatim at
+`.superpowers/sdd/2026-09-21-u1-remaining-firmware-surface/filament-para-all-info-response.txt`
+(15,679 bytes, firmware `version: '0.0.10'`). Copy what you need from that file into the
+test as a fixture — three representative filaments is enough, but keep the exact shape.
 
-```bash
-curl -s -X POST 'http://192.168.30.103:7125/printer/gcode/script' \
-  -H 'Content-Type: application/json' \
-  -d '{"script":"FILAMENT_PARA_GET_ALL_INFO"}'
-curl -s 'http://192.168.30.103:7125/server/gcode_store?count=50' | python3 -m json.tool
-```
+Four properties of that response change how the parser must be written. None of them are
+guesses; all four are read off the capture and off the printer's live `print_task_config`.
 
-Save the response verbatim into the test file as a fixture. If it turns out to be enormous, trim to three representative filaments but keep the exact shape — do NOT hand-write a plausible format.
+1. **It is a Python dict literal, not JSON.** Keys and strings are single-quoted and the
+   booleans are `True`/`False`. `nlohmann::json::parse` rejects it outright. Either
+   normalise first (`'` -> `"`, `True` -> `true`, `False` -> `false`) or write a small
+   dedicated reader. Normalising is safe here only because no key or value in the capture
+   contains a quote or those words — assert that on the input rather than assuming it, and
+   return an empty map when the assertion fails.
+2. **It arrives as ONE console line prefixed `// `**, on the `response` channel of
+   `/server/gcode_store`. Strip that prefix before parsing.
+3. **The shape is `<TYPE>` -> `"vendor_" + <Vendor>` -> `"sub_" + <SubType>` -> leaf.**
+   Three top-level keys are NOT filament types and must be skipped: `version`,
+   `hard_filaments_max_flow_k`, `soft_filaments_max_flow_k`. This capture carries 16
+   types. The leaf holds `load_temp`, `unload_temp`, `clean_nozzle_temp`, `is_soft`,
+   `flow_temp`, and five per-nozzle-diameter maps keyed `'02'`/`'04'`/`'06'`/`'08'`.
+   **The three temperatures this task wants sit on the leaf, not per diameter** — so
+   `FilamentKey` needs no nozzle-diameter member, despite what the paragraph above says.
+4. **Lookup needs a fallback chain, and the printer's own current state proves it.**
+   Live `print_task_config` reports slot 3 as vendor `Generic`, type `PETG`, sub-type
+   `SnapSpeed`. The table has `PETG.vendor_generic` but no `sub_SnapSpeed` beneath it, and
+   the status spells the vendor `Generic` where the table key is `vendor_generic`. So
+   resolution is: case-insensitive vendor match, then exact sub-type, then `sub_generic`,
+   then `vendor_generic.sub_generic`, then nullopt. **A parser that only matches exactly
+   answers nullopt for a spool loaded in the machine right now** — that is the case the
+   test must cover.
 
 - [ ] **Step 2: Write the failing test against the captured fixture**
 
-Assert: a known vendor/type/sub-type resolves to its temperatures; an unknown one yields nullopt rather than a default; a malformed response yields an empty map rather than throwing.
+Assert: a known vendor/type/sub-type resolves to its temperatures (`PLA`/`Snapmaker`/`SnapSpeed` -> load 250, unload 250, clean 170); the live `PETG`/`Generic`/`SnapSpeed` case resolves through the fallback chain to `PETG.vendor_generic.sub_generic` (load 270, unload 270, clean 205) rather than answering nullopt; a type absent from the table yields nullopt rather than a default; and a malformed response yields an empty map rather than throwing.
 
 - [ ] **Step 3: Implement the provider table**
 
 Same shape as `include/z_offset_persistence.h` and `include/pre_print_preferences.h`: a provider row keyed on a detection predicate (`filament_parameters` present in `hw.printer_objects()`, guarded by `hw.objects_reported()`), with the capability questions as free functions. No vendor name escapes this module.
 
-- [ ] **Step 4: Wire one consumer, not all of them**
+- [ ] **Step 4: Wire it into the system that owns the decision**
 
-Find the current load/unload temperature decision (grep the call shape, not a guessed name — start from where a filament load sets a target and work back). Change **one** call site to prefer the firmware's value when the capability answers, falling back to the existing table otherwise. Do not convert every site in this task; one proven consumer is the deliverable.
+**Do not grep for a call site — the owning system is already identified.** It is
+`src/printer/active_material_provider.cpp#get_active_material`, and it implements a documented
+**three-tier, per-field** precedence (#961):
+
+1. **User override** (the Material Temps overlay) — highest
+2. **Vendor preset** — `slot.nozzle_temp_*`, described in that file as "written by backend from
+   RFID/cfg/Klipper config"
+3. **Internal filament DB default** (`filament::find_material`) — lowest
+
+The layering is deliberately per-field: if the user overrode only `nozzle_min`, the vendor preset
+still wins on `nozzle_max`. `filament::get_material_override` returns the *sparse* override
+precisely so tier 2 can tell which fields the user actually set.
+
+**The firmware's values are a tier-2 vendor preset, NOT a new top tier.** An earlier draft of this
+step said to "prefer the firmware's value, falling back to the existing table" — that is a
+two-tier framing and it is wrong: it would let the firmware silently overwrite a temperature the
+user deliberately set in the overlay, which is the single thing this resolver exists to prevent.
+Whatever you add must lose to a user override on the same field.
+
+**Mind the semantic gap before you assign anything.** `nozzle_min`/`nozzle_max` describe a
+*printing* range. The U1 publishes `load_temp`, `unload_temp` and `clean_nozzle_temp`, which are
+*operation* temperatures — PLA reads `load_temp: 250` against a print range nowhere near that.
+They are not the same quantity, so do not fold them into `nozzle_min`/`nozzle_max`. Either carry
+them as their own fields on the result, or wire only the operation that actually wants them (a
+load or unload sequence). Say in your report which you chose and why.
+
+One proven consumer is still the deliverable — do not convert every site in this task.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "feat(printer): prefer the firmware's own per-filament temperatures where it has them" \
-  -m "The U1 publishes load, unload and clean-nozzle temperatures per vendor, type, sub-type and nozzle diameter via FILAMENT_PARA_GET_ALL_INFO; our generic material table was overriding a better answer. Capability question, so a second firmware is one provider row." \
-  -m "Mutation: returning the generic table when the firmware has a value turns [filament][temps] red." \
+git commit -m "feat(printer): carry the firmware's own per-filament temperatures where it has them" \
+  -m "The U1 publishes load, unload and clean-nozzle temperatures per vendor, type and sub-type via FILAMENT_PARA_GET_ALL_INFO. They enter the resolver as a vendor preset, so they beat the generic material table and still lose to a temperature the user set in the Material Temps overlay. Capability question, so a second firmware is one provider row." \
+  -m "Mutation: <name the one you actually ran>." \
   -- include/filament_temperature_source.h src/printer/filament_temperature_source.cpp \
      tests/unit/test_filament_temperature_source.cpp \
+     src/printer/active_material_provider.cpp include/active_material_provider.h \
      firmware/helixscreen-esp32/components/helixapp/app_srcs.txt
 ```
 
@@ -1333,6 +1461,8 @@ git commit -m "feat(printer): prefer the firmware's own per-filament temperature
 - Create: `src/printer/power_loss_sensor.cpp`
 - Create: `tests/unit/test_power_loss_sensor.cpp`
 - Modify: `firmware/helixscreen-esp32/components/helixapp/app_srcs.txt`
+
+**The printer publishes five of these objects**, not one: a bare `power_loss_check` (the mains monitor, `initialized: 1` on the live machine) and `power_loss_check e0` through `e3` (per-extruder, all `initialized: 0` with `voltage_type: 255`). The detection predicate must match the bare name exactly — a prefix or substring test picks up an uninitialised sibling — and `required_status_objects` returns only `power_loss_check`.
 
 **Interfaces:**
 - Consumes: `PrinterDiscovery`.
@@ -1380,15 +1510,40 @@ TEST_CASE("power loss sensor: a frame that omits the object answers nothing",
 
 Provider table on the same shape as Tasks 7 and `z_offset_persistence`. Subscribe the object from the discovery sequence via `required_status_objects`, as Task 6 does for `exception_manager`.
 
-- [ ] **Step 3: Decide what PLR does with it — and write that decision down**
+- [ ] **Step 3: Diagnostic only — the firmware settles this, it is not a judgement call**
 
-This is a judgement call and must not be guessed at in code. Read the existing PLR path (`project_u1_power_loss_recovery`, `tests/unit/test_plr_state.cpp`) and pick ONE of:
+An earlier draft offered three options and asked Preston to choose. Reading
+`/home/lava/klipper/klippy/extras/power_loss_check.py` on the live U1 closes it: **`power_loss_flag`
+is a live MCU-pushed state, not a latch**, and when it trips on the master the firmware does
 
-- **(a) Diagnostic only.** Surface the sensor in the debug bundle and the printer-info surface. No behaviour change. Lowest risk; makes the next investigation possible.
-- **(b) Corroborate the recovery prompt.** When PLR offers to resume, say whether the firmware confirms it saw a power loss. Changes wording, not behaviour.
-- **(c) Gate the prompt.** Only offer recovery when the sensor agrees. **Do not choose this without Preston** — a sensor that reads unknown on some units would suppress a recovery the user wanted.
+```python
+error = '{"coded": "0003-0522-0000-0017", "msg":"mcu: Power loss triggered", "oneshot": 0}'
+self.printer.invoke_shutdown(error)
+```
 
-Default to (a) unless Preston says otherwise, and record the choice in the commit body. Whatever is chosen, the sensor must never make recovery LESS available than it is today without an explicit decision.
+Klipper shuts down on the event and restarts on recovery. So at the moment we would offer to
+resume, the flag reads **0** — mains is fine, which is precisely why the machine booted.
+Gating the recovery prompt on the sensor would therefore suppress **every legitimate recovery
+offer**, not merely some; and corroborating the prompt fails for the same reason, because
+there is nothing left to corroborate against. Surface it diagnostically (the printer-info
+surface and the debug bundle) and change no recovery behaviour.
+
+What the sensor is genuinely good for is the *present* state of incoming mains — `voltage_type`
+(110v / 220v / detecting) and `duty_percent` — i.e. "mains looks marginal", never "a loss
+happened".
+
+**The power-loss EVENT is a structured fault code, and Tasks 4-6 already handle that shape.**
+`0003-0522-0000-0017` decodes as level 3, id 522, index 0, code 17, "mcu: Power loss
+triggered". It is **not** in Task 4's table. Add it there with wording of our own, so a power
+loss reads as a power loss rather than as an unrecognised shutdown. Note it travels in
+`invoke_shutdown`'s JSON `coded` field rather than necessarily through `exception_manager`, so
+confirm Task 5's classifier actually sees that text before claiming the path works — if it does
+not, say so in the report rather than asserting a wiring you have not exercised.
+
+Also correct the framing above: our PLR is not "blind". For `PlrBackendType::SNAPMAKER`,
+`src/ui/ui_plr_offer_controller.cpp` documents that the firmware already validated the snapshot
+against MCU flash on boot, so `pl_env_valid` *is* availability — passive, but firmware-validated,
+unlike Creality's active probe.
 
 - [ ] **Step 4: Commit**
 

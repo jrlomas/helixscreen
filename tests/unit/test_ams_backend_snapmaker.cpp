@@ -547,6 +547,67 @@ TEST_CASE_METHOD(
     }
 }
 
+// Lane presence gates every presence-keyed affordance (Unload, the batch
+// picker's pre-tick). filament_detect.state is the entrance/tag reader: with
+// all four lanes loaded it reads [0,1,0,1] — 0 for exactly the heads whose
+// filament has been fed THROUGH to the toolhead — while the port sensor
+// (filament_feed .extruderN.filament_detected) reads true on all four and
+// channel_state alternates load_finish/preload_finish. Presence must therefore
+// resolve from the port sensor OR the loaded-at-toolhead latch, never from
+// the tag reading.
+TEST_CASE_METHOD(SnapmakerFixture,
+                 "Snapmaker lane presence comes from the port sensor and load latch, not "
+                 "filament_detect.state",
+                 "[ams][snapmaker]") {
+    helix::test::RegisteredBackend<AmsBackendSnapmaker> backend_reg(nullptr, nullptr);
+    AmsBackendSnapmaker& backend = *backend_reg;
+
+    // Heads 0/2 fed to the toolhead (load_finish); heads 1/3 preloaded short
+    // of the gear (preload_finish, latch clear). Port sensor sees filament on
+    // 0-2; head 3 reads port=false so its presence rides the latch alone.
+    json feed = json{
+        {"filament_feed left",
+         json{{"extruder0", json{{"filament_detected", true}, {"channel_state", "load_finish"}}},
+              {"extruder1",
+               json{{"filament_detected", true}, {"channel_state", "preload_finish"}}}}},
+        {"filament_feed right",
+         json{
+             {"extruder2", json{{"filament_detected", true}, {"channel_state", "load_finish"}}},
+             {"extruder3", json{{"filament_detected", false}, {"channel_state", "load_finish"}}}}}};
+    SnapmakerTestAccess::handle_status(backend, feed);
+
+    // The entrance/tag reading: 0 for the two heads fed through it.
+    SnapmakerTestAccess::handle_status(
+        backend, json{{"filament_detect", json{{"state", json::array({0, 1, 0, 1})}}}});
+
+    SECTION("a head fed through to the toolhead (tag reading 0) still holds filament") {
+        CHECK(backend.get_slot_info(0).is_present());
+        CHECK(backend.get_slot_info(0).status != SlotStatus::EMPTY);
+        CHECK(backend.get_slot_info(2).is_present());
+        // The user-visible consequence: Unload is offered for a loaded head.
+        CHECK(backend.can_unload_from_toolhead(0));
+        CHECK(backend.can_unload_from_toolhead(3));
+    }
+
+    SECTION("a preloaded head (latch clear) rides the port sensor") {
+        CHECK(backend.get_slot_info(1).is_present());
+        CHECK(backend.get_slot_info(1).status != SlotStatus::EMPTY);
+    }
+
+    SECTION("a lane with neither signal present reads EMPTY") {
+        SnapmakerTestAccess::handle_status(backend, make_feed_status(1, "wait_insert", false));
+        CHECK_FALSE(backend.get_slot_info(1).is_present());
+        CHECK(backend.get_slot_info(1).status == SlotStatus::EMPTY);
+    }
+
+    SECTION("a delta frame carrying no presence fields leaves the last reading standing") {
+        SnapmakerTestAccess::handle_status(backend,
+                                           json{{"toolhead", json{{"extruder", "extruder"}}}});
+        CHECK(backend.get_slot_info(0).is_present());
+        CHECK(backend.get_slot_info(0).status != SlotStatus::EMPTY);
+    }
+}
+
 // channel_error scoping — the firmware reports channel_error="no_filament" for
 // any lane sitting empty, INCLUDING a lane deliberately left unloaded for a
 // multi-color print (heads 0+2 used, head 1 empty). Post-print that idle empty
@@ -2008,13 +2069,16 @@ struct SnapmakerLaneRig {
     helix::test::RegisteredBackend<AmsBackendSnapmaker> backend_reg;
 };
 
-/// Slot 0 seated, its tag reading @p argb and @p main_type. The state array is
-/// what makes the slot AVAILABLE, the only status the mirror runs on, and the
-/// CARD_UID stays the same across frames so no case reads as a spool swap.
+/// Slot 0 seated, its tag reading @p argb and @p main_type. The port sensor
+/// is what makes the slot present and AVAILABLE, the only status the mirror
+/// runs on, and the CARD_UID stays the same across frames so no case reads as
+/// a spool swap. The state array rides along as the entrance/tag reading,
+/// which backs no presence claim.
 json seated_tag_frame(uint32_t argb, const std::string& main_type) {
     json status =
         make_filament_detect_status(0, main_type, argb, "OtherBrand", json::array({1, 2, 3, 4}));
     status["filament_detect"]["state"] = json::array({1, 0, 0, 0});
+    status["filament_feed left"] = json{{"extruder0", json{{"filament_detected", true}}}};
     return status;
 }
 
@@ -2740,6 +2804,14 @@ TEST_CASE_METHOD(SnapmakerFixture, "Snapmaker claims the not-edit-filament resum
         for (const auto& action : ev->recovery_actions) {
             REQUIRE(action.gcode.find("RESUME") == std::string::npos);
         }
+    }
+
+    SECTION("an overlong extruder index is refused rather than parsed") {
+        // This line arrives from the firmware, so its digit run is not ours to
+        // trust: past the parse range stoi throws, and an escaping throw here
+        // leaves classify_error on the main thread.
+        REQUIRE_FALSE(backend.classify_error("!! e99999999999999999999 not edit filament", paused)
+                          .has_value());
     }
 
     SECTION("keeps the firmware wording for cross-channel dedup") {

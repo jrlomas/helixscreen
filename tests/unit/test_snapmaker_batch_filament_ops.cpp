@@ -17,6 +17,7 @@
 
 #include "../lvgl_test_fixture.h"
 #include "../test_helpers/print_state_test_drivers.h"
+#include "../test_helpers/snapmaker_test_access.h"
 #include "ams_backend.h"
 #include "ams_backend_happy_hare.h"
 #include "ams_backend_snapmaker.h"
@@ -25,6 +26,7 @@
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
+#include "test_helpers/registered_backend.h"
 
 #include <condition_variable>
 #include <memory>
@@ -118,9 +120,46 @@ struct BatchFixture : public LVGLTestFixture {
         return mock_client.gcode_script_history();
     }
 
+    /// A registered Snapmaker backend with the concrete type visible, for
+    /// tests that reach what only AmsBackendSnapmaker exposes. Registered
+    /// through AmsState so lane funnels accept its lane ids.
+    helix::AmsBackendSnapmaker& backend() {
+        if (!raw_backend_) {
+            raw_backend_ =
+                std::make_unique<helix::test::RegisteredBackend<helix::AmsBackendSnapmaker>>(
+                    nullptr, nullptr);
+        }
+        return **raw_backend_;
+    }
+
+    /// Feed one raw JSON status frame to the backend's status handler — the
+    /// same entry point the WebSocket drives.
+    void feed_status(const std::string& json_text) {
+        helix::SnapmakerTestAccess::handle_status(backend(), nlohmann::json::parse(json_text));
+    }
+
+    /// One frame carrying the feeder channel and its motion sensor — the two
+    /// objects slot_op_eligibility answers from. The sensor reads enabled, as
+    /// it does on the rig; the SensorDisabled section re-feeds it false.
+    void set_channel(int slot, const char* state, const char* error, bool detected, bool module,
+                     bool no_auto) {
+        nlohmann::json frame = {
+            {"filament_feed " + std::string(slot < 2 ? "left" : "right"),
+             {{"extruder" + std::to_string(slot),
+               {{"channel_state", state},
+                {"channel_error", error},
+                {"filament_detected", detected},
+                {"module_exist", module},
+                {"disable_auto", no_auto}}}}},
+            {"filament_motion_sensor e" + std::to_string(slot) + "_filament", {{"enabled", true}}},
+        };
+        feed_status(frame.dump());
+    }
+
     MoonrakerClientMock mock_client;
     helix::PrinterState state;
     std::unique_ptr<MoonrakerAPIMock> api;
+    std::unique_ptr<helix::test::RegisteredBackend<helix::AmsBackendSnapmaker>> raw_backend_;
 };
 
 } // namespace
@@ -152,6 +191,39 @@ TEST_CASE("Snapmaker batch_feed_gcode joins one AUTO_FEEDING line per slot", "[s
     SECTION("empty input yields an empty string") {
         REQUIRE(helix::AmsBackendSnapmaker::batch_feed_gcode({}, true).empty());
         REQUIRE(helix::AmsBackendSnapmaker::batch_feed_gcode({}, false).empty());
+    }
+}
+
+TEST_CASE("Snapmaker batch_feed_gcode drives AUTO_FEEDING_BATCH when the firmware has it",
+          "[snapmaker][batch]") {
+    SECTION("load with next-head preheat") {
+        const std::string chain = helix::AmsBackendSnapmaker::batch_feed_gcode(
+            {0, 2, 3}, /*load=*/true, /*use_batch_macro=*/true);
+
+        CHECK(chain == "AUTO_FEEDING_BATCH ACTION=START\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=0 LOAD=1 NEXT_EXTRUDER=2\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=2 LOAD=1 NEXT_EXTRUDER=3\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=3 LOAD=1\n"
+                       "AUTO_FEEDING_BATCH ACTION=END");
+    }
+
+    SECTION("unload keeps the batch sentinels") {
+        const std::string chain = helix::AmsBackendSnapmaker::batch_feed_gcode(
+            {1, 3}, /*load=*/false, /*use_batch_macro=*/true);
+
+        CHECK(chain == "AUTO_FEEDING_BATCH ACTION=START\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=1 UNLOAD=1 NEXT_EXTRUDER=3\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=3 UNLOAD=1\n"
+                       "AUTO_FEEDING_BATCH ACTION=END");
+    }
+
+    SECTION("single slot has no NEXT_EXTRUDER") {
+        const std::string chain = helix::AmsBackendSnapmaker::batch_feed_gcode(
+            {2}, /*load=*/true, /*use_batch_macro=*/true);
+
+        CHECK(chain == "AUTO_FEEDING_BATCH ACTION=START\n"
+                       "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=2 LOAD=1\n"
+                       "AUTO_FEEDING_BATCH ACTION=END");
     }
 }
 
@@ -247,4 +319,172 @@ TEST_CASE_METHOD(BatchFixture, "A batch is refused while printing", "[ams][batch
     REQUIRE(mock_client.last_send_script() == "AUTO_FEEDING EXTRUDER=0 LOAD=1\n"
                                               "AUTO_FEEDING EXTRUDER=1 LOAD=1");
     REQUIRE(sent_gcodes().size() == 2);
+}
+
+// ============================================================================
+// channel_snapshot — the per-channel feeder fields the status parse keeps
+// ============================================================================
+
+TEST_CASE_METHOD(BatchFixture, "Snapmaker keeps the per-channel feeder fields",
+                 "[snapmaker][batch]") {
+    feed_status(R"({"filament_feed left":{"extruder0":{
+        "channel_state":"load_finish","channel_error":"ok","filament_detected":true,
+        "module_exist":true,"disable_auto":false}}})");
+
+    const auto snap = backend().channel_snapshot(0);
+
+    CHECK(snap.state == "load_finish");
+    CHECK(snap.error == "ok");
+    CHECK(snap.filament_detected);
+    CHECK(snap.module_exist);
+    CHECK_FALSE(snap.disable_auto);
+}
+
+TEST_CASE_METHOD(BatchFixture, "A feeder delta keeps the fields it does not mention",
+                 "[snapmaker][batch]") {
+    feed_status(R"({"filament_feed left":{"extruder0":{
+        "channel_state":"load_finish","channel_error":"ok","filament_detected":true,
+        "module_exist":true,"disable_auto":false}}})");
+
+    SECTION("a channel_state-only frame leaves the booleans standing") {
+        feed_status(R"({"filament_feed left":{"extruder0":{
+            "channel_state":"unload_finish"}}})");
+        const auto snap = backend().channel_snapshot(0);
+        CHECK(snap.state == "unload_finish");
+        CHECK(snap.filament_detected); // not cleared by a frame silent on it
+        CHECK(snap.module_exist);
+        CHECK_FALSE(snap.disable_auto);
+    }
+
+    SECTION("a filament_detected-only frame leaves state standing") {
+        feed_status(R"({"filament_feed left":{"extruder0":{"filament_detected":false}}})");
+        const auto snap = backend().channel_snapshot(0);
+        CHECK(snap.state == "load_finish"); // not blanked by a frame silent on it
+        CHECK_FALSE(snap.filament_detected);
+        CHECK(snap.module_exist);
+    }
+
+    SECTION("an error token persists until a frame carries a real value again") {
+        feed_status(R"({"filament_feed left":{"extruder0":{"channel_error":"jam"}}})");
+        CHECK(backend().channel_snapshot(0).error == "jam");
+        // A frame omitting channel_error keeps the token...
+        feed_status(R"({"filament_feed left":{"extruder0":{"channel_state":"load_finish"}}})");
+        CHECK(backend().channel_snapshot(0).error == "jam");
+        // ...and an explicit "ok" clears it.
+        feed_status(R"({"filament_feed left":{"extruder0":{"channel_error":"ok"}}})");
+        CHECK(backend().channel_snapshot(0).error == "ok");
+    }
+}
+
+// ============================================================================
+// batch cursor — the progress line the channel parse renders per head
+// ============================================================================
+
+TEST_CASE_METHOD(BatchFixture, "A finished batch leaves no progress line behind",
+                 "[snapmaker][batch]") {
+    helix::SnapmakerTestAccess::set_batch_plan(backend(), {0, 1}, /*load=*/true, "Load", "of");
+
+    SECTION("mid-batch, the line names the head now in progress") {
+        set_channel(0, "load_finish", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
+        CHECK(backend().batch_plan().cursor == 1);
+        CHECK(backend().batch_plan().active);
+        CHECK(backend().get_system_info().operation_detail == "Load 2 of 2");
+    }
+
+    SECTION("the final head verifies and clears the line") {
+        set_channel(0, "load_finish", "ok", true, true, false);
+        set_channel(1, "load_finish", "ok", true, true, false);
+        CHECK(backend().batch_plan().cursor == 2);
+        CHECK_FALSE(backend().batch_plan().active);
+        CHECK(backend().get_system_info().operation_detail.empty());
+    }
+}
+
+// ============================================================================
+// slot_op_eligibility — the direction-dependent refusal, from channel state
+// ============================================================================
+
+TEST_CASE_METHOD(BatchFixture, "Snapmaker eligibility follows channel state",
+                 "[snapmaker][batch]") {
+    using E = helix::AmsBackend::FilamentOpEligibility;
+
+    SECTION("preload_finish with filament loads, does not unload") {
+        set_channel(0, "preload_finish", "ok", /*detected=*/true, /*module=*/true,
+                    /*no_auto=*/false);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/true) == E::Eligible);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/false) == E::NotLoaded);
+    }
+    SECTION("load_finish unloads, does not load") {
+        set_channel(0, "load_finish", "ok", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/false) == E::Eligible);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/true) == E::AlreadyLoaded);
+    }
+    SECTION("a manual feed that finished on the printer is settled") {
+        // manual_sta_finish is a persistent terminal: a head that completed a
+        // manual EXTRUDE sits in it until the next operation. It is not a
+        // load (the classifier leaves the loaded latch clear), so an unload
+        // still refuses with NotLoaded while a load may proceed.
+        set_channel(0, "manual_sta_finish", "ok", /*detected=*/true, /*module=*/true,
+                    /*no_auto=*/false);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/true) == E::Eligible);
+        CHECK(backend().slot_op_eligibility(0, /*load=*/false) == E::NotLoaded);
+    }
+    SECTION("wait_insert with no filament is empty in both directions") {
+        set_channel(0, "wait_insert", "ok", /*detected=*/false, true, false);
+        CHECK(backend().slot_op_eligibility(0, true) == E::Empty);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Empty);
+    }
+    SECTION("a feeder fault beats everything") {
+        set_channel(0, "load_finish", "jam", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Error);
+    }
+    SECTION("an empty lane's no_filament token is Empty, not a feeder error") {
+        // The firmware reports no_filament for any lane without filament;
+        // on a settled state it must not read as a fault.
+        set_channel(0, "wait_insert", "no_filament", /*detected=*/false, true, false);
+        CHECK(backend().slot_op_eligibility(0, true) == E::Empty);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Empty);
+    }
+    SECTION("an unsettled empty lane is still Empty") {
+        // An idle empty lane reports an unsettled state; presence wins.
+        set_channel(0, "none", "no_filament", false, true, false);
+        CHECK(backend().slot_op_eligibility(0, true) == E::Empty);
+    }
+    SECTION("blank and none error tokens are not faults") {
+        set_channel(0, "load_finish", "none", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Eligible);
+        set_channel(0, "load_finish", "", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Eligible);
+    }
+    SECTION("manual mode or absent module refuses an otherwise eligible head") {
+        set_channel(0, "preload_finish", "ok", true, /*module=*/true, /*no_auto=*/true);
+        CHECK(backend().slot_op_eligibility(0, true) == E::FeederUnavailable);
+        set_channel(1, "preload_finish", "ok", true, /*module=*/false, /*no_auto=*/false);
+        CHECK(backend().slot_op_eligibility(1, true) == E::FeederUnavailable);
+    }
+    SECTION("an unrecognised state is busy, never eligible") {
+        set_channel(0, "loading", "ok", true, true, false);
+        CHECK(backend().slot_op_eligibility(0, true) == E::Busy);
+        CHECK(backend().slot_op_eligibility(0, false) == E::Busy);
+    }
+    SECTION("a disabled motion sensor blocks an otherwise eligible load") {
+        set_channel(0, "unload_finish", "ok", true, true, false);
+        feed_status(R"({"filament_motion_sensor e0_filament":{"enabled":false}})");
+        CHECK(backend().slot_op_eligibility(0, true) == E::SensorDisabled);
+        feed_status(R"({"filament_motion_sensor e0_filament":{"enabled":true}})");
+        CHECK(backend().slot_op_eligibility(0, true) == E::Eligible);
+    }
+    SECTION("an out-of-range slot is busy") {
+        CHECK(backend().slot_op_eligibility(9, true) == E::Busy);
+        CHECK(backend().slot_op_eligibility(-1, false) == E::Busy);
+    }
+}
+
+TEST_CASE_METHOD(BatchFixture, "A backend without the override stays permissive", "[ams][batch]") {
+    // The default must not change behaviour for AFC, Happy Hare, ACE or AD5X.
+    BatchlessBackend backend;
+    CHECK(backend.slot_op_eligibility(0, /*load=*/true) ==
+          helix::AmsBackend::FilamentOpEligibility::Eligible);
+    CHECK(backend.slot_op_eligibility(9, /*load=*/false) ==
+          helix::AmsBackend::FilamentOpEligibility::Eligible);
 }

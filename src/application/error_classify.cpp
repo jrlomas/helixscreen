@@ -4,8 +4,6 @@
 #include "gcode_error_router.h" // clean_error_text
 #include "lvgl/src/others/translation/lv_translation.h"
 
-#include <cctype>
-
 namespace helix::error_classify {
 
 namespace {
@@ -16,36 +14,16 @@ ErrorSource source_for_code(const std::string& code) {
     return ErrorSource::GENERIC;
 }
 
-bool is_error_prefix(const std::string& line) {
-    if (line.size() >= 2 && line[0] == '!' && line[1] == '!')
-        return true;
-    if (line.size() >= 6) {
-        std::string p = line.substr(0, 5);
-        for (auto& c : p)
-            c = static_cast<char>(std::tolower(c));
-        if (p == "error" && line[5] == ':')
-            return true;
-    }
-    return false;
-}
-
 } // namespace
 
 std::optional<ErrorEvent> classify(const std::string& raw_line, const ClassifyContext& ctx) {
-    if (!is_error_prefix(raw_line))
+    const GcodeErrorLine parsed = parse_gcode_error_line(raw_line);
+    if (parsed.prefix == GcodeErrorPrefix::None)
         return std::nullopt;
 
     ErrorEvent e;
-    const bool is_bang = raw_line.size() >= 2 && raw_line[0] == '!' && raw_line[1] == '!';
-
-    std::string text;
-    if (is_bang) {
-        text =
-            (raw_line.size() >= 3 && raw_line[2] == ' ') ? raw_line.substr(3) : raw_line.substr(2);
-    } else { // "Error:"
-        text =
-            (raw_line.size() >= 7 && raw_line[6] == ' ') ? raw_line.substr(7) : raw_line.substr(6);
-    }
+    const bool is_bang = parsed.prefix == GcodeErrorPrefix::Bang;
+    std::string text = parsed.text;
 
     // Capture Klipper's wording before clean_error_text() gets a chance to
     // rewrite it — the RPC channel records this exact string, so it is what the

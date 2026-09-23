@@ -101,7 +101,7 @@ parse keys off whatever objects the frame carries:
 |----------------|-------------|---------|
 | `extruder`, `extruder1`-`extruder3` | `state`, `park_pin`, `active_pin`, `activating_move`, `extruder_offset`, `switch_count`, `retry_count`, `error_count` | Per-tool toolchanger state (`ExtruderToolState`) |
 | `toolhead` | `extruder` | Which extruder the carriage holds — authority for the active tool |
-| `filament_detect` | `info` (per-channel RFID array), `state` (`[int x4]`) | Spool metadata per channel; 1 = filament present |
+| `filament_detect` | `info` (per-channel RFID array), `state` (`[int x4]`) | Spool metadata per channel; `state` is the entrance/tag reading, which reads 0 once filament is fed through to the toolhead — it is not a lane-presence signal |
 | `filament_feed left` / `filament_feed right` | per-`extruder{N}`: `filament_detected`, `channel_state`, `channel_error` | Port/buffer presence, the feed state machine, per-channel errors |
 | `print_task_config` | `filament_exist`, `filament_type`, `filament_vendor`, `filament_color_rgba` | Firmware-authoritative filament metadata (see the native API doc) |
 | `filament_motion_sensor e{N}_filament` (and the `filament_switch_sensor` form) | `filament_detected` | Per-tool runout encoder |
@@ -338,9 +338,14 @@ Extended Firmware endpoint that 404s on stock firmware; the override still persi
 2. `is_stuck_motion_sensor_runout()` has no caller — revive when a verifiable
    "filament at the gear" signal exists (`src/printer/ams_backend_snapmaker.cpp`). Checked
    2026-08-21: the status model carries **no dedicated feeder/gear-presence field** -
-   the three presence signals are `filament_detect.state` (per channel),
-   `filament_feed` per-extruder `filament_detected` (port), and the per-tool motion
-   sensor. The code's own candidate is `filament_feed.channel_state`: `load_finish`
+   lane presence resolves from two signals: the `filament_feed` per-extruder
+   `filament_detected` port sensor OR the `filament_feed.channel_state`
+   loaded-at-toolhead latch (`load_finish` sets it; `unload_finish` /
+   `wait_insert` / `preload_finish` clear it). `filament_detect.state` is the
+   entrance/tag reading and reads 0 once filament is fed through, so it backs
+   no presence claim; the per-tool motion sensor is a runout signal for the
+   active tool, not lane presence. The gear-presence candidate is that same
+   channel_state pair: `load_finish`
    (fed to nozzle) vs `preload_finish` (firmware assist stops short of the gear) -
    both already parsed into the channel-state machine
    (`src/printer/ams_backend_snapmaker.cpp#classify_channel_state`, `:569-576`). What is missing is rig

@@ -279,19 +279,23 @@ std::vector<BackendCensus> census_of_every_backend() {
 
     {
         RegisteredBackend<AmsBackendSnapmaker> harness(nullptr, nullptr);
-        SnapmakerTestAccess::handle_status(
-            *harness,
-            status_frame(
-                "filament_detect",
-                nlohmann::json{{"state", nlohmann::json::array({1, 0, 0, 0})},
-                               {"info", nlohmann::json::array({nlohmann::json{
-                                            {"MAIN_TYPE", "PLA"},
-                                            {"SUB_TYPE", "Silk"},
-                                            {"MANUFACTURER", "Snapmaker"},
-                                            {"ARGB_COLOR", 0xFFED2C2C},
-                                            {"WEIGHT", 1000},
-                                            {"CARD_UID", nlohmann::json::array({144, 32, 196, 2})},
-                                        }})}}));
+        nlohmann::json frame = status_frame(
+            "filament_detect",
+            nlohmann::json{{"state", nlohmann::json::array({1, 0, 0, 0})},
+                           {"info", nlohmann::json::array({nlohmann::json{
+                                        {"MAIN_TYPE", "PLA"},
+                                        {"SUB_TYPE", "Silk"},
+                                        {"MANUFACTURER", "Snapmaker"},
+                                        {"ARGB_COLOR", 0xFFED2C2C},
+                                        {"WEIGHT", 1000},
+                                        {"CARD_UID", nlohmann::json::array({144, 32, 196, 2})},
+                                    }})}});
+        // Lane presence is the port sensor, not the state array (the
+        // entrance/tag reading), so the census drive needs the feed object
+        // for sensed.present to be filed.
+        frame["params"][0]["filament_feed left"] =
+            nlohmann::json{{"extruder0", nlohmann::json{{"filament_detected", true}}}};
+        SnapmakerTestAccess::handle_status(*harness, frame);
         out.push_back({"Snapmaker", filed_on(harness.lane(0))});
     }
 

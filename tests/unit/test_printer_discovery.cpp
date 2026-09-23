@@ -443,6 +443,23 @@ TEST_CASE("PrinterDiscovery detects macros and caches common patterns", "[printe
     }
 }
 
+TEST_CASE("PrinterDiscovery detects the U1 batch feeding macro", "[printer_discovery]") {
+    SECTION("firmware with AUTO_FEEDING_BATCH") {
+        PrinterDiscovery hw;
+        json objects = {"gcode_macro AUTO_FEEDING", "gcode_macro AUTO_FEEDING_BATCH",
+                        "filament_feed left"};
+        hw.parse_objects(objects);
+        REQUIRE(hw.has_auto_feeding_batch());
+    }
+
+    SECTION("firmware with only AUTO_FEEDING") {
+        PrinterDiscovery hw;
+        json objects = {"gcode_macro AUTO_FEEDING", "filament_feed left"};
+        hw.parse_objects(objects);
+        REQUIRE_FALSE(hw.has_auto_feeding_batch());
+    }
+}
+
 // ============================================================================
 // AFC/MMU Detection Tests
 // ============================================================================

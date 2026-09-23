@@ -254,6 +254,7 @@ translations:
     da altura dos parafusos
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: O reabastecimento automático está ligado, mas nenhum par de slots tem filamento compatível, então nada trocará ao acabar o filamento
   Auto-render video: Renderizar vídeo automaticamente
+  'Auto-replenish filament': 'Reabastecer filamento automaticamente'
   Auto-tuning Shapers...: Ajuste automático de Shapers...
   Auto-uninstall only works on local Moonraker: A desinstalação automática só funciona
     no Moonraker local
@@ -818,6 +819,7 @@ translations:
   Deploy: Implantar
   Describe the issue (optional): Descreva o problema (opcional)
   Detailed: Detalhado
+  'Detect filament tangles': 'Detectar emaranhados de filamento'
   Detecting plate...: Detectando placa...
   Detecting printer type...: Detectando tipo de impressora...
   Detecting...: Detectando...
@@ -1469,7 +1471,7 @@ translations:
   Initiate blade change procedure: 'Iniciar o procedimento de troca de lâmina'
   Input: Entrada
   Input Shaper: Input Shaper
-  Input Shaper Calibration: ''
+  Input Shaper Calibration: 'Calibração do input shaper'
   Input Shaper Help: Ajuda do Input Shaper
   Input Shaping: Input Shaping
   Input shaper calibration sensors: Sensores de calibração do input shaper
@@ -2165,6 +2167,7 @@ translations:
   Power: Energia
   Power Devices: Dispositivos de energia
   Power off the printer or screen: Desligar a impressora ou a tela
+  'Power was lost during the print; the printer stopped and saved its progress': 'A energia caiu durante a impressão; a impressora parou e salvou o progresso'
   Pre-heat the extruder first: Pré-aqueça o extrusor primeiro
   'Pre-print command failed: {}': 'Falha no comando pré-impressão: {}'
   Pre-print homing...: Posicionamento pré-impressão...
@@ -2189,7 +2192,7 @@ translations:
   Press Abort to stop: Pressione Abortar para parar
   Press Scan to search: Pressione Escanear para buscar
   'Pressure:': 'Pressão:'
-  Pressure Advance Calibration: ''
+  Pressure Advance Calibration: 'Calibração do pressure advance'
   Preview Sounds: Visualizar Sons
   Previous: Anterior
   Price: Preço
@@ -2198,6 +2201,7 @@ translations:
   Priming...: Preparando...
   Print: Imprimir
   Print Anyway: Imprimir Mesmo Assim
+  'Print Behaviour': 'Comportamento de impressão'
   Print Cancelled: Impressão Cancelada
   Print Complete!: Impressão Concluída!
   Print Completion Alert: Alerta de Conclusão de Impressão
@@ -2439,6 +2443,7 @@ translations:
   Remove PIN: Remover PIN
   Remove Spoolman?: Remover Spoolman?
   Remove plugin from printer: Remover plugin da impressora
+  'Remove the PEI sheet from the bed, then start again: probing through the sheet gives wrong results': 'Remova a folha PEI da mesa e comece de novo: sondar através da folha dá resultados errados'
   Remove the bypass spool from the toolhead first: 'Remova primeiro o carretel de bypass do cabeçote'
   Rename: Renomear
   Rename Fan: Renomear Ventoinha
@@ -2450,6 +2455,7 @@ translations:
   Replace: "Substituir"
   Replace Profile?: "Substituir Perfil?"
   Replay Welcome Tour: Repetir Tour de Boas-Vindas
+  'Replenish ignores colour': 'O reabastecimento ignora a cor'
   Replenishing filament...: Reabastecendo filamento...
   Report saved to crash_report.txt: Relatório salvo em crash_report.txt
   Reprint: Reimprimir
@@ -2795,6 +2801,7 @@ translations:
     não é rastreado.
   Size: Tamanho
   Skip: Pular
+  Skipped: 'Ignorado'
   Sleep While Printing: Suspender Durante Impressão
   Sleep adjusted to match dim timeout: Tempo de suspensão ajustado
   Sliced colors: Cores fatiadas
@@ -2964,6 +2971,7 @@ translations:
   TOOLS: FERRAMENTAS
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Leva 3-5 min. Não interrompa.
+  'Tangle sensitivity': 'Sensibilidade a emaranhados'
   Tap + to add: Toque em + para adicionar
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Toque em Reiniciar firmware para recuperar. Na K2 isso também reinicia a ponte MCU rpi
   Tap again to confirm this orientation: Toque novamente para confirmar esta orientação
@@ -3021,6 +3029,7 @@ translations:
   Thanks! TOTALLY anonymous usage data helps improve HelixScreen.: Obrigado! Dados
     de uso TOTALMENTE anônimos ajudam a melhorar o HelixScreen.
   That did not sound like a pluck - try again: Isso não soou como um dedilhado - tente novamente
+  'That setting cannot be changed while a print is running': 'Essa configuração não pode ser alterada durante uma impressão'
   That slot cannot stand in for this one: Esse slot não pode substituir este
   That tool is already loaded: Essa ferramenta já está carregada
   The CFS odometer hardware is faulty and needs repair or replacement: O hardware do odômetro do CFS está com defeito e precisa de reparo ou substituição
@@ -3258,6 +3267,7 @@ translations:
   Turbo: Turbo
   Turbo Inner: Turbo Interno
   Turbo Outer: Turbo Externo
+  'Turn LED off when the print ends': 'Desligar o LED ao terminar a impressão'
   Turn Off: Desligar
   Turn Off WiFi?: Desligar WiFi?
   Turn On: Ligar
@@ -3306,6 +3316,7 @@ translations:
   Unload Distance: 'Distância de descarregamento'
   Unload Failed: 'Falha ao descarregar'
   Unload Filament: Descarregar Filamento
+  'Unload at end': 'Descarregar ao terminar'
   Unload failed: Falha ao descarregar
   Unload filament: 'Descarregar filamento'
   Unload from toolhead first: 'Descarregue primeiro do cabeçote'
@@ -3525,7 +3536,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-offset salvo - Klipper reiniciando...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: 'já carregado'
   bed: mesa
+  busy: 'ocupado'
   by Preston Brown: por Preston Brown
   chamber heater: aquecedor da câmara
   complete: concluído
@@ -3538,6 +3551,7 @@ translations:
   eSpooler Mode: 'Modo eSpooler'
   eSpooler, clog detection, and sensor settings: 'Configurações de eSpooler, detecção de entupimento e sensores'
   elapsed: decorrido
+  empty: 'vazio'
   enable: habilitar
   enabled: habilitado
   error: erro
@@ -3545,14 +3559,19 @@ translations:
   extruder(s): extrusor(es)
   extruders: extrusores
   fans: ventoinhas
+  feeder error: 'erro do alimentador'
+  feeder not in automatic mode: 'alimentador não está em modo automático'
+  filament sensor disabled: 'sensor de filamento desativado'
   heated bed: mesa aquecida
   idle: ocioso
   in unit {} slot {}: na unidade {} slot {}
   layers: camadas
   left: restante
+  loaded: 'carregado'
   mm before clog: mm antes da obstrução
   needs: precisa
   not detected: não detectado
+  not loaded: 'não carregado'
   nozzle: bico
   of: de
   'off': desligado
@@ -3566,6 +3585,7 @@ translations:
   passive: passivo
   printer default: padrão da impressora
   prints: impressões
+  ready to load: 'pronto para carregar'
   remaining: restante
   remaining before clog detection triggers: restante antes da detecção de obstrução
     ser acionada
