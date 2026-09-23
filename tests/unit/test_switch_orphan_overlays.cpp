@@ -42,6 +42,7 @@
 #include "ui_utils.h"
 
 #include "../lvgl_ui_test_fixture.h"
+#include "overlay_base.h"
 #include "printer_cache_registry.h"
 #include "static_panel_registry.h"
 #include "test_helpers/panel_widget_overlay_cache_test_access.h"
@@ -65,6 +66,11 @@ void seed_nav_panels() {
         p = lv_obj_create(lv_screen_active());
     NavigationManager::instance().set_panels(panels.data());
 }
+
+// Root for the DetachSubtree-shape case: the registry callback is a captureless
+// lambda, so it reaches the widget through file scope (how AmsPanel's
+// s_ams_panel_obj works).
+lv_obj_t* s_detach_shape_root = nullptr;
 
 } // namespace
 
@@ -226,4 +232,33 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     helix::ui::destroy_static_panels();
     helix::ui::UpdateQueue::instance().drain();
     process_lvgl(100);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "a printer switch frees a DetachSubtree-torn-down panel (AMS shape)",
+                 "[overlays][teardown][switch][switch-orphans][ams-orphans]") {
+    seed_nav_panels();
+
+    // AmsPanel and AmsOverviewPanel are bare screen children whose registry
+    // callbacks tear down via teardown_overlay_ui(DetachSubtree): the root is
+    // detached into a hidden layout-less condemned container (the #983 grid/
+    // flex guarantee), which the switch must then free.
+    s_detach_shape_root = lv_obj_create(lv_screen_active());
+    lv_obj_t* child = lv_obj_create(s_detach_shape_root);
+    (void)child;
+    StaticPanelRegistry::instance().register_destroy("DetachShapePanel", []() {
+        helix::ui::teardown_overlay_ui(s_detach_shape_root, "DetachShapePanel",
+                                       helix::ui::TeardownDelete::DetachSubtree);
+    });
+
+    int deletes = 0;
+    lv_obj_add_event_cb(s_detach_shape_root, count_delete, LV_EVENT_DELETE, &deletes);
+
+    NavigationManager::instance().shutdown();
+    helix::ui::destroy_static_panels();
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(100); // the deferred delete lands on the timer tick
+
+    CHECK(deletes == 1);
+    CHECK(s_detach_shape_root == nullptr);
 }
