@@ -315,6 +315,16 @@ backend's own value, and the fields the resolver does not own (tool mapping,
 extruder name, endless-spool group, error, environment, remaining length, temps,
 indices) are left exactly as the backend set them.
 
+On the two backends whose `SlotInfo` persists across frames (AD5X IFS, Happy
+Hare), `prepare_lane_repaint_locked()`
+(`include/ams_subscription_backend.h#AmsSubscriptionBackend/prepare_lane_repaint_locked`)
+runs before that paint and blanks the identity fields only the lane's records
+state (`clear_lane_only_identity()`, `src/printer/lane_apply.cpp`), so a
+dropped record stops showing rather than living on in the struct; a field the
+slot's override record carries takes that record's value instead, and colour,
+material and weights stay with the firmware-truth caches. A backend that
+rebuilds its struct from each frame needs none of this.
+
 Beside that ranking sit the two cross-field rules that can invalidate a lane's
 declared identity outright. Both are `classify_binding()`
 (`src/printer/lane_binding.cpp#classify_binding`), a pure function over the lane's

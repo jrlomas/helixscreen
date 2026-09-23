@@ -4018,7 +4018,7 @@ TEST_CASE("an outside re-bind takes the old spool's brand off a Happy Hare gate"
 }
 
 TEST_CASE("a dropped Spoolman record takes its brand off a Happy Hare gate",
-          "[ams][happyhare][lane][1672]") {
+          "[ams][happy_hare][happyhare][lane][1672]") {
     // The re-bind test above retires the old spool when the gate map names a
     // different one. Here the gate keeps its filament and only the server's
     // record goes away (an unlink that kept the identity, or a denial dropping
