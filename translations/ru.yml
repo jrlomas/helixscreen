@@ -2273,6 +2273,7 @@ translations:
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: Печать
     неподходящим материалом может привести к засорам, плохой адгезии или неудачным
     печатям.
+  'Printing: start after this job': 'Идёт печать: начать после этой печати'
   Prints: Печати
   Prints Trend: Тренд печатей
   'Private:': 'Закрытая:'

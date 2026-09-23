@@ -2085,6 +2085,7 @@
   <translation tag="Printing label..." fr="Impression de l&apos;étiquette..."/>
   <translation tag="Printing test label..." fr="Impression de l&apos;étiquette de test..."/>
   <translation tag="Printing with the wrong material can cause clogs, poor adhesion, or failed prints." fr="Imprimer avec le mauvais matériau peut provoquer des bouchons, une mauvaise adhérence ou des impressions ratées."/>
+  <translation tag="Printing: start after this job" fr="Impression en cours : démarrez après ce travail"/>
   <translation tag="Prints" fr="Impressions"/>
   <translation tag="Prints Trend" fr="Tendance des impressions"/>
   <translation tag="Private:" fr="Privé :"/>

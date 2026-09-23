@@ -2085,6 +2085,7 @@
   <translation tag="Printing label..." ja="ラベル印刷中..."/>
   <translation tag="Printing test label..." ja="テストラベル印刷中..."/>
   <translation tag="Printing with the wrong material can cause clogs, poor adhesion, or failed prints." ja="誤った素材で印刷すると、詰まり、密着不良、または印刷失敗の原因となる可能性があります。"/>
+  <translation tag="Printing: start after this job" ja="印刷中：このジョブ後に開始"/>
   <translation tag="Prints" ja="印刷"/>
   <translation tag="Prints Trend" ja="印刷傾向"/>
   <translation tag="Private:" ja="プライベート:"/>

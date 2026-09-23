@@ -393,6 +393,15 @@
               <bind_state_if_eq subject="print_select_can_print" state="disabled" ref_value="0"/>
             </ui_button>
           </lv_obj>
+
+          <!-- Why the print button is disabled (active print or macro analysis).
+               Text comes from print_select_blocked_reason; hidden whenever the
+               button is usable so the detail view reads clean when idle. -->
+          <text_small name="print_blocked_reason"
+                      width="100%" bind_text="print_select_blocked_reason" style_text_color="#text_muted"
+                      style_text_align="center" style_pad_top="#space_xs">
+            <bind_flag_if_eq subject="print_select_can_print" flag="hidden" ref_value="1"/>
+          </text_small>
         </lv_obj>
       </lv_obj>
     </lv_obj>

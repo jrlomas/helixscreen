@@ -2306,6 +2306,7 @@ translations:
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: Das
     Drucken mit dem falschen Material kann zu Verstopfungen, schlechter Haftung oder
     fehlgeschlagenen Drucken führen.
+  'Printing: start after this job': 'Druck läuft: nach diesem Auftrag starten'
   Prints: Drucke
   Prints Trend: Drucktrend
   'Private:': 'Privat:'

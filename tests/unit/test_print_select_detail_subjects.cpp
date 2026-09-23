@@ -919,3 +919,57 @@ TEST_CASE_METHOD(LVGLUITestFixture, "A tap on the filament card opens the remap 
     lv_obj_send_event(card, LV_EVENT_CLICKED, nullptr);
     CHECK(opens == 1);
 }
+
+// ============================================================================
+// Start-blocked reason (prestonbrown/helixscreen#1395)
+// ============================================================================
+//
+// The Print button's disabled state binds print_select_can_print (owned by
+// PrintSelectPanel), and the reason label beside it binds
+// print_select_blocked_reason with visibility keyed to the same subject. Here
+// both are stubbed so the XML contract is pinned independently of the panel:
+// blocked (0) = button disabled AND reason visible; printable (1) = button
+// enabled AND no reason on screen.
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "print button disables with a visible reason while a print runs",
+                 "[print_select][detail][xml][1395]") {
+    lv_subject_t can_print;
+    lv_subject_init_int(&can_print, 0);
+    lv_xml_register_subject(nullptr, "print_select_can_print", &can_print);
+
+    char reason_buf[96];
+    lv_subject_t reason;
+    lv_subject_init_string(&reason, reason_buf, nullptr, sizeof(reason_buf),
+                           "Printing: start after this job");
+    lv_xml_register_subject(nullptr, "print_select_blocked_reason", &reason);
+
+    lv_obj_t* const root = make_detail_root(test_screen());
+    REQUIRE(root != nullptr);
+
+    // The tree's observers point at the stack subjects above; scrub them before
+    // those go out of scope, or LVGL teardown walks a dead subject.
+    struct RootDelete {
+        lv_obj_t* r;
+        ~RootDelete() {
+            if (r && lv_obj_is_valid(r)) {
+                lv_obj_delete(r);
+            }
+        }
+    } root_delete{root};
+
+    lv_obj_t* const print_button = lv_obj_find_by_name(root, "print_button");
+    REQUIRE(print_button != nullptr);
+    lv_obj_t* const reason_label = lv_obj_find_by_name(root, "print_blocked_reason");
+    REQUIRE(reason_label != nullptr);
+
+    // Blocked: disabled button, reason on screen carrying the subject's text.
+    REQUIRE(lv_obj_has_state(print_button, LV_STATE_DISABLED));
+    CHECK_FALSE(lv_obj_has_flag(reason_label, LV_OBJ_FLAG_HIDDEN));
+    CHECK(std::string(lv_label_get_text(reason_label)) == "Printing: start after this job");
+
+    // Printable: enabled button, reason gone.
+    lv_subject_set_int(&can_print, 1);
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK_FALSE(lv_obj_has_state(print_button, LV_STATE_DISABLED));
+    CHECK(lv_obj_has_flag(reason_label, LV_OBJ_FLAG_HIDDEN));
+}
