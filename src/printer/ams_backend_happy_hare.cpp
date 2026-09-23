@@ -15,7 +15,9 @@
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
-#include "operation_patterns.h" // helix::contains_ci
+#include "operation_patterns.h"    // helix::contains_ci
+#include "print_lifecycle_state.h" // job_holds_machine
+#include "printer_state.h"         // PrinterState: mid-print clear guard
 #include "settings_manager.h"
 
 #include <spdlog/fmt/fmt.h>
@@ -2777,10 +2779,34 @@ void AmsBackendHappyHare::write_gate_locked(int slot_index, SlotInfo& slot, cons
     }
 }
 
+namespace {
+/// The Clear Spool funnel hands the backend a slot with nothing on it: no
+/// material, no declarable colour, no identity text, no spool link. Only that
+/// shape takes the full-wipe path below - an editor commit always carries the
+/// whole slot, so a kept value arrives non-empty and stays incremental.
+bool is_full_clear(const SlotInfo& info) {
+    return info.spoolman_id == 0 && !info.has_filament_info() && info.brand.empty() &&
+           info.spool_name.empty();
+}
+
+/// Spoolman pull mode refuses local gate-map writes by logging the refusal
+/// only, so every refusal path reports it here instead: a partial failure
+/// (HelixScreen's own layer is already written) naming Spoolman as the owner.
+AmsError pull_mode_refusal(const char* title, const char* message) {
+    AmsError refused(AmsResult::COMMAND_FAILED, "Happy Hare Spoolman pull mode owns the gate map",
+                     lv_tr(title), lv_tr(message));
+    refused.partially_applied = true;
+    return refused;
+}
+} // namespace
+
 AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& info,
                                               const helix::ams::Observation& declared) {
     int old_spoolman_id = 0;
     int old_mapped_tool = -1;
+    bool old_had_identity = false;
+    SpoolmanMode spoolman_mode = SpoolmanMode::OFF;
+    int current_slot = -1;
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
@@ -2796,6 +2822,10 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
         // Capture old values BEFORE updating (needed to detect clears / remaps)
         old_spoolman_id = entry->info.spoolman_id;
         old_mapped_tool = entry->info.mapped_tool;
+        old_had_identity = old_spoolman_id > 0 || entry->info.has_filament_info() ||
+                           !entry->info.brand.empty() || !entry->info.spool_name.empty();
+        spoolman_mode = system_info_.spoolman_mode;
+        current_slot = system_info_.current_slot;
         write_gate_locked(slot_index, entry->info, info);
 
         // Record the user's identity in the override store: the gate map cannot
@@ -2807,6 +2837,70 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
     // after every other write has gone out, so a name the gate map cannot store costs
     // the user only the material rather than the whole save — but is never silent.
     std::string rejected_material;
+
+    // Record our own id write so Rule 1 does not read the in-flight
+    // frames (still reporting old_spoolman_id until the echo lands) as
+    // an external re-bind. An unlink (SPOOLID=-1) erases the pending
+    // expectation instead. The command build runs OUTSIDE mutex_ -
+    // take the lock just for the record, matching every other writer.
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        record_own_spool_write(slot_index, info.spoolman_id, old_spoolman_id);
+    }
+
+    // Clear Spool: wipe everything the gate map holds for this gate. Happy
+    // Hare keeps omitted params at their current value, so each writable field
+    // is named with an explicit empty value - the only form that empties
+    // MATERIAL, COLOR, NAME and VENDOR (v2/v3 ignore params they do not fetch;
+    // VENDOR is v4-only). Never RESET: on v2/v3 it ignores GATE and wipes
+    // every gate. Never TEMP=0 (falsy means "keep") or AVAILABLE=0 (that
+    // marks the gate EMPTY, not unknown).
+    if (is_full_clear(info) && old_had_identity) {
+        // Spoolman pull mode: Happy Hare refuses local writes to material,
+        // colour, name, vendor and spool id, and logs the refusal rather than
+        // returning it - the gate map belongs to Spoolman on this printer.
+        if (spoolman_mode == SpoolmanMode::PULL) {
+            spdlog::warn("[AMS HappyHare] Spoolman pull mode owns the gate map; gate {} "
+                         "cleared locally only",
+                         slot_index);
+            emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
+            return pull_mode_refusal("Couldn't clear the printer's gate map",
+                                     "This printer fills its gates from Spoolman. HelixScreen "
+                                     "cleared its own copy; remove the spool in Spoolman.");
+        }
+
+        // A job on this gate: the print UI refuses clears while a job holds
+        // the machine, so one reaching here is a backstop - rewriting the gate
+        // map under a running print is the one thing that must not happen.
+        if (api_ && slot_index == current_slot &&
+            job_holds_machine(api_->printer_state().get_print_lifecycle())) {
+            spdlog::warn("[AMS HappyHare] Clear of gate {} reached us mid-print; firmware "
+                         "write skipped",
+                         slot_index);
+            emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
+            AmsError skipped(AmsResult::COMMAND_FAILED,
+                             "A running print is using this gate; firmware write skipped",
+                             lv_tr("Couldn't clear the printer's gate map"),
+                             lv_tr("A print is running on this gate. HelixScreen cleared its "
+                                   "own copy; clear it again once the print finishes."));
+            skipped.partially_applied = true;
+            return skipped;
+        }
+
+        const std::string wipe = fmt::format(
+            "MMU_GATE_MAP GATE={} MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1", slot_index);
+        execute_gcode(wipe);
+        spdlog::debug("[AMS HappyHare] Sent: {}", wipe);
+
+        // Tool-to-gate mapping is a separate Happy Hare concern from
+        // MMU_GATE_MAP (which is filament metadata).
+        if (info.mapped_tool != old_mapped_tool && info.mapped_tool >= 0) {
+            execute_gcode(fmt::format("MMU_TTG_MAP TOOL={} GATE={}", info.mapped_tool, slot_index));
+        }
+
+        emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
+        return AmsErrorHelper::success();
+    }
 
     // Persist via MMU_GATE_MAP command (Happy Hare stores in mmu_vars.cfg automatically).
     bool has_changes = false;
@@ -2840,18 +2934,17 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
         has_changes = true;
     }
 
-    // Record our own id write so Rule 1 does not read the in-flight
-    // frames (still reporting old_spoolman_id until the echo lands) as
-    // an external re-bind. An unlink (SPOOLID=-1) erases the pending
-    // expectation instead. The gcode block above runs OUTSIDE mutex_ —
-    // take the lock just for the record, matching every other writer.
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        record_own_spool_write(slot_index, info.spoolman_id, old_spoolman_id);
-    }
-
-    // Only send command if there are actual changes to persist
-    if (has_changes) {
+    // Only send command if there are actual changes to persist. Spoolman pull
+    // mode refuses local writes to every field this command carries and logs
+    // the refusal rather than returning it - send nothing and report the
+    // partial failure below instead of claiming success. Tool-to-gate remaps
+    // are not gate-map fields and still go out.
+    const bool pull_owns_gate_map = spoolman_mode == SpoolmanMode::PULL;
+    if (has_changes && pull_owns_gate_map) {
+        spdlog::warn("[AMS HappyHare] Spoolman pull mode owns the gate map; gate {} "
+                     "edit kept locally only",
+                     slot_index);
+    } else if (has_changes) {
         execute_gcode(cmd);
         spdlog::debug("[AMS HappyHare] Sent: {}", cmd);
     }
@@ -2865,6 +2958,12 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
 
     // Emit OUTSIDE the lock to avoid deadlock with callbacks
     emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
+
+    if (has_changes && pull_owns_gate_map) {
+        return pull_mode_refusal("Couldn't save the printer's gate map",
+                                 "This printer fills its gates from Spoolman. Make colour, "
+                                 "material and spool changes in Spoolman.");
+    }
 
     if (!rejected_material.empty()) {
         AmsError partial(AmsResult::COMMAND_FAILED,

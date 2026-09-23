@@ -1790,7 +1790,7 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState: saving through a symlink preserve
 }
 
 // ============================================================================
-// Per-tool offsets: X/Y/Z bookkeeping and subjects
+// Per-tool offsets: X/Y/Z bookkeeping
 // ============================================================================
 
 namespace {
@@ -1833,8 +1833,7 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState offsets: a toolchanger supports al
     for (Axis axis : kAllAxes) {
         CAPTURE(axis_letter(axis));
         CHECK(subj(ts.get_per_tool_axis_supported_subject(axis)) == 1);
-        // Nothing reported yet: not valid, not dirty, reads as 0.
-        CHECK(subj(ts.get_active_tool_offset_valid_subject(axis)) == 0);
+        // Nothing reported yet: not known, not dirty, reads as 0.
         CHECK_FALSE(ts.tool_offset_known(0, axis));
         CHECK(ts.tool_offset_mm(0, axis) == 0.0f);
     }
@@ -1856,15 +1855,9 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState offsets: a frame seeds every axis 
     CHECK(ts.tool_offset_mm(0, Axis::X) == Catch::Approx(1.5f));
     CHECK(ts.tool_offset_mm(0, Axis::Y) == Catch::Approx(-0.25f));
     CHECK(ts.tool_offset_mm(0, Axis::Z) == Catch::Approx(0.1f));
-    // T0 is the active tool, so the active-tool subjects follow, in microns.
-    CHECK(subj(ts.get_active_tool_offset_subject(Axis::X)) == 1500);
-    CHECK(subj(ts.get_active_tool_offset_valid_subject(Axis::X)) == 1);
-    CHECK(subj(ts.get_active_tool_offset_subject(Axis::Y)) == -250);
-    CHECK(subj(ts.get_active_tool_offset_subject(Axis::Z)) == 100);
     // Seeded, not dirty.
     CHECK(ts.dirty_tool_indices().empty());
     CHECK(subj(ts.get_any_tool_offset_dirty_subject()) == 0);
-    CHECK(subj(ts.get_any_tool_axis_dirty_subject(Axis::X)) == 0);
 }
 
 TEST_CASE_METHOD(ToolStateFixture, "ToolState offsets: a local X change dirties X and only X",
@@ -1878,43 +1871,40 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState offsets: a local X change dirties 
 
     CHECK(ts.tool_offset_mm(1, Axis::X) == Catch::Approx(0.5f));
     CHECK(ts.dirty_tool_indices() == std::vector<int>{1});
+    // Only X: the save affordance must not offer to flush axes that never
+    // moved.
     CHECK(ts.tool_offset_dirty(1, Axis::X));
     CHECK_FALSE(ts.tool_offset_dirty(1, Axis::Y));
     CHECK_FALSE(ts.tool_offset_dirty(1, Axis::Z));
-    // Per-axis and any-axis subjects: the Z one must NOT light up, or the
-    // "Save Z-Offset" button would offer to save a Z that has not changed.
-    CHECK(subj(ts.get_any_tool_axis_dirty_subject(Axis::X)) == 1);
-    CHECK(subj(ts.get_any_tool_axis_dirty_subject(Axis::Z)) == 0);
     CHECK(subj(ts.get_any_tool_offset_dirty_subject()) == 1);
 
     // Saving the tool clears every axis of it.
     ts.mark_tool_offsets_saved(1);
     CHECK(ts.dirty_tool_indices().empty());
     CHECK_FALSE(ts.tool_offset_dirty(1, Axis::X));
-    CHECK(subj(ts.get_any_tool_axis_dirty_subject(Axis::X)) == 0);
     CHECK(subj(ts.get_any_tool_offset_dirty_subject()) == 0);
 }
 
 TEST_CASE_METHOD(
     ToolStateFixture,
-    "ToolState offsets: a tool with an unreported axis reads invalid on that axis only",
+    "ToolState offsets: a tool with an unreported axis reads unknown on that axis only",
     "[tool][tool-state][tool-offsets]") {
-    // Validity is per axis: switching to a tool whose X was never reported must
-    // drop X to invalid while its Z, which was, stays valid - otherwise the
+    // Known is per axis: switching to a tool whose X was never reported must
+    // read unknown on X while its Z, which was, stays known - otherwise the
     // previous tool's X would sit on screen beside the new tool's Z.
     lv_init_safe();
     ToolState& ts = fresh_tool_state(toolchanger_hw());
     ts.update_from_status({{"tool T0", {{"gcode_x_offset", 1.5}, {"gcode_z_offset", 0.1}}},
                            {"tool T1", {{"gcode_z_offset", -0.2}}}});
-    REQUIRE(subj(ts.get_active_tool_offset_valid_subject(Axis::X)) == 1);
+    REQUIRE(ts.tool_offset_known(0, Axis::X));
 
     ts.update_from_status({{"toolchanger", {{"tool_number", 1}}}});
 
     REQUIRE(ts.active_tool_index() == 1);
-    CHECK(subj(ts.get_active_tool_offset_valid_subject(Axis::X)) == 0);
-    CHECK(subj(ts.get_active_tool_offset_subject(Axis::X)) == 0);
-    CHECK(subj(ts.get_active_tool_offset_valid_subject(Axis::Z)) == 1);
-    CHECK(subj(ts.get_active_tool_offset_subject(Axis::Z)) == -200);
+    CHECK_FALSE(ts.tool_offset_known(1, Axis::X));
+    CHECK(ts.tool_offset_mm(1, Axis::X) == 0.0f);
+    CHECK(ts.tool_offset_known(1, Axis::Z));
+    CHECK(ts.tool_offset_mm(1, Axis::Z) == Catch::Approx(-0.2f));
 }
 
 TEST_CASE_METHOD(ToolStateFixture, "ToolState offsets: a Z-only delta frame leaves X alone",
@@ -1955,7 +1945,6 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState offsets: a Z-only firmware never l
                            {"tool T0", {{"gcode_x_offset", 1.5}, {"gcode_z_offset", 0.1}}}});
 
     CHECK_FALSE(ts.tool_offset_known(0, Axis::X));
-    CHECK(subj(ts.get_active_tool_offset_valid_subject(Axis::X)) == 0);
     CHECK(ts.tool_offset_mm(0, Axis::Z) == Catch::Approx(-0.2f));
 }
 

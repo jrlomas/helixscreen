@@ -30,6 +30,11 @@ struct Provider {
     /// The console-equivalent coded lines for the faults currently standing,
     /// or nullopt when the frame says nothing about faults.
     std::optional<std::vector<std::string>> (*read_standing)(const nlohmann::json& status);
+    /// The websocket method this firmware pushes each raise on (standing or
+    /// oneshot), or null when it pushes none.
+    const char* notification_method;
+    /// One raise notification's params[0] into a coded line, or nullopt.
+    std::optional<FaultNotification> (*read_notification)(const nlohmann::json& params0);
 };
 
 ErrorSeverity severity_of_event(const snapmaker::ExceptionSeverity& s) {
@@ -77,11 +82,20 @@ std::optional<std::vector<std::string>> read_standing_snapmaker(const nlohmann::
     }
     std::vector<std::string> lines;
     for (const auto& active : snapmaker::read_active_exceptions(status)) {
-        lines.push_back(fmt::format("!! {:04d}-{:04d}-{:04d}-{:04d} {}", active.code.level,
-                                    active.code.id, active.code.index, active.code.code,
-                                    active.message));
+        lines.push_back(snapmaker::coded_line(active));
     }
     return lines;
+}
+
+/// The vendor's raise notifications. params[0] is one exception entry in the
+/// same field shape the standing list carries, so it reads through the same
+/// entry reader and line formatter the status path uses.
+std::optional<FaultNotification> read_notification_snapmaker(const nlohmann::json& params0) {
+    const auto fault = snapmaker::read_exception_entry(params0);
+    if (!fault) {
+        return std::nullopt;
+    }
+    return FaultNotification{snapmaker::coded_line(*fault), fault->message};
 }
 
 /// The provider table. Adding a firmware with the same capability is one row
@@ -91,13 +105,26 @@ const std::array<Provider, 1> kProviders{{
      {"exception_manager"},
      ErrorSource::SNAPMAKER,
      classify_snapmaker,
-     read_standing_snapmaker},
+     read_standing_snapmaker,
+     // Moonraker sends event "snapmaker:exception_notification" to websocket
+     // clients as "notify_" + the part after the colon.
+     "notify_exception_notification",
+     read_notification_snapmaker},
 }};
 
 const Provider* provider_for(const PrinterDiscovery& hw) {
     const auto& objects = hw.printer_objects();
     for (const auto& p : kProviders) {
         if (std::find(objects.begin(), objects.end(), p.detect_object) != objects.end()) {
+            return &p;
+        }
+    }
+    return nullptr;
+}
+
+const Provider* provider_for_method(const std::string& method) {
+    for (const auto& p : kProviders) {
+        if (p.notification_method && method == p.notification_method) {
             return &p;
         }
     }
@@ -131,6 +158,22 @@ std::optional<std::vector<std::string>> read_standing_faults(const PrinterDiscov
                                                              const nlohmann::json& status) {
     const Provider* p = provider_for(hw);
     return p ? p->read_standing(status) : std::nullopt;
+}
+
+std::vector<std::string> notification_methods() {
+    std::vector<std::string> methods;
+    for (const auto& p : kProviders) {
+        if (p.notification_method) {
+            methods.emplace_back(p.notification_method);
+        }
+    }
+    return methods;
+}
+
+std::optional<FaultNotification> read_fault_notification(const std::string& method,
+                                                         const nlohmann::json& params0) {
+    const Provider* p = provider_for_method(method);
+    return p ? p->read_notification(params0) : std::nullopt;
 }
 
 nlohmann::json fault_status_subset(const nlohmann::json& status) {

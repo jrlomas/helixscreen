@@ -282,8 +282,7 @@ class PrintTuneOverlay : public OverlayBase {
     //
 
     ObserverGuard speed_observer_;
-    ObserverGuard tool_z_offset_observer_;
-    ObserverGuard tool_z_valid_observer_;
+    ObserverGuard tools_version_observer_;
     ObserverGuard active_tool_observer_;
     ObserverGuard gcode_speed_observer_;
     ObserverGuard max_velocity_observer_;

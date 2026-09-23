@@ -344,6 +344,8 @@ void PrintSelectPanel::init_subjects() {
     bool can_print = printer_state_.can_start_new_print();
     UI_MANAGED_SUBJECT_INT(can_print_subject_, can_print ? 1 : 0, "print_select_can_print",
                            subjects_);
+    UI_MANAGED_SUBJECT_STRING(blocked_reason_subject_, blocked_reason_buffer_, "",
+                              "print_select_blocked_reason", subjects_);
 
     // Initialize USB source subject (before XML is parsed so bindings resolve)
     helix::ui::PrintSelectUsbSource::init_subjects();
@@ -368,6 +370,11 @@ void PrintSelectPanel::init_subjects() {
     });
 
     subjects_initialized_ = true;
+
+    // Observers only fire on CHANGE, so a panel built mid-print would otherwise
+    // carry the disabled button with no reason until the next state transition.
+    update_print_button_state();
+
     spdlog::debug("[{}] Subjects initialized", get_name());
 }
 
@@ -2433,17 +2440,23 @@ void PrintSelectPanel::update_print_button_state() {
     // Update the can_print subject based on current print state and macro analysis
     // XML binding automatically disables button when value is 0
     bool can_print = printer_state_.can_start_new_print();
+    const char* blocked_reason = "";
 
-    // Also disable if macro analysis is in progress to prevent race conditions
-    // where print starts before we know which skip params to use
-    if (can_print && detail_view_) {
+    if (!can_print) {
+        blocked_reason = lv_tr("Printing: start after this job");
+    } else if (detail_view_) {
+        // Also disable if macro analysis is in progress to prevent race conditions
+        // where print starts before we know which skip params to use
         if (auto* prep_mgr = detail_view_->get_prep_manager()) {
             if (prep_mgr->is_macro_analysis_in_progress()) {
                 can_print = false;
+                blocked_reason = lv_tr("Analyzing data...");
                 spdlog::trace("[{}] Print button disabled: macro analysis in progress", get_name());
             }
         }
     }
+
+    lv_subject_copy_string(&blocked_reason_subject_, blocked_reason);
 
     int new_value = can_print ? 1 : 0;
 

@@ -403,6 +403,14 @@ Four distinct clear paths, handled separately:
 - **User-initiated clear.** The edit modal's "Clear metadata" button calls
   `AmsBackend::clear_slot_override(slot_index)`. This is the public API
   contract; IFS/Snapmaker/ACE/CFS/QIDI override it to DELETE their store entry.
+- **Clear Spool (slot detail menu).** A different door from the modal's button: the
+  funnel builds an all-blank `SlotInfo` and routes it through
+  `AmsState::commit_slot_edit()`, so the override record is rewritten blank rather than
+  deleted and the backend gets to wipe what the firmware holds. Happy Hare's backend
+  detects the all-blank edit and sends one gate-map wipe
+  (`MMU_GATE_MAP GATE=n MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1` - see
+  [the Happy Hare backend doc](FILAMENT_BACKEND_HAPPY_HARE.md#clear-spool)); in Spoolman
+  pull mode it clears HelixScreen's copy only and reports partial failure.
 - **Hardware-event clear.** Each backend watches its own signal (see the
   integration table) and auto-clears when the signal transitions to
   "different spool". The baseline is recorded on first observation after

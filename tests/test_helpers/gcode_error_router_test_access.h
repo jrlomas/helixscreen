@@ -23,6 +23,23 @@ struct GcodeErrorRouterTestAccess {
         r.on_notify_status_update(msg);
     }
 
+    /// Drives a fault raise-notification body exactly as the bg_cb-deferred
+    /// delivery lands it on main.
+    static void on_notify_fault(helix::GcodeErrorRouter& r, const std::string& method,
+                                const nlohmann::json& msg) {
+        r.on_notify_fault(method, msg);
+    }
+
+    /// Held presentations that actually fired, and which fault's spelling
+    /// showed last (a coded event names its code, a prose event its text).
+    static size_t deferred_shown_count(const helix::GcodeErrorRouter& r) {
+        return r.deferred_shown_count_;
+    }
+
+    static const std::string& last_deferred_shown(const helix::GcodeErrorRouter& r) {
+        return r.last_deferred_shown_;
+    }
+
     /// Fires the connect observer's body (standing-fault reset + gcode_store
     /// replay; the replay is a no-op with a null client).
     static void on_connected(helix::GcodeErrorRouter& r) {
