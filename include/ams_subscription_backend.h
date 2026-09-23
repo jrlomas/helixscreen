@@ -19,6 +19,10 @@
 
 namespace helix {
 
+namespace ams {
+class OwnWriteEchoes;
+}
+
 /// Base class for AMS backends that use Moonraker subscription-based status updates.
 /// Extracts common lifecycle, event, and state query logic from AFC/HappyHare/ToolChanger.
 ///
@@ -356,6 +360,17 @@ class AmsSubscriptionBackend : public AmsBackend {
     /// correct, and re-filing its records would put a second producer on the
     /// vendor-cache slot the backend's own firmware readings occupy.
     virtual helix::ams::FilamentSlotOverrideStore* lane_record_store() {
+        return nullptr;
+    }
+
+    /// This backend's echo guard, or nullptr when it does not write identity
+    /// back to firmware. A store other writers co-author can hold the mirror
+    /// of the backend's own write, so the resync files those records through
+    /// the guard the same way a live frame is filed.
+    ///
+    /// The returned guard stays under this backend's mutex_ discipline; the
+    /// resync takes the lock around its consult.
+    [[nodiscard]] virtual helix::ams::OwnWriteEchoes* own_write_echoes() {
         return nullptr;
     }
 

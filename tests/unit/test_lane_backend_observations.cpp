@@ -21,6 +21,7 @@
 #include "ams_types.h"
 #include "app_globals.h"
 #include "filament_slot_override.h"
+#include "lane_echo.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
 #include "moonraker_api_mock.h"
@@ -3053,6 +3054,21 @@ class StartedStorelessToolChanger : public AmsBackendToolChanger {
     }
 };
 
+/// A resync filer that also writes identity back: firmware mirrors the write
+/// into the shared namespace, so the re-read faces the backend's own edit
+/// spelled as a stored record. ToolChanger parses no identity of its own; the
+/// guard is what a write-back backend hands the resync on its behalf.
+class GuardedToolChanger : public AmsBackendToolChanger {
+  public:
+    using AmsBackendToolChanger::AmsBackendToolChanger;
+
+    helix::ams::OwnWriteEchoes* own_write_echoes() override {
+        return &echoes_;
+    }
+
+    helix::ams::OwnWriteEchoes echoes_;
+};
+
 } // namespace
 
 // --- The one backend that files -------------------------------------------
@@ -3173,6 +3189,52 @@ TEST_CASE_METHOD(LVGLTestFixture, "a re-read that cannot reach the database leav
     const auto lane = lane_sources(harness.lane(0));
     REQUIRE(lane.remembered.has_value());
     CHECK(lane.remembered->material == "PLA");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a resync withholds the fields of a write this backend sent",
+                 "[lane][ingest][resync]") {
+    // The stored record carries what the user typed because firmware mirrored
+    // the backend's own write into the shared namespace: no declared bits, so
+    // on its own it files as Remembered whole. Filing it would put the
+    // abandoned edit on the lane as a stored record the moment the override
+    // is cleared, which is the harm the guard exists for, on the one path
+    // that reaches the store without passing a live frame.
+    RegisteredBackend<GuardedToolChanger> harness(nullptr, nullptr);
+    LaneDataDb db;
+    db.seed("T0",
+            nlohmann::json{
+                {"lane", "0"}, {"material", "PETG"}, {"color", "#00FF00"}, {"vendor", "Prusa"}});
+    ToolChangerTestAccess::inject_override_store(*harness, toolchanger_store(db));
+
+    helix::ams::Observation declared(helix::ams::ObservationSource::LocalUser);
+    declared.material = "PETG";
+    declared.color_rgb = 0x00FF00u;
+    harness->echoes_.stage(0, declared);
+    // A stored record names no spool, so the boundary read through it is
+    // empty: the producer saying nothing, which is not a change.
+    harness->echoes_.arm(0, "");
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    // The vendor is the control: nothing declared it, so the re-read files it
+    // and proves the case reached the document. The echoed fields stay out.
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.remembered.has_value());
+    CHECK(echoed.remembered->brand == "Prusa");
+    CHECK_FALSE(echoed.remembered->material.has_value());
+    CHECK_FALSE(echoed.remembered->color_rgb.has_value());
+
+    // Without a write outstanding the same record files whole, so the
+    // withholding is the guard's and not the resync's.
+    db.seed("T1", nlohmann::json{{"lane", "1"}, {"material", "PETG"}, {"color", "#00FF00"}});
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+    const auto plain = lane_sources(harness.lane(1));
+    REQUIRE(plain.remembered.has_value());
+    CHECK(plain.remembered->material == "PETG");
+    REQUIRE(plain.remembered->color_rgb.has_value());
+    CHECK(*plain.remembered->color_rgb == 0x00FF00u);
 }
 
 // --- The six that do not ---------------------------------------------------

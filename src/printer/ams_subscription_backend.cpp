@@ -4,6 +4,7 @@
 #include "ams_subscription_backend.h"
 
 #include "filament_op_router.h"
+#include "lane_echo.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
 #include "moonraker_error.h"
@@ -137,12 +138,15 @@ void AmsSubscriptionBackend::request_resync() {
     // backend's block to name a lane. Carried by value: the deferred callback
     // has no claim on `this` by the time it runs, and backend_index() is
     // stamped by registration, which every resync call site is downstream of.
+    // `self` rides the reload callback un-dereferenced; it is reached only
+    // inside the token-guarded defer, which skips a dead owner.
     const int block = backend_index();
     auto token = lifetime_.token();
+    AmsSubscriptionBackend* self = this;
     store->reload_async(
-        [token, block](std::unordered_map<int, helix::ams::LaneDataRecord> records) {
+        [token, block, self](std::unordered_map<int, helix::ams::LaneDataRecord> records) {
             token.defer("AmsSubscriptionBackend::resync_lane_records",
-                        [block, records = std::move(records)]() {
+                        [self, block, records = std::move(records)]() {
                             for (const auto& [slot, entry] : records) {
                                 // Only what the namespace merely remembers is
                                 // re-filed. A record naming a spool is the
@@ -153,10 +157,19 @@ void AmsSubscriptionBackend::request_resync() {
                                 //
                                 // Remembered rather than VendorCache because this
                                 // re-reads our own store, not a firmware frame.
-                                const helix::ams::Observation obs =
+                                helix::ams::Observation obs =
                                     helix::ams::declared_from_record(entry.record);
                                 if (obs.source != helix::ams::ObservationSource::Remembered) {
                                     continue;
+                                }
+                                // A co-authored namespace carries the mirror of
+                                // this backend's own write, so the re-read faces
+                                // the same echo a live frame does. A stored
+                                // record names no spool, so the boundary is
+                                // empty: the store saying nothing, not a change.
+                                if (helix::ams::OwnWriteEchoes* echoes = self->own_write_echoes()) {
+                                    std::lock_guard<std::mutex> lock(self->mutex_);
+                                    echoes->withhold(slot, std::string{}, obs);
                                 }
                                 helix::ams::ingest(helix::ams::lane_id_for(block, slot), obs);
                             }
