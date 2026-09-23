@@ -177,13 +177,13 @@ namespace {
 /// Pin the print lifecycle for one case and restore a machine-free state on
 /// the way out, even when an assertion throws. The lifecycle subject outlives
 /// every test in this binary (the fixture resets plain data, not subject
-/// values), and CLEAR_SPOOL's behaviour depends on it — a case that died with
+/// values), and CLEAR_SPOOL's behaviour depends on it: a case that died with
 /// Printing latched would change what any later test's clear is allowed to do.
 struct LifecycleGuard {
     explicit LifecycleGuard(PrintState state) {
         if (state == PrintState::Preparing) {
             // Preparing is phase-derived, not a print_stats state, so the wire
-            // driver cannot name it — the enum value is the sanctioned route
+            // driver cannot name it, so the enum value is the sanctioned route
             // (print_state_test_drivers.h).
             lv_subject_set_int(get_printer_state().get_print_lifecycle_subject(),
                                static_cast<int>(PrintState::Preparing));
@@ -229,7 +229,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     helix::ui::set_test_notification_warning_hook(
         [&](const std::string& msg) { warnings.push_back(msg); });
 
-    // create_mock() seeds slot 0 as the loaded, current lane — the one a job
+    // create_mock() seeds slot 0 as the loaded, current lane, the one a job
     // draws from. Everything the clear would erase is still there afterwards.
     REQUIRE(backend->slot_is_actively_loaded(0));
 

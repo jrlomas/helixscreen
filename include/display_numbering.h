@@ -71,8 +71,8 @@ std::string lane_label(LaneNoun noun, int index);
 /**
  * @brief The refusal a Clear Spool shows when the lane feeds the active print.
  *
- * One sentence for both surfaces that can raise it — the context menu's
- * disabled-button hint and the dispatch's toast — so the wording cannot fork
+ * One sentence for both surfaces that can raise it (the context menu's
+ * disabled-button hint and the dispatch's toast), so the wording cannot fork
  * between the affordance and the refusal. Names the position in the backend's
  * own word, like every other sentence that points a user at a lane.
  */

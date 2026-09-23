@@ -11,10 +11,10 @@
 #include "ui_utils.h"
 
 #include "ams_state.h"
-#include "app_globals.h" // get_printer_state — the print lifecycle the clear guard reads
+#include "app_globals.h" // get_printer_state: the print lifecycle the clear guard reads
 #include "display_numbering.h"
-#include "filament_op_dispatch.h"      // EXTERNAL_SPOOL_SLOT — the bypass sentinel
-#include "filament_op_slot_resolver.h" // clear_spool_blocked_by_print — the print guard
+#include "filament_op_dispatch.h"      // EXTERNAL_SPOOL_SLOT: the bypass sentinel
+#include "filament_op_slot_resolver.h" // clear_spool_blocked_by_print: the print guard
 #include "printer_detector.h"
 #include "printer_state.h" // PrinterState, complete for get_print_lifecycle()
 #include "ui/ams_drawing_utils.h"

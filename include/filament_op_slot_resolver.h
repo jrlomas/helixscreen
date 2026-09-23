@@ -222,7 +222,7 @@ struct MachineOpGating {
 /**
  * @brief Whether Clear Spool must refuse on this lane right now.
  *
- * Clearing erases what HelixScreen and the firmware remember about the lane —
+ * Clearing erases what HelixScreen and the firmware remember about the lane,
  * and while a job holds the machine, the lane actively loaded into the toolhead
  * is the one that job is drawing from. Clearing it mid-job wipes the material
  * and colour every print surface is displaying for the running print, so the
@@ -231,7 +231,7 @@ struct MachineOpGating {
  *
  * job_holds_machine(), deliberately NOT print_blocks_filament_op(): that
  * predicate's whole point is letting PAUSED through for the pause-then-swap
- * filament ops, but a clear is not moving filament — it is deleting the
+ * filament ops, but a clear is not moving filament: it is deleting the
  * feeding lane's identity out from under the job that will resume from it.
  * Preparing refuses for the same reason: the job is committed and will draw
  * from this lane.

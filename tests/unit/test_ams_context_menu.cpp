@@ -1046,7 +1046,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     auto backend = std::make_unique<AmsBackendMock>(4);
     REQUIRE(backend->lane_noun() == LaneNoun::Gate);
     // create_mock()'s seed, restated for a directly-constructed mock: slot 0 is
-    // the loaded, current lane — the one a job draws from.
+    // the loaded, current lane, the one a job draws from.
     REQUIRE(backend->slot_is_actively_loaded(0));
 
     // ams_context_menu.xml is registered lazily by AmsPanel/AmsOverviewPanel

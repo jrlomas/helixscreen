@@ -427,7 +427,7 @@ void AmsContextMenu::on_created(lv_obj_t* menu_obj) {
         // colour the print's own surfaces are displaying; clearing it mid-job
         // deletes that out from under the job. The button greys out with the
         // reason beside it, and ams_dispatch_backend_action() refuses the same
-        // case independently — a menu rendered before the print started keeps
+        // case independently: a menu rendered before the print started keeps
         // its old subject values until it is rebuilt.
         const bool clear_blocked = helix::ui::clear_spool_blocked_by_print(
             lifecycle, backend_->slot_is_actively_loaded(slot_index));

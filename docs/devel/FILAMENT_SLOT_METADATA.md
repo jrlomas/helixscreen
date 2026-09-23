@@ -220,8 +220,8 @@ does neither, and both halves of that are load-bearing:
 - **`T<n>` outer keys** (`lane_key_style_for`) are shared with Mainsail #2510's
   records rather than duplicating them.
 
-Every lane-holding backend implements it — IFS, Snapmaker, ACE, CFS, AFC, Happy
-Hare, the tool changer and the mock: reset the lane to machine readings
+Every lane-holding backend implements it: IFS, Snapmaker, ACE, CFS, AFC, Happy
+Hare, the tool changer and the mock reset the lane to machine readings
 (`reset_lane_to_machine_readings()`), erase the in-memory entry, reset the
 override-exclusive fields on the live slot (brand, spool name, Spoolman ids,
 weights, colour name, catalog pick) so the clear shows on the next
@@ -229,7 +229,7 @@ weights, colour name, catalog pick) so the clear shows on the next
 namespace. The mock keeps no override records, so its implementation is the
 lane reset and the slot-changed event alone. Colour and material are left
 standing, because those come from the parse and the lane's firmware values
-should surface — except on the tool changer, which has no parse underneath:
+should surface, except on the tool changer, which has no parse underneath:
 its clear blanks the whole slot, colour and material included, because its
 store is the only record there is. `AmsBackendQidi` also implements it, with
 a firmware half: the
@@ -410,22 +410,22 @@ about that slot; what's left afterwards is only what the hardware can
 physically read right now. How close each backend gets to that bar is set by
 what its firmware can be told to forget:
 
-- **AD5X IFS, AFC, CFS on Kalico, Tool Changer and Happy Hare** reach it —
+- **AD5X IFS, AFC, CFS on Kalico, Tool Changer and Happy Hare** reach it:
   the first four through write paths that cover the firmware-held fields (and
   the tool changer's store is the only record there is, so dropping it erases
   everything), Happy Hare through one
   `MMU_GATE_MAP GATE=n MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1` that empties
   the firmware gate map. In Spoolman pull mode the gate map is Spoolman's, so
-  Happy Hare refuses the write honestly — a partial failure naming Spoolman
-  as the owner — instead of pretending.
-- **QIDI Box reaches it too** — the box's `SAVE_VARIABLE`s are the record,
+  Happy Hare refuses the write honestly (a partial failure naming Spoolman
+  as the owner) instead of pretending.
+- **QIDI Box reaches it too**: the box's `SAVE_VARIABLE`s are the record,
   and the clear writes `VALUE=0` to `filament_slot{n}` / `color_slot{n}` /
   `vendor_slot{n}` (row ids start at 1, so 0 reads as no identity, and vendor
   0 is Generic), gated by `refuse_if_printing()`. A tagged spool re-populates
-  its ids on the next insert, boot or RFID read — the hardware reading what
-  is physically there.
-- **ACE, Snapmaker and stock CFS cannot** — read-only API, no empty spelling
-  for a slot value, and the tag is re-read on the next probe — so their
+  its ids on the next insert, boot or RFID read (the hardware reading what
+  is physically there).
+- **ACE, Snapmaker and stock CFS cannot** (read-only API, no empty spelling
+  for a slot value, and the tag is re-read on the next probe), so their
   tag-derived and firmware-held values survive a clear.
 
 The gesture also refuses while its lane feeds an active print
@@ -446,22 +446,22 @@ Four distinct clear paths, handled separately:
   and a clear second, and the order is load-bearing. `AmsState::commit_slot_edit()`
   carries the arms a backend clear has no way to reach: the Spoolman server
   active-spool unlink, the identity-cache invalidation and the ToolState clear
-  (bundle F2LNLQCC — clearing only the backend left the server asserting the
+  (bundle F2LNLQCC: clearing only the backend left the server asserting the
   spool again after a restart). The commit hands the backend a slot with
   nothing on it, and Happy Hare's backend recognizes exactly that shape
   (`is_full_clear()`), answering with one gate-map wipe
-  (`MMU_GATE_MAP GATE=n MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1` —
+  (`MMU_GATE_MAP GATE=n MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1`;
   see [the Happy Hare backend doc](FILAMENT_BACKEND_HAPPY_HARE.md#clear-spool));
   in Spoolman pull mode it refuses that write honestly, reporting partial
   failure with Spoolman named as the owner, and a print running on the gate
   gets a backend-level refusal there for the same reason the dispatch guard
   above refuses. Only on the commit's success does the gesture call
   `AmsBackend::clear_slot_override(slot_index)`, which drops the lane's
-  standing user declarations and the persisted override record — the half an
+  standing user declarations and the persisted override record: the half an
   edit statement cannot express, because on an unlinked lane a colour pick, a
   typed weight and a colour name never engage as clears
   (prestonbrown/helixscreen#1661). The tool changer clears its store and
-  nothing else — that store is the only record there is, so its clear has no
+  nothing else; that store is the only record there is, so its clear has no
   firmware half.
 - **Hardware-event clear.** Each backend watches its own signal (see the
   integration table) and auto-clears when the signal transitions to
