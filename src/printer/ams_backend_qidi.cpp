@@ -5,6 +5,7 @@
 
 #include "ams_error.h"
 #include "display_numbering.h"
+#include "lane_apply.h"
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
@@ -275,6 +276,11 @@ void AmsBackendQidi::on_started() {
             std::lock_guard<std::mutex> lock(mutex_);
             override_store_ = std::move(loaded.store);
             overrides_ = std::move(loaded.overrides);
+            // A swap the user made while HelixScreen was down still has to
+            // clear the stale override: the record's persisted fingerprint is
+            // the baseline the first post-restart poll compares against.
+            helix::ams::bind_fingerprint_persistence(rfid_tracker_, override_store_.get(),
+                                                     overrides_);
         }
     }
 
@@ -834,11 +840,6 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
         // before the paint below so a cleared slot shows the new tag's
         // identity in this same pass.
         check_hardware_event_clear(*slot, i, fingerprint);
-        // The all-zero composite is a clear's final echo: once the Box states
-        // it, no zero write is still in flight for this slot.
-        if (fingerprint.empty()) {
-            clear_zero_echoes_pending_.erase(i);
-        }
 
         // The saved ids name rows in the Box's own tables, which makes a row
         // that resolves the reading and an id that resolves against nothing no
@@ -1133,6 +1134,11 @@ SlotInfo AmsBackendQidi::get_slot_info(int slot_index) const {
 
 SlotInfo* AmsBackendQidi::cached_slot_locked(int slot_index) {
     return system_info_.get_slot_global(slot_index);
+}
+
+void AmsBackendQidi::prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) {
+    const auto it = overrides_.find(slot_index);
+    helix::ams::clear_lane_only_identity(slot, it == overrides_.end() ? nullptr : &it->second);
 }
 
 bool AmsBackendQidi::is_bypass_active() const {
@@ -1548,7 +1554,9 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
         // every composite the slot may transiently or finally report, built
         // from the old ids and the written ones per field. Each echo consumes
         // only its own entry; any non-matching change consumes them all, so a
-        // genuine swap while a write is in flight is still detected.
+        // genuine swap while a write is in flight is still detected. A clear's
+        // still-echoing zero composites stay expected alongside these:
+        // expect_any_of() accumulates.
         //
         // With no baseline yet there is nothing to guard: the first
         // observation is a baseline and never fires a clear.
@@ -1561,21 +1569,6 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
             std::vector<int> fila_vals{old_fila};
             std::vector<int> color_vals{old_color};
             std::vector<int> vendor_vals{old_vendor};
-            // A clear still waiting for its all-zero echo contributes the zero
-            // arm: expect_any_of() replaces the set, so this registration must
-            // itself cover the clear's pending composites or those echoes
-            // would read as a swap against the edit staged here.
-            if (clear_zero_echoes_pending_.count(slot_index) != 0) {
-                if (old_fila != 0) {
-                    fila_vals.push_back(0);
-                }
-                if (old_color != 0) {
-                    color_vals.push_back(0);
-                }
-                if (old_vendor != 0) {
-                    vendor_vals.push_back(0);
-                }
-            }
             if (fila_id > 0 && fila_id != old_fila) {
                 fila_vals.push_back(fila_id);
             }
@@ -1744,15 +1737,11 @@ void AmsBackendQidi::clear_slot_override(int slot_index) {
                      "skipped, the local override is already cleared",
                      backend_log_tag(), slot_index);
     }
-    if (dispatched_any) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        clear_zero_echoes_pending_.insert(slot_index);
-    } else {
+    if (!dispatched_any) {
         // No echo is coming, so the next fingerprint change is genuinely
         // external and must be treated as a swap.
         std::lock_guard<std::mutex> lock(mutex_);
         rfid_tracker_.forget_expected(slot_index);
-        clear_zero_echoes_pending_.erase(slot_index);
     }
 
     emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));

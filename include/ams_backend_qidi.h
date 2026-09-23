@@ -14,7 +14,6 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace helix {
@@ -137,6 +136,13 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     // written from outside the parse (a person's edit) names the slot here and
     // repaint_slot_from_lane() reaches it before the next poll arrives.
     SlotInfo* cached_slot_locked(int slot_index) override;
+
+    // The parse restates the tag-painted fields (material, colour, brand) from
+    // the save_variables tables every poll, but spool name, catalogue pick,
+    // product line and vendor id exist only in the lane's records - nothing on
+    // this Box ever restates them, so a repaint must drop them from the struct
+    // or the record a rebind or a drop replaced keeps showing.
+    void prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) override;
 
     // Operations. Gated by AmsSubscriptionBackend's NVI wrapper.
     // select_slot_moves_toolhead() stays false: do_select_slot() is
@@ -364,13 +370,6 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     // an identity push we issued. Shared with the other fingerprint backends
     // (CFS, Snapmaker). All access under mutex_.
     helix::ams::SlotFingerprintTracker rfid_tracker_;
-
-    // Slots whose zero writes from clear_slot_override() no all-zero frame has
-    // confirmed yet. expect_any_of() replaces a slot's expectation set, so
-    // apply_user_edit() must fold the zero composites into its own
-    // registration while a clear is still echoing, or those echoes would read
-    // as a spool swap against the fresh edit. All access under mutex_.
-    std::unordered_set<int> clear_zero_echoes_pending_;
 };
 
 } // namespace helix

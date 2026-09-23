@@ -16,6 +16,7 @@
 #include "settings_manager.h"
 #include "test_helpers/qidi_box_test_access.h"
 #include "test_helpers/registered_backend.h"
+#include "test_helpers/seeded_override.h"
 #include "test_helpers/update_queue_test_access.h"
 
 #include <algorithm>
@@ -2498,4 +2499,102 @@ TEST_CASE("QIDI Box a non-integer slot id keeps the last stated id", "[ams][qidi
                                            });
     CHECK(QidiBoxTestAccess::filament_id(backend, 0) == 42);
     CHECK(QidiBoxTestAccess::color_id(backend, 1) == 4);
+}
+
+TEST_CASE("QIDI Box a restart compares against the fingerprint the record carried",
+          "[ams][qidi_box]") {
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    // A record as a session running older code left it: a user override with
+    // no fingerprint. Session 1 boots on it, observes the tag, and the
+    // observation must persist into the record - two backends over one mock
+    // DB stand in for two app lifetimes.
+    helix::ams::FilamentSlotOverride saved;
+    saved.brand = "Polymaker";
+    saved.spoolman_id = 42;
+    api.mock_set_db_value("lane_data", "lane1", helix::ams::to_lane_data_record(0, saved));
+    {
+        helix::test::RegisteredBackend<AmsBackendQidi> session1(&api, nullptr);
+        QidiBoxTestAccess::apply_filas_list(*session1, STOCK_FILAS_EXCERPT);
+        QidiBoxTestAccess::start_load(*session1);
+        REQUIRE(QidiBoxTestAccess::get_override(*session1, 0).has_value());
+        QidiBoxTestAccess::parse_vars(
+            *session1, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
+        const auto stored = api.mock_get_db_value("lane_data", "lane1");
+        REQUIRE(!stored.is_null());
+        REQUIRE(stored["helix_fingerprint"] == "1|18|1");
+    }
+
+    SECTION("a swap made while the app was down clears the override") {
+        helix::test::RegisteredBackend<AmsBackendQidi> session2(&api, nullptr);
+        QidiBoxTestAccess::apply_filas_list(*session2, STOCK_FILAS_EXCERPT);
+        QidiBoxTestAccess::start_load(*session2);
+        // The loaded record's fingerprint is the baseline, so the first frame
+        // after restart is a comparison, not a first observation.
+        REQUIRE(QidiBoxTestAccess::get_override(*session2, 0).has_value());
+        QidiBoxTestAccess::parse_vars(
+            *session2, json{{"filament_slot0", 11}, {"color_slot0", 2}, {"vendor_slot0", 2}});
+        CHECK_FALSE(QidiBoxTestAccess::get_override(*session2, 0).has_value());
+        CHECK(api.mock_get_db_value("lane_data", "lane1").is_null());
+        // The new tag's identity is what the slot shows.
+        CHECK(session2->get_slot_info(0).material == "ABS");
+        CHECK(session2->get_slot_info(0).brand == "eSUN");
+    }
+
+    SECTION("the same spool across a restart keeps the override") {
+        helix::test::RegisteredBackend<AmsBackendQidi> session2(&api, nullptr);
+        QidiBoxTestAccess::apply_filas_list(*session2, STOCK_FILAS_EXCERPT);
+        QidiBoxTestAccess::start_load(*session2);
+        QidiBoxTestAccess::parse_vars(
+            *session2, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
+        const auto ovr = QidiBoxTestAccess::get_override(*session2, 0);
+        REQUIRE(ovr.has_value());
+        CHECK(ovr->brand == "Polymaker");
+        CHECK(!api.mock_get_db_value("lane_data", "lane1").is_null());
+    }
+}
+
+TEST_CASE("clearing a QIDI Box slot takes the linked spool's brand off it",
+          "[ams][qidi_box][lane]") {
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    helix::test::RegisteredBackend<RecordingQidiBackend> harness(&api);
+    RecordingQidiBackend& backend = *harness;
+
+    // A linked Spoolman spool states brand and spool name as lane records.
+    SpoolInfo spool;
+    spool.id = 1;
+    spool.vendor = "Polymaker";
+    spool.filament_name = "PolyLite Red";
+    helix::test::spool_states(backend, 0, spool);
+    backend.repaint_slot_from_lane(0);
+    REQUIRE(backend.get_slot_info(0).brand == "Polymaker");
+    REQUIRE(backend.get_slot_info(0).spool_name == "PolyLite Red");
+
+    // Field for field what ui_ams_detail does on CLEAR_SPOOL: blank the
+    // identity fields, drop the Spoolman handles, commit as a user edit. The
+    // lane no longer states brand or spool name and apply_resolved() cannot
+    // retire a field no source observes - and nothing on this Box ever
+    // restates either - so only the repaint's clear takes them off.
+    SlotInfo cleared = backend.get_slot_info(0);
+    cleared.material.clear();
+    cleared.color_rgb = AMS_DEFAULT_SLOT_COLOR;
+    cleared.color_name.clear();
+    cleared.multi_color_hexes.clear();
+    cleared.brand.clear();
+    cleared.catalog_id.clear();
+    cleared.product_name.clear();
+    cleared.clear_spoolman_link();
+    cleared.remaining_weight_g = -1;
+    cleared.total_weight_g = -1;
+    helix::test::edit_slot_as_user(backend, 0, cleared);
+
+    CHECK(backend.get_slot_info(0).brand.empty());
+    CHECK(backend.get_slot_info(0).spool_name.empty());
 }
