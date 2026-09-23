@@ -4,12 +4,16 @@
 #if HELIX_HAS_QIDI
 
 #include "ams_subscription_backend.h"
+#include "filament_slot_override.h"
+#include "filament_slot_override_store.h"
 
 #include <cstdint>
 #include <ctime>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace helix {
@@ -322,6 +326,28 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// else 0.
     static int resolve_vendor_id(const std::map<int, std::string>& vendors,
                                  const std::string& brand);
+
+    /// Observe one slot's tag fingerprint and clear a standing user edit when
+    /// it changed for a reason other than our own identity push. Caller must
+    /// hold mutex_. Returns whether the change cleared an override.
+    [[nodiscard]] bool check_hardware_event_clear(SlotInfo& slot, int slot_index,
+                                                  const std::string& observed_uid);
+
+    /// Erase the slot's override in both stores (the in-memory map and the
+    /// persisted record) and reset the override-exclusive fields on the live
+    /// slot. Caller must hold mutex_.
+    void clear_override_locked(int slot_index, SlotInfo& slot);
+
+    // Persistent per-slot overrides. Writers (on_started bulk load,
+    // apply_user_edit, check_hardware_event_clear) all hold mutex_.
+    std::unique_ptr<helix::ams::FilamentSlotOverrideStore> override_store_;
+    std::unordered_map<int, helix::ams::FilamentSlotOverride> overrides_;
+
+    // Per-slot last-observed tag fingerprint (the composite of the three
+    // save_variable table indices), plus the pending expected fingerprints for
+    // an identity push we issued. Shared with the other fingerprint backends
+    // (CFS, Snapmaker). All access under mutex_.
+    helix::ams::SlotFingerprintTracker rfid_tracker_;
 };
 
 } // namespace helix
