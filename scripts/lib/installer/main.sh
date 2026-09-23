@@ -818,6 +818,11 @@ main() {
     # Symlink config into printer_data (Pi/Klipper only - enables web UI editing)
     setup_config_symlink
 
+    # State the env file's owner/mode rather than inheriting them from the
+    # extract/restore umask; the launcher refuses to evaluate anything else.
+    # After setup_config_symlink so a migrated printer_data copy is pinned too.
+    pin_env_file
+
     # Configure Moonraker update_manager (Pi only - enables web UI updates)
     configure_moonraker_updates "$platform"
 

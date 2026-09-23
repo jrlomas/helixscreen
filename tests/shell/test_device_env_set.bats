@@ -21,6 +21,16 @@ setup() {
     [ "$output" -eq 1 ]
 }
 
+@test "a newly created env file lands at 0644 regardless of the shell's umask" {
+    # The launcher refuses to evaluate a group-writable env file, so the deploy
+    # path must not let a permissive umask decide the mode of a file it creates.
+    run sh -c 'umask 0002; exec sh "$1" "$2" "$3" "$4"' \
+        sh "$ENVSET" "$WORK/umask.env" HELIX_REMOTE_CONTROL 1
+    [ "$status" -eq 0 ]
+    [ -f "$WORK/umask.env" ]
+    [ "$(stat -c '%a' "$WORK/umask.env")" = "644" ]
+}
+
 @test "is a no-op when the key already holds that value" {
     printf 'HELIX_REMOTE_CONTROL=1\n' > "$WORK/a.env"
     run sh "$ENVSET" "$WORK/a.env" HELIX_REMOTE_CONTROL 1

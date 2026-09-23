@@ -39,7 +39,10 @@ if [ -f "$ENV_FILE" ] && grep -q "^${KEY}=${VALUE}\$" "$ENV_FILE"; then
 fi
 
 mkdir -p "$(dirname "$ENV_FILE")"
-[ -f "$ENV_FILE" ] || : > "$ENV_FILE"
+# A newly created env file gets 0644 explicitly: the launcher only evaluates
+# the file when root or its own user owns it and no group/world write bit is
+# set, and the deploy shell's umask decides that otherwise.
+[ -f "$ENV_FILE" ] || { : > "$ENV_FILE"; chmod 644 "$ENV_FILE"; }
 # One backup, taken before the FIRST modification. Re-copying on every deploy
 # would overwrite the pristine original with an already-modified one.
 [ -f "${ENV_FILE}.helix-bak" ] || cp "$ENV_FILE" "${ENV_FILE}.helix-bak"

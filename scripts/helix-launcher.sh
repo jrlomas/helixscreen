@@ -145,6 +145,57 @@ INSTALL_DIR="$(cd "${BIN_DIR}/.." && pwd)"
 # --print-env query above it: any caller that needs the launcher's resolution
 # for a variable before exec'ing this script asks for it here rather than
 # forking a second parser of helixscreen.env (prestonbrown/helixscreen#1634).
+#
+# Trust gate for that parse: it evaluates file lines (`eval "export ..."`), so
+# a line like FOO=$(cmd) runs cmd as this launcher's user - root on every SysV
+# firmware device. That is acceptable only for a file owned by root or by this
+# launcher's own user, with no group or world write bit; anything else is a
+# file somebody else can rewrite into code this script would run. A refused
+# file is skipped with a warning, and startup continues on built-in defaults:
+# the env file only ever supplies defaults, and a display that must come up
+# beats a config file. A file whose owner or mode cannot be read is refused
+# for the same reason - unverifiable is not trusted.
+#
+# stat -c is the GNU/BusyBox spelling (the same form every installer platform
+# probe uses on the devices we ship to); BSD stat (macOS dev runs) is tried
+# second, -L so a symlinked config reports the real file, %p because the file
+# type bits it includes do not intersect the write-bit mask below.
+helix_env_file_trusted() {
+    _hef_stat=$(stat -c '%u %a' "$1" 2>/dev/null) \
+        || _hef_stat=$(stat -L -f '%u %p' "$1" 2>/dev/null) \
+        || _hef_stat=""
+    _hef_uid=$(id -u 2>/dev/null) || _hef_uid=""
+    if [ -z "$_hef_stat" ] || [ -z "$_hef_uid" ]; then
+        log "warning: cannot determine owner/mode of $1 - env file skipped (fix: chown root:root $1; chmod 644 $1)"
+        unset _hef_stat _hef_uid
+        return 1
+    fi
+    _hef_owner="${_hef_stat%% *}"
+    _hef_mode="${_hef_stat##* }"
+    if [ "$_hef_owner" != "0" ] && [ "$_hef_owner" != "$_hef_uid" ]; then
+        log "warning: $1 is owned by uid $_hef_owner, not root or this user (uid $_hef_uid) - env file skipped (fix: chown root:root $1; chmod 644 $1)"
+        unset _hef_stat _hef_uid _hef_owner _hef_mode
+        return 1
+    fi
+    case "$_hef_mode" in
+        '' | *[!0-9]*)
+            log "warning: unreadable mode '$_hef_mode' on $1 - env file skipped (fix: chmod 644 $1)"
+            unset _hef_stat _hef_uid _hef_owner _hef_mode
+            return 1
+            ;;
+    esac
+    # 0-prefixed so the digits read as the octal stat reported them; 022 is
+    # the group+world write bits. Setuid/setgid digits are unaffected by the
+    # mask, so a 4755 file is judged on its 755 alone.
+    if [ "$((0$_hef_mode & 022))" != "0" ]; then
+        log "warning: $1 (uid $_hef_owner, mode $_hef_mode) is group- or world-writable - env file skipped (fix: chmod 644 $1)"
+        unset _hef_stat _hef_uid _hef_owner _hef_mode
+        return 1
+    fi
+    unset _hef_stat _hef_uid _hef_owner _hef_mode
+    return 0
+}
+
 helix_load_env_file() {
     _helix_env_file=""
     for _env_path in \
@@ -158,6 +209,11 @@ helix_load_env_file() {
     unset _env_path
 
     [ -n "$_helix_env_file" ] || return 0
+
+    if ! helix_env_file_trusted "$_helix_env_file"; then
+        unset _helix_env_file
+        return 0
+    fi
 
     # Read each VAR=value line; only export if not already set.
     # Tolerant of common typos so users don't get a silent no-op:

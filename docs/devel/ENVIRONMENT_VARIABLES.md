@@ -2,6 +2,27 @@
 
 This document is a reference for the environment variables HelixScreen reads at runtime, plus the build-time and shell-script variables that surround them. Every `getenv()` call in `src/`, `include/`, the patched LVGL SDL driver, and `scripts/helix-launcher.sh` has an entry here or in [MOCK_ENVIRONMENT_VARIABLES.md](MOCK_ENVIRONMENT_VARIABLES.md) as of the last audit. New vars are added often, so grep `getenv("HELIX_` / `EnvironmentConfig` if something looks missing.
 
+## How `helixscreen.env` is loaded
+
+The launcher (`scripts/helix-launcher.sh`) evaluates `helixscreen.env` from the first
+existing search path (`<install>/config/helixscreen.env`, then `/etc/helixscreen/helixscreen.env`),
+exporting `KEY=VALUE` lines whose variable is not already set. The file is shell-evaluated,
+so values may use `$(...)` and variable expansion, and the same parse answers `--print-env`.
+
+That eval is why ownership is gated: the file is only read when it is owned by root or by
+the user the launcher itself runs as, and carries no group or world write bit. Anything
+else (a group-writable mode left behind by a permissive umask, an owner that is neither
+root nor the service user) is skipped with a logged warning naming the file, its owner and
+mode, and the fix:
+
+```sh
+chown root:root /etc/helixscreen/helixscreen.env && chmod 644 /etc/helixscreen/helixscreen.env
+```
+
+The launcher continues with defaults rather than exiting, so a mis-placed file costs
+configuration, not the screen. The installer pins the file to `0644` (owned by the install
+user) on every install and update.
+
 ## Quick Reference
 
 | Category | Prefix |

@@ -21,6 +21,11 @@ setup() {
     # of its own.
     mock_command_script "killall" 'exit 0'
 
+    # The launcher's trust gate refuses a group-writable env file, and this
+    # suite's `cat >` fixtures inherit the host umask (0002 on this dev box
+    # lands 0664). Every fixture here must read as a trusted 0644 file.
+    umask 022
+
     # Create a mock install layout so the launcher can find binaries
     export MOCK_INSTALL="$BATS_TEST_TMPDIR/helixscreen"
     mkdir -p "$MOCK_INSTALL/bin"
@@ -475,6 +480,112 @@ EOF
     result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_HOST)
     [ "$result" = "localhost" ]
     echo "$err_output" | grep -qE "warning.*invalid variable name|warning.*ignored malformed line"
+}
+
+# =============================================================================
+# Trust gate: the parse evaluates file lines, so owner and mode decide whether
+# the file is read at all. A refused file is skipped with a warning naming the
+# fix; the launcher comes up (or answers --print-env) on defaults. Coverage of
+# both branches of the owner rule needs uids the test user cannot produce, so
+# `stat` is faked on PATH for those (same technique as the heap-diag uname).
+# =============================================================================
+
+# Fake stat answering the gate's exact question (`stat -c '%u %a' FILE`) with
+# a fixed uid/mode pair. FAKE_STAT_FAIL=1 makes it fail outright, standing in
+# for a rootfs with no usable stat. Any other invocation fails too, so the
+# BSD fallback form never reaches a real stat mid-test.
+make_fake_stat() {
+    mkdir -p "$BATS_TEST_TMPDIR/fakebin"
+    printf '#!/bin/sh\n[ "${FAKE_STAT_FAIL:-0}" = "1" ] && exit 1\n[ "$1" = "-c" ] && echo "${FAKE_STAT_UID:-0} ${FAKE_STAT_MODE:-644}" || exit 1\n' \
+        > "$BATS_TEST_TMPDIR/fakebin/stat"
+    chmod +x "$BATS_TEST_TMPDIR/fakebin/stat"
+}
+
+@test "env file owned by the launcher's own user at 0644 loads" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'MOONRAKER_HOST=self-owned.local\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    run env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST
+    [ "$status" -eq 0 ]
+    [ "$output" = "self-owned.local" ]
+}
+
+@test "root-owned 0644 env file loads while the launcher runs as a normal user" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat
+    printf 'MOONRAKER_HOST=root-owned.local\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        FAKE_STAT_UID=0 FAKE_STAT_MODE=644 \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/gate.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "root-owned.local" ]
+    [ ! -s "$BATS_TEST_TMPDIR/gate.log" ]
+}
+
+@test "group-writable env file is refused with the fix in the warning and never evaluated" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'MOONRAKER_HOST=$(touch "$BATS_TEST_TMPDIR/pwned")\n' \
+        > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 664 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
+    # Refusal skips the file; it does not abort the launcher.
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "group- or world-writable" "$BATS_TEST_TMPDIR/refuse.log"
+    grep -q "mode 664" "$BATS_TEST_TMPDIR/refuse.log"
+    grep -qF "chmod 644 $MOCK_INSTALL/config/helixscreen.env" "$BATS_TEST_TMPDIR/refuse.log"
+    # The command substitution in the refused line never ran.
+    [ ! -e "$BATS_TEST_TMPDIR/pwned" ]
+}
+
+@test "world-writable env file is refused" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'MOONRAKER_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 666 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "mode 666" "$BATS_TEST_TMPDIR/refuse.log"
+}
+
+@test "env file owned by a third user is refused even at 0644" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat
+    printf 'MOONRAKER_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        FAKE_STAT_UID=12345 FAKE_STAT_MODE=644 \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "owned by uid 12345" "$BATS_TEST_TMPDIR/refuse.log"
+    grep -qF "chown root:root $MOCK_INSTALL/config/helixscreen.env" "$BATS_TEST_TMPDIR/refuse.log"
+}
+
+@test "env file whose owner or mode cannot be read is refused, not assumed safe" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat
+    printf 'MOONRAKER_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" FAKE_STAT_FAIL=1 \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "cannot determine owner/mode" "$BATS_TEST_TMPDIR/refuse.log"
+}
+
+@test "a trusted file keeps the parse's full shell semantics" {
+    # The gate is the safety boundary, not a parser change: a file that passed
+    # it is still parsed with source-compatible tolerance (quoting, expansion).
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'MOONRAKER_HOST=$(echo resolved-by-parse)\n' \
+        > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    run env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST
+    [ "$status" -eq 0 ]
+    [ "$output" = "resolved-by-parse" ]
 }
 
 # =============================================================================
