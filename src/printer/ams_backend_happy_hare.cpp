@@ -2928,8 +2928,17 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
         has_changes = true;
     }
 
-    // Only send command if there are actual changes to persist
-    if (has_changes) {
+    // Only send command if there are actual changes to persist. Spoolman pull
+    // mode refuses local writes to every field this command carries and logs
+    // the refusal rather than returning it - send nothing and report the
+    // partial failure below instead of claiming success. Tool-to-gate remaps
+    // are not gate-map fields and still go out.
+    const bool pull_owns_gate_map = spoolman_mode == SpoolmanMode::PULL;
+    if (has_changes && pull_owns_gate_map) {
+        spdlog::warn("[AMS HappyHare] Spoolman pull mode owns the gate map; gate {} "
+                     "edit kept locally only",
+                     slot_index);
+    } else if (has_changes) {
         execute_gcode(cmd);
         spdlog::debug("[AMS HappyHare] Sent: {}", cmd);
     }
@@ -2943,6 +2952,16 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
 
     // Emit OUTSIDE the lock to avoid deadlock with callbacks
     emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
+
+    if (has_changes && pull_owns_gate_map) {
+        AmsError refused(AmsResult::COMMAND_FAILED,
+                         "Happy Hare Spoolman pull mode owns the gate map",
+                         lv_tr("Couldn't save the printer's gate map"),
+                         lv_tr("This printer fills its gates from Spoolman. Make colour, "
+                               "material and spool changes in Spoolman."));
+        refused.partially_applied = true;
+        return refused;
+    }
 
     if (!rejected_material.empty()) {
         AmsError partial(AmsResult::COMMAND_FAILED,

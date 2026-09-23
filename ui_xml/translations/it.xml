@@ -663,6 +663,7 @@
   <translation tag="Could not verify Spoolman status. Moonraker may still be restarting." it="Impossibile verificare lo stato di Spoolman. Moonraker potrebbe essere ancora in riavvio."/>
   <translation tag="Couldn&apos;t clear the printer&apos;s gate map" it="Impossibile svuotare la mappa dei gate della stampante"/>
   <translation tag="Couldn&apos;t save the material name" it="Impossibile salvare il nome del materiale"/>
+  <translation tag="Couldn&apos;t save the printer&apos;s gate map" it="Impossibile salvare la mappa dei gate della stampante"/>
   <translation tag="Couldn&apos;t save to Spoolman. Nothing changed on this printer." it="Impossibile salvare su Spoolman. Nulla è stato modificato su questa stampante."/>
   <translation tag="Cover open" it="Coperchio aperto"/>
   <translation tag="Crash Report" it="Rapporto di crash"/>
@@ -2810,6 +2811,7 @@
   <translation tag="This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?" it="Questa stampa richiede circa %.0fg ma la bobina ne ha circa %.0fg rimanenti. Avviare comunque?"/>
   <translation tag="This printer cannot calibrate tool offsets automatically" it="Questa stampante non può calibrare automaticamente gli offset degli strumenti"/>
   <translation tag="This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman." it="Questa stampante riempie i suoi gate da Spoolman. HelixScreen ha svuotato la propria copia; rimuovi la bobina in Spoolman."/>
+  <translation tag="This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman." it="Questa stampante riempie i suoi gate da Spoolman. Modifica colore, materiale e bobina in Spoolman."/>
   <translation tag="This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets." it="Questa stampante sembra una {} (affidabilità {}%), ma è configurata come {}. Un tipo errato applica opzioni pre-stampa e preset errati."/>
   <translation tag="This removes the plugin&apos;s Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that." it="Questo rimuove il componente Moonraker del plugin e riavvia Moonraker. La stampante si disconnetterà brevemente. Se sono ancora presenti vecchie righe di tracciamento delle fasi in PRINT_START, vengono rimosse anch&apos;esse, mantenendo i backup. Un riavvio di Klipper applica ciò."/>
   <translation tag="This replaces the printer&apos;s helper macros with the current version and restarts Klipper." it="Sostituisce le macro di ausilio della stampante con la versione attuale e riavvia Klipper."/>

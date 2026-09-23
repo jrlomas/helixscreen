@@ -38,7 +38,7 @@ Klipper object `mmu` in `printer.objects.list` sets `AmsType::HAPPY_HARE`.
 | `MMU_RECOVER` | Attempt error recovery |
 | `MMU_CHECK_GATE` | Probe every gate sensor (sidebar **Check slots**). Physical: parks the toolhead and unloads/reloads each gate, and Happy Hare does not refuse it mid-print, so the sidebar gates it |
 | `MMU_TTG_MAP TOOL={n} GATE={g}` | Set tool-to-gate mapping |
-| `MMU_GATE_MAP GATE={n} [COLOR=..] [MATERIAL=..] [SPOOLID=..]` | Persist a slot edit to the gate map (`mmu_vars.cfg`). Omitted params keep their current value, so a field is only cleared by naming it with an explicit empty value |
+| `MMU_GATE_MAP GATE={n} [COLOR=..] [MATERIAL=..] [SPOOLID=..]` | Persist a slot edit to the gate map (`mmu_vars.cfg`). Omitted params keep their current value, so a field is only cleared by naming it with an explicit empty value. In Spoolman pull mode nothing is sent - see [Clear Spool](#clear-spool) |
 | `MMU_GATE_MAP GATE={n} MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1` | **Clear Spool**: wipe every field the gate map holds for one gate - see [Clear Spool](#clear-spool) |
 | `MMU_SELECT_BYPASS` | Select bypass position |
 
@@ -121,7 +121,10 @@ Two gates on the send itself:
   name, vendor and spool id, and logs the refusal in its own console rather than
   returning an error the client could read. The backend clears HelixScreen's layer,
   sends nothing, and returns a partial failure naming Spoolman as the owner of the gate
-  map.
+  map. An ordinary slot edit gets the same treatment in `apply_user_edit()`: the
+  `MMU_GATE_MAP` send is skipped with the same partial failure (HelixScreen keeps its
+  own copy), while a tool remap still goes out - `MMU_TTG_MAP` is not a gate-map field
+  and Happy Hare takes it in pull mode.
 - **Mid-print backstop.** The print UI refuses clears while a job holds the machine. If
   one reaches the backend anyway for the gate the job is printing from, the firmware
   write is skipped with a warning and a partial failure; HelixScreen's own layer is

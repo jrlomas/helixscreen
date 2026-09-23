@@ -663,6 +663,7 @@
   <translation tag="Could not verify Spoolman status. Moonraker may still be restarting." ja="Spoolman のステータスを確認できませんでした。Moonraker がまだ再起動中の可能性があります。"/>
   <translation tag="Couldn&apos;t clear the printer&apos;s gate map" ja="プリンターのゲートマップをクリアできませんでした"/>
   <translation tag="Couldn&apos;t save the material name" ja="材料名を保存できませんでした"/>
+  <translation tag="Couldn&apos;t save the printer&apos;s gate map" ja="プリンターのゲートマップを保存できませんでした"/>
   <translation tag="Couldn&apos;t save to Spoolman. Nothing changed on this printer." ja="Spoolman に保存できませんでした。このプリンターでは何も変更されていません。"/>
   <translation tag="Cover open" ja="カバーが開いています"/>
   <translation tag="Crash Report" ja="クラッシュレポート"/>
@@ -2810,6 +2811,7 @@
   <translation tag="This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?" ja="この印刷には約 %.0fg 必要ですが、スプールの残量は約 %.0fg です。それでも開始しますか？"/>
   <translation tag="This printer cannot calibrate tool offsets automatically" ja="このプリンターはツールオフセットを自動でキャリブレートできません"/>
   <translation tag="This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman." ja="このプリンターのゲートは Spoolman から設定されます。HelixScreen 側のコピーはクリアしました。Spoolman でスプールを削除してください。"/>
+  <translation tag="This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman." ja="このプリンターのゲートは Spoolman から設定されます。色・素材・スプールの変更は Spoolman で行ってください。"/>
   <translation tag="This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets." ja="このプリンターは {} のようです（信頼度 {}%）が、{} として設定されています。誤ったタイプでは不正確な印刷前オプションとプリセットが適用されます。"/>
   <translation tag="This removes the plugin&apos;s Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that." ja="プラグインの Moonraker コンポーネントを削除し、Moonraker を再起動します。プリンターは一時的に切断されます。PRINT_START に古いフェーズトラッキングの行が残っている場合、それらも削除されますが、バックアップは保持されます。Klipper を再起動すると、その変更が適用されます。"/>
   <translation tag="This replaces the printer&apos;s helper macros with the current version and restarts Klipper." ja="プリンターのヘルパーマクロを現在のバージョンに置き換え、Klipper を再起動します。"/>

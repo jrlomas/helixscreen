@@ -746,6 +746,7 @@ translations:
     verificar o status do Spoolman. O Moonraker pode ainda estar reiniciando.
   Couldn't clear the printer's gate map: Não foi possível limpar o mapa de gates da impressora
   Couldn't save the material name: 'Não foi possível salvar o nome do material'
+  Couldn't save the printer's gate map: Não foi possível salvar o mapa de gates da impressora
   Couldn't save to Spoolman. Nothing changed on this printer.: Não foi possível salvar no Spoolman. Nada foi alterado nesta impressora.
   Cover open: Tampa aberta
   Crash Report: Relatório de Falha
@@ -3146,6 +3147,7 @@ translations:
     Iniciar mesmo assim?
   This printer cannot calibrate tool offsets automatically: Esta impressora não consegue calibrar os offsets de ferramenta automaticamente
   This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.: Esta impressora preenche seus gates a partir do Spoolman. O HelixScreen limpou a própria cópia; remova a bobina no Spoolman.
+  This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.: Esta impressora preenche seus gates a partir do Spoolman. Faça alterações de cor, material e bobina no Spoolman.
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : Esta impressora parece ser uma {} ({}% de confiança), mas está configurada como {}. Um tipo errado aplica opções de pré-impressão e predefinições incorretas.
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.

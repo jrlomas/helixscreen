@@ -621,6 +621,52 @@ TEST_CASE("Happy Hare clear: slot stays blank across the status echo", "[ams][ha
     REQUIRE(echoed->spoolman_id == 0);
 }
 
+TEST_CASE("Happy Hare editor write: pull mode skips the firmware write and says so",
+          "[ams][happy_hare]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    helper.test_parse_mmu_state(nlohmann::json{{"spoolman_support", "pull"}});
+    REQUIRE(helper.get_system_info().spoolman_mode == SpoolmanMode::PULL);
+
+    SlotInfo edit;
+    edit.material = "PETG";
+    edit.mapped_tool = 1;
+    const AmsError err = helix::test::apply_edit(helper, 0, edit);
+
+    // Same refusal as the clear: Happy Hare ignores local writes to the
+    // gate-map fields in pull mode and only logs it, so nothing is sent and
+    // the failure is reported here instead of a success.
+    REQUIRE_FALSE(helper.has_gcode_containing("MMU_GATE_MAP"));
+    REQUIRE_FALSE(err.success());
+    REQUIRE(err.partially_applied);
+    // A tool remap is not a gate-map field: Happy Hare takes it in pull mode.
+    REQUIRE(helper.has_gcode_containing("MMU_TTG_MAP TOOL=1 GATE=0"));
+    // Our own layer keeps the edit even though the firmware refused.
+    const SlotInfo* after = helper.get_mutable_slot(0);
+    REQUIRE(after->material == "PETG");
+    REQUIRE(after->mapped_tool == 1);
+}
+
+TEST_CASE("Happy Hare editor write: pull mode still saves a pure tool remap", "[ams][happy_hare]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    helper.test_parse_mmu_state(nlohmann::json{{"spoolman_support", "pull"}});
+    REQUIRE(helper.get_system_info().spoolman_mode == SpoolmanMode::PULL);
+
+    SlotInfo edit;
+    edit.mapped_tool = 1;
+    const AmsError err = helix::test::apply_edit(helper, 0, edit);
+
+    // No gate-map field changed, so the pull-mode refusal must not fire.
+    REQUIRE(err.success());
+    REQUIRE(helper.has_gcode_containing("MMU_TTG_MAP TOOL=1 GATE=0"));
+    REQUIRE_FALSE(helper.has_gcode_containing("MMU_GATE_MAP"));
+}
+
 namespace {
 /// A backend wired to a real PrinterState whose wire can be driven to
 /// PRINTING - the mid-print guard reads api_->printer_state(), which needs a
