@@ -61,6 +61,7 @@ translations:
   1 min ago: vor 1 Min.
   1 minute: 1 Minute
   1 more tap to {} beta features: 1 weiteres Mal tippen, um Beta-Funktionen zu {}
+  1. Printer homes all axes (~1 minute): 1. Drucker referenziert alle Achsen (~1 Minute)
   1. Printer homes and probes the bed: 1. Drucker referenziert und prüft das Bett
   1. Printer will home and probe each screw: 1. Drucker referenziert und prüft jede
     Schraube
@@ -72,6 +73,7 @@ translations:
   180° Upside Down: 180° kopfüber
   2 min: '2 Min'
   2 minutes: 2 Minuten
+  2. Jog the toolhead in Y to line it up with the chute: 2. Werkzeugkopf in Y verfahren, bis er fluchtend über der Rinne steht
   2. Place paper between nozzle and bed: 2. Papier zwischen Düse und Bett legen
   2. Results show how much to turn each screw: 2. Ergebnisse zeigen, wie viel jede
     Schraube gedreht werden muss
@@ -85,6 +87,7 @@ translations:
     prüfen
   3. Lower nozzle until paper drags slightly: 3. Düse absenken, bis das Papier leicht
     schleift
+  3. Save writes the position to the CFS: 3. Speichern schreibt die Position in das CFS
   30 minutes: 30 Minuten
   30 seconds: 30 Sekunden
   3D Pipes: 3D Pipes
@@ -410,9 +413,11 @@ translations:
   Calibrate: Kalibrieren
   Calibrate All: Alle kalibrieren
   Calibrate Bowden: 'Bowden kalibrieren'
+  Calibrate Cutter: Schneider kalibrieren
   Calibrate Encoder: 'Encoder kalibrieren'
   Calibrate Gates: 'Gates kalibrieren'
   Calibrate Gear: 'Zahnrad kalibrieren'
+  Calibrate Purge Chute: Entlüftungsrinne kalibrieren
   Calibrate X: X kalibrieren
   Calibrate Y: Y kalibrieren
   Calibrate all tools: Alle Werkzeuge kalibrieren
@@ -426,9 +431,11 @@ translations:
   Calibrating bed mesh...: Bettnetz kalibrieren...
   Calibrating {} axis...: 'Kalibriere Achse {}...'
   Calibrating...: Kalibriere...
+  Calibration: Kalibrierung
   Calibration & Tools: Kalibrierung & Werkzeuge
   Calibration Complete!: Kalibrierung abgeschlossen!
   Calibration Failed: Kalibrierung fehlgeschlagen
+  Calibration Saved: Kalibrierung gespeichert
   Calibration and system configuration: 'Kalibrierung und Systemkonfiguration'
   Calibration cancelled.: Kalibrierung abgebrochen.
   Calibration complete: Kalibrierung abgeschlossen
@@ -789,7 +796,11 @@ translations:
   Cut filament: Filament schneiden
   Cut tip: 'Spitze schneiden'
   Cutter Enabled: 'Schneider aktiviert'
+  Cutter and purge chute calibration: Schneider- und Entlüftungsrinnen-Kalibrierung
   Cutter blade didn't sever filament: Schneidklinge hat das Filament nicht durchtrennt
+  Cutter calibration completed: Schneider-Kalibrierung abgeschlossen
+  'Cutter calibration failed: {}': 'Schneider-Kalibrierung fehlgeschlagen: {}'
+  'Cutter calibration: {}': 'Schneider-Kalibrierung: {}'
   Cutter jam: Schneidestau
   Cutting: Schneiden
   Cutting filament...: Filament wird geschnitten...
@@ -1321,6 +1332,7 @@ translations:
   Gray: Grau
   Grip filament: Filament greifen
   Grip the filament: Filament greifen
+  Guide the toolhead to the chute's extrude position: Werkzeugkopf zur Extrusionsposition der Rinne führen
   Guides and reference: Anleitungen und Referenz
   H: H
   HOST: Host
@@ -1407,6 +1419,7 @@ translations:
     vorheriges Filament auszuspülen.
   Home: Home
   Home & Continue: Referenzieren & Fortfahren
+  Home and sweep the cutter to re-find its position: Referenzfahrt und Messfahrt des Schneiders, um seine Position neu zu ermitteln
   Home failed: Referenzfahrt fehlgeschlagen
   Home printer first?: Drucker zuerst referenzieren?
   Home selector: Selektor referenzieren
@@ -1552,6 +1565,7 @@ translations:
   Job Queue: Auftragswarteschlange
   Jog Speed XY: Bewegungsgeschwindigkeit XY
   Jog Speed Z: Bewegungsgeschwindigkeit Z
+  Jog Y until filament from the chute lands inside it, then save.: Verfahren Sie Y, bis Filament aus der Rinne darin landet, und speichern Sie dann.
   'Jog failed: {}': 'Bewegung fehlgeschlagen: {}'
   Jog speeds and step distances: Bewegungsgeschwindigkeiten und Schrittweiten
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Tritt
@@ -1568,6 +1582,7 @@ translations:
   Keep Spool Info on Eject: Spuleninfo beim Auswerfen behalten
   Keep current: Aktuelle behalten
   Keep the bypass spool visible when bypass is off: Bypass-Spule sichtbar halten, wenn Bypass deaktiviert ist
+  'Keep the filament path clear: the head moves on its own.': 'Halten Sie den Filamentweg frei: der Kopf bewegt sich von selbst.'
   Kick away: 'Wegschieben'
   Kinematics: Kinematik
   Klipper: Klipper
@@ -2150,6 +2165,7 @@ translations:
   Please enter an IP address or hostname.: Bitte geben Sie eine IP-Adresse oder einen
     Hostnamen ein.
   Please fill in the highlighted fields: Bitte füllen Sie die markierten Felder aus
+  Please wait while the printer homes and moves to the start position.: Bitte warten Sie, während der Drucker referenziert und zur Startposition fährt.
   Please wait while the printer homes and probes.: Bitte warten Sie, während der Drucker
     referenziert und abtastet.
   Please wait while the printer probes each screw position.: Bitte warten Sie, während
@@ -2172,6 +2188,7 @@ translations:
   Port: Port
   Position: Position
   Position the gantry yourself, then continue: Positionieren Sie die Gantry selbst und fahren Sie dann fort
+  Position the toolhead over the purge chute so filament lands inside it.: Positionieren Sie den Werkzeugkopf über der Entlüftungsrinne, damit Filament hineinfällt.
   Post-Sensor Clear: 'Nachlauf nach Sensor'
   Power: Strom
   Power Devices: Stromgeräte
@@ -2347,6 +2364,7 @@ translations:
   Pulling filament back: Filament wird zurückgezogen
   Purge: Entlüften
   Purge & Wipe: 'Entlüften & Abwischen'
+  Purge Chute Calibration: Entlüftungsrinnen-Kalibrierung
   Purge Length: 'Entlüftungslänge'
   'Purge failed: {}': 'Purge fehlgeschlagen: {}'
   Purge may still be running — response timed out: Purge läuft möglicherweise noch
@@ -2635,6 +2653,7 @@ translations:
   Saving offsets...: Speichere Offsets...
   Saving will restart Klipper and CANCEL any active print!: Speichern startet Klipper
     neu und BRICHT jeden aktiven Druck ab!
+  Saving...: Speichern...
   Scan: Suchen
   Scan Cal: Scan-Kal.
   Scan QR Code: QR-Code scannen
@@ -3068,6 +3087,7 @@ translations:
   The printer halted this print and cannot resume it. Restart from the beginning?: Der
     Drucker hat diesen Druck angehalten und kann ihn nicht fortsetzen. Von vorne neu
     starten?
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: Der Drucker referenziert und vermisst den Schneider (ca. 1 Minute). Halten Sie den Filamentweg frei.
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: Der Drucker ist nicht referenziert. Wenn Sie fortfahren, werden alle Achsen referenziert und der Werkzeugkopf bewegt sich. Stellen Sie sicher, dass das Heizbett frei ist.
   The printer lost power during a print. It can resume where it left off.: Der Drucker
     hatte während eines Drucks einen Stromausfall. Er kann dort fortsetzen, wo er aufgehört
@@ -3079,6 +3099,7 @@ translations:
   The printer rejected the filament configuration. The print was not started.: Der
     Drucker hat die Filamentkonfiguration abgelehnt. Der Druck wurde nicht gestartet.
   The printer's firmware chooses the backup spool itself: Die Drucker-Firmware wählt die Reserve-Spule selbst
+  The purge chute position has been updated.: Die Position der Entlüftungsrinne wurde aktualisiert.
   The requested position is outside the printer's bounds: 'Die angeforderte Position liegt außerhalb des Druckerbereichs'
   The right RFID reader in this CFS unit may need service: Der rechte RFID-Leser dieser CFS-Einheit muss möglicherweise gewartet werden
   The runout sensor indicates no filament is loaded. Start print anyway?: Der Auslaufsensor
@@ -3243,6 +3264,7 @@ translations:
   Toolhead LED: 'Werkzeugkopf-LED'
   Toolhead Sensor: Werkzeugkopfsensor
   Toolhead Style: Toolhead-Stil
+  Toolhead Y: Werkzeugkopf Y
   Toolhead jam: Werkzeugkopf-Stau
   Toolhead, G-code, limits, and materials: Druckkopf, G-Code, Grenzen und Materialien
   Toolheads: Werkzeugköpfe
@@ -3475,6 +3497,7 @@ translations:
   Wizard Error: Assistentenfehler
   Working...: Wird verarbeitet...
   Write failed at chunk {}: Schreibvorgang bei Block {} fehlgeschlagen
+  Writing the position to the CFS and re-parking the toolhead.: Position wird in das CFS geschrieben und der Werkzeugkopf neu geparkt.
   Wrong PIN: Falsche PIN
   Wrong State: 'Falscher Status'
   Wrong media: Falsches Medium
@@ -3490,6 +3513,7 @@ translations:
   Y: Y
   Y Axis: Y-Achse
   Y Offset: Y-Offset
+  Y axis limit reached: Y-Achsen-Limit erreicht
   Y jog blocked at bed edge: Y-Bewegung an Bettkante blockiert
   'Y:': 'Y:'
   ? "YOU WIN!\nScore: {}\nTap to play again"

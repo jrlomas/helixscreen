@@ -60,6 +60,7 @@ translations:
   1 min ago: há 1 min
   1 minute: 1 minuto
   1 more tap to {} beta features: Mais 1 toque para {} recursos beta
+  1. Printer homes all axes (~1 minute): 1. A impressora referencia todos os eixos (~1 minuto)
   1. Printer homes and probes the bed: 1. A impressora faz home e sonda a mesa
   1. Printer will home and probe each screw: 1. A impressora fará home e sondará cada
     parafuso
@@ -71,6 +72,7 @@ translations:
   180° Upside Down: 180° invertido
   2 min: '2 min'
   2 minutes: 2 minutos
+  2. Jog the toolhead in Y to line it up with the chute: 2. Mova o cabeçote em Y para alinhá-lo com a calha
   2. Place paper between nozzle and bed: 2. Coloque papel entre o bico e a mesa
   2. Results show how much to turn each screw: 2. Os resultados mostram quanto girar
     cada parafuso
@@ -84,6 +86,7 @@ translations:
     novamente para verificar
   3. Lower nozzle until paper drags slightly: 3. Abaixe o bico até o papel arrastar
     levemente
+  3. Save writes the position to the CFS: 3. Salvar grava a posição no CFS
   30 minutes: 30 minutos
   30 seconds: 30 segundos
   3D Pipes: Canos 3D
@@ -403,9 +406,11 @@ translations:
   Calibrate: Calibrar
   Calibrate All: Calibrar Tudo
   Calibrate Bowden: 'Calibrar o bowden'
+  Calibrate Cutter: Calibrar cortador
   Calibrate Encoder: 'Calibrar o encoder'
   Calibrate Gates: 'Calibrar gates'
   Calibrate Gear: 'Calibrar a engrenagem'
+  Calibrate Purge Chute: Calibrar calha de purga
   Calibrate X: Calibrar X
   Calibrate Y: Calibrar Y
   Calibrate all tools: Calibrar todas as ferramentas
@@ -420,9 +425,11 @@ translations:
   Calibrating bed mesh...: Calibrando malha da mesa...
   Calibrating {} axis...: 'Calibrando o eixo {}...'
   Calibrating...: Calibrando...
+  Calibration: Calibração
   Calibration & Tools: Calibração e Ferramentas
   Calibration Complete!: Calibração Concluída!
   Calibration Failed: Calibração Falhou
+  Calibration Saved: Calibração salva
   Calibration and system configuration: 'Calibração e configuração do sistema'
   Calibration cancelled.: Calibração cancelada.
   Calibration complete: Calibração concluída
@@ -785,7 +792,11 @@ translations:
   Cut filament: Cortar filamento
   Cut tip: 'Cortar a ponta'
   Cutter Enabled: 'Cortador habilitado'
+  Cutter and purge chute calibration: Calibração do cortador e da calha de purga
   Cutter blade didn't sever filament: A lâmina não cortou o filamento
+  Cutter calibration completed: Calibração do cortador concluída
+  'Cutter calibration failed: {}': 'Falha na calibração do cortador: {}'
+  'Cutter calibration: {}': 'Calibração do cortador: {}'
   Cutter jam: Atolamento do cortador
   Cutting: Cortando
   Cutting filament...: Cortando filamento...
@@ -1311,6 +1322,7 @@ translations:
   Gray: Cinza
   Grip filament: Segurar filamento
   Grip the filament: Segurar o filamento
+  Guide the toolhead to the chute's extrude position: Leve o cabeçote até a posição de extrusão da calha
   Guides and reference: Guias e referência
   H: H
   HOST: Host
@@ -1399,6 +1411,7 @@ translations:
     o filamento anterior.
   Home: Início
   Home & Continue: Fazer home e continuar
+  Home and sweep the cutter to re-find its position: Referencia e varre o cortador para reencontrar sua posição
   Home failed: Homing falhou
   Home printer first?: Fazer home da impressora primeiro?
   Home selector: Fazer home do seletor
@@ -1545,6 +1558,7 @@ translations:
   Job Queue: Fila de Trabalhos
   Jog Speed XY: Velocidade de movimento XY
   Jog Speed Z: Velocidade de movimento Z
+  Jog Y until filament from the chute lands inside it, then save.: Mova Y até o filamento da calha cair dentro dela e salve.
   'Jog failed: {}': 'Falha ao mover: {}'
   Jog speeds and step distances: Velocidades de movimento e distâncias de passo
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Participe
@@ -1561,6 +1575,7 @@ translations:
   Keep Spool Info on Eject: Manter Informações do Carretel ao Ejetar
   Keep current: Manter atual
   Keep the bypass spool visible when bypass is off: Manter o carretel de bypass visível quando o bypass estiver desligado
+  'Keep the filament path clear: the head moves on its own.': 'Mantenha o caminho do filamento livre: o cabeçote se move sozinho.'
   Kick away: 'Expulsar'
   Kinematics: Cinemática
   Klipper: Klipper
@@ -2143,6 +2158,7 @@ translations:
   Please enter a valid port (1-65535).: Insira uma porta válida (1-65535).
   Please enter an IP address or hostname.: Insira um endereço IP ou hostname.
   Please fill in the highlighted fields: Por favor, preencha os campos destacados
+  Please wait while the printer homes and moves to the start position.: Aguarde enquanto a impressora referencia e move até a posição inicial.
   Please wait while the printer homes and probes.: Por favor, aguarde enquanto a impressora
     faz home e sonda.
   Please wait while the printer probes each screw position.: Por favor, aguarde enquanto
@@ -2165,6 +2181,7 @@ translations:
   Port: Porta
   Position: Posição
   Position the gantry yourself, then continue: Posicione o pórtico manualmente e continue
+  Position the toolhead over the purge chute so filament lands inside it.: Posicione o cabeçote sobre a calha de purga para o filamento cair dentro.
   Post-Sensor Clear: 'Avanço após o sensor'
   Power: Energia
   Power Devices: Dispositivos de energia
@@ -2341,6 +2358,7 @@ translations:
   Pulling filament back: Retraindo filamento
   Purge: Purgar
   Purge & Wipe: 'Purgar e limpar'
+  Purge Chute Calibration: Calibração da calha de purga
   Purge Length: 'Comprimento de purga'
   'Purge failed: {}': 'Falha ao purgar: {}'
   Purge may still be running — response timed out: A purga pode ainda estar em execução
@@ -2630,6 +2648,7 @@ translations:
   Saving offsets...: Salvando offsets...
   Saving will restart Klipper and CANCEL any active print!: Salvar reiniciará o Klipper
     e CANCELARÁ qualquer impressão ativa!
+  Saving...: Salvando...
   Scan: Escanear
   Scan Cal: Cal de Scan
   Scan QR Code: Escanear Código QR
@@ -3067,6 +3086,7 @@ translations:
     filamento no bico. Retome a impressão assim que a troca terminar.
   The printer halted this print and cannot resume it. Restart from the beginning?: A
     impressora parou esta impressão e não pode retomá-la. Reiniciar do início?
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: A impressora referencia e varre o cortador (cerca de 1 minuto). Mantenha o caminho do filamento livre.
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: A impressora não fez home. Continuar fará home em todos os eixos, movendo o cabeçote. Certifique-se de que a mesa esteja livre.
   The printer lost power during a print. It can resume where it left off.: A impressora
     perdeu energia durante uma impressão. Ela pode retomar de onde parou.
@@ -3077,6 +3097,7 @@ translations:
   The printer rejected the filament configuration. The print was not started.: A impressora
     rejeitou a configuração do filamento. A impressão não foi iniciada.
   The printer's firmware chooses the backup spool itself: O firmware da impressora escolhe o carretel de reserva
+  The purge chute position has been updated.: A posição da calha de purga foi atualizada.
   The requested position is outside the printer's bounds: 'A posição solicitada está fora dos limites da impressora'
   The right RFID reader in this CFS unit may need service: O leitor RFID direito desta unidade CFS pode precisar de manutenção
   The runout sensor indicates no filament is loaded. Start print anyway?: O sensor
@@ -3243,6 +3264,7 @@ translations:
   Toolhead LED: 'LED do cabeçote'
   Toolhead Sensor: Sensor do Cabeçote
   Toolhead Style: Estilo do Cabeçote
+  Toolhead Y: Cabeçote Y
   Toolhead jam: Atolamento do cabeçote
   Toolhead, G-code, limits, and materials: Cabeçote, G-code, limites e materiais
   Toolheads: Cabeçotes
@@ -3474,6 +3496,7 @@ translations:
   Wizard Error: Erro do assistente
   Working...: Processando...
   Write failed at chunk {}: Falha na escrita no fragmento {}
+  Writing the position to the CFS and re-parking the toolhead.: Gravando a posição no CFS e estacionando o cabeçote novamente.
   Wrong PIN: PIN incorreto
   Wrong State: 'Estado incorreto'
   Wrong media: Mídia incorreta
@@ -3489,6 +3512,7 @@ translations:
   Y: Y
   Y Axis: Eixo Y
   Y Offset: Offset Y
+  Y axis limit reached: Limite do eixo Y alcançado
   Y jog blocked at bed edge: Movimento Y bloqueado na borda da mesa
   'Y:': 'Y:'
   ? "YOU WIN!\nScore: {}\nTap to play again"

@@ -60,6 +60,7 @@ translations:
   1 min ago: 1 min fa
   1 minute: 1 minuto
   1 more tap to {} beta features: 1 tocco per {} funzioni beta
+  1. Printer homes all axes (~1 minute): 1. La stampante azzererà tutti gli assi (~1 minuto)
   1. Printer homes and probes the bed: 1. La stampante esegue homing e sonda il piano
   1. Printer will home and probe each screw: 1. La stampante eseguirà homing e sonderà
     ogni vite
@@ -71,6 +72,7 @@ translations:
   180° Upside Down: 180° capovolto
   2 min: '2 min'
   2 minutes: 2 minuti
+  2. Jog the toolhead in Y to line it up with the chute: 2. Spostare la testina in Y per allinearla al condotto
   2. Place paper between nozzle and bed: 2. Posizionare carta tra ugello e piano
   2. Results show how much to turn each screw: 2. I risultati mostrano quanto girare
     ogni vite
@@ -84,6 +86,7 @@ translations:
     verificare
   3. Lower nozzle until paper drags slightly: 3. Abbassare l'ugello fino a quando
     la carta striscia leggermente
+  3. Save writes the position to the CFS: 3. Salvataggio scrive la posizione nel CFS
   30 minutes: 30 minuti
   30 seconds: 30 secondi
   3D Pipes: Tubi 3D
@@ -405,9 +408,11 @@ translations:
   Calibrate: Calibra
   Calibrate All: Calibra tutto
   Calibrate Bowden: 'Calibra il bowden'
+  Calibrate Cutter: Calibra taglierina
   Calibrate Encoder: 'Calibra l''encoder'
   Calibrate Gates: 'Calibra le gate'
   Calibrate Gear: 'Calibra l''ingranaggio'
+  Calibrate Purge Chute: Calibra condotto di spurgo
   Calibrate X: Calibra X
   Calibrate Y: Calibra Y
   Calibrate all tools: Calibra tutti gli strumenti
@@ -422,9 +427,11 @@ translations:
   Calibrating bed mesh...: Calibrazione mesh piano...
   Calibrating {} axis...: 'Calibrazione dell''asse {}...'
   Calibrating...: Calibrazione in corso...
+  Calibration: Calibrazione
   Calibration & Tools: Calibrazione e Strumenti
   Calibration Complete!: Calibrazione completata!
   Calibration Failed: Calibrazione fallita
+  Calibration Saved: Calibrazione salvata
   Calibration and system configuration: 'Calibrazione e configurazione di sistema'
   Calibration cancelled.: Calibrazione annullata.
   Calibration complete: Calibrazione completata
@@ -780,7 +787,11 @@ translations:
   Cut filament: Taglia filamento
   Cut tip: 'Taglia la punta'
   Cutter Enabled: 'Taglierina abilitata'
+  Cutter and purge chute calibration: Calibrazione taglierina e condotto di spurgo
   Cutter blade didn't sever filament: La lama non ha reciso il filamento
+  Cutter calibration completed: Calibrazione taglierina completata
+  'Cutter calibration failed: {}': 'Calibrazione taglierina non riuscita: {}'
+  'Cutter calibration: {}': 'Calibrazione taglierina: {}'
   Cutter jam: Inceppamento taglierina
   Cutting: Taglio
   Cutting filament...: Taglio filamento...
@@ -1309,6 +1320,7 @@ translations:
   Gray: Grigio
   Grip filament: Afferra il filamento
   Grip the filament: Afferra il filamento
+  Guide the toolhead to the chute's extrude position: Portare la testina alla posizione di estrusione del condotto
   Guides and reference: Guide e riferimenti
   H: H
   HOST: Host
@@ -1395,6 +1407,7 @@ translations:
     spurgare il filamento precedente.
   Home: Home
   Home & Continue: Homing e continua
+  Home and sweep the cutter to re-find its position: Azzera e fa scorrevolare la taglierina per ritrovare la sua posizione
   Home failed: Homing fallito
   Home printer first?: Eseguire prima l'homing della stampante?
   Home selector: Homing selettore
@@ -1541,6 +1554,7 @@ translations:
   Job Queue: Coda lavori
   Jog Speed XY: Velocità di movimento XY
   Jog Speed Z: Velocità di movimento Z
+  Jog Y until filament from the chute lands inside it, then save.: Spostare Y finché il filamento dal condotto cade al suo interno, poi salvare.
   'Jog failed: {}': 'Movimento fallito: {}'
   Jog speeds and step distances: Velocità di movimento e distanze di passo
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Unisciti
@@ -1557,6 +1571,7 @@ translations:
   Keep Spool Info on Eject: Mantieni le informazioni sulla bobina all'espulsione
   Keep current: Mantieni attuale
   Keep the bypass spool visible when bypass is off: Mantieni visibile la bobina di bypass quando il bypass è disabilitato
+  'Keep the filament path clear: the head moves on its own.': 'Mantenere libero il percorso del filamento: la testina si muove da sola.'
   Kick away: 'Espelli'
   Kinematics: Cinematica
   Klipper: Klipper
@@ -2141,6 +2156,7 @@ translations:
   Please enter a valid port (1-65535).: Inserire una porta valida (1-65535).
   Please enter an IP address or hostname.: Inserire un indirizzo IP o hostname.
   Please fill in the highlighted fields: Compila i campi evidenziati
+  Please wait while the printer homes and moves to the start position.: Attendere mentre la stampante si azzera e si sposta alla posizione iniziale.
   Please wait while the printer homes and probes.: Attendere mentre la stampante esegue
     homing e sondaggio.
   Please wait while the printer probes each screw position.: Attendere mentre la stampante
@@ -2163,6 +2179,7 @@ translations:
   Port: Porta
   Position: Posizione
   Position the gantry yourself, then continue: Posiziona manualmente il gantry, poi continua
+  Position the toolhead over the purge chute so filament lands inside it.: Posizionare la testina sopra il condotto di spurgo così che il filamento vi cada dentro.
   Post-Sensor Clear: 'Avanzamento dopo il sensore'
   Power: Alimentazione
   Power Devices: Dispositivi di alimentazione
@@ -2337,6 +2354,7 @@ translations:
   Pulling filament back: Retrazione filamento
   Purge: Spurga
   Purge & Wipe: 'Spurgo e pulizia'
+  Purge Chute Calibration: Calibrazione condotto di spurgo
   Purge Length: 'Lunghezza di spurgo'
   'Purge failed: {}': 'Spurgo fallito: {}'
   Purge may still be running — response timed out: Spurgo potrebbe essere ancora in
@@ -2625,6 +2643,7 @@ translations:
   Saving offsets...: Salvataggio offset...
   Saving will restart Klipper and CANCEL any active print!: Il salvataggio riavvierà
     Klipper e ANNULLERÀ qualsiasi stampa attiva!
+  Saving...: Salvataggio...
   Scan: Scansiona
   Scan Cal: Cal. scan
   Scan QR Code: Scansiona codice QR
@@ -3059,6 +3078,7 @@ translations:
     filamento all'ugello. Riprendi la stampa al termine del cambio.
   The printer halted this print and cannot resume it. Restart from the beginning?: La
     stampante ha interrotto questa stampa e non può riprenderla. Riavviare dall'inizio?
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: La stampante si azzera e fa scorrevolare la taglierina (circa 1 minuto). Mantenere libero il percorso del filamento.
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: La stampante non ha eseguito l'homing. Continuando verrà eseguito l'homing di tutti gli assi, muovendo la testina. Assicurarsi che il piano sia libero.
   The printer lost power during a print. It can resume where it left off.: La stampante
     ha perso l'alimentazione durante una stampa. Può riprendere da dove si è interrotta.
@@ -3070,6 +3090,7 @@ translations:
     stampante ha rifiutato la configurazione del filamento. La stampa non è stata
     avviata.
   The printer's firmware chooses the backup spool itself: Il firmware della stampante sceglie la bobina di riserva
+  The purge chute position has been updated.: La posizione del condotto di spurgo è stata aggiornata.
   The requested position is outside the printer's bounds: 'La posizione richiesta è fuori dai limiti della stampante'
   The right RFID reader in this CFS unit may need service: Il lettore RFID destro di questa unità CFS potrebbe richiedere assistenza
   The runout sensor indicates no filament is loaded. Start print anyway?: Il sensore
@@ -3237,6 +3258,7 @@ translations:
   Toolhead LED: 'LED della testina'
   Toolhead Sensor: Sensore testina
   Toolhead Style: Stile testina
+  Toolhead Y: Testina Y
   Toolhead jam: Inceppamento testina
   Toolhead, G-code, limits, and materials: Testina, G-code, limiti e materiali
   Toolheads: Testine
@@ -3469,6 +3491,7 @@ translations:
   Wizard Error: Errore procedura guidata
   Working...: Elaborazione...
   Write failed at chunk {}: Scrittura fallita al chunk {}
+  Writing the position to the CFS and re-parking the toolhead.: Scrittura della posizione nel CFS e riparcheggio della testina.
   Wrong PIN: PIN errato
   Wrong State: 'Stato errato'
   Wrong media: Supporto errato
@@ -3484,6 +3507,7 @@ translations:
   Y: Y
   Y Axis: Asse Y
   Y Offset: Offset Y
+  Y axis limit reached: Limite asse Y raggiunto
   Y jog blocked at bed edge: Movimento Y bloccato al bordo del piano
   'Y:': 'Y:'
   ? "YOU WIN!\nScore: {}\nTap to play again"

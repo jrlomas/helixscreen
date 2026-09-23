@@ -60,6 +60,7 @@ translations:
   1 min ago: 1分前
   1 minute: 1分
   1 more tap to {} beta features: あと1回タップでベータ機能を{}
+  1. Printer homes all axes (~1 minute): 1. プリンターが全軸の原点復帰を行います（約1分）
   1. Printer homes and probes the bed: 1. プリンターがホーミングしてベッドをプローブします
   1. Printer will home and probe each screw: 1. プリンターがホーミングして各ネジをプローブします
   10 minutes: 10分
@@ -70,6 +71,7 @@ translations:
   180° Upside Down: 180° 上下反転
   2 min: '2分'
   2 minutes: 2分
+  2. Jog the toolhead in Y to line it up with the chute: 2. ツールヘッドをY方向に動かしてシュートに合わせます
   2. Place paper between nozzle and bed: 2. ノズルとベッドの間に紙を置いてください
   2. Results show how much to turn each screw: 2. 各ネジをどれだけ回すか結果が表示されます
   20 minutes: 20分
@@ -80,6 +82,7 @@ translations:
   2D Layers: 2Dレイヤー
   3. Adjust screws, then re-probe to verify: 3. ネジを調整し、再度プローブして確認してください
   3. Lower nozzle until paper drags slightly: 3. 紙がわずかに引っかかるまでノズルを下げてください
+  3. Save writes the position to the CFS: 3. 保存すると位置をCFSに書き込みます
   30 minutes: 30分
   30 seconds: 30秒
   3D Pipes: 3Dパイプ
@@ -375,9 +378,11 @@ translations:
   Calibrate: キャリブレート
   Calibrate All: すべてキャリブレート
   Calibrate Bowden: 'ボーデンをキャリブレート'
+  Calibrate Cutter: カッターをキャリブレート
   Calibrate Encoder: 'エンコーダーをキャリブレート'
   Calibrate Gates: 'ゲートをキャリブレート'
   Calibrate Gear: 'ギアをキャリブレート'
+  Calibrate Purge Chute: パージシュートをキャリブレート
   Calibrate X: X軸をキャリブレート
   Calibrate Y: Y軸をキャリブレート
   Calibrate all tools: すべてのツールをキャリブレート
@@ -390,9 +395,11 @@ translations:
   Calibrating bed mesh...: ベッドメッシュをキャリブレーション中...
   Calibrating {} axis...: '{} 軸をキャリブレーション中...'
   Calibrating...: キャリブレーション中...
+  Calibration: キャリブレーション
   Calibration & Tools: キャリブレーションとツール
   Calibration Complete!: キャリブレーション完了！
   Calibration Failed: キャリブレーション失敗
+  Calibration Saved: キャリブレーションを保存しました
   Calibration and system configuration: 'キャリブレーションとシステム設定'
   Calibration cancelled.: キャリブレーションをキャンセルしました。
   Calibration complete: キャリブレーション完了
@@ -714,7 +721,11 @@ translations:
   Cut filament: フィラメントを切断
   Cut tip: '先端をカット'
   Cutter Enabled: 'カッター有効'
+  Cutter and purge chute calibration: カッターとパージシュートのキャリブレーション
   Cutter blade didn't sever filament: カッターの刃がフィラメントを切断できませんでした
+  Cutter calibration completed: カッターのキャリブレーションが完了しました
+  'Cutter calibration failed: {}': 'カッターのキャリブレーションに失敗しました: {}'
+  'Cutter calibration: {}': 'カッターのキャリブレーション: {}'
   Cutter jam: カッター詰まり
   Cutting: カット中
   Cutting filament...: フィラメントを切断中...
@@ -1220,6 +1231,7 @@ translations:
   Gray: グレー
   Grip filament: フィラメントを把持
   Grip the filament: フィラメントを把持
+  Guide the toolhead to the chute's extrude position: ツールヘッドをシュートの押出し位置へ誘導します
   Guides and reference: ガイドとリファレンス
   H: H
   HOST: ホスト
@@ -1299,6 +1311,7 @@ translations:
   Holding nozzle at {}°C to purge previous filament.: 前のフィラメントをパージするためノズルを {}°C に保持しています。
   Home: ホーム
   Home & Continue: ホーミングして続行
+  Home and sweep the cutter to re-find its position: 原点復帰後にカッターを走査して位置を再検出します
   Home failed: ホーミング失敗
   Home printer first?: 先にプリンターをホーミングしますか？
   Home selector: セレクターをホーミング
@@ -1430,6 +1443,7 @@ translations:
   Job Queue: ジョブキュー
   Jog Speed XY: XY ジョグ速度
   Jog Speed Z: Z ジョグ速度
+  Jog Y until filament from the chute lands inside it, then save.: シュートから出るフィラメントが収まるまでYを動かし、保存してください。
   'Jog failed: {}': 'ジョグに失敗しました: {}'
   Jog speeds and step distances: ジョグ速度とステップ距離
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Discord
@@ -1445,6 +1459,7 @@ translations:
   Keep Spool Info on Eject: 取り出し時にスプール情報を保持
   Keep current: 現状維持
   Keep the bypass spool visible when bypass is off: バイパスオフ時もバイパススプールの表示を維持
+  'Keep the filament path clear: the head moves on its own.': フィラメントの経路を空けてください。ヘッドは自律的に動きます。
   Kick away: 'かき出し'
   Kinematics: キネマティクス
   Klipper: Klipper
@@ -1997,6 +2012,7 @@ translations:
   Please enter a valid port (1-65535).: 有効なポート番号を入力してください (1-65535)。
   Please enter an IP address or hostname.: IPアドレスまたはホスト名を入力してください。
   Please fill in the highlighted fields: ハイライトされた項目を入力してください
+  Please wait while the printer homes and moves to the start position.: プリンターが原点復帰して開始位置へ移動するまでお待ちください。
   Please wait while the printer homes and probes.: プリンターがホーミングとプローブを行う間お待ちください。
   Please wait while the printer probes each screw position.: プリンターが各ネジ位置をプローブする間お待ちください。
   Pluck the front belt on the left: 左のフロントベルトをはじいてください
@@ -2017,6 +2033,7 @@ translations:
   Port: ポート
   Position: 位置
   Position the gantry yourself, then continue: ガントリーを手動で動かしてから続行してください
+  Position the toolhead over the purge chute so filament lands inside it.: パージシュートの上にツールヘッドを配置し、フィラメントが収まるようにします。
   Post-Sensor Clear: 'センサー通過後の追加移動'
   Power: 電源
   Power Devices: 電源デバイス
@@ -2182,6 +2199,7 @@ translations:
   Pulling filament back: フィラメントを引き戻し中
   Purge: パージ
   Purge & Wipe: 'パージとワイプ'
+  Purge Chute Calibration: パージシュートのキャリブレーション
   Purge Length: 'パージ長'
   'Purge failed: {}': 'パージに失敗しました: {}'
   Purge may still be running — response timed out: パージがまだ実行中の可能性があります — 応答タイムアウト
@@ -2449,6 +2467,7 @@ translations:
   Saving config... Klipper will restart.: 設定を保存中... Klipper が再起動します。
   Saving offsets...: オフセットを保存中...
   Saving will restart Klipper and CANCEL any active print!: 保存すると Klipper が再起動し、アクティブな印刷がキャンセルされます！
+  Saving...: 保存中...
   Scan: スキャン
   Scan Cal: スキャンキャリブレーション
   Scan QR Code: QR コードをスキャン
@@ -2843,6 +2862,7 @@ translations:
   ? The print is paused. Changing tools now moves the toolhead and swaps the filament at the nozzle. Resume the print once the change finishes.
   : 印刷は一時停止中です。ここでツールを交換すると、ツールヘッドが移動してノズルのフィラメントが入れ替わります。交換が完了したら印刷を再開してください。
   The printer halted this print and cannot resume it. Restart from the beginning?: プリンターはこの印刷を停止し、再開できません。最初からやり直しますか？
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: プリンターが原点復帰してカッターを走査します（約1分）。フィラメントの経路を空けてください。
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: プリンターがホーミングされていません。続行すると全軸がホーミングされ、ツールヘッドが移動します。ベッドに物がないことを確認してください。
   The printer lost power during a print. It can resume where it left off.: 印刷中にプリンターの電源が失われました。中断した箇所から再開できます。
   The printer lost power during a print. The resumed layer may not line up exactly.: 印刷中にプリンターの電源が失われました。再開したレイヤーがわずかにずれる可能性があります。
@@ -2850,6 +2870,7 @@ translations:
   The printer lost power while printing {}. The resumed layer may not line up exactly.: '{} の印刷中にプリンターの電源が失われました。再開したレイヤーがわずかにずれる可能性があります。'
   The printer rejected the filament configuration. The print was not started.: プリンターがフィラメント設定を拒否しました。印刷は開始されませんでした。
   The printer's firmware chooses the backup spool itself: バックアップスプールはプリンターのファームウェアが選びます
+  The purge chute position has been updated.: パージシュートの位置を更新しました。
   The requested position is outside the printer's bounds: '指定された位置はプリンターの可動範囲外です'
   The right RFID reader in this CFS unit may need service: この CFS ユニットの右側 RFID リーダーは修理が必要な可能性があります
   The runout sensor indicates no filament is loaded. Start print anyway?: フィラメント切れセンサーがフィラメント未装填を検出しました。それでも印刷を開始しますか？
@@ -2992,6 +3013,7 @@ translations:
   Toolhead LED: 'ツールヘッドLED'
   Toolhead Sensor: ツールヘッドセンサー
   Toolhead Style: ツールヘッドスタイル
+  Toolhead Y: ツールヘッド Y
   Toolhead jam: ツールヘッドの詰まり
   Toolhead, G-code, limits, and materials: ツールヘッド、Gコード、制限、材料
   Toolheads: ツールヘッド
@@ -3209,6 +3231,7 @@ translations:
   Wizard Error: ウィザードエラー
   Working...: 処理中...
   Write failed at chunk {}: チャンク {} で書き込みに失敗しました
+  Writing the position to the CFS and re-parking the toolhead.: 位置をCFSに書き込み、ツールヘッドを再パークしています。
   Wrong PIN: PIN が違います
   Wrong State: '状態が不正です'
   Wrong media: 不正なメディア
@@ -3224,6 +3247,7 @@ translations:
   Y: Y
   Y Axis: Y軸
   Y Offset: Yオフセット
+  Y axis limit reached: Y軸のリミットに達しました
   Y jog blocked at bed edge: Y軸移動はベッド端でブロックされました
   'Y:': 'Y:'
   ? "YOU WIN!\nScore: {}\nTap to play again"
