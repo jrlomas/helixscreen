@@ -352,6 +352,7 @@ void AmsBackendSnapmaker::on_started() {
         std::lock_guard<std::mutex> lock(mutex_);
         override_store_ = std::move(loaded.store);
         overrides_ = std::move(loaded.overrides);
+        helix::ams::bind_fingerprint_persistence(rfid_tracker_, override_store_.get(), overrides_);
     }
 }
 
@@ -1625,6 +1626,7 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
         // Parse filament_feed left/right — top-level Klipper objects (not nested in
         // filament_detect) Each contains per-extruder state: filament_detected, channel_state,
         // channel_error
+        int in_progress_head = -1;
         for (const auto& feed_key : {"filament_feed left", "filament_feed right"}) {
             if (status.contains(feed_key) && status[feed_key].is_object()) {
                 const auto& feed = status[feed_key];
@@ -1736,6 +1738,14 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                                 system_info_.operation_phase = info.phase;
                                 changed = true;
                             }
+                        }
+
+                        // Capture the head whose channel is mid-op; the single
+                        // derivation of operation_working_slot below decides
+                        // what the header names from it (batch cursor wins).
+                        if (in_progress_head < 0 && (info.action == AmsAction::LOADING ||
+                                                     info.action == AmsAction::UNLOADING)) {
+                            in_progress_head = i;
                         }
 
                         // "Loaded at toolhead" latch (the core fix). Driven purely
@@ -1928,6 +1938,26 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                     }
                 }
             }
+        }
+
+        // ONE derivation of "the head an operation is working on": the batch
+        // cursor while a plan is active, else the head whose channel reported
+        // an in-progress state, else none. A toolhead-only delta carries no
+        // channel evidence, so mid-op it keeps the previous answer instead of
+        // flapping the header back to the carriage tool. current_slot is NOT
+        // touched here: it stays the carriage answer its other consumers
+        // (bypass unload, filament panel gating, the loaded card) read.
+        int working_slot = -1;
+        if (batch_.active) {
+            working_slot = batch_.heads[batch_.cursor];
+        } else if (system_info_.action == AmsAction::LOADING ||
+                   system_info_.action == AmsAction::UNLOADING) {
+            working_slot =
+                (in_progress_head >= 0) ? in_progress_head : system_info_.operation_working_slot;
+        }
+        if (system_info_.operation_working_slot != working_slot) {
+            system_info_.operation_working_slot = working_slot;
+            changed = true;
         }
 
         // The batch macro's `doing` save-variable is the firmware's own word

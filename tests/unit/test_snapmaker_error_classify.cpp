@@ -12,6 +12,7 @@
 #include "printer_discovery.h"
 #include "printer_state.h"
 #include "recovery_modal_presenter.h"
+#include "rpc_error_correlation.h"
 #include "snapmaker_exceptions.h"
 
 #include "../catch_amalgamated.hpp"
@@ -388,5 +389,216 @@ TEST_CASE_METHOD(LVGLUITestFixture, "a standing fault renders translated",
     REQUIRE(fault_surface_correlation::was_recently_surfaced(expected->detail));
 
     lv_translation_set_language(helix::ui::kIdentityLocale);
+    get_printer_state().set_hardware(PrinterDiscovery{});
+}
+
+// ============================================================================
+// Raise notifications: the firmware pushes every raise on a websocket method
+// the provider table names, and the coded copy must win over the console
+// prose of the same fault.
+// ============================================================================
+
+namespace {
+
+/// The oneshot the hardware raises for SET_PRINT_PREFERENCES during a print.
+nlohmann::json prefs_entry() {
+    return {{"id", 531},
+            {"index", 0},
+            {"code", 16},
+            {"level", 1},
+            {"message", "[print_task_config] not allow to set preferences during printing!"},
+            {"is_persistent", 0}};
+}
+
+/// The frame shape the method callback delivers, method name as measured on a U1.
+nlohmann::json raise_frame(const nlohmann::json& entry) {
+    return {{"method", "notify_exception_notification"},
+            {"params", nlohmann::json::array({entry})}};
+}
+
+constexpr const char* PREFS_CODE = "0001-0531-0000-0016";
+constexpr const char* PREFS_METHOD = "notify_exception_notification";
+constexpr const char* PREFS_MESSAGE =
+    "[print_task_config] not allow to set preferences during printing!";
+
+} // namespace
+
+TEST_CASE("the status list and the raise notification produce the same line",
+          "[snapmaker][fault-notify]") {
+    // One formatter serves both channels, so the same fault reads identically
+    // whichever way it arrives -- and feeds one classify path.
+    const auto standing =
+        faultcodes::read_standing_faults(coded_firmware(), standing_frame({prefs_entry()}));
+    const auto note = faultcodes::read_fault_notification(PREFS_METHOD, prefs_entry());
+    REQUIRE(standing.has_value());
+    REQUIRE(note.has_value());
+    REQUIRE(standing->size() == 1);
+    REQUIRE((*standing)[0] == note->line);
+    REQUIRE(note->line == std::string("!! ") + PREFS_CODE + " " + PREFS_MESSAGE);
+    REQUIRE(note->message == PREFS_MESSAGE);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "a coded raise notification surfaces our wording",
+                 "[snapmaker][fault-notify]") {
+    PrinterDiscovery hw = coded_firmware();
+    get_printer_state().set_hardware(std::move(hw));
+
+    helix::ui::RecoveryModalPresenter presenter(nullptr);
+    helix::GcodeErrorRouter router(nullptr, nullptr, presenter);
+    GcodeErrorRouterTestAccess::on_notify_fault(router, PREFS_METHOD, raise_frame(prefs_entry()));
+    helix::ui::UpdateQueue::instance().drain();
+
+    // The notification alone must surface our wording, not the console prose:
+    // exactly one presentation, naming the coded spelling.
+    process_lvgl(250);
+    REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 1);
+    REQUIRE(GcodeErrorRouterTestAccess::last_deferred_shown(router) == PREFS_CODE);
+
+    const auto wording =
+        snapmaker::exception_message(*snapmaker::decode_exception_code(PREFS_CODE));
+    REQUIRE_FALSE(wording.empty());
+    REQUIRE(fault_surface_correlation::was_recently_surfaced(std::string(wording)));
+    get_printer_state().set_hardware(PrinterDiscovery{});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "prose then its coded raise show only our wording",
+                 "[snapmaker][fault-notify]") {
+    PrinterDiscovery hw = coded_firmware();
+    get_printer_state().set_hardware(std::move(hw));
+
+    helix::ui::RecoveryModalPresenter presenter(nullptr);
+    helix::GcodeErrorRouter router(nullptr, nullptr, presenter);
+    // The console copy first: code-stripped, the generic classifier's to own.
+    GcodeErrorRouterTestAccess::process_line(router, std::string("!! ") + PREFS_MESSAGE);
+    // The coded raise milliseconds later.
+    GcodeErrorRouterTestAccess::on_notify_fault(router, PREFS_METHOD, raise_frame(prefs_entry()));
+    helix::ui::UpdateQueue::instance().drain();
+
+    // Both spellings schedule a held presentation; only the coded one fires.
+    process_lvgl(250);
+    REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 1);
+    REQUIRE(GcodeErrorRouterTestAccess::last_deferred_shown(router) == PREFS_CODE);
+    get_printer_state().set_hardware(PrinterDiscovery{});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "prose alone still surfaces", "[snapmaker][fault-notify]") {
+    PrinterDiscovery hw = coded_firmware();
+    get_printer_state().set_hardware(std::move(hw));
+
+    helix::ui::RecoveryModalPresenter presenter(nullptr);
+    helix::GcodeErrorRouter router(nullptr, nullptr, presenter);
+    // Uncoded prose on a fault-code firmware: held in case a coded twin
+    // follows, shown unchanged when none does.
+    GcodeErrorRouterTestAccess::process_line(router, "!! Must home the printer first");
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(250);
+    REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 1);
+    REQUIRE(GcodeErrorRouterTestAccess::last_deferred_shown(router) ==
+            "Must home the printer first");
+    get_printer_state().set_hardware(PrinterDiscovery{});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "a coded raise after the prose fired shows a second toast",
+                 "[snapmaker][fault-notify]") {
+    PrinterDiscovery hw = coded_firmware();
+    get_printer_state().set_hardware(std::move(hw));
+
+    helix::ui::RecoveryModalPresenter presenter(nullptr);
+    helix::GcodeErrorRouter router(nullptr, nullptr, presenter);
+    GcodeErrorRouterTestAccess::process_line(router, std::string("!! ") + PREFS_MESSAGE);
+    helix::ui::UpdateQueue::instance().drain();
+    // Past the 150ms hold the prose has shown; there is nothing pending to
+    // stand down anymore.
+    process_lvgl(250);
+    REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 1);
+
+    // The coded raise then surfaces ours. Accepted rather than suppressed: the
+    // two spellings share no recorded identity (prose recorded its cleaned
+    // text, the code carries ours), and wording ours over the firmware's
+    // chinglish is worth one transient duplicate toast.
+    GcodeErrorRouterTestAccess::on_notify_fault(router, PREFS_METHOD, raise_frame(prefs_entry()));
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(250);
+    REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 2);
+    REQUIRE(GcodeErrorRouterTestAccess::last_deferred_shown(router) == PREFS_CODE);
+    get_printer_state().set_hardware(PrinterDiscovery{});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "a standing fault and its notification surface once",
+                 "[snapmaker][fault-notify][standing]") {
+    PrinterDiscovery hw = coded_firmware();
+    get_printer_state().set_hardware(std::move(hw));
+
+    helix::ui::RecoveryModalPresenter presenter(nullptr);
+    helix::GcodeErrorRouter router(nullptr, nullptr, presenter);
+    // Notification first: it claims the fault...
+    GcodeErrorRouterTestAccess::on_notify_fault(router, PREFS_METHOD, raise_frame(prefs_entry()));
+    helix::ui::UpdateQueue::instance().drain();
+    // ...then the status list raises the same fault.
+    GcodeErrorRouterTestAccess::on_notify_status_update(
+        router, notify_frame(standing_frame({prefs_entry()})));
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(GcodeErrorRouterTestAccess::standing_fed_count(router) == 1);
+
+    process_lvgl(250);
+    REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 1);
+    REQUIRE(GcodeErrorRouterTestAccess::last_deferred_shown(router) == PREFS_CODE);
+    get_printer_state().set_hardware(PrinterDiscovery{});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "a notification for an already-standing fault surfaces once",
+                 "[snapmaker][fault-notify][standing]") {
+    PrinterDiscovery hw = coded_firmware();
+    get_printer_state().set_hardware(std::move(hw));
+
+    helix::ui::RecoveryModalPresenter presenter(nullptr);
+    helix::GcodeErrorRouter router(nullptr, nullptr, presenter);
+    // Status list first: claims and schedules the presentation...
+    GcodeErrorRouterTestAccess::on_notify_status_update(
+        router, notify_frame(standing_frame({prefs_entry()})));
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(GcodeErrorRouterTestAccess::standing_fed_count(router) == 1);
+    // ...then the notification of the same raise arrives.
+    GcodeErrorRouterTestAccess::on_notify_fault(router, PREFS_METHOD, raise_frame(prefs_entry()));
+    helix::ui::UpdateQueue::instance().drain();
+
+    process_lvgl(250);
+    REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 1);
+    REQUIRE(GcodeErrorRouterTestAccess::last_deferred_shown(router) == PREFS_CODE);
+    get_printer_state().set_hardware(PrinterDiscovery{});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "a caller-handled RPC error suppresses the notification",
+                 "[snapmaker][fault-notify]") {
+    PrinterDiscovery hw = coded_firmware();
+    get_printer_state().set_hardware(std::move(hw));
+
+    // The RPC response carries the firmware's bare message, which is the
+    // notification's identity too, so the pre-check catches it.
+    rpc_error_correlation::record_caller_handled(PREFS_MESSAGE);
+
+    helix::ui::RecoveryModalPresenter presenter(nullptr);
+    helix::GcodeErrorRouter router(nullptr, nullptr, presenter);
+    GcodeErrorRouterTestAccess::on_notify_fault(router, PREFS_METHOD, raise_frame(prefs_entry()));
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(250);
+
+    REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 0);
+    get_printer_state().set_hardware(PrinterDiscovery{});
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "a printer without the code channel ignores notifications",
+                 "[snapmaker][fault-notify]") {
+    PrinterDiscovery plain = hardware_with_objects({"bed_mesh", "quad_gantry_level"});
+    get_printer_state().set_hardware(std::move(plain));
+
+    helix::ui::RecoveryModalPresenter presenter(nullptr);
+    helix::GcodeErrorRouter router(nullptr, nullptr, presenter);
+    GcodeErrorRouterTestAccess::on_notify_fault(router, PREFS_METHOD, raise_frame(prefs_entry()));
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(250);
+
+    REQUIRE(GcodeErrorRouterTestAccess::deferred_shown_count(router) == 0);
+    REQUIRE_FALSE(fault_surface_correlation::was_recently_surfaced(PREFS_MESSAGE));
     get_printer_state().set_hardware(PrinterDiscovery{});
 }

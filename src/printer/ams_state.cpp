@@ -3185,6 +3185,15 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
         if (idx != 0)
             secondary_info = b->get_system_info();
         const AmsSystemInfo& info = (idx == 0) ? primary_info : secondary_info;
+        // While a load/unload works a head, the header names THAT head; at
+        // rest it names the loaded lane. The backend owns the classification
+        // (operation_working_slot); this side only formats it.
+        if (info.operation_working_slot >= 0) {
+            loaded_backend = b.get();
+            slot_index = info.operation_working_slot;
+            filament_loaded = true;
+            break;
+        }
         if (info.filament_loaded) {
             loaded_backend = b.get();
             slot_index = info.current_slot;

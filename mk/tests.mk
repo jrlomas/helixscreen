@@ -379,7 +379,9 @@ clean-tests:
 
 # Build tests — delegates to $(TEST_BIN) which handles -j detection via Phase 1
 test-build: prune-orphan-test-objs $(TEST_BIN)
-	@true
+ifndef SKIP_COMPILE_COMMANDS
+	@$(MERGE_COMPILE_COMMANDS)
+endif
 
 # Delete object files whose test source no longer exists, and drop the binary so
 # it relinks without them.

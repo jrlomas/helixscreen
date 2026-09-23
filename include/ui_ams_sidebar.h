@@ -322,15 +322,24 @@ class AmsOperationSidebar {
 
     // ---- Action button gating (filament_op_slot_resolver.h) -----------------
     // Recompute every gated sidebar button and publish the results on
-    // ams_sidebar_unload_disabled, ams_sidebar_reset_disabled and
-    // ams_sidebar_check_gates_disabled. Unload comes from the same
-    // compute_op_button_gating() rule the filament panel and the AMS context
-    // menu use; Reset and Check slots come from compute_machine_op_gating().
+    // ams_sidebar_unload_disabled, ams_sidebar_load_disabled,
+    // ams_sidebar_reset_disabled and ams_sidebar_check_gates_disabled. Unload
+    // and Load come from the same compute_op_button_gating() rule the filament
+    // panel and the AMS context menu use; Reset and Check slots come from
+    // compute_machine_op_gating().
     void refresh_button_gating();
 
     // Live inputs for refresh_button_gating(), also consulted by handle_unload()
     // so the dispatch cannot run when the button should have been greyed.
+    // Availability is per-backend: on batch-capable backends it is "some head
+    // can unload" (the same per-head answer the picker's rows read); elsewhere
+    // it is the aggregate ams_filament_loaded flag.
     [[nodiscard]] helix::ui::OpButtonState read_unload_gating_state() const;
+
+    // The batch Load button's inputs. Load availability is expressed through
+    // the resolver's slot_has_filament semantics: nullopt when some head is
+    // worth feeding (nothing_to_feed stays clear), false when none is.
+    [[nodiscard]] helix::ui::OpButtonState read_batch_load_gating_state() const;
 
     // The Reset / Check-slots half, likewise re-read by handle_reset() and
     // handle_check_gates(). Neither backend call asks check_preconditions() for
@@ -344,6 +353,13 @@ class AmsOperationSidebar {
 
     // Action handlers
     void handle_unload();
+
+    /// The busy/print refusal every filament-op entry shares. The buttons are
+    /// bound to the gating subjects, but a tap can land in the window between
+    /// an operation starting and the subject settling, so each entry re-checks
+    /// and refuses with copy the user can act on rather than forwarding a
+    /// guaranteed backend rejection. True means "refused, stop here".
+    [[nodiscard]] bool refuse_if_busy_or_printing() const;
     void handle_bypass_toggle();
     void handle_reset();
     void handle_check_gates();
@@ -360,7 +376,7 @@ class AmsOperationSidebar {
     static void on_reset_clicked_cb(lv_event_t* e);
     static void on_check_gates_clicked_cb(lv_event_t* e);
     static void on_settings_clicked_cb(lv_event_t* e);
-    static void on_batch_clicked_cb(lv_event_t* e);
+    static void on_batch_load_clicked_cb(lv_event_t* e);
 };
 
 } // namespace helix::ui

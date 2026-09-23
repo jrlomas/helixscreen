@@ -8,11 +8,16 @@
 #include "ams_state.h"
 #include "ams_types.h"
 #include "hh_defaults.h"
+#include "lane_source_store.h"
 #include "lane_translation.h"
 #include "moonraker_api.h"
+#include "moonraker_api_mock.h"
+#include "moonraker_client_mock.h"
+#include "printer_state.h"
 #include "spoolman_types.h"
 #include "test_helpers/backend_user_edit.h"
 #include "test_helpers/happy_hare_test_access.h"
+#include "test_helpers/print_state_test_drivers.h"
 #include "test_helpers/registered_backend.h"
 #include "test_helpers/seeded_override.h"
 
@@ -48,7 +53,9 @@ namespace helix {
  */
 class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
   public:
-    AmsBackendHappyHareTestHelper() : AmsBackendHappyHare(nullptr, nullptr) {}
+    AmsBackendHappyHareTestHelper(IMoonrakerAPI* api = nullptr,
+                                  helix::IMoonrakerClient* client = nullptr)
+        : AmsBackendHappyHare(api, client) {}
 
     /**
      * @brief Initialize test gates with default SlotInfo
@@ -58,6 +65,18 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
     void feed_mmu_gate_spool_ids(const std::vector<int>& ids) {
         nlohmann::json mmu;
         mmu["gate_spool_id"] = ids;
+        nlohmann::json params;
+        params["mmu"] = mmu;
+        nlohmann::json notification;
+        notification["params"] = nlohmann::json::array({params, 0.0});
+        handle_status_update(notification);
+    }
+
+    /// Feed a printer.mmu gate_status array (0 empty, 1 available, 2 loaded),
+    /// as a status update would.
+    void feed_mmu_gate_status(const std::vector<int>& statuses) {
+        nlohmann::json mmu;
+        mmu["gate_status"] = statuses;
         nlohmann::json params;
         params["mmu"] = mmu;
         nlohmann::json notification;
@@ -117,7 +136,7 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
             slot.global_index = i;
             slot.status = SlotStatus::AVAILABLE;
             slot.mapped_tool = i;
-            slot.color_rgb = AMS_DEFAULT_SLOT_COLOR;
+            slot.color_rgb = helix::AMS_DEFAULT_SLOT_COLOR;
             unit.slots.push_back(slot);
         }
 
@@ -145,7 +164,7 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
             auto* entry = HappyHareTestAccess::slots(*this).get_mut(i);
             if (entry) {
                 entry->info.status = SlotStatus::AVAILABLE;
-                entry->info.color_rgb = AMS_DEFAULT_SLOT_COLOR;
+                entry->info.color_rgb = helix::AMS_DEFAULT_SLOT_COLOR;
             }
         }
         // Set 1:1 tool map
@@ -464,6 +483,237 @@ TEST_CASE("Happy Hare persistence: MMU_GATE_MAP clear Spoolman with -1",
 
     // Should send: SPOOLID=-1 to clear
     REQUIRE(helper.has_gcode_containing("SPOOLID=-1"));
+}
+
+// ============================================================================
+// Clear Spool - the full gate-map wipe
+// ============================================================================
+//
+// The Clear Spool funnel (ui_ams_detail CLEAR_SPOOL) hands the backend a copy
+// of the slot with every identity field blanked. Happy Hare keeps omitted
+// params at their current value, so the clear must name each writable field
+// with an explicit empty value: that is the only form that empties MATERIAL,
+// COLOR, NAME and VENDOR on every HH version.
+// ============================================================================
+
+/// The SlotInfo ui_ams_detail's CLEAR_SPOOL arm hands commit_slot_edit(): a
+/// copy of the live slot with every identity field blanked and the Spoolman
+/// link dropped.
+static SlotInfo funnel_cleared_copy(const SlotInfo& original) {
+    SlotInfo cleared = original;
+    cleared.material.clear();
+    cleared.color_rgb = helix::AMS_DEFAULT_SLOT_COLOR;
+    cleared.color_name.clear();
+    cleared.multi_color_hexes.clear();
+    cleared.brand.clear();
+    cleared.catalog_id.clear();
+    cleared.product_name.clear();
+    cleared.clear_spoolman_link();
+    cleared.remaining_weight_g = -1;
+    cleared.total_weight_g = -1;
+    return cleared;
+}
+
+TEST_CASE("Happy Hare clear: the wipe names every gate-map field", "[ams][happy_hare][clear]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    SlotInfo* slot = helper.get_mutable_slot(0);
+    REQUIRE(slot != nullptr);
+    slot->material = "PLA";
+    slot->color_rgb = 0xFF0000;
+    slot->brand = "Prusa";
+    slot->spool_name = "Galaxy Black";
+    slot->spoolman_id = 123;
+
+    helix::test::apply_edit(helper, 0, funnel_cleared_copy(*slot));
+
+    // Each field named with an explicit empty value (v2/v3 ignore params they
+    // do not fetch; VENDOR is v4-only), SPOOLID=-1 unlinks, QUIET keeps the
+    // echo out of the printer console.
+    REQUIRE(
+        helper.has_gcode("MMU_GATE_MAP GATE=0 MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1"));
+    // RESET ignores GATE on v2/v3 and wipes every gate; TEMP=0 is "keep the
+    // current value"; AVAILABLE=0 marks the gate EMPTY, not unknown.
+    REQUIRE_FALSE(helper.has_gcode_containing("RESET="));
+    REQUIRE_FALSE(helper.has_gcode_containing("TEMP="));
+    REQUIRE_FALSE(helper.has_gcode_containing("AVAILABLE="));
+}
+
+TEST_CASE("Happy Hare clear: a material edit does not take the wipe path",
+          "[ams][happy_hare][clear]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    SlotInfo info;
+    info.material = "PLA";
+
+    helix::test::apply_edit(helper, 0, info);
+
+    // An editor commit carries the whole slot, so a kept material arrives
+    // non-empty and stays on the incremental path.
+    REQUIRE(helper.has_gcode("MMU_GATE_MAP GATE=0 MATERIAL=PLA"));
+    REQUIRE_FALSE(helper.has_gcode_containing("SPOOLID=-1"));
+    REQUIRE_FALSE(helper.has_gcode_containing("QUIET=1"));
+}
+
+TEST_CASE("Happy Hare clear: pull mode skips the firmware write and says so",
+          "[ams][happy_hare][clear]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    helper.test_parse_mmu_state(nlohmann::json{{"spoolman_support", "pull"}});
+    REQUIRE(helper.get_system_info().spoolman_mode == SpoolmanMode::PULL);
+
+    SlotInfo* slot = helper.get_mutable_slot(0);
+    REQUIRE(slot != nullptr);
+    slot->material = "PLA";
+    slot->spoolman_id = 123;
+
+    const AmsError err = helix::test::apply_edit(helper, 0, funnel_cleared_copy(*slot));
+
+    // Happy Hare refuses local writes to material/colour/name/vendor/spool id
+    // in pull mode, and the refusal is logged there rather than returned, so
+    // nothing is sent and the failure is reported here instead.
+    REQUIRE_FALSE(helper.has_gcode_containing("MMU_GATE_MAP"));
+    REQUIRE_FALSE(err.success());
+    REQUIRE(err.partially_applied);
+    // Our own layer is cleared even though the firmware refused.
+    const SlotInfo* after = helper.get_mutable_slot(0);
+    REQUIRE(after->material.empty());
+    REQUIRE(after->spoolman_id == 0);
+}
+
+TEST_CASE("Happy Hare clear: slot stays blank across the status echo", "[ams][happy_hare][clear]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    SlotInfo identity;
+    identity.material = "PLA";
+    identity.color_rgb = 0xFF0000;
+    identity.spoolman_id = 42;
+    REQUIRE(helix::test::apply_edit(helper, 0, identity).success());
+    helper.clear_captured_gcodes();
+
+    REQUIRE(helix::test::apply_edit(helper, 0, funnel_cleared_copy(*helper.get_mutable_slot(0)))
+                .success());
+    REQUIRE(
+        helper.has_gcode("MMU_GATE_MAP GATE=0 MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1"));
+
+    // Live: blank.
+    const SlotInfo* live = helper.get_mutable_slot(0);
+    REQUIRE(live->material.empty());
+    REQUIRE(live->color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+    REQUIRE(live->spoolman_id == 0);
+
+    // The firmware's echo of the cleared gate map: still blank. The cleared
+    // override record must not repaint anything onto it.
+    nlohmann::json echo = {
+        {"gate_material", {"", ""}}, {"gate_color", {"", ""}}, {"gate_spool_id", {0, 0}}};
+    helper.test_parse_mmu_state(echo);
+    const SlotInfo* echoed = helper.get_mutable_slot(0);
+    REQUIRE(echoed->material.empty());
+    REQUIRE(echoed->color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+    REQUIRE(echoed->spoolman_id == 0);
+}
+
+TEST_CASE("Happy Hare editor write: pull mode skips the firmware write and says so",
+          "[ams][happy_hare]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    helper.test_parse_mmu_state(nlohmann::json{{"spoolman_support", "pull"}});
+    REQUIRE(helper.get_system_info().spoolman_mode == SpoolmanMode::PULL);
+
+    SlotInfo edit;
+    edit.material = "PETG";
+    edit.mapped_tool = 1;
+    const AmsError err = helix::test::apply_edit(helper, 0, edit);
+
+    // Same refusal as the clear: Happy Hare ignores local writes to the
+    // gate-map fields in pull mode and only logs it, so nothing is sent and
+    // the failure is reported here instead of a success.
+    REQUIRE_FALSE(helper.has_gcode_containing("MMU_GATE_MAP"));
+    REQUIRE_FALSE(err.success());
+    REQUIRE(err.partially_applied);
+    // A tool remap is not a gate-map field: Happy Hare takes it in pull mode.
+    REQUIRE(helper.has_gcode_containing("MMU_TTG_MAP TOOL=1 GATE=0"));
+    // Our own layer keeps the edit even though the firmware refused.
+    const SlotInfo* after = helper.get_mutable_slot(0);
+    REQUIRE(after->material == "PETG");
+    REQUIRE(after->mapped_tool == 1);
+}
+
+TEST_CASE("Happy Hare editor write: pull mode still saves a pure tool remap", "[ams][happy_hare]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    helper.test_parse_mmu_state(nlohmann::json{{"spoolman_support", "pull"}});
+    REQUIRE(helper.get_system_info().spoolman_mode == SpoolmanMode::PULL);
+
+    SlotInfo edit;
+    edit.mapped_tool = 1;
+    const AmsError err = helix::test::apply_edit(helper, 0, edit);
+
+    // No gate-map field changed, so the pull-mode refusal must not fire.
+    REQUIRE(err.success());
+    REQUIRE(helper.has_gcode_containing("MMU_TTG_MAP TOOL=1 GATE=0"));
+    REQUIRE_FALSE(helper.has_gcode_containing("MMU_GATE_MAP"));
+}
+
+namespace {
+/// A backend wired to a real PrinterState whose wire can be driven to
+/// PRINTING - the mid-print guard reads api_->printer_state(), which needs a
+/// non-null api.
+struct PrintLifecycleFixture : public LVGLTestFixture {
+    PrintLifecycleFixture() : mock_client(MoonrakerClientMock::PrinterType::VORON_24) {
+        state.init_subjects(false);
+        api = std::make_unique<MoonrakerAPIMock>(mock_client, state);
+    }
+
+    MoonrakerClientMock mock_client;
+    helix::PrinterState state;
+    std::unique_ptr<MoonrakerAPIMock> api;
+};
+} // namespace
+
+TEST_CASE("Happy Hare clear mid-print: the active gate's firmware write is skipped",
+          "[ams][happy_hare][clear]") {
+    PrintLifecycleFixture fx;
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg(fx.api.get(),
+                                                                             &fx.mock_client);
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+    helper.set_current_slot(0);
+    helix::test::set_wire_state(fx.state, helix::PrintJobState::PRINTING);
+    helix::ui::UpdateQueue::instance().drain();
+
+    for (int i : {0, 1}) {
+        SlotInfo* slot = helper.get_mutable_slot(i);
+        REQUIRE(slot != nullptr);
+        slot->material = "PLA";
+        slot->spoolman_id = 100 + i;
+    }
+
+    // The gate feeding the print: local layer cleared, firmware untouched.
+    const AmsError active =
+        helix::test::apply_edit(helper, 0, funnel_cleared_copy(*helper.get_mutable_slot(0)));
+    REQUIRE_FALSE(active.success());
+    REQUIRE(active.partially_applied);
+    REQUIRE_FALSE(helper.has_gcode_containing("MMU_GATE_MAP"));
+    REQUIRE(helper.get_mutable_slot(0)->material.empty());
+
+    // Any other gate still clears normally.
+    REQUIRE(helix::test::apply_edit(helper, 1, funnel_cleared_copy(*helper.get_mutable_slot(1)))
+                .success());
+    REQUIRE(
+        helper.has_gcode("MMU_GATE_MAP GATE=1 MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1"));
 }
 
 TEST_CASE("Happy Hare persistence: full slot info generates complete command",
@@ -3991,6 +4241,106 @@ TEST_CASE("an outside re-bind takes the old spool's brand off a Happy Hare gate"
 
     CHECK(helper.get_slot_info(1).brand.empty());
     CHECK(helper.get_slot_info(2).brand == "Sunlu");
+}
+
+TEST_CASE("a spool Spoolman denies keeps the Happy Hare gate's brand as remembered",
+          "[ams][happy_hare][happyhare][lane][1672]") {
+    // A spool deleted in Spoolman is bookkeeping, not a spool change: the gate
+    // goes on showing what is loaded. The manager's denial path drops the
+    // record and files what the gate showed as remembered, the way an unlink
+    // that kept the identity does, so the identity stands until an edit or a
+    // spool change replaces it. Both lane shapes - one no one edited and one
+    // carrying a person's own pick - must end up showing the same brand.
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+
+    SpoolInfo spool;
+    spool.id = 42;
+    spool.vendor = "Polymaker";
+    spool.filament_name = "PolyLite PETG";
+    spool.material = "PETG";
+    spool.color_hex = "FF00FF";
+    helix::test::spool_states(helper, 1, spool);
+    helper.repaint_slot_from_lane(1);
+    REQUIRE(helper.get_slot_info(1).brand == "Polymaker");
+
+    SECTION("an unedited gate") {
+        helix::test::spool_denied_on_lane(helper, 1);
+        helper.repaint_slot_from_lane(1);
+        CHECK(helper.get_slot_info(1).brand == "Polymaker");
+
+        // The next gate FRAME must not retire it either: each frame starts
+        // from what the lane holds now, and the lane's remembered record
+        // states it.
+        helper.feed_mmu_gate_status({2, 2, 2, 2});
+        CHECK(helper.get_slot_info(1).brand == "Polymaker");
+    }
+
+    SECTION("a gate a person picked a colour on") {
+        // The editor opens on the lane's current state and moves one field;
+        // the brand stays the server's word while the record stands.
+        SlotInfo edit = helper.get_slot_info(1);
+        edit.color_rgb = 0x1A73E8;
+        edit.color_name = "Sky Blue";
+        REQUIRE(helix::test::apply_edit(helper, 1, edit).success());
+        REQUIRE(helper.has_gate_override(1));
+
+        helix::test::spool_denied_on_lane(helper, 1);
+        helper.repaint_slot_from_lane(1);
+        const SlotInfo after = helper.get_slot_info(1);
+        CHECK(after.brand == "Polymaker");
+        // The person's own pick outranks what is remembered, denial or not.
+        CHECK(after.color_name == "Sky Blue");
+    }
+}
+
+TEST_CASE("a Spoolman record re-filed without its brand clears the Happy Hare gate's brand",
+          "[ams][happy_hare][happyhare][lane][1672]") {
+    // The answer CHANGING is the other half of the contract: a re-filed
+    // record replaces the old one whole, so a server that stopped stating a
+    // brand leaves nothing standing over it, and the gate's SlotInfo - which
+    // persists across frames - must let the brand go rather than keep showing
+    // what an earlier paint wrote.
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+
+    SpoolInfo spool;
+    spool.id = 42;
+    spool.vendor = "Polymaker";
+    spool.filament_name = "PolyLite PETG";
+    spool.material = "PETG";
+    spool.color_hex = "FF00FF";
+    helix::test::spool_states(helper, 1, spool);
+    helper.repaint_slot_from_lane(1);
+    REQUIRE(helper.get_slot_info(1).brand == "Polymaker");
+
+    // The server re-files the spool with no vendor and no spool name: the
+    // record that lands says nothing about either field. With the repaint the
+    // manager runs, nothing states a brand any more.
+    SpoolInfo brandless = spool;
+    brandless.vendor.clear();
+    brandless.filament_name.clear();
+    helix::test::spool_states(helper, 1, brandless);
+    helper.repaint_slot_from_lane(1);
+    CHECK(helper.get_slot_info(1).brand.empty());
+
+    // Restate the record, then re-file it brandless again and let the next
+    // gate FRAME be the first thing that runs: each frame starts from what
+    // the lane holds now, not from what the struct still carries.
+    helix::test::spool_states(helper, 1, spool);
+    helper.repaint_slot_from_lane(1);
+    REQUIRE(helper.get_slot_info(1).brand == "Polymaker");
+    helix::test::spool_states(helper, 1, brandless);
+    helper.feed_mmu_gate_status({2, 2, 2, 2});
+    CHECK(helper.get_slot_info(1).brand.empty());
+
+    // A record that states the brand again paints it back, so a server-side
+    // correction still lands.
+    helix::test::spool_states(helper, 1, spool);
+    helper.feed_mmu_gate_status({2, 2, 2, 2});
+    CHECK(helper.get_slot_info(1).brand == "Polymaker");
 }
 
 TEST_CASE("HappyHare override survives a gate-map update that omits identity",

@@ -106,6 +106,7 @@ translations:
   A newer version of the helper macros is available: 'È disponibile una versione più recente delle macro di ausilio'
   A picture of your printer: Immagine della tua stampante
   A print is in progress - restart still pending: 'Stampa in corso - riavvio in attesa'
+  A print is running on this gate. HelixScreen cleared its own copy; clear it again once the print finishes.: Una stampa è in corso su questo gate. HelixScreen ha svuotato la propria copia; svuotalo di nuovo a stampa terminata.
   A spool may be tangled or the drive gear is jammed: Una bobina potrebbe essere aggrovigliata o l'ingranaggio di trascinamento è bloccato
   ABS: ABS
   ACCELEROMETERS: ACCELEROMETRI
@@ -738,7 +739,9 @@ translations:
   Could not update filaments: Impossibile aggiornare i filamenti
   Could not verify Spoolman status. Moonraker may still be restarting.: Impossibile
     verificare lo stato di Spoolman. Moonraker potrebbe essere ancora in riavvio.
+  Couldn't clear the printer's gate map: Impossibile svuotare la mappa dei gate della stampante
   Couldn't save the material name: 'Impossibile salvare il nome del materiale'
+  Couldn't save the printer's gate map: Impossibile salvare la mappa dei gate della stampante
   Couldn't save to Spoolman. Nothing changed on this printer.: Impossibile salvare su Spoolman. Nulla è stato modificato su questa stampante.
   Cover open: Coperchio aperto
   Crash Report: Rapporto di crash
@@ -1636,7 +1639,6 @@ translations:
   Listening: In ascolto
   Live view from your webcam: Vista live dalla webcam
   Load: Carica
-  Load / Unload: Carica / Scarica
   Load Failed: 'Caricamento non riuscito'
   Load Filament: Carica filamento
   Load a filament first before trying to unload: Prima carica il filamento, poi prova a scaricarlo
@@ -2294,6 +2296,7 @@ translations:
   Printing test label...: Stampa etichetta di prova...
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: Stampare
     con il materiale sbagliato può causare ostruzioni, scarsa adesione o stampe fallite.
+  'Printing: start after this job': 'In stampa: avvia dopo questa stampa'
   Prints: Stampe
   Prints Trend: Tendenza stampe
   'Private:': 'Privato:'
@@ -3135,6 +3138,8 @@ translations:
     stampa richiede circa %.0fg ma la bobina ne ha circa %.0fg rimanenti. Avviare
     comunque?
   This printer cannot calibrate tool offsets automatically: Questa stampante non può calibrare automaticamente gli offset degli strumenti
+  This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.: Questa stampante riempie i suoi gate da Spoolman. HelixScreen ha svuotato la propria copia; rimuovi la bobina in Spoolman.
+  This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.: Questa stampante riempie i suoi gate da Spoolman. Modifica colore, materiale e bobina in Spoolman.
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : Questa stampante sembra una {} (affidabilità {}%), ma è configurata come {}. Un tipo errato applica opzioni pre-stampa e preset errati.
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
@@ -3611,6 +3616,7 @@ translations:
   '{} heater turned off': Riscaldatore {} spento
   '{} is asking to connect to this printer.': '{} chiede di connettersi a questa stampante.'
   '{} is blocked — manual intervention required': '{}: blocco — intervento manuale richiesto'
+  '{} is feeding the current print. Clear it after the print ends.': ''
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} è installato ma il passaggio alla bobina di riserva è disattivato, quindi non avverrà alcun cambio automatico.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} è installato, ma non è stato possibile leggere la sua impostazione della bobina di riserva - non contare su un cambio automatico.'
   '{} is not set up on this printer': '{} non è configurato su questa stampante'

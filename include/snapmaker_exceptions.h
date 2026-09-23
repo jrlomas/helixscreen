@@ -70,6 +70,16 @@ struct ActiveException {
 /// without asking this would clear it on every quiet frame.
 [[nodiscard]] bool status_carries_exceptions(const nlohmann::json& status);
 
+/// One fault, whichever channel carried it: an `exceptions` array entry from
+/// the status object, or the entry a raise notification's params carry. Both
+/// use the same field shape. nullopt when the entry is not an object.
+[[nodiscard]] std::optional<ActiveException> read_exception_entry(const nlohmann::json& entry);
+
+/// The console-equivalent line for one fault, `!! LLLL-IIII-XXXX-CCCC <msg>`
+/// in the same format the classify path parses, so a fault read off any
+/// channel feeds through the same pipe a console line takes. Pure.
+[[nodiscard]] std::string coded_line(const ActiveException& fault);
+
 /// The faults currently standing, one ActiveException per array entry. Each
 /// entry's fields arrive as numbers and are read individually; a field that
 /// arrives as any other type reads as unset rather than being parsed.

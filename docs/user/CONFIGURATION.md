@@ -435,6 +435,12 @@ Framebuffer displays (AD5M, K1, K2, CC1, AD5X) rotate by any angle with no meani
 **Default:** `true`
 **Description:** Whether to use the kernel's backlight enable/disable call in addition to setting a brightness level. A few panels wire this signal backwards, so enabling the backlight turns it off. If your screen is inverted — dark when it should be lit, lit when it should be asleep — set this to `false` so brightness alone controls it.
 
+### `backlight_floor_percent`
+**Type:** integer
+**Default:** `0` (`20` on K2 builds)
+**Range:** `0` - `100`
+**Description:** Lowest brightness level the panel can still show, as a percentage of its raw brightness range. Every screen brightness above "off" stays at or above this floor, so the dimmest slider setting dims instead of blacking out; turning the screen off is unaffected. Change it if your panel goes black before the brightness slider reaches its minimum: raise the value until the dimmest setting stays visible. `0` disables the floor. Takes effect after a restart.
+
 ### `screensaver_type`
 **Type:** integer
 **Default:** `1`

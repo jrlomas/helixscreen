@@ -4,9 +4,14 @@
 
 #include "ams_backend_qidi.h"
 #include "ams_types.h"
+#include "filament_slot_override.h"
+#include "filament_slot_override_store.h"
+#include "test_helpers/seeded_override.h"
 
 #include <functional>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -95,6 +100,36 @@ class QidiBoxTestAccess {
     static void set_fw_caps(AmsBackendQidi& b, bool has_m603, bool has_clear_nozzle) {
         b.fw_has_m603_ = has_m603;
         b.fw_has_clear_nozzle_ = has_clear_nozzle;
+    }
+    static void seed_override(AmsBackendQidi& b, int slot_index,
+                              const helix::ams::FilamentSlotOverride& ovr) {
+        {
+            std::lock_guard<std::mutex> lock(b.mutex_);
+            b.overrides_[slot_index] = ovr;
+        }
+        // The backend's own init files both stores together; a fixture that
+        // wrote only this map would leave the lane reading empty.
+        helix::test::file_override_as_lane_records(b, slot_index, ovr);
+    }
+    static std::optional<helix::ams::FilamentSlotOverride> get_override(const AmsBackendQidi& b,
+                                                                        int slot_index) {
+        std::lock_guard<std::mutex> lock(b.mutex_);
+        auto it = b.overrides_.find(slot_index);
+        if (it == b.overrides_.end())
+            return std::nullopt;
+        return it->second;
+    }
+    static void inject_override_store(AmsBackendQidi& b,
+                                      std::unique_ptr<helix::ams::FilamentSlotOverrideStore> s) {
+        b.override_store_ = std::move(s);
+    }
+    // Runs only the startup store load: a null client makes on_started return
+    // immediately after it, skipping the subscription machinery.
+    static void start_load(AmsBackendQidi& b) {
+        b.on_started();
+    }
+    static std::optional<std::string> last_fingerprint(const AmsBackendQidi& b, int slot_index) {
+        return b.rfid_tracker_.baseline(slot_index);
     }
 };
 } // namespace helix

@@ -9,6 +9,8 @@
 namespace helix {
 
 class MotionWidget : public PanelWidget {
+    friend class MotionWidgetTestAccess;
+
   public:
     MotionWidget();
     ~MotionWidget() override;

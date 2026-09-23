@@ -896,9 +896,9 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
-                 "SpoolmanManager: a spool Spoolman denies loses its cached lane record; an "
-                 "unreachable Spoolman does not",
-                 "[spoolman][lane][1653]") {
+                 "SpoolmanManager: a spool Spoolman denies is re-filed as remembered; an "
+                 "unreachable Spoolman leaves the record standing",
+                 "[spoolman][lane][1653][1672]") {
     helix::test::RegisteredBackend<AmsBackendMock> backend(2);
     link(*backend, 0, 1);
     link(*backend, 1, 2);
@@ -910,12 +910,25 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
     helix::ams::ingest(backend.lane(0), cached);
     REQUIRE(helix::ams::lane_sources(backend.lane(0)).spoolman.has_value());
 
-    SECTION("not found drops it") {
+    SECTION("not found stops tracking the spool and keeps what the slot showed") {
+        // A caching backend's struct carries the identity its frames painted
+        // while the record stood; paint the mock's slot the same way.
+        SlotInfo painted = backend->get_slot_info(0);
+        painted.brand = "Cached Brand";
+        painted.material = "PLA";
+        REQUIRE(backend->sync_external_identity(0, painted).success());
+
         remove_server_spool(1);
         poll();
 
         REQUIRE(SpoolmanManager::is_identity_unresolvable(1));
-        CHECK_FALSE(helix::ams::lane_sources(backend.lane(0)).spoolman.has_value());
+        const helix::ams::LaneSources sources = helix::ams::lane_sources(backend.lane(0));
+        CHECK_FALSE(sources.spoolman.has_value());
+        // The lane shows what is loaded: the identity the record supplied is
+        // re-filed as remembered, the way an unlink that kept it files it.
+        REQUIRE(sources.remembered.has_value());
+        CHECK(sources.remembered->brand == "Cached Brand");
+        CHECK(helix::ams::resolve(sources).brand == "Cached Brand");
     }
 
     SECTION("not found for a slot re-bound meanwhile leaves it alone") {
