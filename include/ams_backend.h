@@ -1854,15 +1854,8 @@ class AmsBackend {
      * Spoolman server unlink and the ToolState clear - so this method never
      * stands in for the commit (bundle F2LNLQCC).
      *
-     * Default implementation is a no-op, which the tool changer takes. On a
-     * tool changer that is a decision, not an omission: nothing there can tell
-     * that a user swapped a spool, so a clear signal would have to be invented
-     * and would throw away user data on an event that does not mean what it
-     * would have to mean. A backend whose clear is not yet implemented warns
-     * and leaves the lane's standing record alone, so there the live lane
-     * still shows the user's picks until a restart.
-     *
-     * Safe to call from the UI thread. Backends lock their own mutex_ for the
+     * Every lane-holding backend implements this. Safe to call from the UI
+     * thread. Backends lock their own mutex_ for the
      * in-memory mutation and submit the store clear asynchronously.
      *
      * @param slot_index Slot to clear (0-based, global)

@@ -207,9 +207,10 @@ does neither, and both halves of that are load-bearing:
   fields" is every field, and the merge is trivially "the override wins".
 - **There is deliberately no hardware-event clearing.** Nothing on a tool changer
   can tell that a user swapped a spool - no RFID, no presence transition, no
-  colour reading. So `clear_slot_override()` stays the inherited no-op. That is a
-  decision, not an omission: inventing a clear signal here would throw away user
-  data on an event that does not mean what it would have to mean.
+  colour reading. That is a decision, not an omission: inventing a clear signal
+  here would throw away user data on an event that does not mean what it would
+  have to mean. The user-initiated `clear_slot_override()` is a different thing
+  and is implemented: it drops the store record, the only record there is.
 - **The wipe it fixes is `initialize_tools()`**, which resets every slot to
   `AMS_DEFAULT_SLOT_COLOR` with the tool name as a placeholder `spool_name`, and
   runs on every `set_discovered_tools()`. Overrides are therefore re-layered at
@@ -220,7 +221,7 @@ does neither, and both halves of that are load-bearing:
   records rather than duplicating them.
 
 Every lane-holding backend implements it — IFS, Snapmaker, ACE, CFS, AFC, Happy
-Hare and the mock: reset the lane to machine readings
+Hare, the tool changer and the mock: reset the lane to machine readings
 (`reset_lane_to_machine_readings()`), erase the in-memory entry, reset the
 override-exclusive fields on the live slot (brand, spool name, Spoolman ids,
 weights, colour name, catalog pick) so the clear shows on the next
@@ -228,7 +229,10 @@ weights, colour name, catalog pick) so the clear shows on the next
 namespace. The mock keeps no override records, so its implementation is the
 lane reset and the slot-changed event alone. Colour and material are left
 standing, because those come from the parse and the lane's firmware values
-should surface. `AmsBackendQidi` also implements it, with a firmware half: the
+should surface — except on the tool changer, which has no parse underneath:
+its clear blanks the whole slot, colour and material included, because its
+store is the only record there is. `AmsBackendQidi` also implements it, with
+a firmware half: the
 local clear is the same erase/reset/`clear_async` against the shared
 `lane_data` namespace, and the firmware half is three
 `SAVE_VARIABLE VARIABLE={filament,color,vendor}_slot{n} VALUE=0` writes (row
@@ -456,8 +460,9 @@ Four distinct clear paths, handled separately:
   standing user declarations and the persisted override record — the half an
   edit statement cannot express, because on an unlinked lane a colour pick, a
   typed weight and a colour name never engage as clears
-  (prestonbrown/helixscreen#1661). The tool changer's no-op default keeps
-  today's behaviour there: the lane's user record stands until a restart.
+  (prestonbrown/helixscreen#1661). The tool changer clears its store and
+  nothing else — that store is the only record there is, so its clear has no
+  firmware half.
 - **Hardware-event clear.** Each backend watches its own signal (see the
   integration table) and auto-clears when the signal transitions to
   "different spool". The baseline is recorded on first observation after
