@@ -275,9 +275,6 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     [[nodiscard]] bool has_environment_sensors() const override {
         return true;
     }
-    [[nodiscard]] bool tracks_weight_locally() const override {
-        return false;
-    }
     [[nodiscard]] bool manages_active_spool() const override {
         return false;
     }

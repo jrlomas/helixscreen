@@ -487,17 +487,6 @@ using helix::SlotInfo;
 
 namespace {
 
-/// A backend that keeps its own remaining weight, the way AFC reads one off
-/// its status payload.
-class LocalWeightBackend : public AmsBackendMock {
-  public:
-    using AmsBackendMock::AmsBackendMock;
-
-    [[nodiscard]] bool tracks_weight_locally() const override {
-        return true;
-    }
-};
-
 /// A backend that records every slot it is asked to repaint.
 class RepaintRecordingBackend : public AmsBackendMock {
   public:
@@ -698,8 +687,8 @@ TEST_CASE_METHOD(
 
 TEST_CASE_METHOD(SpoolmanLaneFixture, "SpoolmanManager: the weights a fetch files on a lane",
                  "[spoolman][lane][1653]") {
-    SECTION("a backend that keeps its own remaining weight gets only Spoolman's total") {
-        helix::test::RegisteredBackend<LocalWeightBackend> backend(2);
+    SECTION("a backend that keeps its own remaining weight still gets Spoolman's") {
+        helix::test::RegisteredBackend<AmsBackendMock> backend(2);
         link(*backend, 0, 1);
         state_polymaker_pla(server_spool(1));
 
@@ -708,7 +697,7 @@ TEST_CASE_METHOD(SpoolmanLaneFixture, "SpoolmanManager: the weights a fetch file
         const auto record = helix::ams::lane_sources(backend.lane(0)).spoolman;
         REQUIRE(record.has_value());
         CHECK(record->total_weight_g == 1000.0F);
-        CHECK_FALSE(record->remaining_weight_g.has_value());
+        CHECK(record->remaining_weight_g == 850.0F);
     }
 
     SECTION("a spool Spoolman holds no weight for states no weight") {
@@ -732,6 +721,61 @@ TEST_CASE_METHOD(SpoolmanLaneFixture, "SpoolmanManager: the weights a fetch file
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a linked lane shows Spoolman's weight over the meter's",
+                 "[spoolman][lane][1632]") {
+    helix::test::RegisteredBackend<AmsBackendMock> backend(2);
+    link(*backend, 0, 1);
+    state_polymaker_pla(server_spool(1));
+
+    // The firmware meter files its own number on every frame, before and after
+    // each poll: ingest replaces a source's record whole, so a poll that wrote
+    // Metered and a meter that writes Metered are two writers of one source.
+    const auto file_metered = [&backend](float remaining) {
+        helix::ams::Observation metered(helix::ams::ObservationSource::Metered);
+        metered.remaining_weight_g = remaining;
+        metered.total_weight_g = 1000.0F;
+        helix::ams::ingest(backend.lane(0), metered);
+    };
+
+    file_metered(400.0F);
+    poll();
+    file_metered(390.0F);
+
+    const auto shown = helix::ams::resolve(helix::ams::lane_sources(backend.lane(0)));
+    CHECK(shown.remaining_weight_g == 850.0F);
+    CHECK(shown.total_weight_g == 1000.0F);
+
+    // The server's number moves and the meter keeps filing its own; the lane
+    // keeps showing the server's rather than flipping between the two.
+    server_spool(1).remaining_weight_g = 700.0;
+    poll();
+    file_metered(380.0F);
+
+    CHECK(helix::ams::resolve(helix::ams::lane_sources(backend.lane(0))).remaining_weight_g ==
+          700.0F);
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: an unlinked lane's weight stays the meter's",
+                 "[spoolman][lane][1632]") {
+    helix::test::RegisteredBackend<AmsBackendMock> backend(2);
+    // The mock seeds every slot with a spoolman id; an unlinked lane has to be
+    // made one on purpose.
+    link(*backend, 0, 0);
+    helix::ams::Observation metered(helix::ams::ObservationSource::Metered);
+    metered.remaining_weight_g = 123.0F;
+    metered.total_weight_g = 1000.0F;
+    helix::ams::ingest(backend.lane(0), metered);
+
+    poll();
+
+    CHECK_FALSE(helix::ams::lane_sources(backend.lane(0)).spoolman.has_value());
+    const auto shown = helix::ams::resolve(helix::ams::lane_sources(backend.lane(0)));
+    CHECK(shown.remaining_weight_g == 123.0F);
+    CHECK(shown.total_weight_g == 1000.0F);
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
                  "SpoolmanManager: a linked lane's catalog pick survives a fetch of its spool",
                  "[spoolman][lane][1653]") {
     helix::test::RegisteredBackend<AmsBackendMock> backend(2);
@@ -750,8 +794,7 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
     stored.product_name = "PolyTerra PLA Charcoal";
     helix::test::file_override_as_lane_records(*backend, 0, stored);
 
-    SpoolmanManager::file_spool_on_lane(backend.lane(0), server_spool(1),
-                                        backend->tracks_weight_locally());
+    SpoolmanManager::file_spool_on_lane(backend.lane(0), server_spool(1));
 
     const auto shown = helix::ams::resolve(helix::ams::lane_sources(backend.lane(0)));
     CHECK(shown.catalog_id == "polymaker-polyterra-pla-charcoal");
@@ -974,7 +1017,7 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
-                 "SpoolmanManager: a weight the poll writes on a tool changer reaches the slot's "
+                 "SpoolmanManager: a weight the poll files on a tool changer reaches the slot's "
                  "subjects in the same pass",
                  "[spoolman][toolchanger][slot_refresh]") {
     helix::test::RegisteredBackend<helix::AmsBackendToolChanger> backend(nullptr, nullptr);
@@ -997,15 +1040,16 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
     drain();
     REQUIRE(lv_subject_get_int(ams.get_slot_fill_subject(0)) == 100);
 
-    // The mock answers inside the fetch. One pass of the update queue runs that
-    // answer and nothing the answer queues in turn, so what the subjects show
-    // afterwards is the poll's own refresh.
+    // The server's number moves. The mock answers inside the fetch. One pass of
+    // the update queue runs that answer and nothing the answer queues in turn,
+    // so what the subjects show afterwards is the poll's own refresh.
+    server_spool(1).remaining_weight_g = 700.0;
     fetch();
     helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
-    REQUIRE(backend->get_slot_info(0).remaining_weight_g == 850.0F);
+    REQUIRE(backend->get_slot_info(0).remaining_weight_g == 700.0F);
 
-    CHECK(lv_subject_get_int(ams.get_slot_fill_subject(0)) == 85);
-    CHECK(std::string(lv_subject_get_string(ams.get_slot_remaining_subject(0))) == "850g");
+    CHECK(lv_subject_get_int(ams.get_slot_fill_subject(0)) == 70);
+    CHECK(std::string(lv_subject_get_string(ams.get_slot_remaining_subject(0))) == "700g");
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,

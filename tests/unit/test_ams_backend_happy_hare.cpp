@@ -2367,17 +2367,6 @@ TEST_CASE_METHOD(AmsBackendHappyHareTestHelper, "EMU drying_state as array",
 }
 
 // ============================================================================
-// tracks_weight_locally() — Happy Hare does NOT track weight (no extruder
-// position-based weight decrement like AFC). Spoolman is source of truth.
-// ============================================================================
-
-TEST_CASE("Happy Hare does not track weight locally", "[ams][happy_hare][spoolman]") {
-    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
-    AmsBackendHappyHareTestHelper& helper = *helper_reg;
-    REQUIRE(helper.tracks_weight_locally() == false);
-}
-
-// ============================================================================
 // EMU compatibility — num_gates as integer or array
 // EMU sends num_gates as plain integer (e.g. 8), not comma-separated string.
 // Config format may also send it as a JSON array (e.g. [8]).

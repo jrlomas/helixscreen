@@ -4995,11 +4995,6 @@ TEST_CASE_METHOD(LVGLTestFixture, "SettingsManager afc_unload_after_print round-
     }
 }
 
-TEST_CASE("AFC backend reports tracks_weight_locally=true", "[ams][afc][spoolman]") {
-    AmsBackendAfcTestHelper helper;
-    REQUIRE(helper.tracks_weight_locally() == true);
-}
-
 // ============================================================================
 // Toolchanger mode: AFC_SELECT_TOOL / AFC_UNSELECT_TOOL
 // ============================================================================
