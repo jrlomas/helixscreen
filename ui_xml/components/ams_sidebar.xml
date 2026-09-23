@@ -9,6 +9,7 @@
     Callbacks (registered by AmsOperationSidebar::register_callbacks_static()):
     - ams_sidebar_bypass_toggled: Bypass toggle switch
     - ams_sidebar_unload_clicked: Unload button
+    - ams_sidebar_batch_load_clicked: Load button (batch-capable systems only)
     - ams_sidebar_reset_clicked: Reset button
     - ams_sidebar_check_gates_clicked: Check slots button (Happy Hare only)
     - ams_sidebar_settings_clicked: Settings button
@@ -62,27 +63,37 @@
           <event_cb trigger="value_changed" callback="ams_sidebar_bypass_toggled"/>
         </ui_switch>
       </lv_obj>
-      <!-- Unload Button (full width): unloads the filament in the ACTIVE head.
-           Gated on ams_is_filament_system, which covers every filament system
-           including the Snapmaker U1, so it shows there and unloads one head. -->
+      <!-- Batch Load (parallel-toolhead systems): opens the picker modal in the
+           Load direction; one firmware script covers every ticked head. -->
+      <!-- Disabled state comes from ams_sidebar_load_disabled, which
+           AmsOperationSidebar::refresh_button_gating() computes through the
+           shared compute_op_button_gating() rule: no head worth feeding is the
+           existing nothing_to_feed refusal, and a running op or a print owning
+           the toolhead disables it like every other filament op. -->
+      <ui_button name="btn_batch_load"
+                 width="100%" variant="secondary" icon="arrow_down" text="Load" translation_tag="Load">
+        <bind_flag_if_eq subject="ams_sidebar_supports_batch" flag="hidden" ref_value="0"/>
+        <bind_state_if_eq subject="ams_sidebar_load_disabled" state="disabled" ref_value="1"/>
+        <event_cb trigger="clicked" callback="ams_sidebar_batch_load_clicked"/>
+      </ui_button>
+      <!-- Unload Button (full width): on per-toolhead filament systems (AFC,
+           Happy Hare, CFS, tool changer) it unloads the filament in the ACTIVE
+           head; on batch-capable systems it opens the picker in the Unload
+           direction. One button, not two: the capability branch lives with the
+           gating that already keys on it. Gated on ams_is_filament_system,
+           which covers every filament system including the Snapmaker U1. -->
       <!-- Disabled state comes from ams_sidebar_unload_disabled, which
-           AmsOperationSidebar::refresh_unload_gating() computes through the
-           shared compute_op_button_gating() rule. It folds in the old
-           ams_filament_loaded term plus the two this button never had: an AMS
-           op already running, and a print owning the toolhead. -->
+           AmsOperationSidebar::refresh_button_gating() computes through the
+           shared compute_op_button_gating() rule. On batch backends the
+           availability term is "some head can unload" (the same per-head answer
+           the picker's rows read); elsewhere it is the aggregate
+           ams_filament_loaded flag. Both fold in an AMS op already running and
+           a print owning the toolhead. -->
       <ui_button name="btn_unload"
                  width="100%" variant="secondary" icon="tray_arrow_up" text="Unload" translation_tag="Unload">
         <bind_flag_if_eq subject="ams_is_filament_system" flag="hidden" ref_value="0"/>
         <bind_state_if_eq subject="ams_sidebar_unload_disabled" state="disabled" ref_value="1"/>
         <event_cb trigger="clicked" callback="ams_sidebar_unload_clicked"/>
-      </ui_button>
-      <!-- Batch Load / Unload (parallel-toolhead systems): opens the picker
-           modal; one firmware script covers every ticked head. -->
-      <ui_button name="btn_batch_filament"
-                 width="100%" variant="secondary" icon="swap_vertical" text="Load / Unload"
-                 translation_tag="Load / Unload">
-        <bind_flag_if_eq subject="ams_sidebar_supports_batch" flag="hidden" ref_value="0"/>
-        <event_cb trigger="clicked" callback="ams_sidebar_batch_clicked"/>
       </ui_button>
       <!-- Reset Button (full width) - hidden for tool changers -->
       <!-- Disabled state comes from ams_sidebar_reset_disabled, which

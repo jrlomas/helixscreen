@@ -62,6 +62,7 @@ constexpr const char* HOME_CONFIRM_LOAD_DECLINE_TAG =
  * before lv_deinit()), same shape as ScrewsTiltShareModal's row subjects.
  */
 lv_subject_t s_unload_disabled;
+lv_subject_t s_load_disabled;
 lv_subject_t s_reset_disabled;
 lv_subject_t s_check_gates_disabled;
 lv_subject_t s_supports_batch;
@@ -74,12 +75,14 @@ void init_button_gating_subjects() {
     // Start disabled: nothing is known about the backend or the job until the
     // first refresh, and an over-eager button is the failure that matters here.
     lv_subject_init_int(&s_unload_disabled, 1);
+    lv_subject_init_int(&s_load_disabled, 1);
     lv_subject_init_int(&s_reset_disabled, 1);
     lv_subject_init_int(&s_check_gates_disabled, 1);
     // Start hidden: the batch button exists only on backends that implement
     // batch ops, and no backend is known until the first refresh.
     lv_subject_init_int(&s_supports_batch, 0);
     lv_xml_register_subject(nullptr, "ams_sidebar_unload_disabled", &s_unload_disabled);
+    lv_xml_register_subject(nullptr, "ams_sidebar_load_disabled", &s_load_disabled);
     lv_xml_register_subject(nullptr, "ams_sidebar_reset_disabled", &s_reset_disabled);
     lv_xml_register_subject(nullptr, "ams_sidebar_check_gates_disabled", &s_check_gates_disabled);
     lv_xml_register_subject(nullptr, "ams_sidebar_supports_batch", &s_supports_batch);
@@ -88,6 +91,7 @@ void init_button_gating_subjects() {
     StaticSubjectRegistry::instance().register_deinit("AmsSidebarButtonGating", []() {
         if (s_gating_subjects_initialized && lv_is_initialized()) {
             lv_subject_deinit(&s_unload_disabled);
+            lv_subject_deinit(&s_load_disabled);
             lv_subject_deinit(&s_reset_disabled);
             lv_subject_deinit(&s_check_gates_disabled);
             lv_subject_deinit(&s_supports_batch);
@@ -128,7 +132,7 @@ void AmsOperationSidebar::register_callbacks_static() {
         {"ams_sidebar_reset_clicked", on_reset_clicked_cb},
         {"ams_sidebar_check_gates_clicked", on_check_gates_clicked_cb},
         {"ams_sidebar_settings_clicked", on_settings_clicked_cb},
-        {"ams_sidebar_batch_clicked", on_batch_clicked_cb},
+        {"ams_sidebar_batch_load_clicked", on_batch_load_clicked_cb},
     });
 }
 
@@ -208,8 +212,8 @@ void AmsOperationSidebar::on_settings_clicked_cb(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_END();
 }
 
-void AmsOperationSidebar::on_batch_clicked_cb(lv_event_t* e) {
-    LVGL_SAFE_EVENT_CB_BEGIN("[AmsSidebar] on_batch_clicked");
+void AmsOperationSidebar::on_batch_load_clicked_cb(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[AmsSidebar] on_batch_load_clicked");
     LV_UNUSED(e);
 
     // The button is hidden wherever the backend lacks batch ops, but a tap can
@@ -217,8 +221,8 @@ void AmsOperationSidebar::on_batch_clicked_cb(lv_event_t* e) {
     // guaranteed not_supported refusal.
     AmsBackend* backend = AmsState::instance().get_backend();
     if (backend && backend->supports_batch_filament_ops()) {
-        spdlog::info("[AmsSidebar] Opening batch filament picker");
-        BatchFilamentModal::show_owned();
+        spdlog::info("[AmsSidebar] Opening batch filament picker (Load)");
+        BatchFilamentModal::show_owned(/*for_load=*/true);
     }
 
     LVGL_SAFE_EVENT_CB_END();
@@ -1121,24 +1125,52 @@ void AmsOperationSidebar::refresh_heat_step_display() {
 
 helix::ui::OpButtonState AmsOperationSidebar::read_unload_gating_state() const {
     // The reads live here; the field mapping they feed is
-    // build_unload_gating_state(), so the sidebar's shape — aggregate loaded
-    // flag, always the heated unload — is stated once and stays testable without
-    // an AmsState singleton. The sidebar had no print term at all before, so it
-    // went straight from "always tappable" to "correct" only if it asks the same
-    // question the backend does.
+    // build_unload_gating_state(), so the sidebar's shape — an availability
+    // answer plus the always-heated unload — is stated once and stays testable
+    // without an AmsState singleton.
     AmsBackend* backend = AmsState::instance().get_backend();
 
-    // This button means "unload whatever is active", so the aggregate loaded flag
-    // is its availability — the same signal the XML used to bind directly.
-    lv_subject_t* loaded = AmsState::instance().get_filament_loaded_subject();
+    // On a batch backend this button opens the picker, so its availability is
+    // "some head can unload" — the same per-head answer the picker's rows read
+    // (any_head_for_direction folds prefill_selection, so the two cannot
+    // disagree). Elsewhere this button means "unload whatever is active", so
+    // the aggregate loaded flag is its availability.
+    bool unload_available = false;
+    if (backend && backend->supports_batch_filament_ops()) {
+        unload_available = BatchFilamentModal::any_head_for_direction(
+            BatchFilamentModal::collect_rows(*backend).at_toolhead, /*for_load=*/false);
+    } else {
+        lv_subject_t* loaded = AmsState::instance().get_filament_loaded_subject();
+        unload_available = loaded && lv_subject_get_int(loaded) == 1;
+    }
 
     return helix::ui::build_unload_gating_state(
-        /*filament_loaded=*/loaded && lv_subject_get_int(loaded) == 1,
+        /*filament_loaded=*/unload_available,
         // AmsSystemInfo::is_busy() — the same predicate check_preconditions()
         // refuses on, instead of a fourth open-coded `action != IDLE && != ERROR`.
         /*system_busy=*/backend && backend->get_system_info().is_busy(),
         printer_state_.get_print_lifecycle(),
         /*backend_self_homes=*/backend && backend->filament_ops_self_home());
+}
+
+helix::ui::OpButtonState AmsOperationSidebar::read_batch_load_gating_state() const {
+    AmsBackend* backend = AmsState::instance().get_backend();
+
+    // Load availability rides the resolver's slot_has_filament semantics:
+    // nullopt while some head is worth feeding, false when none is — which
+    // compute_op_button_gating() turns into its existing nothing_to_feed
+    // refusal. slot_is_loaded stays false: the picker targets empty toolheads,
+    // so an already-fed head never disables the batch.
+    helix::ui::OpButtonState state;
+    const bool any_loadable = backend && backend->supports_batch_filament_ops() &&
+                              BatchFilamentModal::any_head_for_direction(
+                                  BatchFilamentModal::collect_rows(*backend).at_toolhead,
+                                  /*for_load=*/true);
+    state.slot_has_filament = any_loadable ? std::nullopt : std::optional<bool>(false);
+    state.system_busy = backend && backend->get_system_info().is_busy();
+    state.print_blocks_op = helix::ui::print_blocks_filament_op(
+        printer_state_.get_print_lifecycle(), backend && backend->filament_ops_self_home());
+    return state;
 }
 
 helix::ui::MachineOpGating AmsOperationSidebar::read_machine_op_gating() const {
@@ -1156,6 +1188,9 @@ void AmsOperationSidebar::refresh_button_gating() {
     const auto gating = helix::ui::compute_op_button_gating(read_unload_gating_state());
     lv_subject_set_int(&s_unload_disabled, gating.unload_disabled ? 1 : 0);
 
+    const auto load = helix::ui::compute_op_button_gating(read_batch_load_gating_state());
+    lv_subject_set_int(&s_load_disabled, load.load_disabled ? 1 : 0);
+
     const auto machine = read_machine_op_gating();
     lv_subject_set_int(&s_reset_disabled, machine.reset_disabled ? 1 : 0);
     lv_subject_set_int(&s_check_gates_disabled, machine.check_gates_disabled ? 1 : 0);
@@ -1167,7 +1202,16 @@ void AmsOperationSidebar::refresh_button_gating() {
 }
 
 void AmsOperationSidebar::handle_unload() {
-    // Active-slot unload (sidebar Unload button). Delegate to the slot overload
+    // On a batch backend this button opens the picker in the Unload direction —
+    // the same modal the Load button opens, with the direction passed through
+    // so the title, prefill and primary button all name Unload.
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (backend && backend->supports_batch_filament_ops()) {
+        BatchFilamentModal::show_owned(/*for_load=*/false);
+        return;
+    }
+
+    // Active-slot unload (per-toolhead backends). Delegate to the slot overload
     // with slot_index = -1 so the stepper-build + backend-call path lives in one
     // place. The IFS backend's unload_filament() ignores the slot index and
     // sends the current-channel toolhead unload (IFS_REMOVE_CURRENT_PRUTOK).

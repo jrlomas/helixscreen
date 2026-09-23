@@ -8,13 +8,51 @@
 #include "ams_types.h"
 #include "display_numbering.h"
 #include "filament_op_slot_resolver.h"
+#include "helix-xml/src/xml/lv_xml.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "static_subject_registry.h"
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <memory>
 
 namespace helix::ui {
+
+namespace {
+
+// The opening direction's copy, published before the picker's XML is created
+// so the freshly bound title and primary button read the right strings.
+// Process-wide rather than a member (same shape as the sidebar's gating
+// subjects): the XML tree bound to these outlives each one-shot instance's
+// exit animation, and an instance-owned subject would be deinit'd out from
+// under a live binding.
+lv_subject_t s_title_text;
+lv_subject_t s_action_text;
+std::string s_title_owned;
+std::string s_action_owned;
+bool s_direction_subjects_initialized = false;
+
+void init_direction_subjects() {
+    if (s_direction_subjects_initialized) {
+        return;
+    }
+    lv_subject_init_pointer(&s_title_text, nullptr);
+    lv_subject_init_pointer(&s_action_text, nullptr);
+    lv_xml_register_subject(nullptr, "batch_filament_title_text", &s_title_text);
+    lv_xml_register_subject(nullptr, "batch_filament_action_text", &s_action_text);
+    s_direction_subjects_initialized = true;
+
+    StaticSubjectRegistry::instance().register_deinit("BatchFilamentModalDirection", []() {
+        if (s_direction_subjects_initialized && lv_is_initialized()) {
+            lv_subject_deinit(&s_title_text);
+            lv_subject_deinit(&s_action_text);
+            s_direction_subjects_initialized = false;
+        }
+    });
+}
+
+} // namespace
 
 // filament_op_eligibility_reason() returns runtime-chosen strings, so the
 // extractor cannot see them at the lv_tr() call site in dispatch(). This never
@@ -27,8 +65,23 @@ static void eligibility_reason_translation_hints_() {
 }
 // clang-format on
 
-bool BatchFilamentModal::show_owned() {
+bool BatchFilamentModal::show_owned(bool for_load) {
+    init_direction_subjects();
+
+    // One lv_tr() per literal: the extractor cannot see keys chosen inside a
+    // ternary, and every key already exists in translations.
+    const char* title = for_load ? lv_tr("Load filament") : lv_tr("Unload filament");
+    const char* action = for_load ? lv_tr("Load") : lv_tr("Unload");
+    // Copy first, publish second: set_pointer fires observers synchronously,
+    // and they read the buffer, so the owned strings must already hold the new
+    // text when they do.
+    s_title_owned = title;
+    s_action_owned = action;
+    lv_subject_set_pointer(&s_title_text, s_title_owned.data());
+    lv_subject_set_pointer(&s_action_text, s_action_owned.data());
+
     auto modal = std::make_unique<BatchFilamentModal>();
+    modal->for_load_ = for_load;
     if (!modal->show(lv_screen_active())) {
         return false; // the unique_ptr frees the never-shown instance
     }
@@ -45,6 +98,12 @@ BatchFilamentModal::prefill_selection(const std::vector<std::optional<bool>>& at
         ticked.push_back(for_load ? !(present && *present) : (present && *present));
     }
     return ticked;
+}
+
+bool BatchFilamentModal::any_head_for_direction(const std::vector<std::optional<bool>>& at_toolhead,
+                                                bool for_load) {
+    const std::vector<bool> ticked = prefill_selection(at_toolhead, for_load);
+    return std::any_of(ticked.begin(), ticked.end(), [](bool tick) { return tick; });
 }
 
 std::vector<int> BatchFilamentModal::selected_slots(const std::vector<std::string>& keys) {
@@ -107,11 +166,10 @@ BatchFilamentModal::BatchRowSource BatchFilamentModal::collect_rows(const AmsBac
 }
 
 void BatchFilamentModal::on_show() {
+    // btn_primary runs the direction this picker was opened in; btn_secondary
+    // is a real Cancel — Modal::on_cancel() just hides.
     wire_ok_button("btn_primary");
     wire_cancel_button("btn_secondary");
-    // Both action buttons dispatch, so Cancel is the only way out that does
-    // nothing. Modal::on_tertiary() already just hides.
-    wire_tertiary_button("btn_tertiary");
 
     AmsBackend* backend = AmsState::instance().get_backend();
     lv_obj_t* container = find_widget("batch_multiselect");
@@ -122,10 +180,7 @@ void BatchFilamentModal::on_show() {
     }
 
     const BatchRowSource rows = collect_rows(*backend);
-    // One tick set serves both buttons, so it favors the direction with
-    // a physical precondition: Unload on the heads that have filament at the
-    // toolhead.
-    const std::vector<bool> ticked = prefill_selection(rows.at_toolhead, /*for_load=*/false);
+    const std::vector<bool> ticked = prefill_selection(rows.at_toolhead, for_load_);
 
     std::vector<MultiSelectItem> items;
     items.reserve(rows.slots.size());
@@ -142,11 +197,7 @@ void BatchFilamentModal::on_show() {
 }
 
 void BatchFilamentModal::on_ok() {
-    dispatch(/*load=*/true);
-}
-
-void BatchFilamentModal::on_cancel() {
-    dispatch(/*load=*/false);
+    dispatch(for_load_);
 }
 
 void BatchFilamentModal::dispatch(bool load) {

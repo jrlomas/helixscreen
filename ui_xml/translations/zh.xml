@@ -1473,7 +1473,6 @@
   <translation tag="Listening" zh="正在监听"/>
   <translation tag="Live view from your webcam" zh="摄像头实时画面"/>
   <translation tag="Load" zh="加载"/>
-  <translation tag="Load / Unload" zh="加载 / 卸载"/>
   <translation tag="Load Failed" zh="装载失败"/>
   <translation tag="Load Filament" zh="加载耗材"/>
   <translation tag="Load a filament first before trying to unload" zh="请先装载耗材，再尝试卸载"/>

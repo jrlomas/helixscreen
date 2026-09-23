@@ -13,9 +13,12 @@
 // ops, so it inherits the claim (exactly one filament op in flight, batch or
 // not) and the print-active refusal. The gate tests here pin that inheritance.
 
+#include "ui_batch_filament_modal.h"
+#include "ui_modal.h"
 #include "ui_update_queue.h"
 
 #include "../lvgl_test_fixture.h"
+#include "../lvgl_ui_test_fixture.h"
 #include "../test_helpers/print_state_test_drivers.h"
 #include "../test_helpers/snapmaker_test_access.h"
 #include "ams_backend.h"
@@ -24,6 +27,7 @@
 #include "ams_error.h"
 #include "ams_types.h"
 #include "app_globals.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
@@ -91,8 +95,12 @@ class ClaimParkingBackend : public helix::AmsBackendSnapmaker {
     bool release_ = false;
 };
 
-struct BatchFixture : public LVGLTestFixture {
-    BatchFixture() : mock_client(MoonrakerClientMock::PrinterType::VORON_24) {
+/// The mock plumbing every batch test drives: a Voron client/API pair plus
+/// the per-channel feeder feeding and the gcode-history reads. Mixed into the
+/// fixture that supplies the LVGL level, so the picker-modal tests (full XML
+/// registration) and the backend tests (bare LVGL) share one setup.
+struct BatchMockHarness {
+    BatchMockHarness() : mock_client(MoonrakerClientMock::PrinterType::VORON_24) {
         state.init_subjects(false);
         api = std::make_unique<MoonrakerAPIMock>(mock_client, state);
     }
@@ -123,12 +131,13 @@ struct BatchFixture : public LVGLTestFixture {
 
     /// A registered Snapmaker backend with the concrete type visible, for
     /// tests that reach what only AmsBackendSnapmaker exposes. Registered
-    /// through AmsState so lane funnels accept its lane ids.
+    /// through AmsState so lane funnels accept its lane ids, and handed the
+    /// mock client/api pair so a dispatch through it records its script.
     helix::AmsBackendSnapmaker& backend() {
         if (!raw_backend_) {
             raw_backend_ =
                 std::make_unique<helix::test::RegisteredBackend<helix::AmsBackendSnapmaker>>(
-                    nullptr, nullptr);
+                    api.get(), &mock_client);
         }
         return **raw_backend_;
     }
@@ -162,6 +171,58 @@ struct BatchFixture : public LVGLTestFixture {
     std::unique_ptr<MoonrakerAPIMock> api;
     std::unique_ptr<helix::test::RegisteredBackend<helix::AmsBackendSnapmaker>> raw_backend_;
 };
+
+struct BatchFixture : public LVGLTestFixture, public BatchMockHarness {};
+
+/// Full production XML registration (LVGLUITestFixture registers every
+/// component), so BatchFilamentModal::show_owned() builds its picker from
+/// batch_filament_modal.xml on the same mock plumbing.
+struct BatchModalFixture : public LVGLUITestFixture, public BatchMockHarness {
+    /// Close the picker and let its ModalStack entry free the one-shot
+    /// instance: the entry frees a tick after the close animation, so pump
+    /// the clock before the next show_owned().
+    void close_picker(lv_obj_t* dialog) {
+        Modal::hide(dialog);
+        process_lvgl(200);
+    }
+};
+
+/// The picker's dialog on the modal stack, or fail naming what is missing.
+lv_obj_t* picker_dialog() {
+    lv_obj_t* dialog = Modal::get_top();
+    REQUIRE(dialog != nullptr);
+    return dialog;
+}
+
+/// Whether row @p key's checkbox is ticked. Rows are `item_<key>` with a
+/// child checkbox named `check` (UiMultiselect's shape).
+bool row_checked(lv_obj_t* dialog, const char* key) {
+    lv_obj_t* row = lv_obj_find_by_name(dialog, ("item_" + std::string(key)).c_str());
+    REQUIRE(row != nullptr);
+    lv_obj_t* check = lv_obj_find_by_name(row, "check");
+    REQUIRE(check != nullptr);
+    return lv_obj_has_state(check, LV_STATE_CHECKED);
+}
+
+/// The caption showing on @p button: its first label child (ui_button's shape).
+std::string button_caption(lv_obj_t* dialog, const char* button) {
+    lv_obj_t* btn = lv_obj_find_by_name(dialog, button);
+    REQUIRE(btn != nullptr);
+    for (uint32_t i = 0; i < lv_obj_get_child_count(btn); ++i) {
+        lv_obj_t* child = lv_obj_get_child(btn, static_cast<int32_t>(i));
+        if (lv_obj_check_type(child, &lv_label_class)) {
+            return lv_label_get_text(child);
+        }
+    }
+    FAIL("no label inside " << button);
+    return {};
+}
+
+void click(lv_obj_t* dialog, const char* button) {
+    lv_obj_t* btn = lv_obj_find_by_name(dialog, button);
+    REQUIRE(btn != nullptr);
+    lv_obj_send_event(btn, LV_EVENT_CLICKED, nullptr);
+}
 
 } // namespace
 
@@ -587,4 +648,88 @@ TEST_CASE_METHOD(BatchFixture, "A standalone unload's header names the unloading
     set_channel(1, "unload_finish", "ok", true, true, false);
     feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
     CHECK(backend().get_system_info().current_slot == 3);
+}
+
+// ============================================================================
+// The picker modal: one direction per open, chosen by the sidebar button that
+// opened it
+// ============================================================================
+
+TEST_CASE_METHOD(BatchModalFixture,
+                 "The batch picker prefills and names the direction it opened in",
+                 "[snapmaker][batch][ams][multiselect]") {
+    // The rig state: heads 0 and 2 sit loaded at their toolheads, 1 and 3 are
+    // fed but not loaded. Each direction must tick its own complement.
+    REQUIRE(backend().start().success());
+    mock_client.clear_gcode_script_history();
+    set_channel(0, "load_finish", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
+    set_channel(1, "preload_finish", "ok", true, true, false);
+    set_channel(2, "load_finish", "ok", true, true, false);
+    set_channel(3, "preload_finish", "ok", true, true, false);
+
+    SECTION("a Load open ticks the heads without filament at the toolhead") {
+        REQUIRE(helix::ui::BatchFilamentModal::show_owned(/*for_load=*/true));
+        lv_obj_t* dialog = picker_dialog();
+        CHECK(std::string(lv_label_get_text(lv_obj_find_by_name(dialog, "batch_title"))) ==
+              lv_tr("Load filament"));
+        CHECK(button_caption(dialog, "btn_primary") == lv_tr("Load"));
+        CHECK_FALSE(row_checked(dialog, "0"));
+        CHECK(row_checked(dialog, "1"));
+        CHECK_FALSE(row_checked(dialog, "2"));
+        CHECK(row_checked(dialog, "3"));
+        close_picker(dialog);
+    }
+    SECTION("an Unload open ticks the heads with filament at the toolhead") {
+        REQUIRE(helix::ui::BatchFilamentModal::show_owned(/*for_load=*/false));
+        lv_obj_t* dialog = picker_dialog();
+        CHECK(std::string(lv_label_get_text(lv_obj_find_by_name(dialog, "batch_title"))) ==
+              lv_tr("Unload filament"));
+        CHECK(button_caption(dialog, "btn_primary") == lv_tr("Unload"));
+        CHECK(row_checked(dialog, "0"));
+        CHECK_FALSE(row_checked(dialog, "1"));
+        CHECK(row_checked(dialog, "2"));
+        CHECK_FALSE(row_checked(dialog, "3"));
+        close_picker(dialog);
+    }
+}
+
+TEST_CASE_METHOD(BatchModalFixture,
+                 "The picker's primary dispatches its direction; Cancel dispatches nothing",
+                 "[snapmaker][batch][ams]") {
+    REQUIRE(backend().start().success());
+    mock_client.clear_gcode_script_history();
+
+    SECTION("a Load open sends one LOAD script for the ticked heads") {
+        for (int slot = 0; slot < 4; ++slot) {
+            set_channel(slot, "preload_finish", "ok", /*detected=*/true, /*module=*/true,
+                        /*no_auto=*/false);
+        }
+        REQUIRE(helix::ui::BatchFilamentModal::show_owned(/*for_load=*/true));
+        lv_obj_t* dialog = picker_dialog();
+        click(dialog, "btn_primary");
+        CHECK(mock_client.last_send_script() == "AUTO_FEEDING EXTRUDER=0 LOAD=1\n"
+                                                "AUTO_FEEDING EXTRUDER=1 LOAD=1\n"
+                                                "AUTO_FEEDING EXTRUDER=2 LOAD=1\n"
+                                                "AUTO_FEEDING EXTRUDER=3 LOAD=1");
+        process_lvgl(200); // free the one-shot instance
+    }
+    SECTION("an Unload open sends the UNLOAD verb") {
+        for (int slot = 0; slot < 4; ++slot) {
+            set_channel(slot, "load_finish", "ok", /*detected=*/true, /*module=*/true,
+                        /*no_auto=*/false);
+        }
+        REQUIRE(helix::ui::BatchFilamentModal::show_owned(/*for_load=*/false));
+        click(picker_dialog(), "btn_primary");
+        CHECK(mock_client.last_send_script() == "AUTO_FEEDING EXTRUDER=0 UNLOAD=1\n"
+                                                "AUTO_FEEDING EXTRUDER=1 UNLOAD=1\n"
+                                                "AUTO_FEEDING EXTRUDER=2 UNLOAD=1\n"
+                                                "AUTO_FEEDING EXTRUDER=3 UNLOAD=1");
+        process_lvgl(200);
+    }
+    SECTION("Cancel closes without sending anything") {
+        REQUIRE(helix::ui::BatchFilamentModal::show_owned(/*for_load=*/true));
+        click(picker_dialog(), "btn_secondary");
+        CHECK(sent_gcodes().empty());
+        process_lvgl(200);
+    }
 }

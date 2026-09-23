@@ -18,14 +18,17 @@ namespace helix::ui {
  * @brief Picker modal for batch filament load/unload
  *
  * Shown on backends whose toolheads feed independently
- * (AmsBackend::supports_batch_filament_ops()): one row per slot, and either
- * button dispatches the whole ticked set as one firmware script.
+ * (AmsBackend::supports_batch_filament_ops()): one row per slot, and the
+ * primary button dispatches the whole ticked set as one firmware script in the
+ * direction the picker was opened in.
  */
 class BatchFilamentModal : public Modal {
   public:
-    /// One-shot owned show: create, populate from the active backend, and hand
-    /// the instance to ModalStack, which frees it when its entry goes.
-    static bool show_owned();
+    /// One-shot owned show in ONE direction: create, name the title and the
+    /// primary button after the direction, prefill from the active backend,
+    /// and hand the instance to ModalStack, which frees it when its entry
+    /// goes. The sidebar's Load and Unload buttons each open this.
+    static bool show_owned(bool for_load);
 
     const char* get_name() const override {
         return "Batch Filament";
@@ -40,6 +43,12 @@ class BatchFilamentModal : public Modal {
     // unloadable — the backend refuses an empty lane, not the picker.
     static std::vector<bool> prefill_selection(const std::vector<std::optional<bool>>& at_toolhead,
                                                bool for_load);
+
+    // Pure: does any head offer this direction? prefill_selection folded to a
+    // single bool, so the sidebar's Load/Unload gating and the picker's
+    // prefills cannot disagree about which direction a head serves.
+    static bool any_head_for_direction(const std::vector<std::optional<bool>>& at_toolhead,
+                                       bool for_load);
 
     // Pure: multiselect keys are slot indices as decimal strings.
     static std::vector<int> selected_slots(const std::vector<std::string>& keys);
@@ -85,14 +94,15 @@ class BatchFilamentModal : public Modal {
   protected:
     void on_show() override;
 
-    /// btn_primary (Load). The ok/cancel hooks are just which row button they
-    /// wire; both dispatch and hide.
+    /// btn_primary: dispatches the direction the picker was opened in.
     void on_ok() override;
-    /// btn_secondary (Unload)
-    void on_cancel() override;
 
   private:
     void dispatch(bool load);
+
+    /// The direction the sidebar opened this picker in: names the title, the
+    /// primary button, the prefill and the dispatch verb.
+    bool for_load_ = false;
 
     UiMultiselect multiselect_;
 };

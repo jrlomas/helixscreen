@@ -65,6 +65,30 @@ TEST_CASE("BatchFilamentModal prefill ticks by direction", "[ams][batch]") {
     }
 }
 
+TEST_CASE("BatchFilamentModal any head answers the direction", "[ams][batch]") {
+    using o = std::optional<bool>;
+    const std::vector<std::optional<bool>> presence{o(true), o(false), o(), o(true)};
+
+    SECTION("unload: a head with filament at the toolhead is enough") {
+        REQUIRE(BatchFilamentModal::any_head_for_direction(presence, false));
+    }
+    SECTION("unload: no head at any toolhead is not") {
+        REQUIRE_FALSE(BatchFilamentModal::any_head_for_direction(
+            std::vector<std::optional<bool>>{o(false), o(false), o()}, false));
+    }
+    SECTION("load: the complement, so the same presence answers true") {
+        REQUIRE(BatchFilamentModal::any_head_for_direction(presence, true));
+    }
+    SECTION("load: every head already at the toolhead leaves nothing to load") {
+        REQUIRE_FALSE(BatchFilamentModal::any_head_for_direction(
+            std::vector<std::optional<bool>>{o(true), o(true)}, true));
+    }
+    SECTION("no slots answer neither direction") {
+        REQUIRE_FALSE(BatchFilamentModal::any_head_for_direction({}, true));
+        REQUIRE_FALSE(BatchFilamentModal::any_head_for_direction({}, false));
+    }
+}
+
 TEST_CASE("BatchFilamentModal collects toolhead state separately from lane presence",
           "[ams][batch]") {
     DisagreeingBackend backend;
