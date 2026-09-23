@@ -1215,9 +1215,8 @@ void AmsOperationSidebar::refresh_button_gating() {
 
 bool AmsOperationSidebar::refuse_if_busy_or_printing() const {
     // The reads behind one shared refusal: an op already running, or a print
-    // owning the toolhead. The messages are unload-worded because the sidebar's
-    // own Unload button was the live field report, but the Load picker needs
-    // the same two stops.
+    // owning the toolhead. The one-tap Unload and both picker directions stop
+    // on the same two conditions; the messages name unloading.
     const auto gating_state = read_unload_gating_state();
     if (gating_state.system_busy) {
         spdlog::info("[AmsSidebar] Filament op refused: an AMS operation is already running");
