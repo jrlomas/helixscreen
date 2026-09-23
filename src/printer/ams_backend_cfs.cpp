@@ -912,6 +912,17 @@ static std::optional<bool> flat_gate_filament_present(const nlohmann::json& box_
     return it->get<bool>();
 }
 
+// The literal string "None" means ABSENT on this module's text fields, and it
+// is not a chosen value: the module builds each profile entry with
+// `str(value.get(key, ""))`, so a key that is present but JSON null
+// stringifies to Python's "None" rather than falling back to the "" default.
+// Every text field can therefore arrive as "None" — surfacing it would put a
+// spool named "None" made of "None" on screen.
+static std::string flat_text_field(const nlohmann::json& slot_json, const char* key) {
+    std::string v = helix::json_util::safe_string(slot_json, key);
+    return v == "None" ? std::string{} : v;
+}
+
 AmsSystemInfo AmsBackendCfs::parse_flat_box_status(const nlohmann::json& box_json) {
     AmsSystemInfo info;
     info.type = AmsType::CFS;
@@ -1058,20 +1069,11 @@ AmsSystemInfo AmsBackendCfs::parse_flat_box_status(const nlohmann::json& box_jso
             // schema states no map of its own, so that pass hands every lane
             // the 1:1 default this line used to write.
 
-            // The literal string "None" means ABSENT on every one of these
-            // fields, and it is not a chosen value: the module builds each
-            // profile entry with `str(value.get(key, ""))`, so a key that is
-            // present but JSON null stringifies to Python's "None" rather than
-            // falling back to the "" default. Every text field can therefore
-            // arrive as "None", not just brand — surfacing it would put a spool
-            // named "None" made of "None" on screen.
-            auto text_field = [&slot_json](const char* key) -> std::string {
-                std::string v = helix::json_util::safe_string(slot_json, key);
-                return v == "None" ? std::string{} : v;
-            };
-            slot.material = text_field("material");
-            slot.brand = text_field("brand");
-            slot.spool_name = text_field("name");
+            // text fields: flat_text_field above owns the "None"-means-absent
+            // rule this module's null-to-"None" stringification creates.
+            slot.material = flat_text_field(slot_json, "material");
+            slot.brand = flat_text_field(slot_json, "brand");
+            slot.spool_name = flat_text_field(slot_json, "name");
             // Colors need no such guard: "None" is not six hex digits, so
             // parse_flat_slot_color already falls back to the default.
             slot.color_rgb =
@@ -1169,6 +1171,49 @@ static std::string build_cfs_slot_uid(const nlohmann::json& unit_json, int local
     if (mat.empty() && color.empty())
         return "";
     return mat + "|" + color;
+}
+
+// ASCII uppercase, the transform slot_set_gcode applies to MATERIAL before the
+// fork's cmd_slot_set sees it. The fork writeback guard composes its expected
+// echo with the same function, so the spelling the box reports and the
+// spelling we expect cannot drift apart.
+static std::string ascii_uppercase(std::string s) {
+    for (char& c : s) {
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    return s;
+}
+
+// Join the flat schema's identity fields into that fingerprint's spelling.
+// Both consumers must agree on it: the payload feed reads what the box
+// reports, and the fork writeback guard reads what _BOX_SLOT_SET pushed, so
+// the echo of our own write classifies as OwnWriteEcho rather than a swap.
+static std::string compose_cfs_flat_uid(const std::string& material, const std::string& brand,
+                                        const std::string& name, bool has_color,
+                                        uint32_t color_rgb) {
+    if (material.empty() && brand.empty() && name.empty() && !has_color)
+        return "";
+    char hex[8];
+    std::snprintf(hex, sizeof(hex), "%06X", color_rgb & 0xFFFFFFu);
+    return material + "|" + brand + "|" + name + "|" + (has_color ? hex : "");
+}
+
+// The flat schema's per-slot fingerprint, fed to the same
+// check_hardware_event_clear path as the stock composite above. The fork's own
+// identity writeback (_BOX_SLOT_SET) writes MATERIAL/BRAND/NAME/COLOR, so
+// those four fields are what distinguishes one tagged bay from another;
+// spoolman_id is excluded because it is a binding, not a tag property, and
+// reconcile_lane_binding owns its rules. All four empty reads as no signal —
+// an occupied bay whose tag did not read is not a fingerprint, for the same
+// reason a stock sentinel read is not (see build_cfs_slot_uid): it must not
+// overwrite the baseline and mask the swap the next good read reports.
+static std::string build_cfs_flat_slot_uid(const nlohmann::json& slot_json) {
+    const auto color =
+        helix::ams::read_lane_color(helix::json_util::safe_string(slot_json, "color"));
+    return compose_cfs_flat_uid(flat_text_field(slot_json, "material"),
+                                flat_text_field(slot_json, "brand"),
+                                flat_text_field(slot_json, "name"),
+                                color.kind == helix::ams::ColorReadingKind::Observed, color.rgb);
 }
 
 // --- handle_status_update ---
@@ -1364,20 +1409,39 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
             // update, no clear) — exactly the behavior we want for incremental
             // updates that only touch a subset of units.
             std::unordered_map<int, std::string> observed_uids;
-            for (int n = 1; n <= 4; ++n) {
-                std::string key = "T" + std::to_string(n);
-                if (!box.contains(key) || !box[key].is_object())
-                    continue;
-                const auto& unit_json = box[key];
-                // safe_string for the same reason as the parse_box_status unit
-                // loop: a null/wrong-typed `state` must degrade to "disconnected",
-                // not throw out of handle_status_update.
-                std::string state = helix::json_util::safe_string(unit_json, "state", "None");
-                if (state == "None" || state == "-1")
-                    continue;
-                for (int i = 0; i < 4; ++i) {
-                    int global_idx = (n - 1) * 4 + i;
-                    observed_uids[global_idx] = build_cfs_slot_uid(unit_json, i);
+            if (is_flat) {
+                // The flat schema has a single unit; its bays are the kept
+                // entries of slots[] numbered by vector position, exactly as
+                // parse_flat_box_status numbers them. The skips are the
+                // parse's own, so a fingerprint can never address a different
+                // bay than the parse put a spool on.
+                auto slots_it = box.find("slots");
+                if (slots_it != box.end() && slots_it->is_array()) {
+                    int position = 0;
+                    for (const auto& slot_json : *slots_it) {
+                        if (!slot_json.is_object() ||
+                            helix::json_util::safe_bool(slot_json, "external", false)) {
+                            continue;
+                        }
+                        observed_uids[position++] = build_cfs_flat_slot_uid(slot_json);
+                    }
+                }
+            } else {
+                for (int n = 1; n <= 4; ++n) {
+                    std::string key = "T" + std::to_string(n);
+                    if (!box.contains(key) || !box[key].is_object())
+                        continue;
+                    const auto& unit_json = box[key];
+                    // safe_string for the same reason as the parse_box_status
+                    // unit loop: a null/wrong-typed `state` must degrade to
+                    // "disconnected", not throw out of handle_status_update.
+                    std::string state = helix::json_util::safe_string(unit_json, "state", "None");
+                    if (state == "None" || state == "-1")
+                        continue;
+                    for (int i = 0; i < 4; ++i) {
+                        int global_idx = (n - 1) * 4 + i;
+                        observed_uids[global_idx] = build_cfs_slot_uid(unit_json, i);
+                    }
                 }
             }
 
@@ -2283,6 +2347,20 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
                     }
                 }
             }
+
+            // Self-wipe guard, same contract as the stock branch below: the
+            // fork's box.py echoes _BOX_SLOT_SET's values back in later status
+            // frames, and that echo is the flat fingerprint changing to exactly
+            // what we pushed. slot_set_gcode uppercases MATERIAL, so the
+            // expectation carries the uppercased spelling the echo will report.
+            // With no baseline yet there is nothing to guard — the first
+            // observation for a slot is always a baseline and never clears.
+            if (!slot_material.empty() && rfid_tracker_.baseline(global_index)) {
+                rfid_tracker_.expect_any_of(
+                    global_index,
+                    {compose_cfs_flat_uid(ascii_uppercase(slot_material), slot_brand, name,
+                                          /*has_color=*/true, color_rgb)});
+            }
         }
         std::string gcode =
             slot_set_gcode(global_index, slot_material, color_rgb, slot_brand, name, spoolman_id);
@@ -2290,7 +2368,15 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
             spdlog::debug("{} slot-set skipped for slot {}", backend_log_tag(), global_index);
             return;
         }
-        execute_gcode(gcode);
+        auto err = execute_gcode(gcode);
+        if (err.result != AmsResult::SUCCESS) {
+            // No echo is coming, so the expectation must not linger and blind
+            // the next genuine change — same reason as the stock failure path.
+            std::lock_guard<std::mutex> lock(mutex_);
+            rfid_tracker_.forget_expected(global_index);
+            spdlog::warn("{} slot-set dispatch failed for slot {}: {}", backend_log_tag(),
+                         global_index, err.technical_msg);
+        }
         return;
     }
 
@@ -2851,10 +2937,7 @@ std::string AmsBackendCfs::slot_set_gcode(int global_slot_index, const std::stri
                       global_slot_index);
         return "";
     }
-    std::string upper = material;
-    for (char& c : upper) {
-        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    }
+    std::string upper = ascii_uppercase(material);
     char color[10];
     std::snprintf(color, sizeof(color), "#%06X", color_rgb & 0xFFFFFFu);
     return "_BOX_SLOT_SET SLOT=" + std::to_string(global_slot_index) +
