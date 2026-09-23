@@ -114,6 +114,12 @@ void ingest(LaneId lane, const Observation& obs);
 /// what they declared earlier still stands. obs.source must be LocalUser;
 /// every other source's only funnel is ingest().
 ///
+/// A field the edit cleared is a withdrawal, not a value: it comes off the
+/// statement and off whatever the user's record already declared for the
+/// field, so nothing sits over the field and the weaker sources show through
+/// immediately. Without the withdrawal the clear would outrank the machine's
+/// own reading until a restart (prestonbrown/helixscreen#1661).
+///
 /// This is the declaration layer: it records the user's authorship as a lane
 /// source record. AmsState::commit_slot_edit (ams_state.h) is the method
 /// layer that performs the edit against every backing store.

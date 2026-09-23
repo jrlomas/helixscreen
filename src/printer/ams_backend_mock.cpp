@@ -1149,6 +1149,14 @@ AmsError AmsBackendMock::apply_user_edit(int slot_index, const SlotInfo& info,
     return write_slot(slot_index, info);
 }
 
+void AmsBackendMock::clear_slot_override(int slot_index) {
+    // The slot table was wiped by the edit this clear rides behind; what can
+    // still outlive it is the lane's user rung, so the clear resets the lane
+    // to machine readings and lets the resync announce the slot.
+    helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
+    emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
+}
+
 AmsError AmsBackendMock::sync_external_identity(int slot_index, const SlotInfo& info) {
     return write_slot(slot_index, info);
 }

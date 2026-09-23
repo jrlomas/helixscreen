@@ -11,9 +11,12 @@
 #include "ui_utils.h"
 
 #include "ams_state.h"
+#include "app_globals.h" // get_printer_state: the print lifecycle the clear guard reads
 #include "display_numbering.h"
-#include "filament_op_dispatch.h" // EXTERNAL_SPOOL_SLOT — the bypass sentinel
+#include "filament_op_dispatch.h"      // EXTERNAL_SPOOL_SLOT: the bypass sentinel
+#include "filament_op_slot_resolver.h" // clear_spool_blocked_by_print: the print guard
 #include "printer_detector.h"
+#include "printer_state.h" // PrinterState, complete for get_print_lifecycle()
 #include "ui/ams_drawing_utils.h"
 
 #if HELIX_HAS_CFS
@@ -775,6 +778,17 @@ bool ams_dispatch_backend_action(AmsContextMenu::MenuAction action, int slot,
             break;
         }
 
+        // The menu greys its Clear button for this case, but this function is
+        // public and its callers can hold a menu built before the print
+        // started, so the guard here is the authority: the lane a job is
+        // drawing from is the lane whose material and colour the print's own
+        // surfaces are displaying (prestonbrown/helixscreen#1661).
+        if (helix::ui::clear_spool_blocked_by_print(get_printer_state().get_print_lifecycle(),
+                                                    backend->slot_is_actively_loaded(slot))) {
+            NOTIFY_WARNING("{}", helix::ui::clear_spool_blocked_hint(backend->lane_noun(), slot));
+            break;
+        }
+
         // Clear spool assignment: reset material/color/spool data, keep slot status.
         // Routed through AmsState::commit_slot_edit so the Spoolman server active
         // spool and the identity cache are cleared too (bundle F2LNLQCC: clearing
@@ -804,6 +818,15 @@ bool ams_dispatch_backend_action(AmsContextMenu::MenuAction action, int slot,
                 static_cast<helix::printer::AmsBackendCfs*>(backend)->clear_box_slot_profile(slot);
             }
 #endif
+            // The commit clears what an edit can state - and, unlinked, a
+            // colour pick, a typed weight or a colour name never engages as a
+            // clear, so the statement leaves the lane's standing user record
+            // holding them. Dropping that record whole is what makes the live
+            // lane read what a restart would show (prestonbrown/helixscreen#1661).
+            // clear_slot_override() carries no server unlink and no ToolState
+            // clear, which is why it rides behind the commit, never instead
+            // of it.
+            backend->clear_slot_override(slot);
             NOTIFY_INFO(lv_tr("{} spool cleared"),
                         helix::ui::lane_label(backend->lane_noun(), slot));
         } else {
