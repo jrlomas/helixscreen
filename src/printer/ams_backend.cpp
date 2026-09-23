@@ -444,11 +444,7 @@ AmsError AmsBackend::commit_user_edit(int slot_index, const SlotInfo& original,
     if (binding_changed && info.spoolman_id <= 0) {
         const helix::ams::FilamentSlotOverride kept = helix::ams::user_override_from_slot_info(
             declaration, applied, applied.material, nullptr);
-        helix::ams::LaneSources reloads =
-            helix::ams::sources_from_record(kept, helix::ams::to_lane_data_record(slot_index, kept),
-                                            helix::ams::LegacyLockKeys::LaneData);
-        reloads.metered.reset();
-        helix::ams::file_lane_sources(lane, reloads);
+        helix::ams::file_kept_identity(lane, slot_index, kept);
     }
 
     // A backend that paints from the lane while it applies an edit painted the
@@ -1007,6 +1003,28 @@ helix::printer::ToolMappingOrigin AmsBackend::tool_mapping_origin() const {
         }
     }
     return helix::printer::ToolMappingOrigin::Unvouched;
+}
+
+const char* filament_op_eligibility_reason(AmsBackend::FilamentOpEligibility e) {
+    switch (e) {
+    case AmsBackend::FilamentOpEligibility::Eligible:
+        return "";
+    case AmsBackend::FilamentOpEligibility::Empty:
+        return "empty";
+    case AmsBackend::FilamentOpEligibility::AlreadyLoaded:
+        return "already loaded";
+    case AmsBackend::FilamentOpEligibility::NotLoaded:
+        return "not loaded";
+    case AmsBackend::FilamentOpEligibility::FeederUnavailable:
+        return "feeder not in automatic mode";
+    case AmsBackend::FilamentOpEligibility::SensorDisabled:
+        return "filament sensor disabled";
+    case AmsBackend::FilamentOpEligibility::Busy:
+        return "busy";
+    case AmsBackend::FilamentOpEligibility::Error:
+        return "feeder error";
+    }
+    return "";
 }
 
 } // namespace helix

@@ -1,9 +1,10 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "auto_screws_tilt_adjust.h"
+#include "snapmaker_screws_tilt.h"
 
 #include "i_moonraker_client.h"
+#include "snapmaker_exceptions.h"
 #include "spdlog/spdlog.h"
 
 #include <algorithm>
@@ -87,7 +88,8 @@ AutoScrewsTiltResults parse_auto_screws_tilt(const nlohmann::json& status,
     return results;
 }
 
-namespace auto_screws {
+namespace snapmaker {
+namespace screws_tilt {
 
 bool stale_calibration_state(int main_state, const std::string& probe_step) {
     if (main_state != MAIN_STATE_SCREWS_TILT_ADJUST) {
@@ -141,8 +143,8 @@ const nlohmann::json* query_status(const nlohmann::json& response) {
 } // namespace
 
 bool plate_still_on_bed(const std::string& error_message) {
-    return error_message.find(PLATE_NOT_REMOVED_CODE) != std::string::npos ||
-           error_message.find(PLATE_NOT_REMOVED_TEXT) != std::string::npos;
+    const auto code = snapmaker::decode_exception_code(error_message);
+    return code && code->id == 530 && code->index == 0 && code->code == 11;
 }
 
 AutoScrewsTiltResults results_from_query(const nlohmann::json& response) {
@@ -238,6 +240,7 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initia
     });
 }
 
-} // namespace auto_screws
+} // namespace screws_tilt
+} // namespace snapmaker
 
 } // namespace helix

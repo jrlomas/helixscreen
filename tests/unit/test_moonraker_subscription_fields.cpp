@@ -579,6 +579,56 @@ TEST_CASE("Subscription: MCU objects narrow to PerformanceSource reads",
     }
 }
 
+TEST_CASE("Subscription: fault-code firmware subscribes its standing-fault object",
+          "[moonraker][subscription]") {
+    SECTION("exception_manager discovered -> subscribed") {
+        // A fault that survived a restart is never printed to the console
+        // again, so the exceptions array in this object is the only channel
+        // that carries it.
+        DiscoveryFixture fx;
+        fx.add("exception_manager", {});
+        json subs = fx.build();
+
+        REQUIRE(subs.contains("exception_manager"));
+    }
+
+    SECTION("no fault-code object -> not subscribed") {
+        // Printers whose firmware does not report structured faults must not
+        // subscribe an object nothing reads.
+        DiscoveryFixture fx;
+        fx.add("gcode_macro START_PRINT", {});
+        fx.add("extruder", {"heater"});
+        json subs = fx.build();
+
+        REQUIRE_FALSE(subs.contains("exception_manager"));
+    }
+}
+
+TEST_CASE("Subscription: mains-monitor firmware subscribes its power-loss object",
+          "[moonraker][subscription]") {
+    SECTION("power_loss_check discovered -> subscribed") {
+        // The debug bundle's printer-state query reads this object, so the
+        // subscription keeps it arriving in status frames too.
+        DiscoveryFixture fx;
+        fx.add("power_loss_check", {});
+        json subs = fx.build();
+
+        REQUIRE(subs.contains("power_loss_check"));
+    }
+
+    SECTION("per-extruder siblings alone -> not subscribed") {
+        // The firmware also publishes power_loss_check e0..e3, all
+        // uninitialised. Only the bare name is the mains monitor; a prefix
+        // match would subscribe a sibling that never takes a reading.
+        DiscoveryFixture fx;
+        fx.add("power_loss_check e0", {});
+        fx.add("power_loss_check e1", {});
+        json subs = fx.build();
+
+        REQUIRE_FALSE(subs.contains("power_loss_check"));
+    }
+}
+
 TEST_CASE("Subscription: ZMOD printers subscribe save_variables for the persisted z-offset",
           "[moonraker][subscription][zmod]") {
     SECTION("SAVE_ZMOD_DATA present -> save_variables subscribed") {
@@ -609,5 +659,39 @@ TEST_CASE("Subscription: ZMOD printers subscribe save_variables for the persiste
         json subs = fx.build();
 
         REQUIRE(subs.contains("save_variables"));
+    }
+}
+
+TEST_CASE("Subscription: the U1 batch macro subscribes under its config-case key",
+          "[moonraker][subscription]") {
+    SECTION("uppercase config subscribes the uppercase object") {
+        DiscoveryFixture fx;
+        fx.add("filament_detect", {});
+        fx.add("gcode_macro AUTO_FEEDING_BATCH", {});
+        json subs = fx.build();
+
+        REQUIRE(subs.contains("gcode_macro AUTO_FEEDING_BATCH"));
+    }
+
+    SECTION("lowercase config subscribes the lowercase object, not a guessed caps key") {
+        // Klipper keeps the config's case in status object keys, so a
+        // subscription spelled in caps never matches — and an object Moonraker
+        // does not know rejects the WHOLE subscription (blank printer state).
+        DiscoveryFixture fx;
+        fx.add("filament_detect", {});
+        fx.add("gcode_macro auto_feeding_batch", {});
+        json subs = fx.build();
+
+        REQUIRE(subs.contains("gcode_macro auto_feeding_batch"));
+        REQUIRE_FALSE(subs.contains("gcode_macro AUTO_FEEDING_BATCH"));
+    }
+
+    SECTION("no batch macro -> no batch object subscribed") {
+        DiscoveryFixture fx;
+        fx.add("filament_detect", {});
+        json subs = fx.build();
+
+        REQUIRE_FALSE(subs.contains("gcode_macro AUTO_FEEDING_BATCH"));
+        REQUIRE_FALSE(subs.contains("gcode_macro auto_feeding_batch"));
     }
 }

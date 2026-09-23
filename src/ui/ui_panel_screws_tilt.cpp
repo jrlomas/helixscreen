@@ -11,10 +11,10 @@
 #include "ui_utils.h"
 
 #include "app_globals.h"
-#include "auto_screws_tilt_adjust.h"
 #include "i_moonraker_api.h"
 #include "i_moonraker_client.h"
 #include "printer_state.h"
+#include "snapmaker_screws_tilt.h"
 #include "static_panel_registry.h"
 #include "theme_manager.h"
 #include "toolhead_homing.h"
@@ -311,7 +311,7 @@ void ScrewsTiltPanel::on_deactivating(DeactivateReason reason) {
         // Gated on the dialect so other printers spend no query on a cancel.
         if (client_ &&
             client_->hardware().screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-            auto_screws::request_exit(*client_);
+            snapmaker::screws_tilt::request_exit(*client_);
         }
     }
 
@@ -457,7 +457,7 @@ void ScrewsTiltPanel::cancel_probing() {
     // in it, refusing unrelated operations. Gated on the dialect so other
     // printers spend no query per cancel.
     if (client_ && client_->hardware().screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-        auto_screws::request_exit(*client_);
+        snapmaker::screws_tilt::request_exit(*client_);
     }
     set_state(State::IDLE);
 }
@@ -808,7 +808,8 @@ void ScrewsTiltPanel::query_screw_thread() {
             // stands until one does, and only the displayed turn count would
             // move - the level verdict is pitch-invariant.
             const json* thread_value = nullptr;
-            for (const char* section_name : {"screws_tilt_adjust", auto_screws::MODULE_NAME}) {
+            for (const char* section_name :
+                 {"screws_tilt_adjust", snapmaker::screws_tilt::MODULE_NAME}) {
                 const auto section = settings.find(section_name);
                 if (section == settings.end() || !section->is_object()) {
                     continue;

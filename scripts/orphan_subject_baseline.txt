@@ -13,16 +13,7 @@
 # Format:  <subject name>  # <registration site>
 abort_state  # src/abort/abort_manager.cpp:63
 about_version_description  # src/ui/ui_settings_about.cpp:102
-active_tool_x_offset  # src/printer/tool_state.cpp:95
-active_tool_x_offset_valid  # src/printer/tool_state.cpp:98
-active_tool_y_offset  # src/printer/tool_state.cpp:96
-active_tool_y_offset_valid  # src/printer/tool_state.cpp:99
-active_tool_z_offset  # src/printer/tool_state.cpp:97
-active_tool_z_offset_valid  # src/printer/tool_state.cpp:100
 ams_env_overlay_preset_text  # src/ui/ui_ams_environment_overlay.cpp:138
-any_tool_x_dirty  # src/printer/tool_state.cpp:101
-any_tool_y_dirty  # src/printer/tool_state.cpp:102
-any_tool_z_dirty  # src/printer/tool_state.cpp:103
 bt_has_results  # src/ui/ui_panel_belt_tension.cpp:259
 detail_view_visible  # src/ui/ui_panel_print_select.cpp:337
 exclude_map_active  # src/ui/ui_panel_print_status.cpp:633

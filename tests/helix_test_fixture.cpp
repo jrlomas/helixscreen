@@ -23,6 +23,7 @@
 #include "runtime_config.h"
 #include "safety_settings_manager.h"
 #include "system_settings_manager.h"
+#include "temperature_sensor_manager.h"
 #include "test_helpers/config_test_access.h"
 #include "test_helpers/emergency_stop_test_access.h"
 #include "test_helpers/print_control_buttons_test_access.h"
@@ -223,7 +224,21 @@ void HelixTestFixture::reset_all() {
     // here the test body's locals are already gone, so draining first would run
     // a queued update_recovery_dialog_content() straight into the freed object.
     // Nulled, its `if (printer_state_ && ...)` guard makes that callback a no-op.
-    EmergencyStopOverlayTestAccess::reset_dependencies(EmergencyStopOverlay::instance());
+    EmergencyStopOverlay& estop = EmergencyStopOverlay::instance();
+    EmergencyStopOverlayTestAccess::reset_dependencies(estop);
+
+    // The same singleton also carries two wall-clock deadlines — the suppression
+    // window and the user-restart window — and the reason a window is holding
+    // back. Production arms those for 10-30s while a test advances lv_tick by
+    // tens of milliseconds, so one armed window outlives every test that follows
+    // it in this binary and gates whether a recovery dialog may appear at all.
+    // The latched reason goes with them: left set, it surfaces a dialog inside a
+    // later test. Cleared centrally for the reason reset_dependencies() is — a
+    // test that arms one cannot be relied on to unwind it past a failed
+    // assertion, which unwinds straight past any trailing cleanup.
+    EmergencyStopOverlayTestAccess::reset_suppression(estop);
+    EmergencyStopOverlayTestAccess::set_restart_in_progress(estop, false);
+    EmergencyStopOverlayTestAccess::reset_pending_recovery_reason(estop);
 
     // Drain any callbacks queued by a prior test before we touch state they read.
     helix::ui::UpdateQueue::instance().drain();
@@ -429,6 +444,21 @@ void HelixTestFixture::reset_all() {
     // every entry dirty here makes the next get_widget_config() reload from
     // Config::df() regardless of which printer a prior test left active.
     helix::PanelWidgetManager::instance().clear_all_panel_configs();
+
+    // TemperatureSensorManager is a process singleton whose sensor list has no
+    // lifetime hook: only another discover() or deinit_subjects() clears it, and
+    // no fixture calls either. A widget built against an empty config
+    // auto-selects get_sensors_sorted().front(), so one sensor left behind makes
+    // a thermistor tile render a live reading and display name where a clean
+    // process renders its placeholders — wider content in the same tile, which
+    // is enough to clip the tightest layout the content-fits sweep measures.
+    //
+    // discover({}) and not TemperatureSensorManagerTestAccess::reset(): reset()
+    // also calls deinit_subjects(), which frees observer nodes on the temp
+    // subjects. Running that for EVERY fixture walks into the same
+    // observer-lifetime trap that keeps PrinterStateTestAccess::reset() out of
+    // this function. discover({}) clears the sensor list and touches no subject.
+    helix::sensors::TemperatureSensorManager::instance().discover({});
 
     // NOTE: NavigationManager has no public reset API (clear_overlay_stack is
     // private; shutdown() is a one-way teardown for app exit). Add a reset

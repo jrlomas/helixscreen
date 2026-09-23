@@ -6,6 +6,8 @@
 #include "ams_state.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 
+#include <spdlog/fmt/fmt.h>
+
 #include <cstdio>
 
 namespace helix::ui {
@@ -92,6 +94,14 @@ std::string lane_label(LaneNoun noun, int index) {
     if (n < 0)
         return {};
     return noun_text(noun) + " " + std::to_string(n);
+}
+
+std::string clear_spool_blocked_hint(LaneNoun noun, int index) {
+    // lv_tr() returns the format string in the active locale; fmt::format
+    // substitutes the label, the same composition NOTIFY_INFO uses for the
+    // "{} spool cleared" toast.
+    return fmt::format(lv_tr("{} is feeding the current print. Clear it after the print ends."),
+                       lane_label(noun, index));
 }
 
 std::string lane_label(LaneNoun noun, std::string_view unit_display_name, int index) {

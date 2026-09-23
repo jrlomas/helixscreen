@@ -87,4 +87,27 @@ inline void spool_states(const AmsBackend& backend, int slot_index, const SpoolI
                                         backend.tracks_weight_locally());
 }
 
+/// Stage what SpoolmanManager runs when the server denies a spool a slot is
+/// bound to: stop tracking the spool, then re-file what the slot showed as
+/// remembered, so the lane goes on showing what is loaded. A backend test has
+/// no manager behind it, so this walks the same funnels the manager does,
+/// from the same identity snapshot: the slot's struct with both binding ids
+/// zeroed, because a kept record that named the spool would file as the
+/// spool's whole identity and stand the record just dropped right back up.
+///
+/// The caller owns the repaint: a caching backend paints from its lane only
+/// through repaint_slot_from_lane() or a frame, and which of those follows is
+/// the question the test is asking.
+inline void spool_denied_on_lane(const AmsBackend& backend, int slot_index) {
+    helix::ams::drop_lane_source(backend.lane_id(slot_index),
+                                 helix::ams::ObservationSource::Spoolman);
+    SlotInfo kept = backend.get_slot_info(slot_index);
+    kept.spoolman_id = 0;
+    kept.spoolman_filament_id = 0;
+    const helix::ams::Observation nothing_declared(helix::ams::ObservationSource::Remembered);
+    helix::ams::file_kept_identity(
+        backend.lane_id(slot_index), slot_index,
+        helix::ams::user_override_from_slot_info(nothing_declared, kept, kept.material, nullptr));
+}
+
 } // namespace helix::test

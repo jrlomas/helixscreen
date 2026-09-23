@@ -3,6 +3,7 @@
 
 #include "gcode_layer_index.h"
 #include "gcode_pause_scan.h"
+#include "test_helpers/unique_temp_dir.h"
 
 #include <clocale>
 #include <fstream>
@@ -15,13 +16,11 @@ using namespace helix::gcode;
 using Catch::Approx;
 
 // Helper to create a temporary G-code file (same pattern as
-// test_gcode_layer_index.cpp, including the pid in the name: concurrent
-// helix-tests processes draw the same rand() sequence).
+// test_gcode_layer_index.cpp).
 class TempPauseScanGCode {
   public:
     explicit TempPauseScanGCode(const std::string& content) {
-        path_ = "/tmp/test_pause_scan_" + std::to_string(getpid()) + "_" + std::to_string(rand()) +
-                ".gcode";
+        path_ = helix::test::unique_temp_file("test_pause_scan", "gcode");
         std::ofstream file(path_);
         file << content;
         file.close();

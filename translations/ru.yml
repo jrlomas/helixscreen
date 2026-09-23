@@ -20,7 +20,7 @@ translations:
   '%s has about %.0fg but %s needs about %.0fg. Start anyway?': '%s: осталось около %.0fг, но для %s нужно около %.0fг. Всё равно начать?'
   '%s has no filament loaded — this print will run out.': 'В %s не загружен филамент — печати не хватит филамента.'
   '%s needs filament in %s, which is empty — this print will run out.': 'Для %s нужен филамент, но %s пуст — печати не хватит филамента.'
-  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': ''
+  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': '%s использует %s, где есть филамент, но не задан материал — принтер не начнёт печать, пока вы его не зададите.'
   '%s: %.0fg of %.0fg needed': '%s: %.0fг из %.0fг'
   '%u layers': '%u слоёв'
   '%zu changes': '%zu изменений'
@@ -105,6 +105,7 @@ translations:
   A newer version of the helper macros is available: 'Доступна более новая версия вспомогательных макросов'
   A picture of your printer: Изображение вашего принтера
   A print is in progress - restart still pending: 'Идёт печать - перезапуск ещё отложен'
+  A print is running on this gate. HelixScreen cleared its own copy; clear it again once the print finishes.: На этом шлюзе идёт печать. HelixScreen очистил свою копию; после окончания печати очистите его снова.
   A spool may be tangled or the drive gear is jammed: Катушка может быть запутана или заклинило приводную шестерню
   ABS: ABS
   ACCELEROMETERS: АКСЕЛЕРОМЕТРЫ
@@ -249,6 +250,7 @@ translations:
     высоты винтов
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: Автопополнение включено, но нет двух слотов с совпадающим филаментом, поэтому переключение при обрыве не сработает
   Auto-render video: Автоматический рендер видео
+  'Auto-replenish filament': 'Автопополнение филамента'
   Auto-tuning Shapers...: Автонастройка Input Shaper...
   Auto-uninstall only works on local Moonraker: Автоудаление работает только с локальным
     Moonraker
@@ -729,7 +731,9 @@ translations:
   Could not update filaments: Не удалось обновить филаменты
   Could not verify Spoolman status. Moonraker may still be restarting.: Не удалось
     проверить статус Spoolman. Moonraker может ещё перезапускаться.
+  Couldn't clear the printer's gate map: Не удалось очистить карту шлюзов принтера
   Couldn't save the material name: 'Не удалось сохранить название материала'
+  Couldn't save the printer's gate map: Не удалось сохранить карту шлюзов принтера
   Couldn't save to Spoolman. Nothing changed on this printer.: Не удалось сохранить в Spoolman. На этом принтере ничего не изменено.
   Cover open: Крышка открыта
   Crash Report: Отчёт о сбое
@@ -805,6 +809,7 @@ translations:
   Deploy: Развернуть
   Describe the issue (optional): Опишите проблему (необязательно)
   Detailed: Подробно
+  'Detect filament tangles': 'Обнаруживать спутывание филамента'
   Detecting plate...: Обнаружение пластины...
   Detecting printer type...: Определение типа принтера...
   Detecting...: Обнаружение...
@@ -1196,7 +1201,7 @@ translations:
   Filament jam detected: Обнаружен затор филамента
   Filament jammed at the extruder gear: Филамент застрял в шестерне экструдера
   Filament never reached the CFS hub sensor: Филамент не дошёл до датчика хаба CFS
-  Filament not set: ''
+  Filament not set: 'Филамент не задан'
   Filament operation failed: Операция с филаментом не удалась
   Filament operation timed out: Операция с филаментом — время ожидания истекло
   Filament ran out: Филамент закончился
@@ -1449,7 +1454,7 @@ translations:
   Initiate blade change procedure: 'Начать процедуру замены лезвия'
   Input: Ввод
   Input Shaper: Input Shaper
-  Input Shaper Calibration: ''
+  Input Shaper Calibration: 'Калибровка Input Shaper''а'
   Input Shaper Help: Справка по Input Shaper
   Input Shaping: Компенсация вибраций
   Input shaper calibration sensors: Датчики калибровки Input Shaper'а
@@ -1616,7 +1621,6 @@ translations:
   Listening: Прослушивание
   Live view from your webcam: Прямая трансляция с веб-камеры
   Load: Загрузить
-  Load / Unload: Загрузить / Выгрузить
   Load Failed: 'Не удалось загрузить'
   Load Filament: Загрузить филамент
   Load a filament first before trying to unload: Сначала загрузите филамент, прежде чем пытаться его выгрузить
@@ -2140,6 +2144,7 @@ translations:
   Power: Питание
   Power Devices: Устройства питания
   Power off the printer or screen: Выключить принтер или экран
+  'Power was lost during the print; the printer stopped and saved its progress': 'Во время печати пропало питание; принтер остановился и сохранил прогресс'
   Pre-heat the extruder first: Сначала прогрейте экструдер
   'Pre-print command failed: {}': 'Ошибка команды перед печатью: {}'
   Pre-print homing...: Парковка перед печатью...
@@ -2163,7 +2168,7 @@ translations:
   Press Abort to stop: Нажмите «Прервать», чтобы остановить
   Press Scan to search: Нажмите «Поиск» для сканирования
   'Pressure:': 'Давление:'
-  Pressure Advance Calibration: ''
+  Pressure Advance Calibration: 'Калибровка Pressure Advance'
   Preview Sounds: Предпросмотр звуков
   Previous: Прежняя
   Price: Цена
@@ -2172,6 +2177,7 @@ translations:
   Priming...: Грунтование...
   Print: Печать
   Print Anyway: Всё равно печатать
+  'Print Behaviour': 'Поведение печати'
   Print Cancelled: Печать отменена
   Print Complete!: Печать завершена!
   Print Completion Alert: Уведомление о завершении печати
@@ -2267,6 +2273,7 @@ translations:
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: Печать
     неподходящим материалом может привести к засорам, плохой адгезии или неудачным
     печатям.
+  'Printing: start after this job': 'Идёт печать: начать после этой печати'
   Prints: Печати
   Prints Trend: Тренд печатей
   'Private:': 'Закрытая:'
@@ -2411,6 +2418,7 @@ translations:
   Remove PIN: Удалить PIN
   Remove Spoolman?: Удалить Spoolman?
   Remove plugin from printer: Удалить плагин с принтера
+  'Remove the PEI sheet from the bed, then start again: probing through the sheet gives wrong results': 'Снимите лист PEI со стола и начните заново: щуп через лист даёт неверные результаты'
   Remove the bypass spool from the toolhead first: 'Сначала извлеките катушку байпаса из печатающей головки'
   Rename: Переименовать
   Rename Fan: Переименовать вентилятор
@@ -2422,6 +2430,7 @@ translations:
   Replace: "Заменить"
   Replace Profile?: "Заменить профиль?"
   Replay Welcome Tour: Повторить приветственный тур
+  'Replenish ignores colour': 'Пополнение игнорирует цвет'
   Replenishing filament...: Пополнение филамента...
   Report saved to crash_report.txt: Отчёт сохранён в crash_report.txt
   Reprint: Повторить печать
@@ -2761,6 +2770,7 @@ translations:
     не отслеживается.
   Size: Размер
   Skip: Пропустить
+  Skipped: 'Пропущено'
   Sleep While Printing: Спящий режим при печати
   Sleep adjusted to match dim timeout: Таймаут сна изменён
   Sliced colors: Цвета из слайсера
@@ -2771,7 +2781,7 @@ translations:
   Slot Not Available: 'Слот недоступен'
   Slot colors, materials, and levels: Цвета, материалы и уровни слотов
   ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
-  : ''
+  : 'Для слота {} не задан тип филамента, поэтому принтер не продолжит печать. Задайте его материал на панели филамента, затем продолжите печать.'
   Slots: Слоты
   Small labels help keep controls calm and focused.: Мелкие надписи помогают сохранять
     элементы управления аккуратными.
@@ -2927,6 +2937,7 @@ translations:
   TOOLS: ИНСТРУМЕНТЫ
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: Занимает 3-5 мин. Не прерывайте.
+  'Tangle sensitivity': 'Чувствительность к спутыванию'
   Tap + to add: Нажмите +, чтобы добавить
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Нажмите «Перезапуск прошивки» для восстановления. На K2 это также перезапускает мост MCU rpi
   Tap again to confirm this orientation: Нажмите ещё раз для подтверждения ориентации
@@ -2984,6 +2995,7 @@ translations:
   Thanks! TOTALLY anonymous usage data helps improve HelixScreen.: Спасибо! ПОЛНОСТЬЮ
     анонимные данные использования помогают улучшить HelixScreen.
   That did not sound like a pluck - try again: Это не было похоже на щипок - попробуйте снова
+  'That setting cannot be changed while a print is running': 'Этот параметр нельзя изменить во время печати'
   That slot cannot stand in for this one: Этот слот не может заменить текущий
   That tool is already loaded: Этот инструмент уже загружен
   The CFS odometer hardware is faulty and needs repair or replacement: Оборудование одометра CFS неисправно и требует ремонта или замены
@@ -3091,6 +3103,8 @@ translations:
   This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?: Для
     этой печати нужно около %.0fг, но на катушке осталось около %.0fг. Всё равно начать?
   This printer cannot calibrate tool offsets automatically: Этот принтер не может калибровать смещения инструментов автоматически
+  This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.: Этот принтер берёт данные шлюзов из Spoolman. HelixScreen очистил свою копию; удалите катушку в Spoolman.
+  This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.: Этот принтер берёт данные шлюзов из Spoolman. Меняйте цвет, материал и катушку в Spoolman.
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : Этот принтер похож на {} (уверенность {}%), но настроен как {}. Неверный тип применяет неправильные параметры перед печатью и пресеты.
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
@@ -3213,6 +3227,7 @@ translations:
   Turbo: Турбо
   Turbo Inner: Турбо (внутренний)
   Turbo Outer: Турбо (внешний)
+  'Turn LED off when the print ends': 'Выключать светодиод по окончании печати'
   Turn Off: Выключить
   Turn Off WiFi?: Выключить WiFi?
   Turn On: Включить
@@ -3261,6 +3276,7 @@ translations:
   Unload Distance: 'Расстояние выгрузки'
   Unload Failed: 'Не удалось выгрузить'
   Unload Filament: Выгрузить филамент
+  'Unload at end': 'Выгружать в конце'
   Unload failed: Ошибка выгрузки
   Unload filament: 'Выгрузка филамента'
   Unload from toolhead first: 'Сначала выгрузите из печатающей головки'
@@ -3476,7 +3492,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z-смещение сохранено — Klipper перезапускается...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: 'уже загружен'
   bed: стол
+  busy: 'занят'
   by Preston Brown: от Preston Brown
   chamber heater: нагреватель камеры
   complete: завершено
@@ -3489,6 +3507,7 @@ translations:
   eSpooler Mode: 'Режим eSpooler'
   eSpooler, clog detection, and sensor settings: 'Настройки eSpooler, обнаружения засора и датчиков'
   elapsed: прошло
+  empty: 'пусто'
   enable: включить
   enabled: включено
   error: ошибка
@@ -3496,14 +3515,19 @@ translations:
   extruder(s): экструдер(ы)
   extruders: экструдеры
   fans: вентиляторы
+  feeder error: 'ошибка фидера'
+  feeder not in automatic mode: 'фидер не в автоматическом режиме'
+  filament sensor disabled: 'датчик филамента отключён'
   heated bed: подогреваемый стол
   idle: простой
   in unit {} slot {}: 'в блоке {} слот {}'
   layers: слои
   left: осталось
+  loaded: 'загружен'
   mm before clog: мм до засора
   needs: требуется
   not detected: не обнаружено
+  not loaded: 'не загружен'
   nozzle: сопло
   of: из
   'off': выкл
@@ -3517,6 +3541,7 @@ translations:
   passive: пассивно
   printer default: по умолчанию для принтера
   prints: печатей
+  ready to load: 'готов к загрузке'
   remaining: осталось
   remaining before clog detection triggers: осталось до срабатывания обнаружения засора
   rendering: рендеринг
@@ -3546,6 +3571,7 @@ translations:
   '{} heater turned off': Нагреватель {} выключен
   '{} is asking to connect to this printer.': '{} запрашивает подключение к этому принтеру.'
   '{} is blocked — manual intervention required': '{}: блокировка — требуется ручное вмешательство'
+  '{} is feeding the current print. Clear it after the print ends.': ''
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} установлен, но переключение на резервную катушку выключено, поэтому автоматической замены не будет.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} установлен, но прочитать его настройку резервной катушки не удалось - не рассчитывайте на автоматическую замену.'
   '{} is not set up on this printer': '{} не настроен на этом принтере'

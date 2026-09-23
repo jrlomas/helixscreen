@@ -18,6 +18,17 @@ class FilamentSlotOverrideStore;
 /// real migration and the fixtures that imitate it read it from here.
 bool file_lane_sources(LaneId lane, const LaneSources& sources);
 
+/// Reload the identity @p kept states onto @p lane the way an unlink that kept
+/// the slot's identity does: as a Remembered filing that persists until an
+/// edit or a spool change replaces it.
+///
+/// Bookkeeping events (an unlink, a spool deleted in Spoolman) stop tracking
+/// the spool, not what is loaded. @p kept must name no spool: a record that
+/// names one files as the spool's whole identity, which would stand a Spoolman
+/// record right back up. Weights are measurements rather than identity, so the
+/// meter's own record is left standing.
+void file_kept_identity(LaneId lane, int slot_index, const FilamentSlotOverride& kept);
+
 /// Classify every lane_data record @p store's last load_blocking() parsed and
 /// file each onto its lane.
 ///

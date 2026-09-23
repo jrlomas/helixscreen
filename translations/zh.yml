@@ -20,7 +20,7 @@ translations:
   '%s has about %.0fg but %s needs about %.0fg. Start anyway?': '%s 约剩 %.0fg，但%s 需要约 %.0fg。仍要开始吗？'
   '%s has no filament loaded — this print will run out.': '%s 未加载耗材 —— 此次打印将会耗尽耗材。'
   '%s needs filament in %s, which is empty — this print will run out.': '%s 需要耗材，但 %s 为空 —— 此次打印将会耗尽耗材。'
-  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': ''
+  '%s uses %s, which has filament but no material set — the printer will not start until you set it.': '%s 使用 %s，该位置有耗材但未设置材料 — 设置后打印机才会开始。'
   '%s: %.0fg of %.0fg needed': '%s：%.0fg / 需要 %.0fg'
   '%u layers': '%u 层'
   '%zu changes': '%zu 项更改'
@@ -101,6 +101,7 @@ translations:
   A newer version of the helper macros is available: '有更新版本的帮助宏可用'
   A picture of your printer: 打印机的图片
   A print is in progress - restart still pending: '打印进行中 - 重启待执行'
+  A print is running on this gate. HelixScreen cleared its own copy; clear it again once the print finishes.: 此通道正在打印中。HelixScreen 已清除本地副本；打印结束后请再次清空。
   A spool may be tangled or the drive gear is jammed: 料盘可能缠绕，或驱动齿轮卡住
   ABS: ABS
   ACCELEROMETERS: 加速度计
@@ -229,6 +230,7 @@ translations:
   Auto-probe or manually check screw heights: 自动探测或手动检查螺丝高度
   Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: 自动续料已开启，但没有两个槽位装有相同的耗材，因此耗材用尽时不会切换
   Auto-render video: 自动渲染视频
+  'Auto-replenish filament': '自动补充耗材'
   Auto-tuning Shapers...: 正在自动校准整形器...
   Auto-uninstall only works on local Moonraker: 自动卸载仅适用于本地 Moonraker
   Automatic: 自动
@@ -669,7 +671,9 @@ translations:
   Could not update filaments: 无法更新耗材
   Could not verify Spoolman status. Moonraker may still be restarting.: 无法验证 Spoolman
     状态。Moonraker 可能仍在重启中。
+  Couldn't clear the printer's gate map: 无法清空打印机的通道映射
   Couldn't save the material name: '无法保存材料名称'
+  Couldn't save the printer's gate map: 无法保存打印机的通道映射
   Couldn't save to Spoolman. Nothing changed on this printer.: 无法保存到 Spoolman。此打印机上未做任何更改。
   Cover open: 盖子未关闭
   Crash Report: 崩溃报告
@@ -745,6 +749,7 @@ translations:
   Deploy: 部署
   Describe the issue (optional): 描述问题（可选）
   Detailed: 详细
+  'Detect filament tangles': '检测耗材打结'
   Detecting plate...: 正在检测热床板...
   Detecting printer type...: 正在检测打印机类型...
   Detecting...: 正在检测...
@@ -1118,7 +1123,7 @@ translations:
   Filament jam detected: 检测到耗材堵塞
   Filament jammed at the extruder gear: 耗材卡在挤出机齿轮处
   Filament never reached the CFS hub sensor: 耗材未到达 CFS 集线器传感器
-  Filament not set: ''
+  Filament not set: '未设置耗材'
   Filament operation failed: 耗材操作失败
   Filament operation timed out: 耗材操作超时
   Filament ran out: 耗材已用尽
@@ -1357,7 +1362,7 @@ translations:
   Initiate blade change procedure: '启动刀片更换流程'
   Input: 输入
   Input Shaper: 输入整形器
-  Input Shaper Calibration: ''
+  Input Shaper Calibration: '输入整形器校准'
   Input Shaper Help: 输入整形器帮助
   Input Shaping: 输入整形
   Input shaper calibration sensors: 输入整形器校准传感器
@@ -1506,7 +1511,6 @@ translations:
   Listening: 正在监听
   Live view from your webcam: 摄像头实时画面
   Load: 加载
-  Load / Unload: 加载 / 卸载
   Load Failed: '装载失败'
   Load Filament: 加载耗材
   Load a filament first before trying to unload: 请先装载耗材，再尝试卸载
@@ -2009,6 +2013,7 @@ translations:
   Power: 电源
   Power Devices: 电源设备
   Power off the printer or screen: 关闭打印机或屏幕电源
+  'Power was lost during the print; the printer stopped and saved its progress': '打印过程中断电，打印机已停止并保存了进度'
   Pre-heat the extruder first: 请先预热挤出机
   'Pre-print command failed: {}': '打印前命令失败: {}'
   Pre-print homing...: 打印前归位...
@@ -2032,7 +2037,7 @@ translations:
   Press Abort to stop: 按中止以停止
   Press Scan to search: 按扫描搜索
   'Pressure:': '压力:'
-  Pressure Advance Calibration: ''
+  Pressure Advance Calibration: '压力提前校准'
   Preview Sounds: 预览声音
   Previous: 上一步
   Price: 价格
@@ -2041,6 +2046,7 @@ translations:
   Priming...: 正在预挤...
   Print: 打印
   Print Anyway: 仍要打印
+  'Print Behaviour': '打印行为'
   Print Cancelled: 打印已取消
   Print Complete!: 打印完成！
   Print Completion Alert: 打印完成提醒
@@ -2127,6 +2133,7 @@ translations:
   Printing label...: 正在打印标签...
   Printing test label...: 正在打印测试标签...
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: 使用错误的耗材打印可能导致堵塞、附着力差或打印失败。
+  'Printing: start after this job': '打印中：本次打印完成后开始'
   Prints: 打印次数
   Prints Trend: 打印趋势
   'Private:': 私有：
@@ -2263,6 +2270,7 @@ translations:
   Remove PIN: 移除 PIN
   Remove Spoolman?: 移除 Spoolman？
   Remove plugin from printer: 从打印机移除插件
+  'Remove the PEI sheet from the bed, then start again: probing through the sheet gives wrong results': '请先从热床上取下 PEI 板再重新开始：隔着板材探测会导致结果错误'
   Remove the bypass spool from the toolhead first: '请先将旁路料盘从工具头中取出'
   Rename: 重命名
   Rename Fan: 重命名风扇
@@ -2274,6 +2282,7 @@ translations:
   Replace: "替换"
   Replace Profile?: "替换配置？"
   Replay Welcome Tour: 重播欢迎漫游
+  'Replenish ignores colour': '补充时忽略颜色'
   Replenishing filament...: 正在补充耗材...
   Report saved to crash_report.txt: 报告已保存到 crash_report.txt
   Reprint: 重新打印
@@ -2584,6 +2593,7 @@ translations:
   Single toggle macro. State is not tracked.: 单个切换宏。不跟踪状态。
   Size: 大小
   Skip: 跳过
+  Skipped: '已跳过'
   Sleep While Printing: 打印时休眠
   Sleep adjusted to match dim timeout: 休眠超时已调整
   Sliced colors: 切片颜色
@@ -2594,7 +2604,7 @@ translations:
   Slot Not Available: '槽位不可用'
   Slot colors, materials, and levels: 槽位的颜色、材料和余量
   ? Slot {} has no filament type set, so the printer will not resume. Set its material in the filament panel, then resume the print.
-  : ''
+  : '槽位 {} 未设置耗材类型，打印机不会恢复。请在耗材面板中设置其材料，然后恢复打印。'
   Slots: 槽位
   Small labels help keep controls calm and focused.: 小标签有助于保持控件简洁专注。
   Snapmaker SnapSwap: Snapmaker SnapSwap
@@ -2739,6 +2749,7 @@ translations:
   TOOLS: 工具
   TPU: TPU
   Takes 3-5 min. Do not interrupt.: 需要 3-5 分钟。请勿中断。
+  'Tangle sensitivity': '打结灵敏度'
   Tap + to add: 点击 + 添加
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: 点按“重启固件”以恢复。在 K2 上这也会重启 rpi MCU 桥接
   Tap again to confirm this orientation: 再次点击确认此方向
@@ -2793,6 +2804,7 @@ translations:
   Thanks! TOTALLY anonymous usage data helps improve HelixScreen.: 感谢！完全匿名的使用数据有助于改进
     HelixScreen。
   That did not sound like a pluck - try again: 听起来不像拨动声 - 请重试
+  'That setting cannot be changed while a print is running': '打印进行中无法更改该设置'
   That slot cannot stand in for this one: 该槽位无法替代当前槽位
   That tool is already loaded: 该工具已加载耗材
   The CFS odometer hardware is faulty and needs repair or replacement: CFS 计量硬件故障，需维修或更换
@@ -2884,6 +2896,8 @@ translations:
   This print needs about %.0fg but the spool has about %.0fg remaining. Start anyway?: 本次打印需要约
     %.0fg，但料盘仅剩约 %.0fg。仍要开始吗？
   This printer cannot calibrate tool offsets automatically: 此打印机无法自动校准工具偏移
+  This printer fills its gates from Spoolman. HelixScreen cleared its own copy; remove the spool in Spoolman.: 此打印机的通道信息来自 Spoolman。HelixScreen 已清除本地副本；请在 Spoolman 中移除该线轴。
+  This printer fills its gates from Spoolman. Make colour, material and spool changes in Spoolman.: 此打印机的通道信息来自 Spoolman。请在 Spoolman 中更改颜色、材料和线轴。
   ? This printer looks like a {} ({}% confidence), but it is set up as a {}. A wrong type applies incorrect pre-print options and presets.
   : 此打印机看起来是 {}（置信度 {}%），但当前设置为 {}。错误的类型会应用不正确的打印前选项和预设。
   ? This removes the plugin's Moonraker component and restarts Moonraker. The printer will briefly disconnect. If old phase-tracking lines are still in PRINT_START, they are removed too, with backups kept. A Klipper restart applies that.
@@ -2996,6 +3010,7 @@ translations:
   Turbo: 极速
   Turbo Inner: 极速内圈
   Turbo Outer: 极速外圈
+  'Turn LED off when the print ends': '打印结束时关闭 LED'
   Turn Off: 关闭
   Turn Off WiFi?: 关闭 WiFi？
   Turn On: 开启
@@ -3041,6 +3056,7 @@ translations:
   Unload Distance: '卸载距离'
   Unload Failed: '卸载失败'
   Unload Filament: 卸载耗材
+  'Unload at end': '结束时卸载'
   Unload failed: 卸载失败
   Unload filament: '卸载耗材'
   Unload from toolhead first: '请先从工具头卸载'
@@ -3244,7 +3260,9 @@ translations:
   Z-offset saved - Klipper restarting...: Z 偏移已保存 - Klipper 重启中...
   'Z:': 'Z:'
   'Z: 0.000': 'Z: 0.000'
+  already loaded: '已加载'
   bed: 热床
+  busy: '正忙'
   by Preston Brown: by Preston Brown
   chamber heater: 腔体加热器
   complete: 完成
@@ -3257,6 +3275,7 @@ translations:
   eSpooler Mode: 'eSpooler 模式'
   eSpooler, clog detection, and sensor settings: 'eSpooler、堵塞检测与传感器设置'
   elapsed: 已用时
+  empty: '空'
   enable: 启用
   enabled: 已启用
   error: 错误
@@ -3264,14 +3283,19 @@ translations:
   extruder(s): 挤出机
   extruders: 挤出机
   fans: 风扇
+  feeder error: '送料器错误'
+  feeder not in automatic mode: '送料器未处于自动模式'
+  filament sensor disabled: '耗材传感器已禁用'
   heated bed: 热床
   idle: 空闲
   in unit {} slot {}: 在单元 {} 槽位 {}
   layers: 层
   left: 剩余
+  loaded: '已加载'
   mm before clog: 毫米后堵料
   needs: 需要
   not detected: 未检测到
+  not loaded: '未加载'
   nozzle: 喷嘴
   of: 的
   'off': 关闭
@@ -3285,6 +3309,7 @@ translations:
   passive: 被动
   printer default: 打印机默认
   prints: 打印次数
+  ready to load: '可加载'
   remaining: 剩余
   remaining before clog detection triggers: 剩余即触发堵料检测
   rendering: 渲染中
@@ -3314,6 +3339,7 @@ translations:
   '{} heater turned off': '{} 加热器已关闭'
   '{} is asking to connect to this printer.': '{} 请求连接到此打印机。'
   '{} is blocked — manual intervention required': '{} 被阻塞 — 需要手动干预'
+  '{} is feeding the current print. Clear it after the print ends.': ''
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} 已安装，但其备用料盘切换已关闭，因此不会自动切换。'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} 已安装，但无法读取其备用料盘设置 - 请勿指望自动切换。'
   '{} is not set up on this printer': '{} 未在此打印机上设置'

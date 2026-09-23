@@ -472,10 +472,11 @@ enum class FingerprintEvent {
 /// Those intervening polls classify as Unchanged; the echo itself classifies
 /// as OwnWriteEcho.
 ///
-/// Each expectation is single-shot and is consumed by the first change of any
-/// kind, so a genuine physical swap that lands while a write is in flight is
-/// still reported as Changed and never permanently blinds swap detection for
-/// that slot.
+/// Each expectation is single-shot per value: an exact match consumes only its
+/// own entry, and a change to a value no write asked for consumes them all, so
+/// a genuine physical swap that lands while a write is in flight is still
+/// reported as Changed and never permanently blinds swap detection for that
+/// slot.
 ///
 /// A backend that writes TWO fields with one dispatch (CFS writes
 /// material_type then color_value in one script) can land a poll between the
@@ -496,17 +497,55 @@ class SlotFingerprintTracker {
 
     /// Register every value the slot may report between the first and last
     /// echo of a multi-field write (the intermediate composites and the final
-    /// one). Each is consumed only by an exact match; any other change clears
-    /// them all. Empty strings are dropped; an all-empty input is equivalent
-    /// to forget_expected().
-    void expect_any_of(int slot_index, std::vector<std::string> expected_values);
+    /// one). Values accumulate with any still pending from an earlier write on
+    /// the same slot: a second edit dispatched before the first echo lands
+    /// leaves both echoes expected, so neither is misread as a swap when it
+    /// arrives. Each value is consumed only by an exact match; any other
+    /// change clears them all. Empty strings are dropped;
+    /// forget_expected() is the explicit drop.
+    ///
+    /// Returns the values actually staged, for handing back to
+    /// forget_expected() when the write they were armed for fails to
+    /// dispatch. A value an earlier in-flight write also expects is staged
+    /// as a second claim on one entry, so that write's echo stays expected
+    /// after this one gives up.
+    std::vector<std::string> expect_any_of(int slot_index,
+                                           std::vector<std::string> expected_values);
 
-    /// Drop a pending expectation (e.g. the write failed to dispatch, so no
-    /// echo is coming and the next change is genuinely external).
-    void forget_expected(int slot_index);
+    /// Drop the claims one expect_any_of() call staged - that write failed
+    /// to dispatch, so its echo is never coming and the next change is
+    /// genuinely external. Values another in-flight write also expects
+    /// survive: each write holds its own claim.
+    void forget_expected(int slot_index, const std::vector<std::string>& staged_values);
 
     /// Current baseline for a slot, or nullopt when none observed yet.
     [[nodiscard]] std::optional<std::string> baseline(int slot_index) const;
+
+    /// Seed a baseline for a slot from a persisted fingerprint. No-op when the
+    /// slot already has a baseline (a live observation always outranks a
+    /// stored one) or the value is empty (a record without a fingerprint
+    /// starts as a first-observation baseline, as it did before persistence
+    /// existed).
+    void seed_baseline(int slot_index, const std::string& value) {
+        if (!value.empty())
+            baseline_.try_emplace(slot_index, value);
+    }
+
+    /// Notified on every observation that establishes or confirms a baseline:
+    /// Baseline, Unchanged and OwnWriteEcho. Not NoSignal (nothing was
+    /// observed) and not Changed — the caller is about to erase the record the
+    /// fingerprint travels in, and a save racing that erase would resurrect it.
+    /// Unchanged firing is load-bearing: a record can come into existence
+    /// after the Baseline event (the auto-mirror, a user edit), and the next
+    /// confirming poll is what heals the fingerprint into it.
+    ///
+    /// The sink runs inline in observe(), under whatever lock the caller
+    /// already holds there, so it may touch the caller's override map without
+    /// taking its own.
+    using BaselineSink = std::function<void(int, const std::string&)>;
+    void set_baseline_sink(BaselineSink sink) {
+        baseline_sink_ = std::move(sink);
+    }
 
     /// Whether an unconsumed expectation is pending for a slot.
     [[nodiscard]] bool has_expected(int slot_index) const;
@@ -515,9 +554,29 @@ class SlotFingerprintTracker {
 
   private:
     std::unordered_map<int, std::string> baseline_;
-    /// Pending expected values per slot: the intermediate and final
-    /// composites expect_any_of() registered.
-    std::unordered_map<int, std::vector<std::string>> expected_;
+    /// Pending expected values per slot, each paired with the number of
+    /// in-flight writes that expect it: the intermediate and final composites
+    /// expect_any_of() registered, claim-counted so one write's failed
+    /// dispatch drops only its own claim.
+    std::unordered_map<int, std::vector<std::pair<std::string, int>>> expected_;
+    BaselineSink baseline_sink_;
 };
+
+/// Give a tracker's baselines the lifetime of the records they guard: seed
+/// each slot's baseline from the loaded override's persisted fingerprint, and
+/// install the sink that keeps that fingerprint current as the tracker
+/// observes the slot.
+///
+/// The sink no-ops for a slot with no override entry — a fingerprint only
+/// matters while there is a user edit for a swap to clear — and when the
+/// record already carries the observed value, so steady-state polls save
+/// nothing.
+///
+/// `overrides` must outlive the binding (the sink holds a reference to it);
+/// a backend passes its own member, so that is its lifetime. Call with the
+/// same lock discipline the backend uses around observe(): the seeding is
+/// synchronous here, the sink later runs inline under that lock.
+void bind_fingerprint_persistence(SlotFingerprintTracker& tracker, FilamentSlotOverrideStore* store,
+                                  std::unordered_map<int, FilamentSlotOverride>& overrides);
 
 } // namespace helix::ams

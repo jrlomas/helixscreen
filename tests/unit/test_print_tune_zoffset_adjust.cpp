@@ -22,8 +22,10 @@
 #include "../lvgl_ui_test_fixture.h"
 #include "moonraker_api.h"
 #include "moonraker_client_mock.h"
+#include "printer_discovery.h"
 #include "printer_state.h"
 #include "static_panel_registry.h"
+#include "tool_state.h"
 
 #include <array>
 #include <memory>
@@ -67,6 +69,10 @@ class PrintTuneZOffsetFixture : public LVGLUITestFixture {
         // drop it so the next test case builds a clean one.
         StaticPanelRegistry::instance().destroy_all();
         helix::ui::UpdateQueue::instance().drain();
+        // Cases that stage a toolchanger leave ToolState holding a tool with a
+        // dirty offset; Catch2 shuffles order within a shard, so whatever runs
+        // next must not inherit it.
+        helix::ToolState::instance().deinit_subjects();
     }
 
     /// Bring the overlay up the way ControlsPanel::handle_zoffset_tune() does.
@@ -324,4 +330,35 @@ TEST_CASE_METHOD(PrintTuneZOffsetFixture,
     REQUIRE(shown != nullptr);
     CHECK(std::string(shown).find("0.150") != std::string::npos);
     CHECK(std::string(shown).find("0.000") == std::string::npos);
+}
+
+TEST_CASE_METHOD(PrintTuneZOffsetFixture,
+                 "PrintTune: a status frame moving the active tool's Z updates the tool readout",
+                 "[ui_integration][zoffset][tool-offsets]") {
+    // The tool's own Z is data in ToolState, not a subject: tools_version_ is
+    // the only thing telling the overlay a frame moved it. This pins that
+    // wiring - without the observer the display freezes on the last value
+    // rendered by hand.
+    helix::PrinterDiscovery hw;
+    json objects = json::array({"toolchanger", "gcode_move", "tool T0", "extruder"});
+    hw.parse_objects(objects);
+    helix::ToolState& ts = helix::ToolState::instance();
+    ts.deinit_subjects();
+    ts.init_subjects(false);
+    ts.init_tools(hw);
+
+    auto& overlay = show_overlay();
+    overlay.handle_z_target_select(1); // the heading follows the tool's own Z
+
+    ts.update_from_status(json{{"tool T0", json{{"gcode_z_offset", 0.10}}}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    lv_subject_t* display = lv_xml_get_subject(nullptr, "tune_z_offset_display");
+    REQUIRE(display != nullptr);
+    REQUIRE(std::string(lv_subject_get_string(display)) == "0.100 mm");
+
+    ts.update_from_status(json{{"tool T0", json{{"gcode_z_offset", 0.25}}}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(std::string(lv_subject_get_string(display)) == "0.250 mm");
 }

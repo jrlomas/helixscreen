@@ -41,26 +41,12 @@
       <text_body name="dialog_message"
                  width="100%" text="$message" translation_tag="$message_tag" style_text_align="left" long_mode="wrap"/>
     </lv_obj>
-    <!-- Horizontal divider above buttons -->
-    <divider_horizontal/>
-    <!-- Button row -->
-    <lv_obj width="100%" height="#button_height" style_pad_all="0" style_pad_gap="0" flex_flow="row">
-      <!-- Secondary button - hidden by default, shown when dialog_show_cancel=1 -->
-      <ui_button name="btn_secondary"
-                 height="100%" flex_grow="1" style_radius="0" focusable="false" hidden="true"
-                 bind_text="dialog_cancel_text">
-        <bind_flag_if_eq subject="dialog_show_cancel" flag="hidden" ref_value="0"/>
-        <!-- NOTE: Callbacks wired programmatically per-instance, not via XML -->
-      </ui_button>
-      <!-- Vertical divider between buttons (only when cancel is visible) -->
-      <divider_vertical name="btn_divider" hidden="true">
-        <bind_flag_if_eq subject="dialog_show_cancel" flag="hidden" ref_value="0"/>
-      </divider_vertical>
-      <!-- Primary button (always visible) -->
-      <ui_button name="btn_primary"
-                 height="100%" flex_grow="1" style_radius="0" focusable="false" bind_text="dialog_primary_text">
-        <!-- NOTE: Callbacks wired programmatically per-instance, not via XML -->
-      </ui_button>
-    </lv_obj>
+    <!-- Shared footer row: the cancel button (and its divider) stay hidden
+         until dialog_show_cancel turns 1, and both captions arrive by
+         subject. Callbacks are wired programmatically per-instance, not
+         via XML. -->
+    <modal_button_row hide_secondary="true"
+                      secondary_show_subject="dialog_show_cancel" secondary_subject="dialog_cancel_text"
+                      primary_subject="dialog_primary_text"/>
   </view>
 </component>

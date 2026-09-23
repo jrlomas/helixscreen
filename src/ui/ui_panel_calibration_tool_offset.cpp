@@ -16,6 +16,7 @@
 #include "macro_param_cache.h"
 #include "observer_factory.h"
 #include "print_lifecycle_state.h"
+#include "printer_cache_registry.h"
 #include "printer_state.h"
 #include "static_panel_registry.h"
 #include "tool_offsets.h"
@@ -586,6 +587,13 @@ void on_tool_offset_row_clicked(lv_event_t* e) {
 
 void init_tool_offset_row_handler() {
     lv_xml_register_event_cb(nullptr, "on_tool_offset_row_clicked", on_tool_offset_row_clicked);
+
+    // g_advanced_row_panel is file-static, so it survives the printer switch
+    // that frees its orphaned overlay widget. Every active-printer change
+    // fires this invalidator before teardown, so the cache never outlives its
+    // widget. Idempotent by name, safe across soft restarts.
+    PrinterCacheRegistry::instance().register_invalidator("ToolOffsetAdvancedRow",
+                                                          []() { g_advanced_row_panel = nullptr; });
 }
 
 } // namespace helix::ui

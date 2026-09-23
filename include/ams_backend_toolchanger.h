@@ -283,6 +283,7 @@ class AmsBackendToolChanger : public AmsSubscriptionBackend {
     // Configuration
     AmsError apply_user_edit(int slot_index, const SlotInfo& info,
                              const helix::ams::Observation& declared) override;
+    void clear_slot_override(int slot_index) override;
     AmsError sync_external_identity(int slot_index, const SlotInfo& info) override;
     void persist_slot_weight(int slot_index, float remaining_weight_g,
                              float total_weight_g) override;

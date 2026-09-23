@@ -220,6 +220,22 @@ TEST_CASE("DebugBundleCollector: collect_printer_info() returns valid JSON", "[d
     REQUIRE(printer.is_object());
 }
 
+TEST_CASE("DebugBundleCollector: mains-monitor objects join the printer-state query",
+          "[debug-bundle]") {
+    const std::string plain = helix::DebugBundleCollector::printer_objects_query({});
+    REQUIRE(plain == "/printer/objects/query"
+                     "?heater_bed&extruder&print_stats&toolhead&motion_report"
+                     "&fan&display_status&virtual_sdcard");
+
+    // Moonraker answers a query naming an unpublished object with an error, so
+    // the join must stay conditional: a printer without a mains monitor keeps
+    // the plain query.
+    const std::string monitored =
+        helix::DebugBundleCollector::printer_objects_query({"power_loss_check"});
+    REQUIRE(monitored.find("&power_loss_check") != std::string::npos);
+    REQUIRE(monitored.substr(0, plain.size()) == plain);
+}
+
 TEST_CASE("DebugBundleCollector: collect_printer_info() renders a snapshot without PrinterState",
           "[debug-bundle]") {
     // The section is pure assembly now, so the whole state table is reachable
@@ -609,7 +625,7 @@ TEST_CASE("DebugBundleCollector: is_sensitive_key matches serial_number but not 
 TEST_CASE("DebugBundleCollector: collect_moonraker_info returns object with expected keys",
           "[debug-bundle][moonraker]") {
     // When not connected, should return an object with error sub-keys (not crash)
-    json mr = helix::DebugBundleCollector::collect_moonraker_info();
+    json mr = helix::DebugBundleCollector::collect_moonraker_info(helix::PrinterSnapshot{});
     REQUIRE(mr.is_object());
 
     // Should always have these keys, even if errored

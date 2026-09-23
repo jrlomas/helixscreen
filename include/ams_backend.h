@@ -1046,6 +1046,17 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether a batch this process dispatched is still unverified
+     *
+     * Connect-time cleanup asks this to tell its own live batch from an
+     * interlock stranded by an earlier session; true means cleanup must
+     * leave the interlock alone.
+     */
+    [[nodiscard]] virtual bool filament_batch_in_flight() const {
+        return false;
+    }
+
+    /**
      * @brief Load filament on several slots as ONE operation (async)
      *
      * For parallel-toolhead printers whose firmware serializes per-extruder
@@ -1075,6 +1086,38 @@ class AmsBackend {
     virtual AmsError unload_filament_batch(const std::vector<int>& slots) {
         (void)slots;
         return AmsErrorHelper::not_supported("Batch filament unload");
+    }
+
+    /// Why a slot cannot take a filament operation right now. Direction
+    /// matters: a lane can be eligible for unload and not for load in the
+    /// same instant.
+    enum class FilamentOpEligibility {
+        Eligible,
+        Empty,             ///< no filament in the lane
+        AlreadyLoaded,     ///< load requested on a head that is already loaded
+        NotLoaded,         ///< unload requested on a head with nothing at the nozzle
+        FeederUnavailable, ///< module absent or not in automatic mode
+        SensorDisabled,    ///< load needs the head's motion sensor enabled
+        Busy,              ///< transient or unrecognised channel state
+        Error,             ///< the feeder reports a fault
+    };
+
+    /**
+     * @brief Classify whether a slot can take a filament operation
+     *
+     * Backends that can see per-lane state answer from it; the default stays
+     * permissive so backends without that visibility keep ungated behaviour.
+     *
+     * @param slot_index Slot to ask about (0-based)
+     * @param load true for the load direction, false for unload
+     * @return a classification; callers render it via
+     *         filament_op_eligibility_reason()
+     */
+    [[nodiscard]] virtual FilamentOpEligibility slot_op_eligibility(int slot_index,
+                                                                    bool load) const {
+        (void)slot_index;
+        (void)load;
+        return FilamentOpEligibility::Eligible;
     }
 
     /**
@@ -1800,20 +1843,19 @@ class AmsBackend {
     [[nodiscard]] virtual helix::printer::ToolMappingOrigin tool_mapping_origin() const;
 
     /**
-     * @brief Erase the user-provided override for a slot.
+     * @brief Drop a lane's standing user declarations and override record.
      *
-     * Removes the FilamentSlotOverride for @p slot_index from both the
-     * in-memory map and the persisted FilamentSlotOverrideStore, then refreshes
-     * override-exclusive fields on the live SlotInfo so the cleared state is
-     * visible via get_slot_info() on the very next read.
+     * The lane half of a clear: resets the lane to what the machine reports
+     * (reset_lane_to_machine_readings) and erases the FilamentSlotOverride for
+     * @p slot_index from both the in-memory map and the persisted
+     * FilamentSlotOverrideStore, then announces the slot so the cleared state
+     * is visible on the very next read. The Clear Spool gesture calls this
+     * behind AmsState::commit_slot_edit, which owns the other half - the
+     * Spoolman server unlink and the ToolState clear - so this method never
+     * stands in for the commit (bundle F2LNLQCC).
      *
-     * Default implementation is a no-op, which the tool changer and the mock
-     * take. On a tool changer that is a decision, not an omission: nothing
-     * there can tell that a user swapped a spool, so a clear signal would have
-     * to be invented and would throw away user data on an event that does not
-     * mean what it would have to mean.
-     *
-     * Safe to call from the UI thread. Backends lock their own mutex_ for the
+     * Every lane-holding backend implements this. Safe to call from the UI
+     * thread. Backends lock their own mutex_ for the
      * in-memory mutation and submit the store clear asynchronously.
      *
      * @param slot_index Slot to clear (0-based, global)
@@ -2906,6 +2948,21 @@ class AmsBackend {
         (void)sensor_names;
     }
 
+    /**
+     * @brief Hand the backend the discovery snapshot its printer reported
+     *
+     * Called before start() with the same PrinterDiscovery that selected this
+     * backend. Backends take discovery-derived configuration here rather than
+     * reading the global PrinterState during start()/on_started(): application
+     * startup builds and starts AMS backends before that global is published,
+     * so a global read is stale on first connect.
+     *
+     * @param discovery Hardware snapshot this backend's printer reported
+     */
+    virtual void set_discovery(const helix::PrinterDiscovery& discovery) {
+        (void)discovery;
+    }
+
     // ========================================================================
     // Mock Support
     // ========================================================================
@@ -3007,5 +3064,9 @@ class AmsBackend {
     mutable std::mutex authored_mappings_mutex_;
     std::map<int, int> authored_mappings_;
 };
+
+/// User-facing reason for an eligibility refusal. Returns "" for Eligible.
+/// English only here; callers wrap with lv_tr() at the use site.
+const char* filament_op_eligibility_reason(AmsBackend::FilamentOpEligibility e);
 
 } // namespace helix

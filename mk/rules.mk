@@ -135,12 +135,16 @@ ifndef SKIP_COMPILE_COMMANDS
 	@# Skip with SKIP_COMPILE_COMMANDS=1 (used by pre-commit to avoid LSP churn)
 	@# stdout is captured into the summary line; stderr is where the merge says
 	@# why it refused, and it is the only account of a failure the recipe gives.
-	@if [ -d "$(BUILD_DIR)" ] && [ -f scripts/merge_compile_commands.py ]; then \
+	@$(MERGE_COMPILE_COMMANDS)
+endif
+endif
+
+# Shared by `all` and `test-build`: a test build writes fragments too, and a
+# database merged only after the app leaves every test file flagless in clangd.
+MERGE_COMPILE_COMMANDS = if [ -d "$(BUILD_DIR)" ] && [ -f scripts/merge_compile_commands.py ]; then \
 		SUMMARY=$$(python3 scripts/merge_compile_commands.py --build-dir $(BUILD_DIR)) && \
 			echo "$(CYAN)→ compile_commands.json ($$SUMMARY)$(RESET)"; \
 	fi
-endif
-endif
 
 # Build libhv if not present (dependency rule).
 # MUST depend on $(PATCHES_STAMP): libhv patches (e.g. the DNS resolver fallback

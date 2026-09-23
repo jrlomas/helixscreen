@@ -285,8 +285,9 @@ def main() -> int:
 
     # Written through a sibling and renamed over: os.replace is atomic, so a
     # reader never sees a half-written database, and an interrupt during the
-    # dump leaves the previous one in place instead of a truncated file.
-    tmp = args.output + ".tmp"
+    # dump leaves the previous one in place instead of a truncated file. The
+    # sibling is per-process because `make -j all test-build` merges twice at once.
+    tmp = f"{args.output}.{os.getpid()}.tmp"
     try:
         with open(tmp, "w") as fh:
             json.dump(entries, fh, indent=2)

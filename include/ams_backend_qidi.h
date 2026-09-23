@@ -4,12 +4,16 @@
 #if HELIX_HAS_QIDI
 
 #include "ams_subscription_backend.h"
+#include "filament_slot_override.h"
+#include "filament_slot_override_store.h"
 
 #include <cstdint>
 #include <ctime>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace helix {
@@ -127,6 +131,19 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     }
 
   protected:
+    // The Box's slots are painted SlotInfo state that persists between
+    // save_variables polls, not re-read from firmware each pass, so a lane
+    // written from outside the parse (a person's edit) names the slot here and
+    // repaint_slot_from_lane() reaches it before the next poll arrives.
+    SlotInfo* cached_slot_locked(int slot_index) override;
+
+    // The parse restates the tag-painted fields (material, colour, brand) from
+    // the save_variables tables every poll, but spool name, catalogue pick,
+    // product line and vendor id exist only in the lane's records - nothing on
+    // this Box ever restates them, so a repaint must drop them from the struct
+    // or the record a rebind or a drop replaced keeps showing.
+    void prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) override;
+
     // Operations. Gated by AmsSubscriptionBackend's NVI wrapper.
     // select_slot_moves_toolhead() stays false: do_select_slot() is
     // not_supported here — load_filament is the only path.
@@ -322,6 +339,39 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// else 0.
     static int resolve_vendor_id(const std::map<int, std::string>& vendors,
                                  const std::string& brand);
+
+    /// Observe one slot's tag fingerprint and clear a standing user edit when
+    /// it changed for a reason other than our own identity push. Caller must
+    /// hold mutex_. Returns whether the change cleared an override.
+    bool check_hardware_event_clear(SlotInfo& slot, int slot_index,
+                                    const std::string& observed_uid);
+
+    /// Cross-product the per-field id lists into the fingerprint set the slot
+    /// may report while our own SAVE_VARIABLEs echo back one field at a time,
+    /// and register it with rfid_tracker_ so each echo reads as OwnWriteEcho
+    /// instead of a spool swap. Returns the staged values, for a
+    /// forget_expected() release when none of the writes dispatch. Caller
+    /// must hold mutex_.
+    std::vector<std::string> expect_own_write_echoes_locked(int slot_index, const std::string& base,
+                                                            const std::vector<int>& fila_vals,
+                                                            const std::vector<int>& color_vals,
+                                                            const std::vector<int>& vendor_vals);
+
+    /// Erase the slot's override in both stores (the in-memory map and the
+    /// persisted record) and reset the override-exclusive fields on the live
+    /// slot. Caller must hold mutex_.
+    void clear_override_locked(int slot_index, SlotInfo& slot);
+
+    // Persistent per-slot overrides. Writers (on_started bulk load,
+    // apply_user_edit, check_hardware_event_clear) all hold mutex_.
+    std::unique_ptr<helix::ams::FilamentSlotOverrideStore> override_store_;
+    std::unordered_map<int, helix::ams::FilamentSlotOverride> overrides_;
+
+    // Per-slot last-observed tag fingerprint (the composite of the three
+    // save_variable table indices), plus the pending expected fingerprints for
+    // an identity push we issued. Shared with the other fingerprint backends
+    // (CFS, Snapmaker). All access under mutex_.
+    helix::ams::SlotFingerprintTracker rfid_tracker_;
 };
 
 } // namespace helix

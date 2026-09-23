@@ -86,21 +86,14 @@ void ToolState::init_subjects(bool register_xml) {
     INIT_SUBJECT_STRING(tool_badge_text, "", subjects_, register_xml);
     INIT_SUBJECT_INT(show_tool_badge, 0, subjects_, register_xml);
 
-    // Per-tool offsets, one trio per axis. Defaults say "this printer has none
-    // and we know nothing", which is the correct answer until init_tools() sees
-    // the hardware and a status frame carries a value.
+    // Per-tool offsets: which axes this printer keeps per toolhead, and the
+    // aggregate save affordance. Defaults say "this printer has none and we
+    // know nothing", which is the correct answer until init_tools() sees the
+    // hardware and a status frame carries a value. The values themselves live
+    // in tools_ and are read through the tool_offset_*() accessors.
     INIT_SUBJECT_INT(per_tool_x_supported, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(per_tool_y_supported, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(per_tool_z_supported, 0, subjects_, register_xml);
-    INIT_SUBJECT_INT(active_tool_x_offset, 0, subjects_, register_xml);
-    INIT_SUBJECT_INT(active_tool_y_offset, 0, subjects_, register_xml);
-    INIT_SUBJECT_INT(active_tool_z_offset, 0, subjects_, register_xml);
-    INIT_SUBJECT_INT(active_tool_x_offset_valid, 0, subjects_, register_xml);
-    INIT_SUBJECT_INT(active_tool_y_offset_valid, 0, subjects_, register_xml);
-    INIT_SUBJECT_INT(active_tool_z_offset_valid, 0, subjects_, register_xml);
-    INIT_SUBJECT_INT(any_tool_x_dirty, 0, subjects_, register_xml);
-    INIT_SUBJECT_INT(any_tool_y_dirty, 0, subjects_, register_xml);
-    INIT_SUBJECT_INT(any_tool_z_dirty, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(any_tool_offset_dirty, 0, subjects_, register_xml);
 
     subjects_initialized_ = true;
@@ -386,7 +379,6 @@ void ToolState::clear_ams_topology() {
     lv_subject_set_int(&active_tool_, 0);
     // Same reason as init_tools(): the flags died with tools_.
     refresh_any_tool_dirty();
-    refresh_active_tool_offsets();
     int version = lv_subject_get_int(&tools_version_) + 1;
     lv_subject_set_int(&tools_version_, version);
     spdlog::info("[ToolState] AMS topology cleared");
@@ -548,11 +540,8 @@ void ToolState::update_from_status(const nlohmann::json& status) {
                 }
             }
         }
-        // After the reads, so this covers both a new value arriving and the
-        // active tool having changed in this same frame with no value of its
-        // own — otherwise the panel would keep showing the previous tool's
-        // number beside the new selection.
-        refresh_active_tool_offsets();
+        // After the reads, so the aggregate reflects every value this frame
+        // carried.
         refresh_any_tool_dirty();
     }
 
@@ -657,9 +646,6 @@ void ToolState::set_tool_offset_local(int tool_index, Axis axis, int microns) {
     ToolAxisOffset& offset = tools_[tool_index].gcode_offset(axis);
     offset.mm = static_cast<float>(microns) / 1000.0f;
     offset.known = true;
-    if (tool_index == active_tool_index_) {
-        refresh_active_tool_offsets();
-    }
     refresh_any_tool_dirty();
 }
 
@@ -674,51 +660,9 @@ void ToolState::mark_tool_offsets_saved(int tool_index) {
 }
 
 void ToolState::refresh_any_tool_dirty() {
-    int any = 0;
-    for (Axis axis : kAllAxes) {
-        int dirty = 0;
-        for (const auto& tool : tools_) {
-            if (tool.gcode_offset(axis).dirty()) {
-                dirty = 1;
-                break;
-            }
-        }
-        any |= dirty;
-        lv_subject_t* subject = get_any_tool_axis_dirty_subject(axis);
-        if (lv_subject_get_int(subject) != dirty) {
-            lv_subject_set_int(subject, dirty);
-        }
-    }
+    const int any = dirty_tool_indices().empty() ? 0 : 1;
     if (lv_subject_get_int(&any_tool_offset_dirty_) != any) {
         lv_subject_set_int(&any_tool_offset_dirty_, any);
-    }
-}
-
-void ToolState::refresh_active_tool_offsets() {
-    const bool have_tool =
-        active_tool_index_ >= 0 && active_tool_index_ < static_cast<int>(tools_.size());
-
-    for (Axis axis : kAllAxes) {
-        // valid_ is latched separately because 0 microns is a legitimate offset
-        // and cannot double as "nothing known" — the UI needs to tell a tool
-        // sitting at zero from one that has never reported. Dropping it back
-        // to 0 matters as much as raising it: on a tool change to a tool we
-        // have no value for, the previous tool's number must not stay on
-        // screen beside the new selection.
-        const bool have = have_tool && tools_[active_tool_index_].gcode_offset(axis).known;
-        const int microns = have ? static_cast<int>(std::lround(
-                                       tools_[active_tool_index_].gcode_offset(axis).mm * 1000.0f))
-                                 : 0;
-
-        lv_subject_t* value = get_active_tool_offset_subject(axis);
-        if (lv_subject_get_int(value) != microns) {
-            lv_subject_set_int(value, microns);
-        }
-        lv_subject_t* valid = get_active_tool_offset_valid_subject(axis);
-        const int valid_now = have ? 1 : 0;
-        if (lv_subject_get_int(valid) != valid_now) {
-            lv_subject_set_int(valid, valid_now);
-        }
     }
 }
 

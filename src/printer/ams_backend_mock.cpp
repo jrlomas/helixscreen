@@ -413,13 +413,12 @@ void AmsBackendMock::publish_lane_observations() {
 
     // Outside the lock, like every other event this backend publishes.
     for (const auto& r : readings) {
-        // UNKNOWN is the simulated machine declining to state, which is not a
-        // statement that the lane is empty.
-        if (const auto reports = slot_status_reports_filament(r.status)) {
-            helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
-            sensed.present = *reports;
-            helix::ams::ingest(lane_id(r.slot_index), sensed);
-        }
+        // A record with present unset is the machine declining to state, which
+        // retracts whatever an earlier frame established; the other backends
+        // file UNKNOWN the same way.
+        helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
+        sensed.present = slot_status_reports_filament(r.status);
+        helix::ams::ingest(lane_id(r.slot_index), sensed);
 
         helix::ams::Observation cache(helix::ams::ObservationSource::VendorCache);
         if (!r.material.empty()) {
@@ -1148,6 +1147,14 @@ AmsError AmsBackendMock::check_all_gates() {
 AmsError AmsBackendMock::apply_user_edit(int slot_index, const SlotInfo& info,
                                          const helix::ams::Observation& /*declared*/) {
     return write_slot(slot_index, info);
+}
+
+void AmsBackendMock::clear_slot_override(int slot_index) {
+    // The slot table was wiped by the edit this clear rides behind; what can
+    // still outlive it is the lane's user rung, so the clear resets the lane
+    // to machine readings and lets the resync announce the slot.
+    helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
+    emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
 }
 
 AmsError AmsBackendMock::sync_external_identity(int slot_index, const SlotInfo& info) {

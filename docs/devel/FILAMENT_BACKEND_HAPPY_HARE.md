@@ -38,6 +38,8 @@ Klipper object `mmu` in `printer.objects.list` sets `AmsType::HAPPY_HARE`.
 | `MMU_RECOVER` | Attempt error recovery |
 | `MMU_CHECK_GATE` | Probe every gate sensor (sidebar **Check slots**). Physical: parks the toolhead and unloads/reloads each gate, and Happy Hare does not refuse it mid-print, so the sidebar gates it |
 | `MMU_TTG_MAP TOOL={n} GATE={g}` | Set tool-to-gate mapping |
+| `MMU_GATE_MAP GATE={n} [COLOR=..] [MATERIAL=..] [SPOOLID=..]` | Persist a slot edit to the gate map (`mmu_vars.cfg`). Omitted params keep their current value, so a field is only cleared by naming it with an explicit empty value. In Spoolman pull mode nothing is sent - see [Clear Spool](#clear-spool) |
+| `MMU_GATE_MAP GATE={n} MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1` | **Clear Spool**: wipe every field the gate map holds for one gate - see [Clear Spool](#clear-spool) |
 | `MMU_SELECT_BYPASS` | Select bypass position |
 
 ### Path Topology
@@ -53,7 +55,7 @@ Happy Hare's `filament_pos` (0-8) maps to `PathSegment` via `path_segment_from_h
 | Endless Spool | `Available` | `Group` on a single-unit MMU; `ReadOnly` + `MultiUnit` on multi-unit, `ReadOnly` + `NotReady` before the gate registry initialises (see [Endless Spool](FILAMENT_MANAGEMENT.md#endless-spool-shared-model)) |
 | Tool Mapping | Yes | Yes (via `MMU_TTG_MAP`) |
 | Bypass Mode | Yes | Yes (selector position -2), when `[mmu_machine] has_bypass` is set. `has_bypass: 0` hides the UI but `MMU_SELECT_BYPASS` still works - see [the force override](FILAMENT_MANAGEMENT.md#bypass-visibility-and-the-force-override) |
-| Spoolman | Yes | -- |
+| Spoolman | Yes | -- (pull mode: the gate map is Spoolman's - Clear Spool clears HelixScreen's copy only and reports partial failure) |
 | Auto-Heat on Load | No | UI manages preheat |
 | Dryer | Yes | `MMU_HEATER` (see [Happy Hare Specifics](FILAMENT_MANAGEMENT.md#happy-hare-specifics)) |
 | Lane Eject | Yes | `supports_lane_eject()` + `eject_lane()` |
@@ -93,6 +95,44 @@ reports `Unknown` + `NotReady` rather than `Off`.
 Hare runout gets the dialog with manual **Load** kept prominent, because Resume alone does not
 re-feed. `supports_per_tool_spool_assignment()` is not overridden either; it falls through
 to `is_tool_changer(get_type())`, which is false for an MMU.
+
+### Clear Spool
+
+Clear Spool empties everything the printer remembers about the gate, not just the
+spool link. Happy Hare keeps omitted `MMU_GATE_MAP` params at their current value, so
+`apply_user_edit()` detects the funnel's all-blank `SlotInfo` (and a gate that held
+something) and sends one wipe:
+
+```
+MMU_GATE_MAP GATE={n} MATERIAL= COLOR= NAME= VENDOR= SPOOLID=-1 QUIET=1
+```
+
+Every writable field is named with an explicit empty value; v2/v3 ignore params they do
+not fetch, and `VENDOR` is v4-only. Three params are permanently off this command:
+
+- `RESET=1` - on v2/v3 it ignores `GATE` and wipes **every** gate.
+- `TEMP=0` - falsy values mean "keep the current value".
+- `AVAILABLE=0` - that marks the gate EMPTY, not unknown.
+
+Two gates on the send itself:
+
+- **Spoolman pull mode** (`printer.mmu.spoolman_support == "pull"`, parsed into
+  `AmsSystemInfo::spoolman_mode`): Happy Hare refuses local writes to material, colour,
+  name, vendor and spool id, and logs the refusal in its own console rather than
+  returning an error the client could read. The backend clears HelixScreen's layer,
+  sends nothing, and returns a partial failure naming Spoolman as the owner of the gate
+  map. An ordinary slot edit gets the same treatment in `apply_user_edit()`: the
+  `MMU_GATE_MAP` send is skipped with the same partial failure (HelixScreen keeps its
+  own copy), while a tool remap still goes out - `MMU_TTG_MAP` is not a gate-map field
+  and Happy Hare takes it in pull mode.
+- **Mid-print backstop.** The print UI refuses clears while a job holds the machine. If
+  one reaches the backend anyway for the gate the job is printing from, the firmware
+  write is skipped with a warning and a partial failure; HelixScreen's own layer is
+  still cleared.
+
+The wipe only fires when the gate held something. An all-blank edit on an already-blank
+gate (a tool-map-only save) sends no `MMU_GATE_MAP` at all, so an ordinary edit on an
+empty gate stays silent.
 
 ### Reset vs Recover
 

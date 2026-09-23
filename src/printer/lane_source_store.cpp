@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "lane_source_store.h"
 
+#include "lane_translation.h"
+
 #include <spdlog/spdlog.h>
 
 #include <cstddef>
@@ -142,7 +144,24 @@ void commit_slot_edit(LaneId lane, const Observation& obs) {
     if (!any_observed(obs)) {
         return;
     }
-    LaneSourceStore::instance().write(lane, obs, /*amend=*/true);
+
+    // A field the edit cleared is a withdrawal, so it comes off the statement
+    // and off whatever the rung already declared for it: an engaged empty
+    // filed here would outrank the machine's own reading until a restart.
+    // The clear still reaches the stored record, through the edit's values.
+    Observation statement = obs;
+    withdraw_cleared_fields(statement, obs);
+    Observation rung(ObservationSource::LocalUser);
+    const LaneSources standing = LaneSourceStore::instance().get(lane);
+    if (standing.local_user.has_value()) {
+        rung = *standing.local_user;
+        withdraw_cleared_fields(rung, obs);
+    }
+    merge_observed_fields(rung, statement);
+    LaneSourceStore::instance().drop_source(lane, ObservationSource::LocalUser);
+    if (any_observed(rung)) {
+        LaneSourceStore::instance().write(lane, rung, /*amend=*/false);
+    }
 }
 
 void drop_lane_source(LaneId lane, ObservationSource source) {

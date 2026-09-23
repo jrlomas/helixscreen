@@ -7,6 +7,7 @@
 #include "moonraker_client.h"
 #include "moonraker_types.h"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -1879,6 +1880,31 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
 
     /// Advance the armed swap by one notification interval. No-op when idle.
     void advance_medusa_swap();
+
+    // --- Snapmaker U1 feeder simulation --------------------------------------
+    // AUTO_FEEDING (and AUTO_FEEDING_BATCH ACTION=DOING) lines name a channel
+    // with EXTRUDER=n; gcode_script() answers each by publishing the
+    // channel_state sequence the feeder firmware reports, one full
+    // filament_feed frame per state, so the production AmsBackendSnapmaker
+    // status parse sees the same transitions a real U1 sends. State starts at
+    // the rig's resting mix (heads 0/2 loaded, 1/3 preloaded) so the sibling
+    // channel each frame carries alongside the touched one reads plausibly.
+    static constexpr int U1_CHANNELS = 4;
+    std::array<std::string, static_cast<size_t>(U1_CHANNELS)> u1_channel_state_{
+        "load_finish", "preload_finish", "load_finish", "preload_finish"};
+    std::array<bool, static_cast<size_t>(U1_CHANNELS)> u1_filament_detected_{true, true, true,
+                                                                             true};
+
+    /// One feeder command line: walk the named channel through its states.
+    /// HELIX_MOCK_BATCH_FAIL_SLOT=<n> swaps that channel's terminal for its
+    /// *_fail variant. @return true when the line was an AUTO_FEEDING command.
+    bool apply_u1_feeding_gcode(const std::string& gcode);
+
+    /// Publish one full filament_feed frame for the side owning extruder
+    /// `ext`, carrying BOTH of that side's channels with every field — a
+    /// present-but-partial channel object resets the fields the backend's
+    /// delta parse would otherwise carry forward.
+    void publish_u1_channel_frame(int ext);
 
     // --- Standalone IFS module mock -----------------------------------------
     // HELIX_MOCK_AMS=ifs-module: pushes the module's objects (ifs /
