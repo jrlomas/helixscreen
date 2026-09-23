@@ -606,6 +606,18 @@ void SpoolmanManager::refresh_spoolman_weights() {
                     }
 
                     if (SpoolmanManager::file_spool_on_lane(helix::ams::BYPASS_LANE_ID, spool)) {
+                        // The stored binding is what a restart reads before any
+                        // poll answers, so the fetched record moves it too, the
+                        // same reason a slot fetch persists its lane record.
+                        SlotInfo stored = *ext;
+                        apply_spool_to_slot(stored, spool);
+                        if (spool.initial_weight_g <= 0) {
+                            // No weight stated is not a zero weight: the filing
+                            // above skipped the weights for the same reason.
+                            stored.remaining_weight_g = ext->remaining_weight_g;
+                            stored.total_weight_g = ext->total_weight_g;
+                        }
+                        state.set_external_spool_info(stored);
                         state.bump_slots_version();
                         spdlog::debug(
                             "[SpoolmanManager] Filed external spool weights on bypass lane: "

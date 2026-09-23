@@ -517,8 +517,10 @@ struct SpoolmanLaneFixture : SpoolmanFixture {
     MoonrakerAPIMock api;
 
     SpoolmanLaneFixture() : api(client, get_printer_state()) {
-        // A fetch's answer bumps AmsState's slots_version, which needs the
-        // subject to exist.
+        // Lane records and the external spool binding are process-wide; a case
+        // that starts with the previous case's filings reads a filing that
+        // reports "unchanged" and skips the work under test.
+        helix::ams::reset_lane_sources();
         AmsState::instance().init_subjects(true);
         TA::reset_identity(SpoolmanManager::instance());
         set_spoolman_available(true);
@@ -808,6 +810,29 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: an external spool fetch moves the stored binding with it",
+                 "[spoolman][lane][1632]") {
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA";
+    ext.remaining_weight_g = 400.0F; // the link-time stub
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+
+    // The raw record is what a restart (or a server that stays down) reads
+    // before any poll answers: it carries the fetched weight and identity,
+    // not the link-time stub.
+    auto raw = AmsState::instance().raw_external_spool_info();
+    REQUIRE(raw.has_value());
+    CHECK(raw->remaining_weight_g == 850.0F);
+    CHECK(raw->brand == "Polymaker");
+    CHECK(raw->material == "PLA");
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
                  "SpoolmanManager: a spool Spoolman denies takes the bypass lane's record with it",
                  "[spoolman][lane][1632]") {
     SlotInfo ext;
@@ -827,7 +852,10 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
     CHECK_FALSE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
     auto shown = AmsState::instance().get_external_spool_info();
     REQUIRE(shown.has_value());
-    CHECK(shown->remaining_weight_g == 400.0F);
+    // The first poll moved the stored binding to the fetched weight, so the
+    // display falls back to that, not to the link-time stub.
+    CHECK(shown->remaining_weight_g == 850.0F);
+    CHECK(shown->brand == "Polymaker");
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
