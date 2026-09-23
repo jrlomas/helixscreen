@@ -1495,6 +1495,63 @@ TEST_CASE("CFS identity writeback echoes do not self-wipe the override",
     }
 }
 
+// Capture harness whose dispatch failure is toggleable: one push lands and a
+// later one never reaches the box, so the first push's in-flight echo
+// expectation must survive the second's failed dispatch.
+class FailToggleCfsRemap : public CfsRemapHelper {
+  public:
+    AmsError execute_gcode(const std::string& gcode) override {
+        if (fail_dispatch)
+            return AmsErrorHelper::not_supported("fixture dispatch failure");
+        return CfsRemapHelper::execute_gcode(gcode);
+    }
+
+    bool fail_dispatch = false;
+};
+
+TEST_CASE("CFS writeback a failed dispatch drops only its own echo expectations",
+          "[ams][cfs][firmware_writeback][968]") {
+    FailToggleCfsRemap helper;
+
+    // Slot 0 Generic PLA (K1 code 000001), slot 1 Generic PETG (000003) for
+    // the firmware-observed vocabulary the pushes resolve through.
+    CfsTestAccess::handle_status(
+        helper, make_cfs_notification(make_single_unit_box({"000001", "000003", "-1", "-1"},
+                                                           {"09CFF4F", "01B04AE", "-1", "-1"})));
+
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.material = "PETG";
+    ovr.brand = "Generic";
+    ovr.color_rgb = 0xFF0000;
+    ovr.color_set = true;
+    ovr.declared =
+        helix::ams::declared_fields_from_names(nlohmann::json::array({"color_rgb", "material"}));
+    CfsTestAccess::seed_override(helper, 0, ovr);
+
+    // Push A (PETG + red) lands: modify script + same-material refresh.
+    helper.push_slot_identity_to_firmware(0, "PETG", "Generic", "", 0xFF0000);
+    REQUIRE(helper.captured.size() == 2);
+
+    // Push B (PLA + green) never reaches the box - not even the refresh.
+    helper.fail_dispatch = true;
+    helper.push_slot_identity_to_firmware(0, "PLA", "Generic", "", 0x00FF00);
+    helper.fail_dispatch = false;
+    REQUIRE(helper.captured.size() == 2);
+
+    // Firmware echoes A's final composite (000003 + 0FF0000). A's
+    // expectation survived B's forget, so the override stands.
+    CfsTestAccess::handle_status(
+        helper, make_cfs_notification(make_single_unit_box({"000003", "-1", "-1", "-1"},
+                                                           {"0FF0000", "-1", "-1", "-1"})));
+    CHECK(CfsTestAccess::get_override(helper, 0).has_value());
+
+    // A value nobody wrote still clears the override (real swap).
+    CfsTestAccess::handle_status(
+        helper, make_cfs_notification(make_single_unit_box({"000001", "-1", "-1", "-1"},
+                                                           {"0FFFFFF", "-1", "-1", "-1"})));
+    CHECK_FALSE(CfsTestAccess::get_override(helper, 0).has_value());
+}
+
 TEST_CASE("CFS backend ctor latches macro variant from PrinterDetector (#968)", "[ams][cfs]") {
     // The constructor reads PrinterDetector::is_creality_k1() once and caches
     // the result. Verify both routes resolve correctly.
@@ -2797,6 +2854,23 @@ class FlatFailDispatchCfs : public AmsBackendCfs {
     }
 };
 
+// Same shape, but the failure is toggleable: one write lands and a later one
+// never reaches the box, so the first write's in-flight echo expectation must
+// survive the second's failed dispatch.
+class ToggleFailDispatchCfs : public AmsBackendCfs {
+  public:
+    ToggleFailDispatchCfs(IMoonrakerAPI* api, helix::IMoonrakerClient* client)
+        : AmsBackendCfs(api, client) {}
+
+    AmsError execute_gcode(const std::string& gcode) override {
+        if (fail_dispatch)
+            return AmsErrorHelper::not_supported("fixture dispatch failure");
+        return AmsBackendCfs::execute_gcode(gcode);
+    }
+
+    bool fail_dispatch = false;
+};
+
 template <typename BackendT = AmsBackendCfs> struct CfsOverrideRig {
     CfsTmpCacheDir tmp;
     MoonrakerClientMock client{MoonrakerClientMock::PrinterType::VORON_24};
@@ -3149,6 +3223,51 @@ TEST_CASE("CFS flat-schema dispatch failure drops the echo expectation",
     rig.poll(make_flat_box("ASA-CF", "Polymaker", "PolyLite ASA", "#1A1A1A"));
     CHECK_FALSE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
     CHECK(CfsTestAccess::last_rfid_uid(*rig.backend, 0) == "ASA-CF|Polymaker|PolyLite ASA|1A1A1A");
+}
+
+TEST_CASE("CFS flat-schema a failed dispatch drops only its own echo expectations",
+          "[ams][cfs][flat][filament_slot_override]") {
+    CfsOverrideRig<ToggleFailDispatchCfs> rig("cfs_flat_forget_scoped");
+
+    // Fork dialect baseline from the tag's own identity.
+    json box_before = make_flat_box("PLA", "Polymaker", "PolyLite Orange", "#FF5500");
+    rig.poll(box_before);
+    REQUIRE(CfsTestAccess::last_rfid_uid(*rig.backend, 0) ==
+            "PLA|Polymaker|PolyLite Orange|FF5500");
+
+    // Write A lands.
+    SlotInfo edit_a;
+    edit_a.material = "asa-cf";
+    edit_a.brand = "Polymaker";
+    edit_a.spool_name = "PolyLite ASA";
+    edit_a.color_rgb = 0x1A1A1A;
+    helix::test::edit_slot_as_user(*rig.backend, 0, edit_a);
+
+    // Write B never reaches the box.
+    rig.backend->fail_dispatch = true;
+    SlotInfo edit_b;
+    edit_b.material = "petg";
+    edit_b.brand = "Bambu";
+    edit_b.spool_name = "Basic Green";
+    edit_b.color_rgb = 0x2B2B2B;
+    helix::test::edit_slot_as_user(*rig.backend, 0, edit_b);
+    rig.backend->fail_dispatch = false;
+
+    // B staged an override despite the failed push.
+    auto staged = CfsTestAccess::get_override(*rig.backend, 0);
+    REQUIRE(staged.has_value());
+    CHECK(staged->material == "petg");
+
+    // Firmware never heard B, so it echoes A's identity back. A's
+    // expectation survived B's forget, so this reads as our own echo.
+    rig.poll(make_flat_box("ASA-CF", "Polymaker", "PolyLite ASA", "#1A1A1A"));
+    auto after_echo = CfsTestAccess::get_override(*rig.backend, 0);
+    REQUIRE(after_echo.has_value());
+    CHECK(after_echo->material == "petg");
+
+    // A different spool afterwards is still a genuine swap.
+    rig.poll(make_flat_box("ABS", "Prusa", "Prusa Orange", "#FF8800"));
+    CHECK_FALSE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
 }
 
 TEST_CASE("CFS flat-schema two edits in one poll window both survive their echoes",

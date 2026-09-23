@@ -1522,6 +1522,7 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
     int vendor_id = 0;
     bool have_palette = false;
     bool have_vendors = false;
+    std::vector<std::string> staged_echoes;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (system_info_.units.empty()) {
@@ -1578,7 +1579,8 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
             if (have_vendors && vendor_id != old_vendor) {
                 vendor_vals.push_back(vendor_id);
             }
-            expect_own_write_echoes_locked(slot_index, *base, fila_vals, color_vals, vendor_vals);
+            staged_echoes = expect_own_write_echoes_locked(slot_index, *base, fila_vals, color_vals,
+                                                           vendor_vals);
         }
     }
 
@@ -1619,10 +1621,12 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
                      backend_log_tag(), slot_index);
     }
     if (!dispatched_any) {
-        // No echo is coming, so the next fingerprint change is genuinely
-        // external and must be treated as a swap.
+        // No echo is coming for the writes this edit staged, so release
+        // exactly their claims - an earlier edit whose echo is still in
+        // flight stays expected, or its landing would read as a swap and
+        // wipe the user's data.
         std::lock_guard<std::mutex> lock(mutex_);
-        rfid_tracker_.forget_expected(slot_index);
+        rfid_tracker_.forget_expected(slot_index, staged_echoes);
     }
 
     if (override_store_) {
@@ -1694,6 +1698,7 @@ AmsError AmsBackendQidi::set_tool_mapping_impl(int tool_number, int slot_index) 
 }
 
 void AmsBackendQidi::clear_slot_override(int slot_index) {
+    std::vector<std::string> staged_echoes;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto* slot = system_info_.get_slot_global(slot_index);
@@ -1714,8 +1719,8 @@ void AmsBackendQidi::clear_slot_override(int slot_index) {
             const int old_fila = idx < slot_rfid_.size() ? slot_rfid_[idx].filament_id : 0;
             const int old_color = idx < slot_rfid_.size() ? slot_rfid_[idx].color_id : 0;
             const int old_vendor = idx < slot_rfid_.size() ? slot_rfid_[idx].vendor_id : 0;
-            expect_own_write_echoes_locked(slot_index, *base, {old_fila, 0}, {old_color, 0},
-                                           {old_vendor, 0});
+            staged_echoes = expect_own_write_echoes_locked(slot_index, *base, {old_fila, 0},
+                                                           {old_color, 0}, {old_vendor, 0});
         }
     }
 
@@ -1738,10 +1743,11 @@ void AmsBackendQidi::clear_slot_override(int slot_index) {
                      backend_log_tag(), slot_index);
     }
     if (!dispatched_any) {
-        // No echo is coming, so the next fingerprint change is genuinely
-        // external and must be treated as a swap.
+        // No echo is coming for the zero writes this clear staged, so
+        // release exactly their claims - an earlier edit whose echo is
+        // still in flight stays expected.
         std::lock_guard<std::mutex> lock(mutex_);
-        rfid_tracker_.forget_expected(slot_index);
+        rfid_tracker_.forget_expected(slot_index, staged_echoes);
     }
 
     emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
@@ -1828,10 +1834,9 @@ void AmsBackendQidi::clear_override_locked(int slot_index, SlotInfo& slot) {
     }
 }
 
-void AmsBackendQidi::expect_own_write_echoes_locked(int slot_index, const std::string& base,
-                                                    const std::vector<int>& fila_vals,
-                                                    const std::vector<int>& color_vals,
-                                                    const std::vector<int>& vendor_vals) {
+std::vector<std::string> AmsBackendQidi::expect_own_write_echoes_locked(
+    int slot_index, const std::string& base, const std::vector<int>& fila_vals,
+    const std::vector<int>& color_vals, const std::vector<int>& vendor_vals) {
     std::vector<std::string> expected;
     for (const int f : fila_vals) {
         for (const int c : color_vals) {
@@ -1843,9 +1848,7 @@ void AmsBackendQidi::expect_own_write_echoes_locked(int slot_index, const std::s
             }
         }
     }
-    if (!expected.empty()) {
-        rfid_tracker_.expect_any_of(slot_index, std::move(expected));
-    }
+    return rfid_tracker_.expect_any_of(slot_index, std::move(expected));
 }
 
 // --- Bypass ---

@@ -349,11 +349,13 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     /// Cross-product the per-field id lists into the fingerprint set the slot
     /// may report while our own SAVE_VARIABLEs echo back one field at a time,
     /// and register it with rfid_tracker_ so each echo reads as OwnWriteEcho
-    /// instead of a spool swap. Caller must hold mutex_.
-    void expect_own_write_echoes_locked(int slot_index, const std::string& base,
-                                        const std::vector<int>& fila_vals,
-                                        const std::vector<int>& color_vals,
-                                        const std::vector<int>& vendor_vals);
+    /// instead of a spool swap. Returns the staged values, for a
+    /// forget_expected() release when none of the writes dispatch. Caller
+    /// must hold mutex_.
+    std::vector<std::string> expect_own_write_echoes_locked(int slot_index, const std::string& base,
+                                                            const std::vector<int>& fila_vals,
+                                                            const std::vector<int>& color_vals,
+                                                            const std::vector<int>& vendor_vals);
 
     /// Erase the slot's override in both stores (the in-memory map and the
     /// persisted record) and reset the override-exclusive fields on the live

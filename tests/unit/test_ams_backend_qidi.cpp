@@ -49,9 +49,15 @@ class RecordingQidiBackend : public AmsBackendQidi {
   public:
     explicit RecordingQidiBackend(IMoonrakerAPI* api = nullptr) : AmsBackendQidi(api, nullptr) {}
     helix::AmsError execute_gcode(const std::string& gcode) override {
+        if (fail_dispatch) {
+            return helix::AmsErrorHelper::not_supported("fixture dispatch failure");
+        }
         sent.push_back(gcode);
         return helix::AmsErrorHelper::success();
     }
+    // While set, every dispatch fails - for the writes whose echo can never
+    // arrive because the command never reached the box.
+    bool fail_dispatch = false;
     std::vector<std::string> sent;
 };
 
@@ -2175,6 +2181,55 @@ TEST_CASE("QIDI Box a write that never dispatched leaves no echo expectation", "
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 11}, {"color_slot0", 2}, {"vendor_slot0", 2}});
 
+    CHECK_FALSE(QidiBoxTestAccess::get_override(backend, 0).has_value());
+}
+
+TEST_CASE("QIDI Box a failed dispatch drops only its own echo expectations", "[ams][qidi_box]") {
+    // Edit A dispatches; edit B fails to dispatch entirely. B's forget must
+    // release only the composites B staged - A's echo is still in flight,
+    // and dropping its expectation too would make A's echo read as a spool
+    // swap that wipes the override the user just staged.
+    helix::test::RegisteredBackend<RecordingQidiBackend> harness;
+    RecordingQidiBackend& backend = *harness;
+
+    QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
+    QidiBoxTestAccess::parse_vars(
+        backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+
+    // Edit A: ABS / eSUN / 0x060606 -> fila 11, colour 2, vendor 2. It lands.
+    auto info_a = backend.get_slot_info(0);
+    info_a.material = "ABS";
+    info_a.brand = "eSUN";
+    info_a.color_rgb = 0x060606u;
+    helix::test::edit_slot_as_user(backend, 0, info_a);
+    REQUIRE(backend.sent.size() == 3);
+
+    // Edit B: PETG-CF / Generic / 0xB87F2B -> fila 42, colour 24, vendor 0.
+    // None of its writes reach the box.
+    backend.fail_dispatch = true;
+    auto info_b = backend.get_slot_info(0);
+    info_b.material = "PETG-CF";
+    info_b.brand = "Generic";
+    info_b.color_rgb = 0xB87F2Bu;
+    helix::test::edit_slot_as_user(backend, 0, info_b);
+    backend.fail_dispatch = false;
+    REQUIRE(backend.sent.size() == 3);
+
+    // B staged an override despite the failed push; it must survive A's echo.
+    auto staged = QidiBoxTestAccess::get_override(backend, 0);
+    REQUIRE(staged.has_value());
+    CHECK(staged->material == "PETG-CF");
+
+    // Firmware never heard B, so it echoes A's ids back. A's expectation
+    // survived B's forget, so this reads as our own echo, not a swap.
+    QidiBoxTestAccess::parse_vars(
+        backend, json{{"filament_slot0", 11}, {"color_slot0", 2}, {"vendor_slot0", 2}});
+    CHECK(QidiBoxTestAccess::get_override(backend, 0).has_value());
+
+    // A different spool afterwards is still a genuine swap.
+    QidiBoxTestAccess::parse_vars(
+        backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
     CHECK_FALSE(QidiBoxTestAccess::get_override(backend, 0).has_value());
 }
 
