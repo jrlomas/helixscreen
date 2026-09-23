@@ -26,7 +26,9 @@ printing a usage error and matching nothing, which reads as a clean zero.
 The other four claims in that item held, but were misleading rather than useful —
 the module genuinely has no print-end hook, because `print_stats` calls *into* it.
 
-Full trace: `docs/devel/plans/u1-extruder-map-reset-investigation.md` (commit `d725ade70`).
+Full trace: commit `d725ade70` (the investigation note; git history is the archive).
+The observed reset rules live in `docs/devel/FILAMENT_BACKEND_SNAPMAKER_U1.md`
+(tool-mapping read gates).
 
 ### 2. "The test fails when a concurrent cmdline contains both moonraker and helix-screen"
 
