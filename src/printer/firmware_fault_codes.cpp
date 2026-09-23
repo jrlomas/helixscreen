@@ -106,7 +106,9 @@ const std::array<Provider, 1> kProviders{{
      ErrorSource::SNAPMAKER,
      classify_snapmaker,
      read_standing_snapmaker,
-     "snapmaker:exception_notification",
+     // Moonraker sends event "snapmaker:exception_notification" to websocket
+     // clients as "notify_" + the part after the colon.
+     "notify_exception_notification",
      read_notification_snapmaker},
 }};
 

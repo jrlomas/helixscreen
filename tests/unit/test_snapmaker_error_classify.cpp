@@ -410,14 +410,14 @@ nlohmann::json prefs_entry() {
             {"is_persistent", 0}};
 }
 
-/// The frame shape the method callback delivers.
+/// The frame shape the method callback delivers, method name as measured on a U1.
 nlohmann::json raise_frame(const nlohmann::json& entry) {
-    return {{"method", "snapmaker:exception_notification"},
+    return {{"method", "notify_exception_notification"},
             {"params", nlohmann::json::array({entry})}};
 }
 
 constexpr const char* PREFS_CODE = "0001-0531-0000-0016";
-constexpr const char* PREFS_METHOD = "snapmaker:exception_notification";
+constexpr const char* PREFS_METHOD = "notify_exception_notification";
 constexpr const char* PREFS_MESSAGE =
     "[print_task_config] not allow to set preferences during printing!";
 
