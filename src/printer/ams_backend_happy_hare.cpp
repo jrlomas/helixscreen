@@ -2788,6 +2788,16 @@ bool is_full_clear(const SlotInfo& info) {
     return info.spoolman_id == 0 && !info.has_filament_info() && info.brand.empty() &&
            info.spool_name.empty();
 }
+
+/// Spoolman pull mode refuses local gate-map writes by logging the refusal
+/// only, so every refusal path reports it here instead: a partial failure
+/// (HelixScreen's own layer is already written) naming Spoolman as the owner.
+AmsError pull_mode_refusal(const char* title, const char* message) {
+    AmsError refused(AmsResult::COMMAND_FAILED, "Happy Hare Spoolman pull mode owns the gate map",
+                     lv_tr(title), lv_tr(message));
+    refused.partially_applied = true;
+    return refused;
+}
 } // namespace
 
 AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& info,
@@ -2854,13 +2864,9 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
                          "cleared locally only",
                          slot_index);
             emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
-            AmsError refused(AmsResult::COMMAND_FAILED,
-                             "Happy Hare Spoolman pull mode owns the gate map",
-                             lv_tr("Couldn't clear the printer's gate map"),
-                             lv_tr("This printer fills its gates from Spoolman. HelixScreen "
-                                   "cleared its own copy; remove the spool in Spoolman."));
-            refused.partially_applied = true;
-            return refused;
+            return pull_mode_refusal("Couldn't clear the printer's gate map",
+                                     "This printer fills its gates from Spoolman. HelixScreen "
+                                     "cleared its own copy; remove the spool in Spoolman.");
         }
 
         // A job on this gate: the print UI refuses clears while a job holds
@@ -2954,13 +2960,9 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
     emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
 
     if (has_changes && pull_owns_gate_map) {
-        AmsError refused(AmsResult::COMMAND_FAILED,
-                         "Happy Hare Spoolman pull mode owns the gate map",
-                         lv_tr("Couldn't save the printer's gate map"),
-                         lv_tr("This printer fills its gates from Spoolman. Make colour, "
-                               "material and spool changes in Spoolman."));
-        refused.partially_applied = true;
-        return refused;
+        return pull_mode_refusal("Couldn't save the printer's gate map",
+                                 "This printer fills its gates from Spoolman. Make colour, "
+                                 "material and spool changes in Spoolman.");
     }
 
     if (!rejected_material.empty()) {
