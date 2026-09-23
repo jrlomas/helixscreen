@@ -197,6 +197,74 @@ TEST_CASE("Rediscovery does not leak one tool's spool onto another",
     CHECK(untouched.material.empty());
 }
 
+TEST_CASE("Clear Spool blanks a tool's record live and after rediscovery",
+          "[ams][toolchanger][slot_memory][1661]") {
+    helix::test::RegisteredBackend<SlotMemoryHelper> h_reg(4);
+    SlotMemoryHelper& h = *h_reg;
+
+    // #1661's own shape: an UNLINKED pick - no Spoolman id, just a colour
+    // pick, a typed weight and a colour name a person entered.
+    helix::SlotInfo picked = blue_petg();
+    picked.spoolman_id = 0;
+    helix::test::edit_slot_as_user(h, 1, picked);
+    REQUIRE(h.get_slot_info(1).color_rgb == 0x1E5AA8);
+    REQUIRE(h.get_slot_info(1).remaining_weight_g == 730);
+
+    // The Clear Spool funnel's sequence (ui_ams_detail.cpp): the commit
+    // states the blank, then clear_slot_override() drops the standing record
+    // whole - the half that makes live agree with a restart.
+    helix::SlotInfo cleared = h.get_slot_info(1);
+    cleared.material.clear();
+    cleared.color_rgb = helix::AMS_DEFAULT_SLOT_COLOR;
+    cleared.color_name.clear();
+    cleared.multi_color_hexes.clear();
+    cleared.brand.clear();
+    cleared.catalog_id.clear();
+    cleared.product_name.clear();
+    cleared.clear_spoolman_link();
+    cleared.remaining_weight_g = -1;
+    cleared.total_weight_g = -1;
+    helix::test::edit_slot_as_user(h, 1, cleared);
+    h.clear_slot_override(1);
+
+    // Blank on the very next read.
+    auto slot = h.get_slot_info(1);
+    CHECK(slot.color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+    CHECK(slot.material.empty());
+    CHECK(slot.color_name.empty());
+    CHECK(slot.brand.empty());
+    CHECK(slot.remaining_weight_g == -1);
+
+    // And blank after the reconnect wipe: no record survives to re-layer.
+    h.set_tools(4);
+    slot = h.get_slot_info(1);
+    CHECK(slot.color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+    CHECK(slot.material.empty());
+    CHECK(slot.color_name.empty());
+    CHECK(slot.remaining_weight_g == -1);
+}
+
+TEST_CASE("A clear without a preceding commit still drops the record",
+          "[ams][toolchanger][slot_memory][1661]") {
+    helix::test::RegisteredBackend<SlotMemoryHelper> h_reg(4);
+    SlotMemoryHelper& h = *h_reg;
+    helix::SlotInfo picked = blue_petg();
+    picked.spoolman_id = 0;
+    helix::test::edit_slot_as_user(h, 1, picked);
+    REQUIRE(h.get_slot_info(1).color_rgb == 0x1E5AA8);
+
+    // The funnel always commits a blank first, but clear_slot_override()'s own
+    // contract is "drop the standing record" - a caller that skips the commit
+    // must not have the pick re-layered by the next rediscovery.
+    h.clear_slot_override(1);
+    h.set_tools(4);
+
+    auto slot = h.get_slot_info(1);
+    CHECK(slot.color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+    CHECK(slot.material.empty());
+    CHECK(slot.remaining_weight_g == -1);
+}
+
 TEST_CASE("A status frame does not undo the user's edit", "[ams][toolchanger][slot_memory]") {
     helix::test::RegisteredBackend<SlotMemoryHelper> h_reg(4);
     SlotMemoryHelper& h = *h_reg;
@@ -475,6 +543,45 @@ TEST_CASE("Tool-changer slot metadata round-trips through Moonraker",
 
         // A tool the user never touched stays untouched.
         CHECK(fresh.get_slot_info(0).color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+    }
+}
+
+TEST_CASE("A cleared tool-changer record is gone after a reload",
+          "[ams][toolchanger][slot_memory][filament_slot_override][slow][1661]") {
+    ScopedCacheDir tmp("clearreload");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    {
+        helix::test::RegisteredBackend<StoreBackedHelper> h_reg(&api, 4);
+        StoreBackedHelper& h = *h_reg;
+        helix::ToolChangerTestAccess::call_on_started(h);
+
+        helix::SlotInfo picked = blue_petg();
+        picked.spoolman_id = 0;
+        helix::test::edit_slot_as_user(h, 1, picked);
+        // The edit is live before anything is cleared.
+        REQUIRE(h.get_slot_info(1).color_rgb == 0x1E5AA8);
+
+        h.clear_slot_override(1);
+        CHECK(h.get_slot_info(1).color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+        CHECK(h.get_slot_info(1).material.empty());
+    }
+
+    // The record is GONE, not blank: a blank record would still re-apply on
+    // reload, pinning the lane's declared set to nothing instead of freeing it.
+    CHECK(api.mock_get_db_value("lane_data", "T1").is_null());
+
+    // Restart: nothing in memory, nothing in the store, tool 1 reads default.
+    {
+        helix::test::RegisteredBackend<StoreBackedHelper> fresh_reg(&api, 4);
+        StoreBackedHelper& fresh = *fresh_reg;
+        helix::ToolChangerTestAccess::call_on_started(fresh);
+        CHECK(fresh.get_slot_info(1).color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+        CHECK(fresh.get_slot_info(1).material.empty());
+        CHECK(fresh.get_slot_info(1).spoolman_id == 0);
     }
 }
 

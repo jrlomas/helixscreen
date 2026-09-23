@@ -1014,3 +1014,136 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     REQUIRE(header != nullptr);
     CHECK(std::string(lv_label_get_text(header)) == "Gate 3");
 }
+
+// ============================================================================
+// on_created: Clear Spool greys out with a reason while its lane feeds the job
+// ============================================================================
+
+namespace {
+
+/// Pin the lifecycle through the wire driver for one case and restore a
+/// machine-free state on scope exit, even when an assertion throws: the
+/// lifecycle subject outlives every test in this binary, and a latched
+/// PRINTING changes what any later test's Clear Spool is allowed to do.
+class ScopedWireState {
+  public:
+    ScopedWireState(PrinterState& st, helix::PrintJobState s) : st_(st) {
+        helix::test::set_wire_state(st_, s);
+    }
+    ~ScopedWireState() {
+        helix::test::set_wire_state(st_, helix::PrintJobState::STANDBY);
+    }
+
+  private:
+    PrinterState& st_;
+};
+
+} // namespace
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "AmsContextMenu: Clear Spool greys out with a reason while its lane feeds the job",
+                 "[ui][ams][context_menu][1661]") {
+    auto backend = std::make_unique<AmsBackendMock>(4);
+    REQUIRE(backend->lane_noun() == LaneNoun::Gate);
+    // create_mock()'s seed, restated for a directly-constructed mock: slot 0 is
+    // the loaded, current lane, the one a job draws from.
+    REQUIRE(backend->slot_is_actively_loaded(0));
+
+    // ams_context_menu.xml is registered lazily by AmsPanel/AmsOverviewPanel
+    // rather than by helix::register_xml_components(), so the fixture's
+    // "every component" registration does not cover it.
+    REQUIRE(lv_xml_register_component_from_file("A:ui_xml/ams_context_menu.xml") == LV_RESULT_OK);
+
+    SECTION("mid-print, on the lane the job is drawing from") {
+        ScopedWireState printing(state(), helix::PrintJobState::PRINTING);
+
+        AmsContextMenu menu;
+        REQUIRE(menu.show_near_widget(test_screen(), /*slot_index=*/0, test_screen(),
+                                      /*is_loaded=*/true, backend.get()));
+
+        lv_subject_t* can_clear = lv_xml_get_subject(nullptr, "ams_slot_can_clear");
+        REQUIRE(can_clear != nullptr);
+        CHECK(lv_subject_get_int(can_clear) == 0);
+
+        // The reason is on screen in the backend's own word for the position.
+        lv_subject_t* hint = lv_xml_get_subject(nullptr, "ams_slot_clear_hint");
+        REQUIRE(hint != nullptr);
+        const std::string hint_text = lv_subject_get_string(hint);
+        CHECK(hint_text.find("Gate 1") != std::string::npos);
+        CHECK(hint_text.find("feeding the current print") != std::string::npos);
+
+        lv_subject_t* hint_visible = lv_xml_get_subject(nullptr, "ams_slot_clear_hint_visible");
+        REQUIRE(hint_visible != nullptr);
+        CHECK(lv_subject_get_int(hint_visible) == 1);
+
+        // The bound button itself: revealed (the slot carries a spool) but
+        // disabled, so the finger cannot fire a clear the dispatch would refuse.
+        lv_obj_t* btn_clear = lv_obj_find_by_name(test_screen(), "btn_clear_spool");
+        REQUIRE(btn_clear != nullptr);
+        CHECK_FALSE(lv_obj_has_flag(btn_clear, LV_OBJ_FLAG_HIDDEN));
+        CHECK(lv_obj_has_state(btn_clear, LV_STATE_DISABLED));
+    }
+
+    SECTION("same lane, machine free") {
+        ScopedWireState idle(state(), helix::PrintJobState::STANDBY);
+
+        AmsContextMenu menu;
+        REQUIRE(menu.show_near_widget(test_screen(), /*slot_index=*/0, test_screen(),
+                                      /*is_loaded=*/true, backend.get()));
+
+        lv_subject_t* can_clear = lv_xml_get_subject(nullptr, "ams_slot_can_clear");
+        REQUIRE(can_clear != nullptr);
+        CHECK(lv_subject_get_int(can_clear) == 1);
+
+        lv_subject_t* hint_visible = lv_xml_get_subject(nullptr, "ams_slot_clear_hint_visible");
+        REQUIRE(hint_visible != nullptr);
+        CHECK(lv_subject_get_int(hint_visible) == 0);
+
+        lv_obj_t* btn_clear = lv_obj_find_by_name(test_screen(), "btn_clear_spool");
+        REQUIRE(btn_clear != nullptr);
+        CHECK_FALSE(lv_obj_has_state(btn_clear, LV_STATE_DISABLED));
+    }
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "AmsContextMenu: an external menu resets a lane's Clear refusal",
+                 "[ui][ams][context_menu][1661]") {
+    auto backend = std::make_unique<AmsBackendMock>(4);
+    REQUIRE(backend->slot_is_actively_loaded(0));
+
+    REQUIRE(lv_xml_register_component_from_file("A:ui_xml/ams_context_menu.xml") == LV_RESULT_OK);
+
+    // Stage the refusal: a lane menu rendered mid-print on the feeding lane
+    // leaves can_clear=0 and the hint published. The subjects are static and
+    // outlive the menu, so this is the state the bypass menu inherits.
+    {
+        ScopedWireState printing(state(), helix::PrintJobState::PRINTING);
+        AmsContextMenu lane_menu;
+        REQUIRE(lane_menu.show_near_widget(test_screen(), /*slot_index=*/0, test_screen(),
+                                           /*is_loaded=*/true, backend.get()));
+    }
+    lv_subject_t* can_clear = lv_xml_get_subject(nullptr, "ams_slot_can_clear");
+    REQUIRE(can_clear != nullptr);
+    REQUIRE(lv_subject_get_int(can_clear) == 0); // the refusal is staged
+
+    AmsContextMenu ext_menu;
+    REQUIRE(ext_menu.show_for_external_spool(test_screen(), test_screen()));
+
+    // The bypass spool's own Clear erases its assignment, not a lane's
+    // metadata, so the lane's refusal must not render under it.
+    CHECK(lv_subject_get_int(can_clear) == 1);
+
+    lv_subject_t* hint = lv_xml_get_subject(nullptr, "ams_slot_clear_hint");
+    REQUIRE(hint != nullptr);
+    CHECK(std::string(lv_subject_get_string(hint)).empty());
+
+    lv_subject_t* hint_visible = lv_xml_get_subject(nullptr, "ams_slot_clear_hint_visible");
+    REQUIRE(hint_visible != nullptr);
+    CHECK(lv_subject_get_int(hint_visible) == 0);
+
+    // The fresh XML tree binds from the subjects at creation, so a stale
+    // refusal would draw the bypass menu's own Clear disabled.
+    lv_obj_t* btn_clear = lv_obj_find_by_name(test_screen(), "btn_clear_spool");
+    REQUIRE(btn_clear != nullptr);
+    CHECK_FALSE(lv_obj_has_state(btn_clear, LV_STATE_DISABLED));
+}

@@ -219,9 +219,9 @@ tool object's copy. `ToolState::init_tools()` resolves that model once from disc
 result to `read_tool_offset_microns()` per tool and per axis - each read a direct key lookup
 into the frame, never a scan of it - and only for the axes `supports_axis()` says the
 firmware keeps. `ToolInfo::gcode_offset(Axis)` returns the
-value with its `known` / `saved_mm` bookkeeping; the per-axis subjects
-(`per_tool_{x,y,z}_supported`, `active_tool_{x,y,z}_offset`, `active_tool_{x,y,z}_offset_valid`,
-`any_tool_{x,y,z}_dirty`, `any_tool_offset_dirty`) follow from it.
+value with its `known` / `saved_mm` bookkeeping; the per-tool subjects
+(`per_tool_{x,y,z}_supported`, `any_tool_offset_dirty`) follow from it, and the values
+themselves are read through the `tool_offset_*()` accessors rather than subjects.
 
 ---
 

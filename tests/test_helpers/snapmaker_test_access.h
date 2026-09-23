@@ -28,6 +28,13 @@ class SnapmakerTestAccess {
     static void handle_status(AmsBackendSnapmaker& b, const nlohmann::json& n) {
         b.handle_status_update(n);
     }
+    /// Drive the boot path a live backend runs: construct the override store
+    /// from the DB, load its records, and publish them. A unit test skips
+    /// discovery, so without this the store an injected fixture installed is
+    /// all a backend ever has.
+    static void call_on_started(AmsBackendSnapmaker& b) {
+        b.on_started();
+    }
     static void seed_override(AmsBackendSnapmaker& b, int slot_index,
                               const helix::ams::FilamentSlotOverride& ovr) {
         {

@@ -686,6 +686,7 @@ class PrintStatusPanel : public OverlayBase {
     void recompute_paused_overlay_visibility();
     void handle_tune_button();
     void handle_reprint_button(); ///< Reprint the cancelled file
+    void handle_files_click();    ///< Open print select while this overlay holds the screen
     void handle_resize();
 
     /// @brief Tool indices used by the currently-loaded G-code (for U1 native pre-send).
@@ -709,6 +710,7 @@ class PrintStatusPanel : public OverlayBase {
     static void on_tune_clicked(lv_event_t* e);
     static void on_print_status_camera(lv_event_t* e);
     static void on_reprint_clicked(lv_event_t* e);
+    static void on_files_clicked(lv_event_t* e);
     static void on_objects_clicked(lv_event_t* e);
     static void on_view_toggle_clicked(lv_event_t* e);
     static void on_fans_clicked(lv_event_t* e);

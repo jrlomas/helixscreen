@@ -5,6 +5,8 @@
 
 #include "ams_error.h"
 #include "display_numbering.h"
+#include "lane_apply.h"
+#include "lane_legacy_migration.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
 #include "macro_param_cache.h"
@@ -22,6 +24,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 
 // Stub backend for the QIDI Box filament changer. Read-path mirrors
@@ -54,6 +57,43 @@ std::optional<int> parse_slot_name(const std::string& val, int slot_count) {
     } catch (const std::exception&) {
         // Bad slot string — fall through to nullopt
     }
+    return std::nullopt;
+}
+
+// Read a slot's palette row id (filament_slot<N> / color_slot<N> /
+// vendor_slot<N>) from a save_variables value. The firmware and HelixScreen
+// write bare ints, but a SAVE_VARIABLE spelled with a quoted VALUE - Qidi
+// Studio emits VALUE="5" - is stored as a string, because save_variables.py
+// evaluates the literal before saving it. Accept a non-negative integer, or a
+// string holding nothing but a non-negative integer (surrounding whitespace
+// tolerated) - zero IS an id: it is the Box stating the field is unset. Any
+// other value is a writer the ids have no meaning for: logged and ignored,
+// leaving the previously stated id in place.
+std::optional<int> read_slot_id(const nlohmann::json& val, const std::string& key) {
+    if (val.is_number_integer()) {
+        const int id = val.get<int>();
+        // A negative id has no palette row; the digits-only string branch
+        // already refuses one, so the two spellings of the same write agree.
+        if (id >= 0) {
+            return id;
+        }
+    }
+    if (val.is_string()) {
+        std::string s = val.get<std::string>();
+        const auto not_space = [](unsigned char c) { return std::isspace(c) == 0; };
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
+        s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
+        const auto is_digit = [](unsigned char c) { return std::isdigit(c) != 0; };
+        if (!s.empty() && std::all_of(s.begin(), s.end(), is_digit)) {
+            try {
+                return std::stoi(s);
+            } catch (const std::exception&) {
+                // More digits than an int holds - no palette row is that big.
+            }
+        }
+    }
+    spdlog::debug("AmsBackendQidi save_variables {} holds a non-integer or negative value; ignored",
+                  key);
     return std::nullopt;
 }
 
@@ -228,6 +268,29 @@ AmsBackendQidi::~AmsBackendQidi() = default;
 // --- Lifecycle hooks ---
 
 void AmsBackendQidi::on_started() {
+    // Load persisted per-slot overrides before any parse can run, so the
+    // fingerprint baseline and a staged clear agree about what the user had.
+    // Call with NO lock held: the DB round-trip blocks, and the parse path
+    // takes this mutex.
+    if (api_) {
+        auto loaded =
+            helix::ams::make_loaded_override_store(api_, "qidi", get_type(), backend_log_tag());
+        if (loaded.store) {
+            helix::ams::ingest_legacy_records(*loaded.store, helix::ams::LegacyLockKeys::LaneData,
+                                              backend_index());
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            override_store_ = std::move(loaded.store);
+            overrides_ = std::move(loaded.overrides);
+            // A swap the user made while HelixScreen was down still has to
+            // clear the stale override: the record's persisted fingerprint is
+            // the baseline the first post-restart poll compares against.
+            helix::ams::bind_fingerprint_persistence(rfid_tracker_, override_store_.get(),
+                                                     overrides_);
+        }
+    }
+
     if (!client_) {
         return;
     }
@@ -596,6 +659,18 @@ void AmsBackendQidi::rebuild_tool_map_locked() {
     system_info_.tool_to_slot_map = ledger.tool_map();
 }
 
+// The Box states no tag UID: the three save_variable table indices are the
+// most specific identity it reports, so their composite is the spool
+// fingerprint (the same surrogate CFS builds from material_type and
+// color_value). All-zero ids state nothing, which the tracker reads as no
+// signal rather than a fingerprint.
+static std::string qidi_slot_fingerprint(int filament_id, int color_id, int vendor_id) {
+    if (filament_id <= 0 && color_id <= 0 && vendor_id <= 0) {
+        return "";
+    }
+    return fmt::format("{}|{}|{}", filament_id, color_id, vendor_id);
+}
+
 void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
     if (!variables.is_object()) {
         return;
@@ -654,6 +729,7 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
     // resizes the slot vector and the map has to follow it.
     rebuild_tool_map_locked();
 
+    bool stated_slot[QIDI_MAX_BOXES * QIDI_SLOTS_PER_BOX] = {};
     for (int i = 0; i < slot_count; ++i) {
         auto* slot = system_info_.get_slot_global(i);
         if (!slot) {
@@ -664,6 +740,7 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
         if (slot_it == variables.end() || !slot_it->is_number_integer()) {
             continue;
         }
+        stated_slot[i] = true;
         const int state = slot_it->get<int>();
         switch (state) {
         case 0:
@@ -743,20 +820,33 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
             continue;
         }
         const std::string suffix = std::to_string(i);
-        if (auto it = variables.find("filament_slot" + suffix);
-            it != variables.end() && it->is_number_integer()) {
-            slot_rfid_[static_cast<size_t>(i)].filament_id = it->get<int>();
+        const auto read_slot_var = [&variables](const std::string& key) -> std::optional<int> {
+            const auto it = variables.find(key);
+            if (it == variables.end()) {
+                return std::nullopt;
+            }
+            return read_slot_id(*it, key);
+        };
+        auto& ids = slot_rfid_[static_cast<size_t>(i)];
+        if (const auto id = read_slot_var("filament_slot" + suffix)) {
+            ids.filament_id = *id;
         }
-        if (auto it = variables.find("color_slot" + suffix);
-            it != variables.end() && it->is_number_integer()) {
-            slot_rfid_[static_cast<size_t>(i)].color_id = it->get<int>();
+        if (const auto id = read_slot_var("color_slot" + suffix)) {
+            ids.color_id = *id;
         }
-        if (auto it = variables.find("vendor_slot" + suffix);
-            it != variables.end() && it->is_number_integer()) {
-            slot_rfid_[static_cast<size_t>(i)].vendor_id = it->get<int>();
+        if (const auto id = read_slot_var("vendor_slot" + suffix)) {
+            ids.vendor_id = *id;
         }
 
         const auto& rfid = slot_rfid_[static_cast<size_t>(i)];
+        const std::string fingerprint =
+            qidi_slot_fingerprint(rfid.filament_id, rfid.color_id, rfid.vendor_id);
+
+        // A fingerprint change the Box did not hear from us is a physical
+        // spool swap, which outranks edits made for the previous spool. Runs
+        // before the paint below so a cleared slot shows the new tag's
+        // identity in this same pass.
+        check_hardware_event_clear(*slot, i, fingerprint);
 
         // The saved ids name rows in the Box's own tables, which makes a row
         // that resolves the reading and an id that resolves against nothing no
@@ -765,6 +855,11 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
         // table reload that drops a row leaves the last frame's value sitting
         // there with nothing behind it, and reading it back would file that
         // orphan as something the Box still says.
+        //
+        // An id of 0 is the Box stating the field is unset, so the else-arms
+        // blank it: without them the paint from the last frame before the zero
+        // lands would linger forever, the > 0 gates below having nothing to
+        // overwrite.
         helix::ams::Observation cache(helix::ams::ObservationSource::VendorCache);
         if (rfid.filament_id > 0) {
             auto p = fila_profiles_.find(rfid.filament_id);
@@ -776,6 +871,10 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
                     cache.material = p->second.type;
                 }
             }
+        } else {
+            slot->material.clear();
+            slot->nozzle_temp_min = 0;
+            slot->nozzle_temp_max = 0;
         }
         if (rfid.color_id > 0) {
             auto c = color_palette_.find(rfid.color_id);
@@ -787,6 +886,8 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
                     cache.color_rgb = c->second;
                 }
             }
+        } else {
+            slot->color_rgb = 0;
         }
         if (rfid.vendor_id > 0) {
             auto v = vendor_names_.find(rfid.vendor_id);
@@ -794,6 +895,10 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
                 slot->brand = v->second;
                 cache.brand = v->second;
             }
+        } else {
+            // vendor 0 is a real table row ("Generic"), but a slot the Box
+            // reports as untagged shows no brand, matching the clear.
+            slot->brand.clear();
         }
         helix::ams::ingest(lane_id(i), cache);
     }
@@ -824,21 +929,32 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
     // and answering "no reading" there would retract a live presence record at
     // the moment a lane jams.
     //
-    // UNKNOWN is the Box declining to state, which is not a statement that the
-    // lane is empty, so a slot resting there keeps whatever the last frame that
-    // did speak established.
+    // A lane the frame said nothing about (no slot<N> key) files nothing, so a
+    // frame that stays silent keeps whatever the last frame that did speak
+    // established. UNKNOWN the frame DID state, and filing it with present
+    // unset retracts the earlier reading the way ACE, AD5X IFS and Happy Hare
+    // treat a machine that declines to state.
     for (int i = 0; i < slot_count; ++i) {
         const auto* s = system_info_.get_slot_global(i);
-        if (!s) {
-            continue;
-        }
-        const auto reports = slot_status_reports_filament(s->status);
-        if (!reports) {
+        if (!s || !stated_slot[i]) {
             continue;
         }
         helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
-        sensed.present = *reports;
+        sensed.present = slot_status_reports_filament(s->status);
         helix::ams::ingest(lane_id(i), sensed);
+    }
+
+    // Lay each slot's resolved lane over the machine paint, last, so a field
+    // the user declared outranks this frame's tag reading: an edit stays on
+    // screen between its SAVE_VARIABLE dispatch and the echo, and a stored
+    // edit shows again after a restart. Only fields some source observed are
+    // written, so a lane no one declared against keeps the tag's own paint,
+    // and the status overlay runs through presence filed from the reconciled
+    // stamp above, which is what has_per_slot_loaded_authority() promises.
+    for (int i = 0; i < slot_count; ++i) {
+        if (auto* slot = system_info_.get_slot_global(i)) {
+            apply_resolved_lane(*slot, i);
+        }
     }
 }
 
@@ -1021,6 +1137,15 @@ SlotInfo AmsBackendQidi::get_slot_info(int slot_index) const {
     }
     const auto* slot = system_info_.get_slot_global(slot_index);
     return slot ? *slot : SlotInfo{};
+}
+
+SlotInfo* AmsBackendQidi::cached_slot_locked(int slot_index) {
+    return system_info_.get_slot_global(slot_index);
+}
+
+void AmsBackendQidi::prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) {
+    const auto it = overrides_.find(slot_index);
+    helix::ams::clear_lane_only_identity(slot, it == overrides_.end() ? nullptr : &it->second);
 }
 
 bool AmsBackendQidi::is_bypass_active() const {
@@ -1395,7 +1520,7 @@ int AmsBackendQidi::resolve_vendor_id(const std::map<int, std::string>& vendors,
 }
 
 AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
-                                         const helix::ams::Observation& /*declared*/) {
+                                         const helix::ams::Observation& declared) {
     spdlog::info("{} apply_user_edit(slot={}, material='{}', brand='{}')", backend_log_tag(),
                  slot_index, info.material, info.brand);
 
@@ -1404,6 +1529,7 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
     int vendor_id = 0;
     bool have_palette = false;
     bool have_vendors = false;
+    std::vector<std::string> staged_echoes;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (system_info_.units.empty()) {
@@ -1412,6 +1538,9 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
         if (!system_info_.get_slot_global(slot_index)) {
             return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
         }
+        // Stage the override so a later spool swap has something to clear and
+        // a restart reloads what the user chose.
+        helix::ams::stage_user_override(overrides_, slot_index, info, declared);
         // SlotInfo has no dedicated "QIDI product label" field; callers may put
         // a product name ("ABS Rapido") OR a bare material ("ABS") in .material.
         // Pass it as BOTH the material and the name hint so the resolver tries
@@ -1425,14 +1554,51 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
         if (have_vendors) {
             vendor_id = resolve_vendor_id(vendor_names_, info.brand);
         }
+
+        // Self-wipe guard. The SAVE_VARIABLEs below echo back as fingerprint
+        // changes, which on their own read exactly like a physical spool swap
+        // and would erase the override the user just created. The three writes
+        // are separate gcodes, so a poll can land between any of them: register
+        // every composite the slot may transiently or finally report, built
+        // from the old ids and the written ones per field. Each echo consumes
+        // only its own entry; any non-matching change consumes them all, so a
+        // genuine swap while a write is in flight is still detected. A clear's
+        // still-echoing zero composites stay expected alongside these:
+        // expect_any_of() accumulates.
+        //
+        // With no baseline yet there is nothing to guard: the first
+        // observation is a baseline and never fires a clear.
+        if (const auto base = rfid_tracker_.baseline(slot_index)) {
+            const size_t idx = static_cast<size_t>(slot_index);
+            const int old_fila = idx < slot_rfid_.size() ? slot_rfid_[idx].filament_id : 0;
+            const int old_color = idx < slot_rfid_.size() ? slot_rfid_[idx].color_id : 0;
+            const int old_vendor = idx < slot_rfid_.size() ? slot_rfid_[idx].vendor_id : 0;
+
+            std::vector<int> fila_vals{old_fila};
+            std::vector<int> color_vals{old_color};
+            std::vector<int> vendor_vals{old_vendor};
+            if (fila_id > 0 && fila_id != old_fila) {
+                fila_vals.push_back(fila_id);
+            }
+            if (have_palette && color_id > 0 && color_id != old_color) {
+                color_vals.push_back(color_id);
+            }
+            if (have_vendors && vendor_id != old_vendor) {
+                vendor_vals.push_back(vendor_id);
+            }
+            staged_echoes = expect_own_write_echoes_locked(slot_index, *base, fila_vals, color_vals,
+                                                           vendor_vals);
+        }
     }
 
     const std::string suffix = std::to_string(slot_index);
     bool wrote_any = false;
+    bool dispatched_any = false;
 
     if (fila_id > 0) {
-        execute_gcode("SAVE_VARIABLE VARIABLE=filament_slot" + suffix +
-                      " VALUE=" + std::to_string(fila_id));
+        dispatched_any |= execute_gcode("SAVE_VARIABLE VARIABLE=filament_slot" + suffix +
+                                        " VALUE=" + std::to_string(fila_id))
+                              .success();
         wrote_any = true;
     } else {
         spdlog::warn("{} apply_user_edit: no fila match for material='{}' — "
@@ -1440,15 +1606,17 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
                      backend_log_tag(), info.material);
     }
     if (have_palette && color_id > 0) {
-        execute_gcode("SAVE_VARIABLE VARIABLE=color_slot" + suffix +
-                      " VALUE=" + std::to_string(color_id));
+        dispatched_any |= execute_gcode("SAVE_VARIABLE VARIABLE=color_slot" + suffix +
+                                        " VALUE=" + std::to_string(color_id))
+                              .success();
         wrote_any = true;
     }
     // vendor_id 0 is the legitimate "Generic" id, so only the empty-map case
     // (have_vendors == false) suppresses the write.
     if (have_vendors) {
-        execute_gcode("SAVE_VARIABLE VARIABLE=vendor_slot" + suffix +
-                      " VALUE=" + std::to_string(vendor_id));
+        dispatched_any |= execute_gcode("SAVE_VARIABLE VARIABLE=vendor_slot" + suffix +
+                                        " VALUE=" + std::to_string(vendor_id))
+                              .success();
         wrote_any = true;
     }
 
@@ -1459,6 +1627,37 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
                      "loaded?) — no SAVE_VARIABLE issued",
                      backend_log_tag(), slot_index);
     }
+    if (!dispatched_any) {
+        // No echo is coming for the writes this edit staged, so release
+        // exactly their claims - an earlier edit whose echo is still in
+        // flight stays expected, or its landing would read as a swap and
+        // wipe the user's data.
+        std::lock_guard<std::mutex> lock(mutex_);
+        rfid_tracker_.forget_expected(slot_index, staged_echoes);
+    }
+
+    if (override_store_) {
+        // Re-read from overrides_ under the lock to pick up the staged copy.
+        helix::ams::FilamentSlotOverride ovr_to_save;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto it = overrides_.find(slot_index);
+            if (it != overrides_.end()) {
+                ovr_to_save = it->second;
+            }
+        }
+        // Capture by value — save_async's Moonraker callback may fire long
+        // after this returns. Do NOT capture `this`.
+        const std::string tag = backend_log_tag();
+        override_store_->save_async(
+            slot_index, ovr_to_save, [tag, slot_index](bool success, const std::string& err) {
+                if (!success) {
+                    spdlog::warn("{} Override persist failed for slot {}: {}", tag, slot_index,
+                                 err);
+                }
+            });
+    }
+
     return AmsErrorHelper::success();
 }
 
@@ -1505,8 +1704,158 @@ AmsError AmsBackendQidi::set_tool_mapping_impl(int tool_number, int slot_index) 
                          " VALUE=\"slot" + std::to_string(slot_index) + "\"");
 }
 
-void AmsBackendQidi::clear_slot_override(int /*slot_index*/) {
-    spdlog::warn("{} {} not yet implemented", backend_log_tag(), __func__);
+void AmsBackendQidi::clear_slot_override(int slot_index) {
+    std::vector<std::string> staged_echoes;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto* slot = system_info_.get_slot_global(slot_index);
+        if (!slot) {
+            spdlog::warn("{} clear_slot_override: no slot entry for index {}", backend_log_tag(),
+                         slot_index);
+            return;
+        }
+        spdlog::info("{} Slot {} override cleared by user request", backend_log_tag(), slot_index);
+        clear_override_locked(slot_index, *slot);
+
+        // The zero writes below echo back as fingerprint changes; without an
+        // expectation of our own they would read as a spool swap. Same shape
+        // as apply_user_edit(): the old ids and the written zero per field,
+        // cross-producted.
+        if (const auto base = rfid_tracker_.baseline(slot_index)) {
+            const size_t idx = static_cast<size_t>(slot_index);
+            const int old_fila = idx < slot_rfid_.size() ? slot_rfid_[idx].filament_id : 0;
+            const int old_color = idx < slot_rfid_.size() ? slot_rfid_[idx].color_id : 0;
+            const int old_vendor = idx < slot_rfid_.size() ? slot_rfid_[idx].vendor_id : 0;
+            staged_echoes = expect_own_write_echoes_locked(slot_index, *base, {old_fila, 0},
+                                                           {old_color, 0}, {old_vendor, 0});
+        }
+    }
+
+    // The Box has no clear command, so erasing what the firmware remembers is
+    // three bare-int writes. The table row ids start at 1, so 0 names no row
+    // and the slot reads as no identity. A tagged spool re-populates the slot
+    // at the next insert, boot or RFID read - the clear erases what the slot
+    // remembers, not what the hardware can read.
+    bool dispatched_any = false;
+    if (refuse_if_printing().success()) {
+        const std::string suffix = std::to_string(slot_index);
+        for (const std::string_view field : {"filament_slot", "color_slot", "vendor_slot"}) {
+            dispatched_any |=
+                execute_gcode("SAVE_VARIABLE VARIABLE=" + std::string(field) + suffix + " VALUE=0")
+                    .success();
+        }
+    } else {
+        spdlog::warn("{} clear_slot_override(slot={}): print active - firmware zero writes "
+                     "skipped, the local override is already cleared",
+                     backend_log_tag(), slot_index);
+    }
+    if (!dispatched_any) {
+        // No echo is coming for the zero writes this clear staged, so
+        // release exactly their claims - an earlier edit whose echo is
+        // still in flight stays expected.
+        std::lock_guard<std::mutex> lock(mutex_);
+        rfid_tracker_.forget_expected(slot_index, staged_echoes);
+    }
+
+    emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
+}
+
+bool AmsBackendQidi::check_hardware_event_clear(SlotInfo& slot, int slot_index,
+                                                const std::string& observed_uid) {
+    std::string old_uid;
+    const auto event = rfid_tracker_.observe(slot_index, observed_uid, &old_uid);
+
+    switch (event) {
+    case helix::ams::FingerprintEvent::NoSignal:
+        // Nothing stated this frame; the baseline stands so a later real read
+        // is compared against what the Box last said.
+        return false;
+    case helix::ams::FingerprintEvent::Baseline:
+        spdlog::debug("{} Slot {} baseline tag fingerprint: {}", backend_log_tag(), slot_index,
+                      observed_uid);
+        return false;
+    case helix::ams::FingerprintEvent::Unchanged:
+        return false;
+    case helix::ams::FingerprintEvent::OwnWriteEcho:
+        // The Box handed back the ids our own SAVE_VARIABLE push wrote. The
+        // physical spool never moved, so the user's override stands. The
+        // baseline has already advanced to the echoed value, so the next
+        // genuine swap is detected against it.
+        spdlog::debug("{} Slot {} tag fingerprint {} -> {} matches our own identity push — "
+                      "override retained",
+                      backend_log_tag(), slot_index, old_uid, observed_uid);
+        return false;
+    case helix::ams::FingerprintEvent::Changed:
+        break;
+    }
+
+    if (overrides_.find(slot_index) == overrides_.end()) {
+        spdlog::debug("{} Slot {} tag fingerprint changed {} -> {} (no override to clear)",
+                      backend_log_tag(), slot_index, old_uid, observed_uid);
+        return false;
+    }
+
+    spdlog::info("{} Slot {} tag fingerprint changed {} -> {}, clearing override "
+                 "(physical spool swap detected)",
+                 backend_log_tag(), slot_index, old_uid, observed_uid);
+
+    // Delegate erase + field reset + clear_async to the shared helper so
+    // hardware-event clears and user-initiated clears share one field-reset
+    // policy. Caller already holds mutex_.
+    clear_override_locked(slot_index, slot);
+    return true;
+}
+
+void AmsBackendQidi::clear_override_locked(int slot_index, SlotInfo& slot) {
+    // Caller must hold mutex_. Qidi field policy: the clear blanks everything
+    // the slot showed so it reads as no identity the moment the request lands;
+    // the parse's paint (or its else-arms, once the zero writes echo back)
+    // restates whatever the Box still reports.
+    overrides_.erase(slot_index);
+    // The lane's own records go with it: the erase above and this are one
+    // clear in two stores, and a clear that reached only one would leave
+    // resolve() still reporting the identity just removed.
+    helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
+
+    slot.material.clear();
+    slot.color_rgb = 0;
+    slot.nozzle_temp_min = 0;
+    slot.nozzle_temp_max = 0;
+    slot.brand.clear();
+    slot.clear_spoolman_link();
+    slot.remaining_weight_g = -1.0f;
+    slot.total_weight_g = -1.0f;
+    slot.color_name.clear();
+    slot.catalog_id.clear();
+    slot.product_name.clear();
+
+    if (override_store_) {
+        // Capture by value — clear_async's Moonraker callback can fire after
+        // this returns and after the backend itself is gone.
+        const std::string tag = backend_log_tag();
+        override_store_->clear_async(slot_index, [tag, slot_index](bool ok, std::string err) {
+            if (!ok) {
+                spdlog::warn("{} clear_async failed for slot {}: {}", tag, slot_index, err);
+            }
+        });
+    }
+}
+
+std::vector<std::string> AmsBackendQidi::expect_own_write_echoes_locked(
+    int slot_index, const std::string& base, const std::vector<int>& fila_vals,
+    const std::vector<int>& color_vals, const std::vector<int>& vendor_vals) {
+    std::vector<std::string> expected;
+    for (const int f : fila_vals) {
+        for (const int c : color_vals) {
+            for (const int v : vendor_vals) {
+                const std::string fp = qidi_slot_fingerprint(f, c, v);
+                if (!fp.empty() && fp != base) {
+                    expected.push_back(fp);
+                }
+            }
+        }
+    }
+    return rfid_tracker_.expect_any_of(slot_index, std::move(expected));
 }
 
 // --- Bypass ---

@@ -18,6 +18,7 @@
 #include "lane_observation.h"
 #include "lane_resolver.h"
 #include "lane_source_store.h"
+#include "lane_translation.h"
 #include "test_helpers/registered_backend.h"
 #include "test_helpers/seeded_override.h"
 
@@ -128,6 +129,125 @@ TEST_CASE_METHOD(LVGLTestFixture, "A clear leaves the machine's own readings alo
     CHECK(r.present == true);
     CHECK(r.material == "PETG");
     CHECK(r.color_rgb == 0xED2C2Cu);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "A cleared field hands the lane back to the machine at once",
+                 "[lane][writepath][1661]") {
+    // A clear withdraws the user's word rather than stating an emptiness: the
+    // moment it commits, nothing may sit over the field on the user rung, so
+    // the machine's own reading paints the lane again with no restart
+    // (prestonbrown/helixscreen#1661). The stored record carries the clear
+    // through the edit's values whatever the rung does.
+    RegisteredBackend<AmsBackendAfc> harness(nullptr, nullptr);
+    const auto lane = harness.lane(0);
+
+    Observation cache(ObservationSource::VendorCache);
+    cache.brand = "Firmware Brand";
+    cache.material = "PETG";
+    cache.spool_name = "Firmware Reel";
+    cache.spoolman_vendor_id = 9;
+    ingest(lane, cache);
+
+    // One edit that types a value (so a declaration stands to be withdrawn),
+    // then one that clears it. The editor opens on what the lane resolves, the
+    // same before the production editor sees.
+    const auto commit = [](helix::ams::LaneId l, const SlotInfo& original, const SlotInfo& edited) {
+        commit_slot_edit(l, helix::ams::user_edit_observation(original, edited));
+    };
+    const auto lane_shows = [lane] { return resolve(lane_sources(lane)); };
+
+    SECTION("brand") {
+        SlotInfo open;
+        apply_resolved(open, lane_shows());
+        REQUIRE(open.brand == "Firmware Brand");
+        SlotInfo typed = open;
+        typed.brand = "My Brand";
+        commit(lane, open, typed);
+        REQUIRE(lane_shows().brand.value_or("") == "My Brand");
+        SlotInfo cleared = typed;
+        cleared.brand.clear();
+        commit(lane, typed, cleared);
+        CHECK(lane_shows().brand.value_or("") == "Firmware Brand");
+    }
+
+    SECTION("material") {
+        SlotInfo open;
+        apply_resolved(open, lane_shows());
+        SlotInfo typed = open;
+        typed.material = "ABS";
+        commit(lane, open, typed);
+        REQUIRE(lane_shows().material.value_or("") == "ABS");
+        SlotInfo cleared = typed;
+        cleared.material.clear();
+        commit(lane, typed, cleared);
+        CHECK(lane_shows().material.value_or("") == "PETG");
+    }
+
+    SECTION("spool name") {
+        SlotInfo open;
+        apply_resolved(open, lane_shows());
+        SlotInfo typed = open;
+        typed.spool_name = "Bench reel";
+        commit(lane, open, typed);
+        REQUIRE(lane_shows().spool_name.value_or("") == "Bench reel");
+        SlotInfo cleared = typed;
+        cleared.spool_name.clear();
+        commit(lane, typed, cleared);
+        CHECK(lane_shows().spool_name.value_or("") == "Firmware Reel");
+    }
+
+    SECTION("vendor id") {
+        SlotInfo open;
+        apply_resolved(open, lane_shows());
+        SlotInfo typed = open;
+        typed.spoolman_vendor_id = 4;
+        commit(lane, open, typed);
+        REQUIRE(lane_shows().spoolman_vendor_id.value_or(0) == 4);
+        SlotInfo cleared = typed;
+        cleared.spoolman_vendor_id = 0;
+        commit(lane, typed, cleared);
+        CHECK(lane_shows().spoolman_vendor_id.value_or(0) == 9);
+    }
+
+    SECTION("a clear of one field leaves a sibling declaration standing") {
+        SlotInfo open;
+        apply_resolved(open, lane_shows());
+        SlotInfo typed = open;
+        typed.brand = "My Brand";
+        typed.spool_name = "Bench reel";
+        commit(lane, open, typed);
+        SlotInfo cleared = typed;
+        cleared.brand.clear();
+        commit(lane, typed, cleared);
+        CHECK(lane_shows().brand.value_or("") == "Firmware Brand");
+        CHECK(lane_shows().spool_name.value_or("") == "Bench reel");
+    }
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "A cleared field on a lane the machine is silent on stays blank",
+                 "[lane][writepath][1661]") {
+    // No vendor cache, no spool: the clear withdraws the declaration and
+    // nothing states the field, so the lane shows blank rather than the value
+    // the withdrawn declaration stood over (prestonbrown/helixscreen#1661).
+    RegisteredBackend<AmsBackendAfc> harness(nullptr, nullptr);
+    const auto lane = harness.lane(0);
+
+    SlotInfo open;
+    open.brand = "Whatever was loaded";
+    open.material = "PLA";
+    SlotInfo typed = open;
+    typed.brand = "My Brand";
+    typed.material = "ABS";
+    commit_slot_edit(lane, helix::ams::user_edit_observation(open, typed));
+    REQUIRE(resolve(lane_sources(lane)).brand.value_or("") == "My Brand");
+
+    SlotInfo cleared = typed;
+    cleared.brand.clear();
+    cleared.material.clear();
+    commit_slot_edit(lane, helix::ams::user_edit_observation(typed, cleared));
+    const auto after = resolve(lane_sources(lane));
+    CHECK_FALSE(after.brand.has_value());
+    CHECK_FALSE(after.material.has_value());
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "A metered weight reaches the lane it was measured on",

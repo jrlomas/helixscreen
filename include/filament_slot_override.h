@@ -164,6 +164,19 @@ struct FilamentSlotOverride {
     // defaults instead of carrying stale values forward. 0 = unset.
     int bed_temp = 0;
     int nozzle_temp = 0;
+    // The slot identity (RFID UID, composite material/brand/name/color key)
+    // the SlotFingerprintTracker last observed on this lane. Bookkeeping, not
+    // user data: it exists so a restart can tell "same spool" from "swapped
+    // while the app was down" instead of treating the first observation as a
+    // baseline. Written by bind_fingerprint_persistence's sink, carried
+    // forward by user edits (user_override_from_slot_info), erased with the
+    // rest of the entry on a swap clear. Empty on records that pre-date the
+    // field, which read back as first-observation baselines.
+    // Persistence: `helix_fingerprint` in the lane_data record (the shared
+    // namespace demands the prefix, and the key is omitted when empty so a
+    // lane without swap detection squats no names), bare `fingerprint` in the
+    // local cache.
+    std::string fingerprint;
     // Conflict avoidance for third-party writers.
     // ISO-8601 UTC on the wire. Second precision only — sub-second fractions
     // are truncated on format/parse.

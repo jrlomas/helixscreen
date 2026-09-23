@@ -13,6 +13,7 @@
 #include "system/debug_bundle_collector.h"
 #include "system/diagnostics.h"
 #include "test_helpers/ad5x_layout_fixture.h"
+#include "test_helpers/unique_temp_dir.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -28,8 +29,7 @@ namespace {
 struct TempDir {
     fs::path path;
     TempDir() {
-        path = fs::temp_directory_path() / ("helix-diag-test-" + std::to_string(::getpid()) + "-" +
-                                            std::to_string(std::rand()));
+        path = helix::test::unique_temp_dir("helix-diag-test");
         fs::create_directories(path);
     }
     ~TempDir() {

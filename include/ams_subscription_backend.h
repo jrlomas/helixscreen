@@ -193,6 +193,19 @@ class AmsSubscriptionBackend : public AmsBackend {
   protected:
     // --- Hooks for derived classes ---
 
+    /// Drop what earlier paints left on a persistent SlotInfo, so the paint
+    /// that follows takes the lane's current records as its only supplier.
+    ///
+    /// A backend whose SlotInfo persists across frames (AD5X IFS, Happy Hare)
+    /// must clear the identity fields nothing but the lane states before every
+    /// paint, or a field outlives the record that stated it. The default does
+    /// nothing: a backend that rebuilds its struct from each frame already
+    /// satisfies apply_resolved()'s premise. Caller holds mutex_.
+    virtual void prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) {
+        (void)slot_index;
+        (void)slot;
+    }
+
     /// Called after subscription is established and running_ is set.
     /// Lock is NOT held. Safe to call emit_event().
     virtual void on_started() {}

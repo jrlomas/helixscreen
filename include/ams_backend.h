@@ -1843,20 +1843,19 @@ class AmsBackend {
     [[nodiscard]] virtual helix::printer::ToolMappingOrigin tool_mapping_origin() const;
 
     /**
-     * @brief Erase the user-provided override for a slot.
+     * @brief Drop a lane's standing user declarations and override record.
      *
-     * Removes the FilamentSlotOverride for @p slot_index from both the
-     * in-memory map and the persisted FilamentSlotOverrideStore, then refreshes
-     * override-exclusive fields on the live SlotInfo so the cleared state is
-     * visible via get_slot_info() on the very next read.
+     * The lane half of a clear: resets the lane to what the machine reports
+     * (reset_lane_to_machine_readings) and erases the FilamentSlotOverride for
+     * @p slot_index from both the in-memory map and the persisted
+     * FilamentSlotOverrideStore, then announces the slot so the cleared state
+     * is visible on the very next read. The Clear Spool gesture calls this
+     * behind AmsState::commit_slot_edit, which owns the other half - the
+     * Spoolman server unlink and the ToolState clear - so this method never
+     * stands in for the commit (bundle F2LNLQCC).
      *
-     * Default implementation is a no-op, which the tool changer and the mock
-     * take. On a tool changer that is a decision, not an omission: nothing
-     * there can tell that a user swapped a spool, so a clear signal would have
-     * to be invented and would throw away user data on an event that does not
-     * mean what it would have to mean.
-     *
-     * Safe to call from the UI thread. Backends lock their own mutex_ for the
+     * Every lane-holding backend implements this. Safe to call from the UI
+     * thread. Backends lock their own mutex_ for the
      * in-memory mutation and submit the store clear asynchronously.
      *
      * @param slot_index Slot to clear (0-based, global)
@@ -2947,6 +2946,21 @@ class AmsBackend {
      */
     virtual void set_discovered_sensors(const std::vector<std::string>& sensor_names) {
         (void)sensor_names;
+    }
+
+    /**
+     * @brief Hand the backend the discovery snapshot its printer reported
+     *
+     * Called before start() with the same PrinterDiscovery that selected this
+     * backend. Backends take discovery-derived configuration here rather than
+     * reading the global PrinterState during start()/on_started(): application
+     * startup builds and starts AMS backends before that global is published,
+     * so a global read is stale on first connect.
+     *
+     * @param discovery Hardware snapshot this backend's printer reported
+     */
+    virtual void set_discovery(const helix::PrinterDiscovery& discovery) {
+        (void)discovery;
     }
 
     // ========================================================================

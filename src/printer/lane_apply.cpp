@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "lane_apply.h"
 
+#include "filament_slot_override.h"
+
 namespace helix::ams {
 
 SlotStatus narrow_status(SlotStatus backend_status, bool present) {
@@ -61,6 +63,37 @@ void copy_resolver_owned_identity(SlotInfo& dst, const SlotInfo& src) {
     dst.spoolman_vendor_id = src.spoolman_vendor_id;
     dst.remaining_weight_g = src.remaining_weight_g;
     dst.total_weight_g = src.total_weight_g;
+}
+
+void clear_lane_only_identity(SlotInfo& slot, const FilamentSlotOverride* ovr) {
+    // A field the override record carries is restated from it, not kept from
+    // the struct: the struct's copy may be a record that has since been
+    // dropped, and the override is the surviving statement of that value.
+    if (ovr != nullptr && !ovr->brand.empty()) {
+        slot.brand = ovr->brand;
+    } else {
+        slot.brand.clear();
+    }
+    if (ovr != nullptr && !ovr->spool_name.empty()) {
+        slot.spool_name = ovr->spool_name;
+    } else {
+        slot.spool_name.clear();
+    }
+    if (ovr != nullptr && !ovr->catalog_id.empty()) {
+        slot.catalog_id = ovr->catalog_id;
+    } else {
+        slot.catalog_id.clear();
+    }
+    if (ovr != nullptr && !ovr->product_name.empty()) {
+        slot.product_name = ovr->product_name;
+    } else {
+        slot.product_name.clear();
+    }
+    if (ovr != nullptr && ovr->spoolman_vendor_id > 0) {
+        slot.spoolman_vendor_id = ovr->spoolman_vendor_id;
+    } else {
+        slot.spoolman_vendor_id = 0;
+    }
 }
 
 ResolvedLane resolved_lane(LaneId lane) {

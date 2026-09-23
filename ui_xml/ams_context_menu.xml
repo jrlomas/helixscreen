@@ -145,8 +145,17 @@
           <ui_button name="btn_clear_spool"
                      height="#button_height_sm" icon="close" text="Clear Spool" translation_tag="Clear Spool"
                      variant="ghost" clickable="true" style_flex_main_place="start" hidden="true">
+            <bind_state_if_eq subject="ams_slot_can_clear" state="disabled" ref_value="0"/>
             <event_cb trigger="clicked" callback="ams_context_clear_spool_cb"/>
           </ui_button>
+          <!-- Clear Spool refusal the user can act on: this lane is what the
+               current print is drawing from. Text and visibility come from the
+               same update that disables the button. -->
+          <text_small name="clear_blocked_hint"
+                      width="100%" long_mode="wrap" bind_text="ams_slot_clear_hint" style_text_color="#text_muted"
+                      hidden="true">
+            <bind_flag_if_eq subject="ams_slot_clear_hint_visible" flag="hidden" ref_value="0"/>
+          </text_small>
         </lv_obj>
       </lv_obj>
       <!-- Divider before dropdowns -->

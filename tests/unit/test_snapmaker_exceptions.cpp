@@ -89,7 +89,9 @@ TEST_CASE("active exceptions read out of a status frame", "[snapmaker][exception
     auto v = read_active_exceptions(s);
     REQUIRE(v.size() == 1);
     REQUIRE(v[0].code.id == 530);
-    REQUIRE(v[0].message.find("Remove the PEI sheet") != std::string::npos);
+    // The message is the firmware's own, untranslated; wording for the screen
+    // is the render path's job (faultcodes::classify).
+    REQUIRE(v[0].message == "The plate has not been removed");
     REQUIRE(v[0].persistent == false);
 }
 
@@ -133,7 +135,7 @@ TEST_CASE("every standing fault is read, not just the first", "[snapmaker][excep
     REQUIRE(v[1].persistent == true);
 }
 
-TEST_CASE("a fault with no wording keeps the firmware's message", "[snapmaker][exceptions]") {
+TEST_CASE("a fault keeps the firmware's message, level or not", "[snapmaker][exceptions]") {
     // The entry also omits `level`: the firmware raises such faults at level 3
     // (cancel), and a missing level reads 0, which maps to Cancel as well.
     nlohmann::json s = nlohmann::json::object();
@@ -154,8 +156,8 @@ TEST_CASE("a fault with no wording keeps the firmware's message", "[snapmaker][e
 TEST_CASE("a numeric field arriving as a string reads as unset, never parsed",
           "[snapmaker][exceptions]") {
     // A payload's shape is data, not a contract violation to throw on: the
-    // field is skipped, and id 530 with code 0 is no fault we know wording
-    // for, so the firmware's own text stands.
+    // field is skipped, and the firmware's own message stands regardless of
+    // what code the entry carries.
     nlohmann::json s = nlohmann::json::object();
     s["exception_manager"] = {{"exceptions",
                                {{{"id", 530},
