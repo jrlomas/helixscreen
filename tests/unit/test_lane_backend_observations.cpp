@@ -21,6 +21,7 @@
 #include "ams_types.h"
 #include "app_globals.h"
 #include "filament_slot_override.h"
+#include "lane_apply.h"
 #include "lane_echo.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
@@ -631,6 +632,162 @@ TEST_CASE_METHOD(LVGLTestFixture, "an override never reaches AFC's vendor-cache 
     REQUIRE(lane.vendor_cache->color_rgb.has_value());
     CHECK(*lane.vendor_cache->color_rgb == 0xED2C2Cu);
     CHECK(lane.vendor_cache->material == "PETG");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "AFC's own write-back does not return as a vendor reading",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // The user retypes colour and material, so SET_COLOR and SET_MATERIAL both
+    // go out and firmware echoes them through the very keys they went to. The
+    // frame also carries a filament name the write never sent, as AFC's status
+    // pushes do: it is the proof below that the frame was parsed at all.
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1",
+                  {{"color", "#00FF00"}, {"material", "PETG"}, {"filament_name", "AFC Basics"}});
+
+    // The echoed colour and material are absent from the vendor record: a
+    // value repeating the write is not a reading, and ingest files the record
+    // whole, so the field goes absent rather than back to its pre-edit value.
+    // The untouched name still files, which is what makes the absence the
+    // guard's doing rather than a frame that never parsed.
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.vendor_cache.has_value());
+    REQUIRE(echoed.vendor_cache->spool_name.has_value());
+    CHECK(*echoed.vendor_cache->spool_name == "AFC Basics");
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+
+    // The harm lands at the clear: filed, the echo would leave the abandoned
+    // edit standing as firmware's own word once the override is gone. Withheld,
+    // nothing of it survives the clear to resolve.
+    harness->clear_slot_override(0);
+    const auto resolved = helix::ams::resolved_lane(harness.lane(0));
+    CHECK_FALSE(resolved.color_rgb.has_value());
+    CHECK_FALSE(resolved.material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "the lane_data snapshot withholds AFC's echoed fields too",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // The same echo arriving through the DB-snapshot parse, which amends the
+    // same accumulator: without the guard it would file the write as
+    // firmware's word on the one path that never passed the status parse.
+    feed_afc_lane_data(*harness, {{"lane1", {{"color", "#00FF00"}, {"material", "PETG"}}}});
+
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.vendor_cache.has_value());
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+
+    // A snapshot value the write did not send releases only its own field:
+    // the colour files while the material echo is still withheld.
+    feed_afc_lane_data(*harness, {{"lane1", {{"color", "#00AEFF"}, {"material", "PETG"}}}});
+
+    const auto after = lane_sources(harness.lane(0));
+    REQUIRE(after.vendor_cache.has_value());
+    REQUIRE(after.vendor_cache->color_rgb.has_value());
+    CHECK(*after.vendor_cache->color_rgb == 0x00AEFFu);
+    CHECK_FALSE(after.vendor_cache->material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a differing AFC value ends its own field's suppression",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // Firmware says a colour the write did not send: it has demonstrated it can
+    // state its own, so the colour is released while the material stays an
+    // outstanding echo. The frame says nothing about material, and the
+    // accumulator's pre-edit PLA is firmware's last word, not this frame's
+    // claim, so it must not release the material declaration.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00AEFF"}});
+
+    const auto differed = lane_sources(harness.lane(0));
+    REQUIRE(differed.vendor_cache.has_value());
+    REQUIRE(differed.vendor_cache->color_rgb.has_value());
+    CHECK(*differed.vendor_cache->color_rgb == 0x00AEFFu);
+    CHECK(differed.vendor_cache->material == "PLA");
+
+    // The material echo is still withheld: the colour having moved releases
+    // nothing but itself, and the withheld field files absent.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00AEFF"}, {"material", "PETG"}});
+
+    const auto after = lane_sources(harness.lane(0));
+    REQUIRE(after.vendor_cache.has_value());
+    CHECK_FALSE(after.vendor_cache->material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "an external re-bind ends AFC's echo suppression",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // Link a spool: a binding change, so the write carries no identity a person
+    // chose and nothing arms.
+    auto link = harness->get_slot_info(0);
+    link.spoolman_id = 42;
+    helix::test::edit_slot_as_user(*harness, 0, link);
+    feed_afc_lane(*harness, "lane1", {{"spool_id", 42}});
+
+    // A colour edit on the kept link. The spool owns material, brand and name,
+    // but the colour is the lane's own, so SET_COLOR arms the guard.
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"spool_id", 42}});
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.vendor_cache.has_value());
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+
+    // Another writer puts a different spool on the lane, one whose colour reads
+    // exactly what we wrote: value-difference cannot see this swap, only the
+    // re-bind verdict can. The verdict runs after this frame's ingest, so this
+    // frame is the last one withheld.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"spool_id", 7}});
+
+    // The standing colour now files as the new spool's own statement rather
+    // than being withheld as ours forever.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"spool_id", 7}});
+
+    const auto rebound = lane_sources(harness.lane(0));
+    REQUIRE(rebound.vendor_cache.has_value());
+    REQUIRE(rebound.vendor_cache->color_rgb.has_value());
+    CHECK(*rebound.vendor_cache->color_rgb == 0x00FF00u);
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a frame with no sensor key neither sets nor erases AFC presence",

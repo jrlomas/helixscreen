@@ -186,6 +186,26 @@ void afc_state_translation_hints_() {
 }
 // clang-format on
 
+// Run the echo guard over one frame's own statement of a lane's identity and
+// keep what it withholds out of the accumulator copy about to be filed.
+// @p stated is the statement — only fields the frame itself carried — and is
+// filtered in place; a field the guard removed is told from one the frame
+// never mentioned by snapshotting the statement before the call. Only colour
+// and material are tracked: those are the identity fields an AFC write sends,
+// so a declaration can never exist for any other.
+int withhold_echoes(ams::OwnWriteEchoes& echoes, int slot_index, ams::Observation& stated,
+                    ams::Observation& filed) {
+    const ams::Observation judged = stated;
+    const int withheld = echoes.withhold(slot_index, std::string{}, stated);
+    if (judged.color_rgb && !stated.color_rgb) {
+        filed.color_rgb.reset();
+    }
+    if (judged.material && !stated.material) {
+        filed.material.reset();
+    }
+    return withheld;
+}
+
 } // namespace
 
 // ============================================================================
@@ -2343,6 +2363,12 @@ void AmsBackendAfc::invalidate_broken_binding(int slot_index, const SlotInfo& sl
     if (reconcile_lane_binding(slot_index, firmware_spool_id) == ams::BindingVerdict::Holds) {
         return;
     }
+    // A broken binding is this backend's auto-clear signal, and it is the one
+    // boundary an echo suppression can end on: the lane no longer holds what
+    // the write was made against, so what we wrote there has stopped
+    // explaining what is read now. Unconditional by design - the verdict
+    // describes the lane, not whichever edit armed the guard.
+    own_write_echoes_.abandon(slot_index);
     helix::ams::clear_persisted_override(
         override_store_.get(), overrides_,
         slot.global_index >= 0 ? slot.global_index : slot.slot_index, backend_log_tag());
@@ -2418,6 +2444,15 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
     // merge that runs in between.
     auto& firmware = lane_firmware_readings_[lane_name];
 
+    // The colour and material this frame itself stated, gathered as the blocks
+    // below amend the accumulator — the two identity fields an AFC write sends,
+    // so the only two the echo guard can hold a declaration for. The guard
+    // judges this record rather than `firmware.cache`: the accumulator carries
+    // firmware's last word on every key, so a frame silent about material would
+    // otherwise offer the pre-edit material as this frame's statement and
+    // release the material declaration before its echo lands.
+    ams::Observation stated{ams::ObservationSource::VendorCache};
+
     // Parse color. AFC's clear_values() writes color='' on eject and its
     // SET_COLOR with no value stores the bare '#', both of which read as a
     // clear; anything else that will not parse is a value we cannot read
@@ -2431,6 +2466,7 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
             slot.color_rgb = AMS_DEFAULT_SLOT_COLOR;
             firmware.cache.color_rgb.reset();
         }
+        stated.color_rgb = firmware.cache.color_rgb;
     }
 
     // Parse material
@@ -2441,6 +2477,7 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
         } else {
             firmware.cache.material = slot.material;
         }
+        stated.material = firmware.cache.material;
     }
 
     // Filament name, as AFC copied it out of Spoolman's filament record
@@ -2689,7 +2726,16 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
     // unchanged is what lets a delta naming one key leave the rest of the lane
     // alone, where a record built from the frame would narrow it.
     const ams::LaneId lane = lane_id(slot_index);
-    ams::ingest(lane, firmware.cache);
+    // The guard filters a copy of the frame's statement, so the accumulator
+    // stays firmware's own account of what it holds and every later frame
+    // files from that account. An empty boundary is the frame naming no spool,
+    // which is not a change.
+    ams::Observation filed = firmware.cache;
+    const int withheld = withhold_echoes(own_write_echoes_, slot_index, stated, filed);
+    if (withheld > 0) {
+        spdlog::debug("[AMS AFC] withheld {} echoed field(s) on lane {}", withheld, lane_name);
+    }
+    ams::ingest(lane, filed);
     ams::ingest(lane, firmware.metered);
 
     // Does the identity declared on this lane still describe what is in it?
@@ -4138,6 +4184,12 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
         // subscription last said about it, and the other way round.
         auto& firmware = lane_firmware_readings_[slots_.name_of(i)];
 
+        // The colour and material this snapshot itself stated, for the echo
+        // guard the same way parse_afc_stepper() keeps them: the accumulator's
+        // silent fields are firmware's last word, not this snapshot's claim,
+        // and must not release a declaration.
+        ams::Observation stated{ams::ObservationSource::VendorCache};
+
         // Parse color. AFC writes "#RRGGBB" here (verified against a live
         // BoxTurtle's lane_data namespace); bare hex is accepted too. One
         // decision with the status path, so the two parsers cannot answer the
@@ -4151,6 +4203,7 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
                 slot.color_rgb = AMS_DEFAULT_SLOT_COLOR;
                 firmware.cache.color_rgb.reset();
             }
+            stated.color_rgb = firmware.cache.color_rgb;
         }
 
         // Parse material
@@ -4161,6 +4214,7 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
             } else {
                 firmware.cache.material = slot.material;
             }
+            stated.material = firmware.cache.material;
         }
 
         // Filament name, as AFC copied it out of Spoolman's filament record.
@@ -4262,8 +4316,12 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
         //
         // No Sensed record and no Metered one. lane_data reads no sensor, and
         // the weight comment at the end of this loop is why no weight is read
-        // from it on any AFC version.
-        ams::ingest(lane_id(i), firmware.cache);
+        // from it on any AFC version. The echo guard filters a copy of this
+        // snapshot's statement, the same way the status parse above does: the
+        // accumulator stays firmware's own word for the next frame.
+        ams::Observation filed = firmware.cache;
+        withhold_echoes(own_write_echoes_, i, stated, filed);
+        ams::ingest(lane_id(i), filed);
 
         // The same binding check parse_afc_stepper() runs, on the id this
         // parser read.
@@ -5504,6 +5562,40 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
         // caused issue #644, where spool assignment silently bypassed AFC.
         std::string lane_name = slots_.name_of(slot_index);
         if (!lane_name.empty()) {
+            // Remember what the user declared, pruned to what the SET_*
+            // commands below actually carry, so the parse can tell firmware
+            // repeating their choice back from AFC's own readings. Staged
+            // before the first dispatch: the guard has to be standing before
+            // any echo can arrive.
+            //
+            // No boundary token: an AFC status frame names no spool the way
+            // an RFID read names a tag, so suppression ends on a differing
+            // value or on the re-bind verdict in invalidate_broken_binding(),
+            // which is this backend's auto-clear signal. A dispatch that
+            // failed outright leaves the guard armed to self-clean the same
+            // way: firmware still holds a value the declaration disagrees
+            // with.
+            own_write_echoes_.stage(slot_index, declared);
+            if (auto* staged = own_write_echoes_.staged(slot_index)) {
+                // SET_COLOR is skipped for the no-colour sentinel and
+                // SET_MATERIAL for an unsafe name: a field the write omitted
+                // is firmware's to keep, so its echo is a reading.
+                if (!ams::is_declarable_color(info.color_rgb)) {
+                    staged->color_rgb.reset();
+                }
+                if (info.material.empty() ||
+                    !IMoonrakerAPI::is_safe_material_param(info.material)) {
+                    staged->material.reset();
+                }
+                // No SET_* carries brand or spool name, so any value firmware
+                // reports for them is its own. Weight goes to a meter and the
+                // spool id to the binding machinery; the guard's own roster
+                // exempts both.
+                staged->brand.reset();
+                staged->spool_name.reset();
+            }
+            own_write_echoes_.arm(slot_index, std::string{});
+
             // Spoolman ID FIRST — both branches of AFC's set_spoolID() rewrite the
             // lane's material/color/weight/temps, so this must precede our own
             // writes or it clobbers them:
