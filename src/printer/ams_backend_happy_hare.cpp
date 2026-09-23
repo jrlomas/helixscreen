@@ -11,6 +11,7 @@
 #include "humidity_sensor_types.h"
 #include "i_moonraker_api.h"
 #include "json_utils.h"
+#include "lane_apply.h"
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
@@ -337,6 +338,11 @@ SlotInfo* AmsBackendHappyHare::cached_slot_locked(int slot_index) {
     // already the one the refresh derived.
     auto* entry = slots_.get_mut(slot_index);
     return entry ? &entry->info : nullptr;
+}
+
+void AmsBackendHappyHare::prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) {
+    const auto it = overrides_.find(slot_index);
+    helix::ams::clear_lane_only_identity(slot, it == overrides_.end() ? nullptr : &it->second);
 }
 
 // get_current_action(), get_current_tool(), get_current_slot(), is_filament_loaded()
@@ -1285,9 +1291,13 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
     // from the lane, so this has to read a model that already holds both. Every
     // gate rather than the ones one key happened to mention: a lane a key is
     // silent about still resolves, and a gate with no records at all resolves
-    // to nothing observed and keeps every value the parse set.
+    // to nothing observed and keeps every value the parse set. The clear runs
+    // first because the struct persists across frames: without it a field an
+    // earlier paint wrote outlives the record that stated it, and the paint
+    // below faithfully keeps it there.
     for (int gate = 0; gate < slots_.slot_count(); ++gate) {
         if (auto* entry = slots_.get_mut(gate)) {
+            prepare_lane_repaint_locked(gate, entry->info);
             apply_resolved_lane(entry->info, gate);
         }
     }

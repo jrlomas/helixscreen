@@ -8,6 +8,7 @@
 #include "ams_state.h"
 #include "ams_types.h"
 #include "hh_defaults.h"
+#include "lane_source_store.h"
 #include "lane_translation.h"
 #include "moonraker_api.h"
 #include "spoolman_types.h"
@@ -58,6 +59,18 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
     void feed_mmu_gate_spool_ids(const std::vector<int>& ids) {
         nlohmann::json mmu;
         mmu["gate_spool_id"] = ids;
+        nlohmann::json params;
+        params["mmu"] = mmu;
+        nlohmann::json notification;
+        notification["params"] = nlohmann::json::array({params, 0.0});
+        handle_status_update(notification);
+    }
+
+    /// Feed a printer.mmu gate_status array (0 empty, 1 available, 2 loaded),
+    /// as a status update would.
+    void feed_mmu_gate_status(const std::vector<int>& statuses) {
+        nlohmann::json mmu;
+        mmu["gate_status"] = statuses;
         nlohmann::json params;
         params["mmu"] = mmu;
         nlohmann::json notification;
@@ -4002,6 +4015,51 @@ TEST_CASE("an outside re-bind takes the old spool's brand off a Happy Hare gate"
 
     CHECK(helper.get_slot_info(1).brand.empty());
     CHECK(helper.get_slot_info(2).brand == "Sunlu");
+}
+
+TEST_CASE("a dropped Spoolman record takes its brand off a Happy Hare gate",
+          "[ams][happyhare][lane][1672]") {
+    // The re-bind test above retires the old spool when the gate map names a
+    // different one. Here the gate keeps its filament and only the server's
+    // record goes away (an unlink that kept the identity, or a denial dropping
+    // the record). The gate's SlotInfo persists across frames, so a brand an
+    // earlier paint wrote survives every later frame unless each paint starts
+    // from what the gate map states and lets the lane restate what still
+    // stands.
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+
+    SpoolInfo spool;
+    spool.id = 42;
+    spool.vendor = "Polymaker";
+    spool.filament_name = "PolyLite PETG";
+    spool.material = "PETG";
+    spool.color_hex = "FF00FF";
+    helix::test::spool_states(helper, 1, spool);
+    helper.repaint_slot_from_lane(1);
+    REQUIRE(helper.get_slot_info(1).brand == "Polymaker");
+
+    // The record goes away with no frame in flight: the repaint SpoolmanManager
+    // runs after a denial must not keep showing the dropped record's brand.
+    helix::ams::drop_lane_source(helper.lane_id(1), helix::ams::ObservationSource::Spoolman);
+    helper.repaint_slot_from_lane(1);
+    CHECK(helper.get_slot_info(1).brand.empty());
+
+    // Restate the record, then drop it again and let the next gate FRAME be
+    // the first thing that runs: each frame starts from what the lane holds
+    // now.
+    helix::test::spool_states(helper, 1, spool);
+    helper.repaint_slot_from_lane(1);
+    REQUIRE(helper.get_slot_info(1).brand == "Polymaker");
+    helix::ams::drop_lane_source(helper.lane_id(1), helix::ams::ObservationSource::Spoolman);
+    helper.feed_mmu_gate_status({2, 2, 2, 2});
+    CHECK(helper.get_slot_info(1).brand.empty());
+
+    // A re-filed record paints again, so the reset costs a live link nothing.
+    helix::test::spool_states(helper, 1, spool);
+    helper.feed_mmu_gate_status({2, 2, 2, 2});
+    CHECK(helper.get_slot_info(1).brand == "Polymaker");
 }
 
 TEST_CASE("HappyHare override survives a gate-map update that omits identity",

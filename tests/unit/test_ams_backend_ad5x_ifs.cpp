@@ -11708,6 +11708,59 @@ TEST_CASE("clearing an AD5X port takes the linked spool's brand off it",
     CHECK(after.spoolman_id == 0);
 }
 
+TEST_CASE("a dropped Spoolman record takes its brand off an AD5X port",
+          "[ams][ad5x_ifs][lane][1672]") {
+    // The unlink shape the clear test above does not cover: the spool stays
+    // loaded and only the server's record goes away (an unlink that kept the
+    // identity, or a denial dropping the record). The port's SlotInfo
+    // persists across frames, so a brand an earlier paint wrote survives
+    // every later frame unless each paint starts from firmware truth and lets
+    // the lane restate what still stands.
+    Ad5xIfsTmpCacheDir tmp("dropped_record_brand");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    helix::test::RegisteredBackend<AmsBackendAd5xIfs> backend_reg(&api, nullptr);
+    AmsBackendAd5xIfs& backend = *backend_reg;
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
+
+    SpoolInfo spool;
+    spool.id = 42;
+    spool.vendor = "Polymaker";
+    spool.filament_name = "PolyLite PETG";
+    spool.material = "PETG";
+    spool.color_hex = "FF00FF";
+    helix::test::spool_states(backend, 0, spool);
+    backend.repaint_slot_from_lane(0);
+    REQUIRE(backend.get_slot_info(0).brand == "Polymaker");
+
+    // The record goes away with no frame in flight: the repaint SpoolmanManager
+    // runs after a denial must not keep showing the dropped record's brand.
+    helix::ams::drop_lane_source(backend.lane_id(0), helix::ams::ObservationSource::Spoolman);
+    backend.repaint_slot_from_lane(0);
+    CHECK(backend.get_slot_info(0).brand.empty());
+
+    // Restate the record, then drop it again and let the next FRAME be the
+    // first thing that runs: each frame starts from what the lane holds now.
+    helix::test::spool_states(backend, 0, spool);
+    backend.repaint_slot_from_lane(0);
+    REQUIRE(backend.get_slot_info(0).brand == "Polymaker");
+    helix::ams::drop_lane_source(backend.lane_id(0), helix::ams::ObservationSource::Spoolman);
+    Ad5xIfsTestAccess::handle_status(backend, make_save_variables(standard_variables()));
+    CHECK(backend.get_slot_info(0).brand.empty());
+
+    // A re-filed record paints again, so the reset costs a live link nothing.
+    helix::test::spool_states(backend, 0, spool);
+    Ad5xIfsTestAccess::handle_status(backend, make_save_variables(standard_variables()));
+    CHECK(backend.get_slot_info(0).brand == "Polymaker");
+
+    helix::ui::UpdateQueue::instance().drain();
+}
+
 TEST_CASE("an external AD5X type change leaves a linked lane's Spoolman material standing",
           "[ams][ad5x_ifs][filament_slot_override][1653]") {
     // A linked spool owns its material. Firmware's own type still shows beneath

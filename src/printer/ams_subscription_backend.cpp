@@ -167,6 +167,7 @@ void AmsSubscriptionBackend::request_resync() {
 void AmsSubscriptionBackend::repaint_slot_from_lane(int slot_index) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (SlotInfo* slot = cached_slot_locked(slot_index)) {
+        prepare_lane_repaint_locked(slot_index, *slot);
         apply_resolved_lane(*slot, slot_index);
     }
 }

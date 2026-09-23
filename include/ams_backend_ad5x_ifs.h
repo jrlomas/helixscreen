@@ -599,6 +599,17 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
 
     SlotInfo* cached_slot_locked(int slot_index) override;
 
+    /// IFS firmware states colour, material, presence and the tool map, and
+    /// nothing else on the resolver-owned identity: brand, spool name, colour
+    /// name, the catalog pick and the Spoolman handles come from the lane's
+    /// records alone. Those are cleared before every paint (the port's
+    /// SlotInfo persists across frames), so a dropped record stops showing
+    /// rather than living on in the struct - except a field the port's
+    /// override record carries, which takes that record's value: an edit's
+    /// identity must survive the frames between the edit and the server
+    /// refiling the spool's record.
+    void prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) override;
+
   private:
     friend class Ad5xIfsTestAccess;
     friend class Ad5xPerSlotLoadedHelper;
