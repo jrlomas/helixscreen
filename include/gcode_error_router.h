@@ -6,9 +6,12 @@
 #include "action_prompt_manager.h" // PromptData / PromptButton
 #include "async_lifetime_guard.h"
 #include "error_event.h"
+#include "i_moonraker_client.h" // SubscriptionId
 
+#include <cstddef>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -129,6 +132,13 @@ class GcodeErrorRouter {
     /// Live `notify_gcode_response` handler -- runs on the WS thread.
     void on_notify_gcode_response(const nlohmann::json& msg);
 
+    /// notify_status_update handler -- runs on main (the ctor's bg_cb wrapper
+    /// defers the WS-thread delivery). Reads the firmware's standing-fault
+    /// list and feeds every line not seen since the previous frame through
+    /// process_line, so a fault standing across a restart reaches the screen
+    /// even though nothing printed it to the console this session.
+    void on_notify_status_update(const nlohmann::json& msg);
+
     /// Fires on every WS connect / Klippy ready transition. Queries
     /// `server.gcode_store` and replays the most recent `!!` line that
     /// passes age + dedup gates.
@@ -137,7 +147,9 @@ class GcodeErrorRouter {
     /// Walks a single response line through translate + emit. Used by
     /// both the live path and the replay path (replay only feeds `!!`
     /// lines; this still handles `Error:` for the live caller).
-    void process_line(const std::string& line);
+    /// `standing_fault` marks a line read from the firmware's standing-fault
+    /// list rather than the console stream.
+    void process_line(const std::string& line, bool standing_fault = false);
 
     /// CRITICAL error that carries a recovery action: delegates to the
     /// shared RecoveryModalPresenter.
@@ -173,6 +185,21 @@ class GcodeErrorRouter {
     /// without this we would modal the same error twice.
     std::mutex replay_mutex_;
     double last_replayed_time_ = 0.0;
+
+    /// [L072] notify_status_update subscription, unregistered symmetrically
+    /// in the dtor.
+    SubscriptionId standing_notify_id_ = INVALID_SUBSCRIPTION_ID;
+
+    /// The coded lines surfaced from the standing-fault list, main-thread only
+    /// (the bg_cb wrapper defers the notify body). A line leaves the set when
+    /// the firmware clears it, so a re-raised fault surfaces again; a delta
+    /// frame that omits the fault object leaves the set untouched.
+    std::set<std::string> standing_fault_lines_;
+
+    /// Standing-fault lines handed to process_line so far. The correlation
+    /// registry's short window cannot distinguish "surfaced once" from
+    /// "surfaced twice", so this counter is the count tests assert on.
+    size_t standing_fed_count_ = 0;
 
     /// [L072] Generation guard for callbacks captured by MoonrakerClient.
     /// `MoonrakerClient::unregister_method_callback` and

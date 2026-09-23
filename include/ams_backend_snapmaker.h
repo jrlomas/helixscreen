@@ -379,6 +379,12 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         return true;
     }
 
+    /// Caches the batch-macro capability from @p discovery. Must run before
+    /// start(): the status parse and the batch dispatch both read
+    /// use_batch_macro_ / batch_macro_object_, and PrinterState publishes its
+    /// global discovery only after backends have started.
+    void set_discovery(const helix::PrinterDiscovery& discovery) override;
+
     /// The dispatched batch and how far it has verified. heads is in dispatch
     /// order; cursor counts heads that reached the direction's terminal
     /// channel_state. active spans dispatch until every head verified or a
@@ -647,9 +653,9 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     void clear_override_locked(int slot_index, SlotInfo& slot);
 
     /// Whether the connected firmware ships the AUTO_FEEDING_BATCH macro,
-    /// cached from PrinterDiscovery in on_started() — discovery is fully
-    /// populated before this backend is constructed. Selects the script shape
-    /// do_filament_batch() builds. All access under mutex_.
+    /// cached from the discovery set_discovery() handed over before start().
+    /// Selects the script shape do_filament_batch() builds. All access under
+    /// mutex_.
     bool use_batch_macro_ = false;
 
     /// The status-object key the batch macro publishes under ("gcode_macro "

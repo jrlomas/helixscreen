@@ -16,4 +16,28 @@ struct GcodeErrorRouterTestAccess {
     static void process_line(helix::GcodeErrorRouter& r, const std::string& line) {
         r.process_line(line);
     }
+
+    /// Drives the notify_status_update body exactly as the bg_cb-deferred
+    /// delivery lands it on main.
+    static void on_notify_status_update(helix::GcodeErrorRouter& r, const nlohmann::json& msg) {
+        r.on_notify_status_update(msg);
+    }
+
+    /// Fires the connect observer's body (standing-fault reset + gcode_store
+    /// replay; the replay is a no-op with a null client).
+    static void on_connected(helix::GcodeErrorRouter& r) {
+        r.on_connected();
+    }
+
+    /// Standing-fault lines handed to process_line so far. The correlation
+    /// registry's short window would make "did not surface twice" unfalsifiable,
+    /// so tests assert here.
+    static size_t standing_fed_count(const helix::GcodeErrorRouter& r) {
+        return r.standing_fed_count_;
+    }
+
+    /// Size of the standing-fault seen set: what a later frame diffs against.
+    static size_t standing_seen_count(const helix::GcodeErrorRouter& r) {
+        return r.standing_fault_lines_.size();
+    }
 };

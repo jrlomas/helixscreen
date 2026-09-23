@@ -27,6 +27,9 @@ struct Provider {
     /// Read one error line (prefix already stripped) into an event, or
     /// nullopt when the line carries no code this firmware owns.
     std::optional<ErrorEvent> (*classify_event)(const Provider& p, const std::string& text);
+    /// The console-equivalent coded lines for the faults currently standing,
+    /// or nullopt when the frame says nothing about faults.
+    std::optional<std::vector<std::string>> (*read_standing)(const nlohmann::json& status);
 };
 
 ErrorSeverity severity_of_event(const snapmaker::ExceptionSeverity& s) {
@@ -65,10 +68,30 @@ std::optional<ErrorEvent> classify_snapmaker(const Provider& p, const std::strin
     return e;
 }
 
+/// The vendor's standing-fault lines. Each entry becomes a console-equivalent
+/// `!!` line carrying the code and the firmware's own message, so the consumer
+/// can feed it through the same classify path a console line takes.
+std::optional<std::vector<std::string>> read_standing_snapmaker(const nlohmann::json& status) {
+    if (!snapmaker::status_carries_exceptions(status)) {
+        return std::nullopt;
+    }
+    std::vector<std::string> lines;
+    for (const auto& active : snapmaker::read_active_exceptions(status)) {
+        lines.push_back(fmt::format("!! {:04d}-{:04d}-{:04d}-{:04d} {}", active.code.level,
+                                    active.code.id, active.code.index, active.code.code,
+                                    active.message));
+    }
+    return lines;
+}
+
 /// The provider table. Adding a firmware with the same capability is one row
 /// here and no call-site change.
 const std::array<Provider, 1> kProviders{{
-    {"exception_manager", {"exception_manager"}, ErrorSource::SNAPMAKER, classify_snapmaker},
+    {"exception_manager",
+     {"exception_manager"},
+     ErrorSource::SNAPMAKER,
+     classify_snapmaker,
+     read_standing_snapmaker},
 }};
 
 const Provider* provider_for(const PrinterDiscovery& hw) {
@@ -102,6 +125,28 @@ std::optional<ErrorEvent> classify(const PrinterDiscovery& hw, const std::string
         return std::nullopt;
     }
     return p->classify_event(*p, parsed.text);
+}
+
+std::optional<std::vector<std::string>> read_standing_faults(const PrinterDiscovery& hw,
+                                                             const nlohmann::json& status) {
+    const Provider* p = provider_for(hw);
+    return p ? p->read_standing(status) : std::nullopt;
+}
+
+nlohmann::json fault_status_subset(const nlohmann::json& status) {
+    nlohmann::json subset = nlohmann::json::object();
+    if (!status.is_object()) {
+        return subset;
+    }
+    for (const auto& p : kProviders) {
+        for (const auto& obj : p.status_objects) {
+            auto it = status.find(obj);
+            if (it != status.end()) {
+                subset[obj] = *it;
+            }
+        }
+    }
+    return subset;
 }
 
 } // namespace helix::faultcodes
