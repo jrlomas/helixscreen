@@ -15,6 +15,7 @@
 #include "app_globals.h"
 #include "display_numbering.h"
 #include "filament_op_dispatch.h"
+#include "lane_apply.h"
 #include "lane_resolver.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
@@ -492,6 +493,103 @@ TEST_CASE("context-menu clear wipes slot and clears server active spool",
     REQUIRE(mock_api->spoolman_mock().get_mock_active_spool_id() == 0);
 }
 
+TEST_CASE("context-menu clear leaves the live lane as a restart would show it",
+          "[ams][commit][context-menu][1661]") {
+    CommitFixture f;
+    f.setup(0); // slot 0 unlinked
+
+    // What the machine reports on the lane, the way a parse files it.
+    const helix::ams::LaneId lane = f.backend->lane_id(0);
+    helix::ams::Observation machine(helix::ams::ObservationSource::VendorCache);
+    machine.material = "PETG";
+    machine.brand = "Firmware Brand";
+    machine.color_rgb = 0x30C05F;
+    helix::ams::ingest(lane, machine);
+
+    // The standing state a clear has to take with it: a colour pick, its name
+    // and a typed weight, none of which Clear Spool's sentinel/-1 values ever
+    // engage as a clear, so the commit alone leaves them on the user rung.
+    // 640g because the mock seeds slot 0 at 850: a typed number the lane
+    // already holds is not a move, and only a moved field is the user's
+    // statement (user_edit_observation).
+    SlotInfo picked = f.backend->get_slot_info(0);
+    picked.color_rgb = 0xE67E22;
+    picked.color_name = "Signal Orange";
+    picked.remaining_weight_g = 640.0F;
+    helix::test::edit_slot_as_user(*f.backend, 0, picked);
+
+    SlotInfo live;
+    helix::ams::apply_resolved(live, helix::ams::resolve(helix::ams::lane_sources(lane)));
+    REQUIRE(live.color_rgb == 0xE67E22);
+    REQUIRE(live.color_name == "Signal Orange");
+    REQUIRE(live.remaining_weight_g == 640.0F);
+
+    REQUIRE(
+        ui::ams_dispatch_backend_action(ui::AmsContextMenu::MenuAction::CLEAR_SPOOL, 0, nullptr));
+
+    // Live: the lane's user record is gone, so resolve() states only what the
+    // machine reports.
+    const helix::ams::LaneSources after = helix::ams::lane_sources(lane);
+    CHECK_FALSE(after.local_user.has_value());
+    SlotInfo shown;
+    helix::ams::apply_resolved(shown, helix::ams::resolve(after));
+
+    // Restart: the clear dropped the stored record, so boot rebuilds the lane
+    // from the machine's own report alone.
+    helix::ams::LaneSources reload;
+    reload.vendor_cache = machine;
+    SlotInfo rebooted;
+    helix::ams::apply_resolved(rebooted, helix::ams::resolve(reload));
+
+    CHECK(shown.material == rebooted.material);
+    CHECK(shown.brand == rebooted.brand);
+    CHECK(shown.color_rgb == rebooted.color_rgb);
+    CHECK(shown.color_name == rebooted.color_name);
+    CHECK(shown.remaining_weight_g == rebooted.remaining_weight_g);
+    CHECK(shown.total_weight_g == rebooted.total_weight_g);
+    CHECK(shown.spoolman_vendor_id == rebooted.spoolman_vendor_id);
+    // The colour name goes with the pick - no asymmetric survivor - and what
+    // both sides show is the machine's readings.
+    CHECK(shown.color_rgb == 0x30C05F);
+    CHECK(shown.color_name.empty());
+    CHECK(shown.material == "PETG");
+    CHECK(shown.remaining_weight_g < 0);
+}
+
+TEST_CASE("context-menu clear on a lane the machine is silent on shows blank, live and reloaded",
+          "[ams][commit][context-menu][1661]") {
+    CommitFixture f;
+    f.setup(0); // slot 0 unlinked; nothing filed on the lane but the pick below
+
+    // 640g, not the mock's seeded 850: a typed number the lane already holds
+    // is not a move, and only a moved field files as the user's statement.
+    SlotInfo picked = f.backend->get_slot_info(0);
+    picked.color_rgb = 0xE67E22;
+    picked.color_name = "Signal Orange";
+    picked.remaining_weight_g = 640.0F;
+    helix::test::edit_slot_as_user(*f.backend, 0, picked);
+    const auto rung = helix::ams::lane_sources(f.backend->lane_id(0)).local_user;
+    REQUIRE(rung.has_value());
+    REQUIRE(rung->remaining_weight_g.has_value()); // the typed weight stands
+
+    REQUIRE(
+        ui::ams_dispatch_backend_action(ui::AmsContextMenu::MenuAction::CLEAR_SPOOL, 0, nullptr));
+
+    // Live and a restart both resolve a lane nobody states anything on.
+    const helix::ams::LaneSources after = helix::ams::lane_sources(f.backend->lane_id(0));
+    CHECK_FALSE(after.local_user.has_value());
+    SlotInfo shown;
+    helix::ams::apply_resolved(shown, helix::ams::resolve(after));
+    SlotInfo rebooted;
+    helix::ams::apply_resolved(rebooted, helix::ams::resolve(helix::ams::LaneSources{}));
+    CHECK(shown.color_rgb == rebooted.color_rgb);
+    CHECK(shown.color_name == rebooted.color_name);
+    CHECK(shown.material == rebooted.material);
+    CHECK(shown.remaining_weight_g == rebooted.remaining_weight_g);
+    CHECK(shown.color_rgb == AMS_DEFAULT_SLOT_COLOR);
+    CHECK(shown.material.empty());
+}
+
 TEST_CASE("context-menu clear names the position in the backend's own word",
           "[ams][commit][context-menu][i18n]") {
     CommitFixture f;
@@ -922,6 +1020,7 @@ TEST_CASE("a binding change leaves the lane showing what its stored record reloa
     // spool's product. Only an unlink that keeps the rest of the slot keeps it.
     std::string kept_product;
     int bound = 0;
+    bool cleared = false;
 
     SECTION("a link") {
         f.pick_colour_and_product();
@@ -946,10 +1045,21 @@ TEST_CASE("a binding change leaves the lane showing what its stored record reloa
         f.pick_colour_and_product();
         REQUIRE(ui::ams_dispatch_backend_action(ui::AmsContextMenu::MenuAction::CLEAR_SPOOL, 0,
                                                 nullptr));
+        cleared = true;
     }
 
     const SlotInfo slot = f.afc->get_slot_info(0);
     REQUIRE(slot.spoolman_id == bound);
+    if (cleared) {
+        // Clear Spool is the one binding change that leaves no record to
+        // reload: the gesture erases the stored record with the lane's own
+        // (#1661), so a restart reloads nothing and the live lane agrees.
+        std::lock_guard<std::mutex> lock(AfcTestAccess::mutex(*f.afc));
+        CHECK(AfcTestAccess::overrides(*f.afc).find(0) == AfcTestAccess::overrides(*f.afc).end());
+        CHECK_FALSE(helix::ams::lane_sources(f.lane()).local_user.has_value());
+        CHECK(slot.catalog_id.empty());
+        return;
+    }
     f.check_lane_matches_reload();
     // The editor reopens on the slot's own pick, so the slot has to agree too.
     CHECK(slot.catalog_id == kept_product);
@@ -1044,15 +1154,24 @@ TEST_CASE("Clear Spool on a linked lane leaves nothing remembered and no catalog
     const SlotInfo slot = f.afc->get_slot_info(0);
     REQUIRE(slot.spoolman_id == 0);
     const auto sources = helix::ams::lane_sources(f.lane());
-    REQUIRE(sources.local_user.has_value());
-    CHECK(sources.local_user->spoolman_id == 0);
+    // The clear drops the lane's whole user record, the unlink statement
+    // included. The unlink stays durable anyway: the commit wrote it to
+    // firmware (SET_SPOOL_ID with an empty id) and to the Spoolman server,
+    // which is what a restart reads instead of our record
+    // (prestonbrown/helixscreen#1661: a clear is not a declaration, so
+    // nothing of it stands on the lane).
+    CHECK_FALSE(sources.local_user.has_value());
     CHECK_FALSE(sources.remembered.has_value());
     CHECK_FALSE(helix::ams::resolve(sources).color_rgb.has_value());
     // The pick names a product of the material the clear just removed.
     CHECK(slot.catalog_id.empty());
     CHECK(slot.product_name.empty());
-    CHECK_FALSE(f.reloaded().catalog_id.has_value());
-    CHECK_FALSE(f.reloaded().product_name.has_value());
+    // And nothing reloads: the stored record is erased with the lane's, so
+    // the next start reads firmware and the server, both already cleared.
+    {
+        std::lock_guard<std::mutex> lock(AfcTestAccess::mutex(*f.afc));
+        CHECK(AfcTestAccess::overrides(*f.afc).find(0) == AfcTestAccess::overrides(*f.afc).end());
+    }
 }
 
 TEST_CASE("an edit that keeps the same spool keeps the stored record's authorship",

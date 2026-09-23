@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "lane_source_store.h"
 
+#include "lane_translation.h"
+
 #include <spdlog/spdlog.h>
 
 #include <cstddef>
@@ -43,35 +45,6 @@ void merge_observed_fields(Observation& into, const Observation& from) {
     auto from_fields = from.fields();
     merge_fields_impl(into_fields, from_fields,
                       std::make_index_sequence<std::tuple_size_v<decltype(into_fields)>>{});
-}
-
-/// Take every identity field @p edit cleared off @p user: a field the edit
-/// engaged with an empty string, or a zero vendor id, is a withdrawal of the
-/// statement, not a value. Applied to the edit's own statement it files
-/// nothing over the field; applied to the rung's standing record it drops the
-/// declaration the clear withdrew, whatever value it stood over. Either way
-/// nothing sits over the field and the machine's own reading shows through at
-/// once (prestonbrown/helixscreen#1661).
-///
-/// A colour's name is deliberately not withdrawn: a colour pick that carries
-/// no name states that the old name no longer describes the swatch
-/// (resolve(), lane_resolver.cpp), and a cleared colour never reaches here
-/// engaged at all, because SlotInfo spells "no colour" as a sentinel value.
-/// spoolman_id is the binding, not identity; its zero is the unlink's own
-/// statement.
-void withdraw_cleared_by(Observation& user, const Observation& edit) {
-    const std::optional<std::string>* const cleared_text[] = {&edit.material, &edit.brand,
-                                                              &edit.spool_name};
-    std::optional<std::string>* const standing_text[] = {&user.material, &user.brand,
-                                                         &user.spool_name};
-    for (std::size_t i = 0; i < 3; ++i) {
-        if (cleared_text[i]->has_value() && (*cleared_text[i])->empty()) {
-            standing_text[i]->reset();
-        }
-    }
-    if (edit.spoolman_vendor_id == 0) {
-        user.spoolman_vendor_id.reset();
-    }
 }
 
 } // namespace
@@ -177,12 +150,12 @@ void commit_slot_edit(LaneId lane, const Observation& obs) {
     // filed here would outrank the machine's own reading until a restart.
     // The clear still reaches the stored record, through the edit's values.
     Observation statement = obs;
-    withdraw_cleared_by(statement, obs);
+    withdraw_cleared_fields(statement, obs);
     Observation rung(ObservationSource::LocalUser);
     const LaneSources standing = LaneSourceStore::instance().get(lane);
     if (standing.local_user.has_value()) {
         rung = *standing.local_user;
-        withdraw_cleared_by(rung, obs);
+        withdraw_cleared_fields(rung, obs);
     }
     merge_observed_fields(rung, statement);
     LaneSourceStore::instance().drop_source(lane, ObservationSource::LocalUser);

@@ -216,12 +216,17 @@ does neither, and both halves of that are load-bearing:
 - **`T<n>` outer keys** (`lane_key_style_for`) are shared with Mainsail #2510's
   records rather than duplicating them.
 
-Mock inherits the no-op `clear_slot_override` default from `AmsBackend`. AFC and
-Happy Hare each implement it: erase the in-memory entry, reset the
+Every lane-holding backend implements it — IFS, Snapmaker, ACE, CFS, AFC, Happy
+Hare and the mock: reset the lane to machine readings
+(`reset_lane_to_machine_readings()`), erase the in-memory entry, reset the
 override-exclusive fields on the live slot (brand, spool name, Spoolman ids,
 weights, colour name, catalog pick) so the clear shows on the next
 `get_slot_info()`, and fire `clear_async` against the backend's own private
-namespace. Colour and material are left standing, because those come from the
+namespace. The mock keeps no override records, so its implementation is the
+lane reset and the slot-changed event alone. QIDI Box holds no store and its
+clear is a warn-only stub: the box's `SAVE_VARIABLE`s are the record, so a
+clear has to zero them through firmware rather than through this layer (§2).
+Colour and material are left standing, because those come from the
 parse and the lane's firmware values should surface. The `lane_data` records
 their Klipper plugins write are a separate thing and HelixScreen does not touch
 them. For AFC that is not merely etiquette: AFC.py `delete_lane_data()`
@@ -381,9 +386,20 @@ enter for it.
 
 Four distinct clear paths, handled separately:
 
-- **User-initiated clear.** The edit modal's "Clear metadata" button calls
-  `AmsBackend::clear_slot_override(slot_index)`. This is the public API
-  contract; IFS/Snapmaker/ACE/CFS override it to DELETE their store entry.
+- **User-initiated clear.** The AMS context menu's "Clear Spool" gesture
+  (`MenuAction::CLEAR_SPOOL` in `src/ui/ui_ams_detail.cpp`) is a commit first
+  and a clear second, and the order is load-bearing. `AmsState::commit_slot_edit()`
+  carries the arms a backend clear has no way to reach: the Spoolman server
+  active-spool unlink, the identity-cache invalidation and the ToolState clear
+  (bundle F2LNLQCC — clearing only the backend left the server asserting the
+  spool again after a restart). Only on the commit's success does the gesture
+  call `AmsBackend::clear_slot_override(slot_index)`, which drops the lane's
+  standing user declarations and the persisted override record — the half an
+  edit statement cannot express, because on an unlinked lane a colour pick, a
+  typed weight and a colour name never engage as clears
+  (prestonbrown/helixscreen#1661). The tool changer's no-op default and QIDI's
+  warn-only stub keep today's behaviour there: the lane's user record stands
+  until a restart.
 - **Hardware-event clear.** Each backend watches its own signal (see the
   integration table) and auto-clears when the signal transitions to
   "different spool". The baseline is recorded on first observation after

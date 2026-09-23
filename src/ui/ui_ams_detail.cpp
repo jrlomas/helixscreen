@@ -804,6 +804,15 @@ bool ams_dispatch_backend_action(AmsContextMenu::MenuAction action, int slot,
                 static_cast<helix::printer::AmsBackendCfs*>(backend)->clear_box_slot_profile(slot);
             }
 #endif
+            // The commit clears what an edit can state - and, unlinked, a
+            // colour pick, a typed weight or a colour name never engages as a
+            // clear, so the statement leaves the lane's standing user record
+            // holding them. Dropping that record whole is what makes the live
+            // lane read what a restart would show (prestonbrown/helixscreen#1661).
+            // clear_slot_override() carries no server unlink and no ToolState
+            // clear, which is why it rides behind the commit, never instead
+            // of it.
+            backend->clear_slot_override(slot);
             NOTIFY_INFO(lv_tr("{} spool cleared"),
                         helix::ui::lane_label(backend->lane_noun(), slot));
         } else {

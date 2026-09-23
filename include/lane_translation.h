@@ -66,6 +66,20 @@ enum class LegacyLockKeys {
 /// AmsBackend::commit_user_edit() (ams_backend.h) files the lane's half.
 [[nodiscard]] Observation user_edit_observation(const SlotInfo& original, const SlotInfo& edited);
 
+/// Take every identity field @p edit engaged as a clear off @p standing: a
+/// cleared text or zeroed id is a withdrawal of the statement, not a value,
+/// so the field comes off whatever it stood over and the machine's own
+/// reading shows through at once (prestonbrown/helixscreen#1661).
+///
+/// Walks FIELD_ROSTER by kind, so an identity field added there joins by its
+/// kind with no line here. Two statements are not field clears and stay: a
+/// colour's name, because a pick with no name must keep displacing a
+/// contradictory name the machine reports; and the spoolman binding, because
+/// its zero is the user's unlink, a whole statement in its own right
+/// (user_edit_observation()). Clear Spool withdraws nothing field by field -
+/// it drops the record whole through AmsBackend::clear_slot_override().
+void withdraw_cleared_fields(Observation& standing, const Observation& edit);
+
 /// Who declared the identity in a stored record.
 ///
 /// A record carrying a spool id is the server's statement. An unlinked record

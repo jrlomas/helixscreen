@@ -177,6 +177,17 @@ constexpr size_t MATERIAL_INDEX = index_of("material");
 static_assert(COLOR_INDEX < std::tuple_size_v<decltype(FIELD_ROSTER)>, "colour row went missing");
 static_assert(MATERIAL_INDEX < std::tuple_size_v<decltype(FIELD_ROSTER)>,
               "material row went missing");
+// The one cleared text field whose statement must stand rather than withdraw;
+// withdraw_cleared_fields() reaches it by position for the same reason the
+// record path reaches colour and material by name.
+constexpr size_t COLOR_NAME_INDEX = index_of("color_name");
+static_assert(COLOR_NAME_INDEX < std::tuple_size_v<decltype(FIELD_ROSTER)>,
+              "colour name row went missing");
+// The binding's own row: withdraw_cleared_fields() spares it, for the reason
+// named at the use.
+constexpr size_t SPOOLMAN_ID_INDEX = index_of("spoolman_id");
+static_assert(SPOOLMAN_ID_INDEX < std::tuple_size_v<decltype(FIELD_ROSTER)>,
+              "binding row went missing");
 
 /// The roster positions whose row satisfies @p pred, one bit per row.
 template <typename Pred> constexpr uint16_t rows_mask(Pred pred) {
@@ -346,6 +357,51 @@ Observation user_edit_observation(const SlotInfo& original, const SlotInfo& edit
         }
     });
     return obs;
+}
+
+void withdraw_cleared_fields(Observation& standing, const Observation& edit) {
+    for_each_field_indexed([&](const auto& f, size_t index) {
+        using Row = std::decay_t<decltype(f)>;
+        // Only the kinds that can arrive cleared withdraw. A colour's sentinel
+        // and a weight's -1 never engage, so those fields have no cleared
+        // shape to recognize, and presence is sensed, never declared.
+        if constexpr (Row::kind == FieldKind::Text || Row::kind == FieldKind::PositiveId) {
+            // A colour's name is the one cleared text that must stand: an edit
+            // cannot tell a backspaced name from a pick that never carried
+            // one, and a pick with no name has to keep displacing a
+            // contradictory name the machine reports (resolve(),
+            // lane_resolver.cpp). Clear Spool drops the record whole through
+            // AmsBackend::clear_slot_override() instead, so it needs no
+            // exception here.
+            if (index == COLOR_NAME_INDEX) {
+                return;
+            }
+            // The binding is a statement about the lane's spool, not a field
+            // another field's clear reaches: spoolman_id engages only as that
+            // whole statement (user_edit_observation), so its zero is the
+            // user's unlink and must stand.
+            if (index == SPOOLMAN_ID_INDEX) {
+                return;
+            }
+            // Fields the edit path refuses (nullptr slot member) can never
+            // arrive engaged, so there is nothing of theirs to withdraw.
+            if constexpr (!skipped<decltype(f.slot)>) {
+                const auto& incoming = edit.*(f.obs);
+                if (!incoming.has_value()) {
+                    return;
+                }
+                if constexpr (Row::kind == FieldKind::Text) {
+                    if (incoming->empty()) {
+                        (standing.*(f.obs)).reset();
+                    }
+                } else {
+                    if (*incoming == 0) {
+                        (standing.*(f.obs)).reset();
+                    }
+                }
+            }
+        }
+    });
 }
 
 SlotInfo keep_spool_owned_identity(const SlotInfo& original, const SlotInfo& edited,
