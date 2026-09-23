@@ -14,6 +14,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace helix {
@@ -339,6 +340,15 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     bool check_hardware_event_clear(SlotInfo& slot, int slot_index,
                                     const std::string& observed_uid);
 
+    /// Cross-product the per-field id lists into the fingerprint set the slot
+    /// may report while our own SAVE_VARIABLEs echo back one field at a time,
+    /// and register it with rfid_tracker_ so each echo reads as OwnWriteEcho
+    /// instead of a spool swap. Caller must hold mutex_.
+    void expect_own_write_echoes_locked(int slot_index, const std::string& base,
+                                        const std::vector<int>& fila_vals,
+                                        const std::vector<int>& color_vals,
+                                        const std::vector<int>& vendor_vals);
+
     /// Erase the slot's override in both stores (the in-memory map and the
     /// persisted record) and reset the override-exclusive fields on the live
     /// slot. Caller must hold mutex_.
@@ -354,6 +364,13 @@ class AmsBackendQidi : public AmsSubscriptionBackend {
     // an identity push we issued. Shared with the other fingerprint backends
     // (CFS, Snapmaker). All access under mutex_.
     helix::ams::SlotFingerprintTracker rfid_tracker_;
+
+    // Slots whose zero writes from clear_slot_override() no all-zero frame has
+    // confirmed yet. expect_any_of() replaces a slot's expectation set, so
+    // apply_user_edit() must fold the zero composites into its own
+    // registration while a clear is still echoing, or those echoes would read
+    // as a spool swap against the fresh edit. All access under mutex_.
+    std::unordered_set<int> clear_zero_echoes_pending_;
 };
 
 } // namespace helix
