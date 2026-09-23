@@ -74,6 +74,10 @@ setup() {
     # What the built-in detector actually does, so the claim is not vague.
     contains "/usr/bin/detection" "$output"
     contains "pauses the print" "$output"
+    # Pausing follows the printer's own choice, not ours: pausePrint 0 must be
+    # visible in the notice as warn-only.
+    contains "only warns" "$output"
+    contains "pausePrint" "$output"
 }
 
 @test "print_k2_stock_ai_notice: silent on every other platform" {

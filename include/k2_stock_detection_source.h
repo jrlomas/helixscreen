@@ -7,14 +7,15 @@
 #include "async_lifetime_guard.h"
 #include "detection_source.h"
 #include "i_moonraker_api.h"
+#include "printer_state.h"
 
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace helix {
 class PrinterState;
-enum class PrintJobState;
 } // namespace helix
 
 namespace helix::detection {
@@ -25,6 +26,18 @@ namespace helix::detection {
 ///   label: 1 prob: 0.903177 x:151.378 y:302.575 w:744.139 h:569.242
 /// With zero detections the tool prints nothing and exits 0.
 std::optional<float> max_spaghetti_probability(const std::string& detection_stdout);
+
+/// Hard cap on one /usr/bin/detection run. The model files live on /mnt/UDISK;
+/// a hung child must not hold one of the few shared HttpExecutor workers
+/// forever, which would latch busy_ and silently stop detection for the rest
+/// of the print.
+inline constexpr int K2_DETECTION_DEADLINE_S = 20;
+
+/// Run @p argv[0] with a fixed argv (posix_spawn, no shell), capture stdout
+/// into @p stdout_out, and SIGKILL the child if it runs past @p deadline_s.
+/// Returns the child's exit code, or -1 on spawn failure or timeout (logged).
+int run_detection_with_deadline(const std::vector<std::string>& argv, std::string& stdout_out,
+                                int deadline_s = K2_DETECTION_DEADLINE_S);
 
 /**
  * @brief Detection source backed by the Creality K2 stock yolov5n model.
@@ -43,8 +56,10 @@ class K2StockDetectionSource : public DetectionSource {
     /// Fetch a snapshot JPEG from @p url into @p dest_path. Blocking.
     using SnapshotFetcher =
         std::function<bool(const std::string& url, const std::string& dest_path)>;
-    /// Run @p cmd, write its stdout into @p stdout_out, return its exit code. Blocking.
-    using DetectionRunner = std::function<int(const std::string& cmd, std::string& stdout_out)>;
+    /// Run @p argv, write its stdout into @p stdout_out, return its exit code. Blocking,
+    /// but bounded: the default runner kills the child at K2_DETECTION_DEADLINE_S.
+    using DetectionRunner =
+        std::function<int(const std::vector<std::string>& argv, std::string& stdout_out)>;
     /// Schedule blocking work off the main thread.
     using WorkSubmitter = std::function<void(std::function<void()>)>;
 
@@ -109,10 +124,13 @@ class K2StockDetectionSource : public DetectionSource {
     Callback cb_;
 
     bool capable_ = false;
-    bool busy_ = false;           ///< a poll round is in flight (main thread only)
-    bool last_positive_ = false;  ///< edge-trigger: fire only on negative->positive
-    float threshold_ = 0.775f;    ///< pastaTruth / 100
-    int period_s_ = 25;           ///< pastaTime
+    bool busy_ = false;          ///< a poll round is in flight (main thread only)
+    bool last_positive_ = false; ///< edge-trigger: fire only on negative->positive
+    // RAW_PRINT_STATE_OK: tracks the wire's pause/resume pair; PrintState
+    // collapses paused and printing, which is exactly the edge this needs.
+    PrintJobState last_job_state_ = PrintJobState::STANDBY; ///< pause->resume edges
+    float threshold_ = 0.775f;                              ///< pastaTruth / 100
+    int period_s_ = 25;                                     ///< pastaTime
     bool pause_on_detect_ = true; ///< ai_control.pausePrint (1/absent = pause, 0 = notify only)
     std::string config_path_;     ///< user_print_refer.json, overridable for tests
     std::string snapshot_url_ = "http://127.0.0.1:8080/snapshot";

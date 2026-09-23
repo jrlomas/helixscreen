@@ -49,6 +49,11 @@ class DetectionManager {
 
     bool any_available() const;
 
+    /// Whether the named registered source exposes tuning
+    /// (DetectionSource::can_tune()). Lets generic presenters offer a Tune
+    /// button without naming any vendor's source id.
+    bool source_can_tune(const std::string& source_id) const;
+
     using Presenter = std::function<void(const DetectionEvent&, DetectionPolicy)>;
     void set_presenter(Presenter p) {
         presenter_ = std::move(p);

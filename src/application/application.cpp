@@ -2005,9 +2005,10 @@ bool Application::init_panel_subjects() {
                     get_moonraker_api()->job().resume_print([] {}, [](const MoonrakerError&) {});
                 });
                 modal->set_on_abort([] { helix::AbortManager::instance().start_abort(); });
-                // VENDOR_OK: DEFECT_DETECTION_CONFIG is U1 stock firmware's tuning
-                // macro; other sources (K2 runs its own model) have nothing to tune.
-                if (e.source_id == helix::detection::U1StockSource::SOURCE_ID)
+                // VENDOR_OK: DEFECT_DETECTION_CONFIG is the tuning macro of the
+                // stock firmware that exposes can_tune(); sources running their
+                // own model (the K2 polls it directly) decline the button.
+                if (helix::detection::DetectionManager::instance().source_can_tune(e.source_id))
                     modal->set_on_tune([] {
                         // Null callbacks, not empty lambdas: a non-null error_cb reads
                         // as "this caller reports the failure itself", which would

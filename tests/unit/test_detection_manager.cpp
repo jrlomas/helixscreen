@@ -84,6 +84,21 @@ TEST_CASE_METHOD(HelixTestFixture, "DetectionManager any_available reflects sour
     REQUIRE(m.any_available());
 }
 
+TEST_CASE_METHOD(HelixTestFixture, "DetectionManager source_can_tune asks the source",
+                 "[detection][manager]") {
+    auto& m = DetectionManager::instance();
+    m.reset_for_test();
+    // StubSource leaves can_tune() at its default: no Tune button for it, and
+    // none for an id that was never registered.
+    m.register_source(std::make_unique<StubSource>());
+    REQUIRE_FALSE(m.source_can_tune("stub"));
+    REQUIRE_FALSE(m.source_can_tune("nobody"));
+
+    auto u1 = std::make_unique<U1StockSource>(nullptr);
+    m.register_source(std::move(u1));
+    REQUIRE(m.source_can_tune(U1StockSource::SOURCE_ID));
+}
+
 TEST_CASE_METHOD(HelixTestFixture, "DetectionManager capability probe sets U1 source available",
                  "[detection][manager]") {
     auto& m = DetectionManager::instance();

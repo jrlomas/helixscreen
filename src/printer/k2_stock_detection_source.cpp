@@ -18,11 +18,22 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cerrno>
+#include <chrono>
+#include <csignal>
+#include <cstdlib>
 #include <fstream>
+#include <poll.h>
+#include <spawn.h>
 #include <sstream>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "hv/json.hpp"
+
+extern "C" {
+char** environ; // the libc environment, handed to posix_spawn
+}
 
 namespace helix::detection {
 
@@ -49,15 +60,8 @@ bool fetch_snapshot_default(const std::string& url, const std::string& dest_path
     return out.good();
 }
 
-int run_detection_default(const std::string& cmd, std::string& stdout_out) {
-    // cmd is built entirely from fixed paths by this file; no shell metachars.
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
-    if (!pipe)
-        return -1;
-    char buf[512];
-    while (fgets(buf, sizeof(buf), pipe.get()))
-        stdout_out += buf;
-    return pclose(pipe.release());
+int run_detection_default(const std::vector<std::string>& argv, std::string& stdout_out) {
+    return run_detection_with_deadline(argv, stdout_out);
 }
 
 void poll_timer_trampoline(lv_timer_t* t) {
@@ -65,6 +69,70 @@ void poll_timer_trampoline(lv_timer_t* t) {
 }
 
 } // namespace
+
+int run_detection_with_deadline(const std::vector<std::string>& argv, std::string& stdout_out,
+                                int deadline_s) {
+    if (argv.empty())
+        return -1;
+
+    int out_pipe[2];
+    if (pipe(out_pipe) != 0) {
+        spdlog::warn("[K2StockSource] pipe() failed: {}", strerror(errno));
+        return -1;
+    }
+
+    // Fixed argv straight to exec, no shell: every path in it is ours.
+    std::vector<char*> cargv;
+    cargv.reserve(argv.size() + 1);
+    for (const auto& a : argv)
+        cargv.push_back(const_cast<char*>(a.c_str()));
+    cargv.push_back(nullptr);
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_adddup2(&actions, out_pipe[1], STDOUT_FILENO);
+    posix_spawn_file_actions_addclose(&actions, out_pipe[0]);
+    pid_t pid = -1;
+    const int rc = posix_spawn(&pid, argv[0].c_str(), &actions, nullptr, cargv.data(), environ);
+    posix_spawn_file_actions_destroy(&actions);
+    close(out_pipe[1]);
+    if (rc != 0) {
+        close(out_pipe[0]);
+        spdlog::warn("[K2StockSource] spawning {} failed: {}", argv[0], strerror(rc));
+        return -1;
+    }
+
+    // The pipe is nonblocking and the wait is polled: a child that hangs with
+    // stdout open would block a plain read() forever, outliving the deadline.
+    fcntl(out_pipe[0], F_SETFL, O_NONBLOCK);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(deadline_s);
+    char buf[512];
+    for (;;) {
+        struct pollfd pfd {
+            out_pipe[0], POLLIN, 0
+        };
+        if (poll(&pfd, 1, 100) > 0) {
+            for (;;) {
+                const ssize_t n = read(out_pipe[0], buf, sizeof(buf));
+                if (n <= 0)
+                    break; // EAGAIN (drained) or EOF
+                stdout_out.append(buf, static_cast<size_t>(n));
+            }
+        }
+        int status = 0;
+        if (waitpid(pid, &status, WNOHANG) == pid) {
+            close(out_pipe[0]);
+            return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            kill(pid, SIGKILL);
+            waitpid(pid, &status, 0); // reap the killed child
+            close(out_pipe[0]);
+            spdlog::warn("[K2StockSource] detection still running after {} s, killed", deadline_s);
+            return -1;
+        }
+    }
+}
 
 std::optional<float> max_spaghetti_probability(const std::string& detection_stdout) {
     std::optional<float> best;
@@ -149,7 +217,16 @@ void K2StockDetectionSource::start() {
 }
 
 void K2StockDetectionSource::on_print_state(PrintJobState state) {
-    if (!printer_has_job(state))
+    const PrintJobState prev = last_job_state_;
+    last_job_state_ = state;
+    if (!printer_has_job(state)) {
+        last_positive_ = false;
+        return;
+    }
+    // RAW_PRINT_STATE_OK: the resume edge needs the wire's PAUSED -> PRINTING
+    // pair; PrintState collapses paused and printing into one value, so the
+    // user's choice to continue is invisible without the raw pair.
+    if (prev == PrintJobState::PAUSED && state == PrintJobState::PRINTING)
         last_positive_ = false;
 }
 
@@ -173,22 +250,21 @@ void K2StockDetectionSource::poll_tick() {
     const auto fetch = fetcher_;
     const auto run = runner_;
     const auto url = snapshot_url_;
-    const std::string cmd =
-        std::string(DETECTION_BIN) + " " + SNAPSHOT_IN + " " + SNAPSHOT_OUT + " 0";
+    const std::vector<std::string> argv{DETECTION_BIN, SNAPSHOT_IN, SNAPSHOT_OUT, "0"};
     const auto tok = lifetime_.token();
     const float threshold = threshold_;
-    submitter_([this, fetch, run, url, cmd, tok, threshold] {
+    submitter_([this, fetch, run, url, argv, tok, threshold] {
         PollResult r;
         if (fetch(url, SNAPSHOT_IN)) {
             std::string out;
-            if (run(cmd, out) == 0) {
+            if (run(argv, out) == 0) {
                 if (const auto prob = max_spaghetti_probability(out)) {
                     r.ran = true;
                     r.prob = *prob;
                     r.positive = *prob >= threshold;
                 }
             } else {
-                spdlog::debug("[K2StockSource] detection exited nonzero");
+                spdlog::debug("[K2StockSource] detection exited nonzero or timed out");
             }
         } else {
             spdlog::debug("[K2StockSource] snapshot fetch failed");
@@ -203,8 +279,14 @@ void K2StockDetectionSource::poll_tick() {
 
 void K2StockDetectionSource::handle_result(const PollResult& r) {
     busy_ = false;
-    if (r.positive && !last_positive_)
-        fire(r);
+    if (r.positive && !last_positive_) {
+        // The round started while printing; a job that ended while the model
+        // ran leaves nothing to pause and no print for the modal to speak of.
+        // RAW_PRINT_STATE_OK: same wire read poll_tick makes - the round's
+        // result is only meaningful against the job it was launched under.
+        if (printer_has_job(state_->get_print_job_state()))
+            fire(r);
+    }
     last_positive_ = r.positive;
 }
 

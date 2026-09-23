@@ -19,6 +19,24 @@ using helix::detection::DetectionKind;
 using helix::detection::K2StockDetectionSource;
 using json = nlohmann::json;
 
+TEST_CASE("run_detection_with_deadline bounds the child", "[detection][k2]") {
+    SECTION("a child that outlives the deadline is killed, no result") {
+        helix::TextLogCapture capture;
+        std::string out;
+        const int rc = helix::detection::run_detection_with_deadline({"/bin/sleep", "30"}, out, 1);
+        CHECK(rc == -1);
+        CHECK(out.empty());
+        CHECK(capture.contains("killed"));
+    }
+    SECTION("a well-behaved child: exit code and captured stdout") {
+        std::string out;
+        const int rc =
+            helix::detection::run_detection_with_deadline({"/bin/echo", "prob: 0.9"}, out, 20);
+        CHECK(rc == 0);
+        CHECK(out.find("prob: 0.9") != std::string::npos);
+    }
+}
+
 TEST_CASE("max_spaghetti_probability parses /usr/bin/detection stdout", "[detection][k2]") {
     SECTION("positive: duplicated detection lines yield the max prob") {
         // Verbatim from a K2 Plus run on a real spaghetti photo (#1378).
@@ -69,7 +87,7 @@ struct PollHarness {
             ++fetch_calls;
             return fetch_ok;
         });
-        src.set_runner([this](const std::string&, std::string& out) {
+        src.set_runner([this](const std::vector<std::string>&, std::string& out) {
             out = runner_stdout;
             return runner_exit;
         });
@@ -193,6 +211,32 @@ TEST_CASE_METHOD(XMLTestFixture, "K2StockSource thresholds and edge triggering",
         set_print_state(state(), "printing");
         h.poll();
         CHECK(h.events.size() == 2);
+    }
+    SECTION("resume with the spaghetti still present fires again") {
+        h.runner_stdout = "label: 1 prob: 0.900000 x:1 y:2 w:3 h:4\n";
+        h.poll();
+        REQUIRE(h.events.size() == 1);
+
+        set_print_state(state(), "paused"); // the pause the detection asked for
+        h.poll();                           // paused polls; no re-fire while held
+        CHECK(h.events.size() == 1);
+
+        set_print_state(state(), "printing"); // resume resets the debounce
+        h.poll();
+        CHECK(h.events.size() == 2);
+    }
+    SECTION("a round that outlives its job does not fire") {
+        h.runner_stdout = "label: 1 prob: 0.900000 x:1 y:2 w:3 h:4\n";
+        set_print_state(state(), "printing");
+        h.src.poll_tick(); // round runs; its result is deferred, not applied
+
+        set_print_state(state(), "standby"); // job ended before the result landed
+        CHECK(h.events.empty());
+
+        h.runner_stdout.clear();
+        set_print_state(state(), "printing");
+        h.poll(); // busy_ cleared by the skipped round: the next tick runs
+        CHECK(h.fetch_calls == 2);
     }
 }
 

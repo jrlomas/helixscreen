@@ -63,6 +63,14 @@ bool DetectionManager::any_available() const {
     return false;
 }
 
+bool DetectionManager::source_can_tune(const std::string& source_id) const {
+    for (const auto& src : sources_) {
+        if (src && src->id() == source_id)
+            return src->can_tune();
+    }
+    return false;
+}
+
 void DetectionManager::on_event(const DetectionEvent& e) {
     DetectionPolicy p = policy(e.source_id);
     if (p == DetectionPolicy::Off) {
