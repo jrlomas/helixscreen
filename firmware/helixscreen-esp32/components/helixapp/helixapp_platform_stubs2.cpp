@@ -405,6 +405,9 @@ void DebugBundleCollector::upload_async(const BundleOptions&, ResultCallback cal
 std::string host_arch_string() {
     return std::string("xtensa");
 }
+bool ad5x_mod_layout_present(const std::string&, const char**) {
+    return false;
+}
 
 // --- IppPrinter (IPP/PWG-Raster over libhv HTTP; detached print thread) ------
 // The slice UI constructs one before calling the setters, so ctor/dtor and
@@ -451,6 +454,9 @@ spdlog::level::level_enum effective_log_level() {
 std::string effective_destination() {
     return std::string("console");
 }
+std::string effective_log_file_path() {
+    return {};
+}
 
 } // namespace logging
 } // namespace helix
@@ -490,6 +496,13 @@ UpdateChecker::~UpdateChecker() = default;
 void UpdateChecker::clear_cache() {}
 void UpdateChecker::start_download() {}
 void UpdateChecker::cancel_download() {}
+std::string UpdateChecker::get_platform_key() {
+    return std::string("esp32");
+}
+// Firmware updates are flashed whole; there is no tarball to stage.
+std::string UpdateChecker::compute_update_staging_dir(const std::string&, const std::string&) {
+    return {};
+}
 
 // --- hv::WebSocketClient audit stand-in (shim hv_stub/hv/WebSocketClient.h) --
 // The shim declares these; Phase 2 replaces the seam with
@@ -546,6 +559,11 @@ std::string app_get_config_dir() {
 }
 std::string get_helix_cache_dir(const std::string& subdir) {
     return subdir.empty() ? std::string("/config/cache") : "/config/cache/" + subdir;
+}
+std::string peek_helix_cache_dir(const std::string& subdir, const char** tier_out) {
+    if (tier_out)
+        *tier_out = "ESP32";
+    return get_helix_cache_dir(subdir);
 }
 
 namespace helix {

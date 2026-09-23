@@ -95,6 +95,11 @@ lv_subject_t& get_notification_subject() {
 lv_subject_t& get_home_edit_mode_subject() {
     return g_home_edit_mode_subject;
 }
+// These subjects are plain statics with no SubjectManager death signal, so
+// observers get no lifetime, as for any subject panel_widget_manager can't name.
+SubjectLifetime get_app_globals_subjects_lifetime() {
+    return nullptr;
+}
 // Wizard-active gate (app_globals.cpp on Linux). ESP32 has no first-run wizard
 // flow driving it, so it initializes to 0 and only PLR/offer code observes it.
 static lv_subject_t g_wizard_active_subject;
