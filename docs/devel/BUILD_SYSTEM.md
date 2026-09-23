@@ -1900,6 +1900,7 @@ did link them.
 | `HELIX_HAS_ACE` | 1 | ACE vendor backend (0 on non-Anker cross targets) |
 | `HELIX_HAS_QIDI` | 1 | QIDI Box vendor backend (0 on non-QIDI cross targets) |
 | `HELIX_HAS_SNAPMAKER` | 1 | SnapSwap vendor backend (0 except `snapmaker-u1`) |
+| `HELIX_PANEL_POWER_OFF` | 1 | Panel power-off at display sleep (0 on `k1`/`k1-dynamic`/`mips`/`ad5x`/`k2`/`snapmaker-u1`, whose panels do not recover cleanly) |
 
 ### Linker flags by platform
 

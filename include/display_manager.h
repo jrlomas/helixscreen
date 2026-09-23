@@ -7,11 +7,14 @@
 #include "color_transform.h"
 #include "display_backend.h"
 #include "indev_delete_watch.h"
-#include "platform_info.h"
 #include "refresh_timing.h"
 #include "remote_screen_manager.h"
 #include "touch_calibration.h"
 #include "touch_calibration_session.h"
+
+#ifndef HELIX_PANEL_POWER_OFF
+#define HELIX_PANEL_POWER_OFF 1 // Makefile default; per-target 0s live in mk/cross.mk
+#endif
 
 #include <functional>
 #include <lvgl.h>
@@ -191,24 +194,19 @@ class DisplayManager : public helix::ICalibrationSink {
      *
      * A hardware blank still wins, because those backends cut the panel themselves.
      *
-     * Two platforms are excluded, because their panel does not come back from
-     * a power-down:
-     *   - Snapmaker U1 (build time): DPMS-off disables the Rockchip VOP2 CRTC and
-     *     wake's DPMS-on does not reliably re-enable it, so the panel stays black
-     *     until reboot (assets/config/platform/hooks-snapmaker-u1.sh "DRM CRTC
-     *     keepalive").
-     *   - AD5X (runtime, via the mod-layout probe): unblanking leaves the display
-     *     engine cycling solid fill colours until the UI process restarts. Its
-     *     sysfs backlight also reads brightness=1 while the LEDs are physically
-     *     dark, so the panel's real state cannot be probed from userspace. The
-     *     unified MIPS binary also runs on K1 boards, whose panels DO recover, so
-     *     the exclusion keys on the board layout, not the build.
-     * These guards never trust the DISPLAY stack's own probes, because
+     * Builds with HELIX_PANEL_POWER_OFF=0 (set per target in mk/cross.mk) never
+     * power the panel down, because their panels do not come back cleanly:
+     *   - Snapmaker U1: DPMS-off disables the Rockchip VOP2 CRTC and wake's
+     *     DPMS-on does not reliably re-enable it, so the panel stays black until
+     *     reboot (assets/config/platform/hooks-snapmaker-u1.sh "DRM CRTC keepalive").
+     *   - AD5X (unified MIPS build, shared with the K1 series): unblanking leaves
+     *     the display engine cycling solid fill colours until the UI restarts.
+     *   - Creality K1 / K2 series: after POWERDOWN/UNBLANK the panel edges glow
+     *     and flicker white until a power cycle (#1708).
+     * The gate is build-time because the display stack's own probes cannot tell:
      * DisplayBackendFbdev::supports_power_off() answers yes for any writable
-     * /dev/fb0 without asking the panel anything, and a misfiring probe on these
-     * devices leaves the user with a screen they cannot recover. The AD5X
-     * exclusion uses the mod-LAYOUT probe (stat-only, deterministic) — not a
-     * panel probe.
+     * /dev/fb0 without asking the panel anything, and a misfire leaves the user
+     * with a screen they cannot recover.
      *
      * Callers may override the outcome entirely via /display/panel_power_off.
      *
@@ -223,15 +221,7 @@ class DisplayManager : public helix::ICalibrationSink {
         if (use_hardware_blank) {
             return false;
         }
-#if defined(HELIX_PLATFORM_SNAPMAKER_U1)
-        return false;
-#elif defined(HELIX_PLATFORM_MIPS)
-        // One binary serves the AD5X (panel does not recover) and the K1 series
-        // (it does), so the exclusion follows the board layout.
-        return !helix::ad5x_mod_layout_present();
-#else
-        return true;
-#endif
+        return HELIX_PANEL_POWER_OFF != 0;
     }
 
     /**
