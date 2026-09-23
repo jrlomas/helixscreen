@@ -6768,6 +6768,54 @@
       ]
     },
     {
+      "id": "vzbot",
+      "name": "VzBot",
+      "aliases": [
+        "VzBot 330",
+        "VzBot 235"
+      ],
+      "manufacturer": "VzBot",
+      "image": "vzbot.png",
+      "heuristics": [
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "vzbot",
+          "confidence": 80,
+          "reason": "Hostname contains 'vzbot'"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "vz330",
+          "confidence": 85,
+          "reason": "Hostname contains 'vz330' (VzBot 330)"
+        },
+        {
+          "type": "macro_match",
+          "field": "macros",
+          "pattern": "RSCS",
+          "confidence": 60,
+          "reason": "RSCS_on/RSCS_off cooling macros (VzBot default config pack)"
+        },
+        {
+          "type": "macro_match",
+          "field": "macros",
+          "pattern": "RETRACTIONLENGTH",
+          "confidence": 55,
+          "reason": "SET_RETRACTIONLENGTH macro (VzBot default config pack)"
+        },
+        {
+          "type": "kinematics_match",
+          "field": "kinematics",
+          "pattern": "corexy",
+          "confidence": 30,
+          "reason": "CoreXY kinematics",
+          "corroborating": true
+        }
+      ]
+    },
+    {
       "id": "duender_medusahc",
       "name": "Duender (MedusaHC)",
       "manufacturer": "Irbis3D",

@@ -444,11 +444,7 @@ AmsError AmsBackend::commit_user_edit(int slot_index, const SlotInfo& original,
     if (binding_changed && info.spoolman_id <= 0) {
         const helix::ams::FilamentSlotOverride kept = helix::ams::user_override_from_slot_info(
             declaration, applied, applied.material, nullptr);
-        helix::ams::LaneSources reloads =
-            helix::ams::sources_from_record(kept, helix::ams::to_lane_data_record(slot_index, kept),
-                                            helix::ams::LegacyLockKeys::LaneData);
-        reloads.metered.reset();
-        helix::ams::file_lane_sources(lane, reloads);
+        helix::ams::file_kept_identity(lane, slot_index, kept);
     }
 
     // A backend that paints from the lane while it applies an edit painted the

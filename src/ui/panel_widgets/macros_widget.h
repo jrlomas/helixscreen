@@ -9,6 +9,8 @@
 namespace helix {
 
 class MacrosWidget : public PanelWidget {
+    friend class MacrosWidgetTestAccess;
+
   public:
     MacrosWidget();
     ~MacrosWidget() override;

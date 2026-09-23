@@ -1685,6 +1685,84 @@ TEST_CASE_METHOD(SnapmakerFixture, "Snapmaker first RFID UID observation does NO
     CHECK(!api.mock_get_db_value("lane_data", "T0").is_null());
 }
 
+TEST_CASE_METHOD(SnapmakerFixture,
+                 "Snapmaker restart compares against the fingerprint the record carried",
+                 "[ams][snapmaker][filament_slot_override]") {
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    const json uid_f1 = json::array({1, 2, 3, 4});
+    const json uid_f2 = json::array({5, 6, 7, 8});
+
+    // A record as a session running older code left it: a user override with
+    // no fingerprint. Session 1 boots on it, reads the tag, and the
+    // observation must persist into the record — two backends over one mock
+    // DB stand in for two app lifetimes.
+    helix::ams::FilamentSlotOverride saved;
+    saved.brand = "Polymaker";
+    saved.spoolman_id = 42;
+    saved.material = "PLA";
+    saved.color_rgb = 0xFF5500;
+    saved.color_set = true;
+    api.mock_set_db_value("lane_data", "T0", helix::ams::to_lane_data_record(0, saved));
+    {
+        helix::test::RegisteredBackend<AmsBackendSnapmaker> session1(&api, nullptr);
+        SnapmakerTestAccess::call_on_started(*session1);
+        // The record on the wire loaded as this session's override.
+        REQUIRE(SnapmakerTestAccess::get_override(*session1, 0).has_value());
+        SnapmakerTestAccess::handle_status(
+            *session1, make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker", uid_f1));
+        auto stored = api.mock_get_db_value("lane_data", "T0");
+        REQUIRE(!stored.is_null());
+        REQUIRE(stored["helix_fingerprint"] == "1,2,3,4");
+    }
+
+    SECTION("a swap made while the app was down clears the override") {
+        helix::test::RegisteredBackend<AmsBackendSnapmaker> session2(&api, nullptr);
+        SnapmakerTestAccess::call_on_started(*session2);
+        // The loaded record's fingerprint is the baseline, so the first frame
+        // after restart is a comparison, not a first observation.
+        REQUIRE(SnapmakerTestAccess::get_override(*session2, 0).has_value());
+        SnapmakerTestAccess::handle_status(
+            *session2, make_filament_detect_status(0, "PETG", 0xFF00FF00u, "Generic", uid_f2));
+        CHECK(SnapmakerTestAccess::last_rfid_uid(*session2, 0) == "5,6,7,8");
+        CHECK_FALSE(SnapmakerTestAccess::get_override(*session2, 0).has_value());
+        CHECK(api.mock_get_db_value("lane_data", "T0").is_null());
+    }
+
+    SECTION("the same spool across a restart keeps the override") {
+        helix::test::RegisteredBackend<AmsBackendSnapmaker> session2(&api, nullptr);
+        SnapmakerTestAccess::call_on_started(*session2);
+        SnapmakerTestAccess::handle_status(
+            *session2, make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker", uid_f1));
+        auto ovr = SnapmakerTestAccess::get_override(*session2, 0);
+        REQUIRE(ovr.has_value());
+        CHECK(ovr->brand == "Polymaker");
+        CHECK(!api.mock_get_db_value("lane_data", "T0").is_null());
+    }
+
+    SECTION("a record without a stored fingerprint stays a first-observation baseline") {
+        // The shape every record written before the field existed has.
+        api.mock_set_db_value("lane_data", "T0", helix::ams::to_lane_data_record(0, saved));
+        helix::test::RegisteredBackend<AmsBackendSnapmaker> session2(&api, nullptr);
+        SnapmakerTestAccess::call_on_started(*session2);
+        SnapmakerTestAccess::handle_status(
+            *session2, make_filament_detect_status(0, "PETG", 0xFF00FF00u, "Generic", uid_f2));
+        // Baseline, not Changed: the tag differs from the record's data, but
+        // with no stored fingerprint there is nothing to compare against.
+        auto ovr = SnapmakerTestAccess::get_override(*session2, 0);
+        REQUIRE(ovr.has_value());
+        CHECK(ovr->brand == "Polymaker");
+        // The baseline observation itself heals the fingerprint in, so the
+        // NEXT restart compares against this spool.
+        auto stored = api.mock_get_db_value("lane_data", "T0");
+        REQUIRE(!stored.is_null());
+        CHECK(stored["helix_fingerprint"] == "5,6,7,8");
+    }
+}
+
 TEST_CASE_METHOD(SnapmakerFixture, "Snapmaker empty RFID UID does not update baseline or clear",
                  "[ams][snapmaker][filament_slot_override]") {
     // Empty UID = no tag / reader disabled / unreadable. Must not update

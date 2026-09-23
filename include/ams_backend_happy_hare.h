@@ -332,6 +332,18 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     }
     SlotInfo* cached_slot_locked(int slot_index) override;
 
+    /// The gate map states colour, material, the spool id and the gate name,
+    /// and nothing else on the resolver-owned identity: brand, the catalog
+    /// pick and the Spoolman vendor id come from the lane's records alone.
+    /// Those are cleared before every paint (a gate's SlotInfo persists
+    /// across frames), so a dropped record stops showing rather than living
+    /// on in the struct - except a field the gate's override record carries,
+    /// which takes that record's value: the gate map cannot hold brand or
+    /// spool name at all, so the override is their only restating source. The
+    /// gate name keeps its own value: gate_name owns colour_name and no lane
+    /// record restates it.
+    void prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) override;
+
   private:
     // === User-attached slot identity (FilamentSlotOverrideStore) =============
     //

@@ -68,12 +68,14 @@ write_fragment() { # $1 fragment path, $2 source file
 @test "a write that fails leaves the previous database in place" {
     write_fragment "$TMP_DIR/build/live.ccj" scripts/version-compare.sh
     printf 'sentinel\n' > "$TMP_DIR/db.json"
-    # The database is written through a sibling and renamed over, so the real
-    # file is never open while the content is incomplete. Occupying the sibling
-    # is the deterministic way to fail the write after the entries are chosen;
-    # an in-place open() would have truncated db.json before reaching here.
-    mkdir "$TMP_DIR/db.json.tmp"
+    # The database is written through a per-process sibling and renamed over,
+    # so the real file is never open while the content is incomplete. A
+    # read-only directory fails the sibling's creation after the entries are
+    # chosen; an in-place open() would have truncated db.json before that.
+    [ "$(id -u)" -ne 0 ] || skip "root ignores directory permissions"
+    chmod a-w "$TMP_DIR"
     run python3 "$SCRIPT" --build-dir "$TMP_DIR/build" --output "$TMP_DIR/db.json"
+    chmod u+w "$TMP_DIR"
     [ "$status" -eq 1 ]
     [ "$(cat "$TMP_DIR/db.json")" = "sentinel" ]
     contains "cannot write" "$output"
@@ -83,7 +85,7 @@ write_fragment() { # $1 fragment path, $2 source file
     write_fragment "$TMP_DIR/build/live.ccj" scripts/version-compare.sh
     run python3 "$SCRIPT" --build-dir "$TMP_DIR/build" --output "$TMP_DIR/db.json"
     [ "$status" -eq 0 ]
-    [ ! -e "$TMP_DIR/db.json.tmp" ]
+    [ -z "$(compgen -G "$TMP_DIR/db.json*.tmp")" ]
 }
 
 # ------------------------------------------------------- unreadable fragments
