@@ -43,7 +43,7 @@ setup() {
 
 # Mock systemctl. Units named in $@ exist on the host (list-unit-files finds
 # them); every invocation is logged so a test can assert what was enabled or
-# started - and what was not.
+# started - and what was not. FAIL_ENABLE=1 makes every enable fail.
 mock_host_units() {
     mkdir -p "$BATS_TEST_TMPDIR/bin"
     printf '%s\n' "$@" > "$BATS_TEST_TMPDIR/units"
@@ -53,6 +53,7 @@ echo "\$@" >> "$SYSTEMCTL_LOG"
 if [ "\$1" = "list-unit-files" ]; then
     grep -qx "\${2%.service}" "$BATS_TEST_TMPDIR/units" || exit 1
 fi
+[ "\$1" = "enable" ] && [ -n "\${FAIL_ENABLE:-}" ] && exit 1
 exit 0
 EOF
     chmod +x "$BATS_TEST_TMPDIR/bin/systemctl"
@@ -151,6 +152,31 @@ run_restore() {
     [ "$(grep -c '^start ' "$SYSTEMCTL_LOG")" -eq 1 ]
 }
 
+@test "restore: a recorded QIDI stock screen unit is enabled and started" {
+    # The shape stop_qidi_competing_uis records. Enabled but not started, the
+    # stock screen stays on its boot splash until the next reboot.
+    printf 'systemd:qidi-client.service\n' > "$STATE_FILE"
+    mock_host_units qidi-client
+
+    run run_restore
+    [ "$status" -eq 0 ]
+
+    grep -q "^enable qidi-client.service$" "$SYSTEMCTL_LOG"
+    grep -q "^start qidi-client.service$" "$SYSTEMCTL_LOG"
+}
+
+@test "restore: a failed enable is reported with the command that fixes it" {
+    printf 'systemd:qidi-client.service\n' > "$STATE_FILE"
+    mock_host_units qidi-client
+    export FAIL_ENABLE=1
+
+    run run_restore
+    [ "$status" -eq 0 ]
+
+    contains "[WARN] Could not re-enable qidi-client.service" "$output"
+    contains "sudo systemctl enable --now qidi-client.service" "$output"
+}
+
 # --- recorded init scripts, and what must never be run as one ---
 
 @test "restore: a recorded UI init script gets its execute bit and a start" {
@@ -212,6 +238,29 @@ EOF
 
     grep -q "^enable KlipperScreen$" "$SYSTEMCTL_LOG"
     grep -q "^start KlipperScreen$" "$SYSTEMCTL_LOG"
+}
+
+@test "fallback: with no state file a QIDI stock screen unit is restored" {
+    rm -f "$STATE_FILE"
+    mock_host_units qidi-client
+
+    run run_restore
+    [ "$status" -eq 0 ]
+
+    grep -q "^enable qidi-client$" "$SYSTEMCTL_LOG"
+    grep -q "^start qidi-client$" "$SYSTEMCTL_LOG"
+}
+
+@test "fallback: a failed enable is reported with the command that fixes it" {
+    rm -f "$STATE_FILE"
+    mock_host_units makerbase-client
+    export FAIL_ENABLE=1
+
+    run run_restore
+    [ "$status" -eq 0 ]
+
+    contains "[WARN] Could not re-enable makerbase-client" "$output"
+    contains "sudo systemctl enable --now makerbase-client" "$output"
 }
 
 @test "fallback: with no state file a UI init script is restored too" {
