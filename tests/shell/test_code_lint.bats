@@ -1453,7 +1453,7 @@ zoffset_publisher_wiring() {
     [[ "$output" == *"before init_ams_subjects"* ]]
 }
 
-@test "no XML re-derives the Z-offset save rule from any_tool_z_dirty" {
+@test "no XML re-derives the Z-offset save rule from a tool-dirty subject" {
     run zoffset_save_rule_copies ui_xml/ --include='*.xml'
     [ "$status" -eq 0 ]
     [ -z "$output" ]
