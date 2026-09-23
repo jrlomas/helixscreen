@@ -862,6 +862,7 @@ void PrintStatusPanel::init_subjects() {
     register_xml_callbacks({
         {"on_print_status_tune", on_tune_clicked},
         {"on_print_status_camera", on_print_status_camera},
+        {"on_print_status_files", on_files_clicked},
         {"on_print_status_reprint", on_reprint_clicked},
         {"on_temp_card_clicked", on_temp_card_clicked},
         {"on_print_status_graph_clicked", on_temp_graph_clicked},
@@ -2162,6 +2163,19 @@ void PrintStatusPanel::handle_reprint_button() {
     }
 }
 
+void PrintStatusPanel::handle_files_click() {
+    spdlog::info("[{}] Files clicked - opening print select during active print", get_name());
+
+    // The navbar-tap decision, queued because this runs inside an LVGL event
+    // callback. The switch clears the overlay stack while print status's
+    // persistent registration skips on_deactivate(), so the panel keeps
+    // collecting data for its next push from the Home print tile. Starting a
+    // print there stays blocked by print_select_can_print, same rule as the
+    // history reprint path (prestonbrown/helixscreen#1395).
+    NavigationManager::instance().request_panel(PanelId::PrintSelect,
+                                                NavigationManager::SwitchDispatch::Queued);
+}
+
 std::set<int> PrintStatusPanel::get_tools_used() const {
     if (!gcode_viewer_) {
         return {};
@@ -2323,6 +2337,13 @@ void PrintStatusPanel::on_reprint_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusPanel] on_reprint_clicked");
     (void)e;
     get_global_print_status_panel().handle_reprint_button();
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void PrintStatusPanel::on_files_clicked(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusPanel] on_files_clicked");
+    (void)e;
+    get_global_print_status_panel().handle_files_click();
     LVGL_SAFE_EVENT_CB_END();
 }
 

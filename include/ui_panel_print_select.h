@@ -625,6 +625,10 @@ class PrintSelectPanel : public PanelBase {
     /// binding)
     lv_subject_t can_print_subject_;
 
+    /// Why the print button is disabled, shown beside it. Empty when it is not.
+    lv_subject_t blocked_reason_subject_;
+    char blocked_reason_buffer_[96];
+
     //
     // === Panel State ===
     //

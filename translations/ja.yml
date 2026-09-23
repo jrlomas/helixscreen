@@ -2140,6 +2140,7 @@ translations:
   Printing label...: ラベル印刷中...
   Printing test label...: テストラベル印刷中...
   Printing with the wrong material can cause clogs, poor adhesion, or failed prints.: 誤った素材で印刷すると、詰まり、密着不良、または印刷失敗の原因となる可能性があります。
+  'Printing: start after this job': ''
   Prints: 印刷
   Prints Trend: 印刷傾向
   'Private:': 'プライベート:'
