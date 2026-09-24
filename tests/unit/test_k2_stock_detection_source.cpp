@@ -80,9 +80,8 @@ struct PollHarness {
     int runner_exit = 0;
     std::vector<DetectionEvent> events;
 
-    explicit PollHarness(helix::PrinterState* state, IMoonrakerAPI* api,
-                         const std::string& config_path = {})
-        : src(state, api) {
+    explicit PollHarness(helix::PrinterState* state, const std::string& config_path = {})
+        : src(state) {
         src.set_fetcher([this](const std::string&, const std::string&) {
             ++fetch_calls;
             return fetch_ok;
@@ -114,7 +113,7 @@ void set_print_state(helix::PrinterState& state, const char* s) {
 } // namespace
 
 TEST_CASE_METHOD(XMLTestFixture, "K2StockSource gates polling on print state", "[detection][k2]") {
-    PollHarness h(&state(), &api());
+    PollHarness h(&state());
 
     SECTION("standby: no fetch, no event") {
         set_print_state(state(), "standby");
@@ -138,7 +137,7 @@ TEST_CASE_METHOD(XMLTestFixture, "K2StockSource gates polling on the detection t
     SettingsManager::instance().deinit_subjects();
     SettingsManager::instance().init_subjects();
 
-    PollHarness h(&state(), &api());
+    PollHarness h(&state());
     set_print_state(state(), "printing");
     SettingsManager::instance().set_detection_enabled(false);
     h.poll();
@@ -151,7 +150,7 @@ TEST_CASE_METHOD(XMLTestFixture, "K2StockSource gates polling on the detection t
 
 TEST_CASE_METHOD(XMLTestFixture, "K2StockSource thresholds and edge triggering",
                  "[detection][k2]") {
-    PollHarness h(&state(), &api());
+    PollHarness h(&state());
     set_print_state(state(), "printing");
 
     SECTION("below threshold: fetch runs, no event") {
@@ -217,7 +216,7 @@ TEST_CASE_METHOD(XMLTestFixture, "K2StockSource thresholds and edge triggering",
         h.poll();
         REQUIRE(h.events.size() == 1);
 
-        set_print_state(state(), "paused"); // the pause the detection asked for
+        set_print_state(state(), "paused"); // the pause the detection's response produced
         h.poll();                           // paused polls; no re-fire while held
         CHECK(h.events.size() == 1);
 
@@ -240,12 +239,15 @@ TEST_CASE_METHOD(XMLTestFixture, "K2StockSource thresholds and edge triggering",
     }
 }
 
-TEST_CASE_METHOD(XMLTestFixture, "K2StockSource honors ai_control.pausePrint", "[detection][k2]") {
+TEST_CASE_METHOD(XMLTestFixture, "K2StockSource reports the printer's ai_control preference",
+                 "[detection][k2]") {
     // start() reads the ai_control file once, so each section writes the value
     // it exercises and builds the source against that file.
     static constexpr const char* AI_JSON = "/tmp/helix_k2_aicontrol_test.json";
-    auto make_harness = [&](std::optional<int> pause_print) {
+    auto make_harness = [&](std::optional<int> ai_switch, std::optional<int> pause_print) {
         json ai{{"pastaTime", 25}, {"pastaTruth", 77}};
+        if (ai_switch.has_value())
+            ai["switch"] = *ai_switch;
         if (pause_print.has_value())
             ai["pausePrint"] = *pause_print;
         // Closed before the source is built: start() reads the file in the
@@ -254,39 +256,50 @@ TEST_CASE_METHOD(XMLTestFixture, "K2StockSource honors ai_control.pausePrint", "
             std::ofstream f(AI_JSON);
             f << json{{"ai_control", ai}}.dump();
         }
-        return std::make_unique<PollHarness>(&state(), &api(), AI_JSON);
+        return std::make_unique<PollHarness>(&state(), AI_JSON);
     };
-    const char* spaghetti_stdout = "label: 1 prob: 0.903177 x:1 y:2 w:3 h:4\n";
-    // MoonrakerJobAPI logs this line on entry to pause_print(), before any
-    // client I/O, so it is the synchronous proof the pause was attempted.
+
+    SECTION("switch 0: preference says detection off") {
+        auto h = make_harness(0, std::nullopt);
+        const auto pref = h->src.printer_preference();
+        REQUIRE(pref.has_value());
+        CHECK_FALSE(pref->enabled);
+    }
+    SECTION("pausePrint 0: preference says do not pause") {
+        auto h = make_harness(std::nullopt, 0);
+        const auto pref = h->src.printer_preference();
+        REQUIRE(pref.has_value());
+        CHECK(pref->enabled);
+        CHECK_FALSE(pref->pause);
+    }
+    SECTION("both present: both carried") {
+        auto h = make_harness(1, 1);
+        const auto pref = h->src.printer_preference();
+        REQUIRE(pref.has_value());
+        CHECK(pref->enabled);
+        CHECK(pref->pause);
+    }
+
+    std::remove(AI_JSON);
+}
+
+TEST_CASE_METHOD(XMLTestFixture, "K2StockSource reports, never pauses the print itself",
+                 "[detection][k2]") {
+    static constexpr const char* AI_JSON = "/tmp/helix_k2_aicontrol_test.json";
+    {
+        std::ofstream f(AI_JSON);
+        f << json{{"ai_control", {{"pastaTime", 25}, {"pastaTruth", 77}, {"pausePrint", 1}}}}
+                 .dump();
+    }
+    PollHarness h(&state(), AI_JSON);
+    h.runner_stdout = "label: 1 prob: 0.903177 x:1 y:2 w:3 h:4\n";
+    set_print_state(state(), "printing");
+    // The pause decision belongs to the settings and the presenter above the
+    // source; pausePrint 1 here must not make the source send a pause.
     helix::TextLogCapture capture;
-
-    SECTION("pausePrint 0: event raised, print NOT paused") {
-        auto h = make_harness(0);
-        h->runner_stdout = spaghetti_stdout;
-        set_print_state(state(), "printing");
-        h->poll();
-        REQUIRE(h->events.size() == 1);
-        CHECK(h->events[0].kind == DetectionKind::Spaghetti);
-        CHECK(h->events[0].message.find("90%") != std::string::npos);
-        CHECK_FALSE(capture.contains("[Moonraker API] Pausing print"));
-    }
-    SECTION("pausePrint 1: event raised and print paused") {
-        auto h = make_harness(1);
-        h->runner_stdout = spaghetti_stdout;
-        set_print_state(state(), "printing");
-        h->poll();
-        REQUIRE(h->events.size() == 1);
-        CHECK(capture.contains("[Moonraker API] Pausing print"));
-    }
-    SECTION("pausePrint absent: pauses (factory default)") {
-        auto h = make_harness(std::nullopt);
-        h->runner_stdout = spaghetti_stdout;
-        set_print_state(state(), "printing");
-        h->poll();
-        REQUIRE(h->events.size() == 1);
-        CHECK(capture.contains("[Moonraker API] Pausing print"));
-    }
-
+    h.poll();
+    REQUIRE(h.events.size() == 1);
+    CHECK_FALSE(h.events[0].already_paused);
+    CHECK_FALSE(capture.contains("[Moonraker API] Pausing print"));
     std::remove(AI_JSON);
 }

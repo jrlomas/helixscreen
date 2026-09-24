@@ -745,6 +745,7 @@
   <translation tag="Detecting..." ja="検出中..."/>
   <translation tag="Detection Length" ja="検出長"/>
   <translation tag="Detection Mode" ja="検出モード"/>
+  <translation tag="Detection turned off" ja="検出をオフにしました"/>
   <translation tag="Dev" ja="開発版"/>
   <translation tag="Dev channel requires dev_url in config" ja="開発チャンネルには設定にdev_urlが必要です"/>
   <translation tag="Device" ja="デバイス"/>
@@ -1920,7 +1921,9 @@
   <translation tag="Path B" ja="パス B"/>
   <translation tag="Pause" ja="一時停止"/>
   <translation tag="Pause macro not configured" ja="一時停止マクロが未設定です"/>
+  <translation tag="Pause on Detection" ja="検出時に一時停止"/>
   <translation tag="Pause the print first, then load, unload, or change filament" ja="先に印刷を一時停止してから、装填・排出・フィラメント交換を行ってください"/>
+  <translation tag="Pause the print when a failure is seen (off = warn only)" ja="失敗を検出したら印刷を一時停止します（オフ = 警告のみ）"/>
   <translation tag="Pause, resume, or stop the print" ja="印刷の一時停止、再開、停止"/>
   <translation tag="Paused" ja="一時停止"/>
   <translation tag="Paused (attention needed)" ja="一時停止（対応が必要）"/>
@@ -2556,6 +2559,8 @@
   <translation tag="Sounds" ja="サウンド"/>
   <translation tag="Source" ja="ソース"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" ja="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti Detection" ja="スパゲッティ検出"/>
+  <translation tag="Spaghetti detected" ja="スパゲッティを検出しました"/>
   <translation tag="Spaghetti detected — print paused" ja="スパゲッティを検出しました — 印刷を一時停止しました"/>
   <translation tag="Speaker" ja="スピーカー"/>
   <translation tag="Speed" ja="速度"/>
@@ -2918,6 +2923,7 @@
   <translation tag="Turn On" ja="オンにする"/>
   <translation tag="Turn On LEDs" ja="LEDを点灯"/>
   <translation tag="Turn endless spool on, then set the backup gate" ja="エンドレススプールを有効にしてから、バックアップゲートを設定してください"/>
+  <translation tag="Turn off detection" ja="検出をオフにする"/>
   <translation tag="Turn on LEDs when printer starts" ja="プリンター起動時に LED を点灯"/>
   <translation tag="Turn the extruder heater off after a load or unload finishes" ja="装填または排出の完了後にエクストルーダーヒーターをオフにします"/>
   <translation tag="Turn the picture to match how the screen is mounted. Applies after restart." ja="画面の取り付け向きに合わせて表示を回転します。再起動後に適用されます。"/>
@@ -3056,6 +3062,7 @@
   <translation tag="Warn" ja="警告"/>
   <translation tag="Warning" ja="警告"/>
   <translation tag="Warnings &amp; errors" ja="警告とエラー"/>
+  <translation tag="Watch the camera during a print for failed prints" ja="印刷中にカメラで印刷失敗を監視します"/>
   <translation tag="Weak battery" ja="バッテリー残量低下"/>
   <translation tag="Webcam" ja="ウェブカメラ"/>
   <translation tag="Website (optional)" ja="ウェブサイト（オプション）"/>
@@ -3226,7 +3233,7 @@
   <translation tag="{} heater turned off" ja="{} ヒーターをオフにしました"/>
   <translation tag="{} is asking to connect to this printer." ja="{} がこのプリンターへの接続を求めています。"/>
   <translation tag="{} is blocked — manual intervention required" ja="{} がブロックされています — 手動での対応が必要です"/>
-  <translation tag="{} is feeding the current print. Clear it after the print ends."/>
+  <translation tag="{} is feeding the current print. Clear it after the print ends." ja="{} は現在の印刷に給紙中です。印刷終了後にクリアしてください。"/>
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." ja="{} はインストールされていますが、予備スプールへの切り替えがオフになっているため、自動切り替えは行われません。"/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." ja="{} はインストールされていますが、予備スプールの設定を読み取れませんでした - 自動切り替えを当てにしないでください。"/>
   <translation tag="{} is not set up on this printer" ja="{} はこのプリンターで設定されていません"/>

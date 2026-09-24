@@ -6,7 +6,6 @@
 
 #include "async_lifetime_guard.h"
 #include "detection_source.h"
-#include "i_moonraker_api.h"
 #include "printer_state.h"
 
 #include <functional>
@@ -47,9 +46,9 @@ int run_detection_with_deadline(const std::vector<std::string>& argv, std::strin
  * active this source fetches a JPEG from the local ustreamer snapshot endpoint
  * and runs /usr/bin/detection on it, off the main thread, every pastaTime
  * seconds. A probability at or above pastaTruth/100 (user_print_refer.json
- * ai_control block) is a spaghetti detection: the source emits the event and,
- * unless ai_control.pausePrint is 0, pauses the print, edge-triggered so a
- * persistent failure fires once.
+ * ai_control block) is a spaghetti detection, edge-triggered so a persistent
+ * failure fires once. The source only reports: whether a detection pauses
+ * the print is the settings' decision, made above the source.
  */
 class K2StockDetectionSource : public DetectionSource {
   public:
@@ -63,7 +62,7 @@ class K2StockDetectionSource : public DetectionSource {
     /// Schedule blocking work off the main thread.
     using WorkSubmitter = std::function<void(std::function<void()>)>;
 
-    K2StockDetectionSource(helix::PrinterState* state, IMoonrakerAPI* api);
+    K2StockDetectionSource(helix::PrinterState* state);
 
     /// Unique registration key. Exposed so DetectionManager can match on id()
     /// and static_cast instead of dynamic_cast — the firmware builds -fno-rtti.
@@ -77,6 +76,13 @@ class K2StockDetectionSource : public DetectionSource {
     }
     void set_callback(Callback cb) override {
         cb_ = std::move(cb);
+    }
+    /// The ai_control block this printer boots with: switch = detection on,
+    /// pausePrint = pause on a hit. nullopt when no block was readable.
+    std::optional<DetectionPreference> printer_preference() const override {
+        if (!has_preference_)
+            return std::nullopt;
+        return DetectionPreference{ai_enabled_, ai_pause_};
     }
 
     /// Probe capability (Creality K2 + /usr/bin/detection present), read the
@@ -120,7 +126,6 @@ class K2StockDetectionSource : public DetectionSource {
     void fire(const PollResult& r);
 
     helix::PrinterState* state_ = nullptr;
-    IMoonrakerAPI* api_ = nullptr;
     Callback cb_;
 
     bool capable_ = false;
@@ -131,7 +136,9 @@ class K2StockDetectionSource : public DetectionSource {
     PrintJobState last_job_state_ = PrintJobState::STANDBY; ///< pause->resume edges
     float threshold_ = 0.775f;                              ///< pastaTruth / 100
     int period_s_ = 25;                                     ///< pastaTime
-    bool pause_on_detect_ = true; ///< ai_control.pausePrint (1/absent = pause, 0 = notify only)
+    bool ai_enabled_ = true;                                ///< ai_control.switch (1/absent = on)
+    bool ai_pause_ = true;        ///< ai_control.pausePrint (1/absent = pause)
+    bool has_preference_ = false; ///< an ai_control block was parsed in start()
     std::string config_path_;     ///< user_print_refer.json, overridable for tests
     std::string snapshot_url_ = "http://127.0.0.1:8080/snapshot";
 

@@ -828,6 +828,7 @@ translations:
   Detecting...: Detectando...
   Detection Length: Comprimento de Detecção
   Detection Mode: Modo de Detecção
+  Detection turned off: Detecção desligada
   Dev: Dev
   Dev channel requires dev_url in config: Canal dev requer dev_url na configuração
   Device: Dispositivo
@@ -2115,7 +2116,9 @@ translations:
   Path B: Caminho B
   Pause: Pausar
   Pause macro not configured: Macro de pausa não configurado
+  Pause on Detection: Pausar ao detectar
   Pause the print first, then load, unload, or change filament: Pause a impressão primeiro, depois carregue, descarregue ou troque o filamento
+  Pause the print when a failure is seen (off = warn only): Pausa a impressão quando uma falha é vista (desligado = apenas avisar)
   Pause, resume, or stop the print: Pausar, retomar ou parar a impressão
   Paused: Pausado
   Paused (attention needed): Pausado (atenção necessária)
@@ -2834,6 +2837,8 @@ translations:
   Source: Fonte
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod por Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: Detecção de espaguete
+  Spaghetti detected: Espaguete detectado
   Spaghetti detected — print paused: Espaguete detectado — impressão pausada
   Speaker: Alto-falante
   Speed: Velocidade
@@ -3278,6 +3283,7 @@ translations:
   Turn On: Ligar
   Turn On LEDs: 'Ligar os LEDs'
   Turn endless spool on, then set the backup gate: 'Ative o carretel infinito e depois defina o Gate de reserva'
+  Turn off detection: Desligar detecção
   Turn on LEDs when printer starts: Ligar LEDs quando a impressora iniciar
   Turn the extruder heater off after a load or unload finishes: Desliga o aquecedor do extrusor ao concluir um carregamento ou descarregamento
   Turn the picture to match how the screen is mounted. Applies after restart.: Gira a imagem para corresponder à montagem da tela. Aplicado após reiniciar.
@@ -3424,6 +3430,7 @@ translations:
   Warn: Aviso
   Warning: Aviso
   Warnings & errors: 'Avisos e erros'
+  Watch the camera during a print for failed prints: Observa a câmera durante a impressão para detectar impressões com falha
   Weak battery: Bateria fraca
   Webcam: Webcam
   Website (optional): Site (opcional)
@@ -3621,7 +3628,7 @@ translations:
   '{} heater turned off': Aquecedor {} desligado
   '{} is asking to connect to this printer.': '{} quer conectar-se a esta impressora.'
   '{} is blocked — manual intervention required': '{}: bloqueio — intervenção manual necessária'
-  '{} is feeding the current print. Clear it after the print ends.': ''
+  '{} is feeding the current print. Clear it after the print ends.': '{}: alimenta a impressão atual. Remova a bobina após o fim da impressão.'
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} está instalado mas sua troca para carretel reserva está desligada, então não haverá troca automática.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} está instalado, mas não foi possível ler sua configuração de carretel reserva - não conte com uma troca automática.'
   '{} is not set up on this printer': '{} não está configurado nesta impressora'

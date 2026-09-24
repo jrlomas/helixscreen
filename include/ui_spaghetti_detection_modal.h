@@ -13,13 +13,15 @@
  * @brief Response modal for spaghetti / print-issue detection
  *
  * Shows a warning title, an optional camera-frame preview, a message, and
- * three actions:
+ * four actions:
  *   - Resume (primary / on_ok)
  *   - Abort  (secondary / on_cancel)
  *   - Tune   (tertiary / on_tertiary)
+ *   - Turn off detection (quaternary / on_quaternary)
  *
  * Each action invokes a settable callback. Resume and Abort hide the modal;
- * Tune leaves it open so the user can return after tuning.
+ * Tune and Turn off detection leave it open: the print still needs a
+ * Resume/Abort decision.
  *
  * Mirrors the print-cancel / runout-guidance modal pattern: buttons are wired
  * programmatically in on_show() via wire_*_button(), not via XML callbacks.
@@ -43,6 +45,9 @@ class SpaghettiDetectionModal : public Modal {
     }
     void set_on_tune(Action a) {
         on_tune_ = std::move(a);
+    }
+    void set_on_disable(Action a) {
+        on_disable_ = std::move(a);
     }
 
     /**
@@ -70,6 +75,10 @@ class SpaghettiDetectionModal : public Modal {
         if (on_tune_)
             on_tune_();
     }
+    void invoke_disable_for_test() { // Disable does not hide (mirrors on_tune)
+        if (on_disable_)
+            on_disable_();
+    }
 
   protected:
     void on_show() override;
@@ -87,9 +96,13 @@ class SpaghettiDetectionModal : public Modal {
         if (on_tune_)
             on_tune_();
     }
+    void on_quaternary() override { // Turn off detection: print choice still open
+        if (on_disable_)
+            on_disable_();
+    }
 
   private:
     std::string message_;
     lv_draw_buf_t* frame_ = nullptr;
-    Action on_resume_, on_abort_, on_tune_;
+    Action on_resume_, on_abort_, on_tune_, on_disable_;
 };

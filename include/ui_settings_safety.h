@@ -76,6 +76,8 @@ class SafetySettingsOverlay : public OverlayBase {
     void handle_macro_confirm_changed(bool enabled);
     void handle_allow_cold_extrude_changed(bool enabled);
     void handle_filament_auto_cooldown_changed(bool enabled);
+    void handle_detection_enabled_changed(bool enabled);
+    void handle_detection_pause_changed(bool enabled);
 
   private:
     //
@@ -97,6 +99,8 @@ class SafetySettingsOverlay : public OverlayBase {
     static void on_macro_confirm_changed(lv_event_t* e);
     static void on_allow_cold_extrude_changed(lv_event_t* e);
     static void on_filament_auto_cooldown_changed(lv_event_t* e);
+    static void on_detection_enabled_changed(lv_event_t* e);
+    static void on_detection_pause_changed(lv_event_t* e);
 };
 
 /**

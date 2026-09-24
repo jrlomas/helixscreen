@@ -1,12 +1,17 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "../helix_test_fixture.h"
+#include "../test_helpers/config_test_access.h"
 #include "detection_manager.h"
+#include "settings_manager.h"
 #include "u1_stock_detection_source.h"
 
 #include "../catch_amalgamated.hpp"
 
 using namespace helix::detection;
+using helix::Config;
+using helix::ConfigTestAccess;
+using helix::SettingsManager;
 using json = nlohmann::json;
 namespace {
 struct StubSource : DetectionSource {
@@ -24,6 +29,10 @@ struct StubSource : DetectionSource {
             saved(e);
     }
     bool avail = true;
+    std::optional<DetectionPreference> pref; ///< returned by printer_preference()
+    std::optional<DetectionPreference> printer_preference() const override {
+        return pref;
+    }
     Callback saved;
 };
 } // namespace
@@ -123,4 +132,108 @@ TEST_CASE_METHOD(HelixTestFixture, "DetectionManager capability probe sets U1 so
     // Probe again without it -> capability is re-cleared (idempotent, reflects state).
     REQUIRE_FALSE(m.apply_objects_list_for_test(json::array({"gcode_move"})));
     REQUIRE_FALSE(raw->available());
+}
+
+namespace {
+/// SettingsManager subjects persist across tests in this binary while the
+/// Config sandbox resets, so rebuild them from Config the way
+/// test_k2_stock_detection_source.cpp does and restore known values at the end
+/// of each case.
+struct DetectionSettingsGuard {
+    DetectionSettingsGuard() {
+        ConfigTestAccess::data(*Config::get_instance()).erase("detection");
+        SettingsManager::instance().deinit_subjects();
+        SettingsManager::instance().init_subjects();
+    }
+    ~DetectionSettingsGuard() {
+        SettingsManager::instance().set_detection_enabled(true);
+        SettingsManager::instance().set_detection_pause_on_detect(true);
+    }
+};
+} // namespace
+
+TEST_CASE_METHOD(HelixTestFixture, "DetectionManager seeds detection settings once",
+                 "[detection][manager]") {
+    DetectionSettingsGuard guard;
+    auto& m = DetectionManager::instance();
+    m.reset_for_test();
+    auto& sm = SettingsManager::instance();
+    REQUIRE_FALSE(sm.is_detection_seeded());
+
+    SECTION("a capable source's preference is copied into the settings") {
+        auto stub = std::make_unique<StubSource>();
+        stub->pref = DetectionPreference{false, false};
+        m.register_source(std::move(stub));
+        CHECK_FALSE(sm.get_detection_enabled());
+        CHECK_FALSE(sm.get_detection_pause_on_detect());
+        CHECK(sm.is_detection_seeded());
+    }
+
+    SECTION("no stored preference keeps the defaults, but the seed still runs") {
+        auto stub = std::make_unique<StubSource>();
+        m.register_source(std::move(stub));
+        CHECK(sm.get_detection_enabled());
+        CHECK(sm.get_detection_pause_on_detect());
+        CHECK(sm.is_detection_seeded());
+    }
+
+    SECTION("once seeded, later starts never re-seed") {
+        sm.mark_detection_seeded();
+        sm.set_detection_enabled(true);
+        auto stub = std::make_unique<StubSource>();
+        stub->pref = DetectionPreference{false, false};
+        m.register_source(std::move(stub));
+        CHECK(sm.get_detection_enabled());
+        CHECK(sm.get_detection_pause_on_detect());
+    }
+
+    SECTION("no capable source: nothing seeds") {
+        auto stub = std::make_unique<StubSource>();
+        stub->avail = false;
+        stub->pref = DetectionPreference{false, false};
+        m.register_source(std::move(stub));
+        CHECK_FALSE(sm.is_detection_seeded());
+        CHECK(sm.get_detection_enabled());
+        CHECK(sm.get_detection_pause_on_detect());
+    }
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "DetectionManager response_for combines policy and settings",
+                 "[detection][manager]") {
+    DetectionSettingsGuard guard;
+    auto& m = DetectionManager::instance();
+    auto& sm = SettingsManager::instance();
+    sm.set_detection_enabled(true);
+    sm.set_detection_pause_on_detect(true);
+
+    CHECK(m.response_for(DetectionPolicy::DeferToSource) == DetectionResponse::PauseAndRespond);
+    CHECK(m.response_for(DetectionPolicy::NotifyOnly) == DetectionResponse::WarnOnly);
+    CHECK(m.response_for(DetectionPolicy::Off) == DetectionResponse::Suppressed);
+
+    // Pause-on-detect off means warn only, whichever source reported and
+    // whether or not the printer paused itself.
+    sm.set_detection_pause_on_detect(false);
+    CHECK(m.response_for(DetectionPolicy::DeferToSource) == DetectionResponse::WarnOnly);
+
+    sm.set_detection_enabled(false);
+    CHECK(m.response_for(DetectionPolicy::DeferToSource) == DetectionResponse::Suppressed);
+    CHECK(m.response_for(DetectionPolicy::NotifyOnly) == DetectionResponse::Suppressed);
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "DetectionManager availability subject tracks capability",
+                 "[detection][manager]") {
+    auto& m = DetectionManager::instance();
+    m.reset_for_test();
+
+    auto u1 = std::make_unique<U1StockSource>(nullptr);
+    m.register_source(std::move(u1));
+    CHECK(lv_subject_get_int(m.subject_detection_available()) == 0);
+
+    // The probe path (defect_detection present) flips both source and subject.
+    m.apply_objects_list_for_test(json::array({"defect_detection"}));
+    CHECK(lv_subject_get_int(m.subject_detection_available()) == 1);
+
+    // And back: the subject is re-evaluated on every capability refresh.
+    m.apply_objects_list_for_test(json::array({"gcode_move"}));
+    CHECK(lv_subject_get_int(m.subject_detection_available()) == 0);
 }

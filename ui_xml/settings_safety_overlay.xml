@@ -69,6 +69,23 @@
                             description_tag="Turn the extruder heater off after a load or unload finishes"
                             subject="filament_auto_cooldown" callback="on_filament_auto_cooldown_changed"/>
         <!-- ================================================================== -->
+        <!-- SPAGHETTI DETECTION (only when a detection source is capable) -->
+        <!-- ================================================================== -->
+        <lv_obj name="container_detection" width="100%" style_pad_all="0" scrollable="false" flex_flow="column">
+          <bind_flag_if_eq subject="detection_available" flag="hidden" ref_value="0"/>
+          <setting_toggle_row name="row_detection_enabled"
+                              label="Spaghetti Detection" label_tag="Spaghetti Detection" icon="eye"
+                              description="Watch the camera during a print for failed prints"
+                              description_tag="Watch the camera during a print for failed prints"
+                              subject="detection_enabled" callback="on_detection_enabled_changed"/>
+          <setting_toggle_row name="row_detection_pause"
+                              label="Pause on Detection" label_tag="Pause on Detection" icon="pause"
+                              description="Pause the print when a failure is seen (off = warn only)"
+                              description_tag="Pause the print when a failure is seen (off = warn only)"
+                              subject="detection_pause_on_detect" disabled="detection_enabled" disabled_ref_value="0"
+                              callback="on_detection_pause_changed"/>
+        </lv_obj>
+        <!-- ================================================================== -->
         <!-- PRINT COMPLETION ALERT -->
         <!-- ================================================================== -->
         <setting_dropdown_row name="row_completion_alert"

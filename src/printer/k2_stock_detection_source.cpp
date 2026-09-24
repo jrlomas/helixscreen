@@ -9,7 +9,6 @@
 
 #include "http_executor.h"
 #include "hv/requests.h"
-#include "i_moonraker_api.h"
 #include "observer_factory.h"
 #include "printer_detector.h"
 #include "printer_state.h"
@@ -157,8 +156,7 @@ std::optional<float> max_spaghetti_probability(const std::string& detection_stdo
     return best;
 }
 
-K2StockDetectionSource::K2StockDetectionSource(helix::PrinterState* state, IMoonrakerAPI* api)
-    : state_(state), api_(api) {
+K2StockDetectionSource::K2StockDetectionSource(helix::PrinterState* state) : state_(state) {
     config_path_ = USER_PRINT_REFER;
     if (!fetcher_)
         fetcher_ = fetch_snapshot_default;
@@ -173,14 +171,21 @@ K2StockDetectionSource::K2StockDetectionSource(helix::PrinterState* state, IMoon
 void K2StockDetectionSource::start() {
     if (!state_)
         return;
-    capable_ = PrinterDetector::is_creality_k2() && access(DETECTION_BIN, X_OK) == 0;
+    // HELIX_MOCK_DETECTION_CAPABLE=1 forces the capability probe true so the
+    // detection UI can be driven on a dev machine (--test mocks are never a
+    // K2 and the detection binary does not exist there).
+    if (const char* force = std::getenv("HELIX_MOCK_DETECTION_CAPABLE")) {
+        capable_ = std::atoi(force) != 0;
+    } else {
+        capable_ = PrinterDetector::is_creality_k2() && access(DETECTION_BIN, X_OK) == 0;
+    }
 
-    // Thresholds and the pause choice: the ai_control block the stock stack
-    // reads at startup. Parsed whether or not this machine is capable (the
-    // file is absent everywhere but a Creality install, so the read is a
-    // no-op elsewhere). Fall back to the factory values (25 s / 77.5 % /
-    // pause) when the file is missing or malformed rather than refusing to
-    // detect.
+    // Tuning thresholds and the printer's stored on/off + pause choice: the
+    // ai_control block the stock stack reads at startup. Parsed whether or not
+    // this machine is capable (the file is absent everywhere but a Creality
+    // install, so the read is a no-op elsewhere). Missing or malformed file =
+    // no stored preference (settings keep their defaults) and factory tuning
+    // (25 s / 77.5 %) rather than refusing to detect.
     std::ifstream f(config_path_);
     if (f) {
         try {
@@ -189,16 +194,17 @@ void K2StockDetectionSource::start() {
             period_s_ = std::clamp(ai.value("pastaTime", period_s_), 5, 600);
             const double truth = ai.value("pastaTruth", 100.0 * threshold_);
             threshold_ = static_cast<float>(std::clamp(truth / 100.0, 0.05, 1.0));
-            pause_on_detect_ = ai.value("pausePrint", 1) != 0;
+            ai_enabled_ = ai.value("switch", 1) != 0;
+            ai_pause_ = ai.value("pausePrint", 1) != 0;
+            has_preference_ = true;
         } catch (const std::exception& e) {
             spdlog::warn("[K2StockSource] unreadable ai_control ({}), using defaults", e.what());
         }
     }
 
     if (capable_) {
-        spdlog::info("[K2StockSource] capable: poll every {} s at prob >= {:.3}, pause on "
-                     "detect: {}",
-                     period_s_, threshold_, pause_on_detect_ ? "yes" : "no");
+        spdlog::info("[K2StockSource] capable: poll every {} s at prob >= {:.3}", period_s_,
+                     threshold_);
     } else {
         spdlog::debug("[K2StockSource] not capable on this machine; poll ticks stay no-ops");
     }
@@ -292,14 +298,7 @@ void K2StockDetectionSource::handle_result(const PollResult& r) {
 
 void K2StockDetectionSource::fire(const PollResult& r) {
     const int pct = static_cast<int>(r.prob * 100.0f + 0.5f);
-    spdlog::warn("[K2StockSource] spaghetti detected ({}%), {}", pct,
-                 pause_on_detect_ ? "pausing print" : "pausePrint is off, notifying only");
-    if (pause_on_detect_ && api_) {
-        api_->job().pause_print([] { spdlog::info("[K2StockSource] print paused"); },
-                                [](const MoonrakerError& err) {
-                                    spdlog::warn("[K2StockSource] pause failed: {}", err.message);
-                                });
-    }
+    spdlog::warn("[K2StockSource] spaghetti detected ({}%)", pct);
 
     DetectionEvent e;
     e.source_id = id();

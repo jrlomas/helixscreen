@@ -3,6 +3,7 @@
 
 #include "async_lifetime_guard.h"
 #include "detection_source.h"
+#include "lvgl/lvgl.h"
 
 #include <functional>
 #include <map>
@@ -20,6 +21,14 @@ class PrinterState;
 namespace helix::detection {
 
 enum class DetectionPolicy { Off, NotifyOnly, DeferToSource };
+
+/// What the UI should do with a detection, combining the per-source policy
+/// with the global settings (enabled / pause on detect).
+enum class DetectionResponse {
+    Suppressed,      ///< detection off or source policy Off: show nothing
+    WarnOnly,        ///< notify without pausing (or the source paused itself)
+    PauseAndRespond, ///< pause the print (unless already paused) and respond
+};
 
 /// Registry of detection sources plus per-source policy and the UI presenter hook.
 ///
@@ -49,6 +58,16 @@ class DetectionManager {
 
     bool any_available() const;
 
+    /// Classify what a detection from a source with policy @p p should do,
+    /// from the global detection settings. Sources never decide this.
+    DetectionResponse response_for(DetectionPolicy p) const;
+
+    /// "Some detection source is capable on this printer" (integer 0/1),
+    /// bindable from XML to gate detection UI.
+    lv_subject_t* subject_detection_available() {
+        return &detection_available_subject_;
+    }
+
     /// Whether the named registered source exposes tuning
     /// (DetectionSource::can_tune()). Lets generic presenters offer a Tune
     /// button without naming any vendor's source id.
@@ -73,6 +92,21 @@ class DetectionManager {
 
     /// Apply a resolved capability flag to every source that consumes it.
     void apply_capability(bool has_defect_detection);
+
+    /// Init + register the availability subject on first use; re-init would
+    /// wipe observers bound since the first call, so only the flag gates it.
+    void ensure_availability_subject();
+
+    /// Push any_available() into the subject and run the one-time preference
+    /// seed when a capable source exists.
+    void update_availability();
+
+    /// One-time copy of the printer's stored detection preference into the
+    /// settings, the first start where a capable source exists.
+    void maybe_seed_settings();
+
+    lv_subject_t detection_available_subject_{};
+    bool availability_subject_ready_ = false;
 
     helix::IMoonrakerClient* client_ = nullptr;
     helix::PrinterState* state_ = nullptr;

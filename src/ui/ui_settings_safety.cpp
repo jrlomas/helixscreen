@@ -79,6 +79,8 @@ void SafetySettingsOverlay::register_callbacks() {
         {"on_macro_confirm_changed", on_macro_confirm_changed},
         {"on_allow_cold_extrude_changed", on_allow_cold_extrude_changed},
         {"on_filament_auto_cooldown_changed", on_filament_auto_cooldown_changed},
+        {"on_detection_enabled_changed", on_detection_enabled_changed},
+        {"on_detection_pause_changed", on_detection_pause_changed},
     });
 
     spdlog::debug("[{}] Callbacks registered", get_name());
@@ -238,6 +240,16 @@ void SafetySettingsOverlay::handle_filament_auto_cooldown_changed(bool enabled) 
     }
 }
 
+void SafetySettingsOverlay::handle_detection_enabled_changed(bool enabled) {
+    spdlog::info("[{}] Spaghetti detection toggled: {}", get_name(), enabled ? "ON" : "OFF");
+    SettingsManager::instance().set_detection_enabled(enabled);
+}
+
+void SafetySettingsOverlay::handle_detection_pause_changed(bool enabled) {
+    spdlog::info("[{}] Pause on detection toggled: {}", get_name(), enabled ? "ON" : "OFF");
+    SettingsManager::instance().set_detection_pause_on_detect(enabled);
+}
+
 // ============================================================================
 // STATIC CALLBACKS
 // ============================================================================
@@ -303,6 +315,22 @@ void SafetySettingsOverlay::on_filament_auto_cooldown_changed(lv_event_t* e) {
     auto* toggle = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
     bool enabled = lv_obj_has_state(toggle, LV_STATE_CHECKED);
     get_safety_settings_overlay().handle_filament_auto_cooldown_changed(enabled);
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void SafetySettingsOverlay::on_detection_enabled_changed(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[SafetySettingsOverlay] on_detection_enabled_changed");
+    auto* toggle = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    bool enabled = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+    get_safety_settings_overlay().handle_detection_enabled_changed(enabled);
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void SafetySettingsOverlay::on_detection_pause_changed(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[SafetySettingsOverlay] on_detection_pause_changed");
+    auto* toggle = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    bool enabled = lv_obj_has_state(toggle, LV_STATE_CHECKED);
+    get_safety_settings_overlay().handle_detection_pause_changed(enabled);
     LVGL_SAFE_EVENT_CB_END();
 }
 

@@ -745,6 +745,7 @@
   <translation tag="Detecting..." en="Detecting..."/>
   <translation tag="Detection Length" en="Detection Length"/>
   <translation tag="Detection Mode" en="Detection Mode"/>
+  <translation tag="Detection turned off" en="Detection turned off"/>
   <translation tag="Dev" en="Dev"/>
   <translation tag="Dev channel requires dev_url in config" en="Dev channel requires dev_url in config"/>
   <translation tag="Device" en="Device"/>
@@ -1920,7 +1921,9 @@
   <translation tag="Path B" en="Path B"/>
   <translation tag="Pause" en="Pause"/>
   <translation tag="Pause macro not configured" en="Pause macro not configured"/>
+  <translation tag="Pause on Detection" en="Pause on Detection"/>
   <translation tag="Pause the print first, then load, unload, or change filament" en="Pause the print first, then load, unload, or change filament"/>
+  <translation tag="Pause the print when a failure is seen (off = warn only)" en="Pause the print when a failure is seen (off = warn only)"/>
   <translation tag="Pause, resume, or stop the print" en="Pause, resume, or stop the print"/>
   <translation tag="Paused" en="Paused"/>
   <translation tag="Paused (attention needed)" en="Paused (attention needed)"/>
@@ -2556,6 +2559,8 @@
   <translation tag="Sounds" en="Sounds"/>
   <translation tag="Source" en="Source"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" en="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti Detection" en="Spaghetti Detection"/>
+  <translation tag="Spaghetti detected" en="Spaghetti detected"/>
   <translation tag="Spaghetti detected — print paused" en="Spaghetti detected — print paused"/>
   <translation tag="Speaker" en="Speaker"/>
   <translation tag="Speed" en="Speed"/>
@@ -2918,6 +2923,7 @@
   <translation tag="Turn On" en="Turn On"/>
   <translation tag="Turn On LEDs" en="Turn On LEDs"/>
   <translation tag="Turn endless spool on, then set the backup gate" en="Turn endless spool on, then set the backup gate"/>
+  <translation tag="Turn off detection" en="Turn off detection"/>
   <translation tag="Turn on LEDs when printer starts" en="Turn on LEDs when printer starts"/>
   <translation tag="Turn the extruder heater off after a load or unload finishes" en="Turn the extruder heater off after a load or unload finishes"/>
   <translation tag="Turn the picture to match how the screen is mounted. Applies after restart." en="Turn the picture to match how the screen is mounted. Applies after restart."/>
@@ -3056,6 +3062,7 @@
   <translation tag="Warn" en="Warn"/>
   <translation tag="Warning" en="Warning"/>
   <translation tag="Warnings &amp; errors" en="Warnings &amp; errors"/>
+  <translation tag="Watch the camera during a print for failed prints" en="Watch the camera during a print for failed prints"/>
   <translation tag="Weak battery" en="Weak battery"/>
   <translation tag="Webcam" en="Webcam"/>
   <translation tag="Website (optional)" en="Website (optional)"/>

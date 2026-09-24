@@ -576,6 +576,27 @@ class SettingsManager {
         return &detection_enabled_subject_;
     }
 
+    /** @brief Get whether a detection pauses the print (off = warn only) */
+    bool get_detection_pause_on_detect() const;
+
+    /** @brief Set whether a detection pauses the print and persist */
+    void set_detection_pause_on_detect(bool pause);
+
+    /** @brief Detection pause subject (integer: 0=warn only, 1=pause) */
+    lv_subject_t* subject_detection_pause_on_detect() {
+        return &detection_pause_on_detect_subject_;
+    }
+
+    /**
+     * @brief Whether the one-time seed from the printer's stored detection
+     *        preference has run. False until a capable source's preference
+     *        has been copied into the settings.
+     */
+    bool is_detection_seeded() const;
+
+    /** @brief Mark the detection preference seed as done (one-time) */
+    void mark_detection_seeded();
+
     /**
      * @brief Get per-source policy for the Snapmaker U1 built-in detector
      *        0=Off, 1=NotifyOnly, 2=DeferToSource (default)
@@ -659,6 +680,7 @@ class SettingsManager {
     lv_subject_t console_filter_temps_subject_{};
     lv_subject_t console_filter_firmware_noise_subject_{};
     lv_subject_t detection_enabled_subject_{};
+    lv_subject_t detection_pause_on_detect_subject_{};
     lv_subject_t detection_policy_u1_subject_{};
 
     // External references

@@ -757,6 +757,7 @@ translations:
   Detecting...: 検出中...
   Detection Length: 検出長
   Detection Mode: 検出モード
+  Detection turned off: 検出をオフにしました
   Dev: 開発版
   Dev channel requires dev_url in config: 開発チャンネルには設定にdev_urlが必要です
   Device: デバイス
@@ -1970,7 +1971,9 @@ translations:
   Path B: パス B
   Pause: 一時停止
   Pause macro not configured: 一時停止マクロが未設定です
+  Pause on Detection: 検出時に一時停止
   Pause the print first, then load, unload, or change filament: 先に印刷を一時停止してから、装填・排出・フィラメント交換を行ってください
+  Pause the print when a failure is seen (off = warn only): 失敗を検出したら印刷を一時停止します（オフ = 警告のみ）
   Pause, resume, or stop the print: 印刷の一時停止、再開、停止
   Paused: 一時停止
   Paused (attention needed): 一時停止（対応が必要）
@@ -2629,6 +2632,8 @@ translations:
   Source: ソース
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod by Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: スパゲッティ検出
+  Spaghetti detected: スパゲッティを検出しました
   Spaghetti detected — print paused: スパゲッティを検出しました — 印刷を一時停止しました
   Speaker: スピーカー
   Speed: 速度
@@ -3026,6 +3031,7 @@ translations:
   Turn On: オンにする
   Turn On LEDs: 'LEDを点灯'
   Turn endless spool on, then set the backup gate: 'エンドレススプールを有効にしてから、バックアップゲートを設定してください'
+  Turn off detection: 検出をオフにする
   Turn on LEDs when printer starts: プリンター起動時に LED を点灯
   Turn the extruder heater off after a load or unload finishes: 装填または排出の完了後にエクストルーダーヒーターをオフにします
   Turn the picture to match how the screen is mounted. Applies after restart.: 画面の取り付け向きに合わせて表示を回転します。再起動後に適用されます。
@@ -3165,6 +3171,7 @@ translations:
   Warn: 警告
   Warning: 警告
   Warnings & errors: '警告とエラー'
+  Watch the camera during a print for failed prints: 印刷中にカメラで印刷失敗を監視します
   Weak battery: バッテリー残量低下
   Webcam: ウェブカメラ
   Website (optional): ウェブサイト（オプション）
@@ -3350,7 +3357,7 @@ translations:
   '{} heater turned off': '{} ヒーターをオフにしました'
   '{} is asking to connect to this printer.': '{} がこのプリンターへの接続を求めています。'
   '{} is blocked — manual intervention required': '{} がブロックされています — 手動での対応が必要です'
-  '{} is feeding the current print. Clear it after the print ends.': ''
+  '{} is feeding the current print. Clear it after the print ends.': '{} は現在の印刷に給紙中です。印刷終了後にクリアしてください。'
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} はインストールされていますが、予備スプールへの切り替えがオフになっているため、自動切り替えは行われません。'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} はインストールされていますが、予備スプールの設定を読み取れませんでした - 自動切り替えを当てにしないでください。'
   '{} is not set up on this printer': '{} はこのプリンターで設定されていません'

@@ -1976,8 +1976,7 @@ bool Application::init_panel_subjects() {
         u1->start();
         // K2: replaces the stock camera loop the installer disables. Probes
         // capability itself (K2 + /usr/bin/detection) and stays inert elsewhere.
-        auto k2 = std::make_unique<helix::detection::K2StockDetectionSource>(&get_printer_state(),
-                                                                             get_moonraker_api());
+        auto k2 = std::make_unique<helix::detection::K2StockDetectionSource>(&get_printer_state());
         k2->start();
         auto& dm = helix::detection::DetectionManager::instance();
         dm.register_source(std::move(u1));
@@ -1985,43 +1984,58 @@ bool Application::init_panel_subjects() {
         dm.init(get_moonraker_client(), &get_printer_state());
         dm.set_policy("u1_stock", static_cast<helix::detection::DetectionPolicy>(
                                       SettingsManager::instance().get_detection_policy_u1()));
-        dm.set_presenter(
-            [](const helix::detection::DetectionEvent& e, helix::detection::DetectionPolicy p) {
-                using helix::detection::DetectionPolicy;
-                if (!SettingsManager::instance().get_detection_enabled())
-                    return;
-                if (p == DetectionPolicy::NotifyOnly) {
-                    ToastManager::instance().show(ToastSeverity::WARNING,
-                                                  lv_tr("Spaghetti detected — print paused"), 8000);
-                    return;
-                }
-                // DeferToSource: show the response modal. Stack-owned via
-                // Modal::show_owned() (#1382): ModalStack frees the instance when
-                // its entry goes, on every teardown path.
-                auto modal = std::make_unique<SpaghettiDetectionModal>();
-                // TODO(#1506): no frame yet; the modal shows the detector's text only
-                modal->set_detection(e.message, nullptr);
-                modal->set_on_resume([] {
-                    get_moonraker_api()->job().resume_print([] {}, [](const MoonrakerError&) {});
-                });
-                modal->set_on_abort([] { helix::AbortManager::instance().start_abort(); });
-                // VENDOR_OK: DEFECT_DETECTION_CONFIG is the tuning macro of the
-                // stock firmware that exposes can_tune(); sources running their
-                // own model (the K2 polls it directly) decline the button.
-                if (helix::detection::DetectionManager::instance().source_can_tune(e.source_id))
-                    modal->set_on_tune([] {
-                        // Null callbacks, not empty lambdas: a non-null error_cb reads
-                        // as "this caller reports the failure itself", which would
-                        // suppress Klipper's `!!` broadcast for a rejected
-                        // DEFECT_DETECTION_CONFIG and leave the user with nothing.
-                        get_moonraker_client()->send_jsonrpc(
-                            "printer.gcode.script",
-                            nlohmann::json{
-                                {"script", "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
-                            nullptr, nullptr);
+        dm.set_presenter([](const helix::detection::DetectionEvent& e,
+                            helix::detection::DetectionPolicy p) {
+            using helix::detection::DetectionResponse;
+            const auto response = helix::detection::DetectionManager::instance().response_for(p);
+            if (response == DetectionResponse::Suppressed)
+                return;
+            if (response == DetectionResponse::WarnOnly) {
+                ToastManager::instance().show(ToastSeverity::WARNING, lv_tr("Spaghetti detected"),
+                                              8000);
+                return;
+            }
+            // PauseAndRespond: sources only report, so a print the source
+            // did not already pause (it paused itself) pauses here. With
+            // pause-on-detect off this branch is never reached.
+            if (!e.already_paused) {
+                get_moonraker_api()->job().pause_print(
+                    [] { spdlog::info("[Detection] print paused"); },
+                    [](const MoonrakerError& err) {
+                        spdlog::warn("[Detection] pause failed: {}", err.message);
                     });
-                Modal::show_owned(std::move(modal), lv_screen_active());
+            }
+            // Stack-owned via Modal::show_owned() (#1382): ModalStack frees
+            // the instance when its entry goes, on every teardown path.
+            auto modal = std::make_unique<SpaghettiDetectionModal>();
+            // TODO(#1506): no frame yet; the modal shows the detector's text only
+            modal->set_detection(e.message, nullptr);
+            modal->set_on_resume([] {
+                get_moonraker_api()->job().resume_print([] {}, [](const MoonrakerError&) {});
             });
+            modal->set_on_abort([] { helix::AbortManager::instance().start_abort(); });
+            modal->set_on_disable([] {
+                SettingsManager::instance().set_detection_enabled(false);
+                ToastManager::instance().show(ToastSeverity::INFO, lv_tr("Detection turned off"),
+                                              4000);
+            });
+            // VENDOR_OK: DEFECT_DETECTION_CONFIG is the tuning macro of the
+            // stock firmware that exposes can_tune(); sources running their
+            // own model (the K2 polls it directly) decline the button.
+            if (helix::detection::DetectionManager::instance().source_can_tune(e.source_id))
+                modal->set_on_tune([] {
+                    // Null callbacks, not empty lambdas: a non-null error_cb reads
+                    // as "this caller reports the failure itself", which would
+                    // suppress Klipper's `!!` broadcast for a rejected
+                    // DEFECT_DETECTION_CONFIG and leave the user with nothing.
+                    get_moonraker_client()->send_jsonrpc(
+                        "printer.gcode.script",
+                        nlohmann::json{
+                            {"script", "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
+                        nullptr, nullptr);
+                });
+            Modal::show_owned(std::move(modal), lv_screen_active());
+        });
     }
 
     // Register notification callbacks

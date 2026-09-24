@@ -277,6 +277,11 @@ void SettingsManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(detection_enabled_subject_, detection_enabled ? 1 : 0,
                            "detection_enabled", subjects_);
 
+    // Pause on detection (default: true — a detection pauses the print; off = warn only)
+    bool detection_pause = config->get<bool>("/detection/pause_on_detect", true);
+    UI_MANAGED_SUBJECT_INT(detection_pause_on_detect_subject_, detection_pause ? 1 : 0,
+                           "detection_pause_on_detect", subjects_);
+
     // Per-source policy for Snapmaker U1 built-in detector (default: 2 =
     // DeferToSource). Per-printer: the U1's detector only exists on the U1, so
     // the policy belongs to that machine and is inert everywhere else.
@@ -926,6 +931,31 @@ void SettingsManager::set_detection_enabled(bool enabled) {
     config->save();
     TelemetryManager::instance().notify_setting_changed("detection_enabled", old_val,
                                                         std::to_string(enabled ? 1 : 0));
+}
+
+bool SettingsManager::get_detection_pause_on_detect() const {
+    return subject_get_bool_or(detection_pause_on_detect_subject_, true);
+}
+
+void SettingsManager::set_detection_pause_on_detect(bool pause) {
+    spdlog::info("[SettingsManager] set_detection_pause_on_detect({})", pause);
+    auto old_val = std::to_string(lv_subject_get_int(&detection_pause_on_detect_subject_));
+    lv_subject_set_int(&detection_pause_on_detect_subject_, pause ? 1 : 0);
+    Config* config = Config::get_instance();
+    config->set<bool>("/detection/pause_on_detect", pause);
+    config->save();
+    TelemetryManager::instance().notify_setting_changed("detection_pause_on_detect", old_val,
+                                                        std::to_string(pause ? 1 : 0));
+}
+
+bool SettingsManager::is_detection_seeded() const {
+    return Config::get_instance()->get<bool>("/detection/seeded", false);
+}
+
+void SettingsManager::mark_detection_seeded() {
+    Config* config = Config::get_instance();
+    config->set<bool>("/detection/seeded", true);
+    config->save();
 }
 
 int SettingsManager::get_detection_policy_u1() const {

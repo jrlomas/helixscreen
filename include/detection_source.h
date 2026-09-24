@@ -37,6 +37,14 @@ struct DetectionEvent {
     std::string message;
 };
 
+/// The printer's own stored on/off + pause choice, as the vendor stack keeps
+/// it. Seeded into HelixScreen settings once, on the first start where a
+/// capable source exists; after that the settings own both values.
+struct DetectionPreference {
+    bool enabled = true;
+    bool pause = true;
+};
+
 /// A backend that can report print-failure detections.
 class DetectionSource {
   public:
@@ -50,6 +58,11 @@ class DetectionSource {
     }
     virtual bool self_pauses() const {
         return true;
+    }
+    /// The printer's stored preference, or nullopt when this source has none
+    /// (settings then keep their defaults: on, pause on detect).
+    virtual std::optional<DetectionPreference> printer_preference() const {
+        return std::nullopt;
     }
     /// Callback fires on the MAIN thread (already marshaled).
     virtual void set_callback(Callback cb) = 0;

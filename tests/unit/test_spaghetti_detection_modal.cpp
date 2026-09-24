@@ -21,7 +21,7 @@
 
 TEST_CASE_METHOD(LVGLUITestFixture, "SpaghettiDetectionModal shows message + invokes callbacks",
                  "[detection][modal][.ui_integration]") {
-    int resumed = 0, aborted = 0, tuned = 0;
+    int resumed = 0, aborted = 0, tuned = 0, disabled = 0;
 
     // Resume path: the stack frees the modal after the close.
     {
@@ -65,6 +65,21 @@ TEST_CASE_METHOD(LVGLUITestFixture, "SpaghettiDetectionModal shows message + inv
         REQUIRE(tuned == 1);
         REQUIRE(modal->is_visible()); // still visible: Tune does not hide
         modal->hide();                // the entry frees the instance a tick later
+        process_lvgl(50);
+    }
+
+    // Turn off detection: same shape as Tune — the print decision stays open,
+    // so the action fires without hiding the modal.
+    {
+        auto owned = std::make_unique<SpaghettiDetectionModal>();
+        auto* modal = owned.get();
+        modal->set_on_disable([&] { ++disabled; });
+        modal->set_detection("detected noodle", nullptr);
+        REQUIRE(Modal::show_owned(std::move(owned), test_screen()));
+        modal->invoke_disable_for_test();
+        REQUIRE(disabled == 1);
+        REQUIRE(modal->is_visible()); // still visible: Disable does not hide
+        modal->hide();
         process_lvgl(50);
     }
 }

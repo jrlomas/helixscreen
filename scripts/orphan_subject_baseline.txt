@@ -54,6 +54,7 @@ test_gateway_status  # src/ui/ui_overlay_network_settings.cpp:209
 test_internet_status  # src/ui/ui_overlay_network_settings.cpp:210
 test_running  # src/ui/ui_overlay_network_settings.cpp:208
 total_steps  # src/ui/ui_wizard.cpp:384
+telemetry_enabled  # src/system/telemetry_manager.cpp:410
 touch_cal_accept_text  # src/ui/ui_touch_calibration_overlay.cpp:272
 touch_cal_current_step  # src/ui/ui_wizard_touch_calibration.cpp:133
 touch_cal_valid  # src/ui/ui_wizard_touch_calibration.cpp:134
