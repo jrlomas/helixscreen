@@ -616,9 +616,6 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// carried across a feeder write. Read by channel_snapshot().
     std::array<ChannelSnapshot, NUM_TOOLS> channel_snapshots_{};
 
-    /// Validate slot index is within range
-    AmsError validate_slot_index(int slot_index) const;
-
     /// Layer a configured FilamentSlotOverride for `slot_index` over `slot`,
     /// mutating `slot` in place. Override wins for every non-default field.
     /// Callers must hold mutex_. Called from the tail of handle_status_update

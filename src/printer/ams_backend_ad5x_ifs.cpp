@@ -2279,7 +2279,7 @@ AmsError AmsBackendAd5xIfs::eject_lane(int slot_index) {
         // The dispatch stamp is that test (#1250).
         note_filament_op_dispatch_locked();
 
-        if (auto err = validate_slot_index(slot_index); !err.success()) {
+        if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
             return err;
         }
 
@@ -6671,13 +6671,6 @@ void AmsBackendAd5xIfs::persist_seated_slot_locked(int slot0) {
                 spdlog::warn("{} failed to clear persisted seated slot: {}", tag, err);
         });
     }
-}
-
-AmsError AmsBackendAd5xIfs::validate_slot_index(int slot_index) const {
-    if (slot_index < 0 || slot_index >= NUM_PORTS) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, NUM_PORTS - 1);
-    }
-    return AmsErrorHelper::success();
 }
 
 // ensure_homed_then() provided by AmsSubscriptionBackend
