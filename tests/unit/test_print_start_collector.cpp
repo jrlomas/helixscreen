@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <regex>
 #include <string>
 #include <utility>
@@ -3484,6 +3485,124 @@ TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
     drain_async_updates();
     REQUIRE(get_current_phase() == PrintStartPhase::HOMING);
     REQUIRE(get_current_message() == announced);
+}
+
+// ============================================================================
+// Snapmaker U1 replay: the console from PRINT_SWITCH_CHECKING to a
+// verify_heater shutdown, as Moonraker's gcode_store held it
+// (tests/fixtures/u1_heater_wait_console.txt, "HH:MM:SS.mmm line"). Three
+// blocking waits report once a second: M109 S170 during the switch check,
+// M109 S210 after plate detect, then M109 S170 (a cool-down) straight into
+// M190 S100 until the shutdown. The bed is far below 100C through all of them
+// and the active tool is T2.
+// ============================================================================
+
+namespace {
+std::string collector_fixture_dir() {
+    std::string src = __FILE__;
+    auto pos = src.rfind("/tests/unit/");
+    if (pos != std::string::npos) {
+        return src.substr(0, pos) + "/tests/fixtures/";
+    }
+    return "tests/fixtures/";
+}
+} // namespace
+
+TEST_CASE_METHOD(SnapmakerCollectorFixture,
+                 "Snapmaker U1: real heater waits show the bed heating between firmware phases",
+                 "[print][collector][snapmaker][heater_wait][integration]") {
+    const std::string path = collector_fixture_dir() + "u1_heater_wait_console.txt";
+    std::ifstream f(path);
+    INFO("fixture: " << path);
+    REQUIRE(f.is_open());
+
+    struct Line {
+        int ms;
+        std::string text;
+    };
+    std::vector<Line> lines;
+    for (std::string raw; std::getline(f, raw);) {
+        int h = 0, m = 0;
+        double s = 0.0;
+        REQUIRE(std::sscanf(raw.c_str(), "%d:%d:%lf", &h, &m, &s) == 3);
+        lines.push_back({static_cast<int>((h * 3600 + m * 60 + s) * 1000), raw.substr(13)});
+    }
+    REQUIRE(lines.size() > 200);
+
+    helix::sim::SimulatedClock::ManualScope clock(helix::sim::SimSpeed::of(1.0));
+    set_all_temps(/*bed*/ 460, 1000, /*ext*/ 1488, 1700);
+    collector().start();
+    drain_async_updates();
+    collector().enable_fallbacks();
+
+    const int t0 = lines.front().ms;
+    int now = t0;
+    int next_tick = t0 + 5000; // the ETA timer's cadence
+    std::string trace;
+    PrintStartPhase shown = PrintStartPhase::IDLE;
+    const auto note_phase = [&]() {
+        drain_async_updates();
+        drain_async_updates();
+        const PrintStartPhase phase = get_current_phase();
+        if (phase == shown) {
+            return;
+        }
+        shown = phase;
+        if (!trace.empty()) {
+            trace += ' ';
+        }
+        trace +=
+            std::to_string((now - t0) / 1000) + ":" + std::string(print_start_phase_name(phase));
+    };
+    const auto tick = [&]() {
+        collector().check_fallback_completion();
+        note_phase();
+    };
+
+    const std::regex reading(R"((\w+):(-?\d+\.\d) /(-?\d+\.\d))");
+    int bed = 460, bed_target = 1000, ext = 1488, ext_target = 1700;
+    for (const Line& line : lines) {
+        while (next_tick <= line.ms) {
+            clock.advance(std::chrono::milliseconds(next_tick - now));
+            now = next_tick;
+            tick();
+            next_tick += 5000;
+        }
+        clock.advance(std::chrono::milliseconds(line.ms - now));
+        now = line.ms;
+
+        bool target_changed = false;
+        for (std::sregex_iterator it(line.text.begin(), line.text.end(), reading), end; it != end;
+             ++it) {
+            const std::string id = (*it)[1];
+            const int temp = static_cast<int>(std::lround(std::stod((*it)[2]) * 10));
+            const int target = static_cast<int>(std::lround(std::stod((*it)[3]) * 10));
+            if (id == "B") {
+                target_changed |= target != bed_target;
+                bed = temp;
+                bed_target = target;
+            } else if (id == "T2") {
+                target_changed |= target != ext_target;
+                ext = temp;
+                ext_target = target;
+            }
+        }
+        set_all_temps(bed, bed_target, ext, ext_target);
+        feed_gcode(line.text);
+        note_phase();
+        if (target_changed) {
+            tick(); // the target observers run the fallback check
+        }
+    }
+
+    // Each wait takes the label on its first report (or the next tick), and
+    // the next firmware line hands it back: the z offset line starts the mesh,
+    // and the nozzle-clean probe gives "Detecting plate" back until the last
+    // wait runs into the shutdown.
+    CAPTURE(trace);
+    REQUIRE(trace == "0:INITIALIZING 5:HEATING_BED 13:BED_MESH 42:HEATING_BED 55:BED_MESH "
+                     "68:HEATING_BED");
+    REQUIRE(get_current_message() == "Heating Bed...");
 }
 
 TEST_CASE("heater wait report lines", "[print][collector][heater_wait]") {
