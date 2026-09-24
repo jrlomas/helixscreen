@@ -4,6 +4,8 @@
 
 #include "lane_resolver.h"
 
+#include <strings.h>
+
 namespace helix::ams {
 
 namespace {
@@ -68,6 +70,29 @@ BindingVerdict reconcile_binding(LaneId lane, const BindingReading& reading) {
         drop_previous_spool_declarations(lane);
     }
     return verdict;
+}
+
+InsertVerdict classify_insert(const std::optional<SpoolEvidence>& before,
+                              const SpoolEvidence& after) {
+    if (!before) {
+        return InsertVerdict::NoEvidence;
+    }
+    if (!before->tag_uid.empty() && !after.tag_uid.empty()) {
+        return before->tag_uid == after.tag_uid ? InsertVerdict::SameSpool
+                                                : InsertVerdict::DifferentSpool;
+    }
+
+    const bool material_read = !before->material.empty() && !after.material.empty();
+    const bool color_read = before->color_rgb.has_value() && after.color_rgb.has_value();
+    // Tags spell one material in more than one case; they never spell two
+    // materials alike. Colour is a decoded integer, so it compares exactly.
+    if (material_read && strcasecmp(before->material.c_str(), after.material.c_str()) != 0) {
+        return InsertVerdict::DifferentSpool;
+    }
+    if (color_read && (*before->color_rgb & 0xFFFFFFu) != (*after.color_rgb & 0xFFFFFFu)) {
+        return InsertVerdict::DifferentSpool;
+    }
+    return material_read && color_read ? InsertVerdict::SameSpool : InsertVerdict::NoEvidence;
 }
 
 } // namespace helix::ams

@@ -2633,6 +2633,7 @@ translations:
     beim Start wiederholt abgestürzt ist. Öffnen Sie die Einstellungen, um das Problem
     zu beheben, und starten Sie dann neu.
   Safety & Notifications: Sicherheit & Benachrichtigungen
+  Same spool in {}? Tap Clear if it is a new one.: 'Dieselbe Spule in {}? Tippen Sie auf Löschen, wenn es eine neue ist.'
   Sample: Messung
   Sample %d/%d: Messung %d/%d
   Sample Dialog: Beispieldialog

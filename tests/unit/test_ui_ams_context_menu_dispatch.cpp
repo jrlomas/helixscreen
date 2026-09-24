@@ -31,6 +31,8 @@
 
 #include <cstddef>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
@@ -334,4 +336,62 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     // The error says HelixScreen cleared its own copy; that has to be true.
     REQUIRE(backend->cleared_slots.size() == 1);
     CHECK(backend->cleared_slots.front() == 1);
+}
+
+// ============================================================================
+// An insert the hardware read nothing about (prestonbrown/helixscreen#1710)
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "ams insert: an unverified insert offers Clear, which runs Clear Spool",
+                 "[ui][ams][dispatch][insert_rule]") {
+    install_mock_backend();
+    auto* backend = static_cast<helix::AmsBackendMock*>(helix::AmsState::instance().get_backend());
+    REQUIRE(backend != nullptr);
+
+    std::vector<std::pair<ToastSeverity, std::string>> toasts;
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg) {
+        toasts.emplace_back(severity, msg);
+    });
+
+    SECTION("offered on a free machine, and the button clears the lane") {
+        LifecycleGuard hold(PrintState::Idle);
+        REQUIRE_FALSE(backend->get_slot_info(0).material.empty());
+
+        helix::ui::offer_clear_after_unverified_insert(0);
+        REQUIRE(toasts.size() == 1);
+        CHECK(toasts[0].first == ToastSeverity::INFO);
+        CHECK(toasts[0].second.find("Gate 1") != std::string::npos);
+        // Asking changes nothing on its own.
+        CHECK_FALSE(backend->get_slot_info(0).material.empty());
+
+        REQUIRE(helix::ui::fire_last_toast_action());
+        CHECK(backend->get_slot_info(0).material.empty());
+        CHECK(backend->get_slot_info(0).spoolman_id == 0);
+    }
+
+    SECTION("not offered on a lane with nothing to clear") {
+        LifecycleGuard hold(PrintState::Idle);
+        REQUIRE(helix::ui::ams_dispatch_backend_action(MenuAction::CLEAR_SPOOL, 1, nullptr));
+        toasts.clear();
+        helix::ui::offer_clear_after_unverified_insert(1);
+        CHECK(toasts.empty());
+    }
+
+    SECTION("not offered on the lane feeding the print") {
+        LifecycleGuard hold(PrintState::Printing);
+        REQUIRE(backend->slot_is_actively_loaded(0));
+        helix::ui::offer_clear_after_unverified_insert(0);
+        CHECK(toasts.empty());
+        CHECK_FALSE(helix::ui::fire_last_toast_action());
+    }
+
+    SECTION("offered on another lane mid-print") {
+        LifecycleGuard hold(PrintState::Printing);
+        REQUIRE_FALSE(backend->slot_is_actively_loaded(1));
+        helix::ui::offer_clear_after_unverified_insert(1);
+        CHECK(toasts.size() == 1);
+    }
+
+    helix::ui::set_test_toast_hook(nullptr);
 }

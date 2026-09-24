@@ -2571,6 +2571,7 @@ translations:
   : Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
   Safety & Notifications: Safety & Notifications
+  Same spool in {}? Tap Clear if it is a new one.: Same spool in {}? Tap Clear if it is a new one.
   Sample: Sample
   Sample %d/%d: Sample %d/%d
   Sample Dialog: Sample Dialog

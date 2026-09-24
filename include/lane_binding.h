@@ -5,6 +5,10 @@
 #include "lane_source_store.h"
 #include "lane_sources.h"
 
+#include <cstdint>
+#include <optional>
+#include <string>
+
 namespace helix::ams {
 
 /// What firmware stated about a lane's binding in the frame just parsed.
@@ -91,5 +95,51 @@ void drop_previous_spool_declarations(LaneId lane);
 /// ingest_legacy_records() files the stored record back onto the lane at the
 /// next backend start.
 BindingVerdict reconcile_binding(LaneId lane, const BindingReading& reading);
+
+/// What the hardware physically read off the spool in a lane, and nothing
+/// else (prestonbrown/helixscreen#1710).
+///
+/// Every field is evidence about THIS spool only when the reader in the slot
+/// produced it: a tag UID, or material and colour decoded from a tag. A value
+/// the firmware remembers across inserts (a colour the user set on the
+/// printer's own menu, a saved slot table) is not a read of the spool now in
+/// the slot, and leaving it out is what makes an untagged insert classify as
+/// NoEvidence instead of as the spool that was there before. A firmware-named
+/// spool id is binding evidence and belongs to classify_binding(), not here.
+struct SpoolEvidence {
+    /// A per-spool tag identifier nobody can set through the UI. Empty when
+    /// the spool has no tag or the reader has not read it yet.
+    std::string tag_uid;
+    /// Material decoded from the spool. Empty when none was read.
+    std::string material;
+    /// Colour decoded from the spool, 0xRRGGBB. nullopt when none was read.
+    std::optional<uint32_t> color_rgb;
+};
+
+/// Whether the spool just inserted into a lane is the one that was there.
+enum class InsertVerdict {
+    SameSpool, ///< Keep everything, silently.
+    /// Drop what described the previous spool, as a re-bind does
+    /// (drop_previous_spool_declarations()). Firmware is left alone: it
+    /// already holds the new spool's reading.
+    DifferentSpool,
+    NoEvidence, ///< Keep everything, and ask the user whether it is the same spool.
+};
+
+/// Compare what the hardware read off the inserted spool against what it read
+/// off the one before. `before` is nullopt when no reading of the previous
+/// spool exists.
+///
+/// A tag UID on both sides decides alone: a new tag is a new spool whatever
+/// its contents say, and the same tag is the same spool even when its
+/// contents were rewritten. Otherwise material and colour decide, and they
+/// must BOTH match to call it the same spool: two spools of one material and
+/// colour are interchangeable, and a manufacturer change between them is the
+/// user's to correct. Any field read on both sides that differs is a
+/// different spool. Anything less is no evidence.
+///
+/// Pure: same inputs, same answer, no clock, no globals, no I/O, no logging.
+[[nodiscard]] InsertVerdict classify_insert(const std::optional<SpoolEvidence>& before,
+                                            const SpoolEvidence& after);
 
 } // namespace helix::ams

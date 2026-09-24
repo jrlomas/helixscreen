@@ -162,6 +162,16 @@ void set_test_notification_success_hook(std::function<void(const std::string&)> 
  */
 void set_test_toast_hook(std::function<void(ToastSeverity, const std::string&)> hook);
 
+/**
+ * @brief Press the action button of the most recent action toast
+ *
+ * The stub ToastManager keeps the last show_with_action() callback and its
+ * user_data so a test can act as the user tapping the button. Returns false
+ * when no action toast has been shown since the last call or since
+ * set_test_toast_hook(), which forgets the last action.
+ */
+bool fire_last_toast_action();
+
 } // namespace ui
 } // namespace helix
 
