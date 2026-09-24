@@ -97,6 +97,7 @@ struct FilamentSlotOverride {
     std::string brand;
     std::string spool_name;
     int spoolman_id = 0;
+    int spoolman_filament_id = 0;
     int spoolman_vendor_id = 0;
     float remaining_weight_g = -1.0f;
     float total_weight_g = -1.0f;

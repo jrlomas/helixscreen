@@ -4,18 +4,63 @@ This document is a reference for the environment variables HelixScreen reads at 
 
 ## How `helixscreen.env` is loaded
 
-The launcher (`scripts/helix-launcher.sh`) evaluates `helixscreen.env` from the first
+The launcher (`scripts/helix-launcher.sh`) reads `helixscreen.env` from the first
 existing search path (`<install>/config/helixscreen.env`, then `/etc/helixscreen/helixscreen.env`),
-exporting `KEY=VALUE` lines whose variable is not already set. The file is shell-evaluated,
-so values may use `$(...)` and variable expansion, and the same parse answers `--print-env`.
+exporting `KEY=VALUE` lines whose variable is not already set. The same parse answers
+`--print-env`.
 
-That eval is why ownership is gated: the file is only read when it is owned by root or by
-the user the launcher itself runs as, and carries no group or world write bit. A file whose
-owner passes that check and whose only fault is a write bit is repaired in place to `0644`
-(web updates and deploys ship the file without pinning it) and loaded, with one log line
-saying so. Anything else (a mode the repair cannot settle, an owner that is neither root
-nor the service user) is skipped with a logged warning naming the file, its owner and
-mode, and the fix:
+Values are literal text. One pair of matching surrounding quotes (`"..."` or `'...'`) is
+stripped, an unquoted value ends at a whitespace-led `#` comment, and nothing is expanded.
+A value holding `$VAR`, `$(...)`, `${...}` or a backtick is skipped with a warning rather than
+exported, so a line written for the old shell-evaluated file (a generated token, say) never
+becomes a readable literal. Generate the value first and write the result into the file.
+
+Some keys carry a stricter rule, because root acts on the value:
+
+| Key | Accepted value |
+|-----|----------------|
+| `HELIX_DPI`, `HELIX_LOG_DEST`, `HELIX_LOG_LEVEL` | no whitespace and no `*`, `?` or `[`: the launcher passes them to the app as command-line flags |
+| `HELIX_LOG_FILE` | the same, and an absolute `*.log` path whose directory resolves to `/tmp` or `/var/log`, or to a directory under those or the install directory that root or the launcher's user owns with no group or world write bit, with no `..` segment and no symlink at the file. The app writes its log there as root and echoes other settings into it, so a log aimed at a script would be code. Platform hooks choose their own firmware log directory when this key is unset |
+| `HELIX_REMOTE_SOCKET` | the same flag rule, and a path under `/tmp/` or `/run/` with no `..` |
+| `HELIX_NICE` | `0` to `19`; a negative nice would let the UI starve Klipper |
+| `HELIX_ALSA_DEVICE` | `default`, `sysdefault`, `sysdefault:...`, `hw:...`, `plughw:...` or `dmix:...`, with no `|`, `file` or `tee`: ALSA's file plugin runs a `|cmd` target. The app applies the same rule to this variable and to the saved output device |
+
+Only these keys are read; any other key is ignored with one logged warning per key:
+
+`HELIX_ALSA_DEVICE`, `HELIX_AUTO_QUIT_MS`, `HELIX_AUTO_SCREENSHOT`, `HELIX_BACKLIGHT_DEVICE`,
+`HELIX_COLOR_SWAP_RB`, `HELIX_DEBUG`, `HELIX_DEBUG_TOUCH`, `HELIX_DIAGNOSTIC_UPLOADS`,
+`HELIX_DISABLE_AUTO_UPDATES`, `HELIX_DISPLAY_BACKEND`, `HELIX_DISPLAY_ROTATION`, `HELIX_DPI`,
+`HELIX_DRM_DEVICE`, `HELIX_FB_DEVICE`, `HELIX_FORCE_STREAMING`, `HELIX_GCODE_MODE`,
+`HELIX_GCODE_STREAMING`, `HELIX_KEYBOARD_DEVICE`, `HELIX_LOG_DEST`, `HELIX_LOG_FILE`,
+`HELIX_LOG_LEVEL`, `HELIX_MOUSE_DEVICE`, `HELIX_NICE`, `HELIX_NO_SPLASH`,
+`HELIX_REMOTE_CONTROL`, `HELIX_REMOTE_HTTP_TOKEN`, `HELIX_REMOTE_SOCKET`, `HELIX_REQUIRE_POINTER`, `HELIX_SCREEN_SIZE`, `HELIX_SCROLL_GUARD`,
+`HELIX_SCROLL_GUARD_COOLDOWN_MS`, `HELIX_SKIP_SPLASH`, `HELIX_SSAO`, `HELIX_THEME`,
+`HELIX_TOUCH_CALIBRATE`, `HELIX_TOUCH_DEVICE`, `HELIX_TOUCH_SWAP_AXES`, `HELIX_USB_AUTOMOUNT`,
+`MALLOC_ARENA_MAX`, `MALLOC_CHECK_`, `MALLOC_PERTURB_`, `MOONRAKER_HOST`, `MOONRAKER_PORT`.
+
+That is every key `config/helixscreen.env` names (a bats lint holds the two together), the
+env-file settings the user guide lists, and the keys deploys and the init script write or
+query. Every other variable in this reference is set by a platform hook, by the service
+environment, or by hand before a manual run, never by this file. That includes the directory
+keys (`HELIX_DATA_DIR`, `HELIX_CONFIG_DIR`, `HELIX_CACHE_DIR`, `HELIX_TMP_DIR`), since the app
+changes into its data directory and loads plugins from it, and `LD_*`, `PATH`, `IFS`, `HOME`,
+`SHELL`, `ENV`, `BASH_ENV` and `PYTHON*`. The file reaches the environment of root on every
+SysV firmware device.
+
+Ownership is gated as well: the file is only read when it is owned by root or by the user
+the launcher itself runs as, and carries no group or world write bit. On the printer_data
+layout, where `<install>/config/helixscreen.env` is a symlink into
+`printer_data/config/helixscreen/` so Mainsail and Fluidd can edit it, the owner of that
+directory is trusted too: Moonraker saves an edit as its own user (`lava` on the Snapmaker U1)
+while the launcher runs as root. That extra trust holds only while the directory has no group
+or world write bit, the symlink sits in a directory owned by root or the launcher's user with
+none either, and the symlink points straight at the file rather than through another link, so
+only the installer could have aimed it there. A file whose owner passes that check and whose
+only fault is a write bit is repaired in place to `0644` (web updates and deploys ship the
+file without pinning it) and loaded, with one log line saying so. Anything else (a mode the
+repair cannot settle, an owner none of those rules trusts) is skipped with a logged warning
+naming the file, its owner and mode, and the fix, always in this form (the owner is the
+printer_data directory's uid for a file there, which keeps web editing working):
 
 ```sh
 chown root:root /etc/helixscreen/helixscreen.env && chmod 644 /etc/helixscreen/helixscreen.env
@@ -1836,8 +1881,10 @@ set. Loopback needs no token.
 | **Enforced by** | `src/remote/http_transport.cpp#decide_http_bind` |
 
 ```bash
-# In helixscreen.env, or exported before launching:
-HELIX_REMOTE_HTTP_TOKEN=$(openssl rand -hex 16)
+# helixscreen.env does not run commands: generate the token first,
+openssl rand -hex 16
+# then write its output into the file:
+HELIX_REMOTE_HTTP_TOKEN=<paste the output here>
 ```
 
 ```bash

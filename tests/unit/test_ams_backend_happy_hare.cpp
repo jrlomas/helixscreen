@@ -4218,9 +4218,11 @@ TEST_CASE("an outside re-bind takes the old spool's brand off a Happy Hare gate"
     spool.filament_name = "PolyLite PETG";
     spool.material = "PETG";
     spool.color_hex = "FF00FF";
+    spool.filament_id = 55;
     helix::test::spool_states(helper, 1, spool);
     helper.repaint_slot_from_lane(1);
     REQUIRE(helper.get_slot_info(1).brand == "Polymaker");
+    REQUIRE(helper.get_slot_info(1).spoolman_filament_id == 55);
 
     // Gate 2 is the control: same shape, and the frame below reports the spool
     // its lane already names, so its binding holds and nothing is retired.
@@ -4240,6 +4242,7 @@ TEST_CASE("an outside re-bind takes the old spool's brand off a Happy Hare gate"
     helper.feed_mmu_gate_spool_ids({0, 99, 7, 0});
 
     CHECK(helper.get_slot_info(1).brand.empty());
+    CHECK(helper.get_slot_info(1).spoolman_filament_id == 0);
     CHECK(helper.get_slot_info(2).brand == "Sunlu");
 }
 
@@ -4353,8 +4356,10 @@ TEST_CASE("HappyHare override survives a gate-map update that omits identity",
     info.brand = "Polymaker";
     info.spool_name = "PolyLite Grey";
     info.spoolman_id = 42;
+    info.spoolman_filament_id = 55;
     info.total_weight_g = 1000.0f;
     helix::test::edit_slot_as_user(helper, 0, info);
+    REQUIRE(helper.get_slot_info(0).spoolman_filament_id == 55);
 
     // A gate-map refresh that clears the spool id upstream.
     helper.feed_mmu_gate_spool_ids({0, 0, 0, 0});
@@ -4363,7 +4368,42 @@ TEST_CASE("HappyHare override survives a gate-map update that omits identity",
     CHECK(after.brand == "Polymaker");
     CHECK(after.spool_name == "PolyLite Grey");
     CHECK(after.spoolman_id == 42);
+    CHECK(after.spoolman_filament_id == 55);
     CHECK(after.total_weight_g == Catch::Approx(1000.0f));
+}
+
+TEST_CASE("Happy Hare's own gate writes carry the filament id", "[ams][happyhare][1632]") {
+    // The lane repaint that closes a full commit restates the field from the
+    // override, so an edit-driven assertion cannot tell the backend's own copy
+    // from the restatement. Both pins sit below any repaint: apply_user_edit()
+    // writes the gate and returns before commit_user_edit() repaints, and the
+    // retire runs here with no frame behind it at all.
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    SECTION("the editor write copies it into the gate") {
+        SlotInfo info = helper.get_slot_info(0);
+        info.spoolman_id = 42;
+        info.spoolman_filament_id = 55;
+        const AmsError err = helper.apply_user_edit(
+            0, info, helix::ams::user_edit_observation(helper.get_slot_info(0), info));
+        REQUIRE(err.success());
+        REQUIRE(helper.get_slot_info(0).spoolman_filament_id == 55);
+    }
+
+    SECTION("a departed binding's retire drops it") {
+        helper.set_gate_spoolman_link(0, 42, 55, 3);
+        REQUIRE(helper.get_slot_info(0).spoolman_filament_id == 55);
+        // The retire expects its caller to hold mutex_; get_slot_info takes
+        // the same lock itself, so release before reading back.
+        {
+            std::lock_guard<std::mutex> lock(helix::HappyHareTestAccess::mutex(helper));
+            helix::HappyHareTestAccess::retire_departed_identity(helper, 0);
+        }
+        CHECK(helper.get_slot_info(0).spoolman_filament_id == 0);
+        CHECK(helper.get_slot_info(0).spoolman_vendor_id == 0);
+    }
 }
 
 TEST_CASE("HappyHare clear_slot_override drops the retained identity",

@@ -611,6 +611,46 @@ TEST_CASE("A stored record carrying a spool binding migrates to the server's run
     CHECK_FALSE(sources.local_user.has_value());
 }
 
+TEST_CASE("A linked record's filament definition id files with the binding it belongs to",
+          "[lane][ingest][1632]") {
+    SECTION("a record naming a spool states its filament id on the server's rung") {
+        const nlohmann::json wire = {
+            {"lane", "0"}, {"spool_id", 7}, {"helix_spoolman_filament_id", 55}};
+        const auto rec = record_from(wire);
+
+        const auto sources = sources_from_record(rec, wire);
+
+        // The filament id is the spool's own statement about itself, so it
+        // travels with the binding: the server's rung is where the poll files
+        // the same field, and a record read back at load must land there too
+        // or a restart with the server down would show no filament id.
+        REQUIRE(sources.spoolman.has_value());
+        REQUIRE(sources.spoolman->spoolman_filament_id.has_value());
+        CHECK(*sources.spoolman->spoolman_filament_id == 55);
+    }
+    SECTION("a record written before the key existed reads none") {
+        const nlohmann::json wire = {{"lane", "0"}, {"spool_id", 7}};
+        const auto rec = record_from(wire);
+
+        const auto sources = sources_from_record(rec, wire);
+
+        REQUIRE(sources.spoolman.has_value());
+        CHECK_FALSE(sources.spoolman->spoolman_filament_id.has_value());
+    }
+    SECTION("a record naming no spool states no filament id anywhere") {
+        // Without the binding the id means nothing: it identifies a filament
+        // of a spool this lane does not hold, so no rung files it.
+        const nlohmann::json wire = {{"lane", "0"}, {"helix_spoolman_filament_id", 55}};
+        const auto rec = record_from(wire);
+
+        const auto sources = sources_from_record(rec, wire);
+
+        CHECK_FALSE(sources.spoolman.has_value());
+        CHECK_FALSE(sources.local_user.has_value());
+        CHECK_FALSE(sources.remembered.has_value());
+    }
+}
+
 TEST_CASE("An unlinked stored record without the lock key is remembered, not declared",
           "[lane][ingest]") {
     // A legacy record with a colour and no key declares nothing, so a legacy
