@@ -531,6 +531,9 @@ void register_xml_components() {
     // because the AMS panel registers itself lazily and would otherwise be the
     // only consumer guaranteed to find it.
     register_xml("components/ams_endless_status.xml");
+    // Same shape for the CFS calibration section: the device-section overlay
+    // creates it dynamically in refresh(), so nothing earlier guarantees it.
+    register_xml("components/cfs_cutter_status.xml");
     register_xml("print_file_detail.xml");
 
     // Panel widget components (dynamic instantiation from PanelWidgetConfig)

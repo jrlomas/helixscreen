@@ -18,6 +18,7 @@
 #if HELIX_HAS_CFS
 #include "ui_cfs_chute_calibration_overlay.h"
 #include "ui_modal.h"
+#include "ui_subject_registry.h"
 
 #include "ams_backend_cfs.h"
 #endif
@@ -41,6 +42,19 @@ namespace helix::ui {
 // SINGLETON ACCESSOR
 // ============================================================================
 
+#if HELIX_HAS_CFS
+// The cutter sweep runs ~60s with no other visible progress, so a bound
+// status line under the calibration buttons carries the flow's state: running,
+// then the found position or the failure. A toast result would expire, and one
+// queued behind a "started" toast stays hidden for its whole lifetime. The
+// buttons' labels never change; ui_xml/components/cfs_cutter_status.xml
+// renders these subjects (phase: 0 nothing to report, 1 running, 2 result).
+static lv_subject_t s_cfs_cutter_phase;
+static lv_subject_t s_cfs_cutter_status;
+static char s_cfs_cutter_status_buf[128];
+static bool s_cfs_cutter_subjects_ready = false;
+#endif
+
 static std::unique_ptr<AmsDeviceSectionDetailOverlay> g_ams_device_section_detail_overlay;
 
 AmsDeviceSectionDetailOverlay& get_ams_device_section_detail_overlay() {
@@ -61,7 +75,8 @@ AmsDeviceSectionDetailOverlay::AmsDeviceSectionDetailOverlay() {
 }
 
 AmsDeviceSectionDetailOverlay::~AmsDeviceSectionDetailOverlay() {
-    // No subjects to deinitialize — title is set imperatively
+    // The CFS status line's subjects are file-static (see set_cutter_row_state),
+    // so they outlive every overlay instance and need no deinit here.
     spdlog::trace("[{}] Destroyed", get_name());
 }
 
@@ -74,8 +89,17 @@ void AmsDeviceSectionDetailOverlay::init_subjects() {
         return;
     }
 
-    // No subjects needed — title is set imperatively in show()
-    // and dynamic controls don't use XML bindings.
+#if HELIX_HAS_CFS
+    // Calibration status line subjects, consumed by
+    // ui_xml/components/cfs_cutter_status.xml. Init once per process: a second
+    // overlay instance must not memzero a subject whose observers are live.
+    if (!s_cfs_cutter_subjects_ready) {
+        s_cfs_cutter_subjects_ready = true;
+        UI_SUBJECT_INIT_AND_REGISTER_INT(s_cfs_cutter_phase, 0, "cfs_cutter_phase");
+        UI_SUBJECT_INIT_AND_REGISTER_STRING(s_cfs_cutter_status, s_cfs_cutter_status_buf, "",
+                                            "cfs_cutter_status");
+    }
+#endif
 
     subjects_initialized_ = true;
     spdlog::debug("[{}] Subjects initialized", get_name());
@@ -220,6 +244,15 @@ void AmsDeviceSectionDetailOverlay::refresh() {
         }
         count++;
     }
+
+#if HELIX_HAS_CFS
+    // The calibration section's status line sits below the button rows. The
+    // buttons are backend-driven so they are built above; this line is pure
+    // bound appearance and comes from XML, driven by the file-static subjects.
+    if (section_id_ == "calibration" && backend->get_type() == AmsType::CFS) {
+        lv_xml_create(actions_container_, "cfs_cutter_status", nullptr);
+    }
+#endif
 
     spdlog::debug("[{}] Created {} controls for section '{}'", get_name(), count, section_id_);
 }
@@ -501,19 +534,15 @@ void AmsDeviceSectionDetailOverlay::create_button_in_row(
 /// Cutter calibration confirm: BOX_FIND_CUT_POS homes X/Y and takes about a
 /// minute, so the click asks before moving the printer.
 namespace {
-/// The sweep runs ~60s with no other visible progress, so the calibration
-/// rows themselves carry the flow's state: busy while the macro runs, then
-/// the found position or the failure. A toast result would expire, and one
-/// queued behind a "started" toast stays hidden for its whole lifetime.
-void set_cutter_row_state(const char* label_text, bool busy) {
-    lv_obj_t* screen = lv_screen_active();
-    if (lv_obj_t* lbl = lv_obj_find_by_name(screen, "calibrate_cutter_label")) {
-        // The label belongs to a control built dynamically from backend data
-        // (this file's documented exception), not an XML template.
-        lv_label_set_text(lbl, label_text); // DECLARATIVE_OK: dynamic backend-built control
-    }
+
+void set_cutter_row_state(const char* status_text, bool busy) {
+    lv_subject_copy_string(&s_cfs_cutter_status, status_text);
+    // 0 = nothing to report (line hidden), 1 = sweep running, 2 = result.
+    lv_subject_set_int(&s_cfs_cutter_phase, busy ? 1 : (status_text[0] != '\0' ? 2 : 0));
     // Both calibration actions home the machine; neither may start while a
-    // sweep owns it.
+    // sweep owns it. The buttons are built dynamically from backend data
+    // (this file's documented exception), so their state is set here.
+    lv_obj_t* screen = lv_screen_active();
     for (const char* name : {"calibrate_cutter", "calibrate_purge_chute"}) {
         if (lv_obj_t* btn = lv_obj_find_by_name(screen, name)) {
             if (busy) {
@@ -540,7 +569,7 @@ static void confirm_cutter_calibration(const std::string& label) {
             }
             auto* cfs = static_cast<helix::printer::AmsBackendCfs*>(backend);
             set_cutter_row_state(lv_tr("Calibrating... (about 1 minute)"), true);
-            AmsError result = cfs->calibrate_cutter([label](bool ok, const std::string& line) {
+            AmsError result = cfs->calibrate_cutter([](bool ok, const std::string& line) {
                 char axis = '\0';
                 double value_mm = 0.0;
                 std::string text;
@@ -557,7 +586,7 @@ static void confirm_cutter_calibration(const std::string& label) {
                 set_cutter_row_state(text.c_str(), false);
             });
             if (!result.success()) {
-                set_cutter_row_state(lv_tr(label.c_str()), false);
+                set_cutter_row_state("", false);
                 helix::ui::notify_ams_error(result);
             }
         },
