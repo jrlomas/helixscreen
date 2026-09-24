@@ -60,6 +60,14 @@ this build, set the update channel in Settings to Beta.
   move to `/data/.helixscreen` so they stop showing up in the print file list. On the K2,
   the install moves off the 240MB system overlay onto the user partition.
   Both are migrated in place by the update.
+- **`helixscreen.env` values are taken literally** (#1682). The file is no longer run
+  through the shell, so `$VAR`, `${VAR}`, `$(command)` and backticks are not expanded.
+  A line using them is skipped with a warning in the log, so write the final value
+  itself. Only the settings documented for this file are accepted; anything else is
+  skipped and logged. A few values are checked before they are used: the log file has
+  to be a `.log` under `/tmp`, `/var/log` or the install folder, and `HELIX_NICE` has to
+  be 0 to 19. An env file that the web interface can edit, like the one the Snapmaker U1
+  keeps in `printer_data`, is honoured.
 
 **Still being proven.** Two features in this beta are hidden unless beta features are
 on, because they have not yet been checked on enough real machines: the belt tension
