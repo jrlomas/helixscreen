@@ -3490,12 +3490,14 @@ void AmsState::set_external_spool_info_in_memory(const SlotInfo& info) {
 void AmsState::set_external_spool_info(const SlotInfo& info) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     // Moving the binding to a different spool retires the previous spool's
-    // records, exactly as a slot edit's binding change does: its Spoolman
-    // record, the user's pick, the kept identity and the meter's count all
-    // describe a spool that is no longer bound, and resolve() would keep
-    // ranking them onto the new one. Every persistent writer passes through
-    // here (the edit funnel, the active-spool sync), so the reconcile lives
-    // at the funnel rather than at each caller.
+    // records: its Spoolman record, the user's pick, the kept identity and the
+    // meter's count all describe a spool that is no longer bound, and resolve()
+    // would keep ranking them onto the new one. The meter goes too, unlike a
+    // lane's binding change: a lane's firmware re-files its meter every frame,
+    // but nothing re-files the bypass meter while a spool is linked (the
+    // consumption sink pauses), so a stale count would stand. Every persistent writer passes
+    // through here (the edit funnel, the active-spool sync), so the reconcile lives at the funnel
+    // rather than at each caller.
     const int previous_id = raw_external_spool_info().value_or(SlotInfo{}).spoolman_id;
     if (previous_id != info.spoolman_id) {
         helix::ams::drop_previous_spool_declarations(helix::ams::BYPASS_LANE_ID);
