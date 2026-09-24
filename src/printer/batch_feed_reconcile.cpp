@@ -3,8 +3,8 @@
 
 #include "batch_feed_reconcile.h"
 
-#include "ams_backend_snapmaker.h"
 #include "i_moonraker_client.h"
+#include "snapmaker_channel_state.h"
 #include "spdlog/spdlog.h"
 
 namespace helix::batch_feeding {
@@ -29,8 +29,7 @@ bool feed_channels_at_rest(const nlohmann::json& status) {
                 continue;
             }
             saw_channel = true;
-            if (AmsBackendSnapmaker::channel_state_in_progress(
-                    state->get_ref<const std::string&>())) {
+            if (snapmaker::channel_state_in_progress(state->get_ref<const std::string&>())) {
                 return false;
             }
         }
