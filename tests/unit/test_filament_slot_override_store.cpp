@@ -256,6 +256,7 @@ TEST_CASE("user_override_from_slot_info signs the fields the user supplied",
         info.brand = "Polymaker";
         info.spool_name = "Blue PETG 1kg";
         info.spoolman_id = 42;
+        info.spoolman_filament_id = 55;
         info.spoolman_vendor_id = 7;
         info.remaining_weight_g = 730.0f;
         info.total_weight_g = 1000.0f;
@@ -268,6 +269,7 @@ TEST_CASE("user_override_from_slot_info signs the fields the user supplied",
         CHECK(ovr.brand == "Polymaker");
         CHECK(ovr.spool_name == "Blue PETG 1kg");
         CHECK(ovr.spoolman_id == 42);
+        CHECK(ovr.spoolman_filament_id == 55);
         CHECK(ovr.spoolman_vendor_id == 7);
         CHECK(ovr.remaining_weight_g == Catch::Approx(730.0f));
         CHECK(ovr.total_weight_g == Catch::Approx(1000.0f));
