@@ -1078,6 +1078,13 @@ int AmsState::backend_count() const {
     return static_cast<int>(backends_.size());
 }
 
+bool AmsState::any_filament_batch_in_flight() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return std::any_of(backends_.begin(), backends_.end(), [](const auto& backend) {
+        return backend && backend->filament_batch_in_flight();
+    });
+}
+
 void AmsState::clear_backends() {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
 
@@ -3124,7 +3131,7 @@ bool AmsState::was_slot_recently_unloaded(int slot_index) const {
     return (std::chrono::steady_clock::now() - t) < RECENT_UNLOAD_GRACE;
 }
 
-void AmsState::set_current_loaded_defaults() {
+void AmsState::set_current_loaded_defaults(bool write_header) {
     // The card is back to empty, so the next real load is a change worth logging.
     last_synced_loaded_slot_ = -1;
     last_synced_filament_loaded_ = false;
@@ -3133,7 +3140,7 @@ void AmsState::set_current_loaded_defaults() {
         lv_subject_copy_string(&current_material_text_, "---");
     }
     const char* default_slot = lv_tr("Currently Loaded");
-    if (strcmp(lv_subject_get_string(&current_slot_text_), default_slot) != 0) {
+    if (write_header && strcmp(lv_subject_get_string(&current_slot_text_), default_slot) != 0) {
         lv_subject_copy_string(&current_slot_text_, default_slot);
     }
     if (strcmp(lv_subject_get_string(&current_weight_text_), "") != 0) {
@@ -3161,6 +3168,39 @@ void AmsState::sync_current_loaded_from_backend() {
     }
 }
 
+void AmsState::set_current_slot_header(AmsBackend& backend, int slot_index) {
+    AmsSystemInfo sys = backend.get_system_info();
+
+    char tmp[64];
+    if (is_tool_changer(sys.type) && sys.units.empty()) {
+        // Pure tool changer with no AMS units: show the physical toolhead position
+        snprintf(tmp, sizeof(tmp), lv_tr("Current: %s"),
+                 helix::ui::lane_label(helix::ui::active_tool_noun(), slot_index).c_str());
+    } else {
+        std::string unit_display;
+        for (const auto& unit : sys.units) {
+            if (slot_index >= unit.first_slot_global_index &&
+                slot_index < unit.first_slot_global_index + unit.slot_count) {
+                // Prefer display_name, fall back to name, replace _ with spaces
+                unit_display = !unit.display_name.empty() ? unit.display_name : unit.name;
+                std::replace(unit_display.begin(), unit_display.end(), '_', ' ');
+                break;
+            }
+        }
+        const std::string slot_label = helix::ui::lane_label(backend.lane_noun(), slot_index);
+        if (!unit_display.empty() && sys.units.size() > 1) {
+            // Multi-unit: show unit name + slot label on one line
+            snprintf(tmp, sizeof(tmp), lv_tr("Current: %s · %s"), unit_display.c_str(),
+                     slot_label.c_str());
+        } else {
+            snprintf(tmp, sizeof(tmp), lv_tr("Current: %s"), slot_label.c_str());
+        }
+    }
+    if (strcmp(lv_subject_get_string(&current_slot_text_), tmp) != 0) {
+        lv_subject_copy_string(&current_slot_text_, tmp);
+    }
+}
+
 void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_info) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
 
@@ -3176,6 +3216,12 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
     AmsBackend* loaded_backend = nullptr;
     int slot_index = -1;
     bool filament_loaded = false;
+    // While a load/unload works a head, the header names THAT head. Only the
+    // header: the card, filament_loaded and the Spoolman active spool describe
+    // the carriage, so they read the loaded lane below. The backend owns the
+    // classification (operation_working_slot); this side only formats it.
+    AmsBackend* working_backend = nullptr;
+    int working_slot = -1;
 
     for (size_t idx = 0; idx < backends_.size(); ++idx) {
         auto& b = backends_[idx];
@@ -3185,26 +3231,23 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
         if (idx != 0)
             secondary_info = b->get_system_info();
         const AmsSystemInfo& info = (idx == 0) ? primary_info : secondary_info;
-        // While a load/unload works a head, the header names THAT head; at
-        // rest it names the loaded lane. The backend owns the classification
-        // (operation_working_slot); this side only formats it.
-        if (info.operation_working_slot >= 0) {
-            loaded_backend = b.get();
-            slot_index = info.operation_working_slot;
-            filament_loaded = true;
-            break;
+        if (!working_backend && info.operation_working_slot >= 0) {
+            working_backend = b.get();
+            working_slot = info.operation_working_slot;
+        }
+        if (loaded_backend) {
+            continue;
         }
         if (info.filament_loaded) {
             loaded_backend = b.get();
             slot_index = info.current_slot;
             filament_loaded = true;
-            break;
+            continue;
         }
         // Also check bypass on each backend
         if (info.current_slot == -2 && b->is_bypass_active()) {
             loaded_backend = b.get();
             slot_index = -2;
-            break;
         }
     }
 
@@ -3335,39 +3378,10 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
             }
         }
 
-        // Set slot label with unit name
-        {
-            AmsSystemInfo sys = loaded_backend->get_system_info();
-
-            char tmp[64];
-            if (is_tool_changer(sys.type) && sys.units.empty()) {
-                // Pure tool changer with no AMS units — show the physical toolhead position
-                snprintf(tmp, sizeof(tmp), lv_tr("Current: %s"),
-                         helix::ui::lane_label(helix::ui::active_tool_noun(), slot_index).c_str());
-            } else {
-                std::string unit_display;
-                for (const auto& unit : sys.units) {
-                    if (slot_index >= unit.first_slot_global_index &&
-                        slot_index < unit.first_slot_global_index + unit.slot_count) {
-                        // Prefer display_name, fall back to name, replace _ with spaces
-                        unit_display = !unit.display_name.empty() ? unit.display_name : unit.name;
-                        std::replace(unit_display.begin(), unit_display.end(), '_', ' ');
-                        break;
-                    }
-                }
-                const std::string slot_label =
-                    helix::ui::lane_label(loaded_backend->lane_noun(), slot_index);
-                if (!unit_display.empty() && sys.units.size() > 1) {
-                    // Multi-unit: show unit name + slot label on one line
-                    snprintf(tmp, sizeof(tmp), lv_tr("Current: %s · %s"), unit_display.c_str(),
-                             slot_label.c_str());
-                } else {
-                    snprintf(tmp, sizeof(tmp), lv_tr("Current: %s"), slot_label.c_str());
-                }
-            }
-            if (strcmp(lv_subject_get_string(&current_slot_text_), tmp) != 0) {
-                lv_subject_copy_string(&current_slot_text_, tmp);
-            }
+        // The header is written once per sync: an operation's working head
+        // below takes it, so the carriage slot does not flash in first.
+        if (!working_backend) {
+            set_current_slot_header(*loaded_backend, slot_index);
         }
 
         // Show remaining weight if available (from Spoolman or backend)
@@ -3390,7 +3404,11 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
         }
     } else {
         // No filament loaded - show empty state
-        set_current_loaded_defaults();
+        set_current_loaded_defaults(/*write_header=*/!working_backend);
+    }
+
+    if (working_backend) {
+        set_current_slot_header(*working_backend, working_slot);
     }
 
     spdlog::trace("[AMS State] Synced current loaded - slot={}, has_weight={}", slot_index,

@@ -55,11 +55,9 @@
       <divider_vertical name="div_tertiary" hidden="$hide_tertiary"/>
       <!-- Secondary button. style_border_width="0" so the theme's 1px button
            border doesn't stack against divider_vertical (previously looked
-           like a triple-thick edge between Cancel and Save). bind_text before
-           text/translation_tag: an unsupplied secondary_subject resolves to the
-           empty name, a no-op INT subject whose "0" the static text then
-           overwrites (header_bar's header_title is the reference for this
-           ordering). -->
+           like a triple-thick edge between Cancel and Save). An unsupplied
+           secondary_subject leaves bind_text empty, which ui_button skips when
+           it applies bindings, so the static text set at create stands. -->
       <ui_button name="btn_secondary"
                  height="100%" hidden="$hide_secondary" variant="$secondary_variant" flex_grow="1" style_radius="0"
                  style_border_width="0" focusable="false" bind_text="$secondary_subject" icon="$secondary_icon"
@@ -74,8 +72,9 @@
       </divider_vertical>
       <!-- Primary button (same border-width suppression as secondary).
            variant="primary" by default; pass primary_variant="danger" for
-           destructive actions (Shutdown, Cancel Print, etc.). bind_text before
-           text for the same unsupplied-subject reason as the secondary.
+           destructive actions (Shutdown, Cancel Print, etc.). An unsupplied
+           primary_subject leaves the static text standing, as for the
+           secondary.
            A caller whose primary commands the printer passes the
            primary_moves_machine prop, which installs the toolhead guard on
            this button. -->

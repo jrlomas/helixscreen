@@ -8,7 +8,7 @@
 #include "accel_sensor_manager.h"
 #include "ams_state.h"
 #include "batch_feed_reconcile.h"
-#include "snapmaker_screws_tilt.h"
+#include "screws_tilt_dialect.h"
 #if HELIX_HAS_IFS
 #include "ams_backend_ad5x_ifs.h"
 #endif
@@ -1698,9 +1698,7 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                     // a calibration another client is actively driving keeps
                     // its state unless its own probe step proves nothing is
                     // running.
-                    if (hw.screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-                        snapmaker::screws_tilt::reconcile_on_connect(client_, status);
-                    }
+                    screws_tilt::reconcile_on_connect(client_, hw, status);
                     // Same shape, one interlock over: a batch feed interrupted
                     // by a lost connection strands the macro's `doing`, which
                     // refuses every print start until cleared. Clearing is
@@ -1715,16 +1713,9 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                         // not clear it on a mid-batch reconnect. The backends
                         // answer the capability question; which one runs
                         // batches is vendor knowledge that stays there.
-                        bool local_batch_active = false;
-                        auto& ams = AmsState::instance();
-                        for (int i = 0; i < ams.backend_count() && !local_batch_active; ++i) {
-                            if (const auto* backend = ams.get_backend(i)) {
-                                local_batch_active = backend->filament_batch_in_flight();
-                            }
-                        }
                         batch_feeding::reconcile_on_connect(
                             client_, status, fmt::format("gcode_macro {}", batch_macro),
-                            local_batch_active);
+                            AmsState::instance().any_filament_batch_in_flight());
                     }
                 }
             } else if (sub_response.contains("error")) {

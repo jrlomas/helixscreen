@@ -25,12 +25,14 @@ inline constexpr const char* END_GCODE = "AUTO_FEEDING_BATCH ACTION=END";
  *
  * A session that dies mid-batch leaves the macro's `doing` save-variable set,
  * and PRINT_PRESTART_CHECK refuses every print over it. Sends ACTION=END when
- * the discovery snapshot shows `doing` true with no print in flight; a
- * printing or paused print, or an active virtual_sdcard, owns the interlock
- * legitimately, because ACTION=END restores the hotend targets the batch
- * snapshotted at START - the right cleanup when idle, the wrong targets
- * mid-print. Runs on the WebSocket thread beside auto_screws' reconcile;
- * touches no LVGL.
+ * the discovery snapshot shows `doing` true with no print in flight and every
+ * filament_feed channel at rest; a printing or paused print, an active
+ * virtual_sdcard, or a channel mid-load/unload (a batch another client is
+ * running) owns the interlock legitimately, because ACTION=END restores the
+ * hotend targets the batch snapshotted at START - the right cleanup when
+ * idle, the wrong targets mid-print or mid-feed. A snapshot without feed
+ * channels cannot vouch for that and is left alone. Runs on the WebSocket
+ * thread beside the screws-tilt reconcile; touches no LVGL.
  *
  * @param macro_object  The macro's status object key as written in
  *        printer.cfg ("gcode_macro <name>"). Klipper preserves the config's
