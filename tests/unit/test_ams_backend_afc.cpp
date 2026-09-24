@@ -6563,6 +6563,49 @@ TEST_CASE("AFC clear_slot_override drops the retained identity", "[ams][afc][ove
     CHECK(after.spoolman_vendor_id == 0);
 }
 
+TEST_CASE("AFC clear_slot_override empties an unlinked lane's firmware identity",
+          "[ams][afc][override][1661]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes(4);
+    helper.initialize_slots_from_discovery();
+
+    // No Spoolman link, so no SET_SPOOL_ID reaches AFC and its clear_values()
+    // never runs: what SET_MATERIAL / SET_COLOR / SET_WEIGHT stored survives
+    // unless the clear names each field.
+    helper.captured_gcodes.clear();
+    helper.clear_slot_override(0);
+
+    for (const char* gcode : {"SET_MATERIAL LANE=lane1 MATERIAL=", "SET_COLOR LANE=lane1 COLOR=",
+                              "SET_WEIGHT LANE=lane1 WEIGHT=0"}) {
+        CAPTURE(gcode);
+        CHECK(std::find(helper.captured_gcodes.begin(), helper.captured_gcodes.end(),
+                        std::string(gcode)) != helper.captured_gcodes.end());
+    }
+}
+
+TEST_CASE("AFC a zero weight on a lane with no identity reads as unknown",
+          "[ams][afc][weight][1661]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes(4);
+    helper.initialize_slots_from_discovery();
+
+    helper.feed_afc_stepper("lane1",
+                            {{"material", "PLA"}, {"color", "#FF0000"}, {"weight", 850.0}});
+    REQUIRE(helper.get_slot_info(0).remaining_weight_g == Catch::Approx(850.0f));
+
+    SECTION("cleared: no material, bare '#' colour, weight 0") {
+        // What clear_values() and Clear Spool leave in AFC. Read as 0 g, the
+        // print-start weight gate warns on every print from this lane; unknown
+        // (-1) is what it skips.
+        helper.feed_afc_stepper("lane1", {{"material", ""}, {"color", "#"}, {"weight", 0.0}});
+        CHECK(helper.get_slot_info(0).remaining_weight_g < 0.0f);
+    }
+    SECTION("a spool metered down to zero keeps its material and stays at zero") {
+        helper.feed_afc_stepper("lane1", {{"material", "PLA"}, {"weight", 0.0}});
+        CHECK(helper.get_slot_info(0).remaining_weight_g == Catch::Approx(0.0f));
+    }
+}
+
 TEST_CASE("AFC persist_override records a deliberate pure black", "[ams][afc][override]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes(4);

@@ -393,7 +393,7 @@ TEST_CASE_METHOD(
     CHECK(id->filament_name == "Jet Black");
     CHECK(id->material == "PLA");
 
-    // Weight — the thing the poll is actually for — still landed. The lane's
+    // Weight, the thing the poll is actually for, still landed. The lane's
     // Spoolman record is where: the mock keeps no cached slot to repaint, so
     // the slot struct itself is not a render of the lane.
     SlotInfo after = h.backend->get_slot_info(0);
@@ -465,7 +465,7 @@ TEST_CASE_METHOD(IdentityCacheFixture,
     CHECK_FALSE(SpoolmanManager::find_identity(900).has_value());
 
     // Make the id resolvable behind the manager's back. If the second poll still
-    // issued a request, a Spoolman record would file — it must not, because a
+    // issued a request, a Spoolman record would file. It must not, because a
     // known-dead id is skipped before the request is made.
     h.api.spoolman_mock().get_mock_spools().push_back(
         make_spool(900, "Polymaker", "Ambrosia Pink", "PLA"));

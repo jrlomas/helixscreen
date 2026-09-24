@@ -31,6 +31,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <vector>
 
 #include "../catch_amalgamated.hpp"
 
@@ -293,4 +294,44 @@ TEST_CASE_METHOD(LVGLUITestFixture,
         CHECK(after.material.empty());
         CHECK(after.spoolman_id == 0);
     }
+}
+
+namespace {
+
+/// A backend whose firmware refuses part of the clear, the way Happy Hare's
+/// Spoolman pull mode and its mid-print backstop do.
+class PartialClearMock : public helix::AmsBackendMock {
+  public:
+    using helix::AmsBackendMock::AmsBackendMock;
+    helix::AmsError apply_user_edit(int slot_index, const helix::SlotInfo& info,
+                                    const helix::ams::Observation& declared) override {
+        (void)helix::AmsBackendMock::apply_user_edit(slot_index, info, declared);
+        helix::AmsError partial(helix::AmsResult::COMMAND_FAILED, "firmware refused",
+                                "Couldn't clear", "HelixScreen cleared its own copy.");
+        partial.partially_applied = true;
+        return partial;
+    }
+    void clear_slot_override(int slot_index) override {
+        cleared_slots.push_back(slot_index);
+        helix::AmsBackendMock::clear_slot_override(slot_index);
+    }
+    std::vector<int> cleared_slots;
+};
+
+} // namespace
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "ams dispatch: a partially applied Clear Spool still drops the local record",
+                 "[ui][ams][context_menu][dispatch][1661]") {
+    helix::AmsState::instance().init_subjects(true);
+    auto owned = std::make_unique<PartialClearMock>(4);
+    PartialClearMock* backend = owned.get();
+    helix::AmsState::instance().set_backend(std::move(owned));
+    helix::AmsState::instance().sync_from_backend();
+
+    REQUIRE(helix::ui::ams_dispatch_backend_action(MenuAction::CLEAR_SPOOL, 1, nullptr));
+
+    // The error says HelixScreen cleared its own copy; that has to be true.
+    REQUIRE(backend->cleared_slots.size() == 1);
+    CHECK(backend->cleared_slots.front() == 1);
 }
