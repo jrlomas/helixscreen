@@ -2264,8 +2264,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
     REQUIRE(backend.get_slot_info(0).status == SlotStatus::AVAILABLE);
     holds_spool_colour("after the first frame");
 
-    SpoolmanManager::file_spool_on_lane(rig.backend_reg.lane(0), spool_42(),
-                                        backend.tracks_weight_locally());
+    SpoolmanManager::file_spool_on_lane(rig.backend_reg.lane(0), spool_42());
     holds_spool_colour("after the poll re-files the spool");
 
     SnapmakerTestAccess::handle_status(backend, seated_tag_frame(0xFF112233u, "PETG"));
