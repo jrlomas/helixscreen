@@ -17,7 +17,7 @@ constexpr const char* kMedusaObject = "medusahc";
 /// "t9999999" cannot size a vector off a network payload.
 constexpr int kMaxDockIndex = 63;
 
-/// One machine bolted onto klipper-toolchanger.
+/// One machine this module knows the dialect of.
 struct Provider {
     const char* name;
     /// Identifies the machine from discovered hardware.
@@ -93,6 +93,31 @@ std::string medusa_close_gcode(const PrinterDiscovery& hw) {
     return hw.has_macro("MHC_CLOSE") ? "MHC_CLOSE" : "CLOSE";
 }
 
+// --- Z-Mod on the FlashForge Creator 5 Pro -----------------------------------
+//
+// Z-Mod runs FlashForge's own Klipper, which has no klipper-toolchanger. Its
+// zmod_color extra mounts a head with `_T_IN T=<n>`, parks it with `_T_OUT`, and
+// reads gcode_button extruder_pos1..4 (dock) and extruder_grab1..4 (carriage)
+// into zmod_color.active_tool_id: 0..3 mounted, -1 nothing on the carriage, -2
+// the buttons disagree. The AD5X Z-Mod publishes zmod_color too but has no
+// carriage buttons, which is what keeps it out of this row.
+
+constexpr const char* kZmodColorObject = "zmod_color";
+
+bool printer_has_object(const PrinterDiscovery& hw, const char* name) {
+    const auto& objects = hw.printer_objects();
+    return std::find(objects.begin(), objects.end(), name) != objects.end();
+}
+
+bool zmod_c5_detect(const PrinterDiscovery& hw) {
+    return printer_has_object(hw, kZmodColorObject) &&
+           printer_has_object(hw, "gcode_button extruder_grab1");
+}
+
+std::vector<std::string> zmod_c5_status_objects(const PrinterDiscovery& /*hw*/) {
+    return {kZmodColorObject};
+}
+
 const std::vector<Provider>& providers() {
     static const std::vector<Provider> table = {
         // T<n> and DROP_TOOL are what the extra registers when it runs the swap
@@ -104,6 +129,8 @@ const std::vector<Provider>& providers() {
         // this table.
         {"MedusaHC", medusa_detect, medusa_status_objects, medusa_open_gcode, medusa_close_gcode,
          "T", "DROP_TOOL"},
+        {"Creator 5 Pro", zmod_c5_detect, zmod_c5_status_objects, nullptr, nullptr,
+         "_T_IN T=", "_T_OUT"},
     };
     return table;
 }
@@ -296,6 +323,18 @@ std::optional<ToolReading> read_pin_watch(const nlohmann::json& obj) {
     return r;
 }
 
+/// The firmware's own -2 is reported as a sensor error, not derived here.
+std::optional<ToolReading> read_zmod_color(const nlohmann::json& obj) {
+    auto tool = int_field(obj, "active_tool_id");
+    if (!tool) {
+        return std::nullopt;
+    }
+    ToolReading r;
+    r.current_tool = *tool;
+    r.sensor_error = (*tool == -2);
+    return r;
+}
+
 } // namespace
 
 bool present(const PrinterDiscovery& hw) {
@@ -366,7 +405,8 @@ Feeder resolve_feeder(const PrinterDiscovery& hw, const std::string& open_overri
 
 std::vector<std::string> feeder_macro_candidates(const PrinterDiscovery& hw) {
     std::vector<std::string> out;
-    if (!match(hw)) {
+    const Provider* p = match(hw);
+    if (!p || !p->open_gcode) {
         return out;
     }
     // A feeder macro is one of the controller's own MHC_* commands, or a macro
@@ -407,6 +447,12 @@ std::optional<ToolReading> read_tool(const nlohmann::json& status) {
             if (auto r = read_pin_watch(value)) {
                 return r;
             }
+        }
+    }
+    auto zmod = status.find(kZmodColorObject);
+    if (zmod != status.end() && zmod->is_object()) {
+        if (auto r = read_zmod_color(*zmod)) {
+            return r;
         }
     }
     return std::nullopt;

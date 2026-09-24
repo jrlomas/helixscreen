@@ -557,6 +557,13 @@ void AmsBackendToolChanger::apply_tool_sensor_locked(
         // those fields, because they still name a perfectly plausible tool.
         return;
     }
+    // The fault this function raised is withdrawn once the sensors agree again.
+    // A changer that publishes no phase word (Z-Mod) has nothing else to end it.
+    if (sensor_error_ && system_info_.action == AmsAction::ERROR &&
+        system_info_.operation_detail == "sensor error") {
+        system_info_.action = AmsAction::IDLE;
+        system_info_.operation_detail.clear();
+    }
     sensor_error_ = false;
 
     // Only when the frame named the carriage. A delta carrying just the gripper
