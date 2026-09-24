@@ -411,6 +411,69 @@ SUITE
     contains "killed" "$output"
 }
 
+# --- a suite that hangs ------------------------------------------------------
+#
+# A mutant can deadlock the suite instead of failing it, and a run that waits
+# on it waits forever. The hang is a detection only once confirmed: the first
+# timeout re-runs the mutant at twice the limit, and the verdict says which
+# kind of kill a second hang confirmed. The whole process group dies with the
+# timeout. The stub's child proves the kill reaches the group and not just the
+# runner, and its output is redirected off the pipe so the green baseline run
+# can return.
+
+@test "a suite that hangs is killed at the timeout, not waited on forever" {
+    cat > "$WORK/build/bin/helix-tests" <<'SUITE'
+#!/usr/bin/env bash
+echo $$ > .suite-pid
+grep -q NEW_BEHAVIOR src/feature.cpp && exit 0
+sleep 300 >/dev/null 2>&1 &
+echo $! > .child-pid
+wait
+SUITE
+    chmod +x "$WORK/build/bin/helix-tests"
+    before=$(sha256sum "$WORK/src/feature.cpp" | cut -d' ' -f1)
+    run mutate --timeout 3
+    [ "$status" -eq 0 ]
+    contains "killed (timeout)" "$output"
+    contains "re-running at 2x" "$output"
+    contains "VERDICT: CLEAN (1 by timeout: re-confirmed hang)" "$output"
+    after=$(sha256sum "$WORK/src/feature.cpp" | cut -d' ' -f1)
+    [ "$before" = "$after" ]
+    # No orphan: the runner and the child it spawned are both gone.
+    for p in $(cat "$WORK/.suite-pid") $(cat "$WORK/.child-pid"); do
+        n=0
+        while kill -0 "$p" 2>/dev/null && [ "$n" -lt 50 ]; do
+            sleep 0.1; n=$((n + 1))
+        done
+        if kill -0 "$p" 2>/dev/null; then fail "pid $p survived the timeout kill"; fi
+    done
+}
+
+@test "a suite that outruns the limit once is judged by its re-run, not killed" {
+    cat > "$WORK/build/bin/helix-tests" <<'SUITE'
+#!/usr/bin/env bash
+grep -q NEW_BEHAVIOR src/feature.cpp && exit 0
+if [ ! -f .hung-once ]; then
+    : > .hung-once
+    sleep 300 >/dev/null 2>&1
+fi
+echo 'All tests passed (2 assertions in 1 test case)'
+SUITE
+    chmod +x "$WORK/build/bin/helix-tests"
+    run mutate --timeout 3
+    [ "$status" -eq 1 ]
+    contains "re-running at 2x" "$output"
+    contains "SURVIVED" "$output"
+    lacks "killed" "$output"
+}
+
+@test "the mutant timeout is derived from the measured baseline" {
+    stub_tests_that_detect
+    run mutate
+    [ "$status" -eq 0 ]
+    contains "mutant timeout 60s" "$output"
+}
+
 @test "a tooling runner that exits without naming a failing test is not a kill" {
     # bats and pytest are read the same way as the C++ suite. A runner that died
     # collecting its tests exits non-zero having judged nothing, and inferring a
