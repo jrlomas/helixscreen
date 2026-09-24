@@ -10,17 +10,27 @@
 // YZQ47HQ6). watchdog_evaluate() adds a consecutive-stall cap so it gives up
 // and surfaces an error instead of thrashing.
 
+#include "ui_gcode_viewer.h"
+
+#include "../lvgl_test_fixture.h"
 #include "gcode_viewer_watchdog.h"
+
+#include <filesystem>
+#include <string>
 
 #include "../catch_amalgamated.hpp"
 
 using helix::gcode_viewer::watchdog_evaluate;
 using helix::gcode_viewer::WatchdogDecision;
 using helix::gcode_viewer::WatchdogObservation;
+using helix::test_access::gcode_viewer_set_watchdog_track;
+using helix::test_access::gcode_viewer_watchdog_track;
+using helix::test_access::GcodeViewerWatchdogTrack;
 
 namespace {
 constexpr int NEVER_SAMPLED = -2; // sentinel for "no previous observation"
 constexpr int MAX_STALL_KICKS = 30;
+bool g_load_done = false;
 } // namespace
 
 TEST_CASE("watchdog: first sample never kicks or gives up", "[gcode_viewer][watchdog]") {
@@ -137,4 +147,44 @@ TEST_CASE("watchdog: a viewer shown again counts its stall from zero", "[gcode_v
     d = watchdog_evaluate(last, MAX_STALL_KICKS);
     CHECK_FALSE(d.kick);
     CHECK(d.give_up);
+}
+
+// ============================================================================
+// The viewer restarts the watchdog for new content
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLTestFixture, "watchdog: a new load starts from a fresh baseline",
+                 "[gcode_viewer][watchdog]") {
+    std::string path;
+    for (const auto& prefix : {"", "../", "../../"}) {
+        std::string candidate = std::string(prefix) + "assets/test_gcodes/SimpleCuraTest.gcode";
+        if (std::filesystem::exists(candidate)) {
+            path = candidate;
+            break;
+        }
+    }
+    REQUIRE_FALSE(path.empty()); // run helix-tests from the repo root
+
+    lv_obj_t* viewer = ui_gcode_viewer_create(test_screen());
+    REQUIRE(viewer != nullptr);
+
+    g_load_done = false;
+    ui_gcode_viewer_set_load_callback(
+        viewer, [](lv_obj_t*, void*, bool) { g_load_done = true; }, nullptr);
+
+    // One tick short of giving up on the previous file's stall.
+    gcode_viewer_set_watchdog_track(viewer, {-1, 0, MAX_STALL_KICKS - 1});
+
+    ui_gcode_viewer_load_file(viewer, path.c_str());
+
+    const GcodeViewerWatchdogTrack track = gcode_viewer_watchdog_track(viewer);
+    CHECK(track.prev_cached == NEVER_SAMPLED);
+    CHECK(track.prev_target == NEVER_SAMPLED);
+    CHECK(track.stall_streak == 0);
+
+    REQUIRE(wait_until([] { return g_load_done; }, 30000));
+    ui_gcode_viewer_set_load_callback(viewer, nullptr, nullptr);
+    ui_gcode_viewer_clear(viewer);
+    lv_obj_delete(viewer);
+    process_lvgl(50);
 }
