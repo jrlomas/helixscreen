@@ -11,7 +11,7 @@
 namespace helix::snapmaker {
 
 [[nodiscard]] ChannelStateInfo classify_channel_state(const std::string& state) {
-    // One row per firmware state. Exact-match lookup — unambiguous and reads
+    // One row per firmware state. Exact-match lookup: unambiguous and reads
     // directly off the reference table. Unknown/future states fall through to
     // the prefix/suffix heuristic below so we degrade gracefully rather than
     // silently mis-classify.
@@ -65,7 +65,7 @@ namespace helix::snapmaker {
         add("manual_sta_flushing", {LOAD, 4, false, false, false, false, false});
         add("manual_sta_flush_finish", {LOAD, 4, false, false, false, false, false});
         add("manual_sta_flush_fail", {ERR, -1, false, /*fail=*/true, false, false, false});
-        // manual_sta_finish is a completed manual EXTRUDE, not a load — it ends
+        // manual_sta_finish is a completed manual EXTRUDE, not a load; it ends
         // the op (IDLE) but does NOT set the loaded latch.
         add("manual_sta_finish", {IDLE, -1, /*terminal=*/true, false, false, false, false});
         add("manual_sta_fail", {ERR, -1, false, /*fail=*/true, false, false, false});
