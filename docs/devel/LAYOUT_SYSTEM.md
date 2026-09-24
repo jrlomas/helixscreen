@@ -30,8 +30,8 @@ any theme works with any layout.
 | `standard` | **Complete** | All panels — this is the default UI everyone uses today |
 | `ultrawide` | Not started | Directory doesn't exist yet |
 | `portrait` | **Started** | `print_status_panel.xml`, `print_tune_panel.xml` |
-| `micro` | **Started** | `controls_panel.xml`, `header_bar.xml`, `theme_editor_overlay.xml`, `theme_preview_overlay.xml` |
-| `micro_portrait` | Not started | Directory exists (empty) |
+| `micro` | **Started** | `controls_panel.xml`, `header_bar.xml`, `material_temps_overlay.xml`, `theme_editor_overlay.xml`, `theme_preview_overlay.xml` |
+| `micro_portrait` | **Started** | `material_temps_overlay.xml` |
 | `tiny` | Not started | Directory doesn't exist yet |
 | `tiny_portrait` | Not started | Directory doesn't exist yet |
 
@@ -101,7 +101,7 @@ ui_xml/
 
   portrait/                ← Portrait overrides (print_status_panel.xml, print_tune_panel.xml)
   micro/                   ← Micro landscape overrides (480x272, e.g. Ender 3 V3 KE)
-  micro_portrait/          ← Micro portrait overrides (dir exists, empty)
+  micro_portrait/          ← Micro portrait overrides (material_temps_overlay.xml)
 
   ultrawide/               ← Doesn't exist yet — create it to override for ultrawide!
   tiny/                    ← Tiny landscape overrides (doesn't exist yet)

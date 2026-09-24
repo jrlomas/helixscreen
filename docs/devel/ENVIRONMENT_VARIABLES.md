@@ -2,6 +2,29 @@
 
 This document is a reference for the environment variables HelixScreen reads at runtime, plus the build-time and shell-script variables that surround them. Every `getenv()` call in `src/`, `include/`, the patched LVGL SDL driver, and `scripts/helix-launcher.sh` has an entry here or in [MOCK_ENVIRONMENT_VARIABLES.md](MOCK_ENVIRONMENT_VARIABLES.md) as of the last audit. New vars are added often, so grep `getenv("HELIX_` / `EnvironmentConfig` if something looks missing.
 
+## How `helixscreen.env` is loaded
+
+The launcher (`scripts/helix-launcher.sh`) evaluates `helixscreen.env` from the first
+existing search path (`<install>/config/helixscreen.env`, then `/etc/helixscreen/helixscreen.env`),
+exporting `KEY=VALUE` lines whose variable is not already set. The file is shell-evaluated,
+so values may use `$(...)` and variable expansion, and the same parse answers `--print-env`.
+
+That eval is why ownership is gated: the file is only read when it is owned by root or by
+the user the launcher itself runs as, and carries no group or world write bit. A file whose
+owner passes that check and whose only fault is a write bit is repaired in place to `0644`
+(web updates and deploys ship the file without pinning it) and loaded, with one log line
+saying so. Anything else (a mode the repair cannot settle, an owner that is neither root
+nor the service user) is skipped with a logged warning naming the file, its owner and
+mode, and the fix:
+
+```sh
+chown root:root /etc/helixscreen/helixscreen.env && chmod 644 /etc/helixscreen/helixscreen.env
+```
+
+The launcher continues with defaults rather than exiting, so a mis-placed file costs
+configuration, not the screen. The installer pins the file to `0644` (owned by the install
+user) on every install and update.
+
 ## Quick Reference
 
 | Category | Prefix |
@@ -335,8 +358,9 @@ The name says size, but the value is a resolution: it selects the display mode, 
 |----------|-------|
 | **Values** | Named preset: `micro`, `tiny`, `small`, `medium`, `large`, `xlarge` — or custom `WxH` format (e.g., `480x400`, `1920x1080`) |
 | **Default** | Auto-detected from display hardware |
-| **File** | `src/application/application.cpp` (via `EnvironmentConfig::get_screen_size()`) |
+| **File** | `src/system/cli_args.cpp#parse_screen_size_string` (reached from `src/application/application.cpp` via `EnvironmentConfig::get_screen_size()`) |
 | **Priority** | The `-s` command-line flag takes precedence over this variable |
+| **Case** | Case-insensitive: the value is lowercased before matching, which also normalises the separator, so `1920X1080` and `MEDIUM` parse (`src/system/cli_args.cpp#ascii_lower`) |
 
 Named presets and their resolutions:
 
@@ -361,6 +385,16 @@ HELIX_SCREEN_SIZE=1920x1080 ./build/bin/helix-screen --test
 # In helixscreen.env (persistent):
 HELIX_SCREEN_SIZE=medium
 ```
+
+### `HELIX_IMAGE_CACHE_KB`
+
+Size of LVGL's decoded-image cache. `0` (the built-in default) means no image is ever held between draws: every re-show of a PNG decodes it again. The K1 platform hook exports `2048` because that board measurably gains from caching shipped printer images; the K2 and AD5X measured inside their own run-to-run spread and stay at 0.
+
+| Property | Value |
+|----------|-------|
+| **Values** | kilobytes of decoded-image cache; `0` or unset disables caching |
+| **Default** | `0` (K1 hook: `2048`) |
+| **File** | `src/application/display_manager.cpp#apply_image_cache_env`, exported by `assets/config/platform/hooks-k1.sh` |
 
 ### `HELIX_DPI`
 
@@ -860,41 +894,9 @@ echo "HELIX_TOUCH_CALIBRATE=1" >> ~/helixscreen/config/helixscreen.env
 ```
 The `[TouchDebug]` lines are logged at WARN, so they appear at the default log level — no `-v` needed. Then complete the 3-point wizard and grab a debug bundle (or the log). Composes with `HELIX_TOUCH_CAL_DEBOUNCE` (above) for per-press sampling evidence.
 
-### Touch Jitter Filter
+### Scroll and touch tuning
 
-Suppresses small coordinate jitter from noisy touch controllers (e.g., Goodix GT9xx) that would otherwise cause stationary taps to be misinterpreted as scroll/swipe gestures.
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `HELIX_TOUCH_JITTER` | Dead-zone threshold in pixels. Coordinate changes within this distance are suppressed. | `5` |
-| `HELIX_SCROLL_GUARD` | Enables the post-scroll click guard (default 80 ms cooldown after a scroll ends). | (unset; preset-controlled) |
-| `HELIX_SCROLL_GUARD_COOLDOWN_MS` | Cooldown window for `HELIX_SCROLL_GUARD`, in milliseconds. Clamped to 20–500. | `80` |
-
-**How it works:** When a finger is pressed, the filter records the initial position. Subsequent coordinate reports within the dead zone are snapped back to the last stable position. Once movement exceeds the threshold, the new position becomes the anchor. On release, the last stable position is reported.
-
-**Config file equivalents:**
-- `/input/jitter_threshold` (integer, default `5`, set to `0` to disable)
-- `/input/scroll_guard` (boolean, default `false`; FlashForge AD5M and AD5X presets set it to `true`)
-- `/input/scroll_guard_cooldown_ms` (integer, default `80`, range 20–500 — cooldown window when `scroll_guard` is enabled)
-- `/input/scroll_limit` (integer, default `10`, range 1–20 — pixels before LVGL commits to scrolling)
-- `/input/scroll_throw` (integer, default `25`, range 5–50 — scroll momentum decay; higher = faster stop)
-
-Migration history: `jitter_threshold` was 15 before config v3, then reset to 5 in the v2→v3 migration because the larger dead zone added perceptible drag to intentional gestures. The filter is cheap enough to stay on by default; most users never touch it.
-
-**Example:**
-```bash
-# Increase threshold for a very noisy touchscreen
-HELIX_TOUCH_JITTER=25 ./build/bin/helix-screen
-
-# Disable the jitter filter entirely
-HELIX_TOUCH_JITTER=0 ./build/bin/helix-screen
-
-# Force the post-scroll click guard on for a non-FlashForge panel
-HELIX_SCROLL_GUARD=1 ./build/bin/helix-screen
-
-# Stretch the post-scroll cooldown if 80 ms isn't enough for your controller
-HELIX_SCROLL_GUARD=1 HELIX_SCROLL_GUARD_COOLDOWN_MS=150 ./build/bin/helix-screen
-```
+The tuning knobs for tap-vs-scroll feel are config keys, not env vars: `/input/scroll_limit` (pixels before LVGL commits to scrolling, default 10, range 1-20) and `/input/scroll_throw` (momentum decay, default 25, range 5-50), both applied by `DisplayManager::configure_scroll()` at startup and changeable from **Settings > System > Touch & Input** (`scroll_limit` only). `/input/long_press_time` is the live-applied companion. See `docs/user/CONFIGURATION.md` § Input Settings for the full list.
 
 ---
 
@@ -1010,7 +1012,7 @@ HELIX_SSAO=0 ./build/bin/helix-screen --test --gcode-file model.gcode -vv &
 - **Silhouette outline:** 1px darkened border on the alpha boundary of the model for edge definition
 
 **Performance.** The outline pass is ~2 ms per cache revalidation, measured on a
-real AD5M. The antialiasing is not minimal and this doc used to claim it was:
+real AD5M. The antialiasing is not minimal:
 Wu's algorithm measures about **6.1x** the aliased rasterization cost
 (`tests/unit/test_gcode_raster_bench.cpp`, run with
 `./build/bin/helix-tests "[raster_bench]"`). On the 135,197-segment test plate
@@ -1056,6 +1058,16 @@ Audible floor for one theme note on the PWM sysfs buzzer backend (ad5m/ad5m-br/a
 # Rig tuning: stretch the audible floor
 HELIX_PWM_MIN_NOTE_MS=35 ./build/bin/helix-screen
 ```
+
+### `HELIX_ALSA_KEEPALIVE`
+
+Overrides the ALSA backend's idle-clock detection. Detection keeps the card clock running while idle on HDMI, iec958 and S/PDIF devices, because those hand the clock to a receiver that has to re-acquire it before emitting anything; every other device parks the clock when idle. Set `1` to force keep-alive, `0` to force parking, on a device the detection classifies wrong.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `1` (keep clock alive) / `0` (park when idle); any other non-empty value counts as `1` |
+| **Default** | unset - per-device detection |
+| **File** | `src/system/alsa_sound_backend.cpp`; detection in `include/alsa_clock_keepalive.h#device_needs_clock_keepalive` |
 
 ### `HELIX_JZ_*` (jz_pwm rig tuning)
 

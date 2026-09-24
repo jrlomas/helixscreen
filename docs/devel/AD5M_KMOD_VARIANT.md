@@ -64,8 +64,8 @@ $(DESTDIR)/opt/helixscreen/
 │   ├── sounds/                # PWM-tone only on AD5M
 │   └── config/
 │       ├── printer_database.json
-│       ├── presets/{ad5m,ad5m_pro,ad5m_zmod,ad5m_pro_zmod}.json
-│       ├── print_start_profiles/ad5m.json
+│       ├── presets/                  # every platform preset, ad5m*.json included
+│       ├── print_start_profiles/     # every profile, ad5m.json included
 │       └── platform/hooks-ad5m-kmod.sh
 └── certs/ca-certificates.crt  # only if built with `make ad5m-docker`
 ```

@@ -41,15 +41,35 @@ Three modes control how far the print head moves per tap. Toggle between them us
 | **Coarse** | 1mm | 10mm | General positioning, moving to a specific area |
 | **Turbo** | 10mm | 50mm | Rapid movement across the full build plate |
 
+Those distances are the defaults. You can set your own in the Motion settings (see below), and the table above then shows whatever you configured.
+
 The Z-axis buttons on the right follow the same mode — their labels update to show the current step sizes.
 
 > **Tip:** Your selected jog mode is remembered between sessions. If you frequently do calibration work, leave it on Fine; for everyday use, Coarse is the default.
 
 ---
 
+## Motion Settings
+
+Besides the distances, the jog pad's own speed is adjustable. There are two places to reach the settings, and both open the same panel:
+
+- the **cog icon** in the Motion screen's header, next to the title (hidden on small screens - use the Settings path there)
+- **Settings > Printing > Motion**
+
+| Setting | What It Does |
+|---------|--------------|
+| **Jog Speed XY** | How fast the toolhead travels on X/Y taps, in mm/s. The slider tops out at what the printer itself allows - its reported maximum feedrates - so you cannot ask for more than the machine will do. If you stored a speed and the printer later reports a lower ceiling (a firmware change, a different printer), the stored choice is kept but applied at the new ceiling. |
+| **Jog Speed Z** | Same, for the Z axis. |
+| **Fine / Coarse / Turbo distances** | The inner- and outer-ring distance for each of the three jog modes. Each distance is tapped in on a keypad; the inner and outer values of a mode cannot cross. |
+| **Reset Distances** | Puts every distance back to the defaults shown in the table above. Asks for confirmation first. |
+
+---
+
 ## Z-Axis Controls
 
 The right column has four Z buttons (two large steps and two small steps, up and down) with a label between them. The label reads either **Bed** or **Print Head** depending on your printer's kinematics — on bed-slinger printers the bed is what moves in Z, while on CoreXY and delta printers the print head moves. The arrow direction always reflects whether the nozzle is moving closer to or farther from the bed, so "up" always means more clearance.
+
+Z jogs stop at the axis limits, just like X and Y: a move that would run past the top or bottom is trimmed to end at the limit, and a one-time warning appears so you know you have reached it.
 
 ---
 

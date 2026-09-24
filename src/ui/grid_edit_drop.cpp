@@ -15,14 +15,21 @@ DropResolution resolve_drop(const DropInput& in, const GridLayout& occupancy) {
         in.page_index != in.origin_page ? DropOutcome::ReturnToOrigin : DropOutcome::Cancel;
 
     if (cross_page_drop_creates_page(in.page_index, in.page_count, in.has_next_page_slot,
-                                     in.past_right_border)) {
+                                     in.past_right_border, in.past_left_border)) {
         DropResolution created;
         created.outcome = DropOutcome::CreatePage;
         if (on_next_page_slot) {
             created.col = in.target_col;
             created.row = in.target_row;
+        } else if (in.past_left_border) {
+            // The widget sits past the first page's left border, and the page
+            // this creates lands before it. The border decides, not the page
+            // index: a single page is both first and last.
+            created.prepend_page = true;
+            created.col = 0;
+            created.row = std::max(in.target_row, 0);
         } else {
-            // From the last page the widget sits past the right border.
+            // The widget sits past the last page's right border.
             created.col = occupancy.cols() - in.colspan;
             created.row = std::max(in.target_row, 0);
         }

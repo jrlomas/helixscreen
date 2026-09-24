@@ -3139,7 +3139,7 @@ TEST_CASE("CFS flat-schema bay with no identity is not a fingerprint signal",
 
     // Bay 0 occupied but carrying no identity ("None" is this module's spelling
     // of absent): an empty fingerprint, which must not touch the baseline or
-    // clear — the contract the stock schema's sentinels hold. A frame that
+    // clear: the contract the stock schema's sentinels hold. A frame that
     // could not read the tag must not mask the swap the next good read reports.
     json unreadable = make_flat_box("None", "None", "None", "None");
     rig.poll(unreadable);
@@ -3147,7 +3147,7 @@ TEST_CASE("CFS flat-schema bay with no identity is not a fingerprint signal",
     CHECK(CfsTestAccess::get_override(*rig.backend, 0).has_value());
     CHECK(!rig.api->mock_get_db_value("lane_data", "lane1").is_null());
 
-    // The next good read matches the baseline — no clear, no corrupted state.
+    // The next good read matches the baseline: no clear, no corrupted state.
     rig.poll(box1);
     CHECK(CfsTestAccess::get_override(*rig.backend, 0).has_value());
 }
@@ -3175,7 +3175,7 @@ TEST_CASE("CFS flat-schema identity writeback echo does not self-wipe the overri
     REQUIRE(staged.has_value());
     REQUIRE(staged->material == "asa-cf");
 
-    // Polls before the echo lands read the OLD identity — unchanged, no clear.
+    // Polls before the echo lands read the OLD identity: unchanged, no clear.
     rig.poll(box_before);
     REQUIRE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
 
@@ -3208,7 +3208,7 @@ TEST_CASE("CFS flat-schema dispatch failure drops the echo expectation",
             "PLA|Polymaker|PolyLite Orange|FF5500");
 
     // User assigns a new identity; the _BOX_SLOT_SET push fails, so no echo is
-    // ever coming. The override still stages — the push is best-effort.
+    // ever coming. The override still stages; the push is best-effort.
     SlotInfo edit;
     edit.material = "asa-cf";
     edit.brand = "Polymaker";
@@ -3308,7 +3308,7 @@ TEST_CASE("CFS flat-schema two edits in one poll window both survive their echoe
     rig.poll(make_flat_box("ASA-CF", "Polymaker", "PolyLite ASA", "#1A1A1A"));
     REQUIRE(CfsTestAccess::get_override(*rig.backend, 0).has_value());
 
-    // Second write's echo — the identity the user last chose.
+    // Second write's echo: the identity the user last chose.
     rig.poll(make_flat_box("PETG", "Bambu", "Basic Green", "#2B2B2B"));
     auto settled = CfsTestAccess::get_override(*rig.backend, 0);
     REQUIRE(settled.has_value());
@@ -3332,7 +3332,7 @@ TEST_CASE("CFS restart compares against the fingerprint the record carried",
 
     // A record as a session running older code left it: a user override with
     // no fingerprint. Session 1 boots on it, observes the bay, and the
-    // observation must persist into the record — two backends over one mock
+    // observation must persist into the record: two backends over one mock
     // DB stand in for two app lifetimes.
     helix::ams::FilamentSlotOverride saved;
     saved.brand = "Polymaker";

@@ -955,3 +955,28 @@ TEST_CASE("should_stop_collector_on_retirement stops unless the printer took the
         REQUIRE(MoonrakerManager::should_stop_collector_on_retirement(PrintJobState::ERROR));
     }
 }
+
+// ============================================================================
+// Klippy leaving READY ends the pre-print window
+//
+// A verify_heater shutdown mid-PRINT_START leaves print_stats reporting PAUSED
+// on some firmware (Snapmaker U1), and should_stop_print_collector() spares
+// every state that has a job, so the print-state observer alone keeps the
+// collector posting ETA updates for a print that can no longer run.
+// ============================================================================
+
+TEST_CASE("should_stop_collector_on_klippy_state stops on shutdown and error",
+          "[application][print_start_collector]") {
+    SECTION("a dead Klipper ends the pre-print window whatever print_stats says") {
+        REQUIRE(MoonrakerManager::should_stop_collector_on_klippy_state(KlippyState::SHUTDOWN));
+        REQUIRE(MoonrakerManager::should_stop_collector_on_klippy_state(KlippyState::ERROR));
+        // The print-state axis alone would keep it running in exactly this case.
+        REQUIRE_FALSE(MoonrakerManager::should_stop_print_collector(PrintJobState::PAUSED, false));
+    }
+
+    SECTION("ready and startup leave the collector alone") {
+        REQUIRE_FALSE(MoonrakerManager::should_stop_collector_on_klippy_state(KlippyState::READY));
+        REQUIRE_FALSE(
+            MoonrakerManager::should_stop_collector_on_klippy_state(KlippyState::STARTUP));
+    }
+}

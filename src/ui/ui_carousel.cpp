@@ -71,14 +71,16 @@ void apply_input_flags(CarouselState* state) {
     const bool multi_page = count > 1;
     const bool bubble = !multi_page || state->bubble_events;
 
+    const int reachable = reachable_tile_count(*state);
     if (state->scroll_container) {
-        const bool swipe = swipe_enabled(state->swipe, count);
+        // A reachable tile past the last page is somewhere to swipe to, so the
+        // strip scrolls for it as for a page.
+        const bool swipe = swipe_enabled(state->swipe, std::max(count, reachable));
         lv_obj_update_flag(state->scroll_container, LV_OBJ_FLAG_SCROLLABLE, swipe);
         lv_obj_set_scroll_dir(state->scroll_container, swipe ? LV_DIR_HOR : LV_DIR_NONE);
         lv_obj_update_flag(state->scroll_container, LV_OBJ_FLAG_CLICKABLE, multi_page);
         lv_obj_update_flag(state->scroll_container, LV_OBJ_FLAG_EVENT_BUBBLE, bubble);
     }
-    const int reachable = reachable_tile_count(*state);
     for (size_t i = 0; i < state->real_tiles.size(); ++i) {
         lv_obj_t* tile = state->real_tiles[i];
         lv_obj_update_flag(tile, LV_OBJ_FLAG_CLICKABLE, multi_page);

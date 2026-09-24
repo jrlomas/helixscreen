@@ -210,7 +210,7 @@ Set via `wrangler secret put`:
 ### Release-Version Gate
 
 `INGEST_API_KEY` is compiled into every binary and the repo is public, so anything
-built from source — a fork, a local build, a private branch — posts to the same
+built from source - a fork, a local build, a private branch - posts to the same
 endpoint. Those reports can never be symbolicated: no `.sym` for that build exists
 in R2 or on a GitHub release, and none ever will.
 
@@ -227,10 +227,9 @@ tag" comes back as `200` + an empty array, which is distinguishable from a
 permission or transport failure. Every other outcome **fails open** and files the
 issue — a GitHub outage must never silently drop a real crash.
 
-Prompted by #1240: a `v0.1.4` report from a Pi. `VERSION.txt` has never held that
-value (history runs 1.1.0 → 0.9.0 … 0.13.x → 0.95.x … 0.99.x), and the reported
-27 MB text segment doesn't match any release build, so it came from an
-independently compiled binary.
+Reports from independently compiled binaries do arrive (#1240: a `v0.1.4` report
+from a Pi, a value `VERSION.txt` has never held, with a 27 MB text segment that
+matches no release build).
 
 ### Deduplication
 
@@ -256,20 +255,19 @@ same source.
 Signal and PC are deliberately **not** in the key. Both move with the
 architecture: the same poisoned read is `SIGSEGV` at `0xa5a5a6ad` on ARM and
 `SIGBUS` at `0x0` on MIPS (an unaligned address error traps before translation,
-so nothing lands in `si_addr`), at a different PC on each. Keying on those filed
-one use-after-free as four issues — #1347, #1356, #1357, #1361, all v0.99.116,
-all `gcode_viewer_occluder_delete_cb`.
+so nothing lands in `si_addr`), at a different PC on each. Keying on those
+splits one defect across an issue per signal/PC combination (#1347, #1356,
+#1357, #1361: all v0.99.116, all `gcode_viewer_occluder_delete_cb`).
 
 Version stays in the key so a defect that survives into the next release files
 fresh rather than reviving a closed issue.
 
 When the top frame has no symbol — no map published for that build, or a fault
-inside a shared library — the key falls back to the older
+inside a shared library - the key falls back to the symbol-less
 `SIGSEGV/0.99.116/0x2a00c8` shape.
 
-Because the key needs the symbol, backtrace resolution now runs *before* the
-dedup search, so a duplicate report pays for a symbol fetch and parse it used to
-skip.
+Because the key needs the symbol, backtrace resolution runs *before* the
+dedup search, so a duplicate report pays for the symbol fetch and parse as well.
 
 ### GitHub Issue Format
 
@@ -334,7 +332,7 @@ lv_xml_register_event_cb(nullptr, "on_crash_report_dismiss", on_dismiss_cb);
 ### Running Tests
 
 ```bash
-make test-run                              # All tests
+make unit-sweep                            # All unit tests
 ./build/bin/helix-tests "[crash_reporter]" # Just crash reporter
 ```
 
@@ -381,7 +379,7 @@ This downloads `.sym` files from the releases R2 bucket and uses `addr2line` to 
 Not all backtrace frames come from the main binary — some are in shared libraries (libc, libpthread, etc.). The crash-worker's symbol resolver (`server/crash-worker/src/symbol-resolver.ts`) detects these automatically:
 
 - After computing `file_offset = address - load_base`, if the offset is negative or exceeds the last known symbol address (+ 1MB margin), the frame is labeled **`<shared library>`** instead of being resolved against the main binary's symbol table.
-- This prevents garbage symbol names that previously appeared when libc addresses (e.g., `0x7fff80012345`) were force-matched to the nearest binary symbol.
+- Without this, libc addresses (e.g., `0x7fff80012345`) get force-matched to the nearest binary symbol and produce garbage symbol names.
 - The Python telemetry tool (`scripts/telemetry-crashes.py`) has equivalent logic via `is_shared_lib_addr()`.
 
 Shared library frames are expected in crash backtraces — they indicate the crash unwind passed through system code (e.g., `__libc_start_main`, signal handlers).
@@ -390,6 +388,6 @@ Shared library frames are expected in crash backtraces — they indicate the cra
 
 ## Future Enhancements
 
-- **~~Rate limiting~~**: Done — Worker uses CF Rate Limiting binding (5 requests/IP/60s).
+- **Rate limiting**: handled by the Worker's CF Rate Limiting binding (5 requests/IP/60s).
 - **Printer/Klipper info**: Populate `printer_model` and `klipper_version` if Moonraker connection is available at crash report time.
 - **Input sanitization**: Validate/truncate crash data fields in the worker before creating GitHub issues.

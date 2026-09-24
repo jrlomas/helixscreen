@@ -26,10 +26,12 @@ template <bool Suppressible, typename M> constexpr auto field(M member) {
 /// and firmware restating one is not a new fact. The rest are readings in
 /// their own right and pass through untouched.
 constexpr auto FIELD_ROSTER = std::make_tuple(
-    // Presence is sensed. No backend writes it and no write can echo it.
-    field<false>(&Observation::present), field<true>(&Observation::color_rgb),
-    field<true>(&Observation::color_name), field<true>(&Observation::material),
-    field<true>(&Observation::brand), field<true>(&Observation::spool_name),
+    // Presence and docking are sensed. No backend writes either and no write
+    // can echo them.
+    field<false>(&Observation::present), field<false>(&Observation::tool_docked),
+    field<true>(&Observation::color_rgb), field<true>(&Observation::color_name),
+    field<true>(&Observation::material), field<true>(&Observation::brand),
+    field<true>(&Observation::spool_name),
     // No AMS firmware carries a branded catalog product, so nothing echoes
     // it: a non-empty value can only have come from a user pick, and the
     // record path is the only thing that files one.

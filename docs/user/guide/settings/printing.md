@@ -97,10 +97,16 @@ As on Machine Limits, each value is shown in a tappable field — **tap it to ty
 
 Configure preheat presets for different filament materials (PLA, PETG, ABS, TPU, etc.). Each material can have:
 
-- **Nozzle Temperature** — Target extruder temperature
+- **Nozzle Temperature** - Target extruder temperature. The field clamps to the range your printer and nozzle allow, so it cannot be set past what the hardware supports.
 - **Bed Temperature** — Target bed temperature
 - **Preheat Macro** — A Klipper macro to run when preheating this material
 - **Macro Handles Heating** — If enabled, the macro is responsible for setting temperatures. If disabled, HelixScreen sets temperatures first, then runs the macro as an additional step.
+
+---
+
+## Motion
+
+Jog speeds and the per-mode move distances for the jog pad. See [Motion](../motion.md#motion-settings) for what each setting does.
 
 ---
 

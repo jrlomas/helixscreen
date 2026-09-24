@@ -1126,6 +1126,10 @@ void PrinterState::set_kinematics(const std::string& kinematics) {
     }
     last_kinematics_ = kinematics;
 
+    // On delta printers, axes cannot be homed individually.
+    capabilities_state_.set_has_individual_xyz_homing(kinematics != "delta" &&
+                                                      kinematics != "rotary_delta");
+
     // Determine if the bed moves on Z based on kinematics type:
     // - CoreXY: bed typically moves on Z (Voron 0/Trident, Bambu, AD5M, etc.)
     //   Exception: Voron 2.4 and similar with quad_gantry_level have gantry-Z

@@ -156,6 +156,7 @@
   <translation tag="Add Vendor" zh="添加供应商"/>
   <translation tag="Add Widget" zh="添加小组件"/>
   <translation tag="Add custom filament" zh="添加自定义耗材"/>
+  <translation tag="Add page" zh="添加页面"/>
   <translation tag="Added to Spoolman" zh="已添加到 Spoolman"/>
   <translation tag="Address" zh="地址"/>
   <translation tag="Adjust screen brightness level" zh="调整屏幕亮度"/>
@@ -3226,7 +3227,7 @@
   <translation tag="{} heater turned off" zh="{} 加热器已关闭"/>
   <translation tag="{} is asking to connect to this printer." zh="{} 请求连接到此打印机。"/>
   <translation tag="{} is blocked — manual intervention required" zh="{} 被阻塞 — 需要手动干预"/>
-  <translation tag="{} is feeding the current print. Clear it after the print ends."/>
+  <translation tag="{} is feeding the current print. Clear it after the print ends." zh="{} 正在为当前打印供料。请在打印结束后清除。"/>
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." zh="{} 已安装，但其备用料盘切换已关闭，因此不会自动切换。"/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." zh="{} 已安装，但无法读取其备用料盘设置 - 请勿指望自动切换。"/>
   <translation tag="{} is not set up on this printer" zh="{} 未在此打印机上设置"/>

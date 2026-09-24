@@ -2041,8 +2041,9 @@ TEST_CASE_METHOD(LVGLTestFixture, "a tool changer senses docking and declares no
 
     const auto lane = lane_sources(harness.lane(0));
     REQUIRE(lane.sensed.has_value());
-    REQUIRE(lane.sensed->present.has_value());
-    CHECK(*lane.sensed->present == true);
+    REQUIRE(lane.sensed->tool_docked.has_value());
+    CHECK(*lane.sensed->tool_docked == true);
+    CHECK_FALSE(lane.sensed->present.has_value());
 
     // klipper-toolchanger reports whether a tool is docked and nothing about
     // what it holds. initialize_tools() puts the tool's own name in
@@ -2056,8 +2057,9 @@ TEST_CASE_METHOD(LVGLTestFixture, "a tool changer senses docking and declares no
 
     const auto second = lane_sources(harness.lane(1));
     REQUIRE(second.sensed.has_value());
-    REQUIRE(second.sensed->present.has_value());
-    CHECK(*second.sensed->present == true);
+    REQUIRE(second.sensed->tool_docked.has_value());
+    CHECK(*second.sensed->tool_docked == true);
+    CHECK_FALSE(second.sensed->present.has_value());
     CHECK_FALSE(second.vendor_cache.has_value());
 }
 
@@ -2086,18 +2088,19 @@ TEST_CASE_METHOD(LVGLTestFixture, "a vacated dock retracts a tool changer's pres
 
     const auto docked = lane_sources(harness.lane(0));
     REQUIRE(docked.sensed.has_value());
-    REQUIRE(docked.sensed->present.has_value());
-    CHECK(*docked.sensed->present == true);
+    REQUIRE(docked.sensed->tool_docked.has_value());
+    CHECK(*docked.sensed->tool_docked == true);
 
     const auto carriage = lane_sources(harness.lane(1));
     REQUIRE(carriage.sensed.has_value());
-    REQUIRE(carriage.sensed->present.has_value());
-    CHECK(*carriage.sensed->present == true);
+    REQUIRE(carriage.sensed->tool_docked.has_value());
+    CHECK(*carriage.sensed->tool_docked == true);
 
     const auto vacated = lane_sources(harness.lane(2));
     REQUIRE(vacated.sensed.has_value());
-    REQUIRE(vacated.sensed->present.has_value());
-    CHECK(*vacated.sensed->present == false);
+    REQUIRE(vacated.sensed->tool_docked.has_value());
+    CHECK(*vacated.sensed->tool_docked == false);
+    CHECK_FALSE(vacated.sensed->present.has_value());
     CHECK_FALSE(vacated.vendor_cache.has_value());
 }
 
@@ -2128,10 +2131,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "an override never becomes a tool changer's ve
     REQUIRE(harness->get_slot_info(0).material == "ABS");
 
     const auto lane = lane_sources(harness.lane(0));
-    // The presence record is the proof that the translation ran on this frame.
+    // The dock record is the proof that the translation ran on this frame.
     REQUIRE(lane.sensed.has_value());
-    REQUIRE(lane.sensed->present.has_value());
-    CHECK(*lane.sensed->present == true);
+    REQUIRE(lane.sensed->tool_docked.has_value());
+    CHECK(*lane.sensed->tool_docked == true);
     CHECK_FALSE(lane.vendor_cache.has_value());
 }
 

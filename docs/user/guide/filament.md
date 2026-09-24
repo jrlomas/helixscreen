@@ -61,6 +61,14 @@ This works whether or not you have an AMS system. If a slot is left empty (no ma
 
 For manual control without macros, use the **Extrude** and **Retract** buttons on the extrusion widget with selectable amounts (5mm, 10mm, 25mm) and speeds.
 
+### When no preheat happens first
+
+Loading or unloading normally heats the nozzle to the material's temperature before the operation starts. HelixScreen skips that preheat when something else already handles the heat, so the nozzle is not heated twice:
+
+- your filament system heats on its own when it loads,
+- your configured Load/Unload macro heats the hotend itself, or
+- **Allow cold load/unload** is on (Settings > Safety & Notifications).
+
 ### What happens to the nozzle afterward
 
 Loading or unloading heats the nozzle to material temperature. Two minutes after the operation finishes, HelixScreen turns the extruder heater back off — the delay lets you run several operations in a row without the nozzle cooling in between, and a running print is never touched.
@@ -84,7 +92,7 @@ The left side shows all your filament slots in a visual tray layout:
 - **Status badge** — Slot number with color-coded background (green = loaded, gray = empty, red = error)
 - **Tool badge** — If a slot is assigned to a specific extruder tool (T0, T1, etc.), a badge appears in the corner
 
-Below the slot grid, a **filament path diagram** shows the routing from slots through the hub/selector to the toolhead. This updates in real time during load/unload operations, including eject animations when retracting filament at the slot sensor.
+Below the slot grid, a **filament path diagram** shows the routing from slots through the hub/selector to the toolhead. This updates in real time during load/unload operations, including eject animations when retracting filament at the slot sensor. On the Anycubic ACE the path reads the hub and toolhead sensors the driver publishes, so a strand parked partway down the tube is drawn where it actually sits - short of the hub - rather than back at the spool.
 
 Above the slot view, a **mini temperature graph** shows live nozzle, bed, and chamber temperatures (when a chamber sensor or heater is present) so you can monitor heating during filament operations without switching panels.
 
@@ -93,7 +101,7 @@ Above the slot view, a **mini temperature graph** shows live nozzle, bed, and ch
 When a slot runs into trouble, HelixScreen shows it visually so you don't have to dig through logs:
 
 - **Error dot** — A small colored dot appears at the corner of a slot's spool when that slot reports a problem. **Red** means an error (jam, runout, hardware fault); **amber** means a warning. With animations enabled, the dot gently pulses to draw your eye.
-- **Buffer-health tint** — On systems with a buffer between the slots and the toolhead (AFC TurtleNeck, or Happy Hare with sync feedback), the hub on the filament path diagram changes color as the buffer drifts toward a fault: green when healthy, yellow when approaching the fault threshold, and red when at or past it.
+- **Buffer-health tint**: On systems with a buffer between the slots and the toolhead (an AFC buffer - a TurtleNeck, or a pressure-sensor buffer such as an `FPS_PSF` - or Happy Hare with sync feedback), the hub on the filament path diagram changes color as the buffer drifts toward a fault: green when healthy, yellow when approaching the fault threshold, and red when at or past it.
 
 **To recover:**
 
@@ -138,9 +146,12 @@ Some steps only apply to how your machine is set up. A step your system never re
 | Button | Action |
 |--------|--------|
 | **Bypass** (toggle) | Feed filament directly to the extruder, bypassing the AMS. Shown when your hardware supports bypass, or when you turn on **Enable Bypass Controls** - see [When Bypass Doesn't Appear](#when-bypass-doesnt-appear). The toggle is guarded: it can't be changed while a job holds the machine (a "Bypass cannot be changed while printing" warning appears), if a lane's filament is loaded it is unloaded first before bypass engages, and where a hardware sensor owns the bypass the toggle only reports that the sensor is in control. |
-| **Unload** | Retract the currently loaded filament back to its slot |
+| **Load** | Load a slot's filament into the toolhead. On the Snapmaker U1 it opens a picker instead - see below |
+| **Unload** | Retract the currently loaded filament back to its slot. On the Snapmaker U1 it opens a picker instead - see below |
 | **Reset** | Reset the AMS system state (useful after jams or errors) |
 | **Settings** | Open the AMS Management overlay for advanced controls |
+
+**Loading or unloading several heads at once (Snapmaker U1).** The U1 has a toolhead per slot, so **Load** and **Unload** there open a picker listing every head with what it holds - the material and whether it is loaded, ready to load, or empty. Unload comes with the loaded heads already ticked; Load comes with the empty-but-fed heads ticked. Tick the heads you want and confirm: if a ticked head turns out not to take the operation, it is skipped with a warning naming the head and the reason, and the rest continue. The U1 runs its own batch command, which preheats the next head while the current one finishes.
 
 ### When Bypass Doesn't Appear
 
@@ -148,7 +159,7 @@ Some filament systems do not report a bypass position. On those, the Bypass togg
 
 | System | Reason |
 |--------|--------|
-| Anycubic ACE Pro | The ACE protocol has no bypass |
+| Anycubic ACE Pro | The ACE protocol has no bypass position - unless your rig has the fifth-spool master switch (see below) |
 | Snapmaker U1 | Each toolhead has its own path, so there is nothing to bypass |
 | Tool changers (generic Klipper) | Each tool has its own path |
 | QIDI Box | Not implemented in the QIDI backend yet |
@@ -160,11 +171,13 @@ To show the controls anyway, turn on **Enable Bypass Controls** in Settings > Ha
 
 With it on, the external spool appears on the filament path beside your slots. Tap it to set material, color, and brand, or to link a Spoolman spool.
 
+**The ACE Pro's fifth spool is a working bypass.** The ACE protocol has no bypass position of its own, but some rigs have a master switch that turns the whole ACE path off so a fifth spool can be fed to the toolhead by hand. Where the driver publishes that switch, HelixScreen drives it as the bypass: the switch being off *is* bypass engaged. There is no firmware command for it, so the switch is thrown by macros - define `ACE_BYPASS_ON` and `ACE_BYPASS_OFF` on your printer and the Bypass toggle works, with the usual unload-first and never-during-print guards. A rig without the switch, or with only one of the two macros, reports no bypass and the table above applies.
+
 **On Happy Hare, the bypass itself also works.** `MMU_SELECT_BYPASS` does not check `has_bypass` - it deselects the gear steppers and reports gate -2 either way. Turn the setting on if your MMU has a bypass but reports `has_bypass: 0`. That happens with `mmu_vendor: Other` (which includes a QIDI Box driven through Happy Hare) and with a type-A selector whose bypass offset is not calibrated yet.
 
 **On the other systems, the setting changes only what HelixScreen displays.** There is no bypass command to send, so the Bypass toggle reports that the operation is not supported. Use the external spool to record the material and color you loaded by hand: [filament tracking](filament-tracking.md), spool presets, and purge temperatures all read from it. Load and unload with your own macros or from the Extrusion panel.
 
-**On the systems where bypass genuinely engages** (AFC, AD5X IFS, Happy Hare, Creality CFS), it also quiets the pre-print filament checks. Filament fed through the bypass never passes through a slot, so a print started that way would otherwise be flagged for every tool it uses. See [Pre-Print Filament Check](print-monitoring.md#pre-print-filament-check). On the display-only systems above nothing is suppressed, because bypass never actually engages there.
+**On the systems where bypass genuinely engages** (AFC, AD5X IFS, Happy Hare, Creality CFS, and an ACE Pro with its fifth-spool switch), it also quiets the pre-print filament checks. Filament fed through the bypass never passes through a slot, so a print started that way would otherwise be flagged for every tool it uses. See [Pre-Print Filament Check](print-monitoring.md#pre-print-filament-check). On the display-only systems above nothing is suppressed, because bypass never actually engages there.
 
 **Always Show Bypass Spool**, in the same place, keeps the external spool on the filament path while bypass is disengaged. It applies to AFC systems only (Box Turtle, OpenAMS), which report a bypass sensor whether or not one is wired, so the spool is otherwise hidden until bypass is engaged.
 
@@ -193,6 +206,9 @@ Both entries grey out for the same reasons the Filament panel's buttons do: whil
 | **Spool Info** | Open the filament editor to view or change material, color, vendor, and remaining weight. |
 | **Select Spool** | Assign a saved Spoolman spool to this slot. Only shown when Spoolman is configured. |
 | **Scan QR Code** | Scan a filament QR code to auto-fill spool data. Only shown when Spoolman is configured. |
+| **Clear Spool** | Erase everything HelixScreen and the printer's firmware remember about this slot: your saved edits, the slot's spool details, and the Spoolman link, plus the printer's own record where the firmware lets it be wiped (Happy Hare's whole gate map entry, the QIDI Box's stored slot values). What is left afterwards is only what the hardware can physically read - on the ACE, the Snapmaker U1 and a stock CFS the firmware's record cannot be wiped (read-only, or the RFID tag is simply re-read), so the slot repopulates from it. Shown whenever the slot carries an assignment, loaded or not. Refused on the lane feeding an active, paused or preparing print - the button greys out and says why. |
+
+> **Note:** On a Happy Hare printer that fills its gates from Spoolman (Spoolman pull mode), the firmware side is refused for both edits and Clear Spool, and the reason names Spoolman: make colour, material and spool changes in Spoolman itself. Clear Spool still clears HelixScreen's own copy, so remove the spool in Spoolman to finish the job.
 
 On systems that support **Endless Spool**, the context menu also includes:
 
@@ -231,15 +247,26 @@ Tap **Spool Info** in the slot context menu to open the filament editor. This le
 
 Tap **Save** to apply your changes, or **Cancel** to discard them.
 
+> **Tip: favourite filaments.** Tap the star on any row in the filament catalog (the brand and material picker). Starred filaments lead the vendor list in a **Favorites** section and float to the top of their own vendor's list too, on every printer. Tap the star again to unstar.
+
 > **Material names with punctuation or spaces.** On AFC and Happy Hare the material is stored
 > by the firmware itself, so the name has to be something Klipper accepts. Names like `PLA+`,
-> `PA6-CF`, `PETG-CF` and `Silk PLA` all save correctly. On older versions they were dropped
-> on the way through - the save reported success and the material never reached the firmware,
-> so it read back blank or kept the old value. If you have a Spoolman spool whose material
-> name contains something HelixScreen cannot send (a semicolon, a quote, a backslash, or a
-> non-English character), the save now tells you so: everything else - color, weight, Spoolman
+> `PA6-CF`, `PETG-CF` and `Silk PLA` all save correctly. If a Spoolman spool's material name
+> contains something HelixScreen cannot send (a semicolon, a quote, a backslash, or a
+> non-English character), the save tells you so: everything else - color, weight, Spoolman
 > link - is still saved, and renaming the material in Spoolman using letters, digits, spaces
 > and `+ - _ . ( ) /` fixes it.
+
+### Where Lane Information Comes From
+
+Every piece of information on a lane - color, material, brand, spool name, remaining weight - can arrive from more than one place: you edit it on the screen, the printer's firmware reports it, or a linked Spoolman spool carries it. HelixScreen remembers which source said what, and the more trustworthy source for each field wins, rather than whichever wrote last:
+
+- **A color you pick yourself beats the linked spool's.** The spool record says what the vendor sells; your pick says what is actually loaded in that lane right now. The color name you chose travels with it, so a swatch is never labelled with a different color's name.
+- **A spool linked from Spoolman owns its brand, material and spool name.** While Spoolman is unreachable those fields are read-only in the editor - the picker shows the spool's own values instead of letting you type over what the server will replace anyway. The spool's remaining weight also comes from the server.
+- **Your edits are marked as yours in the record the printer shares with other tools**, so Mainsail, OrcaSlicer or a macro refreshing that record does not wipe what you entered.
+- **A reading that leaves a field out leaves it standing.** A status frame that says nothing about, say, brand keeps whatever another source already knew.
+
+**Swapping a spool is noticed, even with the screen off.** Each lane remembers a fingerprint of the spool it held, so a spool swapped while HelixScreen was not running clears the old spool's edits instead of painting them onto the new one. This works on the QIDI Box, on the Creality CFS (including community Kalico-based CFS setups), and - by RFID tag - on the Snapmaker U1.
 
 ### Tool Mapping
 

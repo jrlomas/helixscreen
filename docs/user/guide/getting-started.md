@@ -82,7 +82,7 @@ The first time you launch HelixScreen, a setup wizard guides you through configu
 |------|-------------|
 | **Touch Calibration** | Resistive touchscreen detected (not yet calibrated) |
 | **Language Selection** | Language not previously set on this device |
-| **Printer Identification** | Printer model auto-detection suggests options (K1, K2, etc.) |
+| **Printer Identification** | Printer model auto-detection has candidates to confirm (see below) |
 | **AMS / Filament System** | An AMS, CFS, Happy Hare, or other filament system is detected |
 | **LED Configuration** | Addressable LED strips (NeoPixel, RGB) are discovered |
 | **Filament Sensor Setup** | Multiple filament runout sensors are detected |
@@ -93,13 +93,17 @@ The **Help Improve HelixScreen** step asks whether to share anonymous usage stat
 
 The progress indicator (e.g., "Step 3 of 8") only counts the steps that apply to your setup — skipped steps aren't shown or counted.
 
+### Picking Your Printer Model
+
+The **Printer Identification** step covers every machine HelixScreen knows in two ways. A search box filters the full list as you type, matching on model name or vendor, or you can tap a vendor tile (Creality, Prusa, Voron, ...) to see just that vendor's machines, with a **Back** button to return to the tiles. If auto-detection already identified your printer, the step opens straight to it inside its vendor's list; where the evidence ties between machines, you start on the tied candidates and the one you pick is saved.
+
 ### Preset Mode vs. Normal Setup
 
 Some printers (for example the Creality K1 or the FlashForge Adventurer 5M) ship with a preset that already knows the hardware layout. On these devices the wizard runs in **preset mode**: it skips the heater, fan, AMS, LED, filament-sensor, input-shaper, and printer-identification steps, and shows the **Help Improve HelixScreen** telemetry step in place of the Summary. The result is a shorter, mostly automatic setup flow. On a printer without a preset, you'll see the full hardware-selection flow ending in the Summary step instead.
 
 ### Adding Another Printer
 
-If you have beta multi-printer support enabled, you can add a second printer later from the printer manager. This re-runs the wizard for the new printer, but skips the WiFi and Language steps (those are device-wide and already configured). On the first step, the button reads **Cancel** instead of **Back** — tapping it discards the new printer and returns you to the one you were using. See [Beta Features](beta-features.md) for how to enable multi-printer support.
+You can add a second printer later. Open **Settings > Hardware & Devices > Printers** (or tap the printer icon in the navigation bar, which **Show Printer Switcher** in the same Printers screen turns on) and tap **Add Printer**. This re-runs the wizard for the new printer, but skips the WiFi and Language steps (those are device-wide and already configured). On the first step, the button reads **Cancel** instead of **Back**: tapping it discards the new printer and returns you to the one you were using.
 
 > **Tip:** You can always go back to previous steps using the **Back** button. The connection test in step 2 must pass before you can proceed.
 

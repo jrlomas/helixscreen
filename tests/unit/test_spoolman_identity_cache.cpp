@@ -28,6 +28,8 @@
 #include "ams_types.h"
 #include "app_globals.h"
 #include "filament_display_name.h"
+#include "lane_resolver.h"
+#include "lane_source_store.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
@@ -391,10 +393,14 @@ TEST_CASE_METHOD(
     CHECK(id->filament_name == "Jet Black");
     CHECK(id->material == "PLA");
 
-    // Weight — the thing the poll is actually for — still updated.
+    // Weight, the thing the poll is actually for, still landed. The lane's
+    // Spoolman record is where: the mock keeps no cached slot to repaint, so
+    // the slot struct itself is not a render of the lane.
     SlotInfo after = h.backend->get_slot_info(0);
-    CHECK(after.remaining_weight_g == Catch::Approx(850.0f));
-    CHECK(after.total_weight_g == Catch::Approx(1000.0f));
+    const auto shown = helix::ams::resolve(helix::ams::lane_sources(h.backend->lane_id(0)));
+    REQUIRE(shown.remaining_weight_g.has_value());
+    CHECK(*shown.remaining_weight_g == Catch::Approx(850.0f));
+    CHECK(shown.total_weight_g == Catch::Approx(1000.0f));
 
     // ...and NOTHING Spoolman-derived reached the slot. Identity in SlotInfo
     // would re-enter the persist=false quarantine the weight poll depends on.
@@ -420,7 +426,9 @@ TEST_CASE_METHOD(IdentityCacheFixture,
 
     h.poll();
     REQUIRE(SpoolmanManager::find_identity(1).has_value());
-    REQUIRE(h.backend->get_slot_info(0).remaining_weight_g == Catch::Approx(850.0f));
+    REQUIRE(
+        helix::ams::resolve(helix::ams::lane_sources(h.backend->lane_id(0))).remaining_weight_g ==
+        Catch::Approx(850.0f));
 
     // Spoolman reports a lower remaining weight on the next cycle. The cached
     // identity must not short-circuit that: the two have separate cadences.
@@ -432,7 +440,8 @@ TEST_CASE_METHOD(IdentityCacheFixture,
 
     h.poll();
 
-    CHECK(h.backend->get_slot_info(0).remaining_weight_g == Catch::Approx(610.0f));
+    CHECK(helix::ams::resolve(helix::ams::lane_sources(h.backend->lane_id(0))).remaining_weight_g ==
+          Catch::Approx(610.0f));
     auto id = SpoolmanManager::find_identity(1);
     REQUIRE(id.has_value());
     CHECK(id->vendor == "Polymaker"); // still the first extraction
@@ -456,21 +465,22 @@ TEST_CASE_METHOD(IdentityCacheFixture,
     CHECK_FALSE(SpoolmanManager::find_identity(900).has_value());
 
     // Make the id resolvable behind the manager's back. If the second poll still
-    // issued a request, the weight below would change — it must not, because a
+    // issued a request, a Spoolman record would file. It must not, because a
     // known-dead id is skipped before the request is made.
     h.api.spoolman_mock().get_mock_spools().push_back(
         make_spool(900, "Polymaker", "Ambrosia Pink", "PLA"));
 
     h.poll();
 
-    CHECK(h.backend->get_slot_info(0).remaining_weight_g == Catch::Approx(111.0f));
+    CHECK_FALSE(helix::ams::lane_sources(h.backend->lane_id(0)).spoolman.has_value());
     CHECK_FALSE(SpoolmanManager::find_identity(900).has_value());
 
     // The escape hatch: an explicit invalidation lets it be polled again.
     SpoolmanManager::invalidate_identity(900);
     h.poll();
 
-    CHECK(h.backend->get_slot_info(0).remaining_weight_g == Catch::Approx(850.0f));
+    CHECK(helix::ams::resolve(helix::ams::lane_sources(h.backend->lane_id(0))).remaining_weight_g ==
+          Catch::Approx(850.0f));
     CHECK(SpoolmanManager::find_identity(900).has_value());
 }
 

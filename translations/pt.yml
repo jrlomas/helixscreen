@@ -163,6 +163,7 @@ translations:
   Add Vendor: Adicionar Fornecedor
   Add Widget: Adicionar Widget
   Add custom filament: Adicionar filamento personalizado
+  Add page: 'Adicionar página'
   Added to Spoolman: Adicionado ao Spoolman
   Address: Endereço
   Adjust screen brightness level: Ajustar nível de brilho da tela
@@ -3621,7 +3622,7 @@ translations:
   '{} heater turned off': Aquecedor {} desligado
   '{} is asking to connect to this printer.': '{} quer conectar-se a esta impressora.'
   '{} is blocked — manual intervention required': '{}: bloqueio — intervenção manual necessária'
-  '{} is feeding the current print. Clear it after the print ends.': ''
+  '{} is feeding the current print. Clear it after the print ends.': '{}: alimenta a impressão atual. Remova a bobina após o fim da impressão.'
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} está instalado mas sua troca para carretel reserva está desligada, então não haverá troca automática.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} está instalado, mas não foi possível ler sua configuração de carretel reserva - não conte com uma troca automática.'
   '{} is not set up on this printer': '{} não está configurado nesta impressora'

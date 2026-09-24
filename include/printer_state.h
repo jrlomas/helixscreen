@@ -1985,11 +1985,15 @@ class PrinterState {
     }
 
     /**
-     * @brief Set printer kinematics type and update bed_moves subject
+     * @brief Set printer kinematics type and update has_individual_xyz_homing and
+     *        bed_moves subjects.
      *
-     * Updates printer_bed_moves_ subject based on kinematics type.
-     * CoreXY printers typically have bed moving on Z (Voron 2.4, RatRig).
-     * Cartesian/Delta printers typically have gantry moving on Z (Ender 3, Prusa).
+     * Updates printer_has_individual_xyz_homing_ and printer_bed_moves_ subjects
+     * based on kinematics type:
+     *
+     * - Deltas cannot home XYZ axes individually.
+     * - CoreXY printers typically have bed moving on Z (Voron 2.4, RatRig).
+     * - Cartesian/Delta printers typically have gantry moving on Z (Ender 3, Prusa).
      *
      * @param kinematics Kinematics type string from toolhead config
      */
@@ -2006,6 +2010,17 @@ class PrinterState {
      * Called from set_kinematics() and SettingsManager::set_z_movement_style().
      */
     void apply_effective_bed_moves();
+
+    /**
+     * @brief Get has_individual_xyz_homing subject for XML binding
+     *
+     * Returns 1 if the printer's XYZ axes can be homed invidually,
+     * 0 otherwise (delta/rotary_delta).
+     * Used for hiding redundant home buttons on deltas.
+     */
+    lv_subject_t* get_printer_has_individual_xyz_homing_subject() {
+        return capabilities_state_.get_printer_has_individual_xyz_homing_subject();
+    }
 
     /**
      * @brief Get bed_moves subject for XML binding

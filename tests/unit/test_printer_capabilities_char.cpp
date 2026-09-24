@@ -271,6 +271,67 @@ TEST_CASE("Capabilities characterization: set_spoolman_available updates subject
 }
 
 // ============================================================================
+// Kinematics / Has Individual XYZ Homing Tests
+// ============================================================================
+
+TEST_CASE("Capabilities characterization: set_kinematics updates printer_has_individual_xyz_homing",
+          "[characterization][capabilities][kinematics]") {
+    lv_init_safe();
+
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(true);
+
+    lv_subject_t* subject = state.get_printer_has_individual_xyz_homing_subject();
+
+    SECTION("delta kinematics sets has_individual_xyz_homing to 0 (no individual XYZ homing)") {
+        state.set_kinematics("delta");
+        REQUIRE(lv_subject_get_int(subject) == 0);
+    }
+
+    SECTION(
+        "rotary_delta kinematics sets has_individual_xyz_homing to 0 (no individual XYZ homing)") {
+        state.set_kinematics("rotary_delta");
+        REQUIRE(lv_subject_get_int(subject) == 0);
+    }
+
+    SECTION("cartesian kinematics sets has_individual_xyz_homing to 1 (supports individual XYZ "
+            "homing)") {
+        state.set_kinematics("cartesian");
+        REQUIRE(lv_subject_get_int(subject) == 1);
+    }
+
+    SECTION(
+        "corexy kinematics sets has_individual_xyz_homing to 1 (supports individual XYZ homing)") {
+        state.set_kinematics("corexy");
+        REQUIRE(lv_subject_get_int(subject) == 1);
+    }
+
+    SECTION("hybrid_corexy kinematics sets has_individual_xyz_homing to 1 (supports individual XYZ "
+            "homing)") {
+        state.set_kinematics("corexz");
+        REQUIRE(lv_subject_get_int(subject) == 1);
+    }
+
+    SECTION(
+        "corexz kinematics sets has_individual_xyz_homing to 1 (supports individual XYZ homing)") {
+        state.set_kinematics("corexz");
+        REQUIRE(lv_subject_get_int(subject) == 1);
+    }
+
+    SECTION("switching between kinematics updates correctly") {
+        state.set_kinematics("delta");
+        REQUIRE(lv_subject_get_int(subject) == 0);
+
+        state.set_kinematics("cartesian");
+        REQUIRE(lv_subject_get_int(subject) == 1);
+
+        state.set_kinematics("delta");
+        REQUIRE(lv_subject_get_int(subject) == 0);
+    }
+}
+
+// ============================================================================
 // Kinematics / Bed Moves Tests
 // ============================================================================
 

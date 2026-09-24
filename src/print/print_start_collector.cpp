@@ -127,6 +127,11 @@ const std::regex PrintStartCollector::respond_completion_pattern_(
     R"(\bprint\b\W+\b(start|started|starting)\b|\b(start|started|starting)\b\W+\bprint\b)",
     std::regex::icase);
 
+// One "<id>:<temp> /<target>" pair per heater with a gcode id, space separated.
+// The M105 reply carries an "ok " prefix and does not match.
+const std::regex PrintStartCollector::heater_wait_report_pattern_(
+    R"(\s*\w+:-?\d+(\.\d+)? /-?\d+(\.\d+)?(\s+\w+:-?\d+(\.\d+)? /-?\d+(\.\d+)?)*\s*)");
+
 // ============================================================================
 // CONSTRUCTOR / DESTRUCTOR
 // ============================================================================
@@ -187,6 +192,9 @@ void PrintStartCollector::start() {
         pre_mesh_points_.reset();
         pre_mesh_last_probe_time_ = {};
         current_mesh_message_.clear();
+        current_message_.clear();
+        heater_wait_report_time_ = helix::sim::SimulatedClock::time_point::min();
+        heater_wait_shown_ = false;
         last_phase_object_state_.clear();
         held_status_signal_rules_.clear();
         bed_mesh_present_ = false;
@@ -440,6 +448,9 @@ void PrintStartCollector::reset() {
         pre_mesh_points_.reset();
         pre_mesh_last_probe_time_ = {};
         current_mesh_message_.clear();
+        current_message_.clear();
+        heater_wait_report_time_ = helix::sim::SimulatedClock::time_point::min();
+        heater_wait_shown_ = false;
         last_phase_object_state_.clear();
         held_status_signal_rules_.clear();
         bed_mesh_present_ = false;
@@ -606,6 +617,7 @@ void PrintStartCollector::check_fallback_completion() {
     bool print_start_was_detected;
     float predicted_total;
     helix::sim::SimulatedClock::duration held_for;
+    bool wait_shown;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         // Already complete - nothing to do
@@ -613,6 +625,7 @@ void PrintStartCollector::check_fallback_completion() {
             return;
         }
         current = current_phase_;
+        wait_shown = heater_wait_shown_;
         print_start_was_detected = print_start_detected_;
         start_time = printing_state_start_;
         predicted_total = predicted_total_seconds_;
@@ -772,8 +785,10 @@ void PrintStartCollector::check_fallback_completion() {
     // real long pole. Re-derive the shown heater from live temps, bed-first.
     // Scoped to when we're ALREADY in a heating phase, so it can never
     // relabel a firmware's ordered non-heating phase (e.g. Snapmaker U1
-    // PRINT_BED_DETECTING) as a heating phase.
-    if (current == PrintStartPhase::HEATING_BED || current == PrintStartPhase::HEATING_NOZZLE) {
+    // PRINT_BED_DETECTING) as a heating phase. A heater wait's own label is
+    // resolved by the wait block below instead.
+    if (!wait_shown &&
+        (current == PrintStartPhase::HEATING_BED || current == PrintStartPhase::HEATING_NOZZLE)) {
         PrintStartPhase resolved = bed_heating      ? PrintStartPhase::HEATING_BED
                                    : nozzle_heating ? PrintStartPhase::HEATING_NOZZLE
                                                     : current;
@@ -794,6 +809,59 @@ void PrintStartCollector::check_fallback_completion() {
         // print-temperature M109. relabel_heating_phase() confirms the mesh is
         // idle and the target rose after it began.
         relabel_heating_phase(PrintStartPhase::HEATING_NOZZLE);
+    }
+
+    // A heater wait blocks the whole queue, so while one reports, the heater
+    // still short of its target is what the printer is doing, whatever phase
+    // the firmware announced last. Nozzle first: M109 waits are short and the
+    // bed is usually still warming behind them, while a nozzle above its
+    // target (a cool-down) is not short of it. "Short" is the 2C at-target
+    // test, since M109 keeps blocking until the nozzle settles within a
+    // degree or so. The chamber counts only once both heaters are at target.
+    // Before the first real signal the proactive detection above owns the
+    // heaters.
+    if (real_signal_seen_.load(std::memory_order_relaxed)) {
+        bool waiting;
+        bool nozzle_short;
+        bool bed_short;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            waiting = heater_wait_report_time_ + HEATER_WAIT_REPORT_GAP >
+                      helix::sim::SimulatedClock::now();
+            nozzle_short = !heating_target_reached_locked(PrintStartPhase::HEATING_NOZZLE);
+            bed_short = !heating_target_reached_locked(PrintStartPhase::HEATING_BED);
+        }
+        if (!waiting) {
+            end_heater_wait();
+        } else {
+            const int chamber_temp = lv_subject_get_int(state_.get_chamber_temp_subject());
+            const int chamber_target = lv_subject_get_int(state_.get_chamber_target_subject());
+            const bool chamber_heating = !nozzle_short && !bed_short && chamber_target > 0 &&
+                                         chamber_temp < chamber_target - TEMP_TOLERANCE_DECIDEGREES;
+            const PrintStartPhase waited_on = nozzle_short      ? PrintStartPhase::HEATING_NOZZLE
+                                              : bed_short       ? PrintStartPhase::HEATING_BED
+                                              : chamber_heating ? PrintStartPhase::SOAKING
+                                                                : PrintStartPhase::IDLE;
+            // The report that shows the waited-on heater arriving is the
+            // wait's last, so moving the label to another heater takes a
+            // report after the tick that saw it arrive: the next wait.
+            bool may_relabel = true;
+            {
+                std::lock_guard<std::mutex> lock(state_mutex_);
+                if (!heater_wait_shown_ || waited_on == current_phase_) {
+                    wait_heater_arrived_at_ = helix::sim::SimulatedClock::time_point::min();
+                } else if (wait_heater_arrived_at_ ==
+                           helix::sim::SimulatedClock::time_point::min()) {
+                    wait_heater_arrived_at_ = helix::sim::SimulatedClock::now();
+                    may_relabel = false;
+                } else {
+                    may_relabel = heater_wait_report_time_ > wait_heater_arrived_at_;
+                }
+            }
+            if (waited_on != PrintStartPhase::IDLE && may_relabel) {
+                relabel_heating_phase(waited_on, /*heater_wait=*/true);
+            }
+        }
     }
 
     // =========================================================================
@@ -971,6 +1039,16 @@ void PrintStartCollector::on_gcode_response(const json& msg) {
                           line);
             return;
         }
+    }
+
+    // A heater wait reports once a second for as long as it blocks. The
+    // fallback tick reads the stamp; the wait itself is the printer working.
+    if (is_heater_wait_report(line)) {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            heater_wait_report_time_ = helix::sim::SimulatedClock::now();
+        }
+        note_inferred_activity();
     }
 
     // Check for HELIX:PHASE signals (highest priority - definitive signals from plugin/macros)
@@ -1329,6 +1407,10 @@ void PrintStartCollector::apply_profile_match(const PrintStartProfile::MatchResu
                    trim_trailing_ellipsis(match.message) !=
                        trim_trailing_ellipsis(current_mesh_message_)) {
             should_update = true;
+        } else if (marks_real_signal && heater_wait_shown_) {
+            // A heater wait blocks the queue, so a line the printer narrates
+            // means the wait has ended and this phase replaces its label.
+            should_update = true;
         }
     }
     if (should_update) {
@@ -1633,6 +1715,10 @@ void PrintStartCollector::update_phase(PrintStartPhase phase, const char* messag
         }
         maybe_reset_for_mesh_subphase_locked(phase, message ? message : "");
         current_phase_ = phase;
+        current_message_ = message ? message : "";
+        // A phase signal means the queue moved on from any heater wait.
+        heater_wait_shown_ = false;
+        heater_wait_report_time_ = helix::sim::SimulatedClock::time_point::min();
         detected_phases_.insert(phase); // Track for progress calculation
 
         // Record phase enter timestamp (skip IDLE and INITIALIZING)
@@ -1691,6 +1777,10 @@ void PrintStartCollector::update_phase(PrintStartPhase phase, const std::string&
         }
         maybe_reset_for_mesh_subphase_locked(phase, message);
         current_phase_ = phase;
+        current_message_ = message;
+        // A phase signal means the queue moved on from any heater wait.
+        heater_wait_shown_ = false;
+        heater_wait_report_time_ = helix::sim::SimulatedClock::time_point::min();
         detected_phases_.insert(phase);
 
         // Record phase enter timestamp (skip IDLE and INITIALIZING)
@@ -1725,55 +1815,111 @@ void PrintStartCollector::update_phase(PrintStartPhase phase, const std::string&
     }
 }
 
-void PrintStartCollector::relabel_heating_phase(PrintStartPhase resolved) {
+void PrintStartCollector::relabel_heating_phase(PrintStartPhase resolved, bool heater_wait) {
+    const char* message = resolved == PrintStartPhase::HEATING_BED ? lv_tr("Heating Bed...")
+                          : resolved == PrintStartPhase::SOAKING   ? lv_tr("Heating chamber...")
+                                                                   : lv_tr("Heating Nozzle...");
     int progress;
-    bool has_predictions;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        // CAS guard: only relabel while we are STILL in a heating phase, or in
-        // a mesh that has finished its work while the nozzle heats to a target
-        // set after it began. A background gcode signal may have advanced
-        // current_phase_ (e.g. to QGL or PURGING) between the caller's
-        // temperature snapshot and now; relabeling then would regress a newer,
-        // correct phase back to heating.
+        // CAS guard: the caller decided from a snapshot, and a background gcode
+        // signal may have advanced current_phase_ (e.g. to QGL or PURGING)
+        // since. Relabeling then would regress a newer, correct phase.
         const bool heating = current_phase_ == PrintStartPhase::HEATING_BED ||
                              current_phase_ == PrintStartPhase::HEATING_NOZZLE;
-        const bool mesh_gave_way =
-            current_phase_ == PrintStartPhase::BED_MESH &&
-            resolved == PrintStartPhase::HEATING_NOZZLE && !mesh_probing_locked() &&
-            cached_ext_target_.load(std::memory_order_relaxed) > mesh_entry_ext_target_;
-        if (!heating && !mesh_gave_way) {
+        const bool wait_label = heating || current_phase_ == PrintStartPhase::SOAKING;
+        bool takeover = false;
+        bool allowed;
+        if (heater_wait) {
+            // A wait displaces a firmware phase once, then moves between its
+            // own heater labels. The firmware's heating phases keep the
+            // bed-first correction.
+            takeover = !heater_wait_shown_ && !wait_label &&
+                       current_phase_ != PrintStartPhase::IDLE &&
+                       current_phase_ != PrintStartPhase::PURGING &&
+                       current_phase_ != PrintStartPhase::COMPLETE;
+            allowed = takeover || (heater_wait_shown_ && wait_label);
+        } else {
+            // Still in a heating phase, or in a mesh that finished its work
+            // while the nozzle heats to a target set after it began. The
+            // caller leaves a wait's own label out.
+            const bool mesh_gave_way =
+                current_phase_ == PrintStartPhase::BED_MESH &&
+                resolved == PrintStartPhase::HEATING_NOZZLE && !mesh_probing_locked() &&
+                cached_ext_target_.load(std::memory_order_relaxed) > mesh_entry_ext_target_;
+            allowed = heating || mesh_gave_way;
+        }
+        if (!allowed || current_phase_ == resolved) {
             return;
         }
-        if (current_phase_ == resolved) {
-            return; // already showing the right heater
+        spdlog::info("[PrintStartCollector] Heating correction: phase {} -> {}{}",
+                     static_cast<int>(current_phase_), static_cast<int>(resolved),
+                     heater_wait ? " (heater wait)" : "");
+        if (takeover) {
+            heater_wait_shown_ = true;
+            pre_wait_phase_ = current_phase_;
+            pre_wait_message_ = current_message_;
         }
-        spdlog::info("[PrintStartCollector] Heating correction: phase {} -> {}",
-                     static_cast<int>(current_phase_), static_cast<int>(resolved));
-        maybe_reset_for_mesh_subphase_locked(resolved, "");
-        current_phase_ = resolved;
-        detected_phases_.insert(resolved);
-        int phase_int = static_cast<int>(resolved);
-        if (phase_enter_times_.find(phase_int) == phase_enter_times_.end()) {
-            phase_enter_times_[phase_int] = helix::sim::SimulatedClock::now();
-        }
-        progress = calculate_progress_locked();
-        has_predictions = predictor_.has_predictions();
+        progress = switch_phase_locked(resolved, message);
     }
+    publish_switched_phase(resolved, message, progress);
+}
 
-    // When the predictor has data, time-based progress in update_eta_display() is
-    // the sole progress source — don't override it with phase-weight progress.
-    if (has_predictions) {
+void PrintStartCollector::end_heater_wait() {
+    PrintStartPhase phase;
+    std::string message;
+    int progress;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (!heater_wait_shown_) {
+            return;
+        }
+        heater_wait_shown_ = false;
+        // Restore only over the wait's own label: anything else got there later.
+        if (current_phase_ != PrintStartPhase::HEATING_BED &&
+            current_phase_ != PrintStartPhase::HEATING_NOZZLE &&
+            current_phase_ != PrintStartPhase::SOAKING) {
+            return;
+        }
+        // A finished mesh gives way for good to a nozzle target raised after
+        // it began, as the firmware-heating relabel treats it, once the bed
+        // is ready too: the nozzle label stays.
+        if (pre_wait_phase_ == PrintStartPhase::BED_MESH &&
+            current_phase_ == PrintStartPhase::HEATING_NOZZLE &&
+            cached_ext_target_.load(std::memory_order_relaxed) > mesh_entry_ext_target_ &&
+            heating_target_reached_locked(PrintStartPhase::HEATING_BED)) {
+            return;
+        }
+        phase = pre_wait_phase_;
+        message = pre_wait_message_;
+        progress = switch_phase_locked(phase, message);
+    }
+    spdlog::info("[PrintStartCollector] Heater wait ended, back to phase {} '{}'",
+                 static_cast<int>(phase), message);
+    publish_switched_phase(phase, message, progress);
+}
+
+int PrintStartCollector::switch_phase_locked(PrintStartPhase phase, const std::string& message) {
+    maybe_reset_for_mesh_subphase_locked(phase, message);
+    current_phase_ = phase;
+    current_message_ = message;
+    detected_phases_.insert(phase);
+    phase_enter_times_.try_emplace(static_cast<int>(phase), helix::sim::SimulatedClock::now());
+    // A sequential profile's progress moves only with its own signals.
+    if (profile_ && profile_->progress_mode() == PrintStartProfile::ProgressMode::SEQUENTIAL) {
+        return max_sequential_progress_;
+    }
+    // With a prediction, update_eta_display() owns progress.
+    return predictor_.has_predictions() ? -1 : calculate_progress_locked();
+}
+
+void PrintStartCollector::publish_switched_phase(PrintStartPhase phase, const std::string& message,
+                                                 int progress) {
+    if (progress < 0) {
         auto* subj = state_.get_print_start_progress_subject();
-        if (subj) {
-            progress = lv_subject_get_int(subj);
-        }
+        progress = subj ? lv_subject_get_int(subj) : 0;
     }
-
-    const char* message = resolved == PrintStartPhase::HEATING_BED ? lv_tr("Heating Bed...")
-                                                                   : lv_tr("Heating Nozzle...");
-    // Call PrinterState outside the lock to avoid potential deadlocks
-    state_.set_print_start_state(resolved, message, progress);
+    state_.set_print_start_state(phase, message.c_str(), progress);
 }
 
 bool PrintStartCollector::mesh_probing_locked() const {

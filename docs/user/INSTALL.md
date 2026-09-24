@@ -28,7 +28,7 @@ This guide walks you through installing HelixScreen on your 3D printer's touchsc
 > SSH into your Raspberry Pi, BTT CB1/CB2/Manta, or similar host. For all-in-one printers (Creality K1, K2 series, Flashforge Adventurer 5M/Pro), SSH directly into the printer itself as root.
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+curl -sSL https://releases.helixscreen.org/install.sh | sh
 ```
 
 The installer automatically detects your platform and downloads the correct release.
@@ -191,7 +191,7 @@ Default password is usually `raspberry` unless you changed it.
 ### Step 2: Run the Installer
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+curl -sSL https://releases.helixscreen.org/install.sh | sh
 ```
 
 The installer automatically:
@@ -490,7 +490,7 @@ If you installed via the installer script, it automatically configures Moonraker
 From the command line, over SSH, run the installer with `--update`:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --update
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --update
 ```
 
 This preserves your configuration and updates to the latest version. Printers without direct internet access use a two-step process instead; see your printer's install guide.
@@ -498,13 +498,13 @@ This preserves your configuration and updates to the latest version. Printers wi
 ### Update to Specific Version
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --update --version v1.2.0
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --update --version v1.2.0
 ```
 
 To reinstall a specific version with a **fresh settings.json** (instead of keeping your existing settings), swap `--update` for `--clean`:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --clean --yes --version v1.2.0
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --clean --yes --version v1.2.0
 ```
 
 ### Preserving Configuration
@@ -512,7 +512,7 @@ curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/script
 The update process preserves your `settings.json` settings. If you want to reset to defaults, use the `--clean` flag; it removes your HelixScreen settings and caches everywhere they live, then does a fresh install:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --clean --yes
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --clean --yes
 ```
 
 `--yes` skips the confirmation prompt, which a piped command cannot show; run the downloaded script interactively over SSH and you get the prompt instead. Your Klipper config, Moonraker settings, print history, and G-code files are **not** touched: only HelixScreen's own settings.
@@ -520,7 +520,7 @@ curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/script
 To reset settings **and** pin a specific version in one step, combine `--clean` with `--version`:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --clean --yes --version v1.2.0
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --clean --yes --version v1.2.0
 ```
 
 If you'd rather delete the settings file by hand instead of reinstalling:
@@ -567,7 +567,7 @@ sudo systemctl restart moonraker
 The install script with `--uninstall` removes HelixScreen and **restores your previous UI** (KlipperScreen, the stock printer screen, etc.):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --uninstall
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --uninstall
 ```
 
 Platform-specific details are in your printer's install guide: the bundled installer's location on printers without HTTPS fetch tools, manual revert steps, what gets restored on each firmware.

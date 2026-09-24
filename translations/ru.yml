@@ -160,6 +160,7 @@ translations:
   Add Vendor: Добавить производителя
   Add Widget: Добавить виджет
   Add custom filament: Добавить свой филамент
+  Add page: 'Добавить страницу'
   Added to Spoolman: Добавлено в Spoolman
   Address: Адрес
   Adjust screen brightness level: Настроить уровень яркости экрана
@@ -3571,7 +3572,7 @@ translations:
   '{} heater turned off': Нагреватель {} выключен
   '{} is asking to connect to this printer.': '{} запрашивает подключение к этому принтеру.'
   '{} is blocked — manual intervention required': '{}: блокировка — требуется ручное вмешательство'
-  '{} is feeding the current print. Clear it after the print ends.': ''
+  '{} is feeding the current print. Clear it after the print ends.': '{}: подаёт филамент для текущей печати. Удалите катушку после завершения печати.'
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} установлен, но переключение на резервную катушку выключено, поэтому автоматической замены не будет.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} установлен, но прочитать его настройку резервной катушки не удалось - не рассчитывайте на автоматическую замену.'
   '{} is not set up on this printer': '{} не настроен на этом принтере'

@@ -93,6 +93,9 @@ constexpr auto field(std::string_view name, S slot, R record, O obs) {
 constexpr auto FIELD_ROSTER = std::make_tuple(
     // Presence is sensed, never declared, so neither translation carries it.
     field<FieldKind::Untranslated>("present", nullptr, nullptr, &Observation::present),
+    // Neither is docking: no editor or stored record can state where a
+    // toolhead is parked.
+    field<FieldKind::Untranslated>("tool_docked", nullptr, nullptr, &Observation::tool_docked),
     field<FieldKind::Color, Authorship::DeclaredSet>("color_rgb", &SlotInfo::color_rgb,
                                                      &FilamentSlotOverride::color_rgb,
                                                      &Observation::color_rgb),

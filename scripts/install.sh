@@ -9,10 +9,10 @@
 # HelixScreen Installer
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+#   curl -sSL https://releases.helixscreen.org/install.sh | sh
 #
 # Or download and run:
-#   wget https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh
+#   wget https://releases.helixscreen.org/install.sh
 #   chmod +x install.sh
 #   ./install.sh
 #
@@ -208,6 +208,43 @@ path_sudo() {
     [ -w "$dir" ] && echo "" || echo "$SUDO"
 }
 
+# Pin the trust properties of helixscreen.env: the launcher's env-file parse
+# evaluates the file's lines, so its owner and mode decide who can run code as
+# the launcher's user (root on every SysV firmware device). State 0644 and
+# service-user ownership instead of inheriting whatever the staging umask left
+# behind; with no KLIPPER_USER (root-run firmware) the file stays root's.
+# Resolves through the printer_data symlink: pinning the link's own mode does
+# nothing to the file the launcher reads. The launcher re-checks on every load,
+# so a file this helper never reached is refused rather than evaluated.
+pin_env_file() {
+    local file="${INSTALL_DIR}/config/helixscreen.env"
+    [ -f "$file" ] || return 0
+
+    local real="$file"
+    if [ -L "$file" ]; then
+        real=$(readlink -f "$file" 2>/dev/null || echo "$file")
+    fi
+    [ -n "$real" ] && [ -f "$real" ] || real="$file"
+
+    # Failures warn rather than fail the install, but never silently: an
+    # unpinned file is one the launcher refuses on every boot, and an
+    # unreported chmod is indistinguishable from a pinned one at install time.
+    if ! $(file_sudo "$real") chmod 0644 "$real" 2>/dev/null; then
+        log_warn "pin_env_file: could not chmod 0644 '$real' (the launcher will refuse this file until fixed)"
+    fi
+
+    local user="${KLIPPER_USER:-}"
+    if [ -n "$user" ]; then
+        local group="$user"
+        if type _resolve_primary_group >/dev/null 2>&1; then
+            group=$(_resolve_primary_group "$user")
+        fi
+        if ! $(file_sudo "$real") chown "${user}:${group}" "$real" 2>/dev/null; then
+            log_warn "pin_env_file: could not chown ${user}:${group} '$real'"
+        fi
+    fi
+}
+
 # Resolve the directory holding the user's Klipper/Moonraker config files.
 #
 # Almost every Klipper install puts them in <klipper home>/printer_data/config,
@@ -334,6 +371,7 @@ error_handler() {
                 log_success "helixscreen.env restored from previous install"
             fi
         fi
+        pin_env_file
     fi
 
     # A ledger stop_competing_uis already wrote records a disable (chmod -x on
@@ -1417,6 +1455,11 @@ detect_platform() {
 # Echoes: platform key to use when constructing release archive URLs
 get_download_platform() {
     local detected=$1
+    # k1 and ad5x download their own board-name assets: every release line
+    # publishes them (the release/1.0 line builds them natively; main-line
+    # releases upload them as aliases of the unified mips build, see the
+    # upload step in .github/workflows/release.yml), so the board name is the
+    # one download name every release carries.
     case "$detected" in
         m1)
             # Artillery M1 Pro is a Debian SBC. The pi/pi32 binary runs as-is.
@@ -1428,10 +1471,6 @@ get_download_platform() {
             else
                 echo "pi"
             fi
-            ;;
-        k1|ad5x)
-            # Board spellings of the unified MIPS binary.
-            echo "mips"
             ;;
         *)
             echo "$detected"
@@ -1453,17 +1492,19 @@ get_download_platform() {
 #
 # Convention: a platform's asset is helixscreen-<platform>.zip. The borrows:
 # m1 -> pi/pi32 by userspace bitness (get_download_platform), and the MIPS board
-# spellings -> the unified mips asset. ONE static binary serves the Creality K1
-# series and the FlashForge AD5X; k1, ad5x and the k1-dynamic dev/debug variant
-# (not built by the release matrix) all ride helixscreen-mips.zip. release-mips
-# also publishes identical-content helixscreen-k1.zip / -ad5x.zip aliases so
-# already-deployed binaries that compute those names still find an update.
+# spellings -> the unified mips asset, mapped right here because
+# get_download_platform names fresh-install downloads by board. ONE static
+# binary serves the Creality K1 series and the FlashForge AD5X; k1, ad5x and
+# the k1-dynamic dev/debug variant (not built by the release matrix) all ride
+# helixscreen-mips.zip. release-mips also publishes identical-content
+# helixscreen-k1.zip / -ad5x.zip aliases so already-deployed binaries that
+# compute those names still find an update.
 #
 # Args: platform (detected platform key)
 # Echoes: release asset filename, e.g. helixscreen-pi.zip
 helix_self_update_asset() {
     case "$1" in
-        k1-dynamic) echo "helixscreen-mips.zip" ;;
+        k1|ad5x|k1-dynamic) echo "helixscreen-mips.zip" ;;
         *)          echo "helixscreen-$(get_download_platform "$1").zip" ;;
     esac
 }
@@ -4797,7 +4838,7 @@ _host_ships_a_stock_ui() {
 # Stop the QIDI stock screen in the two shapes COMPETING_UIS cannot name.
 # Sets found_any in the caller's scope, like the sibling handlers.
 stop_qidi_competing_uis() {
-    local bin unit unit_path
+    local bin unit unit_path stopped=false
 
     # Units before binaries: the stock screen unit sets Restart=always with
     # StartLimitIntervalSec=0, and its start script runs the client a second
@@ -4817,6 +4858,7 @@ stop_qidi_competing_uis() {
         $SUDO systemctl disable "$unit" 2>/dev/null || true
         record_disabled_service "systemd" "$unit"
         found_any=true
+        stopped=true
     done
 
     for bin in $QIDI_STOCK_UI_BINS; do
@@ -4828,7 +4870,15 @@ stop_qidi_competing_uis() {
         $SUDO chmod a-x "$bin" 2>/dev/null || true
         record_disabled_service "sysv-chmod" "$bin"
         found_any=true
+        stopped=true
     done
+
+    # The stock client also supplies the MQTT link credentials and the QIDI Box
+    # filament state, so replacing it costs more than the screen.
+    if [ "$stopped" = true ]; then
+        log_warn "QIDI Studio box sync, QIDI cloud and QIDI Box filament edits depend on the stock QIDI client"
+        log_warn "and will not work while HelixScreen replaces it. Uninstalling HelixScreen restores them."
+    fi
 }
 
 # Ensure SSH (dropbear) is running and will start on boot.
@@ -11485,6 +11535,14 @@ _disabled_services_ledger_candidates() {
     done
 }
 
+# Enable a unit for the next boot. A failure is reported with the command that
+# fixes it by hand, and does not stop the uninstall: what follows still has to run.
+enable_unit_or_warn() {
+    if ! $SUDO systemctl enable "$1" 2>/dev/null; then
+        log_warn "Could not re-enable $1. Run: sudo systemctl enable --now $1"
+    fi
+}
+
 # Re-enable services that were disabled during installation
 # Reads the state file and reverses each recorded disable action
 #
@@ -11525,7 +11583,7 @@ reenable_disabled_services() {
         case "$type" in
             systemd)
                 log_info "Re-enabling systemd service: $target"
-                $SUDO systemctl enable "$target" 2>/dev/null || true
+                enable_unit_or_warn "$target"
                 HELIX_REENABLED_UNITS="${HELIX_REENABLED_UNITS} ${target}"
                 ;;
             sysv-chmod)
@@ -13132,6 +13190,19 @@ main() {
     fi
     log_info "Target version: ${BOLD}${version}${NC}"
 
+    # Download/stage the release archive BEFORE any step that modifies the
+    # running printer (stock-UI disable, competing-UI shutdown, old-install
+    # cleanup, service stop): a failed download must leave the machine exactly
+    # as it was - stock UI enabled, old install intact, service running. The
+    # download also needs the network, and stopping UIs can take it away
+    # (e.g. Snapmaker U1's stock GUI owns wpa_supplicant, so restarting it
+    # drops WiFi/SSH mid-update).
+    if [ -n "$local_tarball" ]; then
+        use_local_tarball "$local_tarball"
+    else
+        download_release "$version" "$download_platform"
+    fi
+
     # Configure platform-specific settings before stopping UIs
     configure_platform
 
@@ -13141,17 +13212,6 @@ main() {
     # Clean old installation if requested
     if [ "$clean_mode" = true ]; then
         clean_old_installation "$platform"
-    fi
-
-    # Download/stage the release archive BEFORE stopping the service.
-    # Stopping helixscreen first can disrupt the network on some platforms
-    # (e.g. Snapmaker U1 where platform_post_stop restarts the stock GUI which
-    # owns wpa_supplicant and drops WiFi/SSH mid-update). Staging first also
-    # means a failed download leaves the running service untouched.
-    if [ -n "$local_tarball" ]; then
-        use_local_tarball "$local_tarball"
-    else
-        download_release "$version" "$download_platform"
     fi
 
     if [ "$update_mode" = true ]; then
@@ -13221,6 +13281,11 @@ main() {
 
     # Symlink config into printer_data (Pi/Klipper only - enables web UI editing)
     setup_config_symlink
+
+    # State the env file's owner/mode rather than inheriting them from the
+    # extract/restore umask; the launcher refuses to evaluate anything else.
+    # After setup_config_symlink so a migrated printer_data copy is pinned too.
+    pin_env_file
 
     # Configure Moonraker update_manager (Pi only - enables web UI updates)
     configure_moonraker_updates "$platform"

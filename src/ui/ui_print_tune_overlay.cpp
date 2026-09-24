@@ -291,8 +291,8 @@ void PrintTuneOverlay::setup_panel() {
     {
         auto& ts = helix::ToolState::instance();
         const auto ts_lifetime = ts.get_subjects_lifetime();
-        // The offsets live in tools_, so tools_version_ — bumped on every
-        // change to them — is the re-render trigger for the per-tool Z
+        // The offsets live in tools_, so tools_version_, bumped on every
+        // change to them, is the re-render trigger for the per-tool Z
         // readouts.
         tools_version_observer_ = helix::ui::observe_int_sync<PrintTuneOverlay>(
             ts.get_tools_version_subject(), this,

@@ -16,6 +16,7 @@ Complete reference for HelixScreen configuration options.
 - [Display Settings](#display-settings)
 - [Appearance Settings](#appearance-settings)
 - [Input Settings](#input-settings)
+- [Motion Settings](#motion-settings)
 - [Output Settings](#output-settings)
 - [Network Settings](#network-settings)
 - [Printer Settings](#printer-settings)
@@ -98,7 +99,6 @@ The configuration file is JSON format with several top-level sections:
   "appearance": { ... },
   "input": { ... },
   "output": { ... },
-  "network": { ... },
   "printer": { ... },
   "standard_macros": { ... },
   "gcode_viewer": { ... },
@@ -223,7 +223,7 @@ This is different from `sounds_enabled` — that toggle mutes playback but still
 ### `beta_features`
 **Type:** boolean
 **Default:** `false`
-**Description:** Enable beta features that are still under testing. Gates several Advanced panel features (Macro Browser, Input Shaping, Z-Offset Calibration, HelixPrint plugin management, PRINT_START configuration, Timelapse), the Plugins section in Settings, and the **Dev** entry in the Update Channel selector (Stable and Beta are offered without it). Always enabled automatically when running in `--test` mode. Can also be toggled by tapping the version button 7 times in Settings → About. See the [Beta Features](guide/beta-features.md) guide for the full list.
+**Description:** Enable beta features that are still under testing. Gates rows that are still being proven on real hardware (in the Advanced panel: Configure PRINT_START, Tool Offsets, Belt Tension; on the Controls panel: the Tool Offsets button on tool-changing printers), the prompt that offers to install the HelixPrint Moonraker plugin, and the **Dev** entry in the Update Channel selector (Stable and Beta are offered without it). Always enabled automatically when running in `--test` mode. Can also be toggled by tapping the version button 7 times in **Settings > Help & About > About**. See the [Beta Features](guide/beta-features.md) guide for the full list.
 
 ---
 
@@ -441,6 +441,12 @@ Framebuffer displays (AD5M, K1, K2, CC1, AD5X) rotate by any angle with no meani
 **Range:** `0` - `100`
 **Description:** Lowest brightness level the panel can still show, as a percentage of its raw brightness range. Every screen brightness above "off" stays at or above this floor, so the dimmest slider setting dims instead of blacking out; turning the screen off is unaffected. Change it if your panel goes black before the brightness slider reaches its minimum: raise the value until the dimmest setting stays visible. `0` disables the floor. Takes effect after a restart.
 
+### `panel_power_off`
+**Type:** integer
+**Default:** `-1` (automatic)
+**Values:** `-1` = automatic, `0` = never, `1` = always
+**Description:** Whether display sleep powers the screen panel down or just turns its backlight off. Automatic powers the panel down only when the screen has no brightness control; on every other screen, sleep turns the backlight off. Set `1` if your screen goes black at sleep but the backlight stays lit. Set `0` if at sleep your screen flashes colours, glows at the edges, or does not come back on when you wake it. Takes effect after a restart.
+
 ### `screensaver_type`
 **Type:** integer
 **Default:** `1`
@@ -566,7 +572,6 @@ Located in the `input` section:
     "scroll_limit": 10,
     "long_press_time": 500,
     "scroll_guard": false,
-    "scroll_guard_cooldown_ms": 80,
     "home_edit_mode_enabled": true,
     "touch_device": "",
     "device_blacklist": [],
@@ -584,7 +589,7 @@ Located in the `input` section:
 }
 ```
 
-> **Tuning touch feel:** These four settings interact. See **[Touch Feel — Which Setting Do I Tune?](TROUBLESHOOTING.md#touch-feel--which-setting-do-i-tune)** in the troubleshooting guide for a symptom → setting map.
+> **Tuning touch feel:** `scroll_throw` and `scroll_limit` interact. See **[Touch Feel — Which Setting Do I Tune?](TROUBLESHOOTING.md#touch-feel--which-setting-do-i-tune)** in the troubleshooting guide for a symptom → setting map.
 >
 > **Touch calibration** (`input.calibration`) is set automatically by the wizard — don't edit the `a`–`f` coefficients by hand. See the [Touch Calibration Guide](guide/touch-calibration.md) for the full reference.
 
@@ -632,19 +637,51 @@ Matches LVGL's native default of 10.
 
 ### `scroll_guard`
 **Type:** boolean
-**Default:** `false` (overridden to `true` by AD5M/AD5X presets)
-**Description:** Suppresses the phantom "clicked" event some capacitive touch controllers generate when the finger lifts at the end of a scroll gesture. Common on FlashForge AD5M and AD5X displays — you scroll a list, lift your finger, and whatever button is now under where your finger was fires. When enabled, HelixScreen ignores taps for the cooldown window (default 80 ms — see `scroll_guard_cooldown_ms`) after a scroll ends. Can also be overridden with the `HELIX_SCROLL_GUARD` environment variable (`1` to enable).
-
-### `scroll_guard_cooldown_ms`
-**Type:** integer
-**Default:** `80`
-**Range:** `20` - `500`
-**Description:** How long (in milliseconds) `scroll_guard` suppresses taps after a scroll gesture ends. Only takes effect when `scroll_guard` is enabled. The default handles most capacitive controllers that re-press briefly during lift-off; if you still see phantom clicks right as you lift your finger, try raising to `150` or `200`. Going too high will swallow legitimate taps that closely follow a scroll, so raise gradually. Can also be overridden with the `HELIX_SCROLL_GUARD_COOLDOWN_MS` environment variable.
+**Default:** `false` (`true` in the AD5M and AD5X presets)
+**Description:** Has no effect in current builds. The value is stored and appears as the **Scroll Guard** toggle under **Settings > System > Touch & Input**, and the AD5M and AD5X presets still set it to `true`, but nothing reads it. Keeping the key in an existing settings file is harmless. For clicks that fire while you are still scrolling, the setting that helps is `scroll_limit` (see [Touch Feel](TROUBLESHOOTING.md#touch-feel--which-setting-do-i-tune)); there is currently no setting that suppresses a click at the instant you lift off a scroll.
 
 ### `force_calibration`
 **Type:** boolean
 **Default:** `false`
 **Description:** Force the calibration wizard to run on next startup, even if the device doesn't normally require it. After successful calibration, this flag is automatically cleared. Mainly useful when touch is too far off to reach Settings at all — the Settings entry point itself is offered for any touchscreen, so you rarely need this just to find the option.
+
+---
+
+## Motion Settings
+
+Located in the `motion` section. These back the jog pad; set them from the screen at **Settings > Printing > Motion** (or the cog icon in the Motion screen's header) rather than by hand.
+
+```json
+{
+  "motion": {
+    "jog_speed_xy": 6000,
+    "jog_speed_z": 600,
+    "fine_inner": 0.1,
+    "fine_outer": 1.0,
+    "coarse_inner": 1.0,
+    "coarse_outer": 10.0,
+    "turbo_inner": 10.0,
+    "turbo_outer": 50.0
+  }
+}
+```
+
+### `jog_speed_xy`
+**Type:** integer
+**Default:** `6000`
+**Range:** `60` - `60000`
+**Description:** Jog pad feedrate for X and Y moves, in mm/min.
+
+### `jog_speed_z`
+**Type:** integer
+**Default:** `600`
+**Range:** `60` - `60000`
+**Description:** Jog pad feedrate for Z moves, in mm/min.
+
+### `fine_inner`, `fine_outer`, `coarse_inner`, `coarse_outer`, `turbo_inner`, `turbo_outer`
+**Type:** number
+**Range:** `0.01` - `200`
+**Description:** Distance in mm moved per tap, for each jog mode's inner and outer ring. Defaults: Fine 0.1/1, Coarse 1/10, Turbo 10/50. The ring labels on the jog pad show whatever you set.
 
 ---
 
@@ -669,33 +706,7 @@ Located in the `output` section:
 
 ## Network Settings
 
-Located in the `network` section:
-
-```json
-{
-  "network": {
-    "connection_type": "None",
-    "wifi_ssid": "",
-    "eth_ip": ""
-  }
-}
-```
-
-### `connection_type`
-**Type:** string
-**Default:** `"None"`
-**Values:** `"None"`, `"wifi"`, `"ethernet"`
-**Description:** Current network connection type.
-
-### `wifi_ssid`
-**Type:** string
-**Default:** `""`
-**Description:** Connected WiFi network SSID.
-
-### `eth_ip`
-**Type:** string
-**Default:** `""`
-**Description:** Ethernet IP address (when connected).
+Nothing about the network connection is stored in `settings.json`. The connection type, SSID and IP address shown in **Settings > System > Network** are read live from the printer's operating system, and the setup wizard configures the actual network through the printer, not through this file.
 
 ---
 
@@ -809,6 +820,12 @@ Located in the `printer` section:
 **Default:** `"auto"`
 **Values:** `"auto"`, `"none"`, or a Klipper object name
 **Description:** Which temperature sensor reports the enclosure/chamber temperature. `"auto"` detects it by name heuristics, `"none"` disables chamber-temperature display, or name the Klipper object explicitly (e.g., `"temperature_sensor enclosure_bme"`). Set this if your chamber temperature reads from the wrong sensor or isn't detected.
+
+### `z_offset.step_index`
+**Type:** integer
+**Default:** `2`
+**Values:** `0` = 0.05 mm, `1` = 0.025 mm, `2` = 0.01 mm, `3` = 0.005 mm
+**Description:** The Z-offset step size the print Tune overlay's nudge buttons use, remembered between prints. Picking a size on the overlay writes this; there is nothing to gain from editing it by hand.
 
 ---
 
@@ -1268,6 +1285,7 @@ Each widget object has:
 | `device` | `power_device` | Name of the Moonraker power device to bind |
 | `icon` | `favorite_macro`, `power_device`, `temp_stack`, `fan_stack`, `tool_switcher` | Icon name override |
 | `rotation`, `flip_h`, `flip_v` | `camera` | `0`/`90`/`180`/`270`, and booleans |
+| `source` | `camera` | Name of the webcam to show, exactly as Moonraker lists it; empty or omitted picks the camera automatically |
 | `source`, `danger_threshold` | `clog_detection` | Detection source and danger-zone percentage |
 | `source` | `filament` | Which sensor role the tile follows: `"auto"` (default), `"runout"`, `"toolhead"`, or `"entry"` |
 | `material_index` | `preheat` | Which material profile the buttons preheat to |
@@ -1468,6 +1486,11 @@ Located in the `filament` section:
 **Type:** integer
 **Default:** `120`
 **Description:** How long to wait, in seconds, after a filament load or unload before automatically turning the extruder heater off. This lets you run several filament operations back-to-back without the nozzle cooling down between them. Default is 120 (2 minutes). Setting this to `0` also disables auto-cooldown, but prefer `auto_cooldown` — it's the one the UI toggle writes.
+
+### `favorite_ids`
+**Type:** array of strings
+**Default:** `[]`
+**Description:** The filament types you have starred, in star order. Written whenever you tap a star in a filament selector; each entry is the filament's product id. Edit it only to reorder or clear: a hand-added id that matches nothing simply never shows.
 
 ---
 
@@ -2030,12 +2053,6 @@ Environment="HELIX_TOUCH_DEVICE=/dev/input/event0"
 
   "output": {
     "led_on_at_start": false
-  },
-
-  "network": {
-    "connection_type": "wifi",
-    "wifi_ssid": "PrinterNetwork",
-    "eth_ip": ""
   },
 
   "printer": {

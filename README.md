@@ -164,17 +164,17 @@ See [docs/devel/GALLERY.md](docs/devel/GALLERY.md) for the full gallery.
 
 **One-line install:**
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+curl -sSL https://releases.helixscreen.org/install.sh | sh
 ```
 
 The installer auto-detects your platform, downloads the correct binary, sets up the service, and launches the first-run wizard. To update:
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --update
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --update
 ```
 
 To install or roll back to a specific release (e.g. a last-known-good version), pass `--version` with the tag:
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --version v0.99.111
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --version v0.99.111
 ```
 
 Add `--clean` to wipe HelixScreen's settings and start fresh (it asks for confirmation first; your Klipper/Moonraker config and G-code are untouched). Combine the two to reinstall a specific version with default settings: `--clean --version v0.99.111`.

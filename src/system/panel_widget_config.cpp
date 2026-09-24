@@ -717,7 +717,7 @@ void PanelWidgetConfig::set_widget_config(const std::string& id, const nlohmann:
     spdlog::debug("[PanelWidgetConfig] set_widget_config: widget '{}' not found", id);
 }
 
-int PanelWidgetConfig::add_page(const std::string& name) {
+int PanelWidgetConfig::add_page(const std::string& name, int position) {
     if (!can_add_page()) {
         spdlog::warn("[PanelWidgetConfig] Cannot add page: at maximum ({} pages)", MAX_PAGES);
         return -1;
@@ -725,8 +725,18 @@ int PanelWidgetConfig::add_page(const std::string& name) {
 
     PageConfig page;
     page.id = name.empty() ? generate_page_id() : name;
-    pages_.push_back(std::move(page));
-    return static_cast<int>(pages_.size() - 1);
+    if (position < 0) {
+        position = static_cast<int>(pages_.size());
+    }
+    position = std::min(position, static_cast<int>(pages_.size()));
+    const size_t at = static_cast<size_t>(position);
+    pages_.insert(pages_.begin() + static_cast<int64_t>(at), std::move(page));
+    // A page landing at or before the main page shifts it one later, so the
+    // main page keeps its place in the numbering.
+    if (main_page_index_ >= at) {
+        ++main_page_index_;
+    }
+    return position;
 }
 
 bool PanelWidgetConfig::remove_page(size_t page_index) {

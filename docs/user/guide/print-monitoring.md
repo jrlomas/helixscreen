@@ -123,6 +123,14 @@ This one is about quantity, not identity: when you print from the **external spo
 
 The estimate uses the file's own filament weight when the slicer recorded it; when it only recorded a length, HelixScreen converts it using the material set on the spool. Two honest silences: spools whose remaining weight is unknown are never compared (there is nothing to compare against), and spools sitting in AMS slots are not covered by this dialog — slot-level tracking belongs to your filament system.
 
+## File Will Stop the Printer
+
+Some printers have macros that double as emergency stops (a `HALT`, a vendor stop command), and a file sliced for a different printer profile can call one by name. HelixScreen scans the start of every file before it can start, looking for commands this printer treats as an emergency stop. When it finds one, starting that file is blocked outright:
+
+> *Line 4123 calls HALT, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.*
+
+The dialog names the line and the command, plus the printer's own stop message when it has one. The same check runs when you start a job from the print queue (queue entries usually arrive from a slicer or web UI, so nothing else has looked at them): tap a queued job whose file fails it and the same dialog appears, with the job **left in the queue** so you can fix or remove it.
+
 ---
 
 ## Filament Runout During a Print

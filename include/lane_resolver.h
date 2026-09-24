@@ -23,6 +23,11 @@ namespace helix::ams {
 struct ResolvedLane {
     std::optional<bool> present;
 
+    /// A toolhead docked in this slot, where the backend can sense docking but
+    /// not the filament inside the tool. Orthogonal to `present`: a lane may
+    /// answer this one and stay silent on presence.
+    std::optional<bool> tool_docked;
+
     std::optional<uint32_t> color_rgb;
     std::optional<std::string> color_name;
     std::optional<std::string> material;

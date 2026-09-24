@@ -94,7 +94,7 @@ The app log's location varies by platform; see [Collecting Logs](#collecting-log
    curl -sSL https://releases.helixscreen.org/install.sh | sh
    reboot
    ```
-4. To instead go back to the stock screen, run the uninstaller: `curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --uninstall && reboot`.
+4. To instead go back to the stock screen, run the uninstaller: `curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --uninstall && reboot`.
 
 See [Snapmaker U1 install guide → Recovery](guide/install-u1.md#recovery-screen-is-blank-or-the-printer-is-off-the-network) for the full procedure and the manual reset fallback.
 
@@ -861,26 +861,16 @@ After restart, flags on the language selection screen should show correct colors
 - Only affects the FlashForge Adventurer 5X
 
 **Cause:**
-A driver-level quirk in the AD5X's Allwinner display pipeline. When HelixScreen tells the screen to sleep, the display controller on some AD5X units emits a solid primary-color fill instead of a blank frame. This is not a HelixScreen rendering bug — it does not affect printing, connectivity, or anything else. We have not yet been able to reproduce it reliably on our hardware, so there is no code fix available today.
+The panel has been fully powered down at sleep. A driver-level quirk in the AD5X's Allwinner display pipeline makes the display controller cycle solid primary-color fills when the panel is powered down and brought back. HelixScreen only powers a screen down when it cannot control the screen's backlight, or when `/display/panel_power_off` in `settings.json` forces it; normally it leaves the panel powered and just turns the backlight off, which does not trigger the colors. This is not a HelixScreen rendering bug - it does not affect printing, connectivity, or anything else.
 
-**Workaround 1 — Disable screen sleep (simplest):**
-
-1. Tap the gear icon to open **Settings**
-2. Open **Display**
-3. Set **Sleep** to **Never**
-
-The screen will stay on continuously. Power the touchscreen off at the wall if you want it dark when not in use.
-
-**Workaround 2 — Keep backlight on during sleep (preserves sleep logic):**
-
-This keeps the normal sleep timeout but prevents the backlight from being cut, which avoids the color fill. The screen stays lit showing the last-drawn frame.
+**Fix - stop the panel from being powered down:**
 
 1. SSH into your printer (or open a shell on the AD5X directly)
 2. Edit `settings.json`. On the AD5X (ZMOD firmware) the install lives under the ZMOD data directory, not `~/helixscreen` — the config file is at something like `/usr/data/.mod/.zmod/srv/helixscreen/config/settings.json` (or `/srv/helixscreen/config/settings.json` from inside the ZMOD chroot).
 3. Find the `"display"` section and set:
 
    ```json
-   "sleep_backlight_off": false
+   "panel_power_off": 0
    ```
 
 4. Save the file and restart HelixScreen. The AD5X uses ZMOD's SysV init, not systemd:
@@ -891,7 +881,15 @@ This keeps the normal sleep timeout but prevents the backlight from being cut, w
 
    (or restart via the ZMOD launcher / Mainsail if you manage it that way)
 
-Caveat: the panel stays fully lit 24/7 with this option. If long-term backlight wear is a concern, prefer Workaround 1 and manually power off the screen when not needed.
+With the power-down forbidden, sleep blanks the screen instead: the panel stays powered and dark. Waking is immediate.
+
+**Workaround - disable screen sleep entirely:**
+
+1. Tap the gear icon to open **Settings**
+2. Open **Display**
+3. Set **Sleep** to **Never**
+
+The screen will stay on continuously. Power the touchscreen off at the wall if you want it dark when not in use.
 
 **Helping us fix it:**
 If you are experiencing this and are willing to help, please send a debug bundle from **Settings → Help & About → Upload Debug Bundle**. Include a note that mentions the sleep color issue so we can correlate configs and logs.
@@ -1037,23 +1035,20 @@ sudo usermod -aG input $USER
 
 ### Touch Feel — Which Setting Do I Tune?
 
-Three separate settings control the feel of taps vs. scrolls. Match the symptom to the right knob before changing anything — they have different effects and tuning the wrong one makes things worse.
+Two separate settings control the feel of taps vs. scrolls. Match the symptom to the right knob before changing anything - they have different effects and tuning the wrong one makes things worse.
 
 | Symptom | What's happening | Setting to change | Direction |
 |---|---|---|---|
 | Stationary taps register as swipes/scrolls | Touch controller drifts a few pixels while finger is still, crossing the scroll threshold | `scroll_limit` | **Raise** (e.g., 15–20) |
 | You scroll a list and a button in it fires mid-gesture | Finger released before moving far enough to commit to scroll, so the press becomes a click | `scroll_limit` | **Lower** (e.g., 5) |
-| You scroll, lift your finger, and a button fires right as you lift | Touch controller reports release→re-press on lift-off | `scroll_guard` | **Set to `true`** |
 | Lists feel sluggish — long coast after a flick | Scroll momentum decays too slowly | `scroll_throw` | **Raise** (e.g., 35) |
 | Short flicks never travel far enough — list barely moves | Momentum decays too fast | `scroll_throw` | **Lower** (e.g., 15) |
 
-All three live under `input` in `settings.json` (path varies by platform — see [Config File Locations](guide/touch-calibration.md#config-file-locations)). See [CONFIGURATION.md § Input Configuration](CONFIGURATION.md#input-settings) for the full reference.
+Both live under `input` in `settings.json` (path varies by platform - see [Config File Locations](guide/touch-calibration.md#config-file-locations)). See [CONFIGURATION.md § Input Configuration](CONFIGURATION.md#input-settings) for the full reference.
 
 > **Stop the service before editing `settings.json`** — the daemon rewrites the file periodically and your edits can be clobbered. Stop, edit, start.
 >
-> **Want to try a value before committing it?** All three are sliders under **Settings → System → Touch & Input** on the printer itself, so you can feel the change immediately and keep it only if it helps. `scroll_guard` and `scroll_limit` apply straight away; the panel prompts for a restart where one is needed.
-
-FlashForge AD5M and AD5X presets ship with `scroll_guard: true` out of the box. Other platforms default to `false`.
+> **Want to try a value before committing it?** `scroll_limit` is a slider under **Settings > System > Touch & Input** on the printer itself (Scroll Engage Distance), so you can feel the change immediately and keep it only if it helps; it takes effect after the restart the panel prompts for. `scroll_throw` has no on-screen control, so set it in `settings.json` directly.
 
 ---
 
@@ -1554,16 +1549,23 @@ sudo journalctl -u moonraker | grep -i spoolman
 changing that lane's color from the printer's own color menu does not stick: the panel
 goes back to showing the spool's color within a second.
 
-Assigning the spool is what causes it. HelixScreen records the assignment as a deliberate
-choice of color, so later color readings from the firmware are treated as something to be
-corrected rather than obeyed. There is no way to tell "the user picked this color" apart
-from "this color arrived with the spool" yet, which is why it is not simply switched off.
+This is the lane ranking working as designed. When more than one source can describe a
+lane, HelixScreen takes each detail from the most trustworthy source rather than from
+whichever wrote last: a color you pick on the lane's editor outranks the linked spool's,
+and a linked spool's color outranks what the machine itself reports. A change made in
+the printer's own color menu is a machine report, so while a Spoolman spool is linked
+to that lane it loses to the spool's record. The same ranking protects your own pick:
+a color set on the lane's editor in HelixScreen sticks, and the machine cannot
+overwrite it either.
 
 **What works instead:** change the color in HelixScreen, on the lane's own editor
-(tap the lane, then edit it), or change it in Spoolman. Both take effect and persist.
+(tap the lane, then edit it), or change the spool's color in Spoolman. Both take
+effect and persist.
 
-**Unaffected:** lanes with no Spoolman spool assigned, every non-AD5X printer, and
-material changes.
+**Unaffected:** lanes with no Spoolman spool assigned. With no spool record to lose
+to, the machine's report is the strongest source and the change shows as set. Note
+that a linked spool also owns the lane's material and spool name, so machine-side
+changes to those revert the same way while the link is in place.
 
 ### Only some spools showing in Spoolman lists
 
@@ -1983,7 +1985,7 @@ To go back to GuppyScreen:
 
 ```bash
 # Automated (recommended)
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | bash -s -- --uninstall
+curl -sSL https://releases.helixscreen.org/install.sh | bash -s -- --uninstall
 
 # Manual
 /etc/init.d/S90helixscreen stop

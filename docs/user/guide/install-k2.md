@@ -21,7 +21,7 @@ End-to-end guide for the Creality K2, K2 Plus, and K2 Pro: install, update, and 
 SSH into the printer and run:
 
 ```bash
-python3 -c "import urllib.request as u;u.urlretrieve('https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh','/tmp/install.sh')" && sh /tmp/install.sh
+python3 -c "import urllib.request as u;u.urlretrieve('https://releases.helixscreen.org/install.sh','/tmp/install.sh')" && sh /tmp/install.sh
 ```
 
 > **Why not `wget`?** Recent K2 firmware (Tina/OpenWrt) ships neither `wget` nor `curl` on the `PATH`: even the BusyBox `wget` applet has been compiled out. Every K2 includes `python3` (Klipper and Moonraker need it) with working SSL, so the command above uses Python to fetch the installer over HTTPS; the installer then uses Python for the rest of the download and extraction. If your firmware still has `wget` (older builds did), `wget -O - http://dl.helixscreen.org/install.sh | sh` also works.
