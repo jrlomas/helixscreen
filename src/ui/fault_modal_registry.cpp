@@ -96,6 +96,11 @@ int dismiss_fault_modals() {
 }
 
 void set_fault_carrier(lv_obj_t* dialog) {
+    // Callers may hold a dialog a backdrop tap already deleted. backdrop_for()
+    // only compares pointers, so asking about a dead one is safe.
+    if (dialog && !modal_live(dialog)) {
+        dialog = nullptr;
+    }
     if (dialog == s_fault_carrier) {
         return;
     }
@@ -104,6 +109,7 @@ void set_fault_carrier(lv_obj_t* dialog) {
         return;
     }
     // DECLARATIVE_OK: LV_EVENT_DELETE cleanup has no declarative equivalent.
+    lv_obj_remove_event_cb(dialog, forget_fault_carrier);
     lv_obj_add_event_cb(dialog, forget_fault_carrier, LV_EVENT_DELETE, nullptr);
     const int dismissed = hide_fault_modals();
     if (dismissed > 0) {
@@ -114,6 +120,10 @@ void set_fault_carrier(lv_obj_t* dialog) {
 
 bool fault_carrier_showing() {
     return s_fault_carrier && modal_live(s_fault_carrier);
+}
+
+bool fault_alert_gets_modal(bool modal, bool fault) {
+    return modal && !(fault && fault_carrier_showing());
 }
 
 int tracked_fault_modal_count() {
