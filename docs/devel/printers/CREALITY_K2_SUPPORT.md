@@ -196,6 +196,23 @@ The K2 Plus reports a Goodix `gt9xxnew_ts` on `/dev/input/event0`, which is the 
 
 Selection is scored, not name-matched: `src/api/display_backend_fbdev.cpp#auto_detect_touch_device` requires ABS capabilities, then adds points for a known name (`include/touch_calibration.h#is_known_touchscreen_name`), `INPUT_PROP_DIRECT`, and USB. Some K2 hardware revisions carry a `tlsc6x` controller instead; `tlsc` is **not** in the known-name list, so such a panel scores lower and relies on its capability bits. No K2 with that variant has been observed yet.
 
+## Spaghetti Detection
+
+Installing HelixScreen stops the stock AI failure-detection loop: the launcher hook stops and disables `/etc/init.d/app` (the procd service whose `Monitor`/`master-server`/`app-server` children run Creality's detect loop), and the camera module hands `/dev/video0` to ustreamer. HelixScreen ships its own detector for that gap, so a K2 running HelixScreen is still watched.
+
+`K2StockDetectionSource` (`src/printer/k2_stock_detection_source.cpp`) is capable only on a Creality K2 with `/usr/bin/detection` present and executable. During an active print it fetches a camera snapshot, runs the stock `/usr/bin/detection` binary on it, and parses the `label:`/`prob:` lines for the maximum spaghetti probability. Detection is edge-triggered: it fires once per spaghetti episode, stays quiet while it persists, and re-arms when the frame goes clean or a new print starts.
+
+The interval and threshold are the printer's own, read from `/mnt/UDISK/creality/userdata/config/user_print_refer.json` (`ai_control.pastaTime` = poll period, clamped 5-600s; `ai_control.pastaTruth` = confidence threshold). Nothing writes that file.
+
+The source only reports. Whether a detection pauses the print is decided above it, from the two settings in Settings > Safety & Notifications:
+
+- **Spaghetti Detection** (on/off)
+- **Pause on Detection** (pause the print, or only warn)
+
+On the first start after install, both are seeded once from the printer's own stored choice in the same `ai_control` block (`switch` -> enabled, `pausePrint` -> pause) and are HelixScreen's from then on. A confirmed detection with pausing on sends `PAUSE`, shows the spaghetti modal (Resume / Abort / Reduce Sensitivity / Turn off detection); with pausing off it only warns. The Reduce Sensitivity button opens the stock DEFECT_DETECTION_CONFIG macro screen.
+
+For desktop development, `HELIX_MOCK_DETECTION_CAPABLE=1` forces the capability probe true (mock printers are never a K2), so the Settings rows and the detection loop can be exercised in `--test` runs.
+
 ## CFS (Creality Filament System) — Full Protocol Reference
 
 The CFS is a multi-material filament management system using RS-485 serial communication. Each CFS unit holds 4 spools; up to 4 units can be daisy-chained for 16-color printing.

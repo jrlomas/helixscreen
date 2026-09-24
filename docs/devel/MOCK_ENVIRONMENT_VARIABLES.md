@@ -712,6 +712,21 @@ HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbr
 
 **Two-word object names are reassembled by prefix.** The parser splits on whitespace, then treats a token starting with `heater_generic`, `temperature_fan`, `temperature_sensor`, or `output_pin` as the start of a *new* object and glues any following tokens onto the current one. So `temperature_fan chamber` becomes the single object `temperature_fan chamber`. A token that is not a prefix glues onto the current object — with one exception: a token that exactly names a chamber-heater backend's diagnostics object (e.g. the bare `dragonbreath` after a completed `heater_generic dragonbreath`) starts a new standalone object instead of appending. A chamber heater accepted from this list also replaces the mock profile's built-in chamber heater. Each accepted object is logged as `[MoonrakerClientMock] Added mock object: <name>`.
 
+### `HELIX_MOCK_DETECTION_CAPABLE`
+
+Force the K2 spaghetti-detection source's capability probe, so the Settings > Safety detection rows and the detection loop can be exercised in a mock run. Mock printers are never a K2 and no mock type carries `/usr/bin/detection`, so without this the source reports incapable everywhere off a real printer. Capability normally requires `PrinterDetector::is_creality_k2()` AND `/usr/bin/detection` present and executable; the U1 source is unaffected (its capability comes from the `defect_detection` object probe).
+
+| Property | Value |
+|----------|-------|
+| **Values** | `0` or `1` (any non-zero integer reads as capable) |
+| **Default** | Unset: the real probe runs |
+| **File** | `src/printer/k2_stock_detection_source.cpp` |
+
+```bash
+# Show the Spaghetti Detection / Pause on Detection rows in a mock
+HELIX_MOCK_DETECTION_CAPABLE=1 ./build/bin/helix-screen --test -vv
+```
+
 ### `HELIX_MOCK_DRAGONBREATH_FAULT`
 
 Latch a fault into every synthesized dragonbreath status frame — the diagnostics object reports `fault: true` with a `fault_reason` instead of the nominal healthy payload. Pairs with the `HELIX_MOCK_OBJECTS` dragonbreath trio to exercise fault UI paths without hardware.
