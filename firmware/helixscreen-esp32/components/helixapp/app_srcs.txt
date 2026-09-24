@@ -536,6 +536,7 @@ src/ui/wizard_step_registry.cpp
 src/ui/z_offset_utils.cpp
 src/util/indexed_subject_pool.cpp
 src/util/scoped_subject_registry.cpp
+src/util/version.cpp
 src/utils/network_validation.cpp
 src/xml_registration.cpp
 

@@ -11,7 +11,7 @@ This guide helps you upgrade HelixScreen to a newer version.
 The preferred ways to update are inside the app itself (**Settings > Help & About > About > Check for Updates**) or the Mainsail/Fluidd update manager. From the command line instead, on any host with direct internet access:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --update
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --update
 ```
 
 Your settings (`settings.json`), environment overrides (`helixscreen.env`), and custom files (custom printer images, etc.) are automatically preserved across updates.
@@ -100,7 +100,7 @@ Your Klipper configuration, Moonraker settings, print history, and G-code files 
 ## Upgrade to Specific Version
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --update --version v1.2.0
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --update --version v1.2.0
 ```
 
 ### Reinstall a Version with Fresh Settings
@@ -108,7 +108,7 @@ curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/script
 The command above keeps your existing `settings.json`. To reinstall a specific version **and** reset HelixScreen's settings to defaults at the same time, use `--clean` instead of `--update`:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --clean --yes --version v1.2.0
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --clean --yes --version v1.2.0
 ```
 
 `--yes` is required because a piped command cannot ask for confirmation; if you download the script and run it interactively over SSH, you get the confirmation prompt instead. `--clean` removes HelixScreen's settings and caches, then installs the version you specified. Your Klipper config, Moonraker settings, print history, and G-code files are **not** affected.

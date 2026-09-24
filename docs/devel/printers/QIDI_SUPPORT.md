@@ -99,7 +99,7 @@ This section is for replacing the printer's built-in display with HelixScreen ru
 The standard HelixScreen installer works on QIDI hardware out of the box. SSH into the printer and run:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+curl -sSL https://releases.helixscreen.org/install.sh | sh
 ```
 
 The installer auto-detects QIDI-class SBCs (hostname `linaro-alip` + `/home/mks` on stock Q2; the same Pi/aarch64 binary covers Max 4) and sets up the systemd service, launcher, and config under the correct user.
@@ -234,6 +234,7 @@ HelixScreen ships a **Q2 Happy Hare preset** (`presets/qidi_q2.json`) for exactl
 
 ## Known Limitations
 
+- **On-device install disables the stock client, and with it the slicer and cloud link** -- On new-firmware QIDIs (field-observed on one Max 4; the Q2 and Plus 4 share the firmware family) the stock `qidi-client` is more than the screen: it supplies the credentials QIDI's Moonraker uses for its MQTT link, and the QIDI Box filament state. While it is disabled, QIDI Studio stops seeing the QIDI Box and will not send prints, QIDI cloud is unavailable, and QIDI Box filament edits do not stick (from Fluidd or HelixScreen alike). The symptom signature in the Moonraker log is `[QDC_400_004_010_001]: MQTT account/password/ip decryption returned EMPTY result`, followed by `MQTT Connection Failed: Not authorized`. The installer warns about this when it disables the stock client. Recovery is `sudo systemctl enable --now qidi-client`, or uninstalling HelixScreen, which restores the unit.
 - **Most QIDI models have TJC HMI serial displays** -- The X-Max 3, X-Plus 3, Q1 Pro, X-Smart 3, and **Plus 4** all use TJC (Nextion-compatible) displays connected via serial UART. HelixScreen cannot drive these. For on-device install, a physical screen replacement (HDMI or DSI touchscreen) is required. Remote-control mode is unaffected.
 - **Q2 resolution is very small** -- The Q2's 480x272 display uses the MICRO layout. Some UI elements may be cramped but the layout is functional.
 - **Q2 digitizer over-reports its touch range** -- Advertises 800x480, emits ~460x237, so pre-calibration touches land in the top-left ~55%x49% of the screen (see Hardware Details below). First-run calibration fixes it permanently; `HELIX_TOUCH_MIN/MAX_X/Y` with the *emitted* range is the env-level alternative ([#943](https://github.com/prestonbrown/helixscreen/issues/943)).

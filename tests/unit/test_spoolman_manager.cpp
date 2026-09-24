@@ -487,17 +487,6 @@ using helix::SlotInfo;
 
 namespace {
 
-/// A backend that keeps its own remaining weight, the way AFC reads one off
-/// its status payload.
-class LocalWeightBackend : public AmsBackendMock {
-  public:
-    using AmsBackendMock::AmsBackendMock;
-
-    [[nodiscard]] bool tracks_weight_locally() const override {
-        return true;
-    }
-};
-
 /// A backend that records every slot it is asked to repaint.
 class RepaintRecordingBackend : public AmsBackendMock {
   public:
@@ -528,8 +517,10 @@ struct SpoolmanLaneFixture : SpoolmanFixture {
     MoonrakerAPIMock api;
 
     SpoolmanLaneFixture() : api(client, get_printer_state()) {
-        // A fetch's answer bumps AmsState's slots_version, which needs the
-        // subject to exist.
+        // Lane records and the external spool binding are process-wide; a case
+        // that starts with the previous case's filings reads a filing that
+        // reports "unchanged" and skips the work under test.
+        helix::ams::reset_lane_sources();
         AmsState::instance().init_subjects(true);
         TA::reset_identity(SpoolmanManager::instance());
         set_spoolman_available(true);
@@ -698,8 +689,8 @@ TEST_CASE_METHOD(
 
 TEST_CASE_METHOD(SpoolmanLaneFixture, "SpoolmanManager: the weights a fetch files on a lane",
                  "[spoolman][lane][1653]") {
-    SECTION("a backend that keeps its own remaining weight gets only Spoolman's total") {
-        helix::test::RegisteredBackend<LocalWeightBackend> backend(2);
+    SECTION("a backend that keeps its own remaining weight still gets Spoolman's") {
+        helix::test::RegisteredBackend<AmsBackendMock> backend(2);
         link(*backend, 0, 1);
         state_polymaker_pla(server_spool(1));
 
@@ -708,7 +699,7 @@ TEST_CASE_METHOD(SpoolmanLaneFixture, "SpoolmanManager: the weights a fetch file
         const auto record = helix::ams::lane_sources(backend.lane(0)).spoolman;
         REQUIRE(record.has_value());
         CHECK(record->total_weight_g == 1000.0F);
-        CHECK_FALSE(record->remaining_weight_g.has_value());
+        CHECK(record->remaining_weight_g == 850.0F);
     }
 
     SECTION("a spool Spoolman holds no weight for states no weight") {
@@ -732,6 +723,221 @@ TEST_CASE_METHOD(SpoolmanLaneFixture, "SpoolmanManager: the weights a fetch file
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a linked lane shows Spoolman's weight over the meter's",
+                 "[spoolman][lane][1632]") {
+    helix::test::RegisteredBackend<AmsBackendMock> backend(2);
+    link(*backend, 0, 1);
+    state_polymaker_pla(server_spool(1));
+
+    // The firmware meter files its own number on every frame, before and after
+    // each poll: ingest replaces a source's record whole, so a poll that wrote
+    // Metered and a meter that writes Metered are two writers of one source.
+    const auto file_metered = [&backend](float remaining) {
+        helix::ams::Observation metered(helix::ams::ObservationSource::Metered);
+        metered.remaining_weight_g = remaining;
+        metered.total_weight_g = 1000.0F;
+        helix::ams::ingest(backend.lane(0), metered);
+    };
+
+    file_metered(400.0F);
+    poll();
+    file_metered(390.0F);
+
+    const auto shown = helix::ams::resolve(helix::ams::lane_sources(backend.lane(0)));
+    CHECK(shown.remaining_weight_g == 850.0F);
+    CHECK(shown.total_weight_g == 1000.0F);
+
+    // The server's number moves and the meter keeps filing its own; the lane
+    // keeps showing the server's rather than flipping between the two.
+    server_spool(1).remaining_weight_g = 700.0;
+    poll();
+    file_metered(380.0F);
+
+    CHECK(helix::ams::resolve(helix::ams::lane_sources(backend.lane(0))).remaining_weight_g ==
+          700.0F);
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: an unlinked lane's weight stays the meter's",
+                 "[spoolman][lane][1632]") {
+    helix::test::RegisteredBackend<AmsBackendMock> backend(2);
+    // The mock seeds every slot with a spoolman id; an unlinked lane has to be
+    // made one on purpose.
+    link(*backend, 0, 0);
+    helix::ams::Observation metered(helix::ams::ObservationSource::Metered);
+    metered.remaining_weight_g = 123.0F;
+    metered.total_weight_g = 1000.0F;
+    helix::ams::ingest(backend.lane(0), metered);
+
+    poll();
+
+    CHECK_FALSE(helix::ams::lane_sources(backend.lane(0)).spoolman.has_value());
+    const auto shown = helix::ams::resolve(helix::ams::lane_sources(backend.lane(0)));
+    CHECK(shown.remaining_weight_g == 123.0F);
+    CHECK(shown.total_weight_g == 1000.0F);
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a linked external spool's weight files on the bypass lane",
+                 "[spoolman][lane][1632]") {
+    // No AMS backend: the external spool is the only lane this poll touches.
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA";
+    ext.remaining_weight_g = 400.0F; // the meter's count, in the raw store
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+
+    CHECK(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->remaining_weight_g == 850.0F);
+    CHECK(shown->total_weight_g == 1000.0F);
+
+    // The meter goes on counting in the raw store; the display does not flip
+    // to its number between polls.
+    SlotInfo metered_raw = *shown;
+    metered_raw.remaining_weight_g = 390.0F;
+    AmsState::instance().set_external_spool_info_in_memory(metered_raw);
+    poll();
+
+    shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->remaining_weight_g == 850.0F);
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: an external spool fetch moves the stored binding with it",
+                 "[spoolman][lane][1632]") {
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA";
+    ext.remaining_weight_g = 400.0F; // the link-time stub
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+
+    // The raw record is what a restart (or a server that stays down) reads
+    // before any poll answers: it carries the fetched weight and identity,
+    // not the link-time stub.
+    auto raw = AmsState::instance().raw_external_spool_info();
+    REQUIRE(raw.has_value());
+    CHECK(raw->remaining_weight_g == 850.0F);
+    CHECK(raw->brand == "Polymaker");
+    CHECK(raw->material == "PLA");
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a spool Spoolman denies takes the bypass lane's record with it",
+                 "[spoolman][lane][1632]") {
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA";
+    ext.remaining_weight_g = 400.0F;
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+    REQUIRE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+
+    remove_server_spool(1);
+    poll();
+
+    CHECK_FALSE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    // The first poll moved the stored binding to the fetched weight, so the
+    // display falls back to that, not to the link-time stub.
+    CHECK(shown->remaining_weight_g == 850.0F);
+    CHECK(shown->brand == "Polymaker");
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a denied external spool keeps its freshest identity",
+                 "[spoolman][lane][1632]") {
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA"; // the link-time stub
+    ext.remaining_weight_g = 400.0F;
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+
+    // The server edits the spool to PETG and the next poll carries that; the
+    // delete that follows must keep the PETG view, not revert to the stub.
+    server_spool(1).material = "PETG";
+    poll();
+    REQUIRE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+
+    remove_server_spool(1);
+    poll();
+
+    auto sources = helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID);
+    CHECK_FALSE(sources.spoolman.has_value());
+    // A delete is bookkeeping, not a spool change: what the resolved view
+    // carried goes back on the lane as remembered, the way a denied slot's
+    // does.
+    REQUIRE(sources.remembered.has_value());
+    CHECK(sources.remembered->material == "PETG");
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->material == "PETG");
+    CHECK(shown->brand == "Polymaker");
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a denial in flight does not touch a newer binding",
+                 "[spoolman][lane][1632]") {
+    SlotInfo ext;
+    ext.spoolman_id = 1;
+    ext.material = "PLA";
+    ext.remaining_weight_g = 400.0F;
+    ext.total_weight_g = 1000.0F;
+    AmsState::instance().set_external_spool_info(ext);
+    state_polymaker_pla(server_spool(1));
+
+    poll();
+    REQUIRE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).spoolman.has_value());
+
+    remove_server_spool(1);
+    fetch(); // the mock answers inside the call; the denial is queued, not run
+
+    // Another client rebinds the bypass to spool 2 and its own fetch files
+    // before the denial drains.
+    SlotInfo ext2;
+    ext2.spoolman_id = 2;
+    ext2.material = "ABS";
+    ext2.remaining_weight_g = 600.0F;
+    ext2.total_weight_g = 750.0F;
+    AmsState::instance().set_external_spool_info(ext2);
+    SpoolInfo& s2 = server_spool(2);
+    s2.vendor = "Prusa";
+    s2.material = "ABS";
+    s2.initial_weight_g = 750.0;
+    s2.remaining_weight_g = 600.0;
+    REQUIRE(SpoolmanManager::file_spool_on_lane(helix::ams::BYPASS_LANE_ID, s2));
+
+    drain(); // the denial for spool 1 runs now
+
+    auto sources = helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID);
+    REQUIRE(sources.spoolman.has_value());
+    CHECK(sources.spoolman->spoolman_id == 2);
+    CHECK_FALSE(sources.remembered.has_value());
+    auto shown = AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->spoolman_id == 2);
+    CHECK(shown->remaining_weight_g == 600.0F);
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
                  "SpoolmanManager: a linked lane's catalog pick survives a fetch of its spool",
                  "[spoolman][lane][1653]") {
     helix::test::RegisteredBackend<AmsBackendMock> backend(2);
@@ -750,8 +956,7 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
     stored.product_name = "PolyTerra PLA Charcoal";
     helix::test::file_override_as_lane_records(*backend, 0, stored);
 
-    SpoolmanManager::file_spool_on_lane(backend.lane(0), server_spool(1),
-                                        backend->tracks_weight_locally());
+    SpoolmanManager::file_spool_on_lane(backend.lane(0), server_spool(1));
 
     const auto shown = helix::ams::resolve(helix::ams::lane_sources(backend.lane(0)));
     CHECK(shown.catalog_id == "polymaker-polyterra-pla-charcoal");
@@ -987,7 +1192,7 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
-                 "SpoolmanManager: a weight the poll writes on a tool changer reaches the slot's "
+                 "SpoolmanManager: a weight the poll files on a tool changer reaches the slot's "
                  "subjects in the same pass",
                  "[spoolman][toolchanger][slot_refresh]") {
     helix::test::RegisteredBackend<helix::AmsBackendToolChanger> backend(nullptr, nullptr);
@@ -1010,15 +1215,16 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
     drain();
     REQUIRE(lv_subject_get_int(ams.get_slot_fill_subject(0)) == 100);
 
-    // The mock answers inside the fetch. One pass of the update queue runs that
-    // answer and nothing the answer queues in turn, so what the subjects show
-    // afterwards is the poll's own refresh.
+    // The server's number moves. The mock answers inside the fetch. One pass of
+    // the update queue runs that answer and nothing the answer queues in turn,
+    // so what the subjects show afterwards is the poll's own refresh.
+    server_spool(1).remaining_weight_g = 700.0;
     fetch();
     helix::ui::UpdateQueueTestAccess::drain(helix::ui::UpdateQueue::instance());
-    REQUIRE(backend->get_slot_info(0).remaining_weight_g == 850.0F);
+    REQUIRE(backend->get_slot_info(0).remaining_weight_g == 700.0F);
 
-    CHECK(lv_subject_get_int(ams.get_slot_fill_subject(0)) == 85);
-    CHECK(std::string(lv_subject_get_string(ams.get_slot_remaining_subject(0))) == "850g");
+    CHECK(lv_subject_get_int(ams.get_slot_fill_subject(0)) == 70);
+    CHECK(std::string(lv_subject_get_string(ams.get_slot_remaining_subject(0))) == "700g");
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,

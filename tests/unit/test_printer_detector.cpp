@@ -1673,6 +1673,138 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
     }
 }
 
+// The FLSUN S1 and S1 Pro run one FLSUN OS image and one Klipper config, so no
+// object tells them apart; one entry names both. What separates them from the
+// other deltas is hardware the S1 platform carries: the closed-loop motor boards
+// report through gcode_button motor_a/b/c, and the lid holds a filament drying
+// box. The hostname patterns all start with "flsun": a bare "s1" also names the
+// Ender-3 S1 and the Kobra S1.
+TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: FLSUN S1 / S1 Pro",
+                 "[printer][detector][flsun]") {
+    auto s1_rig = [](const char* hostname) {
+        PrinterHardwareData hardware{
+            .heaters = {"extruder", "heater_bed", "heater_generic HotBed1"},
+            .sensors = {"temperature_sensor mcu_temp", "temperature_sensor Armv7 mcu"},
+            .fans = {"fan", "heater_fan heat_sink_fan", "heater_fan motherboard_fan",
+                     "fan_generic box_fan", "fan_generic drying_box_fan"},
+            .hostname = hostname,
+            .printer_objects = {"delta_calibrate", "bed_mesh", "probe", "gcode_button motor_a",
+                                "gcode_button motor_b", "gcode_button motor_c",
+                                "output_pin motor_cali_a", "output_pin drying_box_heater",
+                                "fan_generic drying_box_fan", "heater_generic HotBed1",
+                                "filament_motion_sensor my_sensor"},
+            .steppers = {"stepper_a", "stepper_b", "stepper_c"},
+            .kinematics = "delta",
+            .mcu = "stm32f103xe",
+            .mcu_list = {"stm32f103xe"}};
+        hardware.objects_reported = true;
+        return hardware;
+    };
+
+    const auto expect_s1 = [](const PrinterHardwareData& hardware) {
+        auto result = PrinterDetector::detect(hardware);
+        CAPTURE(result.type_name, result.confidence, result.runner_up_type_name,
+                result.runner_up_confidence, result.margin(), result.tied_count);
+        REQUIRE(result.type_name == "FLSUN S1 / S1 Pro");
+        REQUIRE(result.margin() >= PrinterDetector::DETECT_MIN_MARGIN);
+        REQUIRE(PrinterDetector::meets_autosave_threshold(result));
+    };
+
+    SECTION("a stock FLSUN OS rig is identified by its hardware, whatever its hostname") {
+        expect_s1(s1_rig("printer"));
+    }
+
+    SECTION("an Open Source Edition rig: FLSUN-S1 hostname, renamed drying box objects") {
+        auto hardware = s1_rig("FLSUN-S1-3C2A");
+        hardware.heaters = {"extruder", "heater_bed", "heater_generic heater_bed_2",
+                            "heater_generic drying_box"};
+        hardware.printer_objects = {"delta_calibrate",
+                                    "bed_mesh",
+                                    "probe",
+                                    "gcode_button motor_a",
+                                    "gcode_button motor_b",
+                                    "gcode_button motor_c",
+                                    "output_pin _motor_cali_a",
+                                    "heater_generic drying_box",
+                                    "heater_fan drying_box_fan",
+                                    "heater_generic heater_bed_2"};
+        expect_s1(hardware);
+    }
+
+    SECTION("a bare delta with an stm32f103xe board is not an S1") {
+        // The MCU is shared with MKS Robin Nano boards on older FLSUN deltas.
+        PrinterHardwareData hardware{.heaters = {"extruder", "heater_bed"},
+                                     .hostname = "flsun",
+                                     .printer_objects = {"delta_calibrate"},
+                                     .steppers = {"stepper_a", "stepper_b", "stepper_c"},
+                                     .kinematics = "delta",
+                                     .mcu = "stm32f103xe",
+                                     .mcu_list = {"stm32f103xe"}};
+        hardware.objects_reported = true;
+        auto result = PrinterDetector::detect(hardware);
+        CAPTURE(result.type_name, result.confidence, result.runner_up_type_name,
+                result.runner_up_confidence, result.margin(), result.tied_count);
+        REQUIRE(result.type_name != "FLSUN S1 / S1 Pro");
+        REQUIRE(std::find(result.contenders.begin(), result.contenders.end(),
+                          "FLSUN S1 / S1 Pro") == result.contenders.end());
+    }
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: an S1 in another vendor's hostname is not an FLSUN S1",
+                 "[printer][detector][flsun]") {
+    SECTION("an ender3-s1 cartesian") {
+        PrinterHardwareData hardware{.heaters = {"extruder", "heater_bed"},
+                                     .fans = {"fan"},
+                                     .hostname = "ender3-s1",
+                                     .printer_objects = {"bed_mesh", "probe"},
+                                     .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+                                     .kinematics = "cartesian",
+                                     .mcu = "stm32f103xe",
+                                     .mcu_list = {"stm32f103xe"}};
+        hardware.objects_reported = true;
+        auto result = PrinterDetector::detect(hardware);
+        CAPTURE(result.type_name, result.confidence, result.runner_up_type_name);
+        REQUIRE(result.type_name != "FLSUN S1 / S1 Pro");
+    }
+
+    SECTION("an ender3-s1 hostname before any hardware is reported") {
+        // Discovery can run detection on the hostname alone; only the hostname
+        // patterns stand between this rig and an FLSUN verdict.
+        PrinterHardwareData hardware{.hostname = "ender3-s1"};
+        auto result = PrinterDetector::detect(hardware);
+        CAPTURE(result.type_name, result.confidence, result.runner_up_type_name);
+        REQUIRE(result.type_name != "FLSUN S1 / S1 Pro");
+    }
+
+    SECTION("a cartesian with a filament drying box heater") {
+        PrinterHardwareData hardware{
+            .heaters = {"extruder", "heater_bed", "heater_generic drying_box"},
+            .fans = {"fan"},
+            .hostname = "printer",
+            .printer_objects = {"bed_mesh", "heater_generic drying_box"},
+            .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+            .kinematics = "cartesian"};
+        hardware.objects_reported = true;
+        auto result = PrinterDetector::detect(hardware);
+        CAPTURE(result.type_name, result.confidence, result.runner_up_type_name);
+        REQUIRE(result.type_name != "FLSUN S1 / S1 Pro");
+    }
+
+    SECTION("a kobra_s1 corexy keeps its Anycubic verdict") {
+        PrinterHardwareData hardware{.heaters = {"extruder", "heater_bed"},
+                                     .fans = {"fan"},
+                                     .hostname = "kobra_s1",
+                                     .printer_objects = {"bed_mesh", "filament_tracker"},
+                                     .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+                                     .kinematics = "corexy"};
+        hardware.objects_reported = true;
+        auto result = PrinterDetector::detect(hardware);
+        CAPTURE(result.type_name, result.confidence, result.runner_up_type_name, result.margin());
+        REQUIRE(result.type_name == "Anycubic Kobra");
+    }
+}
+
 TEST_CASE_METHOD(PrinterDetectorFixture,
                  "PrinterDetector: board_match heuristic - Fysetc board identifies Doron Velta",
                  "[printer][board_match]") {

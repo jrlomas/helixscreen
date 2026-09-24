@@ -1462,10 +1462,19 @@ class AmsState {
     void set_action_detail(const std::string& detail);
 
     /**
-     * @brief Get external spool info from persistent storage
+     * @brief Get external spool info, resolved through the bypass lane
+     *
+     * The stored record is the binding; what the sources say about the bound
+     * spool (the Spoolman poll's record, the consumption meter, the user's
+     * edits) is layered on via resolve(BYPASS_LANE_ID) before returning.
      * @return SlotInfo or nullopt if not set
      */
     std::optional<SlotInfo> get_external_spool_info() const;
+
+    /// The stored record with no lane resolution: in-memory override, else
+    /// SettingsManager. The poll's stale guard and the edit diff compare
+    /// against this raw binding, not the resolved view.
+    std::optional<SlotInfo> raw_external_spool_info() const;
 
     /**
      * @brief Set external spool info and update color subject

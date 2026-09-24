@@ -94,7 +94,7 @@ The app log's location varies by platform; see [Collecting Logs](#collecting-log
    curl -sSL https://releases.helixscreen.org/install.sh | sh
    reboot
    ```
-4. To instead go back to the stock screen, run the uninstaller: `curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --uninstall && reboot`.
+4. To instead go back to the stock screen, run the uninstaller: `curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --uninstall && reboot`.
 
 See [Snapmaker U1 install guide → Recovery](guide/install-u1.md#recovery-screen-is-blank-or-the-printer-is-off-the-network) for the full procedure and the manual reset fallback.
 
@@ -1983,7 +1983,7 @@ To go back to GuppyScreen:
 
 ```bash
 # Automated (recommended)
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | bash -s -- --uninstall
+curl -sSL https://releases.helixscreen.org/install.sh | bash -s -- --uninstall
 
 # Manual
 /etc/init.d/S90helixscreen stop

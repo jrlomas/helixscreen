@@ -74,7 +74,7 @@ The bundler uses `awk` to strip shebangs, SPDX headers, and source guards from e
 The primary end-user method. Downloads and runs the bundled `install.sh`:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+curl -sSL https://releases.helixscreen.org/install.sh | sh
 ```
 
 **Options:**

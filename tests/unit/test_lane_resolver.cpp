@@ -106,6 +106,26 @@ TEST_CASE("Presence comes from the sensor and nothing else", "[lane][resolver]")
     }
 }
 
+TEST_CASE("A docked toolhead is a reading of its own, never a filament presence",
+          "[lane][resolver]") {
+    helix::ams::LaneSources lane;
+
+    // A physical tool changer senses a toolhead in the dock and nothing about
+    // the filament in it, so the dock answer must reach a consumer as itself:
+    // filing it as presence would make every docked tool read as a loaded bay.
+    Observation sensed(ObservationSource::Sensed);
+    sensed.tool_docked = true;
+    lane.apply(sensed);
+
+    const auto r = helix::ams::resolve(lane);
+    CHECK(r.tool_docked == true);
+    CHECK_FALSE(r.present.has_value());
+
+    sensed.tool_docked = false;
+    lane.apply(sensed);
+    CHECK(helix::ams::resolve(lane).tool_docked == false);
+}
+
 TEST_CASE("Identity ranks Spoolman over the user's own record over the vendor cache",
           "[lane][resolver]") {
     helix::ams::LaneSources lane;

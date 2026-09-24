@@ -40,6 +40,11 @@ concurrency:
 # the stamp current and judges nothing.
 env:
   HELIX_PATCHES_FROM_CLEAN: "1"
+  # No DWARF in CI builds. At -g2 the objects are ~99% debug info and an app +
+  # test build overflows the 2G ccache, so every run recompiles what the last
+  # one evicted. -g0 keeps the symbol table, so a crash still names functions;
+  # nothing here ships, and file:line debugging happens locally or on zeus.
+  DBGLEVEL: "0"
 
 jobs:
   compile-ubuntu:
@@ -62,7 +67,7 @@ jobs:
     # -- a timed-out step cancels the job, so "Save ccache" never runs and the
     # next run is cold for the same reason. A cold run has to be able to FINISH
     # once for the cache to exist at all.
-    timeout-minutes: 200
+    timeout-minutes: 260
 
     steps:
     - name: Checkout repository
@@ -196,8 +201,8 @@ jobs:
         ccache -s
 
     - name: Build tests
-      # The larger half, and the one that actually timed out cold at 70.
-      timeout-minutes: 95
+      # The larger half. It has to finish cold once for the ccache to exist.
+      timeout-minutes: 150
       env:
         CC: ccache clang
         CXX: ccache clang++

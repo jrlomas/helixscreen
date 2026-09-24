@@ -254,12 +254,17 @@ echo ""
 # ====================================================================
 # XML Validator Tool Build
 # ====================================================================
-# qc_xml_const / qc_xml_attr pass vacuously when their binaries are missing,
-# and nothing in a normal build produces them — `make` builds only the app.
-# This step builds both tools ahead of those gates, serially and before the
-# parallel batch, so two gates never run make against one tree at once.
-# Failing to build is a red gate, not a skip: a validator that silently
-# doesn't exist is a validator that silently passes.
+# qc_xml_attr passes vacuously when its binary is missing, and nothing in a
+# normal build produces it — `make` builds only the app. This step builds it
+# ahead of that gate, serially and before the parallel batch, so two gates
+# never run make against one tree at once. Failing to build is a red gate, not
+# a skip: a validator that silently doesn't exist is a validator that silently
+# passes.
+#
+# validate-xml-constants is not built here while qc_xml_const is paused
+# (prestonbrown/helixscreen#1698): it links the whole app, which on a cold CI
+# runner is a full build that cannot finish inside the step's time limit.
+# Add it back to this make line when enforcement returns.
 qc_xml_tools() {
   local EXIT_CODE=0
   # Same bounded share the build-verification phase uses: this is a real make
@@ -268,7 +273,7 @@ qc_xml_tools() {
   TOOL_JOBS="${HELIX_QC_JOBS:-$(scripts/helix-claim jobs 2>/dev/null || echo 6)}"
 echo "🔧 Building XML validator tools..."
 
-if make SKIP_COMPILE_COMMANDS=1 -j"$TOOL_JOBS" validate-xml-constants validate-xml-attrs >/tmp/qc_xml_tools.out 2>&1; then
+if make SKIP_COMPILE_COMMANDS=1 -j"$TOOL_JOBS" validate-xml-attrs >/tmp/qc_xml_tools.out 2>&1; then
   echo "✅ XML validator tools ready"
 else
   echo ""
@@ -288,17 +293,12 @@ qc_xml_const() {
   local EXIT_CODE=0
 echo "🔤 XML constant set gate..."
 
-if [ -x "build/bin/validate-xml-constants" ]; then
-  # Not enforced while the validator cannot resolve theme tokens: every
-  # constant defined in assets/config/themes reads as undefined, so enforcing
-  # would fail every XML-touching commit on false positives, and a wall of
-  # noise nobody reads is worse than an honest pause. Enforcement returns
-  # with prestonbrown/helixscreen#1698.
-  echo "⏸️  validate-xml-constants built, not enforced - it cannot resolve theme tokens yet (prestonbrown/helixscreen#1698)"
-else
-  echo "⚠️  validate-xml-constants not built - skipping"
-  echo "   qc_xml_tools above should have built it - check its failure"
-fi
+# Not enforced while the validator cannot resolve theme tokens: every
+# constant defined in assets/config/themes reads as undefined, so enforcing
+# would fail every XML-touching commit on false positives, and a wall of
+# noise nobody reads is worse than an honest pause. Enforcement returns
+# with prestonbrown/helixscreen#1698.
+echo "⏸️  validate-xml-constants not enforced - it cannot resolve theme tokens yet (prestonbrown/helixscreen#1698)"
 
 echo ""
 
