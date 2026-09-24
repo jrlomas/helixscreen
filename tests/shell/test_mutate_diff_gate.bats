@@ -411,6 +411,48 @@ SUITE
     contains "killed" "$output"
 }
 
+# --- a suite that hangs ------------------------------------------------------
+#
+# A mutant can deadlock the suite instead of failing it, and a run that waits
+# on it waits forever. The hang is itself a detection: the verdict says which
+# kind of kill it was, and the whole process group dies with it. The stub's
+# child proves the kill reaches the group and not just the runner, and its
+# output is redirected off the pipe so the green baseline run can return.
+
+@test "a suite that hangs is killed at the timeout, not waited on forever" {
+    cat > "$WORK/build/bin/helix-tests" <<'SUITE'
+#!/usr/bin/env bash
+echo $$ > .suite-pid
+grep -q NEW_BEHAVIOR src/feature.cpp && exit 0
+sleep 300 >/dev/null 2>&1 &
+echo $! > .child-pid
+wait
+SUITE
+    chmod +x "$WORK/build/bin/helix-tests"
+    before=$(sha256sum "$WORK/src/feature.cpp" | cut -d' ' -f1)
+    run mutate --timeout 3
+    [ "$status" -eq 0 ]
+    contains "killed (timeout)" "$output"
+    contains "VERDICT: CLEAN" "$output"
+    after=$(sha256sum "$WORK/src/feature.cpp" | cut -d' ' -f1)
+    [ "$before" = "$after" ]
+    # No orphan: the runner and the child it spawned are both gone.
+    for p in $(cat "$WORK/.suite-pid") $(cat "$WORK/.child-pid"); do
+        n=0
+        while kill -0 "$p" 2>/dev/null && [ "$n" -lt 50 ]; do
+            sleep 0.1; n=$((n + 1))
+        done
+        ! kill -0 "$p" 2>/dev/null
+    done
+}
+
+@test "the mutant timeout is derived from the measured baseline" {
+    stub_tests_that_detect
+    run mutate
+    [ "$status" -eq 0 ]
+    contains "mutant timeout 60s" "$output"
+}
+
 @test "a tooling runner that exits without naming a failing test is not a kill" {
     # bats and pytest are read the same way as the C++ suite. A runner that died
     # collecting its tests exits non-zero having judged nothing, and inferring a

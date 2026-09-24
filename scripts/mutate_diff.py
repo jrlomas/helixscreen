@@ -33,6 +33,13 @@
 #   killed       reverting the hunk made a suite REPORT A FAILING TEST. A test
 #                detects this change. This is the outcome you want. A runner
 #                exiting non-zero is not enough on its own; see INCONCLUSIVE.
+#                A mutant can also HANG a suite (a reverted lock ordering can
+#                self-deadlock the binary) instead of failing it, and that is
+#                a detection too: the whole process group is killed at a
+#                per-suite limit and reported as `killed (timeout)`. The limit
+#                is the max of 60s and 5x the suite's own baseline run, or
+#                --timeout. The baseline itself is untimed: it is the
+#                measurement the limit is derived from.
 #   SURVIVED     reverting the hunk left the suite green. NO test detects this
 #                change. The change shipped untested, whatever the diff's test
 #                files claim.
@@ -616,6 +623,10 @@ def apply_reverse(root, patch_text):
 # ---------------------------------------------------------------------------
 DETECTED, GREEN, INCONCLUSIVE = 'detected', 'green', 'inconclusive'
 
+# The reason that marks a detection-by-hang: the suite was killed at its
+# timeout still running, so the mutant deadlocked it rather than failing it.
+TIMED_OUT = 'timed out'
+
 # How each runner reports a failing test. A pattern with a capture group is
 # evidence only when the count it captures is non-zero, which keeps a summary
 # line that counts no failures -- Catch2's "failed as expected" for a
@@ -686,30 +697,78 @@ def syntax_rejects(root, path, log):
     return r.returncode != 0
 
 
-def run_catch2(root, test_bin, filt, shards, log):
+# Suite runners lead their own sessions, so a timeout (or an interrupt) can
+# kill the whole process group at once: helix-tests runs shards as children,
+# bats farms files out to workers, and reaping only the runner leaves orphans
+# holding the tree.
+_live_suite_procs = []
+
+
+def tracked_suite_proc(cmd, cwd):
+    """Start one suite runner as its own process-group leader."""
+    p = subprocess.Popen(
+        cmd,
+        # errors='replace': a mutant can make the code under test dump raw
+        # bytes into a Catch2 failure message, and a strict decode turns that
+        # into a crash that loses the verdict for the one hunk most likely
+        # to be killed.
+        cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        errors='replace', start_new_session=True)
+    _live_suite_procs.append(p)
+    return p
+
+
+def untrack_suite_proc(p):
+    """Forget a finished runner, so a later kill cannot hit a reused pid."""
+    try:
+        _live_suite_procs.remove(p)
+    except ValueError:
+        pass
+
+
+def kill_live_suite_procs():
+    """SIGKILL every suite runner still alive, group and children together."""
+    while _live_suite_procs:
+        p = _live_suite_procs.pop()
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass          # already gone; the kill is for the ones that are not
+
+
+def run_catch2(root, test_bin, filt, shards, log, timeout=None):
     """(state, reason) for the C++ suite. Stops at the first failing case.
 
     Every shard is read for a failing assertion of its own. One that names one
     has detected the mutant whatever the others did; one that exits non-zero and
     names none has judged nothing, and the run says so rather than inferring a
-    detection from its exit code.
+    detection from its exit code. A shard still running at `timeout` has
+    deadlocked rather than failed, which is a detection of its own.
     """
     argv = [str(test_bin), filt, '-x', '1']
     planned = [('the catch2 suite', argv)] if shards <= 1 else [
         (f'catch2 shard {i}',
          argv + ['--shard-count', str(shards), '--shard-index', str(i)])
         for i in range(shards)]
-    procs = [(who, subprocess.Popen(
-        cmd,
-        # errors='replace': a mutant can make the code under test dump raw
-        # bytes into a Catch2 failure message (a reverted raster guard wrote
-        # 0xfe pixel data), and a strict decode turns that into a crash that
-        # loses the verdict for the one hunk most likely to be killed.
-        cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-        errors='replace')) for who, cmd in planned]
+    procs = [(who, tracked_suite_proc(cmd, root)) for who, cmd in planned]
+    deadline = None if timeout is None else time.monotonic() + timeout
     detected, unexplained = False, ''
     for who, p in procs:
-        out, _ = p.communicate()
+        # Shards share one deadline: they run in parallel, so a per-shard
+        # limit would multiply the wall clock by the shard count.
+        try:
+            out, _ = p.communicate(
+                timeout=None if deadline is None
+                else max(0.1, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            # Every runner dies with the hung one; a survivor would hold the
+            # tree for a run that has already recorded its verdict.
+            kill_live_suite_procs()
+            out, _ = p.communicate()
+            log.write(out or '')
+            return DETECTED, TIMED_OUT
+        finally:
+            untrack_suite_proc(p)
         out = out or ''
         log.write(out)
         state, why = suite_outcome('catch2', p.returncode, out, who)
@@ -752,7 +811,7 @@ def judge(suites, names):
     for name in names:
         state, why = run_confirmed(suites, name)
         if state == DETECTED:
-            return DETECTED, ''
+            return DETECTED, why
         if state == INCONCLUSIVE and not unexplained:
             unexplained = why
     return (INCONCLUSIVE, unexplained) if unexplained else (GREEN, '')
@@ -776,6 +835,10 @@ class Suites:
         venv = root / '.venv' / 'bin' / 'python3'
         self.python = str(venv) if venv.is_file() else 'python3'
         self._pytest_gap = None
+        # suite name -> seconds one suite run may take. Empty until the
+        # baseline has run that suite, so the baseline itself is untimed: it
+        # is the measurement the limit is derived from.
+        self.timeouts = {}
 
     def missing(self, name):
         """Why this suite cannot run here, or '' when it can.
@@ -852,25 +915,53 @@ class Suites:
         print(f'[test binary rebuilt, {secs:.0f}s] ', end='', flush=True)
         return secs
 
+    def adopt_baseline(self, name, secs):
+        """Set a suite's mutant timeout from its measured baseline run.
+
+        Five times a green baseline absorbs the confirming re-run and shard
+        scheduling noise while staying far from hang territory; the 60s floor
+        keeps a fast baseline from making every mutant twitchy.
+        """
+        self.timeouts[name] = self.args.timeout or max(60.0, 5.0 * secs)
+        return self.timeouts[name]
+
+    def _run_group(self, cmd, name, who):
+        """(state, reason) for one runner process, a hang included.
+
+        The runner is killed with its whole group at the timeout: bats farms
+        files out to workers, and a runner killed alone leaves them running.
+        """
+        p = tracked_suite_proc(cmd, self.root)
+        try:
+            out, _ = p.communicate(timeout=self.timeouts.get(name))
+        except subprocess.TimeoutExpired:
+            kill_live_suite_procs()
+            out, _ = p.communicate()
+            self.log.write(out or '')
+            return DETECTED, TIMED_OUT
+        finally:
+            untrack_suite_proc(p)
+        out = out or ''
+        self.log.write(out)
+        return suite_outcome(name, p.returncode, out, who)
+
     def run(self, name):
         """(state, reason): what one run of this suite establishes."""
         if name == 'catch2':
             self.ensure_catch2_binary()
             return run_catch2(self.root, self.catch2_bin, self.args.tests,
-                              self.args.shards, self.log)
+                              self.args.shards, self.log,
+                              timeout=self.timeouts.get(name))
         if name == 'bats':
             cmd = ['bats']
             if shutil.which('parallel'):
                 cmd += ['--jobs', str(self.jobs), '--no-parallelize-within-files']
             cmd.append(self.args.shell_tests)
-            r = run(cmd, cwd=self.root)
-            self.log.write(r.stdout or '')
-            return suite_outcome(name, r.returncode, r.stdout or '', 'the bats suite')
+            return self._run_group(cmd, name, 'the bats suite')
         if name == 'pytest':
-            r = run([self.python, '-m', 'pytest', self.args.python_tests, '-q', '-x'],
-                    cwd=self.root)
-            self.log.write(r.stdout or '')
-            return suite_outcome(name, r.returncode, r.stdout or '', 'pytest')
+            return self._run_group(
+                [self.python, '-m', 'pytest', self.args.python_tests, '-q', '-x'],
+                name, 'pytest')
         raise AssertionError(name)
 
 
@@ -965,6 +1056,8 @@ def verdict_line(verdict, note):
         return 'SURVIVED  <-- no test detects this change'
     if verdict == 'inconclusive':
         return f'INCONCLUSIVE  <-- {note}'
+    if verdict == 'killed (timeout)':
+        return 'killed (timeout)  <-- the suite hung, which is a detection'
     return 'killed'
 
 
@@ -981,6 +1074,9 @@ def main():
     ap.add_argument('--tests', default='~[.]~[slow]', help='Catch2 filter for the scoped suite')
     ap.add_argument('--jobs', type=int, default=6, help='make -j (link is memory-gated; 6 is safe here)')
     ap.add_argument('--shards', type=int, default=8, help='parallel test shards per mutant')
+    ap.add_argument('--timeout', type=float, default=0,
+                    help='seconds one suite may run for a mutant before it counts as '
+                         'killed by timeout (0: the max of 60s and 5x the baseline run)')
     ap.add_argument('--limit', type=int, default=None, help='stop after N hunks')
     # A mutant costs a compile plus a whole-program link, so a 52-hunk range is
     # hours. Scoping to the files worth confirming is how this stays usable.
@@ -1161,6 +1257,7 @@ def main():
             return 2
         print(f'  build ok ({secs:.0f}s)')
     for suite in sorted(needed):
+        t0 = time.monotonic()
         state, why = suites.run(suite)
         if state == DETECTED:
             print(f'FAIL: baseline {suite} suite is RED. Fix it first, or every '
@@ -1174,7 +1271,8 @@ def main():
                   f'mutant would be measured by a suite that cannot report. '
                   f'See {args.log}', file=sys.stderr)
             return 2
-        print(f'  {suite} green')
+        limit = suites.adopt_baseline(suite, time.monotonic() - t0)
+        print(f'  {suite} green (mutant timeout {limit:.0f}s)')
 
     # Read once, before the first mutation: see SAFETY.
     pristine = {}
@@ -1189,8 +1287,14 @@ def main():
     # The restore below lives in a finally, which an uncaught SIGTERM walks
     # straight past, stranding the tree in a state that reads as half-applied
     # work. Turning the signal into SystemExit unwinds through that finally.
+    def stop_on_signal(signum, _frame):
+        # Suite runners lead their own sessions, so they do not see a terminal
+        # Ctrl-C; killing them here keeps an interrupt from orphaning them.
+        kill_live_suite_procs()
+        sys.exit(128 + signum)
+
     for _sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(_sig, lambda s_, _f: sys.exit(128 + s_))
+        signal.signal(_sig, stop_on_signal)
 
     started = time.time()
     for n, h in enumerate(mutable, 1):
@@ -1227,6 +1331,8 @@ def main():
                         state, unexplained = INCONCLUSIVE, UNBUILT_MUTANT
                     verdict = {DETECTED: 'killed', GREEN: 'survived',
                                INCONCLUSIVE: 'inconclusive'}[state]
+                    if verdict == 'killed' and unexplained == TIMED_OUT:
+                        verdict = 'killed (timeout)'
                     note = unexplained
             finally:
                 restore_file(root, h['file'], original)
