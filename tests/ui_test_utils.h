@@ -122,6 +122,15 @@ namespace ui {
 void set_test_notification_warning_hook(std::function<void(const std::string&)> hook);
 
 /**
+ * @brief Install a hook invoked by the test ui_notification_warning_sticky() stub.
+ *
+ * Separate hook from the warning one so a test can tell the sticky channel
+ * (never auto-dismisses) from the timed one, not just read the text. Pass
+ * nullptr to clear. The hook receives the formatted warning message.
+ */
+void set_test_notification_sticky_warning_hook(std::function<void(const std::string&)> hook);
+
+/**
  * @brief Install a hook invoked by the test ui_notification_error() stub.
  *
  * Same purpose as the warning hook: user-facing error toasts are compiled out

@@ -206,3 +206,21 @@ void ui_notification_error_with_detail(const char* message, const char* detail);
  * @see ui_notification_error_with_detail
  */
 void ui_notification_warning_with_detail(const char* message, const char* detail);
+
+/**
+ * @brief Show a warning toast with a "what to do" second line that never
+ *        auto-dismisses
+ *
+ * Same rendering as ui_notification_warning_with_detail, but the toast stays
+ * on screen until its close button is tapped. For warnings where acting is not
+ * optional — a refused helixscreen.env means every setting in it is ignored —
+ * an 8-second auto-dismiss would hide the problem again before the user has
+ * read it.
+ *
+ * **Thread-safe**: marshals to the LVGL main thread. Safe from any thread.
+ *
+ * @param message What happened
+ * @param detail  What the user can do about it; empty renders as a plain toast
+ */
+// NAMESPACE_OK: joins this header's global ui_notification_* free-function API
+void ui_notification_warning_sticky(const char* message, const char* detail);

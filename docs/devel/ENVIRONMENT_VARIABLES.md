@@ -2059,6 +2059,30 @@ The init script starts the early splash for the fastest possible first pixel, th
 
 **Verified before adoption:** the PID's `/proc/<pid>/comm` must read `helix-splash`, so a recycled PID cannot be signalled by mistake. Adoption is logged as `[SplashManager] Adopted early splash PID <n> from HELIX_SPLASH_PID`.
 
+### `HELIX_ENV_FILE_REFUSED`
+
+Why the launcher refused to evaluate `helixscreen.env` at all, as a classification rather than prose: the app owns the user-facing sentence, so the toast stays one line naming the single command the actual problem needs. Exported only on a whole-file trust-gate refusal (#1682: foreign owner, group/world-writable mode the self-heal could not fix, unreadable stat); the app turns it into the same startup toast config-restore warnings use, so the user sees that their settings stopped applying instead of a silent fall back to defaults.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `kind\|detail\|expected\|path` — kind is `mode`, `owner`, `chain` or `other`; detail is the offending uid (owner) or a short reason (other); expected is the chown target (owner only); a `chain` kind has no producer today (a symlink chain narrows the trusted owners and shows up as `owner`) but the app words it if one appears |
+| **Default** | Unset (no refusal, or no env file) |
+| **Files** | `scripts/helix-launcher.sh` (`helix_env_refuse`), `src/system/env_refusal_notice.cpp` (`parse_env_file_refused`, `env_refusal_copy`) |
+
+The launcher's log line keeps the full repair hint (`chown ... && chmod ...`); the toast carries only the command the kind needs. The toast is the channel's sticky form (`ui_notification_warning_sticky`): it stays on screen until the user closes it, because every setting in the file is being ignored. An unknown kind or missing field yields no notification rather than a broken one. Never set it by hand or in `helixscreen.env`: the launcher unsets both handoff variables before parsing, so an ambient value cannot forge a refusal notice. It inherits to `helix-screen` through the watchdog's `execv` like the rest of the environment.
+
+### `HELIX_ENV_LINES_SKIPPED`
+
+The individual `helixscreen.env` lines the launcher refused, joined by `|` after the file itself passed the trust gate. Each entry is `label:reason`: the label is the variable name, or `line N` for a line with no parsable key; the reason is the same sentence the log carries (key not on the allowlist, value refused for that key, unterminated quote, malformed line). Capped at 12 entries by the launcher; a longer file simply stops reporting the tail.
+
+| Property | Value |
+|----------|-------|
+| **Values** | `label:reason` entries joined by `|` (reasons never contain the separator); first `:` splits label from reason, so a reason may itself hold colons |
+| **Default** | Unset (every line loaded, or the file refused outright; see `HELIX_ENV_FILE_REFUSED`) |
+| **Files** | `scripts/helix-launcher.sh` (`helix_env_note_skip`), `src/system/env_refusal_notice.cpp` (`parse_env_lines_skipped`) |
+
+The app parses this with a pure function that drops malformed entries rather than failing: the launcher owns the format, and a stray entry must not cost the boot. Observed in tests via `helix-launcher.sh --print-env HELIX_ENV_LINES_SKIPPED`, which runs the same parse the launch path does.
+
 ### `HELIX_SUPERVISED`
 
 Marks that `helix-screen` is running under `helix-watchdog`. When an in-app action needs a service restart, a supervised process exits cleanly and lets the supervisor bring it back — forking a replacement itself would leave two instances running at once.

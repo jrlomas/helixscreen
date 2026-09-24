@@ -567,6 +567,7 @@ helix::TemperatureController* get_temperature_controller() {
 // out in the test build, so warnings would otherwise be invisible).
 namespace {
 std::function<void(const std::string&)> g_test_warning_hook;
+std::function<void(const std::string&)> g_test_sticky_warning_hook;
 std::function<void(const std::string&)> g_test_error_hook;
 std::function<void(const std::string&)> g_test_success_hook;
 std::function<void(const std::string&)> g_test_info_hook;
@@ -576,6 +577,9 @@ namespace helix {
 namespace ui {
 void set_test_notification_warning_hook(std::function<void(const std::string&)> hook) {
     g_test_warning_hook = std::move(hook);
+}
+void set_test_notification_sticky_warning_hook(std::function<void(const std::string&)> hook) {
+    g_test_sticky_warning_hook = std::move(hook);
 }
 void set_test_notification_error_hook(std::function<void(const std::string&)> hook) {
     g_test_error_hook = std::move(hook);
@@ -692,6 +696,14 @@ void ui_notification_warning_with_detail(const char* message, const char* detail
     spdlog::debug("[Test Stub] ui_notification_warning_with_detail: {}", joined);
     if (g_test_warning_hook) {
         g_test_warning_hook(joined);
+    }
+}
+
+void ui_notification_warning_sticky(const char* message, const char* detail) {
+    const std::string joined = join_detail(message, detail);
+    spdlog::debug("[Test Stub] ui_notification_warning_sticky: {}", joined);
+    if (g_test_sticky_warning_hook) {
+        g_test_sticky_warning_hook(joined);
     }
 }
 

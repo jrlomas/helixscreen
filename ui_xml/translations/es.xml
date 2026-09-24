@@ -55,6 +55,7 @@
   <translation tag="1 event queued" es="1 evento en cola"/>
   <translation tag="1 hour ago" es="hace 1 hora"/>
   <translation tag="1 layer" es="1 capa"/>
+  <translation tag="1 line in helixscreen.env was ignored"/>
   <translation tag="1 min" es="1 min"/>
   <translation tag="1 min ago" es="hace 1 min"/>
   <translation tag="1 minute" es="1 minuto"/>
@@ -1161,6 +1162,8 @@
   <translation tag="Firmware reports no bypass. Enable if you feed filament straight to the extruder" es="El firmware no reporta bypass. Actívelo si alimenta el filamento directamente al extrusor."/>
   <translation tag="Firmware restarting..." es="Reiniciando firmware..."/>
   <translation tag="Firmware saved X = Y&apos;s value; the measured X result was discarded" es="El firmware guardó el valor de Y para X; el resultado medido de X se descartó"/>
+  <translation tag="Fix: chmod 644 {}, then restart"/>
+  <translation tag="Fix: chown {} {}, then restart"/>
   <translation tag="FlashForge Adventurer 5M" es="FlashForge Adventurer 5M"/>
   <translation tag="FlashForge Adventurer 5X" es="FlashForge Adventurer 5X"/>
   <translation tag="FlashForge IFS" es="FlashForge IFS"/>
@@ -2448,6 +2451,7 @@
   <translation tag="Security" es="Seguridad"/>
   <translation tag="Security, network, host, and administration" es="Seguridad, red, host y administración"/>
   <translation tag="See exactly what data will be sent" es="Ver exactamente qué datos se enviarán"/>
+  <translation tag="See the log"/>
   <translation tag="See the quick tour of HelixScreen again" es="Ver de nuevo el tour rápido de HelixScreen"/>
   <translation tag="Select" es="Seleccionar"/>
   <translation tag="Select &apos;None&apos; if you don&apos;t have a filament sensor, or if you don&apos;t want to pause on runout." es="Seleccione &apos;Ninguno&apos; si no tiene un sensor de filamento, o si no desea pausar al agotarse."/>
@@ -3208,6 +3212,10 @@
   <translation tag="feeder not in automatic mode" es="alimentador no está en modo automático"/>
   <translation tag="filament sensor disabled" es="sensor de filamento desactivado"/>
   <translation tag="heated bed" es="cama caliente"/>
+  <translation tag="helixscreen.env ignored: owned by uid {}"/>
+  <translation tag="helixscreen.env ignored: untrusted symlink chain"/>
+  <translation tag="helixscreen.env ignored: writable by other users"/>
+  <translation tag="helixscreen.env ignored: {}"/>
   <translation tag="idle" es="inactivo"/>
   <translation tag="in unit {} slot {}" es="en la unidad {} ranura {}"/>
   <translation tag="layers" es="capas"/>
@@ -3259,6 +3267,7 @@
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." es="{} está instalado pero su cambio a bobina de reserva está desactivado, así que no habrá ningún cambio automático."/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." es="{} está instalado, pero no se pudo leer su ajuste de bobina de reserva - no cuentes con un cambio automático."/>
   <translation tag="{} is not set up on this printer" es="{} no está configurado en esta impresora"/>
+  <translation tag="{} lines in helixscreen.env were ignored"/>
   <translation tag="{} macro not configured" es="Macro {} no configurado"/>
   <translation tag="{} matches." es="{} coincide."/>
   <translation tag="{} may cause unintended changes. Are you sure?" es="{} puede causar cambios no deseados. ¿Estás seguro?"/>

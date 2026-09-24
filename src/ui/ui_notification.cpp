@@ -66,7 +66,8 @@ static bool is_main_thread() {
 // "type=0" subject warnings and "toast_notification is not a known widget"
 // errors on every boot after a settings restore / tips load failure.
 // Application::run() drains PendingStartupWarnings right after ToastManager::init().
-static bool try_defer_to_startup_queue(ToastSeverity severity, const char* display_msg) {
+static bool try_defer_to_startup_queue(ToastSeverity severity, const char* display_msg,
+                                       uint32_t duration_ms = 8000) {
     if (!display_msg || !*display_msg)
         return false;
     if (ToastManager::instance().is_initialized())
@@ -87,7 +88,7 @@ static bool try_defer_to_startup_queue(ToastSeverity severity, const char* displ
         sev = helix::PendingStartupWarnings::Severity::ERROR;
         break;
     }
-    helix::PendingStartupWarnings::instance().enqueue(sev, display_msg);
+    helix::PendingStartupWarnings::instance().enqueue(sev, display_msg, duration_ms);
     return true;
 }
 
@@ -449,7 +450,7 @@ void show_detail_notification(ToastSeverity severity, const char* message, const
         // one string, so both get the halves joined.
         const std::string joined = p->message + " - " + p->detail;
 
-        if (try_defer_to_startup_queue(p->severity, joined.c_str()))
+        if (try_defer_to_startup_queue(p->severity, joined.c_str(), p->duration_ms))
             return;
 
         if (should_show_toast(p->severity)) {
@@ -483,6 +484,11 @@ void ui_notification_error_with_detail(const char* message, const char* detail) 
 
 void ui_notification_warning_with_detail(const char* message, const char* detail) {
     show_detail_notification(ToastSeverity::WARNING, message, detail, 8000);
+}
+
+// NAMESPACE_OK: joins this header's global ui_notification_* free-function API
+void ui_notification_warning_sticky(const char* message, const char* detail) {
+    show_detail_notification(ToastSeverity::WARNING, message, detail, 0);
 }
 
 // Shared body for ui_notification_error() and ui_notification_printer_fault().

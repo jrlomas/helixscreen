@@ -27,6 +27,7 @@
 #include "config.h"
 #include "display/lv_display_private.h"
 #include "display_manager.h"
+#include "env_refusal_notice.h"
 #include "environment_config.h"
 #include "gcode_error_router.h"
 #include "gcode_narration_router.h"
@@ -569,6 +570,12 @@ int Application::run(int argc, char** argv) {
     if (!init_config()) {
         return 1;
     }
+
+    // Tell the user when the launcher refused helixscreen.env: without this
+    // the display comes up on defaults and the only trace is a log line
+    // (prestonbrown/helixscreen#1712). No-op when the launcher exported
+    // neither handoff variable (dev runs, clean file).
+    helix::surface_env_refusal_from_launcher();
 
     // Snapshot the marker path for the SIGTERM handler. init_config() has run,
     // so writable_path() now resolves; the handler cannot construct this itself.
@@ -2086,25 +2093,26 @@ bool Application::init_ui() {
     // Drain any warnings that backends enqueued during pre-UI initialization
     // (e.g. "simpledrm detected", "requested resolution not available").
     // See prestonbrown/helixscreen#766.
-    helix::PendingStartupWarnings::instance().drain(
-        [](helix::PendingStartupWarnings::Severity sev, const std::string& msg) {
-            ToastSeverity toast_sev = ToastSeverity::INFO;
-            switch (sev) {
-            case helix::PendingStartupWarnings::Severity::INFO:
-                toast_sev = ToastSeverity::INFO;
-                break;
-            case helix::PendingStartupWarnings::Severity::SUCCESS:
-                toast_sev = ToastSeverity::SUCCESS;
-                break;
-            case helix::PendingStartupWarnings::Severity::WARNING:
-                toast_sev = ToastSeverity::WARNING;
-                break;
-            case helix::PendingStartupWarnings::Severity::ERROR:
-                toast_sev = ToastSeverity::ERROR;
-                break;
-            }
-            ToastManager::instance().show(toast_sev, msg.c_str(), 8000);
-        });
+    helix::PendingStartupWarnings::instance().drain([](helix::PendingStartupWarnings::Severity sev,
+                                                       const std::string& msg,
+                                                       uint32_t duration_ms) {
+        ToastSeverity toast_sev = ToastSeverity::INFO;
+        switch (sev) {
+        case helix::PendingStartupWarnings::Severity::INFO:
+            toast_sev = ToastSeverity::INFO;
+            break;
+        case helix::PendingStartupWarnings::Severity::SUCCESS:
+            toast_sev = ToastSeverity::SUCCESS;
+            break;
+        case helix::PendingStartupWarnings::Severity::WARNING:
+            toast_sev = ToastSeverity::WARNING;
+            break;
+        case helix::PendingStartupWarnings::Severity::ERROR:
+            toast_sev = ToastSeverity::ERROR;
+            break;
+        }
+        ToastManager::instance().show(toast_sev, msg.c_str(), duration_ms);
+    });
 
     // Initialize overlay backdrop
     NavigationManager::instance().init_overlay_backdrop(m_screen);
