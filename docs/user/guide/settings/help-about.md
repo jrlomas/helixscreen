@@ -59,6 +59,8 @@ Debug bundles contain technical information needed for troubleshooting. Before a
 
 One thing worth knowing: your `printer.cfg` is your own file, and HelixScreen can only redact patterns it recognizes. File paths are left intact, so an include pointing at `/home/yourname/…` will show that name. If you keep something unusual in your printer config that you would rather not share, look at it before you send the code — and remember a share code is only as private as the people you give it to.
 
+**Which builds can upload.** Bundles leave the printer only on builds from the official releases. If you compiled HelixScreen yourself, the upload step stops with an "Upload unavailable in this build" message; setting `HELIX_DIAGNOSTIC_UPLOADS=1` in `helixscreen.env` turns uploads on for that install. Setting it to `0` turns them off on any build.
+
 ---
 
 ## About
@@ -104,12 +106,11 @@ On Android, the install step opens the Play Store.
 
 ### Enabling Beta Features
 
-Tap the **Current Version** row seven times in Settings → About to toggle beta features.
+Tap the **Current Version** row seven times in **Settings > Help & About > About** to toggle beta features.
 
 When beta features are enabled:
 - **Update Channel** selector gains a third entry, **Dev**
-- Additional items appear in the Advanced panel (Macro Browser, Timelapse, etc.)
-- **Plugins** section appears in Settings
+- Additional rows appear in the Advanced panel (Configure PRINT_START, Tool Offsets, Belt Tension; some only on printers whose hardware supports them)
 - Tap seven more times to disable
 
 ### Update Channels

@@ -2,7 +2,7 @@
 
 Developer guide for the live belt-tension tuner: the user plucks a belt by hand, the tool
 listens on Klipper's live accelerometer stream, and reports the belt's fundamental
-frequency. Replaces the deleted `TEST_RESONANCES` sweep and the strobe path.
+frequency.
 
 **Panel**: Belt Tension (`panel_belt_tension`) - Advanced panel row, beta-gated
 **User guide**: `../user/guide/calibration.md` § Belt Tension
@@ -55,9 +55,9 @@ Minimum matrix, agreed with the maintainer:
 ### Known traps when you first run it
 
 - **A soft first pluck producing no response is a threshold, not a hang.**
-  `MIN_DETECTABLE_RATIO` moved 3.0 -> 5.0, so strikes between 3x and 5x the noise floor
-  are now dropped silently rather than surfaced as "pluck harder". That was deliberate -
-  the evidence says nothing below 5x was a pluck at all - but it reads as a dead UI.
+  `MIN_DETECTABLE_RATIO` is 5.0, so strikes below 5x the noise floor are dropped
+  silently rather than surfaced as "pluck harder". That is deliberate - the evidence
+  says nothing below 5x was a pluck at all - but it reads as a dead UI.
 - **Verify the deployed artifact two independent ways.** They fail independently:
   read make's own exit code from a file (never a trailing `echo`, never a harness
   notification), **and**

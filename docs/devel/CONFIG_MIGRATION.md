@@ -35,12 +35,39 @@ Every config file has an integer `config_version` at the root level:
 The current version is defined in `config.h`:
 
 ```cpp
-static constexpr int CURRENT_CONFIG_VERSION = 19;
+static constexpr int CURRENT_CONFIG_VERSION = 25;
 ```
 
 The two migrations enumerated below (v0->v1, v1->v2) are the earliest examples; the
 full migration ladder up to the current head lives in `config.cpp`. The "how to add a
 migration" mechanism shown later still applies to every step in that ladder.
+
+Two properties of the ladder worth knowing before you add to it:
+
+- **Every step must be idempotent under replay.** A rollback to an older build stamps
+  `config_version` back down, and the next upgrade re-runs the chain over a document
+  already in the new shape. Each migration guards against re-doing its own work.
+- **A config written by a newer build is left alone.** `run_versioned_migrations()`
+  detects a `config_version` above `CURRENT_CONFIG_VERSION` and returns without
+  stamping, so an older binary never rewrites data it does not understand.
+
+The current head of the ladder:
+
+- **v23 -> v24** tags every saved home layout with `layout_units: "cells_v21"` and a
+  `legacy_rows` floor harvested from the old `/ui/cached_grid` node, then lifts legacy
+  flat widget arrays into the page shape. The tag is all this migration writes: it runs
+  at config load, before the screen size is known, so the actual coordinate conversion
+  happens later, at the first square-cell grid build, in
+  `port_legacy_layout()` (`include/layout_port.h` + `src/ui/layout_port.cpp`), which
+  drops the tag when done. Three guards keep a replay from converting twice: a panel
+  that already carries `grid`/`parked_grids` (per-grid storage postdates the
+  migration), one already tagged, and one with no coordinates at all.
+- **v24 -> v25** re-keys the pre-print prediction history's per-phase timing from
+  phase ordinals to phase names (`"4"` -> `"QGL"`), against a frozen name table,
+  because inserting a phase renumbers every ordinal after it.
+
+Both have dedicated tests: `tests/unit/test_config_migration_v24.cpp` and
+`tests/unit/test_config_migration_v25.cpp`.
 
 ### Fresh Install vs. Upgrade
 

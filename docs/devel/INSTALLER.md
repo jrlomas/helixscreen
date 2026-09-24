@@ -283,12 +283,12 @@ redundant with the packaging fix: archives published before it still carry the o
 > Creality box. GNU tar accepts `-o` as an alias for `--no-same-owner` when extracting.
 > Verified on BusyBox 1.29.3 (AD5M), 1.31.1 (K1), 1.33.2 (K2), 1.36.1 (CC1, U1).
 
-**Repair** — `fix_install_ownership()` normalises the whole tree, including on root-run
-platforms (ad5m/ad5x/k1/k2/cc1/u1), which it used to skip entirely. That is what heals
-installs made before the above landed; a measured K2 had 890 of 915 files owned by uid 1001.
+**Repair** - `fix_install_ownership()` normalises the whole tree on every platform, root-run
+ones (ad5m/ad5x/k1/k2/cc1/u1) included. Repair is what heals an install whose archive arrived
+carrying foreign ids: a measured K2 had 890 of 915 files owned by uid 1001.
 
-The `deploy-*` targets extract with `-o` on the device for the same reason — a dev deploy
-was a second way for the build host's uid to reach a printer.
+The `deploy-*` targets extract with `-o` on the device for the same reason - a dev deploy is
+a second way for the build host's uid to reach a printer.
 
 ### `NoNewPrivileges` and Self-Update on Pi (systemd)
 
@@ -487,12 +487,10 @@ install uses):
 
 **ForgeX-specific patches (all reversible on uninstall):**
 
-- **Display mode**: Sets `variables.cfg` display to `GUPPY` mode (required for backlight)
-- **GuppyScreen disable**: `chmod -x` on `/opt/config/mod/.root/S80guppyscreen`
-- **tslib disable**: `chmod -x` on `/opt/config/mod/.root/S35tslib`
+- **Display mode**: switches `variables.cfg` display to `HEADLESS` -- the slot Forge-X asks custom screens to occupy, because any other slot risks failed OTA updates and repeated Moonraker recovery prompts. The takeover probes `STOCK`/`FEATHER`/`GUPPY` (and `HEADLESS` as an arrival state for upgrades) and records the pre-install mode to `mod_data/helixscreen_prev_display`. Under `HEADLESS` the mod's start.sh starts neither tslib nor GuppyScreen; the installer still de-execs `S80guppyscreen`, the `guppyscreen` launcher (reachable via zdisplay.sh in any mode) and `S35tslib` as belt-and-braces. Backlight is not a reason to pick a mode: the mod's screen.sh path is mode-independent.
 - **Stock UI disable**: Comments out `ffstartup-arm` in /opt/auto_run.sh
 - **screen.sh backlight patch**: Blocks non-100 backlight changes when HelixScreen active (allows S99root init cycle)
-- **screen.sh drawing patch**: Skips `draw_splash`, `draw_loading`, `boot_message` when HelixScreen active
+- **screen.sh drawing patch**: Guards whichever of `draw_splash`, `draw_loading`, `boot_message`, `splash_start` the installed Forge-X version actually has, each label verified individually, so the mod's splash cannot draw over us
 - **logged wrapper**: Wraps `/opt/config/mod/.bin/exec/logged` to strip `--send-to-screen` flag (prevents direct framebuffer writes)
 
 ### FlashForge Adventurer -- Forge-X Payload Mode (`ad5m`/`ad5x`, `forge_x`)
@@ -650,12 +648,12 @@ The uninstaller (`scripts/uninstall.sh`) reverses the installation:
 1. **Stop service** -- systemd or SysV, plus kill remaining processes (watchdog first to prevent crash dialog)
 2. **Remove service** -- Delete systemd unit or init script
 3. **Re-enable disabled services** -- Reads `config/.disabled_services` state file and re-enables each recorded entry
-4. **Remove installation** -- Checks all known paths: `/opt/helixscreen`, `/root/printer_software/helixscreen`, `/usr/data/helixscreen`
+4. **Remove installation** -- Checks every known install path (`HELIX_INSTALL_DIRS` in `scripts/lib/installer/common.sh`: `/root/printer_software/helixscreen`, `/opt/helixscreen`, `/mnt/UDISK/helixscreen`, `/usr/data/helixscreen`, `/srv/helixscreen`, `/user-resource/helixscreen`, `/userdata/helixscreen`)
 5. **Restore previous UI** -- Platform-specific:
    - Klipper Mod: Re-enable Xorg and KlipperScreen
    - K1: Re-enable GuppyScreen
    - ForgeX: Full cleanup via `uninstall_forgex()` (restore display mode, unpatch screen.sh, remove logged wrapper, re-enable GuppyScreen/tslib)
-6. **Remove caches** -- Thumbnail caches, temp files, PID files, log files
+6. **Remove caches** -- `cache/` and `logs/` under every declared state root (`HELIX_STATE_DIRS` in `scripts/lib/installer/common.sh`, mirroring `kStateRoots` in `include/helix_install_roots.h`), plus the legacy in-payload locations, temp files, PID files
 7. **Remove Moonraker section** -- Strips `[update_manager helixscreen]` from moonraker.conf
 
 ### Disabled Services State File

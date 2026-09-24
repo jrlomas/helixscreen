@@ -320,9 +320,9 @@ Verbosity still applies (`-v`=info, `-vv`=debug, `-vvv`=trace). Detection lines 
 | Snapmaker U1 (Debian Trixie, SysV) | Syslog | `/var/log/messages` (rsyslogd persists on overlay) | `grep helix-screen /var/log/messages` or `journalctl -t helix-screen` if journald-only |
 | AD5M Forge-X/KMod (BusyBox SysV) | **File** (hook) | `/data/.helixscreen/logs/helix.log` | `tail -f /data/.helixscreen/logs/helix.log` |
 | AD5M ZMOD / AD5X (ZMOD MIPS, BusyBox) | **File** (hook) | `/opt/config/mod_data/log/helix.log` — under `/opt/config` so ZMOD's `TAR_CONFIG` archives it (#1249) | `tail -f /opt/config/mod_data/log/helix.log` |
-| Creality K1/K1C (BusyBox, in-memory syslog) | **File** (hook) | `/usr/data/helixscreen/logs/helix.log` | `tail -f /usr/data/helixscreen/logs/helix.log` |
-| Creality K2 (BusyBox procd) | **File** (hook) | `/mnt/UDISK/helixscreen/logs/helix.log` | `tail -f /mnt/UDISK/helixscreen/logs/helix.log` |
-| Elegoo CC1 / COSMOS (BusyBox) | **File** (hook) | `/user-resource/helixscreen/logs/helix.log` | `tail -f /user-resource/helixscreen/logs/helix.log` |
+| Creality K1/K1C (BusyBox, in-memory syslog) | **File** (hook) | `/usr/data/helixscreen-state/logs/helix.log` | `tail -f /usr/data/helixscreen-state/logs/helix.log` |
+| Creality K2 (BusyBox procd) | **File** (hook) | `/mnt/UDISK/helixscreen-state/logs/helix.log` | `tail -f /mnt/UDISK/helixscreen-state/logs/helix.log` |
+| Elegoo CC1 / COSMOS (BusyBox) | **File** (hook) | `/user-resource/helixscreen-state/logs/helix.log` | `tail -f /user-resource/helixscreen-state/logs/helix.log` |
 | SonicPad (Debian) | Syslog | `/var/log/syslog` | `grep helix-screen /var/log/syslog` |
 | Android | Android | logcat | `adb logcat -s HelixScreen` |
 | Dev workstation (macOS / interactive Linux) | Console | stdout in terminal | visible directly |
@@ -376,7 +376,7 @@ compiled in," not "not reached." See BUILD_SYSTEM.md § Patch Gotchas.
 | Snapmaker U1 | `/var/log/helixscreen/launcher.log` (overlay's upperdir is persistent ext4) |
 | AD5M Forge-X/KMod | `/opt/helixscreen/logs/launcher.log` (`/var/log` is tmpfs on BusyBox) |
 | K1 / K1C | `/usr/data/helixscreen/logs/launcher.log` |
-| K2 | `/usr/data/helixscreen/logs/launcher.log` |
+| K2 | `/mnt/UDISK/helixscreen/logs/launcher.log` |
 | AD5X (ZMOD) | `/opt/config/mod_data/log/helixscreen.log` — ghzserg ships their own fork of the init script with `LOGFILE` hardcoded, so the `/var/log` probe above never runs. `INSTALL_DIR` is `/srv/helixscreen`, not `/usr/data/helixscreen`. The **app** log is a separate file, `/opt/config/mod_data/log/helix.log` (see below) |
 | CC1 / COSMOS | `/user-resource/helixscreen/logs/launcher.log` |
 

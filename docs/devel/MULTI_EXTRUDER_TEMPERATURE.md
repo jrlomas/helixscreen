@@ -281,7 +281,7 @@ Chamber temperature **sends** go through `TemperatureController::set_target(Heat
 `PrinterTemperatureState` is a member of `PrinterState`, accessed via:
 
 ```cpp
-auto& ps = PrinterState::instance();
+auto& ps = get_printer_state();   // include/app_globals.h
 
 // Legacy accessors (delegate to PrinterTemperatureState)
 lv_subject_t* temp = ps.get_extruder_temp_subject();      // Static, first extruder
