@@ -1443,6 +1443,7 @@ translations:
   Invalid value type: '値の型が無効です'
   Issue description: 問題の説明
   It can be un-archived in Spoolman's web UI.: Spoolman の Web 画面でアーカイブを解除できます。
+  It has not reported its slots yet. Try again in a moment.: スロットがまだ報告されていません。しばらくしてからもう一度お試しください。
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: ハブセンサーとハブギアの間で詰まっています。CFS を開けてハブを取り除いてから再試行してください
   It's a new spool: 新しいスプールです
   Jammed at the Toolhead: ツールヘッドで詰まり
@@ -1730,6 +1731,7 @@ translations:
   Multi-Filament System Status: 'マルチフィラメントシステムの状態'
   'Multi-Filament System is busy: {}': 'マルチフィラメントシステムがビジー状態: {}'
   Multi-Filament System not available: マルチフィラメントシステムが利用できません
+  Multi-filament system not ready: マルチフィラメントシステムの準備ができていません
   Must home axes first: 先にホーミングしてください
   My Custom Theme: マイカスタムテーマ
   My Panel: マイパネル

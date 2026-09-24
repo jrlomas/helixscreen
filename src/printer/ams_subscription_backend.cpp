@@ -351,7 +351,7 @@ AmsError AmsSubscriptionBackend::state_preconditions_unlocked() const {
 AmsError AmsSubscriptionBackend::validate_slot_index_locked(int slot_index) const {
     const int bound = slot_index_bound_locked();
     if (bound <= 0) {
-        return AmsErrorHelper::not_connected("No slots discovered");
+        return AmsErrorHelper::no_slots_discovered(lane_noun());
     }
     if (slot_index < 0 || slot_index >= bound) {
         return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, bound - 1);

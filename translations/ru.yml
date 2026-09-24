@@ -1538,6 +1538,7 @@ translations:
   Invalid value type: 'Неверный тип значения'
   Issue description: Описание проблемы
   It can be un-archived in Spoolman's web UI.: Это можно восстановить из архива в веб-интерфейсе Spoolman.
+  It has not reported its slots yet. Try again in a moment.: Она ещё не сообщила о своих слотах. Повторите попытку через минуту.
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: Он зажат между датчиком хаба и его шестернёй. Откройте CFS, освободите хаб и повторите
   It's a new spool: Это новая катушка
   Jammed at the Toolhead: Замятие в печатающей головке
@@ -1843,6 +1844,7 @@ translations:
   Multi-Filament System Status: 'Состояние мультифиламентной системы'
   'Multi-Filament System is busy: {}': 'Мультифиламентная система занята: {}'
   Multi-Filament System not available: Мультифиламентная система недоступна
+  Multi-filament system not ready: Мультифиламентная система не готова
   Must home axes first: Сначала необходимо запарковать оси
   My Custom Theme: Моя тема
   My Panel: Моя панель

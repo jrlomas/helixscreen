@@ -12,6 +12,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include <cctype>
 #include <string>
 
 /**
@@ -288,6 +289,23 @@ class AmsErrorHelper {
                         detail.empty() ? "No Moonraker connection" : detail,
                         lv_tr("Printer not connected"),
                         lv_tr("Check that the printer is powered on and connected to the network"));
+    }
+
+    /**
+     * @brief Create a "nothing discovered yet" error for a backend with no slots
+     * @param noun The backend's word for one position
+     * @return AmsError configured for UI display
+     *
+     * The printer is online; the filament system has not reported its positions.
+     */
+    static AmsError no_slots_discovered(ui::LaneNoun noun) {
+        std::string word = ui::noun_text(noun);
+        for (auto& c : word) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        return AmsError(AmsResult::NOT_CONNECTED, "No " + word + "s discovered",
+                        lv_tr("Multi-filament system not ready"),
+                        lv_tr("It has not reported its slots yet. Try again in a moment."));
     }
 
     /**

@@ -1406,6 +1406,7 @@
   <translation tag="Invalid value type" ru="Неверный тип значения"/>
   <translation tag="Issue description" ru="Описание проблемы"/>
   <translation tag="It can be un-archived in Spoolman&apos;s web UI." ru="Это можно восстановить из архива в веб-интерфейсе Spoolman."/>
+  <translation tag="It has not reported its slots yet. Try again in a moment." ru="Она ещё не сообщила о своих слотах. Повторите попытку через минуту."/>
   <translation tag="It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying" ru="Он зажат между датчиком хаба и его шестернёй. Откройте CFS, освободите хаб и повторите"/>
   <translation tag="It&apos;s a new spool" ru="Это новая катушка"/>
   <translation tag="Jammed at the Toolhead" ru="Замятие в печатающей головке"/>
@@ -1682,6 +1683,7 @@
   <translation tag="Multi-Filament System Status" ru="Состояние мультифиламентной системы"/>
   <translation tag="Multi-Filament System is busy: {}" ru="Мультифиламентная система занята: {}"/>
   <translation tag="Multi-Filament System not available" ru="Мультифиламентная система недоступна"/>
+  <translation tag="Multi-filament system not ready" ru="Мультифиламентная система не готова"/>
   <translation tag="Must home axes first" ru="Сначала необходимо запарковать оси"/>
   <translation tag="My Custom Theme" ru="Моя тема"/>
   <translation tag="My Panel" ru="Моя панель"/>

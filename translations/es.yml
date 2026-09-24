@@ -1557,6 +1557,7 @@ translations:
   Invalid value type: 'Tipo de valor no válido'
   Issue description: Descripción del problema
   It can be un-archived in Spoolman's web UI.: Se puede desarchivar en la interfaz web de Spoolman.
+  It has not reported its slots yet. Try again in a moment.: Aún no ha informado de sus ranuras. Inténtelo de nuevo en un momento.
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: Está atascado entre el sensor del concentrador y su engranaje. Abra el CFS y despeje el concentrador antes de reintentar
   It's a new spool: Es una bobina nueva
   Jammed at the Toolhead: Atascado en el cabezal
@@ -1864,6 +1865,7 @@ translations:
   Multi-Filament System Status: 'Estado del sistema multi-filamento'
   'Multi-Filament System is busy: {}': 'Sistema multi-filamento ocupado: {}'
   Multi-Filament System not available: Sistema multi-filamento no disponible
+  Multi-filament system not ready: Sistema multifilamento no preparado
   Must home axes first: Debe posicionar los ejes primero
   My Custom Theme: Mi Tema Personalizado
   My Panel: Mi Panel

@@ -1406,6 +1406,7 @@
   <translation tag="Invalid value type" ja="値の型が無効です"/>
   <translation tag="Issue description" ja="問題の説明"/>
   <translation tag="It can be un-archived in Spoolman&apos;s web UI." ja="Spoolman の Web 画面でアーカイブを解除できます。"/>
+  <translation tag="It has not reported its slots yet. Try again in a moment." ja="スロットがまだ報告されていません。しばらくしてからもう一度お試しください。"/>
   <translation tag="It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying" ja="ハブセンサーとハブギアの間で詰まっています。CFS を開けてハブを取り除いてから再試行してください"/>
   <translation tag="It&apos;s a new spool" ja="新しいスプールです"/>
   <translation tag="Jammed at the Toolhead" ja="ツールヘッドで詰まり"/>
@@ -1682,6 +1683,7 @@
   <translation tag="Multi-Filament System Status" ja="マルチフィラメントシステムの状態"/>
   <translation tag="Multi-Filament System is busy: {}" ja="マルチフィラメントシステムがビジー状態: {}"/>
   <translation tag="Multi-Filament System not available" ja="マルチフィラメントシステムが利用できません"/>
+  <translation tag="Multi-filament system not ready" ja="マルチフィラメントシステムの準備ができていません"/>
   <translation tag="Must home axes first" ja="先にホーミングしてください"/>
   <translation tag="My Custom Theme" ja="マイカスタムテーマ"/>
   <translation tag="My Panel" ja="マイパネル"/>
