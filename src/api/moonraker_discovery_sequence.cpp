@@ -8,7 +8,7 @@
 #include "accel_sensor_manager.h"
 #include "ams_state.h"
 #include "batch_feed_reconcile.h"
-#include "snapmaker_screws_tilt.h"
+#include "screws_tilt_dialect.h"
 #if HELIX_HAS_IFS
 #include "ams_backend_ad5x_ifs.h"
 #endif
@@ -1686,9 +1686,7 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                     // a calibration another client is actively driving keeps
                     // its state unless its own probe step proves nothing is
                     // running.
-                    if (hw.screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-                        snapmaker::screws_tilt::reconcile_on_connect(client_, status);
-                    }
+                    screws_tilt::reconcile_on_connect(client_, hw, status);
                     // Same shape, one interlock over: a batch feed interrupted
                     // by a lost connection strands the macro's `doing`, which
                     // refuses every print start until cleared. Clearing is

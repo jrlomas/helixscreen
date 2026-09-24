@@ -4,7 +4,9 @@
 #pragma once
 
 #include "calibration_types.h"
+#include "i_moonraker_api.h"
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -140,6 +142,15 @@ void request_exit(IMoonrakerClient& client);
  * whoever is driving it. @p client must outlive the round trip.
  */
 void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& initial_status);
+
+/**
+ * @brief Run the five-command calibration sequence that replaces
+ *        SCREWS_TILT_CALCULATE, delivering results or an error once
+ *
+ * Every terminal path releases the firmware calibration state.
+ */
+void start_sequence(IMoonrakerClient& client, IMoonrakerAPI& api, ScrewTiltCallback on_success,
+                    std::function<void(const MoonrakerError&)> on_error);
 
 } // namespace screws_tilt
 } // namespace snapmaker
