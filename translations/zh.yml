@@ -2200,6 +2200,7 @@ translations:
   Purge & Wipe: '排料与擦拭'
   Purge Chute Calibration: 排料口校准
   Purge Length: '排料长度'
+  'Purge chute calibration failed: {}': '排料口校准失败：{}'
   Purge chute position saved.: 排料口位置已保存。
 
   'Purge failed: {}': '清洗失败: {}'
@@ -3016,6 +3017,7 @@ translations:
   Toolhead Style: 工具头样式
   Toolhead Y: 工具头 Y
   Toolhead jam: 工具头堵塞
+  Toolhead position unknown: 工具头位置未知
   Toolhead, G-code, limits, and materials: 打印头、G代码、限制和材料
   Toolheads: 工具头
   Tools: 工具

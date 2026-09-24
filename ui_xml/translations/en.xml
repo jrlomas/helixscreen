@@ -2144,6 +2144,7 @@
   <translation tag="Purge &amp; Wipe" en="Purge &amp; Wipe"/>
   <translation tag="Purge Chute Calibration" en="Purge Chute Calibration"/>
   <translation tag="Purge Length" en="Purge Length"/>
+  <translation tag="Purge chute calibration failed: {}" en="Purge chute calibration failed: {}"/>
   <translation tag="Purge chute position saved." en="Purge chute position saved."/>
   <translation tag="Purge failed: {}" en="Purge failed: {}"/>
   <translation tag="Purge may still be running — response timed out" en="Purge may still be running — response timed out"/>
@@ -2911,6 +2912,7 @@
   <translation tag="Toolhead Style" en="Toolhead Style"/>
   <translation tag="Toolhead Y" en="Toolhead Y"/>
   <translation tag="Toolhead jam" en="Toolhead jam"/>
+  <translation tag="Toolhead position unknown" en="Toolhead position unknown"/>
   <translation tag="Toolhead, G-code, limits, and materials" en="Toolhead, G-code, limits, and materials"/>
   <translation tag="Toolheads" en="Toolheads"/>
   <translation tag="Tools" en="Tools"/>

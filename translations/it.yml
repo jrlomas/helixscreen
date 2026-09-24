@@ -2364,6 +2364,7 @@ translations:
   Purge & Wipe: 'Spurgo e pulizia'
   Purge Chute Calibration: Calibrazione condotto di spurgo
   Purge Length: 'Lunghezza di spurgo'
+  'Purge chute calibration failed: {}': 'Calibrazione del condotto di spurgo non riuscita: {}'
   Purge chute position saved.: Posizione del condotto di spurgo salvata.
 
   'Purge failed: {}': 'Spurgo fallito: {}'
@@ -3271,6 +3272,7 @@ translations:
   Toolhead Style: Stile testina
   Toolhead Y: Testina Y
   Toolhead jam: Inceppamento testina
+  Toolhead position unknown: Posizione della testina sconosciuta
   Toolhead, G-code, limits, and materials: Testina, G-code, limiti e materiali
   Toolheads: Testine
   Tools: Strumenti

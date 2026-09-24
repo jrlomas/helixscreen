@@ -2144,6 +2144,7 @@
   <translation tag="Purge &amp; Wipe" pt="Purgar e limpar"/>
   <translation tag="Purge Chute Calibration" pt="Calibração da calha de purga"/>
   <translation tag="Purge Length" pt="Comprimento de purga"/>
+  <translation tag="Purge chute calibration failed: {}" pt="Falha na calibração da calha de purga: {}"/>
   <translation tag="Purge chute position saved." pt="Posição da calha de purga salva."/>
   <translation tag="Purge failed: {}" pt="Falha ao purgar: {}"/>
   <translation tag="Purge may still be running — response timed out" pt="A purga pode ainda estar em execução — tempo esgotado"/>
@@ -2911,6 +2912,7 @@
   <translation tag="Toolhead Style" pt="Estilo do Cabeçote"/>
   <translation tag="Toolhead Y" pt="Cabeçote Y"/>
   <translation tag="Toolhead jam" pt="Atolamento do cabeçote"/>
+  <translation tag="Toolhead position unknown" pt="Posição do cabeçote desconhecida"/>
   <translation tag="Toolhead, G-code, limits, and materials" pt="Cabeçote, G-code, limites e materiais"/>
   <translation tag="Toolheads" pt="Cabeçotes"/>
   <translation tag="Tools" pt="Ferramentas"/>

@@ -2144,6 +2144,7 @@
   <translation tag="Purge &amp; Wipe" de="Entlüften &amp; Abwischen"/>
   <translation tag="Purge Chute Calibration" de="Entlüftungsrinnen-Kalibrierung"/>
   <translation tag="Purge Length" de="Entlüftungslänge"/>
+  <translation tag="Purge chute calibration failed: {}" de="Kalibrierung der Entlüftungsrinne fehlgeschlagen: {}"/>
   <translation tag="Purge chute position saved." de="Position der Entlüftungsrinne gespeichert."/>
   <translation tag="Purge failed: {}" de="Purge fehlgeschlagen: {}"/>
   <translation tag="Purge may still be running — response timed out" de="Purge läuft möglicherweise noch — Zeitüberschreitung"/>
@@ -2911,6 +2912,7 @@
   <translation tag="Toolhead Style" de="Toolhead-Stil"/>
   <translation tag="Toolhead Y" de="Werkzeugkopf Y"/>
   <translation tag="Toolhead jam" de="Werkzeugkopf-Stau"/>
+  <translation tag="Toolhead position unknown" de="Werkzeugkopfposition unbekannt"/>
   <translation tag="Toolhead, G-code, limits, and materials" de="Druckkopf, G-Code, Grenzen und Materialien"/>
   <translation tag="Toolheads" de="Werkzeugköpfe"/>
   <translation tag="Tools" de="Werkzeuge"/>

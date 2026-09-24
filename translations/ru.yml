@@ -2341,6 +2341,7 @@ translations:
   Purge & Wipe: 'Продувка и очистка'
   Purge Chute Calibration: Калибровка жёлоба продувки
   Purge Length: 'Длина продувки'
+  'Purge chute calibration failed: {}': 'Не удалось калибровать жёлоб продувки: {}'
   Purge chute position saved.: Позиция жёлоба продувки сохранена.
 
   'Purge failed: {}': 'Ошибка прочистки: {}'
@@ -3232,6 +3233,7 @@ translations:
   Toolhead Style: Стиль печатающей головки
   Toolhead Y: Печатающая головка Y
   Toolhead jam: Замятие в печатающей головке
+  Toolhead position unknown: Положение печатающей головки неизвестно
   Toolhead, G-code, limits, and materials: Печатающая головка, G-code, лимиты и материалы
   Toolheads: Печатающие головки
   Tools: Инструменты

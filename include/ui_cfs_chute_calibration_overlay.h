@@ -9,6 +9,9 @@
 #include "overlay_base.h"
 #include "subject_managed_panel.h"
 
+#include <atomic>
+#include <memory>
+
 namespace helix::ui {
 
 /**
@@ -73,6 +76,12 @@ class CfsChuteCalibrationOverlay : public OverlayBase {
     double current_y_mm_ = 0.0;
     bool y_known_ = false;
     bool edge_warned_y_ = false;
+
+    /// Set the moment the overlay starts leaving; the backend polls it at
+    /// each step boundary so a cancel during the home drops the flow instead
+    /// of parking the toolhead at the chute in adjust mode.
+    std::shared_ptr<std::atomic<bool>> cancel_requested_ =
+        std::make_shared<std::atomic<bool>>(false);
 
     lv_obj_t* overlay_root_ = nullptr;
 

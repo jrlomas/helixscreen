@@ -2144,6 +2144,7 @@
   <translation tag="Purge &amp; Wipe" ja="パージとワイプ"/>
   <translation tag="Purge Chute Calibration" ja="パージシュートのキャリブレーション"/>
   <translation tag="Purge Length" ja="パージ長"/>
+  <translation tag="Purge chute calibration failed: {}" ja="パージシュートのキャリブレーションに失敗しました: {}"/>
   <translation tag="Purge chute position saved." ja="パージシュートの位置を保存しました。"/>
   <translation tag="Purge failed: {}" ja="パージに失敗しました: {}"/>
   <translation tag="Purge may still be running — response timed out" ja="パージがまだ実行中の可能性があります — 応答タイムアウト"/>
@@ -2911,6 +2912,7 @@
   <translation tag="Toolhead Style" ja="ツールヘッドスタイル"/>
   <translation tag="Toolhead Y" ja="ツールヘッド Y"/>
   <translation tag="Toolhead jam" ja="ツールヘッドの詰まり"/>
+  <translation tag="Toolhead position unknown" ja="ツールヘッドの位置が不明です"/>
   <translation tag="Toolhead, G-code, limits, and materials" ja="ツールヘッド、Gコード、制限、材料"/>
   <translation tag="Toolheads" ja="ツールヘッド"/>
   <translation tag="Tools" ja="ツール"/>

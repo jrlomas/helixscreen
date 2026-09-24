@@ -27,10 +27,12 @@
 #include "test_helpers/seeded_override.h"
 
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <unistd.h>
@@ -155,8 +157,15 @@ class CfsCalibHelper : public CfsLifecycleHelper {
         CfsTestAccess::set_macro_variant_k1(*this);
     }
 
+    // Keep the 1-arg capture visible beside these overrides.
+    using CfsRemapHelper::execute_gcode;
+
     AmsError execute_gcode(const std::string& gcode, std::function<void()> on_complete) override {
         captured.push_back(gcode);
+        if (hold.count(gcode)) {
+            held.push_back(std::move(on_complete));
+            return AmsErrorHelper::success();
+        }
         if (on_complete) {
             on_complete();
         }
@@ -166,10 +175,41 @@ class CfsCalibHelper : public CfsLifecycleHelper {
     AmsError execute_gcode(const std::string& gcode, std::function<void()> on_complete,
                            std::function<void(const MoonrakerError&)> on_error, bool) override {
         captured.push_back(gcode);
+        if (fail.count(gcode)) {
+            MoonrakerError err;
+            err.type = MoonrakerErrorType::JSON_RPC_ERROR;
+            err.message = "Macro error: " + gcode;
+            if (on_error) {
+                on_error(err);
+            }
+            return AmsErrorHelper::success();
+        }
+        if (hold.count(gcode)) {
+            held.push_back(std::move(on_complete));
+            return AmsErrorHelper::success();
+        }
         if (on_complete) {
             on_complete();
         }
         return AmsErrorHelper::success();
+    }
+
+    /// Commands whose on_complete is captured unfired, so a test can advance
+    /// the world (set a cancel flag, start a second flow) before releasing it.
+    std::set<std::string> hold;
+    /// Commands that answer on_error instead of on_complete, modelling the
+    /// macro failing after the RPC acked.
+    std::set<std::string> fail;
+    std::vector<std::function<void()>> held;
+
+    void release_held() {
+        auto pending = std::move(held);
+        held.clear();
+        for (auto& cb : pending) {
+            if (cb) {
+                cb();
+            }
+        }
     }
 };
 
@@ -527,6 +567,85 @@ TEST_CASE("CFS chute save reads the live position then re-parks (#1282)", "[ams]
           std::vector<std::string>({"BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS",
                                     "BOX_CUSTOM_COMMAND CMD=Y_SAFE"}));
     CHECK(saved);
+}
+
+TEST_CASE("CFS chute calibration cancelled during the home stops before PREPARE (#1282)",
+          "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    backend.hold = {"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"};
+    auto cancel = std::make_shared<std::atomic<bool>>(false);
+    bool ready = false;
+    REQUIRE(backend.start_chute_calibration([&] { ready = true; }, nullptr, cancel).success());
+    REQUIRE(backend.captured == std::vector<std::string>{"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"});
+
+    cancel->store(true); // the user leaves while the home is still running
+    backend.release_held();
+    drain_calib_queue();
+
+    // The home cannot be aborted, but nothing downstream may go out: no
+    // PREPARE, so the box is never left in adjust mode at the chute.
+    CHECK(backend.captured == std::vector<std::string>{"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"});
+    CHECK_FALSE(ready);
+}
+
+TEST_CASE("CFS chute start failure reports the firmware message and never parks (#1282)",
+          "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    backend.fail = {"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"};
+    bool ready = false;
+    std::string failed_msg;
+    REQUIRE(backend
+                .start_chute_calibration([&] { ready = true; },
+                                         [&](const std::string& msg) { failed_msg = msg; })
+                .success());
+    drain_calib_queue();
+    // PREPARE never ran, so there is nothing to unwind: no further command.
+    CHECK(backend.captured == std::vector<std::string>{"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"});
+    CHECK_FALSE(ready);
+    CHECK_FALSE(failed_msg.empty());
+}
+
+TEST_CASE("CFS chute save failure re-parks and reports the firmware message (#1282)",
+          "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    backend.fail = {"BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS"};
+    bool saved = false;
+    std::string failed_msg;
+    REQUIRE(backend
+                .save_chute_position([&] { saved = true; },
+                                     [&](const std::string& msg) { failed_msg = msg; })
+                .success());
+    drain_calib_queue();
+    // The save only ever runs after PREPARE, so a failure always re-parks.
+    CHECK(backend.captured ==
+          std::vector<std::string>({"BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS",
+                                    "BOX_CUSTOM_COMMAND CMD=Y_SAFE"}));
+    CHECK_FALSE(saved);
+    CHECK_FALSE(failed_msg.empty());
+}
+
+TEST_CASE("CFS refuses a second calibration while one is in flight (#1282)", "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    backend.hold = {"BOX_FIND_CUT_POS"};
+    bool got_result = false;
+    REQUIRE(
+        backend.calibrate_cutter([&](bool, const std::string&) { got_result = true; }).success());
+    REQUIRE(backend.captured == std::vector<std::string>{"BOX_FIND_CUT_POS"});
+
+    SECTION("a second cutter start is refused as busy") {
+        const auto second = backend.calibrate_cutter();
+        CHECK_FALSE(second.success());
+        CHECK(backend.captured == std::vector<std::string>{"BOX_FIND_CUT_POS"});
+    }
+    SECTION("a chute start while the cutter runs is refused as busy") {
+        const auto second = backend.start_chute_calibration([] {});
+        CHECK_FALSE(second.success());
+        CHECK(backend.captured == std::vector<std::string>{"BOX_FIND_CUT_POS"});
+    }
+
+    backend.release_held();
+    drain_calib_queue();
+    CHECK(got_result);
 }
 
 TEST_CASE("CFS chute cancel path re-parks with Y_SAFE (#1282)", "[ams][cfs][calib]") {

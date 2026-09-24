@@ -163,18 +163,23 @@ void CfsChuteCalibrationOverlay::show(lv_obj_t* parent_screen) {
 
 void CfsChuteCalibrationOverlay::on_activate() {
     OverlayBase::on_activate();
+    cancel_requested_->store(false);
     set_state(State::IDLE);
 }
 
 void CfsChuteCalibrationOverlay::on_deactivating(DeactivateReason reason) {
+    // Leaving mid-flow must stop the step chain: the flag first, so a cancel
+    // during the home is already visible when the home-done defer runs.
+    cancel_requested_->store(true);
     // Leaving while adjusting leaves the toolhead off-park; re-park it. Before
-    // ADJUSTING there is nothing to unwind (the home cannot be aborted), and
-    // during SAVING the save script parks Y itself.
+    // ADJUSTING there is nothing to unwind (the home cannot be aborted); during
+    // SAVING the park is idempotent, so sending it again is safe.
     if (reason != DeactivateReason::Shutdown) {
         auto* backend = chute_backend();
         if (backend) {
             const int state = lv_subject_get_int(&s_cfs_chute_state);
-            if (state == static_cast<int>(State::ADJUSTING)) {
+            if (state == static_cast<int>(State::ADJUSTING) ||
+                state == static_cast<int>(State::SAVING)) {
                 backend->exit_chute_calibration();
             }
         }
@@ -198,7 +203,14 @@ void CfsChuteCalibrationOverlay::start_calibration() {
         return;
     }
     set_state(State::HOMING);
-    auto err = backend->start_chute_calibration([this]() { set_state(State::ADJUSTING); });
+    cancel_requested_->store(false);
+    auto err = backend->start_chute_calibration(
+        [this]() { set_state(State::ADJUSTING); },
+        [this](const std::string& klipper_msg) {
+            NOTIFY_ERROR(lv_tr("Purge chute calibration failed: {}"), klipper_msg);
+            set_state(State::IDLE);
+        },
+        cancel_requested_);
     if (!err.success()) {
         set_state(State::IDLE);
         notify_ams_error(err);
@@ -216,15 +228,19 @@ void CfsChuteCalibrationOverlay::handle_jog(double delta_mm) {
     // to fold in (unlike the motion panel's coalescer).
     double delta = delta_mm;
     const auto bounds = get_printer_state().get_axis_bounds();
-    if (bounds.has_y && y_known_) {
-        const auto result =
-            helix::clamp_jog_with_warn(current_y_mm_, 0.0, delta, static_cast<double>(bounds.y_min),
-                                       static_cast<double>(bounds.y_max), edge_warned_y_);
-        edge_warned_y_ = result.latch;
-        delta = result.allowed;
-        if (result.warn) {
-            NOTIFY_INFO(lv_tr("Y axis limit reached"));
-        }
+    if (helix::jog_refused_for_unknown_position(bounds.has_y, y_known_)) {
+        // With no envelope or no live position there is nothing to clamp
+        // against, so an unclamped jog must not go out.
+        NOTIFY_INFO(lv_tr("Toolhead position unknown"));
+        return;
+    }
+    const auto result =
+        helix::clamp_jog_with_warn(current_y_mm_, 0.0, delta, static_cast<double>(bounds.y_min),
+                                   static_cast<double>(bounds.y_max), edge_warned_y_);
+    edge_warned_y_ = result.latch;
+    delta = result.allowed;
+    if (result.warn) {
+        NOTIFY_INFO(lv_tr("Y axis limit reached"));
     }
     if (std::abs(delta) <= helix::AxisMove::EPSILON_MM) {
         return;
@@ -239,16 +255,22 @@ void CfsChuteCalibrationOverlay::save_position() {
     }
     set_state(State::SAVING);
     // The done screen names the pair the firmware wrote when the response
-    // line was captured, and stays a plain confirmation otherwise.
-    auto err = backend->save_chute_position([this, backend]() {
-        double x = 0.0, y = 0.0;
-        const std::string text =
-            backend->last_chute_saved_position(x, y)
-                ? fmt::format(lv_tr("Chute position: X {:.1f}, Y {:.1f}"), x, y)
-                : std::string(lv_tr("Purge chute position saved."));
-        lv_subject_copy_string(&s_cfs_chute_saved_text, text.c_str());
-        set_state(State::DONE);
-    });
+    // line was captured, and stays a plain confirmation otherwise. A failed
+    // save re-parks in the backend, so the overlay resets to IDLE.
+    auto err = backend->save_chute_position(
+        [this, backend]() {
+            double x = 0.0, y = 0.0;
+            const std::string text =
+                backend->last_chute_saved_position(x, y)
+                    ? fmt::format(lv_tr("Chute position: X {:.1f}, Y {:.1f}"), x, y)
+                    : std::string(lv_tr("Purge chute position saved."));
+            lv_subject_copy_string(&s_cfs_chute_saved_text, text.c_str());
+            set_state(State::DONE);
+        },
+        [this](const std::string& klipper_msg) {
+            NOTIFY_ERROR(lv_tr("Purge chute calibration failed: {}"), klipper_msg);
+            set_state(State::IDLE);
+        });
     if (!err.success()) {
         set_state(State::ADJUSTING);
         notify_ams_error(err);

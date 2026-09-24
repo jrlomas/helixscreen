@@ -9,6 +9,7 @@
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <optional>
@@ -320,8 +321,15 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// Chute steps 1+2: XYZ_ZERO (~55s full home) then
     /// COORDINATES_ADJUST_PREPARE (parks Y at the box's safe position).
     /// on_ready fires on the main thread once both completed and jogging may
-    /// start.
-    AmsError start_chute_calibration(std::function<void()> on_ready = nullptr);
+    /// start. @p cancel_requested is polled at each step boundary: once set,
+    /// remaining steps are dropped without on_ready (the caller has already
+    /// left the flow). @p on_failed fires on the main thread when any step's
+    /// gcode fails, with Klipper's message; the backend has already re-parked
+    /// Y when PREPARE had run.
+    AmsError
+    start_chute_calibration(std::function<void()> on_ready = nullptr,
+                            std::function<void(const std::string& klipper_msg)> on_failed = nullptr,
+                            std::shared_ptr<std::atomic<bool>> cancel_requested = nullptr);
 
     /// Jog Y by @p delta_mm using the stock screen's exact script form
     /// (SAVE_GCODE_STATE/G91/G0/M400/RESTORE_GCODE_STATE). The caller clamps
@@ -332,8 +340,12 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// Chute save: COORDINATES_ADJUST_SAVE_POS (the firmware reads the LIVE
     /// toolhead position and rewrites extrude_pos_x/y in box.cfg; HelixScreen
     /// sends no coordinate) followed by Y_SAFE to re-park. on_saved fires on
-    /// the main thread after both completed.
-    AmsError save_chute_position(std::function<void()> on_saved = nullptr);
+    /// the main thread after both completed; @p on_failed when either gcode
+    /// fails (the backend has already sent Y_SAFE, which is an idempotent
+    /// park).
+    AmsError
+    save_chute_position(std::function<void()> on_saved = nullptr,
+                        std::function<void(const std::string& klipper_msg)> on_failed = nullptr);
 
     /// Abort path: re-park Y with CMD=Y_SAFE. Required once PREPARE has run,
     /// which is the point from which the toolhead is left off-park.
@@ -613,6 +625,11 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// Save-response line captured by the last chute save (main thread only:
     /// written when the save completes, read by last_chute_saved_position).
     std::string last_chute_save_line_;
+
+    /// Both calibration flows home the machine; only one may own it at a
+    /// time. Set once a flow's first gcode is on the wire, cleared in every
+    /// terminal callback (ready, saved, result, failed, cancelled).
+    bool calibration_in_flight_ = false;
 
     /// Monotonic count of box.map parses — firmware-sourced by construction,
     /// since the optimistic path writes system_info_ via assign_tool_slot()

@@ -2144,6 +2144,7 @@
   <translation tag="Purge &amp; Wipe" ru="Продувка и очистка"/>
   <translation tag="Purge Chute Calibration" ru="Калибровка жёлоба продувки"/>
   <translation tag="Purge Length" ru="Длина продувки"/>
+  <translation tag="Purge chute calibration failed: {}" ru="Не удалось калибровать жёлоб продувки: {}"/>
   <translation tag="Purge chute position saved." ru="Позиция жёлоба продувки сохранена."/>
   <translation tag="Purge failed: {}" ru="Ошибка прочистки: {}"/>
   <translation tag="Purge may still be running — response timed out" ru="Прочистка может ещё выполняться — время ожидания истекло"/>
@@ -2911,6 +2912,7 @@
   <translation tag="Toolhead Style" ru="Стиль печатающей головки"/>
   <translation tag="Toolhead Y" ru="Печатающая головка Y"/>
   <translation tag="Toolhead jam" ru="Замятие в печатающей головке"/>
+  <translation tag="Toolhead position unknown" ru="Положение печатающей головки неизвестно"/>
   <translation tag="Toolhead, G-code, limits, and materials" ru="Печатающая головка, G-code, лимиты и материалы"/>
   <translation tag="Toolheads" ru="Печатающие головки"/>
   <translation tag="Tools" ru="Инструменты"/>

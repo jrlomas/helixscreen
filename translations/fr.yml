@@ -2384,6 +2384,7 @@ translations:
   Purge & Wipe: 'Purge et essuyage'
   Purge Chute Calibration: Calibration de la goulotte de purge
   Purge Length: 'Longueur de purge'
+  'Purge chute calibration failed: {}': 'Échec de la calibration de la goulotte de purge : {}'
   Purge chute position saved.: Position de la goulotte de purge enregistrée.
 
   'Purge failed: {}': 'Échec de la purge : {}'
@@ -3303,6 +3304,7 @@ translations:
   Toolhead Style: Style de tête d'outil
   Toolhead Y: Tête d'outil Y
   Toolhead jam: Bourrage de la tête d'outil
+  Toolhead position unknown: 'Position de la tête d''outil inconnue'
   Toolhead, G-code, limits, and materials: Tête d'outil, G-code, limites et matériaux
   Toolheads: 'Têtes d''outil'
   Tools: Outils

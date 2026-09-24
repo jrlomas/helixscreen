@@ -2367,6 +2367,7 @@ translations:
   Purge & Wipe: 'Purgar y limpiar'
   Purge Chute Calibration: Calibración del conducto de purga
   Purge Length: 'Longitud de purga'
+  'Purge chute calibration failed: {}': 'Falló la calibración del conducto de purga: {}'
   Purge chute position saved.: Posición del conducto de purga guardada.
 
   'Purge failed: {}': 'Error al purgar: {}'
@@ -3273,6 +3274,7 @@ translations:
   Toolhead Style: Estilo de Cabezal
   Toolhead Y: Cabezal Y
   Toolhead jam: Atasco del cabezal
+  Toolhead position unknown: Posición del cabezal desconocida
   Toolhead, G-code, limits, and materials: Cabezal, G-code, límites y materiales
   Toolheads: Cabezales
   Tools: Herramientas

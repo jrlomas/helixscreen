@@ -2144,6 +2144,7 @@
   <translation tag="Purge &amp; Wipe" zh="排料与擦拭"/>
   <translation tag="Purge Chute Calibration" zh="排料口校准"/>
   <translation tag="Purge Length" zh="排料长度"/>
+  <translation tag="Purge chute calibration failed: {}" zh="排料口校准失败：{}"/>
   <translation tag="Purge chute position saved." zh="排料口位置已保存。"/>
   <translation tag="Purge failed: {}" zh="清洗失败: {}"/>
   <translation tag="Purge may still be running — response timed out" zh="清洗可能仍在运行 — 响应超时"/>
@@ -2911,6 +2912,7 @@
   <translation tag="Toolhead Style" zh="工具头样式"/>
   <translation tag="Toolhead Y" zh="工具头 Y"/>
   <translation tag="Toolhead jam" zh="工具头堵塞"/>
+  <translation tag="Toolhead position unknown" zh="工具头位置未知"/>
   <translation tag="Toolhead, G-code, limits, and materials" zh="打印头、G代码、限制和材料"/>
   <translation tag="Toolheads" zh="工具头"/>
   <translation tag="Tools" zh="工具"/>

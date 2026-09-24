@@ -2144,6 +2144,7 @@
   <translation tag="Purge &amp; Wipe" it="Spurgo e pulizia"/>
   <translation tag="Purge Chute Calibration" it="Calibrazione condotto di spurgo"/>
   <translation tag="Purge Length" it="Lunghezza di spurgo"/>
+  <translation tag="Purge chute calibration failed: {}" it="Calibrazione del condotto di spurgo non riuscita: {}"/>
   <translation tag="Purge chute position saved." it="Posizione del condotto di spurgo salvata."/>
   <translation tag="Purge failed: {}" it="Spurgo fallito: {}"/>
   <translation tag="Purge may still be running — response timed out" it="Spurgo potrebbe essere ancora in corso — tempo scaduto"/>
@@ -2911,6 +2912,7 @@
   <translation tag="Toolhead Style" it="Stile testina"/>
   <translation tag="Toolhead Y" it="Testina Y"/>
   <translation tag="Toolhead jam" it="Inceppamento testina"/>
+  <translation tag="Toolhead position unknown" it="Posizione della testina sconosciuta"/>
   <translation tag="Toolhead, G-code, limits, and materials" it="Testina, G-code, limiti e materiali"/>
   <translation tag="Toolheads" it="Testine"/>
   <translation tag="Tools" it="Strumenti"/>

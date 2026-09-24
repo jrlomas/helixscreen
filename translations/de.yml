@@ -2374,6 +2374,7 @@ translations:
   Purge & Wipe: 'Entlüften & Abwischen'
   Purge Chute Calibration: Entlüftungsrinnen-Kalibrierung
   Purge Length: 'Entlüftungslänge'
+  'Purge chute calibration failed: {}': 'Kalibrierung der Entlüftungsrinne fehlgeschlagen: {}'
   Purge chute position saved.: Position der Entlüftungsrinne gespeichert.
 
   'Purge failed: {}': 'Purge fehlgeschlagen: {}'
@@ -3277,6 +3278,7 @@ translations:
   Toolhead Style: Toolhead-Stil
   Toolhead Y: Werkzeugkopf Y
   Toolhead jam: Werkzeugkopf-Stau
+  Toolhead position unknown: Werkzeugkopfposition unbekannt
   Toolhead, G-code, limits, and materials: Druckkopf, G-Code, Grenzen und Materialien
   Toolheads: Werkzeugköpfe
   Tools: Werkzeuge

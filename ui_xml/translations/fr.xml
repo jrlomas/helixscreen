@@ -2144,6 +2144,7 @@
   <translation tag="Purge &amp; Wipe" fr="Purge et essuyage"/>
   <translation tag="Purge Chute Calibration" fr="Calibration de la goulotte de purge"/>
   <translation tag="Purge Length" fr="Longueur de purge"/>
+  <translation tag="Purge chute calibration failed: {}" fr="Échec de la calibration de la goulotte de purge : {}"/>
   <translation tag="Purge chute position saved." fr="Position de la goulotte de purge enregistrée."/>
   <translation tag="Purge failed: {}" fr="Échec de la purge : {}"/>
   <translation tag="Purge may still be running — response timed out" fr="Purge peut-être encore en cours — délai dépassé"/>
@@ -2911,6 +2912,7 @@
   <translation tag="Toolhead Style" fr="Style de tête d&apos;outil"/>
   <translation tag="Toolhead Y" fr="Tête d&apos;outil Y"/>
   <translation tag="Toolhead jam" fr="Bourrage de la tête d&apos;outil"/>
+  <translation tag="Toolhead position unknown" fr="Position de la tête d&apos;outil inconnue"/>
   <translation tag="Toolhead, G-code, limits, and materials" fr="Tête d&apos;outil, G-code, limites et matériaux"/>
   <translation tag="Toolheads" fr="Têtes d&apos;outil"/>
   <translation tag="Tools" fr="Outils"/>

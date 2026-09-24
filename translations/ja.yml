@@ -2209,6 +2209,7 @@ translations:
   Purge & Wipe: 'パージとワイプ'
   Purge Chute Calibration: パージシュートのキャリブレーション
   Purge Length: 'パージ長'
+  'Purge chute calibration failed: {}': 'パージシュートのキャリブレーションに失敗しました: {}'
   Purge chute position saved.: パージシュートの位置を保存しました。
 
   'Purge failed: {}': 'パージに失敗しました: {}'
@@ -3026,6 +3027,7 @@ translations:
   Toolhead Style: ツールヘッドスタイル
   Toolhead Y: ツールヘッド Y
   Toolhead jam: ツールヘッドの詰まり
+  Toolhead position unknown: ツールヘッドの位置が不明です
   Toolhead, G-code, limits, and materials: ツールヘッド、Gコード、制限、材料
   Toolheads: ツールヘッド
   Tools: ツール

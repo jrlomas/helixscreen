@@ -4031,6 +4031,9 @@ AmsBackendCfs::calibrate_cutter(std::function<void(bool ok, const std::string& l
     if (auto e = refuse_calibration_if_printing(api_); !e.success()) {
         return e;
     }
+    if (calibration_in_flight_) {
+        return AmsErrorHelper::busy("calibration");
+    }
 
     // Klipper reports the result on the gcode response stream, not in the
     // gcode/script RPC reply: listen for the terminal lines while the macro
@@ -4068,6 +4071,7 @@ AmsBackendCfs::calibrate_cutter(std::function<void(bool ok, const std::string& l
     auto token = lifetime_.token();
     auto on_complete = [this, token, on_result, watch, unregister]() {
         token.defer("AmsBackendCfs::cutcal_done", [this, token, on_result, watch, unregister]() {
+            calibration_in_flight_ = false;
             unregister();
             const std::string& line =
                 !watch->found_line.empty() ? watch->found_line : watch->saved_line;
@@ -4076,41 +4080,97 @@ AmsBackendCfs::calibrate_cutter(std::function<void(bool ok, const std::string& l
             }
         });
     };
-    auto on_error = [token, on_result, unregister](const MoonrakerError& err) {
-        token.defer("AmsBackendCfs::cutcal_err", [token, on_result, unregister, err]() {
+    auto on_error = [this, token, on_result, unregister](const MoonrakerError& err) {
+        token.defer("AmsBackendCfs::cutcal_err", [this, token, on_result, unregister, err]() {
+            calibration_in_flight_ = false;
             unregister();
             if (on_result) {
                 on_result(false, err.message);
             }
         });
     };
-    return execute_gcode("BOX_FIND_CUT_POS", std::move(on_complete), std::move(on_error));
+    const AmsError err =
+        execute_gcode("BOX_FIND_CUT_POS", std::move(on_complete), std::move(on_error));
+    if (!err.success()) {
+        // The send was refused outright; neither callback will fire to drop
+        // the watch, so remove it here rather than leaking the handler.
+        unregister();
+    } else {
+        calibration_in_flight_ = true;
+    }
+    return err;
 }
 
-AmsError AmsBackendCfs::start_chute_calibration(std::function<void()> on_ready) {
+AmsError AmsBackendCfs::start_chute_calibration(
+    std::function<void()> on_ready, std::function<void(const std::string& klipper_msg)> on_failed,
+    std::shared_ptr<std::atomic<bool>> cancel_requested) {
     if (macro_variant_ != CfsMacroVariant::K1) {
         return AmsErrorHelper::not_supported("Purge chute calibration is K1-stock only");
     }
     if (auto e = refuse_calibration_if_printing(api_); !e.success()) {
         return e;
     }
+    if (calibration_in_flight_) {
+        return AmsErrorHelper::busy("calibration");
+    }
     auto token = lifetime_.token();
+    // PREPARE having run is what makes leaving the flow require a re-park:
+    // every failure leg re-sends Y_SAFE exactly when this is set.
+    auto prepare_ran = std::make_shared<bool>(false);
+    auto fail = [this, token, on_failed, prepare_ran](const MoonrakerError& err) {
+        token.defer("AmsBackendCfs::chute_failed", [this, token, on_failed, prepare_ran, err]() {
+            calibration_in_flight_ = false;
+            if (*prepare_ran) {
+                execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE");
+            }
+            if (on_failed) {
+                on_failed(err.message);
+            }
+        });
+    };
     // XYZ_ZERO is the flow's own full home (~55s incl. PRTouch Z); PREPARE
     // then parks Y at the box's safe position and extrudes X. Jogging may
-    // only start once both acked.
-    return execute_gcode(
-        "BOX_CUSTOM_COMMAND CMD=XYZ_ZERO", [this, token, on_ready = std::move(on_ready)]() {
-            token.defer("AmsBackendCfs::chute_home_done", [this, token, on_ready]() {
-                execute_gcode("BOX_CUSTOM_COMMAND "
-                              "CMD=COORDINATES_ADJUST_PREPARE",
-                              [token, on_ready]() {
-                                  token.defer("AmsBackendCfs::chute_prepare_done", [on_ready]() {
-                                      if (on_ready)
-                                          on_ready();
-                                  });
-                              });
+    // only start once both acked. Every step boundary polls the cancel flag:
+    // once the user has left the flow, no further step goes out.
+    const AmsError err = execute_gcode(
+        "BOX_CUSTOM_COMMAND CMD=XYZ_ZERO",
+        [this, token, on_ready = std::move(on_ready), cancel_requested, prepare_ran, fail]() {
+            token.defer("AmsBackendCfs::chute_home_done", [this, token, on_ready, cancel_requested,
+                                                           prepare_ran, fail]() {
+                if (cancel_requested && cancel_requested->load()) {
+                    // Cancelled during the home: the head sits at the
+                    // homed origin and PREPARE never ran, so there is
+                    // nothing to unwind.
+                    calibration_in_flight_ = false;
+                    return;
+                }
+                *prepare_ran = true;
+                execute_gcode(
+                    "BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_PREPARE",
+                    [this, token, on_ready, cancel_requested, fail]() {
+                        token.defer("AmsBackendCfs::chute_prepare_done",
+                                    [this, token, on_ready, cancel_requested, fail]() {
+                                        if (cancel_requested && cancel_requested->load()) {
+                                            // Cancelled while PREPARE ran: the caller
+                                            // is gone, so the backend re-parks itself.
+                                            calibration_in_flight_ = false;
+                                            execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE");
+                                            return;
+                                        }
+                                        calibration_in_flight_ = false;
+                                        if (on_ready) {
+                                            on_ready();
+                                        }
+                                    });
+                    },
+                    fail);
             });
-        });
+        },
+        fail);
+    if (err.success()) {
+        calibration_in_flight_ = true;
+    }
+    return err;
 }
 
 AmsError AmsBackendCfs::jog_chute_y(float delta_mm) {
@@ -4128,7 +4188,9 @@ AmsError AmsBackendCfs::jog_chute_y(float delta_mm) {
     return execute_gcode(script);
 }
 
-AmsError AmsBackendCfs::save_chute_position(std::function<void()> on_saved) {
+AmsError
+AmsBackendCfs::save_chute_position(std::function<void()> on_saved,
+                                   std::function<void(const std::string& klipper_msg)> on_failed) {
     if (macro_variant_ != CfsMacroVariant::K1) {
         return AmsErrorHelper::not_supported("Purge chute save is K1-stock only");
     }
@@ -4166,8 +4228,20 @@ AmsError AmsBackendCfs::save_chute_position(std::function<void()> on_saved) {
     auto token = lifetime_.token();
     // SAVE_POS reads the LIVE toolhead position into box.cfg's
     // extrude_pos_x/y (HelixScreen sends no coordinate); Y_SAFE re-parks
-    // after the save so the flow ends in the parked state.
-    return execute_gcode(
+    // after the save so the flow ends in the parked state. The save only
+    // ever runs after PREPARE, so a failure always re-parks.
+    auto fail = [this, token, on_failed = std::move(on_failed),
+                 unregister](const MoonrakerError& err) {
+        token.defer("AmsBackendCfs::chute_save_failed",
+                    [this, token, on_failed, unregister, err]() {
+                        unregister();
+                        execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE");
+                        if (on_failed) {
+                            on_failed(err.message);
+                        }
+                    });
+    };
+    const AmsError err = execute_gcode(
         "BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS",
         [this, token, on_saved = std::move(on_saved), watch, unregister]() {
             token.defer("AmsBackendCfs::chute_saved", [this, token, on_saved, watch, unregister]() {
@@ -4182,7 +4256,14 @@ AmsError AmsBackendCfs::save_chute_position(std::function<void()> on_saved) {
                                               });
                               });
             });
-        });
+        },
+        fail);
+    if (!err.success()) {
+        // The send was refused outright; nothing will fire the callbacks that
+        // own the watch, so drop it here rather than leaking the handler.
+        unregister();
+    }
+    return err;
 }
 
 bool AmsBackendCfs::last_chute_saved_position(double& x_mm, double& y_mm) const {
