@@ -288,13 +288,16 @@ bool MoonrakerClientMock::arm_event_replay(const std::string& json_path) {
 namespace {
 /// Per-persona travel bounds reported as toolhead axis_maximum. The K1
 /// persona carries the real values from a K1C capture (printer.cfg
-/// position_max 229/227/255) so printer detection scores it as the Creality
-/// it is; every other persona keeps the long-standing generic volume and
-/// detects exactly as before.
+/// position_max 229/227/255) and the K1 Max persona the values from the
+/// #1282 klippy.log (300/307.5/300), so printer detection scores each as the
+/// Creality it is; every other persona keeps the long-standing generic
+/// volume and detects exactly as before.
 std::array<double, 3> persona_axis_maximum(MoonrakerClientMock::PrinterType type) {
     switch (type) {
     case MoonrakerClientMock::PrinterType::CREALITY_K1:
         return {229.0, 227.0, 255.0};
+    case MoonrakerClientMock::PrinterType::CREALITY_K1_MAX:
+        return {300.0, 307.5, 300.0};
     default:
         return {235.0, 235.0, 250.0};
     }
@@ -1131,6 +1134,7 @@ void MoonrakerClientMock::populate_capabilities() {
         default_kinematics = "corexy";
         break;
     case PrinterType::CREALITY_K1:
+    case PrinterType::CREALITY_K1_MAX:
         default_kinematics = "corexy";
         break;
     default:
@@ -1558,11 +1562,12 @@ bool MoonrakerClientMock::apply_cfs_box_custom_command(const std::string& gcode)
         gcode.substr(start, end == std::string::npos ? std::string::npos : end - start);
 
     // Geometry scales off the persona envelope the way the verified K1 Max
-    // values scale off its 307.5: safe_pos_y = y_max - 16 (291.5 on a Max),
-    // extrude x = 80% of the X envelope (~183 on a Max).
+    // values scale off its 307.5: safe_pos_y = y_max - 16 (291.5 on a Max).
+    // The Max parks at the captured box.cfg extrude_pos_x (184.5); smaller
+    // K1s were never captured, so they scale the X envelope.
     const auto max = persona_axis_maximum(printer_type_);
     const double safe_y = max[1] - 16.0;
-    const double extrude_x = max[0] * 0.8;
+    const double extrude_x = printer_type_ == PrinterType::CREALITY_K1_MAX ? 184.5 : max[0] * 0.8;
 
     // Move to a parked position: homed, motors on, snapshot-dispatched as one
     // frame (same shape the G0 handler emits).
@@ -2041,7 +2046,8 @@ void MoonrakerClientMock::populate_hardware() {
         break;
 
     case PrinterType::CREALITY_K1:
-        // Creality K1/K1 Max configuration
+    case PrinterType::CREALITY_K1_MAX:
+        // Creality K1-family configuration
         discovery_.heaters() = {"heater_bed", "extruder"};
         discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
                                 "extruder", // Hotend thermistor (Klipper naming: bare heater name)

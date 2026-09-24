@@ -63,7 +63,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     enum class PrinterType {
         VORON_24,           // Voron 2.4 (CoreXY, chamber heating)
         VORON_TRIDENT,      // Voron Trident (3Z, CoreXY)
-        CREALITY_K1,        // Creality K1/K1 Max (bed slinger style)
+        CREALITY_K1,        // Creality K1/K1C (bed slinger style)
+        CREALITY_K1_MAX,    // Creality K1 Max (the #1282 CFS capture machine)
         FLASHFORGE_AD5M,    // FlashForge Adventurer 5M (enclosed)
         GENERIC_COREXY,     // Generic CoreXY printer
         GENERIC_BEDSLINGER, // Generic i3-style printer
