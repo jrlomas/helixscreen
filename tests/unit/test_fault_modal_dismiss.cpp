@@ -37,6 +37,8 @@
 
 using helix::KlippyState;
 using helix::ui::dismiss_fault_modals;
+using helix::ui::fault_carrier_showing;
+using helix::ui::set_fault_carrier;
 using helix::ui::track_fault_modal;
 using helix::ui::UpdateQueue;
 
@@ -193,6 +195,44 @@ TEST_CASE_METHOD(FaultModalFixture, "A swept fault modal leaves an untracked one
     CHECK(std::string(lv_label_get_text(title)) == "Wizard Error");
 }
 
+// One fault, one dialog: a dialog that restates the fault retires the alerts
+// for it and holds new ones back while it is up.
+TEST_CASE_METHOD(FaultModalFixture, "A fault carrier retires the fault alerts it restates",
+                 "[faultmodal][faultcarrier]") {
+    raise_fault("Printer Error", "Heater dragonbreath not heating at expected rate");
+    lv_obj_t* carrier =
+        raise_untracked("Klipper Shutdown", "Heater dragonbreath not heating at expected rate");
+    REQUIRE_FALSE(fault_carrier_showing());
+
+    set_fault_carrier(carrier);
+    settle();
+
+    CHECK(helix::ui::tracked_fault_modal_count() == 0);
+    CHECK(Modal::get_top() == carrier);
+    CHECK(fault_carrier_showing());
+
+    // Once the carrier goes, a new fault has nothing restating it and gets its
+    // own alert again.
+    Modal::hide(carrier);
+    settle();
+    CHECK_FALSE(fault_carrier_showing());
+}
+
+TEST_CASE_METHOD(FaultModalFixture, "Clearing the fault carrier leaves fault alerts up",
+                 "[faultmodal][faultcarrier]") {
+    lv_obj_t* carrier = raise_untracked("Klipper Shutdown", "Heater not heating");
+    set_fault_carrier(carrier);
+    raise_fault("Printer Error", "Heater not heating");
+
+    // The carrier stopped restating the fault (its text went generic), so the
+    // alert holds the only copy on screen.
+    set_fault_carrier(nullptr);
+    settle();
+
+    CHECK_FALSE(fault_carrier_showing());
+    CHECK(helix::ui::tracked_fault_modal_count() == 1);
+}
+
 // ============================================================================
 // The wiring: a Klipper READY transition must actually reach the sweep.
 // ============================================================================
@@ -206,6 +246,7 @@ class KlippyRecoveryFixture : public FaultModalFixture {
         estop.init(state(), &api());
         estop.init_subjects();
         estop.create(); // subscribes the klippy_state observer
+        REQUIRE(register_component("klipper_recovery_dialog"));
 
         // Burn the initial-fire guard: production deliberately ignores the
         // first fire, which carries the subject's placeholder value. Burn it
@@ -262,4 +303,48 @@ TEST_CASE_METHOD(KlippyRecoveryFixture, "A fault raised while Klipper stays READ
 
     CHECK(Modal::get_top() != nullptr);
     CHECK(helix::ui::tracked_fault_modal_count() == 1);
+}
+
+TEST_CASE_METHOD(KlippyRecoveryFixture,
+                 "A Klipper shutdown folds its fault alert into the recovery dialog",
+                 "[faultmodal][faultcarrier][recovery]") {
+    state().set_klippy_state_sync(KlippyState::READY);
+    settle();
+    settle();
+
+    const char* reason = "Heater dragonbreath not heating at expected rate, temp: 27.20 "
+                         "target: 60.00";
+    raise_fault("Printer Error", reason);
+    REQUIRE(helix::ui::tracked_fault_modal_count() == 1);
+
+    state().set_klippy_state_message(reason);
+    state().set_klippy_state_sync(KlippyState::SHUTDOWN);
+    settle();
+    settle();
+
+    lv_obj_t* recovery = lv_obj_find_by_name(lv_screen_active(), "klipper_recovery_card");
+    REQUIRE(recovery != nullptr);
+    CHECK(Modal::get_top() == recovery);
+    CHECK(helix::ui::tracked_fault_modal_count() == 0);
+    CHECK(fault_carrier_showing());
+}
+
+TEST_CASE_METHOD(KlippyRecoveryFixture, "A shutdown with no reason text keeps the fault alert",
+                 "[faultmodal][faultcarrier][recovery]") {
+    state().set_klippy_state_sync(KlippyState::READY);
+    settle();
+    settle();
+
+    raise_fault("Printer Error", "Heater dragonbreath not heating at expected rate");
+
+    // The recovery dialog falls back to generic text, so the alert is the only
+    // place the reason is on screen.
+    state().set_klippy_state_message("");
+    state().set_klippy_state_sync(KlippyState::SHUTDOWN);
+    settle();
+    settle();
+
+    REQUIRE(lv_obj_find_by_name(lv_screen_active(), "klipper_recovery_card") != nullptr);
+    CHECK(helix::ui::tracked_fault_modal_count() == 1);
+    CHECK_FALSE(fault_carrier_showing());
 }

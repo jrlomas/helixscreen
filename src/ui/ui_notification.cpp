@@ -201,6 +201,10 @@ static void async_error_callback(void* user_data) {
             }
         }
 
+        if (data->fault && helix::ui::fault_carrier_showing()) {
+            data->modal = false; // see show_error_notification()
+        }
+
         if (data->modal && data->has_title) {
             // Check if a modal with the same title is already showing
             if (top_modal_shows_title(data->title)) {
@@ -505,6 +509,13 @@ static void show_error_notification(const char* title, const char* message, bool
     }
 
     if (is_main_thread()) {
+        // A dialog on screen already restates the printer fault (the Klipper
+        // recovery dialog), so a new one gets a toast and a history row rather
+        // than a second modal stacked on it.
+        if (fault && helix::ui::fault_carrier_showing()) {
+            modal = false;
+        }
+
         // Main thread: call LVGL directly
         if (modal && title) {
             // Check if a modal with the same title is already showing
