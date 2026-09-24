@@ -348,17 +348,80 @@ TEST_CASE_METHOD(LVGLUITestFixture,
 
 TEST_CASE_METHOD(LVGLUITestFixture, "Material preheat without a printer API sends no temperatures",
                  "[material_preheat][preheat]") {
-    const bool has_macro = GENERATE(true, false);
-    CAPTURE(has_macro);
-    MaterialSettingsScope settings;
-    helix::MaterialSettingsManager::instance().set_override(
-        "ABS",
-        abs_override(has_macro ? std::optional<std::string>{"HEAT_ABS"} : std::nullopt, false));
+    using Mode = helix::MaterialPreheatMode;
+    const auto mode = GENERATE(Mode::TEMPERATURES, Mode::TEMPERATURES_THEN_MACRO, Mode::MACRO_ONLY,
+                               Mode::MACRO_MISSING);
+    CAPTURE(static_cast<int>(mode));
     helix::PrinterDiscovery hardware;
     int temperature_sends = 0;
 
     helix::execute_material_preheat(
-        nullptr, "ABS", [&] { ++temperature_sends; }, "[MaterialPreheatTest]", hardware);
+        nullptr, {mode, "HEAT_ABS"}, [&] { ++temperature_sends; }, "[MaterialPreheatTest]",
+        hardware);
 
     CHECK(temperature_sends == 0);
+}
+
+namespace {
+
+helix::PrinterDiscovery printer_with_macro(const char* macro) {
+    helix::PrinterDiscovery hardware;
+    hardware.parse_objects(nlohmann::json{"extruder", std::string("gcode_macro ") + macro});
+    return hardware;
+}
+
+} // namespace
+
+TEST_CASE("plan_material_preheat sends temperatures when no macro is assigned",
+          "[material_preheat][preheat]") {
+    const auto hardware = printer_with_macro("HEAT_ABS");
+    filament::MaterialOverride override;
+    override.macro_handles_heating = true;
+    const auto macro = GENERATE(std::optional<std::string>{}, std::optional<std::string>{""});
+    CAPTURE(macro);
+    override.preheat_macro = macro;
+
+    for (const auto* candidate : {static_cast<const filament::MaterialOverride*>(nullptr),
+                                  static_cast<const filament::MaterialOverride*>(&override)}) {
+        const auto plan = helix::plan_material_preheat(candidate, hardware);
+        CHECK(plan.mode == helix::MaterialPreheatMode::TEMPERATURES);
+        CHECK(plan.macro.empty());
+    }
+}
+
+TEST_CASE("plan_material_preheat lets a discovered macro heat unless it is additive",
+          "[material_preheat][preheat]") {
+    const auto hardware = printer_with_macro("HEAT_ABS");
+    filament::MaterialOverride override;
+    override.preheat_macro = "heat_abs"; // discovery matches macros case-insensitively
+
+    override.macro_handles_heating = std::nullopt;
+    auto plan = helix::plan_material_preheat(&override, hardware);
+    CHECK(plan.mode == helix::MaterialPreheatMode::MACRO_ONLY);
+    CHECK(plan.macro == "heat_abs");
+
+    override.macro_handles_heating = true;
+    CHECK(helix::plan_material_preheat(&override, hardware).mode ==
+          helix::MaterialPreheatMode::MACRO_ONLY);
+
+    override.macro_handles_heating = false;
+    plan = helix::plan_material_preheat(&override, hardware);
+    CHECK(plan.mode == helix::MaterialPreheatMode::TEMPERATURES_THEN_MACRO);
+    CHECK(plan.macro == "heat_abs");
+}
+
+TEST_CASE("plan_material_preheat flags a macro this printer does not define",
+          "[material_preheat][preheat]") {
+    const auto hardware = printer_with_macro("HEAT_PLA");
+    filament::MaterialOverride override;
+    override.preheat_macro = "HEAT_ABS";
+    const auto handles_heating =
+        GENERATE(std::optional<bool>{}, std::optional<bool>{true}, std::optional<bool>{false});
+    CAPTURE(handles_heating);
+    override.macro_handles_heating = handles_heating;
+
+    const auto plan = helix::plan_material_preheat(&override, hardware);
+
+    CHECK(plan.mode == helix::MaterialPreheatMode::MACRO_MISSING);
+    CHECK(plan.macro == "HEAT_ABS");
 }

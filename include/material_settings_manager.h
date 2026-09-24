@@ -56,6 +56,9 @@ class MaterialSettingsManager {
     /** @brief Get override for a material (nullptr if none) */
     const filament::MaterialOverride* get_override(const std::string& name) const;
 
+    /** @brief Override for a material named in any case or alias ("abs" finds "ABS") */
+    const filament::MaterialOverride* find_override_for_material(const std::string& name) const;
+
     /** @brief Set override for a material (saves to config) */
     void set_override(const std::string& name, const filament::MaterialOverride& override);
 
