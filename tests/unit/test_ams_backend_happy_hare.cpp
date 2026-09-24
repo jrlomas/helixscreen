@@ -4395,7 +4395,12 @@ TEST_CASE("Happy Hare's own gate writes carry the filament id", "[ams][happyhare
     SECTION("a departed binding's retire drops it") {
         helper.set_gate_spoolman_link(0, 42, 55, 3);
         REQUIRE(helper.get_slot_info(0).spoolman_filament_id == 55);
-        helix::HappyHareTestAccess::retire_departed_identity(helper, 0);
+        // The retire expects its caller to hold mutex_; get_slot_info takes
+        // the same lock itself, so release before reading back.
+        {
+            std::lock_guard<std::mutex> lock(helix::HappyHareTestAccess::mutex(helper));
+            helix::HappyHareTestAccess::retire_departed_identity(helper, 0);
+        }
         CHECK(helper.get_slot_info(0).spoolman_filament_id == 0);
         CHECK(helper.get_slot_info(0).spoolman_vendor_id == 0);
     }
