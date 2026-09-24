@@ -202,7 +202,8 @@ helix_env_key_allowed() {
             HELIX_FB_DEVICE | HELIX_FORCE_STREAMING | HELIX_GCODE_MODE | \
             HELIX_GCODE_STREAMING | HELIX_KEYBOARD_DEVICE | HELIX_LOG_DEST | \
             HELIX_LOG_FILE | HELIX_LOG_LEVEL | HELIX_MOUSE_DEVICE | \
-            HELIX_NO_SPLASH | HELIX_REMOTE_CONTROL | HELIX_REMOTE_HTTP_TOKEN | \
+            HELIX_NICE | HELIX_NO_SPLASH | HELIX_REMOTE_CONTROL | \
+            HELIX_REMOTE_HTTP_TOKEN | HELIX_REMOTE_SOCKET | \
             HELIX_REQUIRE_POINTER | HELIX_SCREEN_SIZE | HELIX_SCROLL_GUARD | \
             HELIX_SCROLL_GUARD_COOLDOWN_MS | HELIX_SKIP_SPLASH | HELIX_SSAO | \
             HELIX_THEME | HELIX_TOUCH_CALIBRATE | HELIX_TOUCH_DEVICE | \
@@ -215,13 +216,89 @@ helix_env_key_allowed() {
     return 1
 }
 
-# Keys whose value the launcher splices unquoted into the app's command line
-# (EXTRA_FLAGS below); whitespace there would add flags of its own.
-helix_env_key_is_flag() {
+# Why KEY's literal VALUE is refused, printed; nothing (and status 1) when it
+# is fine. Shell syntax is refused for every key: the file does not run it,
+# and exporting it as text would turn a line like `$(openssl rand -hex 16)`
+# into a secret anyone can read here. The per-key rules cover values root acts
+# on: the launcher splices HELIX_DPI, HELIX_LOG_*, and HELIX_REMOTE_SOCKET
+# unquoted into the app's command line, the app writes the log file as root
+# (and echoes other settings into it, so a log aimed at a script is code), and
+# ALSA's file plugin popen()s a `|cmd` target.
+helix_env_value_refusal() {
+    case "$2" in
+        *'$('* | *'`'* | *'${'* | *'$'[A-Za-z_]*)
+            echo "holds shell syntax (\$VAR, \$(...), \${...} or a backtick), which this file does not run - write the final value itself"
+            return 0
+            ;;
+    esac
     case "$1" in
-        HELIX_DPI | HELIX_LOG_DEST | HELIX_LOG_FILE | HELIX_LOG_LEVEL) return 0 ;;
+        HELIX_DPI | HELIX_LOG_DEST | HELIX_LOG_FILE | HELIX_LOG_LEVEL | HELIX_REMOTE_SOCKET)
+            case "$2" in
+                *[' 	*?[']*)
+                    echo "may not contain whitespace or * ? ["
+                    return 0
+                    ;;
+            esac
+            ;;
+    esac
+    case "$1" in
+        HELIX_LOG_FILE)
+            helix_env_log_file_ok "$2" && return 1
+            echo "must be a *.log file under /tmp/, /var/log/ or ${INSTALL_DIR:-the install dir}/, with no .. and not a symlink"
+            return 0
+            ;;
+        HELIX_REMOTE_SOCKET)
+            case "$2" in
+                */../* | */.. | */./*) ;;
+                /tmp/?* | /run/?*) return 1 ;;
+            esac
+            echo "must be a path under /tmp/ or /run/ with no .."
+            return 0
+            ;;
+        HELIX_NICE)
+            case "${2#-}" in
+                '' | *[!0-9]*) ;;
+                *) return 1 ;;
+            esac
+            echo "must be a whole number"
+            return 0
+            ;;
+        HELIX_ALSA_DEVICE)
+            case "$2" in
+                *'|'* | *file* | *tee*) ;;
+                default | sysdefault | sysdefault:* | hw:* | plughw:* | dmix:*) return 1 ;;
+            esac
+            echo "must be default, sysdefault[:...], hw:..., plughw:... or dmix:..."
+            return 0
+            ;;
     esac
     return 1
+}
+
+# The only log files the env file may aim the app at: an absolute *.log path
+# whose parent resolves under /tmp, /var/log or the install dir, with no dot
+# segments and no symlink at the file itself. Platform hooks pick their own
+# firmware log directories after this file loads, so nothing else is needed.
+# ponytail: a link planted in /tmp after this check still races the app's
+# open; fs.protected_symlinks closes that on the kernels we ship to.
+helix_env_log_file_ok() {
+    case "$1" in
+        /*.log) ;;
+        *) return 1 ;;
+    esac
+    case "$1/" in
+        */../* | */./*) return 1 ;;
+    esac
+    [ -L "$1" ] && return 1
+    _helf_dir=$(readlink -f "${1%/*}" 2>/dev/null) || _helf_dir=""
+    _helf_inst=$(readlink -f "${INSTALL_DIR:-/nonexistent}" 2>/dev/null) || _helf_inst=""
+    _helf_ok=1
+    case "$_helf_dir/" in
+        /tmp/* | /var/log/*) _helf_ok=0 ;;
+        "$_helf_inst"/*) [ -n "$_helf_inst" ] && [ -n "$_helf_dir" ] && _helf_ok=0 ;;
+    esac
+    unset _helf_dir _helf_inst
+    return $_helf_ok
 }
 
 # A POSIX identifier: the one rule for names from the file and --print-env.
@@ -448,22 +525,9 @@ helix_load_env_file() {
             log "warning: ${_helix_env_file}:${_lineno}: unterminated quote or text after the closing quote: $_line"
             continue
         fi
-        # Shell syntax that used to run is skipped rather than kept as text:
-        # exporting `$(openssl rand -hex 16)` literally would turn a secret
-        # into a string anyone can read here.
-        case "$_val" in
-            *'$('* | *'`'* | *'${'*)
-                log "warning: ${_helix_env_file}:${_lineno}: $_var holds shell syntax (\$(...), \${...} or a backtick), which this file does not run - write the final value itself; ignored"
-                continue
-                ;;
-        esac
-        if helix_env_key_is_flag "$_var"; then
-            case "$_val" in
-                *[' 	']*)
-                    log "warning: ${_helix_env_file}:${_lineno}: $_var may not contain whitespace - ignored"
-                    continue
-                    ;;
-            esac
+        if _why=$(helix_env_value_refusal "$_var" "$_val"); then
+            log "warning: ${_helix_env_file}:${_lineno}: $_var $_why; ignored"
+            continue
         fi
         # Only set if not already in environment (systemd Environment= /
         # exported parent shell vars win over the file). The eval splices in
@@ -494,7 +558,7 @@ helix_load_env_file() {
             esac
         fi
     done < "$_helix_env_file"
-    unset _line _var _val _existing _lineno _helix_file_set _helix_refused _helix_env_file
+    unset _line _var _val _why _existing _lineno _helix_file_set _helix_refused _helix_env_file
 }
 
 # --print-env NAME: resolve NAME exactly as the env-file read resolves it

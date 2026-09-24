@@ -10,12 +10,20 @@ exporting `KEY=VALUE` lines whose variable is not already set. The same parse an
 `--print-env`.
 
 Values are literal text. One pair of matching surrounding quotes (`"..."` or `'...'`) is
-stripped, an unquoted value ends at a whitespace-led `#` comment, and a plain `$VAR` is kept
-exactly as typed. A value holding `$(...)`, `${...}` or a backtick is skipped with a warning
-rather than exported, so a line written for the old shell-evaluated file (a generated token,
-say) never becomes a readable literal. Generate the value first and write the result into the
-file. `HELIX_DPI`, `HELIX_LOG_DEST`, `HELIX_LOG_FILE` and `HELIX_LOG_LEVEL` may not contain
-whitespace, because the launcher passes them to the app as command-line flags.
+stripped, an unquoted value ends at a whitespace-led `#` comment, and nothing is expanded.
+A value holding `$VAR`, `$(...)`, `${...}` or a backtick is skipped with a warning rather than
+exported, so a line written for the old shell-evaluated file (a generated token, say) never
+becomes a readable literal. Generate the value first and write the result into the file.
+
+Some keys carry a stricter rule, because root acts on the value:
+
+| Key | Accepted value |
+|-----|----------------|
+| `HELIX_DPI`, `HELIX_LOG_DEST`, `HELIX_LOG_LEVEL` | no whitespace and no `*`, `?` or `[`: the launcher passes them to the app as command-line flags |
+| `HELIX_LOG_FILE` | the same, and an absolute `*.log` path whose directory resolves under `/tmp/`, `/var/log/` or the install directory, with no `..` segment and no symlink at the file. The app writes its log there as root and echoes other settings into it, so a log aimed at a script would be code. Platform hooks choose their own firmware log directory when this key is unset |
+| `HELIX_REMOTE_SOCKET` | the same flag rule, and a path under `/tmp/` or `/run/` with no `..` |
+| `HELIX_NICE` | a whole number, optionally negative |
+| `HELIX_ALSA_DEVICE` | `default`, `sysdefault`, `sysdefault:...`, `hw:...`, `plughw:...` or `dmix:...`, with no `|`, `file` or `tee`: ALSA's file plugin runs a `|cmd` target. The app applies the same rule to this variable and to the saved output device |
 
 Only these keys are read; any other key is ignored with one logged warning per key:
 
@@ -24,8 +32,8 @@ Only these keys are read; any other key is ignored with one logged warning per k
 `HELIX_DISABLE_AUTO_UPDATES`, `HELIX_DISPLAY_BACKEND`, `HELIX_DISPLAY_ROTATION`, `HELIX_DPI`,
 `HELIX_DRM_DEVICE`, `HELIX_FB_DEVICE`, `HELIX_FORCE_STREAMING`, `HELIX_GCODE_MODE`,
 `HELIX_GCODE_STREAMING`, `HELIX_KEYBOARD_DEVICE`, `HELIX_LOG_DEST`, `HELIX_LOG_FILE`,
-`HELIX_LOG_LEVEL`, `HELIX_MOUSE_DEVICE`, `HELIX_NO_SPLASH`, `HELIX_REMOTE_CONTROL`,
-`HELIX_REMOTE_HTTP_TOKEN`, `HELIX_REQUIRE_POINTER`, `HELIX_SCREEN_SIZE`, `HELIX_SCROLL_GUARD`,
+`HELIX_LOG_LEVEL`, `HELIX_MOUSE_DEVICE`, `HELIX_NICE`, `HELIX_NO_SPLASH`,
+`HELIX_REMOTE_CONTROL`, `HELIX_REMOTE_HTTP_TOKEN`, `HELIX_REMOTE_SOCKET`, `HELIX_REQUIRE_POINTER`, `HELIX_SCREEN_SIZE`, `HELIX_SCROLL_GUARD`,
 `HELIX_SCROLL_GUARD_COOLDOWN_MS`, `HELIX_SKIP_SPLASH`, `HELIX_SSAO`, `HELIX_THEME`,
 `HELIX_TOUCH_CALIBRATE`, `HELIX_TOUCH_DEVICE`, `HELIX_TOUCH_SWAP_AXES`, `HELIX_USB_AUTOMOUNT`,
 `MALLOC_ARENA_MAX`, `MALLOC_CHECK_`, `MALLOC_PERTURB_`, `MOONRAKER_HOST`, `MOONRAKER_PORT`.
@@ -37,8 +45,7 @@ environment, or by hand before a manual run, never by this file. That includes t
 keys (`HELIX_DATA_DIR`, `HELIX_CONFIG_DIR`, `HELIX_CACHE_DIR`, `HELIX_TMP_DIR`), since the app
 changes into its data directory and loads plugins from it, and `LD_*`, `PATH`, `IFS`, `HOME`,
 `SHELL`, `ENV`, `BASH_ENV` and `PYTHON*`. The file reaches the environment of root on every
-SysV firmware device. `HELIX_LOG_FILE` still names a file root writes to, so whoever may edit
-this file can aim the app's log at any path.
+SysV firmware device.
 
 Ownership is gated as well: the file is only read when it is owned by root or by the user
 the launcher itself runs as, and carries no group or world write bit. On the printer_data

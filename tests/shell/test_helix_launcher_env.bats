@@ -720,10 +720,45 @@ print_env_from_file() {
     grep -q "write the final value itself" "$BATS_TEST_TMPDIR/parse.log"
 }
 
-@test "a value spliced into the app's flags may not carry whitespace" {
+@test "a value spliced into the app's flags may not carry whitespace or globs" {
     [ "$(print_env_from_file HELIX_LOG_LEVEL 'HELIX_LOG_LEVEL="info --splash-pid 1"')" = "" ]
     grep -q "HELIX_LOG_LEVEL may not contain whitespace" "$BATS_TEST_TMPDIR/parse.log"
+    [ "$(print_env_from_file HELIX_DPI 'HELIX_DPI=1*')" = "" ]
     [ "$(print_env_from_file HELIX_LOG_LEVEL 'HELIX_LOG_LEVEL=debug')" = "debug" ]
+}
+
+@test "the log file must live under /tmp, /var/log or the install dir" {
+    [ "$(print_env_from_file HELIX_LOG_FILE 'HELIX_LOG_FILE=/tmp/helixscreen.log')" = "/tmp/helixscreen.log" ]
+    mkdir -p "$MOCK_INSTALL/logs"
+    [ "$(print_env_from_file HELIX_LOG_FILE "HELIX_LOG_FILE=$MOCK_INSTALL/logs/helix.log")" = "$MOCK_INSTALL/logs/helix.log" ]
+    [ "$(print_env_from_file HELIX_LOG_FILE 'HELIX_LOG_FILE=/etc/profile')" = "" ]
+    grep -q "HELIX_LOG_FILE must be a \*.log file" "$BATS_TEST_TMPDIR/parse.log"
+    [ "$(print_env_from_file HELIX_LOG_FILE 'HELIX_LOG_FILE=/tmp/../etc/x.log')" = "" ]
+    [ "$(print_env_from_file HELIX_LOG_FILE 'HELIX_LOG_FILE=/etc/init.d/x.log')" = "" ]
+}
+
+@test "a log path through a symlinked directory is judged where it lands" {
+    local target="/tmp/helix-bats-$$-linkdir"
+    ln -s /etc "$target"
+    [ "$(print_env_from_file HELIX_LOG_FILE "HELIX_LOG_FILE=$target/x.log")" = "" ]
+    rm -f "$target"
+}
+
+@test "ALSA device names are limited to hardware PCMs" {
+    [ "$(print_env_from_file HELIX_ALSA_DEVICE 'HELIX_ALSA_DEVICE=plughw:CARD=vc4hdmi,DEV=0')" = "plughw:CARD=vc4hdmi,DEV=0" ]
+    [ "$(print_env_from_file HELIX_ALSA_DEVICE 'HELIX_ALSA_DEVICE=default')" = "default" ]
+    [ "$(print_env_from_file HELIX_ALSA_DEVICE "HELIX_ALSA_DEVICE=file:FILE='|touch /tmp/pwned'")" = "" ]
+    grep -q "HELIX_ALSA_DEVICE must be default" "$BATS_TEST_TMPDIR/parse.log"
+    [ "$(print_env_from_file HELIX_ALSA_DEVICE 'HELIX_ALSA_DEVICE=hw:0|x')" = "" ]
+}
+
+@test "HELIX_NICE takes a whole number and HELIX_REMOTE_SOCKET a /tmp or /run path" {
+    [ "$(print_env_from_file HELIX_NICE 'HELIX_NICE=-5')" = "-5" ]
+    [ "$(print_env_from_file HELIX_NICE 'HELIX_NICE=5x')" = "" ]
+    [ "$(print_env_from_file HELIX_REMOTE_SOCKET 'HELIX_REMOTE_SOCKET=/tmp/helix.sock')" = "/tmp/helix.sock" ]
+    [ "$(print_env_from_file HELIX_REMOTE_SOCKET 'HELIX_REMOTE_SOCKET=/run/helix.sock')" = "/run/helix.sock" ]
+    [ "$(print_env_from_file HELIX_REMOTE_SOCKET 'HELIX_REMOTE_SOCKET=/etc/x.sock')" = "" ]
+    [ "$(print_env_from_file HELIX_REMOTE_SOCKET 'HELIX_REMOTE_SOCKET=/tmp/../etc/x')" = "" ]
 }
 
 @test "directory keys that steer where the app loads code from are refused" {
@@ -756,10 +791,12 @@ print_env_from_file() {
     [[ "$output" == *"not a variable name"* ]]
 }
 
-@test "a variable reference in a value is not expanded" {
+@test "a variable reference is never expanded, and its key is skipped" {
     local out
     out=$(HOME=/root print_env_from_file MOONRAKER_HOST 'MOONRAKER_HOST=$HOME/x')
-    [ "$out" = '$HOME/x' ]
+    [ "$out" = "" ]
+    grep -q "MOONRAKER_HOST holds shell syntax" "$BATS_TEST_TMPDIR/parse.log"
+    [ "$(print_env_from_file MOONRAKER_HOST 'MOONRAKER_HOST=price$5')" = 'price$5' ]
 }
 
 @test "one pair of surrounding quotes is stripped and inner spaces are kept" {
