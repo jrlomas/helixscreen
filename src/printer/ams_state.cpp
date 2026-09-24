@@ -3173,7 +3173,7 @@ void AmsState::set_current_slot_header(AmsBackend& backend, int slot_index) {
 
     char tmp[64];
     if (is_tool_changer(sys.type) && sys.units.empty()) {
-        // Pure tool changer with no AMS units — show the physical toolhead position
+        // Pure tool changer with no AMS units: show the physical toolhead position
         snprintf(tmp, sizeof(tmp), lv_tr("Current: %s"),
                  helix::ui::lane_label(helix::ui::active_tool_noun(), slot_index).c_str());
     } else {
