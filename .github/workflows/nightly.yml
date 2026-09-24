@@ -89,9 +89,13 @@ jobs:
     name: Build
     needs: gate
     runs-on: ubuntu-22.04
-    # Covers the three build/check step budgets below (80 + 20 + 85 = 185)
+    # Covers the three build/check step budgets below (80 + 45 + 85 = 210)
     # plus setup: apt, caches, npm install, venv, artifact upload.
-    timeout-minutes: 200
+    timeout-minutes: 225
+    # Matches build.yml's DBGLEVEL, which is part of every ccache key: at the
+    # default -g2 no object in the restored build.yml cache can hit.
+    env:
+      DBGLEVEL: "0"
     # old_toolchain_check carries the GCC-10 step's outcome past its own
     # continue-on-error, so nightly-status can fail the run on it without the
     # job itself failing -- a job failure here would skip every downstream
@@ -210,8 +214,10 @@ jobs:
     - name: Check old-toolchain compatibility (GCC 10)
       id: old_toolchain_check
       continue-on-error: true
-      timeout-minutes: 20
-      run: python3 scripts/check_old_toolchain.py --jobs "$(nproc)"
+      # ~790 TUs at several seconds each of g++-10 parsing on a 4-core runner.
+      # -u so a timeout still shows how far the check got.
+      timeout-minutes: 45
+      run: python3 -u scripts/check_old_toolchain.py --jobs "$(nproc)"
 
     # `make test` needs no -j: mk/tests.mk re-execs itself with -j$(NPROC) when
     # MAKEFLAGS carries no jobserver, so it is already parallel here.
@@ -671,6 +677,10 @@ jobs:
     # Has to cover a fully cold build of BOTH the app and the test suite. The
     # per-step budgets below sum to 105; the rest is brew, submodules and npm.
     timeout-minutes: 140
+    # Matches build.yml's DBGLEVEL, which is part of every ccache key: at the
+    # default -g2 no object in the restored build.yml cache can hit.
+    env:
+      DBGLEVEL: "0"
 
     steps:
     - name: Checkout repository

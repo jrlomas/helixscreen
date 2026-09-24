@@ -58,6 +58,9 @@ TEST_CASE_METHOD(LVGLTestFixture,
                  "lv_timer_handler_safe delivers a nested lv_async_call after its timer's "
                  "address is reused (ABA)",
                  "[core][fixture][timer]") {
+#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+    SKIP("ASan quarantines freed memory, so the freed timer address is never handed back");
+#endif
     AbaProbe probe;
 
     std::vector<lv_timer_t*> before;

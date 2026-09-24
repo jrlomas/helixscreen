@@ -121,7 +121,12 @@ class UpdateQueue {
         if (initialized_)
             return;
 
-        shut_down_ = false;
+        {
+            // queue_impl() reads this from worker threads under mutex_, and a
+            // worker from an earlier init/shutdown cycle can still be posting.
+            std::lock_guard<std::mutex> lock(mutex_);
+            shut_down_ = false;
+        }
 
         // One drain per display refresh period, whether or not a frame renders.
         timer_ = lv_timer_create(timer_cb, LV_DEF_REFR_PERIOD, this);
