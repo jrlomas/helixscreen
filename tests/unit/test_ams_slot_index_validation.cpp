@@ -83,3 +83,14 @@ TEST_CASE("CFS keeps the whole TNN range valid until the box size is known",
     CHECK(backend.check(15).success());
     CHECK(backend.check(16).result == AmsResult::INVALID_SLOT);
 }
+
+TEST_CASE("QIDI Box refuses a bad slot as a bad slot at every entry point",
+          "[ams][qidi_box][slot_index]") {
+    SlotIndexProbe<AmsBackendQidi> backend;
+    backend.set_total_slots(3);
+
+    CHECK(backend.load_filament(3).result == AmsResult::INVALID_SLOT);
+    CHECK(backend.unload_filament(3).result == AmsResult::INVALID_SLOT);
+    CHECK(backend.eject_lane(3).result == AmsResult::INVALID_SLOT);
+    CHECK(backend.set_tool_mapping(0, 3).result == AmsResult::INVALID_SLOT);
+}
