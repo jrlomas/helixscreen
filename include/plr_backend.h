@@ -4,6 +4,7 @@
 #include "json_fwd.h"
 
 #include <string>
+#include <vector>
 
 namespace helix {
 
@@ -159,11 +160,28 @@ inline constexpr const char* CREALITY_SIDECAR_REL_PATH =
 inline constexpr const char* QIDI_RESUME_GCODE = "RESUME_INTERRUPTED";
 inline constexpr const char* QIDI_DISCARD_GCODE = "CLEAR_LAST_FILE";
 
-/// Whether the connected printer runs Qidi's stock power-loss-recovery macros.
-/// This is the firmware discriminator for the QIDI backend: the
-/// was_interrupted save_variable is user-writable on ANY Klipper, so the
-/// variable alone must never select the backend. Out-of-line to keep this
-/// header free of the PrinterDiscovery dependency.
-bool plr_qidi_capable(const PrinterDiscovery& hw);
+/// Whether the connected printer runs a firmware whose resume macro is one the
+/// PLR module knows (currently Qidi's stock RESUME_INTERRUPTED - the macro is
+/// the firmware discriminator, because the was_interrupted save_variable it
+/// maintains is user-writable on ANY Klipper). Capability-named on purpose:
+/// generic modules (PrinterState, the subscription builder) call this without
+/// learning the vendor. Out-of-line to keep this header free of the
+/// PrinterDiscovery dependency.
+bool plr_resume_macro_present(const PrinterDiscovery& hw);
+
+/// Status objects the PLR backends need subscribed for the discovered
+/// firmware, empty when none do (the subscription builder loops over this and
+/// never learns the vendor). Currently: save_variables, whose
+/// variables.was_interrupted the passive Qidi backend reads.
+std::vector<std::string> plr_required_status_objects(const PrinterDiscovery& hw);
+
+/// Read the passive backend's interrupted flag out of a status payload:
+/// 1/0 when save_variables.variables.was_interrupted arrived as a JSON boolean,
+/// -1 when this frame says nothing about it (no save_variables key, no
+/// variables dict, no such entry, or a non-boolean value - Moonraker notifies
+/// at top-level-field granularity, so absence in a delta is silence, not
+/// false). Booleans only: save_variables values are Python literals Klipper
+/// re-parses, and another type under this name is not our signal.
+int plr_parse_interrupted_flag(const nlohmann::json& status);
 
 } // namespace helix

@@ -61,7 +61,7 @@ That is the whole signal - nothing is probed and nothing is asked.
 Two halves gate the backend, because the variable name alone proves nothing:
 
 * **Capability**: discovery found the `RESUME_INTERRUPTED` macro
-  (`plr_qidi_capable()`, `PrinterDiscovery::has_macro`). That macro identifies
+  (`plr_resume_macro_present()`, `PrinterDiscovery::has_macro`). That macro identifies
   Qidi's stock firmware; `was_interrupted` is a user-writable name on ANY
   Klipper, so the variable alone must never select the backend.
 * **Availability**: `save_variables.variables.was_interrupted` arrived as a JSON
@@ -95,7 +95,7 @@ offer decision's `printer_idle` input is what scopes it to a boot after power
 loss: mid-print the printer is not idle, so no offer fires. The subscription
 (`save_variables` when the macro exists) is added in
 `MoonrakerDiscoverySequence::build_subscription_objects()` via the
-`plr_qidi_capable()` capability question - no vendor name reaches the
+`plr_required_status_objects()` capability question - no vendor name reaches the
 subscription builder.
 
 ### Creality K1 / K1C / K1 Max / K2 Plus / Ender 3 V3 / Hi / i7 — active
@@ -357,9 +357,11 @@ suppressed entirely rather than showing a Resume button that cannot work.
 
 ## Threading
 
-`update_from_status()` runs on the libhv WebSocket thread; the capability
-parsers only mutate an already-initialized `lv_subject_t` int in place, matching
-the surrounding code in `printer_print_state.cpp`.
+Status notifications arrive on the libhv WebSocket thread, but
+`update_from_notification()` defers the whole payload to the main thread before
+`update_from_status()` runs, so the capability parsers (which only mutate an
+already-initialized `lv_subject_t` int in place) execute on the main thread,
+matching the surrounding code in `printer_print_state.cpp`.
 
 `PlrOfferController`'s observers are registered with `observe_int_sync`, which
 defers through `UpdateQueue`, so every callback body runs on the main thread.

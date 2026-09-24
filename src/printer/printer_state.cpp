@@ -801,10 +801,10 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
     // Delegate capability subject updates to capabilities_state_ component
     capabilities_state_.set_hardware(discovery_, capability_overrides_);
 
-    // Qidi PLR capability comes from the same snapshot, ahead of the initial
-    // status dispatch that carries was_interrupted; the offer decision reads
-    // both, so the capability must land first.
-    print_domain_.set_qidi_plr_capable(helix::plr_qidi_capable(discovery_));
+    // PLR resume-macro capability comes from the same snapshot, ahead of the
+    // initial status dispatch that carries the interrupted flag; the offer
+    // decision reads both, so the capability must land first.
+    print_domain_.set_plr_resume_macro_present(helix::plr_resume_macro_present(discovery_));
 
     // Fold the helper-macro install status in with the same snapshot. An
     // Installed base also clears any restart-pending flag held for a staged

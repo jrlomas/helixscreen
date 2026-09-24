@@ -35,14 +35,15 @@ PlrOfferController::PlrOfferController() {
         [](PlrOfferController* self, int value) { self->on_pl_env_valid_changed(value); },
         ps.get_subjects_lifetime());
 
-    // qidi_was_interrupted is the PRIMARY Qidi trigger, with the same shape as
-    // pl_env_valid: a value the status payload already carried at registration
-    // still offers via the registration-fire, and thereafter a 0->1 edge does.
-    // The capability half (the RESUME_INTERRUPTED macro) comes from discovery
-    // and is read live in evaluate_offer, so this observer alone is enough.
-    qidi_observer_ = observe_int_sync(
-        ps.get_qidi_was_interrupted_subject(), this,
-        [](PlrOfferController* self, int value) { self->on_qidi_was_interrupted_changed(value); },
+    // plr_interrupted_flag is the PRIMARY passive-backend trigger after
+    // pl_env_valid, with the same shape: a value the status payload already
+    // carried at registration still offers via the registration-fire, and
+    // thereafter a 0->1 edge does. The capability half (the discovered resume
+    // macro) comes from discovery and is read live in evaluate_offer, so this
+    // observer alone is enough.
+    interrupted_flag_observer_ = observe_int_sync(
+        ps.get_plr_interrupted_flag_subject(), this,
+        [](PlrOfferController* self, int value) { self->on_plr_interrupted_flag_changed(value); },
         ps.get_subjects_lifetime());
 
     // creality_plr_capable is the PRIMARY Creality trigger. Unlike Snapmaker's
@@ -74,8 +75,8 @@ void PlrOfferController::evaluate_offer() {
     // backend-agnostic. See docs/devel/POWER_LOSS_RECOVERY.md.
     PlrCapabilitySignals caps;
     caps.snapmaker_pl_env_valid = lv_subject_get_int(ps.get_pl_env_valid_subject()) != 0;
-    caps.qidi_resume_macro = lv_subject_get_int(ps.get_qidi_plr_capable_subject()) != 0;
-    caps.qidi_was_interrupted = lv_subject_get_int(ps.get_qidi_was_interrupted_subject()) != 0;
+    caps.qidi_resume_macro = lv_subject_get_int(ps.get_plr_resume_macro_subject()) != 0;
+    caps.qidi_was_interrupted = lv_subject_get_int(ps.get_plr_interrupted_flag_subject()) != 0;
     caps.creality_power_loss_field = lv_subject_get_int(ps.get_creality_plr_capable_subject()) != 0;
     PlrBackendType backend = plr_select_backend(caps);
 
@@ -165,7 +166,7 @@ void PlrOfferController::on_pl_env_valid_changed(int /*pl_env_valid*/) {
     evaluate_offer();
 }
 
-void PlrOfferController::on_qidi_was_interrupted_changed(int /*was_interrupted*/) {
+void PlrOfferController::on_plr_interrupted_flag_changed(int /*was_interrupted*/) {
     // Same shape as on_pl_env_valid_changed: evaluate_offer reads the flag
     // straight from the subject, so the notified value is not needed here.
     evaluate_offer();
@@ -260,8 +261,8 @@ void PlrOfferController::on_connection_state_changed(int new_conn_state) {
         // queue-deferred.
         auto& ps = get_printer_state();
         lv_subject_set_int(ps.get_pl_env_valid_subject(), 0);
-        lv_subject_set_int(ps.get_qidi_plr_capable_subject(), 0);
-        lv_subject_set_int(ps.get_qidi_was_interrupted_subject(), 0);
+        lv_subject_set_int(ps.get_plr_resume_macro_subject(), 0);
+        lv_subject_set_int(ps.get_plr_interrupted_flag_subject(), 0);
         lv_subject_set_int(ps.get_creality_plr_capable_subject(), 0);
         ps.clear_pl_recovery_file();
     }

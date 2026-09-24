@@ -67,11 +67,11 @@ class PlrStateTestFixture {
     }
 
     bool qidi_plr_capable() {
-        return state_.is_qidi_plr_capable();
+        return state_.is_plr_resume_macro_present();
     }
 
     bool qidi_was_interrupted() {
-        return state_.is_qidi_was_interrupted();
+        return state_.is_plr_interrupted_flag();
     }
 
   private:
@@ -350,24 +350,6 @@ TEST_CASE_METHOD(PlrStateTestFixture, "Qidi signal: variables without the key do
     REQUIRE(qidi_was_interrupted() == true);
 }
 
-TEST_CASE_METHOD(PlrStateTestFixture, "Qidi signal: disconnect-edge reset forces it back to 0",
-                 "[plr][state][qidi]") {
-    json interrupted = {{"save_variables", {{"variables", {{"was_interrupted", true}}}}}};
-    state().update_from_status(interrupted);
-    REQUIRE(qidi_was_interrupted() == true);
-
-    // The offer controller performs exactly this on a CONNECTED->not-CONNECTED
-    // edge so a reconnect re-derives a genuine 0->1 edge from the fresh
-    // status.
-    lv_subject_set_int(state().get_qidi_was_interrupted_subject(), 0);
-    REQUIRE(qidi_was_interrupted() == false);
-}
-
-TEST_CASE_METHOD(PlrStateTestFixture, "Qidi capability: set and cleared from discovery",
-                 "[plr][state][qidi]") {
-    // PrinterState::set_hardware calls this with plr_qidi_capable(discovery).
-    state().set_qidi_plr_capable(true);
-    REQUIRE(qidi_plr_capable() == true);
-    state().set_qidi_plr_capable(false);
-    REQUIRE(qidi_plr_capable() == false);
-}
+// The disconnect-edge reset of these subjects is covered at the controller
+// level in test_plr_offer_preparing.cpp: a reset performed by the test itself
+// would only assert the test's own write.

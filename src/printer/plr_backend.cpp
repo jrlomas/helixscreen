@@ -75,8 +75,31 @@ PlrBackendType plr_select_backend(const PlrCapabilitySignals& caps) {
     return PlrBackendType::NONE;
 }
 
-bool plr_qidi_capable(const PrinterDiscovery& hw) {
+bool plr_resume_macro_present(const PrinterDiscovery& hw) {
     return hw.has_macro(QIDI_RESUME_GCODE);
+}
+
+std::vector<std::string> plr_required_status_objects(const PrinterDiscovery& hw) {
+    if (!plr_resume_macro_present(hw)) {
+        return {};
+    }
+    return {std::string("save_variables")};
+}
+
+int plr_parse_interrupted_flag(const nlohmann::json& status) {
+    auto sv_it = status.find("save_variables");
+    if (sv_it == status.end() || !sv_it->is_object()) {
+        return -1;
+    }
+    auto vars_it = sv_it->find("variables");
+    if (vars_it == sv_it->end() || !vars_it->is_object()) {
+        return -1;
+    }
+    auto wi_it = vars_it->find("was_interrupted");
+    if (wi_it == vars_it->end() || !wi_it->is_boolean()) {
+        return -1;
+    }
+    return wi_it->get<bool>() ? 1 : 0;
 }
 
 bool plr_creality_recovery_available(const PlrDetectResult& r) {

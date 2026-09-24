@@ -1490,12 +1490,12 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
         subscription_objects["save_variables"] = nullptr;
     }
 
-    // Qidi's stock power-loss-recovery macros park their state in
-    // save_variables.variables.was_interrupted. Capability question only - the
-    // vendor name stays in plr_backend. A Qidi Box printer already carries the
-    // key from the block above; re-assigning the same map entry is idempotent.
-    if (helix::plr_qidi_capable(hw)) {
-        subscription_objects["save_variables"] = nullptr;
+    // Power-loss recovery: the PLR module owns which status objects its
+    // backends need for the discovered firmware. A printer already carrying
+    // one of these keys from an earlier block just re-assigns the same map
+    // entry, which is idempotent.
+    for (const auto& obj : helix::plr_required_status_objects(hw)) {
+        subscription_objects[obj] = nullptr;
     }
 
     // All discovered filament sensors (filament_switch_sensor, filament_motion_sensor).
@@ -1633,9 +1633,8 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
     if (hw.mmu_type() == AmsType::AD5X_IFS) {
         spdlog::info("[Moonraker Client] Subscribing to save_variables (AD5X IFS)");
     }
-    if (helix::plr_qidi_capable(hw)) {
-        spdlog::info("[Moonraker Client] Subscribing to save_variables (Qidi power-loss "
-                     "recovery)");
+    if (!helix::plr_required_status_objects(hw).empty()) {
+        spdlog::info("[Moonraker Client] Subscribing to save_variables (power-loss recovery)");
     }
     if (helix::zoffset::firmware_persists_z_offset(hw)) {
         spdlog::info("[Moonraker Client] Subscribing persisted z-offset objects ({})",

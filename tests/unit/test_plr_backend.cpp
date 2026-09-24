@@ -398,19 +398,20 @@ TEST_CASE("plr_build_plan: QIDI resume does not depend on the Creality probe",
     REQUIRE(plan.recovery_file.empty());
 }
 
-TEST_CASE("plr_qidi_capable: keyed on the RESUME_INTERRUPTED macro", "[plr][backend][qidi]") {
+TEST_CASE("plr_resume_macro_present: keyed on the RESUME_INTERRUPTED macro",
+          "[plr][backend][qidi]") {
     helix::PrinterDiscovery stock;
     stock.parse_objects(json::array({"gcode_macro RESUME_INTERRUPTED", "save_variables"}));
-    REQUIRE(helix::plr_qidi_capable(stock));
+    REQUIRE(helix::plr_resume_macro_present(stock));
 
     // Detection is case-insensitive like every other macro gate.
     helix::PrinterDiscovery lower;
     lower.parse_objects(json::array({"gcode_macro resume_interrupted"}));
-    REQUIRE(helix::plr_qidi_capable(lower));
+    REQUIRE(helix::plr_resume_macro_present(lower));
 
     helix::PrinterDiscovery other;
     other.parse_objects(json::array({"gcode_macro START_PRINT", "save_variables"}));
-    REQUIRE_FALSE(helix::plr_qidi_capable(other));
+    REQUIRE_FALSE(helix::plr_resume_macro_present(other));
 }
 
 TEST_CASE("plr_build_plan: NONE backend yields no actions at all", "[plr][backend]") {

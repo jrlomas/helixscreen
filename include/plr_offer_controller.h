@@ -38,7 +38,7 @@ namespace helix::ui {
 /// evaluate_offer (ui_plr_offer_controller.cpp); the observers below are just
 /// the edges that drive it:
 ///   - pl_env_valid (PRIMARY Snapmaker trigger): a genuine 0->1 edge offers.
-///   - qidi_was_interrupted (PRIMARY Qidi trigger): an edge re-evaluates the
+///   - plr_interrupted_flag (PRIMARY Qidi trigger): an edge re-evaluates the
 ///     offer; the capability half comes from discovery, not status.
 ///   - creality_plr_capable (PRIMARY Creality trigger): a 0->1 edge fires the
 ///     one-shot probe, whose response then offers.
@@ -74,7 +74,7 @@ class PlrOfferController {
     // exactly one place.
     void evaluate_offer();
     void on_pl_env_valid_changed(int pl_env_valid);
-    void on_qidi_was_interrupted_changed(int was_interrupted);
+    void on_plr_interrupted_flag_changed(int was_interrupted);
     void on_creality_capable_changed(int capable);
     void on_connection_state_changed(int new_conn_state);
     void on_wizard_active_changed(int wizard_active);
@@ -86,7 +86,7 @@ class PlrOfferController {
     void on_creality_detect_result(const helix::PlrDetectResult& result);
 
     ObserverGuard pl_valid_observer_;
-    ObserverGuard qidi_observer_;
+    ObserverGuard interrupted_flag_observer_;
     ObserverGuard creality_capable_observer_;
     ObserverGuard conn_observer_;
     ObserverGuard wizard_observer_;

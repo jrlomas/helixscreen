@@ -763,31 +763,31 @@ class PrinterState {
     }
 
     /**
-     * @brief Qidi stock-firmware PLR: RESUME_INTERRUPTED macro capability and
-     * the live save_variables.variables.was_interrupted flag.
+     * @brief PLR passive backend: discovered resume-macro capability and the
+     * live interrupted flag.
      *
-     * See PrinterPrintState::get_qidi_plr_capable_subject() for the semantics
+     * See PrinterPrintState::get_plr_resume_macro_subject() for the semantics
      * (booleans only; delta frames without the key leave the flag alone).
      */
-    lv_subject_t* get_qidi_plr_capable_subject() {
-        return print_domain_.get_qidi_plr_capable_subject();
+    lv_subject_t* get_plr_resume_macro_subject() {
+        return print_domain_.get_plr_resume_macro_subject();
     }
 
-    [[nodiscard]] bool is_qidi_plr_capable() const {
-        return print_domain_.is_qidi_plr_capable();
+    [[nodiscard]] bool is_plr_resume_macro_present() const {
+        return print_domain_.is_plr_resume_macro_present();
     }
 
     /// Set from the discovery snapshot; main-thread only.
-    void set_qidi_plr_capable(bool capable) {
-        print_domain_.set_qidi_plr_capable(capable);
+    void set_plr_resume_macro_present(bool capable) {
+        print_domain_.set_plr_resume_macro_present(capable);
     }
 
-    lv_subject_t* get_qidi_was_interrupted_subject() {
-        return print_domain_.get_qidi_was_interrupted_subject();
+    lv_subject_t* get_plr_interrupted_flag_subject() {
+        return print_domain_.get_plr_interrupted_flag_subject();
     }
 
-    [[nodiscard]] bool is_qidi_was_interrupted() const {
-        return print_domain_.is_qidi_was_interrupted();
+    [[nodiscard]] bool is_plr_interrupted_flag() const {
+        return print_domain_.is_plr_interrupted_flag();
     }
 
     void clear_pl_recovery_file() {
