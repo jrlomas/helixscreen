@@ -2379,6 +2379,7 @@
   <translation tag="SWITCH SENSORS" it="SENSORI INTERRUTTORE"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." it="Modalità provvisoria attiva. La connessione alla stampante è disabilitata perché l&apos;app continuava a bloccarsi all&apos;avvio. Apri Impostazioni per risolvere il problema, quindi riavvia."/>
   <translation tag="Safety &amp; Notifications" it="Sicurezza e notifiche"/>
+  <translation tag="Same spool in {}? Tap Clear if it is a new one." it="Stessa bobina in {}? Tocca Cancella se è una nuova."/>
   <translation tag="Sample" it="Campione"/>
   <translation tag="Sample %d/%d" it="Campione %d/%d"/>
   <translation tag="Sample Dialog" it="Dialogo di esempio"/>

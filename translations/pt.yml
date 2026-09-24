@@ -2629,6 +2629,7 @@ translations:
     continuou travando na inicialização. Abra as Configurações para corrigir o problema
     e reinicie.
   Safety & Notifications: Segurança e notificações
+  Same spool in {}? Tap Clear if it is a new one.: 'Mesmo carretel em {}? Toque em Limpar se for um novo.'
   Sample: Amostra
   Sample %d/%d: Amostra %d/%d
   Sample Dialog: Diálogo de Exemplo

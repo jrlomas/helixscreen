@@ -2452,6 +2452,7 @@ translations:
     on startup. Open Settings to fix the issue, then reboot.
   : セーフモードが有効です。起動時にアプリがクラッシュし続けたため、プリンター接続は無効になっています。設定を開いて問題を解決してから再起動してください。
   Safety & Notifications: 安全と通知
+  Same spool in {}? Tap Clear if it is a new one.: '{} は同じスプールですか？新しいスプールならクリアをタップしてください。'
   Sample: サンプル
   Sample %d/%d: サンプル %d/%d
   Sample Dialog: サンプルダイアログ

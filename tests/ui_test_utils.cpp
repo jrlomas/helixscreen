@@ -701,12 +701,25 @@ void ui_notification_warning_with_detail(const char* message, const char* detail
 // Fed by the ToastManager stub below, for tests asserting on direct
 // ToastManager::show() calls. See set_test_toast_hook in the header.
 static std::function<void(ToastSeverity, const std::string&)> g_test_toast_hook;
+static toast_action_callback_t g_last_toast_action = nullptr;
+static void* g_last_toast_action_data = nullptr;
 
 namespace helix {
 namespace ui {
 
 void set_test_toast_hook(std::function<void(ToastSeverity, const std::string&)> hook) {
     g_test_toast_hook = std::move(hook);
+    g_last_toast_action = nullptr;
+}
+
+bool fire_last_toast_action() {
+    toast_action_callback_t action = g_last_toast_action;
+    g_last_toast_action = nullptr;
+    if (!action) {
+        return false;
+    }
+    action(g_last_toast_action_data);
+    return true;
 }
 
 } // namespace ui
@@ -754,9 +767,9 @@ void ToastManager::show_with_action(ToastSeverity severity, const char* message,
                                     toast_action_callback_t action_callback, void* user_data,
                                     uint32_t duration_ms) {
     (void)action_text;
-    (void)action_callback;
-    (void)user_data;
     (void)duration_ms;
+    g_last_toast_action = action_callback;
+    g_last_toast_action_data = user_data;
     spdlog::debug("[Test Stub] ToastManager::show_with_action: {}", message ? message : "(null)");
     if (g_test_toast_hook) {
         g_test_toast_hook(severity, message ? message : "");

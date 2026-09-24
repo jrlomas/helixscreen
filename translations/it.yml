@@ -2624,6 +2624,7 @@ translations:
     l'app continuava a bloccarsi all'avvio. Apri Impostazioni per risolvere il problema,
     quindi riavvia.
   Safety & Notifications: Sicurezza e notifiche
+  Same spool in {}? Tap Clear if it is a new one.: 'Stessa bobina in {}? Tocca Cancella se è una nuova.'
   Sample: Campione
   Sample %d/%d: Campione %d/%d
   Sample Dialog: Dialogo di esempio
