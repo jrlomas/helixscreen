@@ -39,6 +39,12 @@ struct Observation {
 
     std::optional<bool> present;
 
+    /// A toolhead occupying the slot, docked or on the carriage. Sensed by a
+    /// physical tool changer, which cannot see the filament inside it: this is
+    /// a different question from `present`, and a backend that answers one
+    /// must leave the other unset rather than let them stand in for each other.
+    std::optional<bool> tool_docked;
+
     std::optional<uint32_t> color_rgb;
     std::optional<std::string> color_name;
     std::optional<std::string> material;
@@ -57,15 +63,15 @@ struct Observation {
     /// instead of keeping its own field list, so a field added here reaches
     /// that code with no matching line to remember.
     auto fields() {
-        return std::tie(present, color_rgb, color_name, material, brand, spool_name, catalog_id,
-                        product_name, spoolman_id, spoolman_vendor_id, remaining_weight_g,
-                        total_weight_g);
+        return std::tie(present, tool_docked, color_rgb, color_name, material, brand, spool_name,
+                        catalog_id, product_name, spoolman_id, spoolman_vendor_id,
+                        remaining_weight_g, total_weight_g);
     }
 
     auto fields() const {
-        return std::tie(present, color_rgb, color_name, material, brand, spool_name, catalog_id,
-                        product_name, spoolman_id, spoolman_vendor_id, remaining_weight_g,
-                        total_weight_g);
+        return std::tie(present, tool_docked, color_rgb, color_name, material, brand, spool_name,
+                        catalog_id, product_name, spoolman_id, spoolman_vendor_id,
+                        remaining_weight_g, total_weight_g);
     }
 };
 
