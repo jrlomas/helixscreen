@@ -70,7 +70,6 @@ TEST_CASE("apply_resolved writes the resolver's fields and leaves the rest alone
     // Fields apply_resolved must leave alone because ResolvedLane has no
     // equivalent of them: a later task must not quietly start writing these.
     slot.multi_color_hexes = "#111111,#222222";
-    slot.spoolman_filament_id = 99;
 
     ResolvedLane r;
     r.present = true;
@@ -82,13 +81,14 @@ TEST_CASE("apply_resolved writes the resolver's fields and leaves the rest alone
     r.catalog_id = "cat-kingroon-pla";
     r.product_name = "PLA Silk";
     r.spoolman_id = 7;
+    r.spoolman_filament_id = 31;
     r.spoolman_vendor_id = 12;
     r.remaining_weight_g = 218.0F;
     r.total_weight_g = 950.0F;
 
     apply_resolved(slot, r);
 
-    // The resolver's 11 fields are replaced wholesale, each with a value
+    // The resolver's 12 fields are replaced wholesale, each with a value
     // distinctive enough that a dropped assignment cannot pass by accident.
     CHECK(slot.color_rgb == 0xBCBCBC);
     CHECK(slot.color_name == "Gunmetal");
@@ -98,6 +98,7 @@ TEST_CASE("apply_resolved writes the resolver's fields and leaves the rest alone
     CHECK(slot.catalog_id == "cat-kingroon-pla");
     CHECK(slot.product_name == "PLA Silk");
     CHECK(slot.spoolman_id == 7);
+    CHECK(slot.spoolman_filament_id == 31);
     CHECK(slot.spoolman_vendor_id == 12);
     CHECK(slot.remaining_weight_g == Catch::Approx(218.0F));
     CHECK(slot.total_weight_g == Catch::Approx(950.0F));
@@ -106,7 +107,7 @@ TEST_CASE("apply_resolved writes the resolver's fields and leaves the rest alone
     CHECK(slot.status == SlotStatus::LOADED);
 
     // Everything SlotInfo carries that the resolver does not own is untouched,
-    // including the two fields ResolvedLane has no member for at all.
+    // including the field ResolvedLane has no member for at all.
     CHECK(slot.slot_index == 3);
     CHECK(slot.global_index == 7);
     CHECK(slot.mapped_tool == 2);
@@ -115,7 +116,6 @@ TEST_CASE("apply_resolved writes the resolver's fields and leaves the rest alone
     CHECK(slot.remaining_length_m == Catch::Approx(12.5F));
     CHECK(slot.nozzle_temp_min == 210);
     CHECK(slot.multi_color_hexes == "#111111,#222222");
-    CHECK(slot.spoolman_filament_id == 99);
 }
 
 TEST_CASE("A lane the resolver reports absent is emptied, not merely dimmed", "[lane][apply]") {
@@ -222,6 +222,7 @@ TEST_CASE("copy_resolver_owned_identity carries every field a paint can write",
     src.catalog_id = "polymaker-polylite-petg";
     src.product_name = "PolyLite PETG";
     src.spoolman_id = 7;
+    src.spoolman_filament_id = 55;
     src.spoolman_vendor_id = 3;
     src.remaining_weight_g = 812.5F;
     src.total_weight_g = 1000.0F;
@@ -240,6 +241,7 @@ TEST_CASE("copy_resolver_owned_identity carries every field a paint can write",
     CHECK(dst.catalog_id == "polymaker-polylite-petg");
     CHECK(dst.product_name == "PolyLite PETG");
     CHECK(dst.spoolman_id == 7);
+    CHECK(dst.spoolman_filament_id == 55);
     CHECK(dst.spoolman_vendor_id == 3);
     CHECK(dst.remaining_weight_g == Catch::Approx(812.5F));
     CHECK(dst.total_weight_g == Catch::Approx(1000.0F));

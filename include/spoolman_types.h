@@ -284,6 +284,9 @@ inline helix::ams::Observation spool_identity_observation(const SpoolInfo& spool
     if (spool.id > 0) {
         stated.spoolman_id = spool.id;
     }
+    if (spool.filament_id > 0) {
+        stated.spoolman_filament_id = spool.filament_id;
+    }
     if (spool.vendor_id > 0) {
         stated.spoolman_vendor_id = spool.vendor_id;
     }

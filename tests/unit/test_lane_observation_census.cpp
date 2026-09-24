@@ -76,10 +76,19 @@ namespace {
 /// ties them. A field added to that struct has no name here, so the
 /// static_assert below stops the build and whoever added it has to say which
 /// backends are expected to file it.
-constexpr std::array<const char*, 12> kFieldNames = {
-    "present",     "color_rgb",          "color_name",         "material",
-    "brand",       "spool_name",         "catalog_id",         "product_name",
-    "spoolman_id", "spoolman_vendor_id", "remaining_weight_g", "total_weight_g"};
+constexpr std::array<const char*, 13> kFieldNames = {"present",
+                                                     "color_rgb",
+                                                     "color_name",
+                                                     "material",
+                                                     "brand",
+                                                     "spool_name",
+                                                     "catalog_id",
+                                                     "product_name",
+                                                     "spoolman_id",
+                                                     "spoolman_filament_id",
+                                                     "spoolman_vendor_id",
+                                                     "remaining_weight_g",
+                                                     "total_weight_g"};
 
 static_assert(std::tuple_size_v<decltype(std::declval<Observation&>().fields())> ==
                   kFieldNames.size(),
@@ -395,14 +404,18 @@ TEST_CASE_METHOD(LVGLTestFixture, "every backend files exactly the fields the ce
 TEST_CASE_METHOD(LVGLTestFixture,
                  "no backend frame translation files a catalog id, a vendor id or a colour name",
                  "[lane][ingest][census]") {
-    // Three fields Observation carries that no producer writes. A consumer or
-    // a test resting on one of them is resting on a value nothing supplies.
+    // Fields Observation carries that no frame translation writes. A consumer
+    // or a test resting on one of them is resting on a value no machine
+    // supplies.
     //
     // Scoped to frame translation on purpose: catalog_id and
     // spoolman_vendor_id DO reach a lane through the resync path, which reads
     // the shared override namespace and files a declaration rather than a
-    // reading. Nothing a machine says carries either.
-    const std::vector<std::string> dead = {"catalog_id", "spoolman_vendor_id", "color_name"};
+    // reading, and spoolman_filament_id reaches it through the Spoolman poll
+    // and the record translation. Nothing a machine's own frame says carries
+    // any of them.
+    const std::vector<std::string> dead = {"catalog_id", "spoolman_vendor_id", "color_name",
+                                           "spoolman_filament_id"};
 
     for (const auto& entry : census_of_every_backend()) {
         INFO("backend: " << entry.backend);

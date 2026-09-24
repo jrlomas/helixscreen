@@ -39,8 +39,10 @@ constexpr auto FIELD_ROSTER = std::make_tuple(
     field<true>(&Observation::product_name),
     // A spool-id echo is a true statement that firmware is now bound to that
     // spool, and resolve() ranks Spoolman above VendorCache regardless. The
-    // in-flight race on a re-bind belongs to own_write_expectation.
-    field<false>(&Observation::spoolman_id), field<false>(&Observation::spoolman_vendor_id),
+    // in-flight race on a re-bind belongs to own_write_expectation. The
+    // filament definition id rides the same statement as the spool id.
+    field<false>(&Observation::spoolman_id), field<false>(&Observation::spoolman_filament_id),
+    field<false>(&Observation::spoolman_vendor_id),
     // A weight write reseeds a real meter, and what the meter reports
     // afterwards is its own state decrementing as filament is consumed.
     // Withholding it would blind the lane the moment the meter legitimately

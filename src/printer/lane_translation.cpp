@@ -127,6 +127,12 @@ constexpr auto FIELD_ROSTER = std::make_tuple(
     // it carries no authorship bit either.
     field<FieldKind::PositiveId>("spoolman_id", nullptr, &FilamentSlotOverride::spoolman_id,
                                  &Observation::spoolman_id),
+    // The filament definition behind the binding: the Spoolman fetch states it
+    // beside the spool id, and it names nothing once the spool is unlinked, so
+    // every routing that drops the binding drops it too.
+    field<FieldKind::PositiveId>("spoolman_filament_id", nullptr,
+                                 &FilamentSlotOverride::spoolman_filament_id,
+                                 &Observation::spoolman_filament_id),
     field<FieldKind::PositiveId, Authorship::DeclaredSet, Owner::SpoolWhenLinked>(
         "spoolman_vendor_id", &SlotInfo::spoolman_vendor_id,
         &FilamentSlotOverride::spoolman_vendor_id, &Observation::spoolman_vendor_id),

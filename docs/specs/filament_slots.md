@@ -1,6 +1,6 @@
 # Filament Slot Metadata — `lane_data` Convention
 
-**Status**: Informational, v1.11 (2026-09). See [Changelog](#changelog).
+**Status**: Informational, v1.12 (2026-09). See [Changelog](#changelog).
 
 This document describes HelixScreen's use of the `lane_data` Moonraker database
 namespace to share per-slot filament metadata with OrcaSlicer and other tools.
@@ -150,6 +150,7 @@ A full HelixScreen-emitted record looks like this:
   "spool_name": "PolyLite ASA-GF Black",
   "name": "PolyLite ASA-GF Black",
   "spoolman_vendor_id": 7,
+  "helix_spoolman_filament_id": 55,
   "remaining_weight_g": 850.0,
   "total_weight_g": 1000.0,
   "color_name": "Black",
@@ -198,6 +199,7 @@ throw on unknown keys).
 | `spool_name` | string | optional | free-form | Human-readable name for the spool (e.g. `"PolyLite ASA-GF Black"`). Distinct from `vendor` + `material` because users often want a friendlier label. | User-edited, or auto-filled from Spoolman. |
 | `name` | string | optional | free-form | Alias of `spool_name`, mirroring Happy Hare's key convention (`push_lane_data` in components/mmu_server.py). Emitted with the same value as `spool_name` for forward-compat. HelixScreen's reader accepts either key. | Same as `spool_name`. |
 | `spoolman_vendor_id` | integer | optional | positive integer | Spoolman vendor ID, paired with `spool_id` for full Spoolman round-tripping. Omitted when zero. | From Spoolman when a spool is selected. |
+| `helix_spoolman_filament_id` | integer | optional | positive integer | The Spoolman filament definition ID behind the `spool_id`: the specific filament record whose vendor, material and colour the spool instantiates. Filed with the spool id and dropped with it, since a definition id whose spool is unlinked names nothing. `helix_`-prefixed because Happy Hare's `push_lane_data` writes its own unprefixed `filament_id` inner field, a different value with the same name. Omitted when zero. | From Spoolman when a spool is selected. |
 | `remaining_weight_g` | float | optional | grams | Remaining filament weight. Negative = unset / unknown. | Spoolman, or user-entered. |
 | `total_weight_g` | float | optional | grams | Full-spool nominal weight. Negative = unset / unknown. | Spoolman, or user-entered. |
 | `color_name` | string | optional | free-form | Human-readable color label (e.g. `"Orange"`), distinct from the `color` hex value. Some user workflows care about the marketing name as well as the RGB. | User-edited, or auto-filled from Spoolman. |
@@ -566,6 +568,14 @@ reader can resolve.
 
 ## Changelog
 
+- **v1.12 (2026-09-23)**: New optional extension key `helix_spoolman_filament_id` (§3): the
+  Spoolman filament definition ID behind the `spool_id`, persisted with the binding so the
+  definition survives HelixScreen restarts and every poll of a box that replaces its parsed
+  slots wholesale (`prestonbrown/helixscreen#1632`). Filed with the spool id and dropped with
+  it. The `helix_` prefix is load-bearing: Happy Hare writes its own unprefixed
+  `filament_id` inner field, a different value with the same name, which HelixScreen does
+  not read. Omitted when zero; records written by earlier versions and by other tools are
+  unaffected.
 - **v1.11 (2026-09-22)**: A name in `helix_declared` stands only over a value
   the record carries (§3, §5). Clearing a field is not a declaration of
   emptiness: HelixScreen no longer names a field in the set when a user clears
