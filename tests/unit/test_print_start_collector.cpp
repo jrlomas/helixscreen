@@ -3304,6 +3304,200 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
 }
 
 // ============================================================================
+// Snapmaker U1: M109/M190 run after DETECT_PLATE with no action code of their
+// own, and the bed warms concurrently with the whole announced sequence. The
+// heater only owns the label while a wait reports ("B:45.2 /100.0 T0:...",
+// once a second), since that wait blocks everything else; the firmware's
+// phase comes back when the queue moves on.
+// ============================================================================
+
+namespace {
+class SnapmakerHeaterWaitFixture : public SnapmakerCollectorFixture {
+  public:
+    SnapmakerHeaterWaitFixture() {
+        collector().start();
+        drain_async_updates();
+        collector().enable_fallbacks();
+        feed_gcode("// Success: Set action code DETECT_PLATE");
+    }
+
+    void tick() {
+        collector().check_fallback_completion();
+        drain_async_updates();
+        drain_async_updates();
+    }
+
+    void set_chamber(int temp_decideg, int target_decideg) {
+        lv_subject_set_int(state().get_chamber_temp_subject(), temp_decideg);
+        lv_subject_set_int(state().get_chamber_target_subject(), target_decideg);
+    }
+
+    helix::sim::SimulatedClock::ManualScope clock_{helix::sim::SimSpeed::of(1.0)};
+};
+} // namespace
+
+TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
+                 "Snapmaker U1: a bed wait after plate detect shows Heating Bed until it ends",
+                 "[print][collector][snapmaker][heater_wait]") {
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+    set_all_temps(/*bed*/ 450, 1000, /*ext*/ 2100, 2100);
+
+    // A bed warming behind the announced phase leaves that phase alone.
+    tick();
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+
+    feed_gcode("B:45.0 /100.0 T0:210.0 /210.0");
+    tick();
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+    REQUIRE(get_current_message() == "Heating Bed...");
+
+    // The last few degrees are inside the tolerance band; the wait still holds.
+    clock_.advance(std::chrono::seconds(1));
+    set_all_temps(980, 1000, 2100, 2100);
+    feed_gcode("B:98.0 /100.0 T0:210.0 /210.0");
+    tick();
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+
+    SECTION("the mesh starting after the wait relabels as it would without one") {
+        feed_gcode("// z offset: -0.05");
+        REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+        REQUIRE(get_current_message().find("Bed mesh") != std::string::npos);
+    }
+
+    SECTION("any other line gives the announced phase back") {
+        feed_gcode("// unrelated firmware chatter");
+        REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+        REQUIRE(get_current_message() == "Detecting plate...");
+    }
+
+    SECTION("an action code arriving after the wait wins") {
+        feed_gcode("// Success: Set action code PRINT_PREEXTRUDING");
+        REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
+        // A later wait does not displace priming.
+        feed_gcode("B:98.0 /100.0 T0:150.0 /210.0");
+        set_all_temps(980, 1000, 1500, 2100);
+        tick();
+        REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
+    }
+}
+
+TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
+                 "Snapmaker U1: a report older than the wait cadence does not relabel",
+                 "[print][collector][snapmaker][heater_wait]") {
+    set_all_temps(/*bed*/ 450, 1000, /*ext*/ 2100, 2100);
+    feed_gcode("B:45.0 /100.0 T0:210.0 /210.0");
+    clock_.advance(std::chrono::seconds(10));
+    tick();
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+}
+
+TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
+                 "Snapmaker U1: a wait with every heater near target leaves the phase alone",
+                 "[print][collector][snapmaker][heater_wait]") {
+    set_all_temps(/*bed*/ 990, 1000, /*ext*/ 2080, 2100);
+    feed_gcode("B:99.0 /100.0 T0:208.0 /210.0");
+    tick();
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+}
+
+TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
+                 "Snapmaker U1: a chamber wait with the bed and nozzle ready shows the chamber",
+                 "[print][collector][snapmaker][heater_wait]") {
+    // TEMPERATURE_WAIT on a heater_generic reports only heaters with a gcode
+    // id, so the chamber shows up in the live subjects, not in the line.
+    set_all_temps(/*bed*/ 1000, 1000, /*ext*/ 2100, 2100);
+    set_chamber(300, 600);
+    feed_gcode("B:100.0 /100.0 T0:210.0 /210.0");
+    tick();
+    REQUIRE(get_current_phase() == PrintStartPhase::SOAKING);
+    REQUIRE(get_current_message() == "Heating chamber...");
+
+    feed_gcode("// unrelated firmware chatter");
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+}
+
+TEST_CASE_METHOD(SnapmakerCollectorFixture,
+                 "Snapmaker U1: before the first real signal a wait report changes nothing",
+                 "[print][collector][snapmaker][heater_wait]") {
+    helix::sim::SimulatedClock::ManualScope clock(helix::sim::SimSpeed::of(1.0));
+    collector().start();
+    drain_async_updates();
+    collector().enable_fallbacks();
+    // Proactive detection owns this window: mid-home, it shows Homing even
+    // with the bed far below its target and a wait reporting.
+    lv_subject_copy_string(state().get_homed_axes_subject(), "xy");
+    set_all_temps(/*bed*/ 250, 1000, /*ext*/ 0, 0);
+    feed_gcode("B:25.0 /100.0");
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::HOMING);
+}
+
+TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
+                 "Snapmaker U1: a wait showing when the print ends does not reach the next one",
+                 "[print][collector][snapmaker][heater_wait]") {
+    set_all_temps(/*bed*/ 450, 1000, /*ext*/ 2100, 2100);
+    feed_gcode("B:45.0 /100.0 T0:210.0 /210.0");
+    tick();
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+
+    SECTION("a fresh start") {
+        collector().stop();
+        collector().start();
+    }
+    SECTION("a reset while active") {
+        collector().reset();
+    }
+    drain_async_updates();
+    collector().enable_fallbacks();
+
+    // Proactive detection shows the bed heating before any signal; a line that
+    // follows must not hand the last print's plate detect back.
+    tick();
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+    feed_gcode("// unrelated firmware chatter");
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+}
+
+TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,
+                 "A heater wait gives a sequential profile's phase and message back",
+                 "[print][collector][heater_wait]") {
+    helix::sim::SimulatedClock::ManualScope clock(helix::sim::SimSpeed::of(1.0));
+    collector().set_profile(PrintStartProfile::load("artillery_m1"));
+    collector().start();
+    drain_async_updates();
+    collector().enable_fallbacks();
+    send_gcode_response("[AM1P] State: HOMING");
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::HOMING);
+    const std::string announced = get_current_message();
+
+    set_all_temps(/*bed*/ 450, 1000, /*ext*/ 2100, 2100);
+    send_gcode_response("B:45.0 /100.0 T0:210.0 /210.0");
+    collector().check_fallback_completion();
+    drain_async_updates();
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+
+    send_gcode_response("// unrelated firmware chatter");
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::HOMING);
+    REQUIRE(get_current_message() == announced);
+}
+
+TEST_CASE("heater wait report lines", "[print][collector][heater_wait]") {
+    REQUIRE(PrintStartCollectorTestAccess::is_heater_wait_report("B:45.2 /100.0 T0:210.1 /210.0"));
+    REQUIRE(PrintStartCollectorTestAccess::is_heater_wait_report("T0:150.0 /210.0"));
+    REQUIRE(PrintStartCollectorTestAccess::is_heater_wait_report("B:25.0 /100.0 C:30.0 /60.0"));
+    REQUIRE_FALSE(PrintStartCollectorTestAccess::is_heater_wait_report("ok B:45.2 /100.0"));
+    REQUIRE_FALSE(PrintStartCollectorTestAccess::is_heater_wait_report("T:0"));
+    REQUIRE_FALSE(PrintStartCollectorTestAccess::is_heater_wait_report("// z offset: -0.05"));
+    REQUIRE_FALSE(
+        PrintStartCollectorTestAccess::is_heater_wait_report("// Success: Set action code X"));
+}
+
+// ============================================================================
 // Snapmaker U1: the initial prime/purge line ("G1 X110 E15") extrudes with NO
 // observable gcode_response (PRINT_PREEXTRUDING only fires for a 2nd tool
 // mid-print). print_stats.print_duration going 0->positive while current_layer
@@ -4843,7 +5037,8 @@ TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
                  "[print][collector][cosmos][integration]") {
     REQUIRE(have_profile_);
     // Without the smart park narration, the stored mesh line is the last word
-    // before M109 raises the nozzle from 140C to 260C.
+    // before M109 raises the nozzle from 140C to 260C. The wait's first report
+    // (543.6s) is what moves the label, on the next fallback tick.
     ThermalRateManager::instance().apply_archetype_defaults(256.0f, "Elegoo Centauri Carbon");
 
     CosmosReplayVariant variant;
@@ -4851,7 +5046,7 @@ TEST_CASE_METHOD(CosmosPrintStartReplayFixture,
     const Result result = replay(variant);
     CAPTURE(result.trace);
     REQUIRE(result.trace == "0:INITIALIZING 5:HEATING_BED 484:SOAKING 542:BED_MESH "
-                            "550:HEATING_NOZZLE 618:COMPLETE");
+                            "545:HEATING_NOZZLE 618:COMPLETE");
 }
 
 TEST_CASE_METHOD(PrintStartCollectorHeaterFixture,

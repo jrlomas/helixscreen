@@ -426,8 +426,23 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
      * may have advanced current_phase_ between the caller's temperature
      * snapshot and this call; the CAS refuses in that case so a newer phase is
      * never regressed back to heating. The label is derived from `resolved`.
+     *
+     * With `heater_wait`, a heater wait is blocking the queue, so the relabel
+     * may also displace any phase short of SOAKING, PURGING or COMPLETE, and
+     * `resolved` may be SOAKING for a chamber. The displaced phase and message
+     * are kept for end_heater_wait().
      */
-    void relabel_heating_phase(helix::PrintStartPhase resolved);
+    void relabel_heating_phase(helix::PrintStartPhase resolved, bool heater_wait = false);
+
+    /// Give the phase a heater wait displaced back, if the wait is still the
+    /// one showing. Takes state_mutex_ itself.
+    void end_heater_wait();
+
+    /// Whether a line is the temperature report Klipper emits once a second
+    /// while M109, M190 or TEMPERATURE_WAIT blocks ("B:45.2 /100.0 T0:210.0 /210.0").
+    [[nodiscard]] static bool is_heater_wait_report(const std::string& line) {
+        return std::regex_match(line, heater_wait_report_pattern_);
+    }
 
     /// Whether BED_MESH is showing and a probe line arrived within
     /// MESH_PROBE_GAP_RESET. Caller must hold state_mutex_.
@@ -515,6 +530,7 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     static const std::regex print_start_pattern_;
     static const std::regex completion_pattern_;
     static const std::regex respond_completion_pattern_;
+    static const std::regex heater_wait_report_pattern_;
 
     // Fallback detection constants.
     //
@@ -607,6 +623,23 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     // as the human label when rendering "<sub-phase> (N/M)" so the user sees
     // which sub-phase they're in. Empty when not in BED_MESH.
     std::string current_mesh_message_;
+
+    /// The message the current phase was entered with, before any probe count
+    /// is appended. Guarded by state_mutex_.
+    std::string current_message_;
+
+    /// When the last heater-wait report arrived. A wait reports once a second,
+    /// so one older than HEATER_WAIT_REPORT_GAP means no wait is blocking.
+    /// Guarded by state_mutex_.
+    helix::sim::SimulatedClock::time_point heater_wait_report_time_ =
+        helix::sim::SimulatedClock::time_point::min();
+    static constexpr auto HEATER_WAIT_REPORT_GAP = std::chrono::seconds(3);
+
+    /// Set while a heater wait is showing in place of a firmware phase, with
+    /// the phase and message it displaced. Guarded by state_mutex_.
+    bool heater_wait_shown_ = false;
+    helix::PrintStartPhase pre_wait_phase_ = helix::PrintStartPhase::IDLE;
+    std::string pre_wait_message_;
 
     /// Nozzle target (°C) when BED_MESH was entered. A higher target while the
     /// mesh is idle is the print-temperature heat that follows it. Guarded by
