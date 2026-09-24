@@ -345,6 +345,15 @@ libs-clean: libhv-clean sdl2-clean lvgl-clean libnl-clean wpa-clean
 # clean step below and the cross-compile lock (mk/cross.mk).
 LIBHV_OBJDIR := $(abspath $(BUILD_DIR)/libhv-objs)
 
+# libhv's Makefile takes `CXXFLAGS ?=` and `CFLAGS ?=`, so any flags reaching it
+# replace its own. test-asan/test-tsan re-invoke make with a sanitizer CXXFLAGS
+# on the command line, and make hands a command-line variable to every sub-make
+# twice: in MAKEFLAGS and as an exported environment variable. Either one alone
+# instruments $(BUILD_DIR)/lib/libhv.a, which is shared by every flavour, and a
+# plain build then fails to link on undefined __asan_* symbols. The empty
+# MAKEOVERRIDES drops the MAKEFLAGS copy while keeping the jobserver; `env -u`
+# on the native recipes drops the environment copy.
+libhv-build: MAKEOVERRIDES :=
 libhv-build:
 	$(ECHO) "$(CYAN)Building libhv...$(RESET)"
 	$(Q)mkdir -p $(BUILD_DIR)/lib $(LIBHV_OBJDIR)/lib
@@ -398,13 +407,13 @@ else ifeq ($(UNAME_S),Darwin)
 	# because libhv's Makefile doesn't pass `-framework CoreFoundation -framework
 	# Security` (needed by ssl/appletls.o). We only consume libhv as a static
 	# archive anyway, so the dylib is just dead weight that breaks the build.
-	$(Q)MACOSX_DEPLOYMENT_TARGET=$(MACOS_MIN_VERSION) $(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv
+	$(Q)env -u CFLAGS -u CXXFLAGS MACOSX_DEPLOYMENT_TARGET=$(MACOS_MIN_VERSION) $(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv
 else
-	$(Q)cd $(LIBHV_DIR) && ./configure --with-http-client $(if $(filter yes,$(ENABLE_SSL)),--with-openssl)
+	$(Q)cd $(LIBHV_DIR) && env -u CFLAGS -u CXXFLAGS ./configure --with-http-client $(if $(filter yes,$(ENABLE_SSL)),--with-openssl)
 	# LDFLAGS= override: see cross-compile branch above for rationale. Critical
 	# for test-asan/test-tsan where the parent invokes us with the project's
 	# full LDFLAGS containing `build/lib/lib*.a` paths.
-	$(Q)$(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= libhv
+	$(Q)env -u CFLAGS -u CXXFLAGS $(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= libhv
 endif
 	# Copy built library from the per-arch out-of-tree objdir to the architecture-
 	# specific output directory. Falls back to the legacy in-tree locations so an
