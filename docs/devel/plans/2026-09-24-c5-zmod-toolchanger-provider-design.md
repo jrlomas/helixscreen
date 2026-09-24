@@ -52,7 +52,11 @@ Z-Mod does not publish material in status yet. We are contributing that upstream
 - **Status objects:** `zmod_color`.
 - **Tool reading:** `active_tool_id` maps one-to-one onto `ToolReading::current_tool`
   (`include/toolchanger_addon.h#ToolReading`), which already uses -2 / -1 / 0..N-1. A frame without
-  the field is no news.
+  the field is no news. Z-Mod only recomputes `active_tool_id` inside its own commands, so on a
+  release without ghzserg/z_c5pro#1 it reads a stale -2 after every restart and the unit shows a
+  dock sensor error until the first `_T_IN` / `_T_OUT` / `GET_ZCOLOR`. Accepted: the fix is
+  upstream (PR computes it live from the dock and carriage buttons), not a second copy of Z-Mod's
+  button rule here.
 - **Commands:** `ToolCommands{select_prefix = "_T_IN T=", unselect = "_T_OUT"}`.
 - **Feeder:** none.
 
@@ -147,7 +151,8 @@ approach). Established by reading; the first test must fail on main to confirm i
 
 1. `feature/c5-platform` (fork port: DB entry detecting both firmwares, preset, mock persona) merges
    first; this work builds on its detection and persona.
-2. Upstream PR ghzserg/z_c5pro#1 adding `slots` and `palette` to `zmod_color.get_status()`. Everything except the
+2. Upstream PR ghzserg/z_c5pro#1: `slots` and `palette` in `zmod_color.get_status()`, and a live
+   `active_tool_id`. Everything except the
    material source works without it, and the material source stays inert until a frame carries
    `slots`.
 3. Empty-carriage fix is independent and can land first.
