@@ -151,6 +151,7 @@ void MoonrakerManager::shutdown() {
     // Using release() avoids double-free of already-removed observers.
     m_print_start_observer.release();
     m_print_start_phase_observer.release();
+    m_print_klippy_state_observer.release();
     m_preparing_epoch_observer.release();
     m_print_bed_target_fallback_observer.release();
     m_print_ext_target_fallback_observer.release();
@@ -906,6 +907,23 @@ void MoonrakerManager::init_print_start_collector() {
                     spdlog::info(
                         "[MoonrakerManager] PRINT_START collector stopped (phase=COMPLETE)");
                 }
+            }
+        },
+        nullptr);
+
+    // A Klipper shutdown or error ends the print even when print_stats keeps
+    // reporting a job, so the collector cannot rely on the print-state observer.
+    m_print_klippy_state_observer = ObserverGuard(
+        get_printer_state().get_klippy_state_subject(),
+        [](lv_observer_t*, lv_subject_t* subject) {
+            auto collector = s_collector.lock();
+            if (!collector || !collector->is_active())
+                return;
+            auto klippy = static_cast<KlippyState>(lv_subject_get_int(subject));
+            if (should_stop_collector_on_klippy_state(klippy)) {
+                collector->stop();
+                spdlog::info("[MoonrakerManager] PRINT_START collector stopped (klippy state={})",
+                             static_cast<int>(klippy));
             }
         },
         nullptr);
