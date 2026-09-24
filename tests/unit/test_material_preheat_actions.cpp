@@ -65,6 +65,14 @@ filament::MaterialOverride abs_override(std::optional<std::string> macro,
     return result;
 }
 
+// The printer defines the material macros these cases assign.
+void discover_macros(Harness& h, std::vector<std::string> objects = {"extruder", "heater_bed"}) {
+    objects.insert(objects.end(), {"gcode_macro HEAT_ABS", "gcode_macro HEAT_ASA"});
+    helix::PrinterDiscovery hardware;
+    hardware.parse_objects(nlohmann::json(objects));
+    h.state.set_hardware(hardware);
+}
+
 // Target 0 makes the Home widget a preheat action, not Cool Down. Both the
 // physical nozzle and its remembered prior target still exceed the preset.
 void feed_hot_nozzle(Harness& h) {
@@ -114,6 +122,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "Material preheat buttons let the configured
     CAPTURE(static_cast<int>(action), handles_heating);
     MaterialSettingsScope settings;
     Harness h;
+    discover_macros(h);
     helix_test::ScopedSharedResource<helix::TemperatureController> controller(
         std::make_shared<helix::TemperatureController>(h.state, &h.api));
     helix::MaterialSettingsManager::instance().set_override(
@@ -133,6 +142,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     CAPTURE(static_cast<int>(action));
     MaterialSettingsScope settings;
     Harness h;
+    discover_macros(h);
     helix_test::ScopedSharedResource<helix::TemperatureController> controller(
         std::make_shared<helix::TemperatureController>(h.state, &h.api));
     helix::MaterialSettingsManager::instance().set_override("ABS", abs_override("HEAT_ABS", false));
@@ -154,9 +164,31 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     CAPTURE(static_cast<int>(action), macro);
     MaterialSettingsScope settings;
     Harness h;
+    discover_macros(h);
     helix_test::ScopedSharedResource<helix::TemperatureController> controller(
         std::make_shared<helix::TemperatureController>(h.state, &h.api));
     helix::MaterialSettingsManager::instance().set_override("ABS", abs_override(macro));
+    feed_hot_nozzle(h);
+
+    press(action, h);
+
+    CHECK(h.client.gcode_script_history() == ABS_TARGETS);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Material preheat heats to the preset when this printer lacks the macro",
+                 "[material_preheat][preheat][filament]") {
+    const auto action = GENERATE(PreheatAction::FILAMENT_PRESET, PreheatAction::SPOOL_PRESET,
+                                 PreheatAction::HOME_WIDGET);
+    const auto handles_heating = GENERATE(std::optional<bool>{true}, std::optional<bool>{false});
+    CAPTURE(static_cast<int>(action), handles_heating);
+    MaterialSettingsScope settings;
+    Harness h;
+    discover_macros(h);
+    helix_test::ScopedSharedResource<helix::TemperatureController> controller(
+        std::make_shared<helix::TemperatureController>(h.state, &h.api));
+    helix::MaterialSettingsManager::instance().set_override(
+        "ABS", abs_override("OTHER_PRINTER_HEAT_ABS", handles_heating));
     feed_hot_nozzle(h);
 
     press(action, h);
@@ -169,6 +201,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "[material_preheat][preheat][presets]") {
     MaterialSettingsScope settings;
     Harness h;
+    discover_macros(h);
     helix_test::ScopedSharedResource<helix::TemperatureController> controller(
         std::make_shared<helix::TemperatureController>(h.state, &h.api));
     auto& manager = helix::MaterialSettingsManager::instance();
@@ -198,6 +231,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "Home preheat uses the reassigned material's
                  "[material_preheat][preheat][presets]") {
     MaterialSettingsScope settings;
     Harness h;
+    discover_macros(h);
     helix_test::ScopedSharedResource<helix::TemperatureController> controller(
         std::make_shared<helix::TemperatureController>(h.state, &h.api));
     auto& manager = helix::MaterialSettingsManager::instance();
@@ -217,6 +251,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "Spool preheat resolves a case-insensitive m
                  "[material_preheat][preheat][filament]") {
     MaterialSettingsScope settings;
     Harness h;
+    discover_macros(h);
     helix_test::ScopedSharedResource<helix::TemperatureController> controller(
         std::make_shared<helix::TemperatureController>(h.state, &h.api));
     helix::MaterialSettingsManager::instance().set_override("ABS", abs_override("HEAT_ABS", true));
@@ -236,14 +271,12 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "[material_preheat][preheat][chamber]") {
     MaterialSettingsScope settings;
     Harness h;
+    discover_macros(h);
     helix_test::ScopedSharedResource<helix::TemperatureController> controller(
         std::make_shared<helix::TemperatureController>(h.state, &h.api));
     helix::MaterialSettingsManager::instance().set_override("ABS", abs_override("HEAT_ABS", false));
     helix::SettingsManager::instance().set_chamber_heater_assignment("auto");
-    helix::PrinterDiscovery hardware;
-    hardware.parse_objects(
-        nlohmann::json{"extruder", "heater_bed", "heater_generic chamber_heater"});
-    h.state.set_hardware(hardware);
+    discover_macros(h, {"extruder", "heater_bed", "heater_generic chamber_heater"});
     REQUIRE(controller.get().resolved_name(helix::HeaterType::Chamber) ==
             "heater_generic chamber_heater");
 
@@ -260,6 +293,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "[material_preheat][preheat][panel_widget]") {
     MaterialSettingsScope settings;
     Harness h;
+    discover_macros(h);
     h.use_two_extruders();
     REQUIRE(ToolState::instance().has_multiple_extruders());
     helix_test::ScopedSharedResource<helix::TemperatureController> controller(
@@ -288,6 +322,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     CAPTURE(load);
     MaterialSettingsScope settings;
     Harness h;
+    discover_macros(h);
     helix_test::ScopedSharedResource<helix::TemperatureController> controller(
         std::make_shared<helix::TemperatureController>(h.state, &h.api));
     helix::MaterialSettingsManager::instance().set_override("ABS", abs_override("HEAT_ABS", true));

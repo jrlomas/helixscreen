@@ -193,7 +193,7 @@ Configure per-material macros in **Material Temperatures** (above). Each materia
 
 These settings apply to the **Preheat widget** on Home or Controls and to the **material preset buttons on the Filament panel**, including the active-spool preset when shown. Long-pressing a Filament preset changes the material assigned to that button; tapping it preheats that material. Individual nozzle, bed, and chamber temperature controls do not run a whole-material macro.
 
-**Macro Handles Heating** is not an enable/disable switch for the macro: the assigned macro runs in either mode. With it enabled, the macro must set every temperature you want. With no macro assigned, the button applies its displayed preset temperatures. Manual preheat does not keep a hotter previous nozzle target for purging; load/unload operations retain their own heating behavior.
+**Macro Handles Heating** is not an enable/disable switch for the macro: the assigned macro runs in either mode. With it enabled, the macro must set every temperature you want. With no macro assigned, or one this printer does not define, the button applies its displayed preset temperatures. Manual preheat does not keep a hotter previous nozzle target for purging; load/unload operations retain their own heating behavior.
 
 ---
 

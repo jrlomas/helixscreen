@@ -1500,7 +1500,7 @@ When a user switches filament, the nozzle must stay hot enough to purge the mate
 load_target = max(new_material_temp, last_nonzero_nozzle_target, current_actual_nozzle_temp)
 ```
 
-- `new_material_temp` — what the tapped preset / load op requested.
+- `new_material_temp` — what the load op requested.
 - `last_nonzero_nozzle_target` — an **in-session latch** of the last non-zero nozzle target. It **survives the target cooling to 0**, so even a cold swap reheats to the old material's temp to purge it. Latched in `PrinterTemperatureState::update_from_status()` (per-`ExtruderInfo.last_nonzero_target`, per-extruder).
 - `current_actual_nozzle_temp` — covers a physically-hot nozzle whose target was already cleared.
 
@@ -1515,7 +1515,7 @@ load_target = max(new_material_temp, last_nonzero_nozzle_target, current_actual_
 **Which calls set `keep_previous_hot`.**
 | Call site | Flag | Rationale |
 |-----------|------|-----------|
-| Material preset tap (`handle_preset_button`, `handle_spool_preset_button`) | ✅ on | "I'm switching material" |
+| Material preset tap (`handle_preset_button`, `handle_spool_preset_button`, Home `PreheatWidget`) | ❌ off | a request for that temperature; load/unload apply the floor when the swap happens |
 | Op preheat (`start_preheat_for_op` — load/extrude/purge/etc.) | ✅ on | controller computes the max; replaced the old target-only check |
 | AMS load-with-preheat (`handle_load_with_preheat`) | ✅ on | skip/wait decision also uses `max(actual, latch)` so a cooled nozzle still reheats to purge |
 | Manual keypad entry (`handle_custom_nozzle_confirmed`) | ❌ off | deliberate override |

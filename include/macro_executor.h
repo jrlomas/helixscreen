@@ -40,7 +40,8 @@ void execute_macro_gcode(IMoonrakerAPI* api, const std::string& macro_name,
 
 /// Apply a whole-material preheat action using its configured macro policy.
 /// The temperature sender runs synchronously, before an additive macro, or alone
-/// when no macro is assigned. A heating macro replaces the temperature sender.
+/// when no macro is assigned or @p hw lacks it. A heating macro replaces the
+/// temperature sender.
 /// Call on the UI thread; the sender is never retained. Filament-change heating
 /// and individual heater controls do not use this policy.
 void execute_material_preheat(IMoonrakerAPI* api, const std::string& material_name,

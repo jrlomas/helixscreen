@@ -211,8 +211,17 @@ void execute_material_preheat(IMoonrakerAPI* api, const std::string& material_na
     const auto material = filament::find_material(material_name);
     const std::string key = material ? material->name : material_name;
     const auto* override = MaterialSettingsManager::instance().get_override(key);
-    const std::string macro = override ? override->preheat_macro.value_or("") : "";
+    std::string macro = override ? override->preheat_macro.value_or("") : "";
     const bool handles_heating = override && override->macro_handles_heating.value_or(true);
+
+    // Material overrides are shared across printers, so the macro may exist on
+    // another printer only. Heat to the preset rather than send a macro that fails.
+    if (!macro.empty() && !hw.has_macro(macro)) {
+        spdlog::warn("{} Preheat macro '{}' for {} not found on this printer; setting "
+                     "temperatures directly",
+                     caller_tag, macro, key);
+        macro.clear();
+    }
 
     if (macro.empty() || !handles_heating) {
         set_temperatures();
