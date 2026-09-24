@@ -346,18 +346,21 @@ it read off the one before.
 
 | Evidence | What counts |
 |----------|-------------|
-| Tag UID | A per-spool tag identifier nobody can set through the UI (Snapmaker `CARD_UID`). |
+| Tag UID | A per-spool tag identifier nobody can set through the UI (Snapmaker `CARD_UID`). A reader that has finished with a spool and found no tag counts too: it says the spool is untagged. |
 | Material and colour | Values decoded from the spool's tag in this insert. A value the firmware remembers across inserts (a colour set on the printer's own menu, a saved slot table) is **not** a reading of the new spool. |
 | Binding | A spool id the firmware names for the lane (AFC, Happy Hare, CFS flat schema), judged by the §5 re-bind rule. |
 
 | Verdict | When | What happens |
 |---------|------|--------------|
-| Different spool | The tag UIDs differ; or, with no UID on both sides, any of material or colour read on both sides differs; or the firmware names a different spool id | HelixScreen drops what described the previous spool: the user's declarations, the remembered copy, the Spoolman binding, the metered weight and the persisted record. The firmware's own reading stays and paints the lane. Nothing is written to firmware, which already holds the new spool's reading. |
-| Same spool | The tag UIDs match; or, with no UID on both sides, material **and** colour both match | Everything is kept, silently. Two spools of one material and colour are interchangeable; a change of manufacturer between them is the user's to correct. |
+| Different spool | The tag UIDs differ, or a finished read finds a tag where the previous spool had none or none where it had one; or, with no UID on either side, any of material or colour read on both sides differs; or the firmware names a different spool id | HelixScreen drops what described the previous spool: the user's declarations, the remembered copy, the Spoolman binding, the metered weight and the persisted record. The firmware's own reading stays and paints the lane. Nothing is written to firmware, which already holds the new spool's reading. |
+| Same spool | The tag UIDs match; or, with no UID on either side (or a read not yet finished), material **and** colour both match | Everything is kept, silently. Two spools of one material and colour are interchangeable; a change of manufacturer between them is the user's to correct. |
 | No evidence | Anything less, including every untagged spool | Everything is kept, and HelixScreen shows a non-blocking "same spool?" notice whose Clear button runs Clear Spool. The notice is not shown for a slot with no details to clear. |
 
-Materials compare without case; colours compare as exact RGB. A family match
-(`PLA` against `PLA-CF`) is a different spool. The verdict does not depend on
+Materials compare without case or surrounding whitespace; colours compare as
+exact RGB. A family match (`PLA` against `PLA-CF`) is a different spool. A
+backend that reads no colour reports none, never its no-colour sentinel as an
+RGB, and a multi-colour spool contributes its primary colour, the one the slot
+paints. The verdict does not depend on
 the print state: when the hardware says the slot holds a different spool,
 keeping the old details would describe a spool that is gone, so a runout
 reload mid-print clears too. The "same spool?" notice alone is withheld on
@@ -371,7 +374,23 @@ exactly as a different-spool verdict, so the fingerprint must be built from
 the same evidence fields: a fingerprint that includes a field the rule
 ignores would call a same-spool insert a swap.
 
-### Per backend
+### Current backend behaviour
+
+Until each backend is moved onto the insert rule, it keeps its own swap
+signal. This table is what ships today; each row is replaced by the one in the
+table after it as that backend moves.
+
+| Backend | Signal today |
+|---------|--------------|
+| AD5X IFS | A colour transition in `Adventurer5M.json` to a materially different RGB, treated as a swap |
+| Snapmaker U1 | A `CARD_UID` change on the RFID tag |
+| CFS | A change in the per-slot `material_type|color_value` composite |
+| QIDI Box | A change in the per-slot filament, colour and vendor table ids |
+| ACE | Any `EMPTY` to present transition, which clears the whole record |
+| AFC | A different positive per-lane `spool_id` (re-bind), or `0`/absent (eject, per the setting below) |
+| Happy Hare | The same split as AFC, on the per-gate `spool_id` |
+
+### Per backend, under the insert rule
 
 | Backend | Tag UID | Material and colour read off the spool | Binding | Verdict for an untagged insert |
 |---------|---------|----------------------------------------|---------|-------------------------------|

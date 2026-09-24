@@ -112,8 +112,14 @@ struct SpoolEvidence {
     std::string tag_uid;
     /// Material decoded from the spool. Empty when none was read.
     std::string material;
-    /// Colour decoded from the spool, 0xRRGGBB. nullopt when none was read.
+    /// Colour decoded from the spool, 0xRRGGBB, the primary colour of a
+    /// multi-colour spool. nullopt when none was read, never the no-colour
+    /// sentinel.
     std::optional<uint32_t> color_rgb;
+    /// The reader finished with this spool, so an empty tag_uid means the
+    /// spool carries no tag rather than "not read yet". A non-empty tag_uid
+    /// implies it.
+    bool tag_read_complete = false;
 };
 
 /// Whether the spool just inserted into a lane is the one that was there.
@@ -130,9 +136,10 @@ enum class InsertVerdict {
 /// off the one before. `before` is nullopt when no reading of the previous
 /// spool exists.
 ///
-/// A tag UID on both sides decides alone: a new tag is a new spool whatever
-/// its contents say, and the same tag is the same spool even when its
-/// contents were rewritten. Otherwise material and colour decide, and they
+/// A finished tag read on both sides decides alone when either found a tag:
+/// a new tag is a new spool whatever its contents say, the same tag is the
+/// same spool even when its contents were rewritten, and a tag appearing or
+/// disappearing is a different spool. Otherwise material and colour decide, and they
 /// must BOTH match to call it the same spool: two spools of one material and
 /// colour are interchangeable, and a manufacturer change between them is the
 /// user's to correct. Any field read on both sides that differs is a

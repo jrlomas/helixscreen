@@ -772,6 +772,45 @@ TEST_CASE("any field read on both sides that differs is a different spool", "[la
     }
 }
 
+namespace {
+
+SpoolEvidence untagged_read(std::string material, std::optional<uint32_t> rgb) {
+    SpoolEvidence e{"", std::move(material), rgb};
+    e.tag_read_complete = true;
+    return e;
+}
+
+} // namespace
+
+TEST_CASE("a finished tag read decides when a tag appears or disappears", "[lane][insert_rule]") {
+    SECTION("a tagged spool replacing an untagged one is a new spool") {
+        CHECK(classify_insert(untagged_read("PLA", 0xFF0000), tag("04A1", "PLA", 0xFF0000)) ==
+              InsertVerdict::DifferentSpool);
+    }
+    SECTION("an untagged spool replacing a tagged one is a new spool") {
+        CHECK(classify_insert(tag("04A1", "PLA", 0xFF0000), untagged_read("PLA", 0xFF0000)) ==
+              InsertVerdict::DifferentSpool);
+    }
+    SECTION("a read not yet finished falls through to material and colour") {
+        CHECK(classify_insert(tag("04A1", "PLA", 0xFF0000), read("PLA", 0xFF0000)) ==
+              InsertVerdict::SameSpool);
+        CHECK(classify_insert(read("PLA", 0xFF0000), tag("04A1", "PLA", 0xFF0000)) ==
+              InsertVerdict::SameSpool);
+    }
+    SECTION("two finished reads with no tag fall through to material and colour") {
+        CHECK(classify_insert(untagged_read("PLA", 0xFF0000), untagged_read("PLA", 0xFF0000)) ==
+              InsertVerdict::SameSpool);
+        CHECK(classify_insert(untagged_read("PLA", 0xFF0000), untagged_read("ABS", 0xFF0000)) ==
+              InsertVerdict::DifferentSpool);
+    }
+}
+
+TEST_CASE("material ignores surrounding whitespace", "[lane][insert_rule]") {
+    CHECK(classify_insert(read(" PLA ", 0xFF0000), read("pla", 0xFF0000)) ==
+          InsertVerdict::SameSpool);
+    CHECK(classify_insert(read("  ", 0xFF0000), read("", 0xFF0000)) == InsertVerdict::NoEvidence);
+}
+
 TEST_CASE("one matching field alone is not the same spool", "[lane][insert_rule]") {
     CHECK(classify_insert(read("PLA", std::nullopt), read("PLA", 0xFF0000)) ==
           InsertVerdict::NoEvidence);

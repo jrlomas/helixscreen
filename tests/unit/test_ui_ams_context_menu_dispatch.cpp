@@ -370,6 +370,20 @@ TEST_CASE_METHOD(LVGLUITestFixture,
         CHECK(backend->get_slot_info(0).spoolman_id == 0);
     }
 
+    SECTION("Clear does nothing once the lane changed since the notice") {
+        LifecycleGuard hold(PrintState::Idle);
+        helix::ui::offer_clear_after_unverified_insert(0);
+        REQUIRE(toasts.size() == 1);
+
+        helix::SlotInfo edited = backend->get_slot_info(0);
+        edited.material = "ASA";
+        REQUIRE(helix::test::apply_edit(*backend, 0, edited).success());
+        REQUIRE(backend->get_slot_info(0).material == "ASA");
+
+        REQUIRE(helix::ui::fire_last_toast_action());
+        CHECK(backend->get_slot_info(0).material == "ASA");
+    }
+
     SECTION("not offered on a lane with nothing to clear") {
         LifecycleGuard hold(PrintState::Idle);
         REQUIRE(helix::ui::ams_dispatch_backend_action(MenuAction::CLEAR_SPOOL, 1, nullptr));
