@@ -121,6 +121,8 @@ Inside the **Temperature Sensors** section, two dropdowns let you override auto-
 
 The **Auto** option shows the currently detected name in parentheses, or "(none detected)" when nothing matched.
 
+A chamber heater can supply the chamber temperature reading itself: when one is connected and no sensor is assigned, the heater's reported temperature is used. Naming a sensor here always wins for the reading; the heater keeps its target but the sensor becomes the temperature you see.
+
 ---
 
 **Next:** [Security & Screen Lock](security.md) | **Prev:** [Fans](fans.md) | [Back to User Guide](../USER_GUIDE.md)

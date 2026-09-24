@@ -64,11 +64,13 @@ actually trips on.
 
 ### One Makefile, three build verbs
 
-`make -j`, `make test`, and `make test-run` build disjoint artifacts. `make -j` (the default `all`
+`make -j` and `make test` build disjoint artifacts. `make -j` (the default `all`
 target, [`mk/rules.mk#"all: apply-patches generate-fonts $(TRANS_XML) splash watchdog $(TARGET) $(FBDEV_TARGET) verify-fbdev strip-both bluetooth-plugin"`](../../../mk/rules.mk#L123)) builds **only** `helix-screen`: patches, generated fonts, translations,
 splash, watchdog, the binary, stripping, and the optional Bluetooth plugin. `make test`
-([`mk/tests.mk#test`](../../../mk/tests.mk#L420)) builds **only** `helix-tests`; `make test-run` ([`mk/tests.mk`](../../../mk/tests.mk)) builds it and
-runs it as Catch2 shards across 3×cores processes with the `~[.] ~[slow]` filter. The split is a
+([`mk/tests.mk#test`](../../../mk/tests.mk#L420)) builds **only** `helix-tests`; `make unit-sweep` builds it and
+runs it as Catch2 shards, one per core, with the `~[.] ~[slow]` filter, and `make full-test-run`
+adds the bats shell suite as the completion gate. `make test-run` runs nothing by design: it prints
+which of these fits the question you are asking and exits non-zero. The split is a
 speed feature and a trap: after a C++ change, rebuild the artifact you are about to use — running a
 stale `helix-tests` against new code, or a stale `helix-screen` against new XML, silently verifies
 nothing. XML-only changes need no rebuild at all (`ui_xml/` loads at runtime); relaunch the binary.
@@ -245,7 +247,7 @@ end-user installer — modular POSIX shell with KIAUH and Moonraker-updater inte
 - **Switching `PLATFORM_TARGET` or compilers auto-cleans the native build dir** ([`mk/rules.mk#TOOLCHAIN_MARKER`](../../../mk/rules.mk#L53)). Don't be surprised by a full rebuild after toggling between `native` and a cross target, or the first build after a toolchain upgrade; cross targets are isolated in `build/<target>/` and unaffected. The compiler is in the marker because a mixed build dir fails quietly: GCC and clang mangle a function-local `std::string` static differently, so the linker keeps both copies and one translation unit's write is invisible to another.
 - **Dev panels are native-only by default; remote control is not.** Every developer build carries the helixctl server, cross included, so a test rig is drivable from your desk. Only the production packaging path drops it — `make package-*` sets `HELIX_PACKAGING=1` ([`mk/cross.mk`](../../../mk/cross.mk)), CI's release workflow passes it, and `make release-*` refuses a binary whose `.build-features` stamp says otherwise. Opt a dev build out with `make PLATFORM_TARGET=pi ENABLE_REMOTE_CONTROL=no` (`Makefile:463`).
 - **A new patch file must be wired into [`mk/patches.mk`](../../../mk/patches.mk)** — an apply block plus, if it touches new files, an entry in `LVGL_PATCHED_FILES`/`LIBHV_PATCHED_FILES`. The stamp's wiring check fails the build if you forget, which is the polite outcome; before that check existed, unwired patches silently never applied.
-- **Test builds reach the patch stamp only through the PCH prerequisite** ([`mk/rules.mk`](../../../mk/rules.mk)); the `test` target does not itself gate on `apply-patches`. After a patch red-line or submodule bump, run `make -j` or `make reapply-patches` — don't assume `make test-run` re-verified the tree (#1212).
+- **Test builds reach the patch stamp only through the PCH prerequisite** ([`mk/rules.mk`](../../../mk/rules.mk)); the `test` target does not itself gate on `apply-patches`. After a patch red-line or submodule bump, run `make -j` or `make reapply-patches` - don't assume `make unit-sweep` re-verified the tree (#1212).
 - **Never hand-edit `lib/lvgl/` or `lib/libhv/` sources directly** — changes there belong in `patches/*.patch`, because the next `git submodule update` wipes direct edits. `lib/helix-xml` is the deliberate exception: it is our own submodule, edited and committed in place, never patched.
 - **Generated assets regenerate; don't hand-edit them.** New icons mean [`include/ui_icon_codepoints.h`](../../../include/ui_icon_codepoints.h) plus `make regen-fonts` plus a rebuild; user-facing strings flow through `make translation-sync` / `make translations`. If a font or translation "won't update", you are probably editing the generated file.
 - **There is no `sonicpad` target.** The Sonic Pad runs the `pi32` binary on SonicPad-Debian; QIDI runs the `pi` binary. Device support is often a release-artifact question, not a new-platform question — check what the installer auto-detects before adding a target.

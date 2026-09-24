@@ -114,6 +114,17 @@ present on both families and are now emitted on both.
 
 `AmsBackendCfs::macro_variant_` is latched in the constructor by querying `PrinterDetector::is_creality_k1()`. All member operations (`load_filament`, `unload_filament`, `change_tool`) thread `macro_variant_` into the gcode helpers. Static call sites without an explicit variant default to `K2` to preserve existing test behavior.
 
+**`total_slots == 0` means the box size is unknown, not "no bays" (#1623).** The count is
+committed only by the first unit-bearing box frame, and the print-start slot-mapping
+restore fires on klippy READY, unordered against that frame - its recovery record is
+deleted when a send is refused, so a pre-frame refusal would lose the mapping for good.
+Every slot-index bound therefore goes through `slot_index_ceiling()`
+(`src/printer/ams_backend_cfs.cpp`): the attached unit count once known, the TNN alphabet
+(4 units x 4 bays = 16) until then, which keeps the pre-frame window permissive while a
+4-slot CFS still refuses index 7. A remap's **tool number** is a routing-table key, not a
+bay, so its bound stays the TNN alphabet even after the unit count is known - a slicer or
+Creality's own UI can hold a high key while fewer units are attached.
+
 ### Endless spool (auto-refill)
 
 CFS reports `Available` + `ReadOnly` + `FirmwareManaged`, with `enabled` derived from
