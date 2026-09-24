@@ -2730,3 +2730,36 @@ EOF
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
+
+# --- Slot-index validation lives on the subscription base (#1624) ---
+#
+# AmsSubscriptionBackend::validate_slot_index() is the one answer to "is this
+# slot index valid", bounded by slot_index_bound_locked(). A backend that
+# declares its own validate_slot_index() hides the base's for every caller in
+# that class, and its copy picks its own bound, which is how six copies came to
+# use four. A backend whose range is not total_slots overrides the bound.
+
+slot_validator_offenders() {
+    local root="${1:-include}"
+    grep -nE 'AmsError[[:space:]]+validate_slot_index(_locked)?[[:space:]]*\(' \
+        "$root"/ams_backend_*.h 2>/dev/null || true
+}
+
+@test "no AMS backend header declares its own validate_slot_index()" {
+    run slot_validator_offenders include
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "the slot-validator gate fires on a backend-local copy" {
+    local d="${BATS_TEST_TMPDIR}/offender"
+    mkdir -p "$d"
+    cat > "$d/ams_backend_thing.h" <<'EOF'
+class AmsBackendThing : public AmsSubscriptionBackend {
+    AmsError validate_slot_index(int slot_index) const;
+};
+EOF
+    run slot_validator_offenders "$d"
+    [ "$status" -eq 0 ]
+    contains "validate_slot_index" "$output"
+}
