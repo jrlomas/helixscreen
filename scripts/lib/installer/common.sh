@@ -171,6 +171,43 @@ path_sudo() {
     [ -w "$dir" ] && echo "" || echo "$SUDO"
 }
 
+# Pin the trust properties of helixscreen.env: the launcher's env-file parse
+# evaluates the file's lines, so its owner and mode decide who can run code as
+# the launcher's user (root on every SysV firmware device). State 0644 and
+# service-user ownership instead of inheriting whatever the staging umask left
+# behind; with no KLIPPER_USER (root-run firmware) the file stays root's.
+# Resolves through the printer_data symlink: pinning the link's own mode does
+# nothing to the file the launcher reads. The launcher re-checks on every load,
+# so a file this helper never reached is refused rather than evaluated.
+pin_env_file() {
+    local file="${INSTALL_DIR}/config/helixscreen.env"
+    [ -f "$file" ] || return 0
+
+    local real="$file"
+    if [ -L "$file" ]; then
+        real=$(readlink -f "$file" 2>/dev/null || echo "$file")
+    fi
+    [ -n "$real" ] && [ -f "$real" ] || real="$file"
+
+    # Failures warn rather than fail the install, but never silently: an
+    # unpinned file is one the launcher refuses on every boot, and an
+    # unreported chmod is indistinguishable from a pinned one at install time.
+    if ! $(file_sudo "$real") chmod 0644 "$real" 2>/dev/null; then
+        log_warn "pin_env_file: could not chmod 0644 '$real' (the launcher will refuse this file until fixed)"
+    fi
+
+    local user="${KLIPPER_USER:-}"
+    if [ -n "$user" ]; then
+        local group="$user"
+        if type _resolve_primary_group >/dev/null 2>&1; then
+            group=$(_resolve_primary_group "$user")
+        fi
+        if ! $(file_sudo "$real") chown "${user}:${group}" "$real" 2>/dev/null; then
+            log_warn "pin_env_file: could not chown ${user}:${group} '$real'"
+        fi
+    fi
+}
+
 # Resolve the directory holding the user's Klipper/Moonraker config files.
 #
 # Almost every Klipper install puts them in <klipper home>/printer_data/config,
@@ -297,6 +334,7 @@ error_handler() {
                 log_success "helixscreen.env restored from previous install"
             fi
         fi
+        pin_env_file
     fi
 
     # A ledger stop_competing_uis already wrote records a disable (chmod -x on

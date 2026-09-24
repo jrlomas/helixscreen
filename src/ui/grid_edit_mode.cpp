@@ -658,33 +658,47 @@ void GridEditMode::create_selection_chrome(lv_obj_t* widget) {
         break;
     }
     const int BTN_OVERHANG = BTN_SIZE / 4; // 25% shift outside widget bounds
-    remove_btn_ = lv_obj_create(container_);
-    lv_obj_t* x_btn = remove_btn_;
-    lv_obj_add_flag(x_btn, LV_OBJ_FLAG_FLOATING);
-    lv_obj_set_pos(x_btn, rel_x1 + widget_w - BTN_SIZE + BTN_OVERHANG, rel_y1 - BTN_OVERHANG);
-    lv_obj_set_size(x_btn, BTN_SIZE, BTN_SIZE);
-    lv_obj_set_style_radius(x_btn, LV_RADIUS_CIRCLE, 0);
-    lv_color_t btn_bg = theme_manager_get_color("text");
-    lv_obj_set_style_bg_color(x_btn, btn_bg, 0);
-    lv_obj_set_style_bg_opa(x_btn, LV_OPA_50, 0);
-    lv_obj_set_style_border_width(x_btn, 0, 0);
-    lv_obj_set_style_pad_all(x_btn, 0, 0);
-    lv_obj_add_flag(x_btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(x_btn, LV_OBJ_FLAG_SCROLLABLE);
+    // The pills are text-colour fills at half opacity that float out over the
+    // grid container, so the icon colour is contrasted against that composite
+    // over the screen background, not against the raw fill. In the shipped
+    // themes the screen composite is the harder of the two backings the pill
+    // overlaps (screen and widget card) for the icon polarity chosen.
+    // The icons are small glyphs, so they are held to the 4.5:1 body-text
+    // bar rather than the 4:1 large-text default.
+    constexpr double kChromeIconContrast = 4.5;
+    const lv_color_t btn_bg = theme_manager_get_color("text");
+    const lv_color_t pill_backing = theme_manager_get_color("screen_bg");
+    const lv_color_t icon_color = theme_manager_get_contrast_adjusted_text(
+        theme_manager_get_color("text"), btn_bg, pill_backing, LV_OPA_50, kChromeIconContrast);
 
-    // The pill is a solid fill, so its icon starts from the palette text colour and shifts
-    // toward its pole as 4:1 needs
-    lv_obj_t* x_label = lv_label_create(x_btn);
-    lv_label_set_text(x_label, ICON_TRASH);
-    lv_obj_set_style_text_font(x_label, chrome_icon_font, 0);
-    lv_obj_set_style_text_color(
-        x_label, theme_manager_get_contrast_adjusted_text(theme_manager_get_color("text"), btn_bg),
-        0);
-    lv_obj_center(x_label);
+    // Shared construction for the trash and configure pills: floating circle,
+    // translucent fill, centred icon. Dynamic overlay chrome uses
+    // lv_obj_add_event_cb (declarative-UI exception).
+    auto make_chrome_pill = [&](int x, int y, const char* icon) {
+        lv_obj_t* btn = lv_obj_create(container_);
+        lv_obj_add_flag(btn, LV_OBJ_FLAG_FLOATING);
+        lv_obj_set_pos(btn, x, y);
+        lv_obj_set_size(btn, BTN_SIZE, BTN_SIZE);
+        lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(btn, btn_bg, 0);
+        lv_obj_set_style_bg_opa(btn, LV_OPA_50, 0);
+        lv_obj_set_style_border_width(btn, 0, 0);
+        lv_obj_set_style_pad_all(btn, 0, 0);
+        lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
 
-    // (X) button click handler — exception: dynamic overlay chrome uses lv_obj_add_event_cb
+        lv_obj_t* label = lv_label_create(btn);
+        lv_label_set_text(label, icon);
+        lv_obj_set_style_text_font(label, chrome_icon_font, 0);
+        lv_obj_set_style_text_color(label, icon_color, 0);
+        lv_obj_center(label);
+        return btn;
+    };
+
+    remove_btn_ = make_chrome_pill(rel_x1 + widget_w - BTN_SIZE + BTN_OVERHANG,
+                                   rel_y1 - BTN_OVERHANG, ICON_TRASH);
     lv_obj_add_event_cb(
-        x_btn,
+        remove_btn_,
         [](lv_event_t* ev) {
             auto* self = static_cast<GridEditMode*>(lv_event_get_user_data(ev));
             self->remove_selected_widget();
@@ -697,30 +711,10 @@ void GridEditMode::create_selection_chrome(lv_obj_t* widget) {
         auto* raw = lv_obj_get_user_data(widget);
         auto* pw = raw ? static_cast<PanelWidget*>(raw) : nullptr;
         if (pw && pw->has_edit_configure()) {
-            configure_btn_ = lv_obj_create(container_);
-            lv_obj_t* cfg_btn = configure_btn_;
-            lv_obj_add_flag(cfg_btn, LV_OBJ_FLAG_FLOATING);
-            lv_obj_set_pos(cfg_btn, rel_x1 - BTN_OVERHANG, rel_y1 - BTN_OVERHANG);
-            lv_obj_set_size(cfg_btn, BTN_SIZE, BTN_SIZE);
-            lv_obj_set_style_radius(cfg_btn, LV_RADIUS_CIRCLE, 0);
-            lv_obj_set_style_bg_color(cfg_btn, btn_bg, 0);
-            lv_obj_set_style_bg_opa(cfg_btn, LV_OPA_50, 0);
-            lv_obj_set_style_border_width(cfg_btn, 0, 0);
-            lv_obj_set_style_pad_all(cfg_btn, 0, 0);
-            lv_obj_add_flag(cfg_btn, LV_OBJ_FLAG_CLICKABLE);
-            lv_obj_remove_flag(cfg_btn, LV_OBJ_FLAG_SCROLLABLE);
-
-            lv_obj_t* cfg_label = lv_label_create(cfg_btn);
-            lv_label_set_text(cfg_label, ICON_SETTINGS);
-            lv_obj_set_style_text_font(cfg_label, chrome_icon_font, 0);
-            lv_obj_set_style_text_color(
-                cfg_label,
-                theme_manager_get_contrast_adjusted_text(theme_manager_get_color("text"), btn_bg),
-                0);
-            lv_obj_center(cfg_label);
-
+            configure_btn_ =
+                make_chrome_pill(rel_x1 - BTN_OVERHANG, rel_y1 - BTN_OVERHANG, ICON_SETTINGS);
             lv_obj_add_event_cb(
-                cfg_btn,
+                configure_btn_,
                 [](lv_event_t* ev) {
                     auto* self = static_cast<GridEditMode*>(lv_event_get_user_data(ev));
                     self->configure_selected_widget();
@@ -1764,17 +1758,19 @@ helix::DropInput GridEditMode::drop_input() const {
     // measured against the border of the page the release lands in.
     in.past_right_border = helix::cross_page_past_right_border(
         settled_content_area().x2, drag_widget_pos_.x, lv_area_get_width(&widget_area));
+    in.past_left_border = helix::cross_page_past_left_border(
+        settled_content_area().x1, drag_widget_pos_.x, lv_area_get_width(&widget_area));
     return in;
 }
 
 int GridEditMode::commit_drop(const std::string& widget_id, const helix::DropResolution& drop) {
     int page = page_index_;
     if (drop.outcome == helix::DropOutcome::CreatePage) {
-        page = config_->add_page(config_->generate_page_id());
+        page = config_->add_page(config_->generate_page_id(), drop.prepend_page ? 0 : -1);
         if (page < 0) {
             return -1;
         }
-        spdlog::info("[GridEditMode] Drop past the last page: created page {} at ({},{})", page,
+        spdlog::info("[GridEditMode] Drop on a page border: created page {} at ({},{})", page,
                      drop.col, drop.row);
     } else if (drop.outcome != helix::DropOutcome::Move) {
         return -1;
@@ -1822,15 +1818,22 @@ void GridEditMode::handle_drag_end(lv_event_t* /*e*/) {
     tear_down_gesture();
     helix::PageSetChange change;
     change.page_count = pages_before;
-    change.page_added = drop.outcome == helix::DropOutcome::CreatePage;
-    change.focus_page = landed_page;
-    if (landed_page != origin_page && prune_empty_page(origin_page)) {
+    change.page_added = drop.outcome == helix::DropOutcome::CreatePage && !drop.prepend_page;
+    change.page_prepended = drop.outcome == helix::DropOutcome::CreatePage && drop.prepend_page;
+    // A prepended page is numbered -1 before the change, the tile the drag sat
+    // on past the first page's left border; every other landing names the page
+    // it landed on.
+    change.focus_page = drop.prepend_page ? -1 : landed_page;
+    // A page created before the first shifts the origin page one later, so the
+    // prune that empties it reads it after the shift.
+    const int origin_after = drop.prepend_page ? origin_page + 1 : origin_page;
+    if (landed_page != origin_after && prune_empty_page(origin_after)) {
         change.removed_page = origin_page;
     }
     // One save for the whole commit: the move, a page it created and a page it
     // emptied.
     config_->save();
-    if (change.page_added || change.removed_page >= 0) {
+    if (change.page_added || change.page_prepended || change.removed_page >= 0) {
         // The panel rebuilds the carousel on the next tick, and the session goes
         // with the entry; the grid's own deferred rebuild would run against
         // containers that rebuild replaces.
@@ -2549,8 +2552,8 @@ void GridEditMode::rebuild_lattice() {
         delete_page_btn_ = lv_obj_create(shield_);
         lv_obj_set_size(delete_page_btn_, DEL_BTN_SIZE, DEL_BTN_SIZE);
         lv_obj_set_style_radius(delete_page_btn_, LV_RADIUS_CIRCLE, 0);
-        lv_obj_set_style_bg_color(delete_page_btn_,
-                                  ThemeManager::instance().current_palette().danger, 0);
+        const lv_color_t del_bg = ThemeManager::instance().current_palette().danger;
+        lv_obj_set_style_bg_color(delete_page_btn_, del_bg, 0);
         lv_obj_set_style_bg_opa(delete_page_btn_, LV_OPA_80, 0);
         lv_obj_set_style_border_width(delete_page_btn_, 0, 0);
         lv_obj_set_style_pad_all(delete_page_btn_, 0, 0);
@@ -2558,11 +2561,15 @@ void GridEditMode::rebuild_lattice() {
         lv_obj_remove_flag(delete_page_btn_, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_pos(delete_page_btn_, w - DEL_BTN_SIZE - DEL_BTN_MARGIN, DEL_BTN_MARGIN);
 
-        // Trash icon label
+        // Trash icon label: contrasted against the danger fill composited over
+        // the screen background at the pill's opacity
         lv_obj_t* icon = lv_label_create(delete_page_btn_);
         lv_label_set_text(icon, ICON_TRASH);
         lv_obj_set_style_text_font(icon, &mdi_icons_16, 0);
-        lv_obj_set_style_text_color(icon, lv_color_white(), 0);
+        lv_obj_set_style_text_color(icon,
+                                    theme_manager_get_contrast_adjusted_text(
+                                        lv_color_white(), del_bg, screen_bg, LV_OPA_80),
+                                    0);
         lv_obj_center(icon);
 
         // Click handler

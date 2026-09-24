@@ -169,7 +169,11 @@ class PanelWidgetConfig {
     }
 
     /// Add a new empty page. Returns the index of the new page, or -1 if at cap.
-    int add_page(const std::string& name = "");
+    /// A @p position of -1 appends past the last page; any other position is
+    /// clamped into [0, page_count] and the page is inserted there, shifting
+    /// every later page and the main page's index with it. The one place a page
+    /// is created: every affordance routes through it.
+    int add_page(const std::string& name = "", int position = -1);
 
     /// Remove a page by index. Returns true if removed.
     /// Refuses, returning false, the last remaining page, the main page and an

@@ -6,8 +6,9 @@
 
 /**
  * @file grid_edit_drop.h
- * @brief What a released home-grid edit drag does: move its widget, create the
- * page past the last one, go back to its origin page, or snap back.
+ * @brief What a released home-grid edit drag does: move its widget, create a
+ * page before the first or past the last one, go back to its origin page, or
+ * snap back.
  *
  * Free of live objects: GridEditMode gathers the release into a DropInput and
  * the scoped page's occupancy, and commits what resolve_drop() returns
@@ -29,11 +30,12 @@ struct DropInput {
     int target_row = -1;
     bool has_next_page_slot = false; ///< A page past the last one can be created
     bool past_right_border = false; ///< The widget's majority lies past the page frame's right edge
+    bool past_left_border = false;  ///< The widget's majority lies past the page frame's left edge
 };
 
 enum class DropOutcome {
     Move,           ///< The entry lands on the scoped page at the resolved cell
-    CreatePage,     ///< A page is added past the last one, and the entry lands on it
+    CreatePage,     ///< A page is added, and the entry lands on it
     ReturnToOrigin, ///< Nothing commits, and the drag goes back to its origin page first
     Cancel,         ///< Nothing commits, on the origin page: the widget snaps back
 };
@@ -42,6 +44,9 @@ struct DropResolution {
     DropOutcome outcome = DropOutcome::Cancel;
     int col = -1; ///< Landing cell for Move and CreatePage
     int row = -1;
+    /// A CreatePage lands before the first page, in the leftmost columns its
+    /// span allows, instead of past the last one.
+    bool prepend_page = false;
 };
 
 /**
@@ -50,8 +55,9 @@ struct DropResolution {
  * - It creates a page when cross_page_drop_creates_page() holds for the scope
  *   the release lands in. On the next-page slot the entry lands at the previewed
  *   cell; from the last page's border, in the rightmost columns its span allows,
- *   on the previewed row. A landing cell that does not fit an empty page creates
- *   nothing.
+ *   on the previewed row; from the first page's left border, in the leftmost
+ *   columns on the previewed row, on a page that lands before the first.
+ *   A landing cell that does not fit an empty page creates nothing.
  * - Otherwise, on a config page, it moves the entry to the previewed cell when
  *   that cell or the page differs from the origin and the span fits
  *   @p occupancy there.

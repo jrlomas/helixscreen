@@ -918,7 +918,7 @@ static std::optional<bool> flat_gate_filament_present(const nlohmann::json& box_
 // is not a chosen value: the module builds each profile entry with
 // `str(value.get(key, ""))`, so a key that is present but JSON null
 // stringifies to Python's "None" rather than falling back to the "" default.
-// Every text field can therefore arrive as "None" — surfacing it would put a
+// Every text field can therefore arrive as "None"; surfacing it would put a
 // spool named "None" made of "None" on screen.
 static std::string flat_text_field(const nlohmann::json& slot_json, const char* key) {
     std::string v = helix::json_util::safe_string(slot_json, key);
@@ -1205,7 +1205,7 @@ static std::string compose_cfs_flat_uid(const std::string& material, const std::
 // identity writeback (_BOX_SLOT_SET) writes MATERIAL/BRAND/NAME/COLOR, so
 // those four fields are what distinguishes one tagged bay from another;
 // spoolman_id is excluded because it is a binding, not a tag property, and
-// reconcile_lane_binding owns its rules. All four empty reads as no signal —
+// reconcile_lane_binding owns its rules. All four empty reads as no signal:
 // an occupied bay whose tag did not read is not a fingerprint, for the same
 // reason a stock sentinel read is not (see build_cfs_slot_uid): it must not
 // overwrite the baseline and mask the swap the next good read reports.
@@ -2356,7 +2356,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
             // frames, and that echo is the flat fingerprint changing to exactly
             // what we pushed. slot_set_gcode uppercases MATERIAL, so the
             // expectation carries the uppercased spelling the echo will report.
-            // With no baseline yet there is nothing to guard — the first
+            // With no baseline yet there is nothing to guard; the first
             // observation for a slot is always a baseline and never clears.
             if (!slot_material.empty() && rfid_tracker_.baseline(global_index)) {
                 staged_echoes = rfid_tracker_.expect_any_of(

@@ -15,6 +15,14 @@ ResolvedLane resolve(const LaneSources& sources) {
         out.present = *sources.sensed->present;
     }
 
+    // Docking is sensed too, and by hardware that cannot see filament: a
+    // physical tool changer answers this question and never the one above, so
+    // a consumer asking about filament reads no answer rather than one about
+    // toolheads.
+    if (sources.sensed.has_value() && sources.sensed->tool_docked.has_value()) {
+        out.tool_docked = *sources.sensed->tool_docked;
+    }
+
     // Identity, highest priority last so each pass overwrites the weaker one.
     // A source that did not observe a field leaves the weaker source's value
     // standing, which is why every field is an optional rather than a sentinel.

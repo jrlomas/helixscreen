@@ -124,8 +124,8 @@ class ScopedHomeConfig {
         // place those beside this config's own.
         std::set<std::string> listed;
         for (const auto& page : pages) {
-            for (const auto& widget : page["widgets"]) {
-                listed.insert(widget["id"].get<std::string>());
+            for (const auto& widget : page.at("widgets")) {
+                listed.insert(widget.at("id").get<std::string>());
             }
         }
         for (const auto& def : helix::get_all_widget_defs()) {
@@ -610,6 +610,14 @@ class EditHomeFixture : public LVGLTestFixture {
         return HomePanelTestAccess::next_page_container(panel());
     }
 
+    /// A point on the slot's grid, clear of its centred + group, while the
+    /// carousel rests on the slot's tile.
+    lv_point_t slot_empty_spot() {
+        lv_area_t a;
+        lv_obj_get_coords(slot_container(), &a);
+        return {static_cast<int32_t>(a.x1 + 20), static_cast<int32_t>(a.y1 + 20)};
+    }
+
     /// The carousel tile holding the next-page slot, at index page_count().
     lv_obj_t* slot_tile() {
         const std::vector<lv_obj_t*>& tiles = carousel_state()->real_tiles;
@@ -880,7 +888,8 @@ class EditHomeFixture : public LVGLTestFixture {
             }
         }
         if (slot_container()) {
-            CHECK(slot_in_reach() == (GridEditModeTestAccess::dragging(grid()) || on_slot));
+            // The slot's tile is the + affordance: always shown, drag or not.
+            CHECK(slot_in_reach());
         }
     }
 
@@ -1102,6 +1111,39 @@ class EditHomeFixture : public LVGLTestFixture {
         REQUIRE(GridEditModeTestAccess::dragging(grid()));
         return drag;
     }
+
+    /// Grab @p widget on the first page, carry it to the page's left edge, and
+    /// hold there at the read cadence for long enough that the push crosses the
+    /// border and a dwell could have run out after it. Nothing sits before the
+    /// first page, so no flip happens. Returns with the drag live past the
+    /// first page's left border.
+    SlotDrag drag_past_left_border(lv_obj_t* widget) {
+        const lv_point_t c = center_of(widget);
+        indev.grab(c.x, c.y);
+        indev.move(c.x - past_drag_threshold(), c.y);
+        REQUIRE(GridEditModeTestAccess::dragging(grid()));
+
+        SlotDrag drag;
+        drag.start = {c.x - past_drag_threshold(), c.y};
+        drag.pointer = {settled_page_area().x1, c.y};
+        int carousel_page = current_page();
+        int session_page = grid().page_index();
+        indev.move(drag.pointer.x, drag.pointer.y);
+        indev.hold(2 * helix::CROSS_PAGE_DWELL_MS, [&]() {
+            if (current_page() != carousel_page) {
+                ++drag.carousel_flips;
+                carousel_page = current_page();
+            }
+            if (grid().page_index() != session_page) {
+                ++drag.session_flips;
+                session_page = grid().page_index();
+            }
+        });
+        REQUIRE(grid().page_index() == 0);
+        REQUIRE(lv_anim_count_running() == 0);
+        REQUIRE(GridEditModeTestAccess::dragging(grid()));
+        return drag;
+    }
 };
 
 } // namespace
@@ -1124,29 +1166,28 @@ TEST_CASE_METHOD(EditHomeFixture, "edit mode keeps the carousel swipeable with n
 }
 
 TEST_CASE_METHOD(EditHomeFixture,
-                 "a single-page home has nothing to swipe to, in edit mode or out of it",
+                 "a single-page home swipes to the next-page slot's +, in edit mode or out of it",
                  "[1638][edit-swipe][home][grid_edit]") {
     build_home(1, 1);
 
-    // A single page has nowhere to swipe to, although the next-page slot sits
-    // past it.
+    // The only page has the slot's + tile past it, so the strip swipes.
     REQUIRE(carousel_state()->real_page_count == 1);
     REQUIRE(slot_container() != nullptr);
-    REQUIRE_FALSE(scroll_live());
-    REQUIRE_FALSE(slot_in_reach());
+    CHECK(scroll_live());
+    CHECK(slot_in_reach());
 
     enter_edit_mode();
     REQUIRE_FALSE(grid().owns_gesture());
 
-    // Edit mode swipes by page count too: the slot is a drop target for a drag,
-    // not a page to swipe to.
-    CHECK_FALSE(scroll_live());
-    CHECK_FALSE(slot_in_reach());
+    // Edit mode swipes to the + too: the slot carries the affordance that adds
+    // a page, and stays a drag's drop target.
+    CHECK(scroll_live());
+    CHECK(slot_in_reach());
 
     panel().exit_grid_edit_mode();
     REQUIRE_FALSE(HomePanelTestAccess::edit_mode_active(panel()));
-    CHECK_FALSE(scroll_live());
-    CHECK_FALSE(slot_in_reach());
+    CHECK(scroll_live());
+    CHECK(slot_in_reach());
 }
 
 TEST_CASE_METHOD(EditHomeFixture, "leaving edit mode re-enables the carousel swipe",
@@ -1274,8 +1315,8 @@ TEST_CASE_METHOD(EditHomeFixture,
     REQUIRE(GridEditModeTestAccess::press_armed(grid()));
     CHECK_FALSE(scroll_live());
     CHECK(swipe_policy() == CarouselSwipe::Disabled);
-    // An armed press is no drag yet: the next-page slot stays out of reach.
-    CHECK_FALSE(slot_in_reach());
+    // An armed press is no drag yet: the + tile stays within reach regardless.
+    CHECK(slot_in_reach());
 
     // Still pressed, moved less than the drag threshold: the lock holds.
     const int nudge = GridEditModeTestAccess::drag_threshold_px() / 2;
@@ -1443,10 +1484,10 @@ TEST_CASE_METHOD(
     CHECK_FALSE(GridEditModeTestAccess::dragging(grid()));
     CHECK(grid().page_index() == 0);
     CHECK(lv_obj_get_parent(widget) == page(0));
-    // The drag went home before the slot went out of reach: the carousel is on
-    // page 0 and slides there from the slot, whose tile is hidden.
+    // The drag went home with the slot still in reach: the carousel is on
+    // page 0 and slides there from the slot.
     CHECK(current_page() == 0);
-    CHECK_FALSE(slot_in_reach());
+    CHECK(slot_in_reach());
     CHECK(lv_anim_get(scroller(), nullptr) != nullptr);
 
     indev.release(drag.pointer.x, drag.pointer.y);
@@ -1461,8 +1502,8 @@ TEST_CASE_METHOD(
     CHECK(grid().page_index() == 0);
     CHECK(config().page_count() == 1);
     CHECK(count_on_page(0, "temperature") == 1);
-    CHECK_FALSE(slot_in_reach());
-    CHECK_FALSE(scroll_live()); // a single page has nothing to swipe to
+    CHECK(slot_in_reach());
+    CHECK(scroll_live()); // the + tile past the single page swipes
 }
 
 TEST_CASE_METHOD(EditHomeFixture, "a drag and its drop leave no timer of the edit session behind",
@@ -2264,7 +2305,7 @@ TEST_CASE_METHOD(EditHomeFixture,
     build_home(1, 1); // a single page with temperature on it, and the slot past it
     lv_obj_t* widget = widget_on(0, "temperature");
     enter_edit_mode();
-    REQUIRE_FALSE(slot_in_reach()); // no drag yet
+    REQUIRE(slot_in_reach()); // the + tile is shown before any drag too
 
     const SlotDrag drag = drag_onto_slot(widget);
 
@@ -2313,12 +2354,12 @@ TEST_CASE_METHOD(EditHomeFixture,
     CHECK(count_on_page(1, "temperature") == 1); // the drop landed on the page it created
 
     // The rebuilt carousel has a container per config page and a new slot past
-    // them, out of reach with no drag; the session and the carousel are on the
-    // new page.
+    // them, its + tile in reach with no drag; the session and the carousel are
+    // on the new page.
     CHECK(page_count() == 2);
     REQUIRE(HomePanelTestAccess::edit_mode_active(panel()));
     REQUIRE(slot_container() != nullptr);
-    CHECK_FALSE(slot_in_reach());
+    CHECK(slot_in_reach());
     check_session_on_screen();
 }
 
@@ -2431,7 +2472,7 @@ TEST_CASE_METHOD(EditHomeFixture,
     CHECK(current_page() == 0);
     CHECK(config().page_count() == 1);
     CHECK(count_on_page(0, "temperature") == 1);
-    CHECK_FALSE(slot_in_reach());
+    CHECK(slot_in_reach());
 }
 
 TEST_CASE_METHOD(EditHomeFixture, "a release right after a carried flip drops on the landing page",
@@ -2565,7 +2606,146 @@ TEST_CASE_METHOD(EditHomeFixture,
     check_session_on_screen();
 }
 
-TEST_CASE_METHOD(EditHomeFixture, "outside edit mode no swipe or goto reaches the next-page slot",
+TEST_CASE_METHOD(EditHomeFixture,
+                 "a tap on the + the next-page slot carries adds a page and lands on it",
+                 "[1638][edit-swipe][home][grid_edit]") {
+    build_home(); // two pages, below the page cap
+    show_page(1);
+
+    // The + sits centered on the slot's tile, one tile past the last page.
+    helix::ui::carousel_goto_tile(carousel(), page_count(), /*animate=*/false);
+    settle();
+    lv_obj_t* plus = lv_obj_find_by_name(slot_tile(), "add_page_button");
+    REQUIRE(plus != nullptr);
+    const lv_point_t c = center_of(plus);
+
+    const PageSetChange change = watch_page_set_change();
+    indev.press(c.x, c.y);
+    indev.release(c.x, c.y);
+    REQUIRE(config().page_count() == 3);
+
+    // The tap went through the same landing every page-set change takes: the
+    // carousel comes up on the added page, and nothing else scrolls.
+    run_page_set_rebuild(change, 2);
+    CHECK(HomePanelTestAccess::active_page(panel()) == 2);
+    CHECK_FALSE(HomePanelTestAccess::edit_mode_active(panel()));
+    // The added page is empty, and a slot sits past it.
+    CHECK(count_on_page(2, "temperature") == 0);
+    CHECK(count_on_page(2, "fan") == 0);
+    REQUIRE(slot_container() != nullptr);
+    CHECK(carousel_state()->real_page_count == 3);
+    // The pages the tap did not touch kept their widgets.
+    CHECK(count_on_page(0, "temperature") == 1);
+    CHECK(count_on_page(1, "fan") == 1);
+}
+
+TEST_CASE_METHOD(EditHomeFixture,
+                 "a tap on the + in edit mode adds a page and re-scopes the session onto it",
+                 "[1638][edit-swipe][home][grid_edit]") {
+    build_home();
+    enter_edit_mode(1);
+
+    // Resting on the slot's tile, the session stays scoped to the page it
+    // edited while the + sits tappable on the slot.
+    helix::ui::carousel_goto_tile(carousel(), page_count(), /*animate=*/false);
+    settle();
+    CHECK(grid().page_index() == 1);
+    lv_obj_t* plus = lv_obj_find_by_name(slot_tile(), "add_page_button");
+    REQUIRE(plus != nullptr);
+    const lv_point_t c = center_of(plus);
+
+    const PageSetChange change = watch_page_set_change();
+    indev.press(c.x, c.y);
+    indev.release(c.x, c.y);
+    REQUIRE(config().page_count() == 3);
+
+    run_page_set_rebuild(change, 2);
+    REQUIRE(HomePanelTestAccess::edit_mode_active(panel()));
+    // The session followed the landing onto the added page.
+    CHECK(grid().page_index() == 2);
+    check_session_on_screen();
+}
+
+TEST_CASE_METHOD(EditHomeFixture, "at the page cap there is no + to tap and no slot to drop on",
+                 "[1638][edit-swipe][home][grid_edit]") {
+    const int cap = static_cast<int>(helix::MAX_PAGES);
+    build_home(2, cap);
+    REQUIRE_FALSE(config().can_add_page());
+
+    // No slot component exists at the cap, so no + rides on any tile.
+    REQUIRE(slot_container() == nullptr);
+    CHECK(lv_obj_find_by_name(HomePanelTestAccess::panel_root(panel()), "add_page_button") ==
+          nullptr);
+    CHECK(carousel_state()->real_page_count == cap);
+
+    // Neither edge creates a page: a drag past the first page's left border
+    // leaves the widget on its page.
+    enter_edit_mode();
+    const SlotDrag drag = drag_past_left_border(widget_on(0, "temperature"));
+    const PageSetChange change = watch_page_set_change();
+    indev.release(drag.pointer.x, drag.pointer.y);
+    settle();
+    CHECK(config().page_count() == static_cast<size_t>(cap));
+    CHECK(count_on_page(0, "temperature") == 1);
+    check_session_on_screen();
+}
+
+TEST_CASE_METHOD(EditHomeFixture,
+                 "a drag past the first page's left border creates a page before it",
+                 "[1638][edit-swipe][home][grid_edit]") {
+    build_home(); // temperature on page 0, fan on page 1
+    lv_obj_t* widget = widget_on(0, "temperature");
+    enter_edit_mode();
+
+    const SlotDrag drag = drag_past_left_border(widget);
+    // Nothing sits before the first page, so the hold flips nothing.
+    CHECK(drag.carousel_flips == 0);
+    CHECK(drag.session_flips == 0);
+    REQUIRE(config().page_count() == 2); // nothing is created mid-drag
+
+    const PageSetChange change = watch_page_set_change();
+    indev.release(drag.pointer.x, drag.pointer.y);
+    REQUIRE(config().page_count() == 3);
+
+    // The carousel was on the old first page, which the rebuild comes up on
+    // renumbered; one slide lands on the page the drop created before it.
+    run_page_set_rebuild(change, 1, 0);
+    // The widget landed on the created page; the pages shifted one later,
+    // their widgets intact.
+    CHECK(count_on_page(0, "temperature") == 1);
+    CHECK(count_on_page(2, "fan") == 1);
+    CHECK(config().page_id(0) == "page_3"); // generate_page_id() minted it
+    CHECK(config().page_id(1) == "main");   // the old first page
+    CHECK(config().page_id(2) == "second");
+    REQUIRE(HomePanelTestAccess::edit_mode_active(panel()));
+    check_session_on_screen();
+    settle();
+}
+
+TEST_CASE_METHOD(EditHomeFixture,
+                 "a drag past the first page's left border on a single-page home creates page 0",
+                 "[1638][edit-swipe][home][grid_edit]") {
+    build_home(1, 1); // temperature alone on the main page
+    lv_obj_t* widget = widget_on(0, "temperature");
+    enter_edit_mode();
+
+    const SlotDrag drag = drag_past_left_border(widget);
+    const PageSetChange change = watch_page_set_change();
+    indev.release(drag.pointer.x, drag.pointer.y);
+
+    // The origin page is the main page, so the prune that empties a moved-from
+    // page spares it: the created page takes index 0, the old one index 1.
+    REQUIRE(config().page_count() == 2);
+    run_page_set_rebuild(change, 1, 0);
+    CHECK(count_on_page(0, "temperature") == 1);
+    CHECK(count_on_page(1, "temperature") == 0);
+    CHECK(config().page_id(0) == "page_3");
+    CHECK(config().page_id(1) == "main");
+    check_session_on_screen();
+}
+
+TEST_CASE_METHOD(EditHomeFixture,
+                 "outside edit mode a swipe or goto reaches the next-page slot's +",
                  "[1638][edit-swipe][home][grid_edit]") {
     build_home(); // two pages, below the page cap
     REQUIRE(slot_container() != nullptr);
@@ -2581,15 +2761,26 @@ TEST_CASE_METHOD(EditHomeFixture, "outside edit mode no swipe or goto reaches th
         settle();
     }
 
+    // The slot's tile holds the + that adds a page, so it is within reach
+    // outside edit mode too; the panel's page stays the last config page.
     CHECK_FALSE(HomePanelTestAccess::edit_mode_active(panel()));
-    CHECK(current_page() == 1);
+    CHECK(current_page() == page_count());
     CHECK(HomePanelTestAccess::active_page(panel()) == 1);
-    CHECK(lv_obj_get_scroll_x(scroller()) == tile_w);
+    CHECK(lv_obj_get_scroll_x(scroller()) == page_count() * tile_w);
+
+    // The slot's grid is not a page: a hold on its empty area enters no edit
+    // mode, which would otherwise scope the session to the off-screen last page.
+    const lv_point_t spot = slot_empty_spot();
+    indev.press(spot.x, spot.y);
+    indev.hold(indev.long_press_hold_ms());
+    indev.release(spot.x, spot.y);
+    settle();
+    CHECK_FALSE(HomePanelTestAccess::edit_mode_active(panel()));
+    CHECK(current_page() == page_count());
 }
 
 TEST_CASE_METHOD(EditHomeFixture,
-                 "in edit mode an idle swipe stops at the last page, and a drag reaches the "
-                 "next-page slot",
+                 "in edit mode an idle swipe reaches the next-page slot, and a drag drops on it",
                  "[1638][edit-swipe][home][grid_edit]") {
     build_home(); // 'fan' alone on page 1, the last page, below the page cap
     enter_edit_mode(1);
@@ -2606,14 +2797,25 @@ TEST_CASE_METHOD(EditHomeFixture,
         settle();
     }
 
-    // With no drag the slot is out of reach, and the carousel stays on the last
-    // page.
-    CHECK(current_page() == 1);
-    CHECK(lv_obj_get_scroll_x(scroller()) == tile_w);
+    // The carousel rests on the slot, whose + tile is in reach with no drag;
+    // the session stays scoped to the last page, which is a config page.
+    CHECK(current_page() == page_count());
+    CHECK(lv_obj_get_scroll_x(scroller()) == page_count() * tile_w);
     CHECK(grid().page_index() == 1);
-    CHECK_FALSE(slot_in_reach());
+    CHECK(slot_in_reach());
 
-    // A drag brings the slot within reach, and the widget rides onto it.
+    // A hold on the slot's empty area opens no widget catalog: the session's
+    // grid is the off-screen last page.
+    const lv_point_t spot = slot_empty_spot();
+    indev.press(spot.x, spot.y);
+    indev.hold(indev.long_press_hold_ms());
+    indev.release(spot.x, spot.y);
+    settle();
+    CHECK_FALSE(grid().is_catalog_open());
+    CHECK(grid().page_index() == 1);
+
+    // A drag carries a widget onto the slot as before.
+    show_page(1);
     const SlotDrag drag = drag_onto_slot(widget_on(1, "fan"));
     CHECK(drag.carousel_flips == 1);
     CHECK(current_page() == page_count());
@@ -3016,7 +3218,7 @@ TEST_CASE_METHOD(EditHomeFixture, "an edge long-press resize owns the gesture, n
         CHECK_FALSE(scroll_live());
         indev.move(edge_x + past_drag_threshold(), mid_y); // cross the threshold
         CHECK(GridEditModeTestAccess::resizing(grid()));   // resize, not a move-drag
-        CHECK_FALSE(slot_in_reach());                      // a resize drops nowhere
+        CHECK(slot_in_reach()); // a resize drops nowhere, but the + tile stays shown
 
         indev.release(edge_x + past_drag_threshold(), mid_y);
         CHECK(scroll_live());
@@ -3446,7 +3648,7 @@ TEST_CASE_METHOD(EditHomeFixture,
 }
 
 TEST_CASE_METHOD(EditHomeFixture,
-                 "a carousel rebuilt in edit mode keeps the next-page slot out of reach",
+                 "a carousel rebuilt in edit mode keeps the next-page slot in reach",
                  "[1638][edit-swipe][home][grid_edit]") {
     build_home(); // 'fan' alone on page 1
     lv_obj_t* fan = widget_on(1, "fan");
@@ -3468,10 +3670,10 @@ TEST_CASE_METHOD(EditHomeFixture,
     REQUIRE_FALSE(grid().owns_gesture());
 
     // The rebuilt carousel holds the edit policy with no gesture live: its
-    // single page has nothing to swipe to, and the slot is out of reach.
+    // single page has the + tile past it to swipe to, in reach.
     REQUIRE(slot_container() != nullptr);
-    CHECK_FALSE(scroll_live());
-    CHECK_FALSE(slot_in_reach());
+    CHECK(scroll_live());
+    CHECK(slot_in_reach());
 }
 
 TEST_CASE_METHOD(EditHomeFixture,

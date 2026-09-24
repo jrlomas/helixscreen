@@ -17,6 +17,7 @@
 using helix::cross_page_drop_creates_page;
 using helix::cross_page_edge_zone_px;
 using helix::cross_page_note_dwell_flip;
+using helix::cross_page_past_left_border;
 using helix::cross_page_past_right_border;
 using helix::CROSS_PAGE_PUSH_CAP_SLOP_PX;
 using helix::cross_page_push_px_per_s;
@@ -270,8 +271,8 @@ TEST_CASE("a flip spends the zone stay for both triggers", "[1638][grid_edit][cr
     }
 }
 
-TEST_CASE("a drop creates a page anywhere on the page past the last, and from the last page only "
-          "past its right border",
+TEST_CASE("a drop creates a page anywhere on the page past the last, from the last page only "
+          "past its right border, and from the first page past its left border",
           "[1638][grid_edit][cross_page]") {
     const int x = FRAME_X2 - zone_px() - 20;
     const int past_right = FRAME_X2 - WIDE_W / 2 + 30;
@@ -297,6 +298,11 @@ TEST_CASE("a drop creates a page anywhere on the page past the last, and from th
         {"majority inside on the page past the last", inside, x - 60, 2, true, true},
         {"majority left on the page past the last", past_left, left_of_zone, 2, true, true},
         {"inside the page past the last with no page to create", inside, x - 60, 2, false, false},
+        {"majority left on the first page", past_left, left_of_zone, 0, true, true},
+        {"majority inside on the first page", inside, x - 60, 0, true, false},
+        {"majority right on the first page", past_right, x, 0, true, false},
+        {"majority left on the first page with no page to create", past_left, left_of_zone, 0,
+         false, false},
     };
     for (const Row& row : rows) {
         INFO(row.what);
@@ -308,7 +314,9 @@ TEST_CASE("a drop creates a page anywhere on the page past the last, and from th
         const CrossPageStep step = cross_page_step(state, in);
         const bool past_right =
             cross_page_past_right_border(in.frame_x2, step.widget_left, in.widget_width);
+        const bool past_left_border =
+            cross_page_past_left_border(in.frame_x1, step.widget_left, in.widget_width);
         CHECK(cross_page_drop_creates_page(in.page_index, in.page_count, in.has_next_page_slot,
-                                           past_right) == row.creates);
+                                           past_right, past_left_border) == row.creates);
     }
 }

@@ -894,3 +894,33 @@ TEST_CASE_METHOD(LVGLTestFixture, "a wake restores rendering even when the panel
 
     DisplayManagerTestAccess::set_display(mgr, nullptr);
 }
+
+TEST_CASE_METHOD(LVGLTestFixture, "panel power-off hides the screen until the flush is restored",
+                 "[application][display][sleep][poweroff][screen_hide]") {
+    // Nothing is drawn while the panel is off, so a widget waiting on its own
+    // draw must see the screen as hidden rather than stalled.
+    REQUIRE_FALSE(helix::active_screen_hide_hold().is_held());
+    DisplayManager mgr;
+    DisplayManagerTestAccess::set_backend(
+        mgr, std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true));
+    DisplayManagerTestAccess::set_use_hardware_blank(mgr, false);
+    DisplayManagerTestAccess::set_use_power_off(mgr, true);
+    lv_display_t* disp = lv_display_get_default();
+    DisplayManagerTestAccess::set_display(mgr, disp);
+    lv_display_set_flush_cb(disp, test_sentinel_flush_cb);
+    lv_obj_t* screen = lv_screen_active();
+    REQUIRE_FALSE(lv_obj_has_flag(screen, LV_OBJ_FLAG_HIDDEN));
+
+    DisplayManagerTestAccess::enter_sleep(mgr, 60);
+    REQUIRE(DisplayManagerTestAccess::last_sleep_mechanism(mgr) ==
+            DisplayManager::SleepMechanism::PanelPowerOff);
+    REQUIRE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
+    CHECK(lv_obj_has_flag(screen, LV_OBJ_FLAG_HIDDEN));
+
+    DisplayManagerTestAccess::restore_display_output(mgr);
+    CHECK_FALSE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
+    CHECK_FALSE(lv_obj_has_flag(screen, LV_OBJ_FLAG_HIDDEN));
+    CHECK_FALSE(helix::active_screen_hide_hold().is_held());
+
+    DisplayManagerTestAccess::set_display(mgr, nullptr);
+}
