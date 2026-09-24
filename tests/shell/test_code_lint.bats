@@ -2736,8 +2736,8 @@ EOF
 # AmsSubscriptionBackend::validate_slot_index() is the one answer to "is this
 # slot index valid", bounded by slot_index_bound_locked(). A backend that
 # declares its own validate_slot_index() hides the base's for every caller in
-# that class, and its copy picks its own bound, which is how six copies came to
-# use four. A backend whose range is not total_slots overrides the bound.
+# that class, and each copy picks its own bound. A backend whose range is not
+# total_slots overrides the bound.
 
 slot_validator_offenders() {
     local root="${1:-include}"

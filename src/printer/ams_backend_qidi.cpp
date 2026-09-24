@@ -1300,6 +1300,9 @@ AmsError AmsBackendQidi::do_unload_filament(int slot_index) {
             return err;
         } else if (const SlotInfo* slot = system_info_.get_slot_global(slot_index)) {
             unload_temp = load_temp_for_slot(*slot);
+        } else {
+            return AmsErrorHelper::invalid_slot(lane_noun(), slot_index,
+                                                slot_index_bound_locked() - 1);
         }
     }
 

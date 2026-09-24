@@ -5646,9 +5646,8 @@ AmsError AmsBackendAfc::set_tool_mapping_impl(int tool_number, int slot_index) {
             return AmsErrorHelper::tool_out_of_range(tool_number);
         }
 
-        if (!slots_.is_valid_index(slot_index)) {
-            return AmsErrorHelper::invalid_slot(lane_noun(), slot_index,
-                                                system_info_.total_slots - 1);
+        if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+            return err;
         }
 
         // Update registry tool mapping (handles clearing old mappings internally)
