@@ -114,7 +114,7 @@ down clears the stale override on the first frame.
 `clear_slot_override()` clears locally (erase + `clear_async` against the
 shared `lane_data` namespace) and then erases what the firmware remembers:
 three `SAVE_VARIABLE VARIABLE={filament,color,vendor}_slot<N> VALUE=0` writes,
-gated by `refuse_if_printing()`. Table row ids start at 1, so 0 names no row
+sent mid-print too because `SAVE_VARIABLE` moves nothing. Table row ids start at 1, so 0 names no row
 and the slot reads as no identity - the clear erases what the slot remembers,
 not what the hardware can read, and a tagged spool re-populates the ids on its
 next insert, boot or RFID read. Vendor is the one field where 0 is a real row

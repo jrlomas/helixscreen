@@ -4953,18 +4953,20 @@ void AmsBackendAfc::persist_override(int slot_index, const SlotInfo& info,
 }
 
 void AmsBackendAfc::clear_slot_override(int slot_index) {
+    std::string lane_name;
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        lane_name = slots_.name_of(slot_index);
         overrides_.erase(slot_index);
         helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
 
         // Also reset the override-exclusive fields on the live slot, so the
         // clear shows up in the very next get_slot_info(). AFC has no concept
         // of brand / spool_name / total weight / colour name, so no firmware
-        // update will ever clear them for us — dropping only the store entry
+        // update will ever clear them for us; dropping only the store entry
         // would leave the previous spool's identity on screen indefinitely.
-        // colour and material are left alone: those DO come from the parse, so
-        // the lane's actual firmware values should surface.
+        // colour and material come from the parse, and the writes below empty
+        // them in firmware.
         if (helix::printer::SlotEntry* entry = slots_.get_mut(slot_index)) {
             entry->info.brand.clear();
             entry->info.clear_spoolman_link();
@@ -4978,6 +4980,17 @@ void AmsBackendAfc::clear_slot_override(int slot_index) {
             entry->info.catalog_id.clear();
             entry->info.product_name.clear();
         }
+    }
+    // An empty SET_SPOOL_ID only runs AFC's clear_values() when AFC has
+    // Spoolman configured and the lane does not remember its spool, so an
+    // unlinked lane keeps what SET_MATERIAL / SET_COLOR / SET_WEIGHT stored
+    // unless it is emptied field by field. An empty COLOR stores a bare '#',
+    // which the parse reads as no colour; WEIGHT=0 is what clear_values()
+    // writes.
+    if (!lane_name.empty()) {
+        execute_gcode(fmt::format("SET_MATERIAL LANE={} MATERIAL=", lane_name));
+        execute_gcode(fmt::format("SET_COLOR LANE={} COLOR=", lane_name));
+        execute_gcode(fmt::format("SET_WEIGHT LANE={} WEIGHT=0", lane_name));
     }
     emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
     if (override_store_) {
