@@ -192,6 +192,17 @@ Access by tapping **Tune** during an active print.
 | Speed % | 50-200% | Overall print speed multiplier |
 | Flow % | 75-125% | Extrusion rate multiplier |
 
+Next to each percentage, the overlay shows what it means right now: how fast the toolhead is actually moving in mm/s (0 when it is standing still) and the live volumetric flow in mm³/s.
+
+**Percent or mm/s.** Anything marked with the ⇄ swap icon switches between the two ways of reading speed and flow. Tap the Speed / Flow line on the Print Status screen, or either readout here, and both places change together:
+
+- **Percent** (default): Print Status shows `Speed 100% · Flow 100%`, and the overlay leads with the percentages.
+- **mm/s**: Print Status shows the live toolhead speed and volumetric flow, for example `Speed 148 mm/s · Flow 11.8 mm³/s`, and the overlay leads with those, with the percentage beside them.
+
+The choice is remembered. On the smallest screens Print Status has no Speed / Flow line, but the overlay readouts still switch.
+
+> **Note:** Volumetric flow assumes 1.75 mm filament. On a 2.85 mm printer it reads low.
+
 The overlay also includes Z-Offset / baby-step controls (see below).
 
 **When to adjust:**
