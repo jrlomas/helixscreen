@@ -106,7 +106,28 @@ HelixScreen data root". `HELIX_DATA_DIR` overrides the lookup.
 | Sound | Compiled in, same as K1/AD5X (`HELIX_HAS_SOUND` + tracker via the jz_pwm backend); whether this board has `/dev/jz_pwm` hardware is unverified |
 | Output | `build/mips/bin/helix-screen`, `helix-splash`; CA bundle in `build/mips/certs/` |
 
+<<<<<<< HEAD
 ## On-device bring-up
+=======
+## Printer detection and preset
+
+`assets/config/printer_database.json` carries a `flashforge_creator_5_pro` entry; the
+preset (`assets/config/presets/creator5.json`, rotate 90) is applied when it wins. Two
+firmware families run on this hardware — the FlashForge fork (K4C5, with `ff_*` printer
+objects) and Z-Mod (`ghzserg/z_c5pro`, no `ff_*` objects but `gcode_button extruder_grab1..4`).
+One entry fingerprints both: `ff_toolchange` names the K4C5 firmware, `gcode_button
+extruder_grab1` names the changer on either firmware, and `zmod_color` is corroborating-only
+because AD5X Z-Mod carries it too. The disambiguation runs both ways: the Creator 5 Pro
+entry excludes on `zmod_ifs`/`SET_EXTRUDER_SLOT` (AD5X IFS), and the AD5X entry excludes on
+`gcode_button extruder_grab1`. The directional pairs are pinned in
+`tests/unit/test_printer_detector.cpp` (`[creator5]`).
+
+Preset macro buttons for macros a firmware does not ship (e.g. `TOOLCHANGE_PARK` on Z-Mod)
+render greyed out, not dead: `ControlsPanel::update_macro_button` keeps the button visible
+and disabled when the macro is absent.
+
+## On-device bring-up (open work)
+>>>>>>> 529759b91 (fix(creator5): database entry detects both C5 firmwares and cannot steal the AD5X)
 
 1. **Sanity on the printer** — done: `bin/helix-screen --version` runs. (`readelf -h` on
    the binary must list `nan2008` in Flags — without it the kernel answers ENOEXEC.)
@@ -132,7 +153,8 @@ HelixScreen data root". `HELIX_DATA_DIR` overrides the lookup.
    (fingerprint: `ff_toolchange` / `gcode_button extruder_grab1`, 4 extruders) and preset
    `creator5.json` (4 hotends, chamber heater, part/chamber fans, LED, `fd_ex*` runout
    switches, rotate 90). Without it the detector picked the AD5X (same hostname, MIPS,
-   4 tools); the AD5X entry excludes on `MOTOR_GRAB`. Uses the `generic-corexy` image.
+   4 tools); the AD5X entry excludes on `gcode_button extruder_grab1`. Uses the
+   `generic-corexy` image.
 6. **Toolchanger model** — 4 extruders (`extruder`, `extruder1..3`), 4 filament switch +
    4 motion sensors (`fd_ex0..3`, `fm_ex0..3`), `heater_generic chamber_heater`,
    `fan_generic fanM106` (part), `heater_fan heat_fan*`, `fan_generic chamber_*_fan`,

@@ -694,11 +694,11 @@
           "reason": "CoreXY kinematics"
         },
         {
-          "type": "macro_exclude",
-          "field": "macros",
-          "pattern": "MOTOR_GRAB",
+          "type": "object_exclude",
+          "field": "printer_objects",
+          "pattern": "gcode_button extruder_grab1",
           "confidence": 0,
-          "reason": "Exclude FlashForge Creator 5 Pro (4-head tool changer with MOTOR_GRAB dock macros; separate entry)"
+          "reason": "Exclude FlashForge Creator 5 Pro (head-dock grab sensors on both its firmwares; separate entry)"
         }
       ]
     },
@@ -722,7 +722,7 @@
           "field": "printer_objects",
           "pattern": "gcode_button extruder_grab1",
           "confidence": 95,
-          "reason": "Head-dock grab sensor (stock FlashForge 4-head changer)"
+          "reason": "Head-dock grab sensor; names Z-Mod C5 (grab1..4) and the stock changer alike (grab0..3)"
         },
         {
           "type": "tool_count",
@@ -737,6 +737,21 @@
           "pattern": "SET_EXTRUDER_SLOT",
           "confidence": 0,
           "reason": "Exclude AD5X (IFS, not a head changer)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "zmod_color",
+          "confidence": 60,
+          "corroborating": true,
+          "reason": "Z-Mod firmware lineage (also on AD5X Z-Mod - support, never establish)"
+        },
+        {
+          "type": "object_exclude",
+          "field": "printer_objects",
+          "pattern": "zmod_ifs",
+          "confidence": 0,
+          "reason": "Exclude AD5X Z-Mod IFS (object form of the SET_EXTRUDER_SLOT macro exclude)"
         }
       ],
       "toolhead_style": "default"
