@@ -294,7 +294,7 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
 }
 
 // ============================================================================
-// Config tests — add_page
+// Config tests: add_page
 // ============================================================================
 
 TEST_CASE_METHOD(PanelWidgetConfigFixture,

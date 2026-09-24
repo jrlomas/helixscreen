@@ -610,6 +610,14 @@ class EditHomeFixture : public LVGLTestFixture {
         return HomePanelTestAccess::next_page_container(panel());
     }
 
+    /// A point on the slot's grid, clear of its centred + group, while the
+    /// carousel rests on the slot's tile.
+    lv_point_t slot_empty_spot() {
+        lv_area_t a;
+        lv_obj_get_coords(slot_container(), &a);
+        return {static_cast<int32_t>(a.x1 + 20), static_cast<int32_t>(a.y1 + 20)};
+    }
+
     /// The carousel tile holding the next-page slot, at index page_count().
     lv_obj_t* slot_tile() {
         const std::vector<lv_obj_t*>& tiles = carousel_state()->real_tiles;
@@ -2759,6 +2767,16 @@ TEST_CASE_METHOD(EditHomeFixture,
     CHECK(current_page() == page_count());
     CHECK(HomePanelTestAccess::active_page(panel()) == 1);
     CHECK(lv_obj_get_scroll_x(scroller()) == page_count() * tile_w);
+
+    // The slot's grid is not a page: a hold on its empty area enters no edit
+    // mode, which would otherwise scope the session to the off-screen last page.
+    const lv_point_t spot = slot_empty_spot();
+    indev.press(spot.x, spot.y);
+    indev.hold(indev.long_press_hold_ms());
+    indev.release(spot.x, spot.y);
+    settle();
+    CHECK_FALSE(HomePanelTestAccess::edit_mode_active(panel()));
+    CHECK(current_page() == page_count());
 }
 
 TEST_CASE_METHOD(EditHomeFixture,
@@ -2785,6 +2803,16 @@ TEST_CASE_METHOD(EditHomeFixture,
     CHECK(lv_obj_get_scroll_x(scroller()) == page_count() * tile_w);
     CHECK(grid().page_index() == 1);
     CHECK(slot_in_reach());
+
+    // A hold on the slot's empty area opens no widget catalog: the session's
+    // grid is the off-screen last page.
+    const lv_point_t spot = slot_empty_spot();
+    indev.press(spot.x, spot.y);
+    indev.hold(indev.long_press_hold_ms());
+    indev.release(spot.x, spot.y);
+    settle();
+    CHECK_FALSE(grid().is_catalog_open());
+    CHECK(grid().page_index() == 1);
 
     // A drag carries a widget onto the slot as before.
     show_page(1);
