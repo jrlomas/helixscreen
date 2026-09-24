@@ -378,8 +378,8 @@ class AmsSubscriptionBackend : public AmsBackend {
 
     /// This backend's echo guard, or nullptr when it does not write identity
     /// back to firmware. A store other writers co-author can hold the mirror
-    /// of the backend's own write, so the resync files those records through
-    /// the guard the same way a live frame is filed.
+    /// of the backend's own write, so the resync strips from those records
+    /// any field still equal to a standing declaration.
     ///
     /// The returned guard stays under this backend's mutex_ discipline; the
     /// resync takes the lock around its consult.

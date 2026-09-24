@@ -209,9 +209,13 @@ TEST_CASE("abandoning a staged write leaves nothing to withhold", "[lane][echo]"
     CHECK(record.material == "PETG");
 }
 
-TEST_CASE("a second edit replaces the declaration the first armed", "[lane][echo]") {
+TEST_CASE("a later edit carries forward the fields it does not restate", "[lane][echo]") {
     OwnWriteEchoes echoes = armed();
 
+    // Only the material moved this time. The write the edit triggers still
+    // re-sends every identity field, so the un-restated brand and colour are
+    // as much this backend's own echo as the material is; a restated field
+    // replaces the value it carried in with.
     Observation second(ObservationSource::LocalUser);
     second.material = "ABS";
     echoes.stage(0, second);
@@ -219,11 +223,65 @@ TEST_CASE("a second edit replaces the declaration the first armed", "[lane][echo
 
     Observation record = echoed();
     record.material = "ABS";
-    CHECK(echoes.withhold(0, "TAG-A", record) == 1);
+    CHECK(echoes.withhold(0, "TAG-A", record) == 3);
+    CHECK_FALSE(record.material.has_value());
+    CHECK_FALSE(record.brand.has_value());
+    CHECK_FALSE(record.color_rgb.has_value());
+}
+
+TEST_CASE("a staging that declares nothing inherits the standing declaration", "[lane][echo]") {
+    OwnWriteEchoes echoes = armed();
+
+    // What user_edit_observation() returns for an edit that moved nothing
+    // suppressible: a weight, or a colour cleared to the sentinel. The write
+    // still re-sends what the earlier edit chose, so the predecessor's
+    // declaration survives the restage rather than the slot arming nothing.
+    Observation none(ObservationSource::LocalUser);
+    none.remaining_weight_g = 750.0F;
+    echoes.stage(0, none);
+    echoes.arm(0, "TAG-A");
+
+    CHECK(echoes.staged(0) != nullptr);
+    Observation record = echoed();
+    CHECK(echoes.withhold(0, "TAG-A", record) == 3);
+}
+
+TEST_CASE("a restage against a different boundary drops the standing declaration", "[lane][echo]") {
+    OwnWriteEchoes echoes = armed();
+
+    // The write was made against a different spool than the predecessor
+    // named: what went to the old one explains nothing read now.
+    Observation second(ObservationSource::LocalUser);
+    second.material = "ABS";
+    echoes.stage(0, second);
+    echoes.arm(0, "TAG-B");
+
+    Observation record = echoed();
+    record.material = "ABS";
+    CHECK(echoes.withhold(0, "TAG-B", record) == 1);
     CHECK_FALSE(record.material.has_value());
     CHECK(record.brand == "Polymaker");
     REQUIRE(record.color_rgb.has_value());
     CHECK(*record.color_rgb == 0x00FF00u);
+}
+
+TEST_CASE("a failed dispatch restores the predecessor it suspended", "[lane][echo]") {
+    OwnWriteEchoes echoes = armed();
+
+    Observation second(ObservationSource::LocalUser);
+    second.material = "ABS";
+    const std::uint64_t staged_sequence = echoes.stage(0, second);
+
+    // The second write never went out, so its echo is not coming. The first
+    // edit's write did go out and firmware is still repeating it, so the
+    // predecessor's suppression stands again rather than both dying.
+    echoes.abandon(0, staged_sequence);
+
+    Observation record = echoed();
+    CHECK(echoes.withhold(0, "TAG-A", record) == 3);
+    CHECK_FALSE(record.material.has_value());
+    CHECK_FALSE(record.brand.has_value());
+    CHECK_FALSE(record.color_rgb.has_value());
 }
 
 TEST_CASE("an abandon naming a superseded staging is a no-op", "[lane][echo]") {
@@ -254,6 +312,44 @@ TEST_CASE("an abandon naming a superseded staging is a no-op", "[lane][echo]") {
     after.material = "ABS";
     CHECK(echoes.withhold(0, "TAG-A", after) == 0);
     CHECK(after.material == "ABS");
+}
+
+TEST_CASE("a frame that clears a field releases its declaration", "[lane][echo]") {
+    OwnWriteEchoes echoes = armed();
+
+    // The producer carried the key and it read as a clear. There is no value
+    // to differ from, but "no value" is a statement about the field, not
+    // silence, so the material declaration ends while brand and colour stand.
+    Observation record(ObservationSource::VendorCache);
+    Observation cleared(ObservationSource::VendorCache);
+    cleared.material = std::string{};
+    CHECK(echoes.withhold(0, "TAG-A", record, cleared) == 0);
+
+    Observation later = echoed();
+    CHECK(echoes.withhold(0, "TAG-A", later) == 2);
+    CHECK(later.material == "PETG");
+    CHECK_FALSE(later.brand.has_value());
+    CHECK_FALSE(later.color_rgb.has_value());
+}
+
+TEST_CASE("clearing every declared field abandons the guard", "[lane][echo]") {
+    OwnWriteEchoes echoes = armed();
+
+    Observation record(ObservationSource::VendorCache);
+    Observation cleared(ObservationSource::VendorCache);
+    cleared.material = std::string{};
+    cleared.brand = std::string{};
+    cleared.color_rgb = 0u;
+    CHECK(echoes.withhold(0, "TAG-A", record, cleared) == 0);
+    CHECK(echoes.staged(0) == nullptr);
+
+    // Nothing is declared any more, so the producer's word files whole.
+    Observation after = echoed();
+    CHECK(echoes.withhold(0, "TAG-A", after) == 0);
+    CHECK(after.material == "PETG");
+    CHECK(after.brand == "Polymaker");
+    REQUIRE(after.color_rgb.has_value());
+    CHECK(*after.color_rgb == 0x00FF00u);
 }
 
 TEST_CASE("slots do not share a declaration", "[lane][echo]") {

@@ -76,6 +76,19 @@ bool declares_anything(const Observation& obs) {
 
 std::uint64_t OwnWriteEchoes::stage(int slot_index, Observation declared) {
     Entry& entry = entries_[slot_index];
+    // Stash an armed predecessor for arm() to carry forward: the next edit
+    // declares only what moved, while its write re-sends every identity
+    // field, so the un-restated declarations still explain the echoes.
+    entry.carry_armed = entry.armed;
+    if (entry.armed) {
+        entry.carry_declared = std::move(entry.declared);
+        entry.carry_boundary = std::move(entry.boundary);
+        entry.carry_sequence = entry.sequence;
+    } else {
+        entry.carry_declared = Observation{ObservationSource::LocalUser};
+        entry.carry_boundary.clear();
+        entry.carry_sequence = 0;
+    }
     entry.declared = std::move(declared);
     entry.boundary.clear();
     entry.armed = false;
@@ -92,12 +105,33 @@ void OwnWriteEchoes::arm(int slot_index, std::string boundary) {
     auto it = entries_.find(slot_index);
     if (it == entries_.end())
         return;
-    if (!declares_anything(it->second.declared)) {
+    Entry& entry = it->second;
+    if (entry.carry_armed) {
+        if (entry.carry_boundary == boundary) {
+            // Fill the fields this declaration does not restate; a restated
+            // field keeps its new value by not being empty here. The carry
+            // itself stays: a failed dispatch restores the predecessor
+            // through the matched abandon().
+            for_each_suppressible([&entry](auto member) {
+                auto& mine = entry.declared.*member;
+                if (!mine.has_value())
+                    mine = entry.carry_declared.*member;
+            });
+        } else {
+            // The write went to a different spool than the predecessor named,
+            // so the predecessor's echo explains nothing read now.
+            entry.carry_armed = false;
+            entry.carry_declared = Observation{ObservationSource::LocalUser};
+            entry.carry_boundary.clear();
+            entry.carry_sequence = 0;
+        }
+    }
+    if (!declares_anything(entry.declared)) {
         entries_.erase(it);
         return;
     }
-    it->second.boundary = std::move(boundary);
-    it->second.armed = true;
+    entry.boundary = std::move(boundary);
+    entry.armed = true;
 }
 
 void OwnWriteEchoes::abandon(int slot_index) {
@@ -106,13 +140,25 @@ void OwnWriteEchoes::abandon(int slot_index) {
 
 void OwnWriteEchoes::abandon(int slot_index, std::uint64_t staged_sequence) {
     auto it = entries_.find(slot_index);
-    if (it != entries_.end() && it->second.sequence == staged_sequence) {
-        entries_.erase(it);
+    if (it == entries_.end() || it->second.sequence != staged_sequence)
+        return;
+    if (it->second.carry_armed) {
+        // The failed write's echo is not coming; the predecessor's went out
+        // and firmware is still repeating it, so its suppression stands
+        // again under its own stamp, which a duplicated failure answer can
+        // no longer reach.
+        it->second.declared = std::move(it->second.carry_declared);
+        it->second.boundary = std::move(it->second.carry_boundary);
+        it->second.armed = true;
+        it->second.sequence = it->second.carry_sequence;
+        it->second.carry_armed = false;
+        return;
     }
+    entries_.erase(it);
 }
 
 int OwnWriteEchoes::withhold(int slot_index, const std::string& boundary,
-                             Observation& producer_record) {
+                             Observation& producer_record, const Observation& cleared) {
     auto it = entries_.find(slot_index);
     if (it == entries_.end() || !it->second.armed)
         return 0;
@@ -127,6 +173,14 @@ int OwnWriteEchoes::withhold(int slot_index, const std::string& boundary,
     for_each_suppressible([&](auto member) {
         auto& mine = declared.*member;
         auto& theirs = producer_record.*member;
+        // The frame carried the key and it read as a clear: the producer
+        // stating "no value" is a statement about the field, not silence, so
+        // the declaration releases even though there is no value to differ
+        // from.
+        if ((cleared.*member).has_value() && mine.has_value()) {
+            mine.reset();
+            return;
+        }
         // A field the producer says nothing about this frame leaves the
         // declaration standing: silence is not a differing value.
         if (!mine.has_value() || !theirs.has_value())

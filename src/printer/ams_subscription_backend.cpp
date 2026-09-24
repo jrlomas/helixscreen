@@ -163,13 +163,19 @@ void AmsSubscriptionBackend::request_resync() {
                                     continue;
                                 }
                                 // A co-authored namespace carries the mirror of
-                                // this backend's own write, so the re-read faces
-                                // the same echo a live frame does. A stored
-                                // record names no spool, so the boundary is
-                                // empty: the store saying nothing, not a change.
+                                // this backend's own write, so the re-read
+                                // strips what it can see is a standing
+                                // declaration. It is a stored record, not a
+                                // live producer: a value that differs from the
+                                // declaration is staleness in the store, not
+                                // firmware demonstrating it can say something
+                                // else, so it releases nothing - withholding
+                                // here would let one stale record unhook the
+                                // guard while the live firmware is still
+                                // echoing the write.
                                 if (helix::ams::OwnWriteEchoes* echoes = self->own_write_echoes()) {
                                     std::lock_guard<std::mutex> lock(self->mutex_);
-                                    echoes->withhold(slot, std::string{}, obs);
+                                    echoes->strip_standing(slot, obs);
                                 }
                                 helix::ams::ingest(helix::ams::lane_id_for(block, slot), obs);
                             }

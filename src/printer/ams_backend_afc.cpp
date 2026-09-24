@@ -192,15 +192,17 @@ void afc_state_translation_hints_() {
 // filtered in place; a field the guard removed is told from one the frame
 // never mentioned by snapshotting the statement before the call. Only colour
 // and material are tracked: those are the identity fields an AFC write sends,
-// so a declaration can never exist for any other. The accumulator copy is
-// then stripped of any field still equal to a standing declaration, since it
-// re-states an echoed value on every later frame the producer is silent about
-// it; strip_standing removes equals without releasing anything, so the
-// pre-edit values the accumulator also holds still file as readings.
+// so a declaration can never exist for any other. @p cleared names the keys
+// the frame carried and read as a clear, which release a declaration rather
+// than riding as silence. The accumulator copy is then stripped of any field
+// still equal to a standing declaration, since it re-states an echoed value
+// on every later frame the producer is silent about it; strip_standing
+// removes equals without releasing anything, so the pre-edit values the
+// accumulator also holds still file as readings.
 int withhold_echoes(ams::OwnWriteEchoes& echoes, int slot_index, ams::Observation& stated,
-                    ams::Observation& filed) {
+                    ams::Observation& filed, const ams::Observation& cleared) {
     const ams::Observation judged = stated;
-    const int withheld = echoes.withhold(slot_index, std::string{}, stated);
+    const int withheld = echoes.withhold(slot_index, std::string{}, stated, cleared);
     if (judged.color_rgb && !stated.color_rgb) {
         filed.color_rgb.reset();
     }
@@ -2458,6 +2460,12 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
     // release the material declaration before its echo lands.
     ams::Observation stated{ams::ObservationSource::VendorCache};
 
+    // The keys this frame carried and read as a clear, for the echo guard:
+    // a key published empty is firmware stating the value is gone, which
+    // releases a declaration where silence would leave it standing. Presence
+    // is the signal; the values are never read.
+    ams::Observation cleared{ams::ObservationSource::VendorCache};
+
     // Parse color. AFC's clear_values() writes color='' on eject and its
     // SET_COLOR with no value stores the bare '#', both of which read as a
     // clear; anything else that will not parse is a value we cannot read
@@ -2470,6 +2478,7 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
         } else if (reading.kind == ams::ColorReadingKind::Cleared) {
             slot.color_rgb = AMS_DEFAULT_SLOT_COLOR;
             firmware.cache.color_rgb.reset();
+            cleared.color_rgb = 0u;
         }
         stated.color_rgb = firmware.cache.color_rgb;
     }
@@ -2479,6 +2488,7 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
         slot.material = data["material"].get<std::string>();
         if (slot.material.empty()) {
             firmware.cache.material.reset();
+            cleared.material = std::string{};
         } else {
             firmware.cache.material = slot.material;
         }
@@ -2736,7 +2746,7 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
     // files from that account. An empty boundary is the frame naming no spool,
     // which is not a change.
     ams::Observation filed = firmware.cache;
-    const int withheld = withhold_echoes(own_write_echoes_, slot_index, stated, filed);
+    const int withheld = withhold_echoes(own_write_echoes_, slot_index, stated, filed, cleared);
     if (withheld > 0) {
         spdlog::debug("[AMS AFC] withheld {} echoed field(s) on lane {}", withheld, lane_name);
     }
@@ -4195,6 +4205,11 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
         // and must not release a declaration.
         ams::Observation stated{ams::ObservationSource::VendorCache};
 
+        // Keys this snapshot carried and read as a clear, same as the status
+        // path: a key published empty releases a declaration where silence
+        // would leave it standing.
+        ams::Observation cleared{ams::ObservationSource::VendorCache};
+
         // Parse color. AFC writes "#RRGGBB" here (verified against a live
         // BoxTurtle's lane_data namespace); bare hex is accepted too. One
         // decision with the status path, so the two parsers cannot answer the
@@ -4207,6 +4222,7 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
             } else if (reading.kind == ams::ColorReadingKind::Cleared) {
                 slot.color_rgb = AMS_DEFAULT_SLOT_COLOR;
                 firmware.cache.color_rgb.reset();
+                cleared.color_rgb = 0u;
             }
             stated.color_rgb = firmware.cache.color_rgb;
         }
@@ -4216,6 +4232,7 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
             slot.material = lane["material"].get<std::string>();
             if (slot.material.empty()) {
                 firmware.cache.material.reset();
+                cleared.material = std::string{};
             } else {
                 firmware.cache.material = slot.material;
             }
@@ -4325,7 +4342,7 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
         // snapshot's statement, the same way the status parse above does: the
         // accumulator stays firmware's own word for the next frame.
         ams::Observation filed = firmware.cache;
-        withhold_echoes(own_write_echoes_, i, stated, filed);
+        withhold_echoes(own_write_echoes_, i, stated, filed, cleared);
         ams::ingest(lane_id(i), filed);
 
         // The same binding check parse_afc_stepper() runs, on the id this
@@ -5020,6 +5037,10 @@ void AmsBackendAfc::clear_slot_override(int slot_index) {
         std::lock_guard<std::mutex> lock(mutex_);
         overrides_.erase(slot_index);
         helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
+        // The clear is deliberate: any echo guard this slot still holds was
+        // suspending readings of an identity the user just removed, so it
+        // ends here rather than suppressing the next frame.
+        own_write_echoes_.abandon(slot_index);
 
         // Also reset the override-exclusive fields on the live slot, so the
         // clear shows up in the very next get_slot_info(). AFC has no concept

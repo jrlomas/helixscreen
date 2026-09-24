@@ -47,9 +47,12 @@ class OwnWriteEchoes {
     /// spool carries its colour, brand and material into the same commit and
     /// nobody chose those.
     ///
-    /// Replaces whatever this slot held. Pair every stage() with arm() or
-    /// abandon(): a staging left unarmed withholds nothing, but it lingers
-    /// until the next stage() replaces it.
+    /// Replaces the slot's active declaration. An ARMED predecessor is not
+    /// lost: stage() stashes it, arm() carries its still-declared fields
+    /// forward onto the new staging, and a matched abandon() restores it
+    /// whole. Pair every stage() with arm() or abandon(): a staging left
+    /// unarmed withholds nothing, but it lingers until the next stage()
+    /// replaces it.
     ///
     /// @return The staging's sequence stamp. A backend whose dispatch can fail
     ///         after the call returns (an HTTP response, a timer) captures
@@ -72,7 +75,19 @@ class OwnWriteEchoes {
     /// Arm the pruned staging against @p boundary, the token naming the
     /// physical spool the write was made against.
     ///
-    /// A staging with no suppressible field left is dropped rather than
+    /// A staging that restates only some of what its predecessor declared
+    /// inherits the rest, and one that declares nothing suppressible
+    /// inherits all of it: the write an edit triggers re-sends every
+    /// identity field, so the predecessor's un-restated declarations explain
+    /// those echoes as much as the restated ones do. A restated field
+    /// replaces the value it carried in with. The carry happens only when
+    /// the boundary still names the spool the predecessor armed against; a
+    /// differing boundary is a different physical spool, whose readings the
+    /// predecessor's write does not explain, so there the carry drops and
+    /// the new declaration stands alone.
+    ///
+    /// A staging left declaring nothing suppressible after that - no
+    /// predecessor carried, nothing of its own - is dropped rather than
     /// armed, which is what makes a preview, a refused dispatch and a
     /// binding-only edit safe with no extra test at the call site.
     ///
@@ -85,15 +100,18 @@ class OwnWriteEchoes {
 
     /// The write never went out, so no echo is coming. Drops the staging.
     ///
-    /// This form drops whatever the slot holds, whatever edit staged it. It is
-    /// for a caller that knows no write is outstanding, such as a boundary
-    /// event on this slot, not for an answer about one particular dispatch.
+    /// This form drops whatever the slot holds, whatever edit staged it,
+    /// including any predecessor the staging suspended. It is for a caller
+    /// that knows no write is outstanding, such as a boundary event on this
+    /// slot, not for an answer about one particular dispatch.
     void abandon(int slot_index);
 
     /// The matched form: the failure answer of the staging @p staged_sequence
     /// came from. A stamp naming a staging this slot no longer holds belongs
     /// to a superseded edit and drops nothing, so a slow failure of edit 1
-    /// cannot cancel edit 2's guard.
+    /// cannot cancel edit 2's guard. A staging that suspended an armed
+    /// predecessor restores it: the failed write's echo is not coming, but
+    /// the predecessor's went out and firmware is still repeating it.
     void abandon(int slot_index, std::uint64_t staged_sequence);
 
     /// Remove from @p producer_record every field whose value repeats this
@@ -114,7 +132,14 @@ class OwnWriteEchoes {
     /// field is its own statement from here on. Value-difference releases the
     /// common swap early; the boundary catches a swap to a spool that reads
     /// identically, which value-difference cannot see.
-    int withhold(int slot_index, const std::string& boundary, Observation& producer_record);
+    ///
+    /// @p cleared names the fields this frame carried and read as a clear:
+    /// the key present, the value empty. Only presence is read. The producer
+    /// stating "no value" is a statement about the field, not silence, so it
+    /// releases that field's declaration the way a differing value does; a
+    /// declaration with every field released is dropped.
+    int withhold(int slot_index, const std::string& boundary, Observation& producer_record,
+                 const Observation& cleared = Observation{ObservationSource::VendorCache});
 
     /// Remove from @p producer_record every suppressible field whose value
     /// equals this slot's armed declaration, and return how many were
@@ -138,6 +163,16 @@ class OwnWriteEchoes {
         bool armed{false};
         /// Which edit staged this entry; matched abandon() answers to it.
         std::uint64_t sequence{0};
+        /// The armed entry this staging replaced, held for arm() to carry
+        /// forward and for a matched abandon() to restore. An edit declares
+        /// only what moved while its write re-sends every identity field, so
+        /// the un-restated declarations still explain the echoes.
+        Observation carry_declared{ObservationSource::LocalUser};
+        std::string carry_boundary;
+        bool carry_armed{false};
+        /// The predecessor's own staging stamp, so a restore lands under a
+        /// stamp a duplicated failure answer can no longer reach.
+        std::uint64_t carry_sequence{0};
     };
 
     std::unordered_map<int, Entry> entries_;

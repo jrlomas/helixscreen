@@ -2448,6 +2448,11 @@ void AmsBackendSnapmaker::clear_override_locked(int slot_index, SlotInfo& slot) 
     // clear in two stores, and a clear that reached only one would leave
     // resolve() still reporting the identity just removed.
     helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
+    // The echo guard goes with them: it was suspending readings of an
+    // identity this clear just removed, on a lane whose next frame is the
+    // machine's own state. Covers both callers - the Clear Spool gesture and
+    // the RFID swap, whose differing tag would disarm at withhold() anyway.
+    own_write_echoes_.abandon(slot_index);
 
     // All three Spoolman handles die with the override. The full
     // SlotInfo::clear_spoolman_link() is withheld here: it also zeroes
