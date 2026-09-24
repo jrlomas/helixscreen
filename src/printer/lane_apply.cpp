@@ -92,6 +92,11 @@ void clear_lane_only_identity(SlotInfo& slot, const FilamentSlotOverride* ovr) {
     } else {
         slot.product_name.clear();
     }
+    if (ovr != nullptr && ovr->spoolman_filament_id > 0) {
+        slot.spoolman_filament_id = ovr->spoolman_filament_id;
+    } else {
+        slot.spoolman_filament_id = 0;
+    }
     if (ovr != nullptr && ovr->spoolman_vendor_id > 0) {
         slot.spoolman_vendor_id = ovr->spoolman_vendor_id;
     } else {

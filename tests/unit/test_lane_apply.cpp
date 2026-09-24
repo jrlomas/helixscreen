@@ -1,5 +1,6 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "filament_slot_override.h"
 #include "helix_test_fixture.h"
 #include "lane_apply.h"
 #include "lane_observation.h"
@@ -11,6 +12,7 @@ using helix::SlotInfo;
 using helix::SlotStatus;
 using helix::ams::apply_resolved;
 using helix::ams::copy_resolver_owned_identity;
+using helix::ams::FilamentSlotOverride;
 using helix::ams::narrow_status;
 using helix::ams::Observation;
 using helix::ams::ObservationSource;
@@ -250,4 +252,46 @@ TEST_CASE("copy_resolver_owned_identity carries every field a paint can write",
     // caller wants the paint's recomputation of, not its own stale copy.
     CHECK(dst.status == SlotStatus::LOADED);
     CHECK(dst.mapped_tool == 2);
+}
+
+TEST_CASE("clear_lane_only_identity blanks every field only a lane record states",
+          "[lane][apply][1632]") {
+    // The set has to mirror the fields no firmware states, field for field.
+    // A repaint narrows the cached struct through this; one field short and a
+    // dropped record's value keeps standing beside a binding it no longer
+    // describes.
+    const auto make_painted = [] {
+        SlotInfo slot;
+        slot.brand = "Polymaker";
+        slot.spool_name = "PolyLite PETG";
+        slot.catalog_id = "polymaker-polylite-petg";
+        slot.product_name = "PolyLite PETG";
+        slot.spoolman_filament_id = 55;
+        slot.spoolman_vendor_id = 3;
+        return slot;
+    };
+
+    SECTION("no record left: every lane-only field blanks") {
+        SlotInfo slot = make_painted();
+        helix::ams::clear_lane_only_identity(slot, nullptr);
+        CHECK(slot.brand.empty());
+        CHECK(slot.spool_name.empty());
+        CHECK(slot.catalog_id.empty());
+        CHECK(slot.product_name.empty());
+        CHECK(slot.spoolman_filament_id == 0);
+        CHECK(slot.spoolman_vendor_id == 0);
+    }
+
+    SECTION("a kept record restates its own values") {
+        SlotInfo slot = make_painted();
+        FilamentSlotOverride kept;
+        kept.brand = "Bambu";
+        kept.spoolman_filament_id = 61;
+        kept.spoolman_vendor_id = 8;
+        helix::ams::clear_lane_only_identity(slot, &kept);
+        CHECK(slot.brand == "Bambu");
+        CHECK(slot.spool_name.empty());
+        CHECK(slot.spoolman_filament_id == 61);
+        CHECK(slot.spoolman_vendor_id == 8);
+    }
 }
