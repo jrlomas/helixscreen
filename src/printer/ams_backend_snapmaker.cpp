@@ -667,6 +667,11 @@ std::string AmsBackendSnapmaker::batch_feed_gcode(const std::vector<int>& slots,
     return chain;
 }
 
+bool AmsBackendSnapmaker::channel_state_in_progress(const std::string& state) {
+    const AmsAction action = classify_channel_state(state).action;
+    return action == AmsAction::LOADING || action == AmsAction::UNLOADING;
+}
+
 AmsBackendSnapmaker::BatchPlan AmsBackendSnapmaker::batch_plan() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return batch_;
@@ -1940,32 +1945,13 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
             }
         }
 
-        // ONE derivation of "the head an operation is working on": the batch
-        // cursor while a plan is active, else the head whose channel reported
-        // an in-progress state, else none. A toolhead-only delta carries no
-        // channel evidence, so mid-op it keeps the previous answer instead of
-        // flapping the header back to the carriage tool. current_slot is NOT
-        // touched here: it stays the carriage answer its other consumers
-        // (bypass unload, filament panel gating, the loaded card) read.
-        int working_slot = -1;
-        if (batch_.active) {
-            working_slot = batch_.heads[batch_.cursor];
-        } else if (system_info_.action == AmsAction::LOADING ||
-                   system_info_.action == AmsAction::UNLOADING) {
-            working_slot =
-                (in_progress_head >= 0) ? in_progress_head : system_info_.operation_working_slot;
-        }
-        if (system_info_.operation_working_slot != working_slot) {
-            system_info_.operation_working_slot = working_slot;
-            changed = true;
-        }
-
         // The batch macro's `doing` save-variable is the firmware's own word
         // on whether a batch script is running. A false reading retires any
         // plan this process still holds active: the script ended without the
         // cursor head reaching a terminal or a *_fail (lost response, script
         // abort, a feeder wedging mid-feed), and no channel_state detector
         // covers that end.
+        bool batch_retired = false;
         if (!batch_macro_object_.empty()) {
             const auto macro = status.find(batch_macro_object_);
             if (macro != status.end() && macro->is_object()) {
@@ -1973,11 +1959,36 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                 if (doing != macro->end() && doing->is_boolean() && !doing->get<bool>() &&
                     batch_.active) {
                     batch_.active = false;
+                    batch_retired = true;
                     changed = true;
                     spdlog::info("{} batch macro reports doing=false — retiring the active plan",
                                  backend_log_tag());
                 }
             }
+        }
+
+        // ONE derivation of "the head an operation is working on": the batch
+        // cursor while a plan is active, else the head whose channel reported
+        // an in-progress state, else none. A toolhead-only delta carries no
+        // channel evidence, so mid-op it keeps the previous answer instead of
+        // flapping the header back to the carriage tool; a batch the firmware
+        // just reported ended carries nothing forward. current_slot is NOT
+        // touched here: it stays the carriage answer its other consumers
+        // (bypass unload, filament panel gating, the loaded card) read.
+        int working_slot = -1;
+        if (batch_.active) {
+            working_slot = batch_.heads[batch_.cursor];
+        } else if (system_info_.action == AmsAction::LOADING ||
+                   system_info_.action == AmsAction::UNLOADING) {
+            if (in_progress_head >= 0) {
+                working_slot = in_progress_head;
+            } else if (!batch_retired) {
+                working_slot = system_info_.operation_working_slot;
+            }
+        }
+        if (system_info_.operation_working_slot != working_slot) {
+            system_info_.operation_working_slot = working_slot;
+            changed = true;
         }
 
         // Parse print_task_config — authoritative filament info from Snapmaker's task manager

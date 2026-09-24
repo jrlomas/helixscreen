@@ -417,6 +417,10 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
         return batch_plan().active;
     }
 
+    /// True when a filament_feed channel_state names a load or unload under
+    /// way, by the same classification the status parse applies.
+    [[nodiscard]] static bool channel_state_in_progress(const std::string& state);
+
     /// Sends AUTO_FEEDING_BATCH ACTION=END. Klipper aborts the rest of a
     /// script when one line raises, so a failed head strands the firmware's
     /// `doing` interlock — which refuses every print start and resume until

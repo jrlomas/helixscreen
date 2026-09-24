@@ -3,10 +3,42 @@
 
 #include "batch_feed_reconcile.h"
 
+#include "ams_backend_snapmaker.h"
 #include "i_moonraker_client.h"
 #include "spdlog/spdlog.h"
 
 namespace helix::batch_feeding {
+
+namespace {
+
+/// Every filament_feed channel the snapshot carries is at rest. False when any
+/// channel is mid-load or mid-unload, and when the snapshot carries none: a
+/// snapshot without channels cannot vouch that nothing is feeding.
+bool feed_channels_at_rest(const nlohmann::json& status) {
+    bool saw_channel = false;
+    for (const auto& [object, channels] : status.items()) {
+        if (object.rfind("filament_feed ", 0) != 0 || !channels.is_object()) {
+            continue;
+        }
+        for (const auto& [name, channel] : channels.items()) {
+            if (!channel.is_object()) {
+                continue;
+            }
+            const auto state = channel.find("channel_state");
+            if (state == channel.end() || !state->is_string()) {
+                continue;
+            }
+            saw_channel = true;
+            if (AmsBackendSnapmaker::channel_state_in_progress(
+                    state->get_ref<const std::string&>())) {
+                return false;
+            }
+        }
+    }
+    return saw_channel;
+}
+
+} // namespace
 
 void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status,
                           const std::string& macro_object, bool local_batch_active) {
@@ -64,6 +96,15 @@ void reconcile_on_connect(IMoonrakerClient& client, const nlohmann::json& status
                 "[BatchFeed] Batch interlock held with a print in flight - leaving it alone");
             return;
         }
+    }
+    // A batch another client (Fluidd, a phone app) is running leaves every
+    // print guard above reading idle too, and ending it restores the targets
+    // its START snapshotted in the middle of a feed.
+    if (!feed_channels_at_rest(status)) {
+        spdlog::info(
+            "[BatchFeed] Batch interlock held with a feed channel busy or unreadable - leaving "
+            "it alone");
+        return;
     }
     spdlog::info("[BatchFeed] Clearing a stranded AUTO_FEEDING_BATCH interlock");
     client.gcode_script(END_GCODE);

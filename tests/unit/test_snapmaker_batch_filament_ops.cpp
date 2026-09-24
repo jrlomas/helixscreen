@@ -331,7 +331,7 @@ TEST_CASE_METHOD(BatchFixture, "Snapmaker batch dispatch sends ONE script for th
 }
 
 // ============================================================================
-// set_discovery — the batch shape comes from the discovery handed to the
+// set_discovery: the batch shape comes from the discovery handed to the
 // backend, not the global PrinterState
 // ============================================================================
 
@@ -339,7 +339,7 @@ TEST_CASE_METHOD(BatchFixture, "Batch shape follows the discovery the backend wa
                  "[snapmaker][batch]") {
     // Startup builds and starts backends from AmsState's hardware argument
     // BEFORE PrinterState publishes discovery globally, so the capability
-    // must arrive through set_discovery() — never a global read.
+    // must arrive through set_discovery(), never a global read.
     get_printer_state().set_hardware(helix::PrinterDiscovery{});
     REQUIRE_FALSE(get_printer_state().get_discovery().has_auto_feeding_batch());
 
@@ -680,6 +680,86 @@ TEST_CASE_METHOD(BatchFixture, "A standalone unload's working head is the unload
     set_channel(1, "unload_finish", "ok", true, true, false);
     CHECK(backend().get_system_info().operation_working_slot == -1);
     CHECK(backend().get_system_info().current_slot == 3);
+}
+
+TEST_CASE_METHOD(BatchFixture, "An op's working head names the header, not the loaded card",
+                 "[snapmaker][batch][ams]") {
+    // The card, filament_loaded and the Spoolman active spool describe the
+    // carriage; only the header follows the head an unload is working on.
+    feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
+    REQUIRE(backend().get_system_info().current_slot == 3);
+    helix::ams::FilamentSlotOverride blue;
+    blue.color_rgb = 0x0000FF;
+    blue.color_set = true;
+    helix::ams::FilamentSlotOverride red;
+    red.color_rgb = 0xFF0000;
+    red.color_set = true;
+    helix::SnapmakerTestAccess::seed_override(backend(), 3, blue);
+    helix::SnapmakerTestAccess::seed_override(backend(), 1, red);
+    // The carriage head latched loaded, as on the rig.
+    set_channel(3, "load_finish", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
+
+    auto& ams = helix::AmsState::instance();
+    ams.init_subjects(true);
+    ams.sync_from_backend();
+    lv_subject_t* color = ams.get_current_color_subject();
+    lv_subject_t* header = lv_xml_get_subject(nullptr, "ams_current_slot_text");
+    REQUIRE(header != nullptr);
+    const int card_at_rest = lv_subject_get_int(color);
+    REQUIRE(card_at_rest == 0x0000FF);
+
+    set_channel(1, "unload_homing", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
+    ams.sync_from_backend();
+
+    CHECK(std::string(lv_subject_get_string(header)) ==
+          "Current: " + helix::ui::lane_label(backend().lane_noun(), 1));
+    CHECK(lv_subject_get_int(color) == card_at_rest);
+}
+
+TEST_CASE_METHOD(BatchFixture, "AmsState answers whether any backend has a batch in flight",
+                 "[snapmaker][batch][ams]") {
+    // Asked from the WebSocket thread at connect, so it must answer from
+    // inside AmsState rather than hand out backend pointers.
+    auto& ams = helix::AmsState::instance();
+    ams.clear_backends();
+    CHECK_FALSE(ams.any_filament_batch_in_flight());
+
+    ams.add_backend(std::make_unique<BatchlessBackend>());
+    auto snapmaker = std::make_unique<helix::AmsBackendSnapmaker>(nullptr, nullptr);
+    auto* second = snapmaker.get();
+    ams.add_backend(std::move(snapmaker));
+    CHECK_FALSE(ams.any_filament_batch_in_flight());
+
+    // The live batch sits on the SECOND backend: every backend is asked.
+    helix::SnapmakerTestAccess::set_batch_plan(*second, {0}, /*load=*/true, "Load", "of");
+    CHECK(ams.any_filament_batch_in_flight());
+
+    ams.clear_backends();
+    CHECK_FALSE(ams.any_filament_batch_in_flight());
+}
+
+TEST_CASE_METHOD(BatchFixture, "A batch the firmware ends mid-head leaves no working head",
+                 "[snapmaker][batch][ams]") {
+    // The script can end (abort, lost response, a feeder wedging) without the
+    // cursor head reaching a terminal state; the frame that reports doing=false
+    // then carries no channel evidence at all. Nothing is being worked after it.
+    feed_status(R"({"toolhead":{"extruder":"extruder3"}})");
+    helix::SnapmakerTestAccess::set_batch_macro_object(backend(), "gcode_macro AUTO_FEEDING_BATCH");
+    helix::SnapmakerTestAccess::set_batch_plan(backend(), {1, 3}, /*load=*/false, "Unload", "of");
+    set_channel(1, "unload_doing", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
+    REQUIRE(backend().get_system_info().operation_working_slot == 1);
+
+    feed_status(R"({"gcode_macro AUTO_FEEDING_BATCH":{"doing":false}})");
+    CHECK_FALSE(backend().batch_plan().active);
+    CHECK(backend().get_system_info().operation_working_slot == -1);
+    CHECK(backend().get_system_info().current_slot == 3);
+
+    helix::AmsState::instance().init_subjects(true);
+    helix::AmsState::instance().sync_from_backend();
+    lv_subject_t* header = lv_xml_get_subject(nullptr, "ams_current_slot_text");
+    REQUIRE(header != nullptr);
+    CHECK(std::string(lv_subject_get_string(header)) ==
+          "Current: " + helix::ui::lane_label(backend().lane_noun(), 3));
 }
 
 // ============================================================================
