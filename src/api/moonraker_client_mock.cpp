@@ -1124,6 +1124,9 @@ void MoonrakerClientMock::populate_capabilities() {
     case PrinterType::CREALITY_K1:
         default_kinematics = "corexy";
         break;
+    case PrinterType::DELTA:
+        default_kinematics = "delta";
+        break;
     default:
         default_kinematics = "cartesian";
         break;
@@ -1942,6 +1945,17 @@ void MoonrakerClientMock::populate_hardware() {
 
     case PrinterType::GENERIC_BEDSLINGER:
         // Generic i3-style bedslinger
+        discovery_.heaters() = {"heater_bed", "extruder"};
+        discovery_.sensors() = {
+            "heater_bed", // Bed thermistor (Klipper naming: bare heater name)
+            "extruder"    // Hotend thermistor (Klipper naming: bare heater name)
+        };
+        discovery_.fans() = {"heater_fan hotend_fan", "fan"};
+        discovery_.leds() = {};
+        break;
+
+    case PrinterType::DELTA:
+        // Generic linear delta: no gantry leveling, bare heaters and fans
         discovery_.heaters() = {"heater_bed", "extruder"};
         discovery_.sensors() = {
             "heater_bed", // Bed thermistor (Klipper naming: bare heater name)

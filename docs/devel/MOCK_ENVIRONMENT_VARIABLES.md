@@ -624,7 +624,7 @@ Select which printer the mock Moonraker client impersonates. Drives the mock's r
 
 | Property | Value |
 |----------|-------|
-| **Values** | `voron_24`, `voron_trident`, `k1`, `ad5m`, `generic_corexy`, `generic_bedslinger`, `multi_extruder` |
+| **Values** | `voron_24`, `voron_trident`, `k1`, `ad5m`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta` |
 | **Default** | `voron_24` (Voron 2.4) |
 | **File** | `src/application/moonraker_manager.cpp` |
 
@@ -634,7 +634,12 @@ HELIX_MOCK_PRINTER=ad5m ./build/bin/helix-screen --test -vv
 
 # Multi-extruder mock
 HELIX_MOCK_PRINTER=multi_extruder ./build/bin/helix-screen --test -vv
+
+# Linear delta: reports kinematics=delta, so per-axis homing is hidden
+HELIX_MOCK_PRINTER=delta ./build/bin/helix-screen --test -vv
 ```
+
+The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 235x235x250 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
 
 **Unrecognized values fall back to Voron 2.4** with a warning listing the valid set — they are not fatal. K2 and CC1 have no dedicated mock type yet and hit that fallback.
 
@@ -678,7 +683,7 @@ Override the kinematics string the mock reports in `configfile.config.printer.ki
 | Property | Value |
 |----------|-------|
 | **Values** | Any Klipper kinematics name (e.g. `corexy`, `cartesian`, `delta`, `corexz`) |
-| **Default** | Derived from the mock printer type: `corexy` for Voron 2.4, Voron Trident and Creality K1; `cartesian` for everything else |
+| **Default** | Derived from the mock printer type: `corexy` for Voron 2.4, Voron Trident and Creality K1; `delta` for `delta`; `cartesian` for everything else |
 | **File** | `src/api/moonraker_client_mock.cpp` |
 
 ```bash

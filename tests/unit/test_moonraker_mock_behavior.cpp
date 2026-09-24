@@ -923,6 +923,15 @@ TEST_CASE_METHOD(HelixTestFixture, "MoonrakerClientMock hardware discovery",
         REQUIRE(leds.empty());
     }
 
+    SECTION("DELTA reports delta kinematics and no gantry leveling") {
+        MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::DELTA);
+        auto hw = mock.hardware();
+
+        REQUIRE(hw.kinematics() == "delta");
+        REQUIRE_FALSE(hw.has_qgl());
+        REQUIRE_FALSE(hw.has_z_tilt());
+    }
+
     SECTION("MULTI_EXTRUDER has multiple extruders") {
         MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::MULTI_EXTRUDER);
         auto hw = mock.hardware();
