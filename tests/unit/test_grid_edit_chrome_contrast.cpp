@@ -58,7 +58,6 @@ TEST_CASE_METHOD(XMLTestFixture, "edit-mode chrome icons clear WCAG AA on their 
 
     // Same geometry contract as test_grid_edit_drag_path.cpp: a content box
     // that gives the Medium breakpoint an exact 12x8 grid.
-    constexpr int CELL_PX = 55;
     constexpr int content_w = 715;
     constexpr int content_h = 475;
     const auto dims = GridLayout::get_dimensions(UiBreakpoint::Medium, content_w, content_h);
