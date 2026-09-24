@@ -1255,8 +1255,8 @@ void MoonrakerClientMock::rebuild_hardware_from_lists() {
         if (backend && !heater.empty() &&
             std::find(objects.begin(), objects.end(), json(heater)) != objects.end()) {
             const auto& prev = hw_prev.printer_objects();
-            for (const std::string key : {std::string(backend->diagnostics_object()),
-                                          std::string(backend->filter_fan_pin())}) {
+            for (const std::string& key : {std::string(backend->diagnostics_object()),
+                                           std::string(backend->filter_fan_pin())}) {
                 if (!key.empty() && std::find(prev.begin(), prev.end(), key) != prev.end() &&
                     std::find(objects.begin(), objects.end(), json(key)) == objects.end()) {
                     objects.push_back(key);
