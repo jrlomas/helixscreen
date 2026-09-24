@@ -39,6 +39,11 @@ template <class B> class SlotIndexProbe : public B {
         std::lock_guard<std::mutex> lock(this->mutex_);
         this->system_info_.total_slots = n;
     }
+    void clear_units() {
+        std::lock_guard<std::mutex> lock(this->mutex_);
+        this->system_info_.units.clear();
+        this->system_info_.total_slots = 0;
+    }
 };
 
 } // namespace
@@ -93,4 +98,13 @@ TEST_CASE("QIDI Box refuses a bad slot as a bad slot at every entry point",
     CHECK(backend.unload_filament(3).result == AmsResult::INVALID_SLOT);
     CHECK(backend.eject_lane(3).result == AmsResult::INVALID_SLOT);
     CHECK(backend.set_tool_mapping(0, 3).result == AmsResult::INVALID_SLOT);
+}
+
+TEST_CASE("QIDI Box with no unit configured refuses a slot as nothing discovered",
+          "[ams][qidi_box][slot_index]") {
+    SlotIndexProbe<AmsBackendQidi> backend;
+    backend.clear_units();
+
+    CHECK(backend.unload_filament(0).result == AmsResult::NOT_CONNECTED);
+    CHECK(backend.load_filament(0).result == AmsResult::NOT_CONNECTED);
 }
