@@ -1791,19 +1791,19 @@ static nlohmann::json describe_one(lv_obj_t* o, const char* name, const std::str
 }
 
 // The name to report for a widget a locator resolved to. lv_obj_get_name_
-// resolved() dereferences obj->spec_attr->name for a parentless object — a
-// screen or layer — and that field is NULL exactly when the object is
-// unnamed: the crafted "<class>_#" fallback is only assembled for children,
-// which have siblings to index against. So it is only asked about named
-// objects; an unnamed one reports "" (its path is its address).
+// resolved() builds a "<class>_#" name for an unnamed CHILD, indexing it
+// against its siblings; for a parentless object (a screen or layer) it
+// instead copies obj->spec_attr->name, which is NULL when the object is
+// unnamed. Only that one combination is answered here with "" (the path is
+// its address); everything else goes to LVGL, named or not.
 static std::string resolved_name(const lv_obj_t* obj) {
     const char* raw = lv_obj_get_name(obj);
-    if (!raw || raw[0] == '\0') {
+    if (!lv_obj_get_parent(obj) && (!raw || raw[0] == '\0')) {
         return {};
     }
     char resolved[128];
     lv_obj_get_name_resolved(obj, resolved, sizeof(resolved));
-    return resolved[0] != '\0' ? resolved : raw;
+    return resolved[0] != '\0' ? resolved : (raw ? raw : "");
 }
 
 // Recursively collect named, non-hidden widgets under `parent` into `out`.

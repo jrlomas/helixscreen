@@ -272,15 +272,18 @@ TEST_CASE_METHOD(LVGLTestFixture, "ctl path: unresolvable segments yield nothing
 TEST_CASE_METHOD(LVGLTestFixture, "ctl ls: an unnamed active screen scopes without crashing",
                  "[remote][ctl]") {
     lv_obj_t* previous = lv_screen_active();
-    // A child allocates the screen's spec_attr while its own name stays NULL —
-    // the exact state `ls @s` meets on a demo screen.
+    // A child allocates the screen's spec_attr while its own name stays NULL,
+    // the exact state `ls @s` meets on a demo screen. The second child stays
+    // nameless too: LVGL gives IT a crafted "<class>_#" name, which `resolve`
+    // must keep answering.
     lv_obj_t* screen = lv_obj_create(NULL);
     lv_obj_set_name(lv_obj_create(screen), "probe");
+    lv_obj_create(screen); // index 1, deliberately nameless
     lv_screen_load(screen);
 
     // The handler is only reachable through dispatch, over a real socket; it
     // parks on a future until the UI queue runs its payload, so the queue is
-    // drained while the response is polled for, never after it.
+    // drained while the response is polled for, never after.
     const std::string sock_path =
         "/tmp/helix-test-ls-unnamed-" + std::to_string(::getpid()) + ".sock";
     ::unlink(sock_path.c_str());
@@ -297,53 +300,73 @@ TEST_CASE_METHOD(LVGLTestFixture, "ctl ls: an unnamed active screen scopes witho
     REQUIRE(fd >= 0);
     REQUIRE(connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0);
 
-    const std::string request =
-        R"({"jsonrpc":"2.0","method":"describe_screen","params":{"path":"s"},"id":1})"
-        "\n";
-    REQUIRE(send(fd, request.data(), request.size(), 0) == static_cast<ssize_t>(request.size()));
+    // One newline-framed JSON-RPC round trip, draining the UI queue while the
+    // response is polled for (the handler parks on a future the drain
+    // resolves). Empty string on any transport failure.
+    auto rpc_roundtrip = [&](int id, const std::string& method, const std::string& params) {
+        const std::string request = "{\"jsonrpc\":\"2.0\",\"method\":\"" + method +
+                                    "\",\"params\":" + params + ",\"id\":" + std::to_string(id) +
+                                    "}\n";
+        REQUIRE(send(fd, request.data(), request.size(), 0) ==
+                static_cast<ssize_t>(request.size()));
 
-    std::string response;
-    char buf[4096];
-    bool timed_out = false;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (response.find('\n') == std::string::npos) {
-        struct pollfd pfd {
-            fd, POLLIN, 0
-        };
-        const int ready = poll(&pfd, 1, 20);
-        if (ready > 0) {
-            ssize_t n = recv(fd, buf, sizeof(buf), 0);
-            if (n <= 0) {
-                timed_out = true;
+        std::string response;
+        char buf[4096];
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (response.find('\n') == std::string::npos) {
+            struct pollfd pfd {
+                fd, POLLIN, 0
+            };
+            const int ready = poll(&pfd, 1, 20);
+            if (ready > 0) {
+                ssize_t n = recv(fd, buf, sizeof(buf), 0);
+                if (n <= 0) {
+                    break;
+                }
+                response.append(buf, static_cast<size_t>(n));
+            } else if (ready < 0) {
                 break;
             }
-            response.append(buf, static_cast<size_t>(n));
-        } else if (ready < 0) {
-            timed_out = true;
-            break;
+            helix::ui::UpdateQueue::instance().drain();
+            if (std::chrono::steady_clock::now() > deadline) {
+                break;
+            }
         }
-        // The handler parks on a future; the queue drain is what resolves it.
+        // A queued follow-up from the handler lands before the next request.
         helix::ui::UpdateQueue::instance().drain();
-        if (std::chrono::steady_clock::now() > deadline) {
-            timed_out = true;
-            break;
+        if (response.find('\n') == std::string::npos) {
+            return std::string();
         }
-    }
-    REQUIRE_FALSE(timed_out);
-    // One more drain: a queued follow-up from the handler lands before stop().
-    helix::ui::UpdateQueue::instance().drain();
+        response.erase(response.find('\n'));
+        return response;
+    };
+
+    // `ls @s`: the scope root reports no name, its named child is listed, and
+    // the nameless screen does not take the app down.
+    const std::string ls = rpc_roundtrip(1, "describe_screen", R"({"path":"s"})");
+    REQUIRE_FALSE(ls.empty());
+    const nlohmann::json ls_rpc = nlohmann::json::parse(ls);
+    REQUIRE(ls_rpc.contains("result"));
+    const nlohmann::json& result = ls_rpc["result"];
+    REQUIRE(result.value("scope", "") == "s");
+    REQUIRE(result.contains("widgets"));
+    REQUIRE(result["widgets"].size() == 2); // the scope root, then its named child
+    REQUIRE(result["widgets"][0].value("name", "") == "");
+    REQUIRE(result["widgets"][1].value("path", "") == "s/probe");
+
+    // `resolve` on the nameless CHILD still answers LVGL's crafted
+    // "<class>_<index>" name, which stays addressable.
+    const std::string res = rpc_roundtrip(2, "resolve", R"({"path":"s/1"})");
+    REQUIRE_FALSE(res.empty());
+    const nlohmann::json res_rpc = nlohmann::json::parse(res);
+    REQUIRE(res_rpc.contains("result"));
+    const std::string crafted = res_rpc["result"].value("name", "");
+    REQUIRE_FALSE(crafted.empty());
+    REQUIRE(crafted.rfind("lv_obj_", 0) == 0);
+
     close(fd);
     server.stop();
     ::unlink(sock_path.c_str());
-
-    response.erase(response.find('\n'));
-    const nlohmann::json rpc = nlohmann::json::parse(response);
-    REQUIRE(rpc.contains("result"));
-    const nlohmann::json& result = rpc["result"];
-    REQUIRE(result.value("scope", "") == "s");
-    REQUIRE(result.contains("widgets"));
-    REQUIRE(result["widgets"].size() == 2); // the scope root, then its child
-    REQUIRE(result["widgets"][1].value("path", "") == "s/probe");
 
     lv_screen_load(previous);
     lv_obj_delete(screen);
