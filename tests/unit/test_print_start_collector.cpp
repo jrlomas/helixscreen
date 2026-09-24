@@ -3428,6 +3428,35 @@ TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
 }
 
 TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
+                 "Snapmaker U1: a nozzle wait holds its label until the nozzle is within 2C",
+                 "[print][collector][snapmaker][heater_wait]") {
+    // M109 keeps blocking while the nozzle settles its last few degrees, with
+    // the bed far below its target behind it.
+    const auto report_for = [&](int nozzle, int seconds) {
+        for (int s = 0; s < seconds; ++s) {
+            clock_.advance(std::chrono::seconds(1));
+            set_all_temps(/*bed*/ 450, 1000, nozzle, 2100);
+            char report[64];
+            std::snprintf(report, sizeof(report), "B:45.0 /100.0 T0:%.1f /210.0", nozzle / 10.0);
+            feed_gcode(report);
+        }
+        tick();
+    };
+    for (int nozzle : {1700, 2060, 2070, 2079}) {
+        report_for(nozzle, 5);
+        INFO("nozzle=" << nozzle);
+        REQUIRE(get_current_phase() == PrintStartPhase::HEATING_NOZZLE);
+    }
+
+    // Within 2C the nozzle has arrived; the bed takes the label on a report
+    // after the tick that saw it arrive.
+    report_for(2085, 1);
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_NOZZLE);
+    report_for(2090, 1);
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
+}
+
+TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
                  "Snapmaker U1: an action code right after a wait report keeps its phase",
                  "[print][collector][snapmaker][heater_wait]") {
     set_all_temps(/*bed*/ 450, 1000, /*ext*/ 2100, 2100);
@@ -3479,12 +3508,12 @@ TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
 TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,
                  "Snapmaker U1: the chamber waits for the bed to reach its target",
                  "[print][collector][snapmaker][heater_wait]") {
-    // 3C short is inside the heating band but not at target.
+    // 3C short is not at target, so the wait is still the bed's.
     set_all_temps(/*bed*/ 970, 1000, /*ext*/ 2100, 2100);
     set_chamber(300, 600);
     feed_gcode("B:97.0 /100.0 T0:210.0 /210.0");
     tick();
-    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+    REQUIRE(get_current_phase() == PrintStartPhase::HEATING_BED);
 }
 
 TEST_CASE_METHOD(SnapmakerHeaterWaitFixture,

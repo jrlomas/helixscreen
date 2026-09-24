@@ -815,28 +815,31 @@ void PrintStartCollector::check_fallback_completion() {
     // still short of its target is what the printer is doing, whatever phase
     // the firmware announced last. Nozzle first: M109 waits are short and the
     // bed is usually still warming behind them, while a nozzle above its
-    // target (a cool-down) is not short of it. The chamber counts only once
-    // both heaters are at target. Before the first real signal the proactive
-    // detection above owns the heaters.
+    // target (a cool-down) is not short of it. "Short" is the 2C at-target
+    // test, since M109 keeps blocking until the nozzle settles within a
+    // degree or so. The chamber counts only once both heaters are at target.
+    // Before the first real signal the proactive detection above owns the
+    // heaters.
     if (real_signal_seen_.load(std::memory_order_relaxed)) {
         bool waiting;
-        bool heaters_ready;
+        bool nozzle_short;
+        bool bed_short;
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             waiting = heater_wait_report_time_ + HEATER_WAIT_REPORT_GAP >
                       helix::sim::SimulatedClock::now();
-            heaters_ready = heating_target_reached_locked(PrintStartPhase::HEATING_NOZZLE) &&
-                            heating_target_reached_locked(PrintStartPhase::HEATING_BED);
+            nozzle_short = !heating_target_reached_locked(PrintStartPhase::HEATING_NOZZLE);
+            bed_short = !heating_target_reached_locked(PrintStartPhase::HEATING_BED);
         }
         if (!waiting) {
             end_heater_wait();
         } else {
             const int chamber_temp = lv_subject_get_int(state_.get_chamber_temp_subject());
             const int chamber_target = lv_subject_get_int(state_.get_chamber_target_subject());
-            const bool chamber_heating = heaters_ready && chamber_target > 0 &&
+            const bool chamber_heating = !nozzle_short && !bed_short && chamber_target > 0 &&
                                          chamber_temp < chamber_target - TEMP_TOLERANCE_DECIDEGREES;
-            const PrintStartPhase waited_on = nozzle_heating    ? PrintStartPhase::HEATING_NOZZLE
-                                              : bed_heating     ? PrintStartPhase::HEATING_BED
+            const PrintStartPhase waited_on = nozzle_short      ? PrintStartPhase::HEATING_NOZZLE
+                                              : bed_short       ? PrintStartPhase::HEATING_BED
                                               : chamber_heating ? PrintStartPhase::SOAKING
                                                                 : PrintStartPhase::IDLE;
             // The report that shows the waited-on heater arriving is the
