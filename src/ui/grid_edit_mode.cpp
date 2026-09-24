@@ -1764,17 +1764,19 @@ helix::DropInput GridEditMode::drop_input() const {
     // measured against the border of the page the release lands in.
     in.past_right_border = helix::cross_page_past_right_border(
         settled_content_area().x2, drag_widget_pos_.x, lv_area_get_width(&widget_area));
+    in.past_left_border = helix::cross_page_past_left_border(
+        settled_content_area().x1, drag_widget_pos_.x, lv_area_get_width(&widget_area));
     return in;
 }
 
 int GridEditMode::commit_drop(const std::string& widget_id, const helix::DropResolution& drop) {
     int page = page_index_;
     if (drop.outcome == helix::DropOutcome::CreatePage) {
-        page = config_->add_page(config_->generate_page_id());
+        page = config_->add_page(config_->generate_page_id(), drop.prepend_page ? 0 : -1);
         if (page < 0) {
             return -1;
         }
-        spdlog::info("[GridEditMode] Drop past the last page: created page {} at ({},{})", page,
+        spdlog::info("[GridEditMode] Drop on a page border: created page {} at ({},{})", page,
                      drop.col, drop.row);
     } else if (drop.outcome != helix::DropOutcome::Move) {
         return -1;
@@ -1822,15 +1824,22 @@ void GridEditMode::handle_drag_end(lv_event_t* /*e*/) {
     tear_down_gesture();
     helix::PageSetChange change;
     change.page_count = pages_before;
-    change.page_added = drop.outcome == helix::DropOutcome::CreatePage;
-    change.focus_page = landed_page;
-    if (landed_page != origin_page && prune_empty_page(origin_page)) {
+    change.page_added = drop.outcome == helix::DropOutcome::CreatePage && !drop.prepend_page;
+    change.page_prepended = drop.outcome == helix::DropOutcome::CreatePage && drop.prepend_page;
+    // A prepended page is numbered -1 before the change, the tile the drag sat
+    // on past the first page's left border; every other landing names the page
+    // it landed on.
+    change.focus_page = drop.prepend_page ? -1 : landed_page;
+    // A page created before the first shifts the origin page one later, so the
+    // prune that empties it reads it after the shift.
+    const int origin_after = drop.prepend_page ? origin_page + 1 : origin_page;
+    if (landed_page != origin_after && prune_empty_page(origin_after)) {
         change.removed_page = origin_page;
     }
     // One save for the whole commit: the move, a page it created and a page it
     // emptied.
     config_->save();
-    if (change.page_added || change.removed_page >= 0) {
+    if (change.page_added || change.page_prepended || change.removed_page >= 0) {
         // The panel rebuilds the carousel on the next tick, and the session goes
         // with the entry; the grid's own deferred rebuild would run against
         // containers that rebuild replaces.

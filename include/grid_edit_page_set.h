@@ -15,12 +15,15 @@
 namespace helix {
 
 /// A change to the home page set, numbered as the carousel was before it: config
-/// pages 0 to page_count - 1, then the next-page slot's tile at page_count.
+/// pages 0 to page_count - 1, then the next-page slot's tile at page_count, and
+/// tile -1 past the first page's left border, where a drag that prepends sits.
 struct PageSetChange {
-    int page_count = 0;      ///< Config pages before the change
-    bool page_added = false; ///< A page was added past the last one, on the slot's tile
-    int removed_page = -1;   ///< The config page removed; -1 when none was
-    /// The page the change asks to end on: where a drop landed, the added page,
+    int page_count = 0;          ///< Config pages before the change
+    bool page_added = false;     ///< A page was added past the last one, on the slot's tile
+    bool page_prepended = false; ///< A page was added before the first one
+    int removed_page = -1;       ///< The config page removed; -1 when none was
+    /// The page the change asks to end on: where a drop landed, the added page
+    /// (the slot's tile for one added past the last, tile -1 for one prepended),
     /// or the page removed from under the edit session
     int focus_page = 0;
 };

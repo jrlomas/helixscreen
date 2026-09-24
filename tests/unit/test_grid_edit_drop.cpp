@@ -4,8 +4,8 @@
 /**
  * @file test_grid_edit_drop.cpp
  * @brief How a released home-grid edit drag resolves: move its widget, create
- * the page past the last one, return to its origin page, or snap back
- * (prestonbrown/helixscreen#1638).
+ * a page before the first or past the last one, return to its origin page, or
+ * snap back (prestonbrown/helixscreen#1638).
  */
 
 #include "grid_edit_drop.h"
@@ -52,6 +52,11 @@ DropInput release_on(int page, int col, int row) {
 
 DropInput past_border(DropInput in) {
     in.past_right_border = true;
+    return in;
+}
+
+DropInput past_left_border(DropInput in) {
+    in.past_left_border = true;
     return in;
 }
 
@@ -207,4 +212,79 @@ TEST_CASE("a created page whose landing cell does not fit an empty page is not c
     DropInput too_wide = past_border(release_on(PAGES - 1, 0, 0));
     too_wide.colspan = COLS + SPAN;
     CHECK(resolve_drop(too_wide, occupied_by({})).outcome == DropOutcome::ReturnToOrigin);
+
+    DropInput too_wide_left = past_left_border(release_on(0, 0, 0));
+    too_wide_left.colspan = COLS + SPAN;
+    CHECK(resolve_drop(too_wide_left, occupied_by({})).outcome == DropOutcome::Cancel);
+}
+
+TEST_CASE("a release past the first page's left border creates a page before it",
+          "[1638][grid_edit][cross_page]") {
+    // Page 0 holds the drag's origin; a page created before it lands the entry
+    // in the leftmost columns its span allows, on the previewed row.
+    const GridPlacement fan{"fan", 4, 0, SPAN, SPAN};
+    struct LeftRow {
+        const char* what;
+        DropInput in;
+        std::vector<GridPlacement> occupants;
+        DropOutcome outcome;
+        int col;
+        int row;
+        bool prepend;
+    };
+    const LeftRow rows[] = {
+        {"a previewed row past the first page's left border",
+         past_left_border(release_on(0, 6, 2)),
+         {fan},
+         DropOutcome::CreatePage,
+         0,
+         2,
+         true},
+        {"no previewed row past the first page's left border",
+         past_left_border(release_on(0, -1, -1)),
+         {},
+         DropOutcome::CreatePage,
+         0,
+         0,
+         true},
+        {"past the first page's left border with no page to create",
+         without_slot(past_left_border(release_on(0, 6, 2))),
+         {fan},
+         DropOutcome::Move,
+         6,
+         2,
+         false},
+        {"past a later page's left border",
+         past_left_border(release_on(1, 6, 2)),
+         {},
+         DropOutcome::Move,
+         6,
+         2,
+         false},
+        {"past the last page's right border still appends",
+         past_border(release_on(PAGES - 1, 8, 4)),
+         {},
+         DropOutcome::CreatePage,
+         COLS - SPAN,
+         4,
+         false},
+    };
+    for (const LeftRow& row : rows) {
+        INFO(row.what);
+        const DropResolution drop = resolve_drop(row.in, occupied_by(row.occupants));
+        CHECK(drop.outcome == row.outcome);
+        CHECK(drop.prepend_page == row.prepend);
+        if (row.outcome == DropOutcome::Move || row.outcome == DropOutcome::CreatePage) {
+            CHECK(drop.col == row.col);
+            CHECK(drop.row == row.row);
+        }
+    }
+
+    // A single page is both first and last: its right border still appends.
+    DropInput only_page = past_border(release_on(0, 6, 2));
+    only_page.page_count = 1;
+    const DropResolution append = resolve_drop(only_page, occupied_by({}));
+    CHECK(append.outcome == DropOutcome::CreatePage);
+    CHECK_FALSE(append.prepend_page);
+    CHECK(append.col == COLS - SPAN);
 }
