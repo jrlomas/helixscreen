@@ -6,7 +6,9 @@
 # A job resets the checkout and rebuilds in $WORKDIR on the container host, so
 # two runs in that tree corrupt each other. The remote half of the script
 # therefore takes an flock on the host before touching anything, and a second
-# run waits, printing who holds the lock and since when.
+# run waits, printing who holds the lock and since when. A build orphaned in
+# the container by a run whose ssh side died holds no lock at all, so the
+# run also polls the container for a live make before touching git.
 #
 # These tests stub ssh so the remote heredoc runs locally, and stub git,
 # sudo and docker so nothing leaves the sandbox and no build runs; what is
@@ -37,12 +39,27 @@ case "$*" in
     *) echo "unhandled git call: $*" >&2; exit 1 ;;
 esac'
     # docker: enough behavior for the container checks, and an exec that
-    # records instead of running, so no git or make ever executes.
+    # records instead of running, so no git or make ever executes. The pgrep
+    # probe is stateful when MOCK_PGREP_HITS names a file: the first poll
+    # reports a running make, later polls report none, and the file counts
+    # the polls. Without the knob every poll reports no make.
     mock_command_script docker '
 case "$1" in
     ps) echo helix-tsan ;;
     start) exit 0 ;;
-    exec) echo "[docker-exec] $*" >> "$MOCK_DOCKER_LOG" ;;
+    exec)
+        case "$*" in
+            *pgrep*)
+                if [ -n "${MOCK_PGREP_HITS:-}" ]; then
+                    n=$(cat "$MOCK_PGREP_HITS" 2>/dev/null || echo 0)
+                    n=$((n + 1))
+                    echo "$n" > "$MOCK_PGREP_HITS"
+                    [ "$n" -eq 1 ] && exit 0
+                fi
+                exit 1
+                ;;
+            *) echo "[docker-exec] $*" >> "$MOCK_DOCKER_LOG" ;;
+        esac ;;
     *) echo "unhandled docker call: $*" >&2; exit 1 ;;
 esac
 exit 0'
@@ -78,6 +95,11 @@ wait_for_line() { # <substring> <file>
     # The lock is advisory state, not liveness: the file outlives the run,
     # but an immediate exclusive flock must succeed.
     flock -n "$(lock_file)" -c true
+
+    # Successive runs rewrite the holder line rather than appending.
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    [ "$(wc -l < "$(lock_file)")" -eq 1 ]
 }
 
 @test "a second run waits for the workdir lock and names the holder" {
@@ -112,4 +134,19 @@ wait_for_line() { # <substring> <file>
     wait "$holder" 2>/dev/null || true
     wait "$runner"
     grep -q "free; continuing" "$out"
+}
+
+@test "a run waits out an orphaned container build before touching the tree" {
+    # A build left running in the container by a run whose ssh side died
+    # holds no lock; the next run must not reset the tree under it.
+    export ZEUS_ORPHAN_POLL_SECS=0
+    export MOCK_PGREP_HITS="$BATS_TEST_TMPDIR/pgrep-hits"
+
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    contains "orphaned build still running in helix-tsan; waiting" "$output"
+    # Two polls: the first sees the make, the second sees it gone.
+    [ "$(cat "$MOCK_PGREP_HITS")" -eq 2 ]
+    # The git sequence ran, and only after the wait cleared.
+    grep -qF "git reset" "$MOCK_DOCKER_LOG"
 }

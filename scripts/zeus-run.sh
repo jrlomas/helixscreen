@@ -129,6 +129,9 @@ if ! flock -n 9; then
     flock 9
     echo "→ $WORKDIR free; continuing"
 fi
+# The lock is held here, so the file can be rewritten in place: it stays one
+# line no matter how many jobs pass through it.
+: > "\$LOCK"
 printf 'held by pid %s: %s %s since %s\n' "\$\$" "$WHAT" "$SHORT" "\$(date '+%F %T')" >&9
 
 # --- ZFS ARC: borrow the RAM for the duration, hand it back on any exit -------
@@ -198,6 +201,16 @@ if ! sudo -n docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
 fi
 
 D() { sudo -n docker exec -w "$WORKDIR" -e CCACHE_DIR=/work/ccache -e HELIX_J="\$HELIX_J" "$CONTAINER" bash -lc "\$1"; }
+
+# A run whose ssh side died leaves its build running in the container while
+# the lock is already released; resetting the tree under that build is the
+# corruption the lock exists to prevent. Wait any make out before touching
+# git. The poll interval is the only knob: long enough not to spam the log
+# of a live box, overridable so tests can spin it fast.
+while D 'pgrep -x make >/dev/null'; do
+    echo "→ orphaned build still running in $CONTAINER; waiting"
+    sleep "${ZEUS_ORPHAN_POLL_SECS:-30}"
+done
 
 D 'git config --global --add safe.directory "*"' >/dev/null
 D 'git fetch --quiet --all --recurse-submodules=on-demand'
