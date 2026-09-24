@@ -270,18 +270,25 @@ struct MachineOpGating {
  * @param backend_self_homes AmsBackend::filament_ops_self_home(); false when
  *                           there is no backend, per print_blocks_filament_op().
  */
+/// The two stops every sidebar filament op shares: an op already running, and
+/// a print owning the toolhead. print_blocks_filament_op(), not the raw
+/// print_active subject: PRINTING always refuses, but a PAUSED print ALLOWS the
+/// op on every backend whose filament macro does not home itself (only AD5X IFS
+/// does). Gating on print_active would grey the buttons through the pause that
+/// is the entire recovery workflow.
+[[nodiscard]] inline OpButtonState op_blocked_state(bool system_busy, PrintState lifecycle,
+                                                    bool backend_self_homes) {
+    OpButtonState s;
+    s.system_busy = system_busy;
+    s.print_blocks_op = print_blocks_filament_op(lifecycle, backend_self_homes);
+    return s;
+}
+
 [[nodiscard]] inline OpButtonState build_unload_gating_state(bool filament_loaded, bool system_busy,
                                                              PrintState lifecycle,
                                                              bool backend_self_homes) {
-    OpButtonState s;
+    OpButtonState s = op_blocked_state(system_busy, lifecycle, backend_self_homes);
     s.unload_available = filament_loaded;
-    s.system_busy = system_busy;
-    // print_blocks_filament_op(), not the raw print_active subject: PRINTING
-    // always refuses, but a PAUSED print ALLOWS the unload on every backend whose
-    // filament macro does not home itself (only AD5X IFS does). Gating on
-    // print_active would keep this button greyed through the pause that is the
-    // entire recovery workflow.
-    s.print_blocks_op = print_blocks_filament_op(lifecycle, backend_self_homes);
     s.unload_is_cold_lane_op = false;
     return s;
 }
