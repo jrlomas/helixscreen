@@ -3,9 +3,12 @@
 
 #include "job_queue_state.h"
 
+#include "ui_filename_utils.h"
+
 #include "connection_staleness.h"
 #include "i_moonraker_api.h"
 #include "i_moonraker_client.h"
+#include "queued_job_options.h"
 #include "static_subject_registry.h"
 #include "subject_debug_registry.h"
 
@@ -14,11 +17,13 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 
 JobQueueState::JobQueueState(IMoonrakerAPI* api, helix::IMoonrakerClient* client)
     : api_(api), client_(client) {
     std::memset(state_buffer_, 0, sizeof(state_buffer_));
     std::memset(summary_buffer_, 0, sizeof(summary_buffer_));
+    std::memset(next_filename_buffer_, 0, sizeof(next_filename_buffer_));
 
     subscribe_to_notifications();
     watch_connection_state();
@@ -27,6 +32,9 @@ JobQueueState::JobQueueState(IMoonrakerAPI* api, helix::IMoonrakerClient* client
 
 void JobQueueState::invalidate() {
     is_loaded_ = false;
+    // A dropped socket may hide a Moonraker restart, and a restart is the
+    // only thing that changes server config: re-read it on the next connect.
+    automatic_transition_loaded_ = false;
 }
 
 void JobQueueState::watch_connection_state() {
@@ -72,6 +80,11 @@ void JobQueueState::init_subjects() {
     lv_xml_register_subject(nullptr, "job_queue_count", &job_queue_count_subject_);
     subjects_.register_subject(&job_queue_count_subject_, "job_queue_count");
 
+    lv_subject_init_string(&job_queue_next_filename_subject_, next_filename_buffer_, nullptr,
+                           sizeof(next_filename_buffer_), "");
+    lv_xml_register_subject(nullptr, "job_queue_next_filename", &job_queue_next_filename_subject_);
+    subjects_.register_subject(&job_queue_next_filename_subject_, "job_queue_next_filename");
+
     SubjectDebugRegistry::instance().register_subject(&job_queue_state_subject_,
                                                       "job_queue_state_text",
                                                       LV_SUBJECT_TYPE_STRING, __FILE__, __LINE__);
@@ -80,6 +93,9 @@ void JobQueueState::init_subjects() {
                                                       LV_SUBJECT_TYPE_STRING, __FILE__, __LINE__);
     SubjectDebugRegistry::instance().register_subject(&job_queue_count_subject_, "job_queue_count",
                                                       LV_SUBJECT_TYPE_INT, __FILE__, __LINE__);
+    SubjectDebugRegistry::instance().register_subject(&job_queue_next_filename_subject_,
+                                                      "job_queue_next_filename",
+                                                      LV_SUBJECT_TYPE_STRING, __FILE__, __LINE__);
 
     subjects_initialized_ = true;
 
@@ -103,6 +119,8 @@ void JobQueueState::deinit_subjects() {
 }
 
 void JobQueueState::fetch() {
+    fetch_automatic_transition();
+
     if (!api_)
         return;
     bool expected = false;
@@ -134,8 +152,41 @@ void JobQueueState::on_queue_fetched(const JobQueueStatus& status) {
     cached_jobs_ = status.queued_jobs;
     queue_state_ = status.queue_state;
     is_loaded_ = true;
+    prune_option_store();
     update_subjects();
     spdlog::debug("[JobQueueState] Updated: state={}, jobs={}", queue_state_, cached_jobs_.size());
+}
+
+void JobQueueState::fetch_automatic_transition() {
+    if (!client_ || automatic_transition_loaded_)
+        return;
+    // Latch before issuing: a failed read must not re-fire on every widget
+    // activation, and unreadable already means false.
+    automatic_transition_loaded_ = true;
+
+    auto token = lifetime_.token();
+    client_->send_jsonrpc(
+        "server.config", json::object(),
+        [this, token](const json& response) {
+            token.defer("JobQueueState::on_server_config", [this, response]() {
+                automatic_transition_ = helix::parse_automatic_transition(response);
+                spdlog::debug("[JobQueueState] job_queue automatic_transition={}",
+                              automatic_transition_);
+            });
+        },
+        [token](const MoonrakerError& err) {
+            spdlog::debug("[JobQueueState] server.config read failed: {}", err.message);
+        },
+        0, true);
+}
+
+void JobQueueState::prune_option_store() {
+    std::vector<std::string> job_ids;
+    job_ids.reserve(cached_jobs_.size());
+    for (const auto& job : cached_jobs_) {
+        job_ids.push_back(job.job_id);
+    }
+    helix::queue::prune_stored_queued_job_options(lifetime_, api_, std::move(job_ids));
 }
 
 void JobQueueState::update_subjects() {
@@ -163,6 +214,14 @@ void JobQueueState::update_subjects() {
     }
     lv_subject_copy_string(&job_queue_summary_subject_, summary_buffer_);
 
+    // Next-job display name, empty when the queue is empty. Same settled-before-
+    // count rule as the two subjects above: count observers re-read this.
+    std::snprintf(next_filename_buffer_, sizeof(next_filename_buffer_), "%s",
+                  cached_jobs_.empty()
+                      ? ""
+                      : helix::gcode::get_display_filename(cached_jobs_.front().filename).c_str());
+    lv_subject_copy_string(&job_queue_next_filename_subject_, next_filename_buffer_);
+
     // Count goes LAST, after cached_jobs_ and both text subjects are settled.
     // It is the rebuild trigger the queue surfaces observe, and PrintStatusWidget's
     // observer runs synchronously (observe_int_sync) — publishing it first would
@@ -183,3 +242,29 @@ void JobQueueState::subscribe_to_notifications() {
 
     spdlog::debug("[JobQueueState] Subscribed to notify_job_queue_changed");
 }
+
+namespace helix {
+
+bool parse_automatic_transition(const json& rpc_response) {
+    // Defensive walk, no throwing value() lookups: server.config is foreign
+    // input and a malformed answer reads as Moonraker's own default (false).
+    if (!rpc_response.is_object() || !rpc_response.contains("result")) {
+        return false;
+    }
+    const json& result = rpc_response["result"];
+    if (!result.is_object() || !result.contains("config")) {
+        return false;
+    }
+    const json& config = result["config"];
+    if (!config.is_object() || !config.contains("job_queue")) {
+        return false;
+    }
+    const json& job_queue = config["job_queue"];
+    if (!job_queue.is_object() || !job_queue.contains("automatic_transition")) {
+        return false;
+    }
+    const json& value = job_queue["automatic_transition"];
+    return value.is_boolean() ? value.get<bool>() : false;
+}
+
+} // namespace helix

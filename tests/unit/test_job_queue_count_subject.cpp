@@ -89,6 +89,7 @@ struct ScopedJobQueueSubjects {
         lv_xml_unregister_subject(nullptr, "job_queue_count");
         lv_xml_unregister_subject(nullptr, "job_queue_summary_text");
         lv_xml_unregister_subject(nullptr, "job_queue_state_text");
+        lv_xml_unregister_subject(nullptr, "job_queue_next_filename");
     }
 };
 
@@ -128,6 +129,10 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     lv_subject_t* summary = lv_xml_get_subject(nullptr, "job_queue_summary_text");
     REQUIRE(summary != nullptr);
 
+    lv_subject_t* next_filename = lv_xml_get_subject(nullptr, "job_queue_next_filename");
+    REQUIRE(next_filename != nullptr);
+    CHECK(std::string(lv_subject_get_string(next_filename)).empty());
+
     ScopedJobQueueState scoped_state(&jqs);
     PanelWidgetHarness<JobQueueWidget> h(test_screen());
 
@@ -146,6 +151,8 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     JobQueueStateTestAccess::deliver_status(jqs, status_with(3));
     CHECK(lv_subject_get_int(count) == 3);
     CHECK(std::string(lv_subject_get_string(summary)) == "3 jobs queued");
+    // Next-job line follows the FIRST entry (display name, extension stripped)
+    CHECK(std::string(lv_subject_get_string(next_filename)) == "file-0");
 
     REQUIRE(wait_until([&] { return container_children(container) == 3; }, 3000));
 
@@ -154,12 +161,15 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     JobQueueStateTestAccess::deliver_status(jqs, status_with(1));
     CHECK(lv_subject_get_int(count) == 1);
     CHECK(std::string(lv_subject_get_string(summary)) == "1 job queued");
+    CHECK(std::string(lv_subject_get_string(next_filename)) == "file-0");
 
     REQUIRE(wait_until([&] { return container_children(container) == 1; }, 3000));
 
     // --- Emptied queue: back to zero rows, and the empty-state label returns.
     JobQueueStateTestAccess::deliver_status(jqs, status_with(0));
     CHECK(lv_subject_get_int(count) == 0);
+    // ...and the next-job line clears with it.
+    CHECK(std::string(lv_subject_get_string(next_filename)).empty());
 
     REQUIRE(wait_until([&] { return container_children(container) == 0; }, 3000));
 

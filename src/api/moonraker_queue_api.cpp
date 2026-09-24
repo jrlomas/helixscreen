@@ -10,6 +10,27 @@
 // MoonrakerQueueAPI Implementation
 // ============================================================================
 
+namespace {
+
+/// Shared parser for every response that carries the queue (status and
+/// post_job both return `queue_state` + `queued_jobs` in result).
+JobQueueStatus parse_queue_status(const json& response) {
+    JobQueueStatus status;
+    auto result = response.value("result", json::object());
+    status.queue_state = result.value("queue_state", "ready");
+    for (const auto& job : result.value("queued_jobs", json::array())) {
+        JobQueueEntry entry;
+        entry.job_id = job.value("job_id", "");
+        entry.filename = job.value("filename", "");
+        entry.time_added = job.value("time_added", 0.0);
+        entry.time_in_queue = job.value("time_in_queue", 0.0);
+        status.queued_jobs.push_back(std::move(entry));
+    }
+    return status;
+}
+
+} // namespace
+
 MoonrakerQueueAPI::MoonrakerQueueAPI(helix::IMoonrakerClient& client) : client_(client) {}
 
 // ============================================================================
@@ -22,17 +43,7 @@ void MoonrakerQueueAPI::get_queue_status(StatusCallback on_success, ErrorCallbac
     client_.send_jsonrpc(
         "server.job_queue.status", json::object(),
         [on_success](json response) {
-            JobQueueStatus status;
-            auto result = response.value("result", json::object());
-            status.queue_state = result.value("queue_state", "ready");
-            for (const auto& job : result.value("queued_jobs", json::array())) {
-                JobQueueEntry entry;
-                entry.job_id = job.value("job_id", "");
-                entry.filename = job.value("filename", "");
-                entry.time_added = job.value("time_added", 0.0);
-                entry.time_in_queue = job.value("time_in_queue", 0.0);
-                status.queued_jobs.push_back(std::move(entry));
-            }
+            JobQueueStatus status = parse_queue_status(response);
             spdlog::debug("[Moonraker API] Job queue: state={}, {} jobs", status.queue_state,
                           status.queued_jobs.size());
             on_success(status);
@@ -64,7 +75,7 @@ void MoonrakerQueueAPI::pause_queue(SuccessCallback on_success, ErrorCallback on
         on_error);
 }
 
-void MoonrakerQueueAPI::add_job(const std::string& filename, SuccessCallback on_success,
+void MoonrakerQueueAPI::add_job(const std::string& filename, StatusCallback on_success,
                                 ErrorCallback on_error) {
     json params;
     params["filenames"] = json::array({filename});
@@ -73,9 +84,11 @@ void MoonrakerQueueAPI::add_job(const std::string& filename, SuccessCallback on_
 
     client_.send_jsonrpc(
         "server.job_queue.post_job", params,
-        [on_success, filename](json) {
-            spdlog::info("[Moonraker API] Job added to queue: {}", filename);
-            on_success();
+        [on_success, filename](json response) {
+            JobQueueStatus status = parse_queue_status(response);
+            spdlog::info("[Moonraker API] Job added to queue: {} ({} jobs now)", filename,
+                         status.queued_jobs.size());
+            on_success(status);
         },
         on_error);
 }

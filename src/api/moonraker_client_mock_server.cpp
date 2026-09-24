@@ -6,6 +6,8 @@
 #include <spdlog/spdlog.h>
 
 #include <cstdlib>
+#include <map>
+#include <string>
 
 namespace {
 
@@ -26,7 +28,96 @@ nlohmann::json mock_server_components(bool with_spoolman) {
 
 namespace mock_internal {
 
+// In-memory Moonraker database. Reset inside register_server_handlers() so
+// each MoonrakerClientMock construction starts empty — otherwise keys written
+// by one test leak into the next in the same process (same L053 reasoning as
+// the mock queue state).
+static std::map<std::string, json> s_mock_db;
+
 void register_server_handlers(std::unordered_map<std::string, MethodHandler>& registry) {
+    s_mock_db.clear();
+
+    // server.config - Moonraker's own configuration.
+    // https://moonraker.readthedocs.io/en/latest/web_api/#get-server-configuration
+    // job_queue.automatic_transition defaults to false the way Moonraker's
+    // does; HELIX_MOCK_JOB_QUEUE_AUTOMATIC_TRANSITION=1 flips it so the
+    // true-branch UI behaviour is reachable in a --test run.
+    registry["server.config"] =
+        []([[maybe_unused]] MoonrakerClientMock* self, [[maybe_unused]] const json& params,
+           std::function<void(const json&)> success_cb,
+           [[maybe_unused]] std::function<void(const MoonrakerError&)> error_cb) -> bool {
+        const char* env = std::getenv("HELIX_MOCK_JOB_QUEUE_AUTOMATIC_TRANSITION");
+        const bool automatic_transition = env != nullptr && std::string(env) == "1";
+
+        json response = {
+            {"jsonrpc", "2.0"},
+            {"result",
+             {{"config", {{"job_queue", {{"automatic_transition", automatic_transition}}}}}}}};
+
+        if (success_cb) {
+            success_cb(response);
+        }
+        return true;
+    };
+
+    // server.database.get_item - read one key from the mock database.
+    // A missing key answers the JSON-RPC 404 the real server does, which is
+    // the signal callers treat as "nothing stored yet".
+    registry["server.database.get_item"] =
+        []([[maybe_unused]] MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
+           std::function<void(const MoonrakerError&)> error_cb) -> bool {
+        if (!params.contains("namespace") || !params["namespace"].is_string() ||
+            !params.contains("key") || !params["key"].is_string()) {
+            if (error_cb) {
+                error_cb(MoonrakerError::validation_error(
+                    "server.database.get_item", "get_item: 'namespace' and 'key' are required"));
+            }
+            return true;
+        }
+        std::string ns = params["namespace"].get<std::string>();
+        std::string key = params["key"].get<std::string>();
+        auto it = s_mock_db.find(ns + "/" + key);
+        if (it == s_mock_db.end()) {
+            if (error_cb) {
+                MoonrakerError err = MoonrakerError::json_rpc_error(
+                    "server.database.get_item",
+                    "Key '" + key + "' in namespace '" + ns + "' not found");
+                err.code = 404;
+                error_cb(err);
+            }
+            return true;
+        }
+        if (success_cb) {
+            success_cb(json{{"result", {{"namespace", ns}, {"key", key}, {"value", it->second}}}});
+        }
+        return true;
+    };
+
+    // server.database.post_item - write one key to the mock database.
+    registry["server.database.post_item"] =
+        []([[maybe_unused]] MoonrakerClientMock* self, const json& params,
+           std::function<void(const json&)> success_cb,
+           std::function<void(const MoonrakerError&)> error_cb) -> bool {
+        if (!params.contains("namespace") || !params["namespace"].is_string() ||
+            !params.contains("key") || !params["key"].is_string() || !params.contains("value")) {
+            if (error_cb) {
+                error_cb(MoonrakerError::validation_error(
+                    "server.database.post_item",
+                    "post_item: 'namespace', 'key' and 'value' are required"));
+            }
+            return true;
+        }
+        std::string ns = params["namespace"].get<std::string>();
+        std::string key = params["key"].get<std::string>();
+        s_mock_db[ns + "/" + key] = params["value"];
+        spdlog::debug("[MoonrakerClientMock] database post_item: {}/{}", ns, key);
+        if (success_cb) {
+            success_cb(
+                json{{"result", {{"namespace", ns}, {"key", key}, {"value", params["value"]}}}});
+        }
+        return true;
+    };
     // server.connection.identify - Identify client to Moonraker for notifications
     // https://moonraker.readthedocs.io/en/latest/web_api/#identify-connection
     registry["server.connection.identify"] =
@@ -302,7 +393,7 @@ void register_server_handlers(std::unordered_map<std::string, MethodHandler>& re
         return true;
     };
 
-    spdlog::debug("[MoonrakerClientMock] Registered {} server method handlers", 6);
+    spdlog::debug("[MoonrakerClientMock] Registered {} server method handlers", 11);
 }
 
 } // namespace mock_internal

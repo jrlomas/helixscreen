@@ -17,7 +17,13 @@
 class IMoonrakerAPI;
 namespace helix {
 class IMoonrakerClient;
-}
+
+/// Parse Moonraker's `job_queue.automatic_transition` out of a `server.config`
+/// JSON-RPC response (the full message; "result" is unwrapped here). False
+/// when the section, the key, or a well-formed response is absent, and when
+/// the value is not a boolean — matching Moonraker's own default.
+bool parse_automatic_transition(const json& rpc_response);
+} // namespace helix
 
 /**
  * @brief Job queue state manager bridging Moonraker Queue API to LVGL subjects
@@ -68,6 +74,17 @@ class JobQueueState {
         return queue_state_;
     }
 
+    /// Whether Moonraker starts the next queued job by itself on completion
+    ///
+    /// Read from `server.config` (`config.job_queue.automatic_transition`)
+    /// once per connect — false when the key, the section or the whole config
+    /// is unreadable, which is also Moonraker's own default. While true,
+    /// Moonraker calls start_print itself and HelixScreen's per-job option
+    /// store cannot participate, so UI hides it.
+    bool automatic_transition() const {
+        return automatic_transition_;
+    }
+
     /// Initialize LVGL subjects (call before XML creation)
     void init_subjects();
 
@@ -86,6 +103,19 @@ class JobQueueState {
 
     void on_queue_fetched(const JobQueueStatus& status);
     void subscribe_to_notifications();
+
+    /**
+     * @brief Read Moonraker's job_queue config once per connect
+     *
+     * Called from fetch(). Latched: while @p automatic_transition_loaded_
+     * holds, further fetches (widget activations) skip the request. A socket
+     * drop invalidates the latch via invalidate(), so the next connect
+     * re-reads — a Moonraker restart is free to have changed the config.
+     */
+    void fetch_automatic_transition();
+
+    /// Drops stored per-job options whose job left the queue (async, best-effort)
+    void prune_option_store();
 
     /**
      * @brief Mark the queue stale whenever the Moonraker socket is not up
@@ -114,12 +144,17 @@ class JobQueueState {
     // prevents UpdateQueue freeze-drops from stranding the fetch guard.
     std::atomic<bool> is_fetching_{false};
     bool subjects_initialized_ = false;
+    bool automatic_transition_ = false;
+    bool automatic_transition_loaded_ = false;
 
     // LVGL subjects
     lv_subject_t job_queue_state_subject_;
     char state_buffer_[64];
     lv_subject_t job_queue_summary_subject_;
     char summary_buffer_[128];
+    // Display name of the first queued job, "" when the queue is empty.
+    lv_subject_t job_queue_next_filename_subject_;
+    char next_filename_buffer_[256];
     // Queued-job count. The refresh channel for every queue surface: the home
     // panel's job_queue widget, the print-status widget's queue row, and the
     // job-queue modal each observe it and rebuild off a change. Nothing else
