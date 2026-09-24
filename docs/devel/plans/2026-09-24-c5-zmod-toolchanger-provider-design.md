@@ -88,6 +88,19 @@ applies to material names used as gcode parameters (`FILAMENT_MANAGEMENT.md` § 
 G-code parameter values"); the plan decides how to share it. Unmappable -> the edit is refused with
 a stated reason, never sent.
 
+**Colour palette:** `filament.json` stores a colour as an index into Z-Mod's `COLOR_MAPPING` (24
+entries). A hex outside it is saved as index 0, white. The writer therefore snaps the picked colour
+to the nearest palette entry before sending, the same rule QIDI Box already applies
+(`AmsBackendQidi::resolve_color_id`, squared RGB distance), extracted into one shared helper rather
+than copied. The palette comes from `zmod_color.palette` (hex keys in index order), added to the
+upstream PR. With no palette in the frame, colour writes are not sent; material writes still are.
+
+**No dialog:** `CHANGE_ZCOLOR` with `HEX` and `TYPE` calls `GET_ZCOLOR` on the same command, which
+opens a Mainsail/Fluidd prompt unless `SILENT=1` is set. The writer always sends
+`CHANGE_ZCOLOR SLOT=<n> HEX=<RRGGBB> TYPE=<type> SILENT=1`. `CHANGE_ZCOLOR` needs both `HEX` and
+`TYPE` to write without a prompt, so a colour-only edit sends the slot's current type and a
+material-only edit sends its current (snapped) colour.
+
 ### 3. Empty carriage on every tool changer
 
 `ToolState::set_ams_topology` (`src/printer/tool_state.cpp`) turns an active tool of -1 into T0.
@@ -134,7 +147,7 @@ approach). Established by reading; the first test must fail on main to confirm i
 
 1. `feature/c5-platform` (fork port: DB entry detecting both firmwares, preset, mock persona) merges
    first; this work builds on its detection and persona.
-2. Upstream PR to ghzserg/z_c5pro adding `slots` to `zmod_color.get_status()`. Everything except the
+2. Upstream PR ghzserg/z_c5pro#1 adding `slots` and `palette` to `zmod_color.get_status()`. Everything except the
    material source works without it, and the material source stays inert until a frame carries
    `slots`.
 3. Empty-carriage fix is independent and can land first.
