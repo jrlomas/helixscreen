@@ -226,7 +226,12 @@ pin_env_file() {
     fi
     [ -n "$real" ] && [ -f "$real" ] || real="$file"
 
-    $(file_sudo "$real") chmod 0644 "$real" 2>/dev/null || true
+    # Failures warn rather than fail the install, but never silently: an
+    # unpinned file is one the launcher refuses on every boot, and an
+    # unreported chmod is indistinguishable from a pinned one at install time.
+    if ! $(file_sudo "$real") chmod 0644 "$real" 2>/dev/null; then
+        log_warn "pin_env_file: could not chmod 0644 '$real' (the launcher will refuse this file until fixed)"
+    fi
 
     local user="${KLIPPER_USER:-}"
     if [ -n "$user" ]; then
@@ -234,7 +239,9 @@ pin_env_file() {
         if type _resolve_primary_group >/dev/null 2>&1; then
             group=$(_resolve_primary_group "$user")
         fi
-        $(file_sudo "$real") chown "${user}:${group}" "$real" 2>/dev/null || true
+        if ! $(file_sudo "$real") chown "${user}:${group}" "$real" 2>/dev/null; then
+            log_warn "pin_env_file: could not chown ${user}:${group} '$real'"
+        fi
     fi
 }
 

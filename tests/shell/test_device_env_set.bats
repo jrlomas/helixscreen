@@ -42,6 +42,18 @@ setup() {
     [ "$output" -eq 1 ]
 }
 
+@test "an already-set key still pins a group-writable env file to 0644" {
+    # The pin runs before the idempotence exit, so a deploy heals a mode an
+    # update or unpack landed even when the key itself needs no change; the
+    # launcher refuses the whole file over that bit.
+    printf 'HELIX_REMOTE_CONTROL=1\n' > "$WORK/pin.env"
+    chmod 664 "$WORK/pin.env"
+    run sh "$ENVSET" "$WORK/pin.env" HELIX_REMOTE_CONTROL 1
+    [ "$status" -eq 0 ]
+    contains "already set" "$output"
+    [ "$(stat -c '%a' "$WORK/pin.env")" = "644" ]
+}
+
 @test "flips a commented-out key in place rather than appending a duplicate" {
     require_gnu_sed
     # The stock env template ships documented-but-disabled entries. Appending

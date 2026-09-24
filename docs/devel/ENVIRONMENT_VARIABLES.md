@@ -10,9 +10,11 @@ exporting `KEY=VALUE` lines whose variable is not already set. The file is shell
 so values may use `$(...)` and variable expansion, and the same parse answers `--print-env`.
 
 That eval is why ownership is gated: the file is only read when it is owned by root or by
-the user the launcher itself runs as, and carries no group or world write bit. Anything
-else (a group-writable mode left behind by a permissive umask, an owner that is neither
-root nor the service user) is skipped with a logged warning naming the file, its owner and
+the user the launcher itself runs as, and carries no group or world write bit. A file whose
+owner passes that check and whose only fault is a write bit is repaired in place to `0644`
+(web updates and deploys ship the file without pinning it) and loaded, with one log line
+saying so. Anything else (a mode the repair cannot settle, an owner that is neither root
+nor the service user) is skipped with a logged warning naming the file, its owner and
 mode, and the fix:
 
 ```sh

@@ -490,13 +490,14 @@ EOF
 # `stat` is faked on PATH for those (same technique as the heap-diag uname).
 # =============================================================================
 
-# Fake stat answering the gate's exact question (`stat -c '%u %a' FILE`) with
-# a fixed uid/mode pair. FAKE_STAT_FAIL=1 makes it fail outright, standing in
-# for a rootfs with no usable stat. Any other invocation fails too, so the
-# BSD fallback form never reaches a real stat mid-test.
+# Fake stat answering the gate's exact question (`stat -L -c '%u %a' FILE`)
+# with a fixed uid/mode pair, on every call alike - so a self-heal re-stat
+# reports the same mode the first one did. FAKE_STAT_FAIL=1 makes it fail
+# outright, standing in for a rootfs with no usable stat. Any other invocation
+# fails too, so the BSD fallback form never reaches a real stat mid-test.
 make_fake_stat() {
     mkdir -p "$BATS_TEST_TMPDIR/fakebin"
-    printf '#!/bin/sh\n[ "${FAKE_STAT_FAIL:-0}" = "1" ] && exit 1\n[ "$1" = "-c" ] && echo "${FAKE_STAT_UID:-0} ${FAKE_STAT_MODE:-644}" || exit 1\n' \
+    printf '#!/bin/sh\n[ "${FAKE_STAT_FAIL:-0}" = "1" ] && exit 1\n[ "$1" = "-L" ] && [ "$2" = "-c" ] && echo "${FAKE_STAT_UID:-0} ${FAKE_STAT_MODE:-644}" || exit 1\n' \
         > "$BATS_TEST_TMPDIR/fakebin/stat"
     chmod +x "$BATS_TEST_TMPDIR/fakebin/stat"
 }
@@ -523,30 +524,93 @@ make_fake_stat() {
     [ ! -s "$BATS_TEST_TMPDIR/gate.log" ]
 }
 
-@test "group-writable env file is refused with the fix in the warning and never evaluated" {
+@test "group-writable env file owned by this user is repaired to 0644 and loaded" {
+    # A write bit on a file the owner rule already accepted is a shipping
+    # fault, not an attack: web updates and deploys land the file without
+    # pinning it, and a refusal would blank settings on every update.
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
-    printf 'MOONRAKER_HOST=$(touch "$BATS_TEST_TMPDIR/pwned")\n' \
+    printf 'MOONRAKER_HOST=self-healed.local\n' \
         > "$MOCK_INSTALL/config/helixscreen.env"
     chmod 664 "$MOCK_INSTALL/config/helixscreen.env"
     env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/heal.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "self-healed.local" ]
+    grep -q "repaired .* from mode 664 to 0644" "$BATS_TEST_TMPDIR/heal.log"
+    [ "$(stat -c '%a' "$MOCK_INSTALL/config/helixscreen.env")" = "644" ]
+}
+
+@test "world-writable env file stays refused when the mode cannot be repaired, and is never evaluated" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    mkdir -p "$BATS_TEST_TMPDIR/fakebin"
+    printf '#!/bin/sh\nexit 1\n' > "$BATS_TEST_TMPDIR/fakebin/chmod"
+    chmod +x "$BATS_TEST_TMPDIR/fakebin/chmod"
+    printf 'MOONRAKER_HOST=$(touch "$BATS_TEST_TMPDIR/pwned")\n' \
+        > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 666 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
     # Refusal skips the file; it does not abort the launcher.
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
     grep -q "group- or world-writable" "$BATS_TEST_TMPDIR/refuse.log"
-    grep -q "mode 664" "$BATS_TEST_TMPDIR/refuse.log"
+    grep -q "mode 666" "$BATS_TEST_TMPDIR/refuse.log"
     grep -qF "chmod 644 $MOCK_INSTALL/config/helixscreen.env" "$BATS_TEST_TMPDIR/refuse.log"
-    # The command substitution in the refused line never ran.
+    # The repair could not run, so the command substitution in the refused
+    # line never did either.
     [ ! -e "$BATS_TEST_TMPDIR/pwned" ]
+    [ "$(stat -c '%a' "$MOCK_INSTALL/config/helixscreen.env")" = "666" ]
 }
 
-@test "world-writable env file is refused" {
+@test "a repair that does not change what stat reports still refuses the file" {
+    # The re-stat after chmod is fail-closed: the fake stat keeps reporting
+    # 0664 no matter what happened on disk, so the file is refused even though
+    # the chmod itself succeeded.
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat
     printf 'MOONRAKER_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
-    chmod 666 "$MOCK_INSTALL/config/helixscreen.env"
-    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        FAKE_STAT_UID=0 FAKE_STAT_MODE=664 \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
-    grep -q "mode 666" "$BATS_TEST_TMPDIR/refuse.log"
+    grep -q "group- or world-writable" "$BATS_TEST_TMPDIR/refuse.log"
+}
+
+@test "a symlinked env file is judged on its target, and loads at 0644" {
+    # The per-file installs symlink config/helixscreen.env into
+    # printer_data/config; a stat that did not dereference reads the link's
+    # own 777 mode and refuses the file on every boot.
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    mkdir -p "$BATS_TEST_TMPDIR/printer_data/config/helixscreen"
+    printf 'MOONRAKER_HOST=behind-symlink.local\n' \
+        > "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
+    chmod 644 "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
+    ln -s "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env" \
+        "$MOCK_INSTALL/config/helixscreen.env"
+    run env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST
+    [ "$status" -eq 0 ]
+    [ "$output" = "behind-symlink.local" ]
+}
+
+@test "a symlinked env file with a writable target repairs the target, not the link" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    mkdir -p "$BATS_TEST_TMPDIR/printer_data/config/helixscreen"
+    printf 'MOONRAKER_HOST=heal-through-link.local\n' \
+        > "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
+    chmod 664 "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
+    ln -s "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env" \
+        "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/heal.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "heal-through-link.local" ]
+    # The repair landed on the real file the link points at, and the link
+    # itself survives as a link.
+    [ "$(stat -L -c '%a' "$MOCK_INSTALL/config/helixscreen.env")" = "644" ]
+    [ -L "$MOCK_INSTALL/config/helixscreen.env" ]
+    grep -q "repaired" "$BATS_TEST_TMPDIR/heal.log"
 }
 
 @test "env file owned by a third user is refused even at 0644" {

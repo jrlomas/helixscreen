@@ -33,6 +33,15 @@ if [ -L "$ENV_FILE" ]; then
     ENV_FILE="$(readlink -f "$ENV_FILE" 2>/dev/null || echo "$ENV_FILE")"
 fi
 
+# Pin the mode on every run, not only where the file is (re)written below: the
+# launcher's trust gate refuses the whole file over a group/world write bit, so
+# an update that landed one would otherwise survive this script's idempotence
+# exit. Best-effort: a missing file (first deploy) or a read-only mount must
+# not fail the key update itself.
+if [ -f "$ENV_FILE" ]; then
+    chmod 644 "$ENV_FILE" 2>/dev/null || true
+fi
+
 if [ -f "$ENV_FILE" ] && grep -q "^${KEY}=${VALUE}\$" "$ENV_FILE"; then
     echo "  ${KEY}=${VALUE} already set in ${ENV_FILE}"
     exit 0
