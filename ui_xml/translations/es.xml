@@ -59,6 +59,7 @@
   <translation tag="1 min ago" es="hace 1 min"/>
   <translation tag="1 minute" es="1 minuto"/>
   <translation tag="1 more tap to {} beta features" es="1 toque más para {} funciones beta"/>
+  <translation tag="1. Printer homes all axes (~1 minute)" es="1. La impresora referencia todos los ejes (~1 minuto)"/>
   <translation tag="1. Printer homes and probes the bed" es="1. La impresora hace origen y sondea la cama"/>
   <translation tag="1. Printer will home and probe each screw" es="1. La impresora hará origen y sondeará cada tornillo"/>
   <translation tag="10 minutes" es="10 minutos"/>
@@ -69,6 +70,7 @@
   <translation tag="180° Upside Down" es="180° invertido"/>
   <translation tag="2 min" es="2 min"/>
   <translation tag="2 minutes" es="2 minutos"/>
+  <translation tag="2. Jog Y until the nozzle is centered over the chute opening" es="2. Mueva Y hasta que la boquilla quede centrada sobre la apertura del conducto"/>
   <translation tag="2. Place paper between nozzle and bed" es="2. Coloque papel entre la boquilla y la cama"/>
   <translation tag="2. Results show how much to turn each screw" es="2. Los resultados muestran cuánto girar cada tornillo"/>
   <translation tag="20 minutes" es="20 minutos"/>
@@ -79,6 +81,7 @@
   <translation tag="2D Layers" es="Capas 2D"/>
   <translation tag="3. Adjust screws, then re-probe to verify" es="3. Ajuste los tornillos, luego vuelva a sondear para verificar"/>
   <translation tag="3. Lower nozzle until paper drags slightly" es="3. Baje la boquilla hasta que el papel roce ligeramente"/>
+  <translation tag="3. Save the position" es="3. Guarde la posición"/>
   <translation tag="30 minutes" es="30 minutos"/>
   <translation tag="30 seconds" es="30 segundos"/>
   <translation tag="3D Pipes" es="3D Pipes"/>
@@ -372,9 +375,11 @@
   <translation tag="Calibrate" es="Calibrar"/>
   <translation tag="Calibrate All" es="Calibrar Todo"/>
   <translation tag="Calibrate Bowden" es="Calibrar el bowden"/>
+  <translation tag="Calibrate Cutter" es="Calibrar cortador"/>
   <translation tag="Calibrate Encoder" es="Calibrar el encoder"/>
   <translation tag="Calibrate Gates" es="Calibrar gates"/>
   <translation tag="Calibrate Gear" es="Calibrar el engranaje"/>
+  <translation tag="Calibrate Purge Chute" es="Calibrar conducto de purga"/>
   <translation tag="Calibrate X" es="Calibrar X"/>
   <translation tag="Calibrate Y" es="Calibrar Y"/>
   <translation tag="Calibrate all tools" es="Calibrar todas las herramientas"/>
@@ -387,9 +392,12 @@
   <translation tag="Calibrating bed mesh..." es="Calibrando malla de cama..."/>
   <translation tag="Calibrating {} axis..." es="Calibrando el eje {}..."/>
   <translation tag="Calibrating..." es="Calibrando..."/>
+  <translation tag="Calibrating... (about 1 minute)" es="Calibrando... (unos 1 minuto)"/>
+  <translation tag="Calibration" es="Calibración"/>
   <translation tag="Calibration &amp; Tools" es="Calibración y herramientas"/>
   <translation tag="Calibration Complete!" es="¡Calibración Completa!"/>
   <translation tag="Calibration Failed" es="Calibración Fallida"/>
+  <translation tag="Calibration Saved" es="Calibración guardada"/>
   <translation tag="Calibration and system configuration" es="Calibración y configuración del sistema"/>
   <translation tag="Calibration cancelled." es="Calibración cancelada."/>
   <translation tag="Calibration complete" es="Calibración completa"/>
@@ -511,6 +519,7 @@
   <translation tag="Choose sound style" es="Elegir estilo de sonido"/>
   <translation tag="Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses." es="Elija el modelo que coincida con su impresora. Esto establece las macros de impresión, los roles de los ventiladores y el comportamiento de calibración que usa HelixScreen."/>
   <translation tag="Choose what to power off or restart." es="Elija qué apagar o reiniciar."/>
+  <translation tag="Chute position: X {:.1f}, Y {:.1f}" es="Posición del conducto de purga: X {:.1f}, Y {:.1f}"/>
   <translation tag="Clean Brush" es="Limpiar cepillo"/>
   <translation tag="Clean Nozzle" es="Limpiar Boquilla"/>
   <translation tag="Cleaning Nozzle..." es="Limpiando boquilla..."/>
@@ -701,9 +710,13 @@
   <translation tag="Customize your home screen" es="Personaliza tu pantalla de inicio"/>
   <translation tag="Cut Distance" es="Distancia de corte"/>
   <translation tag="Cut filament" es="Cortar filamento"/>
+  <translation tag="Cut position saved: {}" es="Posición de corte guardada: {}"/>
   <translation tag="Cut tip" es="Cortar la punta"/>
   <translation tag="Cutter Enabled" es="Cortador activado"/>
+  <translation tag="Cutter and purge chute calibration" es="Calibración del cortador y del conducto de purga"/>
   <translation tag="Cutter blade didn&apos;t sever filament" es="La cuchilla no cortó el filamento"/>
+  <translation tag="Cutter calibration completed" es="Calibración del cortador completada"/>
+  <translation tag="Cutter calibration failed: {}" es="Falló la calibración del cortador: {}"/>
   <translation tag="Cutter jam" es="Atasco del cortador"/>
   <translation tag="Cutting" es="Cortando"/>
   <translation tag="Cutting filament..." es="Cortando filamento..."/>
@@ -1196,6 +1209,7 @@
   <translation tag="Gray" es="Gris"/>
   <translation tag="Grip filament" es="Agarrar filamento"/>
   <translation tag="Grip the filament" es="Agarrar el filamento"/>
+  <translation tag="Guide the toolhead to the chute&apos;s extrude position" es="Guíe el cabezal hasta la posición de extrusión del conducto"/>
   <translation tag="Guides and reference" es="Guías y referencia"/>
   <translation tag="H" es="H"/>
   <translation tag="HOST" es="Host"/>
@@ -1271,6 +1285,7 @@
   <translation tag="Holding nozzle at {}°C to purge previous filament." es="Manteniendo la boquilla a {}°C para purgar el filamento anterior."/>
   <translation tag="Home" es="Inicio"/>
   <translation tag="Home &amp; Continue" es="Referenciar y continuar"/>
+  <translation tag="Home and sweep the cutter to re-find its position" es="Referencia y barrido del cortador para volver a encontrar su posición"/>
   <translation tag="Home failed" es="Error en referencia"/>
   <translation tag="Home printer first?" es="¿Referenciar la impresora primero?"/>
   <translation tag="Home selector" es="Referenciar selector"/>
@@ -1397,6 +1412,7 @@
   <translation tag="Job Queue" es="Cola de trabajos"/>
   <translation tag="Jog Speed XY" es="Velocidad de movimiento XY"/>
   <translation tag="Jog Speed Z" es="Velocidad de movimiento Z"/>
+  <translation tag="Jog Y until the nozzle is centered over the chute opening, then tap Save." es="Mueva Y hasta que la boquilla quede centrada sobre la apertura del conducto y toque Guardar."/>
   <translation tag="Jog failed: {}" es="Error en movimiento: {}"/>
   <translation tag="Jog speeds and step distances" es="Velocidades de movimiento y distancias de paso"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." es="Únase a la comunidad de HelixScreen en Discord para discusión, consejos, ayuda con la solución de problemas y solicitudes de funciones."/>
@@ -1410,6 +1426,7 @@
   <translation tag="Keep Required" es="Mantener Requerido"/>
   <translation tag="Keep Spool Info on Eject" es="Conservar información de la bobina al expulsar"/>
   <translation tag="Keep current" es="Mantener actual"/>
+  <translation tag="Keep hands clear. The printer moves on its own." es="Mantenga las manos alejadas. La impresora se mueve sola."/>
   <translation tag="Keep the bypass spool visible when bypass is off" es="Mantener visible la bobina de bypass cuando el bypass está desactivado"/>
   <translation tag="Kick away" es="Expulsar"/>
   <translation tag="Kinematics" es="Cinemática"/>
@@ -1472,6 +1489,7 @@
   <translation tag="Lifetime Print Stats" es="Estadísticas de impresión totales"/>
   <translation tag="Light" es="Claro"/>
   <translation tag="Light will switch when the current operation finishes" es="La luz cambiará cuando termine la operación actual"/>
+  <translation tag="Line the nozzle up with the purge chute so purged filament drops straight in." es="Alinee la boquilla con el conducto de purga para que el filamento purgado caiga directo dentro."/>
   <translation tag="Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer." es="La línea {} llama a {}, que esta impresora trata como una parada de emergencia. Vuelva a laminar el archivo con un perfil hecho para esta impresora."/>
   <translation tag="Listen to all theme sounds" es="Escucha todos los sonidos del tema"/>
   <translation tag="Listening" es="Escuchando"/>
@@ -1946,6 +1964,7 @@
   <translation tag="Please enter a valid port (1-65535)." es="Ingrese un puerto válido (1-65535)."/>
   <translation tag="Please enter an IP address or hostname." es="Ingrese una dirección IP o nombre de host."/>
   <translation tag="Please fill in the highlighted fields" es="Por favor, rellena los campos resaltados"/>
+  <translation tag="Please wait while the printer homes and moves to the start position." es="Espere mientras la impresora referencia y se mueve a la posición inicial."/>
   <translation tag="Please wait while the printer homes and probes." es="Por favor espere mientras la impresora hace origen y sondea."/>
   <translation tag="Please wait while the printer probes each screw position." es="Por favor espere mientras la impresora sondea cada posición de tornillo."/>
   <translation tag="Pluck the front belt on the left" es="Puntear la correa delantera izquierda"/>
@@ -2124,7 +2143,10 @@
   <translation tag="Pulling filament back" es="Retrayendo filamento"/>
   <translation tag="Purge" es="Purgar"/>
   <translation tag="Purge &amp; Wipe" es="Purgar y limpiar"/>
+  <translation tag="Purge Chute Calibration" es="Calibración del conducto de purga"/>
   <translation tag="Purge Length" es="Longitud de purga"/>
+  <translation tag="Purge chute calibration failed: {}" es="Falló la calibración del conducto de purga: {}"/>
+  <translation tag="Purge chute position saved." es="Posición del conducto de purga guardada."/>
   <translation tag="Purge failed: {}" es="Error al purgar: {}"/>
   <translation tag="Purge may still be running — response timed out" es="La purga puede seguir en curso — tiempo de espera agotado"/>
   <translation tag="Purge to bucket" es="Purgar al cubo"/>
@@ -2383,7 +2405,9 @@
   <translation tag="Saving Z-offset..." es="Guardando Z-offset..."/>
   <translation tag="Saving config... Klipper will restart." es="Guardando config... Klipper se reiniciará."/>
   <translation tag="Saving offsets..." es="Guardando offsets..."/>
+  <translation tag="Saving the position and parking the toolhead." es="Guardando la posición y estacionando el cabezal."/>
   <translation tag="Saving will restart Klipper and CANCEL any active print!" es="¡Guardar reiniciará Klipper y CANCELARÁ cualquier impresión activa!"/>
+  <translation tag="Saving..." es="Guardando..."/>
   <translation tag="Scan" es="Buscar"/>
   <translation tag="Scan Cal" es="Cal Escaneo"/>
   <translation tag="Scan QR Code" es="Escanear Código QR"/>
@@ -2757,6 +2781,7 @@
   <translation tag="The loaded spool is {}, but this file was sliced for {}. Filled filament runs at a lower flow rate and needs a hardened nozzle." es="La bobina cargada es {}, pero este archivo se laminó para {}. El filamento con relleno funciona con un caudal menor y necesita una boquilla endurecida."/>
   <translation tag="The print is paused. Changing tools now moves the toolhead and swaps the filament at the nozzle. Resume the print once the change finishes." es="La impresión está pausada. Cambiar de herramienta ahora mueve el cabezal y cambia el filamento en la boquilla. Reanude la impresión una vez que el cambio termine."/>
   <translation tag="The printer halted this print and cannot resume it. Restart from the beginning?" es="La impresora detuvo esta impresión y no puede reanudarla. ¿Reiniciar desde el principio?"/>
+  <translation tag="The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear." es="La impresora referencia y barre el cortador (unos 60 segundos). Mantenga despejada la ruta del filamento."/>
   <translation tag="The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear." es="La impresora no está referenciada. Si continúa, se referenciarán todos los ejes y el cabezal se moverá. Asegúrese de que la cama esté despejada."/>
   <translation tag="The printer lost power during a print. It can resume where it left off." es="La impresora perdió corriente durante una impresión. Puede reanudar donde se quedó."/>
   <translation tag="The printer lost power during a print. The resumed layer may not line up exactly." es="La impresora perdió corriente durante una impresión. La capa reanudada puede no alinearse con exactitud."/>
@@ -2886,7 +2911,9 @@
   <translation tag="Toolhead LED" es="LED del cabezal"/>
   <translation tag="Toolhead Sensor" es="Sensor del Cabezal"/>
   <translation tag="Toolhead Style" es="Estilo de Cabezal"/>
+  <translation tag="Toolhead Y" es="Cabezal Y"/>
   <translation tag="Toolhead jam" es="Atasco del cabezal"/>
+  <translation tag="Toolhead position unknown" es="Posición del cabezal desconocida"/>
   <translation tag="Toolhead, G-code, limits, and materials" es="Cabezal, G-code, límites y materiales"/>
   <translation tag="Toolheads" es="Cabezales"/>
   <translation tag="Tools" es="Herramientas"/>
@@ -3110,6 +3137,7 @@
   <translation tag="Y" es="Y"/>
   <translation tag="Y Axis" es="Eje Y"/>
   <translation tag="Y Offset" es="Desfase Y"/>
+  <translation tag="Y axis limit reached" es="Límite del eje Y alcanzado"/>
   <translation tag="Y jog blocked at bed edge" es="Movimiento Y bloqueado en el borde de la cama"/>
   <translation tag="Y:" es="Y:"/>
   <translation tag="YOU WIN!&#10;Score: {}&#10;Tap to play again" es="¡GANASTE!&#10;Puntuación: {}&#10;Toca para jugar de nuevo"/>

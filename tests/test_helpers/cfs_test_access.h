@@ -122,6 +122,9 @@ class CfsTestAccess {
     static void set_macro_variant_k1(helix::printer::AmsBackendCfs& b) {
         b.macro_variant_ = helix::printer::CfsMacroVariant::K1;
     }
+    static void set_macro_variant_k2(helix::printer::AmsBackendCfs& b) {
+        b.macro_variant_ = helix::printer::CfsMacroVariant::K2;
+    }
     static void set_macro_variant_fork(helix::printer::AmsBackendCfs& b) {
         b.macro_variant_ = helix::printer::CfsMacroVariant::Fork;
     }

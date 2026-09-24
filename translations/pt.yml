@@ -60,6 +60,7 @@ translations:
   1 min ago: há 1 min
   1 minute: 1 minuto
   1 more tap to {} beta features: Mais 1 toque para {} recursos beta
+  1. Printer homes all axes (~1 minute): 1. A impressora referencia todos os eixos (~1 minuto)
   1. Printer homes and probes the bed: 1. A impressora faz home e sonda a mesa
   1. Printer will home and probe each screw: 1. A impressora fará home e sondará cada
     parafuso
@@ -71,6 +72,8 @@ translations:
   180° Upside Down: 180° invertido
   2 min: '2 min'
   2 minutes: 2 minutos
+  2. Jog Y until the nozzle is centered over the chute opening: 2. Mova Y até o bocal ficar centralizado sobre a abertura da calha
+
   2. Place paper between nozzle and bed: 2. Coloque papel entre o bico e a mesa
   2. Results show how much to turn each screw: 2. Os resultados mostram quanto girar
     cada parafuso
@@ -84,6 +87,8 @@ translations:
     novamente para verificar
   3. Lower nozzle until paper drags slightly: 3. Abaixe o bico até o papel arrastar
     levemente
+  3. Save the position: 3. Salve a posição
+
   30 minutes: 30 minutos
   30 seconds: 30 segundos
   3D Pipes: Canos 3D
@@ -404,9 +409,11 @@ translations:
   Calibrate: Calibrar
   Calibrate All: Calibrar Tudo
   Calibrate Bowden: 'Calibrar o bowden'
+  Calibrate Cutter: Calibrar cortador
   Calibrate Encoder: 'Calibrar o encoder'
   Calibrate Gates: 'Calibrar gates'
   Calibrate Gear: 'Calibrar a engrenagem'
+  Calibrate Purge Chute: Calibrar calha de purga
   Calibrate X: Calibrar X
   Calibrate Y: Calibrar Y
   Calibrate all tools: Calibrar todas as ferramentas
@@ -421,9 +428,12 @@ translations:
   Calibrating bed mesh...: Calibrando malha da mesa...
   Calibrating {} axis...: 'Calibrando o eixo {}...'
   Calibrating...: Calibrando...
+  Calibrating... (about 1 minute): 'Calibrando... (cerca de 1 minuto)'
+  Calibration: Calibração
   Calibration & Tools: Calibração e Ferramentas
   Calibration Complete!: Calibração Concluída!
   Calibration Failed: Calibração Falhou
+  Calibration Saved: Calibração salva
   Calibration and system configuration: 'Calibração e configuração do sistema'
   Calibration cancelled.: Calibração cancelada.
   Calibration complete: Calibração concluída
@@ -572,6 +582,8 @@ translations:
   ? Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses.
   : Escolha o modelo que corresponde à sua impressora. Isso define as macros de impressão, as funções das ventoinhas e o comportamento de calibração que o HelixScreen usa.
   Choose what to power off or restart.: Escolha o que desligar ou reiniciar.
+  'Chute position: X {:.1f}, Y {:.1f}': 'Posição da calha de purga: X {:.1f}, Y {:.1f}'
+
   Clean Brush: 'Limpar escova'
   Clean Nozzle: Limpar Bico
   Cleaning Nozzle...: Limpando bocal...
@@ -784,9 +796,13 @@ translations:
   Customize your home screen: Personalize sua tela inicial
   Cut Distance: 'Distância de corte'
   Cut filament: Cortar filamento
+  'Cut position saved: {}': 'Posição de corte salva: {}'
   Cut tip: 'Cortar a ponta'
   Cutter Enabled: 'Cortador habilitado'
+  Cutter and purge chute calibration: Calibração do cortador e da calha de purga
   Cutter blade didn't sever filament: A lâmina não cortou o filamento
+  Cutter calibration completed: Calibração do cortador concluída
+  'Cutter calibration failed: {}': 'Falha na calibração do cortador: {}'
   Cutter jam: Atolamento do cortador
   Cutting: Cortando
   Cutting filament...: Cortando filamento...
@@ -1312,6 +1328,7 @@ translations:
   Gray: Cinza
   Grip filament: Segurar filamento
   Grip the filament: Segurar o filamento
+  Guide the toolhead to the chute's extrude position: Leve o cabeçote até a posição de extrusão da calha
   Guides and reference: Guias e referência
   H: H
   HOST: Host
@@ -1400,6 +1417,7 @@ translations:
     o filamento anterior.
   Home: Início
   Home & Continue: Fazer home e continuar
+  Home and sweep the cutter to re-find its position: Referencia e varre o cortador para reencontrar sua posição
   Home failed: Homing falhou
   Home printer first?: Fazer home da impressora primeiro?
   Home selector: Fazer home do seletor
@@ -1546,6 +1564,8 @@ translations:
   Job Queue: Fila de Trabalhos
   Jog Speed XY: Velocidade de movimento XY
   Jog Speed Z: Velocidade de movimento Z
+  Jog Y until the nozzle is centered over the chute opening, then tap Save.: Mova Y até o bocal ficar centralizado sobre a abertura da calha e toque em Salvar.
+
   'Jog failed: {}': 'Falha ao mover: {}'
   Jog speeds and step distances: Velocidades de movimento e distâncias de passo
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Participe
@@ -1561,6 +1581,8 @@ translations:
   Keep Required: Manter Obrigatório
   Keep Spool Info on Eject: Manter Informações do Carretel ao Ejetar
   Keep current: Manter atual
+  Keep hands clear. The printer moves on its own.: Mantenha as mãos afastadas. A impressora se move sozinha.
+
   Keep the bypass spool visible when bypass is off: Manter o carretel de bypass visível quando o bypass estiver desligado
   Kick away: 'Expulsar'
   Kinematics: Cinemática
@@ -1638,6 +1660,8 @@ translations:
   Light: Claro
   Light will switch when the current operation finishes: A luz será alternada quando
     a operação atual terminar
+  Line the nozzle up with the purge chute so purged filament drops straight in.: Alinhe o bocal sobre a calha de purga para que o filamento purgado caia direto dentro.
+
   Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: 'A linha {} chama {}, que esta impressora trata como uma parada de emergência. Fatie o arquivo novamente com um perfil feito para esta impressora.'
   Listen to all theme sounds: Ouvir todos os sons do tema
   Listening: Escutando
@@ -2144,6 +2168,7 @@ translations:
   Please enter a valid port (1-65535).: Insira uma porta válida (1-65535).
   Please enter an IP address or hostname.: Insira um endereço IP ou hostname.
   Please fill in the highlighted fields: Por favor, preencha os campos destacados
+  Please wait while the printer homes and moves to the start position.: Aguarde enquanto a impressora referencia e move até a posição inicial.
   Please wait while the printer homes and probes.: Por favor, aguarde enquanto a impressora
     faz home e sonda.
   Please wait while the printer probes each screw position.: Por favor, aguarde enquanto
@@ -2342,7 +2367,11 @@ translations:
   Pulling filament back: Retraindo filamento
   Purge: Purgar
   Purge & Wipe: 'Purgar e limpar'
+  Purge Chute Calibration: Calibração da calha de purga
   Purge Length: 'Comprimento de purga'
+  'Purge chute calibration failed: {}': 'Falha na calibração da calha de purga: {}'
+  Purge chute position saved.: Posição da calha de purga salva.
+
   'Purge failed: {}': 'Falha ao purgar: {}'
   Purge may still be running — response timed out: A purga pode ainda estar em execução
     — tempo esgotado
@@ -2629,8 +2658,11 @@ translations:
   Saving Z-offset...: Salvando Z-offset...
   Saving config... Klipper will restart.: Salvando config... Klipper será reiniciado.
   Saving offsets...: Salvando offsets...
+  Saving the position and parking the toolhead.: Salvando a posição e estacionando o cabeçote.
+
   Saving will restart Klipper and CANCEL any active print!: Salvar reiniciará o Klipper
     e CANCELARÁ qualquer impressão ativa!
+  Saving...: Salvando...
   Scan: Escanear
   Scan Cal: Cal de Scan
   Scan QR Code: Escanear Código QR
@@ -3068,6 +3100,7 @@ translations:
     filamento no bico. Retome a impressão assim que a troca terminar.
   The printer halted this print and cannot resume it. Restart from the beginning?: A
     impressora parou esta impressão e não pode retomá-la. Reiniciar do início?
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: A impressora referencia e varre o cortador (cerca de 1 minuto). Mantenha o caminho do filamento livre.
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: A impressora não fez home. Continuar fará home em todos os eixos, movendo o cabeçote. Certifique-se de que a mesa esteja livre.
   The printer lost power during a print. It can resume where it left off.: A impressora
     perdeu energia durante uma impressão. Ela pode retomar de onde parou.
@@ -3244,7 +3277,9 @@ translations:
   Toolhead LED: 'LED do cabeçote'
   Toolhead Sensor: Sensor do Cabeçote
   Toolhead Style: Estilo do Cabeçote
+  Toolhead Y: Cabeçote Y
   Toolhead jam: Atolamento do cabeçote
+  Toolhead position unknown: Posição do cabeçote desconhecida
   Toolhead, G-code, limits, and materials: Cabeçote, G-code, limites e materiais
   Toolheads: Cabeçotes
   Tools: Ferramentas
@@ -3490,6 +3525,7 @@ translations:
   Y: Y
   Y Axis: Eixo Y
   Y Offset: Offset Y
+  Y axis limit reached: Limite do eixo Y alcançado
   Y jog blocked at bed edge: Movimento Y bloqueado na borda da mesa
   'Y:': 'Y:'
   ? "YOU WIN!\nScore: {}\nTap to play again"

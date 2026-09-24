@@ -61,6 +61,7 @@ translations:
   1 min ago: vor 1 Min.
   1 minute: 1 Minute
   1 more tap to {} beta features: 1 weiteres Mal tippen, um Beta-Funktionen zu {}
+  1. Printer homes all axes (~1 minute): 1. Drucker referenziert alle Achsen (~1 Minute)
   1. Printer homes and probes the bed: 1. Drucker referenziert und prüft das Bett
   1. Printer will home and probe each screw: 1. Drucker referenziert und prüft jede
     Schraube
@@ -72,6 +73,8 @@ translations:
   180° Upside Down: 180° kopfüber
   2 min: '2 Min'
   2 minutes: 2 Minuten
+  2. Jog Y until the nozzle is centered over the chute opening: 2. Y verfahren, bis die Düse mittig über der Rinnenöffnung steht
+
   2. Place paper between nozzle and bed: 2. Papier zwischen Düse und Bett legen
   2. Results show how much to turn each screw: 2. Ergebnisse zeigen, wie viel jede
     Schraube gedreht werden muss
@@ -85,6 +88,8 @@ translations:
     prüfen
   3. Lower nozzle until paper drags slightly: 3. Düse absenken, bis das Papier leicht
     schleift
+  3. Save the position: 3. Position speichern
+
   30 minutes: 30 Minuten
   30 seconds: 30 Sekunden
   3D Pipes: 3D Pipes
@@ -411,9 +416,11 @@ translations:
   Calibrate: Kalibrieren
   Calibrate All: Alle kalibrieren
   Calibrate Bowden: 'Bowden kalibrieren'
+  Calibrate Cutter: Schneider kalibrieren
   Calibrate Encoder: 'Encoder kalibrieren'
   Calibrate Gates: 'Gates kalibrieren'
   Calibrate Gear: 'Zahnrad kalibrieren'
+  Calibrate Purge Chute: Entlüftungsrinne kalibrieren
   Calibrate X: X kalibrieren
   Calibrate Y: Y kalibrieren
   Calibrate all tools: Alle Werkzeuge kalibrieren
@@ -427,9 +434,12 @@ translations:
   Calibrating bed mesh...: Bettnetz kalibrieren...
   Calibrating {} axis...: 'Kalibriere Achse {}...'
   Calibrating...: Kalibriere...
+  Calibrating... (about 1 minute): 'Kalibriere... (ca. 1 Minute)'
+  Calibration: Kalibrierung
   Calibration & Tools: Kalibrierung & Werkzeuge
   Calibration Complete!: Kalibrierung abgeschlossen!
   Calibration Failed: Kalibrierung fehlgeschlagen
+  Calibration Saved: Kalibrierung gespeichert
   Calibration and system configuration: 'Kalibrierung und Systemkonfiguration'
   Calibration cancelled.: Kalibrierung abgebrochen.
   Calibration complete: Kalibrierung abgeschlossen
@@ -579,6 +589,8 @@ translations:
   : Wählen Sie das Modell, das zu Ihrem Drucker passt. Dies legt fest, welche Druckmakros, Lüfterrollen und welches Kalibrierungsverhalten HelixScreen verwendet.
   Choose what to power off or restart.: Wählen Sie, was ausgeschaltet oder neu gestartet
     werden soll.
+  'Chute position: X {:.1f}, Y {:.1f}': 'Position der Entlüftungsrinne: X {:.1f}, Y {:.1f}'
+
   Clean Brush: 'Bürste reinigen'
   Clean Nozzle: Düse reinigen
   Cleaning Nozzle...: Düse reinigen...
@@ -788,9 +800,13 @@ translations:
   Customize your home screen: Startbildschirm anpassen
   Cut Distance: 'Schnittweg'
   Cut filament: Filament schneiden
+  'Cut position saved: {}': 'Schnittposition gespeichert: {}'
   Cut tip: 'Spitze schneiden'
   Cutter Enabled: 'Schneider aktiviert'
+  Cutter and purge chute calibration: Schneider- und Entlüftungsrinnen-Kalibrierung
   Cutter blade didn't sever filament: Schneidklinge hat das Filament nicht durchtrennt
+  Cutter calibration completed: Schneider-Kalibrierung abgeschlossen
+  'Cutter calibration failed: {}': 'Schneider-Kalibrierung fehlgeschlagen: {}'
   Cutter jam: Schneidestau
   Cutting: Schneiden
   Cutting filament...: Filament wird geschnitten...
@@ -1322,6 +1338,7 @@ translations:
   Gray: Grau
   Grip filament: Filament greifen
   Grip the filament: Filament greifen
+  Guide the toolhead to the chute's extrude position: Werkzeugkopf zur Extrusionsposition der Rinne führen
   Guides and reference: Anleitungen und Referenz
   H: H
   HOST: Host
@@ -1408,6 +1425,7 @@ translations:
     vorheriges Filament auszuspülen.
   Home: Home
   Home & Continue: Referenzieren & Fortfahren
+  Home and sweep the cutter to re-find its position: Referenzfahrt und Messfahrt des Schneiders, um seine Position neu zu ermitteln
   Home failed: Referenzfahrt fehlgeschlagen
   Home printer first?: Drucker zuerst referenzieren?
   Home selector: Selektor referenzieren
@@ -1553,6 +1571,8 @@ translations:
   Job Queue: Auftragswarteschlange
   Jog Speed XY: Bewegungsgeschwindigkeit XY
   Jog Speed Z: Bewegungsgeschwindigkeit Z
+  Jog Y until the nozzle is centered over the chute opening, then tap Save.: Verfahren Sie Y, bis die Düse mittig über der Rinnenöffnung steht, und tippen Sie dann auf Speichern.
+
   'Jog failed: {}': 'Bewegung fehlgeschlagen: {}'
   Jog speeds and step distances: Bewegungsgeschwindigkeiten und Schrittweiten
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Tritt
@@ -1568,6 +1588,8 @@ translations:
   Keep Required: Erforderlich behalten
   Keep Spool Info on Eject: Spuleninfo beim Auswerfen behalten
   Keep current: Aktuelle behalten
+  Keep hands clear. The printer moves on its own.: Hände fernhalten. Der Drucker bewegt sich von selbst.
+
   Keep the bypass spool visible when bypass is off: Bypass-Spule sichtbar halten, wenn Bypass deaktiviert ist
   Kick away: 'Wegschieben'
   Kinematics: Kinematik
@@ -1645,6 +1667,8 @@ translations:
   Light: Hell
   Light will switch when the current operation finishes: Das Licht schaltet sich,
     sobald der aktuelle Vorgang abgeschlossen ist.
+  Line the nozzle up with the purge chute so purged filament drops straight in.: Richten Sie die Düse über der Entlüftungsrinne aus, damit das entlüftete Filament direkt hineinfällt.
+
   Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: 'Zeile {} ruft {} auf, das dieser Drucker als Notaus behandelt. Slicen Sie die Datei mit einem Profil für diesen Drucker neu.'
   Listen to all theme sounds: Alle Themensounds anhören
   Listening: Zuhören
@@ -2151,6 +2175,7 @@ translations:
   Please enter an IP address or hostname.: Bitte geben Sie eine IP-Adresse oder einen
     Hostnamen ein.
   Please fill in the highlighted fields: Bitte füllen Sie die markierten Felder aus
+  Please wait while the printer homes and moves to the start position.: Bitte warten Sie, während der Drucker referenziert und zur Startposition fährt.
   Please wait while the printer homes and probes.: Bitte warten Sie, während der Drucker
     referenziert und abtastet.
   Please wait while the printer probes each screw position.: Bitte warten Sie, während
@@ -2348,7 +2373,11 @@ translations:
   Pulling filament back: Filament wird zurückgezogen
   Purge: Entlüften
   Purge & Wipe: 'Entlüften & Abwischen'
+  Purge Chute Calibration: Entlüftungsrinnen-Kalibrierung
   Purge Length: 'Entlüftungslänge'
+  'Purge chute calibration failed: {}': 'Kalibrierung der Entlüftungsrinne fehlgeschlagen: {}'
+  Purge chute position saved.: Position der Entlüftungsrinne gespeichert.
+
   'Purge failed: {}': 'Purge fehlgeschlagen: {}'
   Purge may still be running — response timed out: Purge läuft möglicherweise noch
     — Zeitüberschreitung
@@ -2634,8 +2663,11 @@ translations:
   Saving config... Klipper will restart.: Konfiguration wird gespeichert... Klipper
     wird neu starten.
   Saving offsets...: Speichere Offsets...
+  Saving the position and parking the toolhead.: Position wird gespeichert und der Werkzeugkopf geparkt.
+
   Saving will restart Klipper and CANCEL any active print!: Speichern startet Klipper
     neu und BRICHT jeden aktiven Druck ab!
+  Saving...: Speichern...
   Scan: Suchen
   Scan Cal: Scan-Kal.
   Scan QR Code: QR-Code scannen
@@ -3069,6 +3101,7 @@ translations:
   The printer halted this print and cannot resume it. Restart from the beginning?: Der
     Drucker hat diesen Druck angehalten und kann ihn nicht fortsetzen. Von vorne neu
     starten?
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: Der Drucker referenziert und vermisst den Schneider (ca. 1 Minute). Halten Sie den Filamentweg frei.
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: Der Drucker ist nicht referenziert. Wenn Sie fortfahren, werden alle Achsen referenziert und der Werkzeugkopf bewegt sich. Stellen Sie sicher, dass das Heizbett frei ist.
   The printer lost power during a print. It can resume where it left off.: Der Drucker
     hatte während eines Drucks einen Stromausfall. Er kann dort fortsetzen, wo er aufgehört
@@ -3244,7 +3277,9 @@ translations:
   Toolhead LED: 'Werkzeugkopf-LED'
   Toolhead Sensor: Werkzeugkopfsensor
   Toolhead Style: Toolhead-Stil
+  Toolhead Y: Werkzeugkopf Y
   Toolhead jam: Werkzeugkopf-Stau
+  Toolhead position unknown: Werkzeugkopfposition unbekannt
   Toolhead, G-code, limits, and materials: Druckkopf, G-Code, Grenzen und Materialien
   Toolheads: Werkzeugköpfe
   Tools: Werkzeuge
@@ -3491,6 +3526,7 @@ translations:
   Y: Y
   Y Axis: Y-Achse
   Y Offset: Y-Offset
+  Y axis limit reached: Y-Achsen-Limit erreicht
   Y jog blocked at bed edge: Y-Bewegung an Bettkante blockiert
   'Y:': 'Y:'
   ? "YOU WIN!\nScore: {}\nTap to play again"

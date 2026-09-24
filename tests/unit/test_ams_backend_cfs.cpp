@@ -26,9 +26,13 @@
 #include "test_helpers/registered_backend.h"
 #include "test_helpers/seeded_override.h"
 
+#include <algorithm>
+#include <atomic>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <unistd.h>
@@ -141,6 +145,82 @@ class CfsLifecycleHelper : public CfsRemapHelper {
         api_ = api.get();
     }
 };
+
+// The calibration flows ack through the on_complete overloads (a macro's
+// completion is their terminal signal), so the capture helper must intercept
+// those too, firing on_complete inline where the real client fires it from a
+// background thread. The chained next step reaches the wire from a
+// token.defer() lambda, i.e. one UpdateQueue hop per command.
+class CfsCalibHelper : public CfsLifecycleHelper {
+  public:
+    CfsCalibHelper() {
+        CfsTestAccess::set_macro_variant_k1(*this);
+    }
+
+    // Keep the 1-arg capture visible beside these overrides.
+    using CfsRemapHelper::execute_gcode;
+
+    AmsError execute_gcode(const std::string& gcode, std::function<void()> on_complete) override {
+        captured.push_back(gcode);
+        if (hold.count(gcode)) {
+            held.push_back(std::move(on_complete));
+            return AmsErrorHelper::success();
+        }
+        if (on_complete) {
+            on_complete();
+        }
+        return AmsErrorHelper::success();
+    }
+
+    AmsError execute_gcode(const std::string& gcode, std::function<void()> on_complete,
+                           std::function<void(const MoonrakerError&)> on_error, bool) override {
+        captured.push_back(gcode);
+        if (fail.count(gcode)) {
+            MoonrakerError err;
+            err.type = MoonrakerErrorType::JSON_RPC_ERROR;
+            err.message = "Macro error: " + gcode;
+            if (on_error) {
+                on_error(err);
+            }
+            return AmsErrorHelper::success();
+        }
+        if (hold.count(gcode)) {
+            held.push_back(std::move(on_complete));
+            return AmsErrorHelper::success();
+        }
+        if (on_complete) {
+            on_complete();
+        }
+        return AmsErrorHelper::success();
+    }
+
+    /// Commands whose on_complete is captured unfired, so a test can advance
+    /// the world (set a cancel flag, start a second flow) before releasing it.
+    std::set<std::string> hold;
+    /// Commands that answer on_error instead of on_complete, modelling the
+    /// macro failing after the RPC acked.
+    std::set<std::string> fail;
+    std::vector<std::function<void()>> held;
+
+    void release_held() {
+        auto pending = std::move(held);
+        held.clear();
+        for (auto& cb : pending) {
+            if (cb) {
+                cb();
+            }
+        }
+    }
+};
+
+// Each drain() runs only the batch of deferred work swapped in at its start,
+// so a defer chain (home done -> PREPARE sent -> prepare done) needs one drain
+// per hop. Eight covers the longest chain these tests drive (save: two hops).
+void drain_calib_queue() {
+    for (int i = 0; i < 8; ++i) {
+        helix::ui::UpdateQueue::instance().drain();
+    }
+}
 } // namespace
 
 TEST_CASE("CFS Box profile clear is Fork-only", "[ams][cfs][fork]") {
@@ -385,6 +465,277 @@ TEST_CASE("CFS auto-refill device action sends an explicit ENABLE", "[ams][cfs]"
         REQUIRE(err.result == AmsResult::SUCCESS);
         REQUIRE(backend.captured == std::vector<std::string>{"BOX_ENABLE_AUTO_REFILL ENABLE=0"});
     }
+}
+
+TEST_CASE("CFS calibration section and actions are K1-stock only (#1282)", "[ams][cfs][calib]") {
+    auto find_action = [](AmsBackendCfs& b, const char* id) -> const helix::printer::DeviceAction* {
+        for (const auto& a : b.get_device_actions()) {
+            if (a.id == id) {
+                return &a;
+            }
+        }
+        return nullptr;
+    };
+
+    SECTION("K1 dialect exposes both calibration actions in one section") {
+        CfsK1RemapHelper backend;
+        const auto sections = backend.get_device_sections();
+        REQUIRE(std::any_of(sections.begin(), sections.end(),
+                            [](const auto& s) { return s.id == "calibration"; }));
+
+        const auto* cutter = find_action(backend, "calibrate_cutter");
+        REQUIRE(cutter != nullptr);
+        CHECK(cutter->type == helix::printer::ActionType::BUTTON);
+        CHECK(cutter->section == "calibration");
+        CHECK(cutter->enabled);
+        CHECK(cutter->disable_reason.empty());
+
+        const auto* chute = find_action(backend, "calibrate_purge_chute");
+        REQUIRE(chute != nullptr);
+        CHECK(chute->section == "calibration");
+        CHECK(chute->enabled);
+    }
+
+    SECTION("K2 dialect has no calibration surface (MOTOR_CHECK_CUT_POS world)") {
+        CfsRemapHelper backend;
+        CfsTestAccess::set_macro_variant_k2(backend);
+        for (const auto& s : backend.get_device_sections()) {
+            CHECK(s.id != "calibration");
+        }
+        CHECK(find_action(backend, "calibrate_cutter") == nullptr);
+        CHECK(find_action(backend, "calibrate_purge_chute") == nullptr);
+    }
+
+    SECTION("Kalico Fork has no calibration surface") {
+        CfsRemapHelper backend;
+        CfsTestAccess::set_macro_variant_fork(backend);
+        for (const auto& s : backend.get_device_sections()) {
+            CHECK(s.id != "calibration");
+        }
+        CHECK(find_action(backend, "calibrate_cutter") == nullptr);
+        CHECK(find_action(backend, "calibrate_purge_chute") == nullptr);
+    }
+}
+
+TEST_CASE("CFS cutter calibration sends BOX_FIND_CUT_POS through the long-send path (#1282)",
+          "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    bool got_result = false;
+    std::string result_line;
+    auto err = backend.calibrate_cutter([&](bool ok, const std::string& line) {
+        got_result = ok;
+        result_line = line;
+    });
+    REQUIRE(err.success());
+    // The macro takes no parameters; the completion callback overload is what
+    // carries the long (~60s) runtime without an RPC timeout failing it.
+    REQUIRE(backend.captured == std::vector<std::string>{"BOX_FIND_CUT_POS"});
+    drain_calib_queue();
+    CHECK(got_result);
+}
+
+TEST_CASE("CFS chute calibration homes, prepares, then reports ready (#1282)",
+          "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    bool ready = false;
+    REQUIRE(backend.start_chute_calibration([&] { ready = true; }).success());
+    drain_calib_queue();
+    CHECK(backend.captured ==
+          std::vector<std::string>({"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO",
+                                    "BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_PREPARE"}));
+    CHECK(ready);
+}
+
+TEST_CASE("CFS chute jog sends the stock screen's exact script form (#1282)", "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    REQUIRE(backend.jog_chute_y(-10.0f).success());
+    REQUIRE(backend.jog_chute_y(0.5f).success());
+    // Verbatim stock form: state save/restore around a relative move, M400 so
+    // the RPC ack means the move finished.
+    const std::string jog_down = "SAVE_GCODE_STATE NAME=myMoveState\n G91\n G0 Y-10.000 F3000\n"
+                                 " M400\n RESTORE_GCODE_STATE NAME=myMoveState";
+    REQUIRE(backend.captured[0] == jog_down);
+    REQUIRE(backend.captured[1].find("G0 Y0.500 F3000") != std::string::npos);
+}
+
+TEST_CASE("CFS chute save reads the live position then re-parks (#1282)", "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    bool saved = false;
+    REQUIRE(backend.save_chute_position([&] { saved = true; }).success());
+    drain_calib_queue();
+    CHECK(backend.captured ==
+          std::vector<std::string>({"BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS",
+                                    "BOX_CUSTOM_COMMAND CMD=Y_SAFE"}));
+    CHECK(saved);
+}
+
+TEST_CASE("CFS chute calibration cancelled during the home stops before PREPARE (#1282)",
+          "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    backend.hold = {"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"};
+    auto cancel = std::make_shared<std::atomic<bool>>(false);
+    bool ready = false;
+    REQUIRE(backend.start_chute_calibration([&] { ready = true; }, nullptr, cancel).success());
+    REQUIRE(backend.captured == std::vector<std::string>{"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"});
+
+    cancel->store(true); // the user leaves while the home is still running
+    backend.release_held();
+    drain_calib_queue();
+
+    // The home cannot be aborted, but nothing downstream may go out: no
+    // PREPARE, so the box is never left in adjust mode at the chute.
+    CHECK(backend.captured == std::vector<std::string>{"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"});
+    CHECK_FALSE(ready);
+}
+
+TEST_CASE("CFS chute start failure reports the firmware message and never parks (#1282)",
+          "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    backend.fail = {"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"};
+    bool ready = false;
+    std::string failed_msg;
+    REQUIRE(backend
+                .start_chute_calibration([&] { ready = true; },
+                                         [&](const std::string& msg) { failed_msg = msg; })
+                .success());
+    drain_calib_queue();
+    // PREPARE never ran, so there is nothing to unwind: no further command.
+    CHECK(backend.captured == std::vector<std::string>{"BOX_CUSTOM_COMMAND CMD=XYZ_ZERO"});
+    CHECK_FALSE(ready);
+    CHECK_FALSE(failed_msg.empty());
+}
+
+TEST_CASE("CFS chute save failure re-parks and reports the firmware message (#1282)",
+          "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    backend.fail = {"BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS"};
+    bool saved = false;
+    std::string failed_msg;
+    REQUIRE(backend
+                .save_chute_position([&] { saved = true; },
+                                     [&](const std::string& msg) { failed_msg = msg; })
+                .success());
+    drain_calib_queue();
+    // The save only ever runs after PREPARE, so a failure always re-parks.
+    CHECK(backend.captured ==
+          std::vector<std::string>({"BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS",
+                                    "BOX_CUSTOM_COMMAND CMD=Y_SAFE"}));
+    CHECK_FALSE(saved);
+    CHECK_FALSE(failed_msg.empty());
+}
+
+TEST_CASE("CFS refuses a second calibration while one is in flight (#1282)", "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    backend.hold = {"BOX_FIND_CUT_POS"};
+    bool got_result = false;
+    REQUIRE(
+        backend.calibrate_cutter([&](bool, const std::string&) { got_result = true; }).success());
+    REQUIRE(backend.captured == std::vector<std::string>{"BOX_FIND_CUT_POS"});
+
+    SECTION("a second cutter start is refused as busy") {
+        const auto second = backend.calibrate_cutter();
+        CHECK_FALSE(second.success());
+        CHECK(backend.captured == std::vector<std::string>{"BOX_FIND_CUT_POS"});
+    }
+    SECTION("a chute start while the cutter runs is refused as busy") {
+        const auto second = backend.start_chute_calibration([] {});
+        CHECK_FALSE(second.success());
+        CHECK(backend.captured == std::vector<std::string>{"BOX_FIND_CUT_POS"});
+    }
+
+    backend.release_held();
+    drain_calib_queue();
+    CHECK(got_result);
+}
+
+TEST_CASE("CFS chute cancel path re-parks with Y_SAFE (#1282)", "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    REQUIRE(backend.exit_chute_calibration().success());
+    REQUIRE(backend.captured == std::vector<std::string>{"BOX_CUSTOM_COMMAND CMD=Y_SAFE"});
+}
+
+TEST_CASE("CFS chute save line parses both firmware echo forms (#1282)", "[ams][cfs][calib]") {
+    double x = 0.0, y = 0.0;
+    REQUIRE(AmsBackendCfs::parse_chute_save_line("cmd_save_extrude_pos x=184.50 y=304.00", x, y));
+    CHECK(x == Catch::Approx(184.5));
+    CHECK(y == Catch::Approx(304.0));
+
+    REQUIRE(AmsBackendCfs::parse_chute_save_line(
+        "SAVE_BOX_CFG ok: extrude_pos_x=184.5,extrude_pos_y=304.0", x, y));
+    CHECK(x == Catch::Approx(184.5));
+    CHECK(y == Catch::Approx(304.0));
+
+    CHECK_FALSE(AmsBackendCfs::parse_chute_save_line("SAVE_BOX_CFG ok: cut_pos_y=223.5", x, y));
+    CHECK_FALSE(AmsBackendCfs::parse_chute_save_line("", x, y));
+}
+
+TEST_CASE("CFS cutter found line parses axis and value (#1282)", "[ams][cfs][calib]") {
+    char axis = '\0';
+    double value = 0.0;
+    REQUIRE(AmsBackendCfs::parse_cut_found_line("Found cut position y: 304.0", axis, value));
+    CHECK(axis == 'y');
+    CHECK(value == Catch::Approx(304.0));
+
+    CHECK_FALSE(
+        AmsBackendCfs::parse_cut_found_line("SAVE_BOX_CFG ok: cut_pos_y=223.5", axis, value));
+    CHECK_FALSE(AmsBackendCfs::parse_cut_found_line("", axis, value));
+}
+
+TEST_CASE("CFS calibration refuses while a print owns the machine (#1282)", "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+
+    helix::test::set_wire_state(backend.state, helix::PrintJobState::PRINTING);
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(!backend.calibrate_cutter(nullptr).success());
+    CHECK(!backend.start_chute_calibration(nullptr).success());
+    CHECK(backend.captured.empty());
+
+    // A pause blocks too: both flows home the toolhead by design, which a
+    // paused print cannot tolerate.
+    helix::test::set_wire_state(backend.state, helix::PrintJobState::PAUSED);
+    helix::ui::UpdateQueue::instance().drain();
+    backend.captured.clear();
+    CHECK(!backend.calibrate_cutter(nullptr).success());
+    CHECK(!backend.start_chute_calibration(nullptr).success());
+    CHECK(backend.captured.empty());
+
+    helix::test::set_wire_state(backend.state, helix::PrintJobState::STANDBY);
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(backend.calibrate_cutter(nullptr).success());
+    REQUIRE(backend.captured.size() == 1);
+    CHECK(backend.captured[0] == "BOX_FIND_CUT_POS");
+    // Flush the completion defer before the backend goes out of scope.
+    drain_calib_queue();
+}
+
+TEST_CASE("CFS calibration actions grey out while a print owns the machine (#1282)",
+          "[ams][cfs][calib]") {
+    CfsCalibHelper backend;
+    auto find_action = [](AmsBackendCfs& b, const char* id) -> const helix::printer::DeviceAction* {
+        for (const auto& a : b.get_device_actions()) {
+            if (a.id == id) {
+                return &a;
+            }
+        }
+        return nullptr;
+    };
+
+    const auto* cutter = find_action(backend, "calibrate_cutter");
+    REQUIRE(cutter != nullptr);
+    CHECK(cutter->enabled);
+    CHECK(cutter->disable_reason.empty());
+
+    helix::test::set_wire_state(backend.state, helix::PrintJobState::PRINTING);
+    helix::ui::UpdateQueue::instance().drain();
+    cutter = find_action(backend, "calibrate_cutter");
+    REQUIRE(cutter != nullptr);
+    CHECK_FALSE(cutter->enabled);
+    CHECK_FALSE(cutter->disable_reason.empty());
+
+    const auto* chute = find_action(backend, "calibrate_purge_chute");
+    REQUIRE(chute != nullptr);
+    CHECK_FALSE(chute->enabled);
+    CHECK_FALSE(chute->disable_reason.empty());
 }
 
 TEST_CASE("CFS type enum", "[ams][cfs]") {

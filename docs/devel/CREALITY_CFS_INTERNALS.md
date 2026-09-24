@@ -584,10 +584,64 @@ finds three more (each with a `cmd_*` handler):
 | `TEST_BOX_EXTRUDE` | Calibration extrude used by the screen's cutter/setup screens. |
 
 These are the screen's cutter-calibration surface (`BOX_FIND_CUT_POS` probes, then
-`MODIFY_BOX_CFG cut_pos_*=…` + `SAVE_BOX_CFG`). HelixScreen does not expose them;
+`MODIFY_BOX_CFG cut_pos_*=…` + `SAVE_BOX_CFG`). HelixScreen exposes the cutter and
+purge-chute flows on the K1 stock dialect (see the next section);
 `display-server`'s `TEST_BOX_CLEAN` string has **no** handler in the `.so` — dead on
 this firmware. The inventory lesson generalizes: only a symbol grep settles presence,
 and the grep must not assume a naming prefix.
+
+---
+
+## Calibration choreography (verified, K1 Max + CFS, fw 2.3.5.33)
+
+Captured from a stock-screen run against a real K1 Max (klippy.log 2026-09-20). Both flows
+are single-shot `gcode/script` sends; the stock screen sends no coordinate data at any
+point. HelixScreen reproduces both (`src/printer/ams_backend_cfs.cpp` calibration block,
+UI in `ui_xml/cfs_chute_calibration_overlay.xml`).
+
+### Cutter (~56s, one macro)
+
+```
+gcode/script: BOX_FIND_CUT_POS
+  firmware: cmd_find_cut_pos: G28 Y X
+  responses: "[box] cut sensor state:1"
+             "Found cut position y: 304.0"
+             "MODIFY_BOX_CFG: success, cut_pos_y=304.0,"
+             "SAVE_BOX_CFG ok: cut_pos_y=304.0"     (respond_info; box.cfg backed up first)
+```
+
+The result arrives on the gcode response stream, not in the RPC reply, so the sender must
+listen for `notify_gcode_response` while the macro runs. The intermediate "Cut position
+y: <v>" sweep lines are `gcode:<lambda>` log lines and do not reliably reach the console.
+
+### Purge chute (guided jog)
+
+| Step | Send | Runtime | Notes |
+|---|---|---|---|
+| 1 | `BOX_CUSTOM_COMMAND CMD=XYZ_ZERO` | ~53s | Full home incl. PRTouch Z; echoes `x_park = …`, `y_park = …` |
+| 2 | `BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_PREPARE` | ~4s | Parks at `safe_pos_y` (291.5 on the capture machine), extrude X |
+| 3 | jog script, one per press | none | Verbatim stock form: `SAVE_GCODE_STATE NAME=myMoveState\n G91\n G0 Y-10.000 F3000\n M400\n RESTORE_GCODE_STATE NAME=myMoveState`. Only Y jogged; steps seen: -10, +10 x2, +0.5 x6, -0.5 |
+| 4 | `BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS` | none | Reads the LIVE toolhead position; replies `cmd_save_extrude_pos x=184.50 y=304.00`, `MODIFY_BOX_CFG: success, extrude_pos_x=184.5,`, `SAVE_BOX_CFG ok: extrude_pos_x=184.5,extrude_pos_y=304.0` |
+| 5 | `BOX_CUSTOM_COMMAND CMD=Y_SAFE` | instant | Parks Y |
+
+Cancel/abort behaviour of the stock screen is unknown (never captured); HelixScreen sends
+`CMD=Y_SAFE` on leaving the jog step, the conservative unwind.
+
+### Machine geometry from the same log
+
+`[stepper_y] position_min=-0.5 position_max=307.5` (`gcode_position_max=295`, a Creality
+field). box.cfg before the run: `safe_pos_y 291.5`, `extrude_pos_x 184.5`,
+`extrude_pos_y 304.5`, `cut_pos_y 302`, `has_extrude_pos 1`. Jog clamping must read the
+live axis bounds from PrinterState, never a hardcoded 307.5.
+
+### K2 and the Kalico Fork have none of this
+
+Checked against our K2 Plus (2026-09-23): K2's `box_wrapper.cpython-39.so` has no
+`BOX_FIND_CUT_POS`, `BOX_CUSTOM_COMMAND`, `MODIFY_BOX_CFG` or `SAVE_BOX_CFG`. The K2 cutter
+check is `MOTOR_CHECK_CUT_POS` in `motor_control_wrapper` (closed-loop motors), bounded by
+`printer.cfg` `check_cut_pos_x_min/max` (-9.5/-5.5) and `pre_cut_cal_pos_x -5`. No
+purge-chute jog calibration exists there. This is why the calibration section gates on
+`CfsMacroVariant::K1`.
 
 ---
 

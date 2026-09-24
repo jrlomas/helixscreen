@@ -91,11 +91,13 @@ bool MoonrakerManager::init(const RuntimeConfig& runtime_config, Config* config)
         // the auto-save bar (shared chamber sensor + generic volume score it
         // as a Qidi at 73%), so name the capture machine directly: the
         // persona's printer type is part of what the env var declares.
-        if (mock_printer == "k1") {
-            config->set<std::string>(type_path, "Creality K1C");
+        if (mock_printer == "k1" || mock_printer == "k1max") {
+            const std::string named = mock_printer == "k1max" ? "Creality K1 Max" : "Creality K1C";
+            config->set<std::string>(type_path, named);
             config->save();
-            spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER=k1 — saved printer type "
-                         "'Creality K1C' (persona identity doesn't clear the detection bar)");
+            spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER={} saved printer type "
+                         "'{}' (persona identity doesn't clear the detection bar)",
+                         mock_printer, named);
         } else {
             const std::string prev = config->get<std::string>(type_path, "");
             if (!prev.empty()) {
@@ -372,7 +374,7 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
         // Through the shared accessor so the logged figure is the one the mock
         // will actually run at, clamp included.
         double speedup = helix::sim::SimSpeed::global().factor();
-        // HELIX_MOCK_PRINTER=voron_24|voron_trident|k1|ad5m|generic_corexy|
+        // HELIX_MOCK_PRINTER=voron_24|voron_trident|k1|k1max|ad5m|generic_corexy|
         // generic_bedslinger|multi_extruder — defaults to Voron 2.4. K2 and
         // CC1 don't have dedicated mock types yet; they fall through to the
         // default with a warning.
@@ -390,6 +392,9 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
             } else if (t == "k1") {
                 type = MoonrakerClientMock::PrinterType::CREALITY_K1;
                 type_name = "Creality K1";
+            } else if (t == "k1max") {
+                type = MoonrakerClientMock::PrinterType::CREALITY_K1_MAX;
+                type_name = "Creality K1 Max";
             } else if (t == "ad5m") {
                 type = MoonrakerClientMock::PrinterType::FLASHFORGE_AD5M;
                 type_name = "Flashforge AD5M";
@@ -402,7 +407,7 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
             } else if (t != "voron_24") {
                 spdlog::warn("[MoonrakerManager] HELIX_MOCK_PRINTER='{}' not recognised "
                              "— falling back to Voron 2.4. Valid: voron_24, voron_trident, "
-                             "k1, ad5m, generic_corexy, generic_bedslinger, multi_extruder.",
+                             "k1, k1max, ad5m, generic_corexy, generic_bedslinger, multi_extruder.",
                              t);
             }
         }
