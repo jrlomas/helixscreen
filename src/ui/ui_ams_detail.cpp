@@ -790,11 +790,11 @@ bool ams_dispatch_backend_action(AmsContextMenu::MenuAction action, int slot,
         }
 
         // Clear spool assignment: reset material/color/spool data, keep slot status.
-        // Routed through AmsState::commit_slot_edit so the Spoolman server active
-        // spool and the identity cache are cleared too (bundle F2LNLQCC: clearing
-        // only the backend left spool 169 active server-side; restart re-asserted
-        // it into the UI). The PRE-WIPE info is passed as `original` — the commit's
-        // unlink arm keys off original.spoolman_id.
+        // Routed through AmsState::commit_slot_edit so the Spoolman server's
+        // active spool and the identity cache clear too: a spool left active
+        // server-side is re-asserted into the UI on the next start. The
+        // PRE-WIPE info is passed as `original` because the commit's unlink
+        // arm keys off original.spoolman_id.
         SlotInfo original = backend->get_slot_info(slot);
         SlotInfo cleared = original;
         cleared.material.clear();
@@ -805,9 +805,9 @@ bool ams_dispatch_backend_action(AmsContextMenu::MenuAction action, int slot,
         // The catalog pick names a product of the material cleared above.
         cleared.catalog_id.clear();
         cleared.product_name.clear();
-        // Drops spoolman_id AND the filament/vendor handles — leaving
-        // those behind fed a later repoint comparison against a spool
-        // this lane is no longer linked to.
+        // Drops spoolman_id AND the filament/vendor handles: left behind,
+        // they feed a later repoint comparison against a spool this lane is
+        // no longer linked to.
         cleared.clear_spoolman_link();
         cleared.remaining_weight_g = -1;
         cleared.total_weight_g = -1;

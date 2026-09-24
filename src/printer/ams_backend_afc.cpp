@@ -2557,9 +2557,20 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
     // This is the ONLY weight source for AFC. AFC_lane.get_status() has carried a
     // live `weight` since v1.1.0, on every release, so no version gate is needed
     // and none of the lane_data staleness (see parse_lane_data) can reach us here.
+    //
+    // A zero beside no material and no colour is the state AFC's own
+    // clear_values() and a Clear Spool leave behind, so it reads as unknown
+    // rather than an empty spool. A spool metered down to zero keeps its
+    // material and stays at zero.
     if (data.contains("weight") && data["weight"].is_number()) {
-        slot.remaining_weight_g = data["weight"].get<float>();
-        firmware.metered.remaining_weight_g = slot.remaining_weight_g;
+        const float weight = data["weight"].get<float>();
+        if (weight == 0.0f && !firmware.cache.material && !firmware.cache.color_rgb) {
+            slot.remaining_weight_g = -1.0f;
+            firmware.metered.remaining_weight_g.reset();
+        } else {
+            slot.remaining_weight_g = weight;
+            firmware.metered.remaining_weight_g = weight;
+        }
     }
 
     // Full-spool weight (AFC v1.2.0+), ONLY for lanes with a Spoolman link.

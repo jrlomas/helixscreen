@@ -236,7 +236,12 @@ firmware with `SET_MATERIAL LANE=x MATERIAL=`, `SET_COLOR LANE=x COLOR=` (AFC
 stores a bare `#`, which the parse reads as no colour) and
 `SET_WEIGHT LANE=x WEIGHT=0`: the commit's empty `SET_SPOOL_ID` only runs
 AFC's `clear_values()` when AFC has Spoolman configured and the lane does not
-remember its spool, so an unlinked lane would otherwise keep them.
+remember its spool, so an unlinked lane would otherwise keep them. The
+parse reads that zero weight beside no material and no colour as unknown, not
+an empty spool. One difference from AFC's own eject clear remains: AFC applies
+its default material on a load only when the lane's colour is empty, and the
+bare `#` is not, so the next untagged spool loads with no material until
+something declares one.
 `AmsBackendQidi` also implements it, with
 a firmware half: the
 local clear is the same erase/reset/`clear_async` against the shared
