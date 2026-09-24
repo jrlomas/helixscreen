@@ -651,7 +651,7 @@ void MotionPanel::jog_pad_jog_cb(JogDirection direction, float distance_mm, void
 void MotionPanel::jog_pad_home_cb(void* user_data) {
     auto* self = static_cast<MotionPanel*>(user_data);
     if (self) {
-        self->home('A'); // Home XY
+        self->home('A'); // Home all axes
     }
 }
 

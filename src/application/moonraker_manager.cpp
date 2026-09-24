@@ -375,7 +375,7 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
         // will actually run at, clamp included.
         double speedup = helix::sim::SimSpeed::global().factor();
         // HELIX_MOCK_PRINTER=voron_24|voron_trident|k1|k1max|ad5m|generic_corexy|
-        // generic_bedslinger|multi_extruder — defaults to Voron 2.4. K2 and
+        // generic_bedslinger|multi_extruder|delta — defaults to Voron 2.4. K2 and
         // CC1 don't have dedicated mock types yet; they fall through to the
         // default with a warning.
         const char* type_env = std::getenv("HELIX_MOCK_PRINTER");
@@ -404,10 +404,14 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
             } else if (t == "generic_bedslinger") {
                 type = MoonrakerClientMock::PrinterType::GENERIC_BEDSLINGER;
                 type_name = "Generic Bedslinger";
+            } else if (t == "delta") {
+                type = MoonrakerClientMock::PrinterType::DELTA;
+                type_name = "Generic Delta";
             } else if (t != "voron_24") {
                 spdlog::warn("[MoonrakerManager] HELIX_MOCK_PRINTER='{}' not recognised "
                              "— falling back to Voron 2.4. Valid: voron_24, voron_trident, "
-                             "k1, k1max, ad5m, generic_corexy, generic_bedslinger, multi_extruder.",
+                             "k1, k1max, ad5m, generic_corexy, generic_bedslinger, multi_extruder, "
+                             "delta.",
                              t);
             }
         }

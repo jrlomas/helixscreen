@@ -68,7 +68,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
         FLASHFORGE_AD5M,    // FlashForge Adventurer 5M (enclosed)
         GENERIC_COREXY,     // Generic CoreXY printer
         GENERIC_BEDSLINGER, // Generic i3-style printer
-        MULTI_EXTRUDER      // Multi-extruder test case (2 extruders)
+        MULTI_EXTRUDER,     // Multi-extruder test case (2 extruders)
+        DELTA               // Generic linear delta (every axis homes together)
     };
 
     /**
