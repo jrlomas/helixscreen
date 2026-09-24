@@ -2014,7 +2014,7 @@ class PrinterState {
     /**
      * @brief Get has_individual_xyz_homing subject for XML binding
      *
-     * Returns 1 if the printer's XYZ axes can be homed invidually,
+     * Returns 1 if the printer's XYZ axes can be homed individually,
      * 0 otherwise (delta/rotary_delta).
      * Used for hiding redundant home buttons on deltas.
      */

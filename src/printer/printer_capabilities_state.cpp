@@ -276,14 +276,13 @@ void PrinterCapabilitiesState::set_hide_manual_z_calibration(bool hide) {
     spdlog::debug("[PrinterCapabilitiesState] Hide manual Z calibration: {}", hide);
 }
 
-void PrinterCapabilitiesState::set_has_individual_xyz_homing(bool has_invididual_xyz_homing) {
-    int new_value = has_invididual_xyz_homing ? 1 : 0;
-    // Only log when value actually changes (this gets called frequently from status updates)
+void PrinterCapabilitiesState::set_has_individual_xyz_homing(bool has_individual_xyz_homing) {
+    int new_value = has_individual_xyz_homing ? 1 : 0;
     if (lv_subject_get_int(&printer_has_individual_xyz_homing_) != new_value) {
         lv_subject_set_int(&printer_has_individual_xyz_homing_, new_value);
         spdlog::info("[PrinterCapabilitiesState] Has individual XYZ homing: {}",
-                     has_invididual_xyz_homing);
-    };
+                     has_individual_xyz_homing);
+    }
 }
 
 void PrinterCapabilitiesState::set_bed_moves(bool bed_moves) {

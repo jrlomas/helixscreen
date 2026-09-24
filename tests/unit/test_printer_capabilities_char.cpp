@@ -309,7 +309,7 @@ TEST_CASE("Capabilities characterization: set_kinematics updates printer_has_ind
 
     SECTION("hybrid_corexy kinematics sets has_individual_xyz_homing to 1 (supports individual XYZ "
             "homing)") {
-        state.set_kinematics("corexz");
+        state.set_kinematics("hybrid_corexy");
         REQUIRE(lv_subject_get_int(subject) == 1);
     }
 

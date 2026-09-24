@@ -134,10 +134,10 @@ class PrinterCapabilitiesState {
     /**
      * @brief Set has individual XYZ homing (from kinematics detection)
      *
-     * @param has_invididual_xyz_homing True if XYZ axes can be homed individually,
+     * @param has_individual_xyz_homing True if XYZ axes can be homed individually,
      * false otherwise (delta/rotary_delta)
      */
-    void set_has_individual_xyz_homing(bool has_invididual_xyz_homing);
+    void set_has_individual_xyz_homing(bool has_individual_xyz_homing);
 
     /**
      * @brief Set bed moves on Z axis (from kinematics detection)
@@ -459,12 +459,11 @@ class PrinterCapabilitiesState {
     lv_subject_t hide_manual_z_calibration_{};       // ...and it covers the reference tool's Z
     lv_subject_t printer_has_purge_line_{};          // purge/priming capability
     lv_subject_t printer_has_firmware_retraction_{}; // firmware retraction (G10/G11)
-    lv_subject_t
-        printer_has_individual_xyz_homing_{};   // 0=printer cannot home XYZ axes individually (e.g.
-                                                // deltas), 1=printer can home XYZ axes individually
-    lv_subject_t printer_bed_moves_{};          // 0=gantry moves on Z, 1=bed moves on Z
-    lv_subject_t printer_has_chamber_sensor_{}; // chamber temperature sensor
-    lv_subject_t printer_has_chamber_heater_{}; // active chamber heater (heater_generic)
+    lv_subject_t printer_bed_moves_{};               // 0=gantry moves on Z, 1=bed moves on Z
+    lv_subject_t printer_has_chamber_sensor_{};      // chamber temperature sensor
+    lv_subject_t printer_has_chamber_heater_{};      // active chamber heater (heater_generic)
+    // 0 on deltas: every axis homes together
+    lv_subject_t printer_has_individual_xyz_homing_{};
     lv_subject_t
         printer_has_chamber_heater_diagnostics_{};    // chamber heater exposes backend diagnostics
     lv_subject_t printer_has_chamber_filter_fan_{};   // chamber filter fan (output_pin)
