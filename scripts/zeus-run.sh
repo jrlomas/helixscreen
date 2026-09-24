@@ -115,6 +115,22 @@ echo "→ $HOST:$CONTAINER $WORKDIR @ $SHORT, ARC cap ${ARC_CAP_GB}GB, log $LOG"
 ssh "$HOST" bash -se <<REMOTE | tee "$LOG"
 set -euo pipefail
 
+# --- One job in the workdir at a time -----------------------------------------
+# The job resets the checkout and rebuilds in $WORKDIR, so a second run in the
+# same tree builds against files the first is replacing. Jobs queue rather
+# than share: -j is sized from MemAvailable at start, which is only sound
+# while this run is the only one allocating. The lock lives on the host
+# because this script runs there; the workdir path only exists inside the
+# container, so the lock name is derived from it.
+LOCK="${ZEUS_LOCK_DIR:-/tmp}/helix-zeus-run-$(basename "$WORKDIR")".lock
+exec 9>>"\$LOCK"
+if ! flock -n 9; then
+    echo "→ $WORKDIR busy: \$(tail -n 1 "\$LOCK" 2>/dev/null || echo another zeus-run job); waiting"
+    flock 9
+    echo "→ $WORKDIR free; continuing"
+fi
+printf 'held by pid %s: %s %s since %s\n' "\$\$" "$WHAT" "$SHORT" "\$(date '+%F %T')" >&9
+
 # --- ZFS ARC: borrow the RAM for the duration, hand it back on any exit -------
 # The marker records "<pid> <value to restore>". Liveness is derived from that
 # pid, never asserted: a run that died without restoring leaves a marker whose
