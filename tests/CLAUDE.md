@@ -282,7 +282,7 @@ Four outcomes, and they are not interchangeable:
 | Verdict | Means |
 |---------|-------|
 | `killed` | a test detects the change — the outcome you want |
-| `killed (timeout)` | the mutant hung the suite at a limit derived from the baseline (`max(60s, 5x baseline)`, or `--timeout`) AND hung again when re-run at twice that limit — one stall alone is a machine under load, not a detection. The whole process group dies with each timeout |
+| `killed (timeout)` | the mutant hung the suite at a limit derived from the baseline (`max(60s, 5x baseline)`, or `--timeout`) AND hung again when re-run at twice that limit. One stall alone is a machine under load, not a detection. The whole process group dies with each timeout |
 | `SURVIVED` | the mutant ran and the suite stayed green: NO test detects it |
 | `uncompilable` / `unreversible` | a mutant was attempted but no test ever judged it. Never a kill: a compiler error proves the code is load-bearing for the build, not that anything tests its behaviour |
 | `NOT COVERED` | nothing here can mutate that file, so the gate did not look at it |
