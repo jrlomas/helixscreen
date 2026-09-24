@@ -17,6 +17,10 @@
  * The decision is asserted through evaluate_offer() + the one-shot latch rather
  * than by rendering the modal; test_plr_prompt.cpp explains why the rendering
  * itself is deliberately not covered here.
+ *
+ * The Qidi section below pins the same decision path for the other passive
+ * backend: was_interrupted is ALSO true during every normal print, so the
+ * idle gate is the only thing scoping the offer to a boot after power loss.
  */
 
 #include "ui_update_queue.h"
@@ -27,6 +31,7 @@
 #include "app_globals.h"
 #include "plr_offer_controller.h"
 #include "print_lifecycle_state.h"
+#include "printer_discovery.h"
 #include "printer_state.h"
 #include "test_helpers/printer_state_test_access.h"
 
@@ -150,4 +155,100 @@ TEST_CASE_METHOD(PlrOfferPreparingFixture,
     settle();
 
     CHECK_FALSE(PlrOfferControllerTestAccess::prompted(controller));
+}
+
+// ===========================================================================
+// Qidi backend: was_interrupted is the availability signal, so the offer
+// decision reduces to the idle signal exactly as on Snapmaker.
+// ===========================================================================
+
+namespace {
+
+class QidiPlrOfferFixture : public LVGLTestFixture {
+  public:
+    QidiPlrOfferFixture() {
+        auto& ps = get_printer_state();
+        PrinterStateTestAccess::reset(ps);
+        ps.init_subjects(false);
+        // Discovery found the stock macros (set_hardware's half), then the
+        // boot status carried the still-true was_interrupted a power loss
+        // leaves behind (update_from_status's half).
+        lv_subject_set_int(ps.get_qidi_plr_capable_subject(), 1);
+        ps.update_from_status(
+            json{{"print_stats", {{"state", "standby"}}},
+                 {"save_variables", {{"variables", {{"was_interrupted", true}}}}}});
+        ps.set_print_start_state(PrintStartPhase::IDLE, "", 0);
+        settle();
+        REQUIRE(ps.is_qidi_was_interrupted());
+    }
+
+    ~QidiPlrOfferFixture() override {
+        auto& ps = get_printer_state();
+        ps.set_print_start_state(PrintStartPhase::IDLE, "", 0);
+        helix::test::set_wire_state(ps, PrintJobState::STANDBY);
+        settle();
+    }
+
+    static void settle() {
+        for (int i = 0; i < 8; ++i) {
+            helix::ui::UpdateQueue::instance().drain();
+        }
+    }
+};
+
+} // namespace
+
+TEST_CASE_METHOD(QidiPlrOfferFixture, "Qidi PLR offers recovery when the printer is idle",
+                 "[plr][qidi]") {
+    // Non-vacuity baseline: the Qidi path reaches the prompt at all.
+    PlrOfferController controller;
+    settle();
+
+    CHECK(PlrOfferControllerTestAccess::prompted(controller));
+}
+
+TEST_CASE_METHOD(QidiPlrOfferFixture, "Qidi PLR does not offer while a print is running",
+                 "[plr][qidi]") {
+    // was_interrupted stays true through every normal print (only
+    // CLEAR_LAST_FILE clears it), so the idle gate is the whole defence
+    // against offering a resume on top of the print in progress.
+    auto& ps = get_printer_state();
+    helix::test::set_wire_state(ps, PrintJobState::PRINTING);
+    settle();
+
+    PlrOfferController controller;
+    settle();
+
+    CHECK_FALSE(PlrOfferControllerTestAccess::prompted(controller));
+}
+
+TEST_CASE_METHOD(QidiPlrOfferFixture, "Qidi PLR does not offer without the macro capability",
+                 "[plr][qidi]") {
+    // A was_interrupted variable on a printer without the stock recovery
+    // macros: the variable alone must not select the backend (any Klipper user
+    // can SAVE_VARIABLE that name).
+    auto& ps = get_printer_state();
+    lv_subject_set_int(ps.get_qidi_plr_capable_subject(), 0);
+    settle();
+
+    PlrOfferController controller;
+    settle();
+
+    CHECK_FALSE(PlrOfferControllerTestAccess::prompted(controller));
+}
+
+TEST_CASE_METHOD(QidiPlrOfferFixture, "Qidi PLR capability is wired from discovery",
+                 "[plr][qidi]") {
+    // Drives the real set_hardware wire rather than poking the subject: the
+    // discovery snapshot's RESUME_INTERRUPTED macro is what marks the printer
+    // as running Qidi stock firmware.
+    auto& ps = get_printer_state();
+    lv_subject_set_int(ps.get_qidi_plr_capable_subject(), 0);
+
+    helix::PrinterDiscovery hw;
+    hw.parse_objects(json::array({"gcode_macro RESUME_INTERRUPTED"}));
+    ps.set_hardware(std::move(hw));
+    settle();
+
+    CHECK(ps.is_qidi_plr_capable());
 }

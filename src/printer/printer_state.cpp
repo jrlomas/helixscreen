@@ -34,6 +34,7 @@
 #include "lvgl/src/display/lv_display_private.h" // For rendering_in_progress check
 #include "lvgl_debug_invalidate.h"
 #include "macro_manager.h"
+#include "plr_backend.h"
 #include "pre_print_preferences.h"
 #include "printer_cache_registry.h"
 #include "probe_sensor_manager.h"
@@ -799,6 +800,11 @@ void PrinterState::set_hardware(helix::PrinterDiscovery hardware) {
 
     // Delegate capability subject updates to capabilities_state_ component
     capabilities_state_.set_hardware(discovery_, capability_overrides_);
+
+    // Qidi PLR capability comes from the same snapshot, ahead of the initial
+    // status dispatch that carries was_interrupted; the offer decision reads
+    // both, so the capability must land first.
+    print_domain_.set_qidi_plr_capable(helix::plr_qidi_capable(discovery_));
 
     // Fold the helper-macro install status in with the same snapshot. An
     // Installed base also clears any restart-pending flag held for a staged

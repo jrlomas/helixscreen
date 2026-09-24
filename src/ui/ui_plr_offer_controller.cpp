@@ -35,6 +35,16 @@ PlrOfferController::PlrOfferController() {
         [](PlrOfferController* self, int value) { self->on_pl_env_valid_changed(value); },
         ps.get_subjects_lifetime());
 
+    // qidi_was_interrupted is the PRIMARY Qidi trigger, with the same shape as
+    // pl_env_valid: a value the status payload already carried at registration
+    // still offers via the registration-fire, and thereafter a 0->1 edge does.
+    // The capability half (the RESUME_INTERRUPTED macro) comes from discovery
+    // and is read live in evaluate_offer, so this observer alone is enough.
+    qidi_observer_ = observe_int_sync(
+        ps.get_qidi_was_interrupted_subject(), this,
+        [](PlrOfferController* self, int value) { self->on_qidi_was_interrupted_changed(value); },
+        ps.get_subjects_lifetime());
+
     // creality_plr_capable is the PRIMARY Creality trigger. Unlike Snapmaker's
     // flag this only says the FIRMWARE supports recovery — whether a snapshot
     // exists takes a separate, side-effectful probe.
@@ -59,11 +69,13 @@ PlrOfferController::PlrOfferController() {
 void PlrOfferController::evaluate_offer() {
     auto& ps = get_printer_state();
 
-    // Normalize the two firmware mechanisms into ONE availability signal so the
+    // Normalize the firmware mechanisms into ONE availability signal so the
     // pure decision below (and its latch/re-arm/wizard rules) stays
     // backend-agnostic. See docs/devel/POWER_LOSS_RECOVERY.md.
     PlrCapabilitySignals caps;
     caps.snapmaker_pl_env_valid = lv_subject_get_int(ps.get_pl_env_valid_subject()) != 0;
+    caps.qidi_resume_macro = lv_subject_get_int(ps.get_qidi_plr_capable_subject()) != 0;
+    caps.qidi_was_interrupted = lv_subject_get_int(ps.get_qidi_was_interrupted_subject()) != 0;
     caps.creality_power_loss_field = lv_subject_get_int(ps.get_creality_plr_capable_subject()) != 0;
     PlrBackendType backend = plr_select_backend(caps);
 
@@ -73,6 +85,14 @@ void PlrOfferController::evaluate_offer() {
     case PlrBackendType::SNAPMAKER:
         // Passive: the firmware already validated the snapshot against MCU
         // flash on boot, so pl_env_valid IS availability.
+        recovery_available = true;
+        recovery_file = ps.pl_recovery_file();
+        break;
+    case PlrBackendType::QIDI:
+        // Passive: selection already required was_interrupted true, which the
+        // stock firmware clears on every normal end or cancel. The macros
+        // record no filename; virtual_sdcard.file_path is display-only and may
+        // be empty (the prompt degrades to its generic body).
         recovery_available = true;
         recovery_file = ps.pl_recovery_file();
         break;
@@ -142,6 +162,12 @@ void PlrOfferController::evaluate_offer() {
 void PlrOfferController::on_pl_env_valid_changed(int /*pl_env_valid*/) {
     // evaluate_offer reads pl_env_valid straight from the subject, so the
     // notified value is not needed here — kept for the observer signature.
+    evaluate_offer();
+}
+
+void PlrOfferController::on_qidi_was_interrupted_changed(int /*was_interrupted*/) {
+    // Same shape as on_pl_env_valid_changed: evaluate_offer reads the flag
+    // straight from the subject, so the notified value is not needed here.
     evaluate_offer();
 }
 
@@ -225,14 +251,17 @@ void PlrOfferController::on_connection_state_changed(int new_conn_state) {
         creality_detect_ = PlrDetectResult{};
         creality_recovery_file_.clear();
 
-        // Force both capability subjects back to 0 (and drop the stale recovery
-        // file) so the reconnect's full status re-dispatch produces genuine 0->1
-        // edges that re-fire the observers. The subjects dedup same-value
-        // writes, so without this forced 0 the values would stay 1 across the
-        // reconnect and no fresh edge would ever arrive. Safe on the main thread
-        // — observer callbacks are queue-deferred.
+        // Force the PLR capability and availability subjects back to 0 (and
+        // drop the stale recovery file) so the reconnect's full status
+        // re-dispatch produces genuine 0->1 edges that re-fire the observers.
+        // The subjects dedup same-value writes, so without this forced 0 the
+        // values would stay 1 across the reconnect and no fresh edge would
+        // ever arrive. Safe on the main thread: observer callbacks are
+        // queue-deferred.
         auto& ps = get_printer_state();
         lv_subject_set_int(ps.get_pl_env_valid_subject(), 0);
+        lv_subject_set_int(ps.get_qidi_plr_capable_subject(), 0);
+        lv_subject_set_int(ps.get_qidi_was_interrupted_subject(), 0);
         lv_subject_set_int(ps.get_creality_plr_capable_subject(), 0);
         ps.clear_pl_recovery_file();
     }

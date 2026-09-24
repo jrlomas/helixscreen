@@ -126,6 +126,12 @@ void PrinterPrintState::init_subjects(bool register_xml) {
     // marker. Default 0; set to 1 by presence of the key (see update_from_status).
     INIT_SUBJECT_INT(creality_plr_capable, 0, subjects_, register_xml);
 
+    // Qidi stock-firmware Power-Loss-Recovery: the RESUME_INTERRUPTED macro
+    // (capability, set from discovery) and save_variables.variables.
+    // was_interrupted (availability, parsed in update_from_status). Default 0.
+    INIT_SUBJECT_INT(qidi_plr_capable, 0, subjects_, register_xml);
+    INIT_SUBJECT_INT(qidi_was_interrupted, 0, subjects_, register_xml);
+
     // Pre-populate per-extruder filament_used map. Freezing the map structure
     // here eliminates the BG-thread emplace vs UI-thread read rehash race
     // (see header). update_from_status and the accessor both do direct
@@ -902,6 +908,32 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
                             lv_subject_set_int(&print_layer_current_, estimated);
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // save_variables.variables.was_interrupted - Qidi stock-firmware
+    // Power-Loss-Recovery signal. The stock macros maintain it (PRINT_START's
+    // save_last_file sets it true, CLEAR_LAST_FILE sets it false on a normal
+    // end or cancel), so it reads true at boot after power loss. Booleans
+    // only: save_variables values are Python literals Klipper re-parses, and
+    // another type with this name is not our signal: treated as not-available,
+    // never as available. Deltas: Moonraker notifies at top-level-field granularity,
+    // so a frame without save_variables, or a variables dict without the key,
+    // must leave the flag alone. The offer controller resets it on the
+    // disconnect edge, like pl_env_valid.
+    if (auto sv_it = status.find("save_variables"); sv_it != status.end() && sv_it->is_object()) {
+        if (auto vars_it = sv_it->find("variables");
+            vars_it != sv_it->end() && vars_it->is_object()) {
+            if (auto wi_it = vars_it->find("was_interrupted");
+                wi_it != vars_it->end() && wi_it->is_boolean()) {
+                int wi_val = wi_it->get<bool>() ? 1 : 0;
+                if (lv_subject_get_int(&qidi_was_interrupted_) != wi_val) {
+                    spdlog::debug("[PrinterPrintState] save_variables.was_interrupted={} "
+                                  "(Qidi power-loss recovery)",
+                                  wi_val);
+                    lv_subject_set_int(&qidi_was_interrupted_, wi_val);
                 }
             }
         }

@@ -662,6 +662,19 @@ TEST_CASE("Subscription: ZMOD printers subscribe save_variables for the persiste
     }
 }
 
+TEST_CASE("Subscription: Qidi PLR subscribes save_variables when the recovery macro exists",
+          "[moonraker][subscription]") {
+    // Without this the was_interrupted flag never arrives past the initial
+    // bootstrap query, so a power loss recovered on the reconnect goes
+    // unnoticed. The not-subscribed-by-default half is pinned by the ZMOD
+    // case above.
+    DiscoveryFixture fx;
+    fx.add("gcode_macro RESUME_INTERRUPTED", {});
+    json subs = fx.build();
+
+    REQUIRE(subs.contains("save_variables"));
+}
+
 TEST_CASE("Subscription: the U1 batch macro subscribes under its config-case key",
           "[moonraker][subscription]") {
     SECTION("uppercase config subscribes the uppercase object") {

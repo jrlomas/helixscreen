@@ -578,6 +578,44 @@ class PrinterPrintState {
         return lv_subject_get_int(const_cast<lv_subject_t*>(&creality_plr_capable_)) != 0;
     }
 
+    /// RESUME_INTERRUPTED discovered: the connected printer runs Qidi's stock
+    /// power-loss-recovery macros, which is what makes a was_interrupted
+    /// save_variable ours to act on. Set from the discovery snapshot by
+    /// PrinterState::set_hardware; the offer controller resets it on the
+    /// disconnect edge. See docs/devel/POWER_LOSS_RECOVERY.md.
+    lv_subject_t* get_qidi_plr_capable_subject() {
+        return &qidi_plr_capable_;
+    }
+
+    /// True when the Qidi recovery macros were discovered. See
+    /// get_qidi_plr_capable_subject().
+    [[nodiscard]] bool is_qidi_plr_capable() const {
+        return lv_subject_get_int(const_cast<lv_subject_t*>(&qidi_plr_capable_)) != 0;
+    }
+
+    /// Set/clear the Qidi macro capability from the discovery snapshot.
+    /// In-place subject write, matching the capability markers in
+    /// update_from_status.
+    void set_qidi_plr_capable(bool capable) {
+        lv_subject_set_int(&qidi_plr_capable_, capable ? 1 : 0);
+    }
+
+    /// save_variables.variables.was_interrupted - Qidi stock-firmware
+    /// Power-Loss-Recovery availability. True from PRINT_START's save_last_file
+    /// until a normal end or cancel runs CLEAR_LAST_FILE, so it reads true at
+    /// boot after power loss AND during every normal print (the offer's idle
+    /// gate scopes it). Booleans only; frames without the key leave it
+    /// unchanged (Moonraker sends deltas). Main-thread only for reads.
+    lv_subject_t* get_qidi_was_interrupted_subject() {
+        return &qidi_was_interrupted_;
+    }
+
+    /// True when was_interrupted arrived as a boolean true. See
+    /// get_qidi_was_interrupted_subject().
+    [[nodiscard]] bool is_qidi_was_interrupted() const {
+        return lv_subject_get_int(const_cast<lv_subject_t*>(&qidi_was_interrupted_)) != 0;
+    }
+
     // ========================================================================
     // Setters
     // ========================================================================
@@ -1064,6 +1102,12 @@ class PrinterPrintState {
     // print_stats.power_loss — Creality-fork PLR capability marker. Integer:
     // 1 once the key has been seen as a JSON number (presence, not value).
     lv_subject_t creality_plr_capable_{};
+
+    // Qidi stock-firmware PLR. qidi_plr_capable_: 1 once discovery found the
+    // RESUME_INTERRUPTED macro. qidi_was_interrupted_: the live
+    // save_variables.variables.was_interrupted value (1/0, booleans only).
+    lv_subject_t qidi_plr_capable_{};
+    lv_subject_t qidi_was_interrupted_{};
 
     // Slicer progress from display_status (M73 gcode command)
     // When active, preferred over virtual_sdcard file-position progress

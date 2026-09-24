@@ -121,6 +121,9 @@ what gets saved.
   lines places ticks at the slicer's own percentages, anything else at file position. A print
   whose gcode was never fetched (an external start during the setup wizard, or a file too
   large to preview) simply shows no ticks.
+- **Power-loss recovery works on Qidi printers (#1716)** - on a Q2, Q1 Pro or Plus 4 running
+  the stock firmware, the resume dialog now appears after a print was cut short by a power
+  loss, offering the printer's own `RESUME_INTERRUPTED` flow or a clean discard.
 
 ### Changed
 

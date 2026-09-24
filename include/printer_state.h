@@ -762,6 +762,34 @@ class PrinterState {
         return print_domain_.is_creality_plr_capable();
     }
 
+    /**
+     * @brief Qidi stock-firmware PLR: RESUME_INTERRUPTED macro capability and
+     * the live save_variables.variables.was_interrupted flag.
+     *
+     * See PrinterPrintState::get_qidi_plr_capable_subject() for the semantics
+     * (booleans only; delta frames without the key leave the flag alone).
+     */
+    lv_subject_t* get_qidi_plr_capable_subject() {
+        return print_domain_.get_qidi_plr_capable_subject();
+    }
+
+    [[nodiscard]] bool is_qidi_plr_capable() const {
+        return print_domain_.is_qidi_plr_capable();
+    }
+
+    /// Set from the discovery snapshot; main-thread only.
+    void set_qidi_plr_capable(bool capable) {
+        print_domain_.set_qidi_plr_capable(capable);
+    }
+
+    lv_subject_t* get_qidi_was_interrupted_subject() {
+        return print_domain_.get_qidi_was_interrupted_subject();
+    }
+
+    [[nodiscard]] bool is_qidi_was_interrupted() const {
+        return print_domain_.is_qidi_was_interrupted();
+    }
+
     void clear_pl_recovery_file() {
         print_domain_.clear_pl_recovery_file();
     }

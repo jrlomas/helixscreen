@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "plr_backend.h"
 
+#include "printer_discovery.h"
+
 #include <spdlog/spdlog.h>
 
 #include <array>
@@ -56,16 +58,25 @@ std::string plr_creality_sdcard_relative_name(const std::string& path) {
 }
 
 PlrBackendType plr_select_backend(const PlrCapabilitySignals& caps) {
-    // Snapmaker first: its signal is passive, so choosing it never costs a
-    // side-effectful probe. The two markers come from different firmware forks
-    // and should never coexist, but the ordering makes the tie deterministic.
+    // Passive markers first: choosing them never costs a side-effectful probe.
+    // The markers come from different firmware forks and should never coexist,
+    // but the ordering makes the tie deterministic.
     if (caps.snapmaker_pl_env_valid) {
         return PlrBackendType::SNAPMAKER;
+    }
+    // Both halves required: the macro says Qidi stock firmware, the variable
+    // says an interrupted print is on record.
+    if (caps.qidi_resume_macro && caps.qidi_was_interrupted) {
+        return PlrBackendType::QIDI;
     }
     if (caps.creality_power_loss_field) {
         return PlrBackendType::CREALITY;
     }
     return PlrBackendType::NONE;
+}
+
+bool plr_qidi_capable(const PrinterDiscovery& hw) {
+    return hw.has_macro(QIDI_RESUME_GCODE);
 }
 
 bool plr_creality_recovery_available(const PlrDetectResult& r) {
@@ -157,6 +168,15 @@ PlrRecoveryPlan plr_build_plan(PlrBackendType backend, const std::string& recove
                 std::string("SDCARD_PRINT_FILE FILENAME=\"") + wire_name + "\" ISCONTINUEPRINT=1";
             break;
         }
+
+    case PlrBackendType::QIDI:
+        // Passive backend: selection already required was_interrupted true,
+        // which only a print that never reached a normal end or cancel leaves
+        // behind. Both actions are plain macros with no parameters, so the
+        // filename is display-only and may be empty.
+        plan.resume_gcode = QIDI_RESUME_GCODE;
+        plan.discard_gcode = QIDI_DISCARD_GCODE;
+        break;
 
     case PlrBackendType::NONE:
         break;
