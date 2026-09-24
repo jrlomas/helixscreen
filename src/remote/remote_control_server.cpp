@@ -1790,6 +1790,22 @@ static nlohmann::json describe_one(lv_obj_t* o, const char* name, const std::str
     return entry;
 }
 
+// The name to report for a widget a locator resolved to. lv_obj_get_name_
+// resolved() dereferences obj->spec_attr->name for a parentless object — a
+// screen or layer — and that field is NULL exactly when the object is
+// unnamed: the crafted "<class>_#" fallback is only assembled for children,
+// which have siblings to index against. So it is only asked about named
+// objects; an unnamed one reports "" (its path is its address).
+static std::string resolved_name(const lv_obj_t* obj) {
+    const char* raw = lv_obj_get_name(obj);
+    if (!raw || raw[0] == '\0') {
+        return {};
+    }
+    char resolved[128];
+    lv_obj_get_name_resolved(obj, resolved, sizeof(resolved));
+    return resolved[0] != '\0' ? resolved : raw;
+}
+
 // Recursively collect named, non-hidden widgets under `parent` into `out`.
 // Only named widgets are emitted (unnamed ones can't be addressed), but the
 // walk still descends through them to reach named descendants.
@@ -1852,11 +1868,7 @@ nlohmann::json RemoteControlServer::handle_describe_screen(const nlohmann::json&
                 scopes.push_back(root_path);
                 // Include the root itself, then its subtree, so the listing is
                 // self-contained (you can see what you scoped to).
-                char resolved[128];
-                lv_obj_get_name_resolved(root, resolved, sizeof(resolved));
-                const char* raw = lv_obj_get_name(root);
-                widgets.push_back(describe_one(
-                    root, resolved[0] != '\0' ? resolved : (raw ? raw : ""), root_path));
+                widgets.push_back(describe_one(root, resolved_name(root).c_str(), root_path));
                 describe_walk(root, root_path, widgets);
             }
             if (scopes.size() == 1) {
@@ -1905,10 +1917,8 @@ nlohmann::json RemoteControlServer::handle_resolve(const nlohmann::json& params)
         if (!obj) {
             throw std::invalid_argument("Widget not found: " + target_label(params));
         }
-        char resolved[128];
-        lv_obj_get_name_resolved(obj, resolved, sizeof(resolved));
         return {{"path", path_of(obj)},
-                {"name", resolved},
+                {"name", resolved_name(obj)},
                 {"children", lv_obj_get_child_count(obj)},
                 {"active_screen", active_screen_label()}};
     });

@@ -6,9 +6,19 @@
 // widget in an overlay stacked *behind* the visible one and reported success,
 // and a path copied out of `ls` was rejected unless prefixed with '@'.
 
+#include "ui_update_queue.h"
+
 #include "../lvgl_test_fixture.h"
 #include "remote_client.h"
+#include "remote_control_server.h"
 #include "widget_resolution.h"
+
+#include <chrono>
+#include <cstring>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include "../catch_amalgamated.hpp"
 
@@ -249,6 +259,94 @@ TEST_CASE_METHOD(LVGLTestFixture, "ctl path: unresolvable segments yield nothing
     REQUIRE(helix::resolve_path("s/main_content/settings_list/toggle[9]") == nullptr);
     REQUIRE(helix::resolve_path("s/99") == nullptr);
     REQUIRE(helix::resolve_path("") == nullptr);
+}
+
+// --- describe scoping -----------------------------------------------------
+//
+// `ls @s` scopes to lv_screen_active(), which can be a screen carrying no
+// name of its own (a demo screen). Resolving the scope root's reported name
+// must not assume one exists: lv_obj_get_name_resolved() reads the NULL name
+// of an unnamed parentless object, so a screen that never got a name takes
+// the app down the moment it is listed.
+
+TEST_CASE_METHOD(LVGLTestFixture, "ctl ls: an unnamed active screen scopes without crashing",
+                 "[remote][ctl]") {
+    lv_obj_t* previous = lv_screen_active();
+    // A child allocates the screen's spec_attr while its own name stays NULL —
+    // the exact state `ls @s` meets on a demo screen.
+    lv_obj_t* screen = lv_obj_create(NULL);
+    lv_obj_set_name(lv_obj_create(screen), "probe");
+    lv_screen_load(screen);
+
+    // The handler is only reachable through dispatch, over a real socket; it
+    // parks on a future until the UI queue runs its payload, so the queue is
+    // drained while the response is polled for, never after it.
+    const std::string sock_path =
+        "/tmp/helix-test-ls-unnamed-" + std::to_string(::getpid()) + ".sock";
+    ::unlink(sock_path.c_str());
+    helix::RemoteConfig config;
+    config.socket_path = sock_path;
+    helix::RemoteControlServer& server = helix::RemoteControlServer::instance();
+    REQUIRE(server.start(config));
+
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    REQUIRE(sock_path.size() < sizeof(addr.sun_path));
+    std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path) - 1);
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    REQUIRE(fd >= 0);
+    REQUIRE(connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0);
+
+    const std::string request =
+        R"({"jsonrpc":"2.0","method":"describe_screen","params":{"path":"s"},"id":1})"
+        "\n";
+    REQUIRE(send(fd, request.data(), request.size(), 0) == static_cast<ssize_t>(request.size()));
+
+    std::string response;
+    char buf[4096];
+    bool timed_out = false;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (response.find('\n') == std::string::npos) {
+        struct pollfd pfd {
+            fd, POLLIN, 0
+        };
+        const int ready = poll(&pfd, 1, 20);
+        if (ready > 0) {
+            ssize_t n = recv(fd, buf, sizeof(buf), 0);
+            if (n <= 0) {
+                timed_out = true;
+                break;
+            }
+            response.append(buf, static_cast<size_t>(n));
+        } else if (ready < 0) {
+            timed_out = true;
+            break;
+        }
+        // The handler parks on a future; the queue drain is what resolves it.
+        helix::ui::UpdateQueue::instance().drain();
+        if (std::chrono::steady_clock::now() > deadline) {
+            timed_out = true;
+            break;
+        }
+    }
+    REQUIRE_FALSE(timed_out);
+    // One more drain: a queued follow-up from the handler lands before stop().
+    helix::ui::UpdateQueue::instance().drain();
+    close(fd);
+    server.stop();
+    ::unlink(sock_path.c_str());
+
+    response.erase(response.find('\n'));
+    const nlohmann::json rpc = nlohmann::json::parse(response);
+    REQUIRE(rpc.contains("result"));
+    const nlohmann::json& result = rpc["result"];
+    REQUIRE(result.value("scope", "") == "s");
+    REQUIRE(result.contains("widgets"));
+    REQUIRE(result["widgets"].size() == 2); // the scope root, then its child
+    REQUIRE(result["widgets"][1].value("path", "") == "s/probe");
+
+    lv_screen_load(previous);
+    lv_obj_delete(screen);
 }
 
 // --- topmost-visible name resolution ------------------------------------
