@@ -1765,20 +1765,6 @@ bool AmsBackendAce::parse_slots_response(const json& data) {
 }
 
 // ============================================================================
-// Helpers
-// ============================================================================
-
-AmsError AmsBackendAce::validate_slot_index(int slot_index) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (slot_index < 0 || slot_index >= system_info_.total_slots) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, system_info_.total_slots - 1);
-    }
-
-    return AmsErrorHelper::success();
-}
-
-// ============================================================================
 // Device Actions
 // ============================================================================
 

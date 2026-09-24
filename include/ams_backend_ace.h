@@ -265,12 +265,6 @@ class AmsBackendAce : public AmsSubscriptionBackend {
     void poll_status();
     void poll_slots();
 
-    // ========================================================================
-    // Helpers
-    // ========================================================================
-
-    AmsError validate_slot_index(int slot_index) const;
-
     /**
      * @brief Parse slot color from either RGB array [r,g,b] or hex string "#RRGGBB"
      *
