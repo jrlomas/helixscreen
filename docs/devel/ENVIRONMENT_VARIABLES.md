@@ -20,9 +20,9 @@ Some keys carry a stricter rule, because root acts on the value:
 | Key | Accepted value |
 |-----|----------------|
 | `HELIX_DPI`, `HELIX_LOG_DEST`, `HELIX_LOG_LEVEL` | no whitespace and no `*`, `?` or `[`: the launcher passes them to the app as command-line flags |
-| `HELIX_LOG_FILE` | the same, and an absolute `*.log` path whose directory resolves under `/tmp/`, `/var/log/` or the install directory, with no `..` segment and no symlink at the file. The app writes its log there as root and echoes other settings into it, so a log aimed at a script would be code. Platform hooks choose their own firmware log directory when this key is unset |
+| `HELIX_LOG_FILE` | the same, and an absolute `*.log` path whose directory resolves to `/tmp` or `/var/log`, or to a directory under those or the install directory that root or the launcher's user owns with no group or world write bit, with no `..` segment and no symlink at the file. The app writes its log there as root and echoes other settings into it, so a log aimed at a script would be code. Platform hooks choose their own firmware log directory when this key is unset |
 | `HELIX_REMOTE_SOCKET` | the same flag rule, and a path under `/tmp/` or `/run/` with no `..` |
-| `HELIX_NICE` | a whole number, optionally negative |
+| `HELIX_NICE` | `0` to `19`; a negative nice would let the UI starve Klipper |
 | `HELIX_ALSA_DEVICE` | `default`, `sysdefault`, `sysdefault:...`, `hw:...`, `plughw:...` or `dmix:...`, with no `|`, `file` or `tee`: ALSA's file plugin runs a `|cmd` target. The app applies the same rule to this variable and to the saved output device |
 
 Only these keys are read; any other key is ignored with one logged warning per key:

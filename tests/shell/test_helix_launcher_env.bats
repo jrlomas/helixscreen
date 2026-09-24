@@ -744,6 +744,31 @@ print_env_from_file() {
     rm -f "$target"
 }
 
+@test "a log directory under /tmp owned by another user is refused" {
+    # A web-owned /tmp/d could be swapped for a symlink after the check.
+    local d="/tmp/helix-bats-$$-logdir"
+    mkdir -p "$d"
+    make_fake_stat_map
+    printf '%s 1000 755\n' "$d" > "$BATS_TEST_TMPDIR/statmap"
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'HELIX_LOG_FILE=%s/helix.log\n' "$d" > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    # The env file itself must still pass the gate as root-owned.
+    printf '%s 0 644\n' "$MOCK_INSTALL/config/helixscreen.env" >> "$BATS_TEST_TMPDIR/statmap"
+    env -u HELIX_LOG_FILE PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_LOG_FILE \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/parse.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "HELIX_LOG_FILE must be" "$BATS_TEST_TMPDIR/parse.log"
+    # The same directory owned by root loads.
+    printf '%s 0 755\n%s 0 644\n' "$d" "$MOCK_INSTALL/config/helixscreen.env" > "$BATS_TEST_TMPDIR/statmap"
+    env -u HELIX_LOG_FILE PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_LOG_FILE \
+        > "$BATS_TEST_TMPDIR/value.out" 2>/dev/null
+    rmdir "$d"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "$d/helix.log" ]
+}
+
 @test "ALSA device names are limited to hardware PCMs" {
     [ "$(print_env_from_file HELIX_ALSA_DEVICE 'HELIX_ALSA_DEVICE=plughw:CARD=vc4hdmi,DEV=0')" = "plughw:CARD=vc4hdmi,DEV=0" ]
     [ "$(print_env_from_file HELIX_ALSA_DEVICE 'HELIX_ALSA_DEVICE=default')" = "default" ]
@@ -752,8 +777,12 @@ print_env_from_file() {
     [ "$(print_env_from_file HELIX_ALSA_DEVICE 'HELIX_ALSA_DEVICE=hw:0|x')" = "" ]
 }
 
-@test "HELIX_NICE takes a whole number and HELIX_REMOTE_SOCKET a /tmp or /run path" {
-    [ "$(print_env_from_file HELIX_NICE 'HELIX_NICE=-5')" = "-5" ]
+@test "HELIX_NICE takes 0-19 and HELIX_REMOTE_SOCKET a /tmp or /run path" {
+    [ "$(print_env_from_file HELIX_NICE 'HELIX_NICE=5')" = "5" ]
+    [ "$(print_env_from_file HELIX_NICE 'HELIX_NICE=19')" = "19" ]
+    [ "$(print_env_from_file HELIX_NICE 'HELIX_NICE=-5')" = "" ]
+    grep -q "HELIX_NICE must be 0-19" "$BATS_TEST_TMPDIR/parse.log"
+    [ "$(print_env_from_file HELIX_NICE 'HELIX_NICE=20')" = "" ]
     [ "$(print_env_from_file HELIX_NICE 'HELIX_NICE=5x')" = "" ]
     [ "$(print_env_from_file HELIX_REMOTE_SOCKET 'HELIX_REMOTE_SOCKET=/tmp/helix.sock')" = "/tmp/helix.sock" ]
     [ "$(print_env_from_file HELIX_REMOTE_SOCKET 'HELIX_REMOTE_SOCKET=/run/helix.sock')" = "/run/helix.sock" ]

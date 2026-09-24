@@ -256,11 +256,10 @@ helix_env_value_refusal() {
             return 0
             ;;
         HELIX_NICE)
-            case "${2#-}" in
-                '' | *[!0-9]*) ;;
-                *) return 1 ;;
+            case "$2" in
+                [0-9] | 1[0-9]) return 1 ;;
             esac
-            echo "must be a whole number"
+            echo "must be 0-19 (a negative nice would let the UI starve Klipper)"
             return 0
             ;;
         HELIX_ALSA_DEVICE)
@@ -276,8 +275,9 @@ helix_env_value_refusal() {
 }
 
 # The only log files the env file may aim the app at: an absolute *.log path
-# whose parent resolves under /tmp, /var/log or the install dir, with no dot
-# segments and no symlink at the file itself. Platform hooks pick their own
+# whose parent resolves to /tmp, /var/log, or a directory under those or the
+# install dir that root or this user owns with no group/world write bit, with
+# no dot segments and no symlink at the file itself. Platform hooks pick their own
 # firmware log directories after this file loads, so nothing else is needed.
 # ponytail: a link planted in /tmp after this check still races the app's
 # open; fs.protected_symlinks closes that on the kernels we ship to.
@@ -294,10 +294,28 @@ helix_env_log_file_ok() {
     _helf_inst=$(readlink -f "${INSTALL_DIR:-/nonexistent}" 2>/dev/null) || _helf_inst=""
     _helf_ok=1
     case "$_helf_dir/" in
-        /tmp/* | /var/log/*) _helf_ok=0 ;;
-        "$_helf_inst"/*) [ -n "$_helf_inst" ] && [ -n "$_helf_dir" ] && _helf_ok=0 ;;
+        /tmp/ | /var/log/) _helf_ok=0 ;;
+        /tmp/* | /var/log/*) _helf_ok=2 ;;
+        "$_helf_inst"/*) [ -n "$_helf_inst" ] && [ -n "$_helf_dir" ] && _helf_ok=2 ;;
     esac
-    unset _helf_dir _helf_inst
+    # A subdirectory must be one nobody else can swap for a symlink after
+    # this check: owned by root or this user, with no group/world write bit.
+    if [ "$_helf_ok" = "2" ]; then
+        _helf_ok=1
+        _helf_st=$(helix_env_stat "$_helf_dir")
+        _helf_uid=$(id -u 2>/dev/null) || _helf_uid=""
+        case "${_helf_st##* }" in
+            '' | *[!0-9]*) ;;
+            *)
+                case "${_helf_st%% *}" in
+                    0 | "$_helf_uid")
+                        [ -n "$_helf_uid" ] && [ "$((0${_helf_st##* } & 022))" = "0" ] && _helf_ok=0
+                        ;;
+                esac
+                ;;
+        esac
+    fi
+    unset _helf_dir _helf_inst _helf_st _helf_uid
     return $_helf_ok
 }
 
