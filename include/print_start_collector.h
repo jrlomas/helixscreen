@@ -427,16 +427,28 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
      * snapshot and this call; the CAS refuses in that case so a newer phase is
      * never regressed back to heating. The label is derived from `resolved`.
      *
-     * With `heater_wait`, a heater wait is blocking the queue, so the relabel
-     * may also displace any phase short of SOAKING, PURGING or COMPLETE, and
-     * `resolved` may be SOAKING for a chamber. The displaced phase and message
-     * are kept for end_heater_wait().
+     * With `heater_wait`, a heater wait is blocking the queue instead: the
+     * relabel may displace any phase but IDLE, a heating one, SOAKING,
+     * PURGING or COMPLETE, keeping it and its message for end_heater_wait(),
+     * and afterwards moves
+     * only between the wait's own labels. `resolved` may then be SOAKING for a
+     * chamber. Main thread only, like everything that sets or clears a
+     * wait's label.
      */
     void relabel_heating_phase(helix::PrintStartPhase resolved, bool heater_wait = false);
 
-    /// Give the phase a heater wait displaced back, if the wait is still the
-    /// one showing. Takes state_mutex_ itself.
+    /// Give the phase a heater wait displaced back, if the wait's label is
+    /// still the one showing. Main thread only; takes state_mutex_ itself.
     void end_heater_wait();
+
+    /// Make `phase` current without a phase signal: the relabel and restore
+    /// paths. Returns the progress to publish, -1 to keep the published one.
+    /// Caller must hold state_mutex_.
+    int switch_phase_locked(helix::PrintStartPhase phase, const std::string& message);
+
+    /// Publish a switch_phase_locked() result. Main thread only.
+    void publish_switched_phase(helix::PrintStartPhase phase, const std::string& message,
+                                int progress);
 
     /// Whether a line is the temperature report Klipper emits once a second
     /// while M109, M190 or TEMPERATURE_WAIT blocks ("B:45.2 /100.0 T0:210.0 /210.0").
@@ -640,6 +652,12 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     bool heater_wait_shown_ = false;
     helix::PrintStartPhase pre_wait_phase_ = helix::PrintStartPhase::IDLE;
     std::string pre_wait_message_;
+
+    /// When a fallback tick first saw the heater a wait's label names no
+    /// longer short of its target, min() while it still is. Guarded by
+    /// state_mutex_.
+    helix::sim::SimulatedClock::time_point wait_heater_arrived_at_ =
+        helix::sim::SimulatedClock::time_point::min();
 
     /// Nozzle target (°C) when BED_MESH was entered. A higher target while the
     /// mesh is idle is the print-temperature heat that follows it. Guarded by
