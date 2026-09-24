@@ -116,11 +116,10 @@
  * then without: 0.32% then 0.24%. On an AD5X the starfield's top rung falls 83.4% -> 61.3%,
  * the difference between exhausting the ladder and settling on it.
  *
- * The desktop dev build keeps the thread deliberately. tests/unit/test_info_qr_modal_stress
- * reproduces the #1673 shape - a draw thread blending a layer source a modal teardown has
- * already freed - and only surfaces it as an ASAN use-after-free while a real render thread
- * exists. Without one that test still passes and can no longer fail. Its CPU cost is
- * irrelevant on a dev machine. HELIX_DISPLAY_SDL is set only for the sdl backend, which only
+ * The desktop dev build keeps the thread deliberately: a draw task reading a buffer the main
+ * thread has already freed can only happen while a real render thread exists, so only then
+ * can tests/unit/test_info_qr_modal_stress (under ASAN) and test_draw_buf_guard's drain
+ * assertion fail. Its CPU cost is irrelevant on a dev machine. HELIX_DISPLAY_SDL is set only for the sdl backend, which only
  * the native target uses. */
 #ifdef HELIX_DISPLAY_SDL
     #define LV_USE_OS   LV_OS_PTHREAD
