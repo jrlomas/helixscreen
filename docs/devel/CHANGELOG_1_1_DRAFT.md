@@ -127,12 +127,13 @@ what gets saved.
 - **Emptying a page in edit mode removes it from your saved layout** (#1638) - moving a page's
   last widget to another page, or removing it, deletes the empty page. The main page stays, and
   so does a page still holding widgets that are greyed out because their hardware is not detected.
-- **Pages are added by dragging a widget past your last page** (#1638) - swiping past the last
-  page used to show an empty page with a "+" tile that added a page when tapped, whether or not
-  you were editing. That tile is gone, and swiping stops at your last page. To add a page,
-  long-press the home screen, pick up a widget and drag it past your last page: an empty page
-  slides in, and dropping the widget there creates the page with the widget on it, in place,
-  without the home screen sliding back to the page before it first.
+- **Adding a page: a visible + past your last page, or a drag past either edge** (#1638) - the
+  page past your last one carries a + you can tap to add a page, editing or not, and it stays
+  reachable even when you have a single page. To grow a page out of a widget instead, long-press
+  the home screen, pick up a widget and drag it past your last page: an empty page slides in, and
+  dropping the widget there creates the page with the widget on it, in place, without the home
+  screen sliding back to the page before it first. Dragging past your first page's left edge
+  works the same way and creates the page before it.
 - **Cancelling a print from a runout dialog asks first** - the guidance dialog cancelled on
   the first tap, while the print-status Stop button has always confirmed. One printer had two
   cancel affordances and only one of them asked, and the unconfirmed one sat in a dialog whose

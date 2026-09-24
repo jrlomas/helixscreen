@@ -1,8 +1,9 @@
 # Home Edit Mode (Developer Guide)
 
 How the home panel's edit mode works: the edit session, how a press becomes a selection, a
-grab or a swipe, how a gesture ends, cross-page drag, drop resolution, the widget catalog, and
-the page lifecycle. Read it before changing `GridEditMode` or the edit-mode half of `HomePanel`.
+grab or a swipe, how a gesture ends, cross-page drag, drop resolution, adding a page with the
+next-page slot's +, the widget catalog, and the page lifecycle. Read it before changing
+`GridEditMode` or the edit-mode half of `HomePanel`.
 
 **User-facing doc**: [Home Panel - Edit Mode](../user/guide/home-panel.md#edit-mode)
 
@@ -56,7 +57,7 @@ Rules that hold throughout:
 | `include/panel_widget_config.h`, `src/system/panel_widget_config.cpp` | Page operations: `page_entries`, `place_entry`, `page_is_populated`, `can_add_page`, `add_page`, `remove_page` |
 | `ui_xml/home_panel.xml` | `carousel_host` with the grid event callbacks, and the page badge |
 | `ui_xml/components/home_page_container.xml` | A page's grid container |
-| `ui_xml/components/home_next_page_slot.xml` | The next-page slot, the drop target past the last page |
+| `ui_xml/components/home_next_page_slot.xml` | The next-page slot past the last page: the drag's drop target and the + button that adds a page |
 | `include/ui_next_tick.h` | `helix::ui::run_next_tick`, how structural changes leave input dispatch |
 | `src/ui/ui_utils.cpp` | `helix::ui::reset_input_within`, the scoped input reset |
 | `tests/unit/test_home_edit_page_swipe.cpp` | `EditHomeFixture`: edit mode through the real carousel build, real population and real indev reads |
@@ -224,36 +225,36 @@ void HomePanel::apply_edit_swipe_policy() {
         grid_edit_mode_.owns_gesture() || grid_edit_mode_.is_catalog_open();
     helix::ui::carousel_set_swipe(carousel_,
                                   edit_holds_page ? CarouselSwipe::Disabled : CarouselSwipe::Auto);
-    // The next-page slot is a drag's drop target, never a page to swipe to. A
-    // drop there that creates a page leaves the session scoped to it, and the
-    // carousel resting on it, until the page-set rebuild on the next tick.
-    const bool slot_in_reach =
-        grid_edit_mode_.is_dragging() || grid_edit_mode_.is_scoped_to(next_page_container_);
-    helix::ui::carousel_set_trailing_tiles_reachable(carousel_, slot_in_reach);
+    // The next-page slot carries the + that adds a page and stays a drag's drop
+    // target, so its tile is within reach whenever the slot exists. A drop that
+    // creates a page leaves the session scoped to it, and the carousel resting
+    // on it, until the page-set rebuild on the next tick.
+    helix::ui::carousel_set_trailing_tiles_reachable(carousel_, next_page_container_ != nullptr);
 }
 ```
 
 | State | Policy | Why |
 |-------|--------|-----|
-| Outside edit mode | `Auto` | Swipe when there is more than one page |
-| Edit mode, no gesture owns the pointer | `Auto` | As outside edit mode: a single-page home has nothing to swipe to, since the next-page slot is a drop target, not a page |
+| Outside edit mode | `Auto` | Swipe when there is more than one page, or a next-page slot to swipe to |
+| Edit mode, no gesture owns the pointer | `Auto` | As outside edit mode: the slot's tile is somewhere to swipe to even on a single-page home, since its + adds a page |
 | An edit gesture owns the pointer | `Disabled` | Otherwise the carousel adopts the drag as a scroll |
 | Edit mode, the widget catalog is open | `Disabled` | The session holds its page for the catalog |
 
 The carousel owns the flags. `helix::ui::carousel_set_swipe()` stores the policy and writes the
 scroll container's `LV_OBJ_FLAG_SCROLLABLE` and scroll direction from it, and the carousel applies
-the stored policy again at every page-count change (`src/ui/ui_carousel.cpp#apply_input_flags`).
-It writes input flags only, so it is safe inside input dispatch. The lock has to engage on the
-arming cycle, before any movement, because LVGL adopts a scroll at the first movement past the
-scroll limit. The same function states whether the next-page slot can be reached, through
-`helix::ui::carousel_set_trailing_tiles_reachable()`: within reach while a drag is live, and while
-the session is still scoped to the slot after a drop there created a page (see
-[The next-page slot](#the-next-page-slot)). Reach is derived there, from the session's state, and
-never set at a call site.
+the stored policy again at every page-count change (`src/ui/ui_carousel.cpp#apply_input_flags`),
+where a swipe counts the reachable tiles: the pages plus the slot's tile while the slot exists, so
+a single-page home with a slot still swipes over to it. It writes input flags only, so it is safe
+inside input dispatch. The lock has to engage on the arming cycle, before any movement, because
+LVGL adopts a scroll at the first movement past the scroll limit. The same function states whether
+the next-page slot can be reached, through `helix::ui::carousel_set_trailing_tiles_reachable()`:
+within reach whenever the slot exists, since the slot is both a drag's drop target and the + a tap
+adds a page with (see [The next-page slot](#the-next-page-slot)). Reach is derived there, from
+whether the build created a slot, and never set at a call site.
 
 `build_carousel()` states the policy for the carousel it creates, so a carousel rebuilt under a
-live session holds the session's policy from the start, with the slot out of reach. The
-`show_edit_page()` that follows re-scopes the session with no drag to carry, so `switch_page()`
+live session holds the session's policy from the start, with the slot in reach when there is one.
+The `show_edit_page()` that follows re-scopes the session with no drag to carry, so `switch_page()`
 announces gesture ownership and the policy is stated again.
 
 Focus never moves the page. LVGL scrolls every scrollable ancestor of an object that gains focus
@@ -542,7 +543,7 @@ void GridEditMode::handle_drag_end(lv_event_t* /*e*/) {
 | Outcome | When `resolve_drop()` returns it | What commits |
 |---------|----------------------------------|--------------|
 | `Move` | On a config page, the previewed cell or the page differs from the origin and the span fits the occupancy there | `commit_drop()` -> `PanelWidgetConfig::place_entry` |
-| `CreatePage` | `cross_page_drop_creates_page()` holds for the scope the release lands in: on the next-page slot, the entry lands at the previewed cell; on the last page with the widget's majority past its right border, in the rightmost columns its span allows, on the previewed row. A landing cell that does not fit an empty page creates nothing | `commit_drop()` -> `add_page`, then `place_entry` |
+| `CreatePage` | `cross_page_drop_creates_page()` holds for the scope the release lands in: on the next-page slot, the entry lands at the previewed cell; on the last page with the widget's majority past its right border, in the rightmost columns its span allows, on the previewed row; on the first page with the widget's majority past its left border, in the leftmost column, on the previewed row, and `prepend_page` is set so the page lands before it. A landing cell that does not fit an empty page creates nothing | `commit_drop()` -> `add_page` (appends, or inserts at 0 when `prepend_page`), then `place_entry` |
 | `ReturnToOrigin` | Nothing commits, and the release landed off the origin page | Nothing; `return_drag_to_origin()` carries the drag home first |
 | `Cancel` | Nothing commits, on the origin page | Nothing; the widget snaps back |
 
@@ -599,45 +600,45 @@ containers, then builds on `shown`.
 
 ### The next-page slot
 
-The slot is the only way to add a page: an empty page container past the last page, the drop
-target a drag carries a widget onto (`ui_xml/components/home_next_page_slot.xml`). A drag that
-crosses the last page's border flips onto it, and the session scopes to the slot's container as
-page `page_count()` (`on_next_page_slot()`). Nothing is created while a drag hovers:
+Below the page cap, the carousel holds one `home_next_page_slot` tile past the last page
+(`ui_xml/components/home_next_page_slot.xml`): an empty page container a drag carries a widget
+onto, and beside it the **+ button** that adds a page on a tap. Both run through the one
+creation path, `PanelWidgetConfig::add_page()` - the + appends a page with no widget on it
+(`HomePanel::add_page_from_slot`, from the XML callback `on_add_page_clicked`), a drop appends
+past the last page or inserts at index 0 before the first, with the dragged widget placed - so
+the cap guard, the page ids and the landing rules are the same either way.
 
+- The + is a plain click on the button itself, so it works with a session live or not; in edit
+  mode the session follows the landing onto the added page. It sits beside
+  `next_page_container`, not in it: the session disarms clicks only inside the container it
+  covers, and the + must survive a drag riding onto the slot.
 - A drop on the slot creates the page at commit and lands the widget at the dropped cell. A drop
-  on the last page with the widget's majority past its right border creates the page too, with
-  the widget in the rightmost columns its span allows.
+  on the last page with the widget's majority past its right border appends the same way, with
+  the widget in the rightmost columns its span allows; a drop on the first page with the
+  widget's majority past its left border sets `prepend_page`, and the page lands at index 0 with
+  everything after it shifted one page later.
 - A release on the slot that creates nothing carries the drag back to its origin page first
   (`return_drag_to_origin`), where it resolves as a cancelled move.
-- At the page cap there is no slot, `has_next_page_slot()` is false, and a drop past the last
-  border stays on its page.
+- At the page cap there is no slot: no + tile, `has_next_page_slot()` is false, and a drop past
+  either border stays on its page.
 
-**The slot is reachable only as a drop target.** It is never an idle swipe destination, in edit
-mode or out of it: no swipe, arrow button or goto reaches it, and nothing on it takes a press. It
-comes within reach while a drag is live, and stays within reach while the session is still scoped
-to it after a drop there created a page. HomePanel derives that from the session's state in one
-place (`apply_edit_swipe_policy`), and the carousel, which owns its tiles, hides every tile past
-`real_page_count` while those tiles are out of reach
-(`src/ui/ui_carousel.cpp#carousel_set_trailing_tiles_reachable`). LVGL lays out, scrolls to,
-snaps to and hit-tests only shown children, so a swipe has no room past the last page, a goto
-clamps to the pages, and nothing on the slot takes a press.
+**The slot's tile is a real tile, laid out and shown from the build.** The + is a swipe
+destination, which is why the swipe counts reachable tiles rather than pages
+(`apply_input_flags`): a single-page home with a slot swipes over to it, and the panel's page
+stays the last config page while the carousel rests on the slot. Reach therefore never toggles
+with the gesture state; `carousel_set_trailing_tiles_reachable()` is false only while no slot
+exists, which the cap and the carousel's own unit tests pin directly. A drag rides onto the slot
+by the ordinary cross-page flip, and the session scopes to the slot's container as page
+`page_count()` (`on_next_page_slot()`).
 
-- A drag starts inside a PRESSING dispatch, or inside the LONG_PRESSED of a hold that grabs, and
-  the ownership change it announces shows the tile there. That is a flag write, which creates and
-  deletes nothing: the slot is laid out past the last page, off screen, and the press target stays
-  where it is. Creating the tile there instead would be a structural change inside input
-  dispatch.
-- A reach change writes flags only and never moves the carousel, so the end of a gesture leaves
-  the carousel on a tile within reach by its order:
-  - A cancelled drop, or an abort, while the session is scoped to the slot carries the drag back
-    to its origin page first (`return_drag_to_origin`, from `handle_drag_end` and
-    `end_gesture_uncommitted`), and the ownership change that takes the slot out of reach
-    follows. The slide back runs on while the tile hides: LVGL readjusts no scroll offset along
-    an axis that snaps. Leaving edit mode mid-drag ends the gesture this way first.
-  - A drop on the slot that creates a page leaves the session scoped to the slot's container, so
-    the slot stays within reach and the carousel rests on it, the dropped widget on screen, until
-    the page-set rebuild on the next tick replaces the carousel. The rebuilt carousel states the
-    policy with no drag and no scope, so its slot is out of reach.
+- A drop there that creates a page leaves the session scoped to the slot's container and the
+  carousel resting on its tile, the dropped widget on screen, until the page-set rebuild on the
+  next tick replaces the carousel.
+- A cancelled drop, or an abort, carries the drag back to its origin page first
+  (`return_drag_to_origin`, from `handle_drag_end` and `end_gesture_uncommitted`). The slide
+  back runs on a tile that stays shown: LVGL readjusts no scroll offset along an axis that
+  snaps, and the slot exists until the rebuild. Leaving edit mode mid-drag ends the gesture
+  this way first.
 
 ### Page lifecycle
 
@@ -656,8 +657,9 @@ focus page with the session re-scoped (`src/ui/ui_panel_home.cpp#on_edit_pages_c
 
 **Where a page-set rebuild lands.** Every change to the page set from edit mode describes itself
 as a `helix::PageSetChange`, numbered as the carousel was before it, with the next-page slot's
-tile at `page_count`: how many pages there were, whether a page was added on the slot's tile,
-which page was removed, and the page the change asks to end on. `on_edit_pages_changed(change)`
+tile at `page_count` and the phantom tile a prepend creates at `-1`: how many pages there were,
+whether a page was added, on the slot's tile or before the first page, which page was removed,
+and the page the change asks to end on. `on_edit_pages_changed(change)`
 asks `helix::page_set_landing(change, shown)` with the carousel's page before the rebuild
 (`include/grid_edit_page_set.h#page_set_landing`), builds the carousel on the landing's `shown`,
 and shows its `focus` with `show_edit_page()`, which re-scopes a live session there:
@@ -680,6 +682,8 @@ shifted. Where each change lands:
 | A drop on the next-page slot | The new page, on the tile the slot held, or one tile before it when the move pruned its origin page | The same page, with no slide |
 | A drop past the last page's border, released before a flip, that keeps its origin page | The origin page, the page on screen | The new page, one slide on |
 | The same drop when it prunes its origin page | The new page, which takes the origin's index | The same page |
+| A drop past the first page's left border | The page the drag left, one page later than before | The new page 0, one slide back |
+| A tap on the slot's + | The appended page, on the tile the slot held, with no slide; the page on screen, one slide on, when the tap came from a page | The appended page |
 | A move that prunes a page before its landing page | The landing page at its shifted index, the page already on screen | The same page |
 | Removing a page's last widget | The page that takes the removed page's index, or the new last page: the page on screen is gone | The same page, where the session already is |
 | The delete-page button | The page that takes the deleted page's index, or the new last page. Edit mode has ended | The same page |
@@ -722,7 +726,10 @@ populated page (`ui_xml/home_panel.xml`):
   means the page holds a placed entry. The badge count and pruning share it.
 - `place_entry(id, page, col, row, colspan, rowspan)` leaves exactly one entry named `id` across all
   pages and carries its per-widget config along. Drag commit and catalog placement both use it.
-- `can_add_page()` is the page cap (`helix::MAX_PAGES`); `add_page()` returns -1 at the cap.
+- `can_add_page()` is the page cap (`helix::MAX_PAGES`); `add_page()` returns -1 at the cap. Its
+  `position` parameter is the one creation seam: `-1` appends, `0` inserts before the first page
+  (shifting the main page index with it), and any other position clamps into the page list. The
+  slot's + and a right-border drop append; a left-border drop inserts at 0.
 - Saves. Each commit saves once: a drop (`handle_drag_end`, with the page it created and the page
   it emptied), a resize (`commit_resize_with_snap`, before its snap animation starts), a removal
   (`remove_selected_widget`, with the page it emptied), and a catalog placement
@@ -831,7 +838,7 @@ session's state. The log lines worth watching at `-vv`:
 |----------|-------|
 | `[GridEditMode] Drag started: widget '...'` | A grab became a drag |
 | `[GridEditMode] Page flip request: trigger=crossing` / `trigger=dwell` | A cross-page flip asked for a page |
-| `[GridEditMode] Drop past the last page: created page N` | A drop created a page |
+| `[GridEditMode] Drop on a page border: created page N at (C,R)` | A drop created a page, appended or prepended, landing the widget at (C,R) |
 | `[GridEditMode] Removed empty page N` | A page emptied and was pruned |
 | `[Home Panel] Edit pages changed; rebuilding carousel on page N, focusing page M` | A page-set rebuild comes up on page N and ends on page M, one slide on when they differ |
 | `PRESS_LOST on the event shield ends the gesture uncommitted` / `INDEV_RESET on ...` | LVGL took a gesture's press away and it was cancelled |

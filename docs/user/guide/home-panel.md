@@ -52,7 +52,7 @@ Your dashboard can have **multiple pages** of widgets — just like home screens
 
 - **Swipe left or right** anywhere on the widget grid to move between pages
 - **Dot indicators** at the bottom of the screen show which page you're on and how many pages you have
-- If you only have one page, the dots are hidden and swiping is off, in Edit Mode too, so it works exactly like a single-page dashboard
+- If you only have one page, the dots are hidden, in Edit Mode too. Swiping still works for one thing: the screen to the right of your page holds the **Add page** tile (see below), and you can swipe over to it
 
 ### The Main Page
 
@@ -66,19 +66,28 @@ One page is designated as the **main page** (the first page by default). This is
 
 ### Adding a Page
 
-A new page starts with a widget on it: you add a page by dragging a widget past your last page.
+**The easy way: the Add page tile.** A tile with a **+** sits one swipe past your last page, labelled **Add page**.
+
+1. Swipe to your last page, then one more: the **Add page** tile slides in
+2. Tap the **+**. The new page is created right away and you land on it, empty and ready for widgets (see [Adding a Widget](#adding-a-widget))
+
+You can stay in Edit Mode or not - the tile and its + work either way.
+
+**By dragging a widget:** a new page also starts with a widget on it, when you drag one past the edge of the first or last page.
 
 1. Enter **Edit Mode** (long-press the widget grid)
 2. Pick up a widget (see [Moving a Widget](#moving-a-widget)) and carry it across the right edge of each page until you are on your **last page**
 3. Keep going past the right edge of your last page: an empty page slides in, with the widget still under your finger
-4. Drop the widget anywhere on it. The new page is created, with the widget where you dropped it. Drag back instead and no page is created
+4. Drop the widget anywhere on it. The new page is created past the last one, with the widget where you dropped it. Drag back instead and no page is created
 5. Add more widgets to the new page (see [Adding a Widget](#adding-a-widget))
 
-Swiping never takes you past your last page, in Edit Mode or out of it: the empty page slides in only while you drag a widget onto it. If the widget you dragged was the last one on its page, that page is removed as the new one is created (see [Moving a Widget to Another Page](#moving-a-widget-to-another-page)).
+The same works at the **left edge of your first page**: carry a widget past it, drop it on the empty page that slides in, and the new page is created **before** your first one - everything else shifts one page to the right, with all its widgets.
+
+Swiping never takes you past your last page, except to the Add page tile: the empty page slides in only while you drag a widget onto it. If the widget you dragged was the last one on its page, that page is removed as the new one is created (see [Moving a Widget to Another Page](#moving-a-widget-to-another-page)).
 
 ### Page Limit
 
-The dashboard supports up to **8 pages**. Once you reach the limit, no empty page slides in when you drag a widget past your last page.
+The dashboard supports up to **8 pages**. At the limit there is no Add page tile to swipe to, and no empty page slides in when you drag a widget past either edge of your pages.
 
 ---
 
@@ -88,7 +97,7 @@ Edit Mode is how you customize your dashboard layout. While in Edit Mode, all no
 
 > **Edit Mode is on by default.** If it triggers accidentally when a finger rests on the screen (common on a tablet lying flat), you have two options: turn it off entirely with **Allow Home Screen Editing** under **Settings → System → Touch & Input**, or raise the **Long Press Time** slider in the same page so a longer hold is required. Both take effect immediately.
 
-**Page swiping in Edit Mode:** Swiping between pages works in Edit Mode just as it does outside it: with more than one page, and never past your last page. Swiping pauses from the moment your finger lands on the selected widget until you lift it, while you drag or resize a widget, and while the Widget Catalog is open. To take a widget to another page, or to a new page past your last one, drag it across the page border - see [Moving a Widget to Another Page](#moving-a-widget-to-another-page).
+**Page swiping in Edit Mode:** Swiping between pages works in Edit Mode just as it does outside it: between your pages, plus the Add page tile past your last one, and never further. Swiping pauses from the moment your finger lands on the selected widget until you lift it, while you drag or resize a widget, and while the Widget Catalog is open. To take a widget to another page, or to a new page before your first or past your last one, drag it across the page border - see [Moving a Widget to Another Page](#moving-a-widget-to-another-page).
 
 ### Entering Edit Mode
 
@@ -128,7 +137,7 @@ The widget you long-pressed is selected, not picked up, however long you keep ho
 3. The next page slides in, with the widget still under your finger
 4. Drop the widget where you want it
 
-**Creating a page by dropping:** drag a widget past your last page and an empty page slides in. Drop the widget anywhere on it and the page is created, with the widget where you dropped it. Drag back instead and no page is created. At the 8-page limit there is no empty page to drag onto.
+**Creating a page by dropping:** drag a widget past your last page and an empty page slides in. Drop the widget anywhere on it and the page is created, with the widget where you dropped it. Drag back instead and no page is created. Dragging past the **left edge of your first page** works the same way and creates the page **before** it. At the 8-page limit there is no empty page to drag onto, in either direction.
 
 **Empty pages remove themselves:** when a page's last widget is moved to another page or removed, the empty page is deleted from your layout. The main page is never removed this way. A page that still holds widgets greyed out because their hardware isn't detected is not empty, and stays.
 
