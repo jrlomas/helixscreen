@@ -582,8 +582,13 @@ def collect_files(args: argparse.Namespace, suffixes=('.cpp',)) -> Iterable[tupl
     --staged-only reads each staged file's INDEX content - what the commit
     will contain, not whatever the working tree holds right now.
     """
+    roots = ['src'] if suffixes == ('.cpp',) else ['src', 'include']
     if args.staged_only:
-        yield from staged_files(suffixes=suffixes)
+        # The baselines count only the roots a full scan walks, so a staged file
+        # outside them (a test) would report its long-standing reads as new.
+        for path, text in staged_files(suffixes=suffixes):
+            if Path(path).parts[0] in roots:
+                yield (path, text)
         return
     if args.files:
         for f in args.files:
@@ -594,7 +599,6 @@ def collect_files(args: argparse.Namespace, suffixes=('.cpp',)) -> Iterable[tupl
                 except OSError:
                     continue
         return
-    roots = ['src'] if suffixes == ('.cpp',) else ['src', 'include']
     seen: set[Path] = set()
     for root in roots:
         for suf in suffixes:
