@@ -39,7 +39,12 @@
 #                per-suite limit and reported as `killed (timeout)`. The limit
 #                is the max of 60s and 5x the suite's own baseline run, or
 #                --timeout. The baseline itself is untimed: it is the
-#                measurement the limit is derived from.
+#                measurement the limit is derived from. A suite that merely
+#                outruns the limit is not a detection on its own -- a machine
+#                under load can stall with nothing hung -- so the mutant is
+#                re-run once at twice the limit and only a second hang
+#                confirms the kill; the CLEAN line names how many kills
+#                were confirmed that way.
 #   SURVIVED     reverting the hunk left the suite green. NO test detects this
 #                change. The change shipped untested, whatever the diff's test
 #                files claim.
@@ -839,6 +844,9 @@ class Suites:
         # baseline has run that suite, so the baseline itself is untimed: it
         # is the measurement the limit is derived from.
         self.timeouts = {}
+        # Wall seconds of the last suite run, excluding any binary-recovery
+        # build before it: what adopt_baseline() measures.
+        self.last_secs = None
 
     def missing(self, name):
         """Why this suite cannot run here, or '' when it can.
@@ -925,7 +933,7 @@ class Suites:
         self.timeouts[name] = self.args.timeout or max(60.0, 5.0 * secs)
         return self.timeouts[name]
 
-    def _run_group(self, cmd, name, who):
+    def _run_group(self, cmd, name, who, timeout):
         """(state, reason) for one runner process, a hang included.
 
         The runner is killed with its whole group at the timeout: bats farms
@@ -933,7 +941,7 @@ class Suites:
         """
         p = tracked_suite_proc(cmd, self.root)
         try:
-            out, _ = p.communicate(timeout=self.timeouts.get(name))
+            out, _ = p.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             kill_live_suite_procs()
             out, _ = p.communicate()
@@ -945,24 +953,49 @@ class Suites:
         self.log.write(out)
         return suite_outcome(name, p.returncode, out, who)
 
-    def run(self, name):
-        """(state, reason): what one run of this suite establishes."""
+    def _dispatch(self, name, timeout):
+        """(state, reason) for one runner invocation, no recovery around it."""
         if name == 'catch2':
-            self.ensure_catch2_binary()
             return run_catch2(self.root, self.catch2_bin, self.args.tests,
-                              self.args.shards, self.log,
-                              timeout=self.timeouts.get(name))
+                              self.args.shards, self.log, timeout=timeout)
         if name == 'bats':
             cmd = ['bats']
             if shutil.which('parallel'):
                 cmd += ['--jobs', str(self.jobs), '--no-parallelize-within-files']
             cmd.append(self.args.shell_tests)
-            return self._run_group(cmd, name, 'the bats suite')
+            return self._run_group(cmd, name, 'the bats suite', timeout)
         if name == 'pytest':
             return self._run_group(
                 [self.python, '-m', 'pytest', self.args.python_tests, '-q', '-x'],
-                name, 'pytest')
+                name, 'pytest', timeout)
         raise AssertionError(name)
+
+    def _run_once(self, name, timeout):
+        """One suite run, timed. The binary-recovery build sits outside the
+        clock, so a relink does not read as suite time and inflate the limit
+        derived from it."""
+        if name == 'catch2':
+            self.ensure_catch2_binary()
+        t0 = time.monotonic()
+        state, why = self._dispatch(name, timeout)
+        self.last_secs = time.monotonic() - t0
+        return state, why
+
+    def run(self, name):
+        """(state, reason): what one run of this suite establishes.
+
+        A run that hits its timeout is asked once more at twice the limit: a
+        machine under load can outrun a deadline with nothing hung, so one
+        stall is not a detection. Only a second hang confirms the kill, and
+        a re-run that completes is judged by what it actually reported.
+        """
+        limit = self.timeouts.get(name)
+        state, why = self._run_once(name, limit)
+        if why != TIMED_OUT:
+            return state, why
+        print(f'[{name} hit its {limit:.0f}s limit; re-running at 2x] ',
+              end='', flush=True)
+        return self._run_once(name, 2 * limit)
 
 
 # ---------------------------------------------------------------------------
@@ -1257,7 +1290,6 @@ def main():
             return 2
         print(f'  build ok ({secs:.0f}s)')
     for suite in sorted(needed):
-        t0 = time.monotonic()
         state, why = suites.run(suite)
         if state == DETECTED:
             print(f'FAIL: baseline {suite} suite is RED. Fix it first, or every '
@@ -1271,7 +1303,7 @@ def main():
                   f'mutant would be measured by a suite that cannot report. '
                   f'See {args.log}', file=sys.stderr)
             return 2
-        limit = suites.adopt_baseline(suite, time.monotonic() - t0)
+        limit = suites.adopt_baseline(suite, suites.last_secs)
         print(f'  {suite} green (mutant timeout {limit:.0f}s)')
 
     # Read once, before the first mutation: see SAFETY.
@@ -1293,7 +1325,7 @@ def main():
         kill_live_suite_procs()
         sys.exit(128 + signum)
 
-    for _sig in (signal.SIGINT, signal.SIGTERM):
+    for _sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(_sig, stop_on_signal)
 
     started = time.time()
@@ -1382,7 +1414,11 @@ def main():
     if incomplete:
         print(report_incomplete(uncovered, deferred, unproven, unjudged))
         return 0 if args.allow_incomplete else 3
-    print('\nVERDICT: CLEAN - every changed hunk was mutated and every mutant was killed.')
+    n_by_timeout = sum(1 for r in results if r[1] == 'killed (timeout)')
+    timeout_note = (f' ({n_by_timeout} by timeout: re-confirmed hang)'
+                    if n_by_timeout else '')
+    print(f'\nVERDICT: CLEAN{timeout_note} - every changed hunk was mutated and '
+          f'every mutant was killed.')
     return 0
 
 
