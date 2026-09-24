@@ -723,6 +723,34 @@ TEST_CASE_METHOD(SpoolmanLaneFixture, "SpoolmanManager: the weights a fetch file
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
+                 "SpoolmanManager: a fetch files the spool's filament definition id",
+                 "[spoolman][lane][1632]") {
+    helix::test::RegisteredBackend<AmsBackendMock> backend(2);
+    link(*backend, 0, 1);
+    state_polymaker_pla(server_spool(1));
+
+    SECTION("a spool whose filament definition Spoolman knows files it") {
+        server_spool(1).filament_id = 55;
+
+        poll();
+
+        const auto record = helix::ams::lane_sources(backend.lane(0)).spoolman;
+        REQUIRE(record.has_value());
+        CHECK(record->spoolman_filament_id == 55);
+    }
+
+    SECTION("a spool with no filament definition files none") {
+        REQUIRE(server_spool(1).filament_id == 0);
+
+        poll();
+
+        const auto record = helix::ams::lane_sources(backend.lane(0)).spoolman;
+        REQUIRE(record.has_value());
+        CHECK_FALSE(record->spoolman_filament_id.has_value());
+    }
+}
+
+TEST_CASE_METHOD(SpoolmanLaneFixture,
                  "SpoolmanManager: a linked lane shows Spoolman's weight over the meter's",
                  "[spoolman][lane][1632]") {
     helix::test::RegisteredBackend<AmsBackendMock> backend(2);

@@ -1505,6 +1505,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
     edit.brand = "Polymaker";
     edit.spool_name = "PolyLite PLA Orange";
     edit.spoolman_id = 42;
+    edit.spoolman_filament_id = 55;
     edit.material = "PLA";
     edit.color_rgb = 0xFF5500;
 
@@ -1513,6 +1514,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
     // name, material and colour that ride in with a link need the source that
     // actually owns them.
     helix::test::edit_slot_as_user(backend, 0, edit);
+    REQUIRE(backend.get_slot_info(0).spoolman_filament_id == 55);
     SpoolInfo spool;
     spool.id = 42;
     spool.vendor = "Polymaker";
@@ -1539,6 +1541,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
     CHECK(info.brand == "Polymaker");                // survived
     CHECK(info.spool_name == "PolyLite PLA Orange"); // survived
     CHECK(info.spoolman_id == 42);                   // survived
+    CHECK(info.spoolman_filament_id == 55);          // survived
     CHECK(info.material == "PLA");                   // override material wins
     CHECK(info.color_rgb == 0xFF5500u);              // override color wins
 }

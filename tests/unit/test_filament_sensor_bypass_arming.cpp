@@ -20,7 +20,6 @@
 #include "ui_update_queue.h"
 
 #include "../helix_test_fixture.h"
-#include "test_helpers/afc_test_access.h"
 #include "ams_backend_ad5x_ifs.h"
 #include "ams_backend_afc.h"
 #include "ams_backend_cfs.h"
@@ -32,6 +31,7 @@
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
 #include "test_helpers/ad5x_ifs_test_access.h"
+#include "test_helpers/afc_test_access.h"
 #include "test_helpers/cfs_test_access.h"
 
 #include <filesystem>
@@ -399,6 +399,8 @@ void seed_store_and_publish(helix::ams::LaneKeyStyle style, const char* expect_o
     SlotInfo spool;
     spool.material = "ASA";
     spool.color_rgb = 0x1A2B3C;
+    spool.spoolman_id = 31;
+    spool.spoolman_filament_id = 55;
     const int lane_index = 4; // e.g. T0-T3 lanes -> extern is 4
     CHECK(helix::ams::publish_external_lane(&store, lane_index, &spool, "test"));
     helix::ui::UpdateQueue::instance().drain();
@@ -407,6 +409,7 @@ void seed_store_and_publish(helix::ams::LaneKeyStyle style, const char* expect_o
     REQUIRE_FALSE(rec.is_null());
     CHECK(rec["lane"] == "4"); // inner field authoritative, 0-based string
     CHECK(rec["helix_material"] == "ASA");
+    CHECK(rec.value("helix_spoolman_filament_id", 0) == 55);
 }
 } // namespace
 

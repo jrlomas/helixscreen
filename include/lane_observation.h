@@ -53,6 +53,7 @@ struct Observation {
     std::optional<std::string> catalog_id;
     std::optional<std::string> product_name;
     std::optional<int> spoolman_id;
+    std::optional<int> spoolman_filament_id;
     std::optional<int> spoolman_vendor_id;
 
     std::optional<float> remaining_weight_g;
@@ -64,14 +65,14 @@ struct Observation {
     /// that code with no matching line to remember.
     auto fields() {
         return std::tie(present, tool_docked, color_rgb, color_name, material, brand, spool_name,
-                        catalog_id, product_name, spoolman_id, spoolman_vendor_id,
-                        remaining_weight_g, total_weight_g);
+                        catalog_id, product_name, spoolman_id, spoolman_filament_id,
+                        spoolman_vendor_id, remaining_weight_g, total_weight_g);
     }
 
     auto fields() const {
         return std::tie(present, tool_docked, color_rgb, color_name, material, brand, spool_name,
-                        catalog_id, product_name, spoolman_id, spoolman_vendor_id,
-                        remaining_weight_g, total_weight_g);
+                        catalog_id, product_name, spoolman_id, spoolman_filament_id,
+                        spoolman_vendor_id, remaining_weight_g, total_weight_g);
     }
 };
 

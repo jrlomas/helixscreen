@@ -2163,6 +2163,7 @@ void write_filament_fields(SlotInfo& bay, const SlotInfo& info) {
     bay.product_name = info.product_name;
     bay.spool_name = info.spool_name;
     bay.spoolman_id = info.spoolman_id;
+    bay.spoolman_filament_id = info.spoolman_filament_id;
     bay.spoolman_vendor_id = info.spoolman_vendor_id;
     bay.remaining_weight_g = info.remaining_weight_g;
     bay.total_weight_g = info.total_weight_g;
@@ -4548,19 +4549,18 @@ void AmsBackendCfs::strip_spoolman_link_on_runout_locked(SlotInfo& slot, int slo
     // the fresh spool the user loads keeps inheriting a correctly-labeled
     // lane while the exhausted spool's id stops being re-asserted onto it.
     o.spoolman_id = 0;
+    o.spoolman_filament_id = 0;
     o.spoolman_vendor_id = 0;
     o.updated_at = std::chrono::system_clock::now();
 
     // Immediate visibility on the live SlotInfo. apply_resolved_lane runs after
-    // this, so the zero only survives if no lane source still declares the id,
-    // which is what the retraction below is for.
+    // this, so the zeros only survive if no lane source still declares the ids,
+    // which is what the retraction below is for. The three handles die together:
+    // a filament definition id whose spool id is gone names nothing, and the
+    // paint would put it back on the very next poll.
     slot.spoolman_id = 0;
-    slot.spoolman_vendor_id = 0;
-    // Zero over zero: no wire field carries a filament id and the poll
-    // replaces the units wholesale, so the live slot holds none here. Dropped
-    // anyway so the three handles cannot come apart once a filament id
-    // survives a poll (#1632).
     slot.spoolman_filament_id = 0;
+    slot.spoolman_vendor_id = 0;
 
     // The lane's own records lose the handle too, and only the handle: #1390 is
     // exactly that a bay's identity outlives the spool and labels the one
@@ -4569,6 +4569,7 @@ void AmsBackendCfs::strip_spoolman_link_on_runout_locked(SlotInfo& slot, int slo
     // record the binding they chose, the server's the spool it named.
     helix::ams::retract_lane_declarations(lane_id(slot_index), [](helix::ams::Observation& kept) {
         kept.spoolman_id.reset();
+        kept.spoolman_filament_id.reset();
         kept.spoolman_vendor_id.reset();
     });
 
