@@ -95,7 +95,7 @@ bool MoonrakerManager::init(const RuntimeConfig& runtime_config, Config* config)
             const std::string named = mock_printer == "k1max" ? "Creality K1 Max" : "Creality K1C";
             config->set<std::string>(type_path, named);
             config->save();
-            spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER={} — saved printer type "
+            spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER={} saved printer type "
                          "'{}' (persona identity doesn't clear the detection bar)",
                          mock_printer, named);
         } else {

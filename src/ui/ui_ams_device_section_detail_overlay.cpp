@@ -693,7 +693,6 @@ void AmsDeviceSectionDetailOverlay::on_slider_changed(lv_event_t* e) {
         auto& overlay = get_ams_device_section_detail_overlay();
         auto index = reinterpret_cast<size_t>(lv_obj_get_user_data(slider));
         if (index < overlay.action_ids_.size()) {
-            const std::string& action_id = overlay.action_ids_[index];
             int32_t int_val = lv_slider_get_value(slider);
 
             // Update the text input (last child of the row: label, slider, textarea)
