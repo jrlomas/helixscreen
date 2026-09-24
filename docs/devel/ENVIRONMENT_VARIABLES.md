@@ -10,12 +10,19 @@ exporting `KEY=VALUE` lines whose variable is not already set. The file is shell
 so values may use `$(...)` and variable expansion, and the same parse answers `--print-env`.
 
 That eval is why ownership is gated: the file is only read when it is owned by root or by
-the user the launcher itself runs as, and carries no group or world write bit. A file whose
+the user the launcher itself runs as, and carries no group or world write bit. On the
+printer_data layout, where `<install>/config/helixscreen.env` is a symlink into
+`printer_data/config/helixscreen/` so Mainsail and Fluidd can edit it, the owner of that
+directory is trusted too: Moonraker saves an edit as its own user (`lava` on the Snapmaker U1)
+while the launcher runs as root. That extra trust holds only while the directory has no group
+or world write bit and the symlink sits in a directory owned by root or the launcher's user
+with none either, so only the installer could have pointed it there. A file whose
 owner passes that check and whose only fault is a write bit is repaired in place to `0644`
 (web updates and deploys ship the file without pinning it) and loaded, with one log line
-saying so. Anything else (a mode the repair cannot settle, an owner that is neither root
-nor the service user) is skipped with a logged warning naming the file, its owner and
-mode, and the fix:
+saying so. Anything else (a mode the repair cannot settle, an owner none of those rules
+trusts) is skipped with a logged warning naming the file, its owner and mode, and the fix.
+The fix names the directory's owner for a printer_data file, which keeps web editing
+working; for a plain file it is root:
 
 ```sh
 chown root:root /etc/helixscreen/helixscreen.env && chmod 644 /etc/helixscreen/helixscreen.env

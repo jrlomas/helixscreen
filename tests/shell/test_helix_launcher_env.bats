@@ -502,6 +502,90 @@ make_fake_stat() {
     chmod +x "$BATS_TEST_TMPDIR/fakebin/stat"
 }
 
+# Per-path fake stat for the printer_data layout: each `PATH UID MODE` line in
+# $BATS_TEST_TMPDIR/statmap answers `stat -L -c '%u %a' PATH`, and a path with
+# no line fails. `id -u` reports 0, so the launcher judges as root, the way the
+# SysV firmware devices run it.
+make_fake_stat_map() {
+    mkdir -p "$BATS_TEST_TMPDIR/fakebin"
+    cat > "$BATS_TEST_TMPDIR/fakebin/stat" <<'FAKE'
+#!/bin/sh
+[ "$1" = "-L" ] && [ "$2" = "-c" ] || exit 1
+while read -r p u m; do
+    [ "$p" = "$4" ] && { echo "$u $m"; exit 0; }
+done < "$BATS_TEST_TMPDIR/statmap"
+exit 1
+FAKE
+    printf '#!/bin/sh\n[ "$1" = "-u" ] && echo 0 && exit 0\nexec /usr/bin/id "$@"\n' \
+        > "$BATS_TEST_TMPDIR/fakebin/id"
+    chmod +x "$BATS_TEST_TMPDIR/fakebin/stat" "$BATS_TEST_TMPDIR/fakebin/id"
+}
+
+# The Snapmaker U1 layout: config/helixscreen.env links into printer_data
+# owned by the Klipper user (uid 1000), where Mainsail and Fluidd save it.
+# Arguments are the modes/owners that vary per test.
+make_u1_layout() {
+    local link_dir_uid="$1" real_dir_mode="$2" file_uid="$3"
+    mkdir -p "$BATS_TEST_TMPDIR/printer_data/config/helixscreen"
+    printf 'MOONRAKER_HOST=u1-web-edited.local\n' \
+        > "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
+    ln -s "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env" \
+        "$MOCK_INSTALL/config/helixscreen.env"
+    local real real_dir
+    real=$(readlink -f "$MOCK_INSTALL/config/helixscreen.env")
+    real_dir="${real%/*}"
+    {
+        echo "$MOCK_INSTALL/config/helixscreen.env $file_uid 644"
+        echo "$real $file_uid 644"
+        echo "$MOCK_INSTALL/config $link_dir_uid 755"
+        echo "$real_dir 1000 $real_dir_mode"
+    } > "$BATS_TEST_TMPDIR/statmap"
+}
+
+run_launcher_as_root() {
+    env -u MOONRAKER_HOST PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/gate.log"
+}
+
+@test "a root launcher loads a symlinked env file owned by the printer_data user (U1)" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat_map
+    make_u1_layout 0 755 1000
+    run_launcher_as_root
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "u1-web-edited.local" ]
+    [ ! -s "$BATS_TEST_TMPDIR/gate.log" ]
+}
+
+@test "printer_data user trust needs a printer_data directory nobody else can write" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat_map
+    make_u1_layout 0 775 1000
+    run_launcher_as_root
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "owned by uid 1000" "$BATS_TEST_TMPDIR/gate.log"
+}
+
+@test "printer_data user trust needs the link itself placed by root or this user" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat_map
+    make_u1_layout 12345 755 1000
+    run_launcher_as_root
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "owned by uid 1000" "$BATS_TEST_TMPDIR/gate.log"
+}
+
+@test "a file in printer_data owned by someone other than its directory's owner is refused" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat_map
+    make_u1_layout 0 755 12345
+    run_launcher_as_root
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "owned by uid 12345" "$BATS_TEST_TMPDIR/gate.log"
+    # The advice names the directory's owner, which keeps web editing working.
+    grep -qF "chown 1000 " "$BATS_TEST_TMPDIR/gate.log"
+}
+
 @test "env file owned by the launcher's own user at 0644 loads" {
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     printf 'MOONRAKER_HOST=self-owned.local\n' > "$MOCK_INSTALL/config/helixscreen.env"
@@ -625,7 +709,7 @@ make_fake_stat() {
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
     grep -q "owned by uid 12345" "$BATS_TEST_TMPDIR/refuse.log"
-    grep -qF "chown root:root $MOCK_INSTALL/config/helixscreen.env" "$BATS_TEST_TMPDIR/refuse.log"
+    grep -qF "chown 0 $MOCK_INSTALL/config/helixscreen.env" "$BATS_TEST_TMPDIR/refuse.log"
 }
 
 @test "env file whose owner or mode cannot be read is refused, not assumed safe" {

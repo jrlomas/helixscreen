@@ -150,8 +150,15 @@ INSTALL_DIR="$(cd "${BIN_DIR}/.." && pwd)"
 # a line like FOO=$(cmd) runs cmd as this launcher's user - root on every SysV
 # firmware device. That is acceptable only for a file owned by root or by this
 # launcher's own user, with no group or world write bit; anything else is a
-# file somebody else can rewrite into code this script would run. A file owned
-# by root or this user whose only fault is a write bit is repaired to 0644 in
+# file somebody else can rewrite into code this script would run. One more
+# owner is trusted: the owner of the directory a symlinked env file resolves
+# into, when that directory has no group or world write bit and the link sits
+# in a directory owned by root or this user with none either. That is the
+# printer_data layout, where the file must stay editable from Mainsail and
+# Fluidd: Moonraker saves an edit as its own user (lava on the Snapmaker U1),
+# and only root or this user could have pointed the link into that directory,
+# so its owner already holds the file by the installer's choice. A file owned
+# by a trusted owner whose only fault is a write bit is repaired to 0644 in
 # place and loaded instead: web updates and deploys ship the file without
 # pinning it, and refusing there would blank settings on every update. A
 # refused file is skipped with a warning, and startup continues on built-in
@@ -172,6 +179,31 @@ helix_env_stat() {
     return 0
 }
 
+# Owner of REAL_DIR when it is trusted to hold the env file: REAL_DIR has no
+# group or world write bit, and LINK_DIR (where the symlink lives) is owned by
+# root or UID with none either. Prints 0 (root, already trusted) otherwise.
+helix_env_dir_owner() {
+    _hed_link=$(helix_env_stat "$2")
+    _hed_real=$(helix_env_stat "$1")
+    _hed_out=0
+    case "${_hed_link%% *}" in
+        0 | "$3")
+            case "${_hed_link##* }${_hed_real##* }" in
+                '' | *[!0-9]*) ;;
+                *)
+                    if [ -n "$_hed_real" ] &&
+                        [ "$((0${_hed_link##* } & 022))" = "0" ] &&
+                        [ "$((0${_hed_real##* } & 022))" = "0" ]; then
+                        _hed_out="${_hed_real%% *}"
+                    fi
+                    ;;
+            esac
+            ;;
+    esac
+    echo "$_hed_out"
+    unset _hed_link _hed_real _hed_out
+}
+
 helix_env_file_trusted() {
     _hef_stat=$(helix_env_stat "$1")
     _hef_uid=$(id -u 2>/dev/null) || _hef_uid=""
@@ -182,9 +214,15 @@ helix_env_file_trusted() {
     fi
     _hef_owner="${_hef_stat%% *}"
     _hef_mode="${_hef_stat##* }"
-    if [ "$_hef_owner" != "0" ] && [ "$_hef_owner" != "$_hef_uid" ]; then
-        log "warning: $1 is owned by uid $_hef_owner, not root or this user (uid $_hef_uid) - env file skipped (fix: chown root:root $1; chmod 644 $1)"
-        unset _hef_stat _hef_uid _hef_owner _hef_mode
+    _hef_real=$(readlink -f "$1" 2>/dev/null) || _hef_real="$1"
+    _hef_dir_owner=0
+    if [ -L "$1" ]; then
+        _hef_dir_owner=$(helix_env_dir_owner "${_hef_real%/*}" "${1%/*}" "$_hef_uid")
+    fi
+    if [ "$_hef_owner" != "0" ] && [ "$_hef_owner" != "$_hef_uid" ] &&
+        [ "$_hef_owner" != "$_hef_dir_owner" ]; then
+        log "warning: $1 is owned by uid $_hef_owner, not root, this user (uid $_hef_uid) or the owner of its directory - env file skipped (fix: chown $_hef_dir_owner $_hef_real; chmod 644 $_hef_real)"
+        unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_dir_owner
         return 1
     fi
     case "$_hef_mode" in
@@ -198,12 +236,11 @@ helix_env_file_trusted() {
     # the group+world write bits. Setuid/setgid digits are unaffected by the
     # mask, so a 4755 file is judged on its 755 alone.
     if [ "$((0$_hef_mode & 022))" != "0" ]; then
-        # The owner already passed the check above (root or this user), so the
-        # write bits are a shipping fault, not an attack: tighten the mode on
-        # the symlink's target and load the file if that settles it. The
-        # re-stat stays fail-closed - a chmod that reports success without
-        # taking effect still refuses the file.
-        _hef_real=$(readlink -f "$1" 2>/dev/null) || _hef_real="$1"
+        # The owner already passed the check above, so the write bits are a
+        # shipping fault, not an attack: tighten the mode on the symlink's
+        # target and load the file if that settles it. The re-stat stays
+        # fail-closed - a chmod that reports success without taking effect
+        # still refuses the file.
         if chmod 0644 "$_hef_real" 2>/dev/null; then
             _hef_again=$(helix_env_stat "$_hef_real")
             _hef_again_mode="${_hef_again##* }"
@@ -212,17 +249,17 @@ helix_env_file_trusted() {
                 *)
                     if [ "$((0$_hef_again_mode & 022))" = "0" ]; then
                         log "repaired $_hef_real from mode $_hef_mode to 0644 - env file loaded"
-                        unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_again _hef_again_mode
+                        unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_dir_owner _hef_again _hef_again_mode
                         return 0
                     fi
                     ;;
             esac
         fi
         log "warning: $1 (uid $_hef_owner, mode $_hef_mode) is group- or world-writable - env file skipped (fix: chmod 644 $1)"
-        unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_again _hef_again_mode
+        unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_dir_owner _hef_again _hef_again_mode
         return 1
     fi
-    unset _hef_stat _hef_uid _hef_owner _hef_mode
+    unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_dir_owner
     return 0
 }
 
