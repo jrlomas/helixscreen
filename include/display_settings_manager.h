@@ -171,6 +171,12 @@ class DisplaySettingsManager {
     /** @brief Set page-scroll buttons preference (updates subject + persists) */
     void set_page_scroll_buttons(bool enabled);
 
+    /** @brief Speed/flow readouts lead with mm/s and mm³/s instead of percent */
+    bool get_speed_flow_physical_units() const;
+
+    /** @brief Set speed/flow readout units (updates subject + persists) */
+    void set_speed_flow_physical_units(bool enabled);
+
     /** @brief Keep Android navigation bar onscreen (issue #908, Android only) */
     bool get_keep_navbar_visible() const;
 
@@ -397,6 +403,11 @@ class DisplaySettingsManager {
         return &page_scroll_buttons_subject_;
     }
 
+    /** @brief Speed/flow readout units subject (integer: 0=percent, 1=mm/s + mm³/s) */
+    lv_subject_t* subject_speed_flow_physical_units() {
+        return &speed_flow_physical_units_subject_;
+    }
+
     /** @brief Keep navbar visible subject (integer: 0=immersive, 1=always show) */
     lv_subject_t* subject_keep_navbar_visible() {
         return &keep_navbar_visible_subject_;
@@ -473,6 +484,7 @@ class DisplaySettingsManager {
     lv_subject_t animations_enabled_subject_;
     lv_subject_t use_system_keyboard_subject_;
     lv_subject_t page_scroll_buttons_subject_;
+    lv_subject_t speed_flow_physical_units_subject_;
     lv_subject_t keep_navbar_visible_subject_;
     lv_subject_t is_android_subject_;
     lv_subject_t rotation_available_subject_;

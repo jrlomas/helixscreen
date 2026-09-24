@@ -198,6 +198,30 @@ TEST_CASE("Motion characterization: speed_factor updates from JSON",
     }
 }
 
+TEST_CASE("Motion characterization: live_velocity updates from motion_report",
+          "[characterization][motion][speed][tune_units]") {
+    lv_init_safe();
+
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    SECTION("rounds the measured toolhead speed to whole mm/s") {
+        json status = {{"motion_report", {{"live_velocity", 148.6}}}};
+        state.update_from_status(status);
+
+        REQUIRE(lv_subject_get_int(state.get_live_velocity_subject()) == 149);
+    }
+
+    SECTION("falls back to zero when the toolhead stops") {
+        state.update_from_status({{"motion_report", {{"live_velocity", 120.0}}}});
+        REQUIRE(lv_subject_get_int(state.get_live_velocity_subject()) == 120);
+
+        state.update_from_status({{"motion_report", {{"live_velocity", 0.0}}}});
+        REQUIRE(lv_subject_get_int(state.get_live_velocity_subject()) == 0);
+    }
+}
+
 TEST_CASE("Motion characterization: flow_factor updates from JSON",
           "[characterization][motion][flow]") {
     lv_init_safe();

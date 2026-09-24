@@ -270,6 +270,7 @@ static const IconMapping ICON_MAP[] = {
     {"spoolman",           "\xF3\xB0\x88\xAF"},  // F022F film (same as filament)
     {"star",               "\xF3\xB0\x93\x8E"},  // F04CE star (favorites/recent)
     {"stop",               "\xF3\xB0\x93\x9B"},  // F04DB stop
+    {"swap_horizontal",    "\xF3\xB0\x93\xA1"},  // F04E1 swap-horizontal
     {"swap_vertical",      "\xF3\xB0\x93\xA2"},  // F04E2 swap-vertical
     {"sync",               "\xF3\xB0\x93\xA6"},  // F04E6 sync (auto-detect)
     {"sysinfo",            "\xF3\xB0\x8B\xBC"},  // F02FC information

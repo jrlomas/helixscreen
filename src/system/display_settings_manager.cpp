@@ -309,6 +309,10 @@ void DisplaySettingsManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(page_scroll_buttons_subject_, page_scroll ? 1 : 0,
                            "settings_page_scroll_buttons", subjects_);
 
+    bool physical_units = config->get<bool>("/display/speed_flow_physical_units", false);
+    UI_MANAGED_SUBJECT_INT(speed_flow_physical_units_subject_, physical_units ? 1 : 0,
+                           "settings_speed_flow_physical_units", subjects_);
+
     // Keep navbar onscreen preference (Android only, issue #908, default: off)
     bool keep_navbar = config->get<bool>("/display/keep_navbar_visible", false);
     UI_MANAGED_SUBJECT_INT(keep_navbar_visible_subject_, keep_navbar ? 1 : 0,
@@ -812,6 +816,20 @@ void DisplaySettingsManager::set_page_scroll_buttons(bool enabled) {
 
     Config* config = Config::get_instance();
     config->set<bool>("/display/page_scroll_buttons", enabled);
+    config->save();
+}
+
+bool DisplaySettingsManager::get_speed_flow_physical_units() const {
+    return lv_subject_get_int(const_cast<lv_subject_t*>(&speed_flow_physical_units_subject_)) != 0;
+}
+
+void DisplaySettingsManager::set_speed_flow_physical_units(bool enabled) {
+    spdlog::info("[DisplaySettingsManager] set_speed_flow_physical_units({})", enabled);
+
+    lv_subject_set_int(&speed_flow_physical_units_subject_, enabled ? 1 : 0);
+
+    Config* config = Config::get_instance();
+    config->set<bool>("/display/speed_flow_physical_units", enabled);
     config->save();
 }
 
