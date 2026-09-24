@@ -8,7 +8,7 @@
 #include "accel_sensor_manager.h"
 #include "ams_state.h"
 #include "batch_feed_reconcile.h"
-#include "snapmaker_screws_tilt.h"
+#include "screws_tilt_dialect.h"
 #if HELIX_HAS_IFS
 #include "ams_backend_ad5x_ifs.h"
 #endif
@@ -27,6 +27,7 @@
 #include "macro_patterns.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
+#include "plr_backend.h"
 #include "power_device_state.h"
 #include "power_loss_sensor.h"
 #include "print_start_profile.h"
@@ -1156,7 +1157,8 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
                      "axis_minimum", "axis_maximum"});
     subscription_objects["gcode_move"] =
         json::array({"gcode_position", "speed", "speed_factor", "extrude_factor", "homing_origin"});
-    subscription_objects["motion_report"] = json::array({"live_extruder_velocity"});
+    subscription_objects["motion_report"] =
+        json::array({"live_velocity", "live_extruder_velocity"});
     subscription_objects["display_status"] = json::array({"message", "progress"});
 
     // system_stats was previously subscribed with nullptr but no parser ever
@@ -1489,6 +1491,14 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
         subscription_objects["save_variables"] = nullptr;
     }
 
+    // Power-loss recovery: the PLR module owns which status objects its
+    // backends need for the discovered firmware. A printer already carrying
+    // one of these keys from an earlier block just re-assigns the same map
+    // entry, which is idempotent.
+    for (const auto& obj : helix::plr_required_status_objects(hw)) {
+        subscription_objects[obj] = nullptr;
+    }
+
     // All discovered filament sensors (filament_switch_sensor, filament_motion_sensor).
     // FilamentSensorManager reads filament_detected + enabled + detection_count.
     static const json filament_sensor_fields =
@@ -1624,6 +1634,9 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
     if (hw.mmu_type() == AmsType::AD5X_IFS) {
         spdlog::info("[Moonraker Client] Subscribing to save_variables (AD5X IFS)");
     }
+    if (!helix::plr_required_status_objects(hw).empty()) {
+        spdlog::info("[Moonraker Client] Subscribing to save_variables (power-loss recovery)");
+    }
     if (helix::zoffset::firmware_persists_z_offset(hw)) {
         spdlog::info("[Moonraker Client] Subscribing persisted z-offset objects ({})",
                      helix::zoffset::persistence_provider_name(hw));
@@ -1686,9 +1699,7 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                     // a calibration another client is actively driving keeps
                     // its state unless its own probe step proves nothing is
                     // running.
-                    if (hw.screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-                        snapmaker::screws_tilt::reconcile_on_connect(client_, status);
-                    }
+                    screws_tilt::reconcile_on_connect(client_, hw, status);
                     // Same shape, one interlock over: a batch feed interrupted
                     // by a lost connection strands the macro's `doing`, which
                     // refuses every print start until cleared. Clearing is
@@ -1703,16 +1714,9 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
                         // not clear it on a mid-batch reconnect. The backends
                         // answer the capability question; which one runs
                         // batches is vendor knowledge that stays there.
-                        bool local_batch_active = false;
-                        auto& ams = AmsState::instance();
-                        for (int i = 0; i < ams.backend_count() && !local_batch_active; ++i) {
-                            if (const auto* backend = ams.get_backend(i)) {
-                                local_batch_active = backend->filament_batch_in_flight();
-                            }
-                        }
                         batch_feeding::reconcile_on_connect(
                             client_, status, fmt::format("gcode_macro {}", batch_macro),
-                            local_batch_active);
+                            AmsState::instance().any_filament_batch_in_flight());
                     }
                 }
             } else if (sub_response.contains("error")) {

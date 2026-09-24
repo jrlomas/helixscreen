@@ -740,6 +740,11 @@ bool parse_cli_args(int argc, char** argv, CliArgs& args, int& screen_width, int
                 spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
                              "AD5X IFS backend)",
                              mode);
+            } else if (mode == "cfs" || mode == "cfs-k1") {
+                config.use_real_ams = true;
+                spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
+                             "CFS backend)",
+                             mode);
             }
         }
     }

@@ -356,14 +356,13 @@ void add_system_sink(std::vector<spdlog::sink_ptr>& sinks, LogTarget target,
             sink->set_formatter(make_formatter(SinkKind::File));
             sinks.push_back(std::move(sink));
         } catch (const spdlog::spdlog_ex& e) {
-            // rotating_file_sink_mt THROWS when the path cannot be opened —
-            // missing parent directory, read-only mount, full flash. That
-            // exception used to propagate out of init() and out of
-            // Application::run(), so a bad HELIX_LOG_FILE took the whole UI
-            // down. Logging is never worth refusing to boot over: degrade to
-            // whatever this platform would have picked on its own and say so.
-            // Matters now that platform hooks steer the log at firmware-owned
-            // directories that may not exist on every variant (#1249).
+            // rotating_file_sink_mt THROWS when the path cannot be opened:
+            // missing parent directory, read-only mount, full flash. Uncaught,
+            // it would escape init() and Application::run() and take the UI
+            // down over a bad HELIX_LOG_FILE. Logging is never worth refusing
+            // to boot over: degrade to whatever this platform would pick on its
+            // own and say so. Platform hooks steer the log at firmware-owned
+            // directories that do not exist on every variant (#1249).
             LogTarget fallback = detect_best_target();
             spdlog::warn("[Logging] Cannot open log file '{}' ({}); falling back to {}", path,
                          e.what(), log_target_name(fallback));

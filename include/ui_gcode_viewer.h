@@ -775,6 +775,18 @@ namespace helix::test_access {
  */
 const helix::gcode::GCodeLayerRenderer*
 gcode_viewer_budget_force_2d(lv_obj_t* viewer, std::unique_ptr<helix::gcode::ParsedGCodeFile> file);
+
+/// What the stall watchdog carries between ticks (-2 = never sampled).
+struct GcodeViewerWatchdogTrack {
+    int prev_cached = -2;
+    int prev_target = -2;
+    int stall_streak = 0;
+};
+
+/// Read or seed the watchdog's between-tick state, which production only
+/// reaches through a 2D render stalling on a live print.
+GcodeViewerWatchdogTrack gcode_viewer_watchdog_track(lv_obj_t* viewer);
+void gcode_viewer_set_watchdog_track(lv_obj_t* viewer, const GcodeViewerWatchdogTrack& track);
 } // namespace helix::test_access
 
 #endif

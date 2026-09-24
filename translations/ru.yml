@@ -60,6 +60,7 @@ translations:
   1 min ago: 1 мин. назад
   1 minute: 1 минута
   1 more tap to {} beta features: 1 нажатие до {} бета-функций
+  1. Printer homes all axes (~1 minute): 1. Принтер ищет ноль по всем осям (~1 минута)
   1. Printer homes and probes the bed: 1. Принтер паркуется и зондирует стол
   1. Printer will home and probe each screw: 1. Принтер запаркуется и проверит каждый
     винт
@@ -71,6 +72,8 @@ translations:
   180° Upside Down: 180° вверх ногами
   2 min: '2 мин'
   2 minutes: 2 минуты
+  2. Jog Y until the nozzle is centered over the chute opening: 2. Двигайте Y, пока сопло не встанет по центру отверстия жёлоба
+
   2. Place paper between nozzle and bed: 2. Положите бумагу между соплом и столом
   2. Results show how much to turn each screw: 2. Результаты покажут, насколько повернуть
     каждый винт
@@ -83,6 +86,8 @@ translations:
   3. Adjust screws, then re-probe to verify: 3. Отрегулируйте винты, затем перепроверьте
   3. Lower nozzle until paper drags slightly: 3. Опустите сопло, пока бумага не начнёт
     слегка цепляться
+  3. Save the position: 3. Сохраните позицию
+
   30 minutes: 30 минут
   30 seconds: 30 секунд
   3D Pipes: 3D трубы
@@ -160,6 +165,7 @@ translations:
   Add Vendor: Добавить производителя
   Add Widget: Добавить виджет
   Add custom filament: Добавить свой филамент
+  Add page: 'Добавить страницу'
   Added to Spoolman: Добавлено в Spoolman
   Address: Адрес
   Adjust screen brightness level: Настроить уровень яркости экрана
@@ -398,9 +404,11 @@ translations:
   Calibrate: Калибровать
   Calibrate All: Калибровать всё
   Calibrate Bowden: 'Калибровать боуден'
+  Calibrate Cutter: Калибровать резак
   Calibrate Encoder: 'Калибровать энкодер'
   Calibrate Gates: 'Калибровать шлюзы'
   Calibrate Gear: 'Калибровать шестерню'
+  Calibrate Purge Chute: Калибровать жёлоб продувки
   Calibrate X: Калибровать X
   Calibrate Y: Калибровать Y
   Calibrate all tools: Калибровать все инструменты
@@ -415,9 +423,12 @@ translations:
   Calibrating bed mesh...: Калибровка сетки стола...
   Calibrating {} axis...: 'Калибровка оси {}...'
   Calibrating...: Калибровка...
+  Calibrating... (about 1 minute): 'Калибровка... (около 1 минуты)'
+  Calibration: Калибровка
   Calibration & Tools: Калибровка и инструменты
   Calibration Complete!: Калибровка завершена!
   Calibration Failed: Ошибка калибровки
+  Calibration Saved: Калибровка сохранена
   Calibration and system configuration: 'Калибровка и настройка системы'
   Calibration cancelled.: Калибровка отменена.
   Calibration complete: Калибровка завершена
@@ -564,6 +575,8 @@ translations:
   ? Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses.
   : Выберите модель, соответствующую вашему принтеру. Это задаёт используемые HelixScreen макросы печати, роли вентиляторов и поведение калибровки.
   Choose what to power off or restart.: Выберите, что выключить или перезагрузить.
+  'Chute position: X {:.1f}, Y {:.1f}': 'Позиция жёлоба продувки: X {:.1f}, Y {:.1f}'
+
   Clean Brush: 'Очистить щётку'
   Clean Nozzle: Очистить сопло
   Cleaning Nozzle...: Очистка сопла...
@@ -770,9 +783,13 @@ translations:
   Customize your home screen: Настройте главный экран
   Cut Distance: 'Расстояние реза'
   Cut filament: Обрезать филамент
+  'Cut position saved: {}': 'Позиция реза сохранена: {}'
   Cut tip: 'Обрезка кончика'
   Cutter Enabled: 'Резак включён'
+  Cutter and purge chute calibration: Калибровка резака и жёлоба продувки
   Cutter blade didn't sever filament: Лезвие не перерезало филамент
+  Cutter calibration completed: Калибровка резака завершена
+  'Cutter calibration failed: {}': 'Не удалось калибровать резак: {}'
   Cutter jam: Замятие резака
   Cutting: Резка
   Cutting filament...: Обрезка филамента...
@@ -1295,6 +1312,7 @@ translations:
   Gray: Серый
   Grip filament: Зажать филамент
   Grip the filament: Зажать филамент
+  Guide the toolhead to the chute's extrude position: Подведите печатающую головку к позиции экструзии жёлоба
   Guides and reference: Руководства и справка
   H: Х
   HOST: Хост
@@ -1379,6 +1397,7 @@ translations:
   Holding nozzle at {}°C to purge previous filament.: Удержание сопла при {}°C для очистки от предыдущего филамента.
   Home: Главная
   Home & Continue: Запарковать и продолжить
+  Home and sweep the cutter to re-find its position: Ищет ноль и прощупывает резак, чтобы заново найти его позицию
   Home failed: Парковка не удалась
   Home printer first?: Сначала запарковать принтер?
   Home selector: Парковать селектор
@@ -1525,6 +1544,8 @@ translations:
   Job Queue: Очередь заданий
   Jog Speed XY: Скорость перемещения XY
   Jog Speed Z: Скорость перемещения Z
+  Jog Y until the nozzle is centered over the chute opening, then tap Save.: Двигайте Y, пока сопло не встанет по центру отверстия жёлоба, затем нажмите «Сохранить».
+
   'Jog failed: {}': 'Перемещение не удалось: {}'
   Jog speeds and step distances: Скорости и шаги перемещения
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Присоединяйтесь
@@ -1540,6 +1561,8 @@ translations:
   Keep Required: Оставить обязательным
   Keep Spool Info on Eject: Сохранять данные катушки при извлечении
   Keep current: Оставить текущую
+  Keep hands clear. The printer moves on its own.: Держите руки подальше. Принтер двигается сам.
+
   Keep the bypass spool visible when bypass is off: Показывать катушку байпаса, даже когда байпас выключен
   Kick away: 'Сброс остатка'
   Kinematics: Кинематика
@@ -1616,6 +1639,8 @@ translations:
   Light: Подсветка
   Light will switch when the current operation finishes: Подсветка переключится после
     завершения текущей операции
+  Line the nozzle up with the purge chute so purged filament drops straight in.: Выровняйте сопло над жёлобом продувки, чтобы продутый филамент падал прямо внутрь.
+
   Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: 'Строка {} вызывает {}, что этот принтер считает аварийной остановкой. Нарежьте файл заново с профилем для этого принтера.'
   Listen to all theme sounds: Прослушать все звуки темы
   Listening: Прослушивание
@@ -2118,6 +2143,7 @@ translations:
   Please enter a valid port (1-65535).: Введите корректный порт (1-65535).
   Please enter an IP address or hostname.: Введите IP-адрес или имя хоста.
   Please fill in the highlighted fields: Пожалуйста, заполните выделенные поля
+  Please wait while the printer homes and moves to the start position.: 'Подождите: принтер ищет ноль и перемещается в стартовую позицию.'
   Please wait while the printer homes and probes.: Пожалуйста, подождите, пока принтер
     паркуется и зондирует.
   Please wait while the printer probes each screw position.: Пожалуйста, подождите,
@@ -2314,7 +2340,11 @@ translations:
   Pulling filament back: Откат филамента
   Purge: Продуть
   Purge & Wipe: 'Продувка и очистка'
+  Purge Chute Calibration: Калибровка жёлоба продувки
   Purge Length: 'Длина продувки'
+  'Purge chute calibration failed: {}': 'Не удалось калибровать жёлоб продувки: {}'
+  Purge chute position saved.: Позиция жёлоба продувки сохранена.
+
   'Purge failed: {}': 'Ошибка прочистки: {}'
   Purge may still be running — response timed out: Прочистка может ещё выполняться
     — время ожидания истекло
@@ -2570,6 +2600,7 @@ translations:
     постоянно аварийно завершалось при запуске. Откройте настройки, чтобы устранить
     проблему, затем перезагрузите.
   Safety & Notifications: Безопасность и уведомления
+  Same spool in {}? Tap Clear if it is a new one.: 'Та же катушка в {}? Нажмите «Очистить», если это новая.'
   Sample: Образец
   Sample %d/%d: Образец %d/%d
   Sample Dialog: Пример диалога
@@ -2598,8 +2629,11 @@ translations:
   Saving Z-offset...: Сохранение Z-offset...
   Saving config... Klipper will restart.: Сохранение конфигурации... Klipper перезапустится.
   Saving offsets...: Сохранение смещений...
+  Saving the position and parking the toolhead.: Сохранение позиции и парковка печатающей головки.
+
   Saving will restart Klipper and CANCEL any active print!: Сохранение перезапустит
     Klipper и ОТМЕНИТ любую активную печать!
+  Saving...: Сохранение...
   Scan: Поиск
   Scan Cal: Кал. скана
   Scan QR Code: Сканировать QR-код
@@ -3029,6 +3063,7 @@ translations:
   : Печать на паузе. Смена инструмента сейчас переместит печатающую головку и заменит филамент в сопле. Возобновите печать после завершения смены.
   The printer halted this print and cannot resume it. Restart from the beginning?: Принтер
     остановил эту печать и не может её возобновить. Начать с начала?
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: Принтер ищет ноль и прощупывает резак (около 1 минуты). Держите путь филамента свободным.
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: Принтер не запаркован. Продолжение выполнит парковку всех осей, печатающая головка переместится. Убедитесь, что стол свободен.
   The printer lost power during a print. It can resume where it left off.: Принтер потерял питание во время печати. Он может продолжить с места остановки.
   The printer lost power during a print. The resumed layer may not line up exactly.: Принтер потерял питание во время печати. Возобновлённый слой может не совпасть точно.
@@ -3198,7 +3233,9 @@ translations:
   Toolhead LED: 'LED печатающей головки'
   Toolhead Sensor: Датчик печатающей головки
   Toolhead Style: Стиль печатающей головки
+  Toolhead Y: Печатающая головка Y
   Toolhead jam: Замятие в печатающей головке
+  Toolhead position unknown: Положение печатающей головки неизвестно
   Toolhead, G-code, limits, and materials: Печатающая головка, G-code, лимиты и материалы
   Toolheads: Печатающие головки
   Tools: Инструменты
@@ -3440,6 +3477,7 @@ translations:
   Y: Y
   Y Axis: Ось Y
   Y Offset: Смещение Y
+  Y axis limit reached: Достигнут предел оси Y
   Y jog blocked at bed edge: Перемещение по Y заблокировано на краю стола
   'Y:': 'Y:'
   ? "YOU WIN!\nScore: {}\nTap to play again"

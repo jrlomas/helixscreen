@@ -294,6 +294,63 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
 }
 
 // ============================================================================
+// Config tests: add_page
+// ============================================================================
+
+TEST_CASE_METHOD(PanelWidgetConfigFixture,
+                 "PanelWidgetConfig: add_page inserts at a position, appends by default, and "
+                 "refuses at the cap",
+                 "[panel_widget][widget_config]") {
+    setup_empty_config();
+    PanelWidgetConfig wc("home", config);
+    wc.load();
+    REQUIRE(wc.page_count() == 1);
+
+    // An append, then an insert before the first page. Names sit outside the
+    // page_N series generate_page_id() mints, so no id repeats.
+    REQUIRE(wc.add_page("extra_a") == 1);
+    const std::string first_id = wc.page_id(0);
+    const size_t main_before = wc.main_page_index();
+
+    REQUIRE(wc.add_page("extra_b", 0) == 0);
+    REQUIRE(wc.page_count() == 3);
+    REQUIRE(wc.page_id(0) == "extra_b");
+    REQUIRE(wc.page_id(1) == first_id);
+    // The main page keeps its place in the numbering when a page lands before it.
+    REQUIRE(wc.main_page_index() == main_before + 1);
+    // The entry the first page held shifted with its page.
+    REQUIRE_FALSE(wc.page_entries(1).empty());
+    REQUIRE(wc.page_entries(0).empty());
+
+    // A position past the end appends; a negative one is the default append.
+    REQUIRE(wc.add_page("extra_c", 99) == 3);
+    REQUIRE(wc.add_page("extra_d", -1) == 4);
+
+    // Removing the prepended page shifts the main page's index back down.
+    REQUIRE(wc.remove_page(0));
+    REQUIRE(wc.main_page_index() == main_before);
+    REQUIRE(wc.page_id(0) == first_id);
+
+    while (wc.add_page() >= 0) {
+    }
+    REQUIRE(wc.page_count() == MAX_PAGES);
+    // At the cap nothing is added, wherever it would land.
+    REQUIRE(wc.add_page() == -1);
+    REQUIRE(wc.add_page("", 0) == -1);
+    REQUIRE(wc.main_page_index() == main_before);
+
+    // A prepended page survives a save and reload in order.
+    wc.save();
+    PanelWidgetConfig reloaded("home", config);
+    reloaded.load();
+    REQUIRE(reloaded.page_count() == wc.page_count());
+    for (size_t i = 0; i < wc.page_count(); ++i) {
+        REQUIRE(reloaded.page_id(i) == wc.page_id(i));
+    }
+    REQUIRE(reloaded.main_page_index() == wc.main_page_index());
+}
+
+// ============================================================================
 // Config tests — reorder
 // ============================================================================
 

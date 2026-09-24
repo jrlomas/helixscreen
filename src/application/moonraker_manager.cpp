@@ -91,11 +91,13 @@ bool MoonrakerManager::init(const RuntimeConfig& runtime_config, Config* config)
         // the auto-save bar (shared chamber sensor + generic volume score it
         // as a Qidi at 73%), so name the capture machine directly: the
         // persona's printer type is part of what the env var declares.
-        if (mock_printer == "k1") {
-            config->set<std::string>(type_path, "Creality K1C");
+        if (mock_printer == "k1" || mock_printer == "k1max") {
+            const std::string named = mock_printer == "k1max" ? "Creality K1 Max" : "Creality K1C";
+            config->set<std::string>(type_path, named);
             config->save();
-            spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER=k1 — saved printer type "
-                         "'Creality K1C' (persona identity doesn't clear the detection bar)");
+            spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER={} saved printer type "
+                         "'{}' (persona identity doesn't clear the detection bar)",
+                         mock_printer, named);
         } else {
             const std::string prev = config->get<std::string>(type_path, "");
             if (!prev.empty()) {
@@ -151,6 +153,7 @@ void MoonrakerManager::shutdown() {
     // Using release() avoids double-free of already-removed observers.
     m_print_start_observer.release();
     m_print_start_phase_observer.release();
+    m_print_klippy_state_observer.release();
     m_preparing_epoch_observer.release();
     m_print_bed_target_fallback_observer.release();
     m_print_ext_target_fallback_observer.release();
@@ -371,8 +374,8 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
         // Through the shared accessor so the logged figure is the one the mock
         // will actually run at, clamp included.
         double speedup = helix::sim::SimSpeed::global().factor();
-        // HELIX_MOCK_PRINTER=voron_24|voron_trident|k1|ad5m|generic_corexy|
-        // generic_bedslinger|multi_extruder — defaults to Voron 2.4. K2 and
+        // HELIX_MOCK_PRINTER=voron_24|voron_trident|k1|k1max|ad5m|generic_corexy|
+        // generic_bedslinger|multi_extruder|delta — defaults to Voron 2.4. K2 and
         // CC1 don't have dedicated mock types yet; they fall through to the
         // default with a warning.
         const char* type_env = std::getenv("HELIX_MOCK_PRINTER");
@@ -389,6 +392,9 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
             } else if (t == "k1") {
                 type = MoonrakerClientMock::PrinterType::CREALITY_K1;
                 type_name = "Creality K1";
+            } else if (t == "k1max") {
+                type = MoonrakerClientMock::PrinterType::CREALITY_K1_MAX;
+                type_name = "Creality K1 Max";
             } else if (t == "ad5m") {
                 type = MoonrakerClientMock::PrinterType::FLASHFORGE_AD5M;
                 type_name = "Flashforge AD5M";
@@ -398,10 +404,14 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
             } else if (t == "generic_bedslinger") {
                 type = MoonrakerClientMock::PrinterType::GENERIC_BEDSLINGER;
                 type_name = "Generic Bedslinger";
+            } else if (t == "delta") {
+                type = MoonrakerClientMock::PrinterType::DELTA;
+                type_name = "Generic Delta";
             } else if (t != "voron_24") {
                 spdlog::warn("[MoonrakerManager] HELIX_MOCK_PRINTER='{}' not recognised "
                              "— falling back to Voron 2.4. Valid: voron_24, voron_trident, "
-                             "k1, ad5m, generic_corexy, generic_bedslinger, multi_extruder.",
+                             "k1, k1max, ad5m, generic_corexy, generic_bedslinger, multi_extruder, "
+                             "delta.",
                              t);
             }
         }
@@ -906,6 +916,23 @@ void MoonrakerManager::init_print_start_collector() {
                     spdlog::info(
                         "[MoonrakerManager] PRINT_START collector stopped (phase=COMPLETE)");
                 }
+            }
+        },
+        nullptr);
+
+    // A Klipper shutdown or error ends the print even when print_stats keeps
+    // reporting a job, so the collector cannot rely on the print-state observer.
+    m_print_klippy_state_observer = ObserverGuard(
+        get_printer_state().get_klippy_state_subject(),
+        [](lv_observer_t*, lv_subject_t* subject) {
+            auto collector = s_collector.lock();
+            if (!collector || !collector->is_active())
+                return;
+            auto klippy = static_cast<KlippyState>(lv_subject_get_int(subject));
+            if (should_stop_collector_on_klippy_state(klippy)) {
+                collector->stop();
+                spdlog::info("[MoonrakerManager] PRINT_START collector stopped (klippy state={})",
+                             static_cast<int>(klippy));
             }
         },
         nullptr);

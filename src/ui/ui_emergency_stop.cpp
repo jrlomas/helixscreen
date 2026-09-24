@@ -743,6 +743,21 @@ bool EmergencyStopOverlay::is_expected_restart() const {
 
 void EmergencyStopOverlay::update_recovery_dialog_content() {
     auto content = get_recovery_content(recovery_reason_);
+    lv_subject_copy_string(&recovery_title_subject_, lv_tr(content.title));
+    lv_subject_set_int(&recovery_can_restart_,
+                       recovery_reason_ != RecoveryReason::DISCONNECTED ? 1 : 0);
+    spdlog::debug("[KlipperRecovery] Updated dialog content: reason={}, can_restart={}",
+                  recovery_reason_str(recovery_reason_),
+                  recovery_reason_ != RecoveryReason::DISCONNECTED);
+
+    // A dialog already showing klippy's reason that then loses the connection
+    // keeps that reason; only the title and buttons change. The retired fault
+    // alerts are gone, so this body is the only place the reason is on screen.
+    // The cached state_message is not re-read: after a disconnect it can still
+    // be a READY-era "Printer is ready". This dialog is the only carrier.
+    if (recovery_reason_ == RecoveryReason::DISCONNECTED && helix::ui::fault_carrier_showing()) {
+        return;
+    }
 
     // Use actual Klipper state_message if available (e.g. "Max force exceeded...")
     std::string message;
@@ -760,21 +775,18 @@ void EmergencyStopOverlay::update_recovery_dialog_content() {
             GcodeErrorRouter::clean_error_text(message, code);
         }
     }
+    // Klippy's own reason restates any "Printer Error" alert raised for this
+    // fault, and this dialog adds the restart, so it becomes the one dialog for
+    // it. Generic text restates nothing, and the alerts stay.
+    helix::ui::set_fault_carrier(message.empty() ? nullptr : recovery_dialog_);
     if (message.empty()) {
         message = lv_tr(content.message);
     }
 
     // Update subjects — XML bindings in klipper_recovery_dialog.xml react automatically
-    lv_subject_copy_string(&recovery_title_subject_, lv_tr(content.title));
     lv_subject_copy_string(&recovery_message_subject_, message.c_str());
     lv_subject_copy_string(&recovery_code_subject_, code.c_str());
     lv_subject_set_int(&recovery_has_code_, code.empty() ? 0 : 1);
-    lv_subject_set_int(&recovery_can_restart_,
-                       recovery_reason_ != RecoveryReason::DISCONNECTED ? 1 : 0);
-
-    spdlog::debug("[KlipperRecovery] Updated dialog content: reason={}, can_restart={}",
-                  recovery_reason_str(recovery_reason_),
-                  recovery_reason_ != RecoveryReason::DISCONNECTED);
 }
 
 void EmergencyStopOverlay::restart_klipper() {

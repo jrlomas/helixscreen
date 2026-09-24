@@ -823,14 +823,18 @@ TEST_CASE_METHOD(LVGLTestFixture, "the swipe policy holds through page-count cha
                  "[carousel][swipe]") {
     using helix::ui::CarouselSwipe;
 
-    SECTION("Auto, the default, follows the page count") {
+    SECTION("Auto, the default, follows the reachable tiles") {
         lv_obj_t* carousel = carousel_with_pages(test_screen(), 0);
         CHECK(swipe_off(carousel));
         ui_carousel_add_item(carousel, lv_obj_create(test_screen()));
         CHECK(swipe_off(carousel));
         ui_carousel_add_item(carousel, lv_obj_create(test_screen()));
         CHECK(swipe_live(carousel));
+        // A tile past the page count stays swipeable while it is reachable: the
+        // home panel's next-page slot rides on one.
         ui_carousel_set_real_page_count(carousel, 1);
+        CHECK(swipe_live(carousel));
+        helix::ui::carousel_set_trailing_tiles_reachable(carousel, false);
         CHECK(swipe_off(carousel));
     }
 

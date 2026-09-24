@@ -22,6 +22,25 @@ Printers without direct internet access or HTTPS fetch tools (Creality K1, Adven
 
 ---
 
+## Coming from 1.0
+
+1.1 installs over an existing 1.0 setup as a normal update. To get it before the stable release, switch to the Beta update channel first:
+
+1. Go to **Settings > Help & About > About** and set **Update Channel** to **Beta**
+2. Tap **Check for Updates** on the same screen
+
+The channel picker does not appear on printers whose firmware manages updates itself (Adventurer 5M and 5X on Flashforge firmware); update those over SSH as their install guides describe.
+
+What to expect after the update:
+
+- **Your home screen is converted, not reset.** The first time 1.1 draws the home screen, it remaps your saved tile arrangement onto the new grid. Which tiles you have, their settings and your extra pages all carry over, and tiles that sat next to each other stay next to each other. Sizes can shift a little because the new grid divides the screen differently, and a tile that no longer fits is re-placed on its own. What you see on that first draw is what gets saved.
+- **Display sleep turns the backlight off.** The panel stays powered and only the backlight is cut, so waking is immediate. The panel itself is powered down at sleep only on screens whose backlight cannot be controlled. The `/display/panel_power_off` setting in `settings.json` forces a full power-down if you want one.
+- **Print preparation tracking needs nothing from your config.** The screen works out the current phase (heating, homing, printing) from the printer itself, on any printer. A `PRINT_START` that already carries `HELIX:PHASE` markers from an older install keeps working, and uninstalling removes the markers and leaves a timestamped backup of each file it touches.
+- **Some installs move on disk, automatically.** On the Adventurer 5M, settings, logs and caches move to `/data/.helixscreen`, out of the printer's file list. On the K2, the install moves off the small system overlay onto the user partition (`/mnt/UDISK`). Both moves happen during the update and keep everything.
+- **Going back to 1.0 and returning is safe for your settings.** A 1.0 build reads a newer settings file without rewriting it, and 1.1 picks the file back up afterwards. The home screen arrangement is the one thing that can suffer: a 1.0 build saves tile positions in its own grid's units, so after returning to 1.1 the tiles may sit in the wrong spots, or, from some 1.0 builds, the home screen comes back with its default layout. Long-press the home screen to enter Edit Mode and arrange it again.
+
+---
+
 ## If the Setup Wizard Keeps Appearing
 
 After upgrading, if HelixScreen keeps showing the setup wizard on every boot, your configuration file format may have changed in a way that's incompatible with the new version.

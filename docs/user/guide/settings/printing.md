@@ -97,10 +97,16 @@ As on Machine Limits, each value is shown in a tappable field — **tap it to ty
 
 Configure preheat presets for different filament materials (PLA, PETG, ABS, TPU, etc.). Each material can have:
 
-- **Nozzle Temperature** — Target extruder temperature
+- **Nozzle Temperature** - Target extruder temperature. The field clamps to the range your printer and nozzle allow, so it cannot be set past what the hardware supports.
 - **Bed Temperature** — Target bed temperature
 - **Preheat Macro** — A Klipper macro to run when preheating this material
 - **Macro Handles Heating** — If enabled, the macro is responsible for setting temperatures. If disabled, HelixScreen sets temperatures first, then runs the macro as an additional step.
+
+---
+
+## Motion
+
+Jog speeds and the per-mode move distances for the jog pad. See [Motion](../motion.md#motion-settings) for what each setting does.
 
 ---
 
@@ -184,6 +190,10 @@ Configure per-material macros in **Material Temperatures** (above). Each materia
 
 - **Preheat Macro** — A Klipper macro to run when preheating this material
 - **Macro Handles Heating** — If enabled, the macro is responsible for setting temperatures. If disabled, HelixScreen sets temperatures first, then runs the macro as an additional step.
+
+These settings apply to the **Preheat widget** on Home or Controls and to the **material preset buttons on the Filament panel**, including the active-spool preset when shown. Long-pressing a Filament preset changes the material assigned to that button; tapping it preheats that material. Individual nozzle, bed, and chamber temperature controls do not run a whole-material macro.
+
+**Macro Handles Heating** is not an enable/disable switch for the macro: the assigned macro runs in either mode. With it enabled, the macro must set every temperature you want. With no macro assigned, or one this printer does not define, the button applies its displayed preset temperatures. Manual preheat does not keep a hotter previous nozzle target for purging; load/unload operations retain their own heating behavior.
 
 ---
 

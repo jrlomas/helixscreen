@@ -411,6 +411,10 @@ nlohmann::json to_lane_data_record(int slot_index, const FilamentSlotOverride& o
     }
     if (o.spoolman_vendor_id > 0)
         j["spoolman_vendor_id"] = o.spoolman_vendor_id;
+    // helix_-prefixed: Happy Hare writes its own unprefixed "filament_id" inner
+    // field into these shared records, so that name is not ours to take.
+    if (o.spoolman_filament_id > 0)
+        j["helix_spoolman_filament_id"] = o.spoolman_filament_id;
     if (o.remaining_weight_g >= 0)
         j["remaining_weight_g"] = o.remaining_weight_g;
     if (o.total_weight_g >= 0)
@@ -489,6 +493,10 @@ std::optional<std::pair<int, FilamentSlotOverride>> from_lane_data_record(const 
     // `name` alias.
     o.spool_name = string_with_alias(j, "spool_name", "name");
     o.spoolman_vendor_id = helix::json_util::safe_int(j, "spoolman_vendor_id", 0);
+    // Our key alone, no alias: Happy Hare's unprefixed "filament_id" is a
+    // different field, and reading it here would file a foreign statement as a
+    // Spoolman binding's definition id.
+    o.spoolman_filament_id = helix::json_util::safe_int(j, "helix_spoolman_filament_id", 0);
     o.remaining_weight_g = helix::json_util::safe_float(j, "remaining_weight_g", -1.0f);
     o.total_weight_g = helix::json_util::safe_float(j, "total_weight_g", -1.0f);
     o.color_name = helix::json_util::safe_string(j, "color_name");
@@ -558,6 +566,7 @@ nlohmann::json to_json(const FilamentSlotOverride& o) {
         {"brand", o.brand},
         {"spool_name", o.spool_name},
         {"spoolman_id", o.spoolman_id},
+        {"spoolman_filament_id", o.spoolman_filament_id},
         {"spoolman_vendor_id", o.spoolman_vendor_id},
         {"remaining_weight_g", o.remaining_weight_g},
         {"total_weight_g", o.total_weight_g},
@@ -585,6 +594,7 @@ FilamentSlotOverride from_json(const nlohmann::json& j) {
     o.brand = helix::json_util::safe_string(j, "brand");
     o.spool_name = helix::json_util::safe_string(j, "spool_name");
     o.spoolman_id = helix::json_util::safe_int(j, "spoolman_id", 0);
+    o.spoolman_filament_id = helix::json_util::safe_int(j, "spoolman_filament_id", 0);
     o.spoolman_vendor_id = helix::json_util::safe_int(j, "spoolman_vendor_id", 0);
     o.remaining_weight_g = helix::json_util::safe_float(j, "remaining_weight_g", -1.0f);
     o.total_weight_g = helix::json_util::safe_float(j, "total_weight_g", -1.0f);
@@ -654,6 +664,7 @@ FilamentSlotOverride user_override_from_slot_info(const Observation& declaration
     ovr.brand = edited.brand;
     ovr.spool_name = edited.spool_name;
     ovr.spoolman_id = edited.spoolman_id;
+    ovr.spoolman_filament_id = edited.spoolman_filament_id;
     ovr.spoolman_vendor_id = edited.spoolman_vendor_id;
     ovr.remaining_weight_g = edited.remaining_weight_g;
     ovr.total_weight_g = edited.total_weight_g;
@@ -2099,6 +2110,7 @@ bool persist_override_external_identity(FilamentSlotOverrideStore* store,
     take(ovr.material, spoolman.material);
     take(ovr.spool_name, spoolman.spool_name);
     take(ovr.spoolman_vendor_id, spoolman.spoolman_vendor_id);
+    take(ovr.spoolman_filament_id, spoolman.spoolman_filament_id);
 
     // The colour is the one identity field a linked record can declare, and a
     // declared colour is the user's to keep.
@@ -2178,6 +2190,7 @@ bool publish_external_lane(FilamentSlotOverrideStore* store, int lane_index, con
     ovr.brand = spool->brand;
     ovr.spool_name = spool->spool_name;
     ovr.spoolman_id = spool->spoolman_id;
+    ovr.spoolman_filament_id = spool->spoolman_filament_id;
     ovr.spoolman_vendor_id = spool->spoolman_vendor_id;
     ovr.remaining_weight_g = spool->remaining_weight_g;
     ovr.total_weight_g = spool->total_weight_g;

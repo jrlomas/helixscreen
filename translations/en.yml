@@ -59,6 +59,7 @@ translations:
   1 min ago: 1 min ago
   1 minute: 1 minute
   1 more tap to {} beta features: 1 more tap to {} beta features
+  1. Printer homes all axes (~1 minute): 1. Printer homes all axes (~1 minute)
   1. Printer homes and probes the bed: 1. Printer homes and probes the bed
   1. Printer will home and probe each screw: 1. Printer will home and probe each screw
   10 minutes: 10 minutes
@@ -69,6 +70,7 @@ translations:
   180° Upside Down: 180° Upside Down
   2 min: 2 min
   2 minutes: 2 minutes
+  2. Jog Y until the nozzle is centered over the chute opening: 2. Jog Y until the nozzle is centered over the chute opening
   2. Place paper between nozzle and bed: 2. Place paper between nozzle and bed
   2. Results show how much to turn each screw: 2. Results show how much to turn each
     screw
@@ -80,6 +82,7 @@ translations:
   2D Layers: 2D Layers
   3. Adjust screws, then re-probe to verify: 3. Adjust screws, then re-probe to verify
   3. Lower nozzle until paper drags slightly: 3. Lower nozzle until paper drags slightly
+  3. Save the position: 3. Save the position
   30 minutes: 30 minutes
   30 seconds: 30 seconds
   3D Pipes: 3D Pipes
@@ -159,6 +162,7 @@ translations:
   Add Vendor: Add Vendor
   Add Widget: Add Widget
   Add custom filament: Add custom filament
+  Add page: Add page
   Added to Spoolman: Added to Spoolman
   Address: Address
   Adjust screen brightness level: Adjust screen brightness level
@@ -394,9 +398,11 @@ translations:
   Calibrate: Calibrate
   Calibrate All: Calibrate All
   Calibrate Bowden: Calibrate Bowden
+  Calibrate Cutter: Calibrate Cutter
   Calibrate Encoder: Calibrate Encoder
   Calibrate Gates: Calibrate Gates
   Calibrate Gear: Calibrate Gear
+  Calibrate Purge Chute: Calibrate Purge Chute
   Calibrate X: Calibrate X
   Calibrate Y: Calibrate Y
   Calibrate all tools: Calibrate all tools
@@ -411,9 +417,12 @@ translations:
   'Calibrating bed mesh...': 'Calibrating bed mesh...'
   Calibrating {} axis...: Calibrating {} axis...
   Calibrating...: Calibrating...
+  Calibrating... (about 1 minute): Calibrating... (about 1 minute)
+  Calibration: Calibration
   Calibration & Tools: Calibration & Tools
   Calibration Complete!: Calibration Complete!
   Calibration Failed: Calibration Failed
+  Calibration Saved: Calibration Saved
   Calibration and system configuration: Calibration and system configuration
   Calibration cancelled.: Calibration cancelled.
   Calibration complete: Calibration complete
@@ -555,6 +564,7 @@ translations:
   ? Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses.
   : Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses.
   Choose what to power off or restart.: Choose what to power off or restart.
+  'Chute position: X {:.1f}, Y {:.1f}': 'Chute position: X {:.1f}, Y {:.1f}'
   Clean Brush: Clean Brush
   Clean Nozzle: Clean Nozzle
   Cleaning Nozzle...: Cleaning Nozzle...
@@ -759,9 +769,13 @@ translations:
   Customize your home screen: Customize your home screen
   Cut Distance: Cut Distance
   Cut filament: Cut filament
+  'Cut position saved: {}': 'Cut position saved: {}'
   Cut tip: Cut tip
   Cutter Enabled: Cutter Enabled
+  Cutter and purge chute calibration: Cutter and purge chute calibration
   Cutter blade didn't sever filament: Cutter blade didn't sever filament
+  Cutter calibration completed: Cutter calibration completed
+  'Cutter calibration failed: {}': 'Cutter calibration failed: {}'
   Cutter jam: Cutter jam
   Cutting: Cutting
   Cutting filament...: Cutting filament...
@@ -1281,6 +1295,7 @@ translations:
   Gray: Gray
   Grip filament: Grip filament
   Grip the filament: Grip the filament
+  Guide the toolhead to the chute's extrude position: Guide the toolhead to the chute's extrude position
   Guides and reference: Guides and reference
   H: H
   HOST: HOST
@@ -1365,6 +1380,7 @@ translations:
   Holding nozzle at {}°C to purge previous filament.: Holding nozzle at {}°C to purge previous filament.
   Home: Home
   Home & Continue: Home & Continue
+  Home and sweep the cutter to re-find its position: Home and sweep the cutter to re-find its position
   Home failed: Home failed
   Home printer first?: Home printer first?
   Home selector: Home selector
@@ -1510,6 +1526,7 @@ translations:
   Job Queue: Job Queue
   Jog Speed XY: Jog Speed XY
   Jog Speed Z: Jog Speed Z
+  Jog Y until the nozzle is centered over the chute opening, then tap Save.: Jog Y until the nozzle is centered over the chute opening, then tap Save.
   'Jog failed: {}': 'Jog failed: {}'
   Jog speeds and step distances: Jog speeds and step distances
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Join
@@ -1525,6 +1542,7 @@ translations:
   Keep Required: Keep Required
   Keep Spool Info on Eject: Keep Spool Info on Eject
   Keep current: Keep current
+  Keep hands clear. The printer moves on its own.: Keep hands clear. The printer moves on its own.
   Keep the bypass spool visible when bypass is off: Keep the bypass spool visible when bypass is off
   Kick away: Kick away
   Kinematics: Kinematics
@@ -1598,6 +1616,7 @@ translations:
   Light: Light
   Light will switch when the current operation finishes: Light will switch when the
     current operation finishes
+  Line the nozzle up with the purge chute so purged filament drops straight in.: Line the nozzle up with the purge chute so purged filament drops straight in.
   Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.
   Listen to all theme sounds: Listen to all theme sounds
   Listening: Listening
@@ -2101,6 +2120,7 @@ translations:
   Please enter a valid port (1-65535).: Please enter a valid port (1-65535).
   Please enter an IP address or hostname.: Please enter an IP address or hostname.
   Please fill in the highlighted fields: Please fill in the highlighted fields
+  Please wait while the printer homes and moves to the start position.: Please wait while the printer homes and moves to the start position.
   Please wait while the printer homes and probes.: Please wait while the printer homes
     and probes.
   Please wait while the printer probes each screw position.: Please wait while the
@@ -2293,7 +2313,10 @@ translations:
   Pulling filament back: Pulling filament back
   Purge: Purge
   Purge & Wipe: Purge & Wipe
+  Purge Chute Calibration: Purge Chute Calibration
   Purge Length: Purge Length
+  'Purge chute calibration failed: {}': 'Purge chute calibration failed: {}'
+  Purge chute position saved.: Purge chute position saved.
   'Purge failed: {}': 'Purge failed: {}'
   Purge may still be running — response timed out: Purge may still be running — response
     timed out
@@ -2548,6 +2571,7 @@ translations:
   : Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
   Safety & Notifications: Safety & Notifications
+  Same spool in {}? Tap Clear if it is a new one.: Same spool in {}? Tap Clear if it is a new one.
   Sample: Sample
   Sample %d/%d: Sample %d/%d
   Sample Dialog: Sample Dialog
@@ -2577,8 +2601,10 @@ translations:
   Saving Z-offset...: Saving Z-offset...
   Saving config... Klipper will restart.: Saving config... Klipper will restart.
   Saving offsets...: Saving offsets...
+  Saving the position and parking the toolhead.: Saving the position and parking the toolhead.
   Saving will restart Klipper and CANCEL any active print!: Saving will restart Klipper
     and CANCEL any active print!
+  Saving...: Saving...
   Scan: Scan
   Scan Cal: Scan Cal
   Scan QR Code: Scan QR Code
@@ -3003,6 +3029,7 @@ translations:
   : The print is paused. Changing tools now moves the toolhead and swaps the filament at the nozzle. Resume the print once the change finishes.
   The printer halted this print and cannot resume it. Restart from the beginning?: The
     printer halted this print and cannot resume it. Restart from the beginning?
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.
   The printer lost power during a print. It can resume where it left off.: The printer lost power during a print. It can resume where it left off.
   The printer lost power during a print. The resumed layer may not line up exactly.: The printer lost power during a print. The resumed layer may not line up exactly.
@@ -3171,7 +3198,9 @@ translations:
   Toolhead LED: Toolhead LED
   Toolhead Sensor: Toolhead Sensor
   Toolhead Style: Toolhead Style
+  Toolhead Y: Toolhead Y
   Toolhead jam: Toolhead jam
+  Toolhead position unknown: Toolhead position unknown
   Toolhead, G-code, limits, and materials: Toolhead, G-code, limits, and materials
   Toolheads: Toolheads
   Tools: Tools
@@ -3415,6 +3444,7 @@ translations:
   Y: Y
   Y Axis: Y Axis
   Y Offset: Y Offset
+  Y axis limit reached: Y axis limit reached
   Y jog blocked at bed edge: Y jog blocked at bed edge
   'Y:': 'Y:'
   ? "YOU WIN!\nScore: {}\nTap to play again"

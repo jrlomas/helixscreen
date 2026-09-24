@@ -730,8 +730,9 @@ HelixScreen ships a single generated catalog of **branded** filament products �
 sources: the generic material-**type** table in `include/filament_database.h`
 (PLA, ABS, PETG, … — untouched, still `constexpr`, still the source of
 physical truth) and the old CFS-only assets/cfs_materials.json (renamed and
-superseded). The catalog is generic infrastructure — not CFS-specific — even
-though the CFS backend is currently its only consumer.
+superseded). The catalog is generic infrastructure, not CFS-specific: the CFS
+backend decodes material ids through it, and the catalog picker, the AMS edit
+overlay and the material settings manager all read it (consumers below).
 
 ### Schema
 
@@ -809,7 +810,7 @@ RAM footprint is zero; nothing is parsed until something asks for it.
 auto cat = FilamentCatalog::load_codes("cfs");
 const EffectiveFilament* mat = cat.resolve_code("cfs", mat_id);
 
-// Whole catalog + user overlay merged in. For a future offline picker (Phase 2);
+// Whole catalog + user overlay merged in. What the catalog picker browses;
 // transient for the lifetime of a picker session, not resident otherwise.
 auto full = FilamentCatalog::load_full();
 ```
@@ -821,14 +822,31 @@ caching — worth it for zero idle RAM on memory-constrained devices (AD5M,
 K1). A debounce cache is a future escape hatch only if profiling ever shows
 the re-parse cost matters.
 
-**Today's only consumer** is `AmsBackendCfs` (`src/printer/ams_backend_cfs.cpp`),
-which replaced the old `CfsMaterialDb` JSON table with
-`FilamentCatalog::load_codes("cfs").resolve_code("cfs", mat_id)`. Behavior is
-unchanged for CFS users — same slot fields get filled — the catalog is just
-richer and no longer CFS-gated. A user-editable overlay
-(config/user_filaments.json, read-write, merged by `load_with_overlay()`)
-exists at the load-path level today; the UI to author it is Phase 3 (out of
-scope here).
+**Consumers.** `AmsBackendCfs` decodes material ids through
+`FilamentCatalog::load_codes("cfs").resolve_code("cfs", mat_id)`
+(`src/printer/ams_backend_cfs.cpp`). On the UI side,
+`FilamentCatalogSelector` (`src/ui/ui_filament_catalog_selector.cpp`) is the
+vendor/type/product browser embedded in the AMS edit overlay
+(`src/ui/ui_ams_edit_overlay.cpp`); `FilamentCatalogPickerModal`
+(`src/ui/ui_filament_catalog_picker.cpp`) is a thin `Modal` over it for other
+entry points. `FilamentProductEditModal`
+(`src/ui/ui_filament_product_edit_modal.cpp`) is the production author of the
+user overlay: its form handler builds the product objects and calls
+`FilamentCatalog::save_user_products()`. `material_settings_manager.cpp`,
+`filament_variants.cpp` and the subject/XML registration path round out the
+reader list.
+
+**Favorites.** Catalog rows can be starred (#1100). The ids persist globally
+in Config at `/filament/favorite_ids` - a root-level path, deliberately
+outside the per-printer prefix, because a starred filament is a user
+preference that follows the user across printer profiles
+(`include/filament_favorites.h`). `load_favorite_ids()` re-reads Config on
+every selector rebuild with no cache, so a star toggled anywhere is visible
+everywhere; `toggle_favorite()` persists immediately, with no separate save
+step. In the selector, favorites surface as a pseudo-vendor row that leads
+the vendor list (a control byte in its internal name keeps it from colliding
+with a real vendor), and starred rows float to the top of their vendor's
+list.
 
 ### User overlay format
 
@@ -1035,6 +1053,20 @@ calls `open_environment_for_unit(unit)`, which resolves that unit's environment
 whose lanes each have their own box opens a list of boxes, not one card.
 [FILAMENT_ENVIRONMENT_ZONES.md](FILAMENT_ENVIRONMENT_ZONES.md) has the model.
 
+### Filament Mapping Card (`ui_filament_mapping_card`)
+
+The pre-print tool-to-slot mapping card on the print select and print detail views. One
+renderer draws every mapping as a chip instantiated from
+`ui_xml/components/filament_swatch.xml` via `lv_xml_create()` inside
+`rebuild_compact_view()` (`src/ui/ui_filament_mapping_card.cpp`) - there is no per-caller
+chip layout to keep in step. `set_mappings()` (`include/ui_filament_mapping_card.h`) stores
+the vector, rebuilds the compact view, then fires `on_mappings_changed_` so downstream
+consumers (preview colours, pre-flight checks) see the new state. The lane number on each
+chip is written imperatively during the rebuild: storing mappings without rebuilding leaves
+the stale lane on screen, which is why `set_mappings()` never skips the rebuild. The chip
+width is set from C++ after creation because a numeric width on a component `<view>` root is
+not honoured by `lv_xml_create`.
+
 ### Error State Visualization
 
 Per-slot error indicators and per-unit error badges, driven by `SlotInfo.error` and `AmsUnit::buffer_health` from the backend layer. (The original 2026-02-15 error-state-visualization design doc is no longer in-tree; the data model below is the surviving summary.)
@@ -1227,6 +1259,15 @@ spinner on the panel). The other three surfaces share one execution layer instea
 None of the five surfaces navigate away to dispatch anymore. `plan_load()` /
 `plan_unload()` answer the tier decision for all of them; `filament_op_execute.h` runs
 that decision for the three surfaces above that don't own a per-surface execution ladder.
+
+**Batch load/unload** is a sixth surface, gated per backend: only a backend overriding
+`supports_batch_filament_ops()` to true gets the multi-slot Load All / Unload All button in
+the AMS operation sidebar, which opens `BatchFilamentModal`
+(`include/ui_batch_filament_modal.h`). The Snapmaker U1 is the only real backend that
+qualifies today. The modal dispatches the whole selected set through the backend's
+`load_filament_batch()` / `unload_filament_batch()`, which route through the
+same `run_filament_op()` executor as a single-slot op; the per-backend script shapes live in
+each backend's doc ([Snapmaker U1](FILAMENT_BACKEND_SNAPMAKER_U1.md)).
 
 ### The dispatch ladder
 
@@ -1459,7 +1500,7 @@ When a user switches filament, the nozzle must stay hot enough to purge the mate
 load_target = max(new_material_temp, last_nonzero_nozzle_target, current_actual_nozzle_temp)
 ```
 
-- `new_material_temp` — what the tapped preset / load op requested.
+- `new_material_temp` — what the load op requested.
 - `last_nonzero_nozzle_target` — an **in-session latch** of the last non-zero nozzle target. It **survives the target cooling to 0**, so even a cold swap reheats to the old material's temp to purge it. Latched in `PrinterTemperatureState::update_from_status()` (per-`ExtruderInfo.last_nonzero_target`, per-extruder).
 - `current_actual_nozzle_temp` — covers a physically-hot nozzle whose target was already cleared.
 
@@ -1474,7 +1515,7 @@ load_target = max(new_material_temp, last_nonzero_nozzle_target, current_actual_
 **Which calls set `keep_previous_hot`.**
 | Call site | Flag | Rationale |
 |-----------|------|-----------|
-| Material preset tap (`handle_preset_button`, `handle_spool_preset_button`) | ✅ on | "I'm switching material" |
+| Material preset tap (`handle_preset_button`, `handle_spool_preset_button`, Home `PreheatWidget`) | ❌ off | a request for that temperature; load/unload apply the floor when the swap happens |
 | Op preheat (`start_preheat_for_op` — load/extrude/purge/etc.) | ✅ on | controller computes the max; replaced the old target-only check |
 | AMS load-with-preheat (`handle_load_with_preheat`) | ✅ on | skip/wait decision also uses `max(actual, latch)` so a cooled nozzle still reheats to purge |
 | Manual keypad entry (`handle_custom_nozzle_confirmed`) | ❌ off | deliberate override |

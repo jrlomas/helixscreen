@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include "filament_database.h"
 #include "macro_param_modal.h"
 
+#include <functional>
 #include <string>
 #include <unordered_set>
 
@@ -36,6 +38,33 @@ class PrinterDiscovery;
 void execute_macro_gcode(IMoonrakerAPI* api, const std::string& macro_name,
                          const MacroParamResult& result, const char* caller_tag,
                          const PrinterDiscovery& hw);
+
+/// How a whole-material preheat heats the printer.
+enum class MaterialPreheatMode {
+    TEMPERATURES,            ///< No macro assigned: send the preset temperatures.
+    TEMPERATURES_THEN_MACRO, ///< Send the temperatures, then run the additive macro.
+    MACRO_ONLY,              ///< The macro sets every temperature itself.
+    MACRO_MISSING,           ///< Assigned, but this printer lacks it: send the temperatures.
+};
+
+struct MaterialPreheatPlan {
+    MaterialPreheatMode mode;
+    std::string macro; ///< Empty for TEMPERATURES.
+};
+
+/// Decide a material preheat from its override and this printer's macros.
+/// Material overrides are shared across printers, so an assigned macro may
+/// exist on another printer only; that plans MACRO_MISSING, never a macro send.
+[[nodiscard]] MaterialPreheatPlan plan_material_preheat(const filament::MaterialOverride* override,
+                                                        const PrinterDiscovery& hw);
+
+/// Carry out @p plan. The temperature sender runs synchronously, before an
+/// additive macro, or alone for TEMPERATURES and MACRO_MISSING.
+/// Call on the UI thread; the sender is never retained. Filament-change heating
+/// and individual heater controls do not use this policy.
+void execute_material_preheat(IMoonrakerAPI* api, const MaterialPreheatPlan& plan,
+                              const std::function<void()>& set_temperatures, const char* caller_tag,
+                              const PrinterDiscovery& hw);
 
 /// Commands that restart the Klipper host or halt the printer. Seeds both the
 /// name check below and the macro-body analysis.

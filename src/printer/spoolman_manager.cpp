@@ -605,7 +605,7 @@ void SpoolmanManager::refresh_spoolman_weights() {
                                 const helix::ams::Observation nothing_declared(
                                     helix::ams::ObservationSource::Remembered);
                                 helix::ams::file_kept_identity(
-                                    helix::ams::BYPASS_LANE_ID, -2,
+                                    helix::ams::BYPASS_LANE_ID, helix::ams::BYPASS_SLOT_INDEX,
                                     helix::ams::user_override_from_slot_info(
                                         nothing_declared, kept, kept.material, nullptr));
                             }

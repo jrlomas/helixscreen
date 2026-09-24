@@ -71,6 +71,7 @@ config-manager ui screen_ui grumpyscreen   # or atomscreen, guppyscreen - any of
 The installer auto-detects COSMOS, installs HelixScreen to `/user-resource/helixscreen/`, and registers it with `gui-switcher` through an allowlist wrapper (see Quirks below). It stops the currently active UI (grumpyscreen, atomscreen, or guppyscreen) and starts HelixScreen in its place.
 
 - Install directory: `/user-resource/helixscreen/` (`/` is read-only squashfs on COSMOS)
+- Settings, logs and caches live beside it in `/user-resource/helixscreen-state/`, so a Moonraker web update, which replaces the install directory wholesale, leaves them untouched
 - Init script: `/etc/init.d/helixscreen`; the watchdog also publishes its PID at `/var/run/gui.pid` so `gui-switcher` can stop it
 
 ## Service Control and Logs
@@ -79,7 +80,7 @@ The installer auto-detects COSMOS, installs HelixScreen to `/user-resource/helix
 /etc/init.d/helixscreen restart
 
 # Structured app log (written to disk; the in-memory syslog only has early startup)
-tail -100 /user-resource/helixscreen/logs/helix.log
+tail -100 /user-resource/helixscreen-state/logs/helix.log
 
 # Launcher / crash capture (startup, crash output)
 tail -100 /user-resource/helixscreen/logs/launcher.log

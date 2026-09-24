@@ -762,6 +762,34 @@ class PrinterState {
         return print_domain_.is_creality_plr_capable();
     }
 
+    /**
+     * @brief PLR passive backend: discovered resume-macro capability and the
+     * live interrupted flag.
+     *
+     * See PrinterPrintState::get_plr_resume_macro_subject() for the semantics
+     * (booleans only; delta frames without the key leave the flag alone).
+     */
+    lv_subject_t* get_plr_resume_macro_subject() {
+        return print_domain_.get_plr_resume_macro_subject();
+    }
+
+    [[nodiscard]] bool is_plr_resume_macro_present() const {
+        return print_domain_.is_plr_resume_macro_present();
+    }
+
+    /// Set from the discovery snapshot; main-thread only.
+    void set_plr_resume_macro_present(bool capable) {
+        print_domain_.set_plr_resume_macro_present(capable);
+    }
+
+    lv_subject_t* get_plr_interrupted_flag_subject() {
+        return print_domain_.get_plr_interrupted_flag_subject();
+    }
+
+    [[nodiscard]] bool is_plr_interrupted_flag() const {
+        return print_domain_.is_plr_interrupted_flag();
+    }
+
     void clear_pl_recovery_file() {
         print_domain_.clear_pl_recovery_file();
     }
@@ -1129,6 +1157,11 @@ class PrinterState {
     }
     lv_subject_t* get_live_extruder_velocity_subject() {
         return motion_state_.get_live_extruder_velocity_subject();
+    }
+    /// Measured toolhead speed in mm/s. Unlike the commanded gcode speed it
+    /// falls to 0 when the toolhead stops.
+    lv_subject_t* get_live_velocity_subject() {
+        return motion_state_.get_live_velocity_subject();
     }
     lv_subject_t* get_fan_speed_subject() {
         return fan_state_.get_fan_speed_subject();
@@ -1985,11 +2018,15 @@ class PrinterState {
     }
 
     /**
-     * @brief Set printer kinematics type and update bed_moves subject
+     * @brief Set printer kinematics type and update has_individual_xyz_homing and
+     *        bed_moves subjects.
      *
-     * Updates printer_bed_moves_ subject based on kinematics type.
-     * CoreXY printers typically have bed moving on Z (Voron 2.4, RatRig).
-     * Cartesian/Delta printers typically have gantry moving on Z (Ender 3, Prusa).
+     * Updates printer_has_individual_xyz_homing_ and printer_bed_moves_ subjects
+     * based on kinematics type:
+     *
+     * - Deltas cannot home XYZ axes individually.
+     * - CoreXY printers typically have bed moving on Z (Voron 2.4, RatRig).
+     * - Cartesian/Delta printers typically have gantry moving on Z (Ender 3, Prusa).
      *
      * @param kinematics Kinematics type string from toolhead config
      */
@@ -2006,6 +2043,17 @@ class PrinterState {
      * Called from set_kinematics() and SettingsManager::set_z_movement_style().
      */
     void apply_effective_bed_moves();
+
+    /**
+     * @brief Get has_individual_xyz_homing subject for XML binding
+     *
+     * Returns 1 if the printer's XYZ axes can be homed individually,
+     * 0 otherwise (delta/rotary_delta).
+     * Used for hiding redundant home buttons on deltas.
+     */
+    lv_subject_t* get_printer_has_individual_xyz_homing_subject() {
+        return capabilities_state_.get_printer_has_individual_xyz_homing_subject();
+    }
 
     /**
      * @brief Get bed_moves subject for XML binding

@@ -48,14 +48,20 @@ bool cross_page_past_right_border(int frame_x2, int widget_left, int widget_widt
     return widget_left > frame_x2 - widget_width / 2;
 }
 
+bool cross_page_past_left_border(int frame_x1, int widget_left, int widget_width) {
+    return widget_left + widget_width < frame_x1 + widget_width / 2;
+}
+
 bool cross_page_drop_creates_page(int page_index, int page_count, bool has_next_page_slot,
-                                  bool past_right_border) {
+                                  bool past_right_border, bool past_left_border) {
     // A release on the page past the last one is a drop into it, wherever the
     // widget is; from the last page only a widget already majority past the
-    // right border is dropped there.
+    // right border is dropped there. From the first page a majority past the
+    // left border creates a page before it, the same cap permitting.
     const bool on_next_page = page_index == page_count;
     const bool past_last_border = page_index == page_count - 1 && past_right_border;
-    return has_next_page_slot && (on_next_page || past_last_border);
+    const bool past_first_border = page_index == 0 && past_left_border;
+    return has_next_page_slot && (on_next_page || past_last_border || past_first_border);
 }
 
 CrossPageStep cross_page_step(CrossPageState& state, const CrossPageInput& in) {

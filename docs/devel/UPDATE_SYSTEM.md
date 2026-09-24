@@ -71,10 +71,10 @@ one fired is the first thing to establish on any "my updates are disabled" repor
 The weaker check gate is deliberate. Checking is a manifest fetch that touches no files, so an
 install tree we cannot write is no reason to refuse to look, and knowing a newer version exists
 is the only thing that makes a suppressed install recoverable — the user can still be told to
-re-run the installer. The two shared one predicate through v0.99.96–v0.99.113, and that made a
-false negative in `self_update_supported()` a permanent lockout: the rows vanished wholesale, so
-nothing could tell the user an update existed, and the fix could only ship inside the update
-they were being kept from.
+re-run the installer. Fold this into one predicate and a false negative in
+`self_update_supported()` becomes a permanent lockout: the rows vanish wholesale, nothing can
+tell the user an update exists, and the fix can only ship inside the update they are being
+kept from.
 
 The two underlying reasons, and the notice each raises:
 
@@ -93,11 +93,11 @@ single place any platform is named.
 Today that default is true only for the **Snapmaker U1**. PAXX Extended Firmware ships
 HelixScreen as a selectable component, downloading a pinned, sha256-verified tarball into
 `/oem/apps/helixscreen` via `extended-pkg`; self-updating there rewrites a package the
-firmware believes it owns. Suppression previously depended entirely on the firmware hook
-exporting the flag, which it does not — their lmd hook (<paxx-firmware>/etc/hooks/lmd.d/30-helixscreen.sh) exports `HELIX_DATA_DIR`,
+firmware believes it owns. The default lives here in C++ rather than in the firmware hook
+because the hook exports data paths and nothing else: their lmd hook
+(<paxx-firmware>/etc/hooks/lmd.d/30-helixscreen.sh) exports `HELIX_DATA_DIR`,
 `HELIX_SUPERVISED`, `HELIX_DRM_DEVICE`, `HELIX_CACHE_DIR`, `HELIX_CONFIG_DIR` and
-`HELIX_REMOTE_SCREEN_FB0`, and nothing else. Every U1 install therefore checked for updates
-and raised the update modal.
+`HELIX_REMOTE_SCREEN_FB0`.
 
 The falsy arm is the dev-box escape hatch: `HELIX_DISABLE_AUTO_UPDATES=0` turns self-update
 back on where the platform defaults it off, from the CLI or a deploy script, without a
@@ -219,8 +219,8 @@ A downgrade is deliberately quieter than an update:
 **Config compatibility.** An older build loading a config written by a newer one
 leaves it entirely alone — `run_versioned_migrations()` returns early when
 `config_version > CURRENT_CONFIG_VERSION` rather than stamping it down. Migration
-gates are all `version < N` so none would fire anyway; the damage was the
-unconditional stamp, which made the newer build re-run already-applied migrations
+gates are all `version < N` so none would fire anyway; an unconditional stamp would make
+the newer build re-run already-applied migrations
 on its next boot. Unknown keys survive because `Config::save()` serializes the
 whole in-memory document. Pinned by `tests/unit/test_config_migration_future.cpp`.
 

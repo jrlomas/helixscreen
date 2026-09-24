@@ -41,27 +41,21 @@ Tap to open the Network Settings overlay with a two-column layout:
 - **Add Hidden Network** — Connect to a network that doesn't broadcast its SSID
 - **Refresh** button to re-scan (shows a spinner while scanning)
 
+Joining a WiFi network while Ethernet is connected shows a warning that the wired network will be disconnected, then proceeds: some devices have a single network radio and cannot hold both at once (#1542). If a connection fails, the reason is shown with the result. A WiFi radio that an administrator has blocked (for example with `rfkill`) is left blocked: HelixScreen only clears a block on hardware where you have configured WiFi in HelixScreen (#1697).
+
 ---
 
 ## Host
 
 Shows the current Moonraker host address (e.g., `localhost:7125`). Tap to open the **Change Host** dialog where you can enter a new IP address and port to connect to a different printer.
 
-After changing the host, HelixScreen disconnects from the current printer and reconnects to the new one.
+After changing the host, HelixScreen disconnects from the current printer and reconnects to the new one. Host names are looked up again on every reconnect, so a printer whose IP address changed (a router re-lease, for instance) is found again without restarting HelixScreen.
 
 ---
 
 ## Touch & Input
 
 Opens a sub-page that groups all touch-related settings: calibration, debug visualization, jitter filtering, and scroll feel. See [Touch & Input](touch-input.md) for the full reference.
-
----
-
-## Plugins
-
-> Only shown when beta features are enabled (tap Current Version 7 times in About).
-
-View installed plugins and their status. Plugins extend HelixScreen with additional capabilities like custom LED effects, overlays, and integrations.
 
 ---
 

@@ -29,6 +29,17 @@
 
 namespace {
 
+/// The four feed channels at rest, in the rig's own mix of settled states.
+/// The connect-time reconcile ends an interlock only when every channel is.
+nlohmann::json settled_feeds() {
+    return {{"filament_feed left",
+             {{"extruder0", {{"channel_state", "load_finish"}}},
+              {"extruder1", {{"channel_state", "preload_finish"}}}}},
+            {"filament_feed right",
+             {{"extruder2", {{"channel_state", "load_finish"}}},
+              {"extruder3", {{"channel_state", "unload_finish"}}}}}};
+}
+
 /// A production AmsBackendSnapmaker over the mock API + client, so a batch
 /// dispatch runs the real gcode path and the mock client's simulated feeder
 /// frames flow back through the subscription the same way live frames do.
@@ -287,14 +298,45 @@ TEST_CASE_METHOD(MockBatchFixture, "The AUTO_FEEDING_BATCH shape advances the cu
 
 TEST_CASE("A stranded batch interlock is cleared at connect", "[ams][batch]") {
     RecordingFakeClient client;
-    const auto status = nlohmann::json::parse(
+    auto status = nlohmann::json::parse(
         R"({"gcode_macro AUTO_FEEDING_BATCH":{"doing":true,"extruder0_temp":0,
             "extruder1_temp":0,"extruder2_temp":0,"extruder3_temp":0},
             "print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
+    status.update(settled_feeds());
 
     helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
 
     CHECK(client.sent_contains("AUTO_FEEDING_BATCH ACTION=END"));
+}
+
+TEST_CASE("A batch another client is running is left alone at connect", "[ams][batch]") {
+    // Fluidd or a phone app running AUTO_FEEDING_BATCH leaves print_stats
+    // standby and this process holds no plan, so every other guard reads idle.
+    RecordingFakeClient client;
+    nlohmann::json status = {
+        {"gcode_macro AUTO_FEEDING_BATCH", {{"doing", true}}},
+        {"print_stats", {{"state", "standby"}}},
+        {"virtual_sdcard", {{"is_active", false}}},
+    };
+    status.update(settled_feeds());
+    status["filament_feed right"]["extruder3"]["channel_state"] = "load_feeding";
+
+    helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
+
+    CHECK(client.sent_gcode.empty());
+}
+
+TEST_CASE("A snapshot without feed channels cannot vouch for an idle feeder", "[ams][batch]") {
+    RecordingFakeClient client;
+    const nlohmann::json status = {
+        {"gcode_macro AUTO_FEEDING_BATCH", {{"doing", true}}},
+        {"print_stats", {{"state", "standby"}}},
+        {"virtual_sdcard", {{"is_active", false}}},
+    };
+
+    helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro AUTO_FEEDING_BATCH");
+
+    CHECK(client.sent_gcode.empty());
 }
 
 TEST_CASE("A batch interlock during a print is left alone", "[ams][batch]") {
@@ -381,11 +423,12 @@ TEST_CASE("A null virtual_sdcard does not stop an otherwise idle cleanup", "[ams
     // and is absent on some setups, so an unreadable one must not throw and
     // must not suppress the cleanup a confirmed-idle print state allows.
     RecordingFakeClient client;
-    const nlohmann::json status = {
+    nlohmann::json status = {
         {"gcode_macro AUTO_FEEDING_BATCH", {{"doing", true}}},
         {"print_stats", {{"state", "standby"}}},
         {"virtual_sdcard", nullptr},
     };
+    status.update(settled_feeds());
 
     REQUIRE_NOTHROW(helix::batch_feeding::reconcile_on_connect(client, status,
                                                                "gcode_macro AUTO_FEEDING_BATCH"));
@@ -398,9 +441,10 @@ TEST_CASE("The reconcile reads the macro under the config-case object key", "[am
     // with [gcode_macro auto_feeding_batch] publishes its state under the
     // lowercase spelling the discovery hands us.
     RecordingFakeClient client;
-    const auto status = nlohmann::json::parse(
+    auto status = nlohmann::json::parse(
         R"({"gcode_macro auto_feeding_batch":{"doing":true},
             "print_stats":{"state":"standby"},"virtual_sdcard":{"is_active":false}})");
+    status.update(settled_feeds());
 
     helix::batch_feeding::reconcile_on_connect(client, status, "gcode_macro auto_feeding_batch");
 

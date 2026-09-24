@@ -97,12 +97,19 @@ struct CrossPageStep {
 /// page frame's right edge @p frame_x2 (inclusive).
 bool cross_page_past_right_border(int frame_x2, int widget_left, int widget_width);
 
-/// Whether a release creates the page past the last one: a page can be created
-/// (@p has_next_page_slot), and the session is scoped to that page, wherever the
-/// widget is, or to the last page with the widget's majority past its right
-/// border. Asked at the release, with the scope the release lands in.
+/// Whether a widget whose left edge is @p widget_left has its majority past the
+/// page frame's left edge @p frame_x1: its right edge lies left of the majority
+/// line.
+bool cross_page_past_left_border(int frame_x1, int widget_left, int widget_width);
+
+/// Whether a release creates a page: a page can be created
+/// (@p has_next_page_slot), and the session is scoped to the page past the last
+/// one, wherever the widget is, or to the last page with the widget's majority
+/// past its right border, or to the first page with the widget's majority past
+/// its left border, which creates a page before it. Asked at the release, with
+/// the scope the release lands in.
 bool cross_page_drop_creates_page(int page_index, int page_count, bool has_next_page_slot,
-                                  bool past_right_border);
+                                  bool past_right_border, bool past_left_border);
 
 /**
  * @brief Advance the cross-page rules by one drag move.

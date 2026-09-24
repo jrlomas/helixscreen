@@ -901,6 +901,7 @@
     <str name="icon_spoolman" value="󰈯"/>
     <str name="icon_star" value="󰓎"/>
     <str name="icon_stop" value="󰓛"/>
+    <str name="icon_swap_horizontal" value="󰓡"/>
     <str name="icon_swap_vertical" value="󰓢"/>
     <str name="icon_sync" value="󰓦"/>
     <str name="icon_sysinfo" value="󰋼"/>

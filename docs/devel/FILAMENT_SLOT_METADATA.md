@@ -183,10 +183,10 @@ own hardware-event signal:
 
 | Backend | Backend ID | Parse hook | Hardware-event signal | Override-exclusive fields |
 |---------|------------|------------|-----------------------|---------------------------|
-| `AmsBackendAd5xIfs` | `ifs` | `update_slot_from_state` → `apply_resolved_lane` | `Adventurer5M.json` color RGB change | brand, spool_name, spoolman_id, spoolman_vendor_id, weights, color_name |
-| `AmsBackendSnapmaker` | `snapmaker` | tail loop at end of `handle_status_update` | `filament_detect.info[ch].CARD_UID` byte-array → canonicalized string | spool_name, spoolman_id, spoolman_vendor_id, remaining_weight_g |
-| `AmsBackendAce` | `ace` | `parse_ace_object` per-slot loop | Status transition: EMPTY/UNKNOWN → present | brand, spool_name, spoolman_id, spoolman_vendor_id, weights, color_name |
-| `AmsBackendCfs` | `cfs` | `handle_status_update` tail loop | Composite `material_type\|color_value` fingerprint | spool_name, spoolman_id, spoolman_vendor_id, remaining_weight_g |
+| `AmsBackendAd5xIfs` | `ifs` | `update_slot_from_state` → `apply_resolved_lane` | `Adventurer5M.json` color RGB change | brand, spool_name, spoolman filament/vendor ids, weights, color_name |
+| `AmsBackendSnapmaker` | `snapmaker` | tail loop at end of `handle_status_update` | `filament_detect.info[ch].CARD_UID` byte-array → canonicalized string | spool_name, spoolman filament/vendor ids, remaining_weight_g |
+| `AmsBackendAce` | `ace` | `parse_ace_object` per-slot loop | Status transition: EMPTY/UNKNOWN → present | brand, spool_name, spoolman filament/vendor ids, weights, color_name |
+| `AmsBackendCfs` | `cfs` | `handle_status_update` tail loop | Composite `material_type\|color_value` fingerprint | spool_name, spoolman filament/vendor ids, remaining_weight_g |
 | `AmsBackendToolChanger` | `toolchanger` | `handle_status_update` tail loop, `initialize_tools()` tail, and after the start-time load | **None** - see below | *every* field |
 | `AmsBackendAfc` | `afc` | `parse_afc_stepper` and the `lane_data` query parse | AFC's own firmware clears | brand, color_name, spoolman filament/vendor ids |
 | `AmsBackendHappyHare` | `happyhare` | `gate_spool_id` loop in `handle_status_update` | Gate-map spool id change | brand, spool_name, total_weight_g, color_name, spoolman filament/vendor ids |
@@ -231,12 +231,25 @@ lane reset and the slot-changed event alone. Colour and material are left
 standing, because those come from the parse and the lane's firmware values
 should surface, except on the tool changer, which has no parse underneath:
 its clear blanks the whole slot, colour and material included, because its
-store is the only record there is. `AmsBackendQidi` also implements it, with
+store is the only record there is. `AmsBackendAfc` also empties them in
+firmware with `SET_MATERIAL LANE=x MATERIAL=`, `SET_COLOR LANE=x COLOR=` (AFC
+stores a bare `#`, which the parse reads as no colour) and
+`SET_WEIGHT LANE=x WEIGHT=0`: the commit's empty `SET_SPOOL_ID` only runs
+AFC's `clear_values()` when AFC has Spoolman configured and the lane does not
+remember its spool, so an unlinked lane would otherwise keep them. The
+parse reads that zero weight beside no material and no colour as unknown, not
+an empty spool. One difference from AFC's own eject clear remains: AFC applies
+its default material on a load only when the lane's colour is empty, and the
+bare `#` is not, so the next untagged spool loads with no material until
+something declares one.
+`AmsBackendQidi` also implements it, with
 a firmware half: the
 local clear is the same erase/reset/`clear_async` against the shared
 `lane_data` namespace, and the firmware half is three
 `SAVE_VARIABLE VARIABLE={filament,color,vendor}_slot{n} VALUE=0` writes (row
-ids start at 1, so 0 reads as no identity) gated by `refuse_if_printing()` - a
+ids start at 1, so 0 reads as no identity). `SAVE_VARIABLE` moves nothing, so
+the writes go out mid-print too; the UI already refuses a clear on the lane
+feeding the print. A
 tagged spool re-populates the ids on its next insert, boot or RFID read. The
 `lane_data` records
 their Klipper plugins write are a separate thing and HelixScreen does not touch
@@ -421,7 +434,8 @@ what its firmware can be told to forget:
 - **QIDI Box reaches it too**: the box's `SAVE_VARIABLE`s are the record,
   and the clear writes `VALUE=0` to `filament_slot{n}` / `color_slot{n}` /
   `vendor_slot{n}` (row ids start at 1, so 0 reads as no identity, and vendor
-  0 is Generic), gated by `refuse_if_printing()`. A tagged spool re-populates
+  0 is Generic), mid-print too because `SAVE_VARIABLE` moves nothing. A
+  tagged spool re-populates
   its ids on the next insert, boot or RFID read (the hardware reading what
   is physically there).
 - **ACE, Snapmaker and stock CFS cannot** (read-only API, no empty spelling

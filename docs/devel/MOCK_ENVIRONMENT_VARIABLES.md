@@ -258,7 +258,7 @@ Select the mock AMS topology/type.
 
 | Property | Value |
 |----------|-------|
-| **Values** | `none`, `afc`, `toolchanger` / `tc`, `mixed`, `multi`, `torture`, `vivid`, `ifs`, `htlf`, `snapmaker`, `medusahc` / `medusahc-fork`, `ifs-module` |
+| **Values** | `none`, `afc`, `toolchanger` / `tc`, `mixed`, `multi`, `torture`, `vivid`, `ifs`, `htlf`, `snapmaker`, `medusahc` / `medusahc-fork`, `ifs-module`, `cfs` |
 | **Default** | Happy Hare, LINEAR, 4 slots |
 | **File** | `src/printer/ams_backend.cpp` |
 
@@ -278,6 +278,7 @@ Select the mock AMS topology/type.
 | `medusahc` | 1 | **MedusaHC hotend changer - mock HARDWARE, real backend.** Irbis3D controller. Aliases: `medusa`, `mhc`. See below |
 | `medusahc-fork` | 1 | MedusaHC as driven by topi314's fork. Alias: `medusa-fork` |
 | `ifs-module` | 1 | **Standalone AD5X IFS module - mock HARDWARE, real backend.** The Forge-X drop-in's `ifs`/`ifs_materials` objects + stock-named sensors. Aliases: `ifs_module`, `ad5x-module`. See below |
+| `cfs` | 1 | **Creality CFS, K1 stock dialect - mock HARDWARE, real backend.** The stock `box` status object plus the calibration command surface. Alias: `cfs-k1`. See below |
 
 ```bash
 # Simulate AFC Box Turtle
@@ -365,6 +366,27 @@ registry), with the result published on the next status notification:
 
 ```bash
 HELIX_MOCK_AMS=ifs-module ./build/bin/helix-screen --test -vv
+```
+
+#### `cfs` - mock hardware, real backend
+
+Same rule as the modes above: no `AmsBackendMock` is built. The mock publishes the
+stock K1 `box` status object (bay states, `map`, vendor/color/material arrays), so real
+discovery sets `AmsType::CFS` and the production `AmsBackendCfs` runs its full path.
+Pair with `HELIX_MOCK_PRINTER=k1` to latch the K1 stock dialect the calibration
+surface gates on; on any other persona the backend runs but hides the calibration
+section (the K2 dialect has no such commands).
+
+`gcode_script()` answers `BOX_FIND_CUT_POS` (streams the verified terminal response
+lines on a short timer: `Found cut position y: …`, `MODIFY_BOX_CFG: success, …`,
+`SAVE_BOX_CFG ok: …`) and `BOX_CUSTOM_COMMAND CMD=…` (`XYZ_ZERO`, `COORDINATES_ADJUST_PREPARE`,
+`COORDINATES_ADJUST_SAVE_POS`, `Y_SAFE`), with park/extrude geometry scaled off the
+persona envelope so a K1 Max persona reproduces the captured 291.5/304.0 values. The
+chute jog script rides the existing `SAVE_GCODE_STATE`/`G91`/`G0` simulation, so the
+live Y readout moves as the overlay jogs.
+
+```bash
+HELIX_MOCK_PRINTER=k1 HELIX_MOCK_AMS=cfs ./build/bin/helix-screen --test -vv
 ```
 
 **Multi-extruder and tool testing:** Setting `HELIX_MOCK_AMS=toolchanger` also creates multiple tool definitions and extruders in the mock environment. Multiple extruders (extruder, extruder1, etc.) and tools are auto-discovered from Klipper objects at runtime, so no separate env var is needed to control extruder count. The toolchanger mock provides a complete multi-tool, multi-extruder test environment.
@@ -624,7 +646,7 @@ Select which printer the mock Moonraker client impersonates. Drives the mock's r
 
 | Property | Value |
 |----------|-------|
-| **Values** | `voron_24`, `voron_trident`, `k1`, `ad5m`, `generic_corexy`, `generic_bedslinger`, `multi_extruder` |
+| **Values** | `voron_24`, `voron_trident`, `k1`, `k1max`, `ad5m`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta` |
 | **Default** | `voron_24` (Voron 2.4) |
 | **File** | `src/application/moonraker_manager.cpp` |
 
@@ -634,7 +656,12 @@ HELIX_MOCK_PRINTER=ad5m ./build/bin/helix-screen --test -vv
 
 # Multi-extruder mock
 HELIX_MOCK_PRINTER=multi_extruder ./build/bin/helix-screen --test -vv
+
+# Linear delta: reports kinematics=delta, so per-axis homing is hidden
+HELIX_MOCK_PRINTER=delta ./build/bin/helix-screen --test -vv
 ```
+
+The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 235x235x250 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
 
 **Unrecognized values fall back to Voron 2.4** with a warning listing the valid set — they are not fatal. K2 and CC1 have no dedicated mock type yet and hit that fallback.
 
@@ -678,7 +705,7 @@ Override the kinematics string the mock reports in `configfile.config.printer.ki
 | Property | Value |
 |----------|-------|
 | **Values** | Any Klipper kinematics name (e.g. `corexy`, `cartesian`, `delta`, `corexz`) |
-| **Default** | Derived from the mock printer type: `corexy` for Voron 2.4, Voron Trident and Creality K1; `cartesian` for everything else |
+| **Default** | Derived from the mock printer type: `corexy` for Voron 2.4, Voron Trident and Creality K1; `delta` for `delta`; `cartesian` for everything else |
 | **File** | `src/api/moonraker_client_mock.cpp` |
 
 ```bash

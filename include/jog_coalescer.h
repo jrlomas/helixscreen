@@ -137,6 +137,13 @@ inline JogClampResult clamp_jog_with_warn(double current, double uncommitted, do
     return {0.0, !already_warned, true};
 }
 
+/// Whether a jog must be refused because it cannot be clamped: with no known
+/// envelope or no known live position there is nothing to clamp against, and
+/// sending the jog unclamped would trust exactly the values that are missing.
+inline bool jog_refused_for_unknown_position(bool bounds_known, bool position_known) {
+    return !bounds_known || !position_known;
+}
+
 /// The jog feedrate actually used, given what the user stored and what the
 /// printer permits. Storage keeps the user's choice so a machine with a higher
 /// ceiling gets it back; emission can never exceed the limit. Bounds are plain

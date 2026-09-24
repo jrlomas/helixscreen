@@ -13,7 +13,7 @@ The calibration system has four layers:
 
 ```
 InputShaperPanel (UI overlay, state machine, XML-bound subjects)
-  |  Manages user flow: IDLE -> MEASURING -> RESULTS -> Apply/Save
+  |  Manages user flow: IDLE -> MEASURING -> RESULTS -> Select/Save
   |
   +-> InputShaperCalibrator (orchestrator, Moonraker API calls)
   |     State machine: IDLE -> CHECKING_ADXL -> TESTING_X/Y -> READY
@@ -40,8 +40,10 @@ Klipper SHAPER_CALIBRATE
   -> ShaperCsvParser reads CSV -> ShaperCsvData (frequencies, raw_psd, shaper_curves)
   -> MoonrakerAPI assembles InputShaperResult (all_shapers + freq_response + shaper_curves)
   -> InputShaperPanel populates comparison table + frequency response chart
-  -> User taps Apply -> SET_INPUT_SHAPER G-code
-  -> User taps Save  -> SAVE_CONFIG (Klipper restart)
+  -> User taps a shaper chip per axis -> selected_shaper_for('X'/'Y') (radio semantics)
+  -> User taps Save  -> shaper_config_edits() builds [input_shaper] ADD_KEY edits
+                    -> safe_multi_edit() ends in FIRMWARE_RESTART (no SET_INPUT_SHAPER,
+                       no SAVE_CONFIG: the restart applies the config atomically)
 ```
 
 ---
@@ -251,33 +253,33 @@ Memory impact is approximately 10 KB total including widget overhead. The static
 
 ---
 
-## Shaper Overlay Chip Toggles
+## Shaper Selection Chips
 
-Below each frequency response chart, a row of chip buttons allows toggling individual shaper response curves on and off. This lets users visually compare how different shapers attenuate the resonance peak.
+Below each frequency response chart, a row of chip buttons selects which shaper the results use. One chip per axis is selected: the selection is what **Save** writes, and tapping the selected chip again keeps it selected (`select_shaper_overlay()` implements radio semantics). This lets users compare how different shapers attenuate the resonance peak and commit the one they pick.
 
 ### How Chips Work
 
-Each chip is an LVGL button styled as a pill-shaped toggle:
-- **Off state**: transparent background, border outline
-- **On state**: primary color background, filled (via `bind_state_if_eq` on `is_{axis}_chip_{n}_active`)
+Each chip is an LVGL button styled as a pill:
+- **Unselected**: transparent background, border outline
+- **Selected**: primary color background, filled (via `bind_state_if_eq` on `is_{axis}_chip_{n}_active`)
 - Label text is dynamically set from the shaper name (e.g., "ZV", "MZV", "EI")
 
 ### Chip Subject Bindings
 
 Per chip (11 per axis matching `MAX_SHAPERS`; only chips backed by a CSV curve are shown, via `is_{axis}_num_chips`):
 - `is_x_chip_0_label` / `is_y_chip_0_label` -- Shaper name text (string subject)
-- `is_x_chip_0_active` / `is_y_chip_0_active` -- Toggle state (int subject, 0=off, 1=on)
+- `is_x_chip_0_active` / `is_y_chip_0_active` -- Selection state (int subject, 0=unselected, 1=selected)
 
 ### Event Flow
 
 ```
 User taps chip -> input_shaper_chip_x_2_cb (XML event callback)
   -> InputShaperPanel::handle_chip_x_clicked(2)
-    -> toggle_shaper_overlay('X', 2)
-      -> flip shaper_visible[2]
-      -> ui_frequency_response_chart_show_series(chart, series_id, visible)
-      -> lv_subject_set_int(&chips[2].active, visible ? 1 : 0)
-      -> update_legend(axis) -- updates legend dot color and label
+    -> select_shaper_overlay('X', 2)   (re-click of the selection returns early - kept)
+      -> hide previous chip's series + clear its active subject
+      -> ui_frequency_response_chart_show_series(chart, series_id, true)
+      -> lv_subject_set_int(&chips[2].active, 1)
+      -> update_legend(axis) + refresh_axis_display(axis)
 ```
 
 ### Shaper Overlay Colors
@@ -304,7 +306,7 @@ The Shaper column above is the stock-Klipper mapping (five columns, indices 0-4)
 
 A legend row sits to the right of the chips keying all three curve kinds (a "Relative vibration" caption above the chart itself names the Y quantity):
 - Gray dot (0xB0B0B0) + "Measured (shaper off)" label -- the raw PSD series; shaping was not applied when it was captured
-- Colored dot + shaper name label (dynamically updated to show the last-toggled-on shaper) -- the fitted shaper chips' predicted residual PSD (transfer curve times the measured PSD)
+- Colored dot + shaper name label (dynamically updated to show the selected shaper) -- the fitted shaper chips' predicted residual PSD (transfer curve times the measured PSD)
 - Muted dot (`text_muted` token) + "Previous" label -- the live-before setting's predicted residual curve, gated by `is_{axis}_has_delta` so it only appears when a run had a before-config to compare against
 
 ---
@@ -376,8 +378,42 @@ Aborting during calibration sends `M112` (emergency stop) followed by `FIRMWARE_
 | `MEASURE_AXES_NOISE` | Pre-flight accelerometer check |
 | `SHAPER_CALIBRATE AXIS=X` | X axis resonance test |
 | `SHAPER_CALIBRATE AXIS=Y` | Y axis resonance test |
-| `SET_INPUT_SHAPER SHAPER_TYPE_X=mzv SHAPER_FREQ_X=53.8` | Apply settings |
-| `SAVE_CONFIG` | Persist to printer.cfg (restarts Klipper) |
+
+Saving never sends `SET_INPUT_SHAPER` or `SAVE_CONFIG`: `handle_save_clicked()` resolves each axis's selection via `selected_shaper_for()`, `shaper_config_edits()` builds `[input_shaper]` `ADD_KEY` edits (`shaper_type_x`, `shaper_freq_x` formatted `%.1f`, same for Y), and the `safe_multi_edit()` call ends in a `FIRMWARE_RESTART` so the written config is applied atomically.
+
+---
+
+## Probe Preparation (runtime rules)
+
+Some probes need re-zeroing before use (the AD5X load cell's zero drifts when bed screws turn, and its firmware only tares on the print path). Every probing command HelixScreen sends can therefore be wrapped with preparation gcode, driven entirely by runtime config - no rebuild to add a printer (`with_probe_preparation()` in `src/api/moonraker_advanced_api.cpp`, evaluator in `src/printer/probe_preparation.cpp`).
+
+Rules live under a top-level `probe_preparation` array in `assets/config/printer_database.json` (user drop-ins in `printer_database.d/*.json` merge at higher priority, and the writable user path wins over the bundled asset):
+
+```json
+"probe_preparation": [
+  {
+    "id": "zmod_load_cell_tare",
+    "when": [{ "type": "macro_match", "field": "macros", "pattern": "LOAD_CELL_TARE" }],
+    "operations": ["screws_tilt", "bed_mesh", "probe_accuracy", "z_offset_calibrate"],
+    "gcode": ["LOAD_CELL_TARE"],
+    "label": "Zeroing load cell",
+    "timeout_s": 60
+  }
+]
+```
+
+Invariants:
+
+- `when` is a list evaluated as AND; `when` predicates are the same heuristic types the printer DB already uses (`macro_match`, `object_exists`, `sensor_match`, `hostname_match`). Rules are evaluated in order, first match wins per operation. A rule also lists `skip_if_macro_in`: the resolved macro the operation will actually run, when named there, disables the rule (for firmwares whose own command already prepares the probe).
+- Evaluation fails closed: a malformed rule, an unknown predicate type, or a predicate this build cannot evaluate all mean "does not match". Silently ignoring an unrecognized predicate would let a rule fire on the wrong printer.
+- A rule is keyed on predicates, not on the printer model name, deliberately: if a firmware renames the macro, the predicate stops matching and the send degrades to the bare command, whereas a name-keyed rule would keep firing a dead macro into the probe script. Two rules with old and new names act as a version detector.
+- `timeout_s` is added to the operation's existing budget, never replaces it - a slow preparation cannot eat the probe's own ceiling.
+- The wrapped call sites are the four probe entry points: `SCREWS_TILT_CALCULATE`, `BED_MESH_CALIBRATE`, `PROBE_ACCURACY`, and the Z-offset calibration commands (`Z_ENDSTOP_CALIBRATE` / `PROBE_CALIBRATE`).
+
+### Screws-tilt specifics
+
+- **Direction override.** `screws_tilt_direction` (`"cw"` / `"ccw"`) on a printer entry flips the parser's tighten/loosen wording (`include/printer_detector.h#screws_tilt_direction_override`, applied via `flip_screws_tilt_direction()` in `include/calibration_types.h`) for firmwares whose reported direction is inverted.
+- **Recentering hint.** Klipper reports every screw relative to `screw1`, treating it as a fixed base - but the adjustment vector is only determined up to a uniform translation (adding a constant to every screw moves the bed without changing tilt), so "reference = 0" is an arbitrary choice, not the cheapest one. When all non-reference screws need the same large correction, `suggest_screw_recentering()` offers the one-screw alternative as a hint subject on the panel (`screws_tilt_recenter_hint`).
 
 ---
 

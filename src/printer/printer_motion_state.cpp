@@ -48,6 +48,7 @@ void PrinterMotionState::init_subjects(bool register_xml) {
     INIT_SUBJECT_INT(gcode_speed, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(max_velocity, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(live_extruder_velocity, 0, subjects_, register_xml);
+    INIT_SUBJECT_INT(live_velocity, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(gcode_z_offset, 0, subjects_,
                      register_xml); // Z-offset in microns from homing_origin[2]
     INIT_SUBJECT_INT(pending_z_offset_delta, 0, subjects_,
@@ -213,13 +214,19 @@ void PrinterMotionState::update_from_status(const nlohmann::json& status) {
         }
     }
 
-    // Update motion_report data (live extruder velocity)
+    // Update motion_report data (live toolhead and extruder velocity)
     if (status.contains("motion_report")) {
         const auto& mr = status["motion_report"];
         if (mr.contains("live_extruder_velocity") && mr["live_extruder_velocity"].is_number()) {
             int vel_centimm = static_cast<int>(mr["live_extruder_velocity"].get<double>() * 100.0);
             if (lv_subject_get_int(&live_extruder_velocity_) != vel_centimm) {
                 lv_subject_set_int(&live_extruder_velocity_, vel_centimm);
+            }
+        }
+        if (mr.contains("live_velocity") && mr["live_velocity"].is_number()) {
+            int vel_mm_s = static_cast<int>(std::lround(mr["live_velocity"].get<double>()));
+            if (lv_subject_get_int(&live_velocity_) != vel_mm_s) {
+                lv_subject_set_int(&live_velocity_, vel_mm_s);
             }
         }
     }

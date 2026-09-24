@@ -179,14 +179,18 @@ class HomePanel : public PanelBase {
     /// leave edit mode, and rebuild the carousel on the next tick through
     /// on_edit_pages_changed(), on the deleted page's index.
     void delete_edit_page();
+    /// The + on the next-page slot's action: append a page through the same
+    /// PanelWidgetConfig::add_page() a drag's drop creates with, and land on it
+    /// through the same on_edit_pages_changed() rebuild, on the next tick.
+    void add_page_from_slot();
     void update_arrow_visibility(int page);
     void populate_page(int page_index, bool force);
 
     /// Apply the carousel swipe policy for the edit session: Disabled while an
     /// edit gesture owns the pointer or the widget catalog is open, Auto (swipe
     /// by page count) otherwise, in edit mode or out of it. The next-page slot
-    /// is within reach only while a drag is live, as its drop target, and while
-    /// the session is still scoped to it after a drop there created a page
+    /// carries the + that adds a page and a drag's drop target, so its tile is
+    /// within reach whenever the slot exists, drag or no drag
     /// (prestonbrown/helixscreen#1638). Flags only, so it is safe inside input
     /// dispatch.
     void apply_edit_swipe_policy();
@@ -241,6 +245,8 @@ class HomePanel : public PanelBase {
     static void on_home_grid_released(lv_event_t* e);
     /// PRESS_LOST and INDEV_RESET: LVGL took a press away without a RELEASED.
     static void on_home_grid_press_cancelled(lv_event_t* e);
+    /// The + on the next-page slot, from the slot component's XML event_cb.
+    static void on_add_page_clicked(lv_event_t* e);
 
     /// Guards the carousel rebuilds this panel runs on the next tick. Declared
     /// last, so it expires before any other member is destroyed.

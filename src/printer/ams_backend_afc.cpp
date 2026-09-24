@@ -2609,9 +2609,20 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
     // This is the ONLY weight source for AFC. AFC_lane.get_status() has carried a
     // live `weight` since v1.1.0, on every release, so no version gate is needed
     // and none of the lane_data staleness (see parse_lane_data) can reach us here.
+    //
+    // A zero beside no material and no colour is the state AFC's own
+    // clear_values() and a Clear Spool leave behind, so it reads as unknown
+    // rather than an empty spool. A spool metered down to zero keeps its
+    // material and stays at zero.
     if (data.contains("weight") && data["weight"].is_number()) {
-        slot.remaining_weight_g = data["weight"].get<float>();
-        firmware.metered.remaining_weight_g = slot.remaining_weight_g;
+        const float weight = data["weight"].get<float>();
+        if (weight == 0.0f && !firmware.cache.material && !firmware.cache.color_rgb) {
+            slot.remaining_weight_g = -1.0f;
+            firmware.metered.remaining_weight_g.reset();
+        } else {
+            slot.remaining_weight_g = weight;
+            firmware.metered.remaining_weight_g = weight;
+        }
     }
 
     // Full-spool weight (AFC v1.2.0+), ONLY for lanes with a Spoolman link.
@@ -5033,8 +5044,10 @@ void AmsBackendAfc::persist_override(int slot_index, const SlotInfo& info,
 }
 
 void AmsBackendAfc::clear_slot_override(int slot_index) {
+    std::string lane_name;
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        lane_name = slots_.name_of(slot_index);
         overrides_.erase(slot_index);
         helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
         // The clear is deliberate: any echo guard this slot still holds was
@@ -5045,10 +5058,10 @@ void AmsBackendAfc::clear_slot_override(int slot_index) {
         // Also reset the override-exclusive fields on the live slot, so the
         // clear shows up in the very next get_slot_info(). AFC has no concept
         // of brand / spool_name / total weight / colour name, so no firmware
-        // update will ever clear them for us — dropping only the store entry
+        // update will ever clear them for us; dropping only the store entry
         // would leave the previous spool's identity on screen indefinitely.
-        // colour and material are left alone: those DO come from the parse, so
-        // the lane's actual firmware values should surface.
+        // colour and material come from the parse, and the writes below empty
+        // them in firmware.
         if (helix::printer::SlotEntry* entry = slots_.get_mut(slot_index)) {
             entry->info.brand.clear();
             entry->info.clear_spoolman_link();
@@ -5062,6 +5075,17 @@ void AmsBackendAfc::clear_slot_override(int slot_index) {
             entry->info.catalog_id.clear();
             entry->info.product_name.clear();
         }
+    }
+    // An empty SET_SPOOL_ID only runs AFC's clear_values() when AFC has
+    // Spoolman configured and the lane does not remember its spool, so an
+    // unlinked lane keeps what SET_MATERIAL / SET_COLOR / SET_WEIGHT stored
+    // unless it is emptied field by field. An empty COLOR stores a bare '#',
+    // which the parse reads as no colour; WEIGHT=0 is what clear_values()
+    // writes.
+    if (!lane_name.empty()) {
+        execute_gcode(fmt::format("SET_MATERIAL LANE={} MATERIAL=", lane_name));
+        execute_gcode(fmt::format("SET_COLOR LANE={} COLOR=", lane_name));
+        execute_gcode(fmt::format("SET_WEIGHT LANE={} WEIGHT=0", lane_name));
     }
     emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
     if (override_store_) {
@@ -5537,6 +5561,7 @@ void AmsBackendAfc::write_lane_locked(int slot_index, SlotInfo& slot, const Slot
     slot.catalog_id = info.catalog_id;
     slot.product_name = info.product_name;
     slot.spoolman_id = info.spoolman_id;
+    slot.spoolman_filament_id = info.spoolman_filament_id;
     slot.spool_name = info.spool_name;
     slot.remaining_weight_g = info.remaining_weight_g;
     slot.total_weight_g = info.total_weight_g;

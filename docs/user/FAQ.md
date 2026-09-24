@@ -88,7 +88,7 @@ HelixScreen reads standard G-code, so most slicers work. But support is tiered:
 | Slicer | Status | Notes |
 |--------|--------|-------|
 | **OrcaSlicer 2.3.2+** | **Primary** | The slicer we develop and test against. Best experience — including one-way (HelixScreen → OrcaSlicer) filament preset sync with HelixScreen's filament slots. Recommended for everyone. |
-| Manufacturer slicers (Creality Print, FlashForge Orca, Bambu Studio, etc.) | **Supported** | Most are OrcaSlicer/PrusaSlicer forks and work well. We aim to support them. This is about G-code and profiles, not the vendor's own network path: on the Creality K1 series, installing HelixScreen stops the stock backend, so Creality Print can still slice but can no longer upload to the printer. Upload through Moonraker instead — see [Troubleshooting](TROUBLESHOOTING.md#creality-k1-series-issues). |
+| Manufacturer slicers (Creality Print, FlashForge Orca, Bambu Studio, etc.) | **Supported** | Most are OrcaSlicer/PrusaSlicer forks and work well. We aim to support them. This is about G-code and profiles, not the vendor's own network path: on the Creality K1 series the stock backend keeps running beside HelixScreen, so Creality Print can still reach the printer. If it cannot, see [Troubleshooting](TROUBLESHOOTING.md#creality-print-can-no-longer-find-or-connect-to-the-printer). |
 | PrusaSlicer / SuperSlicer | **Supported** | Fully usable, including exclude-objects and pre-print options. |
 | Cura | **Not targeted** | We don't test against Cura and don't build features for it, but we don't go out of our way to break it. Output generally works; some features (exclude objects, filament sync) need extra setup or aren't available. |
 
@@ -437,17 +437,10 @@ The wizard runs when no valid configuration exists. Causes:
 
 ### How do I change the Moonraker address?
 
-There's currently no UI to change this after initial setup. Your options:
+Go to **Settings > System > Host** and enter the new address. HelixScreen disconnects from the current printer and connects to the new one right away.
 
-**Edit the config file directly:**
-```bash
-sudo nano ~/helixscreen/config/settings.json
-# (fallback path if no Klipper ecosystem: /opt/helixscreen/config/settings.json)
-# Edit moonraker_host and moonraker_port in the "printer" section
-sudo systemctl restart helixscreen
-```
+To re-run the whole setup wizard instead:
 
-**Or re-run the setup wizard:**
 ```bash
 # Either delete the config to trigger wizard on next start:
 # (fallback path if no Klipper ecosystem: /opt/helixscreen/config/settings.json)
@@ -561,16 +554,22 @@ The app produces **two log streams**: a structured app log (recommended starting
 
 ```bash
 # Structured app log
-sudo journalctl -u helixscreen -f          # MainsailOS / x86 / any systemd Pi-like setup
-grep helix-screen /var/log/messages         # AD5M, Snapmaker U1 (persistent syslog)
-logread | grep helix-screen                 # K1 / K1C / K2 / CC1 / AD5X (BusyBox in-RAM)
+sudo journalctl -u helixscreen -f                          # MainsailOS / x86 / any systemd Pi-like setup
+grep helix-screen /var/log/messages                        # Snapmaker U1 (persistent syslog)
+tail -100 /usr/data/helixscreen-state/logs/helix.log       # K1 / K1C
+tail -100 /mnt/UDISK/helixscreen-state/logs/helix.log      # K2
+tail -100 /data/.helixscreen/logs/helix.log                # AD5M
+tail -100 /user-resource/helixscreen-state/logs/helix.log # CC1
+tail -100 /opt/config/mod_data/log/helix.log               # AD5X
 
-# Launcher / crash capture (SysV platforms only — systemd platforms put this in the journal)
-tail -100 /opt/helixscreen/logs/launcher.log              # AD5M
-tail -100 /usr/data/helixscreen/logs/launcher.log         # K1 / K1C / K2 / AD5X
-tail -100 /var/log/helixscreen/launcher.log               # Snapmaker U1
-tail -100 /user-resource/helixscreen/logs/launcher.log    # CC1 (COSMOS)
-tail -100 /tmp/helixscreen.log                            # pre-v0.99.62 fallback
+# Launcher / crash capture (SysV platforms only; systemd platforms put this in the journal)
+tail -100 /opt/helixscreen/logs/launcher.log               # AD5M (Forge-X)
+tail -100 /root/printer_software/helixscreen/logs/launcher.log  # AD5M (Klipper Mod)
+tail -100 /usr/data/helixscreen/logs/launcher.log          # K1 / K1C
+tail -100 /mnt/UDISK/helixscreen/logs/launcher.log         # K2
+tail -100 /opt/config/mod_data/log/helixscreen.log         # AD5X
+tail -100 /var/log/helixscreen/launcher.log                # Snapmaker U1
+tail -100 /user-resource/helixscreen/logs/launcher.log     # CC1
 ```
 
 For a complete map of log locations and how they're wired up, see the [Logging](../devel/LOGGING.md#log-destinations--retrieval) developer doc.
