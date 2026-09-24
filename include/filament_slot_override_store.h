@@ -533,7 +533,7 @@ class SlotFingerprintTracker {
 
     /// Notified on every observation that establishes or confirms a baseline:
     /// Baseline, Unchanged and OwnWriteEcho. Not NoSignal (nothing was
-    /// observed) and not Changed — the caller is about to erase the record the
+    /// observed) and not Changed: the caller is about to erase the record the
     /// fingerprint travels in, and a save racing that erase would resurrect it.
     /// Unchanged firing is load-bearing: a record can come into existence
     /// after the Baseline event (the auto-mirror, a user edit), and the next
@@ -567,8 +567,8 @@ class SlotFingerprintTracker {
 /// install the sink that keeps that fingerprint current as the tracker
 /// observes the slot.
 ///
-/// The sink no-ops for a slot with no override entry — a fingerprint only
-/// matters while there is a user edit for a swap to clear — and when the
+/// The sink no-ops for a slot with no override entry (a fingerprint only
+/// matters while there is a user edit for a swap to clear) and when the
 /// record already carries the observed value, so steady-state polls save
 /// nothing.
 ///

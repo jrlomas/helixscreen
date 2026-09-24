@@ -39,6 +39,10 @@ constexpr int MAX_BACKENDS = 8;
 /// backend. Above every backend block so adding backends never reaches it.
 constexpr LaneId BYPASS_LANE_ID = 10000;
 
+/// The slot index the bypass lane's records carry: the same -2 every backend
+/// reports as current_slot while the external spool feeds the toolhead.
+constexpr int BYPASS_SLOT_INDEX = -2;
+
 /// Direct-drive tools, one id per tool from here up. A tool changer's spools
 /// are lanes like any other and stop needing a parallel store.
 constexpr LaneId FIRST_TOOL_LANE_ID = 20000;

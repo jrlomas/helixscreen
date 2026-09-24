@@ -1698,7 +1698,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
 
     // A record as a session running older code left it: a user override with
     // no fingerprint. Session 1 boots on it, reads the tag, and the
-    // observation must persist into the record — two backends over one mock
+    // observation must persist into the record: two backends over one mock
     // DB stand in for two app lifetimes.
     helix::ams::FilamentSlotOverride saved;
     saved.brand = "Polymaker";

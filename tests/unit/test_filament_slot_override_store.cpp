@@ -4098,7 +4098,7 @@ TEST_CASE("SlotFingerprintTracker expectations accumulate across writes",
     CHECK(tracker.observe(0, "V") == helix::ams::FingerprintEvent::OwnWriteEcho);
     CHECK_FALSE(tracker.has_expected(0));
 
-    // A change no write asked for consumes everything pending — the
+    // A change no write asked for consumes everything pending; the
     // swap-while-in-flight guarantee.
     helix::ams::SlotFingerprintTracker swap;
     swap.observe(1, "B");
