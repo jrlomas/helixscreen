@@ -503,6 +503,7 @@ void write_filament_fields(SlotInfo& slot, const SlotInfo& info) {
     slot.product_name = info.product_name;
     slot.spool_name = info.spool_name;
     slot.spoolman_id = info.spoolman_id;
+    slot.spoolman_filament_id = info.spoolman_filament_id;
     slot.spoolman_vendor_id = info.spoolman_vendor_id;
     slot.remaining_weight_g = info.remaining_weight_g;
     slot.total_weight_g = info.total_weight_g;

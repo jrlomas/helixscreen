@@ -823,8 +823,13 @@ void FilamentPanel::handle_preset_button(int material_id) {
     // An explicit preheat applies the selected material, not a filament-swap
     // temperature floor. A configured heating macro owns all heater commands.
     if (selected_material_ == material_id) {
+        const auto& hw = printer_state_.get_discovery();
         execute_material_preheat(
-            api_, helix::presets::name(material_id),
+            api_,
+            plan_material_preheat(
+                helix::MaterialSettingsManager::instance().find_override_for_material(
+                    helix::presets::name(material_id)),
+                hw),
             [this]() {
                 if (auto* c = get_temperature_controller()) {
                     c->set_target(helix::HeaterType::Nozzle, static_cast<double>(nozzle_target_),
@@ -847,7 +852,7 @@ void FilamentPanel::handle_preset_button(int material_id) {
                     }
                 }
             },
-            "[FilamentPanel]", printer_state_.get_discovery());
+            "[FilamentPanel]", hw);
     }
 }
 
@@ -2157,8 +2162,12 @@ void FilamentPanel::handle_spool_preset_button() {
     update_material_temp_display();
     update_status();
 
+    const auto& hw = printer_state_.get_discovery();
     execute_material_preheat(
-        api_, cached_active_material_->material_name,
+        api_,
+        plan_material_preheat(helix::MaterialSettingsManager::instance().find_override_for_material(
+                                  cached_active_material_->material_name),
+                              hw),
         [this]() {
             if (auto* c = get_temperature_controller()) {
                 c->set_target(helix::HeaterType::Nozzle, static_cast<double>(nozzle_target_),
@@ -2173,7 +2182,7 @@ void FilamentPanel::handle_spool_preset_button() {
             spdlog::info("[{}] Spool preset applied: {} (nozzle={}°C, bed={}°C)", get_name(),
                          cached_active_material_->display_name, nozzle_target_, bed_target_);
         },
-        "[FilamentPanel]", printer_state_.get_discovery());
+        "[FilamentPanel]", hw);
 }
 
 void FilamentPanel::update_spool_preset() {

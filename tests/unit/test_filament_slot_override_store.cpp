@@ -256,6 +256,7 @@ TEST_CASE("user_override_from_slot_info signs the fields the user supplied",
         info.brand = "Polymaker";
         info.spool_name = "Blue PETG 1kg";
         info.spoolman_id = 42;
+        info.spoolman_filament_id = 55;
         info.spoolman_vendor_id = 7;
         info.remaining_weight_g = 730.0f;
         info.total_weight_g = 1000.0f;
@@ -268,6 +269,7 @@ TEST_CASE("user_override_from_slot_info signs the fields the user supplied",
         CHECK(ovr.brand == "Polymaker");
         CHECK(ovr.spool_name == "Blue PETG 1kg");
         CHECK(ovr.spoolman_id == 42);
+        CHECK(ovr.spoolman_filament_id == 55);
         CHECK(ovr.spoolman_vendor_id == 7);
         CHECK(ovr.remaining_weight_g == Catch::Approx(730.0f));
         CHECK(ovr.total_weight_g == Catch::Approx(1000.0f));
@@ -409,6 +411,7 @@ TEST_CASE("FilamentSlotOverride roundtrips through JSON", "[filament_slot_overri
     ovr.brand = "Polymaker";
     ovr.spool_name = "PolyLite PLA Orange";
     ovr.spoolman_id = 42;
+    ovr.spoolman_filament_id = 55;
     ovr.spoolman_vendor_id = 7;
     ovr.remaining_weight_g = 850.0f;
     ovr.total_weight_g = 1000.0f;
@@ -435,6 +438,7 @@ TEST_CASE("FilamentSlotOverride roundtrips through JSON", "[filament_slot_overri
     CHECK(round.brand == ovr.brand);
     CHECK(round.spool_name == ovr.spool_name);
     CHECK(round.spoolman_id == ovr.spoolman_id);
+    CHECK(round.spoolman_filament_id == ovr.spoolman_filament_id);
     CHECK(round.spoolman_vendor_id == ovr.spoolman_vendor_id);
     CHECK(round.remaining_weight_g == ovr.remaining_weight_g);
     CHECK(round.total_weight_g == ovr.total_weight_g);
@@ -453,9 +457,11 @@ TEST_CASE("FilamentSlotOverride roundtrips through JSON", "[filament_slot_overri
     json legacy = j;
     legacy.erase("catalog_id");
     legacy.erase("product_name");
+    legacy.erase("spoolman_filament_id");
     FilamentSlotOverride old_record = helix::ams::from_json(legacy);
     CHECK(old_record.catalog_id.empty());
     CHECK(old_record.product_name.empty());
+    CHECK(old_record.spoolman_filament_id == 0);
     CHECK(old_record.material == "PLA"); // the rest still parses
 }
 
@@ -497,6 +503,10 @@ TEST_CASE("FilamentSlotOverrideStore load_blocking parses lane_data entries",
         // same convention as helix_material / helix_locked_*.
         {"helix_catalog_id", "sunlu-pla-plus-2-0"},
         {"helix_product_name", "PLA+ 2.0"},
+        // The Spoolman filament definition id (prestonbrown/helixscreen#1632).
+        // helix_-prefixed because Happy Hare writes its own unprefixed
+        // "filament_id" inner field into the same records.
+        {"helix_spoolman_filament_id", 55},
     };
     json lane2 = {
         {"lane", "1"},
@@ -504,8 +514,8 @@ TEST_CASE("FilamentSlotOverrideStore load_blocking parses lane_data entries",
         {"material", "PETG"},
         // No bed_temp / nozzle_temp — load must default to 0 (the "use
         // material default" sentinel that resolved_temps() consults at emit).
-        // No helix_catalog_id / helix_product_name either: a foreign or
-        // pre-upgrade record must load with empty defaults.
+        // No helix_catalog_id / helix_product_name / helix_spoolman_filament_id
+        // either: a foreign or pre-upgrade record must load with empty defaults.
     };
     api.mock_set_db_value("lane_data", "lane1", lane1);
     api.mock_set_db_value("lane_data", "lane2", lane2);
@@ -518,6 +528,7 @@ TEST_CASE("FilamentSlotOverrideStore load_blocking parses lane_data entries",
     CHECK(overrides[0].material == "PLA");
     CHECK(overrides[0].color_rgb == 0xFF5500u);
     CHECK(overrides[0].spoolman_id == 42);
+    CHECK(overrides[0].spoolman_filament_id == 55);
     CHECK(overrides[0].spool_name == "PolyLite PLA Orange");
     CHECK(overrides[0].remaining_weight_g == 850.0f);
     CHECK(overrides[0].bed_temp == 65);
@@ -534,6 +545,7 @@ TEST_CASE("FilamentSlotOverrideStore load_blocking parses lane_data entries",
     // brand / spoolman_id not present in lane2 entry - default values
     CHECK(overrides[1].brand == "");
     CHECK(overrides[1].spoolman_id == 0);
+    CHECK(overrides[1].spoolman_filament_id == 0);
     // Temps default to 0 when absent — the "use material default" sentinel.
     CHECK(overrides[1].bed_temp == 0);
     CHECK(overrides[1].nozzle_temp == 0);
@@ -586,6 +598,7 @@ TEST_CASE("FilamentSlotOverrideStore save_async writes AFC-shaped record to lane
     ovr.color_rgb = 0xFF5500;
     ovr.color_set = true; // to_lane_data_record emits "color" iff color_set is true
     ovr.spoolman_id = 42;
+    ovr.spoolman_filament_id = 55;
     ovr.remaining_weight_g = 850.0f;
     ovr.total_weight_g = 1000.0f;
     ovr.catalog_id = "sunlu-pla-plus-2-0";
@@ -615,6 +628,9 @@ TEST_CASE("FilamentSlotOverrideStore save_async writes AFC-shaped record to lane
     CHECK(stored["material"] == "PLA");
     CHECK(stored["vendor"] == "Polymaker");
     CHECK(stored["spool_id"] == 42);
+    // helix_-prefixed: Happy Hare writes its own unprefixed "filament_id"
+    // inner field into these shared records, so the unprefixed name is taken.
+    CHECK(stored["helix_spoolman_filament_id"] == 55);
     CHECK(stored["remaining_weight_g"] == 850.0f);
     CHECK(stored["total_weight_g"] == 1000.0f);
     // helix_-prefixed: lane_data is shared with AFC/Happy Hare/Mainsail/Orca,
@@ -629,6 +645,7 @@ TEST_CASE("FilamentSlotOverrideStore save_async writes AFC-shaped record to lane
     REQUIRE(reparsed.has_value());
     CHECK(reparsed->second.catalog_id == "sunlu-pla-plus-2-0");
     CHECK(reparsed->second.product_name == "PLA+ 2.0");
+    CHECK(reparsed->second.spoolman_filament_id == 55);
 }
 
 TEST_CASE("FilamentSlotOverrideStore save_async emits the shared lane_data key aliases",
@@ -3940,6 +3957,7 @@ TEST_CASE("a Spoolman filing keeps a declared colour on the stored record",
 
     Observation spoolman(ObservationSource::Spoolman);
     spoolman.spoolman_id = 42;
+    spoolman.spoolman_filament_id = 55;
     spoolman.brand = "Sunlu";
     spoolman.material = "PETG";
     spoolman.spool_name = "PLA Plus";
@@ -3954,6 +3972,7 @@ TEST_CASE("a Spoolman filing keeps a declared colour on the stored record",
         CHECK(amended.material == "PETG");
         CHECK(amended.spool_name == "PLA Plus");
         CHECK(amended.spoolman_vendor_id == 9);
+        CHECK(amended.spoolman_filament_id == 55);
         CHECK(amended.color_rgb == 0xBCBCBCu);
         CHECK(declares_color(amended));
         // A filing states identity, so the meter's weight and the user's pick stand.

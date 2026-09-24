@@ -8,6 +8,7 @@
 #include "ui_effects.h"
 #include "ui_error_reporting.h"
 #include "ui_filament_path_canvas.h"
+#include "ui_toast_manager.h"
 #include "ui_utils.h"
 
 #include "ams_state.h"
@@ -27,6 +28,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 // ============================================================================
@@ -846,6 +850,72 @@ bool ams_dispatch_backend_action(AmsContextMenu::MenuAction action, int slot,
     }
 
     return true;
+}
+
+namespace {
+
+/// What a lane showed when its "same spool?" notice went up, keyed by slot.
+/// Clear acts only while the lane still shows it: a later read or edit has
+/// already answered the question the notice asked.
+struct InsertOfferSnapshot {
+    std::string material;
+    uint32_t color_rgb = AMS_DEFAULT_SLOT_COLOR;
+    int spoolman_id = 0;
+
+    static InsertOfferSnapshot of(const SlotInfo& info) {
+        return {info.material, info.color_rgb, info.spoolman_id};
+    }
+    bool operator==(const InsertOfferSnapshot& o) const {
+        return material == o.material && color_rgb == o.color_rgb && spoolman_id == o.spoolman_id;
+    }
+};
+
+std::unordered_map<int, InsertOfferSnapshot>& insert_offers() {
+    static std::unordered_map<int, InsertOfferSnapshot> offers;
+    return offers;
+}
+
+void clear_if_lane_unchanged(int slot) {
+    auto& offers = insert_offers();
+    const auto it = offers.find(slot);
+    if (it == offers.end()) {
+        return;
+    }
+    const InsertOfferSnapshot shown = it->second;
+    offers.erase(it);
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (!backend || !(InsertOfferSnapshot::of(backend->get_slot_info(slot)) == shown)) {
+        spdlog::debug("[AMS] Slot {} changed since the same-spool notice; Clear ignored", slot);
+        return;
+    }
+    ams_dispatch_backend_action(AmsContextMenu::MenuAction::CLEAR_SPOOL, slot, nullptr);
+}
+
+} // namespace
+
+void offer_clear_after_unverified_insert(int slot) {
+    AmsBackend* backend = AmsState::instance().get_backend();
+    if (!backend || clear_spool_blocked_by_print(get_printer_state().get_print_lifecycle(),
+                                                 backend->slot_is_actively_loaded(slot))) {
+        return;
+    }
+    // A lane with no details has nothing the new spool could contradict.
+    const SlotInfo info = backend->get_slot_info(slot);
+    if (!info.has_filament_info() && info.spoolman_id <= 0) {
+        return;
+    }
+    insert_offers()[slot] = InsertOfferSnapshot::of(info);
+    const std::string message =
+        fmt::format(lv_tr("Same spool in {}? Tap Clear if it is a new one."),
+                    lane_label(backend->lane_noun(), slot));
+    // The slot rides in user_data by value: the toast can outlive any object
+    // that could own it, and the dispatch re-checks every guard at tap time.
+    ToastManager::instance().show_with_action(
+        ToastSeverity::INFO, message.c_str(), lv_tr("Clear"),
+        [](void* user_data) {
+            clear_if_lane_unchanged(static_cast<int>(reinterpret_cast<intptr_t>(user_data)));
+        },
+        reinterpret_cast<void*>(static_cast<intptr_t>(slot)), 10000);
 }
 
 } // namespace ui

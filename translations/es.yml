@@ -2630,6 +2630,7 @@ translations:
     aplicación seguía fallando al iniciar. Abra Ajustes para solucionar el problema
     y luego reinicie.
   Safety & Notifications: Seguridad y notificaciones
+  Same spool in {}? Tap Clear if it is a new one.: '¿La misma bobina en {}? Toca Borrar si es una nueva.'
   Sample: Muestra
   Sample %d/%d: Muestra %d/%d
   Sample Dialog: Diálogo de Ejemplo

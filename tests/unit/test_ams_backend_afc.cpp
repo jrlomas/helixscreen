@@ -6519,10 +6519,12 @@ TEST_CASE("AFC override survives an eject that clears firmware fields", "[ams][a
     info.brand = "Likesilk";
     info.spool_name = "Black ASA";
     info.spoolman_id = 86;
+    info.spoolman_filament_id = 55;
     info.material = "ASA";
     info.color_rgb = 0x1A1A1A;
     info.total_weight_g = 1000.0f;
     helix::test::edit_slot_as_user(helper, 0, info);
+    REQUIRE(helper.get_slot_info(0).spoolman_filament_id == 55);
 
     // AFC ejects the lane: clear_values() nulls spool_id and empties
     // colour/material, and parse_afc_stepper now represents that faithfully.
@@ -6535,6 +6537,7 @@ TEST_CASE("AFC override survives an eject that clears firmware fields", "[ams][a
     CHECK(after.brand == "Likesilk");
     CHECK(after.spool_name == "Black ASA");
     CHECK(after.spoolman_id == 86);
+    CHECK(after.spoolman_filament_id == 55);
     CHECK(after.total_weight_g == Catch::Approx(1000.0f));
 }
 

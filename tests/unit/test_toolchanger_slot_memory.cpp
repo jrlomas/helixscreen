@@ -143,6 +143,7 @@ helix::SlotInfo blue_petg() {
     info.brand = "Polymaker";
     info.spool_name = "Blue PETG 1kg";
     info.spoolman_id = 42;
+    info.spoolman_filament_id = 55;
     info.remaining_weight_g = 730;
     info.total_weight_g = 1000;
     return info;
@@ -152,6 +153,7 @@ helix::SlotInfo blue_petg() {
 SpoolInfo blue_petg_spool() {
     SpoolInfo spool;
     spool.id = 42;
+    spool.filament_id = 55;
     spool.vendor = "Polymaker";
     spool.filament_name = "Blue PETG 1kg";
     spool.material = "PETG";
@@ -167,6 +169,7 @@ TEST_CASE("A tool's spool metadata survives rediscovery", "[ams][toolchanger][sl
     helix::test::RegisteredBackend<SlotMemoryHelper> h_reg(4);
     SlotMemoryHelper& h = *h_reg;
     helix::test::edit_slot_as_user(h, 1, blue_petg());
+    REQUIRE(h.get_slot_info(1).spoolman_filament_id == 55);
     helix::test::spool_states(h, 1, blue_petg_spool());
 
     // The reconnect path: AmsState calls set_discovered_tools() again, which
@@ -179,6 +182,7 @@ TEST_CASE("A tool's spool metadata survives rediscovery", "[ams][toolchanger][sl
     CHECK(slot.brand == "Polymaker");
     CHECK(slot.spool_name == "Blue PETG 1kg");
     CHECK(slot.spoolman_id == 42);
+    CHECK(slot.spoolman_filament_id == 55);
     CHECK(slot.remaining_weight_g == 730);
 }
 

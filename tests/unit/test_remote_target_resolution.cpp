@@ -6,9 +6,19 @@
 // widget in an overlay stacked *behind* the visible one and reported success,
 // and a path copied out of `ls` was rejected unless prefixed with '@'.
 
+#include "ui_update_queue.h"
+
 #include "../lvgl_test_fixture.h"
 #include "remote_client.h"
+#include "remote_control_server.h"
 #include "widget_resolution.h"
+
+#include <chrono>
+#include <cstring>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include "../catch_amalgamated.hpp"
 
@@ -249,6 +259,117 @@ TEST_CASE_METHOD(LVGLTestFixture, "ctl path: unresolvable segments yield nothing
     REQUIRE(helix::resolve_path("s/main_content/settings_list/toggle[9]") == nullptr);
     REQUIRE(helix::resolve_path("s/99") == nullptr);
     REQUIRE(helix::resolve_path("") == nullptr);
+}
+
+// --- describe scoping -----------------------------------------------------
+//
+// `ls @s` scopes to lv_screen_active(), which can be a screen carrying no
+// name of its own (a demo screen). Resolving the scope root's reported name
+// must not assume one exists: lv_obj_get_name_resolved() reads the NULL name
+// of an unnamed parentless object, so a screen that never got a name takes
+// the app down the moment it is listed.
+
+TEST_CASE_METHOD(LVGLTestFixture, "ctl ls: an unnamed active screen scopes without crashing",
+                 "[remote][ctl]") {
+    lv_obj_t* previous = lv_screen_active();
+    // A child allocates the screen's spec_attr while its own name stays NULL,
+    // the exact state `ls @s` meets on a demo screen. The second child stays
+    // nameless too: LVGL gives IT a crafted "<class>_#" name, which `resolve`
+    // must keep answering.
+    lv_obj_t* screen = lv_obj_create(NULL);
+    lv_obj_set_name(lv_obj_create(screen), "probe");
+    lv_obj_create(screen); // index 1, deliberately nameless
+    lv_screen_load(screen);
+
+    // The handler is only reachable through dispatch, over a real socket; it
+    // parks on a future until the UI queue runs its payload, so the queue is
+    // drained while the response is polled for, never after.
+    const std::string sock_path =
+        "/tmp/helix-test-ls-unnamed-" + std::to_string(::getpid()) + ".sock";
+    ::unlink(sock_path.c_str());
+    helix::RemoteConfig config;
+    config.socket_path = sock_path;
+    helix::RemoteControlServer& server = helix::RemoteControlServer::instance();
+    REQUIRE(server.start(config));
+
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    REQUIRE(sock_path.size() < sizeof(addr.sun_path));
+    std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path) - 1);
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    REQUIRE(fd >= 0);
+    REQUIRE(connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0);
+
+    // One newline-framed JSON-RPC round trip, draining the UI queue while the
+    // response is polled for (the handler parks on a future the drain
+    // resolves). Empty string on any transport failure.
+    auto rpc_roundtrip = [&](int id, const std::string& method, const std::string& params) {
+        const std::string request = "{\"jsonrpc\":\"2.0\",\"method\":\"" + method +
+                                    "\",\"params\":" + params + ",\"id\":" + std::to_string(id) +
+                                    "}\n";
+        REQUIRE(send(fd, request.data(), request.size(), 0) ==
+                static_cast<ssize_t>(request.size()));
+
+        std::string response;
+        char buf[4096];
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (response.find('\n') == std::string::npos) {
+            struct pollfd pfd {
+                fd, POLLIN, 0
+            };
+            const int ready = poll(&pfd, 1, 20);
+            if (ready > 0) {
+                ssize_t n = recv(fd, buf, sizeof(buf), 0);
+                if (n <= 0) {
+                    break;
+                }
+                response.append(buf, static_cast<size_t>(n));
+            } else if (ready < 0) {
+                break;
+            }
+            helix::ui::UpdateQueue::instance().drain();
+            if (std::chrono::steady_clock::now() > deadline) {
+                break;
+            }
+        }
+        // A queued follow-up from the handler lands before the next request.
+        helix::ui::UpdateQueue::instance().drain();
+        if (response.find('\n') == std::string::npos) {
+            return std::string();
+        }
+        response.erase(response.find('\n'));
+        return response;
+    };
+
+    // `ls @s`: the scope root reports no name, its named child is listed, and
+    // the nameless screen does not take the app down.
+    const std::string ls = rpc_roundtrip(1, "describe_screen", R"({"path":"s"})");
+    REQUIRE_FALSE(ls.empty());
+    const nlohmann::json ls_rpc = nlohmann::json::parse(ls);
+    REQUIRE(ls_rpc.contains("result"));
+    const nlohmann::json& result = ls_rpc["result"];
+    REQUIRE(result.value("scope", "") == "s");
+    REQUIRE(result.contains("widgets"));
+    REQUIRE(result["widgets"].size() == 2); // the scope root, then its named child
+    REQUIRE(result["widgets"][0].value("name", "") == "");
+    REQUIRE(result["widgets"][1].value("path", "") == "s/probe");
+
+    // `resolve` on the nameless CHILD still answers LVGL's crafted
+    // "<class>_<index>" name, which stays addressable.
+    const std::string res = rpc_roundtrip(2, "resolve", R"({"path":"s/1"})");
+    REQUIRE_FALSE(res.empty());
+    const nlohmann::json res_rpc = nlohmann::json::parse(res);
+    REQUIRE(res_rpc.contains("result"));
+    const std::string crafted = res_rpc["result"].value("name", "");
+    REQUIRE_FALSE(crafted.empty());
+    REQUIRE(crafted.rfind("lv_obj_", 0) == 0);
+
+    close(fd);
+    server.stop();
+    ::unlink(sock_path.c_str());
+
+    lv_screen_load(previous);
+    lv_obj_delete(screen);
 }
 
 // --- topmost-visible name resolution ------------------------------------

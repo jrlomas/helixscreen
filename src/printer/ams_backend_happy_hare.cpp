@@ -1320,6 +1320,7 @@ void AmsBackendHappyHare::retire_departed_identity_locked(int gate) {
     entry->info.catalog_id.clear();
     entry->info.product_name.clear();
     entry->info.spoolman_vendor_id = 0;
+    entry->info.spoolman_filament_id = 0;
     entry->info.remaining_weight_g = -1.0F;
     entry->info.total_weight_g = -1.0F;
 }
@@ -2755,6 +2756,7 @@ void AmsBackendHappyHare::write_gate_locked(int slot_index, SlotInfo& slot, cons
     slot.catalog_id = info.catalog_id;
     slot.product_name = info.product_name;
     slot.spoolman_id = info.spoolman_id;
+    slot.spoolman_filament_id = info.spoolman_filament_id;
     slot.spool_name = info.spool_name;
     slot.remaining_weight_g = info.remaining_weight_g;
     slot.total_weight_g = info.total_weight_g;

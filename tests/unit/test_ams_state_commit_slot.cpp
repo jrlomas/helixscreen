@@ -420,9 +420,11 @@ TEST_CASE("commit_slot_edit invalidates identity cache on link change", "[ams][s
     SlotInfo original = f.backend->get_slot_info(0);
     SlotInfo edited = original;
     edited.spoolman_id = 170; // relink 169 -> 170
+    edited.spoolman_filament_id = 55;
 
     AmsError err = AmsState::instance().commit_slot_edit(0, original, edited);
     REQUIRE(err.success());
+    CHECK(f.backend->get_slot_info(0).spoolman_filament_id == 55);
 
     // REQUIRED: the OLD spool's cached identity was dropped...
     CHECK_FALSE(SpoolmanManager::find_identity(169).has_value());

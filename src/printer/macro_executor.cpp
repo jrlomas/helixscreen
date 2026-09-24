@@ -8,8 +8,8 @@
 #include "ui_update_queue.h"
 
 #include "device_display_name.h"
+#include "filament_database.h"
 #include "i_moonraker_api.h"
-#include "material_settings_manager.h"
 #include "moonraker_error.h"
 #include "printer_discovery.h"
 
@@ -199,7 +199,22 @@ void execute_macro_gcode(IMoonrakerAPI* api, const std::string& macro_name,
         IMoonrakerAPI::MACRO_TIMEOUT_MS);
 }
 
-void execute_material_preheat(IMoonrakerAPI* api, const std::string& material_name,
+MaterialPreheatPlan plan_material_preheat(const filament::MaterialOverride* override,
+                                          const PrinterDiscovery& hw) {
+    const std::string macro = override ? override->preheat_macro.value_or("") : "";
+    if (macro.empty()) {
+        return {MaterialPreheatMode::TEMPERATURES, ""};
+    }
+    if (!hw.has_macro(macro)) {
+        return {MaterialPreheatMode::MACRO_MISSING, macro};
+    }
+    return {override->macro_handles_heating.value_or(true)
+                ? MaterialPreheatMode::MACRO_ONLY
+                : MaterialPreheatMode::TEMPERATURES_THEN_MACRO,
+            macro};
+}
+
+void execute_material_preheat(IMoonrakerAPI* api, const MaterialPreheatPlan& plan,
                               const std::function<void()>& set_temperatures, const char* caller_tag,
                               const PrinterDiscovery& hw) {
     if (!api) {
@@ -207,30 +222,25 @@ void execute_material_preheat(IMoonrakerAPI* api, const std::string& material_na
         return;
     }
 
-    // Spool metadata may use a different case than the material settings key.
-    const auto material = filament::find_material(material_name);
-    const std::string key = material ? material->name : material_name;
-    const auto* override = MaterialSettingsManager::instance().get_override(key);
-    std::string macro = override ? override->preheat_macro.value_or("") : "";
-    const bool handles_heating = override && override->macro_handles_heating.value_or(true);
-
-    // Material overrides are shared across printers, so the macro may exist on
-    // another printer only. Heat to the preset rather than send a macro that fails.
-    if (!macro.empty() && !hw.has_macro(macro)) {
-        spdlog::warn("{} Preheat macro '{}' for {} not found on this printer; setting "
-                     "temperatures directly",
-                     caller_tag, macro, key);
-        macro.clear();
-    }
-
-    if (macro.empty() || !handles_heating) {
+    switch (plan.mode) {
+    case MaterialPreheatMode::TEMPERATURES:
         set_temperatures();
+        return;
+    case MaterialPreheatMode::MACRO_MISSING:
+        spdlog::warn("{} Preheat macro '{}' not found on this printer; setting temperatures "
+                     "directly",
+                     caller_tag, plan.macro);
+        set_temperatures();
+        return;
+    case MaterialPreheatMode::TEMPERATURES_THEN_MACRO:
+        set_temperatures();
+        break;
+    case MaterialPreheatMode::MACRO_ONLY:
+        break;
     }
-    if (!macro.empty()) {
-        execute_macro_gcode(api, macro, {}, caller_tag, hw);
-        spdlog::info("{} Preheat {} via macro '{}' (handles_heating={})", caller_tag, key, macro,
-                     handles_heating);
-    }
+    execute_macro_gcode(api, plan.macro, {}, caller_tag, hw);
+    spdlog::info("{} Preheat via macro '{}' (handles_heating={})", caller_tag, plan.macro,
+                 plan.mode == MaterialPreheatMode::MACRO_ONLY);
 }
 
 const std::unordered_set<std::string>& dangerous_command_names() {
