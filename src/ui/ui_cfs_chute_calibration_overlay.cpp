@@ -24,6 +24,7 @@
 #include "static_panel_registry.h"
 #include "unit_conversions.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <cmath>
@@ -55,6 +56,8 @@ CfsChuteCalibrationOverlay& get_cfs_chute_calibration_overlay() {
 static lv_subject_t s_cfs_chute_state;
 static lv_subject_t s_cfs_chute_y_text;
 static char s_cfs_chute_y_buf[16];
+static lv_subject_t s_cfs_chute_saved_text;
+static char s_cfs_chute_saved_buf[96];
 static bool s_callbacks_registered = false;
 
 namespace {
@@ -94,6 +97,8 @@ void CfsChuteCalibrationOverlay::init_subjects() {
     UI_MANAGED_SUBJECT_INT(s_cfs_chute_state, 0, "cfs_chute_state", subjects_);
     UI_MANAGED_SUBJECT_STRING(s_cfs_chute_y_text, s_cfs_chute_y_buf, "0.00 mm",
                               "cfs_chute_y_display", subjects_);
+    UI_MANAGED_SUBJECT_STRING(s_cfs_chute_saved_text, s_cfs_chute_saved_buf, "",
+                              "cfs_chute_saved_pos", subjects_);
     subjects_initialized_ = true;
 
     if (!s_callbacks_registered) {
@@ -233,7 +238,17 @@ void CfsChuteCalibrationOverlay::save_position() {
         return;
     }
     set_state(State::SAVING);
-    auto err = backend->save_chute_position([this]() { set_state(State::DONE); });
+    // The done screen names the pair the firmware wrote when the response
+    // line was captured, and stays a plain confirmation otherwise.
+    auto err = backend->save_chute_position([this, backend]() {
+        double x = 0.0, y = 0.0;
+        const std::string text =
+            backend->last_chute_saved_position(x, y)
+                ? fmt::format(lv_tr("Chute position: X {:.1f}, Y {:.1f}"), x, y)
+                : std::string(lv_tr("Purge chute position saved."));
+        lv_subject_copy_string(&s_cfs_chute_saved_text, text.c_str());
+        set_state(State::DONE);
+    });
     if (!err.success()) {
         set_state(State::ADJUSTING);
         notify_ams_error(err);

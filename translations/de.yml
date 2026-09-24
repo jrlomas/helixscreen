@@ -587,6 +587,8 @@ translations:
   : Wählen Sie das Modell, das zu Ihrem Drucker passt. Dies legt fest, welche Druckmakros, Lüfterrollen und welches Kalibrierungsverhalten HelixScreen verwendet.
   Choose what to power off or restart.: Wählen Sie, was ausgeschaltet oder neu gestartet
     werden soll.
+  'Chute position: X {:.1f}, Y {:.1f}': 'Position der Entlüftungsrinne: X {:.1f}, Y {:.1f}'
+
   Clean Brush: 'Bürste reinigen'
   Clean Nozzle: Düse reinigen
   Cleaning Nozzle...: Düse reinigen...

@@ -517,6 +517,7 @@
   <translation tag="Choose sound style" de="Klangstil auswählen"/>
   <translation tag="Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses." de="Wählen Sie das Modell, das zu Ihrem Drucker passt. Dies legt fest, welche Druckmakros, Lüfterrollen und welches Kalibrierungsverhalten HelixScreen verwendet."/>
   <translation tag="Choose what to power off or restart." de="Wählen Sie, was ausgeschaltet oder neu gestartet werden soll."/>
+  <translation tag="Chute position: X {:.1f}, Y {:.1f}" de="Position der Entlüftungsrinne: X {:.1f}, Y {:.1f}"/>
   <translation tag="Clean Brush" de="Bürste reinigen"/>
   <translation tag="Clean Nozzle" de="Düse reinigen"/>
   <translation tag="Cleaning Nozzle..." de="Düse reinigen..."/>

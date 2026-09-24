@@ -525,6 +525,8 @@ translations:
   ? Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses.
   : お使いのプリンターに一致するモデルを選択してください。これにより、HelixScreenが使用する印刷マクロ、ファンの役割、キャリブレーション動作が設定されます。
   Choose what to power off or restart.: 電源オフまたは再起動する対象を選択してください。
+  'Chute position: X {:.1f}, Y {:.1f}': 'パージシュート位置: X {:.1f}, Y {:.1f}'
+
   Clean Brush: 'ブラシを清掃'
   Clean Nozzle: ノズル清掃
   Cleaning Nozzle...: ノズル清掃中...

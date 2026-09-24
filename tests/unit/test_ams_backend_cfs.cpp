@@ -535,6 +535,21 @@ TEST_CASE("CFS chute cancel path re-parks with Y_SAFE (#1282)", "[ams][cfs][cali
     REQUIRE(backend.captured == std::vector<std::string>{"BOX_CUSTOM_COMMAND CMD=Y_SAFE"});
 }
 
+TEST_CASE("CFS chute save line parses both firmware echo forms (#1282)", "[ams][cfs][calib]") {
+    double x = 0.0, y = 0.0;
+    REQUIRE(AmsBackendCfs::parse_chute_save_line("cmd_save_extrude_pos x=184.50 y=304.00", x, y));
+    CHECK(x == Catch::Approx(184.5));
+    CHECK(y == Catch::Approx(304.0));
+
+    REQUIRE(AmsBackendCfs::parse_chute_save_line(
+        "SAVE_BOX_CFG ok: extrude_pos_x=184.5,extrude_pos_y=304.0", x, y));
+    CHECK(x == Catch::Approx(184.5));
+    CHECK(y == Catch::Approx(304.0));
+
+    CHECK_FALSE(AmsBackendCfs::parse_chute_save_line("SAVE_BOX_CFG ok: cut_pos_y=223.5", x, y));
+    CHECK_FALSE(AmsBackendCfs::parse_chute_save_line("", x, y));
+}
+
 TEST_CASE("CFS calibration refuses while a print owns the machine (#1282)", "[ams][cfs][calib]") {
     CfsCalibHelper backend;
 

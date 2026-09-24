@@ -517,6 +517,7 @@
   <translation tag="Choose sound style" zh="选择声音风格"/>
   <translation tag="Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses." zh="选择与您的打印机相符的型号。这将决定 HelixScreen 使用的打印宏、风扇角色和校准行为。"/>
   <translation tag="Choose what to power off or restart." zh="选择要关闭或重启的对象。"/>
+  <translation tag="Chute position: X {:.1f}, Y {:.1f}" zh="排料口位置: X {:.1f}, Y {:.1f}"/>
   <translation tag="Clean Brush" zh="清洁刷子"/>
   <translation tag="Clean Nozzle" zh="清洁喷嘴"/>
   <translation tag="Cleaning Nozzle..." zh="正在清洁喷嘴..."/>

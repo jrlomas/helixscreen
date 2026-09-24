@@ -3821,7 +3821,7 @@ struct CutterWatch {
     std::string saved_line; // "SAVE_BOX_CFG ok: cut_pos_y=<value>"
 };
 
-std::atomic<int> s_cutter_watch_seq{0};
+std::atomic<int> s_gcode_watch_seq{0};
 
 } // namespace
 
@@ -4039,7 +4039,7 @@ AmsError AmsBackendCfs::calibrate_cutter(std::function<void(const std::string&)>
     auto watch = std::make_shared<CutterWatch>();
     std::string handler;
     if (client_) {
-        handler = "helix_cfs_cutcal_" + std::to_string(++s_cutter_watch_seq);
+        handler = "helix_cfs_cutcal_" + std::to_string(++s_gcode_watch_seq);
         client_->register_method_callback(
             "notify_gcode_response", handler, [watch](const nlohmann::json& msg) {
                 const auto params = msg.find("params");
@@ -4134,24 +4134,69 @@ AmsError AmsBackendCfs::save_chute_position(std::function<void()> on_saved) {
     if (macro_variant_ != CfsMacroVariant::K1) {
         return AmsErrorHelper::not_supported("Purge chute save is K1-stock only");
     }
+    // The firmware reports the pair it wrote on the gcode response stream;
+    // capture it the way calibrate_cutter watches its lines, with the same
+    // shared_ptr lifetime so the WebSocket-thread handler stays valid even
+    // after the backend is gone.
+    auto watch = std::make_shared<std::string>();
+    std::string handler;
+    if (client_) {
+        handler = "helix_cfs_chutesave_" + std::to_string(++s_gcode_watch_seq);
+        client_->register_method_callback(
+            "notify_gcode_response", handler, [watch](const nlohmann::json& msg) {
+                const auto params = msg.find("params");
+                if (params == msg.end() || !params->is_array() || params->empty()) {
+                    return;
+                }
+                const auto& first = (*params)[0];
+                if (!first.is_string()) {
+                    return;
+                }
+                const std::string line = first.get<std::string>();
+                if (line.rfind("cmd_save_extrude_pos", 0) == 0 ||
+                    line.rfind("SAVE_BOX_CFG ok: extrude_pos", 0) == 0) {
+                    *watch = line;
+                }
+            });
+    }
+    auto unregister = [client = client_, handler]() {
+        if (client && !handler.empty()) {
+            client->unregister_method_callback("notify_gcode_response", handler);
+        }
+    };
+
     auto token = lifetime_.token();
     // SAVE_POS reads the LIVE toolhead position into box.cfg's
     // extrude_pos_x/y (HelixScreen sends no coordinate); Y_SAFE re-parks
     // after the save so the flow ends in the parked state.
-    return execute_gcode("BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS",
-                         [this, token, on_saved = std::move(on_saved)]() {
-                             token.defer("AmsBackendCfs::chute_saved", [this, token, on_saved]() {
-                                 execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE",
-                                               [token, on_saved]() {
-                                                   token.defer("AmsBackendCfs::"
-                                                               "chute_parked",
-                                                               [on_saved]() {
-                                                                   if (on_saved)
-                                                                       on_saved();
-                                                               });
-                                               });
-                             });
-                         });
+    return execute_gcode(
+        "BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS",
+        [this, token, on_saved = std::move(on_saved), watch, unregister]() {
+            token.defer("AmsBackendCfs::chute_saved", [this, token, on_saved, watch, unregister]() {
+                execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE",
+                              [this, token, on_saved, watch, unregister]() {
+                                  token.defer("AmsBackendCfs::chute_parked",
+                                              [this, on_saved, watch, unregister]() {
+                                                  unregister();
+                                                  last_chute_save_line_ = *watch;
+                                                  if (on_saved)
+                                                      on_saved();
+                                              });
+                              });
+            });
+        });
+}
+
+bool AmsBackendCfs::last_chute_saved_position(double& x_mm, double& y_mm) const {
+    return parse_chute_save_line(last_chute_save_line_, x_mm, y_mm);
+}
+
+bool AmsBackendCfs::parse_chute_save_line(const std::string& line, double& x_mm, double& y_mm) {
+    if (sscanf(line.c_str(), "cmd_save_extrude_pos x=%lf y=%lf", &x_mm, &y_mm) == 2) {
+        return true;
+    }
+    return sscanf(line.c_str(), "SAVE_BOX_CFG ok: extrude_pos_x=%lf,extrude_pos_y=%lf", &x_mm,
+                  &y_mm) == 2;
 }
 
 AmsError AmsBackendCfs::exit_chute_calibration() {

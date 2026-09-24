@@ -338,6 +338,18 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// which is the point from which the toolhead is left off-park.
     AmsError exit_chute_calibration();
 
+    /// The position pair the last successful save reported on the response
+    /// stream ("cmd_save_extrude_pos x=.. y=..", or the SAVE_BOX_CFG echo).
+    /// False when no line was captured, so the caller can fall back to a
+    /// plain confirmation.
+    [[nodiscard]] bool last_chute_saved_position(double& x_mm, double& y_mm) const;
+
+    /// Parse one save-response line into @p x_mm / @p y_mm. Accepts both the
+    /// cmd_save_extrude_pos form and the SAVE_BOX_CFG ok echo. False when the
+    /// line carries no pair.
+    [[nodiscard]] static bool parse_chute_save_line(const std::string& line, double& x_mm,
+                                                    double& y_mm);
+
     // Static parsers (public for testing)
 
     /// Decide which `box` shape this payload is. Stock is the default for
@@ -591,6 +603,10 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     // from the static helpers (load_gcode/unload_gcode/swap_gcode), so this
     // is read on the script-build side, not in hot paths.
     CfsMacroVariant macro_variant_ = CfsMacroVariant::K2;
+
+    /// Save-response line captured by the last chute save (main thread only:
+    /// written when the save completes, read by last_chute_saved_position).
+    std::string last_chute_save_line_;
 
     /// Monotonic count of box.map parses — firmware-sourced by construction,
     /// since the optimistic path writes system_info_ via assign_tool_slot()

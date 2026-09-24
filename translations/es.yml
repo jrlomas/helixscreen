@@ -581,6 +581,8 @@ translations:
   ? Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses.
   : Elija el modelo que coincida con su impresora. Esto establece las macros de impresión, los roles de los ventiladores y el comportamiento de calibración que usa HelixScreen.
   Choose what to power off or restart.: Elija qué apagar o reiniciar.
+  'Chute position: X {:.1f}, Y {:.1f}': 'Posición del conducto de purga: X {:.1f}, Y {:.1f}'
+
   Clean Brush: 'Limpiar cepillo'
   Clean Nozzle: Limpiar Boquilla
   Cleaning Nozzle...: Limpiando boquilla...
