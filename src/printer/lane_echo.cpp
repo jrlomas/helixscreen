@@ -142,4 +142,21 @@ int OwnWriteEchoes::withhold(int slot_index, const std::string& boundary,
     return withheld;
 }
 
+int OwnWriteEchoes::strip_standing(int slot_index, Observation& producer_record) const {
+    const auto it = entries_.find(slot_index);
+    if (it == entries_.end() || !it->second.armed)
+        return 0;
+    const Observation& declared = it->second.declared;
+    int stripped = 0;
+    for_each_suppressible([&](auto member) {
+        const auto& mine = declared.*member;
+        auto& theirs = producer_record.*member;
+        if (mine.has_value() && theirs.has_value() && *mine == *theirs) {
+            theirs.reset();
+            ++stripped;
+        }
+    });
+    return stripped;
+}
+
 } // namespace helix::ams

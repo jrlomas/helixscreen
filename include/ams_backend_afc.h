@@ -159,6 +159,12 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     AmsBackendAfc(IMoonrakerAPI* api, helix::IMoonrakerClient* client);
     ~AmsBackendAfc() override;
 
+    /// The resync files stored records through this backend's echo guard, the
+    /// same one its parses consult.
+    [[nodiscard]] helix::ams::OwnWriteEchoes* own_write_echoes() override {
+        return &own_write_echoes_;
+    }
+
     /**
      * @brief Bare filament-sensor names AFC owns (no AMS keyword).
      *

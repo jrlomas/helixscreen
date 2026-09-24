@@ -188,11 +188,15 @@ void afc_state_translation_hints_() {
 
 // Run the echo guard over one frame's own statement of a lane's identity and
 // keep what it withholds out of the accumulator copy about to be filed.
-// @p stated is the statement — only fields the frame itself carried — and is
+// @p stated is the statement, the fields the frame itself carried, and is
 // filtered in place; a field the guard removed is told from one the frame
 // never mentioned by snapshotting the statement before the call. Only colour
 // and material are tracked: those are the identity fields an AFC write sends,
-// so a declaration can never exist for any other.
+// so a declaration can never exist for any other. The accumulator copy is
+// then stripped of any field still equal to a standing declaration, since it
+// re-states an echoed value on every later frame the producer is silent about
+// it; strip_standing removes equals without releasing anything, so the
+// pre-edit values the accumulator also holds still file as readings.
 int withhold_echoes(ams::OwnWriteEchoes& echoes, int slot_index, ams::Observation& stated,
                     ams::Observation& filed) {
     const ams::Observation judged = stated;
@@ -203,7 +207,7 @@ int withhold_echoes(ams::OwnWriteEchoes& echoes, int slot_index, ams::Observatio
     if (judged.material && !stated.material) {
         filed.material.reset();
     }
-    return withheld;
+    return withheld + echoes.strip_standing(slot_index, filed);
 }
 
 } // namespace
@@ -2445,8 +2449,9 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
     auto& firmware = lane_firmware_readings_[lane_name];
 
     // The colour and material this frame itself stated, gathered as the blocks
-    // below amend the accumulator — the two identity fields an AFC write sends,
-    // so the only two the echo guard can hold a declaration for. The guard
+    // below amend the accumulator. Colour and material are the two identity
+    // fields an AFC write sends, so the only two the echo guard can hold a
+    // declaration for. The guard
     // judges this record rather than `firmware.cache`: the accumulator carries
     // firmware's last word on every key, so a frame silent about material would
     // otherwise offer the pre-edit material as this frame's statement and
@@ -5587,12 +5592,16 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
                     !IMoonrakerAPI::is_safe_material_param(info.material)) {
                     staged->material.reset();
                 }
-                // No SET_* carries brand or spool name, so any value firmware
-                // reports for them is its own. Weight goes to a meter and the
-                // spool id to the binding machinery; the guard's own roster
-                // exempts both.
+                // No SET_* carries brand, spool name, a colour name or a
+                // product line, so any value firmware reports for them is its
+                // own. Weight goes to a meter and the spool id to the binding
+                // machinery; the guard's own roster exempts both. An inert
+                // field left declared would arm nothing but keep the entry
+                // alive after the real fields are all released.
                 staged->brand.reset();
                 staged->spool_name.reset();
+                staged->color_name.reset();
+                staged->product_name.reset();
             }
             own_write_echoes_.arm(slot_index, std::string{});
 

@@ -52,7 +52,7 @@ class OwnWriteEchoes {
     /// until the next stage() replaces it.
     ///
     /// @return The staging's sequence stamp. A backend whose dispatch can fail
-    ///         after the call returns — an HTTP response, a timer — captures
+    ///         after the call returns (an HTTP response, a timer) captures
     ///         the stamp and passes it to the matched abandon(), so a failure
     ///         answer landing after a later edit restaged the slot cancels
     ///         only the edit it belongs to.
@@ -86,8 +86,8 @@ class OwnWriteEchoes {
     /// The write never went out, so no echo is coming. Drops the staging.
     ///
     /// This form drops whatever the slot holds, whatever edit staged it. It is
-    /// for a caller that knows no write is outstanding — a boundary event on
-    /// this slot — not for an answer about one particular dispatch.
+    /// for a caller that knows no write is outstanding, such as a boundary
+    /// event on this slot, not for an answer about one particular dispatch.
     void abandon(int slot_index);
 
     /// The matched form: the failure answer of the staging @p staged_sequence
@@ -115,6 +115,17 @@ class OwnWriteEchoes {
     /// common swap early; the boundary catches a swap to a spool that reads
     /// identically, which value-difference cannot see.
     int withhold(int slot_index, const std::string& boundary, Observation& producer_record);
+
+    /// Remove from @p producer_record every suppressible field whose value
+    /// equals this slot's armed declaration, and return how many were
+    /// removed. Releases nothing and consumes nothing: withhold() alone
+    /// decides whether a declaration stands, by judging the fields a frame
+    /// itself stated. This is the filing half for producers whose record
+    /// accumulates: a field a later frame is silent about carries the last
+    /// filed value forward, which for an echoed field is our own write, and
+    /// filing it would put the abandoned edit back as the machine's word one
+    /// frame after the echo was withheld.
+    int strip_standing(int slot_index, Observation& producer_record) const;
 
   private:
     struct Entry {
