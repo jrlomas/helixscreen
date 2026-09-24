@@ -4372,6 +4372,35 @@ TEST_CASE("HappyHare override survives a gate-map update that omits identity",
     CHECK(after.total_weight_g == Catch::Approx(1000.0f));
 }
 
+TEST_CASE("Happy Hare's own gate writes carry the filament id", "[ams][happyhare][1632]") {
+    // The lane repaint that closes a full commit restates the field from the
+    // override, so an edit-driven assertion cannot tell the backend's own copy
+    // from the restatement. Both pins sit below any repaint: apply_user_edit()
+    // writes the gate and returns before commit_user_edit() repaints, and the
+    // retire runs here with no frame behind it at all.
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    SECTION("the editor write copies it into the gate") {
+        SlotInfo info = helper.get_slot_info(0);
+        info.spoolman_id = 42;
+        info.spoolman_filament_id = 55;
+        const AmsError err = helper.apply_user_edit(
+            0, info, helix::ams::user_edit_observation(helper.get_slot_info(0), info));
+        REQUIRE(err.success());
+        REQUIRE(helper.get_slot_info(0).spoolman_filament_id == 55);
+    }
+
+    SECTION("a departed binding's retire drops it") {
+        helper.set_gate_spoolman_link(0, 42, 55, 3);
+        REQUIRE(helper.get_slot_info(0).spoolman_filament_id == 55);
+        helix::HappyHareTestAccess::retire_departed_identity(helper, 0);
+        CHECK(helper.get_slot_info(0).spoolman_filament_id == 0);
+        CHECK(helper.get_slot_info(0).spoolman_vendor_id == 0);
+    }
+}
+
 TEST_CASE("HappyHare clear_slot_override drops the retained identity",
           "[ams][happyhare][override][1625]") {
     helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
