@@ -131,6 +131,19 @@ TEST_CASE("filament-temps parse: only the two temperature suffixes are ours",
     CHECK_FALSE(it->second.unload_c.has_value());
 }
 
+TEST_CASE("filament-temps parse: a zero temperature is an unset placeholder, not a target",
+          "[snapmaker][filament-temps]") {
+    // A 0 here would win over the DB rung and preheat the nozzle to 0C.
+    auto table = filament_temps::parse_filament_temperatures(
+        "// {'generic_PLA_Silk_load_temp': 0, 'generic_PLA_Silk_unload_temp': 230, "
+        "'generic_PETG_HF_load_temp': -5}");
+    auto silk = table.find(FilamentKey{"generic", "pla", "silk"});
+    REQUIRE(silk != table.end());
+    CHECK_FALSE(silk->second.load_c.has_value());
+    CHECK(silk->second.unload_c.value() == 230);
+    CHECK(table.find(FilamentKey{"generic", "petg", "hf"}) == table.end());
+}
+
 TEST_CASE("filament-temps parse: banner and malformed lines yield an empty map, never a throw",
           "[snapmaker][filament-temps]") {
     // FILAMENT_PARA_GET_ALL_INFO prints this banner before the dicts.

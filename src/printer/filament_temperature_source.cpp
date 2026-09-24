@@ -97,7 +97,9 @@ std::optional<int> scalar_temp(const nlohmann::json& value) {
         return std::nullopt;
     }
     const int64_t v = value.get<int64_t>();
-    if (v < 0 || v > 999) {
+    // 0 is the table's unset placeholder: as a load/unload target it would
+    // preheat the nozzle to 0C and shadow the DB rung below it.
+    if (v <= 0 || v > 999) {
         return std::nullopt;
     }
     return static_cast<int>(v);
