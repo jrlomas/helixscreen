@@ -1679,7 +1679,7 @@ class AmsState {
     void notify_external_spool_changed(const SlotInfo& info);
 
     /** @brief Set "Currently Loaded" subjects to default/empty state with guards */
-    void set_current_loaded_defaults();
+    void set_current_loaded_defaults(bool write_header = true);
 
     /** @brief Sync clog detection meter subjects from system info */
     void sync_clog_meter_from_info(const AmsSystemInfo& info);

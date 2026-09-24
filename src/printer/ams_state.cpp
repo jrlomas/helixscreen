@@ -3131,7 +3131,7 @@ bool AmsState::was_slot_recently_unloaded(int slot_index) const {
     return (std::chrono::steady_clock::now() - t) < RECENT_UNLOAD_GRACE;
 }
 
-void AmsState::set_current_loaded_defaults() {
+void AmsState::set_current_loaded_defaults(bool write_header) {
     // The card is back to empty, so the next real load is a change worth logging.
     last_synced_loaded_slot_ = -1;
     last_synced_filament_loaded_ = false;
@@ -3140,7 +3140,7 @@ void AmsState::set_current_loaded_defaults() {
         lv_subject_copy_string(&current_material_text_, "---");
     }
     const char* default_slot = lv_tr("Currently Loaded");
-    if (strcmp(lv_subject_get_string(&current_slot_text_), default_slot) != 0) {
+    if (write_header && strcmp(lv_subject_get_string(&current_slot_text_), default_slot) != 0) {
         lv_subject_copy_string(&current_slot_text_, default_slot);
     }
     if (strcmp(lv_subject_get_string(&current_weight_text_), "") != 0) {
@@ -3378,7 +3378,11 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
             }
         }
 
-        set_current_slot_header(*loaded_backend, slot_index);
+        // The header is written once per sync: an operation's working head
+        // below takes it, so the carriage slot does not flash in first.
+        if (!working_backend) {
+            set_current_slot_header(*loaded_backend, slot_index);
+        }
 
         // Show remaining weight if available (from Spoolman or backend)
         if (slot_info.total_weight_g > 0.0f && slot_info.remaining_weight_g >= 0.0f) {
@@ -3400,7 +3404,7 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
         }
     } else {
         // No filament loaded - show empty state
-        set_current_loaded_defaults();
+        set_current_loaded_defaults(/*write_header=*/!working_backend);
     }
 
     if (working_backend) {

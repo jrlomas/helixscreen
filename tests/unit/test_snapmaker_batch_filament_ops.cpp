@@ -711,9 +711,25 @@ TEST_CASE_METHOD(BatchFixture, "An op's working head names the header, not the l
     set_channel(1, "unload_homing", "ok", /*detected=*/true, /*module=*/true, /*no_auto=*/false);
     ams.sync_from_backend();
 
-    CHECK(std::string(lv_subject_get_string(header)) ==
-          "Current: " + helix::ui::lane_label(backend().lane_noun(), 1));
+    const std::string working_header =
+        "Current: " + helix::ui::lane_label(backend().lane_noun(), 1);
+    CHECK(std::string(lv_subject_get_string(header)) == working_header);
     CHECK(lv_subject_get_int(color) == card_at_rest);
+
+    SECTION("a repeat sync mid-op does not flash the carriage slot through the header") {
+        int notifications = 0;
+        lv_observer_t* obs = lv_subject_add_observer(
+            header,
+            [](lv_observer_t* o, lv_subject_t*) {
+                ++*static_cast<int*>(lv_observer_get_user_data(o));
+            },
+            &notifications);
+        notifications = 0; // adding an observer notifies it once
+        ams.sync_from_backend();
+        lv_observer_remove(obs);
+        CHECK(notifications == 0);
+        CHECK(std::string(lv_subject_get_string(header)) == working_header);
+    }
 }
 
 TEST_CASE_METHOD(BatchFixture, "AmsState answers whether any backend has a batch in flight",
