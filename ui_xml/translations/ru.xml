@@ -391,6 +391,7 @@
   <translation tag="Calibrating bed mesh..." ru="Калибровка сетки стола..."/>
   <translation tag="Calibrating {} axis..." ru="Калибровка оси {}..."/>
   <translation tag="Calibrating..." ru="Калибровка..."/>
+  <translation tag="Calibrating... (about 1 minute)" ru="Калибровка... (около 1 минуты)"/>
   <translation tag="Calibration" ru="Калибровка"/>
   <translation tag="Calibration &amp; Tools" ru="Калибровка и инструменты"/>
   <translation tag="Calibration Complete!" ru="Калибровка завершена!"/>
@@ -708,13 +709,13 @@
   <translation tag="Customize your home screen" ru="Настройте главный экран"/>
   <translation tag="Cut Distance" ru="Расстояние реза"/>
   <translation tag="Cut filament" ru="Обрезать филамент"/>
+  <translation tag="Cut position saved: {}" ru="Позиция реза сохранена: {}"/>
   <translation tag="Cut tip" ru="Обрезка кончика"/>
   <translation tag="Cutter Enabled" ru="Резак включён"/>
   <translation tag="Cutter and purge chute calibration" ru="Калибровка резака и жёлоба продувки"/>
   <translation tag="Cutter blade didn&apos;t sever filament" ru="Лезвие не перерезало филамент"/>
   <translation tag="Cutter calibration completed" ru="Калибровка резака завершена"/>
   <translation tag="Cutter calibration failed: {}" ru="Не удалось калибровать резак: {}"/>
-  <translation tag="Cutter calibration: {}" ru="Калибровка резака: {}"/>
   <translation tag="Cutter jam" ru="Замятие резака"/>
   <translation tag="Cutting" ru="Резка"/>
   <translation tag="Cutting filament..." ru="Обрезка филамента..."/>

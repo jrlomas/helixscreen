@@ -391,6 +391,7 @@
   <translation tag="Calibrating bed mesh..." de="Bettnetz kalibrieren..."/>
   <translation tag="Calibrating {} axis..." de="Kalibriere Achse {}..."/>
   <translation tag="Calibrating..." de="Kalibriere..."/>
+  <translation tag="Calibrating... (about 1 minute)" de="Kalibriere... (ca. 1 Minute)"/>
   <translation tag="Calibration" de="Kalibrierung"/>
   <translation tag="Calibration &amp; Tools" de="Kalibrierung &amp; Werkzeuge"/>
   <translation tag="Calibration Complete!" de="Kalibrierung abgeschlossen!"/>
@@ -708,13 +709,13 @@
   <translation tag="Customize your home screen" de="Startbildschirm anpassen"/>
   <translation tag="Cut Distance" de="Schnittweg"/>
   <translation tag="Cut filament" de="Filament schneiden"/>
+  <translation tag="Cut position saved: {}" de="Schnittposition gespeichert: {}"/>
   <translation tag="Cut tip" de="Spitze schneiden"/>
   <translation tag="Cutter Enabled" de="Schneider aktiviert"/>
   <translation tag="Cutter and purge chute calibration" de="Schneider- und Entlüftungsrinnen-Kalibrierung"/>
   <translation tag="Cutter blade didn&apos;t sever filament" de="Schneidklinge hat das Filament nicht durchtrennt"/>
   <translation tag="Cutter calibration completed" de="Schneider-Kalibrierung abgeschlossen"/>
   <translation tag="Cutter calibration failed: {}" de="Schneider-Kalibrierung fehlgeschlagen: {}"/>
-  <translation tag="Cutter calibration: {}" de="Schneider-Kalibrierung: {}"/>
   <translation tag="Cutter jam" de="Schneidestau"/>
   <translation tag="Cutting" de="Schneiden"/>
   <translation tag="Cutting filament..." de="Filament wird geschnitten..."/>

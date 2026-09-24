@@ -391,6 +391,7 @@
   <translation tag="Calibrating bed mesh..." ja="ベッドメッシュをキャリブレーション中..."/>
   <translation tag="Calibrating {} axis..." ja="{} 軸をキャリブレーション中..."/>
   <translation tag="Calibrating..." ja="キャリブレーション中..."/>
+  <translation tag="Calibrating... (about 1 minute)" ja="キャリブレーション中...（約1分）"/>
   <translation tag="Calibration" ja="キャリブレーション"/>
   <translation tag="Calibration &amp; Tools" ja="キャリブレーションとツール"/>
   <translation tag="Calibration Complete!" ja="キャリブレーション完了！"/>
@@ -708,13 +709,13 @@
   <translation tag="Customize your home screen" ja="ホーム画面をカスタマイズ"/>
   <translation tag="Cut Distance" ja="カット距離"/>
   <translation tag="Cut filament" ja="フィラメントを切断"/>
+  <translation tag="Cut position saved: {}" ja="切断位置を保存しました: {}"/>
   <translation tag="Cut tip" ja="先端をカット"/>
   <translation tag="Cutter Enabled" ja="カッター有効"/>
   <translation tag="Cutter and purge chute calibration" ja="カッターとパージシュートのキャリブレーション"/>
   <translation tag="Cutter blade didn&apos;t sever filament" ja="カッターの刃がフィラメントを切断できませんでした"/>
   <translation tag="Cutter calibration completed" ja="カッターのキャリブレーションが完了しました"/>
   <translation tag="Cutter calibration failed: {}" ja="カッターのキャリブレーションに失敗しました: {}"/>
-  <translation tag="Cutter calibration: {}" ja="カッターのキャリブレーション: {}"/>
   <translation tag="Cutter jam" ja="カッター詰まり"/>
   <translation tag="Cutting" ja="カット中"/>
   <translation tag="Cutting filament..." ja="フィラメントを切断中..."/>

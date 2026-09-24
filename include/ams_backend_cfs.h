@@ -312,9 +312,10 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// BOX_FIND_CUT_POS: the firmware homes X/Y, sweeps the cutter and
     /// rewrites cut_pos_y in box.cfg (~60s). Result lines arrive on the gcode
     /// response stream; on_result fires once, on the main thread, with the
-    /// final "Found cut position" line (empty when none was captured).
+    /// sweep's outcome: ok with the final "Found cut position" line (empty
+    /// when none was captured), or the failure that ended it early.
     AmsError
-    calibrate_cutter(std::function<void(const std::string& found_line)> on_result = nullptr);
+    calibrate_cutter(std::function<void(bool ok, const std::string& line)> on_result = nullptr);
 
     /// Chute steps 1+2: XYZ_ZERO (~55s full home) then
     /// COORDINATES_ADJUST_PREPARE (parks Y at the box's safe position).
@@ -349,6 +350,11 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// line carries no pair.
     [[nodiscard]] static bool parse_chute_save_line(const std::string& line, double& x_mm,
                                                     double& y_mm);
+
+    /// Parse a "Found cut position y: 304.0" sweep result into @p axis and
+    /// @p value_mm. False when the line is not a found-position report.
+    [[nodiscard]] static bool parse_cut_found_line(const std::string& line, char& axis,
+                                                   double& value_mm);
 
     // Static parsers (public for testing)
 

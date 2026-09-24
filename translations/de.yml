@@ -433,6 +433,7 @@ translations:
   Calibrating bed mesh...: Bettnetz kalibrieren...
   Calibrating {} axis...: 'Kalibriere Achse {}...'
   Calibrating...: Kalibriere...
+  Calibrating... (about 1 minute): 'Kalibriere... (ca. 1 Minute)'
   Calibration: Kalibrierung
   Calibration & Tools: Kalibrierung & Werkzeuge
   Calibration Complete!: Kalibrierung abgeschlossen!
@@ -798,13 +799,13 @@ translations:
   Customize your home screen: Startbildschirm anpassen
   Cut Distance: 'Schnittweg'
   Cut filament: Filament schneiden
+  'Cut position saved: {}': 'Schnittposition gespeichert: {}'
   Cut tip: 'Spitze schneiden'
   Cutter Enabled: 'Schneider aktiviert'
   Cutter and purge chute calibration: Schneider- und Entlüftungsrinnen-Kalibrierung
   Cutter blade didn't sever filament: Schneidklinge hat das Filament nicht durchtrennt
   Cutter calibration completed: Schneider-Kalibrierung abgeschlossen
   'Cutter calibration failed: {}': 'Schneider-Kalibrierung fehlgeschlagen: {}'
-  'Cutter calibration: {}': 'Schneider-Kalibrierung: {}'
   Cutter jam: Schneidestau
   Cutting: Schneiden
   Cutting filament...: Filament wird geschnitten...

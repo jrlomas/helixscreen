@@ -4023,7 +4023,8 @@ AmsError AmsBackendCfs::execute_device_action(const std::string& action_id,
 // (its cutter check is MOTOR_CHECK_CUT_POS) and the Kalico fork was never
 // observed to expose them either.
 
-AmsError AmsBackendCfs::calibrate_cutter(std::function<void(const std::string&)> on_result) {
+AmsError
+AmsBackendCfs::calibrate_cutter(std::function<void(bool ok, const std::string& line)> on_result) {
     if (macro_variant_ != CfsMacroVariant::K1) {
         return AmsErrorHelper::not_supported("Cutter calibration is K1-stock only");
     }
@@ -4070,20 +4071,17 @@ AmsError AmsBackendCfs::calibrate_cutter(std::function<void(const std::string&)>
             unregister();
             const std::string& line =
                 !watch->found_line.empty() ? watch->found_line : watch->saved_line;
-            if (!line.empty()) {
-                NOTIFY_INFO(lv_tr("Cutter calibration: {}"), line);
-            } else {
-                NOTIFY_INFO(lv_tr("Cutter calibration completed"));
-            }
             if (on_result) {
-                on_result(line);
+                on_result(true, line);
             }
         });
     };
-    auto on_error = [token, unregister](const MoonrakerError& err) {
-        token.defer("AmsBackendCfs::cutcal_err", [err, unregister]() {
+    auto on_error = [token, on_result, unregister](const MoonrakerError& err) {
+        token.defer("AmsBackendCfs::cutcal_err", [token, on_result, unregister, err]() {
             unregister();
-            NOTIFY_ERROR(lv_tr("Cutter calibration failed: {}"), err.message);
+            if (on_result) {
+                on_result(false, err.message);
+            }
         });
     };
     return execute_gcode("BOX_FIND_CUT_POS", std::move(on_complete), std::move(on_error));
@@ -4197,6 +4195,10 @@ bool AmsBackendCfs::parse_chute_save_line(const std::string& line, double& x_mm,
     }
     return sscanf(line.c_str(), "SAVE_BOX_CFG ok: extrude_pos_x=%lf,extrude_pos_y=%lf", &x_mm,
                   &y_mm) == 2;
+}
+
+bool AmsBackendCfs::parse_cut_found_line(const std::string& line, char& axis, double& value_mm) {
+    return sscanf(line.c_str(), "Found cut position %c: %lf", &axis, &value_mm) == 2;
 }
 
 AmsError AmsBackendCfs::exit_chute_calibration() {

@@ -396,6 +396,7 @@ translations:
   Calibrating bed mesh...: 正在校准热床网格...
   Calibrating {} axis...: '正在校准 {} 轴...'
   Calibrating...: 正在校准...
+  Calibrating... (about 1 minute): 校准中...（约1分钟）
   Calibration: 校准
   Calibration & Tools: 校准与工具
   Calibration Complete!: 校准完成！
@@ -721,13 +722,13 @@ translations:
   Customize your home screen: 自定义主屏幕
   Cut Distance: '切割距离'
   Cut filament: 切断耗材
+  'Cut position saved: {}': '切割位置已保存: {}'
   Cut tip: '切断尖端'
   Cutter Enabled: '切刀已启用'
   Cutter and purge chute calibration: 切刀与排料口校准
   Cutter blade didn't sever filament: 切刀未能切断耗材
   Cutter calibration completed: 切刀校准完成
   'Cutter calibration failed: {}': 切刀校准失败：{}
-  'Cutter calibration: {}': 切刀校准：{}
   Cutter jam: 切刀卡住
   Cutting: 切割中
   Cutting filament...: 正在切断耗材...

@@ -397,6 +397,7 @@ translations:
   Calibrating bed mesh...: ベッドメッシュをキャリブレーション中...
   Calibrating {} axis...: '{} 軸をキャリブレーション中...'
   Calibrating...: キャリブレーション中...
+  Calibrating... (about 1 minute): キャリブレーション中...（約1分）
   Calibration: キャリブレーション
   Calibration & Tools: キャリブレーションとツール
   Calibration Complete!: キャリブレーション完了！
@@ -723,13 +724,13 @@ translations:
   Customize your home screen: ホーム画面をカスタマイズ
   Cut Distance: 'カット距離'
   Cut filament: フィラメントを切断
+  'Cut position saved: {}': '切断位置を保存しました: {}'
   Cut tip: '先端をカット'
   Cutter Enabled: 'カッター有効'
   Cutter and purge chute calibration: カッターとパージシュートのキャリブレーション
   Cutter blade didn't sever filament: カッターの刃がフィラメントを切断できませんでした
   Cutter calibration completed: カッターのキャリブレーションが完了しました
   'Cutter calibration failed: {}': 'カッターのキャリブレーションに失敗しました: {}'
-  'Cutter calibration: {}': 'カッターのキャリブレーション: {}'
   Cutter jam: カッター詰まり
   Cutting: カット中
   Cutting filament...: フィラメントを切断中...

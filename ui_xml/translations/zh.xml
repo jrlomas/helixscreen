@@ -391,6 +391,7 @@
   <translation tag="Calibrating bed mesh..." zh="正在校准热床网格..."/>
   <translation tag="Calibrating {} axis..." zh="正在校准 {} 轴..."/>
   <translation tag="Calibrating..." zh="正在校准..."/>
+  <translation tag="Calibrating... (about 1 minute)" zh="校准中...（约1分钟）"/>
   <translation tag="Calibration" zh="校准"/>
   <translation tag="Calibration &amp; Tools" zh="校准与工具"/>
   <translation tag="Calibration Complete!" zh="校准完成！"/>
@@ -708,13 +709,13 @@
   <translation tag="Customize your home screen" zh="自定义主屏幕"/>
   <translation tag="Cut Distance" zh="切割距离"/>
   <translation tag="Cut filament" zh="切断耗材"/>
+  <translation tag="Cut position saved: {}" zh="切割位置已保存: {}"/>
   <translation tag="Cut tip" zh="切断尖端"/>
   <translation tag="Cutter Enabled" zh="切刀已启用"/>
   <translation tag="Cutter and purge chute calibration" zh="切刀与排料口校准"/>
   <translation tag="Cutter blade didn&apos;t sever filament" zh="切刀未能切断耗材"/>
   <translation tag="Cutter calibration completed" zh="切刀校准完成"/>
   <translation tag="Cutter calibration failed: {}" zh="切刀校准失败：{}"/>
-  <translation tag="Cutter calibration: {}" zh="切刀校准：{}"/>
   <translation tag="Cutter jam" zh="切刀卡住"/>
   <translation tag="Cutting" zh="切割中"/>
   <translation tag="Cutting filament..." zh="正在切断耗材..."/>

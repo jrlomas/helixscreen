@@ -429,6 +429,7 @@ translations:
   Calibrating bed mesh...: Calibrazione mesh piano...
   Calibrating {} axis...: 'Calibrazione dell''asse {}...'
   Calibrating...: Calibrazione in corso...
+  Calibrating... (about 1 minute): 'Calibrazione... (circa 1 minuto)'
   Calibration: Calibrazione
   Calibration & Tools: Calibrazione e Strumenti
   Calibration Complete!: Calibrazione completata!
@@ -789,13 +790,13 @@ translations:
   Customize your home screen: Personalizza la schermata principale
   Cut Distance: 'Distanza di taglio'
   Cut filament: Taglia filamento
+  'Cut position saved: {}': 'Posizione di taglio salvata: {}'
   Cut tip: 'Taglia la punta'
   Cutter Enabled: 'Taglierina abilitata'
   Cutter and purge chute calibration: Calibrazione taglierina e condotto di spurgo
   Cutter blade didn't sever filament: La lama non ha reciso il filamento
   Cutter calibration completed: Calibrazione taglierina completata
   'Cutter calibration failed: {}': 'Calibrazione taglierina non riuscita: {}'
-  'Cutter calibration: {}': 'Calibrazione taglierina: {}'
   Cutter jam: Inceppamento taglierina
   Cutting: Taglio
   Cutting filament...: Taglio filamento...

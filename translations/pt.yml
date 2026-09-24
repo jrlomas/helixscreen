@@ -427,6 +427,7 @@ translations:
   Calibrating bed mesh...: Calibrando malha da mesa...
   Calibrating {} axis...: 'Calibrando o eixo {}...'
   Calibrating...: Calibrando...
+  Calibrating... (about 1 minute): 'Calibrando... (cerca de 1 minuto)'
   Calibration: Calibração
   Calibration & Tools: Calibração e Ferramentas
   Calibration Complete!: Calibração Concluída!
@@ -794,13 +795,13 @@ translations:
   Customize your home screen: Personalize sua tela inicial
   Cut Distance: 'Distância de corte'
   Cut filament: Cortar filamento
+  'Cut position saved: {}': 'Posição de corte salva: {}'
   Cut tip: 'Cortar a ponta'
   Cutter Enabled: 'Cortador habilitado'
   Cutter and purge chute calibration: Calibração do cortador e da calha de purga
   Cutter blade didn't sever filament: A lâmina não cortou o filamento
   Cutter calibration completed: Calibração do cortador concluída
   'Cutter calibration failed: {}': 'Falha na calibração do cortador: {}'
-  'Cutter calibration: {}': 'Calibração do cortador: {}'
   Cutter jam: Atolamento do cortador
   Cutting: Cortando
   Cutting filament...: Cortando filamento...

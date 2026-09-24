@@ -391,6 +391,7 @@
   <translation tag="Calibrating bed mesh..." en="Calibrating bed mesh..."/>
   <translation tag="Calibrating {} axis..." en="Calibrating {} axis..."/>
   <translation tag="Calibrating..." en="Calibrating..."/>
+  <translation tag="Calibrating... (about 1 minute)" en="Calibrating... (about 1 minute)"/>
   <translation tag="Calibration" en="Calibration"/>
   <translation tag="Calibration &amp; Tools" en="Calibration &amp; Tools"/>
   <translation tag="Calibration Complete!" en="Calibration Complete!"/>
@@ -708,13 +709,13 @@
   <translation tag="Customize your home screen" en="Customize your home screen"/>
   <translation tag="Cut Distance" en="Cut Distance"/>
   <translation tag="Cut filament" en="Cut filament"/>
+  <translation tag="Cut position saved: {}" en="Cut position saved: {}"/>
   <translation tag="Cut tip" en="Cut tip"/>
   <translation tag="Cutter Enabled" en="Cutter Enabled"/>
   <translation tag="Cutter and purge chute calibration" en="Cutter and purge chute calibration"/>
   <translation tag="Cutter blade didn&apos;t sever filament" en="Cutter blade didn&apos;t sever filament"/>
   <translation tag="Cutter calibration completed" en="Cutter calibration completed"/>
   <translation tag="Cutter calibration failed: {}" en="Cutter calibration failed: {}"/>
-  <translation tag="Cutter calibration: {}" en="Cutter calibration: {}"/>
   <translation tag="Cutter jam" en="Cutter jam"/>
   <translation tag="Cutting" en="Cutting"/>
   <translation tag="Cutting filament..." en="Cutting filament..."/>

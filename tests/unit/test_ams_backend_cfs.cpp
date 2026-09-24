@@ -482,8 +482,8 @@ TEST_CASE("CFS cutter calibration sends BOX_FIND_CUT_POS through the long-send p
     CfsCalibHelper backend;
     bool got_result = false;
     std::string result_line;
-    auto err = backend.calibrate_cutter([&](const std::string& line) {
-        got_result = true;
+    auto err = backend.calibrate_cutter([&](bool ok, const std::string& line) {
+        got_result = ok;
         result_line = line;
     });
     REQUIRE(err.success());
@@ -548,6 +548,18 @@ TEST_CASE("CFS chute save line parses both firmware echo forms (#1282)", "[ams][
 
     CHECK_FALSE(AmsBackendCfs::parse_chute_save_line("SAVE_BOX_CFG ok: cut_pos_y=223.5", x, y));
     CHECK_FALSE(AmsBackendCfs::parse_chute_save_line("", x, y));
+}
+
+TEST_CASE("CFS cutter found line parses axis and value (#1282)", "[ams][cfs][calib]") {
+    char axis = '\0';
+    double value = 0.0;
+    REQUIRE(AmsBackendCfs::parse_cut_found_line("Found cut position y: 304.0", axis, value));
+    CHECK(axis == 'y');
+    CHECK(value == Catch::Approx(304.0));
+
+    CHECK_FALSE(
+        AmsBackendCfs::parse_cut_found_line("SAVE_BOX_CFG ok: cut_pos_y=223.5", axis, value));
+    CHECK_FALSE(AmsBackendCfs::parse_cut_found_line("", axis, value));
 }
 
 TEST_CASE("CFS calibration refuses while a print owns the machine (#1282)", "[ams][cfs][calib]") {

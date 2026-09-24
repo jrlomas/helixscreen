@@ -391,6 +391,7 @@
   <translation tag="Calibrating bed mesh..." fr="Calibration du maillage du plateau..."/>
   <translation tag="Calibrating {} axis..." fr="Calibration de l&apos;axe {}..."/>
   <translation tag="Calibrating..." fr="Calibration..."/>
+  <translation tag="Calibrating... (about 1 minute)" fr="Calibrage... (environ 1 minute)"/>
   <translation tag="Calibration" fr="Calibration"/>
   <translation tag="Calibration &amp; Tools" fr="Calibration et outils"/>
   <translation tag="Calibration Complete!" fr="Calibration terminée !"/>
@@ -708,13 +709,13 @@
   <translation tag="Customize your home screen" fr="Personnalisez votre écran d&apos;accueil"/>
   <translation tag="Cut Distance" fr="Distance de coupe"/>
   <translation tag="Cut filament" fr="Couper le filament"/>
+  <translation tag="Cut position saved: {}" fr="Position de coupe enregistrée : {}"/>
   <translation tag="Cut tip" fr="Couper la pointe"/>
   <translation tag="Cutter Enabled" fr="Coupeur activé"/>
   <translation tag="Cutter and purge chute calibration" fr="Calibration du coupeur et de la goulotte de purge"/>
   <translation tag="Cutter blade didn&apos;t sever filament" fr="La lame n&apos;a pas sectionné le filament"/>
   <translation tag="Cutter calibration completed" fr="Calibration du coupeur terminée"/>
   <translation tag="Cutter calibration failed: {}" fr="Échec de la calibration du coupeur : {}"/>
-  <translation tag="Cutter calibration: {}" fr="Calibration du coupeur : {}"/>
   <translation tag="Cutter jam" fr="Bourrage du coupeur"/>
   <translation tag="Cutting" fr="Coupe"/>
   <translation tag="Cutting filament..." fr="Coupe du filament..."/>

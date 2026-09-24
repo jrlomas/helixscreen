@@ -18,6 +18,8 @@
 #if HELIX_HAS_CFS
 #include "ui_cfs_chute_calibration_overlay.h"
 #include "ui_modal.h"
+
+#include "ams_backend_cfs.h"
 #endif
 
 #include "ams_backend.h"
@@ -30,6 +32,7 @@
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
+#include <cctype>
 #include <memory>
 
 namespace helix::ui {
@@ -497,6 +500,32 @@ void AmsDeviceSectionDetailOverlay::create_button_in_row(
 #if HELIX_HAS_CFS
 /// Cutter calibration confirm: BOX_FIND_CUT_POS homes X/Y and takes about a
 /// minute, so the click asks before moving the printer.
+namespace {
+/// The sweep runs ~60s with no other visible progress, so the calibration
+/// rows themselves carry the flow's state: busy while the macro runs, then
+/// the found position or the failure. A toast result would expire, and one
+/// queued behind a "started" toast stays hidden for its whole lifetime.
+void set_cutter_row_state(const char* label_text, bool busy) {
+    lv_obj_t* screen = lv_screen_active();
+    if (lv_obj_t* lbl = lv_obj_find_by_name(screen, "calibrate_cutter_label")) {
+        // The label belongs to a control built dynamically from backend data
+        // (this file's documented exception), not an XML template.
+        lv_label_set_text(lbl, label_text); // DECLARATIVE_OK: dynamic backend-built control
+    }
+    // Both calibration actions home the machine; neither may start while a
+    // sweep owns it.
+    for (const char* name : {"calibrate_cutter", "calibrate_purge_chute"}) {
+        if (lv_obj_t* btn = lv_obj_find_by_name(screen, name)) {
+            if (busy) {
+                lv_obj_add_state(btn, LV_STATE_DISABLED);
+            } else {
+                lv_obj_remove_state(btn, LV_STATE_DISABLED);
+            }
+        }
+    }
+}
+} // namespace
+
 static void confirm_cutter_calibration(const std::string& label) {
     helix::ui::ConfirmOptions opts;
     helix::ui::modal_confirm(
@@ -506,13 +535,29 @@ static void confirm_cutter_calibration(const std::string& label) {
         ModalSeverity::Warning, lv_tr("Start"),
         [label]() {
             AmsBackend* backend = AmsState::instance().get_backend();
-            if (!backend) {
+            if (!backend || backend->get_type() != AmsType::CFS) {
                 return;
             }
-            AmsError result = backend->execute_device_action("calibrate_cutter");
-            if (result.success()) {
-                NOTIFY_INFO(lv_tr("{} started"), lv_tr(label.c_str()));
-            } else {
+            auto* cfs = static_cast<helix::printer::AmsBackendCfs*>(backend);
+            set_cutter_row_state(lv_tr("Calibrating... (about 1 minute)"), true);
+            AmsError result = cfs->calibrate_cutter([label](bool ok, const std::string& line) {
+                char axis = '\0';
+                double value_mm = 0.0;
+                std::string text;
+                if (ok &&
+                    helix::printer::AmsBackendCfs::parse_cut_found_line(line, axis, value_mm)) {
+                    text = fmt::format(
+                        lv_tr("Cut position saved: {}"),
+                        fmt::format("{} {:.1f}", static_cast<char>(std::toupper(axis)), value_mm));
+                } else if (ok) {
+                    text = lv_tr("Cutter calibration completed");
+                } else {
+                    text = fmt::format(lv_tr("Cutter calibration failed: {}"), line);
+                }
+                set_cutter_row_state(text.c_str(), false);
+            });
+            if (!result.success()) {
+                set_cutter_row_state(lv_tr(label.c_str()), false);
                 helix::ui::notify_ams_error(result);
             }
         },

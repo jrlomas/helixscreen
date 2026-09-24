@@ -433,6 +433,7 @@ translations:
   Calibrating bed mesh...: Calibration du maillage du plateau...
   Calibrating {} axis...: 'Calibration de l''axe {}...'
   Calibrating...: Calibration...
+  Calibrating... (about 1 minute): 'Calibrage... (environ 1 minute)'
   Calibration: Calibration
   Calibration & Tools: Calibration et outils
   Calibration Complete!: Calibration terminée !
@@ -799,13 +800,13 @@ translations:
   Customize your home screen: Personnalisez votre écran d'accueil
   Cut Distance: 'Distance de coupe'
   Cut filament: Couper le filament
+  'Cut position saved: {}': 'Position de coupe enregistrée : {}'
   Cut tip: 'Couper la pointe'
   Cutter Enabled: 'Coupeur activé'
   Cutter and purge chute calibration: Calibration du coupeur et de la goulotte de purge
   Cutter blade didn't sever filament: La lame n'a pas sectionné le filament
   Cutter calibration completed: Calibration du coupeur terminée
   'Cutter calibration failed: {}': 'Échec de la calibration du coupeur : {}'
-  'Cutter calibration: {}': 'Calibration du coupeur : {}'
   Cutter jam: Bourrage du coupeur
   Cutting: Coupe
   Cutting filament...: Coupe du filament...

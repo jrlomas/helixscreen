@@ -422,6 +422,7 @@ translations:
   Calibrating bed mesh...: Калибровка сетки стола...
   Calibrating {} axis...: 'Калибровка оси {}...'
   Calibrating...: Калибровка...
+  Calibrating... (about 1 minute): 'Калибровка... (около 1 минуты)'
   Calibration: Калибровка
   Calibration & Tools: Калибровка и инструменты
   Calibration Complete!: Калибровка завершена!
@@ -781,13 +782,13 @@ translations:
   Customize your home screen: Настройте главный экран
   Cut Distance: 'Расстояние реза'
   Cut filament: Обрезать филамент
+  'Cut position saved: {}': 'Позиция реза сохранена: {}'
   Cut tip: 'Обрезка кончика'
   Cutter Enabled: 'Резак включён'
   Cutter and purge chute calibration: Калибровка резака и жёлоба продувки
   Cutter blade didn't sever filament: Лезвие не перерезало филамент
   Cutter calibration completed: Калибровка резака завершена
   'Cutter calibration failed: {}': 'Не удалось калибровать резак: {}'
-  'Cutter calibration: {}': 'Калибровка резака: {}'
   Cutter jam: Замятие резака
   Cutting: Резка
   Cutting filament...: Обрезка филамента...

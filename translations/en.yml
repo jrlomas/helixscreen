@@ -416,6 +416,7 @@ translations:
   'Calibrating bed mesh...': 'Calibrating bed mesh...'
   Calibrating {} axis...: Calibrating {} axis...
   Calibrating...: Calibrating...
+  Calibrating... (about 1 minute): Calibrating... (about 1 minute)
   Calibration: Calibration
   Calibration & Tools: Calibration & Tools
   Calibration Complete!: Calibration Complete!
@@ -767,13 +768,13 @@ translations:
   Customize your home screen: Customize your home screen
   Cut Distance: Cut Distance
   Cut filament: Cut filament
+  'Cut position saved: {}': 'Cut position saved: {}'
   Cut tip: Cut tip
   Cutter Enabled: Cutter Enabled
   Cutter and purge chute calibration: Cutter and purge chute calibration
   Cutter blade didn't sever filament: Cutter blade didn't sever filament
   Cutter calibration completed: Cutter calibration completed
   'Cutter calibration failed: {}': 'Cutter calibration failed: {}'
-  'Cutter calibration: {}': 'Cutter calibration: {}'
   Cutter jam: Cutter jam
   Cutting: Cutting
   Cutting filament...: Cutting filament...
