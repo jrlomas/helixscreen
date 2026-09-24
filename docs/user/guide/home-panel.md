@@ -81,13 +81,13 @@ You can stay in Edit Mode or not - the tile and its + work either way.
 4. Drop the widget anywhere on it. The new page is created past the last one, with the widget where you dropped it. Drag back instead and no page is created
 5. Add more widgets to the new page (see [Adding a Widget](#adding-a-widget))
 
-The same works at the **left edge of your first page**: carry a widget past it, drop it on the empty page that slides in, and the new page is created **before** your first one - everything else shifts one page to the right, with all its widgets.
+At the **left edge of your first page** nothing slides in; the page is made when you let go. Drag the widget until most of it is past the left edge of your first page (over the navigation bar, in landscape) and release. The new page is created **before** your first one, with the widget at its left side, and every other page shifts one to the right with all its widgets.
 
 Swiping never takes you past your last page, except to the Add page tile: the empty page slides in only while you drag a widget onto it. If the widget you dragged was the last one on its page, that page is removed as the new one is created (see [Moving a Widget to Another Page](#moving-a-widget-to-another-page)).
 
 ### Page Limit
 
-The dashboard supports up to **8 pages**. At the limit there is no Add page tile to swipe to, and no empty page slides in when you drag a widget past either edge of your pages.
+The dashboard supports up to **8 pages**. At the limit there is no Add page tile to swipe to, and dragging a widget past the edge of your first or last page creates nothing.
 
 ---
 
@@ -134,10 +134,10 @@ The widget you long-pressed is selected, not picked up, however long you keep ho
 
 1. Start dragging a widget
 2. Carry it past the left or right edge of the page until most of the widget is over the border, or hold your finger near the edge of the widget area for a moment (in landscape, the left edge is the one beside the navigation bar)
-3. The next page slides in, with the widget still under your finger
+3. The neighbouring page slides in, with the widget still under your finger. At the left edge of your first page there is no page to slide in: letting go there creates a new page in front (see [Adding a Page](#adding-a-page))
 4. Drop the widget where you want it
 
-**Creating a page by dropping:** drag a widget past your last page and an empty page slides in. Drop the widget anywhere on it and the page is created, with the widget where you dropped it. Drag back instead and no page is created. Dragging past the **left edge of your first page** works the same way and creates the page **before** it. At the 8-page limit there is no empty page to drag onto, in either direction.
+**Creating a page by dropping:** drag a widget past your last page and an empty page slides in. Drop the widget anywhere on it and the page is created, with the widget where you dropped it. Drag back instead and no page is created. At the **left edge of your first page** no page slides in: release the widget with most of it past that edge and a new page is created **before** your first one, with the widget at its left side. At the 8-page limit neither edge creates a page.
 
 **Empty pages remove themselves:** when a page's last widget is moved to another page or removed, the empty page is deleted from your layout. The main page is never removed this way. A page that still holds widgets greyed out because their hardware isn't detected is not empty, and stays.
 

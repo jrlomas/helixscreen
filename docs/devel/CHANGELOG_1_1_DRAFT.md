@@ -132,8 +132,9 @@ what gets saved.
   reachable even when you have a single page. To grow a page out of a widget instead, long-press
   the home screen, pick up a widget and drag it past your last page: an empty page slides in, and
   dropping the widget there creates the page with the widget on it, in place, without the home
-  screen sliding back to the page before it first. Dragging past your first page's left edge
-  works the same way and creates the page before it.
+  screen sliding back to the page before it first. At your first page's left edge nothing slides
+  in: let go with most of the widget past that edge and a new page is created in front, with the
+  widget at its left side.
 - **Cancelling a print from a runout dialog asks first** - the guidance dialog cancelled on
   the first tap, while the print-status Stop button has always confirmed. One printer had two
   cancel affordances and only one of them asked, and the unconfirmed one sat in a dialog whose
