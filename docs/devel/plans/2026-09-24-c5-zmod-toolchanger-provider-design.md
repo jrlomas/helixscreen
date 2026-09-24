@@ -87,17 +87,19 @@ because that model needs baseline/echo detection with a history of lost updates 
 Before the first `slots` frame (a Z-Mod build without the export) the hook answers "none" and edits
 are declared locally, as on any tool changer.
 
-**Type mapping:** a material outside `zmod_color.valid_types` goes through the mapping AD5X already
-applies to material names used as gcode parameters (`FILAMENT_MANAGEMENT.md` § "Material names as
-G-code parameter values"); the plan decides how to share it. Unmappable -> the edit is refused with
-a stated reason, never sent.
+**Type mapping:** `zmod_color.valid_types` becomes the backend's `get_supported_materials()`, so
+the edit dropdown offers only those, and `AmsBackend::normalize_material()` (the pipeline every
+restricted-firmware backend uses) maps anything else by compat group before sending. A type the
+firmware lists but that is unsafe on a gcode line (`IMoonrakerAPI::is_safe_material_param()`) is
+refused with an error and never sent.
 
 **Colour palette:** `filament.json` stores a colour as an index into Z-Mod's `COLOR_MAPPING` (24
 entries). A hex outside it is saved as index 0, white. The writer therefore snaps the picked colour
 to the nearest palette entry before sending, the same rule QIDI Box already applies
 (`AmsBackendQidi::resolve_color_id`, squared RGB distance), extracted into one shared helper rather
 than copied. The palette comes from `zmod_color.palette` (hex keys in index order), added to the
-upstream PR. With no palette in the frame, colour writes are not sent; material writes still are.
+upstream PR. `slots` and `palette` arrive together from that PR; write-through, and the firmware
+owning colour and material, start only once both have been seen. Before that, edits stay local.
 
 **No dialog:** `CHANGE_ZCOLOR` with `HEX` and `TYPE` calls `GET_ZCOLOR` on the same command, which
 opens a Mainsail/Fluidd prompt unless `SILENT=1` is set. The writer always sends
