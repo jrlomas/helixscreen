@@ -184,24 +184,52 @@ helix_env_stat() {
     return 0
 }
 
-# Keys the env file may set. HELIX_* is ours; the MALLOC_* trio are the glibc
-# knobs the heap-diagnostic and arena blocks below document as env-file
-# overrides. The HELIX_* exclusions are values a platform hook runs as a
-# program or splices into a `sh -c` line (HELIX_FB_HTTP*), paths a hook or the
-# watchdog writes or deletes as root (pid and flag files, the saved Wi-Fi
-# file), and bats seams that point probes at a sandbox. Everything else
-# (LD_*, PATH, IFS, HOME, SHELL, ENV, BASH_ENV, PYTHON*, ...) is refused.
+# Keys the env file may set: exactly the settings it is meant to carry - every
+# key config/helixscreen.env names (a bats lint keeps the two in step), the
+# env-file settings the user docs list, the keys deploys and the init script
+# write or query, and the glibc knobs the heap-diagnostic and arena blocks
+# document as overrides. A positive list on purpose: directory keys such as
+# HELIX_DATA_DIR (the app chdirs there and dlopens plugins from it) and
+# HELIX_CONFIG_DIR stay off it, as does every other name (LD_*, PATH, IFS,
+# HOME, SHELL, ENV, BASH_ENV, PYTHON*, ...).
 helix_env_key_allowed() {
     case "$1" in
-        HELIX_FB_HTTP | HELIX_FB_HTTP_HTML | HELIX_GUI_PIDFILE | \
-            HELIX_REMOTE_SCREEN_PID | HELIX_WIFI_FLAG | HELIX_SAVED_WPA | \
-            HELIX_SPLASH_PID | HELIX_SHUTTING_DOWN | HELIX_AD5X_PROBE_ROOT | \
-            HELIX_PROC_ROOT | HELIX_MEMINFO_FILE)
-            return 1
+        HELIX_ALSA_DEVICE | HELIX_AUTO_QUIT_MS | HELIX_AUTO_SCREENSHOT | \
+            HELIX_BACKLIGHT_DEVICE | HELIX_COLOR_SWAP_RB | HELIX_DEBUG | \
+            HELIX_DEBUG_TOUCH | HELIX_DIAGNOSTIC_UPLOADS | \
+            HELIX_DISABLE_AUTO_UPDATES | HELIX_DISPLAY_BACKEND | \
+            HELIX_DISPLAY_ROTATION | HELIX_DPI | HELIX_DRM_DEVICE | \
+            HELIX_FB_DEVICE | HELIX_FORCE_STREAMING | HELIX_GCODE_MODE | \
+            HELIX_GCODE_STREAMING | HELIX_KEYBOARD_DEVICE | HELIX_LOG_DEST | \
+            HELIX_LOG_FILE | HELIX_LOG_LEVEL | HELIX_MOUSE_DEVICE | \
+            HELIX_NO_SPLASH | HELIX_REMOTE_CONTROL | HELIX_REMOTE_HTTP_TOKEN | \
+            HELIX_REQUIRE_POINTER | HELIX_SCREEN_SIZE | HELIX_SCROLL_GUARD | \
+            HELIX_SCROLL_GUARD_COOLDOWN_MS | HELIX_SKIP_SPLASH | HELIX_SSAO | \
+            HELIX_THEME | HELIX_TOUCH_CALIBRATE | HELIX_TOUCH_DEVICE | \
+            HELIX_TOUCH_SWAP_AXES | HELIX_USB_AUTOMOUNT | \
+            MALLOC_ARENA_MAX | MALLOC_CHECK_ | MALLOC_PERTURB_ | \
+            MOONRAKER_HOST | MOONRAKER_PORT)
+            return 0
             ;;
-        HELIX_* | MALLOC_CHECK_ | MALLOC_PERTURB_ | MALLOC_ARENA_MAX) return 0 ;;
     esac
     return 1
+}
+
+# Keys whose value the launcher splices unquoted into the app's command line
+# (EXTRA_FLAGS below); whitespace there would add flags of its own.
+helix_env_key_is_flag() {
+    case "$1" in
+        HELIX_DPI | HELIX_LOG_DEST | HELIX_LOG_FILE | HELIX_LOG_LEVEL) return 0 ;;
+    esac
+    return 1
+}
+
+# A POSIX identifier: the one rule for names from the file and --print-env.
+helix_env_is_name() {
+    case "$1" in
+        '' | [!A-Za-z_]* | *[!A-Za-z0-9_]*) return 1 ;;
+    esac
+    return 0
 }
 
 # Owner uid of REAL_DIR when it may hold the env file: REAL_DIR has no group
@@ -402,12 +430,10 @@ helix_load_env_file() {
                 ;;
         esac
         _var="${_line%%=*}"
-        case "$_var" in
-            *[!A-Za-z0-9_]*)
-                log "warning: ${_helix_env_file}:${_lineno}: invalid variable name '$_var'"
-                continue
-                ;;
-        esac
+        if ! helix_env_is_name "$_var"; then
+            log "warning: ${_helix_env_file}:${_lineno}: invalid variable name '$_var'"
+            continue
+        fi
         if ! helix_env_key_allowed "$_var"; then
             case " ${_helix_refused} " in
                 *" $_var "*) ;;
@@ -421,6 +447,23 @@ helix_load_env_file() {
         if ! _val=$(helix_env_value "${_line#*=}"); then
             log "warning: ${_helix_env_file}:${_lineno}: unterminated quote or text after the closing quote: $_line"
             continue
+        fi
+        # Shell syntax that used to run is skipped rather than kept as text:
+        # exporting `$(openssl rand -hex 16)` literally would turn a secret
+        # into a string anyone can read here.
+        case "$_val" in
+            *'$('* | *'`'* | *'${'*)
+                log "warning: ${_helix_env_file}:${_lineno}: $_var holds shell syntax (\$(...), \${...} or a backtick), which this file does not run - write the final value itself; ignored"
+                continue
+                ;;
+        esac
+        if helix_env_key_is_flag "$_var"; then
+            case "$_val" in
+                *[' 	']*)
+                    log "warning: ${_helix_env_file}:${_lineno}: $_var may not contain whitespace - ignored"
+                    continue
+                    ;;
+            esac
         fi
         # Only set if not already in environment (systemd Environment= /
         # exported parent shell vars win over the file). The eval splices in
@@ -465,12 +508,10 @@ if [ "${1:-}" = "--print-env" ]; then
         echo "usage: $0 --print-env NAME" >&2
         exit 2
     fi
-    case "$2" in
-        '' | *[!A-Za-z0-9_]*)
-            echo "$0: --print-env: not a variable name: $2" >&2
-            exit 2
-            ;;
-    esac
+    if ! helix_env_is_name "$2"; then
+        echo "$0: --print-env: not a variable name: $2" >&2
+        exit 2
+    fi
     helix_load_env_file
     eval "printf '%s\n' \"\${$2:-}\""
     exit 0

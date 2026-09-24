@@ -10,24 +10,35 @@ exporting `KEY=VALUE` lines whose variable is not already set. The same parse an
 `--print-env`.
 
 Values are literal text. One pair of matching surrounding quotes (`"..."` or `'...'`) is
-stripped, an unquoted value ends at a whitespace-led `#` comment, and nothing is expanded:
-`$VAR`, `$(...)` and backticks reach the app exactly as typed. Generate a value (a random
-token, a path built from another variable) before you write it into the file.
+stripped, an unquoted value ends at a whitespace-led `#` comment, and a plain `$VAR` is kept
+exactly as typed. A value holding `$(...)`, `${...}` or a backtick is skipped with a warning
+rather than exported, so a line written for the old shell-evaluated file (a generated token,
+say) never becomes a readable literal. Generate the value first and write the result into the
+file. `HELIX_DPI`, `HELIX_LOG_DEST`, `HELIX_LOG_FILE` and `HELIX_LOG_LEVEL` may not contain
+whitespace, because the launcher passes them to the app as command-line flags.
 
-Only these keys are accepted; any other key is ignored with one logged warning per key:
+Only these keys are read; any other key is ignored with one logged warning per key:
 
-- every `HELIX_*` variable, except `HELIX_FB_HTTP` and `HELIX_FB_HTTP_HTML` (a platform
-  hook runs them as a program), `HELIX_GUI_PIDFILE`, `HELIX_REMOTE_SCREEN_PID`,
-  `HELIX_WIFI_FLAG`, `HELIX_SAVED_WPA` and `HELIX_SPLASH_PID` (files and processes a hook
-  or the watchdog writes, deletes or signals as root), `HELIX_SHUTTING_DOWN` (launcher
-  state), and `HELIX_AD5X_PROBE_ROOT`, `HELIX_PROC_ROOT` and `HELIX_MEMINFO_FILE` (test
-  seams);
-- `MALLOC_CHECK_`, `MALLOC_PERTURB_` and `MALLOC_ARENA_MAX`, the glibc knobs the launcher's
-  heap-diagnostic and arena blocks document as overrides.
+`HELIX_ALSA_DEVICE`, `HELIX_AUTO_QUIT_MS`, `HELIX_AUTO_SCREENSHOT`, `HELIX_BACKLIGHT_DEVICE`,
+`HELIX_COLOR_SWAP_RB`, `HELIX_DEBUG`, `HELIX_DEBUG_TOUCH`, `HELIX_DIAGNOSTIC_UPLOADS`,
+`HELIX_DISABLE_AUTO_UPDATES`, `HELIX_DISPLAY_BACKEND`, `HELIX_DISPLAY_ROTATION`, `HELIX_DPI`,
+`HELIX_DRM_DEVICE`, `HELIX_FB_DEVICE`, `HELIX_FORCE_STREAMING`, `HELIX_GCODE_MODE`,
+`HELIX_GCODE_STREAMING`, `HELIX_KEYBOARD_DEVICE`, `HELIX_LOG_DEST`, `HELIX_LOG_FILE`,
+`HELIX_LOG_LEVEL`, `HELIX_MOUSE_DEVICE`, `HELIX_NO_SPLASH`, `HELIX_REMOTE_CONTROL`,
+`HELIX_REMOTE_HTTP_TOKEN`, `HELIX_REQUIRE_POINTER`, `HELIX_SCREEN_SIZE`, `HELIX_SCROLL_GUARD`,
+`HELIX_SCROLL_GUARD_COOLDOWN_MS`, `HELIX_SKIP_SPLASH`, `HELIX_SSAO`, `HELIX_THEME`,
+`HELIX_TOUCH_CALIBRATE`, `HELIX_TOUCH_DEVICE`, `HELIX_TOUCH_SWAP_AXES`, `HELIX_USB_AUTOMOUNT`,
+`MALLOC_ARENA_MAX`, `MALLOC_CHECK_`, `MALLOC_PERTURB_`, `MOONRAKER_HOST`, `MOONRAKER_PORT`.
 
-`LD_*`, `PATH`, `IFS`, `HOME`, `SHELL`, `ENV`, `BASH_ENV`, `PYTHON*` and every other name
-are refused: the file reaches the environment of root on every SysV firmware device, where
-those would be code execution.
+That is every key `config/helixscreen.env` names (a bats lint holds the two together), the
+env-file settings the user guide lists, and the keys deploys and the init script write or
+query. Every other variable in this reference is set by a platform hook, by the service
+environment, or by hand before a manual run, never by this file. That includes the directory
+keys (`HELIX_DATA_DIR`, `HELIX_CONFIG_DIR`, `HELIX_CACHE_DIR`, `HELIX_TMP_DIR`), since the app
+changes into its data directory and loads plugins from it, and `LD_*`, `PATH`, `IFS`, `HOME`,
+`SHELL`, `ENV`, `BASH_ENV` and `PYTHON*`. The file reaches the environment of root on every
+SysV firmware device. `HELIX_LOG_FILE` still names a file root writes to, so whoever may edit
+this file can aim the app's log at any path.
 
 Ownership is gated as well: the file is only read when it is owned by root or by the user
 the launcher itself runs as, and carries no group or world write bit. On the printer_data
@@ -1863,10 +1874,10 @@ set. Loopback needs no token.
 | **Enforced by** | `src/remote/http_transport.cpp#decide_http_bind` |
 
 ```bash
-# Generate once, then put the literal value in helixscreen.env
-# (the file does not run commands):
+# helixscreen.env does not run commands: generate the token first,
 openssl rand -hex 16
-HELIX_REMOTE_HTTP_TOKEN=3f9c2a7d41b0e86c5d2f7a9e1c4b8d06
+# then write its output into the file:
+HELIX_REMOTE_HTTP_TOKEN=<paste the output here>
 ```
 
 ```bash
