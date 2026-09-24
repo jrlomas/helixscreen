@@ -59,6 +59,7 @@
   <translation tag="1 min ago" en="1 min ago"/>
   <translation tag="1 minute" en="1 minute"/>
   <translation tag="1 more tap to {} beta features" en="1 more tap to {} beta features"/>
+  <translation tag="1. Printer homes all axes (~1 minute)" en="1. Printer homes all axes (~1 minute)"/>
   <translation tag="1. Printer homes and probes the bed" en="1. Printer homes and probes the bed"/>
   <translation tag="1. Printer will home and probe each screw" en="1. Printer will home and probe each screw"/>
   <translation tag="10 minutes" en="10 minutes"/>
@@ -69,6 +70,7 @@
   <translation tag="180° Upside Down" en="180° Upside Down"/>
   <translation tag="2 min" en="2 min"/>
   <translation tag="2 minutes" en="2 minutes"/>
+  <translation tag="2. Jog Y until the nozzle is centered over the chute opening" en="2. Jog Y until the nozzle is centered over the chute opening"/>
   <translation tag="2. Place paper between nozzle and bed" en="2. Place paper between nozzle and bed"/>
   <translation tag="2. Results show how much to turn each screw" en="2. Results show how much to turn each screw"/>
   <translation tag="20 minutes" en="20 minutes"/>
@@ -79,6 +81,7 @@
   <translation tag="2D Layers" en="2D Layers"/>
   <translation tag="3. Adjust screws, then re-probe to verify" en="3. Adjust screws, then re-probe to verify"/>
   <translation tag="3. Lower nozzle until paper drags slightly" en="3. Lower nozzle until paper drags slightly"/>
+  <translation tag="3. Save the position" en="3. Save the position"/>
   <translation tag="30 minutes" en="30 minutes"/>
   <translation tag="30 seconds" en="30 seconds"/>
   <translation tag="3D Pipes" en="3D Pipes"/>
@@ -371,9 +374,11 @@
   <translation tag="Calibrate" en="Calibrate"/>
   <translation tag="Calibrate All" en="Calibrate All"/>
   <translation tag="Calibrate Bowden" en="Calibrate Bowden"/>
+  <translation tag="Calibrate Cutter" en="Calibrate Cutter"/>
   <translation tag="Calibrate Encoder" en="Calibrate Encoder"/>
   <translation tag="Calibrate Gates" en="Calibrate Gates"/>
   <translation tag="Calibrate Gear" en="Calibrate Gear"/>
+  <translation tag="Calibrate Purge Chute" en="Calibrate Purge Chute"/>
   <translation tag="Calibrate X" en="Calibrate X"/>
   <translation tag="Calibrate Y" en="Calibrate Y"/>
   <translation tag="Calibrate all tools" en="Calibrate all tools"/>
@@ -386,9 +391,11 @@
   <translation tag="Calibrating bed mesh..." en="Calibrating bed mesh..."/>
   <translation tag="Calibrating {} axis..." en="Calibrating {} axis..."/>
   <translation tag="Calibrating..." en="Calibrating..."/>
+  <translation tag="Calibration" en="Calibration"/>
   <translation tag="Calibration &amp; Tools" en="Calibration &amp; Tools"/>
   <translation tag="Calibration Complete!" en="Calibration Complete!"/>
   <translation tag="Calibration Failed" en="Calibration Failed"/>
+  <translation tag="Calibration Saved" en="Calibration Saved"/>
   <translation tag="Calibration and system configuration" en="Calibration and system configuration"/>
   <translation tag="Calibration cancelled." en="Calibration cancelled."/>
   <translation tag="Calibration complete" en="Calibration complete"/>
@@ -702,7 +709,11 @@
   <translation tag="Cut filament" en="Cut filament"/>
   <translation tag="Cut tip" en="Cut tip"/>
   <translation tag="Cutter Enabled" en="Cutter Enabled"/>
+  <translation tag="Cutter and purge chute calibration" en="Cutter and purge chute calibration"/>
   <translation tag="Cutter blade didn&apos;t sever filament" en="Cutter blade didn&apos;t sever filament"/>
+  <translation tag="Cutter calibration completed" en="Cutter calibration completed"/>
+  <translation tag="Cutter calibration failed: {}" en="Cutter calibration failed: {}"/>
+  <translation tag="Cutter calibration: {}" en="Cutter calibration: {}"/>
   <translation tag="Cutter jam" en="Cutter jam"/>
   <translation tag="Cutting" en="Cutting"/>
   <translation tag="Cutting filament..." en="Cutting filament..."/>
@@ -1195,6 +1206,7 @@
   <translation tag="Gray" en="Gray"/>
   <translation tag="Grip filament" en="Grip filament"/>
   <translation tag="Grip the filament" en="Grip the filament"/>
+  <translation tag="Guide the toolhead to the chute&apos;s extrude position" en="Guide the toolhead to the chute&apos;s extrude position"/>
   <translation tag="Guides and reference" en="Guides and reference"/>
   <translation tag="H" en="H"/>
   <translation tag="HOST" en="HOST"/>
@@ -1270,6 +1282,7 @@
   <translation tag="Holding nozzle at {}°C to purge previous filament." en="Holding nozzle at {}°C to purge previous filament."/>
   <translation tag="Home" en="Home"/>
   <translation tag="Home &amp; Continue" en="Home &amp; Continue"/>
+  <translation tag="Home and sweep the cutter to re-find its position" en="Home and sweep the cutter to re-find its position"/>
   <translation tag="Home failed" en="Home failed"/>
   <translation tag="Home printer first?" en="Home printer first?"/>
   <translation tag="Home selector" en="Home selector"/>
@@ -1396,6 +1409,7 @@
   <translation tag="Job Queue" en="Job Queue"/>
   <translation tag="Jog Speed XY" en="Jog Speed XY"/>
   <translation tag="Jog Speed Z" en="Jog Speed Z"/>
+  <translation tag="Jog Y until the nozzle is centered over the chute opening, then tap Save." en="Jog Y until the nozzle is centered over the chute opening, then tap Save."/>
   <translation tag="Jog failed: {}" en="Jog failed: {}"/>
   <translation tag="Jog speeds and step distances" en="Jog speeds and step distances"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." en="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests."/>
@@ -1409,6 +1423,7 @@
   <translation tag="Keep Required" en="Keep Required"/>
   <translation tag="Keep Spool Info on Eject" en="Keep Spool Info on Eject"/>
   <translation tag="Keep current" en="Keep current"/>
+  <translation tag="Keep hands clear. The printer moves on its own." en="Keep hands clear. The printer moves on its own."/>
   <translation tag="Keep the bypass spool visible when bypass is off" en="Keep the bypass spool visible when bypass is off"/>
   <translation tag="Kick away" en="Kick away"/>
   <translation tag="Kinematics" en="Kinematics"/>
@@ -1471,6 +1486,7 @@
   <translation tag="Lifetime Print Stats" en="Lifetime Print Stats"/>
   <translation tag="Light" en="Light"/>
   <translation tag="Light will switch when the current operation finishes" en="Light will switch when the current operation finishes"/>
+  <translation tag="Line the nozzle up with the purge chute so purged filament drops straight in." en="Line the nozzle up with the purge chute so purged filament drops straight in."/>
   <translation tag="Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer." en="Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer."/>
   <translation tag="Listen to all theme sounds" en="Listen to all theme sounds"/>
   <translation tag="Listening" en="Listening"/>
@@ -1945,6 +1961,7 @@
   <translation tag="Please enter a valid port (1-65535)." en="Please enter a valid port (1-65535)."/>
   <translation tag="Please enter an IP address or hostname." en="Please enter an IP address or hostname."/>
   <translation tag="Please fill in the highlighted fields" en="Please fill in the highlighted fields"/>
+  <translation tag="Please wait while the printer homes and moves to the start position." en="Please wait while the printer homes and moves to the start position."/>
   <translation tag="Please wait while the printer homes and probes." en="Please wait while the printer homes and probes."/>
   <translation tag="Please wait while the printer probes each screw position." en="Please wait while the printer probes each screw position."/>
   <translation tag="Pluck the front belt on the left" en="Pluck the front belt on the left"/>
@@ -2123,7 +2140,9 @@
   <translation tag="Pulling filament back" en="Pulling filament back"/>
   <translation tag="Purge" en="Purge"/>
   <translation tag="Purge &amp; Wipe" en="Purge &amp; Wipe"/>
+  <translation tag="Purge Chute Calibration" en="Purge Chute Calibration"/>
   <translation tag="Purge Length" en="Purge Length"/>
+  <translation tag="Purge chute position saved." en="Purge chute position saved."/>
   <translation tag="Purge failed: {}" en="Purge failed: {}"/>
   <translation tag="Purge may still be running — response timed out" en="Purge may still be running — response timed out"/>
   <translation tag="Purge to bucket" en="Purge to bucket"/>
@@ -2382,7 +2401,9 @@
   <translation tag="Saving Z-offset..." en="Saving Z-offset..."/>
   <translation tag="Saving config... Klipper will restart." en="Saving config... Klipper will restart."/>
   <translation tag="Saving offsets..." en="Saving offsets..."/>
+  <translation tag="Saving the position and parking the toolhead." en="Saving the position and parking the toolhead."/>
   <translation tag="Saving will restart Klipper and CANCEL any active print!" en="Saving will restart Klipper and CANCEL any active print!"/>
+  <translation tag="Saving..." en="Saving..."/>
   <translation tag="Scan" en="Scan"/>
   <translation tag="Scan Cal" en="Scan Cal"/>
   <translation tag="Scan QR Code" en="Scan QR Code"/>
@@ -2756,6 +2777,7 @@
   <translation tag="The loaded spool is {}, but this file was sliced for {}. Filled filament runs at a lower flow rate and needs a hardened nozzle." en="The loaded spool is {}, but this file was sliced for {}. Filled filament runs at a lower flow rate and needs a hardened nozzle."/>
   <translation tag="The print is paused. Changing tools now moves the toolhead and swaps the filament at the nozzle. Resume the print once the change finishes." en="The print is paused. Changing tools now moves the toolhead and swaps the filament at the nozzle. Resume the print once the change finishes."/>
   <translation tag="The printer halted this print and cannot resume it. Restart from the beginning?" en="The printer halted this print and cannot resume it. Restart from the beginning?"/>
+  <translation tag="The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear." en="The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear."/>
   <translation tag="The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear." en="The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear."/>
   <translation tag="The printer lost power during a print. It can resume where it left off." en="The printer lost power during a print. It can resume where it left off."/>
   <translation tag="The printer lost power during a print. The resumed layer may not line up exactly." en="The printer lost power during a print. The resumed layer may not line up exactly."/>
@@ -2885,6 +2907,7 @@
   <translation tag="Toolhead LED" en="Toolhead LED"/>
   <translation tag="Toolhead Sensor" en="Toolhead Sensor"/>
   <translation tag="Toolhead Style" en="Toolhead Style"/>
+  <translation tag="Toolhead Y" en="Toolhead Y"/>
   <translation tag="Toolhead jam" en="Toolhead jam"/>
   <translation tag="Toolhead, G-code, limits, and materials" en="Toolhead, G-code, limits, and materials"/>
   <translation tag="Toolheads" en="Toolheads"/>
@@ -3109,6 +3132,7 @@
   <translation tag="Y" en="Y"/>
   <translation tag="Y Axis" en="Y Axis"/>
   <translation tag="Y Offset" en="Y Offset"/>
+  <translation tag="Y axis limit reached" en="Y axis limit reached"/>
   <translation tag="Y jog blocked at bed edge" en="Y jog blocked at bed edge"/>
   <translation tag="Y:" en="Y:"/>
   <translation tag="YOU WIN!&#10;Score: {}&#10;Tap to play again" en="YOU WIN!&#10;Score: {}&#10;Tap to play again"/>

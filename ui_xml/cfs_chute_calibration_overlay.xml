@@ -21,8 +21,8 @@
         <text_heading width="100%"
                       text="Purge Chute Calibration" translation_tag="Purge Chute Calibration" style_text_align="center"/>
         <text_small width="90%"
-                    text="Position the toolhead over the purge chute so filament lands inside it."
-                    translation_tag="Position the toolhead over the purge chute so filament lands inside it."
+                    text="Line the nozzle up with the purge chute so purged filament drops straight in."
+                    translation_tag="Line the nozzle up with the purge chute so purged filament drops straight in."
                     style_text_align="center"/>
         <lv_obj width="90%"
                 height="content" style_bg_color="#section_bg_color" style_radius="#border_radius"
@@ -31,15 +31,12 @@
                       text="1. Printer homes all axes (~1 minute)"
                       translation_tag="1. Printer homes all axes (~1 minute)"/>
           <text_small width="100%"
-                      text="2. Jog the toolhead in Y to line it up with the chute"
-                      translation_tag="2. Jog the toolhead in Y to line it up with the chute"/>
+                      text="2. Jog Y until the nozzle is centered over the chute opening"
+                      translation_tag="2. Jog Y until the nozzle is centered over the chute opening"/>
+          <text_small width="100%" text="3. Save the position" translation_tag="3. Save the position"/>
           <text_small width="100%"
-                      text="3. Save writes the position to the CFS"
-                      translation_tag="3. Save writes the position to the CFS"/>
-          <text_small width="100%"
-                      text="Keep the filament path clear: the head moves on its own."
-                      translation_tag="Keep the filament path clear: the head moves on its own."
-                      style_text_color="#text_muted"/>
+                      text="Keep hands clear. The printer moves on its own."
+                      translation_tag="Keep hands clear. The printer moves on its own." style_text_color="#text_muted"/>
         </lv_obj>
         <ui_button name="btn_chute_start"
                    width="60%" text="Start Calibration" translation_tag="Start Calibration" moves_machine="true">
@@ -79,8 +76,8 @@
           <text_heading name="chute_y_display" bind_text="cfs_chute_y_display"/>
         </lv_obj>
         <text_small width="90%"
-                    text="Jog Y until filament from the chute lands inside it, then save."
-                    translation_tag="Jog Y until filament from the chute lands inside it, then save."
+                    text="Jog Y until the nozzle is centered over the chute opening, then tap Save."
+                    translation_tag="Jog Y until the nozzle is centered over the chute opening, then tap Save."
                     style_text_align="center"/>
         <!-- Jog buttons: same magnitudes as the stock screen -->
         <lv_obj width="100%"
@@ -122,9 +119,8 @@
         <spinner size="lg"/>
         <text_heading width="100%" text="Saving..." translation_tag="Saving..." style_text_align="center"/>
         <text_small width="80%"
-                    text="Writing the position to the CFS and re-parking the toolhead."
-                    translation_tag="Writing the position to the CFS and re-parking the toolhead."
-                    style_text_align="center"/>
+                    text="Saving the position and parking the toolhead."
+                    translation_tag="Saving the position and parking the toolhead." style_text_align="center"/>
       </lv_obj>
       <!-- ================================================================== -->
       <!-- STATE: DONE (4) -->
@@ -137,8 +133,8 @@
         <text_heading width="100%"
                       text="Calibration Saved" translation_tag="Calibration Saved" style_text_align="center"/>
         <text_small width="80%"
-                    text="The purge chute position has been updated."
-                    translation_tag="The purge chute position has been updated." style_text_align="center"/>
+                    text="Purge chute position saved." translation_tag="Purge chute position saved."
+                    style_text_align="center"/>
         <ui_button name="btn_chute_done" width="40%" text="Done" translation_tag="Done">
           <event_cb trigger="clicked" callback="on_chute_done_clicked"/>
         </ui_button>

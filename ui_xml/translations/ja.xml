@@ -59,6 +59,7 @@
   <translation tag="1 min ago" ja="1分前"/>
   <translation tag="1 minute" ja="1分"/>
   <translation tag="1 more tap to {} beta features" ja="あと1回タップでベータ機能を{}"/>
+  <translation tag="1. Printer homes all axes (~1 minute)" ja="1. プリンターが全軸の原点復帰を行います（約1分）"/>
   <translation tag="1. Printer homes and probes the bed" ja="1. プリンターがホーミングしてベッドをプローブします"/>
   <translation tag="1. Printer will home and probe each screw" ja="1. プリンターがホーミングして各ネジをプローブします"/>
   <translation tag="10 minutes" ja="10分"/>
@@ -69,6 +70,7 @@
   <translation tag="180° Upside Down" ja="180° 上下反転"/>
   <translation tag="2 min" ja="2分"/>
   <translation tag="2 minutes" ja="2分"/>
+  <translation tag="2. Jog Y until the nozzle is centered over the chute opening" ja="2. Yをジョグして、ノズルがシュートの開口部の中心に来るようにします"/>
   <translation tag="2. Place paper between nozzle and bed" ja="2. ノズルとベッドの間に紙を置いてください"/>
   <translation tag="2. Results show how much to turn each screw" ja="2. 各ネジをどれだけ回すか結果が表示されます"/>
   <translation tag="20 minutes" ja="20分"/>
@@ -79,6 +81,7 @@
   <translation tag="2D Layers" ja="2Dレイヤー"/>
   <translation tag="3. Adjust screws, then re-probe to verify" ja="3. ネジを調整し、再度プローブして確認してください"/>
   <translation tag="3. Lower nozzle until paper drags slightly" ja="3. 紙がわずかに引っかかるまでノズルを下げてください"/>
+  <translation tag="3. Save the position" ja="3. 位置を保存します"/>
   <translation tag="30 minutes" ja="30分"/>
   <translation tag="30 seconds" ja="30秒"/>
   <translation tag="3D Pipes" ja="3Dパイプ"/>
@@ -371,9 +374,11 @@
   <translation tag="Calibrate" ja="キャリブレート"/>
   <translation tag="Calibrate All" ja="すべてキャリブレート"/>
   <translation tag="Calibrate Bowden" ja="ボーデンをキャリブレート"/>
+  <translation tag="Calibrate Cutter" ja="カッターをキャリブレート"/>
   <translation tag="Calibrate Encoder" ja="エンコーダーをキャリブレート"/>
   <translation tag="Calibrate Gates" ja="ゲートをキャリブレート"/>
   <translation tag="Calibrate Gear" ja="ギアをキャリブレート"/>
+  <translation tag="Calibrate Purge Chute" ja="パージシュートをキャリブレート"/>
   <translation tag="Calibrate X" ja="X軸をキャリブレート"/>
   <translation tag="Calibrate Y" ja="Y軸をキャリブレート"/>
   <translation tag="Calibrate all tools" ja="すべてのツールをキャリブレート"/>
@@ -386,9 +391,11 @@
   <translation tag="Calibrating bed mesh..." ja="ベッドメッシュをキャリブレーション中..."/>
   <translation tag="Calibrating {} axis..." ja="{} 軸をキャリブレーション中..."/>
   <translation tag="Calibrating..." ja="キャリブレーション中..."/>
+  <translation tag="Calibration" ja="キャリブレーション"/>
   <translation tag="Calibration &amp; Tools" ja="キャリブレーションとツール"/>
   <translation tag="Calibration Complete!" ja="キャリブレーション完了！"/>
   <translation tag="Calibration Failed" ja="キャリブレーション失敗"/>
+  <translation tag="Calibration Saved" ja="キャリブレーションを保存しました"/>
   <translation tag="Calibration and system configuration" ja="キャリブレーションとシステム設定"/>
   <translation tag="Calibration cancelled." ja="キャリブレーションをキャンセルしました。"/>
   <translation tag="Calibration complete" ja="キャリブレーション完了"/>
@@ -702,7 +709,11 @@
   <translation tag="Cut filament" ja="フィラメントを切断"/>
   <translation tag="Cut tip" ja="先端をカット"/>
   <translation tag="Cutter Enabled" ja="カッター有効"/>
+  <translation tag="Cutter and purge chute calibration" ja="カッターとパージシュートのキャリブレーション"/>
   <translation tag="Cutter blade didn&apos;t sever filament" ja="カッターの刃がフィラメントを切断できませんでした"/>
+  <translation tag="Cutter calibration completed" ja="カッターのキャリブレーションが完了しました"/>
+  <translation tag="Cutter calibration failed: {}" ja="カッターのキャリブレーションに失敗しました: {}"/>
+  <translation tag="Cutter calibration: {}" ja="カッターのキャリブレーション: {}"/>
   <translation tag="Cutter jam" ja="カッター詰まり"/>
   <translation tag="Cutting" ja="カット中"/>
   <translation tag="Cutting filament..." ja="フィラメントを切断中..."/>
@@ -1195,6 +1206,7 @@
   <translation tag="Gray" ja="グレー"/>
   <translation tag="Grip filament" ja="フィラメントを把持"/>
   <translation tag="Grip the filament" ja="フィラメントを把持"/>
+  <translation tag="Guide the toolhead to the chute&apos;s extrude position" ja="ツールヘッドをシュートの押出し位置へ誘導します"/>
   <translation tag="Guides and reference" ja="ガイドとリファレンス"/>
   <translation tag="H" ja="H"/>
   <translation tag="HOST" ja="ホスト"/>
@@ -1270,6 +1282,7 @@
   <translation tag="Holding nozzle at {}°C to purge previous filament." ja="前のフィラメントをパージするためノズルを {}°C に保持しています。"/>
   <translation tag="Home" ja="ホーム"/>
   <translation tag="Home &amp; Continue" ja="ホーミングして続行"/>
+  <translation tag="Home and sweep the cutter to re-find its position" ja="原点復帰後にカッターを走査して位置を再検出します"/>
   <translation tag="Home failed" ja="ホーミング失敗"/>
   <translation tag="Home printer first?" ja="先にプリンターをホーミングしますか？"/>
   <translation tag="Home selector" ja="セレクターをホーミング"/>
@@ -1396,6 +1409,7 @@
   <translation tag="Job Queue" ja="ジョブキュー"/>
   <translation tag="Jog Speed XY" ja="XY ジョグ速度"/>
   <translation tag="Jog Speed Z" ja="Z ジョグ速度"/>
+  <translation tag="Jog Y until the nozzle is centered over the chute opening, then tap Save." ja="Yをジョグしてノズルがシュートの開口部の中心に来たら、保存をタップします。"/>
   <translation tag="Jog failed: {}" ja="ジョグに失敗しました: {}"/>
   <translation tag="Jog speeds and step distances" ja="ジョグ速度とステップ距離"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." ja="Discord で HelixScreen コミュニティに参加して、ディスカッション、ヒント、トラブルシューティング支援、機能リクエストを共有しましょう。"/>
@@ -1409,6 +1423,7 @@
   <translation tag="Keep Required" ja="必須を維持"/>
   <translation tag="Keep Spool Info on Eject" ja="取り出し時にスプール情報を保持"/>
   <translation tag="Keep current" ja="現状維持"/>
+  <translation tag="Keep hands clear. The printer moves on its own." ja="手を近づけないでください。プリンターは自動で動きます。"/>
   <translation tag="Keep the bypass spool visible when bypass is off" ja="バイパスオフ時もバイパススプールの表示を維持"/>
   <translation tag="Kick away" ja="かき出し"/>
   <translation tag="Kinematics" ja="キネマティクス"/>
@@ -1471,6 +1486,7 @@
   <translation tag="Lifetime Print Stats" ja="累計印刷統計"/>
   <translation tag="Light" ja="ライト"/>
   <translation tag="Light will switch when the current operation finishes" ja="現在の操作が完了したらライトを切り替えます"/>
+  <translation tag="Line the nozzle up with the purge chute so purged filament drops straight in." ja="パージシュートにノズルを合わせ、パージされたフィラメントがまっすぐ落ちるようにします。"/>
   <translation tag="Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer." ja="{} 行目で {} を実行します。このプリンターでは緊急停止とみなされます。このプリンター用のプロファイルでファイルを再スライスしてください。"/>
   <translation tag="Listen to all theme sounds" ja="すべてのテーマサウンドを試聴"/>
   <translation tag="Listening" ja="聞き取り中"/>
@@ -1945,6 +1961,7 @@
   <translation tag="Please enter a valid port (1-65535)." ja="有効なポート番号を入力してください (1-65535)。"/>
   <translation tag="Please enter an IP address or hostname." ja="IPアドレスまたはホスト名を入力してください。"/>
   <translation tag="Please fill in the highlighted fields" ja="ハイライトされた項目を入力してください"/>
+  <translation tag="Please wait while the printer homes and moves to the start position." ja="プリンターが原点復帰して開始位置へ移動するまでお待ちください。"/>
   <translation tag="Please wait while the printer homes and probes." ja="プリンターがホーミングとプローブを行う間お待ちください。"/>
   <translation tag="Please wait while the printer probes each screw position." ja="プリンターが各ネジ位置をプローブする間お待ちください。"/>
   <translation tag="Pluck the front belt on the left" ja="左のフロントベルトをはじいてください"/>
@@ -2123,7 +2140,9 @@
   <translation tag="Pulling filament back" ja="フィラメントを引き戻し中"/>
   <translation tag="Purge" ja="パージ"/>
   <translation tag="Purge &amp; Wipe" ja="パージとワイプ"/>
+  <translation tag="Purge Chute Calibration" ja="パージシュートのキャリブレーション"/>
   <translation tag="Purge Length" ja="パージ長"/>
+  <translation tag="Purge chute position saved." ja="パージシュートの位置を保存しました。"/>
   <translation tag="Purge failed: {}" ja="パージに失敗しました: {}"/>
   <translation tag="Purge may still be running — response timed out" ja="パージがまだ実行中の可能性があります — 応答タイムアウト"/>
   <translation tag="Purge to bucket" ja="バケツへパージ"/>
@@ -2382,7 +2401,9 @@
   <translation tag="Saving Z-offset..." ja="Zオフセットを保存中..."/>
   <translation tag="Saving config... Klipper will restart." ja="設定を保存中... Klipper が再起動します。"/>
   <translation tag="Saving offsets..." ja="オフセットを保存中..."/>
+  <translation tag="Saving the position and parking the toolhead." ja="位置を保存し、ツールヘッドを退避しています。"/>
   <translation tag="Saving will restart Klipper and CANCEL any active print!" ja="保存すると Klipper が再起動し、アクティブな印刷がキャンセルされます！"/>
+  <translation tag="Saving..." ja="保存中..."/>
   <translation tag="Scan" ja="スキャン"/>
   <translation tag="Scan Cal" ja="スキャンキャリブレーション"/>
   <translation tag="Scan QR Code" ja="QR コードをスキャン"/>
@@ -2756,6 +2777,7 @@
   <translation tag="The loaded spool is {}, but this file was sliced for {}. Filled filament runs at a lower flow rate and needs a hardened nozzle." ja="装填中のスプールは {} ですが、このファイルは {} 用にスライスされています。充填材入りフィラメントはフローレートが低くなり、硬化ノズルが必要です。"/>
   <translation tag="The print is paused. Changing tools now moves the toolhead and swaps the filament at the nozzle. Resume the print once the change finishes." ja="印刷は一時停止中です。ここでツールを交換すると、ツールヘッドが移動してノズルのフィラメントが入れ替わります。交換が完了したら印刷を再開してください。"/>
   <translation tag="The printer halted this print and cannot resume it. Restart from the beginning?" ja="プリンターはこの印刷を停止し、再開できません。最初からやり直しますか？"/>
+  <translation tag="The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear." ja="プリンターが原点復帰してカッターを走査します（約1分）。フィラメントの経路を空けてください。"/>
   <translation tag="The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear." ja="プリンターがホーミングされていません。続行すると全軸がホーミングされ、ツールヘッドが移動します。ベッドに物がないことを確認してください。"/>
   <translation tag="The printer lost power during a print. It can resume where it left off." ja="印刷中にプリンターの電源が失われました。中断した箇所から再開できます。"/>
   <translation tag="The printer lost power during a print. The resumed layer may not line up exactly." ja="印刷中にプリンターの電源が失われました。再開したレイヤーがわずかにずれる可能性があります。"/>
@@ -2885,6 +2907,7 @@
   <translation tag="Toolhead LED" ja="ツールヘッドLED"/>
   <translation tag="Toolhead Sensor" ja="ツールヘッドセンサー"/>
   <translation tag="Toolhead Style" ja="ツールヘッドスタイル"/>
+  <translation tag="Toolhead Y" ja="ツールヘッド Y"/>
   <translation tag="Toolhead jam" ja="ツールヘッドの詰まり"/>
   <translation tag="Toolhead, G-code, limits, and materials" ja="ツールヘッド、Gコード、制限、材料"/>
   <translation tag="Toolheads" ja="ツールヘッド"/>
@@ -3109,6 +3132,7 @@
   <translation tag="Y" ja="Y"/>
   <translation tag="Y Axis" ja="Y軸"/>
   <translation tag="Y Offset" ja="Yオフセット"/>
+  <translation tag="Y axis limit reached" ja="Y軸のリミットに達しました"/>
   <translation tag="Y jog blocked at bed edge" ja="Y軸移動はベッド端でブロックされました"/>
   <translation tag="Y:" ja="Y:"/>
   <translation tag="YOU WIN!&#10;Score: {}&#10;Tap to play again" ja="クリア！&#10;スコア: {}&#10;タップでもう一度"/>

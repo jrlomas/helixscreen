@@ -70,7 +70,8 @@ translations:
   180° Upside Down: 180° 上下颠倒
   2 min: '2分钟'
   2 minutes: 2 分钟
-  2. Jog the toolhead in Y to line it up with the chute: 2. 在 Y 方向点动工具头，使其对准排料口
+  2. Jog Y until the nozzle is centered over the chute opening: 2. 点动 Y 轴，直到喷嘴位于排料口开口中心
+
   2. Place paper between nozzle and bed: 2. 将纸张放在喷嘴和热床之间
   2. Results show how much to turn each screw: 2. 结果显示每个螺丝需要旋转多少
   20 minutes: 20分钟
@@ -81,7 +82,8 @@ translations:
   2D Layers: 2D 图层
   3. Adjust screws, then re-probe to verify: 3. 调整螺丝，然后重新探测以验证
   3. Lower nozzle until paper drags slightly: 3. 降低喷嘴直到纸张有轻微阻力
-  3. Save writes the position to the CFS: 3. 保存会将位置写入 CFS
+  3. Save the position: 3. 保存位置
+
   30 minutes: 30 分钟
   30 seconds: 30 秒
   3D Pipes: 3D 管道
@@ -1438,7 +1440,8 @@ translations:
   Job Queue: 任务队列
   Jog Speed XY: XY 移动速度
   Jog Speed Z: Z 移动速度
-  Jog Y until filament from the chute lands inside it, then save.: 点动 Y 直到排料口出的料落入口中，然后保存。
+  Jog Y until the nozzle is centered over the chute opening, then tap Save.: 点动 Y 轴，直到喷嘴位于排料口开口中心，然后点击保存。
+
   'Jog failed: {}': '移动失败: {}'
   Jog speeds and step distances: 移动速度与步进距离
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: 加入
@@ -1453,8 +1456,9 @@ translations:
   Keep Required: 保持必需
   Keep Spool Info on Eject: 弹出时保留料盘信息
   Keep current: 保留当前
+  Keep hands clear. The printer moves on its own.: 请勿将手靠近。打印机会自行移动。
+
   Keep the bypass spool visible when bypass is off: 旁路关闭时保持料盘可见
-  'Keep the filament path clear: the head moves on its own.': 保持料路畅通：打印头会自行移动。
   Kick away: '拨除废料'
   Kinematics: 运动学
   Klipper: Klipper
@@ -1521,6 +1525,8 @@ translations:
   Lifetime Print Stats: 累计打印统计
   Light: 浅色
   Light will switch when the current operation finishes: 灯光将在当前操作完成后切换
+  Line the nozzle up with the purge chute so purged filament drops straight in.: 将喷嘴对准排料口上方，使排出的料丝垂直落入。
+
   Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: '第 {} 行调用 {}，此打印机将其视为紧急停止。请使用为此打印机制作的配置重新切片该文件。'
   Listen to all theme sounds: 试听所有主题声音
   Listening: 正在监听
@@ -2025,7 +2031,6 @@ translations:
   Port: 端口
   Position: 位置
   Position the gantry yourself, then continue: 请手动移动龙门，然后继续
-  Position the toolhead over the purge chute so filament lands inside it.: 将工具头置于排料口上方，使挤出的料落入其中。
   Post-Sensor Clear: '传感器触发后额外移动'
   Power: 电源
   Power Devices: 电源设备
@@ -2192,6 +2197,8 @@ translations:
   Purge & Wipe: '排料与擦拭'
   Purge Chute Calibration: 排料口校准
   Purge Length: '排料长度'
+  Purge chute position saved.: 排料口位置已保存。
+
   'Purge failed: {}': '清洗失败: {}'
   Purge may still be running — response timed out: 清洗可能仍在运行 — 响应超时
   Purge to bucket: '排料到废料桶'
@@ -2457,6 +2464,8 @@ translations:
   Saving Z-offset...: 正在保存 Z 偏移...
   Saving config... Klipper will restart.: 正在保存配置... Klipper 将重启。
   Saving offsets...: 正在保存偏移...
+  Saving the position and parking the toolhead.: 正在保存位置并驻留工具头。
+
   Saving will restart Klipper and CANCEL any active print!: 保存将重启 Klipper 并取消任何正在进行的打印！
   Saving...: 保存中...
   Scan: 扫描
@@ -2861,7 +2870,6 @@ translations:
   The printer lost power while printing {}. The resumed layer may not line up exactly.: 打印机在打印 {} 时断电。恢复后的层可能无法完全对准。
   The printer rejected the filament configuration. The print was not started.: 打印机拒绝了该耗材配置。打印未启动。
   The printer's firmware chooses the backup spool itself: 备用料盘由打印机固件自行选择
-  The purge chute position has been updated.: 排料口位置已更新。
   The requested position is outside the printer's bounds: '请求的位置超出打印机范围'
   The right RFID reader in this CFS unit may need service: 此 CFS 单元的右侧 RFID 读取器可能需要维修
   The runout sensor indicates no filament is loaded. Start print anyway?: 断料传感器显示未装载耗材。仍要开始打印吗？
@@ -3221,7 +3229,6 @@ translations:
   Wizard Error: 向导错误
   Working...: 处理中...
   Write failed at chunk {}: 区块 {} 写入失败
-  Writing the position to the CFS and re-parking the toolhead.: 正在将位置写入 CFS 并重新停靠工具头。
   Wrong PIN: PIN 错误
   Wrong State: '状态错误'
   Wrong media: 介质错误

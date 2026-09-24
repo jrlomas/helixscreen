@@ -73,7 +73,8 @@ translations:
   180° Upside Down: 180° kopfüber
   2 min: '2 Min'
   2 minutes: 2 Minuten
-  2. Jog the toolhead in Y to line it up with the chute: 2. Werkzeugkopf in Y verfahren, bis er fluchtend über der Rinne steht
+  2. Jog Y until the nozzle is centered over the chute opening: 2. Y verfahren, bis die Düse mittig über der Rinnenöffnung steht
+
   2. Place paper between nozzle and bed: 2. Papier zwischen Düse und Bett legen
   2. Results show how much to turn each screw: 2. Ergebnisse zeigen, wie viel jede
     Schraube gedreht werden muss
@@ -87,7 +88,8 @@ translations:
     prüfen
   3. Lower nozzle until paper drags slightly: 3. Düse absenken, bis das Papier leicht
     schleift
-  3. Save writes the position to the CFS: 3. Speichern schreibt die Position in das CFS
+  3. Save the position: 3. Position speichern
+
   30 minutes: 30 Minuten
   30 seconds: 30 Sekunden
   3D Pipes: 3D Pipes
@@ -1565,7 +1567,8 @@ translations:
   Job Queue: Auftragswarteschlange
   Jog Speed XY: Bewegungsgeschwindigkeit XY
   Jog Speed Z: Bewegungsgeschwindigkeit Z
-  Jog Y until filament from the chute lands inside it, then save.: Verfahren Sie Y, bis Filament aus der Rinne darin landet, und speichern Sie dann.
+  Jog Y until the nozzle is centered over the chute opening, then tap Save.: Verfahren Sie Y, bis die Düse mittig über der Rinnenöffnung steht, und tippen Sie dann auf Speichern.
+
   'Jog failed: {}': 'Bewegung fehlgeschlagen: {}'
   Jog speeds and step distances: Bewegungsgeschwindigkeiten und Schrittweiten
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Tritt
@@ -1581,8 +1584,9 @@ translations:
   Keep Required: Erforderlich behalten
   Keep Spool Info on Eject: Spuleninfo beim Auswerfen behalten
   Keep current: Aktuelle behalten
+  Keep hands clear. The printer moves on its own.: Hände fernhalten. Der Drucker bewegt sich von selbst.
+
   Keep the bypass spool visible when bypass is off: Bypass-Spule sichtbar halten, wenn Bypass deaktiviert ist
-  'Keep the filament path clear: the head moves on its own.': 'Halten Sie den Filamentweg frei: der Kopf bewegt sich von selbst.'
   Kick away: 'Wegschieben'
   Kinematics: Kinematik
   Klipper: Klipper
@@ -1659,6 +1663,8 @@ translations:
   Light: Hell
   Light will switch when the current operation finishes: Das Licht schaltet sich,
     sobald der aktuelle Vorgang abgeschlossen ist.
+  Line the nozzle up with the purge chute so purged filament drops straight in.: Richten Sie die Düse über der Entlüftungsrinne aus, damit das entlüftete Filament direkt hineinfällt.
+
   Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: 'Zeile {} ruft {} auf, das dieser Drucker als Notaus behandelt. Slicen Sie die Datei mit einem Profil für diesen Drucker neu.'
   Listen to all theme sounds: Alle Themensounds anhören
   Listening: Zuhören
@@ -2188,7 +2194,6 @@ translations:
   Port: Port
   Position: Position
   Position the gantry yourself, then continue: Positionieren Sie die Gantry selbst und fahren Sie dann fort
-  Position the toolhead over the purge chute so filament lands inside it.: Positionieren Sie den Werkzeugkopf über der Entlüftungsrinne, damit Filament hineinfällt.
   Post-Sensor Clear: 'Nachlauf nach Sensor'
   Power: Strom
   Power Devices: Stromgeräte
@@ -2366,6 +2371,8 @@ translations:
   Purge & Wipe: 'Entlüften & Abwischen'
   Purge Chute Calibration: Entlüftungsrinnen-Kalibrierung
   Purge Length: 'Entlüftungslänge'
+  Purge chute position saved.: Position der Entlüftungsrinne gespeichert.
+
   'Purge failed: {}': 'Purge fehlgeschlagen: {}'
   Purge may still be running — response timed out: Purge läuft möglicherweise noch
     — Zeitüberschreitung
@@ -2651,6 +2658,8 @@ translations:
   Saving config... Klipper will restart.: Konfiguration wird gespeichert... Klipper
     wird neu starten.
   Saving offsets...: Speichere Offsets...
+  Saving the position and parking the toolhead.: Position wird gespeichert und der Werkzeugkopf geparkt.
+
   Saving will restart Klipper and CANCEL any active print!: Speichern startet Klipper
     neu und BRICHT jeden aktiven Druck ab!
   Saving...: Speichern...
@@ -3099,7 +3108,6 @@ translations:
   The printer rejected the filament configuration. The print was not started.: Der
     Drucker hat die Filamentkonfiguration abgelehnt. Der Druck wurde nicht gestartet.
   The printer's firmware chooses the backup spool itself: Die Drucker-Firmware wählt die Reserve-Spule selbst
-  The purge chute position has been updated.: Die Position der Entlüftungsrinne wurde aktualisiert.
   The requested position is outside the printer's bounds: 'Die angeforderte Position liegt außerhalb des Druckerbereichs'
   The right RFID reader in this CFS unit may need service: Der rechte RFID-Leser dieser CFS-Einheit muss möglicherweise gewartet werden
   The runout sensor indicates no filament is loaded. Start print anyway?: Der Auslaufsensor
@@ -3497,7 +3505,6 @@ translations:
   Wizard Error: Assistentenfehler
   Working...: Wird verarbeitet...
   Write failed at chunk {}: Schreibvorgang bei Block {} fehlgeschlagen
-  Writing the position to the CFS and re-parking the toolhead.: Position wird in das CFS geschrieben und der Werkzeugkopf neu geparkt.
   Wrong PIN: Falsche PIN
   Wrong State: 'Falscher Status'
   Wrong media: Falsches Medium
