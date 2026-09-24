@@ -27,6 +27,7 @@
 #include "macro_patterns.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
+#include "plr_backend.h"
 #include "power_device_state.h"
 #include "power_loss_sensor.h"
 #include "print_start_profile.h"
@@ -1489,6 +1490,14 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
         subscription_objects["save_variables"] = nullptr;
     }
 
+    // Power-loss recovery: the PLR module owns which status objects its
+    // backends need for the discovered firmware. A printer already carrying
+    // one of these keys from an earlier block just re-assigns the same map
+    // entry, which is idempotent.
+    for (const auto& obj : helix::plr_required_status_objects(hw)) {
+        subscription_objects[obj] = nullptr;
+    }
+
     // All discovered filament sensors (filament_switch_sensor, filament_motion_sensor).
     // FilamentSensorManager reads filament_detected + enabled + detection_count.
     static const json filament_sensor_fields =
@@ -1623,6 +1632,9 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
     }
     if (hw.mmu_type() == AmsType::AD5X_IFS) {
         spdlog::info("[Moonraker Client] Subscribing to save_variables (AD5X IFS)");
+    }
+    if (!helix::plr_required_status_objects(hw).empty()) {
+        spdlog::info("[Moonraker Client] Subscribing to save_variables (power-loss recovery)");
     }
     if (helix::zoffset::firmware_persists_z_offset(hw)) {
         spdlog::info("[Moonraker Client] Subscribing persisted z-offset objects ({})",

@@ -15,6 +15,7 @@
 
 #include "data_root_resolver.h"
 #include "format_utils.h"
+#include "plr_backend.h"
 #include "print_lifecycle_state.h"
 #include "printer_state.h" // For enum definitions
 #include "state/subject_macros.h"
@@ -125,6 +126,13 @@ void PrinterPrintState::init_subjects(bool register_xml) {
     // print_stats.power_loss — Creality-fork Power-Loss-Recovery capability
     // marker. Default 0; set to 1 by presence of the key (see update_from_status).
     INIT_SUBJECT_INT(creality_plr_capable, 0, subjects_, register_xml);
+
+    // Power-loss recovery, passive-backend half: the discovered resume macro
+    // (capability, set from discovery by PrinterState::set_hardware) and the
+    // interrupted flag (availability, parsed in update_from_status via
+    // plr_backend). plr_backend owns which firmware carries them. Default 0.
+    INIT_SUBJECT_INT(plr_resume_macro, 0, subjects_, register_xml);
+    INIT_SUBJECT_INT(plr_interrupted_flag, 0, subjects_, register_xml);
 
     // Pre-populate per-extruder filament_used map. Freezing the map structure
     // here eliminates the BG-thread emplace vs UI-thread read rehash race
@@ -905,6 +913,17 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
                 }
             }
         }
+    }
+
+    // Power-loss recovery: plr_backend owns which status key carries the
+    // interrupted flag and the boolean-only rule (-1 means this frame says
+    // nothing about it; see plr_parse_interrupted_flag). The offer controller
+    // resets the subject on the disconnect edge, like pl_env_valid.
+    const int plr_flag = helix::plr_parse_interrupted_flag(status);
+    if (plr_flag >= 0 && lv_subject_get_int(&plr_interrupted_flag_) != plr_flag) {
+        spdlog::debug("[PrinterPrintState] PLR interrupted flag = {} (power-loss recovery)",
+                      plr_flag);
+        lv_subject_set_int(&plr_interrupted_flag_, plr_flag);
     }
 
     // Z-height current-layer derivation (Mainsail/Fluidd parity) — tier 3.
