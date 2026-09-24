@@ -4,25 +4,45 @@ This document is a reference for the environment variables HelixScreen reads at 
 
 ## How `helixscreen.env` is loaded
 
-The launcher (`scripts/helix-launcher.sh`) evaluates `helixscreen.env` from the first
+The launcher (`scripts/helix-launcher.sh`) reads `helixscreen.env` from the first
 existing search path (`<install>/config/helixscreen.env`, then `/etc/helixscreen/helixscreen.env`),
-exporting `KEY=VALUE` lines whose variable is not already set. The file is shell-evaluated,
-so values may use `$(...)` and variable expansion, and the same parse answers `--print-env`.
+exporting `KEY=VALUE` lines whose variable is not already set. The same parse answers
+`--print-env`.
 
-That eval is why ownership is gated: the file is only read when it is owned by root or by
-the user the launcher itself runs as, and carries no group or world write bit. On the
-printer_data layout, where `<install>/config/helixscreen.env` is a symlink into
+Values are literal text. One pair of matching surrounding quotes (`"..."` or `'...'`) is
+stripped, an unquoted value ends at a whitespace-led `#` comment, and nothing is expanded:
+`$VAR`, `$(...)` and backticks reach the app exactly as typed. Generate a value (a random
+token, a path built from another variable) before you write it into the file.
+
+Only these keys are accepted; any other key is ignored with one logged warning per key:
+
+- every `HELIX_*` variable, except `HELIX_FB_HTTP` and `HELIX_FB_HTTP_HTML` (a platform
+  hook runs them as a program), `HELIX_GUI_PIDFILE`, `HELIX_REMOTE_SCREEN_PID`,
+  `HELIX_WIFI_FLAG`, `HELIX_SAVED_WPA` and `HELIX_SPLASH_PID` (files and processes a hook
+  or the watchdog writes, deletes or signals as root), `HELIX_SHUTTING_DOWN` (launcher
+  state), and `HELIX_AD5X_PROBE_ROOT`, `HELIX_PROC_ROOT` and `HELIX_MEMINFO_FILE` (test
+  seams);
+- `MALLOC_CHECK_`, `MALLOC_PERTURB_` and `MALLOC_ARENA_MAX`, the glibc knobs the launcher's
+  heap-diagnostic and arena blocks document as overrides.
+
+`LD_*`, `PATH`, `IFS`, `HOME`, `SHELL`, `ENV`, `BASH_ENV`, `PYTHON*` and every other name
+are refused: the file reaches the environment of root on every SysV firmware device, where
+those would be code execution.
+
+Ownership is gated as well: the file is only read when it is owned by root or by the user
+the launcher itself runs as, and carries no group or world write bit. On the printer_data
+layout, where `<install>/config/helixscreen.env` is a symlink into
 `printer_data/config/helixscreen/` so Mainsail and Fluidd can edit it, the owner of that
 directory is trusted too: Moonraker saves an edit as its own user (`lava` on the Snapmaker U1)
 while the launcher runs as root. That extra trust holds only while the directory has no group
-or world write bit and the symlink sits in a directory owned by root or the launcher's user
-with none either, so only the installer could have pointed it there. A file whose
-owner passes that check and whose only fault is a write bit is repaired in place to `0644`
-(web updates and deploys ship the file without pinning it) and loaded, with one log line
-saying so. Anything else (a mode the repair cannot settle, an owner none of those rules
-trusts) is skipped with a logged warning naming the file, its owner and mode, and the fix.
-The fix names the directory's owner for a printer_data file, which keeps web editing
-working; for a plain file it is root:
+or world write bit, the symlink sits in a directory owned by root or the launcher's user with
+none either, and the symlink points straight at the file rather than through another link, so
+only the installer could have aimed it there. A file whose owner passes that check and whose
+only fault is a write bit is repaired in place to `0644` (web updates and deploys ship the
+file without pinning it) and loaded, with one log line saying so. Anything else (a mode the
+repair cannot settle, an owner none of those rules trusts) is skipped with a logged warning
+naming the file, its owner and mode, and the fix, always in this form (the owner is the
+printer_data directory's uid for a file there, which keeps web editing working):
 
 ```sh
 chown root:root /etc/helixscreen/helixscreen.env && chmod 644 /etc/helixscreen/helixscreen.env
@@ -1843,8 +1863,10 @@ set. Loopback needs no token.
 | **Enforced by** | `src/remote/http_transport.cpp#decide_http_bind` |
 
 ```bash
-# In helixscreen.env, or exported before launching:
-HELIX_REMOTE_HTTP_TOKEN=$(openssl rand -hex 16)
+# Generate once, then put the literal value in helixscreen.env
+# (the file does not run commands):
+openssl rand -hex 16
+HELIX_REMOTE_HTTP_TOKEN=3f9c2a7d41b0e86c5d2f7a9e1c4b8d06
 ```
 
 ```bash

@@ -54,55 +54,9 @@ INSTALL_DIR="$MOCK_INSTALL"
 
 # --- Begin: extracted from helix-launcher.sh ---
 
-# Source environment configuration file if present.
-_helix_env_file=""
-for _env_path in \
-    "${INSTALL_DIR}/config/helixscreen.env" \
-    /etc/helixscreen/helixscreen.env; do
-    if [ -f "$_env_path" ]; then
-        _helix_env_file="$_env_path"
-        break
-    fi
-done
-unset _env_path
-
-if [ -n "$_helix_env_file" ]; then
-    _lineno=0
-    while IFS= read -r _line || [ -n "$_line" ]; do
-        _lineno=$((_lineno + 1))
-        _line=$(printf '%s' "$_line" | sed -e 's/\r$//' \
-                                            -e 's/^[ 	]*//' \
-                                            -e 's/[ 	]*$//' \
-                                            -e 's/^export[ 	][ 	]*//')
-        case "$_line" in
-            '#'*|'') continue ;;
-        esac
-        case "$_line" in
-            [A-Za-z_]*=*) ;;
-            *)
-                echo "[helix-launcher] warning: ${_helix_env_file}:${_lineno}: ignored malformed line: $_line" >&2
-                continue
-                ;;
-        esac
-        _var="${_line%%=*}"
-        case "$_var" in
-            *[!A-Za-z0-9_]*)
-                echo "[helix-launcher] warning: ${_helix_env_file}:${_lineno}: invalid variable name '$_var'" >&2
-                continue
-                ;;
-        esac
-        eval "_existing=\"\${${_var}:-}\""
-        if [ -z "$_existing" ]; then
-            if ! eval "export $_line" 2>/dev/null; then
-                echo "[helix-launcher] warning: ${_helix_env_file}:${_lineno}: failed to export: $_line" >&2
-            fi
-        elif [ "${HELIX_DEBUG:-0}" = "1" ]; then
-            echo "[helix-launcher] note: ${_helix_env_file}:${_lineno}: $_var already set in environment; file value ignored" >&2
-        fi
-    done < "$_helix_env_file"
-    unset _line _var _existing _lineno
-fi
-unset _helix_env_file
+# The launcher's own log() and env-file functions, extracted in setup().
+. "$BATS_TEST_TMPDIR/env_parse.sh"
+helix_load_env_file
 
 # Resolve debug/logging settings: CLI flags > env vars (incl. env file) > defaults
 #
@@ -127,6 +81,16 @@ fi
 # --- End: extracted from helix-launcher.sh ---
 ENVEOF
     chmod +x "$BATS_TEST_TMPDIR/env_setup.sh"
+
+    # The env-file parse runs from the shipped launcher's own functions, so
+    # the harness cannot drift from it. An extraction that finds nothing
+    # fails here rather than letting every test read an empty parse.
+    {
+        awk '/^log\(\) \{/{f=1} f{print} f&&/^}$/{exit}' "$LAUNCHER"
+        awk '/^helix_env_stat\(\) \{/{f=1} f{print} /^helix_load_env_file\(\) \{/{g=1} g&&/^}$/{exit}' "$LAUNCHER"
+    } > "$BATS_TEST_TMPDIR/env_parse.sh"
+    grep -q '^helix_load_env_file() {' "$BATS_TEST_TMPDIR/env_parse.sh"
+    grep -q '^log() {' "$BATS_TEST_TMPDIR/env_parse.sh"
 
     # Create a mock helix-screen that writes its args to a file for inspection
     cat > "$MOCK_INSTALL/bin/helix-screen" << 'MOCKEOF'
@@ -180,21 +144,21 @@ run_env_setup() {
 
 @test "launcher sources helixscreen.env from install dir" {
     cat > "$MOCK_INSTALL/config/helixscreen.env" << 'EOF'
-MOONRAKER_HOST=myprinter.local
-MOONRAKER_PORT=7125
+HELIX_TEST_HOST=myprinter.local
+HELIX_TEST_PORT=7125
 EOF
-    unset MOONRAKER_HOST
-    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_HOST)
+    unset HELIX_TEST_HOST
+    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TEST_HOST)
     [ "$result" = "myprinter.local" ]
 }
 
-@test "launcher sources MOONRAKER_PORT from env file" {
+@test "launcher sources HELIX_TEST_PORT from env file" {
     cat > "$MOCK_INSTALL/config/helixscreen.env" << 'EOF'
-MOONRAKER_HOST=localhost
-MOONRAKER_PORT=8080
+HELIX_TEST_HOST=localhost
+HELIX_TEST_PORT=8080
 EOF
-    unset MOONRAKER_PORT
-    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_PORT)
+    unset HELIX_TEST_PORT
+    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TEST_PORT)
     [ "$result" = "8080" ]
 }
 
@@ -202,13 +166,13 @@ EOF
     cat > "$MOCK_INSTALL/config/helixscreen.env" << 'EOF'
 # This is a comment
 #HELIX_DISPLAY_BACKEND=drm
-MOONRAKER_HOST=localhost
+HELIX_TEST_HOST=localhost
 EOF
-    unset HELIX_DISPLAY_BACKEND MOONRAKER_HOST
+    unset HELIX_DISPLAY_BACKEND HELIX_TEST_HOST
     # The commented HELIX_DISPLAY_BACKEND=drm should NOT be set
     # So on Linux it should fall through to the fbdev default
     result_backend=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_DISPLAY_BACKEND)
-    result_host=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_HOST)
+    result_host=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TEST_HOST)
     [ "$result_host" = "localhost" ]
     if [ "$(uname -s)" = "Linux" ]; then
         [ "$result_backend" = "fbdev" ]
@@ -218,14 +182,14 @@ EOF
 @test "env file skips blank lines" {
     cat > "$MOCK_INSTALL/config/helixscreen.env" << 'EOF'
 
-MOONRAKER_HOST=localhost
+HELIX_TEST_HOST=localhost
 
-MOONRAKER_PORT=7125
+HELIX_TEST_PORT=7125
 
 EOF
-    unset MOONRAKER_HOST MOONRAKER_PORT
-    result_host=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_HOST)
-    result_port=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_PORT)
+    unset HELIX_TEST_HOST HELIX_TEST_PORT
+    result_host=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TEST_HOST)
+    result_port=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TEST_PORT)
     [ "$result_host" = "localhost" ]
     [ "$result_port" = "7125" ]
 }
@@ -236,10 +200,10 @@ EOF
 
 @test "existing env var takes precedence over env file" {
     cat > "$MOCK_INSTALL/config/helixscreen.env" << 'EOF'
-MOONRAKER_HOST=from-file
+HELIX_TEST_HOST=from-file
 EOF
-    export MOONRAKER_HOST=from-env
-    result=$(MOCK_INSTALL="$MOCK_INSTALL" sh -c ". \"$BATS_TEST_TMPDIR/env_setup.sh\" && echo \"\$MOONRAKER_HOST\"")
+    export HELIX_TEST_HOST=from-env
+    result=$(MOCK_INSTALL="$MOCK_INSTALL" sh -c ". \"$BATS_TEST_TMPDIR/env_setup.sh\" && echo \"\$HELIX_TEST_HOST\"")
     [ "$result" = "from-env" ]
 }
 
@@ -253,15 +217,15 @@ EOF
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     rm -f "$MOCK_INSTALL/helix_screen_args.txt"
     cat > "$MOCK_INSTALL/config/helixscreen.env" << 'EOF'
-MOONRAKER_HOST=from-file
+HELIX_TEST_HOST=from-file
 EOF
-    HELIX_DEBUG=1 MOONRAKER_HOST=from-env \
-        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+    HELIX_DEBUG=1 HELIX_TEST_HOST=from-env \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/loud.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "from-env" ]
-    grep -q 'MOONRAKER_HOST already set in environment; file value ignored' "$BATS_TEST_TMPDIR/loud.log"
-    HELIX_DEBUG=0 MOONRAKER_HOST=from-env \
-        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+    grep -q 'HELIX_TEST_HOST already set in environment; file value ignored' "$BATS_TEST_TMPDIR/loud.log"
+    HELIX_DEBUG=0 HELIX_TEST_HOST=from-env \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > /dev/null 2> "$BATS_TEST_TMPDIR/quiet.log"
     [ ! -s "$BATS_TEST_TMPDIR/quiet.log" ]
     # Query mode launched nothing.
@@ -275,25 +239,22 @@ EOF
     # set anywhere.
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     cat > "$MOCK_INSTALL/config/helixscreen.env" << 'EOF'
-MOONRAKER_HOST=first
-MOONRAKER_HOST=second
+HELIX_TEST_HOST=first
+HELIX_TEST_HOST=second
 EOF
-    HELIX_DEBUG=1 "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+    HELIX_DEBUG=1 "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/dup.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "first" ]
-    grep -q 'MOONRAKER_HOST already set by an earlier line of this file; this value ignored' "$BATS_TEST_TMPDIR/dup.log"
+    grep -q 'HELIX_TEST_HOST already set by an earlier line of this file; this value ignored' "$BATS_TEST_TMPDIR/dup.log"
     if grep -q 'already set in environment' "$BATS_TEST_TMPDIR/dup.log"; then
         fail "note blames the environment for a duplicate key in the file"
     fi
 }
 
-@test "the hand-extracted parse and the shipped launcher agree on tolerance shapes" {
-    # env_setup.sh hand-copies the launcher's env-file parse so the
-    # precedence tests can run it without binaries; a copy can drift while
-    # the suite stays green. This differential asks the SHIPPED launcher
-    # (--print-env NAME) for the same resolution the copy reports, across
-    # every tolerance shape, and pins both to the expected value so the two
-    # cannot agree on a wrong answer.
+@test "the extracted parse and the shipped launcher agree on tolerance shapes" {
+    # env_setup.sh runs the launcher's parse functions without binaries; the
+    # shipped launcher answers --print-env NAME through its own startup path.
+    # Both must resolve every tolerance shape to the pinned value.
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     local var shape want copy_val shipped_val
     while IFS='|' read -r var shape want; do
@@ -301,7 +262,7 @@ EOF
         printf '%s\n' "$shape" > "$MOCK_INSTALL/config/helixscreen.env"
         copy_val=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup "$var")
         shipped_val=$(env -u "$var" "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env "$var")
-        [ "$copy_val" = "$want" ] || fail "hand copy mis-reads [$shape] as [$copy_val]"
+        [ "$copy_val" = "$want" ] || fail "extracted parse mis-reads [$shape] as [$copy_val]"
         [ "$shipped_val" = "$want" ] || fail "shipped launcher mis-reads [$shape] as [$shipped_val]"
     done <<'EOF'
 HELIX_FB_DEVICE|HELIX_FB_DEVICE=/dev/fb1|/dev/fb1
@@ -360,7 +321,7 @@ EOF
 @test "launcher works with no env file present" {
     # No helixscreen.env in either location
     rm -f "$MOCK_INSTALL/config/helixscreen.env"
-    unset HELIX_DISPLAY_BACKEND MOONRAKER_HOST
+    unset HELIX_DISPLAY_BACKEND HELIX_TEST_HOST
     result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_DISPLAY_BACKEND)
     if [ "$(uname -s)" = "Linux" ]; then
         [ "$result" = "fbdev" ]
@@ -430,18 +391,18 @@ EOF
 }
 
 @test "env file accepts trailing whitespace after value" {
-    printf 'MOONRAKER_HOST=localhost   \n' > "$MOCK_INSTALL/config/helixscreen.env"
-    unset MOONRAKER_HOST
-    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_HOST)
+    printf 'HELIX_TEST_HOST=localhost   \n' > "$MOCK_INSTALL/config/helixscreen.env"
+    unset HELIX_TEST_HOST
+    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TEST_HOST)
     [ "$result" = "localhost" ]
 }
 
 @test "env file accepts CRLF line endings" {
-    printf 'HELIX_TOUCH_CALIBRATE=1\r\nMOONRAKER_HOST=localhost\r\n' \
+    printf 'HELIX_TOUCH_CALIBRATE=1\r\nHELIX_TEST_HOST=localhost\r\n' \
         > "$MOCK_INSTALL/config/helixscreen.env"
-    unset HELIX_TOUCH_CALIBRATE MOONRAKER_HOST
+    unset HELIX_TOUCH_CALIBRATE HELIX_TEST_HOST
     result_cal=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TOUCH_CALIBRATE)
-    result_host=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_HOST)
+    result_host=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TEST_HOST)
     [ "$result_cal" = "1" ]
     [ "$result_host" = "localhost" ]
 }
@@ -456,13 +417,13 @@ EOF
 @test "env file warns on malformed line without dropping later lines" {
     cat > "$MOCK_INSTALL/config/helixscreen.env" << 'EOF'
 NOT A VAR
-MOONRAKER_HOST=localhost
+HELIX_TEST_HOST=localhost
 EOF
-    unset MOONRAKER_HOST
+    unset HELIX_TEST_HOST
     # Capture stderr to assert a warning fired
     err_output=$(MOCK_INSTALL="$MOCK_INSTALL" sh -c \
         ". \"$BATS_TEST_TMPDIR/env_setup.sh\" 2>&1 1>/dev/null; echo")
-    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_HOST)
+    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TEST_HOST)
     # Later valid line still loaded
     [ "$result" = "localhost" ]
     # Warning fired
@@ -472,12 +433,12 @@ EOF
 @test "env file warns on invalid variable name with special chars" {
     cat > "$MOCK_INSTALL/config/helixscreen.env" << 'EOF'
 BAD-NAME=value
-MOONRAKER_HOST=localhost
+HELIX_TEST_HOST=localhost
 EOF
-    unset MOONRAKER_HOST
+    unset HELIX_TEST_HOST
     err_output=$(MOCK_INSTALL="$MOCK_INSTALL" sh -c \
         ". \"$BATS_TEST_TMPDIR/env_setup.sh\" 2>&1 1>/dev/null; echo")
-    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup MOONRAKER_HOST)
+    result=$(MOCK_INSTALL="$MOCK_INSTALL" run_env_setup HELIX_TEST_HOST)
     [ "$result" = "localhost" ]
     echo "$err_output" | grep -qE "warning.*invalid variable name|warning.*ignored malformed line"
 }
@@ -527,7 +488,7 @@ FAKE
 make_u1_layout() {
     local link_dir_uid="$1" real_dir_mode="$2" file_uid="$3"
     mkdir -p "$BATS_TEST_TMPDIR/printer_data/config/helixscreen"
-    printf 'MOONRAKER_HOST=u1-web-edited.local\n' \
+    printf 'HELIX_TEST_HOST=u1-web-edited.local\n' \
         > "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
     ln -s "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env" \
         "$MOCK_INSTALL/config/helixscreen.env"
@@ -543,8 +504,8 @@ make_u1_layout() {
 }
 
 run_launcher_as_root() {
-    env -u MOONRAKER_HOST PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
-        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+    env -u HELIX_TEST_HOST PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/gate.log"
 }
 
@@ -588,9 +549,9 @@ run_launcher_as_root() {
 
 @test "env file owned by the launcher's own user at 0644 loads" {
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
-    printf 'MOONRAKER_HOST=self-owned.local\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    printf 'HELIX_TEST_HOST=self-owned.local\n' > "$MOCK_INSTALL/config/helixscreen.env"
     chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
-    run env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST
+    run env -u HELIX_TEST_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST
     [ "$status" -eq 0 ]
     [ "$output" = "self-owned.local" ]
 }
@@ -598,11 +559,11 @@ run_launcher_as_root() {
 @test "root-owned 0644 env file loads while the launcher runs as a normal user" {
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     make_fake_stat
-    printf 'MOONRAKER_HOST=root-owned.local\n' > "$MOCK_INSTALL/config/helixscreen.env"
-    env -u MOONRAKER_HOST \
+    printf 'HELIX_TEST_HOST=root-owned.local\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    env -u HELIX_TEST_HOST \
         PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
         FAKE_STAT_UID=0 FAKE_STAT_MODE=644 \
-        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/gate.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "root-owned.local" ]
     [ ! -s "$BATS_TEST_TMPDIR/gate.log" ]
@@ -613,10 +574,10 @@ run_launcher_as_root() {
     # fault, not an attack: web updates and deploys land the file without
     # pinning it, and a refusal would blank settings on every update.
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
-    printf 'MOONRAKER_HOST=self-healed.local\n' \
+    printf 'HELIX_TEST_HOST=self-healed.local\n' \
         > "$MOCK_INSTALL/config/helixscreen.env"
     chmod 664 "$MOCK_INSTALL/config/helixscreen.env"
-    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+    env -u HELIX_TEST_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/heal.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "self-healed.local" ]
     grep -q "repaired .* from mode 664 to 0644" "$BATS_TEST_TMPDIR/heal.log"
@@ -628,12 +589,12 @@ run_launcher_as_root() {
     mkdir -p "$BATS_TEST_TMPDIR/fakebin"
     printf '#!/bin/sh\nexit 1\n' > "$BATS_TEST_TMPDIR/fakebin/chmod"
     chmod +x "$BATS_TEST_TMPDIR/fakebin/chmod"
-    printf 'MOONRAKER_HOST=$(touch "$BATS_TEST_TMPDIR/pwned")\n' \
+    printf 'HELIX_TEST_HOST=$(touch "$BATS_TEST_TMPDIR/pwned")\n' \
         > "$MOCK_INSTALL/config/helixscreen.env"
     chmod 666 "$MOCK_INSTALL/config/helixscreen.env"
-    env -u MOONRAKER_HOST \
+    env -u HELIX_TEST_HOST \
         PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
-        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
     # Refusal skips the file; it does not abort the launcher.
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
@@ -652,12 +613,12 @@ run_launcher_as_root() {
     # the chmod itself succeeded.
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     make_fake_stat
-    printf 'MOONRAKER_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    printf 'HELIX_TEST_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
     chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
-    env -u MOONRAKER_HOST \
+    env -u HELIX_TEST_HOST \
         PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
         FAKE_STAT_UID=0 FAKE_STAT_MODE=664 \
-        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
     grep -q "group- or world-writable" "$BATS_TEST_TMPDIR/refuse.log"
@@ -669,12 +630,12 @@ run_launcher_as_root() {
     # own 777 mode and refuses the file on every boot.
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     mkdir -p "$BATS_TEST_TMPDIR/printer_data/config/helixscreen"
-    printf 'MOONRAKER_HOST=behind-symlink.local\n' \
+    printf 'HELIX_TEST_HOST=behind-symlink.local\n' \
         > "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
     chmod 644 "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
     ln -s "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env" \
         "$MOCK_INSTALL/config/helixscreen.env"
-    run env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST
+    run env -u HELIX_TEST_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST
     [ "$status" -eq 0 ]
     [ "$output" = "behind-symlink.local" ]
 }
@@ -682,12 +643,12 @@ run_launcher_as_root() {
 @test "a symlinked env file with a writable target repairs the target, not the link" {
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     mkdir -p "$BATS_TEST_TMPDIR/printer_data/config/helixscreen"
-    printf 'MOONRAKER_HOST=heal-through-link.local\n' \
+    printf 'HELIX_TEST_HOST=heal-through-link.local\n' \
         > "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
     chmod 664 "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env"
     ln -s "$BATS_TEST_TMPDIR/printer_data/config/helixscreen/helixscreen.env" \
         "$MOCK_INSTALL/config/helixscreen.env"
-    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+    env -u HELIX_TEST_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/heal.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "heal-through-link.local" ]
     # The repair landed on the real file the link points at, and the link
@@ -700,40 +661,105 @@ run_launcher_as_root() {
 @test "env file owned by a third user is refused even at 0644" {
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     make_fake_stat
-    printf 'MOONRAKER_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    printf 'HELIX_TEST_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
     chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
-    env -u MOONRAKER_HOST \
+    env -u HELIX_TEST_HOST \
         PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
         FAKE_STAT_UID=12345 FAKE_STAT_MODE=644 \
-        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
     grep -q "owned by uid 12345" "$BATS_TEST_TMPDIR/refuse.log"
-    grep -qF "chown 0 $MOCK_INSTALL/config/helixscreen.env" "$BATS_TEST_TMPDIR/refuse.log"
+    grep -qF "chown root:root $MOCK_INSTALL/config/helixscreen.env && chmod 644 $MOCK_INSTALL/config/helixscreen.env" "$BATS_TEST_TMPDIR/refuse.log"
 }
 
 @test "env file whose owner or mode cannot be read is refused, not assumed safe" {
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
     make_fake_stat
-    printf 'MOONRAKER_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
-    env -u MOONRAKER_HOST \
+    printf 'HELIX_TEST_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    env -u HELIX_TEST_HOST \
         PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" FAKE_STAT_FAIL=1 \
-        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_TEST_HOST \
         > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
     grep -q "cannot determine owner/mode" "$BATS_TEST_TMPDIR/refuse.log"
 }
 
-@test "a trusted file keeps the parse's full shell semantics" {
-    # The gate is the safety boundary, not a parser change: a file that passed
-    # it is still parsed with source-compatible tolerance (quoting, expansion).
+# The launcher's --print-env answer for NAME, with the env file holding the
+# literal text in $2.
+print_env_from_file() {
     cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
-    printf 'MOONRAKER_HOST=$(echo resolved-by-parse)\n' \
+    printf '%s\n' "$2" > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u "$1" "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env "$1" \
+        2> "$BATS_TEST_TMPDIR/parse.log"
+}
+
+@test "a command substitution in a value is kept as text, never run" {
+    local out
+    out=$(print_env_from_file HELIX_TEST_HOST "HELIX_TEST_HOST=\$(touch $BATS_TEST_TMPDIR/pwned)")
+    [ ! -e "$BATS_TEST_TMPDIR/pwned" ]
+    [ "$out" = "\$(touch $BATS_TEST_TMPDIR/pwned)" ]
+}
+
+@test "backticks in a value are kept as text, never run" {
+    local out
+    out=$(print_env_from_file HELIX_TEST_HOST "HELIX_TEST_HOST=\`touch $BATS_TEST_TMPDIR/pwned\`")
+    [ ! -e "$BATS_TEST_TMPDIR/pwned" ]
+    [ "$out" = "\`touch $BATS_TEST_TMPDIR/pwned\`" ]
+}
+
+@test "a variable reference in a value is not expanded" {
+    local out
+    out=$(HOME=/root print_env_from_file HELIX_TEST_HOST 'HELIX_TEST_HOST=$HOME/x')
+    [ "$out" = '$HOME/x' ]
+}
+
+@test "one pair of surrounding quotes is stripped and inner spaces are kept" {
+    [ "$(print_env_from_file HELIX_TEST_HOST 'HELIX_TEST_HOST="two words"')" = "two words" ]
+    [ "$(print_env_from_file HELIX_TEST_HOST "HELIX_TEST_HOST='single quoted'")" = "single quoted" ]
+    [ "$(print_env_from_file HELIX_TEST_HOST 'HELIX_TEST_HOST="kept # hash" # note')" = "kept # hash" ]
+    [ "$(print_env_from_file HELIX_TEST_HOST 'HELIX_TEST_HOST=bare value')" = "bare value" ]
+}
+
+@test "an unterminated quote is refused with a warning" {
+    [ "$(print_env_from_file HELIX_TEST_HOST 'HELIX_TEST_HOST="open')" = "" ]
+    grep -q "unterminated quote" "$BATS_TEST_TMPDIR/parse.log"
+}
+
+@test "LD_PRELOAD, PATH and other non-settings are refused, once per key" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'LD_PRELOAD=/tmp/evil.so\nLD_PRELOAD=/tmp/evil2.so\nPATH=/tmp/evil\nBASH_ENV=/tmp/x\nHELIX_FB_HTTP=/tmp/evil.py\n' \
         > "$MOCK_INSTALL/config/helixscreen.env"
     chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
-    run env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST
-    [ "$status" -eq 0 ]
-    [ "$output" = "resolved-by-parse" ]
+    run env -u LD_PRELOAD -u HELIX_FB_HTTP "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env LD_PRELOAD
+    [ "$output" != "/tmp/evil.so" ]
+    env -u LD_PRELOAD "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env PATH \
+        > "$BATS_TEST_TMPDIR/path.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/path.out")" != "/tmp/evil" ]
+    [ "$(grep -c 'LD_PRELOAD is not a setting' "$BATS_TEST_TMPDIR/refuse.log")" = "1" ]
+    grep -q 'PATH is not a setting' "$BATS_TEST_TMPDIR/refuse.log"
+    grep -q 'BASH_ENV is not a setting' "$BATS_TEST_TMPDIR/refuse.log"
+    grep -q 'HELIX_FB_HTTP is not a setting' "$BATS_TEST_TMPDIR/refuse.log"
+}
+
+@test "an allowlisted non-HELIX key is exported" {
+    [ "$(print_env_from_file MALLOC_ARENA_MAX 'MALLOC_ARENA_MAX=4')" = "4" ]
+}
+
+@test "a symlink chain into printer_data does not earn the directory owner's trust" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat_map
+    make_u1_layout 0 755 1000
+    # Re-aim the install link through a middle link.
+    local real
+    real=$(readlink -f "$MOCK_INSTALL/config/helixscreen.env")
+    ln -s "$real" "$BATS_TEST_TMPDIR/middle.env"
+    rm "$MOCK_INSTALL/config/helixscreen.env"
+    ln -s "$BATS_TEST_TMPDIR/middle.env" "$MOCK_INSTALL/config/helixscreen.env"
+    run_launcher_as_root
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "owned by uid 1000" "$BATS_TEST_TMPDIR/gate.log"
 }
 
 # =============================================================================

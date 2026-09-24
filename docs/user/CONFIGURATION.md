@@ -1955,6 +1955,11 @@ or in the environment before running the binary by hand. Do not put them in
 /etc/systemd/system/helixscreen.service: that unit is rewritten from the install-dir
 template on every start, so edits to it are discarded before the app launches.
 
+Values in helixscreen.env are plain text. Surrounding quotes are removed, but `$VAR`,
+`$(...)` and backticks are kept exactly as typed, not expanded or run, so write the final
+value itself. Only `HELIX_*` settings and the `MALLOC_*` memory settings are read from the
+file; any other line is ignored and noted in the log.
+
 **Display & Input:**
 
 | Variable | Description |
