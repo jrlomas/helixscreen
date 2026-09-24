@@ -2397,20 +2397,13 @@ void AmsBackendHappyHare::reapply_overrides() {
 
 // check_preconditions() provided by AmsSubscriptionBackend
 
-AmsError AmsBackendHappyHare::validate_slot_index(int gate_index) const {
-    if (!slots_.is_valid_index(gate_index)) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), gate_index, slots_.slot_count() - 1);
-    }
-    return AmsErrorHelper::success();
-}
-
 // execute_gcode() provided by AmsSubscriptionBackend
 
 AmsError AmsBackendHappyHare::do_load_filament(int slot_index) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        AmsError gate_valid = validate_slot_index(slot_index);
+        AmsError gate_valid = validate_slot_index_locked(slot_index);
         if (!gate_valid) {
             return gate_valid;
         }
@@ -2447,7 +2440,7 @@ AmsError AmsBackendHappyHare::do_select_slot(int slot_index) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        AmsError gate_valid = validate_slot_index(slot_index);
+        AmsError gate_valid = validate_slot_index_locked(slot_index);
         if (!gate_valid) {
             return gate_valid;
         }
@@ -2528,7 +2521,7 @@ AmsError AmsBackendHappyHare::clear_fault(int slot_index) {
         }
 
         if (!all_gates) {
-            AmsError slot_err = validate_slot_index(slot_index);
+            AmsError slot_err = validate_slot_index_locked(slot_index);
             if (!slot_err) {
                 return slot_err;
             }
@@ -2554,7 +2547,7 @@ AmsError AmsBackendHappyHare::eject_lane(int slot_index) {
             return precondition;
         }
 
-        AmsError slot_err = validate_slot_index(slot_index);
+        AmsError slot_err = validate_slot_index_locked(slot_index);
         if (!slot_err) {
             return slot_err;
         }
@@ -2574,7 +2567,7 @@ AmsError AmsBackendHappyHare::select_gate(int slot_index) {
             return AmsErrorHelper::not_connected("Happy Hare backend not started");
         }
 
-        AmsError slot_err = validate_slot_index(slot_index);
+        AmsError slot_err = validate_slot_index_locked(slot_index);
         if (!slot_err) {
             return slot_err;
         }
@@ -2618,7 +2611,7 @@ AmsError AmsBackendHappyHare::check_gate(int slot_index) {
             return AmsErrorHelper::not_connected("Happy Hare backend not started");
         }
 
-        AmsError slot_err = validate_slot_index(slot_index);
+        AmsError slot_err = validate_slot_index_locked(slot_index);
         if (!slot_err) {
             return slot_err;
         }

@@ -348,6 +348,22 @@ AmsError AmsSubscriptionBackend::state_preconditions_unlocked() const {
     return AmsErrorHelper::success();
 }
 
+AmsError AmsSubscriptionBackend::validate_slot_index_locked(int slot_index) const {
+    const int bound = slot_index_bound_locked();
+    if (bound <= 0) {
+        return AmsErrorHelper::not_connected("No slots discovered");
+    }
+    if (slot_index < 0 || slot_index >= bound) {
+        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, bound - 1);
+    }
+    return AmsErrorHelper::success();
+}
+
+AmsError AmsSubscriptionBackend::validate_slot_index(int slot_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return validate_slot_index_locked(slot_index);
+}
+
 AmsError AmsSubscriptionBackend::check_preconditions(bool requires_toolhead_motion) const {
     if (auto e = state_preconditions_unlocked(); !e.success()) {
         return e;

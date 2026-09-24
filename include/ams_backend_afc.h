@@ -1102,14 +1102,6 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     virtual AmsError execute_gcode_notify(const std::string& gcode, const std::string& success_msg,
                                           const std::string& error_prefix);
 
-    /**
-     * @brief Validate slot index is within range
-     *
-     * @param slot_index Slot index to validate
-     * @return AmsError (SUCCESS if valid, INVALID_SLOT otherwise)
-     */
-    AmsError validate_slot_index(int slot_index) const;
-
     // Unified slot registry -- single source of truth for all slot-indexed state
     helix::printer::SlotRegistry slots_;
 

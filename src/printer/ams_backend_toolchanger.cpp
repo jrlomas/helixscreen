@@ -941,18 +941,6 @@ int AmsBackendToolChanger::find_slot_for_tool(const std::string& tool_name) cons
 // NOTE: Must be called while holding mutex_ (accesses system_info_ without lock)
 // check_preconditions() provided by AmsSubscriptionBackend
 
-// NOTE: Must be called while holding mutex_ (accesses system_info_ without lock)
-AmsError AmsBackendToolChanger::validate_slot_index(int slot_index) const {
-    // Special case: no tools discovered
-    if (system_info_.total_slots == 0) {
-        return AmsErrorHelper::not_connected("No tools discovered");
-    }
-    if (slot_index < 0 || slot_index >= system_info_.total_slots) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, system_info_.total_slots - 1);
-    }
-    return AmsErrorHelper::success();
-}
-
 // execute_gcode() provided by AmsSubscriptionBackend
 
 // ============================================================================
@@ -1122,7 +1110,7 @@ AmsError AmsBackendToolChanger::do_unload_filament(int slot_index) {
         std::lock_guard<std::mutex> lock(mutex_);
 
         if (slot_index >= 0) {
-            AmsError slot_valid = validate_slot_index(slot_index);
+            AmsError slot_valid = validate_slot_index_locked(slot_index);
             if (!slot_valid) {
                 return slot_valid;
             }
@@ -1165,7 +1153,7 @@ AmsError AmsBackendToolChanger::do_change_tool(int tool_number) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        AmsError slot_valid = validate_slot_index(tool_number);
+        AmsError slot_valid = validate_slot_index_locked(tool_number);
         if (!slot_valid) {
             return slot_valid;
         }
@@ -1244,7 +1232,7 @@ AmsError AmsBackendToolChanger::apply_user_edit(int slot_index, const SlotInfo& 
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        AmsError slot_valid = validate_slot_index(slot_index);
+        AmsError slot_valid = validate_slot_index_locked(slot_index);
         if (!slot_valid) {
             return slot_valid;
         }
@@ -1355,7 +1343,7 @@ AmsError AmsBackendToolChanger::sync_external_identity(int slot_index, const Slo
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        AmsError slot_valid = validate_slot_index(slot_index);
+        AmsError slot_valid = validate_slot_index_locked(slot_index);
         if (!slot_valid) {
             return slot_valid;
         }
