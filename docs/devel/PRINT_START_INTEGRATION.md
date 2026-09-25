@@ -54,10 +54,10 @@ The HelixScreen macro file provides:
 - **Phase tracking**: Optional `HELIX_PHASE_*` macros for detailed progress display
 - **Pre-print helpers**: `HELIX_BED_LEVEL_IF_NEEDED`, `HELIX_CLEAN_NOZZLE`, `HELIX_START_PRINT`
 
-**Installation via Settings UI:**
+**Installation via the UI:**
 
-1. Go to Settings → Advanced → HelixScreen Macros
-2. Click "Install Macros"
+1. Open the **Advanced** panel from the navbar and find the **Helper Macros** section
+2. Tap **Install Helper Macros** (the row reads **Update Helper Macros** when an update is available, and **Helper Macros - Installed** when current)
 3. Restart Klipper when prompted
 
 **Manual Installation:**
@@ -90,7 +90,7 @@ gcode:
 
 ### Option 1b: With Phase Tracking
 
-For detailed progress display during preparation, add phase signals:
+Phase display works out of the box: with no instrumentation at all, HelixScreen infers the current phase from the console stream, probe lines, bed-mesh status, and toolhead position (see "Silent-phase signals" below). Adding explicit phase signals is a manual opt-in for exact, firmware-announced phases on a setup where the heuristics pick wrong:
 
 ```gcode
 [gcode_macro PRINT_START]
@@ -172,6 +172,10 @@ When `helix_macros.cfg` is installed, these macros are available:
 | `HELIX_BED_LEVEL_IF_NEEDED` | Run bed mesh only if stale (configurable max age) |
 | `HELIX_CLEAN_NOZZLE` | Nozzle cleaning sequence (configure brush position) |
 | `HELIX_START_PRINT` | Complete start print sequence with all options |
+
+### Uninstalling
+
+The uninstall path (`moonraker-plugin/install.sh`) also runs `strip_phase_tracking.py` over the Klipper config tree. Each marker block is a pair of `HELIX_TRACKING` comment lines wrapped around a single `HELIX_PHASE_*`/`HELIX_READY` call; the script removes those blocks from inside `[gcode_macro ...]` bodies, writes a `.bak.<timestamp>` backup of every file it edits, and never touches a file whose markers look anomalous (unmatched, nested, or not exactly the three lines a marker block consists of). It does not restart Klipper - the edit takes effect at the next restart. Exit status: `0` all clean or stripped, `2` nothing failed but a file needs a human to look, `1` an edit failed.
 
 ## Controllable Pre-Print Operations
 

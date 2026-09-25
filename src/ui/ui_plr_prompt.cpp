@@ -54,7 +54,7 @@ PlrRecoveryPlan g_active_plan;
 // log_tag must be a string LITERAL: it is captured by pointer into a callback
 // that outlives this frame. Never pass plan.resume_gcode.c_str().
 void run_recovery_gcode(IMoonrakerAPI* api, const std::string& gcode, const char* fail_fmt_tr,
-                        const char* log_tag) {
+                        const char* log_tag, uint32_t timeout_ms = 0) {
     api->execute_gcode(
         gcode, [log_tag]() { spdlog::info("[PLR] {} accepted by firmware", log_tag); },
         [fail_fmt_tr, log_tag](const MoonrakerError& err) {
@@ -65,7 +65,8 @@ void run_recovery_gcode(IMoonrakerAPI* api, const std::string& gcode, const char
                                     [fail_fmt_tr, detail = std::move(detail)]() {
                                         NOTIFY_ERROR(fmt::runtime(fail_fmt_tr), detail);
                                     });
-        });
+        },
+        timeout_ms);
 }
 
 /// Report a discard/resume failure that arrived from a non-gcode (JSON-RPC)
@@ -95,7 +96,13 @@ void run_plr_resume(IMoonrakerAPI* api) {
         return;
     }
     spdlog::info("[PLR] User chose Resume — running '{}'", g_active_plan.resume_gcode);
-    run_recovery_gcode(api, g_active_plan.resume_gcode, lv_tr("Recovery failed: {}"), "Resume");
+    // MACRO_TIMEOUT_MS, not the 60s default: resume macros rebuild and replay
+    // the interrupted job (Qidi's RESUME_INTERRUPTED rewrites the gcode via a
+    // shell pipeline over the whole file before printing it), so a big file can
+    // legitimately run past a minute. A timeout toast here would be a lie - the
+    // firmware keeps executing the resume.
+    run_recovery_gcode(api, g_active_plan.resume_gcode, lv_tr("Recovery failed: {}"), "Resume",
+                       IMoonrakerAPI::MACRO_TIMEOUT_MS);
 }
 
 void run_plr_discard(IMoonrakerAPI* api) {

@@ -225,3 +225,11 @@ TEST_CASE("effective_jog_speed_mm_min: inverted bounds resolve to the maximum", 
     // min(max(v, lo), hi): a mutation run shows the revert surviving.
     CHECK(helix::effective_jog_speed_mm_min(6000, 30000.0, 600.0) == 600);
 }
+
+TEST_CASE("jog_refused_for_unknown_position: refuses unless envelope and position are known",
+          "[jog_coalescer]") {
+    CHECK(helix::jog_refused_for_unknown_position(true, true) == false);
+    CHECK(helix::jog_refused_for_unknown_position(true, false) == true);
+    CHECK(helix::jog_refused_for_unknown_position(false, true) == true);
+    CHECK(helix::jog_refused_for_unknown_position(false, false) == true);
+}

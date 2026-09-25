@@ -8,16 +8,14 @@
  * The header carries exactly one configured action: the secondary button
  * (folder icon, on_print_status_files) that opens print select during an active
  * print, where starting a print stays blocked by print_select_can_print
- * (prestonbrown/helixscreen#1395). The PRIMARY action_button stays unconfigured:
- * the e-stop that used to live there is the estop_fab at the panel root, bound
- * to the estop_visible subject (prestonbrown/helixscreen#1204).
+ * (prestonbrown/helixscreen#1395). The primary action button stays unconfigured;
+ * the e-stop is the estop_fab at the panel root, bound to the estop_visible
+ * subject (prestonbrown/helixscreen#1204).
  *
- * The primary-button regression this pins: on_print_state_changed() once cleared
- * the action button's HIDDEN flag for Preparing/Printing/Paused, left over from
- * when that button WAS the e-stop, which revealed an empty primary-coloured
- * pill for the whole print. The assertion is behavioural: drive the real panel
- * through every print state and require the primary to stay hidden while the
- * Files button stays visible the whole way.
+ * An unconfigured primary shown during a print is an empty primary-coloured
+ * pill, so the tests drive the real panel through every print state and
+ * require the primary to stay hidden while the Files button stays visible the
+ * whole way.
  */
 
 #include "ui_nav_manager.h"

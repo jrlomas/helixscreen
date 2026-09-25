@@ -83,8 +83,7 @@ inline void edit_slot_as_user(AmsBackend& backend, int slot_index, const helix::
 /// exactly the fields production does. A fixture that links a spool without
 /// this has a lane naming an id nothing describes.
 inline void spool_states(const AmsBackend& backend, int slot_index, const SpoolInfo& spool) {
-    SpoolmanManager::file_spool_on_lane(backend.lane_id(slot_index), spool,
-                                        backend.tracks_weight_locally());
+    SpoolmanManager::file_spool_on_lane(backend.lane_id(slot_index), spool);
 }
 
 /// Stage what SpoolmanManager runs when the server denies a spool a slot is

@@ -1151,13 +1151,18 @@ helix::ui::OpButtonState AmsOperationSidebar::read_unload_gating_state() const {
         unload_available = loaded && lv_subject_get_int(loaded) == 1;
     }
 
+    const OpInputs in = read_op_inputs();
     return helix::ui::build_unload_gating_state(
-        /*filament_loaded=*/unload_available,
-        // AmsSystemInfo::is_busy(): the same predicate check_preconditions()
-        // refuses on, instead of a fourth open-coded `action != IDLE && != ERROR`.
-        /*system_busy=*/backend && backend->get_system_info().is_busy(),
-        printer_state_.get_print_lifecycle(),
-        /*backend_self_homes=*/backend && backend->filament_ops_self_home());
+        /*filament_loaded=*/unload_available, in.system_busy, in.lifecycle, in.backend_self_homes);
+}
+
+AmsOperationSidebar::OpInputs AmsOperationSidebar::read_op_inputs() const {
+    AmsBackend* backend = AmsState::instance().get_backend();
+    // AmsSystemInfo::is_busy(): the same predicate check_preconditions()
+    // refuses on, instead of a fourth open-coded `action != IDLE && != ERROR`.
+    return {/*system_busy=*/backend && backend->get_system_info().is_busy(),
+            printer_state_.get_print_lifecycle(),
+            /*backend_self_homes=*/backend && backend->filament_ops_self_home()};
 }
 
 helix::ui::OpButtonState AmsOperationSidebar::read_batch_load_gating_state() const {
@@ -1170,7 +1175,6 @@ helix::ui::OpButtonState AmsOperationSidebar::read_batch_load_gating_state() con
     // its existing nothing_to_feed refusal. slot_is_loaded stays false: the
     // picker targets empty toolheads, so an already-fed head never disables the
     // batch.
-    helix::ui::OpButtonState state;
     bool any_loadable = false;
     if (backend && backend->supports_batch_filament_ops()) {
         const auto rows = BatchFilamentModal::collect_rows(*backend);
@@ -1178,10 +1182,10 @@ helix::ui::OpButtonState AmsOperationSidebar::read_batch_load_gating_state() con
             BatchFilamentModal::any_head_for_direction(rows.at_toolhead, rows.lane_presence,
                                                        /*for_load=*/true);
     }
+    const OpInputs in = read_op_inputs();
+    helix::ui::OpButtonState state =
+        helix::ui::op_blocked_state(in.system_busy, in.lifecycle, in.backend_self_homes);
     state.slot_has_filament = any_loadable ? std::nullopt : std::optional<bool>(false);
-    state.system_busy = backend && backend->get_system_info().is_busy();
-    state.print_blocks_op = helix::ui::print_blocks_filament_op(
-        printer_state_.get_print_lifecycle(), backend && backend->filament_ops_self_home());
     return state;
 }
 
@@ -1270,9 +1274,8 @@ void AmsOperationSidebar::handle_unload(int slot_index) {
     // The button is bound to ams_sidebar_unload_disabled, but a tap can still
     // land in the window between a print starting and the subject settling, and
     // handle_unload(slot) is also the context menu's dispatch entry. Refuse
-    // here rather than forwarding a guaranteed backend rejection ("Cannot run
-    // filament operation while printing" raised while merely PAUSED was a live
-    // field report).
+    // here rather than forwarding a guaranteed backend rejection, which the
+    // backend raises for a paused print as well as a printing one.
     if (refuse_if_busy_or_printing()) {
         return;
     }

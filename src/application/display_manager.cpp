@@ -560,15 +560,15 @@ bool DisplayManager::init(const Config& config) {
         }
     }
 
-    // Real panel power-off (FB_BLANK_POWERDOWN / DRM connector DPMS-off), applied
-    // ALONGSIDE the backlight write rather than instead of it: enter_sleep() writes
-    // brightness 0 whichever mechanism it picks, and some panel controllers treat
-    // duty zero as "dim" and keep the LEDs powered, so a device that can dim still
-    // needs the panel cut (#1049, #1594).
+    // Real panel power-off (FB_BLANK_POWERDOWN / DRM connector DPMS-off) is the
+    // last resort for a panel with no controllable backlight. A device with a
+    // usable backlight sleeps by writing brightness 0 in enter_sleep(), because a
+    // power-down its driver does not expect can wedge the display engine or leave
+    // the panel lit on a no-signal pattern. See should_use_power_off().
     //
     // Config override: /display/panel_power_off (0 or 1). Missing (-1) = auto.
-    // It exists so a platform whose driver cannot survive a CRTC disable can be
-    // switched off in the field without waiting for a release.
+    // 1 cuts the panel on hardware whose backlight write leaves the LEDs lit
+    // (#1594); 0 keeps it powered on a panel that does not recover from it.
     bool has_usable_backlight = m_backlight && m_backlight->is_available();
     bool backend_can_power_off = m_backend && m_backend->supports_power_off();
     {
@@ -579,7 +579,8 @@ bool DisplayManager::init(const Config& config) {
             spdlog::info("[DisplayManager] Display power-off: {} (config override)",
                          m_use_power_off);
         } else {
-            m_use_power_off = should_use_power_off(m_use_hardware_blank, backend_can_power_off);
+            m_use_power_off = should_use_power_off(m_use_hardware_blank, has_usable_backlight,
+                                                   backend_can_power_off);
             spdlog::info("[DisplayManager] Display power-off: {} ({})", m_use_power_off,
                          m_use_power_off
                              ? m_backend->name()
@@ -709,10 +710,16 @@ void DisplayManager::shutdown() {
 
     // Sleep overlay is an LVGL object freed by lv_deinit() — just clear the pointer.
     // Don't call destroy_sleep_overlay() here because lv_obj_delete() ordering
-    // relative to other LVGL teardown is fragile. The screen hold the overlay took is
-    // released here; this does not release a hold a running screensaver has taken.
+    // relative to other LVGL teardown is fragile. The screen holds the overlay and the
+    // power-off flush suppression took are released here; this does not release a
+    // hold a running screensaver has taken.
     if (m_sleep_overlay) {
         helix::active_screen_hide_hold().release();
+    }
+    if (m_flush_suppressed_for_sleep) {
+        helix::active_screen_hide_hold().release();
+        m_flush_suppressed_for_sleep = false;
+        m_saved_flush_cb_for_sleep = nullptr;
     }
     m_sleep_overlay = nullptr;
     m_use_hardware_blank = false;
@@ -1274,6 +1281,9 @@ void DisplayManager::suppress_flush_for_sleep() {
     m_saved_flush_cb_for_sleep = m_display->flush_cb;
     lv_display_set_flush_cb(m_display, sleep_noop_flush_cb);
     m_flush_suppressed_for_sleep = true;
+    // Nothing on the screen is drawn now, so it is hidden: widgets that wait on
+    // their own draw (the G-code viewer's stall watchdog) read it as not visible.
+    helix::active_screen_hide_hold().acquire(lv_screen_active());
     spdlog::debug("[DisplayManager] Flush suppressed while panel powered off");
 }
 
@@ -1287,6 +1297,7 @@ void DisplayManager::restore_flush_after_sleep() {
         lv_display_enable_invalidation(m_display, true);
     }
     m_saved_flush_cb_for_sleep = nullptr;
+    helix::active_screen_hide_hold().release();
     spdlog::debug("[DisplayManager] Flush restored on wake");
 }
 

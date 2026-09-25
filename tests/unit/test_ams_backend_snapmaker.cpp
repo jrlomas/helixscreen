@@ -1505,6 +1505,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
     edit.brand = "Polymaker";
     edit.spool_name = "PolyLite PLA Orange";
     edit.spoolman_id = 42;
+    edit.spoolman_filament_id = 55;
     edit.material = "PLA";
     edit.color_rgb = 0xFF5500;
 
@@ -1513,6 +1514,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
     // name, material and colour that ride in with a link need the source that
     // actually owns them.
     helix::test::edit_slot_as_user(backend, 0, edit);
+    REQUIRE(backend.get_slot_info(0).spoolman_filament_id == 55);
     SpoolInfo spool;
     spool.id = 42;
     spool.vendor = "Polymaker";
@@ -1539,6 +1541,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
     CHECK(info.brand == "Polymaker");                // survived
     CHECK(info.spool_name == "PolyLite PLA Orange"); // survived
     CHECK(info.spoolman_id == 42);                   // survived
+    CHECK(info.spoolman_filament_id == 55);          // survived
     CHECK(info.material == "PLA");                   // override material wins
     CHECK(info.color_rgb == 0xFF5500u);              // override color wins
 }
@@ -1698,7 +1701,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
 
     // A record as a session running older code left it: a user override with
     // no fingerprint. Session 1 boots on it, reads the tag, and the
-    // observation must persist into the record — two backends over one mock
+    // observation must persist into the record: two backends over one mock
     // DB stand in for two app lifetimes.
     helix::ams::FilamentSlotOverride saved;
     saved.brand = "Polymaker";
@@ -2264,8 +2267,7 @@ TEST_CASE_METHOD(SnapmakerFixture,
     REQUIRE(backend.get_slot_info(0).status == SlotStatus::AVAILABLE);
     holds_spool_colour("after the first frame");
 
-    SpoolmanManager::file_spool_on_lane(rig.backend_reg.lane(0), spool_42(),
-                                        backend.tracks_weight_locally());
+    SpoolmanManager::file_spool_on_lane(rig.backend_reg.lane(0), spool_42());
     holds_spool_colour("after the poll re-files the spool");
 
     SnapmakerTestAccess::handle_status(backend, seated_tag_frame(0xFF112233u, "PETG"));

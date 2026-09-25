@@ -2,14 +2,14 @@
 
 The home panel is not one hardcoded screen: it is a grid of independently developed "widgets" — fan speeds, temperatures, camera, macros, and 30-odd more — each pairing an XML component (appearance) with an optional C++ `PanelWidget` subclass (behavior). `PanelWidgetManager`, a `::instance()` singleton, owns the whole lifecycle: it reads the user's saved layout from disk, decides which widgets the connected hardware earns, places them on a responsive grid, and creates/attaches each one. When hardware, config, or the user in edit mode invalidates the layout, the LVGL tree is torn down and rebuilt — but C++ widget instances are recycled through that churn so expensive state (a live camera stream) never restarts.
 
-Counts, recounted 2026-08-20 (method included so you can re-run it):
+Counts, recounted 2026-09-23 (method included so you can re-run it):
 
 | What | Count | Method |
 |------|-------|--------|
 | Widget defs in the registry | 38 (37 + `camera` behind `HELIX_HAS_CAMERA`) | rows of `s_widget_defs` ([`src/ui/panel_widget_registry.cpp#helix`](../../../src/ui/panel_widget_registry.cpp#L88)) |
-| `PanelWidget` subclasses | 31 | `rg -l 'public PanelWidget' include src -g '*.h'` — 28 in `src/ui/panel_widgets/`, plus `favorite_macro`, `power_device`, `preheat` headers in `include/` |
+| `PanelWidget` subclasses | 34 | `rg -l 'public PanelWidget' include src -g '*.h' -g '*.cpp'` — 30 headers in `src/ui/panel_widgets/` plus `LockWidget` defined inside `lock_widget.cpp`, and the `favorite_macro`, `power_device`, `preheat` headers in `include/` |
 | XML components | 41 | `ls ui_xml/components/panel_widget_*.xml \| wc -l` |
-| Factory-less (pure XML) defs | 4 | `ams`, `filament`, `notifications`, `firmware_restart` — no `register_*` call in `init_widget_registrations()` |
+| Factory-less (pure XML) defs | 3 | `ams`, `notifications`, `firmware_restart` — no `register_*` call in `init_widget_registrations()` |
 | Hardware-gated defs | 12 (11 distinct gate subjects) | defs with a non-null `hardware_gate_subject` in the table below |
 | Multi-instance defs (`base_id:N`) | 6 | `power_device`, `fan_stack`, `fan`, `thermistor`, `temp_graph`, `favorite_macro` (`multi_instance = true`) |
 
@@ -40,7 +40,7 @@ flowchart TB
 | [`src/ui/panel_widget_manager.cpp`](../../../src/ui/panel_widget_manager.cpp) | The coordinator: config load, gate checks, grid placement, tile creation, attach, reuse, coalesced rebuilds |
 | [`include/panel_widget_config.h`](../../../include/panel_widget_config.h) | `PanelWidgetConfig` / `PanelWidgetEntry` — per-printer layout JSON (pages, enabled flags, grid positions, per-widget config) |
 | [`src/ui/ui_panel_home.cpp`](../../../src/ui/ui_panel_home.cpp) | `HomePanel` — page carousel, per-page containers, the rebuild callback that feeds the reuse map |
-| `src/ui/panel_widgets/` | 28 of the widget implementations (one class per file pair, headers alongside) |
+| `src/ui/panel_widgets/` | 31 of the widget implementations (one class per file pair, headers alongside; `LockWidget` lives in its `.cpp`) |
 | [`src/ui/panel_widgets/fan_stack_widget.cpp`](../../../src/ui/panel_widgets/fan_stack_widget.cpp) | The richest widget: version-observer rebinding, two XML components, edit-mode configure picker |
 | [`src/ui/panel_widgets/camera_widget.cpp`](../../../src/ui/panel_widgets/camera_widget.cpp) | The reuse rationale: MJPEG stream that must survive LVGL tree rebuilds |
 | [`include/grid_edit_mode.h`](../../../include/grid_edit_mode.h) | Drag-to-rearrange edit mode; consumes widget IDs via `lv_obj_set_name` and drives rebuilds |
@@ -61,7 +61,7 @@ flowchart TB
 - `on_size_changed(colspan, rowspan, width_px, height_px)` — adapt content to the cell; called by the manager right after every `attach()` ([`src/ui/panel_widget_manager.cpp#populate_widgets`](../../../src/ui/panel_widget_manager.cpp#L1178)), including on reused instances.
 - `supports_reuse()` — default `true`; the reuse-map pass-through (below). `has_overlay_open()` — rebuilds must not run while a widget displays a fullscreen overlay, or `detach()` would destroy it mid-display. `has_edit_configure()` / `on_edit_configure()` — the gear button in grid edit mode. `save_widget_config(json)` — persist config through the manager (needs `panel_id_`, set by the manager before attach). `record_interaction()` — telemetry ping from event callbacks.
 
-The registry is a plain vector of `PanelWidgetDef` structs ([`src/ui/panel_widget_registry.cpp#helix`](../../../src/ui/panel_widget_registry.cpp#L88)) — display metadata (name, icon, description for the widget catalog), grid geometry (default/min/max spans, half-cell support), the hardware gate subject, and two function pointers: `factory(instance_id)` and `init_subjects`. A def with `factory == nullptr` is a pure-XML widget: its `ui_xml/components/panel_widget_<id>.xml` does everything through subject bindings, and the manager creates it without any C++ instance. Three defs live that way today — `ams`, `notifications`, and `firmware_restart`. `filament` used to be one of them; it now has a `FilamentSensorWidget` that owns the tap-routing decision (`decide_tap_destination()` in [`filament_widget_tap_policy.h`](../../../include/filament_widget_tap_policy.h)).
+The registry is a plain vector of `PanelWidgetDef` structs ([`src/ui/panel_widget_registry.cpp#helix`](../../../src/ui/panel_widget_registry.cpp#L88)) — display metadata (name, icon, description for the widget catalog), grid geometry (default/min/max spans, half-cell support), the hardware gate subject, and two function pointers: `factory(instance_id)` and `init_subjects`. A def with `factory == nullptr` is a pure-XML widget: its `ui_xml/components/panel_widget_<id>.xml` does everything through subject bindings, and the manager creates it without any C++ instance. Three defs live that way today — `ams`, `notifications`, and `firmware_restart`. `filament` has a `FilamentSensorWidget` that owns the tap-routing decision (`decide_tap_destination()` in [`filament_widget_tap_policy.h`](../../../include/filament_widget_tap_policy.h)).
 
 Factories are installed at runtime, never by static initializers: `init_widget_registrations()` ([`src/ui/panel_widget_registry.cpp#init_widget_registrations`](../../../src/ui/panel_widget_registry.cpp#L207)) explicitly calls each widget's `register_*_widget()` function once, on first `init_widget_subjects()` — file-scope self-registration is banned in the table's comment to avoid static-initialization-order fiasco, because factories capture runtime singletons (`get_printer_state()`) and shared resources. Each `register_*` function also registers its XML event callbacks (`lv_xml_register_event_cb`) at the same moment, before any XML is parsed — an XML file referencing an unregistered callback name silently does nothing. The factory signature takes an `instance_id` string: multi-instance defs get clones addressed as `fan_stack:1`, `thermistor:2`, and `find_widget_def()` strips the `:N` suffix to find the base def ([`src/ui/panel_widget_registry.cpp#find_widget_def`](../../../src/ui/panel_widget_registry.cpp#L168)).
 
@@ -92,7 +92,7 @@ The catalog itself, as the registry defines it (gate subjects from the def table
 | `ams` | *pure XML* (mini-status width propagated by the manager) | `ams_slot_count` |
 | `bypass` | `BypassWidget` | `ams_supports_bypass` |
 | `active_spool` | `ActiveSpoolWidget` | — |
-| `filament` | *pure XML* | `filament_sensor_count` |
+| `filament` | `FilamentSensorWidget` | `filament_sensor_count` |
 | `humidity` | `HumidityWidget` | `humidity_sensor_count` |
 | `width_sensor` | `WidthSensorWidget` | `width_sensor_count` |
 | `favorite_macro` | `FavoriteMacroWidget` (`src/ui/widgets/`) | — |

@@ -150,6 +150,7 @@ from real RFID spools remain rig-pending; code-verified is not field-verified.
 | `T<n>` | Tool change / slot select (`do_change_tool`, `:532-538`) |
 | `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=<l> MAP_EXTRUDER=<p>` | Pre-print logical->physical remap (`build_preprint_gcode`, `:1887-1889`) |
 | `SET_PRINT_USED_EXTRUDERS EXTRUDERS=<csv>` | Pre-print feed gating — always sent, remap or not (`src/printer/ams_backend_snapmaker.cpp#build_preprint_gcode`) |
+| `AUTO_FEEDING_BATCH ACTION=START / DOING EXTRUDER=<n> / END` | Batch load/unload when the firmware macro is present (see Batch Load/Unload) |
 | `POST /printer/filament_detect/set` | Slot-metadata writeback (paxx12 Extended Firmware REST, `:854-924`) |
 
 Why `AUTO_FEEDING ... LOAD=1` and not the obvious alternatives — the source records the
@@ -162,6 +163,63 @@ filament_feed extension, ~line 1681). Unload
 must use the same envelope: the bare `INNER_FILAMENT_UNLOAD` leaf skips the feed state
 machine and breaks aftermarket feeders that hook `unload_finish` (the DnG-Crafts U1-Ace
 ACE-Pro adapter, #974).
+
+### Batch Load/Unload
+
+The U1 is the only backend whose sidebar offers multi-slot Load/Unload All: it overrides
+`supports_batch_filament_ops()` to true (`include/ams_backend_snapmaker.h#AmsBackendSnapmaker`;
+the base default is false and no other backend overrides it, mock aside). The sidebar opens
+`BatchFilamentModal` (`include/ui_batch_filament_modal.h`), which dispatches the whole ticked
+set in one call; `load_filament_batch()` / `unload_filament_batch()` route it through the shared
+`run_filament_op()` executor, so the operation bar, error surfacing and skip handling are the
+same as a single-slot op.
+
+`do_filament_batch()` (`src/printer/ams_backend_snapmaker.cpp#do_filament_batch`) builds one gcode
+script per batch in two shapes:
+
+- **Legacy firmware:** a chain of per-head `AUTO_FEEDING EXTRUDER=<n> LOAD=1` (or `UNLOAD=1`)
+  lines, one per selected head.
+- **Firmware with the batch macro**, detected at connect via
+  `discovery.macro_config_name(helix::macro_patterns::AUTO_FEEDING_BATCH)`: a single
+  `AUTO_FEEDING_BATCH ACTION=START` / `ACTION=DOING EXTRUDER=<n> <LOAD|UNLOAD>=1
+  [NEXT_EXTRUDER=<next>]` / `ACTION=END` script. START snapshots the current hotend targets and
+  raises the firmware-side `doing` interlock; `PRINT_PRESTART_CHECK` refuses to start a print
+  while it is set; END restores the snapshot.
+
+Two recovery paths keep a firmware batch from being stranded half-done:
+
+- **RPC failure mid-batch:** `end_firmware_batch()` re-sends `ACTION=END` only when the dispatch
+  id still matches the live plan, so a second batch already started is never ended out from
+  under itself.
+- **Reconnect:** `batch_feeding::reconcile_on_connect()` (`include/batch_feed_reconcile.h`) sends
+  `ACTION=END` at connect when the `doing` interlock is set, no print is in flight, and no local
+  batch is active (`filament_batch_in_flight() == false`).
+
+The batch's single RPC gets `slots.size() * BATCH_FEED_OP_TIMEOUT_MS` (150 s per head, the same
+headroom one feed gets): a four-head cold batch heats every nozzle from ambient. The backend
+tracks the dispatched heads in its `BatchPlan`, whose cursor advances only as a head reaches the
+direction's terminal channel state; a head that hits a `*_fail` state clears the firmware batch
+interlock and is reported, not retried silently.
+
+Not yet verified on hardware; both script shapes and both recovery paths are source-derived.
+
+### Per-Filament Load/Unload Temperatures
+
+The firmware can answer load and unload temperatures per spool identity. The provider table has
+one row for the U1: detect object `filament_parameters`, query `FILAMENT_PARA_GET_ALL_INFO`
+(`include/filament_temperature_source.h`). The response arrives as `// `-prefixed console lines
+carrying flat Python dict literals keyed `{vendor}_{main_type}_{sub_type}_{field}`;
+`helix::filament_temps` parses them into `FilamentTemperatures{load_c, unload_c}`.
+`capture_on_connect()` runs from the discovery sequence, and
+`lookup_filament_temperatures()` feeds the result into
+`ActiveMaterialProvider` as `result.firmware_temps`
+(`src/printer/active_material_provider.cpp`). The load temperature wins over the
+database-derived preheat when the firmware publishes one
+(`include/filament_op_slot_resolver.h`): a firmware that measured a load temperature measured
+it for the load, so it outranks a print-range midpoint standing in for one. The unload
+temperature is captured and parsed but has no consumer yet. These are load/unload
+temperatures only; they are never folded into `nozzle_temp_min`/`max`, which keep describing
+the printing range.
 
 ### The channel_state Feed Machine
 
@@ -309,6 +367,7 @@ Extended Firmware endpoint that 404s on stock firmware; the override still persi
 | Dryer | No | Not supported |
 | Recover / Reset / Cancel | No | All three return `not_supported` (`src/printer/ams_backend_snapmaker.cpp#recover`) |
 | Operation step bar | Yes | Firmware-driven per-direction steps via `ams_operation_phase`; Heat step live |
+| Batch load/unload | Yes | The only backend with `supports_batch_filament_ops() = true`; see Batch Load/Unload above |
 | Per-slot loaded authority | Override | `slot_is_actively_loaded()` returns `status == LOADED` verbatim (hub table, `src/printer/ams_backend_snapmaker.cpp#slot_is_actively_loaded`) |
 | Path visualization | Yes | NOZZLE when the latch is set, OUTPUT when port/motion sensor still sees filament, NONE otherwise (`src/printer/ams_backend_snapmaker.cpp#get_slot_filament_segment`) |
 | RFID | Yes | Per-channel tag read; UID change clears the slot override |
@@ -323,6 +382,9 @@ Extended Firmware endpoint that 404s on stock firmware; the override still persi
 | `src/printer/ams_backend_snapmaker.cpp` | Full implementation: status parse, channel_state table, gcode, overrides, pre-print builder |
 | `include/printer_discovery.h` | `filament_detect` detection + registration order (MMU wins over stock U1) |
 | `include/snapmaker_resume.h` + `src/printer/snapmaker_resume.cpp` | Terminal-pause matchers (dirty bed vs runout) and coded-error `msg` extraction |
+| `include/batch_feed_reconcile.h` | Connect-time cleanup of a firmware batch left in the `doing` state |
+| `include/snapmaker_print_preferences.h` | `PrintPreferences` read/write model for the firmware prefs surfaced as device actions |
+| `include/filament_temperature_source.h` + `src/printer/filament_temperature_source.cpp` | Per-filament load/unload temperature capture (see above) |
 | [Firmware API: `print_task_config`](#firmware-api-print_task_config) | The firmware-native remap/feed-gate API this backend's pre-print path emits, in this file |
 | `tests/unit/test_ams_backend_snapmaker.cpp` | 54 cases: parsers, status handling, latch, overrides |
 | `tests/unit/test_snapmaker_preprint_gcode.cpp` | 8 cases: the pure `build_preprint_gcode` builder |
@@ -361,6 +423,9 @@ Extended Firmware endpoint that 404s on stock firmware; the override still persi
 4. The `prepare_for_resume` doc comment in `include/ams_backend_snapmaker.h#AmsBackendSnapmaker`
    still describes the retired sensor-disable chain; the implementation drives
    `AUTO_FEEDING` (see Runout and Resume above). Comment is stale, code is right.
+5. Batch load/unload (both script shapes, the dispatch-id END recovery, and
+   `batch_feed_reconcile`) and the per-filament temperature capture are source-derived only -
+   none of it has run on the rig yet.
 
 ---
 
@@ -521,6 +586,17 @@ END_LED_TURN_OFF=<0/1>  END_UNLOAD_FILAMENT=<python-list-literal>  FORCE=<0/1>
 - During `printing`/`paused`, setting `BED_LEVEL`/`FLOW_CALIBRATE`/`SHAPER_CALIBRATE`/`TIME_LAPSE_CAMERA`/`END_UNLOAD_FILAMENT`
   is rejected (id 531, code 16) **unless** `FORCE=1`. The replenish/entangle/LED prefs are always allowed.
 - `END_UNLOAD_FILAMENT` is parsed with `ast.literal_eval` and must be a Python list (e.g. `[1,0,1,0]`).
+
+HelixScreen surfaces the filament-side subset of these prefs as device actions in the printer's
+settings: `get_device_sections()` publishes one "Print Behaviour" section and
+`get_device_actions()` one row per pref the firmware has actually reported
+(`src/printer/ams_backend_snapmaker.cpp#get_device_actions`) - auto-replenish, replenish-ignores-colour,
+tangle detect, tangle sensitivity (dropdown low/medium/high), end-of-print LED, and one
+"Unload at end" toggle per tool. A pref with no reported value renders no row at all: a toggle
+whose state is unknown would render off and invite "changing" it to its own value. Toggles are
+written back through `build_preference_gcode()`, which emits `SET_PRINT_PREFERENCES` with only the
+changed parameter (omitted parameters keep their firmware value); the per-tool unload toggles are
+always written as the whole `END_UNLOAD_FILAMENT` list.
 
 #### `SET_PRINT_TASK_PARAMETERS` — the bulk one-shot
 The "do everything" command. Accepts a superset:

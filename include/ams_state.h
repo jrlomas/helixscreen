@@ -300,6 +300,15 @@ class AmsState {
     [[nodiscard]] int backend_count() const;
 
     /**
+     * @brief Whether any backend has a filament batch it dispatched and has not
+     *        seen complete
+     *
+     * Holds mutex_ across every backend it asks, so a caller off the main
+     * thread never keeps a backend pointer past clear_backends().
+     */
+    [[nodiscard]] bool any_filament_batch_in_flight() const;
+
+    /**
      * @brief Remove and stop all backends
      */
     void clear_backends();
@@ -1451,6 +1460,10 @@ class AmsState {
      */
     void sync_current_loaded_from_backend(const AmsSystemInfo& primary_info);
 
+    /// Writes the "Current: ..." header for @p slot_index on @p backend, with
+    /// the unit name on multi-unit systems. Caller holds mutex_.
+    void set_current_slot_header(AmsBackend& backend, int slot_index);
+
     /**
      * @brief Set action detail text directly (for UI-managed states)
      *
@@ -1462,10 +1475,19 @@ class AmsState {
     void set_action_detail(const std::string& detail);
 
     /**
-     * @brief Get external spool info from persistent storage
+     * @brief Get external spool info, resolved through the bypass lane
+     *
+     * The stored record is the binding; what the sources say about the bound
+     * spool (the Spoolman poll's record, the consumption meter, the user's
+     * edits) is layered on via resolve(BYPASS_LANE_ID) before returning.
      * @return SlotInfo or nullopt if not set
      */
     std::optional<SlotInfo> get_external_spool_info() const;
+
+    /// The stored record with no lane resolution: in-memory override, else
+    /// SettingsManager. The poll's stale guard and the edit diff compare
+    /// against this raw binding, not the resolved view.
+    std::optional<SlotInfo> raw_external_spool_info() const;
 
     /**
      * @brief Set external spool info and update color subject
@@ -1657,7 +1679,7 @@ class AmsState {
     void notify_external_spool_changed(const SlotInfo& info);
 
     /** @brief Set "Currently Loaded" subjects to default/empty state with guards */
-    void set_current_loaded_defaults();
+    void set_current_loaded_defaults(bool write_header = true);
 
     /** @brief Sync clog detection meter subjects from system info */
     void sync_clog_meter_from_info(const AmsSystemInfo& info);

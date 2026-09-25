@@ -6,6 +6,10 @@
 
 class PrintStartCollectorTestAccess {
   public:
+    static bool is_heater_wait_report(const std::string& line) {
+        return PrintStartCollector::is_heater_wait_report(line);
+    }
+
     /// Wind back the start time to simulate elapsed seconds.
     ///
     /// Also winds back both activity stamps, so this models "N seconds passed

@@ -1507,15 +1507,14 @@ EOF
     [[ "$output" == *"offender.xml"* ]]
 }
 
-# --- The Spoolman weight poll must stay weight-only ---
-# AmsBackend::update_slot_weight exists so an automated weight tracker never
-# asserts filament identity. Handing a backend a whole SlotInfo lets it re-derive
-# state from fields the poll never meant to touch: a backend that infers presence
-# from identity resurrects a lane its sensors report empty, and the persist arm
-# re-stages the user-lock flags from whatever the slot happened to hold. The
-# consumption sink routes through update_slot_weight for this reason (#981); the
-# Spoolman poll is the other automated weight writer, and it polls every linked
-# lane on a timer.
+# --- The Spoolman weight poll files a lane observation, never a whole SlotInfo ---
+# The poll states what the server said by filing the lane's Spoolman source
+# (helix::ams::ingest), and the resolver decides what the slot shows. Handing a
+# backend a whole SlotInfo instead lets it re-derive state from fields the poll
+# never meant to touch: a backend that infers presence from identity resurrects a
+# lane its sensors report empty, and the persist arm re-stages the user-lock flags
+# from whatever the slot happened to hold (#981, #1632). The poll runs on a timer
+# over every linked lane, so the damage repeats until the link goes away.
 
 check_weight_poll_is_weight_only() {
     local file="$1"
@@ -1523,8 +1522,8 @@ check_weight_poll_is_weight_only() {
         echo "could not locate $file"
         return 1
     fi
-    if grep -qE '\->(apply_user_edit|sync_external_identity)\(' "$file"; then
-        echo "$file writes a whole SlotInfo; an automated weight poll must call update_slot_weight() instead"
+    if grep -qE '(\.|->)(apply_user_edit|sync_external_identity)\(' "$file"; then
+        echo "$file writes a whole SlotInfo; an automated weight poll must file the lane's Spoolman source through helix::ams::ingest() instead"
         return 1
     fi
     return 0
@@ -1538,12 +1537,15 @@ check_weight_poll_is_weight_only() {
 @test "the weight-poll gate fires when the poll writes a whole SlotInfo" {
     # Meta-test: a gate that cannot fail is not a gate.
     local mutated="${BATS_TEST_TMPDIR}/spoolman_manager_whole_struct.cpp"
-    sed -e 's@owner->update_slot_weight(@owner->sync_external_identity(@' \
+    local filing='helix::ams::ingest(lane, stated);'
+    # A mutation whose target has moved changes nothing and passes vacuously.
+    grep -qF "$filing" src/printer/spoolman_manager.cpp
+    sed -e 's@helix::ams::ingest(lane, stated);@owner.sync_external_identity(slot_index, slot);@' \
         src/printer/spoolman_manager.cpp > "$mutated"
 
     run check_weight_poll_is_weight_only "$mutated"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"update_slot_weight"* ]]
+    [[ "$output" == *"helix::ams::ingest"* ]]
 }
 
 @test "the weight-poll gate fails closed when the file is missing" {

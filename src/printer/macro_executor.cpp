@@ -8,6 +8,7 @@
 #include "ui_update_queue.h"
 
 #include "device_display_name.h"
+#include "filament_database.h"
 #include "i_moonraker_api.h"
 #include "moonraker_error.h"
 #include "printer_discovery.h"
@@ -196,6 +197,50 @@ void execute_macro_gcode(IMoonrakerAPI* api, const std::string& macro_name,
             });
         },
         IMoonrakerAPI::MACRO_TIMEOUT_MS);
+}
+
+MaterialPreheatPlan plan_material_preheat(const filament::MaterialOverride* override,
+                                          const PrinterDiscovery& hw) {
+    const std::string macro = override ? override->preheat_macro.value_or("") : "";
+    if (macro.empty()) {
+        return {MaterialPreheatMode::TEMPERATURES, ""};
+    }
+    if (!hw.has_macro(macro)) {
+        return {MaterialPreheatMode::MACRO_MISSING, macro};
+    }
+    return {override->macro_handles_heating.value_or(true)
+                ? MaterialPreheatMode::MACRO_ONLY
+                : MaterialPreheatMode::TEMPERATURES_THEN_MACRO,
+            macro};
+}
+
+void execute_material_preheat(IMoonrakerAPI* api, const MaterialPreheatPlan& plan,
+                              const std::function<void()>& set_temperatures, const char* caller_tag,
+                              const PrinterDiscovery& hw) {
+    if (!api) {
+        spdlog::warn("{} No API available — cannot preheat material", caller_tag);
+        return;
+    }
+
+    switch (plan.mode) {
+    case MaterialPreheatMode::TEMPERATURES:
+        set_temperatures();
+        return;
+    case MaterialPreheatMode::MACRO_MISSING:
+        spdlog::warn("{} Preheat macro '{}' not found on this printer; setting temperatures "
+                     "directly",
+                     caller_tag, plan.macro);
+        set_temperatures();
+        return;
+    case MaterialPreheatMode::TEMPERATURES_THEN_MACRO:
+        set_temperatures();
+        break;
+    case MaterialPreheatMode::MACRO_ONLY:
+        break;
+    }
+    execute_macro_gcode(api, plan.macro, {}, caller_tag, hw);
+    spdlog::info("{} Preheat via macro '{}' (handles_heating={})", caller_tag, plan.macro,
+                 plan.mode == MaterialPreheatMode::MACRO_ONLY);
 }
 
 const std::unordered_set<std::string>& dangerous_command_names() {

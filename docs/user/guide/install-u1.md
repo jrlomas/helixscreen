@@ -113,7 +113,7 @@ Because HelixScreen replaces the stock touchscreen, the stock screen's on-device
 Run the uninstaller; it re-enables the stock UI and removes HelixScreen:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --uninstall
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --uninstall
 reboot
 ```
 
@@ -133,7 +133,7 @@ If something goes wrong and the printer comes up with a blank screen and is unre
 2. SSH in over that wired IP: `ssh root@<wired-ip>` (password `snapmaker`).
 3. Run the uninstaller to return to the stock UI, then reboot:
    ```bash
-   curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --uninstall
+   curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --uninstall
    reboot
    ```
 4. Once the stock screen is back and the printer is on WiFi again, you can reinstall HelixScreen.

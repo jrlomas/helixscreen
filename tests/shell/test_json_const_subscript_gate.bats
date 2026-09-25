@@ -284,3 +284,18 @@ setup_tmp_repo() {
     run python3 "$GATE_ABS" --staged-only --rule 1 --max-allowed 0
     [ "$status" -eq 0 ]
 }
+
+@test "rule 2 --staged-only skips files outside the roots its baseline covers" {
+    setup_tmp_repo
+    mkdir -p tests/unit
+    printf 'void f() {\n    token.defer("t", [response]() { use(response["result"]["x"]); });\n}\n' \
+        > tests/unit/foo.cpp
+    git add tests/unit/foo.cpp
+    run python3 "$GATE_ABS" --staged-only --rule 2
+    [ "$status" -eq 0 ]
+
+    mv tests/unit/foo.cpp src/printer/bar.cpp
+    git add -A
+    run python3 "$GATE_ABS" --staged-only --rule 2
+    [ "$status" -eq 1 ]
+}

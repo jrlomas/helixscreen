@@ -54,7 +54,7 @@ ssh root@<ip>
 Then run the installer:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+curl -sSL https://releases.helixscreen.org/install.sh | sh
 ```
 
 ### Step 3: Switch back to another UI (optional)
@@ -71,6 +71,7 @@ config-manager ui screen_ui grumpyscreen   # or atomscreen, guppyscreen - any of
 The installer auto-detects COSMOS, installs HelixScreen to `/user-resource/helixscreen/`, and registers it with `gui-switcher` through an allowlist wrapper (see Quirks below). It stops the currently active UI (grumpyscreen, atomscreen, or guppyscreen) and starts HelixScreen in its place.
 
 - Install directory: `/user-resource/helixscreen/` (`/` is read-only squashfs on COSMOS)
+- Settings, logs and caches live beside it in `/user-resource/helixscreen-state/`, so a Moonraker web update, which replaces the install directory wholesale, leaves them untouched
 - Init script: `/etc/init.d/helixscreen`; the watchdog also publishes its PID at `/var/run/gui.pid` so `gui-switcher` can stop it
 
 ## Service Control and Logs
@@ -79,7 +80,7 @@ The installer auto-detects COSMOS, installs HelixScreen to `/user-resource/helix
 /etc/init.d/helixscreen restart
 
 # Structured app log (written to disk; the in-memory syslog only has early startup)
-tail -100 /user-resource/helixscreen/logs/helix.log
+tail -100 /user-resource/helixscreen-state/logs/helix.log
 
 # Launcher / crash capture (startup, crash output)
 tail -100 /user-resource/helixscreen/logs/launcher.log
@@ -92,7 +93,7 @@ Check the installed version on the touchscreen (**Settings > Help & About > Abou
 Re-run the installer with `--update`; it preserves your settings:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --update
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --update
 ```
 
 To pin a specific version add `--version vX.Y.Z`, or swap `--update` for `--clean` to reinstall with fresh settings. See [Updating HelixScreen](../INSTALL.md#updating-helixscreen) for the universal details.
@@ -100,7 +101,7 @@ To pin a specific version add `--version vX.Y.Z`, or swap `--update` for `--clea
 ## Uninstalling
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --uninstall
+curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --uninstall
 ```
 
 The uninstaller reverses the `gui-switcher` registration, including the allowlist wrapper described below, and restores the UI that was running before.

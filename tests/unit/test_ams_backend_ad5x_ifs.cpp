@@ -5025,6 +5025,7 @@ TEST_CASE("AD5X IFS apply_user_edit stores override in memory and store",
     edit.brand = "Polymaker";
     edit.spool_name = "PolyLite PLA Orange";
     edit.spoolman_id = 42;
+    edit.spoolman_filament_id = 55;
     edit.remaining_weight_g = 850.0f;
     edit.material = "PLA";
     edit.color_rgb = 0xFF5500;
@@ -5038,6 +5039,7 @@ TEST_CASE("AD5X IFS apply_user_edit stores override in memory and store",
     CHECK(info.brand == "Polymaker");
     CHECK(info.spool_name == "PolyLite PLA Orange");
     CHECK(info.spoolman_id == 42);
+    CHECK(info.spoolman_filament_id == 55);
     CHECK(info.remaining_weight_g == 850.0f);
     CHECK(info.material == "PLA");
     CHECK(info.color_rgb == 0xFF5500u);
@@ -5047,6 +5049,7 @@ TEST_CASE("AD5X IFS apply_user_edit stores override in memory and store",
     REQUIRE(staged.has_value());
     CHECK(staged->brand == "Polymaker");
     CHECK(staged->spoolman_id == 42);
+    CHECK(staged->spoolman_filament_id == 55);
     CHECK(staged->color_rgb == 0xFF5500u);
 
     // Moonraker DB received the AFC-shaped record via save_async (which

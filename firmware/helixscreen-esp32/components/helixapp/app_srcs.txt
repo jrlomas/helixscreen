@@ -189,6 +189,7 @@ src/printer/printer_temperature_state.cpp
 src/printer/printer_versions_state.cpp
 src/printer/sensor_state.cpp
 src/printer/slot_registry.cpp
+src/printer/snapmaker_channel_state.cpp
 src/printer/snapmaker_exceptions.cpp
 src/printer/snapmaker_print_preferences.cpp
 src/printer/snapmaker_resume.cpp
@@ -351,6 +352,7 @@ src/ui/ui_ams_context_menu.cpp
 src/ui/ui_ams_current_tool.cpp
 src/ui/ui_ams_device_operations_overlay.cpp
 src/ui/ui_ams_device_section_detail_overlay.cpp
+src/ui/ui_cfs_chute_calibration_overlay.cpp
 src/ui/ui_ams_edit_overlay.cpp
 src/ui/ui_ams_environment_overlay.cpp
 src/ui/ui_ams_zone_overview_overlay.cpp
@@ -536,6 +538,7 @@ src/ui/wizard_step_registry.cpp
 src/ui/z_offset_utils.cpp
 src/util/indexed_subject_pool.cpp
 src/util/scoped_subject_registry.cpp
+src/util/version.cpp
 src/utils/network_validation.cpp
 src/xml_registration.cpp
 
@@ -551,6 +554,7 @@ src/ui/ui_ams_detail.cpp
 src/system/helix_paths.cpp
 src/printer/filament_slot_override_store.cpp
 src/printer/filament_temperature_source.cpp
+src/api/screws_tilt_dialect.cpp
 src/api/snapmaker_screws_tilt.cpp
 src/api/wifi_ui_utils.cpp
 # Task 13: wifi_manager.cpp/wifi_backend.cpp were platform-seamed (stub in

@@ -226,7 +226,7 @@ The workflow auto-generates basic release notes if no annotation is provided.
 3. Verify checksums in release notes
 4. Test installation:
    ```bash
-   curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+   curl -sSL https://releases.helixscreen.org/install.sh | sh
    ```
 
 ---

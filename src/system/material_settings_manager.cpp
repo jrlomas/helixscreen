@@ -34,6 +34,13 @@ MaterialSettingsManager::get_override(const std::string& name) const {
     return nullptr;
 }
 
+const filament::MaterialOverride*
+MaterialSettingsManager::find_override_for_material(const std::string& name) const {
+    // Overrides are keyed by the database spelling; spool metadata may differ in case.
+    const auto material = filament::find_material(name);
+    return get_override(material ? material->name : name);
+}
+
 void MaterialSettingsManager::set_override(const std::string& name,
                                            const filament::MaterialOverride& override) {
     overrides_[name] = override;

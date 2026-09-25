@@ -9,6 +9,7 @@
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <optional>
@@ -275,9 +276,6 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     [[nodiscard]] bool has_environment_sensors() const override {
         return true;
     }
-    [[nodiscard]] bool tracks_weight_locally() const override {
-        return false;
-    }
     [[nodiscard]] bool manages_active_spool() const override {
         return false;
     }
@@ -300,6 +298,72 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     [[nodiscard]] std::vector<helix::printer::DeviceAction> get_device_actions() const override;
     AmsError execute_device_action(const std::string& action_id,
                                    const std::any& value = {}) override;
+
+    // --- Cutter / purge-chute calibration (K1 stock dialect only) ---
+    //
+    // Choreography verified against a K1 Max klippy.log, fw 2.3.5.33
+    // (prestonbrown/helixscreen#1282). The K2 box firmware has none of these
+    // commands (its cutter check is MOTOR_CHECK_CUT_POS) and the Kalico fork
+    // was never observed to expose them, which is why every entry point here
+    // gates on macro_variant_ == CfsMacroVariant::K1.
+
+    /// BOX_FIND_CUT_POS: the firmware homes X/Y, sweeps the cutter and
+    /// rewrites cut_pos_y in box.cfg (~60s). Result lines arrive on the gcode
+    /// response stream; on_result fires once, on the main thread, with the
+    /// sweep's outcome: ok with the final "Found cut position" line (empty
+    /// when none was captured), or the failure that ended it early.
+    AmsError
+    calibrate_cutter(std::function<void(bool ok, const std::string& line)> on_result = nullptr);
+
+    /// Chute steps 1+2: XYZ_ZERO (~55s full home) then
+    /// COORDINATES_ADJUST_PREPARE (parks Y at the box's safe position).
+    /// on_ready fires on the main thread once both completed and jogging may
+    /// start. @p cancel_requested is polled at each step boundary: once set,
+    /// remaining steps are dropped without on_ready (the caller has already
+    /// left the flow). @p on_failed fires on the main thread when any step's
+    /// gcode fails, with Klipper's message; the backend has already re-parked
+    /// Y when PREPARE had run.
+    AmsError
+    start_chute_calibration(std::function<void()> on_ready = nullptr,
+                            std::function<void(const std::string& klipper_msg)> on_failed = nullptr,
+                            std::shared_ptr<std::atomic<bool>> cancel_requested = nullptr);
+
+    /// Jog Y by @p delta_mm using the stock screen's exact script form
+    /// (SAVE_GCODE_STATE/G91/G0/M400/RESTORE_GCODE_STATE). The caller clamps
+    /// the delta against live axis bounds; the stepper's own position_min/max
+    /// is the hard limit either way.
+    AmsError jog_chute_y(float delta_mm);
+
+    /// Chute save: COORDINATES_ADJUST_SAVE_POS (the firmware reads the LIVE
+    /// toolhead position and rewrites extrude_pos_x/y in box.cfg; HelixScreen
+    /// sends no coordinate) followed by Y_SAFE to re-park. on_saved fires on
+    /// the main thread after both completed; @p on_failed when either gcode
+    /// fails (the backend has already sent Y_SAFE, which is an idempotent
+    /// park).
+    AmsError
+    save_chute_position(std::function<void()> on_saved = nullptr,
+                        std::function<void(const std::string& klipper_msg)> on_failed = nullptr);
+
+    /// Abort path: re-park Y with CMD=Y_SAFE. Required once PREPARE has run,
+    /// which is the point from which the toolhead is left off-park.
+    AmsError exit_chute_calibration();
+
+    /// The position pair the last successful save reported on the response
+    /// stream ("cmd_save_extrude_pos x=.. y=..", or the SAVE_BOX_CFG echo).
+    /// False when no line was captured, so the caller can fall back to a
+    /// plain confirmation.
+    [[nodiscard]] bool last_chute_saved_position(double& x_mm, double& y_mm) const;
+
+    /// Parse one save-response line into @p x_mm / @p y_mm. Accepts both the
+    /// cmd_save_extrude_pos form and the SAVE_BOX_CFG ok echo. False when the
+    /// line carries no pair.
+    [[nodiscard]] static bool parse_chute_save_line(const std::string& line, double& x_mm,
+                                                    double& y_mm);
+
+    /// Parse a "Found cut position y: 304.0" sweep result into @p axis and
+    /// @p value_mm. False when the line is not a found-position report.
+    [[nodiscard]] static bool parse_cut_found_line(const std::string& line, char& axis,
+                                                   double& value_mm);
 
     // Static parsers (public for testing)
 
@@ -554,6 +618,15 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     // from the static helpers (load_gcode/unload_gcode/swap_gcode), so this
     // is read on the script-build side, not in hot paths.
     CfsMacroVariant macro_variant_ = CfsMacroVariant::K2;
+
+    /// Save-response line captured by the last chute save (main thread only:
+    /// written when the save completes, read by last_chute_saved_position).
+    std::string last_chute_save_line_;
+
+    /// Both calibration flows home the machine; only one may own it at a
+    /// time. Set once a flow's first gcode is on the wire, cleared in every
+    /// terminal callback (ready, saved, result, failed, cancelled).
+    bool calibration_in_flight_ = false;
 
     /// Monotonic count of box.map parses — firmware-sourced by construction,
     /// since the optimistic path writes system_info_ via assign_tool_slot()

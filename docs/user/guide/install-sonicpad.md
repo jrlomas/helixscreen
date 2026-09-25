@@ -28,7 +28,7 @@ HelixScreen requires Klipper and Moonraker to already be installed and working o
 The standard installer works on Sonic Pad:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
+curl -sSL https://releases.helixscreen.org/install.sh | sh
 ```
 
 ## What the Installer Does Here

@@ -60,6 +60,7 @@ translations:
   1 min ago: 1分前
   1 minute: 1分
   1 more tap to {} beta features: あと1回タップでベータ機能を{}
+  1. Printer homes all axes (~1 minute): 1. プリンターが全軸の原点復帰を行います（約1分）
   1. Printer homes and probes the bed: 1. プリンターがホーミングしてベッドをプローブします
   1. Printer will home and probe each screw: 1. プリンターがホーミングして各ネジをプローブします
   10 minutes: 10分
@@ -70,6 +71,8 @@ translations:
   180° Upside Down: 180° 上下反転
   2 min: '2分'
   2 minutes: 2分
+  2. Jog Y until the nozzle is centered over the chute opening: 2. Yをジョグして、ノズルがシュートの開口部の中心に来るようにします
+
   2. Place paper between nozzle and bed: 2. ノズルとベッドの間に紙を置いてください
   2. Results show how much to turn each screw: 2. 各ネジをどれだけ回すか結果が表示されます
   20 minutes: 20分
@@ -80,6 +83,8 @@ translations:
   2D Layers: 2Dレイヤー
   3. Adjust screws, then re-probe to verify: 3. ネジを調整し、再度プローブして確認してください
   3. Lower nozzle until paper drags slightly: 3. 紙がわずかに引っかかるまでノズルを下げてください
+  3. Save the position: 3. 位置を保存します
+
   30 minutes: 30分
   30 seconds: 30秒
   3D Pipes: 3Dパイプ
@@ -155,6 +160,7 @@ translations:
   Add Vendor: ベンダーを追加
   Add Widget: ウィジェットを追加
   Add custom filament: カスタムフィラメントを追加
+  Add page: 'ページを追加'
   Added to Spoolman: Spoolman に追加しました
   Address: アドレス
   Adjust screen brightness level: 画面の明るさを調整します
@@ -375,9 +381,11 @@ translations:
   Calibrate: キャリブレート
   Calibrate All: すべてキャリブレート
   Calibrate Bowden: 'ボーデンをキャリブレート'
+  Calibrate Cutter: カッターをキャリブレート
   Calibrate Encoder: 'エンコーダーをキャリブレート'
   Calibrate Gates: 'ゲートをキャリブレート'
   Calibrate Gear: 'ギアをキャリブレート'
+  Calibrate Purge Chute: パージシュートをキャリブレート
   Calibrate X: X軸をキャリブレート
   Calibrate Y: Y軸をキャリブレート
   Calibrate all tools: すべてのツールをキャリブレート
@@ -390,9 +398,12 @@ translations:
   Calibrating bed mesh...: ベッドメッシュをキャリブレーション中...
   Calibrating {} axis...: '{} 軸をキャリブレーション中...'
   Calibrating...: キャリブレーション中...
+  Calibrating... (about 1 minute): キャリブレーション中...（約1分）
+  Calibration: キャリブレーション
   Calibration & Tools: キャリブレーションとツール
   Calibration Complete!: キャリブレーション完了！
   Calibration Failed: キャリブレーション失敗
+  Calibration Saved: キャリブレーションを保存しました
   Calibration and system configuration: 'キャリブレーションとシステム設定'
   Calibration cancelled.: キャリブレーションをキャンセルしました。
   Calibration complete: キャリブレーション完了
@@ -516,6 +527,8 @@ translations:
   ? Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses.
   : お使いのプリンターに一致するモデルを選択してください。これにより、HelixScreenが使用する印刷マクロ、ファンの役割、キャリブレーション動作が設定されます。
   Choose what to power off or restart.: 電源オフまたは再起動する対象を選択してください。
+  'Chute position: X {:.1f}, Y {:.1f}': 'パージシュート位置: X {:.1f}, Y {:.1f}'
+
   Clean Brush: 'ブラシを清掃'
   Clean Nozzle: ノズル清掃
   Cleaning Nozzle...: ノズル清掃中...
@@ -712,9 +725,13 @@ translations:
   Customize your home screen: ホーム画面をカスタマイズ
   Cut Distance: 'カット距離'
   Cut filament: フィラメントを切断
+  'Cut position saved: {}': '切断位置を保存しました: {}'
   Cut tip: '先端をカット'
   Cutter Enabled: 'カッター有効'
+  Cutter and purge chute calibration: カッターとパージシュートのキャリブレーション
   Cutter blade didn't sever filament: カッターの刃がフィラメントを切断できませんでした
+  Cutter calibration completed: カッターのキャリブレーションが完了しました
+  'Cutter calibration failed: {}': 'カッターのキャリブレーションに失敗しました: {}'
   Cutter jam: カッター詰まり
   Cutting: カット中
   Cutting filament...: フィラメントを切断中...
@@ -1221,6 +1238,7 @@ translations:
   Gray: グレー
   Grip filament: フィラメントを把持
   Grip the filament: フィラメントを把持
+  Guide the toolhead to the chute's extrude position: ツールヘッドをシュートの押出し位置へ誘導します
   Guides and reference: ガイドとリファレンス
   H: H
   HOST: ホスト
@@ -1300,6 +1318,7 @@ translations:
   Holding nozzle at {}°C to purge previous filament.: 前のフィラメントをパージするためノズルを {}°C に保持しています。
   Home: ホーム
   Home & Continue: ホーミングして続行
+  Home and sweep the cutter to re-find its position: 原点復帰後にカッターを走査して位置を再検出します
   Home failed: ホーミング失敗
   Home printer first?: 先にプリンターをホーミングしますか？
   Home selector: セレクターをホーミング
@@ -1431,6 +1450,8 @@ translations:
   Job Queue: ジョブキュー
   Jog Speed XY: XY ジョグ速度
   Jog Speed Z: Z ジョグ速度
+  Jog Y until the nozzle is centered over the chute opening, then tap Save.: Yをジョグしてノズルがシュートの開口部の中心に来たら、保存をタップします。
+
   'Jog failed: {}': 'ジョグに失敗しました: {}'
   Jog speeds and step distances: ジョグ速度とステップ距離
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: Discord
@@ -1445,6 +1466,8 @@ translations:
   Keep Required: 必須を維持
   Keep Spool Info on Eject: 取り出し時にスプール情報を保持
   Keep current: 現状維持
+  Keep hands clear. The printer moves on its own.: 手を近づけないでください。プリンターは自動で動きます。
+
   Keep the bypass spool visible when bypass is off: バイパスオフ時もバイパススプールの表示を維持
   Kick away: 'かき出し'
   Kinematics: キネマティクス
@@ -1513,6 +1536,8 @@ translations:
   Lifetime Print Stats: 累計印刷統計
   Light: ライト
   Light will switch when the current operation finishes: 現在の操作が完了したらライトを切り替えます
+  Line the nozzle up with the purge chute so purged filament drops straight in.: パージシュートにノズルを合わせ、パージされたフィラメントがまっすぐ落ちるようにします。
+
   Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: '{} 行目で {} を実行します。このプリンターでは緊急停止とみなされます。このプリンター用のプロファイルでファイルを再スライスしてください。'
   Listen to all theme sounds: すべてのテーマサウンドを試聴
   Listening: 聞き取り中
@@ -2000,6 +2025,7 @@ translations:
   Please enter a valid port (1-65535).: 有効なポート番号を入力してください (1-65535)。
   Please enter an IP address or hostname.: IPアドレスまたはホスト名を入力してください。
   Please fill in the highlighted fields: ハイライトされた項目を入力してください
+  Please wait while the printer homes and moves to the start position.: プリンターが原点復帰して開始位置へ移動するまでお待ちください。
   Please wait while the printer homes and probes.: プリンターがホーミングとプローブを行う間お待ちください。
   Please wait while the printer probes each screw position.: プリンターが各ネジ位置をプローブする間お待ちください。
   Pluck the front belt on the left: 左のフロントベルトをはじいてください
@@ -2185,7 +2211,11 @@ translations:
   Pulling filament back: フィラメントを引き戻し中
   Purge: パージ
   Purge & Wipe: 'パージとワイプ'
+  Purge Chute Calibration: パージシュートのキャリブレーション
   Purge Length: 'パージ長'
+  'Purge chute calibration failed: {}': 'パージシュートのキャリブレーションに失敗しました: {}'
+  Purge chute position saved.: パージシュートの位置を保存しました。
+
   'Purge failed: {}': 'パージに失敗しました: {}'
   Purge may still be running — response timed out: パージがまだ実行中の可能性があります — 応答タイムアウト
   Purge to bucket: 'バケツへパージ'
@@ -2425,6 +2455,7 @@ translations:
     on startup. Open Settings to fix the issue, then reboot.
   : セーフモードが有効です。起動時にアプリがクラッシュし続けたため、プリンター接続は無効になっています。設定を開いて問題を解決してから再起動してください。
   Safety & Notifications: 安全と通知
+  Same spool in {}? Tap Clear if it is a new one.: '{} は同じスプールですか？新しいスプールならクリアをタップしてください。'
   Sample: サンプル
   Sample %d/%d: サンプル %d/%d
   Sample Dialog: サンプルダイアログ
@@ -2451,7 +2482,10 @@ translations:
   Saving Z-offset...: Zオフセットを保存中...
   Saving config... Klipper will restart.: 設定を保存中... Klipper が再起動します。
   Saving offsets...: オフセットを保存中...
+  Saving the position and parking the toolhead.: 位置を保存し、ツールヘッドを退避しています。
+
   Saving will restart Klipper and CANCEL any active print!: 保存すると Klipper が再起動し、アクティブな印刷がキャンセルされます！
+  Saving...: 保存中...
   Scan: スキャン
   Scan Cal: スキャンキャリブレーション
   Scan QR Code: QR コードをスキャン
@@ -2848,6 +2882,7 @@ translations:
   ? The print is paused. Changing tools now moves the toolhead and swaps the filament at the nozzle. Resume the print once the change finishes.
   : 印刷は一時停止中です。ここでツールを交換すると、ツールヘッドが移動してノズルのフィラメントが入れ替わります。交換が完了したら印刷を再開してください。
   The printer halted this print and cannot resume it. Restart from the beginning?: プリンターはこの印刷を停止し、再開できません。最初からやり直しますか？
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: プリンターが原点復帰してカッターを走査します（約1分）。フィラメントの経路を空けてください。
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: プリンターがホーミングされていません。続行すると全軸がホーミングされ、ツールヘッドが移動します。ベッドに物がないことを確認してください。
   The printer lost power during a print. It can resume where it left off.: 印刷中にプリンターの電源が失われました。中断した箇所から再開できます。
   The printer lost power during a print. The resumed layer may not line up exactly.: 印刷中にプリンターの電源が失われました。再開したレイヤーがわずかにずれる可能性があります。
@@ -2997,7 +3032,9 @@ translations:
   Toolhead LED: 'ツールヘッドLED'
   Toolhead Sensor: ツールヘッドセンサー
   Toolhead Style: ツールヘッドスタイル
+  Toolhead Y: ツールヘッド Y
   Toolhead jam: ツールヘッドの詰まり
+  Toolhead position unknown: ツールヘッドの位置が不明です
   Toolhead, G-code, limits, and materials: ツールヘッド、Gコード、制限、材料
   Toolheads: ツールヘッド
   Tools: ツール
@@ -3231,6 +3268,7 @@ translations:
   Y: Y
   Y Axis: Y軸
   Y Offset: Yオフセット
+  Y axis limit reached: Y軸のリミットに達しました
   Y jog blocked at bed edge: Y軸移動はベッド端でブロックされました
   'Y:': 'Y:'
   ? "YOU WIN!\nScore: {}\nTap to play again"

@@ -23,6 +23,7 @@
 #include "pause_cause.h"
 #include "post_op_cooldown_manager.h"
 #include "settings_manager.h"
+#include "snapmaker_channel_state.h"
 #include "snapmaker_resume.h"
 
 #include <spdlog/fmt/fmt.h>
@@ -102,155 +103,8 @@ constexpr std::array<std::string_view, 8> KNOWN_SUB_TYPES = {
     return lane + lv_tr("Load failed");
 }
 
-// Classification of a single Snapmaker U1 filament_feed channel_state. The
-// firmware exposes 39 distinct states (filament_feed.py:34-72, captured live
-// from firmware 20260608); this maps each to everything the backend needs so
-// the parse reads off ONE table instead of scattered string compares. See
-// .claude/scratchpad/u1_channel_state_reference.md for the authoritative table.
-//
-// Fields:
-//  - action:        the AmsAction the operation collapses to (drives the coarse
-//                   LOAD/UNLOAD/ERROR/IDLE status). LOADING covers preload/load/
-//                   manual feed; UNLOADING covers unload; ERROR covers *_fail;
-//                   IDLE covers none/inited/wait_insert/test and every *_finish.
-//  - phase:         step-bar step index into get_operation_step_model(op).
-//                   Per-direction (a state is unambiguously load/unload/manual by
-//                   prefix, so indices never collide across directions):
-//                     LOAD/manual/preload model (5 steps):
-//                       0=Home 1=Select 2=Heat 3=Feed 4=Purge
-//                     UNLOAD model (4 steps):
-//                       0=Home 1=Select 2=Heat 3=Retract
-//                   -1 = "no active step" (idle / *_finish / *_fail).
-//  - is_terminal:   a *_finish that ENDS the operation (resolves action → IDLE).
-//                   preload_finish is terminal-for-latch but does NOT end the op
-//                   (the nozzle may still be heating on a re-unload); the parse
-//                   special-cases it.
-//  - is_fail:       a *_fail state — surface as ERROR (Change 2).
-//  - sets_loaded:   SET the "loaded at toolhead" latch true (load_finish only).
-//  - clears_loaded: CLEAR the latch false (unload_finish/wait_insert/preload_finish).
-//  - ignore:        the factory 'test' state — touch nothing.
-struct ChannelStateInfo {
-    AmsAction action = AmsAction::IDLE;
-    int phase = -1;
-    bool is_terminal = false;
-    bool is_fail = false;
-    bool sets_loaded = false;
-    bool clears_loaded = false;
-    bool ignore = false;
-};
-
-[[nodiscard]] ChannelStateInfo classify_channel_state(const std::string& state) {
-    // One row per firmware state. Exact-match lookup — unambiguous and reads
-    // directly off the reference table. Unknown/future states fall through to
-    // the prefix/suffix heuristic below so we degrade gracefully rather than
-    // silently mis-classify.
-    static const std::unordered_map<std::string, ChannelStateInfo> TABLE = [] {
-        std::unordered_map<std::string, ChannelStateInfo> m;
-        auto add = [&](const char* s, ChannelStateInfo info) { m.emplace(s, info); };
-        constexpr auto LOAD = AmsAction::LOADING;
-        constexpr auto UNLOAD = AmsAction::UNLOADING;
-        constexpr auto IDLE = AmsAction::IDLE;
-        constexpr auto ERR = AmsAction::ERROR;
-        // {action, phase, is_terminal, is_fail, sets_loaded, clears_loaded, ignore}
-        // --- idle / init ---
-        add("none", {IDLE, -1, false, false, false, false, false});
-        add("inited", {IDLE, -1, false, false, false, false, false});
-        add("wait_insert", {IDLE, -1, false, false, false, /*clear=*/true, false});
-        add("test", {IDLE, -1, false, false, false, false, /*ignore=*/true});
-        // --- preload (stage insert -> gear, NOT to nozzle) ---
-        add("preload_prepare", {LOAD, 0, false, false, false, false, false});
-        add("preload_feeding", {LOAD, 3, false, false, false, false, false});
-        add("preload_finish", {IDLE, -1, /*terminal=*/true, false, false, /*clear=*/true, false});
-        add("preload_fail", {ERR, -1, false, /*fail=*/true, false, false, false});
-        // --- load (feed to nozzle) ---
-        add("load_prepare", {LOAD, 0, false, false, false, false, false});
-        add("load_homing", {LOAD, 0, false, false, false, false, false});
-        add("load_picking", {LOAD, 1, false, false, false, false, false});
-        add("load_heating", {LOAD, 2, false, false, false, false, false});
-        add("load_feeding", {LOAD, 3, false, false, false, false, false});
-        add("load_extruding", {LOAD, 3, false, false, false, false, false});
-        add("load_flushing", {LOAD, 4, false, false, false, false, false});
-        add("load_finish", {IDLE, -1, /*terminal=*/true, false, /*set=*/true, false, false});
-        add("load_fail", {ERR, -1, false, /*fail=*/true, false, false, false});
-        // --- unload (retract from nozzle) ---
-        add("unload_prepare", {UNLOAD, 0, false, false, false, false, false});
-        add("unload_homing", {UNLOAD, 0, false, false, false, false, false});
-        add("unload_picking", {UNLOAD, 1, false, false, false, false, false});
-        add("unload_heating", {UNLOAD, 2, false, false, false, false, false});
-        add("unload_heat_finish", {UNLOAD, 2, false, false, false, false, false});
-        add("unload_doing", {UNLOAD, 3, false, false, false, false, false});
-        add("unload_finish", {IDLE, -1, /*terminal=*/true, false, false, /*clear=*/true, false});
-        add("unload_fail", {ERR, -1, false, /*fail=*/true, false, false, false});
-        // --- manual feed (MANUAL_FEEDING) ---
-        add("manual_sta_prepare", {LOAD, 0, false, false, false, false, false});
-        add("manual_sta_homing", {LOAD, 0, false, false, false, false, false});
-        add("manual_sta_picking", {LOAD, 1, false, false, false, false, false});
-        add("manual_sta_prepare_finish", {LOAD, 1, false, false, false, false, false});
-        add("manual_sta_prepare_fail", {ERR, -1, false, /*fail=*/true, false, false, false});
-        add("manual_sta_heating", {LOAD, 2, false, false, false, false, false});
-        add("manual_sta_extruding", {LOAD, 3, false, false, false, false, false});
-        add("manual_sta_extrude_finish", {LOAD, 3, false, false, false, false, false});
-        add("manual_sta_extrude_fail", {ERR, -1, false, /*fail=*/true, false, false, false});
-        add("manual_sta_flushing", {LOAD, 4, false, false, false, false, false});
-        add("manual_sta_flush_finish", {LOAD, 4, false, false, false, false, false});
-        add("manual_sta_flush_fail", {ERR, -1, false, /*fail=*/true, false, false, false});
-        // manual_sta_finish is a completed manual EXTRUDE, not a load — it ends
-        // the op (IDLE) but does NOT set the loaded latch.
-        add("manual_sta_finish", {IDLE, -1, /*terminal=*/true, false, false, false, false});
-        add("manual_sta_fail", {ERR, -1, false, /*fail=*/true, false, false, false});
-        return m;
-    }();
-
-    auto it = TABLE.find(state);
-    if (it != TABLE.end()) {
-        return it->second;
-    }
-
-    // Fallback for an unrecognized state (firmware drift). Never emitted by
-    // firmware 20260608, but classify conservatively so a future state can't
-    // wedge the action machine. Prefix chooses the family; suffix the phase.
-    ChannelStateInfo info;
-    auto ends_with = [&](std::string_view suffix) {
-        return state.size() > suffix.size() &&
-               state.compare(state.size() - suffix.size(), suffix.size(), suffix) == 0;
-    };
-    const bool is_unload = state.rfind("unload_", 0) == 0;
-    const bool is_load =
-        !is_unload && (state.rfind("load_", 0) == 0 || state.rfind("preload_", 0) == 0 ||
-                       state.rfind("manual_sta_", 0) == 0);
-    if (ends_with("_fail")) {
-        info.action = AmsAction::ERROR;
-        info.is_fail = true;
-    } else if (ends_with("_finish")) {
-        info.action = AmsAction::IDLE;
-        info.is_terminal = true;
-    } else if (is_unload) {
-        info.action = AmsAction::UNLOADING;
-    } else if (is_load) {
-        info.action = AmsAction::LOADING;
-    } else {
-        info.action = AmsAction::IDLE;
-    }
-    if (info.action == AmsAction::LOADING || info.action == AmsAction::UNLOADING) {
-        // Mirrors the per-direction step models: load/manual/preload reach Feed(3)
-        // then Purge(4); unload has no Purge step so its Move phase is Retract(3).
-        if (ends_with("_homing") || ends_with("_prepare"))
-            info.phase = 0;
-        else if (ends_with("_picking"))
-            info.phase = 1;
-        else if (ends_with("_heating"))
-            info.phase = 2;
-        else if (ends_with("_flushing") && !is_unload)
-            info.phase = 4;
-        else if (ends_with("_doing") || ends_with("_feeding") || ends_with("_extruding") ||
-                 ends_with("_flushing"))
-            info.phase = 3;
-    }
-    spdlog::debug("[AmsBackendSnapmaker] unrecognized channel_state '{}' -> fallback action={} "
-                  "phase={}",
-                  state, ams_action_to_string(info.action), info.phase);
-    return info;
-}
+using snapmaker::ChannelStateInfo;
+using snapmaker::classify_channel_state;
 
 } // namespace
 
@@ -1013,6 +867,7 @@ void write_filament_fields(SlotInfo& slot, const SlotInfo& info) {
     slot.remaining_weight_g = info.remaining_weight_g;
     slot.total_weight_g = info.total_weight_g;
     slot.spoolman_id = info.spoolman_id;
+    slot.spoolman_filament_id = info.spoolman_filament_id;
     slot.spoolman_vendor_id = info.spoolman_vendor_id;
     slot.spool_name = info.spool_name;
 }
@@ -1940,32 +1795,13 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
             }
         }
 
-        // ONE derivation of "the head an operation is working on": the batch
-        // cursor while a plan is active, else the head whose channel reported
-        // an in-progress state, else none. A toolhead-only delta carries no
-        // channel evidence, so mid-op it keeps the previous answer instead of
-        // flapping the header back to the carriage tool. current_slot is NOT
-        // touched here: it stays the carriage answer its other consumers
-        // (bypass unload, filament panel gating, the loaded card) read.
-        int working_slot = -1;
-        if (batch_.active) {
-            working_slot = batch_.heads[batch_.cursor];
-        } else if (system_info_.action == AmsAction::LOADING ||
-                   system_info_.action == AmsAction::UNLOADING) {
-            working_slot =
-                (in_progress_head >= 0) ? in_progress_head : system_info_.operation_working_slot;
-        }
-        if (system_info_.operation_working_slot != working_slot) {
-            system_info_.operation_working_slot = working_slot;
-            changed = true;
-        }
-
         // The batch macro's `doing` save-variable is the firmware's own word
         // on whether a batch script is running. A false reading retires any
         // plan this process still holds active: the script ended without the
         // cursor head reaching a terminal or a *_fail (lost response, script
         // abort, a feeder wedging mid-feed), and no channel_state detector
         // covers that end.
+        bool batch_retired = false;
         if (!batch_macro_object_.empty()) {
             const auto macro = status.find(batch_macro_object_);
             if (macro != status.end() && macro->is_object()) {
@@ -1973,11 +1809,36 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                 if (doing != macro->end() && doing->is_boolean() && !doing->get<bool>() &&
                     batch_.active) {
                     batch_.active = false;
+                    batch_retired = true;
                     changed = true;
                     spdlog::info("{} batch macro reports doing=false — retiring the active plan",
                                  backend_log_tag());
                 }
             }
+        }
+
+        // ONE derivation of "the head an operation is working on": the batch
+        // cursor while a plan is active, else the head whose channel reported
+        // an in-progress state, else none. A toolhead-only delta carries no
+        // channel evidence, so mid-op it keeps the previous answer instead of
+        // flapping the header back to the carriage tool; a batch the firmware
+        // just reported ended carries nothing forward. current_slot is NOT
+        // touched here: it stays the carriage answer its other consumers
+        // (bypass unload, filament panel gating, the loaded card) read.
+        int working_slot = -1;
+        if (batch_.active) {
+            working_slot = batch_.heads[batch_.cursor];
+        } else if (system_info_.action == AmsAction::LOADING ||
+                   system_info_.action == AmsAction::UNLOADING) {
+            if (in_progress_head >= 0) {
+                working_slot = in_progress_head;
+            } else if (!batch_retired) {
+                working_slot = system_info_.operation_working_slot;
+            }
+        }
+        if (system_info_.operation_working_slot != working_slot) {
+            system_info_.operation_working_slot = working_slot;
+            changed = true;
         }
 
         // Parse print_task_config — authoritative filament info from Snapmaker's task manager

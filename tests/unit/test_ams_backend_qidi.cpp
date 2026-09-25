@@ -1962,7 +1962,7 @@ TEST_CASE("QIDI adjusts live on a plain heater and not once the box owns the tim
 // =====================================================================
 
 namespace {
-// Per-test tmp cache dir — same idiom as test_ams_backend_cfs.cpp.
+// Per-test tmp cache dir, same idiom as test_ams_backend_cfs.cpp.
 struct QidiTmpCacheDir {
     std::filesystem::path path;
     explicit QidiTmpCacheDir(const std::string& suffix) {
@@ -1978,7 +1978,7 @@ struct QidiTmpCacheDir {
 };
 } // namespace
 
-// Friend-class shim for FilamentSlotOverrideStore — same idiom as the CFS /
+// Friend-class shim for FilamentSlotOverrideStore, same idiom as the CFS /
 // Snapmaker / ACE test files.
 class FilamentSlotOverrideStoreTestAccess {
   public:
@@ -2490,8 +2490,7 @@ TEST_CASE("QIDI Box an edit racing the clear's zero echoes survives them", "[ams
     CHECK(backend.get_slot_info(0).material == "ABS");
 }
 
-TEST_CASE("QIDI Box clear skips the firmware zero writes while a print is active",
-          "[ams][qidi_box]") {
+TEST_CASE("QIDI Box clear writes the firmware zeros while a print is active", "[ams][qidi_box]") {
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
     state.init_subjects(false);
@@ -2517,8 +2516,15 @@ TEST_CASE("QIDI Box clear skips the firmware zero writes while a print is active
 
     backend.clear_slot_override(0);
 
-    // The local clear stands; nothing reaches the firmware mid-print.
-    CHECK(backend.sent.empty());
+    // SAVE_VARIABLE moves nothing, so the print does not hold the writes back;
+    // without them the next poll repaints the old ids over the clear.
+    for (const char* gcode : {"SAVE_VARIABLE VARIABLE=filament_slot0 VALUE=0",
+                              "SAVE_VARIABLE VARIABLE=color_slot0 VALUE=0",
+                              "SAVE_VARIABLE VARIABLE=vendor_slot0 VALUE=0"}) {
+        CAPTURE(gcode);
+        CHECK(std::find(backend.sent.begin(), backend.sent.end(), std::string(gcode)) !=
+              backend.sent.end());
+    }
     CHECK_FALSE(QidiBoxTestAccess::get_override(backend, 0).has_value());
     CHECK(backend.get_slot_info(0).material.empty());
 }

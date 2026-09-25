@@ -63,7 +63,7 @@ TEST_CASE("brightness_cli_command: floor lifts the lowest on-levels",
 }
 
 // ============================================================================
-// raw_from_percent (#1709) — percent -> raw with a per-panel floor
+// raw_from_percent (#1709): percent -> raw with a per-panel floor
 // ============================================================================
 
 TEST_CASE("raw_from_percent: no floor keeps the plain linear map", "[api][backlight][1709]") {

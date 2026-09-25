@@ -59,6 +59,7 @@
   <translation tag="1 min ago" zh="1分钟前"/>
   <translation tag="1 minute" zh="1 分钟"/>
   <translation tag="1 more tap to {} beta features" zh="再点击 1 次以{}测试功能"/>
+  <translation tag="1. Printer homes all axes (~1 minute)" zh="1. 打印机全部轴归零（约1分钟）"/>
   <translation tag="1. Printer homes and probes the bed" zh="1. 打印机归位并探测热床"/>
   <translation tag="1. Printer will home and probe each screw" zh="1. 打印机将归位并探测每个螺丝位置"/>
   <translation tag="10 minutes" zh="10 分钟"/>
@@ -69,6 +70,7 @@
   <translation tag="180° Upside Down" zh="180° 上下颠倒"/>
   <translation tag="2 min" zh="2分钟"/>
   <translation tag="2 minutes" zh="2 分钟"/>
+  <translation tag="2. Jog Y until the nozzle is centered over the chute opening" zh="2. 点动 Y 轴，直到喷嘴位于排料口开口中心"/>
   <translation tag="2. Place paper between nozzle and bed" zh="2. 将纸张放在喷嘴和热床之间"/>
   <translation tag="2. Results show how much to turn each screw" zh="2. 结果显示每个螺丝需要旋转多少"/>
   <translation tag="20 minutes" zh="20分钟"/>
@@ -79,6 +81,7 @@
   <translation tag="2D Layers" zh="2D 图层"/>
   <translation tag="3. Adjust screws, then re-probe to verify" zh="3. 调整螺丝，然后重新探测以验证"/>
   <translation tag="3. Lower nozzle until paper drags slightly" zh="3. 降低喷嘴直到纸张有轻微阻力"/>
+  <translation tag="3. Save the position" zh="3. 保存位置"/>
   <translation tag="30 minutes" zh="30 分钟"/>
   <translation tag="30 seconds" zh="30 秒"/>
   <translation tag="3D Pipes" zh="3D 管道"/>
@@ -156,6 +159,7 @@
   <translation tag="Add Vendor" zh="添加供应商"/>
   <translation tag="Add Widget" zh="添加小组件"/>
   <translation tag="Add custom filament" zh="添加自定义耗材"/>
+  <translation tag="Add page" zh="添加页面"/>
   <translation tag="Added to Spoolman" zh="已添加到 Spoolman"/>
   <translation tag="Address" zh="地址"/>
   <translation tag="Adjust screen brightness level" zh="调整屏幕亮度"/>
@@ -371,9 +375,11 @@
   <translation tag="Calibrate" zh="校准"/>
   <translation tag="Calibrate All" zh="全部校准"/>
   <translation tag="Calibrate Bowden" zh="校准波顿管"/>
+  <translation tag="Calibrate Cutter" zh="校准切刀"/>
   <translation tag="Calibrate Encoder" zh="校准编码器"/>
   <translation tag="Calibrate Gates" zh="校准通道"/>
   <translation tag="Calibrate Gear" zh="校准齿轮"/>
+  <translation tag="Calibrate Purge Chute" zh="校准排料口"/>
   <translation tag="Calibrate X" zh="校准 X 轴"/>
   <translation tag="Calibrate Y" zh="校准 Y 轴"/>
   <translation tag="Calibrate all tools" zh="校准所有工具"/>
@@ -386,9 +392,12 @@
   <translation tag="Calibrating bed mesh..." zh="正在校准热床网格..."/>
   <translation tag="Calibrating {} axis..." zh="正在校准 {} 轴..."/>
   <translation tag="Calibrating..." zh="正在校准..."/>
+  <translation tag="Calibrating... (about 1 minute)" zh="校准中...（约1分钟）"/>
+  <translation tag="Calibration" zh="校准"/>
   <translation tag="Calibration &amp; Tools" zh="校准与工具"/>
   <translation tag="Calibration Complete!" zh="校准完成！"/>
   <translation tag="Calibration Failed" zh="校准失败"/>
+  <translation tag="Calibration Saved" zh="校准已保存"/>
   <translation tag="Calibration and system configuration" zh="校准与系统配置"/>
   <translation tag="Calibration cancelled." zh="校准已取消。"/>
   <translation tag="Calibration complete" zh="校准完成"/>
@@ -510,6 +519,7 @@
   <translation tag="Choose sound style" zh="选择声音风格"/>
   <translation tag="Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses." zh="选择与您的打印机相符的型号。这将决定 HelixScreen 使用的打印宏、风扇角色和校准行为。"/>
   <translation tag="Choose what to power off or restart." zh="选择要关闭或重启的对象。"/>
+  <translation tag="Chute position: X {:.1f}, Y {:.1f}" zh="排料口位置: X {:.1f}, Y {:.1f}"/>
   <translation tag="Clean Brush" zh="清洁刷子"/>
   <translation tag="Clean Nozzle" zh="清洁喷嘴"/>
   <translation tag="Cleaning Nozzle..." zh="正在清洁喷嘴..."/>
@@ -700,9 +710,13 @@
   <translation tag="Customize your home screen" zh="自定义主屏幕"/>
   <translation tag="Cut Distance" zh="切割距离"/>
   <translation tag="Cut filament" zh="切断耗材"/>
+  <translation tag="Cut position saved: {}" zh="切割位置已保存: {}"/>
   <translation tag="Cut tip" zh="切断尖端"/>
   <translation tag="Cutter Enabled" zh="切刀已启用"/>
+  <translation tag="Cutter and purge chute calibration" zh="切刀与排料口校准"/>
   <translation tag="Cutter blade didn&apos;t sever filament" zh="切刀未能切断耗材"/>
+  <translation tag="Cutter calibration completed" zh="切刀校准完成"/>
+  <translation tag="Cutter calibration failed: {}" zh="切刀校准失败：{}"/>
   <translation tag="Cutter jam" zh="切刀卡住"/>
   <translation tag="Cutting" zh="切割中"/>
   <translation tag="Cutting filament..." zh="正在切断耗材..."/>
@@ -1196,6 +1210,7 @@
   <translation tag="Gray" zh="灰色"/>
   <translation tag="Grip filament" zh="夹持耗材"/>
   <translation tag="Grip the filament" zh="夹持耗材"/>
+  <translation tag="Guide the toolhead to the chute&apos;s extrude position" zh="引导工具头到排料口的挤出位置"/>
   <translation tag="Guides and reference" zh="指南与参考"/>
   <translation tag="H" zh="头"/>
   <translation tag="HOST" zh="主机"/>
@@ -1271,6 +1286,7 @@
   <translation tag="Holding nozzle at {}°C to purge previous filament." zh="将喷嘴保持在 {}°C 以清洗之前的耗材。"/>
   <translation tag="Home" zh="归位"/>
   <translation tag="Home &amp; Continue" zh="归位并继续"/>
+  <translation tag="Home and sweep the cutter to re-find its position" zh="归零并扫过切刀以重新找到其位置"/>
   <translation tag="Home failed" zh="归位失败"/>
   <translation tag="Home printer first?" zh="先将打印机归位？"/>
   <translation tag="Home selector" zh="选择器归位"/>
@@ -1397,6 +1413,7 @@
   <translation tag="Job Queue" zh="任务队列"/>
   <translation tag="Jog Speed XY" zh="XY 移动速度"/>
   <translation tag="Jog Speed Z" zh="Z 移动速度"/>
+  <translation tag="Jog Y until the nozzle is centered over the chute opening, then tap Save." zh="点动 Y 轴，直到喷嘴位于排料口开口中心，然后点击保存。"/>
   <translation tag="Jog failed: {}" zh="移动失败: {}"/>
   <translation tag="Jog speeds and step distances" zh="移动速度与步进距离"/>
   <translation tag="Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests." zh="加入 HelixScreen 的 Discord 社区，参与讨论、获取技巧、故障排除帮助和功能请求。"/>
@@ -1410,6 +1427,7 @@
   <translation tag="Keep Required" zh="保持必需"/>
   <translation tag="Keep Spool Info on Eject" zh="弹出时保留料盘信息"/>
   <translation tag="Keep current" zh="保留当前"/>
+  <translation tag="Keep hands clear. The printer moves on its own." zh="请勿将手靠近。打印机会自行移动。"/>
   <translation tag="Keep the bypass spool visible when bypass is off" zh="旁路关闭时保持料盘可见"/>
   <translation tag="Kick away" zh="拨除废料"/>
   <translation tag="Kinematics" zh="运动学"/>
@@ -1472,6 +1490,7 @@
   <translation tag="Lifetime Print Stats" zh="累计打印统计"/>
   <translation tag="Light" zh="浅色"/>
   <translation tag="Light will switch when the current operation finishes" zh="灯光将在当前操作完成后切换"/>
+  <translation tag="Line the nozzle up with the purge chute so purged filament drops straight in." zh="将喷嘴对准排料口上方，使排出的料丝垂直落入。"/>
   <translation tag="Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer." zh="第 {} 行调用 {}，此打印机将其视为紧急停止。请使用为此打印机制作的配置重新切片该文件。"/>
   <translation tag="Listen to all theme sounds" zh="试听所有主题声音"/>
   <translation tag="Listening" zh="正在监听"/>
@@ -1948,6 +1967,7 @@
   <translation tag="Please enter a valid port (1-65535)." zh="请输入有效的端口号 (1-65535)。"/>
   <translation tag="Please enter an IP address or hostname." zh="请输入 IP 地址或主机名。"/>
   <translation tag="Please fill in the highlighted fields" zh="请填写高亮显示的字段"/>
+  <translation tag="Please wait while the printer homes and moves to the start position." zh="请等待打印机归零并移动到起始位置。"/>
   <translation tag="Please wait while the printer homes and probes." zh="请等待打印机归位和探测。"/>
   <translation tag="Please wait while the printer probes each screw position." zh="请等待打印机探测每个螺丝位置。"/>
   <translation tag="Pluck the front belt on the left" zh="拨动前左皮带"/>
@@ -2126,7 +2146,10 @@
   <translation tag="Pulling filament back" zh="正在回抽耗材"/>
   <translation tag="Purge" zh="排料"/>
   <translation tag="Purge &amp; Wipe" zh="排料与擦拭"/>
+  <translation tag="Purge Chute Calibration" zh="排料口校准"/>
   <translation tag="Purge Length" zh="排料长度"/>
+  <translation tag="Purge chute calibration failed: {}" zh="排料口校准失败：{}"/>
+  <translation tag="Purge chute position saved." zh="排料口位置已保存。"/>
   <translation tag="Purge failed: {}" zh="清洗失败: {}"/>
   <translation tag="Purge may still be running — response timed out" zh="清洗可能仍在运行 — 响应超时"/>
   <translation tag="Purge to bucket" zh="排料到废料桶"/>
@@ -2359,6 +2382,7 @@
   <translation tag="SWITCH SENSORS" zh="开关传感器"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." zh="安全模式已激活。由于应用程序在启动时反复崩溃，打印机连接已被禁用。请打开设置以解决问题，然后重启。"/>
   <translation tag="Safety &amp; Notifications" zh="安全与通知"/>
+  <translation tag="Same spool in {}? Tap Clear if it is a new one." zh="{} 是同一个料盘吗？如果是新料盘，请点击清除。"/>
   <translation tag="Sample" zh="样本"/>
   <translation tag="Sample %d/%d" zh="样本 %d/%d"/>
   <translation tag="Sample Dialog" zh="示例对话框"/>
@@ -2385,7 +2409,9 @@
   <translation tag="Saving Z-offset..." zh="正在保存 Z 偏移..."/>
   <translation tag="Saving config... Klipper will restart." zh="正在保存配置... Klipper 将重启。"/>
   <translation tag="Saving offsets..." zh="正在保存偏移..."/>
+  <translation tag="Saving the position and parking the toolhead." zh="正在保存位置并驻留工具头。"/>
   <translation tag="Saving will restart Klipper and CANCEL any active print!" zh="保存将重启 Klipper 并取消任何正在进行的打印！"/>
+  <translation tag="Saving..." zh="保存中..."/>
   <translation tag="Scan" zh="扫描"/>
   <translation tag="Scan Cal" zh="扫描校准"/>
   <translation tag="Scan QR Code" zh="扫描 QR 码"/>
@@ -2761,6 +2787,7 @@
   <translation tag="The loaded spool is {}, but this file was sliced for {}. Filled filament runs at a lower flow rate and needs a hardened nozzle." zh="当前装载的料盘是 {}，但此文件为 {} 切片。填充耗材需要以更低的流量运行，且需要硬化喷嘴。"/>
   <translation tag="The print is paused. Changing tools now moves the toolhead and swaps the filament at the nozzle. Resume the print once the change finishes." zh="打印已暂停。现在切换工具会移动工具头并更换喷嘴处的耗材。切换完成后请恢复打印。"/>
   <translation tag="The printer halted this print and cannot resume it. Restart from the beginning?" zh="打印机已停止此打印且无法恢复。从头重新开始？"/>
+  <translation tag="The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear." zh="打印机将归零并扫过切刀（约1分钟）。请保持料路畅通。"/>
   <translation tag="The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear." zh="打印机尚未归位。继续将对所有轴执行归位操作，移动工具头。请确保热床上没有障碍物。"/>
   <translation tag="The printer lost power during a print. It can resume where it left off." zh="打印机在打印过程中断电。可以从中断处继续。"/>
   <translation tag="The printer lost power during a print. The resumed layer may not line up exactly." zh="打印机在打印过程中断电。恢复后的层可能无法完全对准。"/>
@@ -2890,7 +2917,9 @@
   <translation tag="Toolhead LED" zh="工具头 LED"/>
   <translation tag="Toolhead Sensor" zh="工具头传感器"/>
   <translation tag="Toolhead Style" zh="工具头样式"/>
+  <translation tag="Toolhead Y" zh="工具头 Y"/>
   <translation tag="Toolhead jam" zh="工具头堵塞"/>
+  <translation tag="Toolhead position unknown" zh="工具头位置未知"/>
   <translation tag="Toolhead, G-code, limits, and materials" zh="打印头、G代码、限制和材料"/>
   <translation tag="Toolheads" zh="工具头"/>
   <translation tag="Tools" zh="工具"/>
@@ -3116,6 +3145,7 @@
   <translation tag="Y" zh="Y"/>
   <translation tag="Y Axis" zh="Y 轴"/>
   <translation tag="Y Offset" zh="Y 偏移"/>
+  <translation tag="Y axis limit reached" zh="已到达 Y 轴限位"/>
   <translation tag="Y jog blocked at bed edge" zh="Y 轴移动已限制在热床边缘"/>
   <translation tag="Y:" zh="Y："/>
   <translation tag="YOU WIN!&#10;Score: {}&#10;Tap to play again" zh="你赢了！&#10;得分：{}&#10;点按再玩一次"/>

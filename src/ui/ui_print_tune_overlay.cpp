@@ -5,12 +5,14 @@
 
 #include "ui_callback_helpers.h"
 #include "ui_error_reporting.h"
+#include "ui_event_safety.h"
 #include "ui_nav_manager.h"
 #include "ui_panel_common.h"
 #include "ui_toast_manager.h"
 #include "ui_z_offset_indicator.h"
 
 #include "display_numbering.h"
+#include "display_settings_manager.h"
 #include "format_utils.h"
 #include "i_moonraker_api.h"
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -72,6 +74,13 @@ static void on_tune_reset_clicked_cb(lv_event_t* /*e*/) {
     get_print_tune_overlay().handle_reset();
 }
 
+static void on_tune_units_toggle_cb(lv_event_t* /*e*/) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[PrintTuneOverlay] on_tune_units_toggle");
+    auto& settings = helix::DisplaySettingsManager::instance();
+    settings.set_speed_flow_physical_units(!settings.get_speed_flow_physical_units());
+    LVGL_SAFE_EVENT_CB_END();
+}
+
 // Z-offset step amount selector (user_data = index "0"-"3")
 static void on_tune_z_target_cb(lv_event_t* e) {
     const char* idx_str = static_cast<const char*>(lv_event_get_user_data(e));
@@ -111,9 +120,10 @@ PrintTuneOverlay::PrintTuneOverlay() {
 PrintTuneOverlay::~PrintTuneOverlay() {
     // Clean up observers before subjects
     speed_observer_.reset();
-    gcode_speed_observer_.reset();
+    live_velocity_observer_.reset();
     max_velocity_observer_.reset();
     extruder_vel_observer_.reset();
+    units_observer_.reset();
 
     // Clean up subjects
     if (subjects_initialized_) {
@@ -227,6 +237,7 @@ void PrintTuneOverlay::init_subjects_internal() {
         {"on_tune_speed_adjust", on_tune_speed_adjust_cb},
         {"on_tune_flow_adjust", on_tune_flow_adjust_cb},
         {"on_tune_reset_clicked", on_tune_reset_clicked_cb},
+        {"on_tune_units_toggle", on_tune_units_toggle_cb},
         {"on_tune_save_z_offset", on_tune_save_z_offset_cb},
         {"on_tune_z_step", on_tune_z_step_cb},
         {"on_tune_z_target", on_tune_z_target_cb},
@@ -263,26 +274,30 @@ void PrintTuneOverlay::setup_panel() {
     // Update Z-offset icons based on printer kinematics
     update_z_offset_icons(tune_panel_);
 
-    // Observe speed-related subjects for live actual speed display
+    // Observe speed-related subjects for the live speed/flow readouts
     if (printer_state_) {
         speed_observer_ = helix::ui::observe_int_sync<PrintTuneOverlay>(
             printer_state_->get_speed_factor_subject(), this,
-            [](PrintTuneOverlay* self, int /*value*/) { self->update_actual_speed_display(); },
+            [](PrintTuneOverlay* self, int /*value*/) { self->update_display(); },
             printer_state_->get_subjects_lifetime());
-        gcode_speed_observer_ = helix::ui::observe_int_sync<PrintTuneOverlay>(
-            printer_state_->get_gcode_speed_subject(), this,
-            [](PrintTuneOverlay* self, int /*value*/) { self->update_actual_speed_display(); },
+        live_velocity_observer_ = helix::ui::observe_int_sync<PrintTuneOverlay>(
+            printer_state_->get_live_velocity_subject(), this,
+            [](PrintTuneOverlay* self, int /*value*/) { self->update_display(); },
             printer_state_->get_subjects_lifetime());
         max_velocity_observer_ = helix::ui::observe_int_sync<PrintTuneOverlay>(
             printer_state_->get_max_velocity_subject(), this,
-            [](PrintTuneOverlay* self, int /*value*/) { self->update_actual_speed_display(); },
+            [](PrintTuneOverlay* self, int /*value*/) { self->update_display(); },
             printer_state_->get_subjects_lifetime());
-        // Observe extruder velocity for live flow display
         extruder_vel_observer_ = helix::ui::observe_int_sync<PrintTuneOverlay>(
             printer_state_->get_live_extruder_velocity_subject(), this,
-            [](PrintTuneOverlay* self, int /*value*/) { self->update_actual_flow_display(); },
+            [](PrintTuneOverlay* self, int /*value*/) { self->update_display(); },
             printer_state_->get_subjects_lifetime());
     }
+    auto& display_settings = DisplaySettingsManager::instance();
+    units_observer_ = helix::ui::observe_int_sync<PrintTuneOverlay>(
+        display_settings.subject_speed_flow_physical_units(), this,
+        [](PrintTuneOverlay* self, int /*value*/) { self->update_display(); },
+        display_settings.get_subjects_lifetime());
 
     // Per-tool z-offset. ToolState's lifetime is passed on every one of these:
     // it is a singleton whose deinit_subjects() frees the observer nodes, and a
@@ -291,8 +306,8 @@ void PrintTuneOverlay::setup_panel() {
     {
         auto& ts = helix::ToolState::instance();
         const auto ts_lifetime = ts.get_subjects_lifetime();
-        // The offsets live in tools_, so tools_version_ — bumped on every
-        // change to them — is the re-render trigger for the per-tool Z
+        // The offsets live in tools_, so tools_version_, bumped on every
+        // change to them, is the re-render trigger for the per-tool Z
         // readouts.
         tools_version_observer_ = helix::ui::observe_int_sync<PrintTuneOverlay>(
             ts.get_tools_version_subject(), this,
@@ -335,10 +350,6 @@ void PrintTuneOverlay::sync_to_state() {
         ui_z_offset_indicator_set_value(indicator, z_offset_microns);
     }
 
-    // Update actual speed/flow displays
-    update_actual_speed_display();
-    update_actual_flow_display();
-
     spdlog::debug("[PrintTuneOverlay] Synced to state: speed={}%, flow={}%", speed, flow);
 }
 
@@ -377,11 +388,55 @@ void PrintTuneOverlay::update_z_offset_icons(lv_obj_t* /*panel*/) {
 // ============================================================================
 
 void PrintTuneOverlay::update_display() {
-    helix::format::format_percent(speed_percent_, tune_speed_buf_, sizeof(tune_speed_buf_));
-    lv_subject_copy_string(&tune_speed_subject_, tune_speed_buf_);
+    if (!subjects_initialized_) {
+        return;
+    }
 
-    helix::format::format_percent(flow_percent_, tune_flow_buf_, sizeof(tune_flow_buf_));
+    int live_velocity = 0;
+    int max_velocity = 0;
+    int vel_centimm = 0;
+    if (printer_state_) {
+        live_velocity = lv_subject_get_int(printer_state_->get_live_velocity_subject());
+        max_velocity = lv_subject_get_int(printer_state_->get_max_velocity_subject());
+        vel_centimm = lv_subject_get_int(printer_state_->get_live_extruder_velocity_subject());
+    }
+
+    const auto percent =
+        helix::tune::status_speed_flow_text(false, speed_percent_, flow_percent_, 0, 0);
+    const auto live = helix::tune::status_speed_flow_text(true, speed_percent_, flow_percent_,
+                                                          live_velocity, vel_centimm);
+
+    // The same preference Print Status shows decides which of each pair leads.
+    // As the secondary readout, live speed carries the machine limit and an
+    // idle extruder's flow is left blank rather than showing 0.0.
+    if (DisplaySettingsManager::instance().get_speed_flow_physical_units()) {
+        std::snprintf(tune_speed_buf_, sizeof(tune_speed_buf_), "%s", live.speed.c_str());
+        std::snprintf(tune_flow_buf_, sizeof(tune_flow_buf_), "%s", live.flow.c_str());
+        std::snprintf(tune_actual_speed_buf_, sizeof(tune_actual_speed_buf_), "%s",
+                      percent.speed.c_str());
+        std::snprintf(tune_actual_flow_buf_, sizeof(tune_actual_flow_buf_), "%s",
+                      percent.flow.c_str());
+    } else {
+        std::snprintf(tune_speed_buf_, sizeof(tune_speed_buf_), "%s", percent.speed.c_str());
+        std::snprintf(tune_flow_buf_, sizeof(tune_flow_buf_), "%s", percent.flow.c_str());
+        if (max_velocity > 0) {
+            std::snprintf(tune_actual_speed_buf_, sizeof(tune_actual_speed_buf_), "%d / %d mm/s",
+                          live_velocity, max_velocity);
+        } else {
+            std::snprintf(tune_actual_speed_buf_, sizeof(tune_actual_speed_buf_), "%s",
+                          live.speed.c_str());
+        }
+        if (helix::tune::volumetric_flow_mm3_s(vel_centimm) >= 0.1) {
+            std::snprintf(tune_actual_flow_buf_, sizeof(tune_actual_flow_buf_), "%s",
+                          live.flow.c_str());
+        } else {
+            tune_actual_flow_buf_[0] = '\0';
+        }
+    }
+    lv_subject_copy_string(&tune_speed_subject_, tune_speed_buf_);
     lv_subject_copy_string(&tune_flow_subject_, tune_flow_buf_);
+    lv_subject_copy_string(&tune_actual_speed_subject_, tune_actual_speed_buf_);
+    lv_subject_copy_string(&tune_actual_flow_subject_, tune_actual_flow_buf_);
 }
 
 void PrintTuneOverlay::update_speed_flow_display(int speed_percent, int flow_percent) {
@@ -409,49 +464,6 @@ void PrintTuneOverlay::update_z_offset_display(int microns) {
 
     spdlog::trace("[PrintTuneOverlay] Z-offset display updated: {}um ({}mm)", microns,
                   current_z_offset_);
-}
-
-void PrintTuneOverlay::update_actual_speed_display() {
-    if (!printer_state_ || !subjects_initialized_)
-        return;
-
-    int gcode_speed = lv_subject_get_int(printer_state_->get_gcode_speed_subject());
-    int speed_factor = lv_subject_get_int(printer_state_->get_speed_factor_subject());
-    int max_velocity = lv_subject_get_int(printer_state_->get_max_velocity_subject());
-
-    // Effective speed = gcode_speed * speed_factor / 100
-    int effective_speed = gcode_speed * speed_factor / 100;
-
-    if (max_velocity > 0) {
-        std::snprintf(tune_actual_speed_buf_, sizeof(tune_actual_speed_buf_), "%d / %d mm/s",
-                      effective_speed, max_velocity);
-    } else {
-        std::snprintf(tune_actual_speed_buf_, sizeof(tune_actual_speed_buf_), "%d mm/s",
-                      effective_speed);
-    }
-    lv_subject_copy_string(&tune_actual_speed_subject_, tune_actual_speed_buf_);
-}
-
-void PrintTuneOverlay::update_actual_flow_display() {
-    if (!printer_state_ || !subjects_initialized_)
-        return;
-
-    // live_extruder_velocity is in centimm/s (x100)
-    int vel_centimm = lv_subject_get_int(printer_state_->get_live_extruder_velocity_subject());
-
-    // Volumetric flow = extruder_velocity * pi * (d/2)^2
-    // TODO(#1504): 1.75 mm cross-section (2.405 mm^2) until the extruder's
-    // filament_diameter reaches PrinterState; 2.85 mm reads 2.65x low.
-    static constexpr double FILAMENT_AREA_175 = 2.405;
-    double flow_mm3_s = (vel_centimm / 100.0) * FILAMENT_AREA_175;
-
-    if (flow_mm3_s >= 0.1) {
-        std::snprintf(tune_actual_flow_buf_, sizeof(tune_actual_flow_buf_), "%.1f mm\xC2\xB3/s",
-                      flow_mm3_s);
-    } else {
-        tune_actual_flow_buf_[0] = '\0';
-    }
-    lv_subject_copy_string(&tune_actual_flow_subject_, tune_actual_flow_buf_);
 }
 
 // ============================================================================

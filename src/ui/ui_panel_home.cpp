@@ -140,6 +140,7 @@ void HomePanel::init_subjects() {
         {"on_home_grid_pressing", on_home_grid_pressing},
         {"on_home_grid_released", on_home_grid_released},
         {"on_home_grid_press_cancelled", on_home_grid_press_cancelled},
+        {"on_add_page_clicked", on_add_page_clicked},
     });
 
     subjects_initialized_ = true;
@@ -280,12 +281,11 @@ void HomePanel::apply_edit_swipe_policy() {
         grid_edit_mode_.owns_gesture() || grid_edit_mode_.is_catalog_open();
     helix::ui::carousel_set_swipe(carousel_,
                                   edit_holds_page ? CarouselSwipe::Disabled : CarouselSwipe::Auto);
-    // The next-page slot is a drag's drop target, never a page to swipe to. A
-    // drop there that creates a page leaves the session scoped to it, and the
-    // carousel resting on it, until the page-set rebuild on the next tick.
-    const bool slot_in_reach =
-        grid_edit_mode_.is_dragging() || grid_edit_mode_.is_scoped_to(next_page_container_);
-    helix::ui::carousel_set_trailing_tiles_reachable(carousel_, slot_in_reach);
+    // The next-page slot carries the + that adds a page and stays a drag's drop
+    // target, so its tile is within reach whenever the slot exists. A drop that
+    // creates a page leaves the session scoped to it, and the carousel resting
+    // on it, until the page-set rebuild on the next tick.
+    helix::ui::carousel_set_trailing_tiles_reachable(carousel_, next_page_container_ != nullptr);
 }
 
 void HomePanel::build_carousel(int initial_page) {
@@ -663,6 +663,23 @@ void HomePanel::delete_edit_page() {
     // On the next tick, outside the confirmation button's click, landing as
     // every page-set change from edit mode does: on the deleted page's index,
     // clamped to the last page.
+    helix::ui::run_next_tick(lifetime_.token(),
+                             [this, change]() { on_edit_pages_changed(change); });
+}
+
+void HomePanel::add_page_from_slot() {
+    auto& config = helix::PanelWidgetManager::instance().get_widget_config("home");
+    helix::PageSetChange change;
+    change.page_count = static_cast<int>(config.page_count());
+    change.page_added = true;
+    // The slot's tile names the page the + creates, as a drag's landing does.
+    change.focus_page = change.page_count;
+    if (config.add_page(config.generate_page_id()) < 0) {
+        return;
+    }
+    config.save();
+    // On the next tick, outside the + button's click, landing as every page-set
+    // change does: on the added page.
     helix::ui::run_next_tick(lifetime_.token(),
                              [this, change]() { on_edit_pages_changed(change); });
 }
@@ -1084,6 +1101,12 @@ void HomePanel::on_home_grid_clicked(lv_event_t* e) {
         !panel.finger_drifted_since_press()) {
         panel.grid_edit_mode_.handle_click(e);
     }
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void HomePanel::on_add_page_clicked(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[HomePanel] on_add_page_clicked");
+    get_global_home_panel().add_page_from_slot();
     LVGL_SAFE_EVENT_CB_END();
 }
 

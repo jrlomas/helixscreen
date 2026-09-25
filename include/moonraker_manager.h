@@ -279,6 +279,18 @@ class MoonrakerManager {
     }
 
     /**
+     * @brief Decide whether a Klippy state change should stop the collector
+     *
+     * A shutdown or error ends the print, but print_stats does not always say
+     * so: some firmware (Snapmaker U1) reports PAUSED after a verify_heater
+     * shutdown, which should_stop_print_collector() spares. Klippy's own state
+     * is the signal that no PRINT_START is still running.
+     */
+    static inline bool should_stop_collector_on_klippy_state(helix::KlippyState state) {
+        return state == helix::KlippyState::SHUTDOWN || state == helix::KlippyState::ERROR;
+    }
+
+    /**
      * @brief Decide whether the pre-print phase should end (hand off to printing)
      *
      * The pre-print → printing hand-off must be gated on the REAL first layer,
@@ -400,6 +412,7 @@ class MoonrakerManager {
     ObserverGuard m_preparing_epoch_observer;
     ObserverGuard m_print_start_observer;
     ObserverGuard m_print_start_phase_observer;
+    ObserverGuard m_print_klippy_state_observer;
     SubjectLifetime m_print_bed_target_fallback_lifetime;
     ObserverGuard m_print_bed_target_fallback_observer;
     ObserverGuard m_print_ext_target_fallback_observer;

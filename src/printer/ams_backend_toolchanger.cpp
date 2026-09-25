@@ -809,12 +809,16 @@ void AmsBackendToolChanger::refresh_slot_statuses_locked() {
         // filament identity a slot ever carries is the override store's, which
         // is a person's statement and not a firmware reading.
         //
+        // The dock reading files under tool_docked and leaves present unset:
+        // a toolhead in a dock says nothing about the filament in it, so
+        // filing presence would make every docked tool read as a loaded bay.
+        //
         // The reading filed is the local this pass computed, never
         // slots[i].status. That struct persists across frames and
         // apply_resolved_lane() rewrites it, so anything reading it back is one
         // inserted line away from filing a user's value as a firmware one.
         helix::ams::Observation sensed(helix::ams::ObservationSource::Sensed);
-        sensed.present = slot_status_reports_filament(stamped);
+        sensed.tool_docked = stamped != SlotStatus::EMPTY;
         helix::ams::ingest(lane_id(i), sensed);
     }
 }
@@ -1227,6 +1231,7 @@ void write_filament_fields(SlotInfo& slot, const SlotInfo& info) {
     slot.catalog_id = info.catalog_id;
     slot.product_name = info.product_name;
     slot.spoolman_id = info.spoolman_id;
+    slot.spoolman_filament_id = info.spoolman_filament_id;
     slot.spool_name = info.spool_name;
     slot.remaining_weight_g = info.remaining_weight_g;
     slot.total_weight_g = info.total_weight_g;

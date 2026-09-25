@@ -133,18 +133,23 @@ what gets saved.
   (`switch` / `pausePrint`) and are HelixScreen's from then on. Printers whose firmware
   pauses by itself, like the U1, are never double-paused. The rows appear only on printers
   with detection hardware.
+- **Power-loss recovery works on Qidi printers (#1716)** - on a Q2, Q1 Pro or Plus 4 running
+  the stock firmware, the resume dialog now appears after a print was cut short by a power
+  loss, offering the printer's own `RESUME_INTERRUPTED` flow or a clean discard.
 
 ### Changed
 
 - **Emptying a page in edit mode removes it from your saved layout** (#1638) - moving a page's
   last widget to another page, or removing it, deletes the empty page. The main page stays, and
   so does a page still holding widgets that are greyed out because their hardware is not detected.
-- **Pages are added by dragging a widget past your last page** (#1638) - swiping past the last
-  page used to show an empty page with a "+" tile that added a page when tapped, whether or not
-  you were editing. That tile is gone, and swiping stops at your last page. To add a page,
-  long-press the home screen, pick up a widget and drag it past your last page: an empty page
-  slides in, and dropping the widget there creates the page with the widget on it, in place,
-  without the home screen sliding back to the page before it first.
+- **Adding a page: a visible + past your last page, or a drag past either edge** (#1638) - the
+  page past your last one carries a + you can tap to add a page, editing or not, and it stays
+  reachable even when you have a single page. To grow a page out of a widget instead, long-press
+  the home screen, pick up a widget and drag it past your last page: an empty page slides in, and
+  dropping the widget there creates the page with the widget on it, in place, without the home
+  screen sliding back to the page before it first. At your first page's left edge nothing slides
+  in: let go with most of the widget past that edge and a new page is created in front, with the
+  widget at its left side.
 - **Cancelling a print from a runout dialog asks first** - the guidance dialog cancelled on
   the first tap, while the print-status Stop button has always confirmed. One printer had two
   cancel affordances and only one of them asked, and the unconfirmed one sat in a dialog whose

@@ -390,42 +390,32 @@ TEST_CASE_METHOD(LVGLTestFixture,
 // Bug 2 — power-off gate: LAST RESORT only (Snapmaker U1 regression guard)
 // ============================================================================
 
-TEST_CASE("power-off gate: any power-off-capable backend without a hardware blank",
-          "[application][display][sleep][poweroff][1049][1594]") {
-    // Pure decision matrix for should_use_power_off(use_hw_blank,
-    // backend_supports_power_off). A usable backlight is NOT an input: the
-    // backlight write and the panel power-off stack, so a device that can dim
-    // still benefits from cutting the panel.
-
-    // No hardware blank, backend can power off → power off.
-    REQUIRE(DisplayManager::should_use_power_off(false, true));
-
-    // Hardware blank present → never power off (AD5M/Allwinner).
-    REQUIRE_FALSE(DisplayManager::should_use_power_off(true, true));
-
-    // Backend can't power off → never (falls back to software overlay).
-    REQUIRE_FALSE(DisplayManager::should_use_power_off(false, false));
-}
-
-TEST_CASE("power-off gate: HELIX_PANEL_POWER_OFF=0 builds refuse the power-off path",
+TEST_CASE("power-off gate: only with NO hardware blank AND NO usable backlight",
           "[application][display][sleep][poweroff][1049][1594][1708]") {
-    // Targets whose panels do not recover from a power-down (U1, AD5X/K1 MIPS,
-    // K1, K2) build with HELIX_PANEL_POWER_OFF=0 and refuse whatever the backend
-    // reports. The host build asserts the opposite, which is what proves the
-    // gate is not accidentally off everywhere.
-#if HELIX_PANEL_POWER_OFF
-    REQUIRE(DisplayManager::should_use_power_off(false, true));
-#else
-    REQUIRE_FALSE(DisplayManager::should_use_power_off(false, true));
-#endif
+    // Pure decision matrix for should_use_power_off(use_hw_blank,
+    // has_usable_backlight, backend_supports_power_off).
+
+    // No hw blank, no backlight, backend can power off -> power off (HDMI / CB1).
+    REQUIRE(DisplayManager::should_use_power_off(false, false, true));
+
+    // Usable backlight present -> never power off, even with a DPMS-capable
+    // backend (U1, AD5X, K1/K2, Pi DSI all have one).
+    REQUIRE_FALSE(DisplayManager::should_use_power_off(false, true, true));
+
+    // Hardware blank present -> never power off (AD5M/Allwinner).
+    REQUIRE_FALSE(DisplayManager::should_use_power_off(true, false, true));
+
+    // Backend can't power off -> never (falls back to software overlay).
+    REQUIRE_FALSE(DisplayManager::should_use_power_off(false, false, false));
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "a usable backlight does not suppress panel power-off",
-                 "[application][display][sleep][poweroff][1594]") {
-    // A panel with a working sysfs backlight and a power-off-capable DRM backend
-    // reporting Hardware blank: false. Some panel controllers treat duty zero as
-    // "dim" and keep the LEDs powered, so the backlight write alone leaves them
-    // lit: sleep cuts the panel as well as the backlight.
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "usable backlight suppresses power-off so enter_sleep dims instead",
+                 "[application][display][sleep][poweroff][1049][1708]") {
+    // A working backlight (is_available()==true) + a DPMS-capable DRM backend
+    // reporting Hardware blank: false, the U1 shape. The gate must refuse
+    // power-off, and enter_sleep must turn the backlight off instead of calling
+    // power_off(), which would wedge the VOP2 CRTC there.
     DisplayManager mgr;
     auto backend =
         std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true, DisplayBackendType::DRM);
@@ -437,13 +427,13 @@ TEST_CASE_METHOD(LVGLTestFixture, "a usable backlight does not suppress panel po
 
     // Run the real init() gate against the injected state.
     bool use_power_off = DisplayManagerTestAccess::compute_use_power_off(mgr);
-    REQUIRE(use_power_off);
+    REQUIRE_FALSE(use_power_off);
 
     DisplayManagerTestAccess::enter_sleep(mgr, 60);
 
     REQUIRE(mgr.is_display_sleeping());
-    REQUIRE(raw_backend->power_off_calls == 1); // the panel is cut, not merely dimmed
-    REQUIRE(raw_backend->blank_calls == 0);     // not a hardware-blank device
+    REQUIRE(raw_backend->power_off_calls == 0); // never DPMS-off a backlight device
+    REQUIRE(raw_backend->blank_calls == 0);     // not a hardware-blank device either
 }
 
 TEST_CASE_METHOD(LVGLTestFixture,
@@ -901,6 +891,36 @@ TEST_CASE_METHOD(LVGLTestFixture, "a wake restores rendering even when the panel
 
     CHECK_FALSE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
     CHECK(disp->flush_cb == real_cb);
+
+    DisplayManagerTestAccess::set_display(mgr, nullptr);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "panel power-off hides the screen until the flush is restored",
+                 "[application][display][sleep][poweroff][screen_hide]") {
+    // Nothing is drawn while the panel is off, so a widget waiting on its own
+    // draw must see the screen as hidden rather than stalled.
+    REQUIRE_FALSE(helix::active_screen_hide_hold().is_held());
+    DisplayManager mgr;
+    DisplayManagerTestAccess::set_backend(
+        mgr, std::make_unique<FakePowerOffBackend>(/*supports_power_off=*/true));
+    DisplayManagerTestAccess::set_use_hardware_blank(mgr, false);
+    DisplayManagerTestAccess::set_use_power_off(mgr, true);
+    lv_display_t* disp = lv_display_get_default();
+    DisplayManagerTestAccess::set_display(mgr, disp);
+    lv_display_set_flush_cb(disp, test_sentinel_flush_cb);
+    lv_obj_t* screen = lv_screen_active();
+    REQUIRE_FALSE(lv_obj_has_flag(screen, LV_OBJ_FLAG_HIDDEN));
+
+    DisplayManagerTestAccess::enter_sleep(mgr, 60);
+    REQUIRE(DisplayManagerTestAccess::last_sleep_mechanism(mgr) ==
+            DisplayManager::SleepMechanism::PanelPowerOff);
+    REQUIRE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
+    CHECK(lv_obj_has_flag(screen, LV_OBJ_FLAG_HIDDEN));
+
+    DisplayManagerTestAccess::restore_display_output(mgr);
+    CHECK_FALSE(DisplayManagerTestAccess::is_flush_suppressed(mgr));
+    CHECK_FALSE(lv_obj_has_flag(screen, LV_OBJ_FLAG_HIDDEN));
+    CHECK_FALSE(helix::active_screen_hide_hold().is_held());
 
     DisplayManagerTestAccess::set_display(mgr, nullptr);
 }

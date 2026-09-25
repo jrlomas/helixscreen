@@ -156,6 +156,7 @@ MDI_ICONS+=",0xF04B2"    # sleep (moon/zzz)
 MDI_ICONS+=",0xF04C5"    # speedometer
 MDI_ICONS+=",0xF04DB"    # stop
 MDI_ICONS+=",0xF14F1"    # spirit-level (QGL/Z-Tilt)
+MDI_ICONS+=",0xF04E1"    # swap-horizontal
 MDI_ICONS+=",0xF04E2"    # swap-vertical
 MDI_ICONS+=",0xF06E4"    # infinity (endless spool)
 MDI_ICONS+=",0xF04E6"    # sync (auto-detect)

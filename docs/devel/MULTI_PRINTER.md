@@ -10,7 +10,7 @@ Multi-printer management allows users to configure, switch between, add, and del
 
 Key properties:
 
-- **Opt-in via a user setting** -- the navbar printer badge is gated on the `show_printer_switcher` setting (Settings > Printers). The old `<beta_feature>` wrappers around the entry points were removed. Printer count does not gate the badge on its own: `show_printer_switcher` is the single source of truth, and a config migration defaults it off for single-printer setups.
+- **Opt-in via a user setting** -- the navbar printer badge is gated on the `show_printer_switcher` setting (Settings > Printers). Printer count does not gate the badge on its own: `show_printer_switcher` is the single source of truth, and a config migration defaults it off for single-printer setups.
 - **Config schema v4** -- per-printer data lives under `/printers/{id}/`, with `df()` routing dynamically to the active printer
 - **Soft restart** -- switching printers tears down and reinitializes the entire printer state without restarting the application or LVGL display
 
@@ -371,11 +371,8 @@ if (data["printers"].size() <= 1) {
 
 ## Entry-Point Visibility
 
-The multi-printer entry points are no longer beta-gated. The `<beta_feature>` wrappers
-that once surrounded them have been removed; visibility is now driven by the
-`show_printer_switcher` user setting (toggled from Settings > Printers).
-
-Entry points:
+Visibility is driven by the `show_printer_switcher` user setting (toggled from
+Settings > Printers). Entry points:
 - **Navbar printer badge** (`nav_printer_badge`) -- gated on the `show_printer_switcher` subject
 - **Printer Manager > Manage Printers** button (`pm_manage_printers_btn`) -- always present in the Printer Manager overlay
 
@@ -538,7 +535,7 @@ The list is repopulated on every `on_activate()` to reflect config changes.
 
 ### PrinterManagerOverlay (Manage Printers Button)
 
-Section 4 of the Printer Manager overlay contains a "Manage Printers" button wrapped in `<beta_feature>`. Clicking it opens the `PrinterListOverlay`.
+Section 4 of the Printer Manager overlay contains a "Manage Printers" button (`pm_manage_printers_btn`). Clicking it opens the `PrinterListOverlay`.
 
 ---
 

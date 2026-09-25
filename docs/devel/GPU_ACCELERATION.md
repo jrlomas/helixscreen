@@ -21,12 +21,12 @@ alternatives — each rung builds on the one below.
 |------|--------------|-----------|
 | `lv_draw_sw` into a dumb buffer | CPU rasterizes, kernel scans out | **ships** |
 | `lv_draw_sw` into a GBM/EGL surface | CPU rasterizes, GPU composites and presents | **ships on `pi`**, probe-gated |
+| `lv_draw_nanovg` | GPU rasterizes widgets | **broken upstream**, see below |
+| `lv_draw_opengles` | GPU rasterizes, different unit | not evaluated |
 
 The EGL rung's CPU numbers below were first recorded against a build that was
 rendering incorrectly - see "The alpha trap" - so treat any measurement of this
 path as provisional until someone has looked at the panel.
-| `lv_draw_nanovg` | GPU rasterizes widgets | **broken upstream**, see below |
-| `lv_draw_opengles` | GPU rasterizes, different unit | not evaluated |
 
 The config chain matters and is easy to get wrong: `LV_USE_OPENGLES` is the
 macro that counts. `lv_conf_internal.h` derives `LV_LINUX_DRM_USE_EGL` from it
@@ -273,7 +273,7 @@ The same defaults double the frame rate on a Pi 5 (4 GB, 60 Hz DSI panel) as wel
 ### EGL against the dumb-DRM binary on the same Pi 3B (2026-09-15)
 
 Which binary is cheaper depends on the workload, so this rung is not a single win or loss for a
-board. Same install (`c9ca2fb6f`), same panel, two runs per arm, board at 62-65 C and unthrottled
+board. Same install, same panel, two runs per arm, board at 62-65 C and unthrottled
 throughout. Figures are percent of one core.
 
 | Workload | EGL binary | DRM binary |

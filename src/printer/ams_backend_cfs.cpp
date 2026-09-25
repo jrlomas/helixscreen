@@ -3,6 +3,7 @@
 
 #include "ams_backend_cfs.h"
 
+#include "ui_error_reporting.h"
 #include "ui_temperature_utils.h"
 
 #include "ams_bypass_policy.h"
@@ -27,9 +28,13 @@
 #include "printer_state.h" // get_print_lifecycle_subject: the insert-probe gate
 #include "settings_manager.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
+#include <atomic>
 #include <cctype>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -918,7 +923,7 @@ static std::optional<bool> flat_gate_filament_present(const nlohmann::json& box_
 // is not a chosen value: the module builds each profile entry with
 // `str(value.get(key, ""))`, so a key that is present but JSON null
 // stringifies to Python's "None" rather than falling back to the "" default.
-// Every text field can therefore arrive as "None" — surfacing it would put a
+// Every text field can therefore arrive as "None"; surfacing it would put a
 // spool named "None" made of "None" on screen.
 static std::string flat_text_field(const nlohmann::json& slot_json, const char* key) {
     std::string v = helix::json_util::safe_string(slot_json, key);
@@ -1205,7 +1210,7 @@ static std::string compose_cfs_flat_uid(const std::string& material, const std::
 // identity writeback (_BOX_SLOT_SET) writes MATERIAL/BRAND/NAME/COLOR, so
 // those four fields are what distinguishes one tagged bay from another;
 // spoolman_id is excluded because it is a binding, not a tag property, and
-// reconcile_lane_binding owns its rules. All four empty reads as no signal —
+// reconcile_lane_binding owns its rules. All four empty reads as no signal:
 // an occupied bay whose tag did not read is not a fingerprint, for the same
 // reason a stock sentinel read is not (see build_cfs_slot_uid): it must not
 // overwrite the baseline and mask the swap the next good read reports.
@@ -2158,6 +2163,7 @@ void write_filament_fields(SlotInfo& bay, const SlotInfo& info) {
     bay.product_name = info.product_name;
     bay.spool_name = info.spool_name;
     bay.spoolman_id = info.spoolman_id;
+    bay.spoolman_filament_id = info.spoolman_filament_id;
     bay.spoolman_vendor_id = info.spoolman_vendor_id;
     bay.remaining_weight_g = info.remaining_weight_g;
     bay.total_weight_g = info.total_weight_g;
@@ -2356,7 +2362,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
             // frames, and that echo is the flat fingerprint changing to exactly
             // what we pushed. slot_set_gcode uppercases MATERIAL, so the
             // expectation carries the uppercased spelling the echo will report.
-            // With no baseline yet there is nothing to guard — the first
+            // With no baseline yet there is nothing to guard; the first
             // observation for a slot is always a baseline and never clears.
             if (!slot_material.empty() && rfid_tracker_.baseline(global_index)) {
                 staged_echoes = rfid_tracker_.expect_any_of(
@@ -3788,21 +3794,58 @@ uint64_t AmsBackendCfs::firmware_tool_mapping_generation() const {
     return firmware_map_generation_;
 }
 
+namespace {
+
+// Both calibration flows home the toolhead by design (G28 inside
+// BOX_FIND_CUT_POS, XYZ_ZERO for the chute), so PAUSED blocks them too.
+// Stated through print_blocks_filament_op() with self_homes=true so the rule
+// cannot drift from the one greying every filament-op button.
+AmsError refuse_calibration_if_printing(IMoonrakerAPI* api) {
+    if (!api) {
+        // No connection: lifecycle unknown, do not block (mirrors
+        // AmsSubscriptionBackend::refuse_if_printing's null-api path).
+        return AmsErrorHelper::success();
+    }
+    const auto lifecycle = api->printer_state().get_print_lifecycle();
+    if (print_blocks_filament_op(lifecycle, /*backend_self_homes=*/true)) {
+        return AmsErrorHelper::print_active(lifecycle == PrintState::Paused,
+                                            /*pause_allows_ops=*/false);
+    }
+    return AmsErrorHelper::success();
+}
+
+// Gcode response lines captured while BOX_FIND_CUT_POS runs. Held by
+// shared_ptr so the WebSocket-thread handler stays valid regardless of the
+// backend's lifetime.
+struct CutterWatch {
+    std::string found_line; // "Found cut position <axis>: <value>"
+    std::string saved_line; // "SAVE_BOX_CFG ok: cut_pos_y=<value>"
+};
+
+std::atomic<int> s_gcode_watch_seq{0};
+
+} // namespace
+
 std::vector<helix::printer::DeviceSection> AmsBackendCfs::get_device_sections() const {
     // All four box operations are one-shot care commands against the CFS
     // hardware, so a single maintenance section carries them; a split would be
     // a taxonomy with one or two members each. The device-operations overlay
     // renders only actions whose section matches one declared here.
     using DS = helix::printer::DeviceSection;
-    return {
+    std::vector<DS> sections = {
         DS{"maintenance", "Maintenance", 0, "RFID, auto-refill, nozzle and link care"},
     };
+    if (macro_variant_ == CfsMacroVariant::K1) {
+        sections.push_back(
+            DS{"calibration", "Calibration", 1, "Cutter and purge chute calibration"});
+    }
+    return sections;
 }
 
 std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() const {
     using DA = helix::printer::DeviceAction;
     using AT = helix::printer::ActionType;
-    return {
+    std::vector<DA> actions = {
         DA{"refresh_rfid",
            "Refresh RFID",
            "",
@@ -3860,6 +3903,45 @@ std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() co
            true,
            ""},
     };
+    if (macro_variant_ == CfsMacroVariant::K1) {
+        // Both actions home the toolhead, so a print that owns the machine
+        // (or a pause it would drag the head through) greys them out; the
+        // execute paths refuse again for anything the list snapshot missed.
+        const bool print_blocks = !refuse_calibration_if_printing(api_).success();
+        std::string reason;
+        if (print_blocks) {
+            reason = "Printer is busy with a print";
+        }
+        actions.push_back(DA{"calibrate_cutter",
+                             "Calibrate Cutter",
+                             "",
+                             "calibration",
+                             "Home and sweep the cutter to re-find its position",
+                             AT::BUTTON,
+                             {},
+                             {},
+                             0,
+                             100,
+                             "",
+                             -1,
+                             !print_blocks,
+                             reason});
+        actions.push_back(DA{"calibrate_purge_chute",
+                             "Calibrate Purge Chute",
+                             "",
+                             "calibration",
+                             "Guide the toolhead to the chute's extrude position",
+                             AT::BUTTON,
+                             {},
+                             {},
+                             0,
+                             100,
+                             "",
+                             -1,
+                             !print_blocks,
+                             reason});
+    }
+    return actions;
 }
 
 AmsError AmsBackendCfs::execute_device_action(const std::string& action_id,
@@ -3917,7 +3999,297 @@ AmsError AmsBackendCfs::execute_device_action(const std::string& action_id,
         return AmsErrorHelper::success();
     }
 
+    if (action_id == "calibrate_cutter") {
+        return calibrate_cutter();
+    }
+
+    if (action_id == "calibrate_purge_chute") {
+        // The section-detail overlay routes this action to the guided chute
+        // overlay instead of executing it; landing here means the routing
+        // hook did not run (e.g. a future caller bypassing the overlay).
+        return AmsErrorHelper::not_supported(
+            "Purge chute calibration runs through the guided overlay");
+    }
+
     return AmsErrorHelper::not_supported("Unknown action: " + action_id);
+}
+
+// ============================================================================
+// Cutter / purge-chute calibration (K1 stock dialect only)
+// ============================================================================
+//
+// Both flows below are the stock screen's verified choreography for a K1 Max
+// + CFS on fw 2.3.5.33 (prestonbrown/helixscreen#1282). Every entry gates on
+// macro_variant_ == K1: the K2 box firmware ships none of these commands
+// (its cutter check is MOTOR_CHECK_CUT_POS) and the Kalico fork was never
+// observed to expose them either.
+
+AmsError
+AmsBackendCfs::calibrate_cutter(std::function<void(bool ok, const std::string& line)> on_result) {
+    if (macro_variant_ != CfsMacroVariant::K1) {
+        return AmsErrorHelper::not_supported("Cutter calibration is K1-stock only");
+    }
+    if (auto e = refuse_calibration_if_printing(api_); !e.success()) {
+        return e;
+    }
+    if (calibration_in_flight_) {
+        return AmsErrorHelper::busy("calibration");
+    }
+
+    // Klipper reports the result on the gcode response stream, not in the
+    // gcode/script RPC reply: listen for the terminal lines while the macro
+    // runs. The handler touches only the shared watch, so it is safe on the
+    // WebSocket thread and after the backend is gone (the entry then stays
+    // registered on the client until teardown, updating a watch nobody reads).
+    auto watch = std::make_shared<CutterWatch>();
+    std::string handler;
+    if (client_) {
+        handler = "helix_cfs_cutcal_" + std::to_string(++s_gcode_watch_seq);
+        client_->register_method_callback(
+            "notify_gcode_response", handler, [watch](const nlohmann::json& msg) {
+                const auto params = msg.find("params");
+                if (params == msg.end() || !params->is_array() || params->empty()) {
+                    return;
+                }
+                const auto& first = (*params)[0];
+                if (!first.is_string()) {
+                    return;
+                }
+                const std::string line = first.get<std::string>();
+                if (line.rfind("Found cut position", 0) == 0) {
+                    watch->found_line = line;
+                } else if (line.rfind("SAVE_BOX_CFG ok:", 0) == 0) {
+                    watch->saved_line = line;
+                }
+            });
+    }
+    auto unregister = [client = client_, handler]() {
+        if (client && !handler.empty()) {
+            client->unregister_method_callback("notify_gcode_response", handler);
+        }
+    };
+
+    auto token = lifetime_.token();
+    auto on_complete = [this, token, on_result, watch, unregister]() {
+        token.defer("AmsBackendCfs::cutcal_done", [this, token, on_result, watch, unregister]() {
+            calibration_in_flight_ = false;
+            unregister();
+            const std::string& line =
+                !watch->found_line.empty() ? watch->found_line : watch->saved_line;
+            if (on_result) {
+                on_result(true, line);
+            }
+        });
+    };
+    auto on_error = [this, token, on_result, unregister](const MoonrakerError& err) {
+        token.defer("AmsBackendCfs::cutcal_err", [this, token, on_result, unregister, err]() {
+            calibration_in_flight_ = false;
+            unregister();
+            if (on_result) {
+                on_result(false, err.message);
+            }
+        });
+    };
+    const AmsError err =
+        execute_gcode("BOX_FIND_CUT_POS", std::move(on_complete), std::move(on_error));
+    if (!err.success()) {
+        // The send was refused outright; neither callback will fire to drop
+        // the watch, so remove it here rather than leaking the handler.
+        unregister();
+    } else {
+        calibration_in_flight_ = true;
+    }
+    return err;
+}
+
+AmsError AmsBackendCfs::start_chute_calibration(
+    std::function<void()> on_ready, std::function<void(const std::string& klipper_msg)> on_failed,
+    std::shared_ptr<std::atomic<bool>> cancel_requested) {
+    if (macro_variant_ != CfsMacroVariant::K1) {
+        return AmsErrorHelper::not_supported("Purge chute calibration is K1-stock only");
+    }
+    if (auto e = refuse_calibration_if_printing(api_); !e.success()) {
+        return e;
+    }
+    if (calibration_in_flight_) {
+        return AmsErrorHelper::busy("calibration");
+    }
+    auto token = lifetime_.token();
+    // PREPARE having run is what makes leaving the flow require a re-park:
+    // every failure leg re-sends Y_SAFE exactly when this is set.
+    auto prepare_ran = std::make_shared<bool>(false);
+    auto fail = [this, token, on_failed, prepare_ran](const MoonrakerError& err) {
+        token.defer("AmsBackendCfs::chute_failed", [this, token, on_failed, prepare_ran, err]() {
+            calibration_in_flight_ = false;
+            if (*prepare_ran) {
+                execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE");
+            }
+            if (on_failed) {
+                on_failed(err.message);
+            }
+        });
+    };
+    // XYZ_ZERO is the flow's own full home (~55s incl. PRTouch Z); PREPARE
+    // then parks Y at the box's safe position and extrudes X. Jogging may
+    // only start once both acked. Every step boundary polls the cancel flag:
+    // once the user has left the flow, no further step goes out.
+    const AmsError err = execute_gcode(
+        "BOX_CUSTOM_COMMAND CMD=XYZ_ZERO",
+        [this, token, on_ready = std::move(on_ready), cancel_requested, prepare_ran, fail]() {
+            token.defer("AmsBackendCfs::chute_home_done", [this, token, on_ready, cancel_requested,
+                                                           prepare_ran, fail]() {
+                if (cancel_requested && cancel_requested->load()) {
+                    // Cancelled during the home: the head sits at the
+                    // homed origin and PREPARE never ran, so there is
+                    // nothing to unwind.
+                    calibration_in_flight_ = false;
+                    return;
+                }
+                *prepare_ran = true;
+                execute_gcode(
+                    "BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_PREPARE",
+                    [this, token, on_ready, cancel_requested, fail]() {
+                        token.defer("AmsBackendCfs::chute_prepare_done",
+                                    [this, token, on_ready, cancel_requested, fail]() {
+                                        if (cancel_requested && cancel_requested->load()) {
+                                            // Cancelled while PREPARE ran: the caller
+                                            // is gone, so the backend re-parks itself.
+                                            calibration_in_flight_ = false;
+                                            execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE");
+                                            return;
+                                        }
+                                        calibration_in_flight_ = false;
+                                        if (on_ready) {
+                                            on_ready();
+                                        }
+                                    });
+                    },
+                    fail);
+            });
+        },
+        fail);
+    if (err.success()) {
+        calibration_in_flight_ = true;
+    }
+    return err;
+}
+
+AmsError AmsBackendCfs::jog_chute_y(float delta_mm) {
+    if (macro_variant_ != CfsMacroVariant::K1) {
+        return AmsErrorHelper::not_supported("Purge chute jog is K1-stock only");
+    }
+    // The stock screen's script form, verbatim: the state save/restore keeps
+    // the caller's absolute/relative mode intact and M400 makes the RPC ack
+    // wait for the move to finish, so back-to-back jogs cannot accumulate
+    // uncommitted travel.
+    const std::string script =
+        fmt::format("SAVE_GCODE_STATE NAME=myMoveState\n G91\n G0 Y{:.3f} F3000\n M400\n"
+                    " RESTORE_GCODE_STATE NAME=myMoveState",
+                    delta_mm);
+    return execute_gcode(script);
+}
+
+AmsError
+AmsBackendCfs::save_chute_position(std::function<void()> on_saved,
+                                   std::function<void(const std::string& klipper_msg)> on_failed) {
+    if (macro_variant_ != CfsMacroVariant::K1) {
+        return AmsErrorHelper::not_supported("Purge chute save is K1-stock only");
+    }
+    // The firmware reports the pair it wrote on the gcode response stream;
+    // capture it the way calibrate_cutter watches its lines, with the same
+    // shared_ptr lifetime so the WebSocket-thread handler stays valid even
+    // after the backend is gone.
+    auto watch = std::make_shared<std::string>();
+    std::string handler;
+    if (client_) {
+        handler = "helix_cfs_chutesave_" + std::to_string(++s_gcode_watch_seq);
+        client_->register_method_callback(
+            "notify_gcode_response", handler, [watch](const nlohmann::json& msg) {
+                const auto params = msg.find("params");
+                if (params == msg.end() || !params->is_array() || params->empty()) {
+                    return;
+                }
+                const auto& first = (*params)[0];
+                if (!first.is_string()) {
+                    return;
+                }
+                const std::string line = first.get<std::string>();
+                if (line.rfind("cmd_save_extrude_pos", 0) == 0 ||
+                    line.rfind("SAVE_BOX_CFG ok: extrude_pos", 0) == 0) {
+                    *watch = line;
+                }
+            });
+    }
+    auto unregister = [client = client_, handler]() {
+        if (client && !handler.empty()) {
+            client->unregister_method_callback("notify_gcode_response", handler);
+        }
+    };
+
+    auto token = lifetime_.token();
+    // SAVE_POS reads the LIVE toolhead position into box.cfg's
+    // extrude_pos_x/y (HelixScreen sends no coordinate); Y_SAFE re-parks
+    // after the save so the flow ends in the parked state. The save only
+    // ever runs after PREPARE, so a failure always re-parks.
+    auto fail = [this, token, on_failed = std::move(on_failed),
+                 unregister](const MoonrakerError& err) {
+        token.defer("AmsBackendCfs::chute_save_failed",
+                    [this, token, on_failed, unregister, err]() {
+                        unregister();
+                        execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE");
+                        if (on_failed) {
+                            on_failed(err.message);
+                        }
+                    });
+    };
+    const AmsError err = execute_gcode(
+        "BOX_CUSTOM_COMMAND CMD=COORDINATES_ADJUST_SAVE_POS",
+        [this, token, on_saved = std::move(on_saved), watch, unregister]() {
+            token.defer("AmsBackendCfs::chute_saved", [this, token, on_saved, watch, unregister]() {
+                execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE",
+                              [this, token, on_saved, watch, unregister]() {
+                                  token.defer("AmsBackendCfs::chute_parked",
+                                              [this, on_saved, watch, unregister]() {
+                                                  unregister();
+                                                  last_chute_save_line_ = *watch;
+                                                  if (on_saved)
+                                                      on_saved();
+                                              });
+                              });
+            });
+        },
+        fail);
+    if (!err.success()) {
+        // The send was refused outright; nothing will fire the callbacks that
+        // own the watch, so drop it here rather than leaking the handler.
+        unregister();
+    }
+    return err;
+}
+
+bool AmsBackendCfs::last_chute_saved_position(double& x_mm, double& y_mm) const {
+    return parse_chute_save_line(last_chute_save_line_, x_mm, y_mm);
+}
+
+bool AmsBackendCfs::parse_chute_save_line(const std::string& line, double& x_mm, double& y_mm) {
+    if (sscanf(line.c_str(), "cmd_save_extrude_pos x=%lf y=%lf", &x_mm, &y_mm) == 2) {
+        return true;
+    }
+    return sscanf(line.c_str(), "SAVE_BOX_CFG ok: extrude_pos_x=%lf,extrude_pos_y=%lf", &x_mm,
+                  &y_mm) == 2;
+}
+
+bool AmsBackendCfs::parse_cut_found_line(const std::string& line, char& axis, double& value_mm) {
+    return sscanf(line.c_str(), "Found cut position %c: %lf", &axis, &value_mm) == 2;
+}
+
+AmsError AmsBackendCfs::exit_chute_calibration() {
+    if (macro_variant_ != CfsMacroVariant::K1) {
+        return AmsErrorHelper::not_supported("Purge chute exit is K1-stock only");
+    }
+    // The cancel/back path from PREPARE onward. Before PREPARE the toolhead
+    // is either unhomed or still parked, so the caller sends nothing.
+    return execute_gcode("BOX_CUSTOM_COMMAND CMD=Y_SAFE");
 }
 
 // ============================================================================
@@ -4177,19 +4549,18 @@ void AmsBackendCfs::strip_spoolman_link_on_runout_locked(SlotInfo& slot, int slo
     // the fresh spool the user loads keeps inheriting a correctly-labeled
     // lane while the exhausted spool's id stops being re-asserted onto it.
     o.spoolman_id = 0;
+    o.spoolman_filament_id = 0;
     o.spoolman_vendor_id = 0;
     o.updated_at = std::chrono::system_clock::now();
 
     // Immediate visibility on the live SlotInfo. apply_resolved_lane runs after
-    // this, so the zero only survives if no lane source still declares the id,
-    // which is what the retraction below is for.
+    // this, so the zeros only survive if no lane source still declares the ids,
+    // which is what the retraction below is for. The three handles die together:
+    // a filament definition id whose spool id is gone names nothing, and the
+    // paint would put it back on the very next poll.
     slot.spoolman_id = 0;
-    slot.spoolman_vendor_id = 0;
-    // Zero over zero: no wire field carries a filament id and the poll
-    // replaces the units wholesale, so the live slot holds none here. Dropped
-    // anyway so the three handles cannot come apart once a filament id
-    // survives a poll (#1632).
     slot.spoolman_filament_id = 0;
+    slot.spoolman_vendor_id = 0;
 
     // The lane's own records lose the handle too, and only the handle: #1390 is
     // exactly that a bay's identity outlives the spool and labels the one
@@ -4198,6 +4569,7 @@ void AmsBackendCfs::strip_spoolman_link_on_runout_locked(SlotInfo& slot, int slo
     // record the binding they chose, the server's the spool it named.
     helix::ams::retract_lane_declarations(lane_id(slot_index), [](helix::ams::Observation& kept) {
         kept.spoolman_id.reset();
+        kept.spoolman_filament_id.reset();
         kept.spoolman_vendor_id.reset();
     });
 

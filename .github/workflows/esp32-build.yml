@@ -1,8 +1,10 @@
 name: esp32-build
+# ESP32 is not a supported target on the 1.0 release line.
 on:
   pull_request:
+    branches-ignore: ["release/1.0"]
   push:
-    branches: [main, "release/**"]
+    branches: [main, "release/**", "!release/1.0"]
 
 # A ~25 min job. Superseded pushes to the same PR/branch are cancelled rather
 # than queued behind each other; main is keyed per-SHA so pushes there still

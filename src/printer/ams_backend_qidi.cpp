@@ -1646,7 +1646,7 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
                 ovr_to_save = it->second;
             }
         }
-        // Capture by value — save_async's Moonraker callback may fire long
+        // Capture by value: save_async's Moonraker callback may fire long
         // after this returns. Do NOT capture `this`.
         const std::string tag = backend_log_tag();
         override_store_->save_async(
@@ -1735,19 +1735,15 @@ void AmsBackendQidi::clear_slot_override(int slot_index) {
     // three bare-int writes. The table row ids start at 1, so 0 names no row
     // and the slot reads as no identity. A tagged spool re-populates the slot
     // at the next insert, boot or RFID read - the clear erases what the slot
-    // remembers, not what the hardware can read.
+    // remembers, not what the hardware can read. SAVE_VARIABLE moves nothing,
+    // so a print does not gate it: skipping it would leave the ids the next
+    // poll repaints straight back over the clear.
     bool dispatched_any = false;
-    if (refuse_if_printing().success()) {
-        const std::string suffix = std::to_string(slot_index);
-        for (const std::string_view field : {"filament_slot", "color_slot", "vendor_slot"}) {
-            dispatched_any |=
-                execute_gcode("SAVE_VARIABLE VARIABLE=" + std::string(field) + suffix + " VALUE=0")
-                    .success();
-        }
-    } else {
-        spdlog::warn("{} clear_slot_override(slot={}): print active - firmware zero writes "
-                     "skipped, the local override is already cleared",
-                     backend_log_tag(), slot_index);
+    const std::string suffix = std::to_string(slot_index);
+    for (const std::string_view field : {"filament_slot", "color_slot", "vendor_slot"}) {
+        dispatched_any |=
+            execute_gcode("SAVE_VARIABLE VARIABLE=" + std::string(field) + suffix + " VALUE=0")
+                .success();
     }
     if (!dispatched_any) {
         // No echo is coming for the zero writes this clear staged, so
@@ -1781,8 +1777,8 @@ bool AmsBackendQidi::check_hardware_event_clear(SlotInfo& slot, int slot_index,
         // physical spool never moved, so the user's override stands. The
         // baseline has already advanced to the echoed value, so the next
         // genuine swap is detected against it.
-        spdlog::debug("{} Slot {} tag fingerprint {} -> {} matches our own identity push — "
-                      "override retained",
+        spdlog::debug("{} Slot {} tag fingerprint {} -> {} matches our own identity push, so "
+                      "the override stays",
                       backend_log_tag(), slot_index, old_uid, observed_uid);
         return false;
     case helix::ams::FingerprintEvent::Changed:
@@ -1830,7 +1826,7 @@ void AmsBackendQidi::clear_override_locked(int slot_index, SlotInfo& slot) {
     slot.product_name.clear();
 
     if (override_store_) {
-        // Capture by value — clear_async's Moonraker callback can fire after
+        // Capture by value: clear_async's Moonraker callback can fire after
         // this returns and after the backend itself is gone.
         const std::string tag = backend_log_tag();
         override_store_->clear_async(slot_index, [tag, slot_index](bool ok, std::string err) {

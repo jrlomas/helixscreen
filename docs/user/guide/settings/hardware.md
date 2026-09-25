@@ -6,7 +6,7 @@ The Hardware & Devices category contains settings for printers, peripherals, and
 
 ## Hardware Health
 
-Tap to open the Hardware Health overlay, which lists detected hardware validation issues:
+The row itself is a live summary: it reads **No Hardware Issues**, or a count such as **1 Hardware Issue**, and its icon takes the warning color when something needs attention or the danger color when something is critical. Tap it to open the Hardware Health overlay, which lists the issues:
 
 | Category | Meaning |
 |----------|---------|
@@ -25,8 +25,6 @@ Use this when adding or removing hardware to keep HelixScreen's expectations acc
 ---
 
 ## Printers
-
-> Only shown when [beta features](../beta-features.md) are enabled.
 
 Manage all your configured printers. Tap to open the Printer Management overlay where you can:
 
@@ -61,7 +59,7 @@ Most of what's inside varies by hardware, but four toggles appear here regardles
 | **Always Show Bypass Spool** | AFC systems only | Keep the external spool visible on the filament path even while bypass is disengaged. AFC reports a bypass sensor whether or not one is wired, so it's hidden by default until bypass is actually engaged |
 | **Enable Bypass Controls** | Only when your firmware reports **no** bypass | Show the bypass controls and the external spool anyway, for machines where you feed filament straight to the extruder. Applies to Anycubic ACE Pro, Snapmaker U1, tool changers, QIDI Box, and any Happy Hare config with `has_bypass: 0` |
 
-What **Enable Bypass Controls** does depends on the system. On Happy Hare, `MMU_SELECT_BYPASS` works whether or not `[mmu_machine] has_bypass` is set, so the bypass becomes usable - relevant for `mmu_vendor: Other` setups such as a QIDI Box driven through Happy Hare, and for an uncalibrated type-A selector. On the Creality CFS the bypass works and is always shown, so this setting never appears there. On ACE, Snapmaker, tool changers, and QIDI Box there is no bypass command, so the Bypass toggle reports that the operation is not supported; there the setting only lets you record the material and color you loaded by hand, which keeps filament tracking and temperature presets correct.
+What **Enable Bypass Controls** does depends on the system. On Happy Hare, `MMU_SELECT_BYPASS` works whether or not `[mmu_machine] has_bypass` is set, so the bypass becomes usable - relevant for `mmu_vendor: Other` setups such as a QIDI Box driven through Happy Hare, and for an uncalibrated type-A selector. On the Creality CFS the bypass works and is always shown, so this setting never appears there. On Snapmaker, tool changers, QIDI Box, and an ACE without a bypass switch there is no bypass command, so the Bypass toggle reports that the operation is not supported (an ACE Pro rig with a fifth spool on its bypass switch and bypass macros gets a working Bypass toggle; see [Filament](../filament.md#when-bypass-doesnt-appear)); there the setting only lets you record the material and color you loaded by hand, which keeps filament tracking and temperature presets correct.
 
 See [Filament → When Bypass Doesn't Appear](../filament.md#when-bypass-doesnt-appear).
 

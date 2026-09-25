@@ -27,6 +27,10 @@ LAUNCHER="$WORKTREE_ROOT/scripts/helix-launcher.sh"
 
 setup() {
     load helpers
+
+    # The launcher refuses to evaluate a group/world-writable env file; a host
+    # umask of 0002 would otherwise land every fixture at 0664.
+    umask 022
 }
 
 # Every export of a HELIX_* variable in a hook, anywhere in the file —

@@ -14,7 +14,7 @@
 #include "i_moonraker_api.h"
 #include "i_moonraker_client.h"
 #include "printer_state.h"
-#include "snapmaker_screws_tilt.h"
+#include "screws_tilt_dialect.h"
 #include "static_panel_registry.h"
 #include "theme_manager.h"
 #include "toolhead_homing.h"
@@ -309,9 +309,8 @@ void ScrewsTiltPanel::on_deactivating(DeactivateReason reason) {
         // Printers whose firmware holds an explicit calibration state (the
         // U1) must be told to leave it, or unrelated operations stay refused.
         // Gated on the dialect so other printers spend no query on a cancel.
-        if (client_ &&
-            client_->hardware().screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-            snapmaker::screws_tilt::request_exit(*client_);
+        if (client_) {
+            screws_tilt::request_exit(*client_, client_->hardware());
         }
     }
 
@@ -456,8 +455,8 @@ void ScrewsTiltPanel::cancel_probing() {
     // explicit calibration state (the U1) needs the gated exit or it stays
     // in it, refusing unrelated operations. Gated on the dialect so other
     // printers spend no query per cancel.
-    if (client_ && client_->hardware().screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-        snapmaker::screws_tilt::request_exit(*client_);
+    if (client_) {
+        screws_tilt::request_exit(*client_, client_->hardware());
     }
     set_state(State::IDLE);
 }
@@ -808,8 +807,7 @@ void ScrewsTiltPanel::query_screw_thread() {
             // stands until one does, and only the displayed turn count would
             // move - the level verdict is pitch-invariant.
             const json* thread_value = nullptr;
-            for (const char* section_name :
-                 {"screws_tilt_adjust", snapmaker::screws_tilt::MODULE_NAME}) {
+            for (const char* section_name : screws_tilt::config_section_names()) {
                 const auto section = settings.find(section_name);
                 if (section == settings.end() || !section->is_object()) {
                     continue;

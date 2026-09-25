@@ -341,6 +341,14 @@ class AmsOperationSidebar {
     // worth feeding (nothing_to_feed stays clear), false when none is.
     [[nodiscard]] helix::ui::OpButtonState read_batch_load_gating_state() const;
 
+    /// The backend and print reads every filament op's gating starts from.
+    struct OpInputs {
+        bool system_busy = false;
+        PrintState lifecycle{};
+        bool backend_self_homes = false;
+    };
+    [[nodiscard]] OpInputs read_op_inputs() const;
+
     // The Reset / Check-slots half, likewise re-read by handle_reset() and
     // handle_check_gates(). Neither backend call asks check_preconditions() for
     // the print term, so these two reads are the only guard on those paths.

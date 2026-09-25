@@ -74,6 +74,8 @@ Pick an explicit percentage if the result is not to your taste, or if HelixScree
 
 **The new size appears after you restart HelixScreen.** Fonts and layout are worked out once, while the screen is being set up, so the change cannot be applied to a running interface. Nothing is lost by waiting — the setting is saved as soon as you pick it.
 
+Your home panel arrangement is remembered per size: the number of widget slots changes with the scale, so each scale keeps its own saved layout. Rearrange at one size, switch, rearrange again; switching back restores the arrangement you made there.
+
 ### Theme Colors
 
 Open the theme explorer to browse, preview, and apply color themes.
@@ -150,6 +152,8 @@ Both **Save** and **Save As New** apply the theme live — no restart needed. If
 
 Slider from 10–100%. Only shown on hardware with backlight control (hidden on Android).
 
+On the Creality K2 the low end of the slider keeps the panel brighter than you ask for: the K2 panel shows anything under about 20% of its range as fully off, so HelixScreen never dims into that range.
+
 ### Screen Dim
 
 When the screen dims to lower brightness: Never, 30s, 1m, 2m, 5m, or 10m of inactivity.
@@ -157,6 +161,14 @@ When the screen dims to lower brightness: Never, 30s, 1m, 2m, 5m, or 10m of inac
 ### Display Sleep
 
 When the screen turns off completely: Never, 1m, 5m, 10m, 20m, or 30m of inactivity.
+
+Sleeping turns the backlight off. On the rare panel with no adjustable backlight, the panel itself is powered down instead. If your screen stays faintly lit after sleep, or does not come back after waking, the behavior can be forced either way in `settings.json`:
+
+```json
+"display": { "panel_power_off": 1 }
+```
+
+Use `0` where `1` made things worse. Touch wakes the screen in all cases.
 
 ### Screensaver
 
@@ -266,7 +278,8 @@ The first five (button press, toggles, navigation) are **UI sounds** and respect
 |----------|-------------|
 | **Desktop (SDL)** | Full audio synthesis through your computer speakers. Best sound quality. |
 | **ALSA (Linux)** | Direct audio output on devices with ALSA sound support. 4-voice polyphony with MOD/MED tracker music support for richer sound themes. |
-| **FlashForge AD5M / AD5M Pro** | Hardware PWM buzzer. Supports different tones and volume levels. |
+| **FlashForge AD5X** | Piezo speaker driven by the printer's PWM hardware. Chords and full sound themes, plus tracker music (including the startup jingle) rendered as tone phrases. |
+| **FlashForge AD5M / AD5M Pro** | Hardware PWM buzzer. Tone sound effects only, with no startup music or tracker themes on this hardware. |
 | **Other Klipper printers** | Beeper commands sent through Moonraker. Requires `[output_pin beeper]` in your Klipper config. Basic beep tones only. |
 
 If no audio hardware is detected, the sound options are hidden entirely.

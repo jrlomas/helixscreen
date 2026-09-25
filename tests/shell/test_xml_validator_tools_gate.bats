@@ -22,11 +22,19 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "tool-build gate builds both validator binaries" {
+@test "tool-build gate builds the attribute validator" {
     run bash -c "sed -n '/^qc_xml_tools() {/,/^}/p' scripts/quality-checks.sh"
     [ "$status" -eq 0 ] || fail "qc_xml_tools not extractable"
-    contains "validate-xml-constants" "$output"
     contains "validate-xml-attrs" "$output"
+}
+
+# validate-xml-constants links the whole app; building it from the hook makes
+# the CI quality step a cold full build that overruns its time limit. It stays
+# out of the make line while its gate is paused (#1698).
+@test "tool-build gate does not build the paused constants validator" {
+    run bash -c "sed -n '/^qc_xml_tools() {/,/^}/p' scripts/quality-checks.sh | grep '^if make'"
+    [ "$status" -eq 0 ] || fail "qc_xml_tools make line not found"
+    lacks "validate-xml-constants" "$output"
 }
 
 @test "tool-build gate wakes on the files the validators inspect" {

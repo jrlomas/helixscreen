@@ -5,6 +5,7 @@
 #include "ams_state.h"
 #include "ams_types.h"
 #include "consumption_sink.h"
+#include "lane_source_store.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -133,4 +134,68 @@ TEST_CASE_METHOD(ExternalSpoolSinkFixture,
     auto after = helix::AmsState::instance().get_external_spool_info();
     REQUIRE(after->remaining_weight_g < 500.0f);
     REQUIRE(after->remaining_weight_g > 499.0f);
+}
+
+TEST_CASE_METHOD(ExternalSpoolSinkFixture,
+                 "ExternalSpoolSink: flush persists the binding, "
+                 "not the resolved view",
+                 "[consumption_sink][external][1632]") {
+    ExternalSpoolSink sink;
+    sink.snapshot(0.0f);
+    sink.apply_delta(1000.0f); // ~3 g consumed; raw and Metered both ~997 g
+    auto raw_before = helix::AmsState::instance().raw_external_spool_info();
+    REQUIRE(raw_before.has_value());
+    REQUIRE(raw_before->remaining_weight_g < 1000.0f);
+
+    // A resolved weight that disagrees with the stored record (a newer meter
+    // reading filed on the lane). Flushing must persist the binding as it
+    // stands, not bake the resolved view into the stored record.
+    helix::ams::Observation metered(helix::ams::ObservationSource::Metered);
+    metered.remaining_weight_g = 500.0f;
+    helix::ams::ingest(helix::ams::BYPASS_LANE_ID, metered);
+
+    sink.flush();
+
+    auto raw_after = helix::AmsState::instance().raw_external_spool_info();
+    REQUIRE(raw_after.has_value());
+    CHECK(raw_after->remaining_weight_g == raw_before->remaining_weight_g);
+}
+
+TEST_CASE_METHOD(ExternalSpoolSinkFixture, "ExternalSpoolSink: Spoolman-linked spool not metered",
+                 "[consumption_sink][external][1632]") {
+    helix::SlotInfo info;
+    info.material = "PLA";
+    info.spoolman_id = 4;
+    info.remaining_weight_g = 1000.0f;
+    info.total_weight_g = 1000.0f;
+    helix::AmsState::instance().set_external_spool_info_in_memory(info);
+
+    ExternalSpoolSink sink;
+    sink.snapshot(0.0f);
+    // The server tracks a linked spool's own consumption; a local meter would
+    // fight it.
+    REQUIRE_FALSE(sink.is_trackable());
+}
+
+TEST_CASE_METHOD(ExternalSpoolSinkFixture, "ExternalSpoolSink: linking mid-print pauses the meter",
+                 "[consumption_sink][external][1632]") {
+    ExternalSpoolSink sink;
+    sink.snapshot(0.0f);
+    REQUIRE(sink.is_trackable());
+
+    helix::SlotInfo linked;
+    linked.material = "PLA";
+    linked.spoolman_id = 4;
+    linked.remaining_weight_g = 1000.0f;
+    linked.total_weight_g = 1000.0f;
+    helix::AmsState::instance().set_external_spool_info_in_memory(linked);
+
+    sink.apply_delta(1000.0f); // ~3 g consumed
+
+    // Paused, not counting: the bypass lane carries no Metered record, and the
+    // shown weight is the binding's own, not a local decrement of it.
+    CHECK_FALSE(helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID).metered.has_value());
+    auto shown = helix::AmsState::instance().get_external_spool_info();
+    REQUIRE(shown.has_value());
+    CHECK(shown->remaining_weight_g == 1000.0f);
 }

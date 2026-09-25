@@ -121,7 +121,12 @@ class UpdateQueue {
         if (initialized_)
             return;
 
-        shut_down_ = false;
+        {
+            // queue_impl() reads this from worker threads under mutex_, and a
+            // worker from an earlier init/shutdown cycle can still be posting.
+            std::lock_guard<std::mutex> lock(mutex_);
+            shut_down_ = false;
+        }
 
         // One drain per display refresh period, whether or not a frame renders.
         timer_ = lv_timer_create(timer_cb, LV_DEF_REFR_PERIOD, this);
@@ -148,7 +153,7 @@ class UpdateQueue {
         // timer. Record that identity so callers can ask whether they are
         // already on the main thread instead of marshalling unconditionally
         // (see helix::ui::is_main_thread).
-        main_thread_id_ = std::this_thread::get_id();
+        main_thread_id_.store(std::this_thread::get_id(), std::memory_order_release);
         main_thread_known_.store(true, std::memory_order_release);
 
         initialized_ = true;
@@ -166,7 +171,7 @@ class UpdateQueue {
         if (!main_thread_known_.load(std::memory_order_acquire)) {
             return true;
         }
-        return std::this_thread::get_id() == main_thread_id_;
+        return std::this_thread::get_id() == main_thread_id_.load(std::memory_order_acquire);
     }
 
     /**
@@ -565,10 +570,12 @@ class UpdateQueue {
     static inline volatile unsigned int previous_tag_next_ = 0;
 
     /// Identity of the LVGL main thread, captured in init(). Read from any
-    /// thread via is_main_thread(); `main_thread_known_` orders the write so a
-    /// racing reader either sees "not yet known" (and assumes main, which is
-    /// correct that early) or a fully-published id.
-    static inline std::thread::id main_thread_id_{};
+    /// thread via is_main_thread(); `main_thread_known_` orders the first write
+    /// so a racing reader either sees "not yet known" (and assumes main, which
+    /// is correct that early) or a fully-published id. The id itself is atomic
+    /// because every later init() rewrites it while workers from the previous
+    /// cycle may still be reading it.
+    static inline std::atomic<std::thread::id> main_thread_id_{};
     static inline std::atomic<bool> main_thread_known_{false};
 
     /// Count of queued callbacks that threw. Swallowing the exception is

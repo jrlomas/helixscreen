@@ -98,7 +98,7 @@ Or use the command line (replace `vX.Y.Z` with the actual version):
 ```bash
 VERSION=vX.Y.Z  # Check latest at https://github.com/prestonbrown/helixscreen/releases/latest
 wget "https://github.com/prestonbrown/helixscreen/releases/download/${VERSION}/helixscreen-k1.zip"
-wget https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh
+wget https://releases.helixscreen.org/install.sh
 ```
 
 **Copy to the printer and install:**
@@ -126,9 +126,9 @@ The installer automatically:
 > printer or Guilouz firmware; on a Simple AF install the stock stack is already disabled,
 > and HelixScreen stops only GuppyScreen.)
 >
-> If Creality Print cannot reach the printer after installing, update HelixScreen: the
-> backend startup script ships with it, and an install from before the backend was kept
-> alive will not have it. See [Troubleshooting: Creality Print cannot connect](../TROUBLESHOOTING.md#creality-print-can-no-longer-find-or-connect-to-the-printer).
+> If Creality Print cannot reach the printer after installing, update HelixScreen and
+> reboot: the backend startup script ships with current releases. See
+> [Troubleshooting: Creality Print cannot connect](../TROUBLESHOOTING.md#creality-print-can-no-longer-find-or-connect-to-the-printer).
 
 ## Step 5: Complete Setup on the Touchscreen
 
@@ -154,10 +154,9 @@ HelixScreen starts automatically after install. The on-screen wizard walks you t
 /usr/data/helixscreen/bin/helix-screen --version
 
 # View logs (both written to disk under /usr/data)
-tail -100 /usr/data/helixscreen/logs/helix.log       # structured app log
+tail -100 /usr/data/helixscreen-state/logs/helix.log # structured app log
 tail -100 /usr/data/helixscreen/logs/launcher.log    # launcher / crash capture
 tail -f /usr/data/helixscreen/logs/launcher.log      # live follow launcher
-# Pre-v0.99.62 installs only: tail -f /tmp/helixscreen.log
 ```
 
 The installer stops and disables the previous screen UI automatically. To do it by hand on a rooted stock printer:
@@ -255,9 +254,9 @@ reboot
 | Can't SSH in | Make sure root is enabled (Step 1). Password is `creality_2023` |
 | `curl` or SSL error | K1 doesn't support HTTPS downloads. Use the two-step install (Step 4): download on your computer, then `scp` to the printer |
 | Installer warns that Moonraker "does not appear to be running" | Complete Step 3 first: Moonraker must be running |
-| Blank screen after install | Check logs: `logread \| grep helix-screen \| tail -100` and `tail -100 /usr/data/helixscreen/logs/launcher.log` |
+| Blank screen after install | Check logs: `logread \| grep helix-screen \| tail -100`, `tail -100 /usr/data/helixscreen-state/logs/helix.log` and `tail -100 /usr/data/helixscreen/logs/launcher.log` |
 | Touch not responding | Reboot: `reboot` |
-| Creality Print can't find the printer after install | Expected: the stock Creality backend is stopped so HelixScreen can use the screen. Use Fluidd/Mainsail, HelixScreen's file browser, or a Moonraker-capable slicer. To revert, uninstall HelixScreen. See [Troubleshooting](../TROUBLESHOOTING.md#creality-k1-series-issues) |
+| Creality Print can't find the printer after install | The stock Creality backend should still be running beside HelixScreen. Update to the current release and reboot, then see [Troubleshooting](../TROUBLESHOOTING.md#creality-print-can-no-longer-find-or-connect-to-the-printer) |
 
 For more help: [Troubleshooting Guide](../TROUBLESHOOTING.md) | [Discord](https://discord.gg/RZCT2StKhr) | [GitHub Issues](https://github.com/prestonbrown/helixscreen/issues)
 

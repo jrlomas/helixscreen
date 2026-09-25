@@ -7,6 +7,9 @@
 #include "ui_ams_current_tool.h"
 #include "ui_ams_device_operations_overlay.h"
 #include "ui_ams_device_section_detail_overlay.h"
+#if HELIX_HAS_CFS
+#include "ui_cfs_chute_calibration_overlay.h"
+#endif
 #include "ui_ams_edit_overlay.h"
 #include "ui_belt_trace.h"
 #include "ui_button.h"
@@ -528,6 +531,9 @@ void register_xml_components() {
     // because the AMS panel registers itself lazily and would otherwise be the
     // only consumer guaranteed to find it.
     register_xml("components/ams_endless_status.xml");
+    // Same shape for the CFS calibration section: the device-section overlay
+    // creates it dynamically in refresh(), so nothing earlier guarantees it.
+    register_xml("components/cfs_cutter_status.xml");
     register_xml("print_file_detail.xml");
 
     // Panel widget components (dynamic instantiation from PanelWidgetConfig)
@@ -647,6 +653,12 @@ void register_xml_components() {
     register_xml("ams_device_operations.xml");
     helix::ui::get_ams_device_section_detail_overlay().register_callbacks();
     register_xml("ams_device_section_detail.xml");
+#if HELIX_HAS_CFS
+    // CFS purge-chute calibration overlay (K1 dialect, pushed from the
+    // device-section detail overlay's calibration action)
+    helix::ui::get_cfs_chute_calibration_overlay().init_subjects();
+    register_xml("cfs_chute_calibration_overlay.xml");
+#endif
 
     // Spoolman Settings (accessed from Settings > Spoolman, future)
     register_xml("spoolman_settings.xml");

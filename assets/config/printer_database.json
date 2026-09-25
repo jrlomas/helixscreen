@@ -4125,6 +4125,77 @@
       ]
     },
     {
+      "id": "flsun_s1",
+      "name": "FLSUN S1 / S1 Pro",
+      "manufacturer": "FLSUN",
+      "image": "flsun-s1.png",
+      "heuristics": [
+        {
+          "type": "object_required",
+          "field": "printer_objects",
+          "pattern": "delta_calibrate",
+          "reason": "The S1 is a delta; a reported object list without delta_calibrate is another machine"
+        },
+        {
+          "type": "kinematics_match",
+          "field": "kinematics",
+          "pattern": "delta",
+          "confidence": 90,
+          "reason": "Delta kinematics"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "delta_calibrate",
+          "confidence": 95,
+          "reason": "Delta calibration present (delta printer signature)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "^gcode_button motor_a$",
+          "confidence": 95,
+          "reason": "Closed-loop motor board status buttons (gcode_button motor_a/b/c, stock FLSUN OS and Open Source Edition)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "drying_box",
+          "confidence": 90,
+          "reason": "Built-in filament drying box (drying_box_heater/drying_box_fan stock, heater_generic drying_box on Open Source Edition)"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "flsun",
+          "confidence": 90,
+          "reason": "Hostname contains 'flsun'",
+          "corroborating": true
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "flsun-s1",
+          "confidence": 95,
+          "reason": "Hostname contains 'flsun-s1' (FLSUN OS Open Source Edition names the host FLSUN-S1-XXXX)"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "flsun_s1",
+          "confidence": 95,
+          "reason": "Hostname contains 'flsun_s1'"
+        },
+        {
+          "type": "hostname_match",
+          "field": "hostname",
+          "pattern": "flsuns1",
+          "confidence": 95,
+          "reason": "Hostname contains 'flsuns1'"
+        }
+      ]
+    },
+    {
       "id": "doron_velta",
       "name": "Doron Velta",
       "manufacturer": "Doron",

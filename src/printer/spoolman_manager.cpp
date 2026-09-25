@@ -64,31 +64,26 @@ helix::SpoolIdentity identity_from_spool(const SpoolInfo& spool) {
     return identity;
 }
 
-/// A slot's backend and its current state, taken when the slot still names the
-/// spool a fetch asked about. An answer describes the binding its request was
-/// made for, so a slot re-bound while the request was in flight takes nothing
-/// from it.
-struct BoundSlot {
-    AmsBackend* owner;
-    SlotInfo slot;
-};
-
-std::optional<BoundSlot> slot_still_bound_to(int backend_index, int slot_index, int spoolman_id) {
+/// The backend a fetch's answer still belongs to: the slot it asked about must
+/// still name the spool the fetch asked for. An answer describes the binding
+/// its request was made for, so a slot re-bound while the request was in
+/// flight takes nothing from it.
+AmsBackend* slot_still_bound_to(int backend_index, int slot_index, int spoolman_id) {
     // The backend this slot belongs to - NOT get_backend(0). A slot index is
     // meaningful only within its own backend, so writing a second AMS's answer
     // onto the primary's same-numbered bay corrupts both.
     AmsBackend* owner = AmsState::instance().get_backend(backend_index);
     if (!owner) {
-        return std::nullopt;
+        return nullptr;
     }
-    SlotInfo slot = owner->get_slot_info(slot_index);
-    if (slot.spoolman_id != spoolman_id) {
+    const int bound_id = owner->get_slot_info(slot_index).spoolman_id;
+    if (bound_id != spoolman_id) {
         spdlog::debug("[SpoolmanManager] Slot {} spoolman_id changed ({} -> {}), skipping stale "
                       "Spoolman answer",
-                      slot_index, spoolman_id, slot.spoolman_id);
-        return std::nullopt;
+                      slot_index, spoolman_id, bound_id);
+        return nullptr;
     }
-    return BoundSlot{owner, std::move(slot)};
+    return owner;
 }
 
 } // namespace
@@ -236,12 +231,10 @@ void SpoolmanManager::set_api(IMoonrakerAPI* api) {
     reset_circuit_breaker();
 }
 
-void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int spoolman_id,
-                                        bool local_weight) {
+void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int spoolman_id) {
     api_->spoolman().get_spoolman_spool(
         spoolman_id,
-        [slot_index, spoolman_id, backend_index,
-         local_weight](const std::optional<SpoolInfo>& spool_opt) {
+        [slot_index, spoolman_id, backend_index](const std::optional<SpoolInfo>& spool_opt) {
             if (!spool_opt.has_value()) {
                 spdlog::warn("[SpoolmanManager] Spoolman spool {} not found", spoolman_id);
                 // "No such spool" is an answer, not a transport
@@ -258,9 +251,9 @@ void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int s
                     if (s_shutdown_flag.load(std::memory_order_acquire)) {
                         return;
                     }
-                    const auto bound = slot_still_bound_to(backend_index, slot_index, spoolman_id);
+                    AmsBackend* bound = slot_still_bound_to(backend_index, slot_index, spoolman_id);
                     if (bound) {
-                        const helix::ams::LaneId lane = bound->owner->lane_id(slot_index);
+                        const helix::ams::LaneId lane = bound->lane_id(slot_index);
                         const bool had_record = helix::ams::lane_sources(lane).spoolman.has_value();
                         helix::ams::drop_lane_source(lane, helix::ams::ObservationSource::Spoolman);
                         if (had_record) {
@@ -275,7 +268,7 @@ void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int s
                             // The slot struct keeps its own spoolman_id: the manager
                             // has no identity write path to a backend, and polling
                             // for this spool already stopped above.
-                            SlotInfo kept = bound->slot;
+                            SlotInfo kept = bound->get_slot_info(slot_index);
                             kept.spoolman_id = 0;
                             kept.spoolman_filament_id = 0;
                             const helix::ams::Observation nothing_declared(
@@ -288,7 +281,7 @@ void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int s
                             // painted this one while the record stood,
                             // and the drop raises no backend event to
                             // resync the slot's subjects.
-                            bound->owner->repaint_slot_from_lane(slot_index);
+                            bound->repaint_slot_from_lane(slot_index);
                             AmsState::instance().update_slot_for_backend(backend_index, slot_index);
                         }
                     }
@@ -303,20 +296,15 @@ void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int s
                 int slot_index;
                 int backend_index;        // Which AMS owns that slot index
                 int expected_spoolman_id; // To verify slot wasn't reassigned
-                float remaining_weight_g;
-                float total_weight_g;
-                bool local_weight; // Backend tracks remaining weight locally
                 // Whole record, carried so the identity cache and
                 // the lane's Spoolman record are filled on the UI
                 // thread. Nothing from it is written onto the slot:
-                // see the persist=false note below.
+                // the Spoolman record is the filing.
                 SpoolInfo spool;
             };
 
             auto update_data = std::make_unique<WeightUpdate>(
-                WeightUpdate{slot_index, backend_index, spoolman_id,
-                             static_cast<float>(spool.remaining_weight_g),
-                             static_cast<float>(spool.initial_weight_g), local_weight, spool});
+                WeightUpdate{slot_index, backend_index, spoolman_id, spool});
 
             helix::ui::queue_update<WeightUpdate>(std::move(update_data), [](WeightUpdate* d) {
                 // Skip if shutdown is in progress
@@ -359,66 +347,27 @@ void SpoolmanManager::fetch_linked_slot(int backend_index, int slot_index, int s
                     // is every poll once a spool settles (#1264).
                     ams.bump_slots_version();
                 }
-                const auto bound =
+                AmsBackend* owner =
                     slot_still_bound_to(d->backend_index, d->slot_index, d->expected_spoolman_id);
-                if (!bound) {
+                if (!owner) {
                     return;
                 }
-                AmsBackend* owner = bound->owner;
-                const SlotInfo& slot = bound->slot;
 
                 // Every answer reaches the lane, not only one that
                 // carries a new identity: a spool edited on the
                 // server keeps its id, so cache_identity() has
-                // already seen it. Ahead of the weights-unchanged
-                // return for the same reason. Refiling an unchanged
-                // record is harmless, since it replaces the old one.
-                // `slot` is a copy taken before this, so the
-                // weight comparison below still reads the old
-                // values.
-                apply_fetched_spool(*owner, d->backend_index, d->slot_index, d->spool,
-                                    d->local_weight);
-
-                // When backend tracks weight locally, only update total_weight
-                // (initial weight from Spoolman). Preserve the backend's
-                // remaining_weight which is more accurate than Spoolman's.
-                float new_remaining =
-                    d->local_weight ? slot.remaining_weight_g : d->remaining_weight_g;
-
-                // Skip update if weights haven't changed (avoids UI refresh cascade)
-                if (slot.remaining_weight_g == new_remaining &&
-                    slot.total_weight_g == d->total_weight_g) {
-                    spdlog::trace("[SpoolmanManager] Slot {} weights unchanged "
-                                  "({:.0f}g / {:.0f}g)",
-                                  d->slot_index, new_remaining, d->total_weight_g);
-                    return;
-                }
-
-                // Weight-only, through the weight-only API. An
-                // automated weight tracker must never assert filament
-                // identity: handing a backend a whole SlotInfo lets it
-                // re-derive state from fields this poll did not mean to
-                // touch, which on a backend that infers presence from
-                // identity resurrects a lane the sensors report empty
-                // (#981 for the same shape on the consumption path).
+                // already seen it. Refiling an unchanged record is
+                // harmless, since it replaces the old one, and
+                // apply_fetched_spool() stops at the lane when the
+                // record did not move.
                 //
-                // persist=false because these weights come FROM
-                // Spoolman, which is the durable store for a linked
-                // spool. Persisting would also send firmware G-code
-                // (SET_WEIGHT on AFC, MMU_GATE_MAP on Happy Hare),
-                // whose status_update echo re-enters this poll: 16+
-                // commands per cycle on four AFC lanes.
-                owner->update_slot_weight(d->slot_index, new_remaining, d->total_weight_g,
-                                          /*persist=*/false);
-                // A slot event the backend raises for this write is
-                // only queued, so the subjects follow the weight in
-                // the pass that wrote it.
-                ams.update_slot_for_backend(d->backend_index, d->slot_index);
-                ams.bump_slots_version();
-
-                spdlog::debug("[SpoolmanManager] Updated slot {} weights: {:.0f}g / {:.0f}g{}",
-                              d->slot_index, new_remaining, d->total_weight_g,
-                              d->local_weight ? " (local remaining)" : "");
+                // The Spoolman record IS the filing: its weights ride
+                // the lane's sources, where resolve() ranks them above
+                // the meter's, and the slot follows through the
+                // repaint below. Writing the weights onto the slot as
+                // well would file them a second time under Metered and
+                // put two producers on one source.
+                apply_fetched_spool(*owner, d->backend_index, d->slot_index, d->spool);
             });
         },
         [spoolman_id](const MoonrakerError& err) {
@@ -495,11 +444,10 @@ void SpoolmanManager::refresh_spool(int spool_id) {
 
     for (const auto& entry : backends) {
         AmsBackend* backend = entry.second;
-        const bool local_weight = backend->tracks_weight_locally();
         const int slot_count = backend->get_system_info().total_slots;
         for (int i = 0; i < slot_count; ++i) {
             if (backend->get_slot_info(i).spoolman_id == spool_id) {
-                mgr.fetch_linked_slot(entry.first, i, spool_id, local_weight);
+                mgr.fetch_linked_slot(entry.first, i, spool_id);
             }
         }
     }
@@ -581,11 +529,6 @@ void SpoolmanManager::refresh_spoolman_weights() {
     for (const auto& entry : backends) {
         const int backend_index = entry.first;
         AmsBackend* backend = entry.second;
-        // When the backend tracks weight locally (e.g., AFC reads a
-        // firmware-reported remaining weight from its own status payload), we
-        // still need total_weight_g (initial weight) from Spoolman - the
-        // backend only provides remaining weight.
-        bool local_weight = backend->tracks_weight_locally();
         int slot_count = backend->get_system_info().total_slots;
 
         for (int i = 0; i < slot_count; ++i) {
@@ -604,7 +547,7 @@ void SpoolmanManager::refresh_spoolman_weights() {
                 int slot_index = i;
                 int spoolman_id = slot.spoolman_id;
 
-                fetch_linked_slot(backend_index, slot_index, spoolman_id, local_weight);
+                fetch_linked_slot(backend_index, slot_index, spoolman_id);
             }
         }
     } // if (backend)
@@ -623,8 +566,51 @@ void SpoolmanManager::refresh_spoolman_weights() {
                     spdlog::warn("[SpoolmanManager] External spool Spoolman #{} not found",
                                  ext_spoolman_id);
                     helix::ui::queue_update(
-                        "SpoolmanManager::ext_unresolvable",
-                        [ext_spoolman_id]() { note_identity_unresolvable(ext_spoolman_id); });
+                        "SpoolmanManager::ext_unresolvable", [ext_spoolman_id]() {
+                            note_identity_unresolvable(ext_spoolman_id);
+                            if (s_shutdown_flag.load(std::memory_order_acquire)) {
+                                return;
+                            }
+                            AmsState& state = AmsState::instance();
+                            const auto raw = state.raw_external_spool_info();
+                            if (!raw.has_value() || raw->spoolman_id != ext_spoolman_id) {
+                                // The binding moved while this denial was in
+                                // flight; its records were already retired by
+                                // the rebind, and a newer spool's records are
+                                // not this denial's to touch.
+                                return;
+                            }
+                            // Same contract as a denied slot: the record described
+                            // a spool Spoolman no longer knows, so it stops being
+                            // a source the resolved read can rank. The resolved
+                            // view is captured first, while the record still
+                            // stands, and what it carried goes back on the lane
+                            // as remembered - a delete is bookkeeping, not a
+                            // spool change, and the display keeps the freshest
+                            // identity it had. The kept record names no spool
+                            // (both binding ids zeroed) or the record
+                            // translation would stand the Spoolman record just
+                            // dropped right back up.
+                            const bool had_record =
+                                helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID)
+                                    .spoolman.has_value();
+                            const std::optional<SlotInfo> kept_view =
+                                state.get_external_spool_info();
+                            helix::ams::drop_lane_source(helix::ams::BYPASS_LANE_ID,
+                                                         helix::ams::ObservationSource::Spoolman);
+                            if (had_record && kept_view.has_value()) {
+                                SlotInfo kept = *kept_view;
+                                kept.spoolman_id = 0;
+                                kept.spoolman_filament_id = 0;
+                                const helix::ams::Observation nothing_declared(
+                                    helix::ams::ObservationSource::Remembered);
+                                helix::ams::file_kept_identity(
+                                    helix::ams::BYPASS_LANE_ID, helix::ams::BYPASS_SLOT_INDEX,
+                                    helix::ams::user_override_from_slot_info(
+                                        nothing_declared, kept, kept.material, nullptr));
+                            }
+                            state.bump_slots_version();
+                        });
                     return;
                 }
 
@@ -632,42 +618,49 @@ void SpoolmanManager::refresh_spoolman_weights() {
                 float new_remaining = static_cast<float>(spool.remaining_weight_g);
                 float new_total = static_cast<float>(spool.initial_weight_g);
 
-                helix::ui::queue_update(
-                    "SpoolmanManager::ext_weights",
-                    [ext_spoolman_id, new_remaining, new_total, spool]() {
-                        if (s_shutdown_flag.load(std::memory_order_acquire)) {
-                            return;
-                        }
+                helix::ui::queue_update("SpoolmanManager::ext_weights", [ext_spoolman_id,
+                                                                         new_remaining, new_total,
+                                                                         spool]() {
+                    if (s_shutdown_flag.load(std::memory_order_acquire)) {
+                        return;
+                    }
 
-                        // Before the unchanged-weights early return below, same as
-                        // the AMS slot path.
-                        const bool identity_is_new = cache_identity(spool);
+                    // Same shape as the slot arm: cache the identity before
+                    // any early return, then file the spool on the bypass
+                    // lane and let resolve() rank it.
+                    const bool identity_is_new = cache_identity(spool);
 
-                        AmsState& state = AmsState::instance();
-                        if (identity_is_new) {
-                            state.bump_slots_version();
-                        }
-                        auto ext = state.get_external_spool_info();
-                        if (!ext.has_value() || ext->spoolman_id != ext_spoolman_id) {
-                            spdlog::debug(
-                                "[SpoolmanManager] External spool changed, skipping stale update");
-                            return;
-                        }
-
-                        // Skip if weights unchanged
-                        if (ext->remaining_weight_g == new_remaining &&
-                            ext->total_weight_g == new_total) {
-                            return;
-                        }
-
-                        ext->remaining_weight_g = new_remaining;
-                        ext->total_weight_g = new_total;
-                        state.set_external_spool_info(*ext);
-
+                    AmsState& state = AmsState::instance();
+                    if (identity_is_new) {
+                        state.bump_slots_version();
+                    }
+                    auto ext = state.raw_external_spool_info();
+                    if (!ext.has_value() || ext->spoolman_id != ext_spoolman_id) {
                         spdlog::debug(
-                            "[SpoolmanManager] Updated external spool weights: {:.0f}g / {:.0f}g",
+                            "[SpoolmanManager] External spool changed, skipping stale update");
+                        return;
+                    }
+
+                    if (SpoolmanManager::file_spool_on_lane(helix::ams::BYPASS_LANE_ID, spool)) {
+                        // The stored binding is what a restart reads before any
+                        // poll answers, so the fetched record moves it too, the
+                        // same reason a slot fetch persists its lane record.
+                        SlotInfo stored = *ext;
+                        apply_spool_to_slot(stored, spool);
+                        if (spool.initial_weight_g <= 0) {
+                            // No weight stated is not a zero weight: the filing
+                            // above skipped the weights for the same reason.
+                            stored.remaining_weight_g = ext->remaining_weight_g;
+                            stored.total_weight_g = ext->total_weight_g;
+                        }
+                        state.set_external_spool_info(stored);
+                        state.bump_slots_version();
+                        spdlog::debug(
+                            "[SpoolmanManager] Filed external spool weights on bypass lane: "
+                            "{:.0f}g / {:.0f}g",
                             new_remaining, new_total);
-                    });
+                    }
+                });
             },
             [ext_spoolman_id](const MoonrakerError& err) {
                 spdlog::warn("[SpoolmanManager] Failed to fetch external spool Spoolman #{}: {}",
@@ -683,9 +676,8 @@ void SpoolmanManager::refresh_spoolman_weights() {
 }
 
 bool SpoolmanManager::apply_fetched_spool(helix::AmsBackend& owner, int backend_index,
-                                          int slot_index, const SpoolInfo& spool,
-                                          bool local_weight) {
-    const bool lane_changed = file_spool_on_lane(owner.lane_id(slot_index), spool, local_weight);
+                                          int slot_index, const SpoolInfo& spool) {
+    const bool lane_changed = file_spool_on_lane(owner.lane_id(slot_index), spool);
     // Every poll refiles every linked lane, so only a changed record is worth
     // the work below.
     if (!lane_changed) {
@@ -700,20 +692,20 @@ bool SpoolmanManager::apply_fetched_spool(helix::AmsBackend& owner, int backend_
     // of which a filing raises none.
     owner.repaint_slot_from_lane(slot_index);
     AmsState::instance().update_slot_for_backend(backend_index, slot_index);
+    // Version-keyed consumers (the pre-print filament check) need the weight
+    // change the filing carried, which no backend event raises.
+    AmsState::instance().bump_slots_version();
     return true;
 }
 
-bool SpoolmanManager::file_spool_on_lane(helix::ams::LaneId lane, const SpoolInfo& spool,
-                                         bool backend_tracks_weight_locally) {
+bool SpoolmanManager::file_spool_on_lane(helix::ams::LaneId lane, const SpoolInfo& spool) {
     helix::ams::Observation stated = helix::ams::spool_identity_observation(spool);
     // Spoolman computes the remaining weight from the initial one and serves
     // both as null when it has none, which the parser reads as zero. Zero here
     // is therefore no weight at all, and filing it would outrank the meter.
     if (spool.initial_weight_g > 0) {
         stated.total_weight_g = static_cast<float>(spool.initial_weight_g);
-        if (!backend_tracks_weight_locally) {
-            stated.remaining_weight_g = static_cast<float>(spool.remaining_weight_g);
-        }
+        stated.remaining_weight_g = static_cast<float>(spool.remaining_weight_g);
     }
     // Read back rather than compared with `stated`: the store is what decides
     // whether the lane took the filing at all.

@@ -27,8 +27,10 @@ set -e
 GITHUB_REPO="prestonbrown/helixscreen"
 SERVICE_NAME="helixscreen"
 
-# Previous UIs we may need to re-enable (for scanning)
-PREVIOUS_UIS="guppyscreen GuppyScreen featherscreen FeatherScreen klipperscreen KlipperScreen"
+# Previous UIs we may need to re-enable (for scanning). qidi-client and
+# makerbase-client are the QIDI stock screen units. The Sovol mksclient is left
+# out: it is a bare binary, and a restored UI gets run with `start`.
+PREVIOUS_UIS="guppyscreen GuppyScreen featherscreen FeatherScreen klipperscreen KlipperScreen qidi-client makerbase-client"
 
 
 # ============================================
@@ -197,6 +199,43 @@ path_sudo() {
     [ -w "$dir" ] && echo "" || echo "$SUDO"
 }
 
+# Pin the trust properties of helixscreen.env: the launcher's env-file parse
+# evaluates the file's lines, so its owner and mode decide who can run code as
+# the launcher's user (root on every SysV firmware device). State 0644 and
+# service-user ownership instead of inheriting whatever the staging umask left
+# behind; with no KLIPPER_USER (root-run firmware) the file stays root's.
+# Resolves through the printer_data symlink: pinning the link's own mode does
+# nothing to the file the launcher reads. The launcher re-checks on every load,
+# so a file this helper never reached is refused rather than evaluated.
+pin_env_file() {
+    local file="${INSTALL_DIR}/config/helixscreen.env"
+    [ -f "$file" ] || return 0
+
+    local real="$file"
+    if [ -L "$file" ]; then
+        real=$(readlink -f "$file" 2>/dev/null || echo "$file")
+    fi
+    [ -n "$real" ] && [ -f "$real" ] || real="$file"
+
+    # Failures warn rather than fail the install, but never silently: an
+    # unpinned file is one the launcher refuses on every boot, and an
+    # unreported chmod is indistinguishable from a pinned one at install time.
+    if ! $(file_sudo "$real") chmod 0644 "$real" 2>/dev/null; then
+        log_warn "pin_env_file: could not chmod 0644 '$real' (the launcher will refuse this file until fixed)"
+    fi
+
+    local user="${KLIPPER_USER:-}"
+    if [ -n "$user" ]; then
+        local group="$user"
+        if type _resolve_primary_group >/dev/null 2>&1; then
+            group=$(_resolve_primary_group "$user")
+        fi
+        if ! $(file_sudo "$real") chown "${user}:${group}" "$real" 2>/dev/null; then
+            log_warn "pin_env_file: could not chown ${user}:${group} '$real'"
+        fi
+    fi
+}
+
 # Resolve the directory holding the user's Klipper/Moonraker config files.
 #
 # Almost every Klipper install puts them in <klipper home>/printer_data/config,
@@ -323,6 +362,7 @@ error_handler() {
                 log_success "helixscreen.env restored from previous install"
             fi
         fi
+        pin_env_file
     fi
 
     # A ledger stop_competing_uis already wrote records a disable (chmod -x on
@@ -1406,6 +1446,11 @@ detect_platform() {
 # Echoes: platform key to use when constructing release archive URLs
 get_download_platform() {
     local detected=$1
+    # k1 and ad5x download their own board-name assets: every release line
+    # publishes them (the release/1.0 line builds them natively; main-line
+    # releases upload them as aliases of the unified mips build, see the
+    # upload step in .github/workflows/release.yml), so the board name is the
+    # one download name every release carries.
     case "$detected" in
         m1)
             # Artillery M1 Pro is a Debian SBC. The pi/pi32 binary runs as-is.
@@ -1417,10 +1462,6 @@ get_download_platform() {
             else
                 echo "pi"
             fi
-            ;;
-        k1|ad5x)
-            # Board spellings of the unified MIPS binary.
-            echo "mips"
             ;;
         *)
             echo "$detected"
@@ -1442,17 +1483,19 @@ get_download_platform() {
 #
 # Convention: a platform's asset is helixscreen-<platform>.zip. The borrows:
 # m1 -> pi/pi32 by userspace bitness (get_download_platform), and the MIPS board
-# spellings -> the unified mips asset. ONE static binary serves the Creality K1
-# series and the FlashForge AD5X; k1, ad5x and the k1-dynamic dev/debug variant
-# (not built by the release matrix) all ride helixscreen-mips.zip. release-mips
-# also publishes identical-content helixscreen-k1.zip / -ad5x.zip aliases so
-# already-deployed binaries that compute those names still find an update.
+# spellings -> the unified mips asset, mapped right here because
+# get_download_platform names fresh-install downloads by board. ONE static
+# binary serves the Creality K1 series and the FlashForge AD5X; k1, ad5x and
+# the k1-dynamic dev/debug variant (not built by the release matrix) all ride
+# helixscreen-mips.zip. release-mips also publishes identical-content
+# helixscreen-k1.zip / -ad5x.zip aliases so already-deployed binaries that
+# compute those names still find an update.
 #
 # Args: platform (detected platform key)
 # Echoes: release asset filename, e.g. helixscreen-pi.zip
 helix_self_update_asset() {
     case "$1" in
-        k1-dynamic) echo "helixscreen-mips.zip" ;;
+        k1|ad5x|k1-dynamic) echo "helixscreen-mips.zip" ;;
         *)          echo "helixscreen-$(get_download_platform "$1").zip" ;;
     esac
 }
@@ -7377,6 +7420,27 @@ _disabled_services_ledger_candidates() {
     done
 }
 
+# Enable a unit for the next boot. A failure is reported with the command that
+# fixes it by hand, and does not stop the uninstall: what follows still has to run.
+enable_unit_or_warn() {
+    if ! $SUDO systemctl enable "$1" 2>/dev/null; then
+        log_warn "Could not re-enable $1. Run: sudo systemctl enable --now $1"
+    fi
+}
+
+# Remove the QIDI .3mf thumbnail helper units (prestonbrown/helixscreen#1713).
+# The helper script itself ships in $INSTALL_DIR/config/ and rides the install
+# dir's removal out; the generated PNGs under gcodes/.thumbs stay. No-op when
+# the units are absent (they are only installed on QIDI-class systemd hosts).
+uninstall_qidi_3mf_thumbs() {
+    $SUDO systemctl stop helixscreen-3mf-thumbs.path 2>/dev/null || true
+    $SUDO systemctl disable helixscreen-3mf-thumbs.path 2>/dev/null || true
+    $SUDO systemctl disable helixscreen-3mf-thumbs.service 2>/dev/null || true
+    $SUDO rm -f /etc/systemd/system/helixscreen-3mf-thumbs.path
+    $SUDO rm -f /etc/systemd/system/helixscreen-3mf-thumbs.service
+    return 0
+}
+
 # Re-enable services that were disabled during installation
 # Reads the state file and reverses each recorded disable action
 #
@@ -7417,7 +7481,7 @@ reenable_disabled_services() {
         case "$type" in
             systemd)
                 log_info "Re-enabling systemd service: $target"
-                $SUDO systemctl enable "$target" 2>/dev/null || true
+                enable_unit_or_warn "$target"
                 HELIX_REENABLED_UNITS="${HELIX_REENABLED_UNITS} ${target}"
                 ;;
             sysv-chmod)
@@ -7915,6 +7979,7 @@ uninstall() {
         $SUDO systemctl disable helixscreen-update.path 2>/dev/null || true
         $SUDO rm -f /etc/systemd/system/helixscreen-update.path
         $SUDO rm -f /etc/systemd/system/helixscreen-update.service
+        uninstall_qidi_3mf_thumbs
         # Remove permission rules (udev, polkit)
         $SUDO rm -f /etc/udev/rules.d/99-helixscreen-backlight.rules
         $SUDO rm -f /etc/polkit-1/localauthority/50-local.d/helixscreen-network.pkla
@@ -8220,6 +8285,7 @@ clean_old_installation() {
     $SUDO systemctl disable helixscreen-update.path 2>/dev/null || true
     $SUDO rm -f /etc/systemd/system/helixscreen-update.path
     $SUDO rm -f /etc/systemd/system/helixscreen-update.service
+    uninstall_qidi_3mf_thumbs
     # Remove permission rules (udev, polkit)
     $SUDO rm -f /etc/udev/rules.d/99-helixscreen-backlight.rules
     $SUDO rm -f /etc/polkit-1/localauthority/50-local.d/helixscreen-network.pkla
@@ -8378,7 +8444,7 @@ _scan_for_previous_uis() {
         if [ "$INIT_SYSTEM" = "systemd" ]; then
             if systemctl list-unit-files "${ui}.service" >/dev/null 2>&1; then
                 log_info "Found previous UI (systemd): $ui"
-                $SUDO systemctl enable "$ui" 2>/dev/null || true
+                enable_unit_or_warn "$ui"
                 _start_restored_ui "$ui" $SUDO systemctl start "$ui"
             fi
         fi

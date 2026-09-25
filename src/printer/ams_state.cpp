@@ -30,7 +30,9 @@
 #include "filament_sensor_manager.h"
 #include "helix_psram_attr.h"
 #include "i_moonraker_api.h"
+#include "lane_apply.h"
 #include "lane_binding.h"
+#include "lane_resolver.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
 #include "lvgl/src/others/translation/lv_translation.h"
@@ -1074,6 +1076,13 @@ AmsBackend* AmsState::get_backend(int index) const {
 int AmsState::backend_count() const {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     return static_cast<int>(backends_.size());
+}
+
+bool AmsState::any_filament_batch_in_flight() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return std::any_of(backends_.begin(), backends_.end(), [](const auto& backend) {
+        return backend && backend->filament_batch_in_flight();
+    });
 }
 
 void AmsState::clear_backends() {
@@ -3122,7 +3131,7 @@ bool AmsState::was_slot_recently_unloaded(int slot_index) const {
     return (std::chrono::steady_clock::now() - t) < RECENT_UNLOAD_GRACE;
 }
 
-void AmsState::set_current_loaded_defaults() {
+void AmsState::set_current_loaded_defaults(bool write_header) {
     // The card is back to empty, so the next real load is a change worth logging.
     last_synced_loaded_slot_ = -1;
     last_synced_filament_loaded_ = false;
@@ -3131,7 +3140,7 @@ void AmsState::set_current_loaded_defaults() {
         lv_subject_copy_string(&current_material_text_, "---");
     }
     const char* default_slot = lv_tr("Currently Loaded");
-    if (strcmp(lv_subject_get_string(&current_slot_text_), default_slot) != 0) {
+    if (write_header && strcmp(lv_subject_get_string(&current_slot_text_), default_slot) != 0) {
         lv_subject_copy_string(&current_slot_text_, default_slot);
     }
     if (strcmp(lv_subject_get_string(&current_weight_text_), "") != 0) {
@@ -3159,6 +3168,39 @@ void AmsState::sync_current_loaded_from_backend() {
     }
 }
 
+void AmsState::set_current_slot_header(AmsBackend& backend, int slot_index) {
+    AmsSystemInfo sys = backend.get_system_info();
+
+    char tmp[64];
+    if (is_tool_changer(sys.type) && sys.units.empty()) {
+        // Pure tool changer with no AMS units: show the physical toolhead position
+        snprintf(tmp, sizeof(tmp), lv_tr("Current: %s"),
+                 helix::ui::lane_label(helix::ui::active_tool_noun(), slot_index).c_str());
+    } else {
+        std::string unit_display;
+        for (const auto& unit : sys.units) {
+            if (slot_index >= unit.first_slot_global_index &&
+                slot_index < unit.first_slot_global_index + unit.slot_count) {
+                // Prefer display_name, fall back to name, replace _ with spaces
+                unit_display = !unit.display_name.empty() ? unit.display_name : unit.name;
+                std::replace(unit_display.begin(), unit_display.end(), '_', ' ');
+                break;
+            }
+        }
+        const std::string slot_label = helix::ui::lane_label(backend.lane_noun(), slot_index);
+        if (!unit_display.empty() && sys.units.size() > 1) {
+            // Multi-unit: show unit name + slot label on one line
+            snprintf(tmp, sizeof(tmp), lv_tr("Current: %s · %s"), unit_display.c_str(),
+                     slot_label.c_str());
+        } else {
+            snprintf(tmp, sizeof(tmp), lv_tr("Current: %s"), slot_label.c_str());
+        }
+    }
+    if (strcmp(lv_subject_get_string(&current_slot_text_), tmp) != 0) {
+        lv_subject_copy_string(&current_slot_text_, tmp);
+    }
+}
+
 void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_info) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
 
@@ -3174,6 +3216,12 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
     AmsBackend* loaded_backend = nullptr;
     int slot_index = -1;
     bool filament_loaded = false;
+    // While a load/unload works a head, the header names THAT head. Only the
+    // header: the card, filament_loaded and the Spoolman active spool describe
+    // the carriage, so they read the loaded lane below. The backend owns the
+    // classification (operation_working_slot); this side only formats it.
+    AmsBackend* working_backend = nullptr;
+    int working_slot = -1;
 
     for (size_t idx = 0; idx < backends_.size(); ++idx) {
         auto& b = backends_[idx];
@@ -3183,26 +3231,23 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
         if (idx != 0)
             secondary_info = b->get_system_info();
         const AmsSystemInfo& info = (idx == 0) ? primary_info : secondary_info;
-        // While a load/unload works a head, the header names THAT head; at
-        // rest it names the loaded lane. The backend owns the classification
-        // (operation_working_slot); this side only formats it.
-        if (info.operation_working_slot >= 0) {
-            loaded_backend = b.get();
-            slot_index = info.operation_working_slot;
-            filament_loaded = true;
-            break;
+        if (!working_backend && info.operation_working_slot >= 0) {
+            working_backend = b.get();
+            working_slot = info.operation_working_slot;
+        }
+        if (loaded_backend) {
+            continue;
         }
         if (info.filament_loaded) {
             loaded_backend = b.get();
             slot_index = info.current_slot;
             filament_loaded = true;
-            break;
+            continue;
         }
         // Also check bypass on each backend
         if (info.current_slot == -2 && b->is_bypass_active()) {
             loaded_backend = b.get();
             slot_index = -2;
-            break;
         }
     }
 
@@ -3333,39 +3378,10 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
             }
         }
 
-        // Set slot label with unit name
-        {
-            AmsSystemInfo sys = loaded_backend->get_system_info();
-
-            char tmp[64];
-            if (is_tool_changer(sys.type) && sys.units.empty()) {
-                // Pure tool changer with no AMS units — show the physical toolhead position
-                snprintf(tmp, sizeof(tmp), lv_tr("Current: %s"),
-                         helix::ui::lane_label(helix::ui::active_tool_noun(), slot_index).c_str());
-            } else {
-                std::string unit_display;
-                for (const auto& unit : sys.units) {
-                    if (slot_index >= unit.first_slot_global_index &&
-                        slot_index < unit.first_slot_global_index + unit.slot_count) {
-                        // Prefer display_name, fall back to name, replace _ with spaces
-                        unit_display = !unit.display_name.empty() ? unit.display_name : unit.name;
-                        std::replace(unit_display.begin(), unit_display.end(), '_', ' ');
-                        break;
-                    }
-                }
-                const std::string slot_label =
-                    helix::ui::lane_label(loaded_backend->lane_noun(), slot_index);
-                if (!unit_display.empty() && sys.units.size() > 1) {
-                    // Multi-unit: show unit name + slot label on one line
-                    snprintf(tmp, sizeof(tmp), lv_tr("Current: %s · %s"), unit_display.c_str(),
-                             slot_label.c_str());
-                } else {
-                    snprintf(tmp, sizeof(tmp), lv_tr("Current: %s"), slot_label.c_str());
-                }
-            }
-            if (strcmp(lv_subject_get_string(&current_slot_text_), tmp) != 0) {
-                lv_subject_copy_string(&current_slot_text_, tmp);
-            }
+        // The header is written once per sync: an operation's working head
+        // below takes it, so the carriage slot does not flash in first.
+        if (!working_backend) {
+            set_current_slot_header(*loaded_backend, slot_index);
         }
 
         // Show remaining weight if available (from Spoolman or backend)
@@ -3388,7 +3404,11 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
         }
     } else {
         // No filament loaded - show empty state
-        set_current_loaded_defaults();
+        set_current_loaded_defaults(/*write_header=*/!working_backend);
+    }
+
+    if (working_backend) {
+        set_current_slot_header(*working_backend, working_slot);
     }
 
     spdlog::trace("[AMS State] Synced current loaded - slot={}, has_weight={}", slot_index,
@@ -3450,13 +3470,33 @@ void AmsState::set_modal_preset(int temp_c, int duration_min) {
 // External Spool (delegates to SettingsManager for persistence)
 // ============================================================================
 
-std::optional<SlotInfo> AmsState::get_external_spool_info() const {
+std::optional<SlotInfo> AmsState::raw_external_spool_info() const {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     // In-memory override takes priority when set (e.g. live tracker updates).
     if (in_memory_external_spool_.has_value()) {
         return in_memory_external_spool_;
     }
     return helix::SettingsManager::instance().get_external_spool_info();
+}
+
+std::optional<SlotInfo> AmsState::get_external_spool_info() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    std::optional<SlotInfo> out = raw_external_spool_info();
+    if (!out.has_value()) {
+        return out;
+    }
+    // The bypass lane carries what the sources say about this spool: the
+    // weight poll's Spoolman record, the consumption meter's count, the
+    // user's own edits. A Spoolman record standing from an earlier binding
+    // names a spool the raw record does not, so it is dropped from the copy
+    // rather than resolved - the same ranking a lane's declared id gets.
+    helix::ams::LaneSources sources = helix::ams::lane_sources(helix::ams::BYPASS_LANE_ID);
+    if (sources.spoolman.has_value() &&
+        sources.spoolman->spoolman_id.value_or(0) != out->spoolman_id) {
+        sources.drop(helix::ams::ObservationSource::Spoolman);
+    }
+    helix::ams::apply_resolved(*out, helix::ams::resolve(sources));
+    return out;
 }
 
 void AmsState::set_external_spool_info_in_memory(const SlotInfo& info) {
@@ -3467,6 +3507,21 @@ void AmsState::set_external_spool_info_in_memory(const SlotInfo& info) {
 
 void AmsState::set_external_spool_info(const SlotInfo& info) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
+    // Moving the binding to a different spool retires the previous spool's
+    // records: its Spoolman record, the user's pick, the kept identity and the
+    // meter's count all describe a spool that is no longer bound, and resolve()
+    // would keep ranking them onto the new one. The meter goes too, unlike a
+    // lane's binding change: a lane's firmware re-files its meter every frame,
+    // but nothing re-files the bypass meter while a spool is linked (the
+    // consumption sink pauses), so a stale count would stand. Every persistent writer passes
+    // through here (the edit funnel, the active-spool sync), so the reconcile lives at the funnel
+    // rather than at each caller.
+    const int previous_id = raw_external_spool_info().value_or(SlotInfo{}).spoolman_id;
+    if (previous_id != info.spoolman_id) {
+        helix::ams::drop_previous_spool_declarations(helix::ams::BYPASS_LANE_ID);
+        helix::ams::drop_lane_source(helix::ams::BYPASS_LANE_ID,
+                                     helix::ams::ObservationSource::Metered);
+    }
     in_memory_external_spool_.reset(); // Persistent write wins; let SettingsManager be the source.
     helix::SettingsManager::instance().set_external_spool_info(info);
     notify_external_spool_changed(info);
@@ -3491,6 +3546,9 @@ void AmsState::clear_external_spool_info() {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     in_memory_external_spool_.reset();
     helix::SettingsManager::instance().clear_external_spool_info();
+    // The raw record's absence has to reach the sources that described it, or
+    // resolve() keeps returning the identity the clear just removed.
+    helix::ams::reset_lane_to_machine_readings(helix::ams::BYPASS_LANE_ID);
     // Force notification even when color was already 0 (e.g. previous spool was
     // black, RGB=0x000000) — observers read full spool info, not just the color.
     if (lv_subject_get_int(&external_spool_color_) == 0) {
@@ -3560,9 +3618,18 @@ AmsError AmsState::commit_slot_edit(int slot_index, const SlotInfo& original,
 
 void AmsState::apply_external_spool_store(const SlotInfo& info) {
     // S5 + S7 — same emptiness predicate as the FilamentPanel completion arm
+    const SlotInfo original = raw_external_spool_info().value_or(SlotInfo{});
     if (info.spoolman_id > 0 || !info.material.empty()) {
         set_external_spool_info(info);
+        // The edit files on the bypass lane like a slot edit files on its
+        // lane: set_external_spool_info() has already taken the previous
+        // spool's records with any binding move, and the user's own values
+        // now stand as LocalUser.
+        helix::ams::commit_slot_edit(helix::ams::BYPASS_LANE_ID,
+                                     helix::ams::user_edit_observation(original, info));
     } else {
+        // Takes the lane's declarations with it, exactly as it takes the
+        // stored record's identity.
         clear_external_spool_info();
     }
 

@@ -18,9 +18,9 @@
 #include "operation_timeout_guard.h"
 #include "printer_state.h"
 #include "probe_preparation.h"
+#include "screws_tilt_dialect.h"
 #include "screws_tilt_parser.h"
 #include "shaper_csv_parser.h"
-#include "snapmaker_screws_tilt.h"
 #include "spdlog/spdlog.h"
 #include "standard_macros.h"
 
@@ -1238,161 +1238,6 @@ class ScrewsTiltCollector : public std::enable_shared_from_this<ScrewsTiltCollec
 
 namespace helix {
 /**
- * @brief State machine driving the U1's AUTO_SCREWS_TILT_ADJUST sequence
- *
- * Five firmware commands replace SCREWS_TILT_CALCULATE on printers whose
- * screws_tilt_dialect() is SnapmakerAuto; the result arrives as a status
- * object, not console lines. Each command blocks until Klipper finishes it,
- * so the sequence chains on execute_gcode completion and every terminal path
- * funnels into complete_success()/complete_error() - both of which release
- * the firmware calibration state. A leaked SCREWS_TILT_ADJUST makes
- * unrelated filament operations refuse forever, so the gated exit on every
- * path is mandatory, not best-effort.
- *
- * The plate gate between homing and probing is equally mandatory: probing
- * through the PEI sheet shifts per-corner tilt far beyond the probe's own
- * noise floor, so a detected sheet fails the run with instructions instead
- * of producing wrong numbers.
- */
-class AutoScrewsTiltCollector : public std::enable_shared_from_this<AutoScrewsTiltCollector> {
-  public:
-    AutoScrewsTiltCollector(IMoonrakerClient& client, MoonrakerAPI& api,
-                            ScrewTiltCallback on_success,
-                            MoonrakerAdvancedAPI::ErrorCallback on_error)
-        : client_(client), api_(api), on_success_(std::move(on_success)),
-          on_error_(std::move(on_error)) {}
-
-    void start() {
-        spdlog::info("[AutoScrewsTiltCollector] Starting the U1 screws-tilt sequence");
-        send_step(snapmaker::screws_tilt::CMD_ENTRY, &AutoScrewsTiltCollector::on_entry_done);
-    }
-
-  private:
-    using StepFn = void (AutoScrewsTiltCollector::*)();
-
-    /// One firmware command of the sequence. Success runs @p next; any
-    /// failure ends the run. Each command gets its own full
-    /// CALIBRATION_TIMEOUT_MS, so the sequence spans five budgets, not one
-    /// shared one.
-    ///
-    /// Every failure is terminal here, including TIMEOUT and
-    /// CONNECTION_LOST, which report_collector_rpc_error() absorbs for the
-    /// line-driven collectors (prestonbrown/helixscreen#1543). Those wait on
-    /// console lines from ONE long macro, so losing the transport and
-    /// continuing to listen is safe. This is a chain of five dependent RPCs:
-    /// after a loss there is no knowing which step the firmware is actually
-    /// on, and issuing the next command blind could collide with one still
-    /// running. Failing terminally with the state-gated exit cleans up
-    /// deterministically, and connect-time reconciliation is the backstop.
-    /// The cost: a step that outlives its timeout surfaces to the user as a
-    /// failure while the firmware is still working.
-    void send_step(const char* command, StepFn next) {
-        auto self = shared_from_this();
-        api_.execute_gcode(
-            command, [self, next]() { (self.get()->*next)(); },
-            [self, command](const MoonrakerError& err) {
-                self->complete_error(std::string(command) + " failed: " + err.message);
-            },
-            MoonrakerAdvancedAPI::CALIBRATION_TIMEOUT_MS);
-    }
-
-    void on_entry_done() {
-        send_step(snapmaker::screws_tilt::CMD_HOMING, &AutoScrewsTiltCollector::on_homing_done);
-    }
-
-    void on_homing_done() {
-        detect_plate();
-    }
-
-    /// The plate gate. DETECT_BED_PLATE PRESENCE=0 is an assertion, not a
-    /// query, so the command's own outcome is the verdict: success means the
-    /// sheet is off and the run proceeds to probing; the not-removed error
-    /// means the sheet is on and the run refuses with instructions; any other
-    /// error is a genuine detection failure and refuses too - an outcome we
-    /// cannot classify is not evidence the sheet is off, and probing through
-    /// it skews per-corner tilt by more than the adjustment tolerance.
-    void detect_plate() {
-        auto self = shared_from_this();
-        api_.execute_gcode(
-            snapmaker::screws_tilt::CMD_DETECT_BED_PLATE,
-            [self]() {
-                self->send_step(snapmaker::screws_tilt::CMD_PROBE_REFERENCE_POINTS,
-                                &AutoScrewsTiltCollector::on_probe_done);
-            },
-            [self](const MoonrakerError& err) {
-                if (snapmaker::screws_tilt::plate_still_on_bed(err.message)) {
-                    self->complete_error(
-                        "Remove the PEI sheet from the bed, then start again: probing through "
-                        "the sheet gives wrong results");
-                    return;
-                }
-                self->complete_error(std::string(snapmaker::screws_tilt::CMD_DETECT_BED_PLATE) +
-                                     " failed: " + err.message);
-            },
-            MoonrakerAdvancedAPI::CALIBRATION_TIMEOUT_MS);
-    }
-
-    void on_probe_done() {
-        collect_results();
-    }
-
-    void collect_results() {
-        auto self = shared_from_this();
-        json params = {{"objects", json::object({{snapmaker::screws_tilt::MODULE_NAME, nullptr},
-                                                 {"configfile", json::array({"settings"})}})}};
-        client_.send_jsonrpc(
-            "printer.objects.query", params,
-            [self](const json& response) {
-                AutoScrewsTiltResults results =
-                    snapmaker::screws_tilt::results_from_query(response);
-                if (!results.ok()) {
-                    self->complete_error(results.error);
-                    return;
-                }
-                self->complete_success(std::move(results.screws));
-            },
-            [self](const MoonrakerError& err) {
-                self->complete_error(std::string("reading screw results failed: ") + err.message);
-            });
-    }
-
-    void complete_success(std::vector<ScrewTiltResult> screws) {
-        if (finished_.exchange(true)) {
-            return;
-        }
-        spdlog::info("[AutoScrewsTiltCollector] Complete with {} screws", screws.size());
-        // Release the firmware state (restores IDLE, lifts Z). The exit is
-        // only ISSUED here: its state query resolves a round trip after
-        // on_success_ renders, so the panel never waits on it. What this
-        // guarantees is that the state is released, not that it is released
-        // before the results appear.
-        snapmaker::screws_tilt::request_exit(client_);
-        if (on_success_) {
-            on_success_(screws);
-        }
-    }
-
-    void complete_error(const std::string& message) {
-        if (finished_.exchange(true)) {
-            return;
-        }
-        spdlog::error("[AutoScrewsTiltCollector] Error: {}", message);
-        snapmaker::screws_tilt::request_exit(client_);
-        if (on_error_) {
-            on_error_(MoonrakerError::json_rpc_error(snapmaker::screws_tilt::MODULE_NAME, message));
-        }
-    }
-
-    IMoonrakerClient& client_;
-    MoonrakerAPI& api_;
-    ScrewTiltCallback on_success_;
-    MoonrakerAdvancedAPI::ErrorCallback on_error_;
-    std::atomic<bool> finished_{false};
-};
-} // namespace helix
-
-namespace helix {
-/**
  * @brief State machine for collecting SHAPER_CALIBRATE responses
  *
  * Klipper sends input shaper results as console output lines via notify_gcode_response.
@@ -2401,10 +2246,8 @@ void MoonrakerAdvancedAPI::calculate_screws_tilt(ScrewTiltCallback on_success,
     // feeds the SAME ScrewTiltCallback the standard path uses; the panel
     // cannot tell which dialect ran. The macro slot is meaningless without
     // upstream's command, so the auto path does not resolve it.
-    if (client_.hardware().screws_tilt_dialect() == ScrewsTiltDialect::SnapmakerAuto) {
-        auto collector =
-            std::make_shared<AutoScrewsTiltCollector>(client_, api_, on_success, on_error);
-        collector->start();
+    if (screws_tilt::start_dialect_sequence(client_, api_, client_.hardware(), on_success,
+                                            on_error)) {
         return;
     }
 

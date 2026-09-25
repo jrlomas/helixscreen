@@ -59,6 +59,7 @@ translations:
   1 min ago: 1分钟前
   1 minute: 1 分钟
   1 more tap to {} beta features: 再点击 1 次以{}测试功能
+  1. Printer homes all axes (~1 minute): 1. 打印机全部轴归零（约1分钟）
   1. Printer homes and probes the bed: 1. 打印机归位并探测热床
   1. Printer will home and probe each screw: 1. 打印机将归位并探测每个螺丝位置
   10 minutes: 10 分钟
@@ -69,6 +70,8 @@ translations:
   180° Upside Down: 180° 上下颠倒
   2 min: '2分钟'
   2 minutes: 2 分钟
+  2. Jog Y until the nozzle is centered over the chute opening: 2. 点动 Y 轴，直到喷嘴位于排料口开口中心
+
   2. Place paper between nozzle and bed: 2. 将纸张放在喷嘴和热床之间
   2. Results show how much to turn each screw: 2. 结果显示每个螺丝需要旋转多少
   20 minutes: 20分钟
@@ -79,6 +82,8 @@ translations:
   2D Layers: 2D 图层
   3. Adjust screws, then re-probe to verify: 3. 调整螺丝，然后重新探测以验证
   3. Lower nozzle until paper drags slightly: 3. 降低喷嘴直到纸张有轻微阻力
+  3. Save the position: 3. 保存位置
+
   30 minutes: 30 分钟
   30 seconds: 30 秒
   3D Pipes: 3D 管道
@@ -154,6 +159,7 @@ translations:
   Add Vendor: 添加供应商
   Add Widget: 添加小组件
   Add custom filament: 添加自定义耗材
+  Add page: '添加页面'
   Added to Spoolman: 已添加到 Spoolman
   Address: 地址
   Adjust screen brightness level: 调整屏幕亮度
@@ -374,9 +380,11 @@ translations:
   Calibrate: 校准
   Calibrate All: 全部校准
   Calibrate Bowden: '校准波顿管'
+  Calibrate Cutter: 校准切刀
   Calibrate Encoder: '校准编码器'
   Calibrate Gates: '校准通道'
   Calibrate Gear: '校准齿轮'
+  Calibrate Purge Chute: 校准排料口
   Calibrate X: 校准 X 轴
   Calibrate Y: 校准 Y 轴
   Calibrate all tools: 校准所有工具
@@ -389,9 +397,12 @@ translations:
   Calibrating bed mesh...: 正在校准热床网格...
   Calibrating {} axis...: '正在校准 {} 轴...'
   Calibrating...: 正在校准...
+  Calibrating... (about 1 minute): 校准中...（约1分钟）
+  Calibration: 校准
   Calibration & Tools: 校准与工具
   Calibration Complete!: 校准完成！
   Calibration Failed: 校准失败
+  Calibration Saved: 校准已保存
   Calibration and system configuration: '校准与系统配置'
   Calibration cancelled.: 校准已取消。
   Calibration complete: 校准完成
@@ -515,6 +526,8 @@ translations:
   ? Choose the model that matches your printer. This sets the print macros, fan roles and calibration behaviour HelixScreen uses.
   : 选择与您的打印机相符的型号。这将决定 HelixScreen 使用的打印宏、风扇角色和校准行为。
   Choose what to power off or restart.: 选择要关闭或重启的对象。
+  'Chute position: X {:.1f}, Y {:.1f}': '排料口位置: X {:.1f}, Y {:.1f}'
+
   Clean Brush: '清洁刷子'
   Clean Nozzle: 清洁喷嘴
   Cleaning Nozzle...: 正在清洁喷嘴...
@@ -710,9 +723,13 @@ translations:
   Customize your home screen: 自定义主屏幕
   Cut Distance: '切割距离'
   Cut filament: 切断耗材
+  'Cut position saved: {}': '切割位置已保存: {}'
   Cut tip: '切断尖端'
   Cutter Enabled: '切刀已启用'
+  Cutter and purge chute calibration: 切刀与排料口校准
   Cutter blade didn't sever filament: 切刀未能切断耗材
+  Cutter calibration completed: 切刀校准完成
+  'Cutter calibration failed: {}': 切刀校准失败：{}
   Cutter jam: 切刀卡住
   Cutting: 切割中
   Cutting filament...: 正在切断耗材...
@@ -1217,6 +1234,7 @@ translations:
   Gray: 灰色
   Grip filament: 夹持耗材
   Grip the filament: 夹持耗材
+  Guide the toolhead to the chute's extrude position: 引导工具头到排料口的挤出位置
   Guides and reference: 指南与参考
   H: 头
   HOST: 主机
@@ -1296,6 +1314,7 @@ translations:
   Holding nozzle at {}°C to purge previous filament.: 将喷嘴保持在 {}°C 以清洗之前的耗材。
   Home: 归位
   Home & Continue: 归位并继续
+  Home and sweep the cutter to re-find its position: 归零并扫过切刀以重新找到其位置
   Home failed: 归位失败
   Home printer first?: 先将打印机归位？
   Home selector: 选择器归位
@@ -1426,6 +1445,8 @@ translations:
   Job Queue: 任务队列
   Jog Speed XY: XY 移动速度
   Jog Speed Z: Z 移动速度
+  Jog Y until the nozzle is centered over the chute opening, then tap Save.: 点动 Y 轴，直到喷嘴位于排料口开口中心，然后点击保存。
+
   'Jog failed: {}': '移动失败: {}'
   Jog speeds and step distances: 移动速度与步进距离
   Join the HelixScreen community on Discord for discussion, tips, troubleshooting help, and feature requests.: 加入
@@ -1440,6 +1461,8 @@ translations:
   Keep Required: 保持必需
   Keep Spool Info on Eject: 弹出时保留料盘信息
   Keep current: 保留当前
+  Keep hands clear. The printer moves on its own.: 请勿将手靠近。打印机会自行移动。
+
   Keep the bypass spool visible when bypass is off: 旁路关闭时保持料盘可见
   Kick away: '拨除废料'
   Kinematics: 运动学
@@ -1507,6 +1530,8 @@ translations:
   Lifetime Print Stats: 累计打印统计
   Light: 浅色
   Light will switch when the current operation finishes: 灯光将在当前操作完成后切换
+  Line the nozzle up with the purge chute so purged filament drops straight in.: 将喷嘴对准排料口上方，使排出的料丝垂直落入。
+
   Line {} calls {}, which this printer treats as an emergency stop. Re-slice the file with a profile made for this printer.: '第 {} 行调用 {}，此打印机将其视为紧急停止。请使用为此打印机制作的配置重新切片该文件。'
   Listen to all theme sounds: 试听所有主题声音
   Listening: 正在监听
@@ -1993,6 +2018,7 @@ translations:
   Please enter a valid port (1-65535).: 请输入有效的端口号 (1-65535)。
   Please enter an IP address or hostname.: 请输入 IP 地址或主机名。
   Please fill in the highlighted fields: 请填写高亮显示的字段
+  Please wait while the printer homes and moves to the start position.: 请等待打印机归零并移动到起始位置。
   Please wait while the printer homes and probes.: 请等待打印机归位和探测。
   Please wait while the printer probes each screw position.: 请等待打印机探测每个螺丝位置。
   Pluck the front belt on the left: 拨动前左皮带
@@ -2176,7 +2202,11 @@ translations:
   Pulling filament back: 正在回抽耗材
   Purge: 排料
   Purge & Wipe: '排料与擦拭'
+  Purge Chute Calibration: 排料口校准
   Purge Length: '排料长度'
+  'Purge chute calibration failed: {}': '排料口校准失败：{}'
+  Purge chute position saved.: 排料口位置已保存。
+
   'Purge failed: {}': '清洗失败: {}'
   Purge may still be running — response timed out: 清洗可能仍在运行 — 响应超时
   Purge to bucket: '排料到废料桶'
@@ -2416,6 +2446,7 @@ translations:
     on startup. Open Settings to fix the issue, then reboot.
   : 安全模式已激活。由于应用程序在启动时反复崩溃，打印机连接已被禁用。请打开设置以解决问题，然后重启。
   Safety & Notifications: 安全与通知
+  Same spool in {}? Tap Clear if it is a new one.: '{} 是同一个料盘吗？如果是新料盘，请点击清除。'
   Sample: 样本
   Sample %d/%d: 样本 %d/%d
   Sample Dialog: 示例对话框
@@ -2442,7 +2473,10 @@ translations:
   Saving Z-offset...: 正在保存 Z 偏移...
   Saving config... Klipper will restart.: 正在保存配置... Klipper 将重启。
   Saving offsets...: 正在保存偏移...
+  Saving the position and parking the toolhead.: 正在保存位置并驻留工具头。
+
   Saving will restart Klipper and CANCEL any active print!: 保存将重启 Klipper 并取消任何正在进行的打印！
+  Saving...: 保存中...
   Scan: 扫描
   Scan Cal: 扫描校准
   Scan QR Code: 扫描 QR 码
@@ -2839,6 +2873,7 @@ translations:
   ? The print is paused. Changing tools now moves the toolhead and swaps the filament at the nozzle. Resume the print once the change finishes.
   : 打印已暂停。现在切换工具会移动工具头并更换喷嘴处的耗材。切换完成后请恢复打印。
   The printer halted this print and cannot resume it. Restart from the beginning?: 打印机已停止此打印且无法恢复。从头重新开始？
+  The printer homes and sweeps the cutter (about 1 minute). Keep the filament path clear.: 打印机将归零并扫过切刀（约1分钟）。请保持料路畅通。
   The printer is not homed. Continuing will home all axes, moving the toolhead. Make sure the bed is clear.: 打印机尚未归位。继续将对所有轴执行归位操作，移动工具头。请确保热床上没有障碍物。
   The printer lost power during a print. It can resume where it left off.: 打印机在打印过程中断电。可以从中断处继续。
   The printer lost power during a print. The resumed layer may not line up exactly.: 打印机在打印过程中断电。恢复后的层可能无法完全对准。
@@ -2987,7 +3022,9 @@ translations:
   Toolhead LED: '工具头 LED'
   Toolhead Sensor: 工具头传感器
   Toolhead Style: 工具头样式
+  Toolhead Y: 工具头 Y
   Toolhead jam: 工具头堵塞
+  Toolhead position unknown: 工具头位置未知
   Toolhead, G-code, limits, and materials: 打印头、G代码、限制和材料
   Toolheads: 工具头
   Tools: 工具
@@ -3221,6 +3258,7 @@ translations:
   Y: Y
   Y Axis: Y 轴
   Y Offset: Y 偏移
+  Y axis limit reached: 已到达 Y 轴限位
   Y jog blocked at bed edge: Y 轴移动已限制在热床边缘
   'Y:': Y：
   ? "YOU WIN!\nScore: {}\nTap to play again"
