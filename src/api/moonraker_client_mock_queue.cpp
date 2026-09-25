@@ -30,9 +30,9 @@ static struct MockQueueState {
     void reset() {
         double now = static_cast<double>(time(nullptr));
         jobs = {
-            {"0001", "benchy_v2.gcode", now - 3600},
-            {"0002", "calibration_cube.gcode", now - 1800},
-            {"0003", "phone_stand.gcode", now - 300},
+            {"0001", "3DBenchy.gcode", now - 3600},
+            {"0002", "xyz-10mm-calibration-cube.gcode", now - 1800},
+            {"0003", "stand_s.gcode", now - 300},
         };
         queue_state = "ready";
         next_id = 4; // Next-available ID; preserves 4-digit zero-padded format.

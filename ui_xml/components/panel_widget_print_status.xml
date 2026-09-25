@@ -207,9 +207,9 @@
                     flex_grow="1" bind_text="job_queue_up_next_text" long_mode="dots" style_text_color="#text_muted"
                     clickable="false" event_bubble="true"/>
       </lv_obj>
-      <!-- Library active view only (print_status_view == 3). The detailed
-           active view has its own M117 row inside print_status_detailed_active;
-           this copy is clipped there by that component's height="100%". -->
+      <!-- Library active view only (print_status_view == 3); the detailed
+           active view carries its own M117 row inside
+           print_status_detailed_active. -->
       <text_small name="display_message"
                   width="100%" bind_text="display_message" style_text_align="center" long_mode="dots" hidden="true"
                   clickable="false" event_bubble="true">

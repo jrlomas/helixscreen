@@ -46,6 +46,7 @@
 
 #include "../lvgl_ui_test_fixture.h"
 #include "../test_helpers/job_queue_state_test_access.h"
+#include "../test_helpers/job_queue_subjects_fixture.h"
 #include "../test_helpers/panel_widget_size_harness.h"
 #include "app_globals.h"
 #include "helix-xml/src/xml/lv_xml.h"
@@ -77,32 +78,9 @@ struct ScopedJobQueueState {
     ScopedJobQueueState& operator=(const ScopedJobQueueState&) = delete;
 };
 
-/// Runs JobQueueState's registered deinit while the instance is still alive,
-/// then drops every queue-subject name out of helix-xml's global scope so no
-/// later test resolves a pointer into this test's stack frame.
-///
-/// deinit_one() rather than deinit_all(): the test binary's registry also
-/// holds entries left by earlier fixtures, some capturing destroyed objects.
-struct ScopedJobQueueSubjects {
-    ~ScopedJobQueueSubjects() {
-        StaticSubjectRegistry::instance().deinit_one("JobQueueState");
-        lv_xml_unregister_subject(nullptr, "job_queue_count");
-        lv_xml_unregister_subject(nullptr, "job_queue_summary_text");
-        lv_xml_unregister_subject(nullptr, "job_queue_state_text");
-        lv_xml_unregister_subject(nullptr, "job_queue_up_next_text");
-        lv_xml_unregister_subject(nullptr, "job_queue_start_next_text");
-    }
-};
-
-JobQueueStatus status_with(int n) {
-    JobQueueStatus s;
-    s.queue_state = "ready";
-    for (int i = 0; i < n; ++i) {
-        s.queued_jobs.push_back({"job-" + std::to_string(i), "file-" + std::to_string(i) + ".gcode",
-                                 1000.0 + i, 30.0 * (i + 1)});
-    }
-    return s;
-}
+/// ScopedJobQueueSubjects / status_with:
+/// shared test_helpers/job_queue_subjects_fixture.h. Kept as a name in this
+/// file via the helix using-directive above.
 
 int container_children(lv_obj_t* c) {
     return static_cast<int>(lv_obj_get_child_count(c));
