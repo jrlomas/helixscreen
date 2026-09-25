@@ -2642,6 +2642,7 @@
   <translation tag="Start anyway?" zh="仍要开始吗？"/>
   <translation tag="Start at" zh="从第"/>
   <translation tag="Start failed" zh="启动失败"/>
+  <translation tag="Start next" zh="开始下一个"/>
   <translation tag="Start over" zh="重新开始"/>
   <translation tag="Start print anyway?" zh="仍要开始打印吗？"/>
   <translation tag="Started" zh="已开始"/>
@@ -3010,6 +3011,7 @@
   <translation tag="Unretract Speed" zh="回抽恢复速度"/>
   <translation tag="Unsupported tape width" zh="不支持的标签带宽度"/>
   <translation tag="Unsupported tape width: " zh="不支持的标签带宽度: "/>
+  <translation tag="Up next" zh="下一个"/>
   <translation tag="Up to date" zh="已是最新"/>
   <translation tag="Update" zh="更新"/>
   <translation tag="Update Available" zh="有可用更新"/>

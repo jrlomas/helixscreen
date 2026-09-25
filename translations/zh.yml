@@ -2714,6 +2714,7 @@ translations:
   Start anyway?: '仍要开始吗？'
   Start at: 从第
   Start failed: 启动失败
+  Start next: 开始下一个
   Start over: 重新开始
   Start print anyway?: 仍要开始打印吗？
   Started: 已开始
@@ -3117,6 +3118,7 @@ translations:
   Unretract Speed: 回抽恢复速度
   Unsupported tape width: 不支持的标签带宽度
   'Unsupported tape width: ': '不支持的标签带宽度: '
+  Up next: 下一个
   Up to date: 已是最新
   Update: 更新
   Update Available: 有可用更新

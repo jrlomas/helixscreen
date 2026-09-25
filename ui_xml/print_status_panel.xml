@@ -201,7 +201,23 @@
         <!-- Plugin injection point: widgets from plugins appear here -->
         <!-- Plugins can inject print monitoring widgets, sensor readouts, etc. -->
         <lv_obj name="print_status_extras"
-                width="100%" height="content" style_pad_all="0" flex_flow="column" style_pad_gap="#space_md"/>
+                width="100%" height="content" style_pad_all="0" flex_flow="column" style_pad_gap="#space_md">
+          <!-- Up next: the first queued job. No completion modal shows while
+               the user sits on this panel, so this line is what makes the
+               queue reachable after a print ends — it stays up while the
+               queue is non-empty. Tap starts the job when the printer is
+               free, otherwise opens the job queue modal. -->
+          <lv_obj name="up_next_row"
+                  width="100%" height="content" style_pad_all="0" flex_flow="row" style_flex_cross_place="center"
+                  style_pad_gap="#space_xs" scrollable="false" clickable="true">
+            <bind_flag_if_eq subject="job_queue_count" flag="hidden" ref_value="0"/>
+            <event_cb trigger="clicked" callback="on_up_next_tap"/>
+            <icon src="progress_clock" size="sm" variant="muted" clickable="false" event_bubble="true"/>
+            <text_small name="up_next_label"
+                        flex_grow="1" bind_text="job_queue_up_next_text" long_mode="dots" clickable="false"
+                        event_bubble="true"/>
+          </lv_obj>
+        </lv_obj>
       </lv_obj>
     </lv_obj>
 

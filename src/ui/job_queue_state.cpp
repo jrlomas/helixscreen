@@ -23,7 +23,8 @@ JobQueueState::JobQueueState(IMoonrakerAPI* api, helix::IMoonrakerClient* client
     : api_(api), client_(client) {
     std::memset(state_buffer_, 0, sizeof(state_buffer_));
     std::memset(summary_buffer_, 0, sizeof(summary_buffer_));
-    std::memset(next_filename_buffer_, 0, sizeof(next_filename_buffer_));
+    std::memset(up_next_text_buffer_, 0, sizeof(up_next_text_buffer_));
+    std::memset(start_next_text_buffer_, 0, sizeof(start_next_text_buffer_));
 
     subscribe_to_notifications();
     watch_connection_state();
@@ -80,10 +81,16 @@ void JobQueueState::init_subjects() {
     lv_xml_register_subject(nullptr, "job_queue_count", &job_queue_count_subject_);
     subjects_.register_subject(&job_queue_count_subject_, "job_queue_count");
 
-    lv_subject_init_string(&job_queue_next_filename_subject_, next_filename_buffer_, nullptr,
-                           sizeof(next_filename_buffer_), "");
-    lv_xml_register_subject(nullptr, "job_queue_next_filename", &job_queue_next_filename_subject_);
-    subjects_.register_subject(&job_queue_next_filename_subject_, "job_queue_next_filename");
+    lv_subject_init_string(&job_queue_up_next_text_subject_, up_next_text_buffer_, nullptr,
+                           sizeof(up_next_text_buffer_), "");
+    lv_xml_register_subject(nullptr, "job_queue_up_next_text", &job_queue_up_next_text_subject_);
+    subjects_.register_subject(&job_queue_up_next_text_subject_, "job_queue_up_next_text");
+
+    lv_subject_init_string(&job_queue_start_next_text_subject_, start_next_text_buffer_, nullptr,
+                           sizeof(start_next_text_buffer_), "");
+    lv_xml_register_subject(nullptr, "job_queue_start_next_text",
+                            &job_queue_start_next_text_subject_);
+    subjects_.register_subject(&job_queue_start_next_text_subject_, "job_queue_start_next_text");
 
     lv_subject_init_int(&job_queue_automatic_transition_subject_, automatic_transition_ ? 1 : 0);
     lv_xml_register_subject(nullptr, "job_queue_automatic_transition",
@@ -99,8 +106,11 @@ void JobQueueState::init_subjects() {
                                                       LV_SUBJECT_TYPE_STRING, __FILE__, __LINE__);
     SubjectDebugRegistry::instance().register_subject(&job_queue_count_subject_, "job_queue_count",
                                                       LV_SUBJECT_TYPE_INT, __FILE__, __LINE__);
-    SubjectDebugRegistry::instance().register_subject(&job_queue_next_filename_subject_,
-                                                      "job_queue_next_filename",
+    SubjectDebugRegistry::instance().register_subject(&job_queue_up_next_text_subject_,
+                                                      "job_queue_up_next_text",
+                                                      LV_SUBJECT_TYPE_STRING, __FILE__, __LINE__);
+    SubjectDebugRegistry::instance().register_subject(&job_queue_start_next_text_subject_,
+                                                      "job_queue_start_next_text",
                                                       LV_SUBJECT_TYPE_STRING, __FILE__, __LINE__);
 
     subjects_initialized_ = true;
@@ -224,13 +234,21 @@ void JobQueueState::update_subjects() {
     }
     lv_subject_copy_string(&job_queue_summary_subject_, summary_buffer_);
 
-    // Next-job display name, empty when the queue is empty. Same settled-before-
-    // count rule as the two subjects above: count observers re-read this.
-    std::snprintf(next_filename_buffer_, sizeof(next_filename_buffer_), "%s",
-                  cached_jobs_.empty()
-                      ? ""
-                      : helix::gcode::get_display_filename(cached_jobs_.front().filename).c_str());
-    lv_subject_copy_string(&job_queue_next_filename_subject_, next_filename_buffer_);
+    // Next-job display name, empty when the queue is empty, feeds both
+    // composed strings. Same settled-before-count rule as the two subjects
+    // above: count observers re-read these.
+    const std::string next_display =
+        cached_jobs_.empty() ? std::string{}
+                             : helix::gcode::get_display_filename(cached_jobs_.front().filename);
+
+    // Both surfaces bind their visibility to the count published last.
+    std::snprintf(up_next_text_buffer_, sizeof(up_next_text_buffer_), "%s",
+                  helix::format_up_next_text(next_display, count).c_str());
+    lv_subject_copy_string(&job_queue_up_next_text_subject_, up_next_text_buffer_);
+
+    std::snprintf(start_next_text_buffer_, sizeof(start_next_text_buffer_), "%s",
+                  helix::format_start_next_text(next_display, count).c_str());
+    lv_subject_copy_string(&job_queue_start_next_text_subject_, start_next_text_buffer_);
 
     lv_subject_set_int(&job_queue_automatic_transition_subject_, automatic_transition_ ? 1 : 0);
 
@@ -256,6 +274,24 @@ void JobQueueState::subscribe_to_notifications() {
 }
 
 namespace helix {
+
+std::string format_up_next_text(const std::string& display_name, int queued_count) {
+    if (queued_count <= 0 || display_name.empty()) {
+        return {};
+    }
+    std::string text = std::string(lv_tr("Up next")) + ": " + display_name;
+    if (queued_count > 1) {
+        text += " (+" + std::to_string(queued_count - 1) + ")";
+    }
+    return text;
+}
+
+std::string format_start_next_text(const std::string& display_name, int queued_count) {
+    if (queued_count <= 0 || display_name.empty()) {
+        return {};
+    }
+    return std::string(lv_tr("Start next")) + ": " + display_name;
+}
 
 bool parse_automatic_transition(const json& rpc_response) {
     // Defensive walk, no throwing value() lookups: server.config is foreign

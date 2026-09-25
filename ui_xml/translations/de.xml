@@ -2642,6 +2642,7 @@
   <translation tag="Start anyway?" de="Trotzdem starten?"/>
   <translation tag="Start at" de="Beginnen bei"/>
   <translation tag="Start failed" de="Start fehlgeschlagen"/>
+  <translation tag="Start next" de="Nächstes starten"/>
   <translation tag="Start over" de="Von vorne beginnen"/>
   <translation tag="Start print anyway?" de="Druck trotzdem starten?"/>
   <translation tag="Started" de="Gestartet"/>
@@ -3010,6 +3011,7 @@
   <translation tag="Unretract Speed" de="Prime-Geschwindigkeit"/>
   <translation tag="Unsupported tape width" de="Nicht unterstützte Bandbreite"/>
   <translation tag="Unsupported tape width: " de="Nicht unterstützte Bandbreite: "/>
+  <translation tag="Up next" de="Als Nächstes"/>
   <translation tag="Up to date" de="Aktuell"/>
   <translation tag="Update" de="Aktualisieren"/>
   <translation tag="Update Available" de="Update verfügbar"/>
