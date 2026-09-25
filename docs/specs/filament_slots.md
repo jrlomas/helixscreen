@@ -404,8 +404,6 @@ table after it as that backend moves.
 |---------|--------------|
 | AD5X IFS | A colour transition in `Adventurer5M.json` to a materially different RGB, treated as a swap |
 | CFS | A change in the per-slot `material_type|color_value` composite |
-| QIDI Box | A change in the per-slot filament, colour and vendor table ids |
-| Happy Hare | A different positive per-gate `spool_id` (re-bind), or `0`/absent (eject, per the setting below) |
 
 ### Per backend, under the insert rule
 
