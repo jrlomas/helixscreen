@@ -738,6 +738,14 @@ static std::unique_ptr<AmsBackend> try_create_mock(IMoonrakerClient* mock_client
             return nullptr;
         }
     }
+    // Personas that model firmware HelixScreen talks to through a production
+    // backend are mock hardware too: decline, and real discovery builds that
+    // backend against the mock's objects.
+    if (!mock_ams_env && MoonrakerClientMock::mock_hardware_persona()) {
+        spdlog::info("[AMS Backend] Mock printer persona is mock hardware - deferring to real "
+                     "discovery");
+        return nullptr;
+    }
 
     spdlog::debug("[AMS Backend] Creating mock backend with {} gates (mock mode enabled)",
                   config->mock_ams_gate_count);
