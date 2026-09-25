@@ -1128,7 +1128,7 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     /**
      * @brief The `zmod_color` object as Z-Mod's firmware reports it.
      *
-     * Empty-object-free full frame: active_tool_id, total_tools, color_limit,
+     * Full frame: active_tool_id, total_tools, color_limit,
      * display, valid_types, hidden_types, palette (the 24 firmware colours)
      * and slots (the 4 heads' Material/HEX registry). Served by the
      * objects.query/subscribe handlers and republished on _T_IN/_T_OUT/
