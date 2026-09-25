@@ -485,6 +485,42 @@ TEST_CASE("Happy Hare persistence: MMU_GATE_MAP clear Spoolman with -1",
     REQUIRE(helper.has_gcode_containing("SPOOLID=-1"));
 }
 
+TEST_CASE("Happy Hare persistence: clearing one field names it empty",
+          "[ams][happy_hare][persistence]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(2);
+
+    SlotInfo* slot = helper.get_mutable_slot(0);
+    REQUIRE(slot != nullptr);
+    slot->material = "PLA";
+    slot->color_rgb = 0xED2C2C;
+    SlotInfo* second = helper.get_mutable_slot(1);
+    REQUIRE(second != nullptr);
+    second->material = "PLA";
+    second->color_rgb = 0xED2C2C;
+
+    // The editor saves the whole slot, so the clear is an edit that keeps the
+    // colour and empties the material. Happy Hare keeps an omitted parameter
+    // at its current value, so the write must name the emptied field with an
+    // explicit empty or the gate map goes on remembering PLA.
+    SlotInfo cleared_material = *slot;
+    cleared_material.material.clear();
+    helix::test::apply_edit(helper, 0, cleared_material);
+    REQUIRE(helper.has_gcode("MMU_GATE_MAP GATE=0 COLOR=ED2C2C MATERIAL="));
+
+    // The same edit on the colour, keeping the material.
+    SlotInfo cleared_color = *second;
+    cleared_color.color_rgb = helix::AMS_DEFAULT_SLOT_COLOR;
+    helix::test::apply_edit(helper, 1, cleared_color);
+    REQUIRE(helper.has_gcode("MMU_GATE_MAP GATE=1 COLOR= MATERIAL=PLA"));
+
+    // Neither took the full wipe: a single-field clear keeps every other
+    // field the gate map holds.
+    REQUIRE_FALSE(helper.has_gcode_containing("SPOOLID=-1"));
+    REQUIRE_FALSE(helper.has_gcode_containing("NAME="));
+}
+
 // ============================================================================
 // Clear Spool - the full gate-map wipe
 // ============================================================================

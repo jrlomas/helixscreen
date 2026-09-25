@@ -8,6 +8,7 @@
 #include "async_lifetime_guard.h"
 #include "error_event.h"
 #include "filament_slot_override_store.h"
+#include "lane_echo.h"
 #include "lane_observation.h"
 #include "slot_registry.h"
 
@@ -239,6 +240,12 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
 
     /// Delete this gate's user override ("Clear Spool").
     void clear_slot_override(int slot_index) override;
+
+    /// The resync files stored records through this backend's echo guard, the
+    /// same one its parses consult.
+    [[nodiscard]] helix::ams::OwnWriteEchoes* own_write_echoes() override {
+        return &own_write_echoes_;
+    }
 
     /// Publish the external spool as lane{N+1} in the SHARED lane_data
     /// namespace — Happy Hare's plugin never publishes its bypass/external
@@ -539,6 +546,13 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     /// reading it back would file a user's own choice as something the MMU
     /// remembers.
     std::map<int, helix::ams::Observation> gate_readings_;
+
+    /// What the user's own MMU_GATE_MAP write declared, so the gate map
+    /// echoing it back through printer.mmu is not filed as firmware's reading.
+    /// The gate map is user-maintained, so no tag names the spool a write was
+    /// made against: suppression ends on a differing value, a key published
+    /// empty, the re-bind verdict in the gate_spool_id parse, or a clear.
+    helix::ams::OwnWriteEchoes own_write_echoes_;
 
     // Path visualization state
     int filament_pos_{0};     ///< Happy Hare filament_pos value
