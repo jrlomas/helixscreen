@@ -499,6 +499,15 @@ void PrintStartCollector::note_priming() {
     if (!active_.load()) {
         return;
     }
+    // A profile that narrates its own purge owns that narration outright: the
+    // U1 maps PRINT_PREEXTRUDING -> PURGING, and its klippy-internal flow
+    // calibration and nozzle clean run ~2 minutes with no gcode_response at
+    // all — a quiet-clock inference cannot tell that silence from a prime
+    // line and would mislabel the whole stretch. A declared signal outranks
+    // the guess, so the inference stands down entirely.
+    if (profile_ && profile_->declares_phase_signal(PrintStartPhase::PURGING)) {
+        return;
+    }
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         // Don't regress out of COMPLETE, and don't re-announce once already

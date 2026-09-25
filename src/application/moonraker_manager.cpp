@@ -1004,10 +1004,11 @@ void MoonrakerManager::init_print_start_collector() {
             // mid-print. print_duration going 0->positive while current_layer is
             // still < 1 is the one observable "priming has begun" signal. This
             // observer only reports that raw condition; note_priming() owns the
-            // gating (once per print, only past the mesh phases, only once the
-            // printer has gone quiet) and never completes the pre-print —
-            // completion stays gated on the genuine current_layer 0->1 edge
-            // below / in the layer observer.
+            // gating (not at all when the profile declares its own PURGING
+            // signal; otherwise once per print, only past the mesh phases,
+            // only once the printer has gone quiet) and never completes the
+            // pre-print — completion stays gated on the genuine
+            // current_layer 0->1 edge below / in the layer observer.
             // Skipped for non-reporting printers: there, print_duration>0 IS the
             // completion signal (handled by should_complete_preprint), so a
             // PURGING nudge would just be immediately replaced by COMPLETE.

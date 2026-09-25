@@ -229,6 +229,18 @@ class PrintStartProfile {
         return !signal_formats_.empty();
     }
 
+    /**
+     * @brief True when any mapping form in this profile narrates the phase
+     *
+     * Covers every container that carries a phase: signal format mappings,
+     * response patterns, state patterns, status-signal rules, and
+     * silent-progression entries. A profile declaring a phase owns its
+     * narration outright — the collector's own inferences for that phase
+     * (e.g. the print_duration priming nudge when PURGING is declared) stand
+     * down, because a declared signal outranks a guess.
+     */
+    bool declares_phase_signal(helix::PrintStartPhase phase) const;
+
     /// True if this is the default/generic fallback profile, not printer-specific
     bool is_default() const {
         return is_default_;

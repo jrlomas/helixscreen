@@ -211,9 +211,13 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
      * complete the pre-print phase — completion stays gated on the genuine
      * current_layer 0->1 edge (MoonrakerManager::should_complete_preprint).
      *
-     * The nudge is an inference, so it owns its own gating: it speaks at most
-     * once per print, only once the collector has reached BED_MESH or a later
-     * phase (before that the printer is still homing / feeding / heating, and
+     * The nudge is an inference, so it owns its own gating: it is disabled
+     * outright when the loaded profile declares a PURGING signal in any form
+     * (that profile narrates its own purge — a declared signal outranks the
+     * guess, whose quiet-clock reading cannot tell a long silent calibration
+     * stretch from a prime line); otherwise it speaks at most once per print,
+     * only once the collector has reached BED_MESH or a later phase (before
+     * that the printer is still homing / feeding / heating, and
      * print_duration goes positive with the first toolhead motion), and only
      * after the printer has stopped narrating for PRIMING_INFER_QUIET — probe
      * lines and action codes refresh that clock throughout a live mesh, so a
