@@ -1,10 +1,14 @@
-# FlashForge Creator 5 Pro Support
+# FlashForge Creator 5 and Creator 5 Pro Support
 
-The FlashForge Creator 5 Pro is served by the **unified MIPS32 target**: `make creator5`
+The FlashForge Creator 5 line is served by the **unified MIPS32 target**: `make creator5`
 is an alias of `make mips`, so its binary, toolchain and release asset are the K1/AD5X
 one. The board is told apart at runtime, never at compile time (see the unified-block
-comment in `mk/cross.mk`). This page covers what is specific to the printer: a 4-tool
-toolchanger running a FlashForge Klipper fork on an Ingenic X2000 MIPS host.
+comment in `mk/cross.mk`). This page covers what is specific to the printers: a 4-tool
+toolchanger running a FlashForge Klipper fork on an Ingenic X2000 MIPS host. HelixScreen
+carries two entries for the line: the **Creator 5 Pro**, which adds a chamber heater and
+chamber fans over the base machine, and the heater-free **Creator 5**. Each is detected
+on its own and gets its own preset (see "Printer detection and preset"); everything else
+on this page applies to both models.
 
 **Status: the UI runs on the printer** under both firmware families: Z-Mod
 (`ghzserg/z_c5pro`) starts it in place of the stock UI (`DISPLAY_OFF HELIX=1`;
@@ -92,7 +96,8 @@ the release workflow's mips matrix entry publishes it. Same layout as every othe
 tarball (`bin/`, `ui_xml/`, `assets/`, `config/`, `certs/`, `install.sh`); needs the
 prerendered images first (`make venv-setup && make gen-all-images`, as `release.yml` does).
 No preset is baked in: first boot runs the hardware wizard, whose detection applies
-`assets/config/presets/creator5.json`.
+`assets/config/presets/creator5_pro.json` on a Pro and
+`assets/config/presets/creator5.json` on a heater-free Creator 5.
 
 The binary locates its data root relative to itself (`<root>/bin/helix-screen` ->
 `<root>/ui_xml`), so unpack the tarball as a whole (e.g. to `/usr/data/helixscreen/`)
@@ -116,15 +121,20 @@ HelixScreen data root". `HELIX_DATA_DIR` overrides the lookup.
 
 ## Printer detection and preset
 
-`assets/config/printer_database.json` carries a `flashforge_creator_5_pro` entry; the
-preset (`assets/config/presets/creator5.json`, rotate 90) is applied when it wins. Two
-firmware families run on this hardware: the FlashForge fork (K4C5, with `ff_*` printer
-objects) and Z-Mod (`ghzserg/z_c5pro`, no `ff_*` objects but `gcode_button extruder_grab1..4`).
-One entry fingerprints both: `ff_toolchange` names the K4C5 firmware, `gcode_button
-extruder_grab1` names the changer on either firmware, and `zmod_color` is corroborating-only
-because AD5X Z-Mod carries it too. The disambiguation runs both ways: the Creator 5 Pro
-entry excludes on `zmod_ifs`/`SET_EXTRUDER_SLOT` (AD5X IFS), and the AD5X entry excludes on
-`gcode_button extruder_grab1`. The directional pairs are pinned in
+`assets/config/printer_database.json` carries two entries: `flashforge_creator_5_pro`
+(preset `assets/config/presets/creator5_pro.json`, rotate 90) and `flashforge_creator_5`
+(preset `assets/config/presets/creator5.json`, rotate 90, no chamber heater or chamber
+fans). The chamber heater separates the models the way the chamber light separates the
+AD5M pair: the Pro identifies on `heater_generic chamber_heater` and requires it once
+objects are reported, while the Creator 5 excludes on its presence, so each model wins
+its own machine. Two firmware families run on this hardware: the FlashForge fork (K4C5,
+with `ff_*` printer objects) and Z-Mod (`ghzserg/z_c5pro`, no `ff_*` objects but
+`gcode_button extruder_grab1..4`). The family fingerprints are shared across both
+entries: `ff_toolchange` names the K4C5 firmware, `gcode_button extruder_grab1` names
+the changer on either firmware, and `zmod_color` is corroborating-only because AD5X
+Z-Mod carries it too. The disambiguation against the AD5X runs both ways: both Creator 5
+entries exclude on `zmod_ifs`/`SET_EXTRUDER_SLOT` (AD5X IFS), and the AD5X entry
+excludes on `gcode_button extruder_grab1`. The directional pairs are pinned in
 `tests/unit/test_printer_detector.cpp` (`[creator5]`).
 
 Preset macro buttons for macros a firmware does not ship (e.g. `TOOLCHANGE_PARK` on Z-Mod)
@@ -186,17 +196,23 @@ Each item below says whether it is done or still open.
 4. **Moonraker** (done): HelixScreen talks to Moonraker (not `/tmp/uds`). The Moonraker
    instance that Mainsail uses is the one to point at (port 7125 unless `moonraker.conf`
    says otherwise).
-5. **Detection + preset** (done): `printer_database.json` entry
+5. **Detection + preset** (done): `printer_database.json` entries
    `flashforge_creator_5_pro` (fingerprint: `ff_toolchange` / `gcode_button
-   extruder_grab1`, 4 extruders) and preset `creator5.json` (4 hotends, chamber heater,
-   part/chamber fans, LED, `fd_ex*` switches with runout off, rotate 90). Without the
-   entry the detector resolves the AD5X, which matches on hostname, MIPS and 4 tools;
-   the entry is what tells them apart, with the AD5X side excluding on
-   `gcode_button extruder_grab1`. Uses the `generic-corexy` image.
+   extruder_grab1`, 4 extruders, `heater_generic chamber_heater`) and
+   `flashforge_creator_5` for the heater-free model (same fingerprints, excluding the
+   chamber heater). Presets: `creator5_pro.json` (4 hotends, chamber heater,
+   part/chamber fans, LED, `fd_ex*` switches with runout off, rotate 90) and
+   `creator5.json` (the same minus the chamber heater and chamber fans). Without the
+   entries the detector resolves the AD5X, which matches on hostname, MIPS and 4 tools;
+   the entries are what tell them apart, with the AD5X side excluding on
+   `gcode_button extruder_grab1`. Each entry carries its own image:
+   `flashforge-creator-5-pro.png` / `flashforge-creator-5.png`.
 6. **Toolchanger model** (done): 4 extruders (`extruder`, `extruder1..3`), 4 filament
    switch + 4 motion sensors (`fd_ex0..3`, `fm_ex0..3`), `heater_generic
    chamber_heater`, `fan_generic fanM106` (part), `heater_fan heat_fan*`, `fan_generic
-   chamber_*_fan`, `led chamber_led`.
+   chamber_*_fan`, `led chamber_led`. The chamber heater and the `chamber_*_fan`s are
+   the Pro's hardware; the heater-free Creator 5 reports neither, and its preset drops
+   both.
 7. **Memory** (open): 128-256 MB shared with Klipper, Moonraker, `firmwareExe`.
    HelixScreen's ~15 MB footprint is fine, but check `free` with the stock stack
    running.
