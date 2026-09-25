@@ -218,6 +218,53 @@ build_fixture_repo() {
     rm -rf "$tmp"
 }
 
+@test "a branch whose patches differ gets a checkout free of the main tree's patches" {
+    # The private checkout is copied from the main tree, applied patches and all.
+    # reapply-patches resets only the files the BRANCH's patch list names, so a
+    # patch only the main tree carries - one hunk edited, one file created - has to
+    # be undone before it, or it ships in the branch's build.
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    main="$tmp/main"
+    printf 'reapply-patches:\n\t@true\n' > "$main/Makefile"
+    git -C "$main" add Makefile
+    git -C "$main" commit -qm stub
+    git -C "$main" branch rel
+
+    cat > "$main/patches/lvgl_main_only.patch" <<'PATCH'
+diff --git a/src/lv_thing.c b/src/lv_thing.c
+--- a/src/lv_thing.c
++++ b/src/lv_thing.c
+@@ -1 +1 @@
+-int v = 2;
++int v = 3;
+diff --git a/src/lv_new.c b/src/lv_new.c
+new file mode 100644
+--- /dev/null
++++ b/src/lv_new.c
+@@ -0,0 +1 @@
++int n = 1;
+PATCH
+    git -C "$main" add patches/lvgl_main_only.patch
+    git -C "$main" commit -qm "main-only patch"
+    git -C "$main/lib/lvgl" apply "$main/patches/lvgl_main_only.patch"
+
+    run bash "$main/scripts/setup-worktree.sh" --base rel --no-build feat/back
+    [ "$status" -eq 0 ] || { echo "$output" >&2; return 1; }
+
+    wt="$main/.worktrees/back"
+    run cat "$wt/lib/lvgl/src/lv_thing.c"
+    [ "$output" = "int v = 2;" ] || { echo "main-only hunk survived: $output" >&2; return 1; }
+    [ ! -e "$wt/lib/lvgl/src/lv_new.c" ] || { echo "main-only file survived" >&2; return 1; }
+
+    # The main tree keeps its own patches.
+    run cat "$main/lib/lvgl/src/lv_thing.c"
+    [ "$output" = "int v = 3;" ] || { echo "main tree was rewritten: $output" >&2; return 1; }
+    [ -e "$main/lib/lvgl/src/lv_new.c" ] || { echo "main tree lost its file" >&2; return 1; }
+    rm -rf "$tmp"
+}
+
 @test "setup fails loudly when a private submodule is not at the pinned revision" {
     # A submodule at the wrong revision compiles, links, and is not the code the
     # branch describes. Nothing downstream reports it, so setup has to.

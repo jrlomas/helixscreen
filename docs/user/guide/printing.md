@@ -154,7 +154,7 @@ The Print Status panel shows:
 | **Cancel** | Stops print (confirmation required). By default, waits for the printer's cancel routine to finish. If **Cancel Escalation** is enabled in **Settings > Safety & Notifications**, an emergency stop triggers automatically after the configured timeout. |
 | **Tune** | Opens Print Tune overlay for real-time adjustments |
 
-**Files button.** While a print runs, a folder icon in the print screen's header opens the file list, so you can line up the next job without leaving the print view. Starting a print from there stays blocked until the current one ends - the Start button tells you so instead of starting a second job.
+**Files button.** While a print runs, a folder icon in the print screen's header opens the file list, so you can line up the next job without leaving the print view. A second print can never start while one runs; when your printer has a job queue, the button becomes **Add to Queue** instead (see [Queueing a Print](#queueing-a-print)).
 
 **Camera button.** If HelixScreen runs on a separate screen or device from the printer (see [Camera](camera.md)) and the printer has a webcam, the header also gains a **Camera** button that opens the full-screen webcam view. On the printer's own screen it stays hidden - you can already see the print.
 
@@ -181,6 +181,27 @@ During printing, frame captures happen automatically based on your timelapse set
 
 ---
 
+## Queueing a Print
+
+You don't have to wait for a print to end before picking the next one. While a print is running - or still preparing, before its first layer - open any file and its **Print** button becomes **Add to Queue**, marked with a clock icon. A toast confirms the job's position ("Added to queue (position 2)").
+
+- The pre-print options you set on that screen (bed mesh, nozzle cleaning and so on) are saved with the queued job and come back when the job starts.
+- The filament mapping is not saved: it is worked out again when the job actually starts, against the filament loaded at that moment.
+
+**Where to see the queue:**
+
+- the **Up next** line on the print status screen while a print runs, and on the home print card ("Up next: benchy (+2)" when more jobs follow). Tapping it while a print runs opens the Job Queue.
+- the **Job Queue** itself (see [Home Panel - Job Queue Manager](home-panel.md#job-queue-manager)).
+
+**Starting the next job:**
+
+- When a print finishes, the completion dialog offers a **Start next** button whenever the queue has jobs.
+- When the printer is idle, tap the **Up next** line or a job in the Job Queue. The file opens in the file view with your saved options already set - check that the bed is clear, then tap **Print**. The job leaves the queue only once the print actually starts, so backing out of the file view leaves it queued for later.
+
+> **Note:** The queue is Moonraker's `[job_queue]` component. Without it in `moonraker.conf`, the button stays a disabled **Print**. If you set `automatic_transition: True` there, Moonraker starts queued jobs itself as each print finishes - HelixScreen is not involved in that start, so the options card is hidden while queueing and your options are not applied.
+
+---
+
 ## Print Tune Overlay
 
 ![Print Tune Overlay](../../images/user/print-tune.png)
@@ -191,6 +212,17 @@ Access by tapping **Tune** during an active print.
 |-----------|-------|--------------|
 | Speed % | 50-200% | Overall print speed multiplier |
 | Flow % | 75-125% | Extrusion rate multiplier |
+
+Next to each percentage, the overlay shows what it means right now: how fast the toolhead is actually moving in mm/s (0 when it is standing still) and the live volumetric flow in mm³/s.
+
+**Percent or mm/s.** Anything marked with the ⇄ swap icon switches between the two ways of reading speed and flow. Tap the Speed / Flow line on the Print Status screen, or either readout here, and both places change together:
+
+- **Percent** (default): Print Status shows `Speed 100% · Flow 100%`, and the overlay leads with the percentages.
+- **mm/s**: Print Status shows the live toolhead speed and volumetric flow, for example `Speed 148 mm/s · Flow 11.8 mm³/s`, and the overlay leads with those, with the percentage beside them.
+
+The choice is remembered. On the smallest screens Print Status has no Speed / Flow line, but the overlay readouts still switch.
+
+> **Note:** Volumetric flow assumes 1.75 mm filament. On a 2.85 mm printer it reads low.
 
 The overlay also includes Z-Offset / baby-step controls (see below).
 

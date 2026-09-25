@@ -494,9 +494,10 @@ print_platform_banner() {
     esac
 }
 
-# Tell a K2 owner that stock AI failure detection is gone (#1378).
+# Tell a K2 owner how AI failure detection stands after this install (#1378).
 #
-# Two independent parts of the install stop it, and neither announces itself:
+# Two independent parts of the install stop the STOCK detector, and neither
+# announces itself:
 #
 #   - assets/config/platform/hooks-k2.sh platform_stop_competing_uis() stops and
 #     disables /etc/init.d/app. That procd service is the stock UI, and the same
@@ -507,23 +508,29 @@ print_platform_banner() {
 #     kills the stock cam_app grabber on every launch. The node is single-stream,
 #     so nothing else can read the chamber camera while HelixScreen runs.
 #
-# HelixScreen ships no replacement detector, so after this install the print is
-# unwatched. Silence here is the actual harm: the owner keeps believing a safety
-# feature is running, and the first sign otherwise is a failed print.
+# HelixScreen ships its own spaghetti detector for exactly this gap: while a
+# print is active it captures a frame from the ustreamer camera and runs
+# /usr/bin/detection (Creality's on-device model) on it, pausing the print on a
+# hit. The notice says both halves - stock service stops, HelixScreen detection
+# takes over - so the owner knows what is watching their prints.
 #
 # The text stays ASCII: it lands on a BusyBox console on the printer. No-op on
 # every other platform.
 print_k2_stock_ai_notice() {
     [ "${1:-}" = "k2" ] || return 0
 
-    log_warn "Creality's stock AI failure detection is now DISABLED on this printer."
-    log_warn "  HelixScreen replaces the stock UI service (/etc/init.d/app), which also"
+    log_warn "Creality's stock AI failure detection service is now DISABLED on this"
+    log_warn "  printer: HelixScreen replaces the stock UI (/etc/init.d/app), which also"
     log_warn "  runs Creality's failure detector, and takes over the chamber camera."
-    log_warn "  HelixScreen does not provide a replacement, so your prints are no longer"
-    log_warn "  watched for spaghetti or other failures."
-    log_warn "  A HelixScreen detector is tracked at:"
-    log_warn "    https://github.com/prestonbrown/helixscreen/issues/1033"
-    log_warn "  To get stock detection back, uninstall HelixScreen:"
+    log_warn "  HelixScreen provides its own spaghetti detection instead: while a print"
+    log_warn "  is active it captures a chamber-camera frame, runs Creality's on-device"
+    log_warn "  detection model (/usr/bin/detection) on it, and pauses the print with a"
+    log_warn "  warning when it sees spaghetti - or only warns, if detection is set not"
+    log_warn "  to pause. Its interval and threshold come from the printer's own"
+    log_warn "  ai_control settings (pastaTime / pastaTruth); the on/off and pause"
+    log_warn "  choices start from those settings (switch / pausePrint) and then live in"
+    log_warn "  Settings > Safety & Notifications."
+    log_warn "  To get the stock detector back, uninstall HelixScreen:"
     log_warn "    curl -sSL https://releases.helixscreen.org/install.sh | sh -s -- --uninstall"
     log_warn "  Uninstalling re-enables both the stock UI service and the stock camera."
 }
@@ -784,6 +791,12 @@ main() {
     # self-skips on the root-only platforms (ad5m/ad5x/k1/k2), when KLIPPER_USER
     # is root, and under NoNewPrivileges where sudo is unavailable.
     install_permission_rules "$platform"
+
+    # QIDI: take over the .3mf plate-thumbnail duty the stopped stock screen
+    # carried (prestonbrown/helixscreen#1713). No-op off QIDI-class hosts and
+    # on firmware whose Moonraker extracts thumbnails itself. Post-extract
+    # because the helper and its unit templates ship in the payload's config/.
+    install_qidi_3mf_thumbs
 
     # Install KIAUH extension if KIAUH is detected
     install_kiauh_extension "$skip_kiauh_registration" || true

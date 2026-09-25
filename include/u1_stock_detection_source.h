@@ -33,6 +33,11 @@ class U1StockSource : public DetectionSource {
     bool can_tune() const override {
         return true;
     }
+    /// The stock firmware pauses the print on the same snapshot it reports,
+    /// so the pause-on-detect setting cannot govern this source.
+    bool self_pauses() const override {
+        return true;
+    }
     void set_callback(Callback cb) override {
         cb_ = std::move(cb);
     }
@@ -40,6 +45,10 @@ class U1StockSource : public DetectionSource {
     void set_capable(bool v) {
         capable_ = v;
     }
+
+    /// DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low, the stock firmware's
+    /// one-step-down sensitivity command.
+    void tune() override;
 
     /// Install the print-state observer. Called once.
     void start();

@@ -55,6 +55,7 @@
   <translation tag="1 event queued" es="1 evento en cola"/>
   <translation tag="1 hour ago" es="hace 1 hora"/>
   <translation tag="1 layer" es="1 capa"/>
+  <translation tag="1 line in helixscreen.env was ignored" es="1 línea de helixscreen.env fue ignorada"/>
   <translation tag="1 min" es="1 min"/>
   <translation tag="1 min ago" es="hace 1 min"/>
   <translation tag="1 minute" es="1 minuto"/>
@@ -160,7 +161,11 @@
   <translation tag="Add Widget" es="Agregar widget"/>
   <translation tag="Add custom filament" es="Añadir filamento personalizado"/>
   <translation tag="Add page" es="Añadir página"/>
+  <translation tag="Add to Queue" es="Añadir a la cola"/>
   <translation tag="Added to Spoolman" es="Añadido a Spoolman"/>
+  <translation tag="Added to queue (position {})" es="Añadido a la cola (posición {})"/>
+  <translation tag="Added to queue (position {}) - queue is paused" es="Añadido a la cola (posición {}): la cola está en pausa"/>
+  <translation tag="Adding to queue..." es="Añadiendo a la cola..."/>
   <translation tag="Address" es="Dirección"/>
   <translation tag="Adjust screen brightness level" es="Ajustar el nivel de brillo de la pantalla"/>
   <translation tag="Adjust screws, then re-probe." es="Ajuste los tornillos, luego vuelva a sondear."/>
@@ -219,6 +224,7 @@
   <translation tag="Assign a role to enable sensor monitoring" es="Asigne un rol para habilitar el monitoreo del sensor"/>
   <translation tag="Assisted Retract" es="Retracción asistida"/>
   <translation tag="Assisting" es="Asistiendo"/>
+  <translation tag="At least {} lines in helixscreen.env were ignored" es="Al menos {} líneas de helixscreen.env fueron ignoradas"/>
   <translation tag="Authentication failed" es="Error de autenticación"/>
   <translation tag="Auto" es="Automático"/>
   <translation tag="Auto Bed Mesh" es="Malla de Cama Automática"/>
@@ -425,6 +431,7 @@
   <translation tag="Cancel Print" es="Cancelar Impresión"/>
   <translation tag="Cancel macro not configured" es="Macro de cancelar no configurado"/>
   <translation tag="Cancelled" es="Cancelado"/>
+  <translation tag="Cannot add to queue: internal error" es="No se puede añadir a la cola: error interno"/>
   <translation tag="Cannot be changed from here on a multi-unit MMU" es="No se puede cambiar aquí en un MMU de varias unidades"/>
   <translation tag="Cannot control timelapse: printer not connected" es="No se puede controlar timelapse: impresora no conectada"/>
   <translation tag="Cannot delete file: printer not connected" es="No se puede eliminar archivo: impresora no conectada"/>
@@ -655,6 +662,7 @@
   <translation tag="Copy failed - use SSH manually" es="Error al copiar - use SSH manualmente"/>
   <translation tag="Corner roundness" es="Redondeo de esquinas"/>
   <translation tag="Correction (Ki)" es="Corrección (Ki)"/>
+  <translation tag="Could not add to queue" es="No se pudo añadir a la cola"/>
   <translation tag="Could not analyze PRINT_START macro. Some print options may be unavailable." es="No se pudo analizar la macro PRINT_START. Algunas opciones de impresión pueden no estar disponibles."/>
   <translation tag="Could not answer the connection request" es="No se pudo responder a la solicitud de conexión"/>
   <translation tag="Could not check webcam status.&#10;Check printer connection." es="No se pudo verificar la webcam.&#10;Compruebe la conexión."/>
@@ -665,6 +673,7 @@
   <translation tag="Could not parse tips database" es="No se pudo analizar la base de datos de consejos"/>
   <translation tag="Could not reach Spoolman at" es="No se pudo conectar a Spoolman en"/>
   <translation tag="Could not read the screw adjustments from the printer" es="No se pudieron leer los ajustes de los tornillos desde la impresora"/>
+  <translation tag="Could not remove the job from the queue" es="No se pudo eliminar el trabajo de la cola"/>
   <translation tag="Could not resolve printer RFCOMM channel" es="No se pudo resolver el canal RFCOMM de la impresora"/>
   <translation tag="Could not save filament" es="No se pudo guardar el filamento"/>
   <translation tag="Could not save the mesh as &apos;{}&apos;: {}" es="No se pudo guardar la malla como &apos;{}&apos;: {}"/>
@@ -759,8 +768,9 @@
   <translation tag="Detecting..." es="Detectando..."/>
   <translation tag="Detection Length" es="Longitud de detección"/>
   <translation tag="Detection Mode" es="Modo de detección"/>
+  <translation tag="Detection turned off" es="Detección desactivada"/>
   <translation tag="Dev" es="Dev"/>
-  <translation tag="Dev channel requires dev_url in config" es="Canal de desarrollo requiere dev_url en la configuración"/>
+  <translation tag="Dev channel requires dev_url in update_urls.json" es="Canal de desarrollo requiere dev_url en update_urls.json"/>
   <translation tag="Device" es="Dispositivo"/>
   <translation tag="Device Section" es="Sección de dispositivo"/>
   <translation tag="Device connected" es="Dispositivo conectado"/>
@@ -1145,6 +1155,7 @@
   <translation tag="File" es="Archivo"/>
   <translation tag="File Size" es="Tamaño del archivo"/>
   <translation tag="File Will Stop the Printer" es="El archivo detendrá la impresora"/>
+  <translation tag="File not found: {}" es="Archivo no encontrado: {}"/>
   <translation tag="Filename" es="Nombre de Archivo"/>
   <translation tag="Filter Fan" es="Ventilador de filtro"/>
   <translation tag="Filter Fan: Off" es="Ventilador de filtro: Apagado"/>
@@ -1161,6 +1172,8 @@
   <translation tag="Firmware reports no bypass. Enable if you feed filament straight to the extruder" es="El firmware no reporta bypass. Actívelo si alimenta el filamento directamente al extrusor."/>
   <translation tag="Firmware restarting..." es="Reiniciando firmware..."/>
   <translation tag="Firmware saved X = Y&apos;s value; the measured X result was discarded" es="El firmware guardó el valor de Y para X; el resultado medido de X se descartó"/>
+  <translation tag="Fix: chmod 644 {}, then restart" es="Solución: chmod 644 {}, luego reinicie"/>
+  <translation tag="Fix: chown {} {}, then restart" es="Solución: chown {} {}, luego reinicie"/>
   <translation tag="FlashForge Adventurer 5M" es="FlashForge Adventurer 5M"/>
   <translation tag="FlashForge Adventurer 5X" es="FlashForge Adventurer 5X"/>
   <translation tag="FlashForge IFS" es="FlashForge IFS"/>
@@ -1406,6 +1419,7 @@
   <translation tag="Invalid value type" es="Tipo de valor no válido"/>
   <translation tag="Issue description" es="Descripción del problema"/>
   <translation tag="It can be un-archived in Spoolman&apos;s web UI." es="Se puede desarchivar en la interfaz web de Spoolman."/>
+  <translation tag="It has not reported its slots yet. Try again in a moment." es="Aún no ha informado de sus ranuras. Inténtelo de nuevo en un momento."/>
   <translation tag="It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying" es="Está atascado entre el sensor del concentrador y su engranaje. Abra el CFS y despeje el concentrador antes de reintentar"/>
   <translation tag="It&apos;s a new spool" es="Es una bobina nueva"/>
   <translation tag="Jammed at the Toolhead" es="Atascado en el cabezal"/>
@@ -1682,6 +1696,7 @@
   <translation tag="Multi-Filament System Status" es="Estado del sistema multi-filamento"/>
   <translation tag="Multi-Filament System is busy: {}" es="Sistema multi-filamento ocupado: {}"/>
   <translation tag="Multi-Filament System not available" es="Sistema multi-filamento no disponible"/>
+  <translation tag="Multi-filament system not ready" es="Sistema multifilamento no preparado"/>
   <translation tag="Must home axes first" es="Debe posicionar los ejes primero"/>
   <translation tag="My Custom Theme" es="Mi Tema Personalizado"/>
   <translation tag="My Panel" es="Mi Panel"/>
@@ -1939,7 +1954,9 @@
   <translation tag="Path B" es="Ruta B"/>
   <translation tag="Pause" es="Pausar"/>
   <translation tag="Pause macro not configured" es="Macro de pausa no configurado"/>
+  <translation tag="Pause on Detection" es="Pausar al detectar"/>
   <translation tag="Pause the print first, then load, unload, or change filament" es="Pause primero la impresión y luego cargue, descargue o cambie el filamento"/>
+  <translation tag="Pause the print when a failure is seen (off = warn only)" es="Pausa la impresión cuando se detecta un fallo (desactivado = solo avisar)"/>
   <translation tag="Pause, resume, or stop the print" es="Pausar, reanudar o detener la impresión"/>
   <translation tag="Paused" es="Pausado"/>
   <translation tag="Paused (attention needed)" es="Pausado (requiere atención)"/>
@@ -2379,6 +2396,7 @@
   <translation tag="SWITCH SENSORS" es="SENSORES DE INTERRUPTOR"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." es="Modo seguro activo. La conexión con la impresora está deshabilitada porque la aplicación seguía fallando al iniciar. Abra Ajustes para solucionar el problema y luego reinicie."/>
   <translation tag="Safety &amp; Notifications" es="Seguridad y notificaciones"/>
+  <translation tag="Same spool in {}? Tap Clear if it is a new one." es="¿La misma bobina en {}? Toca Borrar si es una nueva."/>
   <translation tag="Sample" es="Muestra"/>
   <translation tag="Sample %d/%d" es="Muestra %d/%d"/>
   <translation tag="Sample Dialog" es="Diálogo de Ejemplo"/>
@@ -2448,6 +2466,7 @@
   <translation tag="Security" es="Seguridad"/>
   <translation tag="Security, network, host, and administration" es="Seguridad, red, host y administración"/>
   <translation tag="See exactly what data will be sent" es="Ver exactamente qué datos se enviarán"/>
+  <translation tag="See the log" es="Revise el registro"/>
   <translation tag="See the quick tour of HelixScreen again" es="Ver de nuevo el tour rápido de HelixScreen"/>
   <translation tag="Select" es="Seleccionar"/>
   <translation tag="Select &apos;None&apos; if you don&apos;t have a filament sensor, or if you don&apos;t want to pause on runout." es="Seleccione &apos;Ninguno&apos; si no tiene un sensor de filamento, o si no desea pausar al agotarse."/>
@@ -2581,6 +2600,8 @@
   <translation tag="Sounds" es="Sonidos"/>
   <translation tag="Source" es="Fuente"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" es="Space Debris mod por Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti Detection" es="Detección de spaghetti"/>
+  <translation tag="Spaghetti detected" es="Spaghetti detectado"/>
   <translation tag="Spaghetti detected — print paused" es="Spaghetti detectado — impresión pausada"/>
   <translation tag="Speaker" es="Altavoz"/>
   <translation tag="Speed" es="Velocidad"/>
@@ -2637,6 +2658,7 @@
   <translation tag="Start anyway?" es="¿Iniciar de todos modos?"/>
   <translation tag="Start at" es="Comenzar en"/>
   <translation tag="Start failed" es="Inicio fallido"/>
+  <translation tag="Start next: {}" es="Iniciar siguiente: {}"/>
   <translation tag="Start over" es="Empezar de nuevo"/>
   <translation tag="Start print anyway?" es="¿Iniciar la impresión de todos modos?"/>
   <translation tag="Started" es="Iniciado"/>
@@ -2645,6 +2667,7 @@
   <translation tag="Starting nozzle clean..." es="Iniciando limpieza de boquilla..."/>
   <translation tag="Starting print..." es="Iniciando impresión..."/>
   <translation tag="Starting..." es="Iniciando..."/>
+  <translation tag="Starts after the current print" es="Comienza cuando termine la impresión actual"/>
   <translation tag="Startup Brightness" es="Brillo de inicio"/>
   <translation tag="Startup, auto-control, and macro devices" es="Inicio, control automático y dispositivos de macro"/>
   <translation tag="State" es="Estado"/>
@@ -2684,11 +2707,9 @@
   <translation tag="Switched to {}" es="Cambiado a {}"/>
   <translation tag="Switches to a backup spool on runout" es="Cambia a una bobina de respaldo al agotarse"/>
   <translation tag="Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." es="Cambiar de nuevo a PID cambia cómo se controla este calentador y luego lo calibra. Eso tarda varios minutos a temperatura."/>
-  <translation tag="Switching back to PID changes how this heater is controlled." es="Cambiar de nuevo a PID cambia cómo se controla este calentador."/>
   <translation tag="Switching back to PID requires a config change and Klipper restart." es="Cambiar de nuevo a PID requiere modificar la configuración y reiniciar Klipper."/>
   <translation tag="Switching heater control to MPC. Klipper will restart." es="Cambiando control del calentador a MPC. Klipper se reiniciará."/>
   <translation tag="Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." es="Cambiar a MPC cambia cómo se controla este calentador y luego lo calibra. Eso tarda varios minutos a temperatura."/>
-  <translation tag="Switching to MPC changes how this heater is controlled." es="Cambiar a MPC cambia cómo se controla este calentador."/>
   <translation tag="Switching to MPC requires a config change and Klipper restart." es="Cambiar a MPC requiere modificar la configuración y reiniciar Klipper."/>
   <translation tag="Sync with Spoolman" es="Sincronizar con Spoolman"/>
   <translation tag="Sysfs" es="Sysfs"/>
@@ -2946,6 +2967,7 @@
   <translation tag="Turn On" es="Encender"/>
   <translation tag="Turn On LEDs" es="Encender los LED"/>
   <translation tag="Turn endless spool on, then set the backup gate" es="Active la bobina infinita y luego configure el Gate de respaldo"/>
+  <translation tag="Turn off detection" es="Desactivar detección"/>
   <translation tag="Turn on LEDs when printer starts" es="Encender LEDs cuando la impresora inicia"/>
   <translation tag="Turn the extruder heater off after a load or unload finishes" es="Apagar el calentador del extrusor al terminar una carga o descarga"/>
   <translation tag="Turn the picture to match how the screen is mounted. Applies after restart." es="Gira la imagen para que coincida con el montaje de la pantalla. Se aplica tras reiniciar."/>
@@ -3004,6 +3026,8 @@
   <translation tag="Unretract Speed" es="Velocidad de Des-retracción"/>
   <translation tag="Unsupported tape width" es="Ancho de cinta no compatible"/>
   <translation tag="Unsupported tape width: " es="Ancho de cinta no compatible: "/>
+  <translation tag="Up next: {}" es="Siguiente: {}"/>
+  <translation tag="Up next: {} (+{})" es="Siguiente: {} (+{})"/>
   <translation tag="Up to date" es="Actualizado"/>
   <translation tag="Update" es="Actualizar"/>
   <translation tag="Update Available" es="Actualización disponible"/>
@@ -3084,6 +3108,7 @@
   <translation tag="Warn" es="Advertencia"/>
   <translation tag="Warning" es="Advertencia"/>
   <translation tag="Warnings &amp; errors" es="Advertencias y errores"/>
+  <translation tag="Watch the camera during a print for failed prints" es="Vigila la cámara durante la impresión para detectar impresiones fallidas"/>
   <translation tag="Weak battery" es="Batería baja"/>
   <translation tag="Webcam" es="Webcam"/>
   <translation tag="Website (optional)" es="Sitio Web (opcional)"/>
@@ -3208,6 +3233,10 @@
   <translation tag="feeder not in automatic mode" es="alimentador no está en modo automático"/>
   <translation tag="filament sensor disabled" es="sensor de filamento desactivado"/>
   <translation tag="heated bed" es="cama caliente"/>
+  <translation tag="helixscreen.env ignored: owned by uid {}" es="helixscreen.env ignorado: pertenece al uid {}"/>
+  <translation tag="helixscreen.env ignored: untrusted symlink chain" es="helixscreen.env ignorado: cadena de enlaces simbólicos no confiable"/>
+  <translation tag="helixscreen.env ignored: writable by other users" es="helixscreen.env ignorado: escribible por otros usuarios"/>
+  <translation tag="helixscreen.env ignored: {}" es="helixscreen.env ignorado: {}"/>
   <translation tag="idle" es="inactivo"/>
   <translation tag="in unit {} slot {}" es="en la unidad {} ranura {}"/>
   <translation tag="layers" es="capas"/>
@@ -3259,6 +3288,7 @@
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." es="{} está instalado pero su cambio a bobina de reserva está desactivado, así que no habrá ningún cambio automático."/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." es="{} está instalado, pero no se pudo leer su ajuste de bobina de reserva - no cuentes con un cambio automático."/>
   <translation tag="{} is not set up on this printer" es="{} no está configurado en esta impresora"/>
+  <translation tag="{} lines in helixscreen.env were ignored" es="{} líneas de helixscreen.env fueron ignoradas"/>
   <translation tag="{} macro not configured" es="Macro {} no configurado"/>
   <translation tag="{} matches." es="{} coincide."/>
   <translation tag="{} may cause unintended changes. Are you sure?" es="{} puede causar cambios no deseados. ¿Estás seguro?"/>

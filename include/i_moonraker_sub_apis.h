@@ -189,7 +189,10 @@ class IQueueAPI {
 
     virtual void pause_queue(SuccessCallback on_success, ErrorCallback on_error) = 0;
 
-    virtual void add_job(const std::string& filename, SuccessCallback on_success,
+    /// Success carries the resulting queue: Moonraker's post_job response
+    /// holds `queued_jobs` and `queue_state`, and the caller identifies the
+    /// new job as the job_id that was absent before the call.
+    virtual void add_job(const std::string& filename, StatusCallback on_success,
                          ErrorCallback on_error) = 0;
 
     virtual void remove_jobs(const std::vector<std::string>& job_ids, SuccessCallback on_success,

@@ -62,6 +62,7 @@
 #include "temp_graph_controller.h"
 #include "theme_manager.h"
 #include "tool_state.h"
+#include "tune_controller.h"
 #include "ui/fan_spin_animation.h"
 #include "ui/ui_widget_helpers.h"
 #include "wizard_config_paths.h"
@@ -299,6 +300,18 @@ PrintStatusPanel::PrintStatusPanel(PrinterState& printer_state, IMoonrakerAPI* a
     flow_factor_observer_ = observe_int_sync<PrintStatusPanel>(
         printer_state_.get_flow_factor_subject(), this,
         [](PrintStatusPanel* self, int flow) { self->on_flow_factor_changed(flow); }, ps_subjects);
+    // The physical-units readout also moves with the live toolhead and
+    // extruder velocities, and with the speed/flow units preference.
+    live_velocity_observer_ = observe_int_sync<PrintStatusPanel>(
+        printer_state_.get_live_velocity_subject(), this,
+        [](PrintStatusPanel* self, int) { self->update_speed_flow_text(); }, ps_subjects);
+    extruder_velocity_observer_ = observe_int_sync<PrintStatusPanel>(
+        printer_state_.get_live_extruder_velocity_subject(), this,
+        [](PrintStatusPanel* self, int) { self->update_speed_flow_text(); }, ps_subjects);
+    physical_units_observer_ = observe_int_sync<PrintStatusPanel>(
+        DisplaySettingsManager::instance().subject_speed_flow_physical_units(), this,
+        [](PrintStatusPanel* self, int) { self->update_speed_flow_text(); },
+        DisplaySettingsManager::instance().get_subjects_lifetime());
     gcode_z_offset_observer_ = observe_int_sync<PrintStatusPanel>(
         printer_state_.get_gcode_z_offset_subject(), this,
         [](PrintStatusPanel* self, int microns) { self->on_gcode_z_offset_changed(microns); },
@@ -861,6 +874,7 @@ void PrintStatusPanel::init_subjects() {
     // (light and timelapse callbacks are registered by light_timelapse_controls_.init_subjects())
     register_xml_callbacks({
         {"on_print_status_tune", on_tune_clicked},
+        {"on_print_status_units_toggle", on_units_toggle_clicked},
         {"on_print_status_camera", on_print_status_camera},
         {"on_print_status_files", on_files_clicked},
         {"on_print_status_reprint", on_reprint_clicked},
@@ -2062,12 +2076,7 @@ void PrintStatusPanel::update_all_displays() {
     std::snprintf(bed_status_buf_, sizeof(bed_status_buf_), "%s", bed_status.c_str());
     lv_subject_copy_string(&bed_status_subject_, bed_status_buf_);
 
-    // Speeds
-    helix::format::format_percent(lifecycle_.speed_percent(), speed_buf_, sizeof(speed_buf_));
-    lv_subject_copy_string(&speed_subject_, speed_buf_);
-
-    helix::format::format_percent(lifecycle_.flow_percent(), flow_buf_, sizeof(flow_buf_));
-    lv_subject_copy_string(&flow_subject_, flow_buf_);
+    update_speed_flow_text();
 
     // Pause/Resume button icon + label are owned by PrintControlButtons now.
 }
@@ -2285,6 +2294,14 @@ void PrintStatusPanel::on_tune_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusPanel] on_tune_clicked");
     (void)e;
     get_global_print_status_panel().handle_tune_button();
+    LVGL_SAFE_EVENT_CB_END();
+}
+
+void PrintStatusPanel::on_units_toggle_clicked(lv_event_t* e) {
+    LVGL_SAFE_EVENT_CB_BEGIN("[PrintStatusPanel] on_units_toggle_clicked");
+    (void)e;
+    auto& settings = DisplaySettingsManager::instance();
+    settings.set_speed_flow_physical_units(!settings.get_speed_flow_physical_units());
     LVGL_SAFE_EVENT_CB_END();
 }
 
@@ -3334,20 +3351,35 @@ void PrintStatusPanel::on_print_filename_changed(const char* filename) {
 
 void PrintStatusPanel::on_speed_factor_changed(int speed) {
     lifecycle_.on_speed_changed(speed);
-    if (subjects_initialized_) {
-        helix::format::format_percent(lifecycle_.speed_percent(), speed_buf_, sizeof(speed_buf_));
-        lv_subject_copy_string(&speed_subject_, speed_buf_);
-    }
+    update_speed_flow_text();
     spdlog::trace("[{}] Speed factor updated: {}%", get_name(), speed);
 }
 
 void PrintStatusPanel::on_flow_factor_changed(int flow) {
     lifecycle_.on_flow_changed(flow);
-    if (subjects_initialized_) {
-        helix::format::format_percent(lifecycle_.flow_percent(), flow_buf_, sizeof(flow_buf_));
+    update_speed_flow_text();
+    spdlog::trace("[{}] Flow factor updated: {}%", get_name(), flow);
+}
+
+void PrintStatusPanel::update_speed_flow_text() {
+    if (!subjects_initialized_) {
+        return;
+    }
+    auto text = helix::tune::status_speed_flow_text(
+        DisplaySettingsManager::instance().get_speed_flow_physical_units(),
+        lifecycle_.speed_percent(), lifecycle_.flow_percent(),
+        lv_subject_get_int(printer_state_.get_live_velocity_subject()),
+        lv_subject_get_int(printer_state_.get_live_extruder_velocity_subject()));
+    // The extruder velocity observer fires several times a second; only a
+    // changed string is worth a relabel.
+    if (text.speed != speed_buf_) {
+        std::snprintf(speed_buf_, sizeof(speed_buf_), "%s", text.speed.c_str());
+        lv_subject_copy_string(&speed_subject_, speed_buf_);
+    }
+    if (text.flow != flow_buf_) {
+        std::snprintf(flow_buf_, sizeof(flow_buf_), "%s", text.flow.c_str());
         lv_subject_copy_string(&flow_subject_, flow_buf_);
     }
-    spdlog::trace("[{}] Flow factor updated: {}%", get_name(), flow);
 }
 
 void PrintStatusPanel::on_gcode_z_offset_changed(int /* microns */) {

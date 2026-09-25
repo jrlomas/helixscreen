@@ -616,6 +616,22 @@ EOF
   [[ "$output" == *"^src/"* ]]
 }
 
+@test "the coverage gate fails on empty locale values via CI's pytest" {
+  # The dry run proves a KEY exists; `make translation-sync` writes a new key
+  # as an EMPTY placeholder, and an empty value renders as empty text in that
+  # locale (the English-tag fallback only fires on a MISSING key). The gate
+  # must run the same scan CI's Code Quality job runs -
+  # tests/python/test_cpp_translation_coverage.py - so a tree the hook passes
+  # cannot fail CI on the same rule.
+  if [ ! -x .venv/bin/python ]; then
+    skip "translations venv not set up (run 'make venv-setup')"
+  fi
+  run bash -c "sed -n '/^qc_translation_coverage() {/,/^}/p' scripts/quality-checks.sh"
+  [ "$status" -eq 0 ]
+  contains "tests/python/test_cpp_translation_coverage.py" "$output"
+  contains "-m pytest" "$output"
+}
+
 # A missing .venv used to turn this gate into a warning in every mode. The full
 # sweep is what pre-push and CI run, and a fresh clone (a cloud session, a new
 # box) has no .venv until someone runs `make venv-setup`, so the last gate before
@@ -2729,4 +2745,37 @@ EOF
     run override_store_offenders "$d"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
+}
+
+# --- Slot-index validation lives on the subscription base (#1624) ---
+#
+# AmsSubscriptionBackend::validate_slot_index() is the one answer to "is this
+# slot index valid", bounded by slot_index_bound_locked(). A backend that
+# declares its own validate_slot_index() hides the base's for every caller in
+# that class, and each copy picks its own bound. A backend whose range is not
+# total_slots overrides the bound.
+
+slot_validator_offenders() {
+    local root="${1:-include}"
+    grep -nE 'AmsError[[:space:]]+validate_slot_index(_locked)?[[:space:]]*\(' \
+        "$root"/ams_backend_*.h 2>/dev/null || true
+}
+
+@test "no AMS backend header declares its own validate_slot_index()" {
+    run slot_validator_offenders include
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "the slot-validator gate fires on a backend-local copy" {
+    local d="${BATS_TEST_TMPDIR}/offender"
+    mkdir -p "$d"
+    cat > "$d/ams_backend_thing.h" <<'EOF'
+class AmsBackendThing : public AmsSubscriptionBackend {
+    AmsError validate_slot_index(int slot_index) const;
+};
+EOF
+    run slot_validator_offenders "$d"
+    [ "$status" -eq 0 ]
+    contains "validate_slot_index" "$output"
 }

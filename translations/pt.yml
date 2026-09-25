@@ -56,6 +56,7 @@ translations:
   1 event queued: 1 evento na fila
   1 hour ago: há 1 hora
   1 layer: 1 camada
+  1 line in helixscreen.env was ignored: '1 linha do helixscreen.env foi ignorada'
   1 min: '1 min'
   1 min ago: há 1 min
   1 minute: 1 minuto
@@ -169,7 +170,11 @@ translations:
   Add Widget: Adicionar Widget
   Add custom filament: Adicionar filamento personalizado
   Add page: 'Adicionar página'
+  Add to Queue: Adicionar à fila
   Added to Spoolman: Adicionado ao Spoolman
+  Added to queue (position {}): Adicionado à fila (posição {})
+  Added to queue (position {}) - queue is paused: Adicionado à fila (posição {}) – a fila está pausada
+  Adding to queue...: Adicionando à fila...
   Address: Endereço
   Adjust screen brightness level: Ajustar nível de brilho da tela
   Adjust screws, then re-probe.: Ajuste os parafusos, depois sonde novamente.
@@ -245,6 +250,7 @@ translations:
     do sensor
   Assisted Retract: 'Retração assistida'
   Assisting: Assistindo
+  At least {} lines in helixscreen.env were ignored: 'Pelo menos {} linhas do helixscreen.env foram ignoradas'
   Authentication failed: Falha na autenticação
   Auto: Automático
   Auto Bed Mesh: Malha da Mesa Automática
@@ -468,6 +474,7 @@ translations:
   Cancel Print: Cancelar Impressão
   Cancel macro not configured: Macro de cancelar não configurado
   Cancelled: Cancelado
+  'Cannot add to queue: internal error': 'Não foi possível adicionar à fila: erro interno'
   Cannot be changed from here on a multi-unit MMU: Não pode ser alterado aqui em um MMU de várias unidades
   'Cannot control timelapse: printer not connected': 'Não é possível controlar timelapse:
     impressora não conectada'
@@ -736,6 +743,7 @@ translations:
   Copy failed - use SSH manually: Falha ao copiar - use SSH manualmente
   Corner roundness: Arredondamento dos cantos
   Correction (Ki): Correção (Ki)
+  Could not add to queue: Não foi possível adicionar à fila
   Could not analyze PRINT_START macro. Some print options may be unavailable.: Não
     foi possível analisar a macro PRINT_START. Algumas opções de impressão podem estar
     indisponíveis.
@@ -749,6 +757,7 @@ translations:
   Could not parse tips database: Não foi possível analisar o banco de dados de dicas
   Could not reach Spoolman at: Não foi possível alcançar o Spoolman em
   Could not read the screw adjustments from the printer: Não foi possível ler os ajustes dos parafusos da impressora
+  Could not remove the job from the queue: Não foi possível remover o trabalho da fila
   Could not resolve printer RFCOMM channel: Não foi possível resolver o canal RFCOMM
     da impressora
   Could not save filament: Não foi possível salvar o filamento
@@ -845,8 +854,9 @@ translations:
   Detecting...: Detectando...
   Detection Length: Comprimento de Detecção
   Detection Mode: Modo de Detecção
+  Detection turned off: Detecção desligada
   Dev: Dev
-  Dev channel requires dev_url in config: Canal dev requer dev_url na configuração
+  Dev channel requires dev_url in update_urls.json: Canal dev requer dev_url em update_urls.json
   Device: Dispositivo
   Device Section: Seção de dispositivo
   Device connected: 'Dispositivo conectado'
@@ -1260,6 +1270,7 @@ translations:
   File: Arquivo
   File Size: Tamanho do Arquivo
   File Will Stop the Printer: 'O arquivo vai parar a impressora'
+  'File not found: {}': 'Arquivo não encontrado: {}'
   Filename: Nome do Arquivo
   Filter Fan: Ventoinha do Filtro
   'Filter Fan: Off': 'Ventoinha do Filtro: Desligado'
@@ -1278,6 +1289,8 @@ translations:
     extrusor
   Firmware restarting...: Reiniciando firmware...
   Firmware saved X = Y's value; the measured X result was discarded: O firmware salvou o valor de Y para X; o resultado medido de X foi descartado
+  'Fix: chmod 644 {}, then restart': 'Correção: chmod 644 {}, depois reinicie'
+  'Fix: chown {} {}, then restart': 'Correção: chown {} {}, depois reinicie'
   FlashForge Adventurer 5M: FlashForge Adventurer 5M
   FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
@@ -1558,6 +1571,7 @@ translations:
   Invalid value type: 'Tipo de valor inválido'
   Issue description: Descrição do problema
   It can be un-archived in Spoolman's web UI.: Pode ser desarquivado na interface web do Spoolman.
+  It has not reported its slots yet. Try again in a moment.: Ainda não informou seus slots. Tente novamente em instantes.
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: Está preso entre o sensor do hub e a engrenagem do hub. Abra o CFS e desobstrua o hub antes de tentar novamente
   It's a new spool: É um carretel novo
   Jammed at the Toolhead: Atolado no cabeçote
@@ -1866,6 +1880,7 @@ translations:
   Multi-Filament System Status: 'Status do sistema multi-filamento'
   'Multi-Filament System is busy: {}': 'Sistema multi-filamento ocupado: {}'
   Multi-Filament System not available: Sistema multi-filamento não disponível
+  Multi-filament system not ready: Sistema multifilamento não está pronto
   Must home axes first: Deve referenciar os eixos primeiro
   My Custom Theme: Meu Tema Personalizado
   My Panel: Meu Painel
@@ -2140,7 +2155,9 @@ translations:
   Path B: Caminho B
   Pause: Pausar
   Pause macro not configured: Macro de pausa não configurado
+  Pause on Detection: Pausar ao detectar
   Pause the print first, then load, unload, or change filament: Pause a impressão primeiro, depois carregue, descarregue ou troque o filamento
+  Pause the print when a failure is seen (off = warn only): Pausa a impressão quando uma falha é vista (desligado = apenas avisar)
   Pause, resume, or stop the print: Pausar, retomar ou parar a impressão
   Paused: Pausado
   Paused (attention needed): Pausado (atenção necessária)
@@ -2629,6 +2646,7 @@ translations:
     continuou travando na inicialização. Abra as Configurações para corrigir o problema
     e reinicie.
   Safety & Notifications: Segurança e notificações
+  Same spool in {}? Tap Clear if it is a new one.: 'Mesmo carretel em {}? Toque em Limpar se for um novo.'
   Sample: Amostra
   Sample %d/%d: Amostra %d/%d
   Sample Dialog: Diálogo de Exemplo
@@ -2710,6 +2728,7 @@ translations:
   Security: Segurança
   Security, network, host, and administration: Segurança, rede, host e administração
   See exactly what data will be sent: Veja exatamente quais dados serão enviados
+  See the log: 'Verifique o registro'
   See the quick tour of HelixScreen again: Veja novamente o tour rápido do HelixScreen
   Select: Selecionar
   Select 'None' if you don't have a filament sensor, or if you don't want to pause on runout.: Selecione
@@ -2867,6 +2886,8 @@ translations:
   Source: Fonte
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod por Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: Detecção de espaguete
+  Spaghetti detected: Espaguete detectado
   Spaghetti detected — print paused: Espaguete detectado — impressão pausada
   Speaker: Alto-falante
   Speed: Velocidade
@@ -2926,6 +2947,7 @@ translations:
   Start anyway?: 'Iniciar mesmo assim?'
   Start at: Começar em
   Start failed: Falha ao iniciar
+  'Start next: {}': 'Iniciar próximo: {}'
   Start over: Recomeçar
   Start print anyway?: Iniciar impressão mesmo assim?
   Started: Iniciado
@@ -2934,6 +2956,7 @@ translations:
   Starting nozzle clean...: Iniciando limpeza do bico...
   Starting print...: Iniciando impressão...
   Starting...: Iniciando...
+  Starts after the current print: Começa depois da impressão atual
   Startup Brightness: Brilho na inicialização
   Startup, auto-control, and macro devices: Inicialização, controle automático e dispositivos
     de macro
@@ -2982,12 +3005,10 @@ translations:
   Switches to a backup spool on runout: Troca para um carretel de reserva ao acabar
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : Voltar para PID altera como este aquecedor é controlado e depois o calibra. Isso leva vários minutos em temperatura.
-  Switching back to PID changes how this heater is controlled.: Voltar para PID altera como este aquecedor é controlado.
   Switching back to PID requires a config change and Klipper restart.: Voltar para PID requer alteração de configuração e reinicialização do Klipper.
   Switching heater control to MPC. Klipper will restart.: Alterando controle do aquecedor
     para MPC. Klipper será reiniciado.
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: Mudar para MPC altera como este aquecedor é controlado e depois o calibra. Isso leva vários minutos em temperatura.
-  Switching to MPC changes how this heater is controlled.: Mudar para MPC altera como este aquecedor é controlado.
   Switching to MPC requires a config change and Klipper restart.: Mudar para MPC requer
     alteração de configuração e reinicialização do Klipper.
   Sync with Spoolman: Sincronizar com Spoolman
@@ -3314,6 +3335,7 @@ translations:
   Turn On: Ligar
   Turn On LEDs: 'Ligar os LEDs'
   Turn endless spool on, then set the backup gate: 'Ative o carretel infinito e depois defina o Gate de reserva'
+  Turn off detection: Desligar detecção
   Turn on LEDs when printer starts: Ligar LEDs quando a impressora iniciar
   Turn the extruder heater off after a load or unload finishes: Desliga o aquecedor do extrusor ao concluir um carregamento ou descarregamento
   Turn the picture to match how the screen is mounted. Applies after restart.: Gira a imagem para corresponder à montagem da tela. Aplicado após reiniciar.
@@ -3376,6 +3398,8 @@ translations:
   Unretract Speed: Velocidade de Desretração
   Unsupported tape width: Largura de fita não suportada
   'Unsupported tape width: ': 'Largura de fita não suportada: '
+  'Up next: {}': 'A seguir: {}'
+  'Up next: {} (+{})': 'A seguir: {} (+{})'
   Up to date: Atualizado
   Update: Atualizar
   Update Available: Atualização Disponível
@@ -3460,6 +3484,7 @@ translations:
   Warn: Aviso
   Warning: Aviso
   Warnings & errors: 'Avisos e erros'
+  Watch the camera during a print for failed prints: Observa a câmera durante a impressão para detectar impressões com falha
   Weak battery: Bateria fraca
   Webcam: Webcam
   Website (optional): Site (opcional)
@@ -3605,6 +3630,10 @@ translations:
   feeder not in automatic mode: 'alimentador não está em modo automático'
   filament sensor disabled: 'sensor de filamento desativado'
   heated bed: mesa aquecida
+  'helixscreen.env ignored: owned by uid {}': 'helixscreen.env ignorado: pertence ao uid {}'
+  'helixscreen.env ignored: untrusted symlink chain': 'helixscreen.env ignorado: cadeia de links simbólicos não confiável'
+  'helixscreen.env ignored: writable by other users': 'helixscreen.env ignorado: gravável por outros usuários'
+  'helixscreen.env ignored: {}': 'helixscreen.env ignorado: {}'
   idle: ocioso
   in unit {} slot {}: na unidade {} slot {}
   layers: camadas
@@ -3662,6 +3691,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} está instalado mas sua troca para carretel reserva está desligada, então não haverá troca automática.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} está instalado, mas não foi possível ler sua configuração de carretel reserva - não conte com uma troca automática.'
   '{} is not set up on this printer': '{} não está configurado nesta impressora'
+  '{} lines in helixscreen.env were ignored': '{} linhas do helixscreen.env foram ignoradas'
   '{} macro not configured': Macro {} não configurado
   '{} matches.': '{} corresponde.'
   '{} may cause unintended changes. Are you sure?': '{} pode causar alterações não

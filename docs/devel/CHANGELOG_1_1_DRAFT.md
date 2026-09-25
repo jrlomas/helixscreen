@@ -121,6 +121,19 @@ what gets saved.
   lines places ticks at the slicer's own percentages, anything else at file position. A print
   whose gcode was never fetched (an external start during the setup wizard, or a file too
   large to preview) simply shows no ticks.
+- **Spaghetti detection, built in (#1378)** - installing HelixScreen on a K2 Plus stops the
+  stock AI failure-detection loop along with the stock UI, so HelixScreen ships its own
+  detector: during a print it runs Creality's own `/usr/bin/detection` on camera snapshots at
+  the interval and threshold the printer's `ai_control` settings already hold, and never
+  writes them. A confirmed detection pauses the print and opens a dialog offering Resume,
+  Abort, Reduce Sensitivity or Turn off detection. The whole pipeline is vendor-neutral: any
+  detection source only reports, and two settings in Safety & Notifications decide what
+  happens - **Spaghetti Detection** (watch at all) and **Pause on Detection** (pause, or only
+  warn). On the first start both are seeded once from the printer's own stored choice
+  (`switch` / `pausePrint`) and are HelixScreen's from then on. Printers whose firmware
+  pauses by itself, like the U1, are never double-paused and always get the response dialog
+  (their Pause on Detection row hides; the firmware's pause is not HelixScreen's to govern).
+  The rows appear only on printers with detection hardware.
 - **Power-loss recovery works on Qidi printers (#1716)** - on a Q2, Q1 Pro or Plus 4 running
   the stock firmware, the resume dialog now appears after a print was cut short by a power
   loss, offering the printer's own `RESUME_INTERRUPTED` flow or a clean discard.
@@ -132,6 +145,20 @@ what gets saved.
   until it ships, a Z-Mod machine reports a dock sensor error at boot until its first tool
   change, and colour or material edits stay on the screen instead of being saved to the
   printer. All of this is verified against a simulated printer, not yet on the hardware.
+- **A print can be queued while another one runs** - while a job prints, or is still
+  preparing before its first layer, the file view's Print button becomes Add to Queue with
+  a clock icon, and a toast confirms the job's position. The pre-print options you set are
+  saved with the queued job and come back when it starts; the filament mapping is not
+  saved, it is worked out when the job starts. Needs Moonraker's `[job_queue]` component;
+  with `automatic_transition: True` in `moonraker.conf` the options card is hidden while
+  queueing, because Moonraker starts queued jobs itself.
+- **The queue is visible while a print runs, and starting the next job is one tap** - an
+  "Up next: name (+N)" line on the print status screen and the home print card names the
+  first queued job; tapping it mid-print opens the Job Queue. The completion dialog gains
+  a **Start next** button. Tapping the line, that button or a queue row while the printer
+  is idle opens the file in the file view with its saved options already set - check the
+  bed is clear, tap Print, and the job leaves the queue only once the print actually
+  starts.
 
 ### Changed
 
@@ -277,6 +304,12 @@ what gets saved.
   boxes on the Moonraker connection step opened empty instead of carrying the default
   (127.0.0.1 and port 7125), so the whole address had to be typed by hand. Both fields are
   seeded again.
+- **Starting a job from the Job Queue skipped the normal print checks** - a tap removed the
+  job from the queue and started the file directly, bypassing the pre-print options, the
+  filament mapping and every start gate, and it did nothing without a notice whenever a
+  print was still preparing or running. A queued job now opens in the file view with its
+  saved options and goes through the same start pipeline as any other print; it leaves the
+  queue only once the print has actually started, and a busy printer says so.
 
 ### Internal
 

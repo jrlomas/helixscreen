@@ -176,6 +176,19 @@ class PrintSelectDetailView : public OverlayBase {
     }
 
     /**
+     * @brief Set callback fired from on_deactivating().
+     *
+     * Every close path funnels through that hook — the back button and
+     * backdrop via hide(), but also ESC / go_back() and a navbar switch,
+     * which pop the overlay without the owning panel's hide function. The
+     * panel wires its back-out bookkeeping (a pending queued start) here so
+     * those paths cannot miss it.
+     */
+    void set_on_dismissed(std::function<void()> callback) {
+        on_dismissed_cb_ = std::move(callback);
+    }
+
+    /**
      * @brief Handle a tap on the filament card.
      *
      * Gates on the active backend's remap strategy and, when applicable, fires
@@ -356,6 +369,27 @@ class PrintSelectDetailView : public OverlayBase {
     [[nodiscard]] PrintPreparationManager* get_prep_manager() const {
         return prep_manager_.get();
     }
+
+    /**
+     * @brief Current toggle state of every rendered option row (id -> on)
+     *
+     * The queue path's snapshot of the detail view's option rows: what gets
+     * stored with the queued job so it can be re-applied when the job starts.
+     */
+    [[nodiscard]] std::map<std::string, bool> collect_option_states() const;
+
+    /**
+     * @brief Override the NEXT render's initial option-row states
+     *
+     * The queued-job start path's counterpart of collect_option_states():
+     * states are handed back before show() so the rows for that one file open
+     * as they were saved, not at default_enabled. Applied in on_activate()
+     * right after populate_option_rows() re-initializes the rows, then
+     * consumed — a later show starts from defaults again. Ids with no row are
+     * dropped by the renderer's set_state(); ids the seed does not mention
+     * keep their defaults.
+     */
+    void seed_option_states(std::map<std::string, bool> overrides);
 
     /**
      * @brief Get current filament mappings from the mapping card
@@ -770,6 +804,10 @@ class PrintSelectDetailView : public OverlayBase {
     lv_obj_t* pre_print_options_container_ = nullptr;
     std::string last_rendered_printer_type_;
 
+    // States handed over by seed_option_states(), applied over the freshly
+    // populated rows by the next on_activate() and consumed there.
+    std::map<std::string, bool> pending_option_seed_;
+
     // === Cached show() parameters (used by on_activate) ===
     std::string current_filename_;
     std::string current_path_;
@@ -801,6 +839,7 @@ class PrintSelectDetailView : public OverlayBase {
     // informational.
     std::function<void()> on_remap_requested_;
     std::function<void()> on_plugin_setup_requested_;
+    std::function<void()> on_dismissed_cb_;
 
     // === Internal Methods ===
 

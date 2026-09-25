@@ -1218,12 +1218,13 @@ AmsError AmsBackendQidi::do_load_filament(int slot_index) {
     int unload_temp = QIDI_DEFAULT_LOAD_TEMP_C;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (system_info_.units.empty()) {
-            return AmsErrorHelper::not_supported("QIDI Box: no unit configured");
+        if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+            return err;
         }
         const SlotInfo* target = system_info_.get_slot_global(slot_index);
         if (!target) {
-            return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
+            return AmsErrorHelper::invalid_slot(lane_noun(), slot_index,
+                                                slot_index_bound_locked() - 1);
         }
         load_temp = load_temp_for_slot(*target);
         // If a *different* slot is already in the extruder, retract it first —
@@ -1277,9 +1278,6 @@ AmsError AmsBackendQidi::do_unload_filament(int slot_index) {
     int target_slot = slot_index; // for the EXTRUDER_UNLOAD fallback
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (system_info_.units.empty()) {
-            return AmsErrorHelper::not_supported("QIDI Box: no unit configured");
-        }
         if (slot_index == -1) {
             // Active slot: find the LOADED one and use its profile temperature.
             const SlotInfo* loaded = nullptr;
@@ -1299,10 +1297,13 @@ AmsError AmsBackendQidi::do_unload_filament(int slot_index) {
             }
             unload_temp = load_temp_for_slot(*loaded);
             target_slot = loaded->global_index;
+        } else if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+            return err;
         } else if (const SlotInfo* slot = system_info_.get_slot_global(slot_index)) {
             unload_temp = load_temp_for_slot(*slot);
         } else {
-            return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
+            return AmsErrorHelper::invalid_slot(lane_noun(), slot_index,
+                                                slot_index_bound_locked() - 1);
         }
     }
 
@@ -1406,11 +1407,8 @@ AmsError AmsBackendQidi::eject_lane(int slot_index) {
     spdlog::info("{} eject_lane(slot={})", backend_log_tag(), slot_index);
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (system_info_.units.empty()) {
-            return AmsErrorHelper::not_supported("QIDI Box: no unit configured");
-        }
-        if (!system_info_.get_slot_global(slot_index)) {
-            return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
+        if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+            return err;
         }
     }
     // Max 4 dialect: the multi_color_controller state machine owns filament ops and
@@ -1518,11 +1516,8 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
     std::vector<std::string> staged_echoes;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (system_info_.units.empty()) {
-            return AmsErrorHelper::not_supported("QIDI Box: no unit configured");
-        }
-        if (!system_info_.get_slot_global(slot_index)) {
-            return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
+        if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+            return err;
         }
         // Stage the override so a later spool swap has something to clear and
         // a restart reloads what the user chose.
@@ -1649,11 +1644,8 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
 
 AmsError AmsBackendQidi::sync_external_identity(int slot_index, const SlotInfo& /*info*/) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (system_info_.units.empty()) {
-        return AmsErrorHelper::not_supported("QIDI Box: no unit configured");
-    }
-    if (!system_info_.get_slot_global(slot_index)) {
-        return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
+    if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+        return err;
     }
     // Only a person's edit reaches the box's save_variables, and this backend
     // keeps no other store for a slot's identity, so a synced value has nowhere
@@ -1676,11 +1668,8 @@ AmsError AmsBackendQidi::set_tool_mapping_impl(int tool_number, int slot_index) 
     }
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (system_info_.units.empty()) {
-            return AmsErrorHelper::not_supported("QIDI Box: no unit configured");
-        }
-        if (!system_info_.get_slot_global(slot_index)) {
-            return AmsErrorHelper::not_supported("QIDI Box: slot index out of range");
+        if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+            return err;
         }
     }
     // box_extras.py stores `value_t<N> = "slot<M>"` — same shape we parse on

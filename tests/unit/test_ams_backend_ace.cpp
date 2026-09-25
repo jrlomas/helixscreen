@@ -1075,12 +1075,14 @@ TEST_CASE("ACE apply_user_edit writes to store", "[ams][ace][filament_slot_overr
     edit.brand = "Polymaker";
     edit.spool_name = "PolyLite PLA Orange";
     edit.spoolman_id = 42;
+    edit.spoolman_filament_id = 55;
     edit.remaining_weight_g = 850.0f;
     edit.material = "PLA";
     edit.color_rgb = 0xFF5500;
 
     auto err = helix::test::apply_edit(backend, 0, edit);
     REQUIRE(err.success());
+    REQUIRE(backend.get_slot_info(0).spoolman_filament_id == 55);
 
     // In-memory map carries the override.
     auto staged = AceTestAccess::get_override(backend, 0);
@@ -1095,6 +1097,7 @@ TEST_CASE("ACE apply_user_edit writes to store", "[ams][ace][filament_slot_overr
     REQUIRE(!stored.is_null());
     CHECK(stored["vendor"] == "Polymaker");
     CHECK(stored["spool_id"] == 42);
+    CHECK(stored["helix_spoolman_filament_id"] == 55);
     CHECK(stored["material"] == "PLA");
     CHECK(stored["color"] == "#FF5500");
 

@@ -1207,6 +1207,7 @@ AmsError AmsBackendMock::write_slot(int slot_index, const SlotInfo& info) {
         entry->info.catalog_id = info.catalog_id;
         entry->info.product_name = info.product_name;
         entry->info.spoolman_id = info.spoolman_id;
+        entry->info.spoolman_filament_id = info.spoolman_filament_id;
         entry->info.spool_name = info.spool_name;
         entry->info.remaining_weight_g = info.remaining_weight_g;
         entry->info.total_weight_g = info.total_weight_g;

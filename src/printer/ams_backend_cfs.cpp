@@ -1893,6 +1893,10 @@ SlotInfo AmsBackendCfs::get_slot_info(int slot_index) const {
     return SlotInfo{};
 }
 
+int AmsBackendCfs::slot_index_bound_locked() const {
+    return slot_index_ceiling(system_info_.total_slots);
+}
+
 SlotInfo* AmsBackendCfs::cached_slot_locked(int slot_index) {
     return system_info_.get_slot_global(slot_index);
 }
@@ -1980,10 +1984,12 @@ AmsError AmsBackendCfs::do_load_filament(int slot_index) {
     int max_slot;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        max_slot = slot_index_ceiling(system_info_.total_slots) - 1;
-    }
-    if (!bypass && (slot_index < 0 || slot_index > max_slot)) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, max_slot);
+        max_slot = slot_index_bound_locked() - 1;
+        if (!bypass) {
+            if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+                return err;
+            }
+        }
     }
 
     std::string gcode;
@@ -2163,6 +2169,7 @@ void write_filament_fields(SlotInfo& bay, const SlotInfo& info) {
     bay.product_name = info.product_name;
     bay.spool_name = info.spool_name;
     bay.spoolman_id = info.spoolman_id;
+    bay.spoolman_filament_id = info.spoolman_filament_id;
     bay.spoolman_vendor_id = info.spoolman_vendor_id;
     bay.remaining_weight_g = info.remaining_weight_g;
     bay.total_weight_g = info.total_weight_g;
@@ -2323,12 +2330,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
     // legitimate user choice and we don't want to silently drop it. The
     // caller (apply_user_edit, which sets color_set=true on the override) is
     // responsible for only invoking this when a real color was chosen.
-    int slot_count;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        slot_count = slot_index_ceiling(system_info_.total_slots);
-    }
-    if (global_index < 0 || global_index >= slot_count) {
+    if (!validate_slot_index(global_index).success()) {
         spdlog::debug("{} push_slot_identity_to_firmware: skipping invalid slot {}",
                       backend_log_tag(), global_index);
         return;
@@ -2572,16 +2574,11 @@ AmsError AmsBackendCfs::set_tool_mapping_impl(int tool_number, int slot_index) {
     // Creality's own UI can hold a high key while fewer units are attached —
     // so its bound is the TNN alphabet.
     constexpr int CFS_MAX_SLOTS = 16; // 4 units × 4 slots
-    int slot_count;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        slot_count = slot_index_ceiling(system_info_.total_slots);
-    }
     if (tool_number < 0 || tool_number >= CFS_MAX_SLOTS) {
         return AmsErrorHelper::tool_out_of_range(tool_number);
     }
-    if (slot_index < 0 || slot_index >= slot_count) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, slot_count - 1);
+    if (auto err = validate_slot_index(slot_index); !err.success()) {
+        return err;
     }
 
     std::string tool_tnn = CfsMaterialDb::slot_to_tnn(tool_number);
@@ -4548,19 +4545,18 @@ void AmsBackendCfs::strip_spoolman_link_on_runout_locked(SlotInfo& slot, int slo
     // the fresh spool the user loads keeps inheriting a correctly-labeled
     // lane while the exhausted spool's id stops being re-asserted onto it.
     o.spoolman_id = 0;
+    o.spoolman_filament_id = 0;
     o.spoolman_vendor_id = 0;
     o.updated_at = std::chrono::system_clock::now();
 
     // Immediate visibility on the live SlotInfo. apply_resolved_lane runs after
-    // this, so the zero only survives if no lane source still declares the id,
-    // which is what the retraction below is for.
+    // this, so the zeros only survive if no lane source still declares the ids,
+    // which is what the retraction below is for. The three handles die together:
+    // a filament definition id whose spool id is gone names nothing, and the
+    // paint would put it back on the very next poll.
     slot.spoolman_id = 0;
-    slot.spoolman_vendor_id = 0;
-    // Zero over zero: no wire field carries a filament id and the poll
-    // replaces the units wholesale, so the live slot holds none here. Dropped
-    // anyway so the three handles cannot come apart once a filament id
-    // survives a poll (#1632).
     slot.spoolman_filament_id = 0;
+    slot.spoolman_vendor_id = 0;
 
     // The lane's own records lose the handle too, and only the handle: #1390 is
     // exactly that a bay's identity outlives the spool and labels the one
@@ -4569,6 +4565,7 @@ void AmsBackendCfs::strip_spoolman_link_on_runout_locked(SlotInfo& slot, int slo
     // record the binding they chose, the server's the spool it named.
     helix::ams::retract_lane_declarations(lane_id(slot_index), [](helix::ams::Observation& kept) {
         kept.spoolman_id.reset();
+        kept.spoolman_filament_id.reset();
         kept.spoolman_vendor_id.reset();
     });
 

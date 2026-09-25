@@ -24,14 +24,14 @@
  * |   +-- Session events (app launch)
  * |   +-- Print outcome events (success/failure/cancel)
  * +-- Device Identity (UUID v4 + salt, stored in config dir)
- * +-- LVGL Subject (reactive binding for settings toggle)
  * +-- Transmission (Phase 3: batched HTTPS POST to endpoint)
  * @endcode
  *
  * Thread safety:
  * - Event recording (record_session, record_print_outcome) is thread-safe
  *   and may be called from any thread.
- * - LVGL subject access (enabled_subject) must happen on the main LVGL thread.
+ * - set_enabled() must be called from the main LVGL thread (it manages
+ *   LVGL timers); enabled_ itself is atomic for reads from any thread.
  * - Transmission (try_send) runs on a background thread.
  *
  * Usage:
@@ -39,7 +39,7 @@
  * auto& telemetry = TelemetryManager::instance();
  * telemetry.init("config");  // Load persisted state
  *
- * // User enables telemetry in settings UI (binds to enabled_subject())
+ * // User enables telemetry in settings UI (SystemSettingsManager calls this)
  * telemetry.set_enabled(true);
  *
  * // Record events throughout the application lifetime
@@ -731,18 +731,6 @@ class TelemetryManager {
     // LVGL SUBJECT (for settings UI binding)
     // =========================================================================
 
-    /**
-     * @brief Get LVGL subject for the enabled state
-     *
-     * Integer subject: 0 = disabled, 1 = enabled. Bind this to a toggle
-     * switch in the settings XML for reactive opt-in/opt-out.
-     *
-     * Must be accessed on the main LVGL thread only.
-     *
-     * @return Pointer to the enabled state subject
-     */
-    lv_subject_t* enabled_subject();
-
     // =========================================================================
     // CONSTANTS
     // =========================================================================
@@ -1140,25 +1128,6 @@ class TelemetryManager {
 
     /// Directory for persistence files (queue, device ID, enabled state)
     std::string config_dir_;
-
-    // =========================================================================
-    // LVGL SUBJECT
-    // =========================================================================
-
-    /// Integer subject: 0 = disabled, 1 = enabled
-    lv_subject_t enabled_subject_{};
-
-    /// RAII cleanup for the enabled subject
-    SubjectManager subjects_;
-
-    /// Expires the deferred `enabled_subject_` write. Declared after `subjects_`
-    /// so reverse-order member destruction invalidates it before the subject it
-    /// protects; also invalidated by shutdown(), which is where the subject is
-    /// actually torn down (#1165, #1146).
-    helix::AsyncLifetimeGuard async_lifetime_;
-
-    /// Guards against double-initialization of subjects
-    bool subjects_initialized_{false};
 
     /// Set to true when crash.txt is suppressed due to update_success.json being present
     bool had_update_restart_ = false;

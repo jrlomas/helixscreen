@@ -11,6 +11,7 @@
 #include "display_numbering.h"
 #include "lvgl_test_fixture.h"
 #include "static_subject_registry.h"
+#include "test_helpers/log_capture.h"
 #include "tool_state.h"
 
 #include <string>
@@ -122,6 +123,20 @@ TEST_CASE_METHOD(ToolStateFixture, "[ToolState][ams-topology] clear_ams_topology
 
     // After clear, tools_ is empty (callers must invoke init_tools again to repopulate)
     REQUIRE(ToolState::instance().tool_count() == 0);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "[ToolState][ams-topology] clear_ams_topology before init is a silent no-op",
+                 "[tool-state][ams][ams-topology]") {
+    // Shutdown clears AMS backends unconditionally, including on paths such as
+    // --version that exit before any subject is initialized.
+    ToolState::instance().deinit_subjects();
+    REQUIRE_FALSE(ToolState::instance().ams_topology_active());
+
+    helix::TextLogCapture capture;
+    ToolState::instance().clear_ams_topology();
+
+    CHECK_FALSE(capture.contains("clear_ams_topology() before init_subjects()"));
 }
 
 TEST_CASE_METHOD(ToolStateFixture,

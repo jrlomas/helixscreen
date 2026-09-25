@@ -55,6 +55,7 @@
   <translation tag="1 event queued" ru="1 событие в очереди"/>
   <translation tag="1 hour ago" ru="1 ч. назад"/>
   <translation tag="1 layer" ru="1 слой"/>
+  <translation tag="1 line in helixscreen.env was ignored" ru="В helixscreen.env проигнорирована 1 строка"/>
   <translation tag="1 min" ru="1 мин"/>
   <translation tag="1 min ago" ru="1 мин. назад"/>
   <translation tag="1 minute" ru="1 минута"/>
@@ -160,7 +161,11 @@
   <translation tag="Add Widget" ru="Добавить виджет"/>
   <translation tag="Add custom filament" ru="Добавить свой филамент"/>
   <translation tag="Add page" ru="Добавить страницу"/>
+  <translation tag="Add to Queue" ru="Добавить в очередь"/>
   <translation tag="Added to Spoolman" ru="Добавлено в Spoolman"/>
+  <translation tag="Added to queue (position {})" ru="Добавлено в очередь (позиция {})"/>
+  <translation tag="Added to queue (position {}) - queue is paused" ru="Добавлено в очередь (позиция {}) – очередь на паузе"/>
+  <translation tag="Adding to queue..." ru="Добавление в очередь..."/>
   <translation tag="Address" ru="Адрес"/>
   <translation tag="Adjust screen brightness level" ru="Настроить уровень яркости экрана"/>
   <translation tag="Adjust screws, then re-probe." ru="Отрегулируйте винты, затем перепроверьте."/>
@@ -219,6 +224,7 @@
   <translation tag="Assign a role to enable sensor monitoring" ru="Назначьте роль для мониторинга датчика"/>
   <translation tag="Assisted Retract" ru="Ретракция с поддержкой"/>
   <translation tag="Assisting" ru="Помощь"/>
+  <translation tag="At least {} lines in helixscreen.env were ignored" ru="В helixscreen.env проигнорировано не менее {} строк"/>
   <translation tag="Authentication failed" ru="Ошибка аутентификации"/>
   <translation tag="Auto" ru="Авто"/>
   <translation tag="Auto Bed Mesh" ru="Авто сетка стола"/>
@@ -425,6 +431,7 @@
   <translation tag="Cancel Print" ru="Отменить печать"/>
   <translation tag="Cancel macro not configured" ru="Макрос отмены не настроен"/>
   <translation tag="Cancelled" ru="Отменено"/>
+  <translation tag="Cannot add to queue: internal error" ru="Не удалось добавить в очередь: внутренняя ошибка"/>
   <translation tag="Cannot be changed from here on a multi-unit MMU" ru="Нельзя изменить здесь на MMU с несколькими блоками"/>
   <translation tag="Cannot control timelapse: printer not connected" ru="Невозможно управлять таймлапсом: принтер не подключён"/>
   <translation tag="Cannot delete file: printer not connected" ru="Невозможно удалить файл: принтер не подключён"/>
@@ -655,6 +662,7 @@
   <translation tag="Copy failed - use SSH manually" ru="Ошибка копирования - используйте SSH вручную"/>
   <translation tag="Corner roundness" ru="Скругление углов"/>
   <translation tag="Correction (Ki)" ru="Коррекция (Ki)"/>
+  <translation tag="Could not add to queue" ru="Не удалось добавить в очередь"/>
   <translation tag="Could not analyze PRINT_START macro. Some print options may be unavailable." ru="Не удалось проанализировать макрос PRINT_START. Некоторые параметры печати могут быть недоступны."/>
   <translation tag="Could not answer the connection request" ru="Не удалось ответить на запрос подключения"/>
   <translation tag="Could not check webcam status.&#10;Check printer connection." ru="Не удалось проверить статус веб-камеры.&#10;Проверьте подключение принтера."/>
@@ -665,6 +673,7 @@
   <translation tag="Could not parse tips database" ru="Не удалось разобрать базу данных советов"/>
   <translation tag="Could not reach Spoolman at" ru="Не удалось связаться со Spoolman по адресу"/>
   <translation tag="Could not read the screw adjustments from the printer" ru="Не удалось получить данные регулировки винтов от принтера"/>
+  <translation tag="Could not remove the job from the queue" ru="Не удалось удалить задание из очереди"/>
   <translation tag="Could not resolve printer RFCOMM channel" ru="Не удалось определить RFCOMM-канал принтера"/>
   <translation tag="Could not save filament" ru="Не удалось сохранить филамент"/>
   <translation tag="Could not save the mesh as &apos;{}&apos;: {}" ru="Не удалось сохранить сетку как &apos;{}&apos;: {}"/>
@@ -759,8 +768,9 @@
   <translation tag="Detecting..." ru="Обнаружение..."/>
   <translation tag="Detection Length" ru="Длина обнаружения"/>
   <translation tag="Detection Mode" ru="Режим обнаружения"/>
+  <translation tag="Detection turned off" ru="Обнаружение отключено"/>
   <translation tag="Dev" ru="Разработка"/>
-  <translation tag="Dev channel requires dev_url in config" ru="Dev-канал требует dev_url в конфиге"/>
+  <translation tag="Dev channel requires dev_url in update_urls.json" ru="Dev-канал требует dev_url в update_urls.json"/>
   <translation tag="Device" ru="Устройство"/>
   <translation tag="Device Section" ru="Раздел устройств"/>
   <translation tag="Device connected" ru="Устройство подключено"/>
@@ -1145,6 +1155,7 @@
   <translation tag="File" ru="Файл"/>
   <translation tag="File Size" ru="Размер файла"/>
   <translation tag="File Will Stop the Printer" ru="Файл остановит принтер"/>
+  <translation tag="File not found: {}" ru="Файл не найден: {}"/>
   <translation tag="Filename" ru="Имя файла"/>
   <translation tag="Filter Fan" ru="Вентилятор фильтра"/>
   <translation tag="Filter Fan: Off" ru="Вентилятор фильтра: Выкл"/>
@@ -1161,6 +1172,8 @@
   <translation tag="Firmware reports no bypass. Enable if you feed filament straight to the extruder" ru="Прошивка не сообщает о байпасе. Включите, если филамент подаётся прямо в экструдер."/>
   <translation tag="Firmware restarting..." ru="Перезапуск прошивки..."/>
   <translation tag="Firmware saved X = Y&apos;s value; the measured X result was discarded" ru="Прошивка сохранила для X значение Y; результат измерения X был отброшен"/>
+  <translation tag="Fix: chmod 644 {}, then restart" ru="Исправление: chmod 644 {}, затем перезапустите"/>
+  <translation tag="Fix: chown {} {}, then restart" ru="Исправление: chown {} {}, затем перезапустите"/>
   <translation tag="FlashForge Adventurer 5M" ru="FlashForge Adventurer 5M"/>
   <translation tag="FlashForge Adventurer 5X" ru="FlashForge Adventurer 5X"/>
   <translation tag="FlashForge IFS" ru="FlashForge IFS"/>
@@ -1406,6 +1419,7 @@
   <translation tag="Invalid value type" ru="Неверный тип значения"/>
   <translation tag="Issue description" ru="Описание проблемы"/>
   <translation tag="It can be un-archived in Spoolman&apos;s web UI." ru="Это можно восстановить из архива в веб-интерфейсе Spoolman."/>
+  <translation tag="It has not reported its slots yet. Try again in a moment." ru="Она ещё не сообщила о своих слотах. Повторите попытку через минуту."/>
   <translation tag="It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying" ru="Он зажат между датчиком хаба и его шестернёй. Откройте CFS, освободите хаб и повторите"/>
   <translation tag="It&apos;s a new spool" ru="Это новая катушка"/>
   <translation tag="Jammed at the Toolhead" ru="Замятие в печатающей головке"/>
@@ -1682,6 +1696,7 @@
   <translation tag="Multi-Filament System Status" ru="Состояние мультифиламентной системы"/>
   <translation tag="Multi-Filament System is busy: {}" ru="Мультифиламентная система занята: {}"/>
   <translation tag="Multi-Filament System not available" ru="Мультифиламентная система недоступна"/>
+  <translation tag="Multi-filament system not ready" ru="Мультифиламентная система не готова"/>
   <translation tag="Must home axes first" ru="Сначала необходимо запарковать оси"/>
   <translation tag="My Custom Theme" ru="Моя тема"/>
   <translation tag="My Panel" ru="Моя панель"/>
@@ -1939,7 +1954,9 @@
   <translation tag="Path B" ru="Путь B"/>
   <translation tag="Pause" ru="Пауза"/>
   <translation tag="Pause macro not configured" ru="Макрос паузы не настроен"/>
+  <translation tag="Pause on Detection" ru="Пауза при обнаружении"/>
   <translation tag="Pause the print first, then load, unload, or change filament" ru="Сначала приостановите печать, затем загружайте, выгружайте или меняйте филамент"/>
+  <translation tag="Pause the print when a failure is seen (off = warn only)" ru="Приостанавливает печать при обнаружении сбоя (выкл. = только предупреждать)"/>
   <translation tag="Pause, resume, or stop the print" ru="Пауза, продолжение или остановка"/>
   <translation tag="Paused" ru="Приостановлено"/>
   <translation tag="Paused (attention needed)" ru="Приостановлено (требует внимания)"/>
@@ -2379,6 +2396,7 @@
   <translation tag="SWITCH SENSORS" ru="КОНЦЕВЫЕ ДАТЧИКИ"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." ru="Активен безопасный режим. Подключение к принтеру отключено, так как приложение постоянно аварийно завершалось при запуске. Откройте настройки, чтобы устранить проблему, затем перезагрузите."/>
   <translation tag="Safety &amp; Notifications" ru="Безопасность и уведомления"/>
+  <translation tag="Same spool in {}? Tap Clear if it is a new one." ru="Та же катушка в {}? Нажмите «Очистить», если это новая."/>
   <translation tag="Sample" ru="Образец"/>
   <translation tag="Sample %d/%d" ru="Образец %d/%d"/>
   <translation tag="Sample Dialog" ru="Пример диалога"/>
@@ -2448,6 +2466,7 @@
   <translation tag="Security" ru="Безопасность"/>
   <translation tag="Security, network, host, and administration" ru="Безопасность, сеть, хост и администрирование"/>
   <translation tag="See exactly what data will be sent" ru="Посмотрите, какие именно данные будут отправлены"/>
+  <translation tag="See the log" ru="Подробности в журнале"/>
   <translation tag="See the quick tour of HelixScreen again" ru="Посмотреть краткий тур по HelixScreen снова"/>
   <translation tag="Select" ru="Выбрать"/>
   <translation tag="Select &apos;None&apos; if you don&apos;t have a filament sensor, or if you don&apos;t want to pause on runout." ru="Выберите &apos;Нет&apos;, если у вас нет датчика филамента или пауза по окончании филамента не нужна."/>
@@ -2581,6 +2600,8 @@
   <translation tag="Sounds" ru="Звуки"/>
   <translation tag="Source" ru="Источник"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" ru="Space Debris мод от Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti Detection" ru="Обнаружение «спагетти»"/>
+  <translation tag="Spaghetti detected" ru="Обнаружены «спагетти»"/>
   <translation tag="Spaghetti detected — print paused" ru="Обнаружены «спагетти» — печать приостановлена"/>
   <translation tag="Speaker" ru="Динамик"/>
   <translation tag="Speed" ru="Скорость"/>
@@ -2637,6 +2658,7 @@
   <translation tag="Start anyway?" ru="Всё равно начать?"/>
   <translation tag="Start at" ru="Начать с"/>
   <translation tag="Start failed" ru="Ошибка запуска"/>
+  <translation tag="Start next: {}" ru="Запустить следующую: {}"/>
   <translation tag="Start over" ru="Начать заново"/>
   <translation tag="Start print anyway?" ru="Всё равно начать печать?"/>
   <translation tag="Started" ru="Начато"/>
@@ -2645,6 +2667,7 @@
   <translation tag="Starting nozzle clean..." ru="Запуск очистки сопла..."/>
   <translation tag="Starting print..." ru="Запуск печати..."/>
   <translation tag="Starting..." ru="Запуск..."/>
+  <translation tag="Starts after the current print" ru="Начнётся после текущей печати"/>
   <translation tag="Startup Brightness" ru="Яркость при запуске"/>
   <translation tag="Startup, auto-control, and macro devices" ru="Запуск, автоуправление и макро-устройства"/>
   <translation tag="State" ru="Состояние"/>
@@ -2684,11 +2707,9 @@
   <translation tag="Switched to {}" ru="Переключено на {}"/>
   <translation tag="Switches to a backup spool on runout" ru="При обрыве переключится на резервную катушку"/>
   <translation tag="Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." ru="Возврат к PID меняет способ управления этим нагревателем, а затем калибрует его. Это занимает несколько минут при рабочей температуре."/>
-  <translation tag="Switching back to PID changes how this heater is controlled." ru="Возврат к PID меняет способ управления этим нагревателем."/>
   <translation tag="Switching back to PID requires a config change and Klipper restart." ru="Возврат к PID требует изменения конфига и перезапуска Klipper."/>
   <translation tag="Switching heater control to MPC. Klipper will restart." ru="Переключение управления нагревом на MPC. Klipper перезапустится."/>
   <translation tag="Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." ru="Переход на MPC меняет способ управления этим нагревателем, а затем калибрует его. Это занимает несколько минут при рабочей температуре."/>
-  <translation tag="Switching to MPC changes how this heater is controlled." ru="Переход на MPC меняет способ управления этим нагревателем."/>
   <translation tag="Switching to MPC requires a config change and Klipper restart." ru="Переход на MPC требует изменения конфига и перезапуска Klipper."/>
   <translation tag="Sync with Spoolman" ru="Синхронизация со Spoolman"/>
   <translation tag="Sysfs" ru="Sysfs"/>
@@ -2946,6 +2967,7 @@
   <translation tag="Turn On" ru="Включить"/>
   <translation tag="Turn On LEDs" ru="Включить LED"/>
   <translation tag="Turn endless spool on, then set the backup gate" ru="Включите бесконечную катушку, затем задайте резервный шлюз"/>
+  <translation tag="Turn off detection" ru="Отключить обнаружение"/>
   <translation tag="Turn on LEDs when printer starts" ru="Включать LED при запуске принтера"/>
   <translation tag="Turn the extruder heater off after a load or unload finishes" ru="Выключать нагреватель экструдера после загрузки или выгрузки"/>
   <translation tag="Turn the picture to match how the screen is mounted. Applies after restart." ru="Поворачивает изображение в соответствии с положением экрана. Применяется после перезапуска."/>
@@ -3004,6 +3026,8 @@
   <translation tag="Unretract Speed" ru="Скорость возврата"/>
   <translation tag="Unsupported tape width" ru="Неподдерживаемая ширина ленты"/>
   <translation tag="Unsupported tape width: " ru="Неподдерживаемая ширина ленты: "/>
+  <translation tag="Up next: {}" ru="Далее: {}"/>
+  <translation tag="Up next: {} (+{})" ru="Далее: {} (+{})"/>
   <translation tag="Up to date" ru="Актуальная версия"/>
   <translation tag="Update" ru="Обновить"/>
   <translation tag="Update Available" ru="Доступно обновление"/>
@@ -3084,6 +3108,7 @@
   <translation tag="Warn" ru="Предупреждение"/>
   <translation tag="Warning" ru="Предупреждение"/>
   <translation tag="Warnings &amp; errors" ru="Предупреждения и ошибки"/>
+  <translation tag="Watch the camera during a print for failed prints" ru="Следит за камерой во время печати, выявляя неудачные печати"/>
   <translation tag="Weak battery" ru="Слабый заряд"/>
   <translation tag="Webcam" ru="Веб-камера"/>
   <translation tag="Website (optional)" ru="Веб-сайт (необязательно)"/>
@@ -3208,6 +3233,10 @@
   <translation tag="feeder not in automatic mode" ru="фидер не в автоматическом режиме"/>
   <translation tag="filament sensor disabled" ru="датчик филамента отключён"/>
   <translation tag="heated bed" ru="подогреваемый стол"/>
+  <translation tag="helixscreen.env ignored: owned by uid {}" ru="helixscreen.env проигнорирован: принадлежит uid {}"/>
+  <translation tag="helixscreen.env ignored: untrusted symlink chain" ru="helixscreen.env проигнорирован: недоверенная цепочка символических ссылок"/>
+  <translation tag="helixscreen.env ignored: writable by other users" ru="helixscreen.env проигнорирован: доступен на запись другим пользователям"/>
+  <translation tag="helixscreen.env ignored: {}" ru="helixscreen.env проигнорирован: {}"/>
   <translation tag="idle" ru="простой"/>
   <translation tag="in unit {} slot {}" ru="в блоке {} слот {}"/>
   <translation tag="layers" ru="слои"/>
@@ -3259,6 +3288,7 @@
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." ru="{} установлен, но переключение на резервную катушку выключено, поэтому автоматической замены не будет."/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." ru="{} установлен, но прочитать его настройку резервной катушки не удалось - не рассчитывайте на автоматическую замену."/>
   <translation tag="{} is not set up on this printer" ru="{} не настроен на этом принтере"/>
+  <translation tag="{} lines in helixscreen.env were ignored" ru="В helixscreen.env проигнорировано строк: {}"/>
   <translation tag="{} macro not configured" ru="Макрос {} не настроен"/>
   <translation tag="{} matches." ru="{} подходит."/>
   <translation tag="{} may cause unintended changes. Are you sure?" ru="{} может привести к непреднамеренным изменениям. Вы уверены?"/>

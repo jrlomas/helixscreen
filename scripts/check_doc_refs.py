@@ -116,6 +116,9 @@ EXEMPT_SUBSTRINGS = (
     # Written at runtime.
     'settings-test.json',  # seeded by --test
     'config/settings.json',
+    # Device runtime state (systemd StateDirectory): root-owned files a dev
+    # box never has, e.g. update_urls.json.
+    'var/lib/helixscreen/',
     # Created by `make apply-patches` (patches/libhv-dns-resolver-fallback.patch).
     'dns_resolv.',
     # Build outputs.
@@ -132,6 +135,10 @@ EXEMPT_SUBSTRINGS = (
     # were read from those sources rather than inferred. Nothing named
     # medusahc.py will ever exist in this repo.
     'medusahc.py',
+    # Lives on the printer and is read-only to us: CREALITY_K2_SUPPORT.md
+    # cites the K2's own AI tuning state. Nothing named user_print_refer.json
+    # will ever exist in this repo.
+    'user_print_refer.json',
 )
 
 # Tokens that are obviously placeholders rather than real paths.

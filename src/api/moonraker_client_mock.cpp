@@ -1434,6 +1434,12 @@ void MoonrakerClientMock::discover_printer(
                 spdlog::debug("[MoonrakerClientMock] Spoolman available: {}",
                               mock_spoolman_enabled_);
 
+                // The mock's server.info always lists job_queue among its
+                // components (mock_server_components), so queue-mode UI paths
+                // are reachable under --test the way they are on a printer
+                // with the component enabled.
+                get_printer_state().set_job_queue_available(true);
+
                 // Set webcam availability during discovery (matches real Moonraker behavior)
                 // Real client queries server.webcams.list during discovery
                 if (mock_webcams_.empty()) {
@@ -5645,6 +5651,14 @@ void MoonrakerClientMock::temperature_simulation_loop() {
         // Get Z offset for gcode_move
         double z_offset = gcode_offset_z_.load();
 
+        // Commanded feed rate swings between perimeter and infill speeds while
+        // printing. The extruder feeds 0.2 x 0.45 mm lines of 1.75 mm filament
+        // at the overridden speed and flow, as motion_report would measure it.
+        const bool extruding = print_state_str == "printing";
+        const double feed_mm_s = extruding ? 105.0 + 45.0 * std::sin(elapsed / 7.0) : 0.0;
+        const double extruder_mm_s =
+            feed_mm_s * (speed / 100.0) * (0.2 * 0.45 / 2.405) * (flow / 100.0);
+
         // Build notification JSON (enhanced Moonraker format with layer info)
         json status_obj = {
             {"extruder",
@@ -5665,9 +5679,13 @@ void MoonrakerClientMock::temperature_simulation_loop() {
               {"kinematics", discovery_.hardware().kinematics()}}},
             {"gcode_move",
              {{"gcode_position", {x, y, z, 0.0}}, // Commanded position (same as toolhead in mock)
+              {"speed", feed_mm_s},
               {"speed_factor", speed / 100.0},
               {"extrude_factor", flow / 100.0},
               {"homing_origin", {0.0, 0.0, z_offset, 0.0}}}},
+            {"motion_report",
+             {{"live_velocity", feed_mm_s * (speed / 100.0)},
+              {"live_extruder_velocity", extruder_mm_s}}},
             {"fan", {{"speed", fan / 255.0}}},
             {"print_stats",
              {{"state", print_state_str},

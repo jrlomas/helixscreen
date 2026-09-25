@@ -436,14 +436,6 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     void initialize_slots(int gate_count);
 
     /**
-     * @brief Validate gate index is within range
-     *
-     * @param gate_index Slot index to validate
-     * @return AmsError (SUCCESS if valid, INVALID_GATE otherwise)
-     */
-    AmsError validate_slot_index(int gate_index) const;
-
-    /**
      * @brief Query configfile.settings.mmu to determine tip method
      *
      * Reads form_tip_macro from Happy Hare config via Moonraker.

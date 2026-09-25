@@ -21,6 +21,8 @@
 #include "in_flight_guard.h"
 #include "print_file_data.h"
 #include "print_history_manager.h"
+#include "print_select_button_view.h"
+#include "queued_job_options.h"
 #include "subject_managed_panel.h"
 #include "usb_backend.h"
 
@@ -452,6 +454,16 @@ class PrintSelectPanel : public PanelBase {
     void hide_detail_view();
 
     /**
+     * @brief The back-out rule for a pending queued start: an untapped start
+     * for exactly the shown file is discarded with the closing view.
+     *
+     * Shared by hide_detail_view() and the detail view's on_dismissed
+     * callback, fired from PrintSelectDetailView::on_deactivating() when
+     * ESC / go_back() pops the overlay without this panel's hide function.
+     */
+    void discard_pending_queued_start_on_back_out();
+
+    /**
      * @brief Access the print start controller (owned by this panel).
      *
      * Exposed so the print status panel's reprint path can route through the
@@ -512,6 +524,34 @@ class PrintSelectPanel : public PanelBase {
      *              callback re-enters with force=true to bypass the check.
      */
     void start_print(bool force = false);
+
+    /**
+     * @brief Queue the selected file instead of starting it.
+     *
+     * The print button's queue-mode action: post_job the original filename,
+     * store the detail view's current option row states against the new
+     * job_id, and toast the queue position. Does not touch
+     * PrintStartController — the job starts through the normal pipeline when
+     * its turn comes.
+     */
+    void add_to_queue();
+
+    /**
+     * @brief Start a queued job through this panel's detail view.
+     *
+     * The job queue's single entry point (the job queue modal's row tap, the
+     * completion screen's "Start next"): guards on can_start_new_print()
+     * (warn and leave the job queued when the printer is busy), reads the
+     * job's saved option states from the store, and opens the file's detail
+     * view seeded with them — the same pipeline a manual Print tap uses, so
+     * every start-time check (filament, preflight, printer-stopping commands)
+     * runs as usual. The queue entry and its stored options are deleted only
+     * from the print-start success callback, never here: a missing file, a
+     * back-out or a failed start leaves the job queued.
+     *
+     * @param job The queue entry to start (job_id + queued filename)
+     */
+    void start_queued_job(const JobQueueEntry& job);
 
     /**
      * @brief Show the enriched pre-flight filament check modal.
@@ -625,6 +665,18 @@ class PrintSelectPanel : public PanelBase {
     /// binding)
     lv_subject_t can_print_subject_;
 
+    /// Button mode subject: 0 = Print, 1 = Queue (label + card visibility)
+    lv_subject_t button_mode_subject_;
+
+    /// Button label text ("Print" / "Add to Queue")
+    lv_subject_t button_label_subject_;
+    char button_label_buffer_[32];
+
+    /// Button icon name ("print" / "progress_clock"), bound to the button's
+    /// icon slot the same way the label subject binds to its text
+    lv_subject_t button_icon_subject_;
+    char button_icon_buffer_[32];
+
     /// Why the print button is disabled, shown beside it. Empty when it is not.
     lv_subject_t blocked_reason_subject_;
     char blocked_reason_buffer_[96];
@@ -648,6 +700,40 @@ class PrintSelectPanel : public PanelBase {
     int selected_success_count_ = 0;      ///< Success count of selected file
     std::string
         pending_file_selection_; ///< File to auto-select when list is populated (--select-file)
+
+    /// A queued job being walked through the detail view toward a start.
+    /// Lives from start_queued_job() until one of:
+    ///   - print-start confirmed  -> finish_pending_queued_job() removes the
+    ///     queue entry and the stored options, then clears this;
+    ///   - the user backs out / opens a different file -> cleared, job stays
+    ///     queued for its own row tap;
+    ///   - a failed start -> kept, so a later confirmed retry still removes
+    ///     the job that was finally started.
+    struct PendingQueuedStart {
+        std::string job_id;
+        std::string filename;                 ///< gcodes-relative, as queued
+        helix::queue::QueuedJobOptions saved; ///< options read from the store (empty is valid)
+        bool saved_loaded = false;            ///< the options read has answered
+        bool start_attempted = false;         ///< a Print tap for THIS file is in flight
+        bool listing_arrived = false;         ///< a file listing answered after the request
+    };
+    std::optional<PendingQueuedStart> pending_queued_start_;
+
+    /// Queue-entry removal + stored-options delete, from the print-start
+    /// success callback only.
+    void finish_pending_queued_job();
+
+    /// Open the pending queued job's file, or toast "file not found" once the
+    /// post-request listing has answered and the file is provably absent.
+    /// The options read and the listing answer in either order; whichever
+    /// lands second is the one that can decide. No-op once a Print tap is in
+    /// flight — from then the pending entry exists only to remove the job on
+    /// a confirmed start, and a refresh must not re-open the file.
+    void try_open_pending_queued_job();
+
+    /// current_path_ + "/" + selected_filename_buffer_, or the bare name at
+    /// the gcodes root — the shape queued filenames have.
+    [[nodiscard]] std::string composed_selected_filename() const;
     bool return_to_home_on_close_ = false;
     int return_home_activation_count_ = 0;
     PrintSelectViewMode current_view_mode_ = PrintSelectViewMode::CARD;
@@ -713,8 +799,9 @@ class PrintSelectPanel : public PanelBase {
     ObserverGuard connection_observer_;
     ObserverGuard print_state_observer_; ///< Observes print state to enable/disable print button
     ObserverGuard
-        print_in_progress_observer_;      ///< Observes workflow in-progress for immediate disable
-    ObserverGuard helix_plugin_observer_; ///< Observes plugin status for install prompt
+        print_in_progress_observer_; ///< Observes workflow in-progress for immediate disable
+    ObserverGuard print_lifecycle_observer_; ///< Observes the lifecycle the button decision reads
+    ObserverGuard helix_plugin_observer_;    ///< Observes plugin status for install prompt
 
     /// Observer for PrintHistoryManager - updates file status when history changes
     helix::HistoryChangedCallback history_observer_;
@@ -807,11 +894,20 @@ class PrintSelectPanel : public PanelBase {
     void update_empty_state();
 
     /**
-     * @brief Update print button enabled/disabled state based on print job state
+     * @brief Update print button state from the pure mode decision
      *
-     * Disables the print button when a print is in progress to prevent concurrent prints.
+     * Maps compute_print_select_button_view() onto the panel's subjects: mode
+     * (Print/Queue), enabled/disabled, label text and the one-line reason or
+     * queue hint shown beside the button.
      */
     void update_print_button_state();
+
+    /// The mode the button was last rendered in; routes the tap.
+    helix::ui::PrintSelectButtonMode print_button_mode_ = helix::ui::PrintSelectButtonMode::Print;
+
+    /// True while an add_job request is on the wire: taps are ignored and the
+    /// button renders disabled until its callback lands (success or failure).
+    bool queue_add_in_flight_ = false;
 
     /**
      * @brief Update sort indicator icons on column headers

@@ -313,8 +313,11 @@ void PreheatWidget::handle_apply() {
         return;
     }
 
+    const auto& hw = printer_state_.get_discovery();
     execute_material_preheat(
-        api, material_name,
+        api,
+        plan_material_preheat(
+            MaterialSettingsManager::instance().find_override_for_material(material_name), hw),
         [this, &material_name]() {
             // Use the same targets as the label, including material overrides.
             const PreheatTargets t = targets_for_slot(selected_material_);
@@ -328,7 +331,7 @@ void PreheatWidget::handle_apply() {
                 "[PreheatWidget] Preheat {} applied (nozzle={}°C, bed={}°C, tool_target={})",
                 material_name, t.nozzle, t.bed, tool_target_);
         },
-        "[PreheatWidget]", printer_state_.get_discovery());
+        "[PreheatWidget]", hw);
 }
 
 void PreheatWidget::handle_cooldown() {

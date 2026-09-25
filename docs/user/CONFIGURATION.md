@@ -311,6 +311,13 @@ Located in the `theme` section:
 - `/var/log/helix-screen.log` (if writable)
 - `~/.local/share/helix-screen/helix.log` (fallback)
 
+The path must be an absolute `*.log` path under `/tmp`, `/var/log` or the
+install directory; a subdirectory of those must be owned by root or the
+HelixScreen user with no group or world write bit, and the path may not
+contain `..` or be a symlink. Anything else is refused with a warning and the
+default location is used, since `settings.json` is editable from the web UI
+and must not aim the log at arbitrary files.
+
 ### `log_level`
 **Type:** string
 **Default:** `"warn"`
@@ -347,6 +354,7 @@ Located in the `display` section:
     "bed_mesh_render_mode": 0,
     "bed_mesh_show_zero_plane": true,
     "page_scroll_buttons": false,
+    "speed_flow_physical_units": false,
     "ui_scale_percent": 0,
     "printer_image": ""
   }
@@ -507,6 +515,11 @@ The mode can be overridden per launch without touching settings. Precedence is c
 **Type:** boolean
 **Default:** `false`
 **Description:** Show up/down scroll buttons on long lists throughout the app. Useful on small screens or displays where drag-to-scroll feels unresponsive. See [Display & Sound Settings](guide/settings/display-sound.md#scroll-buttons) for details.
+
+### `speed_flow_physical_units`
+**Type:** boolean
+**Default:** `false`
+**Description:** Show speed and flow as the live toolhead speed in mm/s and the live volumetric flow in mm³/s instead of percentages, on the Print Status screen and as the leading value in the Print Tune overlay. Tapping the Speed / Flow line on Print Status, or either readout in the Tune overlay, flips it. See [Print Tune Overlay](guide/printing.md#print-tune-overlay).
 
 ### `ui_scale_percent`
 **Type:** integer
@@ -1689,16 +1702,34 @@ Located in the `plugins` section:
 
 ## Update Settings
 
-Located in the `update` section:
+`channel` lives in the `update` section of `settings.json`. The URL overrides
+(`dev_url`, `r2_url`) live in a separate root-owned file,
+`/var/lib/helixscreen/update_urls.json`, because the updater installs whatever
+those URLs serve and `settings.json` is editable from the web UI:
 
 ```json
 {
   "update": {
-    "channel": 0,
-    "dev_url": "",
-    "r2_url": ""
+    "channel": 0
   }
 }
+```
+
+```json
+{
+  "r2_url": "",
+  "dev_url": ""
+}
+```
+
+The override file only takes effect when it is owned by root or the user
+HelixScreen runs as and has no group or world write bit. `/var/lib/helixscreen`
+is created by the systemd unit or the init script on every platform; on a device
+where it is missing yet:
+
+```bash
+sudo mkdir -p /var/lib/helixscreen && sudo chown root:root /var/lib/helixscreen && sudo chmod 755 /var/lib/helixscreen
+sudo install -o root -g root -m 644 update_urls.json /var/lib/helixscreen/update_urls.json
 ```
 
 ### `channel`
@@ -1708,18 +1739,20 @@ Located in the `update` section:
 **Description:** Update channel selection:
 - `0` - **Stable**: Tries R2 CDN first (`{r2_url}/stable/manifest.json`), falls back to GitHub releases API
 - `1` - **Beta**: Tries R2 CDN first (`{r2_url}/beta/manifest.json`), falls back to GitHub pre-releases API
-- `2` - **Dev**: Uses `dev_url` if set (backward compat), otherwise uses R2 CDN (`{r2_url}/dev/manifest.json`)
+- `2` - **Dev**: Uses `dev_url` from the trusted override file if set, otherwise uses R2 CDN (`{r2_url}/dev/manifest.json`)
 
 Can also be changed from the Settings panel. Stable and Beta are offered on any
 install; **Dev** appears only when `beta_features` is enabled.
 
 ### `dev_url`
+**Where:** `/var/lib/helixscreen/update_urls.json`
 **Type:** string
 **Default:** `""` (empty)
 **Example:** `"https://releases.helixscreen.org/dev"`
 **Description:** Explicit base URL for the dev update channel. When set and `channel` is `2`, HelixScreen fetches `{dev_url}/manifest.json` directly, bypassing R2. When empty, the dev channel uses the R2 CDN path (`{r2_url}/dev/manifest.json`). Must use `http://` or `https://` scheme. Primarily used for local development servers or self-hosted setups that predate R2 support.
 
 ### `r2_url`
+**Where:** `/var/lib/helixscreen/update_urls.json`
 **Type:** string
 **Default:** `""` (uses built-in `https://releases.helixscreen.org`)
 **Example:** `"https://my-cdn.example.com"`
@@ -1955,6 +1988,11 @@ or in the environment before running the binary by hand. Do not put them in
 /etc/systemd/system/helixscreen.service: that unit is rewritten from the install-dir
 template on every start, so edits to it are discarded before the app launches.
 
+Values in helixscreen.env are plain text. Surrounding quotes are removed and nothing is
+expanded or run: a line whose value holds `$VAR`, `$(...)`, `${...}` or a backtick is
+ignored, so write the final value itself. Only the settings on this page and in the file's own comments
+are read from it; any other line is ignored and noted in the log.
+
 **Display & Input:**
 
 | Variable | Description |
@@ -2029,6 +2067,7 @@ Environment="HELIX_TOUCH_DEVICE=/dev/input/event0"
     "bed_mesh_render_mode": 0,
     "bed_mesh_show_zero_plane": true,
     "page_scroll_buttons": false,
+    "speed_flow_physical_units": false,
     "printer_image": ""
   },
 
@@ -2179,8 +2218,7 @@ Environment="HELIX_TOUCH_DEVICE=/dev/input/event0"
   },
 
   "update": {
-    "channel": 0,
-    "dev_url": ""
+    "channel": 0
   }
 }
 ```

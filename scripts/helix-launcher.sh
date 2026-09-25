@@ -27,6 +27,12 @@
 #   HELIX_LOG_DEST=<d>   Same as --log-dest (auto|journal|syslog|file|console)
 #   HELIX_LOG_FILE=<f>   Same as --log-file
 #
+# Exported to helix-screen, never read from the environment
+# (prestonbrown/helixscreen#1712): HELIX_ENV_FILE_REFUSED (whole-file
+# refusal: "kind|detail|expected|path") and HELIX_ENV_LINES_SKIPPED
+# ("label:reason" entries joined by '|', capped). The app turns them into
+# startup notifications; see docs/devel/ENVIRONMENT_VARIABLES.md.
+#
 # All other options are passed through to helix-screen.
 #
 # Logging behavior:
@@ -146,18 +152,30 @@ INSTALL_DIR="$(cd "${BIN_DIR}/.." && pwd)"
 # for a variable before exec'ing this script asks for it here rather than
 # forking a second parser of helixscreen.env (prestonbrown/helixscreen#1634).
 #
-# Trust gate for that parse: it evaluates file lines (`eval "export ..."`), so
-# a line like FOO=$(cmd) runs cmd as this launcher's user - root on every SysV
-# firmware device. That is acceptable only for a file owned by root or by this
-# launcher's own user, with no group or world write bit; anything else is a
-# file somebody else can rewrite into code this script would run. A file owned
-# by root or this user whose only fault is a write bit is repaired to 0644 in
-# place and loaded instead: web updates and deploys ship the file without
-# pinning it, and refusing there would blank settings on every update. A
-# refused file is skipped with a warning, and startup continues on built-in
-# defaults: the env file only ever supplies defaults, and a display that must
-# come up beats a config file. A file whose owner or mode cannot be read is
-# refused for the same reason - unverifiable is not trusted.
+# Values are literal text, never shell code: one pair of matching surrounding
+# quotes is stripped, and $VAR, $(...) and backticks stay as typed. Only the
+# keys helix_env_key_allowed accepts are exported, because this file reaches
+# the environment of root on every SysV firmware device and a key like
+# LD_PRELOAD or PATH, or a HELIX_* key a platform hook runs as a program,
+# would still be code execution.
+#
+# Trust gate, as defence in depth under that: the file is read only when it is
+# owned by root or by this launcher's own user, with no group or world write
+# bit. One more owner is trusted: the owner of the directory a symlinked env
+# file resolves into, when that directory has no group or world write bit, the
+# link sits in a directory owned by root or this user with none either, and
+# the link points straight at the file rather than through another link. That
+# is the printer_data layout, where the file must stay editable from Mainsail
+# and Fluidd: Moonraker saves an edit as its own user (lava on the Snapmaker
+# U1) while the launcher runs as root, and only root or this user could have
+# aimed the link there. A file with a trusted owner whose only fault is a
+# write bit is repaired to 0644 in place and loaded: web updates and deploys
+# ship the file without pinning it, and refusing there would blank settings
+# on every update. A refused file is skipped with a warning, and startup
+# continues on built-in defaults: the env file only ever supplies defaults,
+# and a display that must come up beats a config file. A file whose owner or
+# mode cannot be read is refused for the same reason - unverifiable is not
+# trusted.
 #
 # Both stat spellings dereference symlinks (-L): on the per-file installs the
 # env file is a symlink into printer_data/config, and stat without -L reports
@@ -172,25 +190,291 @@ helix_env_stat() {
     return 0
 }
 
+# Hard-link count (st_nlink) of an existing path, for the log-file gate.
+helix_env_nlink() {
+    stat -L -c '%h' "$1" 2>/dev/null && return 0
+    stat -L -f '%l' "$1" 2>/dev/null && return 0
+    return 0
+}
+
+# Keys the env file may set: exactly the settings it is meant to carry - every
+# key config/helixscreen.env names (a bats lint keeps the two in step), the
+# env-file settings the user docs list, the keys deploys and the init script
+# write or query, and the glibc knobs the heap-diagnostic and arena blocks
+# document as overrides. A positive list on purpose: directory keys such as
+# HELIX_DATA_DIR (the app chdirs there and dlopens plugins from it) and
+# HELIX_CONFIG_DIR stay off it, as does every other name (LD_*, PATH, IFS,
+# HOME, SHELL, ENV, BASH_ENV, PYTHON*, ...).
+helix_env_key_allowed() {
+    case "$1" in
+        HELIX_ALSA_DEVICE | HELIX_AUTO_QUIT_MS | HELIX_AUTO_SCREENSHOT | \
+            HELIX_BACKLIGHT_DEVICE | HELIX_COLOR_SWAP_RB | HELIX_DEBUG | \
+            HELIX_DEBUG_TOUCH | HELIX_DIAGNOSTIC_UPLOADS | \
+            HELIX_DISABLE_AUTO_UPDATES | HELIX_DISPLAY_BACKEND | \
+            HELIX_DISPLAY_ROTATION | HELIX_DPI | HELIX_DRM_DEVICE | \
+            HELIX_FB_DEVICE | HELIX_FORCE_STREAMING | HELIX_GCODE_MODE | \
+            HELIX_GCODE_STREAMING | HELIX_KEYBOARD_DEVICE | HELIX_LOG_DEST | \
+            HELIX_LOG_FILE | HELIX_LOG_LEVEL | HELIX_MOUSE_DEVICE | \
+            HELIX_NICE | HELIX_NO_SPLASH | HELIX_REMOTE_CONTROL | \
+            HELIX_REMOTE_HTTP_TOKEN | HELIX_REMOTE_SOCKET | \
+            HELIX_REQUIRE_POINTER | HELIX_SCREEN_SIZE | HELIX_SCROLL_GUARD | \
+            HELIX_SCROLL_GUARD_COOLDOWN_MS | HELIX_SKIP_SPLASH | HELIX_SSAO | \
+            HELIX_THEME | HELIX_TOUCH_CALIBRATE | HELIX_TOUCH_DEVICE | \
+            HELIX_TOUCH_SWAP_AXES | HELIX_USB_AUTOMOUNT | \
+            MALLOC_ARENA_MAX | MALLOC_CHECK_ | MALLOC_PERTURB_ | \
+            MOONRAKER_HOST | MOONRAKER_PORT)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+# Why KEY's literal VALUE is refused, printed; nothing (and status 1) when it
+# is fine. Shell syntax is refused for every key: the file does not run it,
+# and exporting it as text would turn a line like `$(openssl rand -hex 16)`
+# into a secret anyone can read here. The per-key rules cover values root acts
+# on: the launcher splices HELIX_DPI, HELIX_LOG_*, and HELIX_REMOTE_SOCKET
+# unquoted into the app's command line, the app writes the log file as root
+# (and echoes other settings into it, so a log aimed at a script is code), and
+# ALSA's file plugin popen()s a `|cmd` target.
+helix_env_value_refusal() {
+    case "$2" in
+        *'$('* | *'`'* | *'${'* | *'$'[A-Za-z_]*)
+            echo "holds shell syntax (\$VAR, \$(...), \${...} or a backtick), which this file does not run - write the final value itself"
+            return 0
+            ;;
+    esac
+    case "$1" in
+        HELIX_DPI | HELIX_LOG_DEST | HELIX_LOG_FILE | HELIX_LOG_LEVEL | HELIX_REMOTE_SOCKET)
+            case "$2" in
+                *[' 	*?[']*)
+                    echo "may not contain whitespace or * ? ["
+                    return 0
+                    ;;
+            esac
+            ;;
+    esac
+    case "$1" in
+        HELIX_LOG_FILE)
+            helix_env_log_file_ok "$2" && return 1
+            echo "must be a *.log file under /tmp/, /var/log/ or ${INSTALL_DIR:-the install dir}/, with no .. and not a symlink"
+            return 0
+            ;;
+        HELIX_REMOTE_SOCKET)
+            case "$2" in
+                */../* | */.. | */./*) ;;
+                /tmp/?* | /run/?*) return 1 ;;
+            esac
+            echo "must be a path under /tmp/ or /run/ with no .."
+            return 0
+            ;;
+        HELIX_NICE)
+            case "$2" in
+                [0-9] | 1[0-9]) return 1 ;;
+            esac
+            echo "must be 0-19 (a negative nice would let the UI starve Klipper)"
+            return 0
+            ;;
+        HELIX_ALSA_DEVICE)
+            case "$2" in
+                *'|'* | *file* | *tee*) ;;
+                default | sysdefault | sysdefault:* | hw:* | plughw:* | dmix:*) return 1 ;;
+            esac
+            echo "must be default, sysdefault[:...], hw:..., plughw:... or dmix:..."
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+# The only log files the env file may aim the app at: an absolute *.log path
+# whose parent resolves to /tmp, /var/log, or a directory under those or the
+# install dir that root or this user owns with no group/world write bit, with
+# no dot segments, no symlink at the file itself, and - when the file exists -
+# a single-link regular file owned by root or this user. Platform hooks pick
+# their own firmware log directories after this file loads, so nothing else
+# is needed.
+# ponytail: a link planted in /tmp after this check still races the app's
+# open; fs.protected_symlinks closes that on the kernels we ship to.
+helix_env_log_file_ok() {
+    case "$1" in
+        /*.log) ;;
+        *) return 1 ;;
+    esac
+    case "$1/" in
+        */../* | */./*) return 1 ;;
+    esac
+    [ -L "$1" ] && return 1
+    # An existing file must be a regular file with no other hard link, owned
+    # by root or this user: a planted hard link has the app append to an
+    # arbitrary file as root where fs.protected_hardlinks=0.
+    if [ -e "$1" ]; then
+        [ -f "$1" ] || return 1
+        _helf_nlink=$(helix_env_nlink "$1")
+        case "$_helf_nlink" in
+            *[!0-9]* | '') return 1 ;;
+            *) [ "$_helf_nlink" -gt 1 ] && return 1 ;;
+        esac
+        _helf_uid=$(id -u 2>/dev/null) || _helf_uid=""
+        [ -n "$_helf_uid" ] || return 1
+        _helf_fst=$(helix_env_stat "$1")
+        case "${_helf_fst%% *}" in
+            0 | "$_helf_uid") ;;
+            *) return 1 ;;
+        esac
+    fi
+    _helf_dir=$(readlink -f "${1%/*}" 2>/dev/null) || _helf_dir=""
+    _helf_inst=$(readlink -f "${INSTALL_DIR:-/nonexistent}" 2>/dev/null) || _helf_inst=""
+    _helf_ok=1
+    case "$_helf_dir/" in
+        /tmp/ | /var/log/) _helf_ok=0 ;;
+        /tmp/* | /var/log/*) _helf_ok=2 ;;
+        "$_helf_inst"/*) [ -n "$_helf_inst" ] && [ -n "$_helf_dir" ] && _helf_ok=2 ;;
+    esac
+    # A subdirectory must be one nobody else can swap for a symlink after
+    # this check: owned by root or this user, with no group/world write bit.
+    if [ "$_helf_ok" = "2" ]; then
+        _helf_ok=1
+        _helf_st=$(helix_env_stat "$_helf_dir")
+        _helf_uid=$(id -u 2>/dev/null) || _helf_uid=""
+        case "${_helf_st##* }" in
+            '' | *[!0-9]*) ;;
+            *)
+                case "${_helf_st%% *}" in
+                    0 | "$_helf_uid")
+                        [ -n "$_helf_uid" ] && [ "$((0${_helf_st##* } & 022))" = "0" ] && _helf_ok=0
+                        ;;
+                esac
+                ;;
+        esac
+    fi
+    unset _helf_dir _helf_inst _helf_st _helf_uid _helf_nlink _helf_fst
+    return $_helf_ok
+}
+
+# A POSIX identifier: the one rule for names from the file and --print-env.
+helix_env_is_name() {
+    case "$1" in
+        '' | [!A-Za-z_]* | *[!A-Za-z0-9_]*) return 1 ;;
+    esac
+    return 0
+}
+
+# Owner uid of REAL_DIR when it may hold the env file: REAL_DIR has no group
+# or world write bit, and LINK_DIR (where the symlink lives) is owned by root
+# or UID with none either. Prints 0 (root, trusted anyway) otherwise.
+# ponytail: judges the two directories only, not every ancestor; walk the
+# ancestors if the env file ever becomes code again.
+helix_env_dir_owner() {
+    _hed_link=$(helix_env_stat "$2")
+    _hed_real=$(helix_env_stat "$1")
+    _hed_out=0
+    case "${_hed_link%% *}" in
+        0 | "$3")
+            case "${_hed_link##* }${_hed_real##* }" in
+                '' | *[!0-9]*) ;;
+                *)
+                    if [ -n "$_hed_real" ] &&
+                        [ "$((0${_hed_link##* } & 022))" = "0" ] &&
+                        [ "$((0${_hed_real##* } & 022))" = "0" ]; then
+                        _hed_out="${_hed_real%% *}"
+                    fi
+                    ;;
+            esac
+            ;;
+    esac
+    echo "$_hed_out"
+    unset _hed_link _hed_real _hed_out
+}
+
+# Refuse the env file: log the detailed reason with the full fix, and hand a
+# structured record to the app (prestonbrown/helixscreen#1712) so the app
+# words the on-screen warning; the launcher's longer hint stays in the log.
+# Callers set _hef_kind (mode|owner|chain|other), _hef_detail (the offending
+# uid for owner, a short reason for other) and _hef_file (the path as
+# configured). The kind decides which fields the export carries, normalized
+# here so no refusal site has to clear a field: mode keeps neither middle,
+# owner keeps both (detail uid + _hef_expected chown target), other and chain
+# keep only the detail. kind|detail|expected|path, every field always present.
+helix_env_refuse() {
+    log "warning: $1 - env file skipped ($_hef_fix)"
+    case "$_hef_kind" in
+        owner) ;;
+        mode) _hef_detail=""; _hef_expected="" ;;
+        *) _hef_expected="" ;;
+    esac
+    export HELIX_ENV_FILE_REFUSED="$_hef_kind|$_hef_detail|$_hef_expected|$_hef_file"
+    helix_env_trust_cleanup
+}
+
+# Record one skipped line for the app (prestonbrown/helixscreen#1712):
+# append "label:reason" to _helix_skipped, which helix_load_env_file exports
+# as HELIX_ENV_LINES_SKIPPED once the parse finishes. Labels are the variable
+# name, or "line N" for a line with no parsable key; reasons are fixed
+# sentences that never contain the '|' separator. Past the cap one sentinel
+# entry ("more skipped") closes the list so the app can say "at least N"
+# instead of naming N as the whole story; its label has a space, so no
+# variable name or "line N" label can collide with it.
+HELIX_ENV_SKIP_CAP=12
+helix_env_note_skip() {
+    if [ "$_hes_count" -ge "$HELIX_ENV_SKIP_CAP" ]; then
+        if [ "$_hes_more" != 1 ]; then
+            _helix_skipped="${_helix_skipped}|more skipped:not every skipped line is listed"
+            _hes_more=1
+        fi
+        return 0
+    fi
+    _helix_skipped="${_helix_skipped}${_helix_skipped:+|}$1"
+    _hes_count=$((_hes_count + 1))
+}
+
 helix_env_file_trusted() {
-    _hef_stat=$(helix_env_stat "$1")
+    _hef_file="$1"
+    _hef_kind=other
+    _hef_detail=""
+    _hef_expected=""
+    _hef_real=$(readlink -f "$1" 2>/dev/null) || _hef_real="$1"
+    [ -n "$_hef_real" ] || _hef_real="$1"
     _hef_uid=$(id -u 2>/dev/null) || _hef_uid=""
+    _hef_dir_owner=0
+    if [ -L "$1" ] && [ -n "$_hef_uid" ]; then
+        # Only a link aimed straight at the file: a chain would let whoever
+        # owns the middle link choose which file this is.
+        _hef_hop=$(readlink "$1" 2>/dev/null) || _hef_hop=""
+        case "$_hef_hop" in
+            '') ;;
+            /*) ;;
+            *) _hef_hop="${1%/*}/$_hef_hop" ;;
+        esac
+        if [ -n "$_hef_hop" ] && [ ! -L "$_hef_hop" ]; then
+            _hef_dir_owner=$(helix_env_dir_owner "${_hef_real%/*}" "${1%/*}" "$_hef_uid")
+        fi
+    fi
+    if [ "$_hef_dir_owner" = "0" ]; then
+        _hef_expected="root:root"
+    else
+        _hef_expected="$_hef_dir_owner"
+    fi
+    _hef_fix="fix: chown $_hef_expected $_hef_real && chmod 644 $_hef_real"
+    _hef_stat=$(helix_env_stat "$1")
     if [ -z "$_hef_stat" ] || [ -z "$_hef_uid" ]; then
-        log "warning: cannot determine owner/mode of $1 - env file skipped (fix: chown root:root $1; chmod 644 $1)"
-        unset _hef_stat _hef_uid
+        _hef_detail="its owner or permissions could not be read"
+        helix_env_refuse "cannot determine owner/mode of $1"
         return 1
     fi
     _hef_owner="${_hef_stat%% *}"
     _hef_mode="${_hef_stat##* }"
-    if [ "$_hef_owner" != "0" ] && [ "$_hef_owner" != "$_hef_uid" ]; then
-        log "warning: $1 is owned by uid $_hef_owner, not root or this user (uid $_hef_uid) - env file skipped (fix: chown root:root $1; chmod 644 $1)"
-        unset _hef_stat _hef_uid _hef_owner _hef_mode
+    if [ "$_hef_owner" != "0" ] && [ "$_hef_owner" != "$_hef_uid" ] &&
+        [ "$_hef_owner" != "$_hef_dir_owner" ]; then
+        _hef_kind=owner
+        _hef_detail="$_hef_owner"
+        helix_env_refuse "$1 is owned by uid $_hef_owner, not root, this user (uid $_hef_uid) or the owner of its directory"
         return 1
     fi
     case "$_hef_mode" in
         '' | *[!0-9]*)
-            log "warning: unreadable mode '$_hef_mode' on $1 - env file skipped (fix: chmod 644 $1)"
-            unset _hef_stat _hef_uid _hef_owner _hef_mode
+            _hef_detail="its permissions could not be read"
+            helix_env_refuse "unreadable mode '$_hef_mode' on $1"
             return 1
             ;;
     esac
@@ -198,12 +482,11 @@ helix_env_file_trusted() {
     # the group+world write bits. Setuid/setgid digits are unaffected by the
     # mask, so a 4755 file is judged on its 755 alone.
     if [ "$((0$_hef_mode & 022))" != "0" ]; then
-        # The owner already passed the check above (root or this user), so the
-        # write bits are a shipping fault, not an attack: tighten the mode on
-        # the symlink's target and load the file if that settles it. The
-        # re-stat stays fail-closed - a chmod that reports success without
-        # taking effect still refuses the file.
-        _hef_real=$(readlink -f "$1" 2>/dev/null) || _hef_real="$1"
+        # The owner already passed the check above, so the write bits are a
+        # shipping fault, not an attack: tighten the mode on the symlink's
+        # target and load the file if that settles it. The re-stat stays
+        # fail-closed - a chmod that reports success without taking effect
+        # still refuses the file.
         if chmod 0644 "$_hef_real" 2>/dev/null; then
             _hef_again=$(helix_env_stat "$_hef_real")
             _hef_again_mode="${_hef_again##* }"
@@ -212,21 +495,72 @@ helix_env_file_trusted() {
                 *)
                     if [ "$((0$_hef_again_mode & 022))" = "0" ]; then
                         log "repaired $_hef_real from mode $_hef_mode to 0644 - env file loaded"
-                        unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_again _hef_again_mode
+                        helix_env_trust_cleanup
                         return 0
                     fi
                     ;;
             esac
         fi
-        log "warning: $1 (uid $_hef_owner, mode $_hef_mode) is group- or world-writable - env file skipped (fix: chmod 644 $1)"
-        unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_again _hef_again_mode
+        _hef_kind=mode
+        helix_env_refuse "$1 (uid $_hef_owner, mode $_hef_mode) is group- or world-writable"
         return 1
     fi
-    unset _hef_stat _hef_uid _hef_owner _hef_mode
+    helix_env_trust_cleanup
     return 0
 }
 
+helix_env_trust_cleanup() {
+    unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_dir_owner \
+        _hef_hop _hef_fix _hef_again _hef_again_mode _hef_kind _hef_detail \
+        _hef_expected _hef_file
+}
+
+# Literal value of a `KEY=value` line's right-hand side: one pair of matching
+# surrounding quotes stripped, anything after a closing quote allowed only as
+# a `# comment`, and an unquoted value cut at the first whitespace-led `#`.
+# Fails (prints nothing) on an unterminated quote or text after one.
+helix_env_value() {
+    _hev_v="$1"
+    case "$_hev_v" in
+        \"*) _hev_q='"' ;;
+        \'*) _hev_q="'" ;;
+        *)
+            _hev_v="${_hev_v%%[ 	]#*}"
+            _hev_v="${_hev_v%"${_hev_v##*[! 	]}"}"
+            printf '%s' "$_hev_v"
+            unset _hev_v
+            return 0
+            ;;
+    esac
+    _hev_rest="${_hev_v#?}"
+    _hev_ok=0
+    case "$_hev_rest" in
+        *"$_hev_q"*)
+            _hev_after="${_hev_rest#*"$_hev_q"}"
+            _hev_trim="${_hev_after#"${_hev_after%%[! 	]*}"}"
+            case "$_hev_after" in
+                '') _hev_ok=1 ;;
+                [' 	']*)
+                    case "$_hev_trim" in
+                        '' | '#'*) _hev_ok=1 ;;
+                    esac
+                    ;;
+            esac
+            ;;
+    esac
+    [ "$_hev_ok" = "1" ] && printf '%s' "${_hev_rest%%"$_hev_q"*}"
+    unset _hev_v _hev_q _hev_rest _hev_after _hev_trim
+    [ "$_hev_ok" = "1" ]
+    _hev_rc=$?
+    unset _hev_ok
+    return $_hev_rc
+}
+
 helix_load_env_file() {
+    # The two handoff variables are launcher-authoritative: an ambient value
+    # (systemd Environment=, an operator shell) must not fabricate a refusal
+    # the launcher never made.
+    unset HELIX_ENV_FILE_REFUSED HELIX_ENV_LINES_SKIPPED
     _helix_env_file=""
     for _env_path in \
         "${INSTALL_DIR}/config/helixscreen.env" \
@@ -254,6 +588,10 @@ helix_load_env_file() {
     # Malformed lines emit a stderr warning instead of being dropped silently.
     _lineno=0
     _helix_file_set=""
+    _helix_refused=""
+    _helix_skipped=""
+    _hes_count=0
+    _hes_more=0
     while IFS= read -r _line || [ -n "$_line" ]; do
         _lineno=$((_lineno + 1))
         # Normalize: strip CR, trim whitespace, drop optional `export ` prefix.
@@ -271,22 +609,46 @@ helix_load_env_file() {
             [A-Za-z_]*=*) ;;
             *)
                 log "warning: ${_helix_env_file}:${_lineno}: ignored malformed line: $_line"
+                helix_env_note_skip "line ${_lineno}:malformed line"
                 continue
                 ;;
         esac
         _var="${_line%%=*}"
-        case "$_var" in
-            *[!A-Za-z0-9_]*)
-                log "warning: ${_helix_env_file}:${_lineno}: invalid variable name '$_var'"
-                continue
-                ;;
-        esac
+        if ! helix_env_is_name "$_var"; then
+            log "warning: ${_helix_env_file}:${_lineno}: invalid variable name '$_var'"
+            helix_env_note_skip "line ${_lineno}:invalid variable name"
+            continue
+        fi
+        if ! helix_env_key_allowed "$_var"; then
+            case " ${_helix_refused} " in
+                *" $_var "*) ;;
+                *)
+                    log "warning: ${_helix_env_file}:${_lineno}: $_var is not a setting this file may change - ignored"
+                    _helix_refused="${_helix_refused}${_helix_refused:+ }$_var"
+                    helix_env_note_skip "${_var}:not a setting this file may change"
+                    ;;
+            esac
+            continue
+        fi
+        if ! _val=$(helix_env_value "${_line#*=}"); then
+            log "warning: ${_helix_env_file}:${_lineno}: unterminated quote or text after the closing quote: $_line"
+            helix_env_note_skip "${_var}:unterminated quote"
+            continue
+        fi
+        if _why=$(helix_env_value_refusal "$_var" "$_val"); then
+            log "warning: ${_helix_env_file}:${_lineno}: $_var $_why; ignored"
+            helix_env_note_skip "${_var}:${_why}"
+            continue
+        fi
         # Only set if not already in environment (systemd Environment= /
-        # exported parent shell vars win over the file).
+        # exported parent shell vars win over the file). The eval splices in
+        # only the NAME, already checked as an identifier above, never the
+        # value; it reads the shell's own variable without forking a helper.
         eval "_existing=\"\${${_var}:-}\""
         if [ -z "$_existing" ]; then
-            if ! eval "export $_line" 2>/dev/null; then
+            if ! export "$_var=$_val" 2>/dev/null; then
                 log "warning: ${_helix_env_file}:${_lineno}: failed to export: $_line"
+                helix_env_note_skip "${_var}:could not be exported"
             else
                 case " ${_helix_file_set} " in
                     *" $_var "*) ;;
@@ -308,7 +670,11 @@ helix_load_env_file() {
             esac
         fi
     done < "$_helix_env_file"
-    unset _line _var _existing _lineno _helix_file_set _helix_env_file
+    if [ -n "$_helix_skipped" ]; then
+        export HELIX_ENV_LINES_SKIPPED="$_helix_skipped"
+    fi
+    unset _line _var _val _why _existing _lineno _helix_file_set _helix_refused \
+        _helix_skipped _hes_count _hes_more _helix_env_file
 }
 
 # --print-env NAME: resolve NAME exactly as the env-file read resolves it
@@ -316,19 +682,16 @@ helix_load_env_file() {
 # the value, exiting before any other launcher work — no display side
 # effects, no daemon. The init script's early-splash gate uses this so one
 # parser serves every reader of helixscreen.env. NAME must be a plain
-# identifier: the parse evaluates file lines, so an arbitrary argument must
-# never reach it.
+# identifier, because the lookup below splices it into an eval.
 if [ "${1:-}" = "--print-env" ]; then
     if [ "$#" -ne 2 ]; then
         echo "usage: $0 --print-env NAME" >&2
         exit 2
     fi
-    case "$2" in
-        '' | *[!A-Za-z0-9_]*)
-            echo "$0: --print-env: not a variable name: $2" >&2
-            exit 2
-            ;;
-    esac
+    if ! helix_env_is_name "$2"; then
+        echo "$0: --print-env: not a variable name: $2" >&2
+        exit 2
+    fi
     helix_load_env_file
     eval "printf '%s\n' \"\${$2:-}\""
     exit 0

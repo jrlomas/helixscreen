@@ -1158,6 +1158,11 @@ class PrinterState {
     lv_subject_t* get_live_extruder_velocity_subject() {
         return motion_state_.get_live_extruder_velocity_subject();
     }
+    /// Measured toolhead speed in mm/s. Unlike the commanded gcode speed it
+    /// falls to 0 when the toolhead stops.
+    lv_subject_t* get_live_velocity_subject() {
+        return motion_state_.get_live_velocity_subject();
+    }
     lv_subject_t* get_fan_speed_subject() {
         return fan_state_.get_fan_speed_subject();
     }
@@ -1805,6 +1810,27 @@ class PrinterState {
      */
     bool is_spoolman_available() const {
         return lv_subject_get_int(capabilities_state_.get_printer_has_spoolman_subject()) == 1;
+    }
+
+    /**
+     * @brief Set job queue availability from Moonraker's server.info components
+     *
+     * Thread-safe: defers the LVGL subject update to the main thread.
+     *
+     * @param available True if the job_queue component is listed
+     */
+    void set_job_queue_available(bool available) {
+        capabilities_state_.set_job_queue_available(available);
+    }
+
+    /**
+     * @brief Check if Moonraker's job_queue component is present
+     *
+     * Reads the printer_has_job_queue subject value. Safe to call from any
+     * thread (reads a single int).
+     */
+    bool is_job_queue_available() const {
+        return lv_subject_get_int(capabilities_state_.get_printer_has_job_queue_subject()) == 1;
     }
 
     /**

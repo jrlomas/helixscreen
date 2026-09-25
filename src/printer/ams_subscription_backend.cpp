@@ -4,6 +4,7 @@
 #include "ams_subscription_backend.h"
 
 #include "filament_op_router.h"
+#include "lane_echo.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
 #include "moonraker_error.h"
@@ -137,12 +138,15 @@ void AmsSubscriptionBackend::request_resync() {
     // backend's block to name a lane. Carried by value: the deferred callback
     // has no claim on `this` by the time it runs, and backend_index() is
     // stamped by registration, which every resync call site is downstream of.
+    // `self` rides the reload callback un-dereferenced; it is reached only
+    // inside the token-guarded defer, which skips a dead owner.
     const int block = backend_index();
     auto token = lifetime_.token();
+    AmsSubscriptionBackend* self = this;
     store->reload_async(
-        [token, block](std::unordered_map<int, helix::ams::LaneDataRecord> records) {
+        [token, block, self](std::unordered_map<int, helix::ams::LaneDataRecord> records) {
             token.defer("AmsSubscriptionBackend::resync_lane_records",
-                        [block, records = std::move(records)]() {
+                        [self, block, records = std::move(records)]() {
                             for (const auto& [slot, entry] : records) {
                                 // Only what the namespace merely remembers is
                                 // re-filed. A record naming a spool is the
@@ -153,10 +157,25 @@ void AmsSubscriptionBackend::request_resync() {
                                 //
                                 // Remembered rather than VendorCache because this
                                 // re-reads our own store, not a firmware frame.
-                                const helix::ams::Observation obs =
+                                helix::ams::Observation obs =
                                     helix::ams::declared_from_record(entry.record);
                                 if (obs.source != helix::ams::ObservationSource::Remembered) {
                                     continue;
+                                }
+                                // A co-authored namespace carries the mirror of
+                                // this backend's own write, so the re-read
+                                // strips what it can see is a standing
+                                // declaration. It is a stored record, not a
+                                // live producer: a value that differs from the
+                                // declaration is staleness in the store, not
+                                // firmware demonstrating it can say something
+                                // else, so it releases nothing - withholding
+                                // here would let one stale record unhook the
+                                // guard while the live firmware is still
+                                // echoing the write.
+                                if (helix::ams::OwnWriteEchoes* echoes = self->own_write_echoes()) {
+                                    std::lock_guard<std::mutex> lock(self->mutex_);
+                                    echoes->strip_standing(slot, obs);
                                 }
                                 helix::ams::ingest(helix::ams::lane_id_for(block, slot), obs);
                             }
@@ -346,6 +365,22 @@ AmsError AmsSubscriptionBackend::state_preconditions_unlocked() const {
         return AmsErrorHelper::busy(ams_action_to_string(system_info_.action));
     }
     return AmsErrorHelper::success();
+}
+
+AmsError AmsSubscriptionBackend::validate_slot_index_locked(int slot_index) const {
+    const int bound = slot_index_bound_locked();
+    if (bound <= 0) {
+        return AmsErrorHelper::no_slots_discovered(lane_noun());
+    }
+    if (slot_index < 0 || slot_index >= bound) {
+        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, bound - 1);
+    }
+    return AmsErrorHelper::success();
+}
+
+AmsError AmsSubscriptionBackend::validate_slot_index(int slot_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return validate_slot_index_locked(slot_index);
 }
 
 AmsError AmsSubscriptionBackend::check_preconditions(bool requires_toolhead_motion) const {

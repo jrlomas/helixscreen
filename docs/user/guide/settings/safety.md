@@ -76,6 +76,28 @@ The setting is per printer, so an AFC machine can opt out while your other print
 
 ---
 
+## Spaghetti Detection
+
+Only present on printers with built-in AI failure detection (a K2 Plus, or a Snapmaker U1 with defect detection). While a print is running, HelixScreen watches the camera for spaghetti - a print that has detached or is piling up as a nest of plastic.
+
+| State | Behavior |
+|-------|----------|
+| **On** (default) | During a print, the camera is checked for failures |
+| **Off** | Nothing is watched; no detection alerts appear |
+
+The first time HelixScreen starts on a printer that had its own detection choice stored (a K2 Plus), your existing on/off and pause settings are carried over once. After that they live here.
+
+### Pause on Detection
+
+| State | Behavior |
+|-------|----------|
+| **On** (default) | A detected failure pauses the print and shows the spaghetti dialog, so you can resume, abort, or turn detection off |
+| **Off** | A detected failure only shows a warning; the print keeps running |
+
+This row is only adjustable while Spaghetti Detection is on. On printers whose firmware pauses the print itself when it detects a failure (the U1), the pause happens either way - this setting controls whether HelixScreen adds its own pause on printers where it must, and whether you get the full dialog or just the warning.
+
+---
+
 ## Print Completion Alert
 
 Controls how HelixScreen notifies you when a print finishes, is cancelled, or fails — when you're not already on the print status screen.

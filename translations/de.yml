@@ -57,6 +57,7 @@ translations:
   1 event queued: 1 Ereignis in Warteschlange
   1 hour ago: vor 1 Stunde
   1 layer: 1 Schicht
+  1 line in helixscreen.env was ignored: '1 Zeile in helixscreen.env wurde ignoriert'
   1 min: '1 Min'
   1 min ago: vor 1 Min.
   1 minute: 1 Minute
@@ -171,7 +172,11 @@ translations:
   Add Widget: Widget hinzufügen
   Add custom filament: Benutzerdefiniertes Filament hinzufügen
   Add page: 'Seite hinzufügen'
+  Add to Queue: Zur Warteschlange hinzufügen
   Added to Spoolman: Zu Spoolman hinzugefügt
+  Added to queue (position {}): Zur Warteschlange hinzugefügt (Position {})
+  Added to queue (position {}) - queue is paused: Zur Warteschlange hinzugefügt (Position {}) – Warteschlange ist pausiert
+  Adding to queue...: Wird zur Warteschlange hinzugefügt...
   Address: Adresse
   Adjust screen brightness level: Bildschirmhelligkeit anpassen
   Adjust screws, then re-probe.: Schrauben einstellen, dann erneut prüfen.
@@ -250,6 +255,7 @@ translations:
     zu aktivieren
   Assisted Retract: 'Unterstützter Einzug'
   Assisting: Unterstützend
+  At least {} lines in helixscreen.env were ignored: 'Mindestens {} Zeilen in helixscreen.env wurden ignoriert'
   Authentication failed: Authentifizierung fehlgeschlagen
   Auto: Automatisch
   Auto Bed Mesh: Automatisches Bettnetz
@@ -474,6 +480,7 @@ translations:
   Cancel Print: Druck abbrechen
   Cancel macro not configured: Abbruch-Makro nicht konfiguriert
   Cancelled: Abgebrochen
+  'Cannot add to queue: internal error': 'Zur Warteschlange hinzufügen nicht möglich: interner Fehler'
   Cannot be changed from here on a multi-unit MMU: Bei einer MMU mit mehreren Einheiten hier nicht änderbar
   'Cannot control timelapse: printer not connected': 'Timelapse nicht steuerbar: Drucker
     nicht verbunden'
@@ -739,6 +746,7 @@ translations:
   Copy failed - use SSH manually: Kopieren fehlgeschlagen – SSH verwenden
   Corner roundness: Eckenrundung
   Correction (Ki): Korrektur (Ki)
+  Could not add to queue: Konnte nicht zur Warteschlange hinzufügen
   Could not analyze PRINT_START macro. Some print options may be unavailable.: PRINT_START-Makro
     konnte nicht analysiert werden. Einige Druckoptionen sind möglicherweise nicht
     verfügbar.
@@ -752,6 +760,7 @@ translations:
   Could not parse tips database: Tipps-Datenbank konnte nicht ausgelesen werden
   Could not reach Spoolman at: 'Spoolman nicht erreichbar unter:'
   Could not read the screw adjustments from the printer: Schraubeneinstellungen konnten nicht vom Drucker gelesen werden
+  Could not remove the job from the queue: Der Auftrag konnte nicht aus der Warteschlange entfernt werden
   Could not resolve printer RFCOMM channel: RFCOMM-Kanal des Druckers konnte nicht
     ermittelt werden
   Could not save filament: Filament konnte nicht gespeichert werden
@@ -849,8 +858,9 @@ translations:
   Detecting...: Wird erkannt...
   Detection Length: Erkennungslänge
   Detection Mode: Erkennungsmodus
+  Detection turned off: Erkennung ausgeschaltet
   Dev: Dev
-  Dev channel requires dev_url in config: Dev-Kanal erfordert dev_url in der Konfiguration
+  Dev channel requires dev_url in update_urls.json: Dev-Kanal erfordert dev_url in update_urls.json
   Device: Gerät
   Device Section: Geräteabschnitt
   Device connected: 'Gerät verbunden'
@@ -1272,6 +1282,7 @@ translations:
   File: Datei
   File Size: Dateigröße
   File Will Stop the Printer: 'Datei stoppt den Drucker'
+  'File not found: {}': 'Datei nicht gefunden: {}'
   Filename: Dateiname
   Filter Fan: Filterlüfter
   'Filter Fan: Off': 'Filterlüfter: Aus'
@@ -1288,6 +1299,8 @@ translations:
   Firmware reports no bypass. Enable if you feed filament straight to the extruder: Firmware meldet keinen Bypass. Aktivieren Sie dies, wenn Sie das Filament direkt zum Extruder führen
   Firmware restarting...: Firmware wird neu gestartet...
   Firmware saved X = Y's value; the measured X result was discarded: Die Firmware hat X mit dem Wert von Y gespeichert; das gemessene X-Ergebnis wurde verworfen
+  'Fix: chmod 644 {}, then restart': 'Beheben: chmod 644 {}, dann neu starten'
+  'Fix: chown {} {}, then restart': 'Beheben: chown {} {}, dann neu starten'
   FlashForge Adventurer 5M: FlashForge Adventurer 5M
   FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
@@ -1565,6 +1578,7 @@ translations:
   Invalid value type: 'Ungültiger Werttyp'
   Issue description: Problembeschreibung
   It can be un-archived in Spoolman's web UI.: Sie kann in der Weboberfläche von Spoolman wiederhergestellt werden.
+  It has not reported its slots yet. Try again in a moment.: Es hat seine Slots noch nicht gemeldet. Versuchen Sie es gleich noch einmal.
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: Es klemmt zwischen Hub-Sensor und Hub-Antriebsrad. CFS öffnen, den Hub frei machen und erneut versuchen
   It's a new spool: Es ist eine neue Spule
   Jammed at the Toolhead: Stau am Werkzeugkopf
@@ -1872,6 +1886,7 @@ translations:
   Multi-Filament System Status: 'Multi-Filament-Status'
   'Multi-Filament System is busy: {}': 'Multi-Filament-System ist beschäftigt: {}'
   Multi-Filament System not available: Multi-Filament-System nicht verfügbar
+  Multi-filament system not ready: Multi-Filament-System nicht bereit
   Must home axes first: Achsen müssen zuerst referenziert werden
   My Custom Theme: Mein benutzerdefiniertes Thema
   My Panel: Mein Panel
@@ -2146,7 +2161,9 @@ translations:
   Path B: Pfad B
   Pause: Pause
   Pause macro not configured: Pause-Makro nicht konfiguriert
+  Pause on Detection: Bei Erkennung pausieren
   Pause the print first, then load, unload, or change filament: Pausieren Sie zuerst den Druck, um Filament zu laden, zu entladen oder zu wechseln
+  Pause the print when a failure is seen (off = warn only): Pausiert den Druck, wenn ein Fehler erkannt wird (aus = nur warnen)
   Pause, resume, or stop the print: Druck pausieren, fortsetzen, stoppen
   Paused: Pausiert
   Paused (attention needed): Pausiert (Aufmerksamkeit erforderlich)
@@ -2633,6 +2650,7 @@ translations:
     beim Start wiederholt abgestürzt ist. Öffnen Sie die Einstellungen, um das Problem
     zu beheben, und starten Sie dann neu.
   Safety & Notifications: Sicherheit & Benachrichtigungen
+  Same spool in {}? Tap Clear if it is a new one.: 'Dieselbe Spule in {}? Tippen Sie auf Löschen, wenn es eine neue ist.'
   Sample: Messung
   Sample %d/%d: Messung %d/%d
   Sample Dialog: Beispieldialog
@@ -2714,6 +2732,7 @@ translations:
   Security: Sicherheit
   Security, network, host, and administration: Sicherheit, Netzwerk, Host und Verwaltung
   See exactly what data will be sent: Genau sehen, welche Daten gesendet werden
+  See the log: 'Details im Protokoll'
   See the quick tour of HelixScreen again: Den Kurzrundgang durch HelixScreen erneut
     ansehen
   Select: Auswählen
@@ -2870,6 +2889,8 @@ translations:
   Source: Quelle
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris Mod von Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: Spaghetti-Erkennung
+  Spaghetti detected: Spaghetti erkannt
   Spaghetti detected — print paused: Spaghetti erkannt – Druck pausiert
   Speaker: Lautsprecher
   Speed: Geschwindigkeit
@@ -2929,6 +2950,7 @@ translations:
   Start anyway?: 'Trotzdem starten?'
   Start at: Beginnen bei
   Start failed: Start fehlgeschlagen
+  'Start next: {}': 'Nächstes starten: {}'
   Start over: Von vorne beginnen
   Start print anyway?: Druck trotzdem starten?
   Started: Gestartet
@@ -2937,6 +2959,7 @@ translations:
   Starting nozzle clean...: Düsenreinigung starten...
   Starting print...: Druck starten...
   Starting...: Starten...
+  Starts after the current print: Startet nach dem aktuellen Druck
   Startup Brightness: Starthelligkeit
   Startup, auto-control, and macro devices: Start, Auto-Steuerung und Makro-Geräte
   State: Status
@@ -2981,12 +3004,10 @@ translations:
   Switches to a backup spool on runout: Wechselt bei leerer Spule auf eine Reserve-Spule
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : Der Wechsel zurück zu PID ändert, wie diese Heizung geregelt wird, und kalibriert sie anschließend. Das dauert mehrere Minuten bei Betriebstemperatur.
-  Switching back to PID changes how this heater is controlled.: Der Wechsel zurück zu PID ändert, wie diese Heizung geregelt wird.
   Switching back to PID requires a config change and Klipper restart.: Wechsel zurück zu PID erfordert eine Konfigurationsänderung und Klipper-Neustart.
   Switching heater control to MPC. Klipper will restart.: Heizungsregelung wird auf
     MPC umgestellt. Klipper wird neu starten.
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: Der Wechsel zu MPC ändert, wie diese Heizung geregelt wird, und kalibriert sie anschließend. Das dauert mehrere Minuten bei Betriebstemperatur.
-  Switching to MPC changes how this heater is controlled.: Der Wechsel zu MPC ändert, wie diese Heizung geregelt wird.
   Switching to MPC requires a config change and Klipper restart.: Wechsel zu MPC erfordert
     eine Konfigurationsänderung und Klipper-Neustart.
   Sync with Spoolman: Mit Spoolman synchronisieren
@@ -3316,6 +3337,7 @@ translations:
   Turn On: Einschalten
   Turn On LEDs: 'LEDs einschalten'
   Turn endless spool on, then set the backup gate: 'Aktivieren Sie die Endlosspule und legen Sie dann das Backup-Gate fest'
+  Turn off detection: Erkennung ausschalten
   Turn on LEDs when printer starts: LEDs beim Druckerstart einschalten
   Turn the extruder heater off after a load or unload finishes: Extruder-Heizung nach Laden oder Entladen ausschalten
   Turn the picture to match how the screen is mounted. Applies after restart.: Dreht das Bild passend zur Einbaulage des Bildschirms. Wird nach einem Neustart wirksam.
@@ -3378,6 +3400,8 @@ translations:
   Unretract Speed: Prime-Geschwindigkeit
   Unsupported tape width: Nicht unterstützte Bandbreite
   'Unsupported tape width: ': 'Nicht unterstützte Bandbreite: '
+  'Up next: {}': 'Als Nächstes: {}'
+  'Up next: {} (+{})': 'Als Nächstes: {} (+{})'
   Up to date: Aktuell
   Update: Aktualisieren
   Update Available: Update verfügbar
@@ -3461,6 +3485,7 @@ translations:
   Warn: Warnung
   Warning: Warnung
   Warnings & errors: 'Warnungen & Fehler'
+  Watch the camera during a print for failed prints: Überwacht die Kamera während des Drucks auf fehlgeschlagene Drucke
   Weak battery: Schwache Batterie
   Webcam: Webcam
   Website (optional): Webseite (optional)
@@ -3608,6 +3633,10 @@ translations:
   feeder not in automatic mode: 'Zuführung nicht im Automatikmodus'
   filament sensor disabled: 'Filamentsensor deaktiviert'
   heated bed: Heizbett
+  'helixscreen.env ignored: owned by uid {}': 'helixscreen.env ignoriert: gehört uid {}'
+  'helixscreen.env ignored: untrusted symlink chain': 'helixscreen.env ignoriert: nicht vertrauenswürdige Symlink-Kette'
+  'helixscreen.env ignored: writable by other users': 'helixscreen.env ignoriert: von anderen Benutzern beschreibbar'
+  'helixscreen.env ignored: {}': 'helixscreen.env ignoriert: {}'
   idle: Leerlauf
   in unit {} slot {}: 'in Einheit {} Slot {}'
   layers: Schichten
@@ -3665,6 +3694,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} ist installiert, aber der Wechsel zur Ersatzspule ist ausgeschaltet, daher findet kein automatischer Wechsel statt.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} ist installiert, aber die Ersatzspulen-Einstellung konnte nicht gelesen werden - verlasse dich nicht auf einen automatischen Wechsel.'
   '{} is not set up on this printer': '{} ist auf diesem Drucker nicht eingerichtet'
+  '{} lines in helixscreen.env were ignored': '{} Zeilen in helixscreen.env wurden ignoriert'
   '{} macro not configured': '{}-Makro nicht konfiguriert'
   '{} matches.': '{} passt.'
   '{} may cause unintended changes. Are you sure?': '{} kann unbeabsichtigte Änderungen

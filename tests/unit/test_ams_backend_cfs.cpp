@@ -3946,11 +3946,13 @@ void link_lane_four_to_spool_137(AmsBackendCfs& backend) {
     edit.spool_name = "Black ASA";
     edit.color_rgb = 0x1A1A1A;
     edit.spoolman_id = 137;
+    edit.spoolman_filament_id = 99;
     edit.spoolman_vendor_id = 21;
     helix::test::edit_slot_as_user(backend, 3, edit);
 
     SpoolInfo spool;
     spool.id = 137;
+    spool.filament_id = 99;
     spool.vendor_id = 21;
     spool.vendor = "Elegoo";
     spool.filament_name = "Black ASA";
@@ -3982,6 +3984,7 @@ TEST_CASE("CFS runout invalidates the exhausted lane's remembered Spoolman link"
     REQUIRE(ovr.has_value());
     SECTION("the Spoolman handle is dropped from the override") {
         CHECK(ovr->spoolman_id == 0);
+        CHECK(ovr->spoolman_filament_id == 0);
         CHECK(ovr->spoolman_vendor_id == 0);
     }
     SECTION("identity survives: only the handle is gone") {
@@ -3997,6 +4000,7 @@ TEST_CASE("CFS runout invalidates the exhausted lane's remembered Spoolman link"
     SECTION("the live slot shows the drop immediately") {
         auto info = rig.backend->get_slot_info(3);
         CHECK(info.spoolman_id == 0);
+        CHECK(info.spoolman_filament_id == 0);
         CHECK(info.spoolman_vendor_id == 0);
         CHECK(info.material == "ASA-CF");
         CHECK(info.status == SlotStatus::EMPTY);
@@ -4005,10 +4009,30 @@ TEST_CASE("CFS runout invalidates the exhausted lane's remembered Spoolman link"
         auto stored = rig.api->mock_get_db_value("lane_data", "lane4");
         REQUIRE(!stored.is_null());
         CHECK(stored.value("spool_id", 0) == 0);
+        CHECK(stored.value("helix_spoolman_filament_id", 0) == 0);
         CHECK(stored.value("spoolman_vendor_id", 0) == 0);
         CHECK(stored["vendor_name"] == "Elegoo");
         CHECK(stored["helix_material"] == "ASA-CF");
         CHECK(stored["spool_name"] == "Black ASA");
+    }
+}
+
+TEST_CASE("CFS repoll re-lands a linked spool's filament definition id on the lane",
+          "[ams][cfs][filament_slot_override][1632]") {
+    CfsOverrideRig rig("cfs_filament_id_repaint");
+
+    rig.poll(make_runout_seated_box(/*useup=*/0, /*active=*/"D"));
+    link_lane_four_to_spool_137(*rig.backend);
+    REQUIRE(rig.backend->get_slot_info(3).spoolman_filament_id == 99);
+
+    // Every poll replaces the parsed units wholesale, wiping every
+    // firmware-sourced field off the live slot. The convergence repaint must
+    // put the linked spool's filament definition id back beside its spool id.
+    for (int i = 0; i < 2; ++i) {
+        rig.poll(make_runout_seated_box(/*useup=*/0, /*active=*/"D"));
+        const auto info = rig.backend->get_slot_info(3);
+        CHECK(info.spoolman_id == 137);
+        CHECK(info.spoolman_filament_id == 99);
     }
 }
 

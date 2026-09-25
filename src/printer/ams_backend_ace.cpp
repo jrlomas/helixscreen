@@ -503,6 +503,7 @@ void write_filament_fields(SlotInfo& slot, const SlotInfo& info) {
     slot.product_name = info.product_name;
     slot.spool_name = info.spool_name;
     slot.spoolman_id = info.spoolman_id;
+    slot.spoolman_filament_id = info.spoolman_filament_id;
     slot.spoolman_vendor_id = info.spoolman_vendor_id;
     slot.remaining_weight_g = info.remaining_weight_g;
     slot.total_weight_g = info.total_weight_g;
@@ -1762,20 +1763,6 @@ bool AmsBackendAce::parse_slots_response(const json& data) {
     apply_seated_slot_stamp_locked();
 
     return changed;
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-AmsError AmsBackendAce::validate_slot_index(int slot_index) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (slot_index < 0 || slot_index >= system_info_.total_slots) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, system_info_.total_slots - 1);
-    }
-
-    return AmsErrorHelper::success();
 }
 
 // ============================================================================

@@ -78,11 +78,15 @@ class MoonrakerQueueAPI : public IQueueAPI {
     /**
      * @brief Add a job to the queue
      *
+     * Success carries the resulting queue (Moonraker returns `queued_jobs`
+     * and `queue_state` from post_job), so the caller can find the new job's
+     * id: it is the one absent from the queue before the call.
+     *
      * @param filename G-code filename to enqueue
-     * @param on_success Success callback
+     * @param on_success Callback with the resulting queue status
      * @param on_error Error callback
      */
-    void add_job(const std::string& filename, SuccessCallback on_success,
+    void add_job(const std::string& filename, StatusCallback on_success,
                  ErrorCallback on_error) override;
 
     /**

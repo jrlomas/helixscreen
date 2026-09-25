@@ -170,6 +170,7 @@ src/printer/pre_print_preferences.cpp
 src/printer/preflight_validator.cpp
 src/printer/print_lifecycle_state.cpp
 src/printer/print_start_checks.cpp
+src/printer/queued_job_options.cpp
 src/printer/printer_calibration_state.cpp
 src/printer/printer_capabilities_state.cpp
 src/printer/printer_composite_visibility_state.cpp
@@ -198,6 +199,7 @@ src/printer/plr_backend.cpp
 src/printer/plr_offer.cpp
 src/printer/standard_macros.cpp
 src/printer/toolchanger_addon.cpp
+src/printer/zmod_color_status.cpp
 src/printer/toolhead_homing.cpp
 src/printer/tool_offset_calibration.cpp
 src/printer/tool_offsets.cpp
@@ -215,6 +217,7 @@ src/system/audio_settings_manager.cpp
 src/system/capability_overrides.cpp
 src/system/cjk_font_manager.cpp
 src/system/config.cpp
+src/system/config_trust.cpp
 src/system/config_backup.cpp
 src/system/diagnostics.cpp
 src/system/display_settings_manager.cpp
@@ -276,6 +279,7 @@ src/ui/filament_tube_stroker.cpp
 src/ui/grid_layout.cpp
 src/ui/helix_sparkline.cpp
 src/ui/job_queue_state.cpp
+src/ui/job_queue_start.cpp
 src/ui/keyboard_layout_provider.cpp
 src/ui/layout_port.cpp
 src/ui/locale_formats.cpp
@@ -454,6 +458,7 @@ src/ui/ui_panel_power.cpp
 src/ui/ui_panel_print_select.cpp
 src/ui/ui_panel_print_status.cpp
 src/ui/ui_panel_settings.cpp
+src/ui/print_select_button_view.cpp
 src/ui/ui_plr_offer_controller.cpp
 src/ui/ui_plr_prompt.cpp
 src/ui/ui_pin_entry_modal.cpp
@@ -669,3 +674,4 @@ src/printer/probe_preparation.cpp
 # MOCK: src/api/moonraker_client_mock_server.cpp
 # MOCK: src/printer/ams_backend_mock.cpp
 src/system/host_identity.cpp
+src/system/env_refusal_notice.cpp

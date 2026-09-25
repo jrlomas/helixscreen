@@ -570,14 +570,6 @@ class AmsBackendToolChanger : public AmsSubscriptionBackend {
      */
     [[nodiscard]] int find_slot_for_tool(const std::string& tool_name) const;
 
-    /**
-     * @brief Validate slot index is within range
-     *
-     * @param slot_index Slot index to validate
-     * @return AmsError (SUCCESS if valid, INVALID_SLOT otherwise)
-     */
-    AmsError validate_slot_index(int slot_index) const;
-
     // === Optimistic dispatch + macro-ack resolution =========================
     //
     // The only thing that can move the action off the value a dispatch sets is

@@ -2639,6 +2639,16 @@ TEST_CASE("AFC recover_lane_position second lane", "[ams][afc][recovery][phase4]
     REQUIRE(helper.has_gcode("AFC_LANE_RESET LANE=lane3"));
 }
 
+TEST_CASE("AFC set_tool_mapping refuses a lane past the discovered range",
+          "[ams][afc][slot_index]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_with_slots(4);
+    helper.set_running(true);
+
+    CHECK(helper.set_tool_mapping(0, 4).result == AmsResult::INVALID_SLOT);
+    CHECK(helper.set_tool_mapping(0, -2).result == AmsResult::INVALID_SLOT);
+}
+
 TEST_CASE("AFC recover_lane_position validates slot index", "[ams][afc][recovery][phase4]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes_with_slots(4);
@@ -6519,10 +6529,12 @@ TEST_CASE("AFC override survives an eject that clears firmware fields", "[ams][a
     info.brand = "Likesilk";
     info.spool_name = "Black ASA";
     info.spoolman_id = 86;
+    info.spoolman_filament_id = 55;
     info.material = "ASA";
     info.color_rgb = 0x1A1A1A;
     info.total_weight_g = 1000.0f;
     helix::test::edit_slot_as_user(helper, 0, info);
+    REQUIRE(helper.get_slot_info(0).spoolman_filament_id == 55);
 
     // AFC ejects the lane: clear_values() nulls spool_id and empties
     // colour/material, and parse_afc_stepper now represents that faithfully.
@@ -6535,6 +6547,7 @@ TEST_CASE("AFC override survives an eject that clears firmware fields", "[ams][a
     CHECK(after.brand == "Likesilk");
     CHECK(after.spool_name == "Black ASA");
     CHECK(after.spoolman_id == 86);
+    CHECK(after.spoolman_filament_id == 55);
     CHECK(after.total_weight_g == Catch::Approx(1000.0f));
 }
 

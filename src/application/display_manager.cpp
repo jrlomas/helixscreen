@@ -1467,6 +1467,7 @@ void DisplayManager::check_display_sleep() {
                 // Suspend active panel lifecycle to stop widget timers (clock, etc.)
                 // that would otherwise invalidate underlying UI and bleed through
                 NavigationManager::instance().suspend_active();
+                m_lifecycle_suspended = true;
                 ScreensaverManager::instance().start(ScreensaverManager::configured_type());
                 m_screensaver_active = true;
                 if (m_backlight) {
@@ -1552,7 +1553,14 @@ void DisplayManager::wake_display() {
     if (m_screensaver_active) {
         ScreensaverManager::instance().stop();
         m_screensaver_active = false;
-        // Resume active panel lifecycle to restart widget timers
+    }
+    // Resume only a suspend this manager requested. enter_sleep() stops the
+    // screensaver without resuming, so gating on m_screensaver_active alone
+    // would leave the view deactivated after a sleep that followed a dim — but
+    // Application's background/foreground pair owns a second suspend of the
+    // same latch, and a wake while backgrounded must not steal it.
+    if (m_lifecycle_suspended) {
+        m_lifecycle_suspended = false;
         NavigationManager::instance().resume_active();
     }
 #else
@@ -1631,6 +1639,7 @@ void DisplayManager::preview_screensaver(int type) {
     spdlog::info("[DisplayManager] Previewing screensaver type {}", type);
     // Suspend active panel so widget timers stop updating the background
     NavigationManager::instance().suspend_active();
+    m_lifecycle_suspended = true;
     ScreensaverManager::instance().start(ss_type);
     // Mark display as dimmed so wake_display() runs on touch; is_preview
     // flag suppresses auto-lock on dismiss.
