@@ -2744,10 +2744,14 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
         // details silently (same spool, or the re-bind verdict swaps them),
         // and a lane it leaves unnamed asks. The notice re-checks its own
         // guards (print-feeding lane, lane with nothing to clear) on the UI
-        // thread (prestonbrown/helixscreen#1710).
+        // thread (prestonbrown/helixscreen#1710). An insert is an edge out
+        // of an OBSERVED empty: initialize_slots() writes UNKNOWN, so a
+        // loaded lane's first frame at boot or reconnect is a baseline
+        // sighting, and asking "same spool?" per lane per boot would train
+        // the notice away.
         auto fw_it = lane_firmware_spool_id_.find(lane_name);
         const int firmware_id = fw_it != lane_firmware_spool_id_.end() ? fw_it->second : 0;
-        if (firmware_id <= 0) {
+        if (firmware_id <= 0 && status_at_frame_start == SlotStatus::EMPTY) {
             helix::ui::queue_update(
                 [slot_index] { helix::ui::offer_clear_after_unverified_insert(slot_index); });
         }

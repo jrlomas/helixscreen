@@ -6388,6 +6388,14 @@ TEST_CASE_METHOD(LVGLUITestFixture,
         toasts.emplace_back(severity, msg);
     });
 
+    // An insert is an edge out of an OBSERVED empty, so the lanes start by
+    // reporting empty: initialize_slots() writes UNKNOWN, and a lane whose
+    // first frame already says Loaded is a baseline sighting, not an insert.
+    helper.feed_afc_stepper("lane1", {{"status", "None"}});
+    helper.feed_afc_stepper("lane2", {{"status", "None"}});
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(toasts.empty());
+
     // lane1 (slot 0) goes empty -> present with no spool named.
     helper.feed_afc_stepper("lane1", {{"status", "Loaded"}});
     helix::ui::UpdateQueue::instance().drain();
@@ -6399,6 +6407,44 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     helper.feed_afc_stepper("lane2", {{"spool_id", 86}, {"status", "Loaded"}});
     helix::ui::UpdateQueue::instance().drain();
     CHECK(toasts.size() == 1);
+
+    helix::ui::set_test_toast_hook(nullptr);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "AFC a loaded lane's first frame after start raises no notice",
+                 "[ams][afc][status][1710]") {
+    // initialize_slots() writes SlotStatus::UNKNOWN: until a frame says
+    // otherwise, the lane's emptiness has never been observed, so the first
+    // presence frame on every loaded lane at boot or reconnect is a baseline,
+    // not an insert. Asking "same spool?" once per lane per boot would train
+    // the notice away.
+    helix::test::RegisteredBackend<AmsBackendAfcTestHelper> harness;
+    AmsBackendAfcTestHelper& helper = *harness;
+    helper.initialize_test_lanes(4);
+    helper.initialize_slots_from_discovery();
+
+    SlotInfo info;
+    info.material = "PETG";
+    info.color_rgb = 0x1188FF;
+    helix::test::apply_edit(helper, 0, info);
+
+    std::vector<std::pair<ToastSeverity, std::string>> toasts;
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg, uint32_t) {
+        toasts.emplace_back(severity, msg);
+    });
+
+    // First frame of a loaded lane: a baseline sighting, no ask.
+    helper.feed_afc_stepper("lane1", {{"status", "Loaded"}});
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    // The same lane later empties and inserts: that edge IS observed, and
+    // the notice asks.
+    helper.feed_afc_stepper("lane1", {{"status", "None"}});
+    helper.feed_afc_stepper("lane1", {{"status", "Loaded"}});
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(toasts.size() == 1);
+    CHECK(toasts[0].first == ToastSeverity::INFO);
 
     helix::ui::set_test_toast_hook(nullptr);
 }
