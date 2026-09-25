@@ -4,6 +4,7 @@
 #include "ams_backend_qidi.h"
 
 #include "ams_error.h"
+#include "color_utils.h"
 #include "display_numbering.h"
 #include "lane_apply.h"
 #include "lane_legacy_migration.h"
@@ -1482,22 +1483,7 @@ int AmsBackendQidi::resolve_fila_id(const std::map<int, FilaProfile>& profiles,
 
 int AmsBackendQidi::resolve_color_id(const std::map<int, std::uint32_t>& palette,
                                      std::uint32_t rgb) {
-    int best_id = 0;
-    long best_dist = -1;
-    const long r = (rgb >> 16) & 0xFF;
-    const long g = (rgb >> 8) & 0xFF;
-    const long b = rgb & 0xFF;
-    for (const auto& [id, packed] : palette) {
-        const long pr = (packed >> 16) & 0xFF;
-        const long pg = (packed >> 8) & 0xFF;
-        const long pb = packed & 0xFF;
-        const long dist = (r - pr) * (r - pr) + (g - pg) * (g - pg) + (b - pb) * (b - pb);
-        if (best_dist < 0 || dist < best_dist) {
-            best_dist = dist;
-            best_id = id;
-        }
-    }
-    return best_id;
+    return helix::nearest_palette_key(palette, rgb, 0);
 }
 
 int AmsBackendQidi::resolve_vendor_id(const std::map<int, std::string>& vendors,

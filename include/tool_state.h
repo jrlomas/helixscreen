@@ -104,6 +104,9 @@ struct ToolInfo {
 struct ToolTopology {
     int tool_count = 0;
     int active_tool = -1;
+    /// The carriage can hold no tool at all, so active_tool -1 is a real state
+    /// rather than "nothing loaded". True where selecting a slot mounts a tool.
+    bool allows_empty_carriage = false;
     std::vector<int> tool_to_slot;
     int backend_index = 0; ///< Source backend in AmsState::backends_
 };
