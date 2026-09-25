@@ -93,6 +93,8 @@ TEST_CASE("The Z-Mod C5 persona reports Z-Mod's objects", "[mock][creator5][zmod
     REQUIRE(helix::toolchanger_addon::present(hw));
     CHECK(helix::toolchanger_addon::machine_name(hw) == "Creator 5 Pro");
     CHECK(helix::toolchanger_addon::resolve_material_source(hw).present);
+    // The firmware reports the head count here, not the 24-entry palette size.
+    CHECK(mock.zmod_color_status().value("color_limit", -1) == 4);
     CHECK_FALSE(hw.has_tool_changer());
     CHECK(hw.tool_names().size() == 4);
 }

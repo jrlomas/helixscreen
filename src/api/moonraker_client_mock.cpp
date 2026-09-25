@@ -919,7 +919,7 @@ void MoonrakerClientMock::populate_capabilities() {
         break;
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD:
         // Z-Mod's own objects. Its carriage buttons are 1-based, unlike the
-        // Reforge persona's grab0..3 above — zmod_c5_detect in
+        // Reforge persona's grab0..3 above; zmod_c5_detect in
         // toolchanger_addon keys off exactly these names.
         mock_objects.push_back("zmod");
         mock_objects.push_back("zmod_color");
@@ -1864,7 +1864,9 @@ json MoonrakerClientMock::zmod_color_status() const {
     }
     return json{{"active_tool_id", zmod_active_tool_.load()},
                 {"total_tools", 4},
-                {"color_limit", 24},
+                // The head count, as the firmware reports it; not the 24-entry
+                // palette size, which is what the field name suggests.
+                {"color_limit", 4},
                 {"display", false},
                 {"valid_types", kZmodValidTypes},
                 {"hidden_types", json::array()},
@@ -2158,7 +2160,7 @@ void MoonrakerClientMock::populate_hardware() {
 
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD: // Z-Mod: same machine, same hardware
     case PrinterType::FLASHFORGE_CREATOR5:
-        // FlashForge Creator 5 Pro — 4-head tool changer, enclosed, heated chamber.
+        // FlashForge Creator 5 Pro: 4-head tool changer, enclosed, heated chamber.
         // Object names mirror assets/config/presets/creator5.json so the mock and
         // the shipped preset describe the same machine.
         discovery_.heaters() = {"heater_bed", "extruder",  "extruder1",
