@@ -1584,6 +1584,9 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
     int fila_id = 0;
     int color_id = 0;
     int vendor_id = 0;
+    // The value to write per identity field: -1 means no write.
+    int fila_write = -1;
+    int color_write = -1;
     bool have_palette = false;
     bool have_vendors = false;
     std::vector<std::string> staged_echoes;
@@ -1602,11 +1605,33 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
         fila_id = resolve_fila_id(fila_profiles_, info.material, info.material);
         have_palette = !color_palette_.empty();
         have_vendors = !vendor_names_.empty();
-        if (have_palette) {
+        const bool color_cleared = !helix::ams::is_declarable_color(info.color_rgb);
+        if (have_palette && !color_cleared) {
             color_id = resolve_color_id(color_palette_, info.color_rgb);
         }
         if (have_vendors) {
             vendor_id = resolve_vendor_id(vendor_names_, info.brand);
+        }
+        const size_t idx = static_cast<size_t>(slot_index);
+        const int old_fila = idx < slot_rfid_.size() ? slot_rfid_[idx].filament_id : 0;
+        const int old_color = idx < slot_rfid_.size() ? slot_rfid_[idx].color_id : 0;
+
+        // The write per field: a resolved row id, an explicit zero when the
+        // user cleared a field the Box still holds an id for, or no write at
+        // all when the tables cannot name a row for a field the user set.
+        // Skipping the zero would leave the Box restating the old id forever,
+        // so the clear never reaches the variables the Box reads back.
+        if (fila_id > 0) {
+            fila_write = fila_id;
+        } else if (info.material.empty() && old_fila != 0) {
+            fila_write = 0;
+        }
+        if (have_palette) {
+            if (color_id > 0) {
+                color_write = color_id;
+            } else if (color_cleared && old_color != 0) {
+                color_write = 0;
+            }
         }
 
         // Self-wipe guard. The SAVE_VARIABLEs below echo back as fingerprint
@@ -1623,17 +1648,13 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
         // With no baseline yet there is nothing to guard: the first
         // observation is a baseline and never fires a clear.
         if (const auto base = rfid_tracker_.baseline(slot_index)) {
-            const size_t idx = static_cast<size_t>(slot_index);
-            const int old_fila = idx < slot_rfid_.size() ? slot_rfid_[idx].filament_id : 0;
-            const int old_color = idx < slot_rfid_.size() ? slot_rfid_[idx].color_id : 0;
-
             std::vector<int> fila_vals{old_fila};
             std::vector<int> color_vals{old_color};
-            if (fila_id > 0 && fila_id != old_fila) {
-                fila_vals.push_back(fila_id);
+            if (fila_write >= 0 && fila_write != old_fila) {
+                fila_vals.push_back(fila_write);
             }
-            if (have_palette && color_id > 0 && color_id != old_color) {
-                color_vals.push_back(color_id);
+            if (color_write >= 0 && color_write != old_color) {
+                color_vals.push_back(color_write);
             }
             staged_echoes =
                 expect_own_write_echoes_locked(slot_index, *base, fila_vals, color_vals);
@@ -1643,12 +1664,14 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
         // judged against this edit. The ids name table rows rather than
         // spelling the values, so each carried field is relocated to what
         // its row will state; a field whose write does not go out (no fila
-        // match, empty palette, vendor id 0) is pruned, because the Box then
-        // keeps stating whatever it had. No SAVE_VARIABLE carries a name.
+        // match, empty palette) is pruned, because the Box then keeps stating
+        // whatever it had. A zero write states no row, so its field is
+        // pruned too: the Box's restatement of id 0 is its own reading.
+        // No SAVE_VARIABLE carries a name.
         own_write_echoes_.stage(slot_index, declared);
         if (auto* staged_echo = own_write_echoes_.staged(slot_index)) {
-            if (fila_id > 0) {
-                const auto row = fila_profiles_.find(fila_id);
+            if (fila_write > 0) {
+                const auto row = fila_profiles_.find(fila_write);
                 if (row != fila_profiles_.end() && !row->second.type.empty()) {
                     staged_echo->material = row->second.type;
                 } else {
@@ -1657,8 +1680,8 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
             } else {
                 staged_echo->material.reset();
             }
-            if (have_palette && color_id > 0) {
-                staged_echo->color_rgb = color_palette_.at(color_id);
+            if (color_write > 0) {
+                staged_echo->color_rgb = color_palette_.at(color_write);
                 if (!helix::ams::is_declarable_color(*staged_echo->color_rgb)) {
                     staged_echo->color_rgb.reset();
                 }
@@ -1689,19 +1712,19 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
     bool wrote_any = false;
     bool dispatched_any = false;
 
-    if (fila_id > 0) {
+    if (fila_write >= 0) {
         dispatched_any |= execute_gcode("SAVE_VARIABLE VARIABLE=filament_slot" + suffix +
-                                        " VALUE=" + std::to_string(fila_id))
+                                        " VALUE=" + std::to_string(fila_write))
                               .success();
         wrote_any = true;
-    } else {
+    } else if (!info.material.empty()) {
         spdlog::warn("{} apply_user_edit: no fila match for material='{}' — "
                      "skipping filament_slot write",
                      backend_log_tag(), info.material);
     }
-    if (have_palette && color_id > 0) {
+    if (color_write >= 0) {
         dispatched_any |= execute_gcode("SAVE_VARIABLE VARIABLE=color_slot" + suffix +
-                                        " VALUE=" + std::to_string(color_id))
+                                        " VALUE=" + std::to_string(color_write))
                               .success();
         wrote_any = true;
     }

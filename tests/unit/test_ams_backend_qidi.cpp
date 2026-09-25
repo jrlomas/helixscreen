@@ -1670,6 +1670,83 @@ TEST_CASE("QIDI Box apply_user_edit with no palette/vendor data still writes fil
     REQUIRE(backend.sent[0] == "SAVE_VARIABLE VARIABLE=filament_slot0 VALUE=1");
 }
 
+TEST_CASE("QIDI Box apply_user_edit carries an explicit zero for a cleared field",
+          "[ams][qidi_box][write_path][1633]") {
+    RecordingQidiBackend backend;
+    QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
+    // The Box states a full identity for slot 0, so the edit has an id to
+    // clear and the fingerprint baseline the echo is judged against.
+    QidiBoxTestAccess::parse_vars(
+        backend,
+        json{{"box_count", 1}, {"filament_slot0", 11}, {"color_slot0", 18}, {"vendor_slot0", 2}});
+
+    auto sent_fila = [&backend] {
+        for (const auto& g : backend.sent) {
+            if (g.rfind("SAVE_VARIABLE VARIABLE=filament_slot0", 0) == 0) {
+                return g;
+            }
+        }
+        return std::string{};
+    };
+    auto sent_color = [&backend] {
+        for (const auto& g : backend.sent) {
+            if (g.rfind("SAVE_VARIABLE VARIABLE=color_slot0", 0) == 0) {
+                return g;
+            }
+        }
+        return std::string{};
+    };
+
+    SECTION("material cleared alone writes fila zero") {
+        SlotInfo info = backend.get_slot_info(0);
+        info.material.clear();
+
+        REQUIRE(helix::test::apply_edit(backend, 0, info).success());
+        // The zero is the whole point: without it the Box keeps restating
+        // fila 11 forever and the user's clear never reaches the variables.
+        REQUIRE(sent_fila() == "SAVE_VARIABLE VARIABLE=filament_slot0 VALUE=0");
+        // The untouched colour still resolves to its row.
+        REQUIRE(sent_color() == "SAVE_VARIABLE VARIABLE=color_slot0 VALUE=18");
+
+        // The zero echoes back as a fingerprint change; the guard the same
+        // edit staged must read it as ours, not as a spool swap.
+        QidiBoxTestAccess::parse_vars(backend, json{{"box_count", 1},
+                                                    {"filament_slot0", 0},
+                                                    {"color_slot0", 18},
+                                                    {"vendor_slot0", 2}});
+        CHECK(QidiBoxTestAccess::get_override(backend, 0).has_value());
+    }
+
+    SECTION("colour cleared alone writes color zero") {
+        SlotInfo info = backend.get_slot_info(0);
+        info.color_rgb = AMS_DEFAULT_SLOT_COLOR;
+
+        REQUIRE(helix::test::apply_edit(backend, 0, info).success());
+        REQUIRE(sent_color() == "SAVE_VARIABLE VARIABLE=color_slot0 VALUE=0");
+        // The untouched material still resolves to its row.
+        REQUIRE(sent_fila() == "SAVE_VARIABLE VARIABLE=filament_slot0 VALUE=11");
+
+        QidiBoxTestAccess::parse_vars(backend, json{{"box_count", 1},
+                                                    {"filament_slot0", 11},
+                                                    {"color_slot0", 0},
+                                                    {"vendor_slot0", 2}});
+        CHECK(QidiBoxTestAccess::get_override(backend, 0).has_value());
+    }
+
+    SECTION("a cleared field the Box never held writes no zero") {
+        // No fila was ever stated for slot 1, so an empty material has
+        // nothing to clear and must not invent a write.
+        SlotInfo info;
+        info.material.clear();
+        info.color_rgb = 0xFF362D;
+
+        REQUIRE(helix::test::apply_edit(backend, 1, info).success());
+        for (const auto& g : backend.sent) {
+            CHECK(g.rfind("SAVE_VARIABLE VARIABLE=filament_slot1", 0) != 0);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Error-center bridge: current_error()
 // ---------------------------------------------------------------------------
