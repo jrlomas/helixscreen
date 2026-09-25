@@ -13,6 +13,7 @@
 
 #include "ams_backend_ace.h"
 
+#include "ui_ams_detail.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
@@ -1043,23 +1044,43 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                     // SKU is available but not mapped to SlotInfo currently
                 }
 
-                // Hardware-event override clear. ACE has no RFID UID to track;
-                // "user swapped the spool" is inferred from a status transition
-                // EMPTY -> present. Must run BEFORE apply_resolved_lane so the
-                // clear sees firmware-truth (not the resolved view); once the
-                // clear has run, the lane declares nothing for those fields and
-                // apply_resolved_lane leaves them as firmware set them.
+                // The rfid boolean is the bay's tag reader: true means the
+                // material and colour in this frame came off the spool's tag;
+                // false or absent means the hub is stating its own memory of
+                // the bay, which is not a reading of what is in it now
+                // (prestonbrown/helixscreen#1710).
+                helix::ams::SpoolEvidence evidence;
+                if (slot_json.contains("rfid") && slot_json["rfid"].is_boolean() &&
+                    slot_json["rfid"].get<bool>()) {
+                    evidence.material = observed_material.value_or(std::string{});
+                    evidence.color_rgb = observed_color;
+                    evidence.tag_read_complete = true;
+                }
+
+                // Insert-edge verdict. Must run BEFORE apply_resolved_lane so
+                // the check sees firmware-truth (not the resolved view); once a
+                // DifferentSpool clear has run, the lane declares nothing for
+                // those fields and apply_resolved_lane leaves them as firmware
+                // set them.
                 //
                 // First observation (no prev_slot_status_ entry) is a
-                // BASELINE and must never fire a clear — matches IFS/Snapmaker
+                // BASELINE and must never fire — matches IFS/Snapmaker
                 // baseline semantics. Only call the helper when a prior status
                 // was already recorded for this slot.
                 int idx = static_cast<int>(i);
                 auto prev_it = prev_slot_status_.find(idx);
                 if (prev_it != prev_slot_status_.end()) {
-                    check_hardware_event_clear(slot, idx, prev_it->second, slot.status);
+                    check_hardware_event_clear(slot, idx, prev_it->second, slot.status, evidence);
                 }
                 prev_slot_status_[idx] = slot.status;
+                // Remember the reading for the spool now in the bay, and keep
+                // it across the empty interval: the reading of the spool that
+                // left is the comparison side of the insert rule when the next
+                // one arrives. Must follow the check, which reads the previous
+                // entry.
+                if (slot.status == SlotStatus::AVAILABLE || slot.status == SlotStatus::LOADED) {
+                    last_spool_evidence_[idx] = evidence;
+                }
 
                 // The hub reports an occupancy status and a colour. Neither is
                 // an identity reading, so the colour is the hub's own memory of
@@ -1878,28 +1899,55 @@ AmsError AmsBackendAce::execute_device_action(const std::string& action_id, cons
 // ============================================================================
 
 void AmsBackendAce::check_hardware_event_clear(SlotInfo& slot, int slot_index, SlotStatus prev,
-                                               SlotStatus curr) {
-    // ACE has no RFID UID to track. Detect "new spool inserted" as a status
-    // transition from EMPTY -> present (AVAILABLE / LOADED). A LOADED ->
-    // EMPTY transition is NOT a swap — the user may reinsert the same spool.
-    // UNKNOWN is treated as "no signal" on either side and never fires the
-    // check; callers must only invoke this helper AFTER a valid prior
-    // observation has been recorded (caller handles the baseline skip).
+                                               SlotStatus curr,
+                                               const helix::ams::SpoolEvidence& inserted) {
+    // "A spool was put in" is the status transition EMPTY -> present
+    // (AVAILABLE / LOADED); what that insert does to the record is the insert
+    // rule's verdict on the two tag readings. A LOADED -> EMPTY transition is
+    // not an insert, and UNKNOWN is "no signal" on either side; callers must
+    // only invoke this helper AFTER a valid prior observation has been
+    // recorded (caller handles the baseline skip).
     const bool was_empty = (prev == SlotStatus::EMPTY);
     const bool is_present = (curr == SlotStatus::AVAILABLE || curr == SlotStatus::LOADED);
     if (!was_empty || !is_present)
         return;
 
-    auto ovr_it = overrides_.find(slot_index);
-    if (ovr_it == overrides_.end()) {
-        spdlog::debug("[ACE] Slot {} insertion detected (prev={}, curr={}); "
-                      "no override to clear",
-                      slot_index, slot_status_to_string(prev), slot_status_to_string(curr));
+    std::optional<helix::ams::SpoolEvidence> before;
+    if (const auto prev_reading = last_spool_evidence_.find(slot_index);
+        prev_reading != last_spool_evidence_.end()) {
+        before = prev_reading->second;
+    }
+    const auto verdict = helix::ams::classify_insert(before, inserted);
+
+    if (verdict == helix::ams::InsertVerdict::NoEvidence) {
+        // An insert the hardware read nothing about: the bay said no rfid, or
+        // the previous occupant left no reading. Nothing contradicts the
+        // record and nothing confirms it either, so ask rather than clear.
+        // offer_clear_after_unverified_insert() re-checks every guard
+        // (print-feeding lane, lane with nothing to clear) on the UI thread.
+        spdlog::debug("[ACE] Slot {} inserted with no comparable tag reading; "
+                      "offering the same-spool notice",
+                      slot_index);
+        helix::ui::queue_update(
+            [slot_index]() { helix::ui::offer_clear_after_unverified_insert(slot_index); });
+        return;
+    }
+    if (verdict != helix::ams::InsertVerdict::DifferentSpool) {
+        spdlog::debug("[ACE] Slot {} inserted with the same tag reading; record stands",
+                      slot_index);
         return;
     }
 
-    spdlog::info("[ACE] Slot {} insertion detected (prev={}, curr={}); clearing override",
-                 slot_index, slot_status_to_string(prev), slot_status_to_string(curr));
+    auto ovr_it = overrides_.find(slot_index);
+    if (ovr_it == overrides_.end()) {
+        spdlog::debug("[ACE] Slot {} inserted with a different tag reading; "
+                      "no override to clear",
+                      slot_index);
+        return;
+    }
+
+    spdlog::info("[ACE] Slot {} inserted with a different tag reading; clearing override",
+                 slot_index);
 
     // Delegate erase + field reset + clear_async to the shared helper so
     // hardware-event clears and user-initiated clears share one field-reset

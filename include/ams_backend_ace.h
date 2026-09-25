@@ -9,6 +9,7 @@
 #include "async_lifetime_guard.h"
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
+#include "lane_binding.h"
 #include "moonraker_types.h"
 
 #include <atomic>
@@ -451,24 +452,24 @@ class AmsBackendAce : public AmsSubscriptionBackend {
     // is the only source for those fields; color/material come from both the
     // firmware and user edits and the override wins per the merge policy.
 
-    // Hardware-event detection: ACE has no RFID UID, so "user physically
-    // swapped the spool" is inferred from a status transition EMPTY -> present
-    // (AVAILABLE / LOADED). When detected, the stored override for the slot
-    // is cleared so stale brand/spool_name/spoolman_id from the previous
-    // spool don't bleed onto the new one. Override-exclusive fields on `slot`
-    // are zeroed in place so the cleared state is visible in the very next
-    // get_slot_info() read.
+    // Insert-edge verdict (prestonbrown/helixscreen#1710). The status
+    // transition EMPTY -> present (AVAILABLE / LOADED) is "a spool was put
+    // in"; what that insert does to the stored override is the insert rule's
+    // call on the two tag readings: DifferentSpool clears the override (via
+    // clear_override_locked, so stale brand/spool_name/spoolman_id from the
+    // previous spool don't bleed onto the new one), SameSpool keeps it, and
+    // NoEvidence keeps it and offers the same-spool notice on the UI thread.
+    // `inserted` is what this frame's tag reader got off the incoming spool
+    // (empty when the bay reported no rfid read).
     //
     // Called from parse_ace_object BEFORE apply_resolved_lane, so the check
     // decides based on parsed firmware status (not the resolved view). The
     // caller is responsible for skipping the very first observation (no prior
     // prev_slot_status_ entry) — first-observation is a baseline and never
-    // fires. Limitation: a LOADED -> EMPTY -> LOADED sequence (user unloaded
-    // and reinserted the same spool) looks identical to a swap under this
-    // status-based heuristic and clears the override. Documented tradeoff —
-    // ACE's single signal is too coarse to distinguish the two cases.
+    // fires.
     void check_hardware_event_clear(SlotInfo& slot, int slot_index, SlotStatus previous_status,
-                                    SlotStatus current_status);
+                                    SlotStatus current_status,
+                                    const helix::ams::SpoolEvidence& inserted);
 
     /// Mutable slot lookup. ACE is always single-unit, and the two REST
     /// parsers size units[0].slots independently, so index directly rather
@@ -555,13 +556,19 @@ class AmsBackendAce : public AmsSubscriptionBackend {
         return override_store_.get();
     }
 
-    // Previous slot status per slot index. Used as the swap-detection signal:
-    // an EMPTY -> present transition fires the clear-override path. Map
-    // presence also acts as the baseline guard: absent entry means "no prior
-    // observation" and the check is skipped (first observation never clears).
-    // Access is always under mutex_ (parse_ace_object is the only
-    // writer/reader).
+    // Previous slot status per slot index. Used as the insert-edge signal:
+    // an EMPTY -> present transition runs the insert rule. Map presence also
+    // acts as the baseline guard: absent entry means "no prior observation"
+    // and the check is skipped (first observation never clears). Access is
+    // always under mutex_ (parse_ace_object is the only writer/reader).
     std::unordered_map<int, SlotStatus> prev_slot_status_;
+
+    // What the hub's tag reader last got off the spool occupying each bay.
+    // Written on every frame that reports the bay occupied, and deliberately
+    // NOT cleared when the bay empties: the reading of the spool that left is
+    // the comparison side of the insert rule when the next one arrives. All
+    // access under mutex_ (parse_ace_object).
+    std::unordered_map<int, helix::ams::SpoolEvidence> last_spool_evidence_;
 };
 
 } // namespace helix

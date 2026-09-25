@@ -400,12 +400,9 @@ table after it as that backend moves.
 | Backend | Signal today |
 |---------|--------------|
 | AD5X IFS | A colour transition in `Adventurer5M.json` to a materially different RGB, treated as a swap |
-| Snapmaker U1 | A `CARD_UID` change on the RFID tag |
 | CFS | A change in the per-slot `material_type|color_value` composite |
 | QIDI Box | A change in the per-slot filament, colour and vendor table ids |
-| ACE | Any `EMPTY` to present transition, which clears the whole record |
-| AFC | A different positive per-lane `spool_id` (re-bind), or `0`/absent (eject, per the setting below) |
-| Happy Hare | The same split as AFC, on the per-gate `spool_id` |
+| Happy Hare | A different positive per-gate `spool_id` (re-bind), or `0`/absent (eject, per the setting below) |
 
 ### Per backend, under the insert rule
 
@@ -645,6 +642,8 @@ reader can resolve.
   `helix_` key is another tool's replacement of ours and files as the lane's
   statement — unstamped outright, stamped only over an older statement —
   instead of as a memory below whatever a person said.
+  §6: Snapmaker U1, ACE and AFC moved onto the insert rule
+  (prestonbrown/helixscreen#1710).
 - **v1.13 (2026-09-24)**: §6 states one insert rule for every backend: a
   spool going into a slot is judged on what the hardware read off it (tag UID,
   or material and colour decoded from the tag, or a firmware-named spool id).
