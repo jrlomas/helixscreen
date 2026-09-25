@@ -120,7 +120,7 @@ class PresenterFixture : public LVGLUITestFixture {
         get_printer_state().init_subjects(false);
 
         helix::ui::set_test_toast_hook(
-            [this](ToastSeverity s, const std::string& m) { toasts.emplace_back(s, m); });
+            [this](ToastSeverity s, const std::string& m, uint32_t) { toasts.emplace_back(s, m); });
     }
 
     ~PresenterFixture() override {
