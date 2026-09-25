@@ -5057,7 +5057,8 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
                             "gcode_macro TOOLCHANGE_PARK", "gcode_macro BED_MESH_CALIBRATE"},
         .steppers = {},
         .kinematics = "corexy",
-        .cpu_arch = "MIPS Ingenic X2000"};
+        .cpu_arch = "MIPS Ingenic X2000",
+        .objects_reported = true};
 
     auto result = PrinterDetector::detect(hardware);
     CAPTURE(result.type_name, result.confidence, result.runner_up_type_name,
@@ -5091,7 +5092,8 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
                             "filament_motion_sensor fm_ex2", "filament_motion_sensor fm_ex3"},
         .steppers = {},
         .kinematics = "corexy",
-        .cpu_arch = "MIPS Ingenic X2000"};
+        .cpu_arch = "MIPS Ingenic X2000",
+        .objects_reported = true};
 
     auto result = PrinterDetector::detect(hardware);
     CAPTURE(result.type_name, result.confidence, result.runner_up_type_name,
@@ -5103,11 +5105,75 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
 }
 
 TEST_CASE_METHOD(PrinterDetectorFixture,
-                 "PrinterDetector: AD5X Z-Mod (zmod_color, IFS) is not a Creator 5 Pro",
+                 "PrinterDetector: Creator 5 on Z-Mod firmware (no chamber heater)",
+                 "[printer][heuristics][creator5]") {
+    // The Creator 5 is the heater-free model: same Z-Mod objects as the Pro
+    // above, minus the chamber heater and its fan suite.
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "extruder1", "extruder2", "extruder3", "heater_bed"},
+        .sensors = {},
+        .fans = {},
+        .leds = {},
+        .hostname = "flashforge",
+        .printer_objects = {"zmod", "zmod_color", "gcode_button extruder_grab1",
+                            "gcode_button extruder_grab2", "gcode_button extruder_grab3",
+                            "gcode_button extruder_grab4", "filament_switch_sensor fd_ex0",
+                            "filament_switch_sensor fd_ex1", "filament_switch_sensor fd_ex2",
+                            "filament_switch_sensor fd_ex3", "filament_motion_sensor fm_ex0",
+                            "filament_motion_sensor fm_ex1", "filament_motion_sensor fm_ex2",
+                            "filament_motion_sensor fm_ex3"},
+        .steppers = {},
+        .kinematics = "corexy",
+        .cpu_arch = "MIPS Ingenic X2000",
+        .objects_reported = true};
+
+    auto result = PrinterDetector::detect(hardware);
+    CAPTURE(result.type_name, result.confidence, result.runner_up_type_name,
+            result.runner_up_confidence, result.margin(), result.tied_count);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "FlashForge Creator 5");
+    REQUIRE(result.margin() >= PrinterDetector::DETECT_MIN_MARGIN);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Creator 5 on FlashForge firmware (no chamber heater)",
+                 "[printer][heuristics][creator5]") {
+    // The Reforge fingerprint above, minus the Pro's chamber heater and
+    // chamber fan. The LED stays: both models carry it.
+    PrinterHardwareData hardware{
+        .heaters = {"extruder", "extruder1", "extruder2", "extruder3", "heater_bed"},
+        .sensors = {},
+        .fans = {"heater_fan heat_fan", "fan_generic fanM106"},
+        .leds = {"led chamber_led"},
+        .hostname = "flashforge",
+        .printer_objects = {"ff_toolchange", "ff_tool_offset", "ff_tool 0", "ff_tool 1",
+                            "ff_tool 2", "ff_tool 3", "gcode_button extruder_grab0",
+                            "gcode_button extruder_grab1", "gcode_button extruder_grab2",
+                            "gcode_button extruder_grab3", "filament_switch_sensor fd_ex0",
+                            "filament_switch_sensor fd_ex1", "filament_switch_sensor fd_ex2",
+                            "filament_switch_sensor fd_ex3", "gcode_macro TOOLCHANGE_PARK",
+                            "gcode_macro BED_MESH_CALIBRATE"},
+        .steppers = {},
+        .kinematics = "corexy",
+        .cpu_arch = "MIPS Ingenic X2000",
+        .objects_reported = true};
+
+    auto result = PrinterDetector::detect(hardware);
+    CAPTURE(result.type_name, result.confidence, result.runner_up_type_name,
+            result.runner_up_confidence, result.margin(), result.tied_count);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.type_name == "FlashForge Creator 5");
+    REQUIRE(result.margin() >= PrinterDetector::DETECT_MIN_MARGIN);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: AD5X Z-Mod (zmod_color, IFS) is not a Creator 5",
                  "[printer][heuristics][creator5][ad5x]") {
     // zmod_color exists on AD5X Z-Mod too; with the grab buttons absent it
-    // must never pull the machine toward the Creator 5 Pro entry, and the
-    // IFS objects must exclude that entry outright.
+    // must never pull the machine toward either Creator 5 entry, and the
+    // IFS objects must exclude both outright.
     PrinterHardwareData hardware{
         .heaters = {"extruder", "extruder1", "extruder2", "extruder3", "heater_bed"},
         .sensors = {"weightValue", "weight"},
@@ -5130,8 +5196,10 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
 
     REQUIRE(result.detected());
     REQUIRE(result.type_name == "FlashForge Adventurer 5X");
-    REQUIRE(result.type_name.find("Creator 5 Pro") == std::string::npos);
-    REQUIRE(result.runner_up_type_name.find("Creator 5 Pro") == std::string::npos);
+    // "Creator 5" is a substring of "Creator 5 Pro", so one check covers both
+    // entries as winner and as runner-up.
+    REQUIRE(result.type_name.find("Creator 5") == std::string::npos);
+    REQUIRE(result.runner_up_type_name.find("Creator 5") == std::string::npos);
     REQUIRE(result.margin() >= PrinterDetector::DETECT_MIN_MARGIN);
 }
 
