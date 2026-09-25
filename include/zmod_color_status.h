@@ -16,8 +16,11 @@
 namespace helix::zmod_color {
 
 struct Slot {
-    std::string material; ///< Empty when the firmware reports its "?" unset sentinel
-    std::string hex;      ///< As published, no '#'; may be empty
+    /// Empty when the firmware reports its "?" unset sentinel: a live frame
+    /// sends Material "?" with HEX "", which would otherwise render as a
+    /// literal "?" in the UI.
+    std::string material;
+    std::string hex; ///< As published, no '#'; may be empty
 };
 
 /// `slots[]`, indexed by 1-based `ID` minus one and sized @p max_slots. Entries

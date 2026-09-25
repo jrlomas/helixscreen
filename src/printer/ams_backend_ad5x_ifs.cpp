@@ -4882,8 +4882,8 @@ bool AmsBackendAd5xIfs::read_ifs_materials_object(const json& obj, ZColorSilentR
     bool saw_slot = false;
     for (auto slot_it = slots_it->begin(); slot_it != slots_it->end(); ++slot_it) {
         // Moonraker serialises dict keys as strings, so "1".."4" - but accept
-        // an integer key too, same tolerance read_zmod_color_object gives the
-        // ID field (it is somebody else's serializer either way).
+        // an integer key too, same tolerance helix::zmod_color::parse_slots
+        // gives the ID field (it is somebody else's serializer either way).
         int id = 0;
         try {
             id = std::stoi(slot_it.key());

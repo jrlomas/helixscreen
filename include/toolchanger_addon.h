@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-// Tool-changer dialects: the one place that knows each tool changer's dialect -
+// Tool-changer dialects: the one place that knows each tool changer's extras -
 // the add-on hardware klipper-toolchanger does not model (MedusaHC), and changer
 // firmware that has no klipper-toolchanger at all (Z-Mod on the Creator 5 Pro).
 //
