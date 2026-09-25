@@ -13,10 +13,13 @@ prestonbrown/helixscreen#1714), and Reforge (`Klipper4FlashForge/firmware`) ship
 over SSH with the NaN2008 toolchain; the kernel refuses legacy-NaN executables with
 ENOEXEC (see "NaN encoding").
 
-**Status: the toolchanger works in the UI** on Z-Mod firmware: the four heads are driven
-by the tool changer backend through Z-Mod's own objects, with mount/unmount and per-head
-colour and material (see "Z-Mod tool changer support" below). One upstream export is
-still pending for boot-time tool state and write-through; the section names it.
+**Status: the toolchanger is implemented and verified against the `creator5_zmod` mock**:
+the four heads are driven by the tool changer backend through Z-Mod's own objects, with
+mount/unmount and per-head colour and material (see "Z-Mod tool changer support" below).
+No toolchanger behaviour has run on a real Creator 5 Pro: hardware verification is pending
+[ghzserg/z_c5pro#1](https://github.com/ghzserg/z_c5pro/pull/1)
+(prestonbrown/helixscreen#1714), the same upstream export that gates boot-time tool state
+and write-through; the section below names it.
 
 ## Hardware (from the stock `firmwareExe` ELF and the device rootfs)
 
@@ -156,44 +159,51 @@ open (prestonbrown/helixscreen#1714).
 `creator5` persona models the Reforge side only. Details in
 [`MOCK_ENVIRONMENT_VARIABLES.md`](../MOCK_ENVIRONMENT_VARIABLES.md).
 
-## On-device bring-up (open work)
+## On-device bring-up
 
-1. **Sanity on the printer**: done, `bin/helix-screen --version` runs. (`readelf -h` on
+Each item below says whether it is done or still open.
+
+1. **Sanity on the printer** (done): `bin/helix-screen --version` runs. (`readelf -h` on
    the binary must list `nan2008` in Flags; without it the kernel answers ENOEXEC.)
    `install.sh` reports the board as an AD5X (see "Platform key and self-update" above);
    unpack the tarball by hand, or accept the mislabel, until it gets a fingerprint.
-2. **Stock UI coexistence**: on the stock firmware, unlike the K1's `display-server`,
-   `firmwareExe` is not just a UI: stopping it also kills the 8898 REST API, the cloud
-   link and the stock print orchestration (tool grab/release for UI-started prints), and
-   two processes drawing to `/dev/fb0` will fight. The other firmwares sidestep it: Z-Mod
-   (`ghzserg/z_c5pro`) starts HelixScreen in place of the stock UI (`DISPLAY_OFF HELIX=1`),
-   and Reforge (`Klipper4FlashForge/firmware`) removes `firmwareExe` entirely.
-3. **Touch**: `/dev/input/event2`; if auto-detect picks another device, pin it with
-   `HELIX_TOUCH_DEVICE`. The capacitive Goodix controller declares an 800x480 ABS range
-   on the 480x800 portrait framebuffer: transposed, not mismatched. HelixScreen scales
-   such a range by the display size and leaves rotation to LVGL
-   (`has_transposed_abs_range()`, prestonbrown/helixscreen#1450; 1.0.x instead forced a
-   bad calibration, prestonbrown/helixscreen#1714). With `display.rotate = 90` the touch
-   input is auto-rotated to match the display, so `HELIX_TOUCH_SWAP_AXES` must NOT be
-   set: it would swap already-correct axes.
-4. **Moonraker**: HelixScreen talks to Moonraker (not `/tmp/uds`). The Moonraker instance
-   that Mainsail uses is the one to point at (port 7125 unless `moonraker.conf` says otherwise).
-5. **Detection + preset**: `printer_database.json` entry `flashforge_creator_5_pro`
-   (fingerprint: `ff_toolchange` / `gcode_button extruder_grab1`, 4 extruders) and preset
-   `creator5.json` (4 hotends, chamber heater, part/chamber fans, LED, `fd_ex*` runout
-   switches, rotate 90). Without it the detector picked the AD5X (same hostname, MIPS,
-   4 tools); the AD5X entry excludes on `gcode_button extruder_grab1`. Uses the
-   `generic-corexy` image.
-6. **Toolchanger model**: 4 extruders (`extruder`, `extruder1..3`), 4 filament switch +
-   4 motion sensors (`fd_ex0..3`, `fm_ex0..3`), `heater_generic chamber_heater`,
-   `fan_generic fanM106` (part), `heater_fan heat_fan*`, `fan_generic chamber_*_fan`,
-   `led chamber_led`.
-7. **Memory**: 128-256 MB shared with Klipper, Moonraker, `firmwareExe`. HelixScreen's
-   ~15 MB footprint is fine, but check `free` with the stock stack running.
-8. **Init**: no systemd; the stock stack is started from BusyBox init scripts. An init.d
-   script modeled on the AD5X/ZMOD `S80guppyscreen` pattern is the likely shape.
-9. **Runout on an empty docked head**: the preset ships `fd_ex0..3` with role `"none"`, runout
-   disabled. `FilamentSensorManager#lane_index_for_sensor` maps only `e<N>_filament` names to
-   a head, so an fd_ex sensor with the runout role counts any empty docked head as filament
-   loss and raises the runout guidance. Giving them the runout role needs hardware
-   verification of what the switches actually report.
+2. **Stock UI coexistence** (done): on the stock firmware, unlike the K1's
+   `display-server`, `firmwareExe` is not just a UI: stopping it also kills the 8898 REST
+   API, the cloud link and the stock print orchestration (tool grab/release for
+   UI-started prints), and two processes drawing to `/dev/fb0` will fight. The other
+   firmwares sidestep it: Z-Mod (`ghzserg/z_c5pro`) starts HelixScreen in place of the
+   stock UI (`DISPLAY_OFF HELIX=1`), and Reforge (`Klipper4FlashForge/firmware`) removes
+   `firmwareExe` entirely.
+3. **Touch** (done): `/dev/input/event2`; if auto-detect picks another device, pin it
+   with `HELIX_TOUCH_DEVICE`. The capacitive Goodix controller declares an 800x480 ABS
+   range on the 480x800 portrait framebuffer: transposed, not mismatched. HelixScreen
+   scales such a range by the display size and leaves rotation to LVGL
+   (`has_transposed_abs_range()`, prestonbrown/helixscreen#1450; versions without that
+   handling force a bad calibration, so they need the axes swapped by hand,
+   prestonbrown/helixscreen#1714). With `display.rotate = 90` the touch input is
+   auto-rotated to match the display, so `HELIX_TOUCH_SWAP_AXES` must NOT be set: it
+   would swap already-correct axes.
+4. **Moonraker** (done): HelixScreen talks to Moonraker (not `/tmp/uds`). The Moonraker
+   instance that Mainsail uses is the one to point at (port 7125 unless `moonraker.conf`
+   says otherwise).
+5. **Detection + preset** (done): `printer_database.json` entry
+   `flashforge_creator_5_pro` (fingerprint: `ff_toolchange` / `gcode_button
+   extruder_grab1`, 4 extruders) and preset `creator5.json` (4 hotends, chamber heater,
+   part/chamber fans, LED, `fd_ex*` switches with runout off, rotate 90). Without the
+   entry the detector resolves the AD5X, which matches on hostname, MIPS and 4 tools;
+   the entry is what tells them apart, with the AD5X side excluding on
+   `gcode_button extruder_grab1`. Uses the `generic-corexy` image.
+6. **Toolchanger model** (done): 4 extruders (`extruder`, `extruder1..3`), 4 filament
+   switch + 4 motion sensors (`fd_ex0..3`, `fm_ex0..3`), `heater_generic
+   chamber_heater`, `fan_generic fanM106` (part), `heater_fan heat_fan*`, `fan_generic
+   chamber_*_fan`, `led chamber_led`.
+7. **Memory** (open): 128-256 MB shared with Klipper, Moonraker, `firmwareExe`.
+   HelixScreen's ~15 MB footprint is fine, but check `free` with the stock stack
+   running.
+8. **Init** (open): no systemd; the stock stack is started from BusyBox init scripts. An
+   init.d script modeled on the AD5X/ZMOD `S80guppyscreen` pattern is the likely shape.
+9. **Runout on an empty docked head** (open): the preset ships `fd_ex0..3` with role
+   `"none"`, runout disabled. `FilamentSensorManager#lane_index_for_sensor` maps only
+   `e<N>_filament` names to a head, so an fd_ex sensor with the runout role counts any
+   empty docked head as filament loss and raises the runout guidance. Giving them the
+   runout role needs hardware verification of what the switches actually report.
