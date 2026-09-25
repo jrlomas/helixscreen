@@ -41,6 +41,7 @@ class PrinterDiscovery;
 typedef struct _lv_subject_t lv_subject_t;
 
 #include <any>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -1618,6 +1619,42 @@ class AmsBackend {
      */
     virtual AmsError apply_user_edit(int slot_index, const SlotInfo& info,
                                      const helix::ams::Observation& declared) = 0;
+
+    /**
+     * @brief The stamp of the slot's current echo staging, 0 when it has none.
+     *
+     * commit_user_edit() captures this ahead of apply_user_edit() so a refusal
+     * can name the staging it must cancel instead of dropping whatever the
+     * slot holds. The default names nothing; AmsSubscriptionBackend answers
+     * from its own_write_echoes().
+     *
+     * @param slot_index Slot whose staging stamp to read (0-based, global)
+     */
+    virtual std::uint64_t own_write_echo_sequence(int slot_index) {
+        (void)slot_index;
+        return 0;
+    }
+
+    /**
+     * @brief Cancel the echo staging a refused dispatch left behind.
+     *
+     * commit_user_edit() calls this when apply_user_edit() refuses an edit
+     * outright: a write that never went out has no echo, and a guard left
+     * standing would withhold the next genuine firmware reading until its
+     * boundary moved. The matched @p staged_sequence drops only the staging
+     * this refusal created and restores the armed predecessor it suspended:
+     * an earlier edit's write did go out, and firmware is still repeating
+     * it. The default does nothing, for a backend that writes no identity
+     * back to firmware; AmsSubscriptionBackend cancels the staging its
+     * own_write_echoes() holds under that stamp.
+     *
+     * @param slot_index Slot whose staging to cancel (0-based, global)
+     * @param staged_sequence own_write_echo_sequence() of the staging to cancel
+     */
+    virtual void abandon_own_write_echoes(int slot_index, std::uint64_t staged_sequence) {
+        (void)slot_index;
+        (void)staged_sequence;
+    }
 
     /**
      * @brief Put filament information that arrived from outside on a slot.

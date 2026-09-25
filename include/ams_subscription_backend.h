@@ -398,6 +398,13 @@ class AmsSubscriptionBackend : public AmsBackend {
         return nullptr;
     }
 
+    /// commit_user_edit()'s refusal hooks: a dispatch that failed outright
+    /// wrote nothing firmware can echo, so the staging it created cancels
+    /// rather than withholding the next genuine reading, and the armed
+    /// predecessor that staging suspended stands again.
+    std::uint64_t own_write_echo_sequence(int slot_index) override;
+    void abandon_own_write_echoes(int slot_index, std::uint64_t staged_sequence) override;
+
     // --- Protected state for derived classes ---
     IMoonrakerAPI* api_;
     helix::IMoonrakerClient* client_;

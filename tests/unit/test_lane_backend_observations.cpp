@@ -46,6 +46,7 @@
 #include "test_helpers/toolchanger_test_access.h"
 #include "toolchanger_addon.h"
 
+#include <chrono>
 #include <filesystem>
 #include <map>
 #include <mutex>
@@ -89,6 +90,68 @@ using SnapmakerHarness = RegisteredBackend<AmsBackendSnapmaker>;
 using ToolChangerHarness = RegisteredBackend<AmsBackendToolChanger>;
 using QidiHarness = RegisteredBackend<AmsBackendQidi>;
 using MockHarness = RegisteredBackend<AmsBackendMock>;
+
+/// An AFC backend whose write to firmware can be made to fail after it has
+/// staged its echo guard: the state a refused dispatch leaves behind, which
+/// the shared commit funnel has to clean up (prestonbrown/helixscreen#1633).
+class RefusedWriteAfc : public AmsBackendAfc {
+  public:
+    using AmsBackendAfc::AmsBackendAfc;
+
+    bool refuse_writes = false;
+
+    helix::AmsError apply_user_edit(int slot_index, const helix::SlotInfo& info,
+                                    const helix::ams::Observation& declared) override {
+        // Stage and arm exactly as a write-back backend does ahead of its
+        // dispatch, then answer as the dispatch itself would: success means
+        // the write went out and its echo is coming, refusal means nothing
+        // reached firmware.
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (auto* echoes = own_write_echoes()) {
+            echoes->stage(slot_index, declared);
+            echoes->arm(slot_index, std::string{});
+        }
+        if (!refuse_writes) {
+            return helix::AmsErrorHelper::success();
+        }
+        return helix::AmsError(helix::AmsResult::COMMAND_FAILED, "refused", lv_tr("Write failed"));
+    }
+};
+
+using RefusedWriteAfcHarness = RegisteredBackend<RefusedWriteAfc>;
+
+/// An AFC backend running the real apply_user_edit dispatch chain, whose
+/// SET_COLOR/SET_MATERIAL send answers the way a refused Moonraker call does:
+/// through the error callback, after the send itself already returned
+/// (prestonbrown/helixscreen#1633).
+class RefusedGcodeAfc : public AmsBackendAfc {
+  public:
+    using AmsBackendAfc::AmsBackendAfc;
+
+    // Per command: a case refusing only one SET_* proves that dispatch's own
+    // cancel, where refusing both lets either cancel clear the shared guard.
+    bool refuse_set_color = false;
+    bool refuse_set_material = false;
+
+    helix::AmsError execute_gcode(const std::string& gcode, std::function<void()>,
+                                  std::function<void(const MoonrakerError&)> on_error,
+                                  bool /*silent*/ = true) override {
+        const bool refused = (refuse_set_color && gcode.rfind("SET_COLOR ", 0) == 0) ||
+                             (refuse_set_material && gcode.rfind("SET_MATERIAL ", 0) == 0);
+        if (refused && on_error &&
+            (gcode.rfind("SET_COLOR ", 0) == 0 || gcode.rfind("SET_MATERIAL ", 0) == 0)) {
+            // Inline, on the dispatching thread, while apply_user_edit still
+            // holds the backend mutex: the tightest shape the callback fires in.
+            MoonrakerError err;
+            err.type = MoonrakerErrorType::JSON_RPC_ERROR;
+            err.message = "macro refused";
+            on_error(err);
+        }
+        return helix::AmsErrorHelper::success();
+    }
+};
+
+using RefusedGcodeAfcHarness = RegisteredBackend<RefusedGcodeAfc>;
 
 /// One `box` object, delivered the way Moonraker delivers it. Which schema
 /// parsed, and whether the frame counts as a full update at all, are decisions
@@ -1092,6 +1155,155 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(after.vendor_cache.has_value());
     CHECK_FALSE(after.vendor_cache->color_rgb.has_value());
     CHECK_FALSE(after.vendor_cache->material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a refused write leaves no guard to withhold firmware's value",
+                 "[lane][ingest][afc]") {
+    RefusedWriteAfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // The commit funnel the application's editor and Clear Spool both ride.
+    // The dispatch fails outright, so the edit is refused whole: nothing is
+    // filed on the lane and firmware was never written.
+    harness->refuse_writes = true;
+    const helix::SlotInfo original = harness->get_slot_info(0);
+    helix::SlotInfo edit = original;
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    const helix::AmsError error = harness->commit_user_edit(0, original, edit);
+    CHECK_FALSE(error.success());
+    CHECK_FALSE(error.partially_applied);
+    CHECK_FALSE(lane_sources(harness.lane(0)).local_user.has_value());
+
+    // Firmware's next frame is a reading, not an echo: the write never went
+    // out, so the values it states must file rather than be withheld by the
+    // guard the failed dispatch staged.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+    const auto sources = lane_sources(harness.lane(0));
+    REQUIRE(sources.vendor_cache.has_value());
+    REQUIRE(sources.vendor_cache->color_rgb.has_value());
+    CHECK(*sources.vendor_cache->color_rgb == 0x00FF00u);
+    CHECK(sources.vendor_cache->material == "PETG");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a refused write restores the guard of the edit it suspended",
+                 "[lane][ingest][afc]") {
+    // An edit whose write went out arms a guard firmware will echo back. A
+    // LATER edit refused after staging suspends that guard as its carry; the
+    // refusal must stand the earlier guard up again, because erasing it would
+    // let the earlier write's echo file as the machine's own word.
+    RefusedWriteAfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // Edit A goes out: its values are now ours, coming back.
+    const helix::SlotInfo before_a = harness->get_slot_info(0);
+    helix::SlotInfo edit_a = before_a;
+    edit_a.color_rgb = 0xFF0000u;
+    edit_a.material = "ABS";
+    REQUIRE(harness->commit_user_edit(0, before_a, edit_a).success());
+
+    // Edit B is refused: nothing of it reached firmware.
+    harness->refuse_writes = true;
+    const helix::SlotInfo before_b = harness->get_slot_info(0);
+    helix::SlotInfo edit_b = before_b;
+    edit_b.color_rgb = 0x00FF00u;
+    CHECK_FALSE(harness->commit_user_edit(0, before_b, edit_b).success());
+
+    // Firmware's next frame repeats edit A's values: still our own write
+    // being echoed, so neither field may file as the machine's word.
+    feed_afc_lane(*harness, "lane1", {{"color", "#FF0000"}, {"material", "ABS"}});
+    {
+        const auto sources = lane_sources(harness.lane(0));
+        CHECK(!(sources.vendor_cache && sources.vendor_cache->color_rgb == 0xFF0000u));
+        CHECK(!(sources.vendor_cache && sources.vendor_cache->material == "ABS"));
+    }
+
+    // A value neither edit wrote is a reading and files.
+    feed_afc_lane(*harness, "lane1", {{"color", "#0000FF"}});
+    {
+        const auto sources = lane_sources(harness.lane(0));
+        REQUIRE(sources.vendor_cache.has_value());
+        REQUIRE(sources.vendor_cache->color_rgb.has_value());
+        CHECK(*sources.vendor_cache->color_rgb == 0x0000FFu);
+    }
+}
+
+namespace {
+/// The shared body of the two refused-dispatch cases: @p refuse_material
+/// flips exactly one SET_* send to fail through the error callback after the
+/// send returned success, while the other SET_* went out. The refused
+/// command's field never reached firmware, so the same value on the next
+/// frame is a reading and must file; the accepted command's field DID reach
+/// firmware, so the same value on that frame is our own write echoing and
+/// must stay withheld.
+void assert_refused_set_command_releases_only_its_own_field(RefusedGcodeAfcHarness& harness,
+                                                            bool refuse_material) {
+    if (refuse_material) {
+        harness->refuse_set_material = true;
+    } else {
+        harness->refuse_set_color = true;
+    }
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // The edit's send returns success, then Moonraker refuses one SET_*
+    // macro through the error callback: the dispatch failed after the guard
+    // was already staged and armed.
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    REQUIRE(helix::test::apply_edit(*harness, 0, edit).success());
+    // The cancel hops off the callback's thread before taking the backend
+    // mutex, which apply_user_edit still holds.
+    helix::ui::UpdateQueue::instance().drain();
+
+    // filament_name is the proof the frame parsed, which makes each field's
+    // presence or absence below the release's doing rather than a guard that
+    // never armed.
+    feed_afc_lane(*harness, "lane1",
+                  {{"color", "#00FF00"}, {"material", "PETG"}, {"filament_name", "AFC Basics"}});
+
+    const auto sources = lane_sources(harness.lane(0));
+    REQUIRE(sources.vendor_cache.has_value());
+    REQUIRE(sources.vendor_cache->spool_name.has_value());
+    CHECK(*sources.vendor_cache->spool_name == "AFC Basics");
+    if (refuse_material) {
+        // SET_MATERIAL never reached firmware: PETG on the frame is a
+        // reading and files. SET_COLOR did: the green on the frame is our
+        // own write echoing, and filing it would put the edit back as the
+        // machine's word.
+        REQUIRE(sources.vendor_cache->material.has_value());
+        CHECK(*sources.vendor_cache->material == "PETG");
+        CHECK_FALSE(sources.vendor_cache->color_rgb.has_value());
+    } else {
+        REQUIRE(sources.vendor_cache->color_rgb.has_value());
+        CHECK(*sources.vendor_cache->color_rgb == 0x00FF00u);
+        CHECK_FALSE(sources.vendor_cache->material.has_value());
+    }
+}
+} // namespace
+
+TEST_CASE_METHOD(LVGLTestFixture, "a refused SET_COLOR releases its own guard, not SET_MATERIAL's",
+                 "[lane][ingest][afc]") {
+    RefusedGcodeAfcHarness harness(nullptr, nullptr);
+    assert_refused_set_command_releases_only_its_own_field(harness, /*refuse_material=*/false);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a refused SET_MATERIAL releases its own guard, not SET_COLOR's",
+                 "[lane][ingest][afc]") {
+    RefusedGcodeAfcHarness harness(nullptr, nullptr);
+    assert_refused_set_command_releases_only_its_own_field(harness, /*refuse_material=*/true);
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a frame with no sensor key neither sets nor erases AFC presence",
@@ -4354,7 +4566,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "the factory mock is registered before it star
 //
 // By source: only records classifying as VendorCache. A record naming a spool
 // is the server's statement and one carrying a lock key is a person's, and
-// neither becomes true again merely because a re-read saw it.
+// neither becomes true again merely because a re-read saw it. A record this
+// application did not write is another tool's statement and may displace the
+// lane's own (#1632) - unless a write of ours is still in flight on the slot,
+// where the guard's strip alone decides what files.
 //
 // By lane: only where firmware states no identity of its own. Everywhere else
 // a status frame already files the vendor-cache record, ingest() replaces a
@@ -4474,10 +4689,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync re-reads the shared namespace into t
 
     CHECK(db.api.mock_db_namespace_get_count() == 1);
     const auto lane = lane_sources(harness.lane(0));
-    REQUIRE(lane.remembered.has_value());
-    CHECK(lane.remembered->material == "ASA");
-    REQUIRE(lane.remembered->color_rgb.has_value());
-    CHECK(*lane.remembered->color_rgb == 0xA4B2BCu);
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "ASA");
+    REQUIRE(lane.local_user->color_rgb.has_value());
+    CHECK(*lane.local_user->color_rgb == 0xA4B2BCu);
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a resync reaches the backend's own block, not slot indices",
@@ -4500,12 +4715,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync reaches the backend's own block, not
 
     // Slot 1, not slot 0: the slot index is carried as well as the block.
     const auto lane = lane_sources(backend->lane_id(1));
-    REQUIRE(lane.remembered.has_value());
-    CHECK(lane.remembered->material == "PC");
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "PC");
 
     // Block 0 belongs to the other backend. Deriving the id from the slot
     // index alone would land the record there.
-    CHECK_FALSE(lane_sources(helix::ams::lane_id_for(0, 1)).remembered.has_value());
+    CHECK_FALSE(lane_sources(helix::ams::lane_id_for(0, 1)).local_user.has_value());
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a resync files no declaration for a record naming a spool",
@@ -4527,8 +4742,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync files no declaration for a record na
     CHECK_FALSE(linked.remembered.has_value());
 
     const auto plain = lane_sources(harness.lane(1));
-    REQUIRE(plain.remembered.has_value());
-    CHECK(plain.remembered->material == "PLA");
+    REQUIRE(plain.local_user.has_value());
+    CHECK(plain.local_user->material == "PLA");
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a resync files no declaration for a locked record",
@@ -4553,8 +4768,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync files no declaration for a locked re
     CHECK_FALSE(locked.remembered.has_value());
 
     const auto plain = lane_sources(harness.lane(1));
-    REQUIRE(plain.remembered.has_value());
-    CHECK(plain.remembered->material == "PLA");
+    REQUIRE(plain.local_user.has_value());
+    CHECK(plain.local_user->material == "PLA");
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a re-read that cannot reach the database leaves the lane alone",
@@ -4566,7 +4781,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "a re-read that cannot reach the database leav
 
     harness->request_resync();
     helix::ui::UpdateQueue::instance().drain();
-    REQUIRE(lane_sources(harness.lane(0)).remembered.has_value());
+    REQUIRE(lane_sources(harness.lane(0)).local_user.has_value());
 
     db.seed("T0", nlohmann::json{{"lane", "0"}, {"material", "TPU"}});
     db.api.mock_reject_next_db_get();
@@ -4574,8 +4789,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "a re-read that cannot reach the database leav
     helix::ui::UpdateQueue::instance().drain();
 
     const auto lane = lane_sources(harness.lane(0));
-    REQUIRE(lane.remembered.has_value());
-    CHECK(lane.remembered->material == "PLA");
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "PLA");
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a resync withholds the fields of a write this backend sent",
@@ -4612,16 +4827,114 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync withholds the fields of a write this
     CHECK_FALSE(echoed.remembered->material.has_value());
     CHECK_FALSE(echoed.remembered->color_rgb.has_value());
 
-    // Without a write outstanding the same record files whole, so the
-    // withholding is the guard's and not the resync's.
+    // Without a write outstanding the same record files whole - as another
+    // tool's statement, on the user's rung (#1632) - so the withholding is
+    // the guard's and not the resync's.
     db.seed("T1", nlohmann::json{{"lane", "1"}, {"material", "PETG"}, {"color", "#00FF00"}});
     harness->request_resync();
     helix::ui::UpdateQueue::instance().drain();
     const auto plain = lane_sources(harness.lane(1));
-    REQUIRE(plain.remembered.has_value());
-    CHECK(plain.remembered->material == "PETG");
-    REQUIRE(plain.remembered->color_rgb.has_value());
-    CHECK(*plain.remembered->color_rgb == 0x00FF00u);
+    REQUIRE(plain.local_user.has_value());
+    CHECK(plain.local_user->material == "PETG");
+    REQUIRE(plain.local_user->color_rgb.has_value());
+    CHECK(*plain.local_user->color_rgb == 0x00FF00u);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a resync promotes a record another tool wrote over an older edit",
+                 "[lane][ingest][resync]") {
+    ToolChangerHarness harness(nullptr, nullptr);
+    LaneDataDb db;
+
+    // The lane's standing statement: an edit made here, stamped 12:00.
+    const auto at = [](int hours) {
+        return std::chrono::system_clock::time_point{
+            std::chrono::seconds(1790337600 + hours * 3600)};
+    };
+    helix::ams::Observation mine(helix::ams::ObservationSource::LocalUser);
+    mine.color_rgb = 0x00FF00u;
+    mine.material = "PETG";
+    mine.edited_at = at(0);
+    helix::ams::commit_slot_edit(harness.lane(0), mine);
+
+    // Another tool replaced the record at 13:00 with its own identity.
+    db.seed("T0", nlohmann::json{{"lane", "0"},
+                                 {"color", "#ED2C2C"},
+                                 {"material", "PLA"},
+                                 {"scan_time", "2026-09-25T13:00:00Z"}});
+    ToolChangerTestAccess::inject_override_store(*harness, toolchanger_store(db));
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto lane = lane_sources(harness.lane(0));
+    REQUIRE(lane.local_user.has_value());
+    REQUIRE(lane.local_user->color_rgb.has_value());
+    CHECK(*lane.local_user->color_rgb == 0xED2C2Cu);
+    CHECK(lane.local_user->material == "PLA");
+    // The winning statement carries the record's stamp, so a later edit here
+    // displaces it and a later record elsewhere does too.
+    REQUIRE(lane.local_user->edited_at.has_value());
+    CHECK(*lane.local_user->edited_at == at(1));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a resync keeps an outside record older than the lane's edit below it",
+                 "[lane][ingest][resync]") {
+    ToolChangerHarness harness(nullptr, nullptr);
+    LaneDataDb db;
+
+    const auto at = [](int hours) {
+        return std::chrono::system_clock::time_point{
+            std::chrono::seconds(1790337600 + hours * 3600)};
+    };
+    helix::ams::Observation mine(helix::ams::ObservationSource::LocalUser);
+    mine.color_rgb = 0x00FF00u;
+    mine.material = "PETG";
+    mine.edited_at = at(2);
+    helix::ams::commit_slot_edit(harness.lane(0), mine);
+
+    // Stamped 10:00, two hours before the edit standing on the lane.
+    db.seed("T0", nlohmann::json{{"lane", "0"},
+                                 {"color", "#ED2C2C"},
+                                 {"material", "PLA"},
+                                 {"scan_time", "2026-09-25T10:00:00Z"}});
+    ToolChangerTestAccess::inject_override_store(*harness, toolchanger_store(db));
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto lane = lane_sources(harness.lane(0));
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "PETG");
+    // The older record ranks below the lane's own edit, as a memory.
+    REQUIRE(lane.remembered.has_value());
+    CHECK(lane.remembered->material == "PLA");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a resync promotes a record another tool left no stamp on",
+                 "[lane][ingest][resync]") {
+    // Mainsail and Orca write no scan_time. Their record still displaced ours
+    // in the namespace - our writes always carry one - so the absence of a
+    // stamp is itself the evidence theirs is the newer edit.
+    ToolChangerHarness harness(nullptr, nullptr);
+    LaneDataDb db;
+
+    helix::ams::Observation mine(helix::ams::ObservationSource::LocalUser);
+    mine.material = "PETG";
+    mine.edited_at = std::chrono::system_clock::time_point{std::chrono::seconds(1790337600)};
+    helix::ams::commit_slot_edit(harness.lane(0), mine);
+
+    db.seed("T0", nlohmann::json{{"lane", "0"}, {"material", "PLA"}});
+    ToolChangerTestAccess::inject_override_store(*harness, toolchanger_store(db));
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto lane = lane_sources(harness.lane(0));
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "PLA");
+    CHECK_FALSE(lane.remembered.has_value());
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "AFC's resync consults its own echo guard",
