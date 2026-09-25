@@ -671,16 +671,20 @@ The `delta` persona changes the kinematics and hardware only. Its build volume i
 
 #### The `creator5` persona
 
-Mirrors `assets/config/presets/creator5.json`, so the mock and the shipped preset
+Both Creator 5 personas model the **Creator 5 Pro** (the heated-chamber model), so
+`creator5` here names the mock persona, not the printer: the preset it mirrors is
+`assets/config/presets/creator5_pro.json`. The mock and the shipped preset
 describe the same machine: 4 extruders (`extruder`, `extruder1..3`), chamber heater
 `heater_generic chamber_heater`, fans `heater_fan heat_fan` / `fan_generic fanM106`
 / `fan_generic chamber_fan` / `fan_generic chamber_loop_fan`, LED `led chamber_led`,
 and one runout switch per head (`fd_ex0..fd_ex3`).
 
-It also advertises the Creator 5 fingerprint in `printer.objects.list`
-(`ff_toolchange`, `gcode_button extruder_grab0..3`, `gcode_macro TOOLCHANGE_PARK`,
-`gcode_macro BED_MESH_CALIBRATE`), so `PrinterDetector` resolves it to
-**FlashForge Creator 5 Pro** at 99% confidence rather than a generic CoreXY.
+It also advertises the Creator 5 Pro fingerprint in `printer.objects.list`
+(`ff_toolchange`, `gcode_button extruder_grab0..3`, `heater_generic chamber_heater`,
+`gcode_macro TOOLCHANGE_PARK`, `gcode_macro BED_MESH_CALIBRATE`), so
+`PrinterDetector` resolves it to **FlashForge Creator 5 Pro** at 99% confidence
+rather than a generic CoreXY; without the chamber heater object it would resolve
+to the heater-free Creator 5.
 
 **The persona implies a tool changer.** A Creator 5 Pro is a 4-head changer, so
 with no `HELIX_MOCK_AMS` set it selects the toolchanger backend rather than
@@ -712,8 +716,8 @@ Where `creator5` advertises the Reforge fingerprint (`ff_toolchange`,
 `gcode_button extruder_grab0..3`) and stands the mock toolchanger up, this
 persona publishes Z-Mod's own objects (`zmod`, `zmod_color`, `save_variables`,
 `gcode_button extruder_pos1..4` and `extruder_grab1..4`; Z-Mod's buttons are
-1-based) plus the per-head sensor pairs `fd_ex0..3` / `fm_ex0..3`, and pushes
-no `mmu` and no `toolchanger` object.
+1-based) plus the Pro's `heater_generic chamber_heater` and the per-head sensor
+pairs `fd_ex0..3` / `fm_ex0..3`, and pushes no `mmu` and no `toolchanger` object.
 
 The point is that real discovery runs: `AmsBackend::try_create_mock()` declines
 this persona (see `MoonrakerClientMock::mock_hardware_persona()`), so

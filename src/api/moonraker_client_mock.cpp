@@ -1048,7 +1048,7 @@ void MoonrakerClientMock::populate_capabilities() {
         spdlog::debug("[MoonrakerClientMock] Custom filament sensors from env: {}", sensor_env);
     } else if (printer_type_ == PrinterType::FLASHFORGE_CREATOR5 ||
                printer_type_ == PrinterType::FLASHFORGE_CREATOR5_ZMOD) {
-        // One runout switch per head, named as in assets/config/presets/creator5.json.
+        // One runout switch per head, named as in assets/config/presets/creator5_pro.json.
         for (int i = 0; i < 4; ++i) {
             mock_objects.push_back("filament_switch_sensor fd_ex" + std::to_string(i));
         }
@@ -2167,7 +2167,7 @@ void MoonrakerClientMock::populate_hardware() {
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD: // Z-Mod: same machine, same hardware
     case PrinterType::FLASHFORGE_CREATOR5:
         // FlashForge Creator 5 Pro: 4-head tool changer, enclosed, heated chamber.
-        // Object names mirror assets/config/presets/creator5.json so the mock and
+        // Object names mirror assets/config/presets/creator5_pro.json so the mock and
         // the shipped preset describe the same machine.
         discovery_.heaters() = {"heater_bed", "extruder",  "extruder1",
                                 "extruder2",  "extruder3", "heater_generic chamber_heater"};
