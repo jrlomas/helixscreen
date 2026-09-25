@@ -6,6 +6,7 @@
 #include "lane_observation.h"
 #include "lane_sources.h"
 
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -123,14 +124,22 @@ void withdraw_cleared_fields(Observation& standing, const Observation& edit);
 /// not was written by another tool that replaced ours wholesale
 /// (prestonbrown/helixscreen#1632).
 ///
-/// The question is provenance, not authorship of any one field: every build
-/// of this application has marked its lane_data records with helix_-prefixed
-/// keys, and no other writer emits the prefix, so a shared-namespace document
-/// carrying none of them can only be a foreign replacement. The local cache
-/// is this application's own file, so every record in it is ours whatever
-/// keys it carries.
+/// The question is provenance, not authorship of any one field: no other
+/// writer emits the helix_ prefix, and the legacy spellings `vendor` and
+/// `spool_name` are likewise ours alone (the namespace's shared spellings are
+/// `vendor_name` and `name`), so a shared-namespace document carrying none of
+/// our keys can only be a foreign replacement. The local cache is this
+/// application's own file, so every record in it is ours whatever keys it
+/// carries.
 [[nodiscard]] bool wire_authored_by_helix(const nlohmann::json& wire,
                                           LegacyLockKeys keys = LegacyLockKeys::LaneData);
+
+/// A stamp older than this names no real moment: a device without an RTC
+/// reads 1970 (or its build date) until NTP reaches it, so a statement we
+/// stamped on such a clock cannot be ordered against a foreign record's real
+/// stamp. 2020-01-01 UTC; HelixScreen's first release is 2025.
+inline constexpr std::chrono::system_clock::time_point k_unknown_stamp_before =
+    std::chrono::system_clock::time_point{} + std::chrono::seconds(1577836800);
 
 /// Whether a record another tool wrote displaces the statement standing on
 /// the lane. Newest edit wins whoever made it: a record stamped by its writer
@@ -138,6 +147,13 @@ void withdraw_cleared_fields(Observation& standing, const Observation& edit);
 /// outright because our writes always stamp and an unstampable record can
 /// only be a foreign write that replaced ours, and no statement standing
 /// leaves the record the only one anyone made.
+/// Newest edit wins whoever made it: a record stamped by its writer wins only
+/// when its stamp is past the statement's; one with no stamp wins outright
+/// because our writes always stamp and an unstampable record can only be a
+/// foreign write that replaced ours; no statement standing leaves the record
+/// the only one anyone made; and a statement stamped below
+/// k_unknown_stamp_before cannot be ordered at all, so it keeps the lane
+/// rather than losing it to a record whose claim to be newer is unfalsifiable.
 ///
 /// Pure: no clock, no globals, no I/O.
 [[nodiscard]] bool outside_edit_wins(const FilamentSlotOverride& record,

@@ -326,20 +326,23 @@ the external write. An override survives only an absent/zero firmware id
 
 **Amendment (v1.14):** when a lane's record disagrees with the statement
 standing on it, the newest edit wins whoever made it
-(prestonbrown/helixscreen#1632). A record carrying none of the `helix_`
-extension keys was written by another tool that replaced ours wholesale — no
-other writer emits the prefix — and files as the lane's statement rather than
-as a memory below it: unstamped it wins outright, because every HelixScreen
-write carries a `scan_time` and a record without one can only be a foreign
-replacement; stamped it wins only over a statement older than its `scan_time`,
-and an older or equal record still files as remembered. Records HelixScreen
-wrote never promote, whatever their `scan_time` says, and while one of our
-writes is still awaiting firmware's echo the re-read strips what matches it
-before judging anything, so our own write coming back is never misread as a
-newer outside edit. This is why §3 asks a rewriter to carry the authorship
-keys through unchanged: a tool that drops them reassigns its own edit to
-nobody, and the next HelixScreen load reads the record as a foreign
-replacement.
+(prestonbrown/helixscreen#1632). A record carrying none of this application's
+authorship marks, whether a `helix_` extension key or the legacy `vendor` or
+`spool_name` spellings that no other lane_data writer emits, was written by
+another tool that replaced ours wholesale and files as the lane's statement
+rather than as a memory below it: unstamped it wins outright, because every
+HelixScreen write carries a `scan_time` and a record without one can only be
+a foreign replacement; stamped it wins only over a statement older than its
+`scan_time`, and an older or equal record still files as remembered. A
+statement stamped before 2020 is a device with no clock rather than a moment
+in the lane's history, and an order against it cannot be known, so the
+statement keeps the lane. Records HelixScreen wrote never promote, whatever
+their `scan_time` says, and while one of our writes is still awaiting
+firmware's echo the re-read strips what matches it before judging anything,
+so our own write coming back is never misread as a newer outside edit. This
+is why §3 asks a rewriter to carry the authorship keys through unchanged: a
+tool that drops them reassigns its own edit to nobody, and the next
+HelixScreen load reads the record as a foreign replacement.
 
 A tool reading these records does not need to replicate HelixScreen's merge
 rule — it is documented here so third parties understand why we emit only the
@@ -638,12 +641,14 @@ reader can resolve.
 ## Changelog
 
 - **v1.14 (2026-09-25)**: §5 amendment: newest edit wins whoever made it
-  (prestonbrown/helixscreen#1632). A shared-namespace record carrying no
-  `helix_` key is another tool's replacement of ours and files as the lane's
-  statement — unstamped outright, stamped only over an older statement —
-  instead of as a memory below whatever a person said.
-  §6: Snapmaker U1, ACE and AFC moved onto the insert rule
-  (prestonbrown/helixscreen#1710).
+  (prestonbrown/helixscreen#1632). A shared-namespace record carrying none of
+  our authorship marks (`helix_` keys, or the legacy `vendor` / `spool_name`
+  spellings) is another tool's replacement of ours and files as the lane's
+  statement, unstamped outright or stamped only over an older statement,
+  instead of as a memory below whatever a person said. A `scan_time` in the
+  JavaScript or Python spelling (fractional seconds, numeric offset) orders
+  the same as a `Z`-suffixed one. §6: Snapmaker U1, ACE and AFC moved onto
+  the insert rule (prestonbrown/helixscreen#1710).
 - **v1.13 (2026-09-24)**: §6 states one insert rule for every backend: a
   spool going into a slot is judged on what the hardware read off it (tag UID,
   or material and colour decoded from the tag, or a firmware-named spool id).

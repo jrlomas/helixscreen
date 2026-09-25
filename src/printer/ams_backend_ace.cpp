@@ -1064,7 +1064,7 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                 // set them.
                 //
                 // First observation (no prev_slot_status_ entry) is a
-                // BASELINE and must never fire — matches IFS/Snapmaker
+                // BASELINE and must never fire a clear, matching IFS/Snapmaker
                 // baseline semantics. Only call the helper when a prior status
                 // was already recorded for this slot.
                 int idx = static_cast<int>(i);

@@ -504,10 +504,16 @@ bool wire_authored_by_helix(const nlohmann::json& wire, LegacyLockKeys keys) {
     }
     // In the shared namespace the helix_ prefix is ours alone - no other
     // writer emits it - so any key carrying it was written by some build of
-    // HelixScreen, whatever that build's authorship keys were. A document
-    // with none of them can only have replaced ours wholesale.
+    // HelixScreen, whatever that build's authorship keys were. So are the
+    // legacy spellings `vendor` and `spool_name`: a 0.99.x mirror wrote them
+    // without the prefix, and the namespace's shared spellings are
+    // `vendor_name` and `name`, which a foreign document carries instead. A
+    // document with none of our keys can only have replaced ours wholesale.
+    const auto ours = [](const std::string& key) {
+        return key.rfind("helix_", 0) == 0 || key == "vendor" || key == "spool_name";
+    };
     return std::any_of(wire.items().begin(), wire.items().end(),
-                       [](const auto& entry) { return entry.key().rfind("helix_", 0) == 0; });
+                       [&](const auto& entry) { return ours(entry.key()); });
 }
 
 bool outside_edit_wins(const FilamentSlotOverride& record,
@@ -517,6 +523,15 @@ bool outside_edit_wins(const FilamentSlotOverride& record,
     }
     if (record.updated_at.time_since_epoch().count() <= 0) {
         return true;
+    }
+    // A statement stamped before this product existed is a device with no RTC
+    // writing before NTP reached it, not a moment in the lane's history:
+    // ordering a foreign record against it would let even a stale record beat
+    // a newer user edit. The order is unknowable, so the record does not get
+    // to displace; the statement keeps the lane until something ordered
+    // replaces it.
+    if (*standing_user->edited_at < k_unknown_stamp_before) {
+        return false;
     }
     return record.updated_at > *standing_user->edited_at;
 }

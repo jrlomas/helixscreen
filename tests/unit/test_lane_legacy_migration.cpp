@@ -442,6 +442,46 @@ TEST_CASE_METHOD(HelixTestFixture,
     CHECK_FALSE(sources.local_user.has_value());
 }
 
+TEST_CASE_METHOD(HelixTestFixture,
+                 "A record our legacy mirror wrote is not another tool's statement",
+                 "[lane][migration]") {
+    // The 0.99.x auto-mirror wrote lane_data with `vendor` and `spool_name`
+    // and none of today's helix_ keys, so the authorship question has to
+    // answer those spellings as ours: reading such a mirror as foreign would
+    // promote it to the user's rung at load and paint over the live tag
+    // reading. The namespace's shared spellings (`vendor_name`, `name`) stay
+    // another tool's, whatever values they carry.
+    using helix::ams::from_lane_data_record;
+    using helix::ams::sources_from_record;
+
+    const nlohmann::json mirror{{"lane", 0},
+                                {"color", "#ED2C2C"},
+                                {"material", "PLA"},
+                                {"vendor", "AFC Basics"},
+                                {"spool_name", "Quiet PLA"},
+                                {"scan_time", "2026-09-25T12:00:00Z"}};
+    const auto parsed = from_lane_data_record(mirror);
+    REQUIRE(parsed.has_value());
+
+    const auto ours = sources_from_record(parsed->second, mirror, LegacyLockKeys::LaneData);
+    CHECK_FALSE(ours.local_user.has_value());
+    REQUIRE(ours.remembered.has_value());
+    CHECK(ours.remembered->brand == "AFC Basics");
+    CHECK(ours.remembered->spool_name == "Quiet PLA");
+
+    // The same identity under the shared spellings: a foreign document.
+    const nlohmann::json foreign{{"lane", 0},           {"color", "#ED2C2C"},
+                                 {"material", "PLA"},   {"vendor_name", "AFC Basics"},
+                                 {"name", "Quiet PLA"}, {"scan_time", "2026-09-25T12:00:00Z"}};
+    const auto parsed_foreign = from_lane_data_record(foreign);
+    REQUIRE(parsed_foreign.has_value());
+
+    const auto theirs =
+        sources_from_record(parsed_foreign->second, foreign, LegacyLockKeys::LaneData);
+    REQUIRE(theirs.local_user.has_value());
+    CHECK_FALSE(theirs.remembered.has_value());
+}
+
 TEST_CASE("An outside record displaces only a statement it is newer than", "[lane][migration]") {
     using helix::ams::outside_edit_wins;
 
@@ -470,6 +510,65 @@ TEST_CASE("An outside record displaces only a statement it is newer than", "[lan
     // Unstampable: a foreign writer that writes no scan_time replaced our
     // stamped record wholesale, so theirs is the newest edit there is.
     record.updated_at = {};
+    CHECK(outside_edit_wins(record, standing));
+}
+
+TEST_CASE("A foreign stamp in JS or Python spelling still orders", "[lane][migration]") {
+    // toISOString() writes fractional seconds, isoformat() writes a numeric
+    // offset: both name an instant, and reading either as unstamped would let
+    // a stale foreign record win outright over a newer user statement.
+    using helix::ams::from_lane_data_record;
+    using helix::ams::outside_edit_wins;
+
+    const auto stamp = [](const char* scan_time) {
+        const nlohmann::json wire{{"lane", 0}, {"color", "#ED2C2C"}, {"scan_time", scan_time}};
+        const auto parsed = from_lane_data_record(wire);
+        REQUIRE(parsed.has_value());
+        return parsed->second.updated_at;
+    };
+
+    // The fraction is sub-second, not a reject: .500Z sits strictly between
+    // the plain second and the next one.
+    const auto half_past = stamp("2026-09-25T12:00:00.500Z");
+    CHECK(half_past > stamp("2026-09-25T12:00:00Z"));
+    CHECK(half_past < stamp("2026-09-25T12:00:01Z"));
+
+    // An offset is a zone, not garbage: 14:00 at +02:00 and 10:00 at -02:00
+    // are both 12:00 UTC.
+    CHECK(stamp("2026-09-25T14:00:00+02:00") == stamp("2026-09-25T12:00:00Z"));
+    CHECK(stamp("2026-09-25T10:00:00-02:00") == stamp("2026-09-25T12:00:00Z"));
+
+    // A zoneless wall time names no instant and reads as unstamped.
+    CHECK(stamp("2026-09-25T12:00:00").time_since_epoch().count() == 0);
+
+    // The pay-off: a fractional stamp older than the statement does not win,
+    // where an unparsable one read as "no stamp" and won outright.
+    helix::ams::Observation standing(ObservationSource::LocalUser);
+    standing.edited_at = stamp("2026-09-25T13:00:00Z");
+    helix::ams::FilamentSlotOverride record;
+    record.updated_at = stamp("2026-09-25T12:00:00.123Z");
+    CHECK_FALSE(outside_edit_wins(record, standing));
+}
+
+TEST_CASE("A statement stamped before the product existed keeps the lane", "[lane][migration]") {
+    // A device without an RTC stamps 1970 (or its build date) until NTP
+    // reaches it. Ordering a foreign record against such a stamp would let
+    // even a stale record beat a newer user edit, so an unknowable order
+    // means the record does not displace.
+    using helix::ams::outside_edit_wins;
+
+    helix::ams::FilamentSlotOverride record;
+    record.updated_at = std::chrono::system_clock::time_point{std::chrono::seconds(1790337600)};
+    helix::ams::Observation standing(ObservationSource::LocalUser);
+
+    // The unread clock: the order is unknowable, so the statement stays.
+    standing.edited_at = std::chrono::system_clock::time_point{std::chrono::seconds(86400)};
+    CHECK_FALSE(outside_edit_wins(record, standing));
+
+    // A readable clock keeps the ordinary rule in both directions.
+    standing.edited_at = std::chrono::system_clock::time_point{std::chrono::seconds(1790341200)};
+    CHECK_FALSE(outside_edit_wins(record, standing));
+    standing.edited_at = std::chrono::system_clock::time_point{std::chrono::seconds(1790334000)};
     CHECK(outside_edit_wins(record, standing));
 }
 

@@ -1248,7 +1248,7 @@ TEST_CASE("ACE inserting a different tagged spool clears the override",
     REQUIRE(AceTestAccess::get_override(backend, 0).has_value());
     REQUIRE(!api.mock_get_db_value("lane_data", "lane1").is_null());
 
-    // Second parse: EMPTY — the user pulled the spool. Not a swap signal.
+    // Second parse: EMPTY, the user pulled the spool. Not a swap signal.
     AceTestAccess::parse_ace(backend, make_ace_slot_payload("empty", 0x000000, ""));
     REQUIRE(AceTestAccess::get_override(backend, 0).has_value());
 
