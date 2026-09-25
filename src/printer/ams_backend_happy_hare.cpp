@@ -3,6 +3,9 @@
 
 #include "ams_backend_happy_hare.h"
 
+#include "ui_insert_notice.h"
+#include "ui_update_queue.h"
+
 #include "ams_bypass_policy.h"
 #include "ams_fault_event.h"
 #include "ams_state.h"
@@ -1308,6 +1311,26 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
         sensed.present =
             slot_status_reports_filament(slot_status_from_happy_hare(gate_status_raw_[i]));
         ams::ingest(lane_id(static_cast<int>(i)), sensed);
+
+        // An empty gate that now holds filament is an insert. The gate map
+        // carries no material or colour the reader read off the spool - those
+        // keys are a remembered declaration, not a reading - so the spool_id
+        // binding is the only word on what went in: a gate the MMU names keeps
+        // its details silently either way (same spool, or the binding verdict
+        // swaps them), and an unnamed gate asks. entry->info.status still
+        // holds the previous frame's stamp here; refresh_gate_statuses_locked
+        // rewrites it after this loop.
+        if (sensed.present) {
+            const auto* entry = slots_.get(static_cast<int>(i));
+            const auto binding = gate_readings_.find(static_cast<int>(i));
+            const bool binding_names_spool =
+                binding != gate_readings_.end() && binding->second.spoolman_id.value_or(0) > 0;
+            if (entry->info.status == SlotStatus::EMPTY && !binding_names_spool) {
+                const int gate = static_cast<int>(i);
+                helix::ui::queue_update(
+                    [gate] { helix::ui::offer_clear_after_unverified_insert(gate); });
+            }
+        }
     }
     for (const auto& [gate, reading] : gate_readings_) {
         // The echo guard: a value repeating the user's own MMU_GATE_MAP write

@@ -2015,7 +2015,7 @@ TEST_CASE("QIDI Box tag fingerprint change clears a prior user edit", "[ams][qid
     // First observation establishes the baseline whatever the override says.
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
     REQUIRE(QidiBoxTestAccess::get_override(backend, 0).has_value());
 
     // A different spool's tag: new ids on all three fields.
@@ -2053,7 +2053,7 @@ TEST_CASE("QIDI Box unchanged tag fingerprint keeps a user edit", "[ams][qidi_bo
 
     const json tag{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}};
     QidiBoxTestAccess::parse_vars(backend, tag);
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
 
     // The same spool re-observed on a later poll.
     QidiBoxTestAccess::parse_vars(backend, tag);
@@ -2082,7 +2082,7 @@ TEST_CASE("QIDI Box first tag observation is a baseline, not a clear", "[ams][qi
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
 
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
     CHECK(QidiBoxTestAccess::get_override(backend, 0).has_value());
 }
 
@@ -2095,7 +2095,7 @@ TEST_CASE("QIDI Box own identity push echo does not clear the edit", "[ams][qidi
     QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
 
     // The user's edit resolves to fila 11 (ABS), palette row 2 (the exact
     // 0x060606 entry), vendor 2 (eSUN).
@@ -2133,7 +2133,7 @@ TEST_CASE("QIDI Box colour and vendor writes keep the echo expectation alive", "
     QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
 
     auto info = backend.get_slot_info(0);
     info.material = "Woodfill"; // matches no profile by name or type
@@ -2168,7 +2168,7 @@ TEST_CASE("QIDI Box a write that never dispatched leaves no echo expectation", "
     QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
 
     auto info = backend.get_slot_info(0);
     info.material = "ABS";
@@ -2195,7 +2195,7 @@ TEST_CASE("QIDI Box a failed dispatch drops only its own echo expectations", "[a
     QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
 
     // Edit A: ABS / eSUN / 0x060606 -> fila 11, colour 2, vendor 2. It lands.
     auto info_a = backend.get_slot_info(0);
@@ -2331,7 +2331,7 @@ TEST_CASE("QIDI Box a poll between the edit and its echo keeps the edit on scree
     QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
 
     auto info = backend.get_slot_info(0);
     info.material = "ABS";
@@ -2412,7 +2412,7 @@ TEST_CASE("QIDI Box clearing a spool writes the three identity zeros", "[ams][qi
     QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
 
     backend.clear_slot_override(0);
 
@@ -2467,7 +2467,7 @@ TEST_CASE("QIDI Box an edit racing the clear's zero echoes survives them", "[ams
     QidiBoxTestAccess::apply_filas_list(backend, STOCK_FILAS_EXCERPT);
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", 1}, {"color_slot0", 18}, {"vendor_slot0", 1}});
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
 
     backend.clear_slot_override(0);
 
@@ -2539,7 +2539,7 @@ TEST_CASE("QIDI Box a quoted SAVE_VARIABLE value paints the slot", "[ams][qidi_b
     QidiBoxTestAccess::parse_vars(
         backend, json{{"filament_slot0", "1"}, {"color_slot0", "18"}, {"vendor_slot0", "1"}});
 
-    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18|1");
+    REQUIRE(QidiBoxTestAccess::last_fingerprint(backend, 0) == "1|18");
     REQUIRE(backend.get_slot_info(0).material == "PLA");
     REQUIRE(backend.get_slot_info(0).brand == "QIDI");
     REQUIRE(backend.get_slot_info(0).color_rgb == 0xFF362Du);
@@ -2593,7 +2593,7 @@ TEST_CASE("QIDI Box a restart compares against the fingerprint the record carrie
         const auto stored = api.mock_get_db_value("lane_data", "lane1");
         REQUIRE(!stored.is_null());
         REQUIRE(stored.contains("helix_fingerprint"));
-        CHECK(stored.at("helix_fingerprint") == "1|18|1");
+        CHECK(stored.at("helix_fingerprint") == "1|18");
     }
 
     SECTION("a swap made while the app was down clears the override") {

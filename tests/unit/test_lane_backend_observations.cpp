@@ -8,6 +8,7 @@
 #include "ui_update_queue.h"
 
 #include "../lvgl_test_fixture.h"
+#include "../ui_test_utils.h"
 #include "ams_backend_ace.h"
 #include "ams_backend_ad5x_ifs.h"
 #include "ams_backend_afc.h"
@@ -141,12 +142,28 @@ std::string filas_list(int fila_id, const std::string& type, int color_id,
            std::to_string(vendor_id) + " = " + vendor + "\n";
 }
 
-/// Two fila profiles, two palette rows and two vendor rows: enough table for
-/// a slot-0 edit and a slot-1 control naming different rows in one frame.
-std::string qidi_two_row_tables() {
-    return fila_section(12, "PETG Basic", "PETG") + fila_section(40, "ABS Rapido", "ABS") +
+/// Three fila profiles (two of them the same material under different names),
+/// two palette rows and two vendor rows: enough table for a slot-0 edit, a
+/// slot-1 control naming different rows, and a fila id change that decodes to
+/// the same material.
+std::string qidi_tables() {
+    return fila_section(12, "PETG Basic", "PETG") + fila_section(14, "PETG Rapido", "PETG") +
+           fila_section(40, "ABS Rapido", "ABS") +
            "[colordict]\n5 = #ED2C2C\n9 = #00FF00\n[vendor_list]\n3 = QIDI\n8 = Elegoo\n";
 }
+
+/// Capture the toasts a case fires, and stop capturing when it ends. The
+/// insert rule's ask is a toast, so this is how a lane test observes it.
+struct ToastRecorder {
+    std::vector<std::string> messages;
+    ToastRecorder() {
+        helix::ui::set_test_toast_hook(
+            [this](ToastSeverity, const std::string& msg, uint32_t) { messages.push_back(msg); });
+    }
+    ~ToastRecorder() {
+        helix::ui::set_test_toast_hook(nullptr);
+    }
+};
 
 /// Four lanes through AFC's own initialize_slots(), which is what a discovery
 /// answer ends in.
@@ -1931,6 +1948,77 @@ TEST_CASE_METHOD(LVGLTestFixture, "clearing one field of a gate does not bring t
     CHECK(*resolved.color_rgb == 0xED2C2Cu);
 }
 
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a Happy Hare insert nothing names a spool for keeps the details and asks",
+                 "[lane][ingest][happy_hare][1710]") {
+    HappyHareHarness harness(nullptr, nullptr);
+    ToastRecorder toasts;
+
+    feed_mmu(*harness, {{"gate_status", nlohmann::json::array({0})},
+                        {"gate_color", nlohmann::json::array({"ed2c2c"})},
+                        {"gate_material", nlohmann::json::array({"PLA"})}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // A spool goes in. Happy Hare senses occupancy alone and the gate map is
+    // memory a person maintains, so the insert itself reads nothing about the
+    // spool, and no binding names one: whether the details still standing
+    // describe the spool now in the gate is the user's to answer.
+    feed_mmu(*harness, {{"gate_status", nlohmann::json::array({1})}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    REQUIRE(toasts.messages.size() == 1);
+    CHECK(toasts.messages.front().find("Gate 1") != std::string::npos);
+    // Asking changes nothing: the declared details stand until answered.
+    const auto resolved = helix::ams::resolved_lane(harness.lane(0));
+    REQUIRE(resolved.material.has_value());
+    CHECK(*resolved.material == "PETG");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a Happy Hare insert the MMU names a spool for asks nothing",
+                 "[lane][ingest][happy_hare][1710]") {
+    HappyHareHarness harness(nullptr, nullptr);
+    ToastRecorder toasts;
+
+    feed_mmu(*harness, {{"gate_status", nlohmann::json::array({0})},
+                        {"gate_spool_id", nlohmann::json::array({7})},
+                        {"gate_color", nlohmann::json::array({"ed2c2c"})}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PLA";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // The gate fills and the MMU still names spool 7: the binding answers the
+    // same-spool question, so nobody is asked. (A different id would have
+    // re-bound through the gate_spool_id verdict already.)
+    feed_mmu(*harness, {{"gate_status", nlohmann::json::array({1})},
+                        {"gate_spool_id", nlohmann::json::array({7})}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(toasts.messages.empty());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a Happy Hare frame with no insert asks nothing",
+                 "[lane][ingest][happy_hare][1710]") {
+    HappyHareHarness harness(nullptr, nullptr);
+    ToastRecorder toasts;
+
+    feed_mmu(*harness, {{"gate_status", nlohmann::json::array({1})},
+                        {"gate_color", nlohmann::json::array({"ed2c2c"})}});
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PLA";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // The gate held filament through both frames; the ask belongs to an
+    // insert, not to a poll.
+    feed_mmu(*harness, {{"gate_status", nlohmann::json::array({1})}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(toasts.messages.empty());
+}
+
 // --- CFS ---------------------------------------------------------------
 
 TEST_CASE_METHOD(LVGLTestFixture, "CFS splits bay occupancy from the box's tag memory",
@@ -3578,7 +3666,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
                  "a Qidi edit's own SAVE_VARIABLE echo does not return as a reading",
                  "[lane][ingest][qidi]") {
     QidiHarness harness(nullptr, nullptr);
-    QidiBoxTestAccess::apply_filas_list(*harness, qidi_two_row_tables());
+    QidiBoxTestAccess::apply_filas_list(*harness, qidi_tables());
     QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 2}});
 
     auto edit = harness->get_slot_info(0);
@@ -3626,7 +3714,7 @@ TEST_CASE_METHOD(LVGLTestFixture,
 TEST_CASE_METHOD(LVGLTestFixture, "a Qidi frame restating the saved ids keeps the echo withheld",
                  "[lane][ingest][qidi]") {
     QidiHarness harness(nullptr, nullptr);
-    QidiBoxTestAccess::apply_filas_list(*harness, qidi_two_row_tables());
+    QidiBoxTestAccess::apply_filas_list(*harness, qidi_tables());
     QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1}});
 
     auto edit = harness->get_slot_info(0);
@@ -3669,7 +3757,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "a Qidi frame restating the saved ids keeps th
 TEST_CASE_METHOD(LVGLTestFixture, "a Qidi spool swap clears the echo guard with the override",
                  "[lane][ingest][qidi]") {
     QidiHarness harness(nullptr, nullptr);
-    QidiBoxTestAccess::apply_filas_list(*harness, qidi_two_row_tables());
+    QidiBoxTestAccess::apply_filas_list(*harness, qidi_tables());
 
     // The same rows the edit below rewrites, so the echo frames stay
     // fingerprint-Unchanged and only the guard is under test.
@@ -3690,26 +3778,28 @@ TEST_CASE_METHOD(LVGLTestFixture, "a Qidi spool swap clears the echo guard with 
     CHECK_FALSE(withheld.vendor_cache->color_rgb.has_value());
     CHECK_FALSE(withheld.vendor_cache->brand.has_value());
 
-    // Same fila and colour rows, a different vendor row: the values repeat
-    // the edit, but the fingerprint moved and no write of ours explains it,
-    // which is the swap signal. The clear that follows drops the guard, so
-    // this frame files the identity rather than withholding it as an echo.
+    // A different fila row with the colour row kept: the fingerprint moves to
+    // a row pair nothing of ours explains, and the material it decodes to
+    // differs from the edit's, which is the swap verdict. The clear that
+    // follows drops the guard, so this frame files the whole identity -
+    // including the colour, which repeats the edit and would stay withheld
+    // with the guard standing - rather than holding it back as an echo.
     QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1},
-                                                           {"filament_slot0", 12},
+                                                           {"filament_slot0", 40},
                                                            {"color_slot0", 5},
-                                                           {"vendor_slot0", 8}});
+                                                           {"vendor_slot0", 3}});
     const auto swapped = lane_sources(harness.lane(0));
     REQUIRE(swapped.vendor_cache.has_value());
-    CHECK(swapped.vendor_cache->material == "PETG");
+    CHECK(swapped.vendor_cache->material == "ABS");
     REQUIRE(swapped.vendor_cache->color_rgb.has_value());
     CHECK(*swapped.vendor_cache->color_rgb == 0xED2C2Cu);
-    CHECK(swapped.vendor_cache->brand == "Elegoo");
+    CHECK(swapped.vendor_cache->brand == "QIDI");
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "clearing a Qidi slot ends its echo suppression",
                  "[lane][ingest][qidi]") {
     QidiHarness harness(nullptr, nullptr);
-    QidiBoxTestAccess::apply_filas_list(*harness, qidi_two_row_tables());
+    QidiBoxTestAccess::apply_filas_list(*harness, qidi_tables());
     QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1}});
 
     auto edit = harness->get_slot_info(0);
@@ -3741,7 +3831,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "clearing a Qidi slot ends its echo suppressio
 TEST_CASE_METHOD(LVGLTestFixture, "a Qidi edit arms nothing its SAVE_VARIABLEs cannot carry",
                  "[lane][ingest][qidi]") {
     QidiHarness harness(nullptr, nullptr);
-    QidiBoxTestAccess::apply_filas_list(*harness, qidi_two_row_tables());
+    QidiBoxTestAccess::apply_filas_list(*harness, qidi_tables());
     QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1}});
 
     auto edit = harness->get_slot_info(0);
@@ -3768,6 +3858,138 @@ TEST_CASE_METHOD(LVGLTestFixture, "a Qidi edit arms nothing its SAVE_VARIABLEs c
     // No SAVE_VARIABLE carries a spool name, so the Box holding one is its
     // own reading: the name must not hold a declaration that strips it.
     CHECK(probe.spool_name == "Benchy spool");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a Qidi vendor change alone is not a spool swap",
+                 "[lane][ingest][qidi][1710]") {
+    QidiHarness harness(nullptr, nullptr);
+    QidiBoxTestAccess::apply_filas_list(*harness, qidi_tables());
+
+    const nlohmann::json base{
+        {"box_count", 1}, {"filament_slot0", 12}, {"color_slot0", 5}, {"vendor_slot0", 3}};
+    QidiBoxTestAccess::parse_vars(*harness, base);
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PETG Basic";
+    edit.color_rgb = 0xED2C2Cu;
+    edit.brand = "QIDI";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // Another writer moves only the vendor row. The vendor id is not evidence
+    // about the spool - it is the Box's own table, not something the spool
+    // carries - so the slot's details are not a description of a departed
+    // spool and the override stands; the new vendor repaints the brand.
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1},
+                                                           {"filament_slot0", 12},
+                                                           {"color_slot0", 5},
+                                                           {"vendor_slot0", 8}});
+
+    const auto info = harness->get_slot_info(0);
+    CHECK(info.material == "PETG Basic");
+    CHECK(info.brand == "Elegoo");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "Qidi rows that decode alike are one spool",
+                 "[lane][ingest][qidi][1710]") {
+    QidiHarness harness(nullptr, nullptr);
+    ToastRecorder toasts;
+    QidiBoxTestAccess::apply_filas_list(*harness, qidi_tables());
+
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1},
+                                                           {"filament_slot0", 12},
+                                                           {"color_slot0", 5},
+                                                           {"vendor_slot0", 3}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PETG Basic";
+    edit.color_rgb = 0xED2C2Cu;
+    edit.brand = "QIDI";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // The fila row changes but both rows are PETG under a different name, and
+    // the colour row does not move: what the reader read off the spool decodes
+    // to the same material and colour, which is one spool by the insert rule,
+    // not a swap. The details stand and nobody is asked.
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1},
+                                                           {"filament_slot0", 14},
+                                                           {"color_slot0", 5},
+                                                           {"vendor_slot0", 3}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(harness->get_slot_info(0).material == "PETG Basic");
+    CHECK(toasts.messages.empty());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a Qidi insert the reader read nothing about asks",
+                 "[lane][ingest][qidi][1710]") {
+    QidiHarness harness(nullptr, nullptr);
+    ToastRecorder toasts;
+    QidiBoxTestAccess::apply_filas_list(*harness, qidi_tables());
+
+    // The slot sits empty while the saved ids stand in the variables: those
+    // are the Box's memory of the last spool, not a read of the slot.
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1},
+                                                           {"slot0", 0},
+                                                           {"filament_slot0", 12},
+                                                           {"color_slot0", 5},
+                                                           {"vendor_slot0", 3}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PETG Basic";
+    edit.color_rgb = 0xED2C2Cu;
+    edit.brand = "QIDI";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // Filament appears and the ids did not move: the reader read nothing off
+    // the spool that went in, so nothing says whether the details standing on
+    // the slot describe it. Keep them, and ask.
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1}, {"slot0", 1}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    REQUIRE(toasts.messages.size() == 1);
+    CHECK(harness->get_slot_info(0).material == "PETG Basic");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a Qidi insert whose tag decodes the same asks nothing",
+                 "[lane][ingest][qidi][1710]") {
+    QidiHarness harness(nullptr, nullptr);
+    ToastRecorder toasts;
+    QidiBoxTestAccess::apply_filas_list(*harness, qidi_tables());
+
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1},
+                                                           {"slot0", 0},
+                                                           {"filament_slot0", 12},
+                                                           {"color_slot0", 5},
+                                                           {"vendor_slot0", 3}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PETG Basic";
+    edit.color_rgb = 0xED2C2Cu;
+    edit.brand = "QIDI";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // The insert brings a tag the Box reads: both fila rows decode to PETG and
+    // the colour is unchanged, so the reading proves the same spool and the
+    // ask is not offered.
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1},
+                                                           {"slot0", 1},
+                                                           {"filament_slot0", 14},
+                                                           {"color_slot0", 5},
+                                                           {"vendor_slot0", 3}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK(toasts.messages.empty());
+    CHECK(harness->get_slot_info(0).material == "PETG Basic");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a Qidi fingerprint stored with a vendor component folds to two",
+                 "[lane][ingest][qidi][1710]") {
+    CHECK(QidiBoxTestAccess::normalize_legacy_fingerprint("12|5|3") == "12|5");
+    // Already the current shape, empty, or a value no build of ours wrote:
+    // left exactly as found.
+    CHECK(QidiBoxTestAccess::normalize_legacy_fingerprint("12|5") == "12|5");
+    CHECK(QidiBoxTestAccess::normalize_legacy_fingerprint("").empty());
+    CHECK(QidiBoxTestAccess::normalize_legacy_fingerprint("box") == "box");
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a Qidi palette grey is the no-colour sentinel",
