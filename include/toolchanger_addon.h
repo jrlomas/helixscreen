@@ -24,8 +24,10 @@
 // Adding a machine means adding one Provider to the table in
 // toolchanger_addon.cpp - no call site changes.
 
+#include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "hv/json.hpp"
@@ -137,6 +139,39 @@ struct ToolSensor {
     bool present = false;
     std::string provider_name;
 };
+
+/// Material and colour for one slot, as the firmware stores them.
+struct SlotMaterial {
+    std::string material;             ///< Empty when the firmware has none set
+    std::optional<std::uint32_t> rgb; ///< nullopt when unset or unparseable
+};
+
+/// What a firmware material source said in one status frame. Each field is
+/// nullopt when the frame did not carry it: Moonraker republishes only what
+/// CHANGED, so absence is never "cleared".
+struct MaterialReading {
+    std::optional<std::vector<std::optional<SlotMaterial>>> slots;
+    std::optional<std::vector<std::string>> valid_types;
+    std::optional<std::vector<std::pair<int, std::uint32_t>>> palette; ///< (index, 0xRRGGBB)
+};
+
+/// A changer whose firmware stores each slot's material and colour itself.
+/// Default-constructed means HelixScreen's own store is the only one.
+struct MaterialSource {
+    bool present = false;
+    std::string provider_name;
+    /// Gcode that stores @p type and @p rgb for @p slot_index (0-based). @p type
+    /// must already be one of the firmware's valid types, safe for a gcode line,
+    /// and @p rgb one of its palette colours.
+    std::string (*write_gcode)(int slot_index, const std::string& type,
+                               std::uint32_t rgb) = nullptr;
+};
+
+/// The firmware material source this printer has, or an absent capability.
+MaterialSource resolve_material_source(const PrinterDiscovery& hw);
+
+/// Pull a material reading out of a status frame. nullopt means no news.
+std::optional<MaterialReading> read_materials(const nlohmann::json& status, int max_slots);
 
 /// Whether any provider claims this printer.
 bool present(const PrinterDiscovery& hw);

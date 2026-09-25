@@ -2,7 +2,11 @@
 
 #include "toolchanger_addon.h"
 
+#include "color_utils.h"
 #include "printer_discovery.h"
+#include "zmod_color_status.h"
+
+#include <spdlog/fmt/fmt.h>
 
 #include <algorithm>
 #include <cctype>
@@ -33,6 +37,9 @@ struct Provider {
     const char* select_prefix;
     /// Unmounts the tool on the head, or nullptr when there is no such command.
     const char* unselect_gcode;
+    /// Stores a slot's material and colour in firmware, or nullptr when the
+    /// firmware keeps no such record.
+    std::string (*material_write_gcode)(int slot_index, const std::string& type, std::uint32_t rgb);
 };
 
 // --- MedusaHC ---------------------------------------------------------------
@@ -118,6 +125,15 @@ std::vector<std::string> zmod_c5_status_objects(const PrinterDiscovery& /*hw*/) 
     return {kZmodColorObject};
 }
 
+/// HEX and TYPE together write without opening a prompt; SILENT=1 keeps the
+/// GET_ZCOLOR that CHANGE_ZCOLOR runs afterwards from opening one in
+/// Mainsail/Fluidd.
+std::string zmod_c5_material_write(int slot_index, const std::string& type, std::uint32_t rgb) {
+    return fmt::format("CHANGE_ZCOLOR SLOT={} HEX={:06X} TYPE={} SILENT=1",
+                       slot_index + 1, // DISPLAY_NUMBERING_OK: gcode wire, not a label
+                       rgb & 0xFFFFFFu, type);
+}
+
 const std::vector<Provider>& providers() {
     static const std::vector<Provider> table = {
         // T<n> and DROP_TOOL are what the extra registers when it runs the swap
@@ -128,9 +144,9 @@ const std::vector<Provider>& providers() {
         // the way the feeder macros are, and naming it here is the whole point of
         // this table.
         {"MedusaHC", medusa_detect, medusa_status_objects, medusa_open_gcode, medusa_close_gcode,
-         "T", "DROP_TOOL"},
+         "T", "DROP_TOOL", nullptr},
         {"Creator 5 Pro", zmod_c5_detect, zmod_c5_status_objects, nullptr, nullptr,
-         "_T_IN T=", "_T_OUT"},
+         "_T_IN T=", "_T_OUT", zmod_c5_material_write},
     };
     return table;
 }
@@ -428,6 +444,48 @@ std::vector<std::string> feeder_macro_candidates(const PrinterDiscovery& hw) {
 std::vector<std::string> required_status_objects(const PrinterDiscovery& hw) {
     const Provider* p = match(hw);
     return p ? p->status_objects(hw) : std::vector<std::string>{};
+}
+
+MaterialSource resolve_material_source(const PrinterDiscovery& hw) {
+    const Provider* p = match(hw);
+    if (!p || !p->material_write_gcode) {
+        return {};
+    }
+    MaterialSource s;
+    s.present = true;
+    s.provider_name = p->name;
+    s.write_gcode = p->material_write_gcode;
+    return s;
+}
+
+std::optional<MaterialReading> read_materials(const nlohmann::json& status, int max_slots) {
+    if (!status.is_object()) {
+        return std::nullopt;
+    }
+    auto it = status.find(kZmodColorObject);
+    if (it == status.end() || !it->is_object()) {
+        return std::nullopt;
+    }
+    MaterialReading r;
+    if (auto slots = zmod_color::parse_slots(*it, max_slots)) {
+        std::vector<std::optional<SlotMaterial>> out(slots->size());
+        for (size_t i = 0; i < slots->size(); ++i) {
+            if (!(*slots)[i]) {
+                continue;
+            }
+            SlotMaterial m;
+            m.material = (*slots)[i]->material;
+            m.rgb = parse_hex_color((*slots)[i]->hex);
+            out[i] = std::move(m);
+        }
+        r.slots = std::move(out);
+    }
+    r.valid_types = zmod_color::parse_valid_types(*it);
+    r.palette = zmod_color::parse_palette(*it);
+    if (!r.slots && !r.valid_types && !r.palette) {
+        return std::nullopt;
+    }
+    return r;
 }
 
 std::optional<ToolReading> read_tool(const nlohmann::json& status) {

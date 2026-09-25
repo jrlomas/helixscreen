@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../test_helpers/toolchanger_test_helper.h"
+#include "lane_source_store.h"
 #include "printer_discovery.h"
+#include "test_helpers/registered_backend.h"
 #include "toolchanger_addon.h"
 
 #include "../catch_amalgamated.hpp"
@@ -135,4 +137,89 @@ TEST_CASE("Z-Mod has no feeder and offers no feeder macros", "[toolchanger][zmod
     auto hw = zmod_c5_discovery();
     CHECK_FALSE(toolchanger_addon::resolve_feeder(hw).present);
     CHECK(toolchanger_addon::feeder_macro_candidates(hw).empty());
+}
+
+namespace {
+
+json full_zmod_color_frame() {
+    json palette = json::array();
+    for (const char* hex : {"FFFFFF", "FEF043", "0ACC38", "F72224", "161616"}) {
+        palette.push_back(hex);
+    }
+    return json{
+        {"zmod_color",
+         {{"active_tool_id", -1},
+          {"valid_types", json::array({"PLA", "PETG", "ABS", "?"})},
+          {"palette", palette},
+          {"slots", json::array({{{"ID", "1"}, {"Material", "PLA"}, {"HEX", "FFFFFF"}},
+                                 {{"ID", "2"}, {"Material", "PETG"}, {"HEX", "0ACC38"}},
+                                 {{"ID", "3"}, {"Material", "?"}, {"HEX", ""}},
+                                 {{"ID", "4"}, {"Material", "ABS"}, {"HEX", "161616"}}})}}}};
+}
+
+void wire_material_source(ToolChangerHelper& tc) {
+    tc.set_material_source(toolchanger_addon::resolve_material_source(zmod_c5_discovery()));
+}
+
+} // namespace
+
+TEST_CASE("Z-Mod publishes each head's material and colour", "[toolchanger][zmod][material]") {
+    helix::ams::reset_lane_sources();
+    // Registered, because lane_id() answers INVALID_LANE_ID for a backend
+    // AmsState does not know, and the lane funnels drop what that id names.
+    helix::test::RegisteredBackend<ToolChangerHelper> tc_reg(4);
+    ToolChangerHelper& tc = *tc_reg;
+    wire_zmod(tc);
+    wire_material_source(tc);
+    tc.feed(full_zmod_color_frame());
+
+    auto vc = helix::ams::lane_sources(tc.lane_id(1)).vendor_cache;
+    REQUIRE(vc.has_value());
+    CHECK(vc->material == std::optional<std::string>("PETG"));
+    CHECK(vc->color_rgb == std::optional<uint32_t>(0x0ACC38));
+
+    const auto info = tc.get_system_info();
+    CHECK(info.units[0].slots[1].material == "PETG");
+    CHECK(info.units[0].slots[1].color_rgb == 0x0ACC38);
+    // "?" is the firmware saying nothing is set.
+    auto unset = helix::ams::lane_sources(tc.lane_id(2)).vendor_cache;
+    REQUIRE(unset.has_value());
+    CHECK_FALSE(unset->material.has_value());
+}
+
+TEST_CASE("A frame without slots leaves the firmware reading standing",
+          "[toolchanger][zmod][material]") {
+    helix::ams::reset_lane_sources();
+    helix::test::RegisteredBackend<ToolChangerHelper> tc_reg(4);
+    ToolChangerHelper& tc = *tc_reg;
+    wire_zmod(tc);
+    wire_material_source(tc);
+    tc.feed(full_zmod_color_frame());
+    tc.feed(json{{"zmod_color", {{"active_tool_id", 1}}}});
+
+    auto vc = helix::ams::lane_sources(tc.lane_id(1)).vendor_cache;
+    REQUIRE(vc.has_value());
+    CHECK(vc->material == std::optional<std::string>("PETG"));
+}
+
+TEST_CASE("Z-Mod's valid types are the supported materials", "[toolchanger][zmod][material]") {
+    ToolChangerHelper tc(4);
+    wire_zmod(tc);
+    wire_material_source(tc);
+    CHECK_FALSE(tc.get_supported_materials().has_value());
+    tc.feed(full_zmod_color_frame());
+    auto types = tc.get_supported_materials();
+    REQUIRE(types.has_value());
+    CHECK(*types == std::vector<std::string>{"PLA", "PETG", "ABS"});
+}
+
+TEST_CASE("A changer without a material source files no firmware reading",
+          "[toolchanger][zmod][material]") {
+    helix::ams::reset_lane_sources();
+    helix::test::RegisteredBackend<ToolChangerHelper> tc_reg(4); // no wire_material_source
+    ToolChangerHelper& tc = *tc_reg;
+    wire_zmod(tc);
+    tc.feed(full_zmod_color_frame());
+    CHECK_FALSE(helix::ams::lane_sources(tc.lane_id(1)).vendor_cache.has_value());
+    CHECK_FALSE(tc.get_supported_materials().has_value());
 }

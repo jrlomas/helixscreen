@@ -2921,6 +2921,20 @@ class AmsBackend {
     }
 
     /**
+     * @brief Declare the firmware material store this machine keeps, if any
+     *
+     * Called before start(). Only tool changers use it: a changer whose
+     * firmware stores each slot's material and colour itself publishes them on
+     * its status object, so HelixScreen's own store stops being the only one.
+     * Absent - the default - means the firmware keeps no such record.
+     *
+     * @param source Resolved material source; absent when the printer has none
+     */
+    virtual void set_material_source(helix::toolchanger_addon::MaterialSource source) {
+        (void)source;
+    }
+
+    /**
      * @brief Set filament sensor names from PrinterCapabilities
      *
      * Called before start() to provide filament sensor names from printer.objects.list.

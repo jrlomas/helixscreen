@@ -500,6 +500,14 @@ void AmsBackendToolChanger::handle_status_update(const nlohmann::json& notificat
             }
         }
 
+        if (material_source_.present) {
+            if (auto reading = helix::toolchanger_addon::read_materials(
+                    params, static_cast<int>(tool_names_.size()))) {
+                apply_material_reading_locked(*reading);
+                state_changed = true;
+            }
+        }
+
         // Check for individual tool updates (e.g., "tool T0", "tool T1")
         for (const auto& tool_name : tool_names_) {
             std::string key = "tool " + tool_name;
@@ -689,6 +697,44 @@ void AmsBackendToolChanger::apply_tool_sensor_locked(
     if (operation_ended) {
         feeder_opened_this_operation_ = false;
     }
+}
+
+void AmsBackendToolChanger::apply_material_reading_locked(
+    const helix::toolchanger_addon::MaterialReading& reading) {
+    if (reading.valid_types) {
+        firmware_valid_types_ = *reading.valid_types;
+    }
+    if (reading.palette) {
+        firmware_palette_ = *reading.palette;
+    }
+    if (!reading.slots) {
+        return;
+    }
+    firmware_slots_seen_ = true;
+    for (size_t i = 0; i < reading.slots->size(); ++i) {
+        const auto& slot = (*reading.slots)[i];
+        if (!slot) {
+            continue;
+        }
+        // The firmware's statement of what this head holds, replaced whole each
+        // time the frame carries it.
+        helix::ams::Observation vendor(helix::ams::ObservationSource::VendorCache);
+        if (!slot->material.empty()) {
+            vendor.material = slot->material;
+        }
+        if (slot->rgb) {
+            vendor.color_rgb = *slot->rgb;
+        }
+        helix::ams::ingest(lane_id(static_cast<int>(i)), vendor);
+    }
+}
+
+std::optional<std::vector<std::string>> AmsBackendToolChanger::get_supported_materials() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!material_source_.present || !firmware_valid_types_ || firmware_valid_types_->empty()) {
+        return std::nullopt;
+    }
+    return firmware_valid_types_;
 }
 
 void AmsBackendToolChanger::parse_toolchanger_state(const nlohmann::json& tc_data) {
