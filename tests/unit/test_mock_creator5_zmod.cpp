@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ams_backend.h"
+#include "ams_types.h"
 #include "moonraker_client_mock.h"
 #include "printer_discovery.h"
 #include "test_helpers/scoped_env.h"
+#include "test_helpers/scoped_runtime_config.h"
 #include "toolchanger_addon.h"
 
 #include <chrono>
@@ -135,4 +138,37 @@ TEST_CASE("The Z-Mod C5 persona mounts, parks and stores colours", "[mock][creat
         return s && s->value("HEX", "") == "FFFFFF";
     });
     CHECK(white.has_value());
+}
+
+TEST_CASE("The Reforge persona's mock AMS is a tool changer", "[mock][creator5]") {
+    MockTopologyGuards guards;
+    helix::ScopedEnv reforge{"HELIX_MOCK_PRINTER", "creator5"};
+
+    ScopedRuntimeConfig scoped_config;
+    auto* config = get_runtime_config();
+    config->test_mode = true;
+    config->use_real_ams = false;
+    REQUIRE(config->should_mock_ams());
+
+    // No HELIX_MOCK_AMS: the persona, not the generic Happy Hare default, picks
+    // the mock's topology.
+    auto backend = helix::AmsBackend::create(helix::AmsType::NONE, nullptr, nullptr);
+    REQUIRE(backend != nullptr);
+    CHECK(backend->get_system_info().type == helix::AmsType::TOOL_CHANGER);
+}
+
+TEST_CASE("A mock-hardware persona declines the mock AMS backend", "[mock][creator5][zmod]") {
+    MockTopologyGuards guards;
+    helix::ScopedEnv zmod{"HELIX_MOCK_PRINTER", "creator5_zmod"};
+
+    ScopedRuntimeConfig scoped_config;
+    auto* config = get_runtime_config();
+    config->test_mode = true;
+    config->use_real_ams = false;
+    REQUIRE(config->should_mock_ams());
+
+    // creator5_zmod models hardware the production AmsBackendToolChanger drives,
+    // so with mock AMS on and no HELIX_MOCK_AMS the factory must defer to real
+    // discovery instead of standing a generic mock in front of it.
+    CHECK(helix::AmsBackend::create(helix::AmsType::NONE, nullptr, nullptr) == nullptr);
 }
