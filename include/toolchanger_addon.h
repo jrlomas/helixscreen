@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-// Tool-changer add-ons: hardware bolted onto klipper-toolchanger that it does
-// not model.
+// Tool-changer dialects: the one place that knows each tool changer's dialect -
+// the add-on hardware klipper-toolchanger does not model (MedusaHC), and changer
+// firmware that has no klipper-toolchanger at all (Z-Mod on the Creator 5 Pro).
 //
-// klipper-toolchanger swaps a whole toolhead, and `toolchanger.tool_number` is
-// simply whatever SELECT_TOOL last set. A hotend changer swaps only the hot end,
-// which brings two things the toolchanger object cannot answer:
+// MedusaHC bolts a hotend changer onto klipper-toolchanger, which swaps a whole
+// toolhead, and `toolchanger.tool_number` is simply whatever SELECT_TOOL last
+// set. A hotend changer swaps only the hot end, which brings two things the
+// toolchanger object cannot answer:
 //
 //   1. Which tool is PHYSICALLY on the head. MedusaHC ships toolchanger.cfg with
 //      `verify_tool_pickup: False`, so klipper-toolchanger never checks; the
@@ -15,9 +17,9 @@
 //   2. A filament feeder. Only the hot end travels, so the filament is held by a
 //      servo gripper on the frame that has to be released around a swap.
 //
-// This module is the ONLY place that knows which machines have those, what their
-// status objects are called, and what gcode drives them. AmsBackendToolChanger
-// and the subscription builder ask these functions and never name a machine.
+// This module is the ONLY place that knows each machine's status objects and
+// swap commands. AmsBackendToolChanger and the subscription builder ask these
+// functions and never name a machine.
 //
 // Adding a machine means adding one Provider to the table in
 // toolchanger_addon.cpp - no call site changes.
