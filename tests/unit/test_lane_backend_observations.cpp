@@ -3992,6 +3992,73 @@ TEST_CASE_METHOD(LVGLTestFixture, "a Qidi fingerprint stored with a vendor compo
     CHECK(QidiBoxTestAccess::normalize_legacy_fingerprint("box") == "box");
 }
 
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a Qidi swap the tables have not decoded still clears the override",
+                 "[lane][ingest][qidi][1710]") {
+    QidiHarness harness(nullptr, nullptr);
+    ToastRecorder toasts;
+    // No apply_filas_list: the officiall_filas_list.cfg fetch has not landed,
+    // so no id in the fingerprint decodes to a material or a colour.
+
+    const nlohmann::json base{{"box_count", 1}, {"filament_slot0", 12}, {"color_slot0", 5}};
+    QidiBoxTestAccess::parse_vars(*harness, base);
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PETG Basic";
+    edit.color_rgb = 0xED2C2Cu;
+    edit.brand = "QIDI";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+    REQUIRE(QidiBoxTestAccess::get_override(*harness, 0).has_value());
+
+    // A different spool's ids arrive with the tables still missing. Both
+    // composites fall back to the raw ids, the ids differ, so the change is a
+    // swap: the override must not outlive a swap just because a config fetch
+    // is late. A differing-ids verdict is an answer, not a question, so the
+    // ask is not offered either.
+    QidiBoxTestAccess::parse_vars(
+        *harness, nlohmann::json{{"box_count", 1}, {"filament_slot0", 40}, {"color_slot0", 9}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    CHECK_FALSE(QidiBoxTestAccess::get_override(*harness, 0).has_value());
+    CHECK(harness->get_slot_info(0).material != "PETG Basic");
+    CHECK(toasts.messages.empty());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "Qidi ids that match with no tables keep the override",
+                 "[lane][ingest][qidi][1710]") {
+    QidiHarness harness(nullptr, nullptr);
+    ToastRecorder toasts;
+    // Tables missing here too: whatever the fallback does, it must not turn a
+    // quiet frame into a clearance.
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{
+                                                {"box_count", 1},
+                                                {"filament_slot0", 12},
+                                                {"color_slot0", 5},
+                                                {"vendor_slot0", 3},
+                                            });
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PETG Basic";
+    edit.color_rgb = 0xED2C2Cu;
+    edit.brand = "QIDI";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+    REQUIRE(QidiBoxTestAccess::get_override(*harness, 0).has_value());
+
+    // The fila and colour ids stand; only the vendor row moves. The
+    // fingerprint is unchanged and no id the spool carries moved, so the
+    // override survives a late or failed table fetch untouched.
+    QidiBoxTestAccess::parse_vars(*harness, nlohmann::json{{"box_count", 1},
+                                                           {"filament_slot0", 12},
+                                                           {"color_slot0", 5},
+                                                           {"vendor_slot0", 8}});
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto override_after = QidiBoxTestAccess::get_override(*harness, 0);
+    REQUIRE(override_after.has_value());
+    CHECK(harness->get_slot_info(0).material == "PETG Basic");
+    CHECK(toasts.messages.empty());
+}
+
 TEST_CASE_METHOD(LVGLTestFixture, "a Qidi palette grey is the no-colour sentinel",
                  "[lane][ingest][qidi]") {
     QidiHarness harness(nullptr, nullptr);

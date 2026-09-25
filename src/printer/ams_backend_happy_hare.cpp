@@ -2939,7 +2939,12 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
         // The gate is being emptied deliberately, so a frame restating the
         // edit's values afterwards is the machine's own reading, not an echo
         // to hide - the guard from an earlier edit must not outlive it.
-        own_write_echoes_.abandon(slot_index);
+        // Under the lock: the parse mutates the same map under mutex_ on the
+        // WebSocket thread.
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            own_write_echoes_.abandon(slot_index);
+        }
 
         // Spoolman pull mode: Happy Hare refuses local writes to material,
         // colour, name, vendor and spool id, and logs the refusal rather than
@@ -3041,7 +3046,10 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
                      slot_index);
         // No write goes out, so no echo is coming: the gate map's next frame
         // is Spoolman's word, not ours.
-        own_write_echoes_.abandon(slot_index);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            own_write_echoes_.abandon(slot_index);
+        }
     } else if (has_changes) {
         // Remember what the user declared, pruned to the fields this command
         // actually carries, so the parse can tell the gate map repeating their
@@ -3049,32 +3057,38 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
         // dispatch: the guard has to be standing before any echo can arrive.
         // A dispatch that failed outright leaves it armed to self-clean the
         // same way - firmware still holds a value the declaration disagrees
-        // with.
-        own_write_echoes_.stage(slot_index, declared);
-        if (auto* staged = own_write_echoes_.staged(slot_index)) {
-            // COLOR= is skipped for the no-colour sentinel and MATERIAL= for
-            // an unsafe or cleared name: a field the write omitted (or asked
-            // firmware to drop) is the gate map's to keep, so its echo is a
-            // reading.
-            if (!ams::is_declarable_color(info.color_rgb)) {
-                staged->color_rgb.reset();
+        // with. Under the lock: the parse mutates the same map under mutex_
+        // on the WebSocket thread. The dispatch itself stays outside it, as
+        // every other writer here.
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            own_write_echoes_.stage(slot_index, declared);
+            if (auto* staged = own_write_echoes_.staged(slot_index)) {
+                // COLOR= is skipped for the no-colour sentinel and MATERIAL= for
+                // an unsafe or cleared name: a field the write omitted (or asked
+                // firmware to drop) is the gate map's to keep, so its echo is a
+                // reading.
+                if (!ams::is_declarable_color(info.color_rgb)) {
+                    staged->color_rgb.reset();
+                }
+                if (info.material.empty() ||
+                    !IMoonrakerAPI::is_safe_material_param(info.material)) {
+                    staged->material.reset();
+                }
+                // The command carries no name, brand, colour name or product
+                // line, so any value firmware reports for them is its own. An
+                // inert field left declared would keep the entry alive after the
+                // real fields are all released.
+                staged->brand.reset();
+                staged->spool_name.reset();
+                staged->color_name.reset();
+                staged->product_name.reset();
             }
-            if (info.material.empty() || !IMoonrakerAPI::is_safe_material_param(info.material)) {
-                staged->material.reset();
-            }
-            // The command carries no name, brand, colour name or product
-            // line, so any value firmware reports for them is its own. An
-            // inert field left declared would keep the entry alive after the
-            // real fields are all released.
-            staged->brand.reset();
-            staged->spool_name.reset();
-            staged->color_name.reset();
-            staged->product_name.reset();
+            // No boundary token: no tag names the spool a gate-map write was made
+            // against, so suppression ends on a differing value or a key
+            // published empty rather than on a boundary event.
+            own_write_echoes_.arm(slot_index, std::string{});
         }
-        // No boundary token: no tag names the spool a gate-map write was made
-        // against, so suppression ends on a differing value or a key
-        // published empty rather than on a boundary event.
-        own_write_echoes_.arm(slot_index, std::string{});
 
         execute_gcode(cmd);
         spdlog::debug("[AMS HappyHare] Sent: {}", cmd);

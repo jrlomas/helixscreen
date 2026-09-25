@@ -1930,13 +1930,25 @@ AmsBackendQidi::fingerprint_evidence_locked(const std::string& fingerprint) cons
     // The composite is the Box's own read, so the spool carries no UID-capable
     // tag rather than one not read yet, and the material/colour fields decide.
     evidence.tag_read_complete = true;
-    if (const auto row = fila_profiles_.find(fila_id);
-        row != fila_profiles_.end() && !row->second.type.empty()) {
-        evidence.material = row->second.type;
+    const auto fila_row = fila_profiles_.find(fila_id);
+    const auto color_row = color_palette_.find(color_id);
+    const bool fila_decoded = fila_row != fila_profiles_.end() && !fila_row->second.type.empty();
+    const bool color_decoded =
+        color_row != color_palette_.end() && helix::ams::is_declarable_color(color_row->second);
+    // The tables come from an async officiall_filas_list.cfg fetch that can
+    // land late or fail. An id the tables cannot decode is still a stable
+    // identity the Box chose, so fall back to the raw ids: a differing
+    // composite stays a swap instead of decoding to empty on both sides and
+    // reading as no evidence, which would keep the override forever.
+    if ((fila_id > 0 && !fila_decoded) || (color_id > 0 && !color_decoded)) {
+        evidence.tag_uid = fmt::format("fila#{}|color#{}", fila_id, color_id);
+        return evidence;
     }
-    if (const auto entry = color_palette_.find(color_id);
-        entry != color_palette_.end() && helix::ams::is_declarable_color(entry->second)) {
-        evidence.color_rgb = entry->second;
+    if (fila_decoded) {
+        evidence.material = fila_row->second.type;
+    }
+    if (color_decoded) {
+        evidence.color_rgb = color_row->second;
     }
     return evidence;
 }
