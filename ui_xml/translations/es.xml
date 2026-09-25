@@ -161,7 +161,11 @@
   <translation tag="Add Widget" es="Agregar widget"/>
   <translation tag="Add custom filament" es="Añadir filamento personalizado"/>
   <translation tag="Add page" es="Añadir página"/>
+  <translation tag="Add to Queue" es="Añadir a la cola"/>
   <translation tag="Added to Spoolman" es="Añadido a Spoolman"/>
+  <translation tag="Added to queue (position {})" es="Añadido a la cola (posición {})"/>
+  <translation tag="Added to queue (position {}) - queue is paused" es="Añadido a la cola (posición {}): la cola está en pausa"/>
+  <translation tag="Adding to queue..." es="Añadiendo a la cola..."/>
   <translation tag="Address" es="Dirección"/>
   <translation tag="Adjust screen brightness level" es="Ajustar el nivel de brillo de la pantalla"/>
   <translation tag="Adjust screws, then re-probe." es="Ajuste los tornillos, luego vuelva a sondear."/>
@@ -427,6 +431,7 @@
   <translation tag="Cancel Print" es="Cancelar Impresión"/>
   <translation tag="Cancel macro not configured" es="Macro de cancelar no configurado"/>
   <translation tag="Cancelled" es="Cancelado"/>
+  <translation tag="Cannot add to queue: internal error" es="No se puede añadir a la cola: error interno"/>
   <translation tag="Cannot be changed from here on a multi-unit MMU" es="No se puede cambiar aquí en un MMU de varias unidades"/>
   <translation tag="Cannot control timelapse: printer not connected" es="No se puede controlar timelapse: impresora no conectada"/>
   <translation tag="Cannot delete file: printer not connected" es="No se puede eliminar archivo: impresora no conectada"/>
@@ -657,6 +662,7 @@
   <translation tag="Copy failed - use SSH manually" es="Error al copiar - use SSH manualmente"/>
   <translation tag="Corner roundness" es="Redondeo de esquinas"/>
   <translation tag="Correction (Ki)" es="Corrección (Ki)"/>
+  <translation tag="Could not add to queue" es="No se pudo añadir a la cola"/>
   <translation tag="Could not analyze PRINT_START macro. Some print options may be unavailable." es="No se pudo analizar la macro PRINT_START. Algunas opciones de impresión pueden no estar disponibles."/>
   <translation tag="Could not answer the connection request" es="No se pudo responder a la solicitud de conexión"/>
   <translation tag="Could not check webcam status.&#10;Check printer connection." es="No se pudo verificar la webcam.&#10;Compruebe la conexión."/>
@@ -667,6 +673,7 @@
   <translation tag="Could not parse tips database" es="No se pudo analizar la base de datos de consejos"/>
   <translation tag="Could not reach Spoolman at" es="No se pudo conectar a Spoolman en"/>
   <translation tag="Could not read the screw adjustments from the printer" es="No se pudieron leer los ajustes de los tornillos desde la impresora"/>
+  <translation tag="Could not remove the job from the queue" es="No se pudo eliminar el trabajo de la cola"/>
   <translation tag="Could not resolve printer RFCOMM channel" es="No se pudo resolver el canal RFCOMM de la impresora"/>
   <translation tag="Could not save filament" es="No se pudo guardar el filamento"/>
   <translation tag="Could not save the mesh as &apos;{}&apos;: {}" es="No se pudo guardar la malla como &apos;{}&apos;: {}"/>
@@ -1148,6 +1155,7 @@
   <translation tag="File" es="Archivo"/>
   <translation tag="File Size" es="Tamaño del archivo"/>
   <translation tag="File Will Stop the Printer" es="El archivo detendrá la impresora"/>
+  <translation tag="File not found: {}" es="Archivo no encontrado: {}"/>
   <translation tag="Filename" es="Nombre de Archivo"/>
   <translation tag="Filter Fan" es="Ventilador de filtro"/>
   <translation tag="Filter Fan: Off" es="Ventilador de filtro: Apagado"/>
@@ -2650,6 +2658,7 @@
   <translation tag="Start anyway?" es="¿Iniciar de todos modos?"/>
   <translation tag="Start at" es="Comenzar en"/>
   <translation tag="Start failed" es="Inicio fallido"/>
+  <translation tag="Start next: {}" es="Iniciar siguiente: {}"/>
   <translation tag="Start over" es="Empezar de nuevo"/>
   <translation tag="Start print anyway?" es="¿Iniciar la impresión de todos modos?"/>
   <translation tag="Started" es="Iniciado"/>
@@ -2658,6 +2667,7 @@
   <translation tag="Starting nozzle clean..." es="Iniciando limpieza de boquilla..."/>
   <translation tag="Starting print..." es="Iniciando impresión..."/>
   <translation tag="Starting..." es="Iniciando..."/>
+  <translation tag="Starts after the current print" es="Comienza cuando termine la impresión actual"/>
   <translation tag="Startup Brightness" es="Brillo de inicio"/>
   <translation tag="Startup, auto-control, and macro devices" es="Inicio, control automático y dispositivos de macro"/>
   <translation tag="State" es="Estado"/>
@@ -2697,11 +2707,9 @@
   <translation tag="Switched to {}" es="Cambiado a {}"/>
   <translation tag="Switches to a backup spool on runout" es="Cambia a una bobina de respaldo al agotarse"/>
   <translation tag="Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." es="Cambiar de nuevo a PID cambia cómo se controla este calentador y luego lo calibra. Eso tarda varios minutos a temperatura."/>
-  <translation tag="Switching back to PID changes how this heater is controlled." es="Cambiar de nuevo a PID cambia cómo se controla este calentador."/>
   <translation tag="Switching back to PID requires a config change and Klipper restart." es="Cambiar de nuevo a PID requiere modificar la configuración y reiniciar Klipper."/>
   <translation tag="Switching heater control to MPC. Klipper will restart." es="Cambiando control del calentador a MPC. Klipper se reiniciará."/>
   <translation tag="Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." es="Cambiar a MPC cambia cómo se controla este calentador y luego lo calibra. Eso tarda varios minutos a temperatura."/>
-  <translation tag="Switching to MPC changes how this heater is controlled." es="Cambiar a MPC cambia cómo se controla este calentador."/>
   <translation tag="Switching to MPC requires a config change and Klipper restart." es="Cambiar a MPC requiere modificar la configuración y reiniciar Klipper."/>
   <translation tag="Sync with Spoolman" es="Sincronizar con Spoolman"/>
   <translation tag="Sysfs" es="Sysfs"/>
@@ -3018,6 +3026,8 @@
   <translation tag="Unretract Speed" es="Velocidad de Des-retracción"/>
   <translation tag="Unsupported tape width" es="Ancho de cinta no compatible"/>
   <translation tag="Unsupported tape width: " es="Ancho de cinta no compatible: "/>
+  <translation tag="Up next: {}" es="Siguiente: {}"/>
+  <translation tag="Up next: {} (+{})" es="Siguiente: {} (+{})"/>
   <translation tag="Up to date" es="Actualizado"/>
   <translation tag="Update" es="Actualizar"/>
   <translation tag="Update Available" es="Actualización disponible"/>

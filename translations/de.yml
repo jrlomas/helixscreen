@@ -172,7 +172,11 @@ translations:
   Add Widget: Widget hinzufügen
   Add custom filament: Benutzerdefiniertes Filament hinzufügen
   Add page: 'Seite hinzufügen'
+  Add to Queue: Zur Warteschlange hinzufügen
   Added to Spoolman: Zu Spoolman hinzugefügt
+  Added to queue (position {}): Zur Warteschlange hinzugefügt (Position {})
+  Added to queue (position {}) - queue is paused: Zur Warteschlange hinzugefügt (Position {}) – Warteschlange ist pausiert
+  Adding to queue...: Wird zur Warteschlange hinzugefügt...
   Address: Adresse
   Adjust screen brightness level: Bildschirmhelligkeit anpassen
   Adjust screws, then re-probe.: Schrauben einstellen, dann erneut prüfen.
@@ -476,6 +480,7 @@ translations:
   Cancel Print: Druck abbrechen
   Cancel macro not configured: Abbruch-Makro nicht konfiguriert
   Cancelled: Abgebrochen
+  'Cannot add to queue: internal error': 'Zur Warteschlange hinzufügen nicht möglich: interner Fehler'
   Cannot be changed from here on a multi-unit MMU: Bei einer MMU mit mehreren Einheiten hier nicht änderbar
   'Cannot control timelapse: printer not connected': 'Timelapse nicht steuerbar: Drucker
     nicht verbunden'
@@ -741,6 +746,7 @@ translations:
   Copy failed - use SSH manually: Kopieren fehlgeschlagen – SSH verwenden
   Corner roundness: Eckenrundung
   Correction (Ki): Korrektur (Ki)
+  Could not add to queue: Konnte nicht zur Warteschlange hinzufügen
   Could not analyze PRINT_START macro. Some print options may be unavailable.: PRINT_START-Makro
     konnte nicht analysiert werden. Einige Druckoptionen sind möglicherweise nicht
     verfügbar.
@@ -754,6 +760,7 @@ translations:
   Could not parse tips database: Tipps-Datenbank konnte nicht ausgelesen werden
   Could not reach Spoolman at: 'Spoolman nicht erreichbar unter:'
   Could not read the screw adjustments from the printer: Schraubeneinstellungen konnten nicht vom Drucker gelesen werden
+  Could not remove the job from the queue: Der Auftrag konnte nicht aus der Warteschlange entfernt werden
   Could not resolve printer RFCOMM channel: RFCOMM-Kanal des Druckers konnte nicht
     ermittelt werden
   Could not save filament: Filament konnte nicht gespeichert werden
@@ -1275,6 +1282,7 @@ translations:
   File: Datei
   File Size: Dateigröße
   File Will Stop the Printer: 'Datei stoppt den Drucker'
+  'File not found: {}': 'Datei nicht gefunden: {}'
   Filename: Dateiname
   Filter Fan: Filterlüfter
   'Filter Fan: Off': 'Filterlüfter: Aus'
@@ -2942,6 +2950,7 @@ translations:
   Start anyway?: 'Trotzdem starten?'
   Start at: Beginnen bei
   Start failed: Start fehlgeschlagen
+  'Start next: {}': 'Nächstes starten: {}'
   Start over: Von vorne beginnen
   Start print anyway?: Druck trotzdem starten?
   Started: Gestartet
@@ -2950,6 +2959,7 @@ translations:
   Starting nozzle clean...: Düsenreinigung starten...
   Starting print...: Druck starten...
   Starting...: Starten...
+  Starts after the current print: Startet nach dem aktuellen Druck
   Startup Brightness: Starthelligkeit
   Startup, auto-control, and macro devices: Start, Auto-Steuerung und Makro-Geräte
   State: Status
@@ -2994,12 +3004,10 @@ translations:
   Switches to a backup spool on runout: Wechselt bei leerer Spule auf eine Reserve-Spule
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : Der Wechsel zurück zu PID ändert, wie diese Heizung geregelt wird, und kalibriert sie anschließend. Das dauert mehrere Minuten bei Betriebstemperatur.
-  Switching back to PID changes how this heater is controlled.: Der Wechsel zurück zu PID ändert, wie diese Heizung geregelt wird.
   Switching back to PID requires a config change and Klipper restart.: Wechsel zurück zu PID erfordert eine Konfigurationsänderung und Klipper-Neustart.
   Switching heater control to MPC. Klipper will restart.: Heizungsregelung wird auf
     MPC umgestellt. Klipper wird neu starten.
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: Der Wechsel zu MPC ändert, wie diese Heizung geregelt wird, und kalibriert sie anschließend. Das dauert mehrere Minuten bei Betriebstemperatur.
-  Switching to MPC changes how this heater is controlled.: Der Wechsel zu MPC ändert, wie diese Heizung geregelt wird.
   Switching to MPC requires a config change and Klipper restart.: Wechsel zu MPC erfordert
     eine Konfigurationsänderung und Klipper-Neustart.
   Sync with Spoolman: Mit Spoolman synchronisieren
@@ -3392,6 +3400,8 @@ translations:
   Unretract Speed: Prime-Geschwindigkeit
   Unsupported tape width: Nicht unterstützte Bandbreite
   'Unsupported tape width: ': 'Nicht unterstützte Bandbreite: '
+  'Up next: {}': 'Als Nächstes: {}'
+  'Up next: {} (+{})': 'Als Nächstes: {} (+{})'
   Up to date: Aktuell
   Update: Aktualisieren
   Update Available: Update verfügbar

@@ -162,7 +162,11 @@ translations:
   Add Widget: ウィジェットを追加
   Add custom filament: カスタムフィラメントを追加
   Add page: 'ページを追加'
+  Add to Queue: キューに追加
   Added to Spoolman: Spoolman に追加しました
+  Added to queue (position {}): キューに追加しました（{} 番目）
+  Added to queue (position {}) - queue is paused: キューに追加しました（{} 番目）– キューは一時停止中です
+  Adding to queue...: キューに追加中...
   Address: アドレス
   Adjust screen brightness level: 画面の明るさを調整します
   Adjust screws, then re-probe.: ネジを調整して、再度プローブしてください。
@@ -433,6 +437,7 @@ translations:
   Cancel Print: 印刷をキャンセル
   Cancel macro not configured: キャンセルマクロが未設定です
   Cancelled: キャンセル済み
+  'Cannot add to queue: internal error': 'キューに追加できません: 内部エラー'
   Cannot be changed from here on a multi-unit MMU: マルチユニット MMU ではここから変更できません
   'Cannot control timelapse: printer not connected': 'タイムラプスを制御できません: プリンター未接続'
   'Cannot delete file: printer not connected': 'ファイルを削除できません: プリンター未接続'
@@ -669,6 +674,7 @@ translations:
   Copy failed - use SSH manually: コピー失敗 - SSHを手動で使用してください
   Corner roundness: 角の丸み
   Correction (Ki): 補正 (Ki)
+  Could not add to queue: キューに追加できませんでした
   Could not analyze PRINT_START macro. Some print options may be unavailable.: PRINT_START
     マクロを分析できませんでした。一部の印刷オプションが利用できない場合があります。
   Could not answer the connection request: '接続リクエストに応答できませんでした'
@@ -681,6 +687,7 @@ translations:
   Could not parse tips database: ヒントデータベースを解析できませんでした
   Could not reach Spoolman at: 'Spoolman に接続できません:'
   Could not read the screw adjustments from the printer: プリンターからネジ調整を読み取れませんでした
+  Could not remove the job from the queue: キューからジョブを削除できませんでした
   Could not resolve printer RFCOMM channel: プリンターの RFCOMM チャンネルを解決できませんでした
   Could not save filament: フィラメントを保存できませんでした
   "Could not save the mesh as '{}': {}": "メッシュを '{}' として保存できませんでした: {}"
@@ -1174,6 +1181,7 @@ translations:
   File: ファイル
   File Size: ファイルサイズ
   File Will Stop the Printer: 'ファイルがプリンターを停止します'
+  'File not found: {}': 'ファイルが見つかりません: {}'
   Filename: ファイル名
   Filter Fan: フィルターファン
   'Filter Fan: Off': 'フィルターファン: オフ'
@@ -2731,6 +2739,7 @@ translations:
   Start anyway?: 'それでも開始しますか？'
   Start at: 開始位置
   Start failed: 開始に失敗
+  'Start next: {}': '次を開始：{}'
   Start over: やり直す
   Start print anyway?: それでも印刷を開始しますか？
   Started: 開始
@@ -2739,6 +2748,7 @@ translations:
   Starting nozzle clean...: ノズル清掃を開始中...
   Starting print...: 印刷開始中...
   Starting...: 開始中...
+  Starts after the current print: 現在の印刷が終わったら開始します
   Startup Brightness: 起動時の明るさ
   Startup, auto-control, and macro devices: 起動、自動制御、マクロデバイス
   State: 状態
@@ -2780,11 +2790,9 @@ translations:
   Switches to a backup spool on runout: フィラメント切れ時にバックアップスプールへ切り替えます
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : PIDに戻すと、このヒーターの制御方法が変わり、その後キャリブレーションが行われます。温度に達した状態で数分かかります。
-  Switching back to PID changes how this heater is controlled.: PIDに戻すと、このヒーターの制御方法が変わります。
   Switching back to PID requires a config change and Klipper restart.: PIDに戻すには設定変更とKlipperの再起動が必要です。
   Switching heater control to MPC. Klipper will restart.: ヒーター制御をMPCに切り替えます。Klipperが再起動します。
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: MPCに切り替えると、このヒーターの制御方法が変わり、その後キャリブレーションが行われます。温度に達した状態で数分かかります。
-  Switching to MPC changes how this heater is controlled.: MPCに切り替えると、このヒーターの制御方法が変わります。
   Switching to MPC requires a config change and Klipper restart.: MPCへの切り替えには設定変更とKlipperの再起動が必要です。
   Sync with Spoolman: Spoolman と同期
   Sysfs: Sysfs
@@ -3135,6 +3143,8 @@ translations:
   Unretract Speed: アンリトラクト速度
   Unsupported tape width: サポートされていないテープ幅
   'Unsupported tape width: ': 'サポートされていないテープ幅: '
+  'Up next: {}': '次の印刷：{}'
+  'Up next: {} (+{})': '次の印刷：{}（+{}）'
   Up to date: 最新の状態です
   Update: 更新
   Update Available: 更新あり

@@ -161,7 +161,11 @@
   <translation tag="Add Widget" ru="Добавить виджет"/>
   <translation tag="Add custom filament" ru="Добавить свой филамент"/>
   <translation tag="Add page" ru="Добавить страницу"/>
+  <translation tag="Add to Queue" ru="Добавить в очередь"/>
   <translation tag="Added to Spoolman" ru="Добавлено в Spoolman"/>
+  <translation tag="Added to queue (position {})" ru="Добавлено в очередь (позиция {})"/>
+  <translation tag="Added to queue (position {}) - queue is paused" ru="Добавлено в очередь (позиция {}) – очередь на паузе"/>
+  <translation tag="Adding to queue..." ru="Добавление в очередь..."/>
   <translation tag="Address" ru="Адрес"/>
   <translation tag="Adjust screen brightness level" ru="Настроить уровень яркости экрана"/>
   <translation tag="Adjust screws, then re-probe." ru="Отрегулируйте винты, затем перепроверьте."/>
@@ -427,6 +431,7 @@
   <translation tag="Cancel Print" ru="Отменить печать"/>
   <translation tag="Cancel macro not configured" ru="Макрос отмены не настроен"/>
   <translation tag="Cancelled" ru="Отменено"/>
+  <translation tag="Cannot add to queue: internal error" ru="Не удалось добавить в очередь: внутренняя ошибка"/>
   <translation tag="Cannot be changed from here on a multi-unit MMU" ru="Нельзя изменить здесь на MMU с несколькими блоками"/>
   <translation tag="Cannot control timelapse: printer not connected" ru="Невозможно управлять таймлапсом: принтер не подключён"/>
   <translation tag="Cannot delete file: printer not connected" ru="Невозможно удалить файл: принтер не подключён"/>
@@ -657,6 +662,7 @@
   <translation tag="Copy failed - use SSH manually" ru="Ошибка копирования - используйте SSH вручную"/>
   <translation tag="Corner roundness" ru="Скругление углов"/>
   <translation tag="Correction (Ki)" ru="Коррекция (Ki)"/>
+  <translation tag="Could not add to queue" ru="Не удалось добавить в очередь"/>
   <translation tag="Could not analyze PRINT_START macro. Some print options may be unavailable." ru="Не удалось проанализировать макрос PRINT_START. Некоторые параметры печати могут быть недоступны."/>
   <translation tag="Could not answer the connection request" ru="Не удалось ответить на запрос подключения"/>
   <translation tag="Could not check webcam status.&#10;Check printer connection." ru="Не удалось проверить статус веб-камеры.&#10;Проверьте подключение принтера."/>
@@ -667,6 +673,7 @@
   <translation tag="Could not parse tips database" ru="Не удалось разобрать базу данных советов"/>
   <translation tag="Could not reach Spoolman at" ru="Не удалось связаться со Spoolman по адресу"/>
   <translation tag="Could not read the screw adjustments from the printer" ru="Не удалось получить данные регулировки винтов от принтера"/>
+  <translation tag="Could not remove the job from the queue" ru="Не удалось удалить задание из очереди"/>
   <translation tag="Could not resolve printer RFCOMM channel" ru="Не удалось определить RFCOMM-канал принтера"/>
   <translation tag="Could not save filament" ru="Не удалось сохранить филамент"/>
   <translation tag="Could not save the mesh as &apos;{}&apos;: {}" ru="Не удалось сохранить сетку как &apos;{}&apos;: {}"/>
@@ -1148,6 +1155,7 @@
   <translation tag="File" ru="Файл"/>
   <translation tag="File Size" ru="Размер файла"/>
   <translation tag="File Will Stop the Printer" ru="Файл остановит принтер"/>
+  <translation tag="File not found: {}" ru="Файл не найден: {}"/>
   <translation tag="Filename" ru="Имя файла"/>
   <translation tag="Filter Fan" ru="Вентилятор фильтра"/>
   <translation tag="Filter Fan: Off" ru="Вентилятор фильтра: Выкл"/>
@@ -2650,6 +2658,7 @@
   <translation tag="Start anyway?" ru="Всё равно начать?"/>
   <translation tag="Start at" ru="Начать с"/>
   <translation tag="Start failed" ru="Ошибка запуска"/>
+  <translation tag="Start next: {}" ru="Запустить следующую: {}"/>
   <translation tag="Start over" ru="Начать заново"/>
   <translation tag="Start print anyway?" ru="Всё равно начать печать?"/>
   <translation tag="Started" ru="Начато"/>
@@ -2658,6 +2667,7 @@
   <translation tag="Starting nozzle clean..." ru="Запуск очистки сопла..."/>
   <translation tag="Starting print..." ru="Запуск печати..."/>
   <translation tag="Starting..." ru="Запуск..."/>
+  <translation tag="Starts after the current print" ru="Начнётся после текущей печати"/>
   <translation tag="Startup Brightness" ru="Яркость при запуске"/>
   <translation tag="Startup, auto-control, and macro devices" ru="Запуск, автоуправление и макро-устройства"/>
   <translation tag="State" ru="Состояние"/>
@@ -2697,11 +2707,9 @@
   <translation tag="Switched to {}" ru="Переключено на {}"/>
   <translation tag="Switches to a backup spool on runout" ru="При обрыве переключится на резервную катушку"/>
   <translation tag="Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." ru="Возврат к PID меняет способ управления этим нагревателем, а затем калибрует его. Это занимает несколько минут при рабочей температуре."/>
-  <translation tag="Switching back to PID changes how this heater is controlled." ru="Возврат к PID меняет способ управления этим нагревателем."/>
   <translation tag="Switching back to PID requires a config change and Klipper restart." ru="Возврат к PID требует изменения конфига и перезапуска Klipper."/>
   <translation tag="Switching heater control to MPC. Klipper will restart." ru="Переключение управления нагревом на MPC. Klipper перезапустится."/>
   <translation tag="Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." ru="Переход на MPC меняет способ управления этим нагревателем, а затем калибрует его. Это занимает несколько минут при рабочей температуре."/>
-  <translation tag="Switching to MPC changes how this heater is controlled." ru="Переход на MPC меняет способ управления этим нагревателем."/>
   <translation tag="Switching to MPC requires a config change and Klipper restart." ru="Переход на MPC требует изменения конфига и перезапуска Klipper."/>
   <translation tag="Sync with Spoolman" ru="Синхронизация со Spoolman"/>
   <translation tag="Sysfs" ru="Sysfs"/>
@@ -3018,6 +3026,8 @@
   <translation tag="Unretract Speed" ru="Скорость возврата"/>
   <translation tag="Unsupported tape width" ru="Неподдерживаемая ширина ленты"/>
   <translation tag="Unsupported tape width: " ru="Неподдерживаемая ширина ленты: "/>
+  <translation tag="Up next: {}" ru="Далее: {}"/>
+  <translation tag="Up next: {} (+{})" ru="Далее: {} (+{})"/>
   <translation tag="Up to date" ru="Актуальная версия"/>
   <translation tag="Update" ru="Обновить"/>
   <translation tag="Update Available" ru="Доступно обновление"/>

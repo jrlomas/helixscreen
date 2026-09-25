@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -20,15 +21,18 @@ static constexpr const char* THUMBNAIL_CACHE_DIR = "build/thumbnail_cache";
 #define TEST_GCODE_DIR RuntimeConfig::TEST_GCODE_DIR
 
 /**
- * @brief Scan test directory for G-code files
+ * @brief Scan the test gcodes tree for G-code files
+ * @param subdir Directory relative to the gcodes root ("" = root)
  * @return Vector of filenames (not full paths)
  */
-static std::vector<std::string> scan_mock_gcode_files() {
+static std::vector<std::string> scan_mock_gcode_files(const std::string& subdir = {}) {
     std::vector<std::string> files;
 
-    DIR* dir = opendir(TEST_GCODE_DIR);
+    const std::string dir_path =
+        subdir.empty() ? std::string(TEST_GCODE_DIR) : std::string(TEST_GCODE_DIR) + "/" + subdir;
+    DIR* dir = opendir(dir_path.c_str());
     if (!dir) {
-        spdlog::warn("[MoonrakerClientMock] Cannot open test G-code directory: {}", TEST_GCODE_DIR);
+        spdlog::warn("[MoonrakerClientMock] Cannot open test G-code directory: {}", dir_path);
         return files;
     }
 
@@ -165,8 +169,37 @@ static json build_mock_file_list_response(const std::string& root, const std::st
 
         // Note: We only return real files from TEST_GCODE_DIR
         // Fake subdirectory entries were removed to prevent thumbnail extraction warnings
+    } else {
+        // A subdirectory of the gcodes root: scan it like the root, the way
+        // Moonraker lists any directory it is asked for. A nonexistent
+        // directory scans empty, matching the unknown-path behavior.
+        std::string subdir = path;
+        if (subdir.rfind("gcodes/", 0) == 0) {
+            subdir = subdir.substr(strlen("gcodes/"));
+        }
+        while (!subdir.empty() && subdir.back() == '/') {
+            subdir.pop_back();
+        }
+
+        auto filenames = scan_mock_gcode_files(subdir);
+
+        for (const auto& filename : filenames) {
+            std::string full_path = std::string(TEST_GCODE_DIR) + "/" + subdir + "/" + filename;
+
+            struct stat file_stat;
+            uint64_t size = 0;
+            double modified = 0.0;
+            if (stat(full_path.c_str(), &file_stat) == 0) {
+                size = static_cast<uint64_t>(file_stat.st_size);
+                modified = static_cast<double>(file_stat.st_mtime);
+            }
+
+            json file_entry = {
+                {"path", filename}, {"size", size}, {"modified", modified}, {"permissions", "rw"}};
+            result_array.push_back(file_entry);
+        }
     }
-    // Unknown paths return empty lists
+    // Unscannable paths return empty lists
 
     json response = {{"result", result_array}};
 

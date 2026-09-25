@@ -3,205 +3,158 @@
 
 /**
  * @file test_job_queue_start_guard.cpp
- * @brief Starting a queued job must not delete the entry it then fails to start.
+ * @brief A queued job starts through the detail view and dies only on success.
  *
- * Run with: ./build/bin/helix-tests "[job_queue][print_state]"
+ * Run with: ./build/bin/helix-tests "[job_queue][queue_start]"
  *
- * JobQueueModal::start_job() removes the entry from Moonraker's queue FIRST and
- * starts the print from the removal's success callback. That ordering is only
- * safe while the refusal in front of it is complete. It was not: the guard read
- * print_stats.state, which reports standby for the whole of a host-side
- * pre-print block, so a tap during that window deleted the queue entry and then
- * ran into PrintStartController's own refusal - the job was gone with nothing
- * printing and nothing queued.
+ * PrintSelectPanel::start_queued_job() is the queue's single entry point (the
+ * job queue modal's row tap, and the completion screen's Start next). It owns
+ * three contracts:
  *
- * can_start_new_print() is the predicate that covers both axes: the printer's
- * reported state AND the app's committed-but-unconfirmed start.
- *
- * The second guard here is the printer-stopping command check: a queued entry
- * reaches the queue from a slicer or web UI, so nothing in the app has ever
- * scanned it.
+ * 1. The busy guard: can_start_new_print() covers BOTH the printer's reported
+ *    state AND the app's committed-but-unconfirmed host-side start, so a tap
+ *    during that window cannot delete the entry and lose the job.
+ * 2. The entry outlives the attempt: remove_jobs and the stored-options delete
+ *    run from the print-start SUCCESS callback, never from the tap. A missing
+ *    file, a back-out and a failed start all leave the job queued.
+ * 3. The saved option states seed the detail view's rows for the queued file
+ *    (the merge rules themselves are pinned at the renderer level in
+ *    test_print_select_detail_subjects.cpp and test_pre_print_options_renderer.cpp).
  */
 
 #include "ui_job_queue_modal.h"
 #include "ui_update_queue.h"
 
-#include "../lvgl_test_fixture.h"
 #include "../test_helpers/job_queue_modal_test_access.h"
+#include "../test_helpers/job_queue_state_test_access.h"
+#include "../test_helpers/moonraker_client_mock_test_access.h"
+#include "../test_helpers/print_select_panel_fixture.h"
+#include "../test_helpers/print_select_panel_test_access.h"
 #include "../test_helpers/print_state_test_drivers.h"
 #include "../ui_test_utils.h"
 #include "app_globals.h"
-#include "macro_param_cache.h"
+#include "job_queue_start.h"
+#include "job_queue_state.h"
 #include "moonraker_api.h"
-#include "moonraker_api_mock.h"
-#include "moonraker_client_mock.h"
 #include "printer_state.h"
+#include "queued_job_options.h"
+#include "static_panel_registry.h"
+#include "test_helpers/pre_print_option_sets.h"
 #include "test_helpers/printer_state_test_access.h"
 
-#include <cstdio>
-#include <filesystem>
-#include <fstream>
-#include <functional>
-#include <memory>
-#include <optional>
+#include <map>
 #include <string>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
 
 using helix::JobQueueModal;
+using helix::PlantedGcode;
 using helix::PrintJobState;
+using helix::queue::QueuedJobOptions;
+using helix::queue::QueuedJobOptionsMap;
+using helix::test::make_skip_and_addon_set;
 using helix::test::set_wire_state;
 
 namespace {
 
-/// Records every JSON-RPC method the modal sends, so "did it touch the queue?"
-/// is answered by observing the wire rather than by a spy on our own code.
-class RecordingClient : public MoonrakerClientMock {
-  public:
-    RecordingClient() : MoonrakerClientMock(MoonrakerClientMock::PrinterType::VORON_24) {}
+/// Collects the user-facing warning toasts: toasts are compiled out of the
+/// test build, so the hook is the only observable.
+struct WarningLog {
+    std::vector<std::string> messages;
 
-    helix::RequestId send_jsonrpc(
-        const std::string& method, const json& params, std::function<void(const json&)> success_cb,
-        std::function<void(const MoonrakerError&)> error_cb, uint32_t timeout_ms = 0,
-        bool silent = false,
-        std::optional<helix::rpc_error_policy::CallerIntent> intent = std::nullopt) override {
-        methods.push_back(method);
-        return MoonrakerClientMock::send_jsonrpc(method, params, std::move(success_cb),
-                                                 std::move(error_cb), timeout_ms, silent, intent);
+    WarningLog() {
+        helix::ui::set_test_notification_warning_hook(
+            [this](const std::string& message) { messages.push_back(message); });
     }
+    ~WarningLog() {
+        helix::ui::set_test_notification_warning_hook(nullptr);
+    }
+    WarningLog(const WarningLog&) = delete;
+    WarningLog& operator=(const WarningLog&) = delete;
 
-    [[nodiscard]] int count(const std::string& method) const {
-        int n = 0;
-        for (const auto& m : methods) {
-            if (m == method) {
-                ++n;
+    bool contains(const std::string& needle) const {
+        for (const auto& m : messages) {
+            if (m.find(needle) != std::string::npos) {
+                return true;
             }
         }
-        return n;
+        return false;
     }
-
-    std::vector<std::string> methods;
 };
 
-constexpr const char* DELETE_JOB = "server.job_queue.delete_job";
-
-/// Counts the file-head reads the start path makes, so "it blocked" can be told
-/// apart from "it never looked".
-class CountingTransfers : public MoonrakerFileTransferAPIMock {
+class QueuedStartFixture : private helix::PrintSelectGlobalStateReset,
+                           public helix::PrintSelectPanelFixture {
   public:
-    using MoonrakerFileTransferAPIMock::MoonrakerFileTransferAPIMock;
-
-    void download_file_partial(const std::string& root, const std::string& path, size_t max_bytes,
-                               StringCallback on_success, ErrorCallback on_error) override {
-        ++partial_reads;
-        MoonrakerFileTransferAPIMock::download_file_partial(
-            root, path, max_bytes, std::move(on_success), std::move(on_error));
-    }
-
-    int partial_reads = 0;
-};
-
-/// The real API everywhere except the file reads, which come from disk.
-class TransferMockAPI : public MoonrakerAPI {
-  public:
-    TransferMockAPI(helix::MoonrakerClient& client, helix::PrinterState& state,
-                    CountingTransfers& transfers)
-        : MoonrakerAPI(client, state), transfers_(transfers) {}
-
-    MoonrakerFileTransferAPI& transfers() override {
-        return transfers_;
-    }
-
-  private:
-    CountingTransfers& transfers_;
-};
-
-/// A .gcode in the directory the transfer mock resolves names from.
-class PlantedAsset {
-  public:
-    PlantedAsset(const std::string& name, const std::string& content) {
-        for (const auto* prefix : {"", "../", "../../"}) {
-            const std::string dir = std::string(prefix) + "assets/test_gcodes";
-            if (std::filesystem::is_directory(dir)) {
-                path_ = dir + "/" + name;
-                break;
-            }
-        }
-        REQUIRE_FALSE(path_.empty());
-        std::ofstream(path_, std::ios::trunc) << content;
-    }
-    ~PlantedAsset() {
-        std::remove(path_.c_str());
-    }
-    PlantedAsset(const PlantedAsset&) = delete;
-    PlantedAsset& operator=(const PlantedAsset&) = delete;
-
-  private:
-    std::string path_;
-};
-
-/// This printer's M729 is a macro that shuts it down.
-class StopMacroCache {
-  public:
-    StopMacroCache() {
-        nlohmann::json config;
-        config["gcode_macro M729"] = {
-            {"gcode", "{action_emergency_stop(\"M729 is not supported\")}"}};
-        helix::MacroParamCache::instance().populate_from_configfile(config, {"M729"});
-    }
-    ~StopMacroCache() {
-        helix::MacroParamCache::instance().clear();
-    }
-    StopMacroCache(const StopMacroCache&) = delete;
-    StopMacroCache& operator=(const StopMacroCache&) = delete;
-};
-
-class JobQueueStartFixture : public LVGLTestFixture {
-  public:
-    JobQueueStartFixture() {
-        // The global PrinterState is shared across the shard: reset and
-        // re-init, or a prior case's subjects decide this one's answers.
-        auto& ps0 = get_printer_state();
-        PrinterStateTestAccess::reset(ps0);
-        ps0.init_subjects(false);
-        client.connect("ws://mock/websocket", []() {}, []() {});
-        api = std::make_unique<TransferMockAPI>(client, get_printer_state(), transfers);
+    QueuedStartFixture()
+        : helix::PrintSelectPanelFixture(helix::PrintSelectFilelistHandler::Unregistered) {
+        PrinterStateTestAccess::set_option_set(get_printer_state(), make_skip_and_addon_set());
         previous_api_ = get_moonraker_api();
-        set_moonraker_api(api.get());
-        // A prior case's preparing job would refuse every start here.
-        auto& ps = get_printer_state();
-        if (ps.has_preparing_job()) {
-            ps.retire_preparing(helix::PreparingExit::Superseded);
-        }
-        set_wire_state(ps, PrintJobState::STANDBY);
-        settle();
+        set_moonraker_api(api_.get());
+        drain();
     }
 
-    ~JobQueueStartFixture() override {
+    ~QueuedStartFixture() override {
+        // With the panel and its api still alive: settle the state, then hand
+        // the global api pointer back before the bases tear anything down.
         auto& ps = get_printer_state();
         if (ps.has_preparing_job()) {
             ps.retire_preparing(helix::PreparingExit::Superseded);
         }
         set_wire_state(ps, PrintJobState::STANDBY);
-        settle();
+        drain();
         set_moonraker_api(previous_api_);
-        api.reset();
-        client.stop_temperature_simulation();
-        client.disconnect();
     }
 
-    /// One drain is not enough: a handler running during a drain queues more
-    /// work that is still pending when drain() returns.
-    static void settle() {
-        for (int i = 0; i < 8; ++i) {
-            helix::ui::UpdateQueue::instance().drain();
-        }
+    /// Writes a stored-options entry the way add_to_queue does: one post to
+    /// the job's own key. The mock dispatches inline, so it answers before
+    /// returning.
+    void seed_store(const std::string& job_id, const std::string& filename,
+                    std::map<std::string, bool> options) {
+        api_->database_post_item(
+            helix::queue::kOptionsDbNamespace, helix::queue::queued_job_option_key(job_id),
+            helix::queue::encode_queued_job_entry(QueuedJobOptions{filename, std::move(options)}),
+            []() {}, [](const MoonrakerError&) { FAIL("seed post failed"); });
     }
 
-    RecordingClient client;
-    CountingTransfers transfers{client, "http://mock"};
-    std::unique_ptr<MoonrakerAPI> api;
+    /// Reads the stored option map straight from the (mock) database.
+    QueuedJobOptionsMap read_store() {
+        QueuedJobOptionsMap out;
+        bool answered = false;
+        api_->database_get_item(
+            helix::queue::kOptionsDbNamespace, helix::queue::kOptionsDbKey,
+            [&out, &answered](const json& value) {
+                out = helix::queue::decode_queued_job_options(value);
+                answered = true;
+            },
+            [&answered](const MoonrakerError&) { answered = true; });
+        REQUIRE(answered);
+        return out;
+    }
+
+    /// Whether the job is still in Moonraker's queue (the mock answers
+    /// synchronously, so a capturing lambda is safe here).
+    bool queue_has(const std::string& job_id) {
+        bool found = false;
+        api_->queue().get_queue_status(
+            [&found, &job_id](const JobQueueStatus& status) {
+                for (const auto& job : status.queued_jobs) {
+                    if (job.job_id == job_id) {
+                        found = true;
+                    }
+                }
+            },
+            [](const MoonrakerError& err) { FAIL(err.message); });
+        return found;
+    }
+
+    static JobQueueEntry entry(const std::string& job_id, const std::string& filename) {
+        return JobQueueEntry{job_id, filename, 0.0, 0.0};
+    }
+
+    const std::string* pending_job_id() const {
+        return ::PrintSelectPanelTestAccess::pending_queued_job_id(*panel_);
+    }
 
   private:
     IMoonrakerAPI* previous_api_ = nullptr;
@@ -209,21 +162,58 @@ class JobQueueStartFixture : public LVGLTestFixture {
 
 } // namespace
 
-TEST_CASE_METHOD(JobQueueStartFixture, "JobQueueModal starts a queued job when the printer is idle",
-                 "[job_queue][print_state]") {
-    // The baseline that stops every refusal assertion below from passing
-    // vacuously: with nothing running, the queue entry IS removed.
-    JobQueueModal modal;
-    JobQueueModalTestAccess::start_job(modal, "job-1", "benchy.gcode");
-    settle();
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "a queued job opens the detail view seeded and is removed only on confirmed start",
+                 "[job_queue][queue_start]") {
+    PlantedGcode file("queue_start_happy.gcode");
+    seed_store("0001", file.name(), {{"bed_mesh", false}, {"timelapse", true}});
 
-    CHECK(client.count(DELETE_JOB) == 1);
+    panel_->start_queued_job(entry("0001", file.name()));
+    drain();
+
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    const std::string* pending = pending_job_id();
+    REQUIRE(pending != nullptr);
+    CHECK(*pending == "0001");
+
+    // Saved states, not default_enabled, decide the rows for this file.
+    const auto states = ::PrintSelectPanelTestAccess::collect_option_states(*panel_);
+    REQUIRE(states.count("bed_mesh") == 1);
+    CHECK(states.at("bed_mesh") == false);
+    REQUIRE(states.count("timelapse") == 1);
+    CHECK(states.at("timelapse") == true);
+
+    // Nothing is removed until Moonraker confirms the print actually started:
+    // opening the file, however far the pipeline gets, is not a start.
+    CHECK(queue_has("0001"));
+    REQUIRE(read_store().count("0001") == 1);
+
+    ::PrintSelectPanelTestAccess::fire_print_started(*panel_);
+    drain();
+
+    CHECK_FALSE(queue_has("0001"));
+    CHECK(read_store().empty());
+    CHECK(pending_job_id() == nullptr);
 }
 
-TEST_CASE_METHOD(JobQueueStartFixture, "JobQueueModal refuses to start while a print is running",
-                 "[job_queue][print_state]") {
-    // Characterization of the behaviour that already worked - the wire is
-    // enough here, and it must stay refused after the predicate changes.
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "a queued file missing from the listing warns and stays queued",
+                 "[job_queue][queue_start]") {
+    WarningLog warnings;
+
+    panel_->start_queued_job(entry("0003", "queue_start_ghost.gcode"));
+    drain();
+
+    // The refusal is answered, and neither the queue entry nor a stale
+    // pending start is left behind.
+    CHECK(warnings.contains("File not found"));
+    CHECK(warnings.contains("queue_start_ghost.gcode"));
+    CHECK(pending_job_id() == nullptr);
+    CHECK(queue_has("0003"));
+}
+
+TEST_CASE_METHOD(QueuedStartFixture, "a queued job refuses to start while the printer is busy",
+                 "[job_queue][queue_start][print_state]") {
     auto& ps = get_printer_state();
 
     SECTION("printing") {
@@ -232,69 +222,303 @@ TEST_CASE_METHOD(JobQueueStartFixture, "JobQueueModal refuses to start while a p
     SECTION("paused") {
         set_wire_state(ps, PrintJobState::PAUSED);
     }
-    settle();
+    SECTION("host-side pre-print block") {
+        // The wire still reads standby here: the guard must consult the app's
+        // committed start too, or the entry is deleted into a failed start.
+        ps.begin_preparing(helix::PrintJobRef{"other.gcode", "", ""});
+        drain();
+        REQUIRE(ps.get_print_job_state() == PrintJobState::STANDBY);
+        REQUIRE(ps.is_print_in_progress());
+    }
+    drain();
 
-    // The refusal is answered: the row tap must not look ignored.
-    std::vector<std::string> warnings;
-    helix::ui::set_test_notification_warning_hook(
-        [&warnings](const std::string& message) { warnings.push_back(message); });
-    JobQueueModal modal;
-    JobQueueModalTestAccess::start_job(modal, "job-1", "benchy.gcode");
-    settle();
-    helix::ui::set_test_notification_warning_hook(nullptr);
+    WarningLog warnings;
+    panel_->start_queued_job(entry("0002", "calibration_cube.gcode"));
+    drain();
 
-    CHECK(client.count(DELETE_JOB) == 0);
-    REQUIRE(warnings.size() == 1);
-    CHECK(warnings[0].find("benchy.gcode") != std::string::npos);
+    CHECK(warnings.contains("calibration_cube.gcode"));
+    CHECK(pending_job_id() == nullptr);
+    CHECK(queue_has("0002"));
+    CHECK_FALSE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
 }
 
-TEST_CASE_METHOD(JobQueueStartFixture,
-                 "JobQueueModal refuses to start during a host-side pre-print block",
-                 "[job_queue][print_state]") {
-    // THE BUG. The app has committed to a print and is running the user's
-    // pre-start block itself, so print_stats.state still reads standby. Under
-    // the old wire-only guard the entry was deleted here and the start then
-    // failed, losing the job.
-    auto& ps = get_printer_state();
-    ps.begin_preparing(helix::PrintJobRef{"queued.gcode", "", ""});
-    settle();
-    REQUIRE(ps.get_print_job_state() == PrintJobState::STANDBY);
-    REQUIRE(ps.is_print_in_progress());
+TEST_CASE_METHOD(
+    QueuedStartFixture,
+    "closing the queued file's detail view drops the pending start once no start is in flight",
+    "[job_queue][queue_start]") {
+    PlantedGcode file("queue_start_backout.gcode");
+    seed_store("0001", file.name(), {{"bed_mesh", false}});
 
-    JobQueueModal modal;
-    JobQueueModalTestAccess::start_job(modal, "job-1", "benchy.gcode");
-    settle();
+    panel_->start_queued_job(entry("0001", file.name()));
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
 
-    CHECK(client.count(DELETE_JOB) == 0);
+    SECTION("a Print tap in flight survives the close") {
+        // A failed start re-shows the view; the pipeline closing it here must
+        // not cancel the bookkeeping that removes the job on success.
+        ::PrintSelectPanelTestAccess::set_pending_start_attempted(*panel_, true);
+        ::PrintSelectPanelTestAccess::hide_detail_view(*panel_);
+        drain();
+
+        const std::string* pending = pending_job_id();
+        REQUIRE(pending != nullptr);
+        CHECK(*pending == "0001");
+        CHECK(queue_has("0001"));
+    }
+
+    SECTION("a plain back-out clears the pending start") {
+        ::PrintSelectPanelTestAccess::hide_detail_view(*panel_);
+        drain();
+
+        CHECK(pending_job_id() == nullptr);
+        CHECK(queue_has("0001"));
+
+        // Starting the same job again re-opens seeded: the saved states are
+        // keyed to the job, not to whichever show happened first.
+        panel_->start_queued_job(entry("0001", file.name()));
+        drain();
+        REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+        const auto states = ::PrintSelectPanelTestAccess::collect_option_states(*panel_);
+        REQUIRE(states.count("bed_mesh") == 1);
+        CHECK(states.at("bed_mesh") == false);
+    }
 }
 
-TEST_CASE_METHOD(JobQueueStartFixture, "JobQueueModal refuses a queued file that stops the printer",
-                 "[job_queue][printer_stop]") {
-    // Nothing in the app enqueues jobs, so a queue entry has never been through
-    // the detail view's scan: this start path is the only place it is read.
-    StopMacroCache macros;
-    PlantedAsset file("queued_stop.gcode", "G28\nM729\nG1 X10 Y10 E1\n");
+TEST_CASE_METHOD(QueuedStartFixture, "opening a different file discards the pending queued start",
+                 "[job_queue][queue_start]") {
+    PlantedGcode queued_file("queue_start_diff_queued.gcode");
+    PlantedGcode other_file("queue_start_diff_other.gcode");
+    seed_store("0001", queued_file.name(), {{"bed_mesh", false}});
 
-    JobQueueModal modal;
-    JobQueueModalTestAccess::start_job(modal, "job-1", "queued_stop.gcode");
-    settle();
+    panel_->start_queued_job(entry("0001", queued_file.name()));
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    REQUIRE(pending_job_id() != nullptr);
 
-    CHECK(client.count(DELETE_JOB) == 0);
-    // An absence assertion has to prove the code ran.
-    CHECK(transfers.partial_reads == 1);
+    // A start is in flight (so the close itself keeps the pending start), and
+    // the user then picks a different file: the queued job's saved states
+    // must not leak onto that file's rows, and the job stays queued for its
+    // own row tap.
+    ::PrintSelectPanelTestAccess::set_pending_start_attempted(*panel_, true);
+    ::PrintSelectPanelTestAccess::hide_detail_view(*panel_);
+    drain();
+    REQUIRE(pending_job_id() != nullptr);
+
+    REQUIRE(panel_->select_file_by_name(other_file.name()));
+    drain();
+
+    CHECK(pending_job_id() == nullptr);
+    CHECK(queue_has("0001"));
+    const auto states = ::PrintSelectPanelTestAccess::collect_option_states(*panel_);
+    REQUIRE(states.count("bed_mesh") == 1);
+    CHECK(states.at("bed_mesh") == true);
 }
 
-TEST_CASE_METHOD(JobQueueStartFixture,
-                 "JobQueueModal starts a queued file that calls no such macro",
-                 "[job_queue][printer_stop]") {
-    // Stops the refusal above from passing vacuously.
-    StopMacroCache macros;
-    PlantedAsset file("queued_clean.gcode", "G28\nG1 X10 Y10 E1\n");
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "the job queue modal delegates its row tap to the panel entry point",
+                 "[job_queue][queue_start]") {
+    PlantedGcode file("queue_start_modal.gcode");
+
+    // The process-global panel binds whichever fixture's api created it; a
+    // case that runs after another one touched it would reuse a dead api, so
+    // every case here retires it at both ends and lets its own tap recreate it.
+    StaticPanelRegistry::instance().destroy_all();
 
     JobQueueModal modal;
-    JobQueueModalTestAccess::start_job(modal, "job-1", "queued_clean.gcode");
-    settle();
+    JobQueueModalTestAccess::start_job(modal, "0002", file.name());
+    drain();
 
-    CHECK(client.count(DELETE_JOB) == 1);
-    CHECK(transfers.partial_reads == 1);
+    // The modal hides itself and routes the tap to the global print select
+    // panel's start_queued_job(). That panel is created lazily and never
+    // set up in tests (no XML, no file provider), so its file list is empty
+    // and the pending start waits for a listing that never arrives - which
+    // is exactly what makes this a clean delegation proof: the pending start
+    // EXISTS on that panel, and the queue is untouched.
+    const std::string* pending =
+        ::PrintSelectPanelTestAccess::pending_queued_job_id(get_global_print_select_panel());
+    REQUIRE(pending != nullptr);
+    CHECK(*pending == "0002");
+    CHECK(queue_has("0002"));
+
+    StaticPanelRegistry::instance().destroy_all();
+}
+
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "start next routes the queue's front job through the panel entry point",
+                 "[job_queue][queue_start]") {
+    StaticPanelRegistry::instance().destroy_all();
+
+    JobQueueState jqs(api_.get(), &mock_client_);
+    set_job_queue_state(&jqs);
+    // The ids/filenames mirror the mock's default queue (0001 3DBenchy,
+    // 0002 xyz-10mm-calibration-cube), so queue_has() below reads the
+    // entries the mock actually holds rather than ones only the cache
+    // knows about.
+    JobQueueStateTestAccess::set_jobs(
+        jqs, {entry("0001", "3DBenchy.gcode"), entry("0002", "xyz-10mm-calibration-cube.gcode")});
+
+    start_next_queued_job();
+    drain();
+
+    // Same delegation proof as the modal's row tap: the lazily-created global
+    // panel is never set up here, so the observable is the pending start
+    // existing for the FRONT job while the queue keeps every entry.
+    const std::string* pending =
+        ::PrintSelectPanelTestAccess::pending_queued_job_id(get_global_print_select_panel());
+    REQUIRE(pending != nullptr);
+    CHECK(*pending == "0001");
+    CHECK(queue_has("0001"));
+    CHECK(queue_has("0002"));
+
+    set_job_queue_state(nullptr);
+    StaticPanelRegistry::instance().destroy_all();
+}
+
+TEST_CASE_METHOD(QueuedStartFixture, "start next with an empty queue touches nothing",
+                 "[job_queue][queue_start]") {
+    StaticPanelRegistry::instance().destroy_all();
+
+    JobQueueState jqs(api_.get(), &mock_client_);
+    set_job_queue_state(&jqs);
+    JobQueueStateTestAccess::set_jobs(jqs, {});
+
+    start_next_queued_job();
+
+    // The factory call creates the panel here (the no-op path never does), so
+    // the read is against a live object, not the pre-call null singleton.
+    CHECK(::PrintSelectPanelTestAccess::pending_queued_job_id(
+              *get_print_select_panel(get_printer_state(), api_.get())) == nullptr);
+    set_job_queue_state(nullptr);
+    StaticPanelRegistry::instance().destroy_all();
+}
+
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "leaving the panel before the queued file opens abandons the pending start",
+                 "[job_queue][queue_start]") {
+    PlantedGcode file("queue_start_abandon.gcode");
+    seed_store("0001", file.name(), {{"bed_mesh", false}});
+
+    // The pending start exists with no detail view open yet: the panel has
+    // left for another screen before the saved-options load answered, which
+    // is the state a navbar switch or go_back lands on.
+    panel_->start_queued_job(entry("0001", file.name()));
+    REQUIRE(pending_job_id() != nullptr);
+    CHECK_FALSE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+
+    panel_->on_deactivating(DeactivateReason::NavigateAway);
+    drain();
+
+    // A later visit's refresh must not reopen the queued file unasked, and
+    // the entry stays queued with its options.
+    CHECK(pending_job_id() == nullptr);
+    CHECK(queue_has("0001"));
+    CHECK(read_store().count("0001") == 1);
+}
+
+TEST_CASE_METHOD(QueuedStartFixture, "a queued subdirectory file is found from the gcodes root",
+                 "[job_queue][queue_start]") {
+    PlantedGcode file("sub_file.gcode", "queue_start_subdir");
+    seed_store("0001", file.relative(), {{"bed_mesh", false}});
+
+    panel_->start_queued_job(entry("0001", file.relative()));
+    drain();
+
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    CHECK(::PrintSelectPanelTestAccess::composed_selected_filename(*panel_) == file.relative());
+    const auto states = ::PrintSelectPanelTestAccess::collect_option_states(*panel_);
+    REQUIRE(states.count("bed_mesh") == 1);
+    CHECK(states.at("bed_mesh") == false);
+}
+
+TEST_CASE_METHOD(QueuedStartFixture, "a queued root file is found while browsing a subdirectory",
+                 "[job_queue][queue_start]") {
+    PlantedGcode nested("nested.gcode", "queue_start_browse");
+    PlantedGcode root_file("queue_start_root.gcode");
+    seed_store("0001", root_file.name(), {{"bed_mesh", false}});
+
+    // Browse into a subdirectory first — the queued start must retarget the
+    // listing back to the root, not match against what is on screen.
+    panel_->navigate_to_directory("queue_start_browse");
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::list_contains(*panel_, nested.name()));
+
+    panel_->start_queued_job(entry("0001", root_file.name()));
+    drain();
+
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    CHECK(::PrintSelectPanelTestAccess::composed_selected_filename(*panel_) == root_file.name());
+}
+
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "two same-named files in different directories resolve to the queued one",
+                 "[job_queue][queue_start]") {
+    PlantedGcode first("dup.gcode", "queue_start_dup_one");
+    PlantedGcode second("dup.gcode", "queue_start_dup_two");
+    seed_store("0001", second.relative(), {{"bed_mesh", false}});
+
+    // The listing the panel starts from shows the FIRST directory's file;
+    // the queued filename names the second.
+    panel_->navigate_to_directory("queue_start_dup_one");
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::list_contains(*panel_, first.name()));
+
+    panel_->start_queued_job(entry("0001", second.relative()));
+    drain();
+
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    CHECK(::PrintSelectPanelTestAccess::composed_selected_filename(*panel_) == second.relative());
+}
+
+TEST_CASE_METHOD(QueuedStartFixture, "a refused queue removal keeps the job and its saved options",
+                 "[job_queue][queue_start]") {
+    WarningLog warnings;
+    PlantedGcode file("queue_start_refused.gcode");
+    seed_store("0001", file.name(), {{"bed_mesh", false}});
+
+    // Moonraker refuses the removal — a stale id after a restart, say. The
+    // override answers error_cb where the stock handler succeeds.
+    helix::MoonrakerClientMockTestAccess::set_method_handler(
+        mock_client_, "server.job_queue.delete_job",
+        [](MoonrakerClientMock*, const json&, std::function<void(const json&)> /*success_cb*/,
+           std::function<void(const MoonrakerError&)> error_cb) -> bool {
+            if (error_cb) {
+                error_cb(MoonrakerError::unknown("refused", "server.job_queue.delete_job"));
+            }
+            return true;
+        });
+
+    panel_->start_queued_job(entry("0001", file.name()));
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    ::PrintSelectPanelTestAccess::fire_print_started(*panel_);
+    drain();
+
+    // The job stays queued AND keeps its options, so Start next can offer it
+    // again exactly as it was saved; the refusal is surfaced, not just logged.
+    CHECK(queue_has("0001"));
+    CHECK(read_store().count("0001") == 1);
+    CHECK(warnings.contains("Could not remove the job from the queue"));
+}
+
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "closing the detail overlay via go_back drops an untapped pending start",
+                 "[job_queue][queue_start]") {
+    PlantedGcode file("queue_start_esc.gcode");
+    seed_store("0001", file.name(), {{"bed_mesh", false}});
+
+    panel_->start_queued_job(entry("0001", file.name()));
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    REQUIRE(pending_job_id() != nullptr);
+
+    // ESC and the Android back key pop the overlay through NavigationManager
+    // alone - hide_detail_view() never runs, so on_activate() is where the
+    // back-out bookkeeping has to land.
+    REQUIRE(NavigationManager::instance().go_back());
+    drain();
+
+    CHECK(pending_job_id() == nullptr);
+    CHECK(queue_has("0001"));
+    CHECK(read_store().count("0001") == 1);
+    CHECK_FALSE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
 }

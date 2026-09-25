@@ -42,6 +42,7 @@ void PrinterCapabilitiesState::init_subjects(bool register_xml) {
     INIT_SUBJECT_INT(printer_has_spoolman, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(printer_has_speaker, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(printer_has_timelapse, 0, subjects_, register_xml);
+    INIT_SUBJECT_INT(printer_has_job_queue, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(printer_has_purge_line, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(printer_has_firmware_retraction, 0, subjects_, register_xml);
     INIT_SUBJECT_INT(printer_has_individual_xyz_homing, 1, subjects_, register_xml);
@@ -263,6 +264,16 @@ void PrinterCapabilitiesState::set_timelapse_available(bool available) {
     async_lifetime_.defer("PrinterCapabilitiesState::set_timelapse_available", [this, available]() {
         set_capability_int(printer_has_timelapse_, available ? 1 : 0);
         spdlog::debug("[PrinterCapabilitiesState] Timelapse availability set: {}", available);
+    });
+}
+
+void PrinterCapabilitiesState::set_job_queue_available(bool available) {
+    // Thread-safe: Use ui_queue_update to update LVGL subject from any thread
+    async_lifetime_.defer("PrinterCapabilitiesState::set_job_queue_available", [this, available]() {
+        set_capability_int(printer_has_job_queue_, available ? 1 : 0);
+        spdlog::debug("[PrinterCapabilitiesState] Job queue availability "
+                      "set: {}",
+                      available);
     });
 }
 

@@ -161,7 +161,11 @@ translations:
   Add Widget: 添加小组件
   Add custom filament: 添加自定义耗材
   Add page: '添加页面'
+  Add to Queue: 添加到队列
   Added to Spoolman: 已添加到 Spoolman
+  Added to queue (position {}): 已添加到队列（第 {} 位）
+  Added to queue (position {}) - queue is paused: 已添加到队列（第 {} 位）– 队列已暂停
+  Adding to queue...: 正在添加到队列...
   Address: 地址
   Adjust screen brightness level: 调整屏幕亮度
   Adjust screws, then re-probe.: 调整螺丝，然后重新探测。
@@ -432,6 +436,7 @@ translations:
   Cancel Print: 取消打印
   Cancel macro not configured: 取消宏未配置
   Cancelled: 已取消
+  'Cannot add to queue: internal error': '无法添加到队列：内部错误'
   Cannot be changed from here on a multi-unit MMU: 多单元 MMU 无法在此处更改
   'Cannot control timelapse: printer not connected': '无法控制延时摄影: 打印机未连接'
   'Cannot delete file: printer not connected': '无法删除文件: 打印机未连接'
@@ -667,6 +672,7 @@ translations:
   Copy failed - use SSH manually: 复制失败 - 请手动使用 SSH
   Corner roundness: 圆角程度
   Correction (Ki): 校正 (Ki)
+  Could not add to queue: 无法添加到队列
   Could not analyze PRINT_START macro. Some print options may be unavailable.: 无法分析
     PRINT_START 宏。部分打印选项可能不可用。
   Could not answer the connection request: '无法响应连接请求'
@@ -679,6 +685,7 @@ translations:
   Could not parse tips database: 无法解析提示数据库
   Could not reach Spoolman at: 无法连接 Spoolman：
   Could not read the screw adjustments from the printer: 无法从打印机读取螺丝调整数据
+  Could not remove the job from the queue: 无法从队列中移除任务
   Could not resolve printer RFCOMM channel: 无法解析打印机 RFCOMM 通道
   Could not save filament: 无法保存耗材
   "Could not save the mesh as '{}': {}": "无法将网格保存为 '{}'：{}"
@@ -1170,6 +1177,7 @@ translations:
   File: 文件
   File Size: 文件大小
   File Will Stop the Printer: '文件会使打印机停止'
+  'File not found: {}': '未找到文件: {}'
   Filename: 文件名
   Filter Fan: 滤网风扇
   'Filter Fan: Off': '滤网风扇: 关'
@@ -2722,6 +2730,7 @@ translations:
   Start anyway?: '仍要开始吗？'
   Start at: 从第
   Start failed: 启动失败
+  'Start next: {}': '开始下一个：{}'
   Start over: 重新开始
   Start print anyway?: 仍要开始打印吗？
   Started: 已开始
@@ -2730,6 +2739,7 @@ translations:
   Starting nozzle clean...: 正在开始清洁喷嘴...
   Starting print...: 正在启动打印...
   Starting...: 正在启动...
+  Starts after the current print: 当前打印完成后开始
   Startup Brightness: 启动亮度
   Startup, auto-control, and macro devices: 启动、自动控制和宏设备
   State: 状态
@@ -2771,11 +2781,9 @@ translations:
   Switches to a backup spool on runout: 耗材用尽时切换到备用料盘
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : 切回 PID 会改变此加热器的控制方式，随后会进行校准。这需要在工作温度下耗时数分钟。
-  Switching back to PID changes how this heater is controlled.: 切回 PID 会改变此加热器的控制方式。
   Switching back to PID requires a config change and Klipper restart.: 切回 PID 需要修改配置并重启 Klipper。
   Switching heater control to MPC. Klipper will restart.: 正在将加热控制切换为 MPC。Klipper 将重启。
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: 切换到 MPC 会改变此加热器的控制方式，随后会进行校准。这需要在工作温度下耗时数分钟。
-  Switching to MPC changes how this heater is controlled.: 切换到 MPC 会改变此加热器的控制方式。
   Switching to MPC requires a config change and Klipper restart.: 切换到 MPC 需要修改配置并重启
     Klipper。
   Sync with Spoolman: 与 Spoolman 同步
@@ -3125,6 +3133,8 @@ translations:
   Unretract Speed: 回抽恢复速度
   Unsupported tape width: 不支持的标签带宽度
   'Unsupported tape width: ': '不支持的标签带宽度: '
+  'Up next: {}': '下一个：{}'
+  'Up next: {} (+{})': '下一个：{}（+{}）'
   Up to date: 已是最新
   Update: 更新
   Update Available: 有可用更新

@@ -170,7 +170,11 @@ translations:
   Add Widget: Adicionar Widget
   Add custom filament: Adicionar filamento personalizado
   Add page: 'Adicionar página'
+  Add to Queue: Adicionar à fila
   Added to Spoolman: Adicionado ao Spoolman
+  Added to queue (position {}): Adicionado à fila (posição {})
+  Added to queue (position {}) - queue is paused: Adicionado à fila (posição {}) – a fila está pausada
+  Adding to queue...: Adicionando à fila...
   Address: Endereço
   Adjust screen brightness level: Ajustar nível de brilho da tela
   Adjust screws, then re-probe.: Ajuste os parafusos, depois sonde novamente.
@@ -470,6 +474,7 @@ translations:
   Cancel Print: Cancelar Impressão
   Cancel macro not configured: Macro de cancelar não configurado
   Cancelled: Cancelado
+  'Cannot add to queue: internal error': 'Não foi possível adicionar à fila: erro interno'
   Cannot be changed from here on a multi-unit MMU: Não pode ser alterado aqui em um MMU de várias unidades
   'Cannot control timelapse: printer not connected': 'Não é possível controlar timelapse:
     impressora não conectada'
@@ -738,6 +743,7 @@ translations:
   Copy failed - use SSH manually: Falha ao copiar - use SSH manualmente
   Corner roundness: Arredondamento dos cantos
   Correction (Ki): Correção (Ki)
+  Could not add to queue: Não foi possível adicionar à fila
   Could not analyze PRINT_START macro. Some print options may be unavailable.: Não
     foi possível analisar a macro PRINT_START. Algumas opções de impressão podem estar
     indisponíveis.
@@ -751,6 +757,7 @@ translations:
   Could not parse tips database: Não foi possível analisar o banco de dados de dicas
   Could not reach Spoolman at: Não foi possível alcançar o Spoolman em
   Could not read the screw adjustments from the printer: Não foi possível ler os ajustes dos parafusos da impressora
+  Could not remove the job from the queue: Não foi possível remover o trabalho da fila
   Could not resolve printer RFCOMM channel: Não foi possível resolver o canal RFCOMM
     da impressora
   Could not save filament: Não foi possível salvar o filamento
@@ -1263,6 +1270,7 @@ translations:
   File: Arquivo
   File Size: Tamanho do Arquivo
   File Will Stop the Printer: 'O arquivo vai parar a impressora'
+  'File not found: {}': 'Arquivo não encontrado: {}'
   Filename: Nome do Arquivo
   Filter Fan: Ventoinha do Filtro
   'Filter Fan: Off': 'Ventoinha do Filtro: Desligado'
@@ -2939,6 +2947,7 @@ translations:
   Start anyway?: 'Iniciar mesmo assim?'
   Start at: Começar em
   Start failed: Falha ao iniciar
+  'Start next: {}': 'Iniciar próximo: {}'
   Start over: Recomeçar
   Start print anyway?: Iniciar impressão mesmo assim?
   Started: Iniciado
@@ -2947,6 +2956,7 @@ translations:
   Starting nozzle clean...: Iniciando limpeza do bico...
   Starting print...: Iniciando impressão...
   Starting...: Iniciando...
+  Starts after the current print: Começa depois da impressão atual
   Startup Brightness: Brilho na inicialização
   Startup, auto-control, and macro devices: Inicialização, controle automático e dispositivos
     de macro
@@ -2995,12 +3005,10 @@ translations:
   Switches to a backup spool on runout: Troca para um carretel de reserva ao acabar
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : Voltar para PID altera como este aquecedor é controlado e depois o calibra. Isso leva vários minutos em temperatura.
-  Switching back to PID changes how this heater is controlled.: Voltar para PID altera como este aquecedor é controlado.
   Switching back to PID requires a config change and Klipper restart.: Voltar para PID requer alteração de configuração e reinicialização do Klipper.
   Switching heater control to MPC. Klipper will restart.: Alterando controle do aquecedor
     para MPC. Klipper será reiniciado.
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: Mudar para MPC altera como este aquecedor é controlado e depois o calibra. Isso leva vários minutos em temperatura.
-  Switching to MPC changes how this heater is controlled.: Mudar para MPC altera como este aquecedor é controlado.
   Switching to MPC requires a config change and Klipper restart.: Mudar para MPC requer
     alteração de configuração e reinicialização do Klipper.
   Sync with Spoolman: Sincronizar com Spoolman
@@ -3390,6 +3398,8 @@ translations:
   Unretract Speed: Velocidade de Desretração
   Unsupported tape width: Largura de fita não suportada
   'Unsupported tape width: ': 'Largura de fita não suportada: '
+  'Up next: {}': 'A seguir: {}'
+  'Up next: {} (+{})': 'A seguir: {} (+{})'
   Up to date: Atualizado
   Update: Atualizar
   Update Available: Atualização Disponível

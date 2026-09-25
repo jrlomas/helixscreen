@@ -7,6 +7,7 @@
 #include "ui_error_reporting.h"
 #include "ui_fonts.h"
 #include "ui_icon_codepoints.h"
+#include "ui_panel_print_select.h"
 #include "ui_utils.h"
 
 #include "app_globals.h"
@@ -14,7 +15,6 @@
 #include "job_queue_state.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
-#include "print_start_checks.h"
 #include "printer_state.h"
 #include "theme_manager.h"
 
@@ -388,91 +388,16 @@ void JobQueueModal::start_job(const std::string& job_id, const std::string& file
     if (!api)
         return;
 
-    // The queue entry is removed BEFORE the start is attempted, so an
-    // incomplete refusal loses the job: it is deleted and the print then fails.
-    // can_start_new_print() covers both axes — what the printer reports AND a
-    // start this app has already committed to but the printer has not confirmed,
-    // which is the whole of a host-side pre-print block.
-    auto& ps = get_printer_state();
-    if (!ps.can_start_new_print()) {
-        // Moonraker has no reorder call, so the entry cannot be promoted to the
-        // front either; the tap is answered rather than swallowed.
-        NOTIFY_WARNING(lv_tr("Printer is busy - {} stays in the queue"), filename);
-        return;
-    }
+    spdlog::info("[JobQueueModal] Starting queued job {}: {}", job_id, filename);
 
-    // Every entry here arrives from a slicer or a web UI, so no scan in this app
-    // has ever read it: this is the only chance to see a command the printer
-    // treats as an emergency stop.
-    auto token = lifetime_.token();
-    api->transfers().download_file_partial(
-        "gcodes", filename, helix::PRINTER_STOP_SCAN_BYTES,
-        // Both callbacks run on a background HTTP thread.
-        [token, this, job_id, filename](const std::string& content) {
-            const auto stop = helix::printer_stop_check_in(content, helix::PRINTER_STOP_SCAN_BYTES);
-            token.defer("JobQueueModal::stop_check", [this, job_id, filename, stop]() {
-                start_checked_job(job_id, filename, stop);
-            });
-        },
-        [token, this, job_id, filename](const MoonrakerError& err) {
-            const auto stop =
-                helix::printer_stop_not_run("the file could not be read: " + err.message);
-            token.defer("JobQueueModal::stop_check_failed", [this, job_id, filename, stop]() {
-                start_checked_job(job_id, filename, stop);
-            });
-        });
-}
-
-void JobQueueModal::start_checked_job(const std::string& job_id, const std::string& filename,
-                                      const PrinterStopCheck& stop) {
-    auto* api = get_moonraker_api();
-    if (!api)
-        return;
-
-    if (stop.state == PrinterStopCheck::State::Stops) {
-        // The entry stays queued: the file is the problem, not the queue, and
-        // deleting it would cost the user the job as well as the print.
-        PrintStartContext ctx;
-        ctx.printer_stop = stop;
-        const CheckResult result = gate_printer_stopping_command(ctx);
-        spdlog::warn("[JobQueueModal] {} line {} calls {}, which stops this printer", filename,
-                     stop.line_number, stop.command);
-        helix::ui::AlertOptions alert_opts;
-        alert_opts.owner_token = lifetime_.token();
-        helix::ui::modal_alert(result.title.c_str(), result.body.c_str(), ModalSeverity::Error,
-                               lv_tr("OK"), nullptr, alert_opts);
-        return;
-    }
-
-    spdlog::info("[JobQueueModal] Starting print: {}", filename);
-    if (stop.state == PrinterStopCheck::State::NotRun) {
-        helix::warn_printer_stop_check_skipped("the job queue", filename, stop.not_run_reason);
-    }
-    auto token = lifetime_.token();
-
-    // Remove from queue first, then start the print
-    api->queue().remove_jobs(
-        {job_id},
-        [token, this, filename, api]() {
-            if (token.expired())
-                return;
-            api->job().start_print(
-                filename,
-                [token, this]() {
-                    if (token.expired())
-                        return;
-                    token.defer("JobQueueModal::start_job", [this]() {
-                        spdlog::info("[JobQueueModal] Print started, closing modal");
-                        hide();
-                    });
-                },
-                [](const MoonrakerError& err) {
-                    spdlog::warn("[JobQueueModal] Start print failed: {}", err.message);
-                });
-        },
-        [](const MoonrakerError& err) {
-            spdlog::warn("[JobQueueModal] Remove job before start failed: {}", err.message);
-        });
+    // The start walks the print select panel's entry point: the busy guard,
+    // the saved option states and the printer-stopping command check all
+    // live in the detail-view pipeline every manual Print tap already uses,
+    // and the queue entry is deleted only once the printer confirms the
+    // start. Hiding first returns the user to the panel the job opens on.
+    hide();
+    get_print_select_panel(get_printer_state(), api)
+        ->start_queued_job(JobQueueEntry{job_id, filename, 0.0, 0.0});
 }
 
 } // namespace helix

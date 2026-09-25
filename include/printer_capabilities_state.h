@@ -132,6 +132,16 @@ class PrinterCapabilitiesState {
     void set_timelapse_available(bool available);
 
     /**
+     * @brief Set job queue availability (async update from Moonraker's
+     * server.info components list)
+     *
+     * Thread-safe: Uses helix::ui::queue_update() for main-thread execution.
+     *
+     * @param available True if Moonraker lists the job_queue component
+     */
+    void set_job_queue_available(bool available);
+
+    /**
      * @brief Set has individual XYZ homing (from kinematics detection)
      *
      * @param has_individual_xyz_homing True if XYZ axes can be homed individually,
@@ -267,6 +277,11 @@ class PrinterCapabilitiesState {
     /// 1 if moonraker-timelapse plugin is installed
     lv_subject_t* get_printer_has_timelapse_subject() const {
         return const_cast<lv_subject_t*>(&printer_has_timelapse_);
+    }
+
+    /// 1 if Moonraker's server.info lists the job_queue component
+    lv_subject_t* get_printer_has_job_queue_subject() const {
+        return const_cast<lv_subject_t*>(&printer_has_job_queue_);
     }
 
     /// 1 if printer has purge/priming capability
@@ -455,6 +470,7 @@ class PrinterCapabilitiesState {
     lv_subject_t printer_has_spoolman_{};            // spoolman filament manager
     lv_subject_t printer_has_speaker_{};             // speaker for M300
     lv_subject_t printer_has_timelapse_{};           // moonraker-timelapse plugin
+    lv_subject_t printer_has_job_queue_{};           // Moonraker job_queue component
     lv_subject_t printer_has_tool_offset_cal_{};     // automatic tool offset calibration
     lv_subject_t hide_manual_z_calibration_{};       // ...and it covers the reference tool's Z
     lv_subject_t printer_has_purge_line_{};          // purge/priming capability

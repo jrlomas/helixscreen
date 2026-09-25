@@ -44,6 +44,14 @@ class MoonrakerClientMockTestAccess {
     static size_t replay_next(const MoonrakerClientMock& c) {
         return c.replay_next_;
     }
+
+    // Replace one registered method handler — the seam for refusal
+    // injection, answering error_cb where the stock handler succeeds. The
+    // registry is per-instance, so the override dies with the mock.
+    static void set_method_handler(MoonrakerClientMock& c, const std::string& method,
+                                   mock_internal::MethodHandler handler) {
+        c.method_handlers_[method] = std::move(handler);
+    }
 };
 
 } // namespace helix
