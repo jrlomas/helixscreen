@@ -34,7 +34,7 @@ When beta features are enabled, the following appear in the UI with an orange "B
 | Feature | Location | Description | Status |
 |---------|----------|-------------|--------|
 | **Configure PRINT_START** | Advanced panel | Make bed mesh and QGL skippable in your print start macro | Functional; writes your Klipper config directly via Moonraker, no plugin required |
-| **Dev Update Channel** | Settings > Help & About > About | Adds **Dev** to the Update Channel selector, which otherwise offers Stable and Beta to everyone | Functional; needs `update.dev_url` set in the config file |
+| **Dev Update Channel** | Settings > Help & About > About | Adds **Dev** to the Update Channel selector, which otherwise offers Stable and Beta to everyone | Functional; needs `dev_url` set in `/var/lib/helixscreen/update_urls.json` (root-owned) |
 | **Belt Tension** | Advanced panel | Pluck each belt by hand; the tool listens and reports its frequency, for CoreXY | **Early beta - not yet validated on real hardware.** Requires an accelerometer and HelixScreen running on the printer itself |
 | **Tool Offsets** | Advanced panel, Controls panel | Automatically measure every tool's X/Y/Z position in one run, on a tool-changer printer | Functional; requires a tool changer with automatic offset calibration support |
 

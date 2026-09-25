@@ -778,7 +778,7 @@ translations:
   Detection Mode: 検出モード
   Detection turned off: 検出をオフにしました
   Dev: 開発版
-  Dev channel requires dev_url in config: 開発チャンネルには設定にdev_urlが必要です
+  Dev channel requires dev_url in update_urls.json: 開発チャンネルには update_urls.json に dev_url が必要です
   Device: デバイス
   Device Section: デバイスセクション
   Device connected: 'デバイスが接続されました'

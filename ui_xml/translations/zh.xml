@@ -763,7 +763,7 @@
   <translation tag="Detection Mode" zh="检测模式"/>
   <translation tag="Detection turned off" zh="检测已关闭"/>
   <translation tag="Dev" zh="开发版"/>
-  <translation tag="Dev channel requires dev_url in config" zh="开发频道需要在配置中设置 dev_url"/>
+  <translation tag="Dev channel requires dev_url in update_urls.json" zh="开发频道需要在 update_urls.json 中设置 dev_url"/>
   <translation tag="Device" zh="设备"/>
   <translation tag="Device Section" zh="设备区域"/>
   <translation tag="Device connected" zh="设备已连接"/>

@@ -190,6 +190,13 @@ helix_env_stat() {
     return 0
 }
 
+# Hard-link count (st_nlink) of an existing path, for the log-file gate.
+helix_env_nlink() {
+    stat -L -c '%h' "$1" 2>/dev/null && return 0
+    stat -L -f '%l' "$1" 2>/dev/null && return 0
+    return 0
+}
+
 # Keys the env file may set: exactly the settings it is meant to carry - every
 # key config/helixscreen.env names (a bats lint keeps the two in step), the
 # env-file settings the user docs list, the keys deploys and the init script
@@ -283,8 +290,10 @@ helix_env_value_refusal() {
 # The only log files the env file may aim the app at: an absolute *.log path
 # whose parent resolves to /tmp, /var/log, or a directory under those or the
 # install dir that root or this user owns with no group/world write bit, with
-# no dot segments and no symlink at the file itself. Platform hooks pick their own
-# firmware log directories after this file loads, so nothing else is needed.
+# no dot segments, no symlink at the file itself, and - when the file exists -
+# a single-link regular file owned by root or this user. Platform hooks pick
+# their own firmware log directories after this file loads, so nothing else
+# is needed.
 # ponytail: a link planted in /tmp after this check still races the app's
 # open; fs.protected_symlinks closes that on the kernels we ship to.
 helix_env_log_file_ok() {
@@ -296,6 +305,24 @@ helix_env_log_file_ok() {
         */../* | */./*) return 1 ;;
     esac
     [ -L "$1" ] && return 1
+    # An existing file must be a regular file with no other hard link, owned
+    # by root or this user: a planted hard link has the app append to an
+    # arbitrary file as root where fs.protected_hardlinks=0.
+    if [ -e "$1" ]; then
+        [ -f "$1" ] || return 1
+        _helf_nlink=$(helix_env_nlink "$1")
+        case "$_helf_nlink" in
+            *[!0-9]* | '') return 1 ;;
+            *) [ "$_helf_nlink" -gt 1 ] && return 1 ;;
+        esac
+        _helf_uid=$(id -u 2>/dev/null) || _helf_uid=""
+        [ -n "$_helf_uid" ] || return 1
+        _helf_fst=$(helix_env_stat "$1")
+        case "${_helf_fst%% *}" in
+            0 | "$_helf_uid") ;;
+            *) return 1 ;;
+        esac
+    fi
     _helf_dir=$(readlink -f "${1%/*}" 2>/dev/null) || _helf_dir=""
     _helf_inst=$(readlink -f "${INSTALL_DIR:-/nonexistent}" 2>/dev/null) || _helf_inst=""
     _helf_ok=1
@@ -321,7 +348,7 @@ helix_env_log_file_ok() {
                 ;;
         esac
     fi
-    unset _helf_dir _helf_inst _helf_st _helf_uid
+    unset _helf_dir _helf_inst _helf_st _helf_uid _helf_nlink _helf_fst
     return $_helf_ok
 }
 

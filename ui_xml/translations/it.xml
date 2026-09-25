@@ -763,7 +763,7 @@
   <translation tag="Detection Mode" it="Modalità rilevamento"/>
   <translation tag="Detection turned off" it="Rilevamento disattivato"/>
   <translation tag="Dev" it="Dev"/>
-  <translation tag="Dev channel requires dev_url in config" it="Il canale dev richiede dev_url nella configurazione"/>
+  <translation tag="Dev channel requires dev_url in update_urls.json" it="Il canale dev richiede dev_url in update_urls.json"/>
   <translation tag="Device" it="Dispositivo"/>
   <translation tag="Device Section" it="Sezione dispositivo"/>
   <translation tag="Device connected" it="Dispositivo connesso"/>

@@ -849,7 +849,7 @@ translations:
   Detection Mode: Modo de Detecção
   Detection turned off: Detecção desligada
   Dev: Dev
-  Dev channel requires dev_url in config: Canal dev requer dev_url na configuração
+  Dev channel requires dev_url in update_urls.json: Canal dev requer dev_url em update_urls.json
   Device: Dispositivo
   Device Section: Seção de dispositivo
   Device connected: 'Dispositivo conectado'

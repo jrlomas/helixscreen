@@ -159,7 +159,7 @@ Three channels are available. The channel is stored in config at `/update/channe
 |---------|------|-------------|--------|-------------|
 | **Stable** | `UpdateChannel::Stable` | `0` | R2 stable/manifest.json, fallback: GitHub `/releases/latest` | Production releases only. Default for all users. |
 | **Beta** | `UpdateChannel::Beta` | `1` | R2 beta/manifest.json, fallback: GitHub `/releases` array (first prerelease) | Includes pre-release tags (`v1.0.0-beta.1`, `v1.0.0-rc.1`). Falls back to latest stable if no prereleases exist. |
-| **Dev** | `UpdateChannel::Dev` | `2` | R2 dev/manifest.json, or explicit `/update/dev_url` | Cutting-edge builds. Supports custom manifest URLs for local development servers. |
+| **Dev** | `UpdateChannel::Dev` | `2` | R2 dev/manifest.json, or explicit `dev_url` (update_urls.json) | Cutting-edge builds. Supports custom manifest URLs for local development servers. |
 
 ### Channel Selection in UI
 
@@ -177,9 +177,10 @@ single `on_about_update_channel_changed` callback behind both rows mean the same
 thing whichever row is on screen. Index 2 is reachable only from the beta row.
 
 Dev stays behind the beta gate because it fetches from an arbitrary
-`/update/dev_url` rather than a published channel, and because `main` publishes to
-both the beta and dev channels — the two deliver identical builds, so a third
-entry would offer a stable-line user a duplicate of its neighbour.
+`dev_url` in the root-owned update_urls.json rather than a published channel,
+and because `main` publishes to both the beta and dev channels - the two
+deliver identical builds, so a third entry would offer a stable-line user a
+duplicate of its neighbour.
 
 Neither row binds its selection to a subject; `lv_dropdown` has no such binding in
 the XML engine. `AboutSettingsOverlay::sync_update_channel_rows()` seeds both from
@@ -226,14 +227,15 @@ whole in-memory document. Pinned by `tests/unit/test_config_migration_future.cpp
 
 ### Dev Channel Custom URL
 
-The dev channel supports an explicit URL override via config:
+The dev channel supports an explicit URL override. The channel selection stays in
+settings.json; the URL itself lives in the root-owned
+`/var/lib/helixscreen/update_urls.json` (see "R2 Base URL Override" below for the
+trust rules and per-platform location). settings.json's web-editable storage is
+exactly why the app ignores any `dev_url`/`r2_url` key it finds there:
 
 ```json
 {
-  "update": {
-    "channel": 2,
-    "dev_url": "http://192.168.1.100:8080/dev/"
-  }
+  "dev_url": "http://192.168.1.100:8080/dev/"
 }
 ```
 
@@ -346,17 +348,36 @@ https://releases.helixscreen.org/
 
 ### R2 Base URL Override
 
-The R2 base URL can be overridden in config for testing:
+The R2 base URL can be overridden for testing. The override lives in
+`/var/lib/helixscreen/update_urls.json`, NOT in settings.json: the updater
+downloads a payload and runs its install.sh from wherever this URL points, and
+settings.json sits where the web UI can write it. The file only counts when it
+is owned by root or the app's user and has no group or world write bit
+(`chown root:root ... && chmod 644 ...`); anything else is ignored with a
+warning.
 
 ```json
 {
-  "update": {
-    "r2_url": "https://my-test-cdn.example.com"
-  }
+  "r2_url": "https://my-test-cdn.example.com"
 }
 ```
 
 Default: `https://releases.helixscreen.org` (compiled as `DEFAULT_R2_BASE_URL`).
+
+**Where the state dir lives.** `/var/lib/helixscreen` on every platform - Pi, K1,
+K2, AD5M, AD5X, CC1 and U1 all resolve the same compile-time `STATE_DIR_DEFAULT`
+(`include/app_constants.h`); no platform falls back to `~/.helixscreen` for this
+file. systemd units create it via `StateDirectory=helixscreen`
+(`StateDirectoryMode=0700`), and the SysV init script (`config/helixscreen.init`)
+`mkdir -p`s it at boot. On a device where neither has run yet:
+
+```bash
+sudo mkdir -p /var/lib/helixscreen && sudo chown root:root /var/lib/helixscreen && sudo chmod 755 /var/lib/helixscreen
+sudo install -o root -g root -m 644 update_urls.json /var/lib/helixscreen/update_urls.json
+```
+
+The parent must carry no group/world write bit or the file is ignored alongside
+it.
 
 ### GitHub API Fallback
 
@@ -565,14 +586,16 @@ Multi-state modal driven by `download_status` subject:
 
 ## Configuration Reference
 
-All update settings live under the `/update/` key in `settings.json`:
+The channel setting lives under the `/update/` key in `settings.json`; the URL
+overrides live in the root-owned `/var/lib/helixscreen/update_urls.json` (see
+"R2 Base URL Override" above):
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `/update/channel` | int | `0` | Update channel: 0=Stable, 1=Beta, 2=Dev |
-| `/update/dev_url` | string | `""` | Custom manifest URL for dev channel |
-| `/update/r2_url` | string | `""` | R2 base URL override (default: `https://releases.helixscreen.org`) |
-| `/update/dismissed_version` | string | `""` | Version the user chose to ignore |
+| Key | Where | Type | Default | Description |
+|-----|-------|------|---------|-------------|
+| `/update/channel` | settings.json | int | `0` | Update channel: 0=Stable, 1=Beta, 2=Dev |
+| `/update/dismissed_version` | settings.json | string | `""` | Version the user chose to ignore |
+| `r2_url` | update_urls.json | string | `""` | R2 base URL override (default: `https://releases.helixscreen.org`) |
+| `dev_url` | update_urls.json | string | `""` | Custom manifest URL for dev channel |
 
 ---
 
@@ -619,11 +642,21 @@ Configure HelixScreen:
 ```json
 {
   "update": {
-    "channel": 2,
-    "dev_url": "http://192.168.1.100:8080/"
+    "channel": 2
   }
 }
 ```
+
+in settings.json, and
+
+```json
+{
+  "dev_url": "http://192.168.1.100:8080/"
+}
+```
+
+in `/var/lib/helixscreen/update_urls.json` (root-owned, mode 644; see "R2 Base
+URL Override" for the trust rules).
 
 ### End-to-End Self-Update Testing on Device
 

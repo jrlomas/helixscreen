@@ -836,7 +836,7 @@ translations:
   Detection Mode: Режим обнаружения
   Detection turned off: Обнаружение отключено
   Dev: Разработка
-  Dev channel requires dev_url in config: Dev-канал требует dev_url в конфиге
+  Dev channel requires dev_url in update_urls.json: Dev-канал требует dev_url в update_urls.json
   Device: Устройство
   Device Section: Раздел устройств
   Device connected: 'Устройство подключено'

@@ -3,10 +3,13 @@
 
 #include "../helix_test_fixture.h"
 #include "../lvgl_test_fixture.h"
+#include "app_constants.h"
 #include "app_globals.h"
 #include "config.h"
 #include "system/debug_bundle_collector.h"
 #include "system/update_checker.h"
+#include "test_helpers/scoped_update_urls.h"
+#include "test_helpers/unique_temp_dir.h"
 
 #include <spdlog/spdlog.h>
 
@@ -1399,7 +1402,8 @@ TEST_CASE_METHOD(HelixTestFixture,
     REQUIRE(channel == UpdateChecker::channel_name(UpdateChecker::instance().get_channel()));
 
     // Effective URL must be resolved (default applied) and normalized, so a
-    // misconfigured /update/r2_url is visible as itself rather than as "".
+    // misconfigured r2_url in update_urls.json is visible as itself rather
+    // than as "".
     const auto url = upd["r2_base_url"].get<std::string>();
     INFO("r2_base_url=" << url);
     REQUIRE_FALSE(url.empty());
@@ -1423,16 +1427,20 @@ TEST_CASE_METHOD(HelixTestFixture, "DebugBundleCollector: collect() includes the
     REQUIRE(bundle["update"]["suppressed"].is_boolean());
 }
 
-TEST_CASE_METHOD(HelixTestFixture, "UpdateChecker: effective_r2_base_url defaults and normalizes",
+TEST_CASE_METHOD(HelixTestFixture, "UpdateChecker: settings.json r2_url is ignored",
                  "[debug-bundle][update]") {
-    // HelixTestFixture resets Config to empty, so no /update/r2_url is set.
+    // Point the state dir at scratch so a real /var/lib/helixscreen on the
+    // developer machine cannot feed the trusted update_urls.json lookup.
+    helix::test::ScopedUpdateUrls urls("helix_r2");
     REQUIRE(UpdateChecker::effective_r2_base_url() ==
             std::string(UpdateChecker::DEFAULT_R2_BASE_URL));
 
     auto* config = helix::Config::get_instance();
     REQUIRE(config != nullptr);
+    // The base URL is root-owned authority; a settings.json copy is ignored.
     config->set<std::string>("/update/r2_url", "https://mirror.example.com/rel///");
-    REQUIRE(UpdateChecker::effective_r2_base_url() == "https://mirror.example.com/rel");
+    REQUIRE(UpdateChecker::effective_r2_base_url() ==
+            std::string(UpdateChecker::DEFAULT_R2_BASE_URL));
 }
 
 TEST_CASE("UpdateChecker: channel_name covers every channel", "[debug-bundle][update]") {

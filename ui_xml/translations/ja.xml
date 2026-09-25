@@ -763,7 +763,7 @@
   <translation tag="Detection Mode" ja="検出モード"/>
   <translation tag="Detection turned off" ja="検出をオフにしました"/>
   <translation tag="Dev" ja="開発版"/>
-  <translation tag="Dev channel requires dev_url in config" ja="開発チャンネルには設定にdev_urlが必要です"/>
+  <translation tag="Dev channel requires dev_url in update_urls.json" ja="開発チャンネルには update_urls.json に dev_url が必要です"/>
   <translation tag="Device" ja="デバイス"/>
   <translation tag="Device Section" ja="デバイスセクション"/>
   <translation tag="Device connected" ja="デバイスが接続されました"/>

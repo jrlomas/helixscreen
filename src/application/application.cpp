@@ -180,6 +180,7 @@
 #include "safety_settings_manager.h"
 #include "settings_manager.h"
 #include "system/afc_message_dedup.h"
+#include "system/config_trust.h"
 #include "system/crash_handler.h"
 #include "system/crash_history.h"
 #include "system/crash_reporter.h"
@@ -1413,9 +1414,19 @@ bool Application::init_logging() {
     log_config.target = parse_log_target(resolve_log_setting(
         g_log_dest_cli, env_log_dest, m_config->get<std::string>("/log_dest", "auto")));
 
-    // Resolve log file path: CLI > HELIX_LOG_FILE > config
-    log_config.file_path = resolve_log_setting(g_log_file_cli, env_log_file,
-                                               m_config->get<std::string>("/log_path", ""));
+    // Resolve log file path: CLI > HELIX_LOG_FILE > config. A config-sourced
+    // path must pass the same confinement the launcher applies to
+    // HELIX_LOG_FILE (see helix::config_trust::log_path_allowed): settings.json
+    // is web-writable and must not aim a root-written log at arbitrary files.
+    // A refused path falls through to CLI/env, then the default location.
+    std::string config_log_path = m_config->get<std::string>("/log_path", "");
+    if (!config_log_path.empty() && !helix::config_trust::log_path_allowed(config_log_path)) {
+        spdlog::warn("[Application] /log_path '{}' refused (must be a *.log file under /tmp, "
+                     "/var/log or the install dir, no .. , not a symlink) - using the default",
+                     config_log_path);
+        config_log_path.clear();
+    }
+    log_config.file_path = resolve_log_setting(g_log_file_cli, env_log_file, config_log_path);
 
     init(log_config);
 

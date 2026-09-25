@@ -763,7 +763,7 @@
   <translation tag="Detection Mode" en="Detection Mode"/>
   <translation tag="Detection turned off" en="Detection turned off"/>
   <translation tag="Dev" en="Dev"/>
-  <translation tag="Dev channel requires dev_url in config" en="Dev channel requires dev_url in config"/>
+  <translation tag="Dev channel requires dev_url in update_urls.json" en="Dev channel requires dev_url in update_urls.json"/>
   <translation tag="Device" en="Device"/>
   <translation tag="Device Section" en="Device Section"/>
   <translation tag="Device connected" en="Device connected"/>

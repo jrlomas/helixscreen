@@ -116,6 +116,9 @@ EXEMPT_SUBSTRINGS = (
     # Written at runtime.
     'settings-test.json',  # seeded by --test
     'config/settings.json',
+    # Device runtime state (systemd StateDirectory): root-owned files a dev
+    # box never has, e.g. update_urls.json.
+    'var/lib/helixscreen/',
     # Created by `make apply-patches` (patches/libhv-dns-resolver-fallback.patch).
     'dns_resolv.',
     # Build outputs.

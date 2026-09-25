@@ -776,7 +776,7 @@ translations:
   Detection Mode: 检测模式
   Detection turned off: 检测已关闭
   Dev: 开发版
-  Dev channel requires dev_url in config: 开发频道需要在配置中设置 dev_url
+  Dev channel requires dev_url in update_urls.json: 开发频道需要在 update_urls.json 中设置 dev_url
   Device: 设备
   Device Section: 设备区域
   Device connected: '设备已连接'
