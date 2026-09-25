@@ -3,6 +3,7 @@
 
 #include "ams_backend_snapmaker.h"
 
+#include "ui_insert_notice.h"
 #include "ui_toast_manager.h"
 
 #include "ams_error.h"
@@ -1315,6 +1316,10 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
     // it is released, because reaching into AmsState while holding ours inverts
     // the order add_backend() acquires them in.
     std::vector<int> unloaded_lanes;
+    // Channels whose feed-port presence rose this parse with no tag evidence
+    // behind it. Same deferral rule as unloaded_lanes: the notice reaches
+    // through AmsState and the UI queue, which must not run under mutex_.
+    std::vector<int> unverified_insert_lanes;
     // The cursor head's *_fail state, when the active batch hit one this
     // parse. Same deferral rule as unloaded_lanes: end_firmware_batch() sends
     // gcode, which must not run under mutex_.
@@ -1434,6 +1439,12 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                     if (!rfid.uid.empty()) {
                         evidence.tag_read_complete = true;
                     }
+                    // The feed-port presence edge below is an insert, and this
+                    // flag is what the RFID side vouches for at that moment:
+                    // a UID or a decoded MAIN_TYPE. It persists across frames
+                    // (a delta frame silent about the channel keeps the last
+                    // read) and a NONE entry clears it.
+                    channel_tag_evidence_[i] = (!rfid.uid.empty() || rfid.main_type != "NONE");
                     if (rfid.main_type != "NONE") {
                         evidence.material = rfid.main_type;
                         if (helix::ams::is_declarable_color(rfid.color_rgb)) {
@@ -1591,6 +1602,20 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                             // to AVAILABLE/LOADED based on extruder pin state which
                             // is orthogonal to the port sensor reading.
                             if (i >= 0 && i < NUM_TOOLS) {
+                                // The port flag's false -> true edge is an
+                                // insert into the channel; the first sighting
+                                // is the baseline, not an edge. An insert with
+                                // no tag evidence behind it (reader disabled,
+                                // untagged spool, read never landed) files
+                                // nothing the insert rule can judge, so the
+                                // stored record could describe a spool that
+                                // left. Offer the notice, which re-checks its
+                                // own guards on the UI thread (#1710).
+                                if (detected && feed_presence_seen_[i] &&
+                                    !port_sensor_filament_present_[i] &&
+                                    !channel_tag_evidence_[i]) {
+                                    unverified_insert_lanes.push_back(i);
+                                }
                                 port_sensor_filament_present_[i] = detected;
                                 feed_presence_seen_[i] = true;
                             }
@@ -2301,6 +2326,14 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
     // filament out of the lane.
     for (int lane : unloaded_lanes) {
         AmsState::instance().mark_slot_unloaded(lane);
+    }
+
+    // An insert the RFID side vouches nothing for asks whether the stored
+    // record still describes the spool that went in (#1710). The notice
+    // re-checks its own guards (print-feeding lane, lane with nothing to
+    // clear) on the UI thread.
+    for (int lane : unverified_insert_lanes) {
+        helix::ui::queue_update([lane] { helix::ui::offer_clear_after_unverified_insert(lane); });
     }
 
     if (batch_failed_head >= 0) {

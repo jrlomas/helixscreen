@@ -16,7 +16,7 @@
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
 #include "lane_translation.h"
-#include "lvgl/src/others/translation/lv_translation.h"
+#include "lvgl_ui_test_fixture.h" #include "lvgl/src/others/translation/lv_translation.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
 #include "printer_discovery.h"
@@ -1871,6 +1871,53 @@ TEST_CASE_METHOD(SnapmakerFixture,
         backend, make_filament_detect_status(0, "NONE", 0xFFFF5500u, "Polymaker", json::array()));
     CHECK(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "1,2,3,4");
     CHECK(SnapmakerTestAccess::get_override(backend, 0).has_value());
+}
+
+// The insert rule needs a presence edge to fire on; for a channel whose RFID
+// side says nothing (reader disabled, untagged spool) that edge is the feed
+// port's false -> true, and the notice is the rule's NoEvidence verdict
+// (#1710).
+TEST_CASE_METHOD(LVGLUITestFixture, "Snapmaker an untagged channel insert offers the notice",
+                 "[ams][snapmaker][1710]") {
+    helix::test::RegisteredBackend<AmsBackendSnapmaker> backend_reg(nullptr, nullptr);
+    AmsBackendSnapmaker& backend = *backend_reg;
+
+    // The stored record the notice asks about: user-entered details on lane 0.
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.material = "PETG";
+    ovr.color_rgb = 0x1188FF;
+    SnapmakerTestAccess::seed_override(backend, 0, ovr);
+    REQUIRE(SnapmakerTestAccess::get_override(backend, 0).has_value());
+
+    std::vector<std::pair<ToastSeverity, std::string>> toasts;
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg, uint32_t) {
+        toasts.emplace_back(severity, msg);
+    });
+
+    // The port flag's first reading is the baseline, not an edge.
+    SnapmakerTestAccess::handle_status(backend, make_feed_status(0, "wait_insert", false));
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    // Filament goes in with no tag evidence behind it: the record stands and
+    // the notice asks.
+    SnapmakerTestAccess::handle_status(backend, make_feed_status(0, "load_finish", true));
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(toasts.size() == 1);
+    CHECK(toasts[0].first == ToastSeverity::INFO);
+    CHECK(SnapmakerTestAccess::get_override(backend, 0).has_value());
+
+    // A channel whose tag was read never asks: the RFID side vouches for the
+    // insert, and the UID rule owns the swap verdict.
+    SnapmakerTestAccess::handle_status(
+        backend,
+        make_filament_detect_status(1, "PLA", 0xFFFF5500u, "Polymaker", json::array({1, 2, 3, 4})));
+    SnapmakerTestAccess::handle_status(backend, make_feed_status(1, "wait_insert", false));
+    SnapmakerTestAccess::handle_status(backend, make_feed_status(1, "load_finish", true));
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.size() == 1);
+
+    helix::ui::set_test_toast_hook(nullptr);
 }
 
 TEST_CASE_METHOD(
