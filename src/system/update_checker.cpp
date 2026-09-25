@@ -33,6 +33,7 @@
 #include "print_lifecycle_state.h"
 #include "printer_state.h"
 #include "spdlog/spdlog.h"
+#include "system/config_trust.h"
 #include "system/helix_paths.h"
 #include "system/log_path_probe.h"
 #include "system/sha256_util.h"
@@ -2503,6 +2504,26 @@ UpdateChecker::find_local_installer(const std::vector<std::string>& extra_search
 // Public API
 // ============================================================================
 
+namespace {
+
+// settings.json is web-writable, so the updater URLs it lists are ignored in
+// favour of the root-owned state file; say so once per process for installs
+// that still carry the keys.
+void warn_legacy_update_url_keys(Config* config) {
+    static bool warned = false;
+    if (warned || config == nullptr) {
+        return;
+    }
+    if (config->exists("/update/dev_url") || config->exists("/update/r2_url")) {
+        warned = true;
+        spdlog::warn("[UpdateChecker] ignoring /update/dev_url and /update/r2_url in settings.json"
+                     " - set r2_url/dev_url in {} instead (owned by root, mode 0644)",
+                     AppConstants::Update::state_dir() + "/update_urls.json");
+    }
+}
+
+} // namespace
+
 void UpdateChecker::check_for_updates(Callback callback) {
     // Don't start new checks during shutdown
     if (shutting_down_) {
@@ -2588,7 +2609,8 @@ void UpdateChecker::check_for_updates(Callback callback) {
     // Cache channel config on main thread (Config is NOT thread-safe)
     cached_channel_ = get_channel();
     auto* config = Config::get_instance();
-    cached_dev_url_ = config ? config->get<std::string>("/update/dev_url", "") : "";
+    warn_legacy_update_url_keys(config);
+    cached_dev_url_ = helix::config_trust::read_update_urls().dev_url;
     cached_r2_base_url_ = effective_r2_base_url();
 
     spdlog::debug("[UpdateChecker] check_for_updates: channel={} dev_url='{}' r2_base_url='{}'",
@@ -2785,8 +2807,9 @@ UpdateChecker::UpdateChannel UpdateChecker::get_channel() const {
 
     // /update/channel persists independently of /beta_features. Stable and Beta
     // are both offered on a stock install (about_settings_overlay.xml), so only
-    // Dev is gated here: it fetches from the arbitrary /update/dev_url rather
-    // than a published channel, and its picker appears only with beta unlocked.
+    // Dev is gated here: it fetches from the arbitrary dev_url in the
+    // root-owned update_urls.json rather than a published channel, and its
+    // picker appears only with beta unlocked.
     // Fall back to Stable, not to the Beta neighbour, since Beta is a choice the
     // user never made. Clamp the EFFECTIVE channel rather than rewriting the
     // stored value, so re-unlocking beta restores the channel the user picked.
@@ -2833,8 +2856,10 @@ UpdateChecker::ConfigSnapshot UpdateChecker::config_snapshot() const {
 }
 
 std::string UpdateChecker::effective_r2_base_url() {
-    auto* config = Config::get_instance();
-    std::string url = config ? config->get<std::string>("/update/r2_url", std::string{}) : "";
+    // Root-owned authority (state_dir/update_urls.json), never settings.json:
+    // the updater downloads a payload and runs its install.sh from wherever
+    // this points, and settings.json sits where the web UI can write it.
+    std::string url = helix::config_trust::read_update_urls().r2_url;
     if (url.empty()) {
         url = DEFAULT_R2_BASE_URL;
     }

@@ -379,8 +379,9 @@ class UpdateChecker {
     /**
      * @brief Resolve the R2 base URL the next check will actually use.
      *
-     * Reads /update/r2_url, falls back to DEFAULT_R2_BASE_URL when unset, and
-     * strips trailing slashes. Single source of truth for that resolution:
+     * Reads r2_url from the trusted update_urls.json, falls back to
+     * DEFAULT_R2_BASE_URL when unset, and strips trailing slashes. Single
+     * source of truth for that resolution:
      * check_for_updates() caches its result into cached_r2_base_url_, and
      * refresh_config_snapshot() stores it for off-thread readers.
      *

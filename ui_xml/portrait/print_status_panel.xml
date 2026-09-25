@@ -146,20 +146,21 @@
         </ui_card>
 
         <!-- Merged status row: Speed/Flow on the left, filament + AMS on the right. -->
-        <!-- Tap opens Tune overlay (same as Tune button) -->
+        <!-- Tapping Speed/Flow switches between percentages and mm/s + mm³/s -->
         <lv_obj name="speed_flow_row"
                 width="100%" height="content" style_pad_left="#space_md" style_pad_right="#space_md" style_pad_top="0"
                 flex_flow="row" style_flex_main_place="space_between" style_flex_cross_place="center"
-                style_pad_gap="#space_sm" scrollable="false" clickable="true">
-          <event_cb trigger="clicked" callback="on_print_status_tune"/>
+                style_pad_gap="#space_sm" scrollable="false">
           <lv_obj width="content"
                   height="content" style_pad_all="0" flex_flow="row" style_flex_cross_place="center"
-                  style_pad_gap="#space_xs" scrollable="false" clickable="false" event_bubble="true">
+                  style_pad_gap="#space_xs" scrollable="false" clickable="true">
+            <event_cb trigger="clicked" callback="on_print_status_units_toggle"/>
             <text_small text="Speed" translation_tag="Speed" clickable="false" event_bubble="true"/>
             <text_small name="speed_value" bind_text="print_speed_text" clickable="false" event_bubble="true"/>
             <text_small text=" · " clickable="false" event_bubble="true"/>
             <text_small text="Flow" translation_tag="Flow" clickable="false" event_bubble="true"/>
             <text_small name="flow_value" bind_text="print_flow_text" clickable="false" event_bubble="true"/>
+            <icon src="swap_horizontal" size="xs" variant="secondary" clickable="false" event_bubble="true"/>
           </lv_obj>
 
           <!-- Filament + AMS cluster (was its own row in the baseline) -->

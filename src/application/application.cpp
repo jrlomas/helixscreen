@@ -27,6 +27,7 @@
 #include "config.h"
 #include "display/lv_display_private.h"
 #include "display_manager.h"
+#include "env_refusal_notice.h"
 #include "environment_config.h"
 #include "gcode_error_router.h"
 #include "gcode_narration_router.h"
@@ -171,6 +172,7 @@
 #include "screensaver.h"
 #endif
 #include "display_metrics.h"
+#include "k2_stock_detection_source.h"
 #include "led/ui_led_control_overlay.h"
 #include "platform_info.h"
 #include "printer_detector.h"
@@ -178,6 +180,7 @@
 #include "safety_settings_manager.h"
 #include "settings_manager.h"
 #include "system/afc_message_dedup.h"
+#include "system/config_trust.h"
 #include "system/crash_handler.h"
 #include "system/crash_history.h"
 #include "system/crash_reporter.h"
@@ -569,6 +572,12 @@ int Application::run(int argc, char** argv) {
     if (!init_config()) {
         return 1;
     }
+
+    // Tell the user when the launcher refused helixscreen.env: without this
+    // the display comes up on defaults and the only trace is a log line
+    // (prestonbrown/helixscreen#1712). No-op when the launcher exported
+    // neither handoff variable (dev runs, clean file).
+    helix::surface_env_refusal_from_launcher();
 
     // Snapshot the marker path for the SIGTERM handler. init_config() has run,
     // so writable_path() now resolves; the handler cannot construct this itself.
@@ -1405,9 +1414,19 @@ bool Application::init_logging() {
     log_config.target = parse_log_target(resolve_log_setting(
         g_log_dest_cli, env_log_dest, m_config->get<std::string>("/log_dest", "auto")));
 
-    // Resolve log file path: CLI > HELIX_LOG_FILE > config
-    log_config.file_path = resolve_log_setting(g_log_file_cli, env_log_file,
-                                               m_config->get<std::string>("/log_path", ""));
+    // Resolve log file path: CLI > HELIX_LOG_FILE > config. A config-sourced
+    // path must pass the same confinement the launcher applies to
+    // HELIX_LOG_FILE (see helix::config_trust::log_path_allowed): settings.json
+    // is web-writable and must not aim a root-written log at arbitrary files.
+    // A refused path falls through to CLI/env, then the default location.
+    std::string config_log_path = m_config->get<std::string>("/log_path", "");
+    if (!config_log_path.empty() && !helix::config_trust::log_path_allowed(config_log_path)) {
+        spdlog::warn("[Application] /log_path '{}' refused (must be a *.log file under /tmp, "
+                     "/var/log or the install dir, no .. , not a symlink) - using the default",
+                     config_log_path);
+        config_log_path.clear();
+    }
+    log_config.file_path = resolve_log_setting(g_log_file_cli, env_log_file, config_log_path);
 
     init(log_config);
 
@@ -1973,43 +1992,20 @@ bool Application::init_panel_subjects() {
     {
         auto u1 = std::make_unique<helix::detection::U1StockSource>(&get_printer_state());
         u1->start();
+        // K2: replaces the stock camera loop the installer disables. Probes
+        // capability itself (K2 + /usr/bin/detection) and stays inert elsewhere.
+        auto k2 = std::make_unique<helix::detection::K2StockDetectionSource>(&get_printer_state());
+        k2->start();
         auto& dm = helix::detection::DetectionManager::instance();
         dm.register_source(std::move(u1));
+        dm.register_source(std::move(k2));
         dm.init(get_moonraker_client(), &get_printer_state());
         dm.set_policy("u1_stock", static_cast<helix::detection::DetectionPolicy>(
                                       SettingsManager::instance().get_detection_policy_u1()));
-        dm.set_presenter([](const helix::detection::DetectionEvent& e,
-                            helix::detection::DetectionPolicy p) {
-            using helix::detection::DetectionPolicy;
-            if (!SettingsManager::instance().get_detection_enabled())
-                return;
-            if (p == DetectionPolicy::NotifyOnly) {
-                ToastManager::instance().show(ToastSeverity::WARNING,
-                                              lv_tr("Spaghetti detected — print paused"), 8000);
-                return;
-            }
-            // DeferToSource: show the response modal. Stack-owned via
-            // Modal::show_owned() (#1382): ModalStack frees the instance when
-            // its entry goes, on every teardown path.
-            auto modal = std::make_unique<SpaghettiDetectionModal>();
-            // TODO(#1506): no frame yet; the modal shows the detector's text only
-            modal->set_detection(e.message, nullptr);
-            modal->set_on_resume([] {
-                get_moonraker_api()->job().resume_print([] {}, [](const MoonrakerError&) {});
+        dm.set_presenter(
+            [](const helix::detection::DetectionEvent& e, helix::detection::DetectionPolicy p) {
+                helix::detection::present_detection(e, p);
             });
-            modal->set_on_abort([] { helix::AbortManager::instance().start_abort(); });
-            modal->set_on_tune([] {
-                // Null callbacks, not empty lambdas: a non-null error_cb reads
-                // as "this caller reports the failure itself", which would
-                // suppress Klipper's `!!` broadcast for a rejected
-                // DEFECT_DETECTION_CONFIG and leave the user with nothing.
-                get_moonraker_client()->send_jsonrpc(
-                    "printer.gcode.script",
-                    nlohmann::json{{"script", "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
-                    nullptr, nullptr);
-            });
-            Modal::show_owned(std::move(modal), lv_screen_active());
-        });
     }
 
     // Register notification callbacks
@@ -2086,25 +2082,26 @@ bool Application::init_ui() {
     // Drain any warnings that backends enqueued during pre-UI initialization
     // (e.g. "simpledrm detected", "requested resolution not available").
     // See prestonbrown/helixscreen#766.
-    helix::PendingStartupWarnings::instance().drain(
-        [](helix::PendingStartupWarnings::Severity sev, const std::string& msg) {
-            ToastSeverity toast_sev = ToastSeverity::INFO;
-            switch (sev) {
-            case helix::PendingStartupWarnings::Severity::INFO:
-                toast_sev = ToastSeverity::INFO;
-                break;
-            case helix::PendingStartupWarnings::Severity::SUCCESS:
-                toast_sev = ToastSeverity::SUCCESS;
-                break;
-            case helix::PendingStartupWarnings::Severity::WARNING:
-                toast_sev = ToastSeverity::WARNING;
-                break;
-            case helix::PendingStartupWarnings::Severity::ERROR:
-                toast_sev = ToastSeverity::ERROR;
-                break;
-            }
-            ToastManager::instance().show(toast_sev, msg.c_str(), 8000);
-        });
+    helix::PendingStartupWarnings::instance().drain([](helix::PendingStartupWarnings::Severity sev,
+                                                       const std::string& msg,
+                                                       uint32_t duration_ms) {
+        ToastSeverity toast_sev = ToastSeverity::INFO;
+        switch (sev) {
+        case helix::PendingStartupWarnings::Severity::INFO:
+            toast_sev = ToastSeverity::INFO;
+            break;
+        case helix::PendingStartupWarnings::Severity::SUCCESS:
+            toast_sev = ToastSeverity::SUCCESS;
+            break;
+        case helix::PendingStartupWarnings::Severity::WARNING:
+            toast_sev = ToastSeverity::WARNING;
+            break;
+        case helix::PendingStartupWarnings::Severity::ERROR:
+            toast_sev = ToastSeverity::ERROR;
+            break;
+        }
+        ToastManager::instance().show(toast_sev, msg.c_str(), duration_ms);
+    });
 
     // Initialize overlay backdrop
     NavigationManager::instance().init_overlay_backdrop(m_screen);

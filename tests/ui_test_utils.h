@@ -122,6 +122,15 @@ namespace ui {
 void set_test_notification_warning_hook(std::function<void(const std::string&)> hook);
 
 /**
+ * @brief Install a hook invoked by the test ui_notification_warning_sticky() stub.
+ *
+ * Separate hook from the warning one so a test can tell the sticky channel
+ * (never auto-dismisses) from the timed one, not just read the text. Pass
+ * nullptr to clear. The hook receives the formatted warning message.
+ */
+void set_test_notification_sticky_warning_hook(std::function<void(const std::string&)> hook);
+
+/**
  * @brief Install a hook invoked by the test ui_notification_error() stub.
  *
  * Same purpose as the warning hook: user-facing error toasts are compiled out
@@ -157,10 +166,21 @@ void set_test_notification_success_hook(std::function<void(const std::string&)> 
  * ToastManager::show() directly (deliberately bypassing ui_notification_* and
  * its history row) has no other observation point in the test binary — the
  * real ToastManager is excluded from the link. Carries the severity so a
- * wrong-severity toast fails on severity, not just wording. Pass nullptr to
+ * wrong-severity toast fails on severity, not just wording, and the duration
+ * so a sticky (0) call cannot silently read as a timed one. Pass nullptr to
  * clear.
  */
-void set_test_toast_hook(std::function<void(ToastSeverity, const std::string&)> hook);
+void set_test_toast_hook(std::function<void(ToastSeverity, const std::string&, uint32_t)> hook);
+
+/**
+ * @brief Press the action button of the most recent action toast
+ *
+ * The stub ToastManager keeps the last show_with_action() callback and its
+ * user_data so a test can act as the user tapping the button. Returns false
+ * when no action toast has been shown since the last call or since
+ * set_test_toast_hook(), which forgets the last action.
+ */
+bool fire_last_toast_action();
 
 } // namespace ui
 } // namespace helix

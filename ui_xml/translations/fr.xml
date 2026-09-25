@@ -55,6 +55,7 @@
   <translation tag="1 event queued" fr="1 événement en attente"/>
   <translation tag="1 hour ago" fr="il y a 1 heure"/>
   <translation tag="1 layer" fr="1 couche"/>
+  <translation tag="1 line in helixscreen.env was ignored"/>
   <translation tag="1 min" fr="1 min"/>
   <translation tag="1 min ago" fr="il y a 1 min"/>
   <translation tag="1 minute" fr="1 minute"/>
@@ -223,6 +224,7 @@
   <translation tag="Assign a role to enable sensor monitoring" fr="Attribuez un rôle pour activer la surveillance du capteur"/>
   <translation tag="Assisted Retract" fr="Rétraction assistée"/>
   <translation tag="Assisting" fr="Assistance"/>
+  <translation tag="At least {} lines in helixscreen.env were ignored"/>
   <translation tag="Authentication failed" fr="Échec de l&apos;authentification"/>
   <translation tag="Auto" fr="Auto"/>
   <translation tag="Auto Bed Mesh" fr="Maillage auto du plateau"/>
@@ -766,8 +768,9 @@
   <translation tag="Detecting..." fr="Détection..."/>
   <translation tag="Detection Length" fr="Longueur de détection"/>
   <translation tag="Detection Mode" fr="Mode de détection"/>
+  <translation tag="Detection turned off" fr="Détection désactivée"/>
   <translation tag="Dev" fr="Dev"/>
-  <translation tag="Dev channel requires dev_url in config" fr="Le canal de développement nécessite dev_url dans la configuration"/>
+  <translation tag="Dev channel requires dev_url in update_urls.json" fr="Le canal de développement nécessite dev_url dans update_urls.json"/>
   <translation tag="Device" fr="Appareil"/>
   <translation tag="Device Section" fr="Section des appareils"/>
   <translation tag="Device connected" fr="Appareil connecté"/>
@@ -1169,6 +1172,8 @@
   <translation tag="Firmware reports no bypass. Enable if you feed filament straight to the extruder" fr="Le firmware ne signale aucun bypass. Activez cette option si vous alimentez l&apos;extrudeur directement en filament"/>
   <translation tag="Firmware restarting..." fr="Redémarrage du firmware..."/>
   <translation tag="Firmware saved X = Y&apos;s value; the measured X result was discarded" fr="Le firmware a enregistré la valeur de Y pour X ; le résultat mesuré de X a été écarté"/>
+  <translation tag="Fix: chmod 644 {}, then restart"/>
+  <translation tag="Fix: chown {} {}, then restart"/>
   <translation tag="FlashForge Adventurer 5M" fr="FlashForge Adventurer 5M"/>
   <translation tag="FlashForge Adventurer 5X" fr="FlashForge Adventurer 5X"/>
   <translation tag="FlashForge IFS" fr="FlashForge IFS"/>
@@ -1414,6 +1419,7 @@
   <translation tag="Invalid value type" fr="Type de valeur non valide"/>
   <translation tag="Issue description" fr="Description du problème"/>
   <translation tag="It can be un-archived in Spoolman&apos;s web UI." fr="Elle peut être désarchivée dans l&apos;interface web de Spoolman."/>
+  <translation tag="It has not reported its slots yet. Try again in a moment." fr="Il n&apos;a pas encore signalé ses emplacements. Réessayez dans un instant."/>
   <translation tag="It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying" fr="Il est coincé entre le capteur du hub et son engrenage. Ouvrez le CFS et dégagez le hub avant de réessayer"/>
   <translation tag="It&apos;s a new spool" fr="C&apos;est une nouvelle bobine"/>
   <translation tag="Jammed at the Toolhead" fr="Bourrage à la tête d&apos;outil"/>
@@ -1690,6 +1696,7 @@
   <translation tag="Multi-Filament System Status" fr="État du système multi-filament"/>
   <translation tag="Multi-Filament System is busy: {}" fr="Le système multi-filament est occupé : {}"/>
   <translation tag="Multi-Filament System not available" fr="Système multi-filament non disponible"/>
+  <translation tag="Multi-filament system not ready" fr="Système multi-filaments pas prêt"/>
   <translation tag="Must home axes first" fr="Les axes doivent d&apos;abord être référencés"/>
   <translation tag="My Custom Theme" fr="Mon thème personnalisé"/>
   <translation tag="My Panel" fr="Mon panneau"/>
@@ -1947,7 +1954,9 @@
   <translation tag="Path B" fr="Chemin B"/>
   <translation tag="Pause" fr="Pause"/>
   <translation tag="Pause macro not configured" fr="Macro de pause non configurée"/>
+  <translation tag="Pause on Detection" fr="Pause à la détection"/>
   <translation tag="Pause the print first, then load, unload, or change filament" fr="Mettez d&apos;abord l&apos;impression en pause, puis chargez, déchargez ou changez le filament"/>
+  <translation tag="Pause the print when a failure is seen (off = warn only)" fr="Met l&apos;impression en pause quand un défaut est vu (désactivé = avertir seulement)"/>
   <translation tag="Pause, resume, or stop the print" fr="Mettre en pause, reprendre ou arrêter"/>
   <translation tag="Paused" fr="En pause"/>
   <translation tag="Paused (attention needed)" fr="En pause (attention requise)"/>
@@ -2387,6 +2396,7 @@
   <translation tag="SWITCH SENSORS" fr="CAPTEURS DE COMMUTATION"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." fr="Mode sans échec actif. La connexion à l&apos;imprimante est désactivée car l&apos;application plantait au démarrage. Ouvrez les Paramètres pour résoudre le problème, puis redémarrez."/>
   <translation tag="Safety &amp; Notifications" fr="Sécurité et notifications"/>
+  <translation tag="Same spool in {}? Tap Clear if it is a new one." fr="Même bobine dans {} ? Touchez Effacer s&apos;il s&apos;agit d&apos;une nouvelle."/>
   <translation tag="Sample" fr="Échantillon"/>
   <translation tag="Sample %d/%d" fr="Échantillon %d/%d"/>
   <translation tag="Sample Dialog" fr="Dialogue exemple"/>
@@ -2456,6 +2466,7 @@
   <translation tag="Security" fr="Sécurité"/>
   <translation tag="Security, network, host, and administration" fr="Sécurité, réseau, hôte et administration"/>
   <translation tag="See exactly what data will be sent" fr="Voir exactement quelles données seront envoyées"/>
+  <translation tag="See the log"/>
   <translation tag="See the quick tour of HelixScreen again" fr="Revoir la visite rapide de HelixScreen"/>
   <translation tag="Select" fr="Sélectionner"/>
   <translation tag="Select &apos;None&apos; if you don&apos;t have a filament sensor, or if you don&apos;t want to pause on runout." fr="Sélectionnez &apos;Aucun&apos; si vous n&apos;avez pas de capteur de filament, ou si vous ne voulez pas mettre en pause en fin de filament."/>
@@ -2589,6 +2600,8 @@
   <translation tag="Sounds" fr="Sons"/>
   <translation tag="Source" fr="Source"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" fr="Space Debris mod par Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti Detection" fr="Détection de spaghettis"/>
+  <translation tag="Spaghetti detected" fr="Spaghetti détecté"/>
   <translation tag="Spaghetti detected — print paused" fr="Spaghetti détecté — impression en pause"/>
   <translation tag="Speaker" fr="Haut-parleur"/>
   <translation tag="Speed" fr="Vitesse"/>
@@ -2954,6 +2967,7 @@
   <translation tag="Turn On" fr="Allumer"/>
   <translation tag="Turn On LEDs" fr="Allumer les LED"/>
   <translation tag="Turn endless spool on, then set the backup gate" fr="Activez la bobine infinie, puis définissez le Gate de secours"/>
+  <translation tag="Turn off detection" fr="Désactiver la détection"/>
   <translation tag="Turn on LEDs when printer starts" fr="Allumer les LED au démarrage de l&apos;imprimante"/>
   <translation tag="Turn the extruder heater off after a load or unload finishes" fr="Éteindre le chauffage de l&apos;extrudeur après un chargement ou un déchargement"/>
   <translation tag="Turn the picture to match how the screen is mounted. Applies after restart." fr="Fait pivoter l&apos;image selon l&apos;orientation de montage de l&apos;écran. Prend effet après redémarrage."/>
@@ -3094,6 +3108,7 @@
   <translation tag="Warn" fr="Avertissement"/>
   <translation tag="Warning" fr="Avertissement"/>
   <translation tag="Warnings &amp; errors" fr="Avertissements et erreurs"/>
+  <translation tag="Watch the camera during a print for failed prints" fr="Surveille la caméra pendant une impression pour détecter les impressions échouées"/>
   <translation tag="Weak battery" fr="Batterie faible"/>
   <translation tag="Webcam" fr="Webcam"/>
   <translation tag="Website (optional)" fr="Site web (facultatif)"/>
@@ -3218,6 +3233,10 @@
   <translation tag="feeder not in automatic mode" fr="alimentateur pas en mode automatique"/>
   <translation tag="filament sensor disabled" fr="capteur de filament désactivé"/>
   <translation tag="heated bed" fr="plateau chauffant"/>
+  <translation tag="helixscreen.env ignored: owned by uid {}"/>
+  <translation tag="helixscreen.env ignored: untrusted symlink chain"/>
+  <translation tag="helixscreen.env ignored: writable by other users"/>
+  <translation tag="helixscreen.env ignored: {}"/>
   <translation tag="idle" fr="inactif"/>
   <translation tag="in unit {} slot {}" fr="dans l&apos;unité {} slot {}"/>
   <translation tag="layers" fr="couches"/>
@@ -3269,6 +3288,7 @@
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." fr="{} est installé mais son passage à la bobine de secours est désactivé, aucun changement automatique n&apos;aura donc lieu."/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." fr="{} est installé, mais son réglage de bobine de secours n&apos;a pas pu être lu - ne comptez pas sur un changement automatique."/>
   <translation tag="{} is not set up on this printer" fr="{} n&apos;est pas configuré sur cette imprimante"/>
+  <translation tag="{} lines in helixscreen.env were ignored"/>
   <translation tag="{} macro not configured" fr="Macro {} non configurée"/>
   <translation tag="{} matches." fr="{} correspond."/>
   <translation tag="{} may cause unintended changes. Are you sure?" fr="{} peut entraîner des modifications non souhaitées. Êtes-vous sûr ?"/>

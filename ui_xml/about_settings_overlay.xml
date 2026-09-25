@@ -61,7 +61,8 @@
            options are a static string, so the entries a user may choose from are
            picked by which row is on screen: everyone gets Stable/Beta, and Dev is
            added only with beta features unlocked, because it fetches from the
-           arbitrary /update/dev_url in config rather than from a published channel.
+           arbitrary dev_url in the root-owned update_urls.json rather than from
+           a published channel.
            Index 1 is Beta in both lists, so the shared callback and the stored
            /update/channel mean the same thing whichever row is visible.
            show_update_settings is part of both conditions because a firmware-managed

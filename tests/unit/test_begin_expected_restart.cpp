@@ -65,9 +65,8 @@ class ExpectedRestartFixture : public LVGLTestFixture {
     ExpectedRestartFixture() {
         state.init_subjects(false);
         set_moonraker_api(&api);
-        helix::ui::set_test_toast_hook([this](ToastSeverity severity, const std::string& m) {
-            toasts.push_back({severity, m});
-        });
+        helix::ui::set_test_toast_hook([this](ToastSeverity severity, const std::string& m,
+                                              uint32_t) { toasts.push_back({severity, m}); });
         auto note = [this](const std::string& m) { notifications.push_back(m); };
         helix::ui::set_test_notification_info_hook(note);
         helix::ui::set_test_notification_warning_hook(note);

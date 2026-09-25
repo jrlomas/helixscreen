@@ -78,6 +78,12 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
 
     ~AmsBackendSnapmaker() override;
 
+    /// The resync files stored records through this backend's echo guard, the
+    /// same one its status responses consult.
+    [[nodiscard]] helix::ams::OwnWriteEchoes* own_write_echoes() override {
+        return &own_write_echoes_;
+    }
+
     [[nodiscard]] AmsType get_type() const override {
         return AmsType::SNAPMAKER;
     }
@@ -615,9 +621,6 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// sensor_enabled arrives from the motion-sensor objects instead and is
     /// carried across a feeder write. Read by channel_snapshot().
     std::array<ChannelSnapshot, NUM_TOOLS> channel_snapshots_{};
-
-    /// Validate slot index is within range
-    AmsError validate_slot_index(int slot_index) const;
 
     /// Layer a configured FilamentSlotOverride for `slot_index` over `slot`,
     /// mutating `slot` in place. Override wins for every non-default field.

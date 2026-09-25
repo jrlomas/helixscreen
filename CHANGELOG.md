@@ -68,6 +68,19 @@ this build, set the update channel in Settings to Beta.
   to be a `.log` under `/tmp`, `/var/log` or the install folder, and `HELIX_NICE` has to
   be 0 to 19. An env file that the web interface can edit, like the one the Snapmaker U1
   keeps in `printer_data`, is honoured.
+- **A custom update server moves out of `settings.json`** (#1718). `settings.json` can be
+  edited from the web interface, so it no longer chooses where updates are downloaded
+  from. To point a printer at your own server, put `r2_url` or `dev_url` in
+  `/var/lib/helixscreen/update_urls.json`, a file only root or HelixScreen's own user may
+  own. The old keys in `settings.json` are ignored, and the log says where to move them.
+  A custom `log_path` has to sit under `/tmp`, `/var/log` or HelixScreen's own folders.
+- **A refused `helixscreen.env` says so on screen** (#1712). When the file cannot be
+  trusted (wrong owner, or still writable by others after the automatic repair) the
+  launcher used to fall back to defaults with nothing on the display. Now a startup
+  warning says what is wrong, names the one command that fixes it, and stays on screen
+  until closed; lines the launcher skips (a setting this file may not change, shell
+  syntax in the value, a bad quote) are listed with the key and the reason each was
+  ignored.
 
 **Still being proven.** Two features in this beta are hidden unless beta features are
 on, because they have not yet been checked on enough real machines: the belt tension

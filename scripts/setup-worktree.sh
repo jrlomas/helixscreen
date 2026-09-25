@@ -612,6 +612,29 @@ materialize_private_submodule() {
     return 0
 }
 
+# Undo the main tree's patch set in this worktree's private checkouts. They are
+# copied from the main tree with its patches applied, and reapply-patches resets
+# only the files THIS branch's patch list names, so a hunk or a created file from
+# a patch only the main tree carries would otherwise ship in this branch's build.
+# Every file those patches touch goes back to the pinned commit; a file they
+# create, which the pin does not track, is removed.
+unapply_main_tree_patches() {
+    local submod dst f patches
+    for submod in "${LIB_PRIVATE_SUBMODULES[@]}"; do
+        dst="$WORKTREE_PATH/$submod"
+        [[ -e "$dst/.git" ]] || continue
+        patches=("$MAIN_TREE/patches/${submod#lib/}"*.patch)
+        [[ -e "${patches[0]}" ]] || continue
+        while IFS= read -r f; do
+            if git -C "$dst" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+                git -C "$dst" checkout --quiet HEAD -- "$f"
+            else
+                rm -f "$dst/$f"
+            fi
+        done < <(sed -n 's#^\(---\|+++\) [ab]/##p' "${patches[@]}" | sort -u)
+    done
+}
+
 # Give each private submodule its own working tree at the commit this branch
 # points at. The git dir lands under .git/worktrees/<name>/modules/, so the
 # checkout is independent of the main tree's and of every other worktree's.
@@ -1443,6 +1466,7 @@ if [[ "$PRIVATE_SUBMODULES_NEED_PATCHES" != "true" ]] \
 fi
 if [[ "$PRIVATE_SUBMODULES_NEED_PATCHES" == "true" ]]; then
     echo -e "${CYAN}Applying this branch's patches to the private submodules...${RESET}"
+    unapply_main_tree_patches
     if make reapply-patches; then
         echo -e "${GREEN}✓ Patches match this branch${RESET}"
     else

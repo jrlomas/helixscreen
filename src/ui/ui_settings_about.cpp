@@ -37,6 +37,7 @@ inline constexpr int CONTRIBUTOR_COUNT = sizeof(CONTRIBUTORS) / sizeof(CONTRIBUT
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "platform_info.h"
 #include "static_panel_registry.h"
+#include "system/config_trust.h"
 #include "system/diagnostics.h"
 #include "system/update_checker.h"
 #include "system_settings_manager.h"
@@ -533,14 +534,14 @@ void AboutSettingsOverlay::on_about_update_channel_changed(lv_event_t* e) {
 
     bool rejected = false;
     if (index == 2) {
-        auto* config = Config::get_instance();
-        std::string dev_url = config ? config->get<std::string>("/update/dev_url", "") : "";
+        std::string dev_url = helix::config_trust::read_update_urls().dev_url;
         if (dev_url.empty()) {
             spdlog::warn("[AboutSettings] Dev channel selected but no dev_url configured");
             int current = SystemSettingsManager::instance().get_update_channel();
             lv_dropdown_set_selected(dropdown, static_cast<uint32_t>(current));
             ToastManager::instance().show(ToastSeverity::WARNING,
-                                          lv_tr("Dev channel requires dev_url in config"), 3000);
+                                          lv_tr("Dev channel requires dev_url in update_urls.json"),
+                                          3000);
             rejected = true;
         }
     }

@@ -56,6 +56,7 @@ translations:
   1 event queued: 1 événement en attente
   1 hour ago: il y a 1 heure
   1 layer: 1 couche
+  1 line in helixscreen.env was ignored: ''
   1 min: '1 min'
   1 min ago: il y a 1 min
   1 minute: 1 minute
@@ -254,6 +255,7 @@ translations:
     du capteur
   Assisted Retract: 'Rétraction assistée'
   Assisting: Assistance
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: Échec de l'authentification
   Auto: Auto
   Auto Bed Mesh: Maillage auto du plateau
@@ -857,9 +859,9 @@ translations:
   Detecting...: Détection...
   Detection Length: Longueur de détection
   Detection Mode: Mode de détection
+  Detection turned off: Détection désactivée
   Dev: Dev
-  Dev channel requires dev_url in config: Le canal de développement nécessite dev_url
-    dans la configuration
+  Dev channel requires dev_url in update_urls.json: Le canal de développement nécessite dev_url dans update_urls.json
   Device: Appareil
   Device Section: Section des appareils
   Device connected: 'Appareil connecté'
@@ -1301,6 +1303,8 @@ translations:
   Firmware reports no bypass. Enable if you feed filament straight to the extruder: Le firmware ne signale aucun bypass. Activez cette option si vous alimentez l'extrudeur directement en filament
   Firmware restarting...: Redémarrage du firmware...
   Firmware saved X = Y's value; the measured X result was discarded: Le firmware a enregistré la valeur de Y pour X ; le résultat mesuré de X a été écarté
+  'Fix: chmod 644 {}, then restart': ''
+  'Fix: chown {} {}, then restart': ''
   FlashForge Adventurer 5M: FlashForge Adventurer 5M
   FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
@@ -1579,6 +1583,7 @@ translations:
   Invalid value type: 'Type de valeur non valide'
   Issue description: Description du problème
   It can be un-archived in Spoolman's web UI.: Elle peut être désarchivée dans l'interface web de Spoolman.
+  It has not reported its slots yet. Try again in a moment.: Il n'a pas encore signalé ses emplacements. Réessayez dans un instant.
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: Il est coincé entre le capteur du hub et son engrenage. Ouvrez le CFS et dégagez le hub avant de réessayer
   It's a new spool: C'est une nouvelle bobine
   Jammed at the Toolhead: Bourrage à la tête d'outil
@@ -1887,6 +1892,7 @@ translations:
   Multi-Filament System Status: 'État du système multi-filament'
   'Multi-Filament System is busy: {}': 'Le système multi-filament est occupé : {}'
   Multi-Filament System not available: Système multi-filament non disponible
+  Multi-filament system not ready: Système multi-filaments pas prêt
   Must home axes first: Les axes doivent d'abord être référencés
   My Custom Theme: Mon thème personnalisé
   My Panel: Mon panneau
@@ -2162,7 +2168,9 @@ translations:
   Path B: Chemin B
   Pause: Pause
   Pause macro not configured: Macro de pause non configurée
+  Pause on Detection: Pause à la détection
   Pause the print first, then load, unload, or change filament: Mettez d'abord l'impression en pause, puis chargez, déchargez ou changez le filament
+  Pause the print when a failure is seen (off = warn only): Met l'impression en pause quand un défaut est vu (désactivé = avertir seulement)
   Pause, resume, or stop the print: Mettre en pause, reprendre ou arrêter
   Paused: En pause
   Paused (attention needed): En pause (attention requise)
@@ -2653,6 +2661,7 @@ translations:
   : Mode sans échec actif. La connexion à l'imprimante est désactivée car l'application
     plantait au démarrage. Ouvrez les Paramètres pour résoudre le problème, puis redémarrez.
   Safety & Notifications: Sécurité et notifications
+  Same spool in {}? Tap Clear if it is a new one.: 'Même bobine dans {} ? Touchez Effacer s''il s''agit d''une nouvelle.'
   Sample: Échantillon
   Sample %d/%d: Échantillon %d/%d
   Sample Dialog: Dialogue exemple
@@ -2735,6 +2744,7 @@ translations:
   Security: Sécurité
   Security, network, host, and administration: Sécurité, réseau, hôte et administration
   See exactly what data will be sent: Voir exactement quelles données seront envoyées
+  See the log: ''
   See the quick tour of HelixScreen again: Revoir la visite rapide de HelixScreen
   Select: Sélectionner
   Select 'None' if you don't have a filament sensor, or if you don't want to pause on runout.: Sélectionnez
@@ -2894,6 +2904,8 @@ translations:
   Source: Source
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod par Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: Détection de spaghettis
+  Spaghetti detected: Spaghetti détecté
   Spaghetti detected — print paused: Spaghetti détecté — impression en pause
   Speaker: Haut-parleur
   Speed: Vitesse
@@ -3348,6 +3360,7 @@ translations:
   Turn On: Allumer
   Turn On LEDs: 'Allumer les LED'
   Turn endless spool on, then set the backup gate: 'Activez la bobine infinie, puis définissez le Gate de secours'
+  Turn off detection: Désactiver la détection
   Turn on LEDs when printer starts: Allumer les LED au démarrage de l'imprimante
   Turn the extruder heater off after a load or unload finishes: Éteindre le chauffage de l'extrudeur après un chargement ou un déchargement
   Turn the picture to match how the screen is mounted. Applies after restart.: Fait pivoter l'image selon l'orientation de montage de l'écran. Prend effet après redémarrage.
@@ -3497,6 +3510,7 @@ translations:
   Warn: Avertissement
   Warning: Avertissement
   Warnings & errors: 'Avertissements et erreurs'
+  Watch the camera during a print for failed prints: Surveille la caméra pendant une impression pour détecter les impressions échouées
   Weak battery: Batterie faible
   Webcam: Webcam
   Website (optional): Site web (facultatif)
@@ -3645,6 +3659,10 @@ translations:
   feeder not in automatic mode: 'alimentateur pas en mode automatique'
   filament sensor disabled: 'capteur de filament désactivé'
   heated bed: plateau chauffant
+  'helixscreen.env ignored: owned by uid {}': ''
+  'helixscreen.env ignored: untrusted symlink chain': ''
+  'helixscreen.env ignored: writable by other users': ''
+  'helixscreen.env ignored: {}': ''
   idle: inactif
   in unit {} slot {}: dans l'unité {} slot {}
   layers: couches
@@ -3702,6 +3720,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} est installé mais son passage à la bobine de secours est désactivé, aucun changement automatique n''aura donc lieu.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} est installé, mais son réglage de bobine de secours n''a pas pu être lu - ne comptez pas sur un changement automatique.'
   '{} is not set up on this printer': "{} n'est pas configuré sur cette imprimante"
+  '{} lines in helixscreen.env were ignored': ''
   '{} macro not configured': Macro {} non configurée
   '{} matches.': '{} correspond.'
   '{} may cause unintended changes. Are you sure?': '{} peut entraîner des modifications

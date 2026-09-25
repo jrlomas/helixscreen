@@ -55,6 +55,7 @@
   <translation tag="1 event queued" ja="1件のイベント待機中"/>
   <translation tag="1 hour ago" ja="1時間前"/>
   <translation tag="1 layer" ja="1レイヤー"/>
+  <translation tag="1 line in helixscreen.env was ignored"/>
   <translation tag="1 min" ja="1分"/>
   <translation tag="1 min ago" ja="1分前"/>
   <translation tag="1 minute" ja="1分"/>
@@ -223,6 +224,7 @@
   <translation tag="Assign a role to enable sensor monitoring" ja="センサー監視を有効にするには役割を割り当ててください"/>
   <translation tag="Assisted Retract" ja="アシスト付き引き戻し"/>
   <translation tag="Assisting" ja="アシスト中"/>
+  <translation tag="At least {} lines in helixscreen.env were ignored"/>
   <translation tag="Authentication failed" ja="認証に失敗しました"/>
   <translation tag="Auto" ja="自動"/>
   <translation tag="Auto Bed Mesh" ja="自動ベッドメッシュ"/>
@@ -766,8 +768,9 @@
   <translation tag="Detecting..." ja="検出中..."/>
   <translation tag="Detection Length" ja="検出長"/>
   <translation tag="Detection Mode" ja="検出モード"/>
+  <translation tag="Detection turned off" ja="検出をオフにしました"/>
   <translation tag="Dev" ja="開発版"/>
-  <translation tag="Dev channel requires dev_url in config" ja="開発チャンネルには設定にdev_urlが必要です"/>
+  <translation tag="Dev channel requires dev_url in update_urls.json" ja="開発チャンネルには update_urls.json に dev_url が必要です"/>
   <translation tag="Device" ja="デバイス"/>
   <translation tag="Device Section" ja="デバイスセクション"/>
   <translation tag="Device connected" ja="デバイスが接続されました"/>
@@ -1169,6 +1172,8 @@
   <translation tag="Firmware reports no bypass. Enable if you feed filament straight to the extruder" ja="ファームウェアはバイパスがないと報告しています。フィラメントをエクストルーダーに直接送っている場合は有効にしてください"/>
   <translation tag="Firmware restarting..." ja="ファームウェア再起動中..."/>
   <translation tag="Firmware saved X = Y&apos;s value; the measured X result was discarded" ja="ファームウェアは X の値として Y の値を保存しました。測定された X の結果は破棄されました。"/>
+  <translation tag="Fix: chmod 644 {}, then restart"/>
+  <translation tag="Fix: chown {} {}, then restart"/>
   <translation tag="FlashForge Adventurer 5M" ja="FlashForge Adventurer 5M"/>
   <translation tag="FlashForge Adventurer 5X" ja="FlashForge Adventurer 5X"/>
   <translation tag="FlashForge IFS" ja="FlashForge IFS"/>
@@ -1414,6 +1419,7 @@
   <translation tag="Invalid value type" ja="値の型が無効です"/>
   <translation tag="Issue description" ja="問題の説明"/>
   <translation tag="It can be un-archived in Spoolman&apos;s web UI." ja="Spoolman の Web 画面でアーカイブを解除できます。"/>
+  <translation tag="It has not reported its slots yet. Try again in a moment." ja="スロットがまだ報告されていません。しばらくしてからもう一度お試しください。"/>
   <translation tag="It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying" ja="ハブセンサーとハブギアの間で詰まっています。CFS を開けてハブを取り除いてから再試行してください"/>
   <translation tag="It&apos;s a new spool" ja="新しいスプールです"/>
   <translation tag="Jammed at the Toolhead" ja="ツールヘッドで詰まり"/>
@@ -1690,6 +1696,7 @@
   <translation tag="Multi-Filament System Status" ja="マルチフィラメントシステムの状態"/>
   <translation tag="Multi-Filament System is busy: {}" ja="マルチフィラメントシステムがビジー状態: {}"/>
   <translation tag="Multi-Filament System not available" ja="マルチフィラメントシステムが利用できません"/>
+  <translation tag="Multi-filament system not ready" ja="マルチフィラメントシステムの準備ができていません"/>
   <translation tag="Must home axes first" ja="先にホーミングしてください"/>
   <translation tag="My Custom Theme" ja="マイカスタムテーマ"/>
   <translation tag="My Panel" ja="マイパネル"/>
@@ -1947,7 +1954,9 @@
   <translation tag="Path B" ja="パス B"/>
   <translation tag="Pause" ja="一時停止"/>
   <translation tag="Pause macro not configured" ja="一時停止マクロが未設定です"/>
+  <translation tag="Pause on Detection" ja="検出時に一時停止"/>
   <translation tag="Pause the print first, then load, unload, or change filament" ja="先に印刷を一時停止してから、装填・排出・フィラメント交換を行ってください"/>
+  <translation tag="Pause the print when a failure is seen (off = warn only)" ja="失敗を検出したら印刷を一時停止します（オフ = 警告のみ）"/>
   <translation tag="Pause, resume, or stop the print" ja="印刷の一時停止、再開、停止"/>
   <translation tag="Paused" ja="一時停止"/>
   <translation tag="Paused (attention needed)" ja="一時停止（対応が必要）"/>
@@ -2387,6 +2396,7 @@
   <translation tag="SWITCH SENSORS" ja="スイッチセンサー"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." ja="セーフモードが有効です。起動時にアプリがクラッシュし続けたため、プリンター接続は無効になっています。設定を開いて問題を解決してから再起動してください。"/>
   <translation tag="Safety &amp; Notifications" ja="安全と通知"/>
+  <translation tag="Same spool in {}? Tap Clear if it is a new one." ja="{} は同じスプールですか？新しいスプールならクリアをタップしてください。"/>
   <translation tag="Sample" ja="サンプル"/>
   <translation tag="Sample %d/%d" ja="サンプル %d/%d"/>
   <translation tag="Sample Dialog" ja="サンプルダイアログ"/>
@@ -2456,6 +2466,7 @@
   <translation tag="Security" ja="セキュリティ"/>
   <translation tag="Security, network, host, and administration" ja="セキュリティ、ネットワーク、ホスト、管理"/>
   <translation tag="See exactly what data will be sent" ja="送信されるデータを正確に確認"/>
+  <translation tag="See the log"/>
   <translation tag="See the quick tour of HelixScreen again" ja="HelixScreen のクイックツアーをもう一度見る"/>
   <translation tag="Select" ja="選択"/>
   <translation tag="Select &apos;None&apos; if you don&apos;t have a filament sensor, or if you don&apos;t want to pause on runout." ja="フィラメントセンサーがない場合、またはフィラメント切れで一時停止したくない場合は「なし」を選択してください。"/>
@@ -2589,6 +2600,8 @@
   <translation tag="Sounds" ja="サウンド"/>
   <translation tag="Source" ja="ソース"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" ja="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti Detection" ja="スパゲッティ検出"/>
+  <translation tag="Spaghetti detected" ja="スパゲッティを検出しました"/>
   <translation tag="Spaghetti detected — print paused" ja="スパゲッティを検出しました — 印刷を一時停止しました"/>
   <translation tag="Speaker" ja="スピーカー"/>
   <translation tag="Speed" ja="速度"/>
@@ -2954,6 +2967,7 @@
   <translation tag="Turn On" ja="オンにする"/>
   <translation tag="Turn On LEDs" ja="LEDを点灯"/>
   <translation tag="Turn endless spool on, then set the backup gate" ja="エンドレススプールを有効にしてから、バックアップゲートを設定してください"/>
+  <translation tag="Turn off detection" ja="検出をオフにする"/>
   <translation tag="Turn on LEDs when printer starts" ja="プリンター起動時に LED を点灯"/>
   <translation tag="Turn the extruder heater off after a load or unload finishes" ja="装填または排出の完了後にエクストルーダーヒーターをオフにします"/>
   <translation tag="Turn the picture to match how the screen is mounted. Applies after restart." ja="画面の取り付け向きに合わせて表示を回転します。再起動後に適用されます。"/>
@@ -3094,6 +3108,7 @@
   <translation tag="Warn" ja="警告"/>
   <translation tag="Warning" ja="警告"/>
   <translation tag="Warnings &amp; errors" ja="警告とエラー"/>
+  <translation tag="Watch the camera during a print for failed prints" ja="印刷中にカメラで印刷失敗を監視します"/>
   <translation tag="Weak battery" ja="バッテリー残量低下"/>
   <translation tag="Webcam" ja="ウェブカメラ"/>
   <translation tag="Website (optional)" ja="ウェブサイト（オプション）"/>
@@ -3218,6 +3233,10 @@
   <translation tag="feeder not in automatic mode" ja="フィーダーが自動モードではありません"/>
   <translation tag="filament sensor disabled" ja="フィラメントセンサーが無効"/>
   <translation tag="heated bed" ja="ヒートベッド"/>
+  <translation tag="helixscreen.env ignored: owned by uid {}"/>
+  <translation tag="helixscreen.env ignored: untrusted symlink chain"/>
+  <translation tag="helixscreen.env ignored: writable by other users"/>
+  <translation tag="helixscreen.env ignored: {}"/>
   <translation tag="idle" ja="アイドル"/>
   <translation tag="in unit {} slot {}" ja="ユニット {} スロット {}"/>
   <translation tag="layers" ja="レイヤー"/>
@@ -3269,6 +3288,7 @@
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." ja="{} はインストールされていますが、予備スプールへの切り替えがオフになっているため、自動切り替えは行われません。"/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." ja="{} はインストールされていますが、予備スプールの設定を読み取れませんでした - 自動切り替えを当てにしないでください。"/>
   <translation tag="{} is not set up on this printer" ja="{} はこのプリンターで設定されていません"/>
+  <translation tag="{} lines in helixscreen.env were ignored"/>
   <translation tag="{} macro not configured" ja="{} マクロが未設定です"/>
   <translation tag="{} matches." ja="{} が一致します。"/>
   <translation tag="{} may cause unintended changes. Are you sure?" ja="{} は意図しない変更を引き起こす可能性があります。よろしいですか？"/>

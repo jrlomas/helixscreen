@@ -8,6 +8,7 @@
 #include "async_lifetime_guard.h"
 #include "error_event.h"
 #include "filament_slot_override_store.h"
+#include "lane_echo.h"
 #include "lane_observation.h"
 #include "slot_registry.h"
 
@@ -157,6 +158,12 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
      */
     AmsBackendAfc(IMoonrakerAPI* api, helix::IMoonrakerClient* client);
     ~AmsBackendAfc() override;
+
+    /// The resync files stored records through this backend's echo guard, the
+    /// same one its parses consult.
+    [[nodiscard]] helix::ams::OwnWriteEchoes* own_write_echoes() override {
+        return &own_write_echoes_;
+    }
 
     /**
      * @brief Bare filament-sensor names AFC owns (no AMS keyword).
@@ -1102,14 +1109,6 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     virtual AmsError execute_gcode_notify(const std::string& gcode, const std::string& success_msg,
                                           const std::string& error_prefix);
 
-    /**
-     * @brief Validate slot index is within range
-     *
-     * @param slot_index Slot index to validate
-     * @return AmsError (SUCCESS if valid, INVALID_SLOT otherwise)
-     */
-    AmsError validate_slot_index(int slot_index) const;
-
     // Unified slot registry -- single source of truth for all slot-indexed state
     helix::printer::SlotRegistry slots_;
 
@@ -1319,6 +1318,13 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
         ams::Observation metered{ams::ObservationSource::Metered};
     };
     std::unordered_map<std::string, LaneFirmwareReadings> lane_firmware_readings_;
+
+    /// What a user's edit declared and this backend wrote back, for the parse
+    /// to tell firmware repeating our own SET_COLOR / SET_MATERIAL from a
+    /// reading. Keyed by slot index like the guard's other users, and under
+    /// the same mutex_ discipline as lane_firmware_readings_ above: both parse
+    /// paths and apply_user_edit() run with the lock held.
+    ams::OwnWriteEchoes own_write_echoes_;
 
     /// Lanes last seen on each buffer, keyed by buffer name. AFC's buffer status
     /// arrives as a Moonraker delta, so a frame that changes only `state` omits

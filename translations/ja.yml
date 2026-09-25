@@ -56,6 +56,7 @@ translations:
   1 event queued: 1件のイベント待機中
   1 hour ago: 1時間前
   1 layer: 1レイヤー
+  1 line in helixscreen.env was ignored: ''
   1 min: '1分'
   1 min ago: 1分前
   1 minute: 1分
@@ -227,6 +228,7 @@ translations:
   Assign a role to enable sensor monitoring: センサー監視を有効にするには役割を割り当ててください
   Assisted Retract: 'アシスト付き引き戻し'
   Assisting: アシスト中
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: 認証に失敗しました
   Auto: 自動
   Auto Bed Mesh: 自動ベッドメッシュ
@@ -781,8 +783,9 @@ translations:
   Detecting...: 検出中...
   Detection Length: 検出長
   Detection Mode: 検出モード
+  Detection turned off: 検出をオフにしました
   Dev: 開発版
-  Dev channel requires dev_url in config: 開発チャンネルには設定にdev_urlが必要です
+  Dev channel requires dev_url in update_urls.json: 開発チャンネルには update_urls.json に dev_url が必要です
   Device: デバイス
   Device Section: デバイスセクション
   Device connected: 'デバイスが接続されました'
@@ -1195,6 +1198,8 @@ translations:
   Firmware reports no bypass. Enable if you feed filament straight to the extruder: ファームウェアはバイパスがないと報告しています。フィラメントをエクストルーダーに直接送っている場合は有効にしてください
   Firmware restarting...: ファームウェア再起動中...
   Firmware saved X = Y's value; the measured X result was discarded: ファームウェアは X の値として Y の値を保存しました。測定された X の結果は破棄されました。
+  'Fix: chmod 644 {}, then restart': ''
+  'Fix: chown {} {}, then restart': ''
   FlashForge Adventurer 5M: FlashForge Adventurer 5M
   FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
@@ -1451,6 +1456,7 @@ translations:
   Invalid value type: '値の型が無効です'
   Issue description: 問題の説明
   It can be un-archived in Spoolman's web UI.: Spoolman の Web 画面でアーカイブを解除できます。
+  It has not reported its slots yet. Try again in a moment.: スロットがまだ報告されていません。しばらくしてからもう一度お試しください。
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: ハブセンサーとハブギアの間で詰まっています。CFS を開けてハブを取り除いてから再試行してください
   It's a new spool: 新しいスプールです
   Jammed at the Toolhead: ツールヘッドで詰まり
@@ -1738,6 +1744,7 @@ translations:
   Multi-Filament System Status: 'マルチフィラメントシステムの状態'
   'Multi-Filament System is busy: {}': 'マルチフィラメントシステムがビジー状態: {}'
   Multi-Filament System not available: マルチフィラメントシステムが利用できません
+  Multi-filament system not ready: マルチフィラメントシステムの準備ができていません
   Must home axes first: 先にホーミングしてください
   My Custom Theme: マイカスタムテーマ
   My Panel: マイパネル
@@ -2003,7 +2010,9 @@ translations:
   Path B: パス B
   Pause: 一時停止
   Pause macro not configured: 一時停止マクロが未設定です
+  Pause on Detection: 検出時に一時停止
   Pause the print first, then load, unload, or change filament: 先に印刷を一時停止してから、装填・排出・フィラメント交換を行ってください
+  Pause the print when a failure is seen (off = warn only): 失敗を検出したら印刷を一時停止します（オフ = 警告のみ）
   Pause, resume, or stop the print: 印刷の一時停止、再開、停止
   Paused: 一時停止
   Paused (attention needed): 一時停止（対応が必要）
@@ -2460,6 +2469,7 @@ translations:
     on startup. Open Settings to fix the issue, then reboot.
   : セーフモードが有効です。起動時にアプリがクラッシュし続けたため、プリンター接続は無効になっています。設定を開いて問題を解決してから再起動してください。
   Safety & Notifications: 安全と通知
+  Same spool in {}? Tap Clear if it is a new one.: '{} は同じスプールですか？新しいスプールならクリアをタップしてください。'
   Sample: サンプル
   Sample %d/%d: サンプル %d/%d
   Sample Dialog: サンプルダイアログ
@@ -2533,6 +2543,7 @@ translations:
   Security: セキュリティ
   Security, network, host, and administration: セキュリティ、ネットワーク、ホスト、管理
   See exactly what data will be sent: 送信されるデータを正確に確認
+  See the log: ''
   See the quick tour of HelixScreen again: HelixScreen のクイックツアーをもう一度見る
   Select: 選択
   Select 'None' if you don't have a filament sensor, or if you don't want to pause on runout.: フィラメントセンサーがない場合、またはフィラメント切れで一時停止したくない場合は「なし」を選択してください。
@@ -2670,6 +2681,8 @@ translations:
   Source: ソース
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod by Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: スパゲッティ検出
+  Spaghetti detected: スパゲッティを検出しました
   Spaghetti detected — print paused: スパゲッティを検出しました — 印刷を一時停止しました
   Speaker: スピーカー
   Speed: 速度
@@ -3070,6 +3083,7 @@ translations:
   Turn On: オンにする
   Turn On LEDs: 'LEDを点灯'
   Turn endless spool on, then set the backup gate: 'エンドレススプールを有効にしてから、バックアップゲートを設定してください'
+  Turn off detection: 検出をオフにする
   Turn on LEDs when printer starts: プリンター起動時に LED を点灯
   Turn the extruder heater off after a load or unload finishes: 装填または排出の完了後にエクストルーダーヒーターをオフにします
   Turn the picture to match how the screen is mounted. Applies after restart.: 画面の取り付け向きに合わせて表示を回転します。再起動後に適用されます。
@@ -3211,6 +3225,7 @@ translations:
   Warn: 警告
   Warning: 警告
   Warnings & errors: '警告とエラー'
+  Watch the camera during a print for failed prints: 印刷中にカメラで印刷失敗を監視します
   Weak battery: バッテリー残量低下
   Webcam: ウェブカメラ
   Website (optional): ウェブサイト（オプション）
@@ -3345,6 +3360,10 @@ translations:
   feeder not in automatic mode: 'フィーダーが自動モードではありません'
   filament sensor disabled: 'フィラメントセンサーが無効'
   heated bed: ヒートベッド
+  'helixscreen.env ignored: owned by uid {}': ''
+  'helixscreen.env ignored: untrusted symlink chain': ''
+  'helixscreen.env ignored: writable by other users': ''
+  'helixscreen.env ignored: {}': ''
   idle: アイドル
   in unit {} slot {}: 'ユニット {} スロット {}'
   layers: レイヤー
@@ -3401,6 +3420,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} はインストールされていますが、予備スプールへの切り替えがオフになっているため、自動切り替えは行われません。'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} はインストールされていますが、予備スプールの設定を読み取れませんでした - 自動切り替えを当てにしないでください。'
   '{} is not set up on this printer': '{} はこのプリンターで設定されていません'
+  '{} lines in helixscreen.env were ignored': ''
   '{} macro not configured': '{} マクロが未設定です'
   '{} matches.': '{} が一致します。'
   '{} may cause unintended changes. Are you sure?': '{} は意図しない変更を引き起こす可能性があります。よろしいですか？'

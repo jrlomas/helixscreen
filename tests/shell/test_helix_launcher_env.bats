@@ -472,6 +472,15 @@ make_fake_stat_map() {
     cat > "$BATS_TEST_TMPDIR/fakebin/stat" <<'FAKE'
 #!/bin/sh
 [ "$1" = "-L" ] && [ "$2" = "-c" ] || exit 1
+if [ "$3" = "%h" ]; then
+    if [ -f "$BATS_TEST_TMPDIR/nlinkmap" ]; then
+        while read -r p n; do
+            [ "$p" = "$4" ] && { echo "$n"; exit 0; }
+        done < "$BATS_TEST_TMPDIR/nlinkmap"
+    fi
+    echo 1
+    exit 0
+fi
 while read -r p u m; do
     [ "$p" = "$4" ] && { echo "$u $m"; exit 0; }
 done < "$BATS_TEST_TMPDIR/statmap"
@@ -769,6 +778,37 @@ print_env_from_file() {
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "$d/helix.log" ]
 }
 
+@test "an existing log file with a second hard link is refused" {
+    # A hard link planted at an allowed path still shares its inode with a
+    # file elsewhere: appending to the log would write that file as root.
+    local d="/tmp/helix-bats-$$-hardlink"
+    mkdir -p "$d"
+    : > "$d/helix.log"
+    ln "$d/helix.log" "$d/helix.log.2"
+    make_fake_stat_map
+    printf '%s 0 755\n%s 0 644\n%s 0 644\n' \
+        "$d" "$d/helix.log" "$MOCK_INSTALL/config/helixscreen.env" \
+        > "$BATS_TEST_TMPDIR/statmap"
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'HELIX_LOG_FILE=%s/helix.log\n' "$d" > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    # nlink 2: both names for the inode are refused.
+    printf '%s/helix.log 2\n%s/helix.log.2 2\n' "$d" "$d" > "$BATS_TEST_TMPDIR/nlinkmap"
+    env -u HELIX_LOG_FILE PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_LOG_FILE \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/parse.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "HELIX_LOG_FILE must be" "$BATS_TEST_TMPDIR/parse.log"
+    # nlink 1: the same single-link file loads.
+    printf '%s/helix.log 1\n' "$d" > "$BATS_TEST_TMPDIR/nlinkmap"
+    env -u HELIX_LOG_FILE PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_LOG_FILE \
+        > "$BATS_TEST_TMPDIR/value.out" 2>/dev/null
+    rm -f "$d/helix.log" "$d/helix.log.2"
+    rmdir "$d"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "$d/helix.log" ]
+}
+
 @test "ALSA device names are limited to hardware PCMs" {
     [ "$(print_env_from_file HELIX_ALSA_DEVICE 'HELIX_ALSA_DEVICE=plughw:CARD=vc4hdmi,DEV=0')" = "plughw:CARD=vc4hdmi,DEV=0" ]
     [ "$(print_env_from_file HELIX_ALSA_DEVICE 'HELIX_ALSA_DEVICE=default')" = "default" ]
@@ -873,6 +913,137 @@ print_env_from_file() {
     run_launcher_as_root
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
     grep -q "owned by uid 1000" "$BATS_TEST_TMPDIR/gate.log"
+}
+
+# =============================================================================
+# Launcher -> app handoff (prestonbrown/helixscreen#1712)
+#
+# A refusal only the log knows about changes nothing for the user, so the
+# launcher exports HELIX_ENV_FILE_REFUSED (kind|detail|expected|path) /
+# HELIX_ENV_LINES_SKIPPED before it starts helix-screen. --print-env NAME
+# observes exactly the value the app would read: the same parse runs, then the
+# variable is printed - and the handoff variables are unset before the parse,
+# so an ambient value cannot forge a refusal.
+# =============================================================================
+
+@test "a refused env file is handed to the app as HELIX_ENV_FILE_REFUSED" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    make_fake_stat
+    printf 'MOONRAKER_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        FAKE_STAT_UID=12345 FAKE_STAT_MODE=644 \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_FILE_REFUSED \
+        > "$BATS_TEST_TMPDIR/refused.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/refused.out")" = \
+        "owner|12345|root:root|$MOCK_INSTALL/config/helixscreen.env" ]
+    # A whole-file refusal never reaches the parse, so no line skips either.
+    env -u MOONRAKER_HOST \
+        PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        FAKE_STAT_UID=12345 FAKE_STAT_MODE=644 \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_LINES_SKIPPED \
+        > "$BATS_TEST_TMPDIR/skipped.out" 2>/dev/null
+    [ "$(cat "$BATS_TEST_TMPDIR/skipped.out")" = "" ]
+}
+
+@test "a mode refusal is handed to the app with the mode kind" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    mkdir -p "$BATS_TEST_TMPDIR/fakebin"
+    printf '#!/bin/sh\nexit 1\n' > "$BATS_TEST_TMPDIR/fakebin/chmod"
+    chmod +x "$BATS_TEST_TMPDIR/fakebin/chmod"
+    printf 'MOONRAKER_HOST=never-loaded\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 666 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_FILE_REFUSED \
+        > "$BATS_TEST_TMPDIR/refused.out" 2> "$BATS_TEST_TMPDIR/refuse.log"
+    # kind|detail|expected|path: a mode problem carries no uid and no chown.
+    [ "$(cat "$BATS_TEST_TMPDIR/refused.out")" = \
+        "mode|||$MOCK_INSTALL/config/helixscreen.env" ]
+}
+
+@test "skipped lines are handed to the app as HELIX_ENV_LINES_SKIPPED" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'nonsense without an equals sign\nLD_PRELOAD=/tmp/evil.so\nHELIX_NICE=31\nMOONRAKER_HOST=ok.local\n' \
+        > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST -u LD_PRELOAD \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_LINES_SKIPPED \
+        > "$BATS_TEST_TMPDIR/skipped.out" 2> "$BATS_TEST_TMPDIR/parse.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/skipped.out")" = \
+        "line 1:malformed line|LD_PRELOAD:not a setting this file may change|HELIX_NICE:must be 0-19 (a negative nice would let the UI starve Klipper)" ]
+    # The parse continues past the skipped lines: the good key still loads,
+    # and line skips are not a whole-file refusal.
+    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_FILE_REFUSED \
+        > "$BATS_TEST_TMPDIR/refused.out" 2>/dev/null
+    [ "$(cat "$BATS_TEST_TMPDIR/refused.out")" = "" ]
+    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env MOONRAKER_HOST \
+        > "$BATS_TEST_TMPDIR/host.out" 2>/dev/null
+    [ "$(cat "$BATS_TEST_TMPDIR/host.out")" = "ok.local" ]
+}
+
+@test "a clean env file hands off neither variable" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'MOONRAKER_HOST=clean.local\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_FILE_REFUSED \
+        > "$BATS_TEST_TMPDIR/refused.out" 2>/dev/null
+    env -u MOONRAKER_HOST "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_LINES_SKIPPED \
+        > "$BATS_TEST_TMPDIR/skipped.out" 2>/dev/null
+    [ "$(cat "$BATS_TEST_TMPDIR/refused.out")" = "" ]
+    [ "$(cat "$BATS_TEST_TMPDIR/skipped.out")" = "" ]
+}
+
+@test "the skipped-lines handoff is capped at 12 entries" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    : > "$MOCK_INSTALL/config/helixscreen.env"
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        echo "NOT_A_SETTING_$i=x"
+    done >> "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_LINES_SKIPPED \
+        > "$BATS_TEST_TMPDIR/skipped.out" 2>/dev/null
+    # 12 real entries plus the sentinel row that announces the cap: 13 entries
+    # join on 12 separators, and the 13th line onward never reaches the app.
+    [ "$(tr -dc '|' < "$BATS_TEST_TMPDIR/skipped.out" | wc -c)" = "12" ]
+    grep -q 'NOT_A_SETTING_12:' "$BATS_TEST_TMPDIR/skipped.out"
+    ! grep -q 'NOT_A_SETTING_13:' "$BATS_TEST_TMPDIR/skipped.out"
+    grep -q 'more skipped:' "$BATS_TEST_TMPDIR/skipped.out"
+}
+
+@test "a skipped-lines handoff at the cap exactly carries no sentinel" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    : > "$MOCK_INSTALL/config/helixscreen.env"
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+        echo "NOT_A_SETTING_$i=x"
+    done >> "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_LINES_SKIPPED \
+        > "$BATS_TEST_TMPDIR/skipped.out" 2>/dev/null
+    # The list is complete at 12 entries, so no sentinel row: the app words
+    # the count as exact, never "at least 12".
+    [ "$(tr -dc '|' < "$BATS_TEST_TMPDIR/skipped.out" | wc -c)" = "11" ]
+    grep -q 'NOT_A_SETTING_12:' "$BATS_TEST_TMPDIR/skipped.out"
+    ! grep -q 'more skipped' "$BATS_TEST_TMPDIR/skipped.out"
+}
+
+@test "an ambient handoff value cannot forge a refusal" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'MOONRAKER_HOST=clean.local\n' > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    HELIX_ENV_FILE_REFUSED=spoofed HELIX_ENV_LINES_SKIPPED=spoofed \
+        env -u MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_FILE_REFUSED \
+        > "$BATS_TEST_TMPDIR/refused.out" 2>/dev/null
+    HELIX_ENV_FILE_REFUSED=spoofed HELIX_ENV_LINES_SKIPPED=spoofed \
+        env -u MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_LINES_SKIPPED \
+        > "$BATS_TEST_TMPDIR/skipped.out" 2>/dev/null
+    [ "$(cat "$BATS_TEST_TMPDIR/refused.out")" = "" ]
+    [ "$(cat "$BATS_TEST_TMPDIR/skipped.out")" = "" ]
 }
 
 # =============================================================================

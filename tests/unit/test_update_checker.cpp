@@ -22,6 +22,7 @@
 #include "../helix_test_fixture.h"
 #include "../test_helpers/live_thread_count.h"
 #include "../test_helpers/scoped_env.h"
+#include "../test_helpers/scoped_update_urls.h"
 #include "../test_helpers/update_checker_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "config.h"
@@ -416,24 +417,26 @@ TEST_CASE("UpdateChecker lifecycle", "[update_checker][lifecycle]") {
 // positive. A condition-based wait for the count to settle would let it come
 // back into the default run.
 TEST_CASE("UpdateChecker callback is optional", "[update_checker][callback][slow]") {
-    // Hermetic by construction: no real network. The dev channel already reads
-    // its endpoint from config (/update/dev_url) and is exempt from the rate
-    // limiter, so pointing it at a closed loopback port drives the full
+    // Hermetic by construction: no real network. The dev channel reads its
+    // endpoint from the root-owned update_urls.json (settings.json's copy is
+    // ignored) and is exempt from the rate limiter, so pointing it at a closed
+    // loopback port drives the full
     // check_for_updates -> do_check -> fetch_dev_release -> report_result cycle
     // on a fast, local, deterministic connection refusal. Hitting api.github.com
-    // instead made this test slow, network-dependent, and — because libhv's
+    // instead made this test slow, network-dependent, and - because libhv's
     // requests:: client spins event-loop threads on a successful TLS connection
-    // that outlive the call — the one test in the suite that leaked threads
+    // that outlive the call - the one test in the suite that leaked threads
     // (prestonbrown/helixscreen#1212). The isolation listener's per-TEST_CASE
-    // reset_config_singleton() wipes these keys again for the next test.
+    // reset_config_singleton() wipes these config keys again for the next test;
+    // the ScopedUpdateUrls guard restores the state dir itself.
     auto* config = Config::get_instance();
     REQUIRE(config != nullptr);
-    // Dev and Beta are gated behind /beta_features — get_channel() reports Stable
+    // Dev and Beta are gated behind /beta_features - get_channel() reports Stable
     // for either one while beta is locked, which would send this check at the real
     // stable endpoint instead of the loopback port below.
     config->set<bool>("/beta_features", true);
     config->set<int>("/update/channel", 2); // Dev
-    config->set<std::string>("/update/dev_url", "http://127.0.0.1:1/");
+    helix::test::ScopedUpdateUrls urls("helix_dev_url", R"({"dev_url": "http://127.0.0.1:1/"})");
 
     auto& checker = UpdateChecker::instance();
     checker.init();

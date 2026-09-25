@@ -55,6 +55,7 @@ translations:
   1 event queued: 1 event queued
   1 hour ago: 1 hour ago
   1 layer: 1 layer
+  1 line in helixscreen.env was ignored: 1 line in helixscreen.env was ignored
   1 min: 1 min
   1 min ago: 1 min ago
   1 minute: 1 minute
@@ -240,6 +241,7 @@ translations:
   Assign a role to enable sensor monitoring: Assign a role to enable sensor monitoring
   Assisted Retract: Assisted Retract
   Assisting: Assisting
+  At least {} lines in helixscreen.env were ignored: At least {} lines in helixscreen.env were ignored
   Authentication failed: Authentication failed
   Auto: Auto
   Auto Bed Mesh: Auto Bed Mesh
@@ -825,8 +827,9 @@ translations:
   Detecting...: Detecting...
   Detection Length: Detection Length
   Detection Mode: Detection Mode
+  Detection turned off: Detection turned off
   Dev: Dev
-  Dev channel requires dev_url in config: Dev channel requires dev_url in config
+  Dev channel requires dev_url in update_urls.json: Dev channel requires dev_url in update_urls.json
   Device: Device
   Device Section: Device Section
   Device connected: Device connected
@@ -1253,6 +1256,8 @@ translations:
   Firmware reports no bypass. Enable if you feed filament straight to the extruder: Firmware reports no bypass. Enable if you feed filament straight to the extruder
   Firmware restarting...: Firmware restarting...
   Firmware saved X = Y's value; the measured X result was discarded: Firmware saved X = Y's value; the measured X result was discarded
+  'Fix: chmod 644 {}, then restart': 'Fix: chmod 644 {}, then restart'
+  'Fix: chown {} {}, then restart': 'Fix: chown {} {}, then restart'
   FlashForge Adventurer 5M: FlashForge Adventurer 5M
   FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
@@ -1528,6 +1533,7 @@ translations:
   Invalid value type: Invalid value type
   Issue description: Issue description
   It can be un-archived in Spoolman's web UI.: It can be un-archived in Spoolman's web UI.
+  It has not reported its slots yet. Try again in a moment.: It has not reported its slots yet. Try again in a moment.
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying
   It's a new spool: It's a new spool
   Jammed at the Toolhead: Jammed at the Toolhead
@@ -1829,6 +1835,7 @@ translations:
   Multi-Filament System Status: Multi-Filament System Status
   'Multi-Filament System is busy: {}': 'Multi-Filament System is busy: {}'
   Multi-Filament System not available: Multi-Filament System not available
+  Multi-filament system not ready: Multi-filament system not ready
   Must home axes first: Must home axes first
   My Custom Theme: My Custom Theme
   My Panel: My Panel
@@ -2099,8 +2106,10 @@ translations:
   Path B: Path B
   Pause: Pause
   Pause macro not configured: Pause macro not configured
+  Pause on Detection: Pause on Detection
   Pause the print first, then load, unload, or change filament: Pause the print first,
     then load, unload, or change filament
+  Pause the print when a failure is seen (off = warn only): Pause the print when a failure is seen (off = warn only)
   Pause, resume, or stop the print: Pause, resume, or stop the print
   Paused: Paused
   Paused (attention needed): Paused (attention needed)
@@ -2579,6 +2588,7 @@ translations:
   : Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
   Safety & Notifications: Safety & Notifications
+  Same spool in {}? Tap Clear if it is a new one.: Same spool in {}? Tap Clear if it is a new one.
   Sample: Sample
   Sample %d/%d: Sample %d/%d
   Sample Dialog: Sample Dialog
@@ -2657,6 +2667,7 @@ translations:
   Security: Security
   Security, network, host, and administration: Security, network, host, and administration
   See exactly what data will be sent: See exactly what data will be sent
+  See the log: See the log
   See the quick tour of HelixScreen again: See the quick tour of HelixScreen again
   Select: Select
   Select 'None' if you don't have a filament sensor, or if you don't want to pause on runout.: Select
@@ -2808,6 +2819,8 @@ translations:
   Source: Source
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod by Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: Spaghetti Detection
+  Spaghetti detected: Spaghetti detected
   Spaghetti detected — print paused: Spaghetti detected — print paused
   Speaker: Speaker
   Speed: Speed
@@ -3242,6 +3255,7 @@ translations:
   Turn On: Turn On
   Turn On LEDs: Turn On LEDs
   Turn endless spool on, then set the backup gate: Turn endless spool on, then set the backup gate
+  Turn off detection: Turn off detection
   Turn on LEDs when printer starts: Turn on LEDs when printer starts
   Turn the extruder heater off after a load or unload finishes: Turn the extruder heater off after a load or unload finishes
   Turn the picture to match how the screen is mounted. Applies after restart.: Turn the picture to match how the screen is mounted. Applies after restart.
@@ -3389,6 +3403,7 @@ translations:
   Warn: Warn
   Warning: Warning
   Warnings & errors: Warnings & errors
+  Watch the camera during a print for failed prints: Watch the camera during a print for failed prints
   Weak battery: Weak battery
   Webcam: Webcam
   Website (optional): Website (optional)
@@ -3533,6 +3548,10 @@ translations:
   feeder not in automatic mode: feeder not in automatic mode
   filament sensor disabled: filament sensor disabled
   heated bed: heated bed
+  'helixscreen.env ignored: owned by uid {}': 'helixscreen.env ignored: owned by uid {}'
+  'helixscreen.env ignored: untrusted symlink chain': 'helixscreen.env ignored: untrusted symlink chain'
+  'helixscreen.env ignored: writable by other users': 'helixscreen.env ignored: writable by other users'
+  'helixscreen.env ignored: {}': 'helixscreen.env ignored: {}'
   idle: idle
   in unit {} slot {}: in unit {} slot {}
   layers: layers
@@ -3584,6 +3603,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.'
   '{} is not set up on this printer': '{} is not set up on this printer'
+  '{} lines in helixscreen.env were ignored': '{} lines in helixscreen.env were ignored'
   '{} macro not configured': '{} macro not configured'
   '{} matches.': '{} matches.'
   '{} may cause unintended changes. Are you sure?': '{} may cause unintended changes.

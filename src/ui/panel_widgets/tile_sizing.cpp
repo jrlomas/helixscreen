@@ -148,14 +148,18 @@ TileVerdict TileSizing::decide(int width_px, int height_px) const {
 }
 
 bool TileSizing::fits(int width_px, int height_px) const {
-    // Half a cell is only offered above the tiny tier. A track is 34px at micro
-    // and 40px at tiny, which cannot carry a glyph and a reading together at
-    // any rung, so the floor there is a whole cell on both axes. Declining the
-    // size here rather than lowering the registry minimum keeps one floor for
-    // every screen and lets the resize clamp and the load path grow past it,
-    // which they both already do through grow_span_to_fit.
+    // Where half a cell is offered at all. A track is 34px at micro and 40px at
+    // tiny. Neither can carry a glyph and a reading together at any rung, so a
+    // tile with a reading floors at a whole cell on both. An icon-only tile
+    // draws its glyph alone in a tiny track, but a micro track is within a
+    // pixel of the widest glyph, so micro floors every tile. Declining the size
+    // here rather than lowering the registry minimum keeps one floor for every
+    // screen and lets the resize clamp and the load path grow past it, which
+    // they both already do through grow_span_to_fit.
     const UiBreakpoint bp = widget_size::current_breakpoint();
-    if (whole_cell_only_ || bp <= UiBreakpoint::Tiny) {
+    const bool small_tier_floor =
+        bp <= UiBreakpoint::Micro || (content_.has_value && bp <= UiBreakpoint::Tiny);
+    if (whole_cell_only_ || small_tier_floor) {
         const float cell = has_cell_metrics_
                                ? std::min(cell_metrics_.cell_w, cell_metrics_.cell_h)
                                : static_cast<float>(GridLayout::GRID_CELL[to_int(bp)]);

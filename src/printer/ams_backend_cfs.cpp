@@ -1893,6 +1893,10 @@ SlotInfo AmsBackendCfs::get_slot_info(int slot_index) const {
     return SlotInfo{};
 }
 
+int AmsBackendCfs::slot_index_bound_locked() const {
+    return slot_index_ceiling(system_info_.total_slots);
+}
+
 SlotInfo* AmsBackendCfs::cached_slot_locked(int slot_index) {
     return system_info_.get_slot_global(slot_index);
 }
@@ -1980,10 +1984,12 @@ AmsError AmsBackendCfs::do_load_filament(int slot_index) {
     int max_slot;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        max_slot = slot_index_ceiling(system_info_.total_slots) - 1;
-    }
-    if (!bypass && (slot_index < 0 || slot_index > max_slot)) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, max_slot);
+        max_slot = slot_index_bound_locked() - 1;
+        if (!bypass) {
+            if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+                return err;
+            }
+        }
     }
 
     std::string gcode;
@@ -2324,12 +2330,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
     // legitimate user choice and we don't want to silently drop it. The
     // caller (apply_user_edit, which sets color_set=true on the override) is
     // responsible for only invoking this when a real color was chosen.
-    int slot_count;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        slot_count = slot_index_ceiling(system_info_.total_slots);
-    }
-    if (global_index < 0 || global_index >= slot_count) {
+    if (!validate_slot_index(global_index).success()) {
         spdlog::debug("{} push_slot_identity_to_firmware: skipping invalid slot {}",
                       backend_log_tag(), global_index);
         return;
@@ -2573,16 +2574,11 @@ AmsError AmsBackendCfs::set_tool_mapping_impl(int tool_number, int slot_index) {
     // Creality's own UI can hold a high key while fewer units are attached —
     // so its bound is the TNN alphabet.
     constexpr int CFS_MAX_SLOTS = 16; // 4 units × 4 slots
-    int slot_count;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        slot_count = slot_index_ceiling(system_info_.total_slots);
-    }
     if (tool_number < 0 || tool_number >= CFS_MAX_SLOTS) {
         return AmsErrorHelper::tool_out_of_range(tool_number);
     }
-    if (slot_index < 0 || slot_index >= slot_count) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, slot_count - 1);
+    if (auto err = validate_slot_index(slot_index); !err.success()) {
+        return err;
     }
 
     std::string tool_tnn = CfsMaterialDb::slot_to_tnn(tool_number);
