@@ -21,6 +21,8 @@
 #include "ams_types.h"
 #include "app_globals.h"
 #include "filament_slot_override.h"
+#include "lane_apply.h"
+#include "lane_echo.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
 #include "moonraker_api_mock.h"
@@ -637,6 +639,435 @@ TEST_CASE_METHOD(LVGLTestFixture, "an override never reaches AFC's vendor-cache 
     REQUIRE(lane.vendor_cache->color_rgb.has_value());
     CHECK(*lane.vendor_cache->color_rgb == 0xED2C2Cu);
     CHECK(lane.vendor_cache->material == "PETG");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "AFC's own write-back does not return as a vendor reading",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // The user retypes colour and material, so SET_COLOR and SET_MATERIAL both
+    // go out and firmware echoes them through the very keys they went to. The
+    // frame also carries a filament name the write never sent, as AFC's status
+    // pushes do: it is the proof below that the frame was parsed at all.
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1",
+                  {{"color", "#00FF00"}, {"material", "PETG"}, {"filament_name", "AFC Basics"}});
+
+    // The echoed colour and material are absent from the vendor record: a
+    // value repeating the write is not a reading, and ingest files the record
+    // whole, so the field goes absent rather than back to its pre-edit value.
+    // The untouched name still files, which is what makes the absence the
+    // guard's doing rather than a frame that never parsed.
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.vendor_cache.has_value());
+    REQUIRE(echoed.vendor_cache->spool_name.has_value());
+    CHECK(*echoed.vendor_cache->spool_name == "AFC Basics");
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+
+    // The harm lands at the clear: filed, the echo would leave the abandoned
+    // edit standing as firmware's own word once the override is gone. Withheld,
+    // nothing of it survives the clear to resolve.
+    harness->clear_slot_override(0);
+    const auto resolved = helix::ams::resolved_lane(harness.lane(0));
+    CHECK_FALSE(resolved.color_rgb.has_value());
+    CHECK_FALSE(resolved.material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "the lane_data snapshot withholds AFC's echoed fields too",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // The same echo arriving through the DB-snapshot parse, which amends the
+    // same accumulator: without the guard it would file the write as
+    // firmware's word on the one path that never passed the status parse.
+    feed_afc_lane_data(*harness, {{"lane1", {{"color", "#00FF00"}, {"material", "PETG"}}}});
+
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.vendor_cache.has_value());
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+
+    // A snapshot value the write did not send releases only its own field:
+    // the colour files while the material echo is still withheld.
+    feed_afc_lane_data(*harness, {{"lane1", {{"color", "#00AEFF"}, {"material", "PETG"}}}});
+
+    const auto after = lane_sources(harness.lane(0));
+    REQUIRE(after.vendor_cache.has_value());
+    REQUIRE(after.vendor_cache->color_rgb.has_value());
+    CHECK(*after.vendor_cache->color_rgb == 0x00AEFFu);
+    CHECK_FALSE(after.vendor_cache->material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a differing AFC value ends its own field's suppression",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // Firmware says a colour the write did not send: it has demonstrated it can
+    // state its own, so the colour is released while the material stays an
+    // outstanding echo. The frame says nothing about material, and the
+    // accumulator's pre-edit PLA is firmware's last word, not this frame's
+    // claim, so it must not release the material declaration.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00AEFF"}});
+
+    const auto differed = lane_sources(harness.lane(0));
+    REQUIRE(differed.vendor_cache.has_value());
+    REQUIRE(differed.vendor_cache->color_rgb.has_value());
+    CHECK(*differed.vendor_cache->color_rgb == 0x00AEFFu);
+    CHECK(differed.vendor_cache->material == "PLA");
+
+    // The material echo is still withheld: the colour having moved releases
+    // nothing but itself, and the withheld field files absent.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00AEFF"}, {"material", "PETG"}});
+
+    const auto after = lane_sources(harness.lane(0));
+    REQUIRE(after.vendor_cache.has_value());
+    CHECK_FALSE(after.vendor_cache->material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "an echoed field stays withheld on frames that go silent",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // The echo itself: both fields name the write, so both file absent.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+
+    // A later delta about nothing but state. The accumulator still holds the
+    // echoed values, and filing it whole would put the abandoned edit back as
+    // the machine's word one frame after the echo was withheld.
+    feed_afc_lane(*harness, "lane1", {{"status", "Loaded"}});
+
+    const auto silent = lane_sources(harness.lane(0));
+    REQUIRE(silent.vendor_cache.has_value());
+    CHECK_FALSE(silent.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(silent.vendor_cache->material.has_value());
+
+    // A differing value still releases only its own field, so the suppression
+    // the silent frame rode over is the declaration, not a dead entry.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00AEFF"}});
+
+    const auto differed = lane_sources(harness.lane(0));
+    REQUIRE(differed.vendor_cache.has_value());
+    REQUIRE(differed.vendor_cache->color_rgb.has_value());
+    CHECK(*differed.vendor_cache->color_rgb == 0x00AEFFu);
+    CHECK_FALSE(differed.vendor_cache->material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "an AFC edit arms nothing its write cannot carry",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x123456u;
+    edit.color_name = "Peacock";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // A producer record restating both fields. The colour strips, which is
+    // the control: it proves the guard holds an armed entry for this slot,
+    // so the name surviving is the prune and not an empty guard.
+    helix::ams::Observation probe(helix::ams::ObservationSource::VendorCache);
+    probe.color_rgb = 0x123456u;
+    probe.color_name = "Peacock";
+    harness->own_write_echoes()->withhold(0, std::string{}, probe);
+    CHECK_FALSE(probe.color_rgb.has_value());
+    // No SET_* carries a colour name, so firmware holding one is its own
+    // reading: the name must not hold a declaration that strips it.
+    CHECK(probe.color_name == "Peacock");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "an external re-bind ends AFC's echo suppression",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // Link a spool: a binding change, so the write carries no identity a person
+    // chose and nothing arms.
+    auto link = harness->get_slot_info(0);
+    link.spoolman_id = 42;
+    helix::test::edit_slot_as_user(*harness, 0, link);
+    feed_afc_lane(*harness, "lane1", {{"spool_id", 42}});
+
+    // A colour edit on the kept link. The spool owns material, brand and name,
+    // but the colour is the lane's own, so SET_COLOR arms the guard.
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"spool_id", 42}});
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.vendor_cache.has_value());
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+
+    // Another writer puts a different spool on the lane, one whose colour reads
+    // exactly what we wrote: value-difference cannot see this swap, only the
+    // re-bind verdict can. The verdict runs after this frame's ingest, so this
+    // frame is the last one withheld.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"spool_id", 7}});
+
+    // The standing colour now files as the new spool's own statement rather
+    // than being withheld as ours forever.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"spool_id", 7}});
+
+    const auto rebound = lane_sources(harness.lane(0));
+    REQUIRE(rebound.vendor_cache.has_value());
+    REQUIRE(rebound.vendor_cache->color_rgb.has_value());
+    CHECK(*rebound.vendor_cache->color_rgb == 0x00FF00u);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a later edit declaring nothing new keeps the earlier guard",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    // The echo itself: both fields name the write, so both file absent.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+    const auto echoed = lane_sources(harness.lane(0));
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+
+    // A second edit that declares no identity field: only the weight moved.
+    // The write it triggers re-sends SET_COLOR and SET_MATERIAL with the
+    // values the first edit chose, so a frame restating them is still the
+    // echo of our own write, not firmware's reading.
+    auto weight = harness->get_slot_info(0);
+    weight.remaining_weight_g = 750.0F;
+    weight.total_weight_g = 1000.0F;
+    helix::test::edit_slot_as_user(*harness, 0, weight);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+
+    const auto restated = lane_sources(harness.lane(0));
+    REQUIRE(restated.vendor_cache.has_value());
+    CHECK_FALSE(restated.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(restated.vendor_cache->material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "clearing the colour keeps the guard the write needs",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}});
+    const auto echoed = lane_sources(harness.lane(0));
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+
+    // Clear the colour. The sentinel is not declarable and the write omits
+    // SET_COLOR for it, so this edit declares nothing the guard could arm on
+    // its own - yet firmware still holds the green it was given and restates
+    // it on every frame, which is still the echo of our earlier write.
+    auto cleared = harness->get_slot_info(0);
+    cleared.color_rgb = helix::AMS_DEFAULT_SLOT_COLOR;
+    helix::test::edit_slot_as_user(*harness, 0, cleared);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}});
+
+    const auto restated = lane_sources(harness.lane(0));
+    REQUIRE(restated.vendor_cache.has_value());
+    CHECK_FALSE(restated.vendor_cache->color_rgb.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a firmware clear releases the declaration it names",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+    const auto echoed = lane_sources(harness.lane(0));
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+
+    // The eject: clear_values() wipes the lane in firmware and publishes the
+    // keys empty. That is firmware stating the value is GONE, not falling
+    // silent about it, so the declaration ends here rather than standing
+    // guard over a lane that no longer holds the value.
+    feed_afc_lane(*harness, "lane1", {{"material", ""}, {"color", ""}});
+
+    // An untagged spool loaded into the emptied lane publishes firmware's
+    // defaults. The values equal the old declarations, so only the clear
+    // above can have released them: these are fresh readings and must file,
+    // or the lane shows no identity at all.
+    feed_afc_lane(*harness, "lane1",
+                  {{"status", "Loaded"}, {"color", "#00FF00"}, {"material", "PETG"}});
+
+    const auto reloaded = lane_sources(harness.lane(0));
+    REQUIRE(reloaded.vendor_cache.has_value());
+    REQUIRE(reloaded.vendor_cache->color_rgb.has_value());
+    CHECK(*reloaded.vendor_cache->color_rgb == 0x00FF00u);
+    CHECK(reloaded.vendor_cache->material == "PETG");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a DB snapshot clear releases the declaration it names",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+    const auto echoed = lane_sources(harness.lane(0));
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+
+    // The same clear through the DB snapshot, which amends the same
+    // accumulator: the keys arrive empty there too, and a clear on either
+    // parser must reach the guard the same way.
+    feed_afc_lane_data(*harness, {{"lane1", {{"color", ""}, {"material", ""}}}});
+
+    feed_afc_lane(*harness, "lane1",
+                  {{"status", "Loaded"}, {"color", "#00FF00"}, {"material", "PETG"}});
+
+    const auto reloaded = lane_sources(harness.lane(0));
+    REQUIRE(reloaded.vendor_cache.has_value());
+    REQUIRE(reloaded.vendor_cache->color_rgb.has_value());
+    CHECK(*reloaded.vendor_cache->color_rgb == 0x00FF00u);
+    CHECK(reloaded.vendor_cache->material == "PETG");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "clearing a spool ends its echo suppression",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+    const auto echoed = lane_sources(harness.lane(0));
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+
+    // The Clear Spool gesture. The lane is being emptied deliberately, so a
+    // frame restating the edit's values afterwards is the machine's own
+    // reading, not an echo to hide.
+    harness->clear_slot_override(0);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+
+    const auto after = lane_sources(harness.lane(0));
+    REQUIRE(after.vendor_cache.has_value());
+    REQUIRE(after.vendor_cache->color_rgb.has_value());
+    CHECK(*after.vendor_cache->color_rgb == 0x00FF00u);
+    CHECK(after.vendor_cache->material == "PETG");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "Clear Spool on a previously edited lane shows nothing afterwards",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+
+    // Clear Spool empties the lane in firmware field by field, so the next
+    // status frame publishes the emptied keys with WEIGHT=0. Nothing of the
+    // edit's identity may survive that frame on screen.
+    harness->clear_slot_override(0);
+    feed_afc_lane(*harness, "lane1",
+                  {{"status", "Loaded"}, {"color", ""}, {"material", ""}, {"weight", 0.0}});
+
+    const auto info = harness->get_slot_info(0);
+    CHECK(info.material.empty());
+    CHECK(info.color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+    CHECK(info.remaining_weight_g == -1.0F);
+    CHECK(info.total_weight_g == -1.0F);
+    CHECK(info.brand.empty());
+
+    const auto after = lane_sources(harness.lane(0));
+    REQUIRE(after.vendor_cache.has_value());
+    CHECK_FALSE(after.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(after.vendor_cache->material.has_value());
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a frame with no sensor key neither sets nor erases AFC presence",
@@ -2404,6 +2835,69 @@ TEST_CASE_METHOD(LVGLTestFixture, "Snapmaker's own write-back does not return as
     CHECK(*swapped.vendor_cache->color_rgb == 0x00FF00u);
 }
 
+TEST_CASE_METHOD(LVGLTestFixture, "clearing a Snapmaker spool ends its echo suppression",
+                 "[lane][ingest][snapmaker]") {
+    // The write-back needs a real API behind it: the POST is what arms the
+    // guard, and the clear has to end what that edit armed.
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    SnapmakerHarness harness(&api, nullptr);
+
+    const auto tag_uid = nlohmann::json::array({144, 32, 196, 2});
+
+    feed_filament_detect(*harness, nlohmann::json{
+                                       {"state", nlohmann::json::array({1})},
+                                       {"info", nlohmann::json::array({nlohmann::json{
+                                                    {"MAIN_TYPE", "PLA"},
+                                                    {"MANUFACTURER", "Snapmaker"},
+                                                    {"ARGB_COLOR", 0xFFED2C2C},
+                                                    {"CARD_UID", tag_uid},
+                                                }})},
+                                   });
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PETG";
+    edit.color_rgb = 0x00FF00u;
+    REQUIRE(helix::test::apply_edit(*harness, 0, edit).success());
+    REQUIRE(api.rest_mock().mock_get_post_history().size() == 1);
+
+    // The echo, still on the same tag: withheld.
+    feed_filament_detect(*harness, nlohmann::json{
+                                       {"state", nlohmann::json::array({1})},
+                                       {"info", nlohmann::json::array({nlohmann::json{
+                                                    {"MAIN_TYPE", "PETG"},
+                                                    {"ARGB_COLOR", 0xFF00FF00},
+                                                    {"CARD_UID", tag_uid},
+                                                }})},
+                                   });
+    const auto echoed = lane_sources(harness.lane(0));
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+    CHECK_FALSE(echoed.vendor_cache->color_rgb.has_value());
+
+    // The Clear Spool gesture funnels through clear_slot_override. The spool
+    // is being emptied deliberately, so the same frame afterwards is the
+    // machine's own state, not an echo to hide.
+    harness->clear_slot_override(0);
+
+    feed_filament_detect(*harness, nlohmann::json{
+                                       {"state", nlohmann::json::array({1})},
+                                       {"info", nlohmann::json::array({nlohmann::json{
+                                                    {"MAIN_TYPE", "PETG"},
+                                                    {"ARGB_COLOR", 0xFF00FF00},
+                                                    {"CARD_UID", tag_uid},
+                                                }})},
+                                   });
+
+    const auto after = lane_sources(harness.lane(0));
+    REQUIRE(after.vendor_cache.has_value());
+    CHECK(after.vendor_cache->material == "PETG");
+    REQUIRE(after.vendor_cache->color_rgb.has_value());
+    CHECK(*after.vendor_cache->color_rgb == 0x00FF00u);
+}
+
 TEST_CASE_METHOD(LVGLTestFixture, "a Snapmaker write firmware refused withholds nothing",
                  "[lane][ingest][snapmaker]") {
     // Stock firmware carries no /printer/filament_detect/set, so the POST 404s
@@ -2473,6 +2967,72 @@ TEST_CASE_METHOD(LVGLTestFixture, "a Snapmaker write firmware refused withholds 
     CHECK(read.vendor_cache->product_name == "Matte");
     REQUIRE(read.vendor_cache->color_rgb.has_value());
     CHECK(*read.vendor_cache->color_rgb == 0x00FF00u);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a Snapmaker refusal answers only the edit it was sent for",
+                 "[lane][ingest][snapmaker]") {
+    // Two saves in a row: the first POST is refused, and its failure answer
+    // marshals to the main thread only after the second save has staged its
+    // own declaration. The refusal belongs to the first edit, so it may not
+    // cancel the second's guard.
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    RestResponse not_found;
+    not_found.success = false;
+    not_found.status_code = 404;
+    not_found.error = "Not Found";
+    api.rest_mock().mock_queue_post_response("/printer/filament_detect/set", not_found);
+
+    SnapmakerHarness harness(&api, nullptr);
+
+    const auto tag_uid = nlohmann::json::array({144, 32, 196, 2});
+    feed_filament_detect(*harness, nlohmann::json{
+                                       {"state", nlohmann::json::array({1})},
+                                       {"info", nlohmann::json::array({nlohmann::json{
+                                                    {"MAIN_TYPE", "PLA"},
+                                                    {"CARD_UID", tag_uid},
+                                                }})},
+                                   });
+
+    auto first = harness->get_slot_info(0);
+    first.material = "PETG";
+    REQUIRE(helix::test::apply_edit(*harness, 0, first).success());
+    REQUIRE(api.rest_mock().mock_get_post_history().size() == 1);
+
+    // The second save is accepted; it restages the slot before the first's
+    // refusal is delivered.
+    RestResponse ok;
+    ok.success = true;
+    ok.status_code = 200;
+    ok.data = {{"result", "ok"}};
+    api.rest_mock().mock_queue_post_response("/printer/filament_detect/set", ok);
+    auto second = harness->get_slot_info(0);
+    second.material = "ABS";
+    REQUIRE(helix::test::apply_edit(*harness, 0, second).success());
+
+    // The refusal of the first edit arrives now.
+    helix::ui::UpdateQueue::instance().drain();
+
+    // Firmware repeats the second write back on the same spool. WEIGHT is the
+    // control that a record was filed at all; the material is an echo of the
+    // edit whose write is still outstanding and must not file.
+    feed_filament_detect(*harness, nlohmann::json{
+                                       {"state", nlohmann::json::array({1})},
+                                       {"info", nlohmann::json::array({nlohmann::json{
+                                                    {"MAIN_TYPE", "ABS"},
+                                                    {"WEIGHT", 1000},
+                                                    {"CARD_UID", tag_uid},
+                                                }})},
+                                   });
+
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.vendor_cache.has_value());
+    REQUIRE(echoed.vendor_cache->total_weight_g.has_value());
+    CHECK(*echoed.vendor_cache->total_weight_g == 1000.0F);
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
 }
 
 TEST_CASE_METHOD(LVGLTestFixture,
@@ -3064,6 +3624,58 @@ class StartedStorelessToolChanger : public AmsBackendToolChanger {
     }
 };
 
+/// A resync filer that also writes identity back: firmware mirrors the write
+/// into the shared namespace, so the re-read faces the backend's own edit
+/// spelled as a stored record. ToolChanger parses no identity of its own; the
+/// guard is what a write-back backend hands the resync on its behalf.
+class GuardedToolChanger : public AmsBackendToolChanger {
+  public:
+    using AmsBackendToolChanger::AmsBackendToolChanger;
+
+    helix::ams::OwnWriteEchoes* own_write_echoes() override {
+        return &echoes_;
+    }
+
+    helix::ams::OwnWriteEchoes echoes_;
+};
+
+/// An AFC backend a resync can run on: only the two reachability gates are
+/// flipped, so the guard the consult finds has to come from AmsBackendAfc's
+/// own override, which is what the case below pins.
+class ResyncableAfc : public AmsBackendAfc {
+  public:
+    using AmsBackendAfc::AmsBackendAfc;
+
+    [[nodiscard]] bool firmware_publishes_lane_identity() const override {
+        return false;
+    }
+
+    helix::ams::FilamentSlotOverrideStore* lane_record_store() override {
+        return store_.get();
+    }
+
+    std::unique_ptr<helix::ams::FilamentSlotOverrideStore> store_;
+};
+
+/// A Snapmaker backend a resync can run on, the same two gates flipped. The
+/// case below reaches the guard through the production edit path, so the
+/// consult has to find AmsBackendSnapmaker's own override to withhold
+/// anything.
+class ResyncableSnapmaker : public AmsBackendSnapmaker {
+  public:
+    using AmsBackendSnapmaker::AmsBackendSnapmaker;
+
+    [[nodiscard]] bool firmware_publishes_lane_identity() const override {
+        return false;
+    }
+
+    helix::ams::FilamentSlotOverrideStore* lane_record_store() override {
+        return store_.get();
+    }
+
+    std::unique_ptr<helix::ams::FilamentSlotOverrideStore> store_;
+};
+
 } // namespace
 
 // --- The one backend that files -------------------------------------------
@@ -3184,6 +3796,172 @@ TEST_CASE_METHOD(LVGLTestFixture, "a re-read that cannot reach the database leav
     const auto lane = lane_sources(harness.lane(0));
     REQUIRE(lane.remembered.has_value());
     CHECK(lane.remembered->material == "PLA");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a resync withholds the fields of a write this backend sent",
+                 "[lane][ingest][resync]") {
+    // The stored record carries what the user typed because firmware mirrored
+    // the backend's own write into the shared namespace: no declared bits, so
+    // on its own it files as Remembered whole. Filing it would put the
+    // abandoned edit on the lane as a stored record the moment the override
+    // is cleared, which is the harm the guard exists for, on the one path
+    // that reaches the store without passing a live frame.
+    RegisteredBackend<GuardedToolChanger> harness(nullptr, nullptr);
+    LaneDataDb db;
+    db.seed("T0",
+            nlohmann::json{
+                {"lane", "0"}, {"material", "PETG"}, {"color", "#00FF00"}, {"vendor", "Prusa"}});
+    ToolChangerTestAccess::inject_override_store(*harness, toolchanger_store(db));
+
+    helix::ams::Observation declared(helix::ams::ObservationSource::LocalUser);
+    declared.material = "PETG";
+    declared.color_rgb = 0x00FF00u;
+    harness->echoes_.stage(0, declared);
+    // A stored record names no spool, so the boundary read through it is
+    // empty: the producer saying nothing, which is not a change.
+    harness->echoes_.arm(0, "");
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    // The vendor is the control: nothing declared it, so the re-read files it
+    // and proves the case reached the document. The echoed fields stay out.
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.remembered.has_value());
+    CHECK(echoed.remembered->brand == "Prusa");
+    CHECK_FALSE(echoed.remembered->material.has_value());
+    CHECK_FALSE(echoed.remembered->color_rgb.has_value());
+
+    // Without a write outstanding the same record files whole, so the
+    // withholding is the guard's and not the resync's.
+    db.seed("T1", nlohmann::json{{"lane", "1"}, {"material", "PETG"}, {"color", "#00FF00"}});
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+    const auto plain = lane_sources(harness.lane(1));
+    REQUIRE(plain.remembered.has_value());
+    CHECK(plain.remembered->material == "PETG");
+    REQUIRE(plain.remembered->color_rgb.has_value());
+    CHECK(*plain.remembered->color_rgb == 0x00FF00u);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "AFC's resync consults its own echo guard",
+                 "[lane][ingest][resync][afc]") {
+    // Nothing today drives a real AFC through the resync: it answers
+    // firmware_publishes_lane_identity() == true, and a backend whose
+    // firmware states identity has a live producer to race and no stored
+    // record to add. That is exactly how an override goes missing while the
+    // consult stays green. The subclass flips only the reachability gates,
+    // so the guard the consult finds is AmsBackendAfc's own or nothing.
+    RegisteredBackend<ResyncableAfc> harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+    LaneDataDb db;
+    db.seed("T0",
+            nlohmann::json{
+                {"lane", "0"}, {"material", "PETG"}, {"color", "#00FF00"}, {"vendor", "Prusa"}});
+    harness->store_ = toolchanger_store(db);
+
+    helix::ams::OwnWriteEchoes* echoes = harness->own_write_echoes();
+    REQUIRE(echoes != nullptr);
+    helix::ams::Observation declared(helix::ams::ObservationSource::LocalUser);
+    declared.material = "PETG";
+    declared.color_rgb = 0x00FF00u;
+    echoes->stage(0, declared);
+    echoes->arm(0, "");
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.remembered.has_value());
+    CHECK(echoed.remembered->brand == "Prusa");
+    CHECK_FALSE(echoed.remembered->material.has_value());
+    CHECK_FALSE(echoed.remembered->color_rgb.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a stale stored record does not release a live echo",
+                 "[lane][ingest][resync][afc]") {
+    // The stored record is a co-authored mirror of past writes, not a live
+    // producer: a value it states that differs from the declaration is
+    // staleness in the store, not firmware demonstrating it can say something
+    // else. Releasing on it would let one stale record unhook the guard while
+    // the live firmware is still echoing the write.
+    RegisteredBackend<ResyncableAfc> harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+    LaneDataDb db;
+    db.seed("T0", nlohmann::json{{"lane", "0"}, {"material", "PLA"}, {"vendor", "Prusa"}});
+    harness->store_ = toolchanger_store(db);
+
+    helix::ams::OwnWriteEchoes* echoes = harness->own_write_echoes();
+    REQUIRE(echoes != nullptr);
+    helix::ams::Observation declared(helix::ams::ObservationSource::LocalUser);
+    declared.material = "PETG";
+    echoes->stage(0, declared);
+    echoes->arm(0, "");
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    // The stale material files as the store remembers it, vendor control
+    // intact: the re-read strips what equals the declaration and files the
+    // rest, but releases nothing.
+    const auto stale = lane_sources(harness.lane(0));
+    REQUIRE(stale.remembered.has_value());
+    CHECK(stale.remembered->material == "PLA");
+    CHECK(stale.remembered->brand == "Prusa");
+
+    // The live frame still echoes the write, so the declaration still holds.
+    feed_afc_lane(*harness, "lane1", {{"material", "PETG"}});
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.vendor_cache.has_value());
+    CHECK_FALSE(echoed.vendor_cache->material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "Snapmaker's resync consults its own echo guard",
+                 "[lane][ingest][resync][snapmaker]") {
+    // The edit's guard is armed on the way to a real POST, so this reaches it
+    // through the production path rather than staging by hand.
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    // The real backend answers firmware_publishes_lane_identity() == true, so
+    // only the flipped gates below can bring a resync to its guard. Finding
+    // nothing there would file the stored echo whole.
+    RegisteredBackend<ResyncableSnapmaker> harness(&api, nullptr);
+
+    feed_filament_detect(*harness, nlohmann::json{
+                                       {"state", nlohmann::json::array({1})},
+                                       {"info", nlohmann::json::array({nlohmann::json{
+                                                    {"MAIN_TYPE", "PLA"},
+                                                    {"MANUFACTURER", "Snapmaker"},
+                                                    {"ARGB_COLOR", 0xFFED2C2C},
+                                                }})},
+                                   });
+
+    auto edit = harness->get_slot_info(0);
+    edit.material = "PETG";
+    edit.color_rgb = 0x00FF00u;
+    REQUIRE(helix::test::apply_edit(*harness, 0, edit).success());
+    REQUIRE(api.rest_mock().mock_get_post_history().size() == 1);
+
+    // A stored record carrying exactly what the edit wrote. The vendor is the
+    // control: nothing declared it, so it files and proves the resync read
+    // the document.
+    LaneDataDb db;
+    db.seed("T0",
+            nlohmann::json{
+                {"lane", "0"}, {"material", "PETG"}, {"color", "#00FF00"}, {"vendor", "Prusa"}});
+    harness->store_ = db.store("snapmaker", helix::ams::LaneKeyStyle::Tool);
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto echoed = lane_sources(harness.lane(0));
+    REQUIRE(echoed.remembered.has_value());
+    CHECK(echoed.remembered->brand == "Prusa");
+    CHECK_FALSE(echoed.remembered->material.has_value());
+    CHECK_FALSE(echoed.remembered->color_rgb.has_value());
 }
 
 // --- The six that do not ---------------------------------------------------

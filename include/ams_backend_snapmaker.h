@@ -78,6 +78,12 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
 
     ~AmsBackendSnapmaker() override;
 
+    /// The resync files stored records through this backend's echo guard, the
+    /// same one its status responses consult.
+    [[nodiscard]] helix::ams::OwnWriteEchoes* own_write_echoes() override {
+        return &own_write_echoes_;
+    }
+
     [[nodiscard]] AmsType get_type() const override {
         return AmsType::SNAPMAKER;
     }
