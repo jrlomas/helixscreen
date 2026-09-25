@@ -5,8 +5,19 @@
 
 #include "ui_modal.h"
 
+#include "detection_manager.h"
+
 #include <functional>
 #include <string>
+
+namespace helix::detection {
+
+/// Present one detection to the user per the response ladder: nothing when
+/// Suppressed, a warning toast when WarnOnly, and for PauseAndRespond the
+/// pause the source did not do itself plus the response modal.
+void present_detection(const DetectionEvent& e, DetectionPolicy p);
+
+} // namespace helix::detection
 
 /**
  * @file ui_spaghetti_detection_modal.h

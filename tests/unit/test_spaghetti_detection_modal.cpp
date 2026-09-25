@@ -6,9 +6,19 @@
 // LVGLUITestFixture registers ALL XML components (via
 // helix::register_xml_components()), including spaghetti_detection_modal.xml,
 // so the modal can be created from XML inside the test.
+#include "ui_toast_manager.h"
+
 #include "../lvgl_ui_test_fixture.h"
+#include "../ui_test_utils.h"
+#include "app_globals.h"
+#include "moonraker_api.h"
+#include "moonraker_client_mock.h"
+#include "settings_manager.h"
 
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "../catch_amalgamated.hpp"
 
@@ -81,5 +91,119 @@ TEST_CASE_METHOD(LVGLUITestFixture, "SpaghettiDetectionModal shows message + inv
         REQUIRE(modal->is_visible()); // still visible: Disable does not hide
         modal->hide();
         process_lvgl(50);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// present_detection: the response ladder, end to end
+// ---------------------------------------------------------------------------
+// DetectionManager maps settings + policy to Suppressed / WarnOnly /
+// PauseAndRespond; present_detection is what each response does to the user.
+// A mock print makes the pause half real: SDCARD_PRINT_FILE reaches PREHEAT
+// synchronously, PREHEAT is pausable, and printer.print.pause is a
+// synchronous mock handler.
+
+namespace {
+
+using ToastRecord = std::pair<ToastSeverity, std::string>;
+
+class PresenterFixture : public LVGLUITestFixture {
+  public:
+    PresenterFixture() : mock_client(MoonrakerClientMock::PrinterType::VORON_24) {
+        SettingsManager::instance().init_subjects();
+        helix::detection::DetectionManager::instance().reset_for_test();
+
+        mock_client.connect("ws://mock/websocket", []() {}, []() {});
+        api = std::make_unique<MoonrakerAPI>(mock_client, state);
+        previous_api_ = get_moonraker_api();
+        set_moonraker_api(api.get());
+        get_printer_state().init_subjects(false);
+
+        helix::ui::set_test_toast_hook(
+            [this](ToastSeverity s, const std::string& m) { toasts.emplace_back(s, m); });
+    }
+
+    ~PresenterFixture() override {
+        helix::ui::set_test_toast_hook(nullptr);
+        set_moonraker_api(previous_api_);
+        mock_client.stop_temperature_simulation();
+        mock_client.disconnect();
+        api.reset();
+    }
+
+    helix::detection::DetectionEvent spaghetti_event(bool already_paused) const {
+        helix::detection::DetectionEvent e;
+        e.source_id = "u1_stock";
+        e.kind = helix::detection::DetectionKind::Spaghetti;
+        e.attributable = true;
+        e.already_paused = already_paused;
+        e.message = "noodle detected";
+        return e;
+    }
+
+    MoonrakerClientMock mock_client;
+    helix::PrinterState state;
+    std::unique_ptr<MoonrakerAPI> api;
+    std::vector<ToastRecord> toasts;
+
+  private:
+    IMoonrakerAPI* previous_api_ = nullptr;
+};
+
+} // namespace
+
+TEST_CASE_METHOD(PresenterFixture, "present_detection response ladder",
+                 "[detection][modal][presenter]") {
+    using helix::detection::DetectionPolicy;
+    auto& sm = SettingsManager::instance();
+
+    SECTION("Suppressed: detection off shows nothing and pauses nothing") {
+        sm.set_detection_enabled(false);
+        helix::detection::present_detection(spaghetti_event(false), DetectionPolicy::DeferToSource);
+
+        CHECK(toasts.empty());
+        CHECK(ModalStack::instance().top_component_name().empty());
+        CHECK(mock_client.get_print_phase() == MoonrakerClientMock::MockPrintPhase::IDLE);
+    }
+
+    SECTION("WarnOnly: notify policy warns and leaves the print alone") {
+        sm.set_detection_enabled(true);
+        sm.set_detection_pause_on_detect(true); // policy, not the setting, keeps this warn-only
+        helix::detection::present_detection(spaghetti_event(false), DetectionPolicy::NotifyOnly);
+
+        REQUIRE(toasts.size() == 1);
+        CHECK(toasts[0].first == ToastSeverity::WARNING);
+        CHECK(toasts[0].second == "Spaghetti detected");
+        CHECK(ModalStack::instance().top_component_name().empty());
+        CHECK(mock_client.get_print_phase() == MoonrakerClientMock::MockPrintPhase::IDLE);
+    }
+
+    SECTION("PauseAndRespond: a print the source did not pause pauses here") {
+        sm.set_detection_enabled(true);
+        sm.set_detection_pause_on_detect(true);
+        mock_client.gcode_script("SDCARD_PRINT_FILE FILENAME=3DBenchy.gcode");
+        REQUIRE(mock_client.get_print_phase() == MoonrakerClientMock::MockPrintPhase::PREHEAT);
+
+        helix::detection::present_detection(spaghetti_event(false), DetectionPolicy::DeferToSource);
+
+        CHECK(mock_client.get_print_phase() == MoonrakerClientMock::MockPrintPhase::PAUSED);
+        CHECK(ModalStack::instance().top_component_name() == "spaghetti_detection_modal");
+        CHECK(toasts.empty());
+        ModalStack::instance().clear();
+    }
+
+    SECTION("PauseAndRespond: an already-paused print is not paused twice") {
+        sm.set_detection_enabled(true);
+        sm.set_detection_pause_on_detect(true);
+        mock_client.gcode_script("SDCARD_PRINT_FILE FILENAME=3DBenchy.gcode");
+        REQUIRE(mock_client.get_print_phase() == MoonrakerClientMock::MockPrintPhase::PREHEAT);
+
+        helix::detection::present_detection(spaghetti_event(true), DetectionPolicy::DeferToSource);
+
+        // Still PREHEAT: the presenter skipped pause_print because the source
+        // reported the print already paused.
+        CHECK(mock_client.get_print_phase() == MoonrakerClientMock::MockPrintPhase::PREHEAT);
+        CHECK(ModalStack::instance().top_component_name() == "spaghetti_detection_modal");
+        ModalStack::instance().clear();
     }
 }
