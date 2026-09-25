@@ -106,11 +106,25 @@ TEST_CASE("button view: an in-flight queue add keeps Queue mode but disables",
     CHECK(std::string(v.blocked_reason).find("Adding to queue") == 0);
 }
 
-TEST_CASE("button view: the in-flight flag alone changes nothing on an idle printer",
+TEST_CASE("button view: the print ending mid-flight still leaves the button disabled",
           "[print_select][button_view][job_queue]") {
+    // The machine is idle here because the print ended while the add was on
+    // the wire; an actionable button in this state is a Print tap for the
+    // very file the add is about to queue.
     PrintSelectButtonInputs in;
     in.queue_add_in_flight = true;
     const auto v = compute_print_select_button_view(in);
-    CHECK(v.mode == PrintSelectButtonMode::Print);
-    CHECK(view_actionable(v));
+    CHECK(v.mode == PrintSelectButtonMode::Queue);
+    CHECK_FALSE(view_actionable(v));
+    CHECK(std::string(v.blocked_reason).find("Adding to queue") == 0);
+}
+
+TEST_CASE("button view: an in-flight add outranks the busy reason",
+          "[print_select][button_view][job_queue]") {
+    auto in = machine_held(false);
+    in.queue_add_in_flight = true;
+    const auto v = compute_print_select_button_view(in);
+    CHECK(v.mode == PrintSelectButtonMode::Queue);
+    CHECK_FALSE(view_actionable(v));
+    CHECK(std::string(v.blocked_reason).find("Adding to queue") == 0);
 }

@@ -94,8 +94,7 @@ stale_queued_job_option_ids(const QueuedJobOptionsMap& stored,
     return stale;
 }
 
-void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
-                                     const std::vector<std::string>& queued_job_ids) {
+void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api) {
     if (!api) {
         return;
     }
@@ -104,19 +103,42 @@ void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI
         kOptionsDbNamespace, kOptionsDbKey,
         lifetime.bg_cb(
             "queue::prune_options_read",
-            [api, queued_job_ids](const json& stored) {
-                for (const auto& job_id : stale_queued_job_option_ids(
-                         decode_queued_job_options(stored), queued_job_ids)) {
-                    api->database_delete_item(
-                        kOptionsDbNamespace, queued_job_option_key(job_id),
-                        [job_id]() {
-                            spdlog::debug("[queue] Pruned stored options for job {}", job_id);
-                        },
-                        [job_id](const MoonrakerError& err) {
-                            spdlog::warn("[queue] Pruning stored options for job {} failed: {}",
-                                         job_id, err.user_message());
-                        });
-                }
+            [api, &lifetime](const json& stored) {
+                // The queue read is issued only here, after the store read has
+                // answered: every stored entry was written after its add_job
+                // succeeded, so a queue read taken after the store read names
+                // every job whose entry the store just returned. An entry can
+                // therefore only be deleted against a queue state that is at
+                // least as fresh as the entry itself, never against a snapshot
+                // that predates the add.
+                api->queue().get_queue_status(
+                    lifetime.bg_cb(
+                        "queue::prune_queue_read",
+                        [api,
+                         stored = decode_queued_job_options(stored)](const JobQueueStatus& fresh) {
+                            std::vector<std::string> queued_ids;
+                            queued_ids.reserve(fresh.queued_jobs.size());
+                            for (const auto& job : fresh.queued_jobs) {
+                                queued_ids.push_back(job.job_id);
+                            }
+                            for (const auto& job_id :
+                                 stale_queued_job_option_ids(stored, queued_ids)) {
+                                api->database_delete_item(
+                                    kOptionsDbNamespace, queued_job_option_key(job_id),
+                                    [job_id]() {
+                                        spdlog::debug("[queue] Pruned stored options for job {}",
+                                                      job_id);
+                                    },
+                                    [job_id](const MoonrakerError& err) {
+                                        spdlog::warn(
+                                            "[queue] Pruning stored options for job {} failed: {}",
+                                            job_id, err.user_message());
+                                    });
+                            }
+                        }),
+                    lifetime.bg_cb("queue::prune_queue_read_error", [](const MoonrakerError& err) {
+                        spdlog::debug("[queue] queue read during prune failed: {}", err.message);
+                    }));
             }),
         lifetime.bg_cb("queue::prune_options_read_error", [](const MoonrakerError& err) {
             // A missing key is the first-run state; anything else is informational.

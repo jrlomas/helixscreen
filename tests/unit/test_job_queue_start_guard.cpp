@@ -350,11 +350,12 @@ TEST_CASE_METHOD(QueuedStartFixture,
 
     JobQueueState jqs(api_.get(), &mock_client_);
     set_job_queue_state(&jqs);
-    // The ids/filenames mirror the mock's default queue (0001 benchy_v2,
-    // 0002 calibration_cube), so queue_has() below reads the entries the
-    // mock actually holds rather than ones only the cache knows about.
+    // The ids/filenames mirror the mock's default queue (0001 3DBenchy,
+    // 0002 xyz-10mm-calibration-cube), so queue_has() below reads the
+    // entries the mock actually holds rather than ones only the cache
+    // knows about.
     JobQueueStateTestAccess::set_jobs(
-        jqs, {entry("0001", "benchy_v2.gcode"), entry("0002", "calibration_cube.gcode")});
+        jqs, {entry("0001", "3DBenchy.gcode"), entry("0002", "xyz-10mm-calibration-cube.gcode")});
 
     start_next_queued_job();
     drain();

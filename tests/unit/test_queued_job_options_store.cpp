@@ -154,6 +154,36 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
 }
 
 TEST_CASE_METHOD(QueueOptionsStoreFixture,
+                 "the prune decides against a queue read taken after the store read",
+                 "[job_queue][options_store]") {
+    using namespace helix::queue;
+
+    // 0004 has no entry in the mock's queue yet, so the triggering fetch's
+    // snapshot cannot name it; dead-job is in neither read.
+    QueuedJobOptionsMap seed;
+    seed["0004"] = QueuedJobOptions{"wedge.gcode", {{"soak", true}}};
+    seed["dead-job"] = QueuedJobOptions{"gone.gcode", {{"soak", false}}};
+    seed_store(seed);
+
+    // The fetch answers before the add lands: its snapshot is 0001-0003.
+    state_->fetch();
+
+    // The add lands between the triggering fetch and the prune's own queue
+    // read; the mock allocates 0004 for the first job added.
+    bool added = false;
+    api_->queue().add_job(
+        "wedge.gcode", [&added](const JobQueueStatus&) { added = true; },
+        [](const MoonrakerError& err) { FAIL(err.message); });
+    REQUIRE(added);
+
+    pump();
+
+    const auto after = read_store();
+    CHECK(after.count("0004") == 1);
+    CHECK(after.count("dead-job") == 0);
+}
+
+TEST_CASE_METHOD(QueueOptionsStoreFixture,
                  "a refresh with nothing to prune leaves the store untouched",
                  "[job_queue][options_store]") {
     using namespace helix::queue;
@@ -184,9 +214,8 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture, "a refresh after the first keeps fres
     pump();
     REQUIRE(read_store().count("0004") == 1);
 
-    // The next refresh's queue snapshot cannot name 0004, but the prune must
-    // not run against it — a fetch racing an Add would otherwise delete the
-    // options the Add just wrote.
+    // The next refresh's queue snapshot cannot name 0004; the saved options
+    // must survive it.
     state_->fetch();
     pump();
 

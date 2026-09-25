@@ -38,8 +38,9 @@ void JobQueueState::invalidate() {
     // A dropped socket may hide a Moonraker restart, and a restart is the
     // only thing that changes server config: re-read it on the next connect.
     automatic_transition_loaded_ = false;
-    // Same re-arm for the option-store prune: it must not run against a
-    // queue snapshot taken before a reconnect's mutations.
+    // The prune re-arms with it: an extra prune only repeats the
+    // store-then-queue read, so collecting a reconnect's orphans costs one
+    // round trip.
     pruned_this_connect_ = false;
 }
 
@@ -177,10 +178,11 @@ void JobQueueState::on_queue_fetched(const JobQueueStatus& status) {
     cached_jobs_ = status.queued_jobs;
     queue_state_ = status.queue_state;
     is_loaded_ = true;
-    // Prune once per connect, on the FIRST fetch. A later fetch's snapshot
-    // can predate a fresh Add to Queue whose save has not landed when the
-    // prune reads the store — pruning there would delete options for a job
-    // that is in fact queued.
+    // Prune once per connect, on the FIRST fetch. Which fetch triggers it is
+    // irrelevant to safety: the prune reads the option store first and the
+    // queue second, so an entry can only be deleted against a queue read
+    // taken after the store read. The latch just avoids repeating the
+    // two-read round trip on every fetch.
     if (!pruned_this_connect_) {
         pruned_this_connect_ = true;
         prune_option_store();
@@ -217,12 +219,7 @@ void JobQueueState::fetch_automatic_transition() {
 }
 
 void JobQueueState::prune_option_store() {
-    std::vector<std::string> job_ids;
-    job_ids.reserve(cached_jobs_.size());
-    for (const auto& job : cached_jobs_) {
-        job_ids.push_back(job.job_id);
-    }
-    helix::queue::prune_stored_queued_job_options(lifetime_, api_, std::move(job_ids));
+    helix::queue::prune_stored_queued_job_options(lifetime_, api_);
 }
 
 void JobQueueState::update_subjects() {

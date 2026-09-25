@@ -81,18 +81,23 @@ std::vector<std::string>
 stale_queued_job_option_ids(const QueuedJobOptionsMap& stored,
                             const std::vector<std::string>& queued_job_ids);
 
-/// @brief Read the stored map, delete every stale job's own key
+/// @brief Read the stored map, then the queue, delete every stale job's key
+///
+/// The two reads are ordered: the queue read is issued from the store read's
+/// own completion, so it is at least as fresh as every entry the store
+/// returned. A stored entry exists only once its add_job succeeded, which
+/// means the later queue read names that job — an entry can only be deleted
+/// when a queue read taken AFTER the store read does not name it, never
+/// against a snapshot that predates the add.
 ///
 /// Fire-and-forget and best-effort: a missing parent key (first run, fresh
 /// database) and any read error leave the store untouched. The read
-/// completion is marshalled through @p lifetime so a store whose owner died
+/// completions are marshalled through @p lifetime so a store whose owner died
 /// mid-request never dereferences @p api.
 ///
 /// @param lifetime Guard of the object owning @p api's lifetime
 /// @param api API to read/write through; null is a no-op
-/// @param queued_job_ids Job ids currently in Moonraker's queue
-void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
-                                     const std::vector<std::string>& queued_job_ids);
+void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api);
 
 /// @brief The job id present in @p after but not in @p before
 ///

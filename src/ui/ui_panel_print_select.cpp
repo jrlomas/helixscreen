@@ -350,6 +350,8 @@ void PrintSelectPanel::init_subjects() {
     UI_MANAGED_SUBJECT_INT(button_mode_subject_, 0, "print_select_button_mode", subjects_);
     UI_MANAGED_SUBJECT_STRING(button_label_subject_, button_label_buffer_, lv_tr("Print"),
                               "print_select_button_label", subjects_);
+    UI_MANAGED_SUBJECT_STRING(button_icon_subject_, button_icon_buffer_, "print",
+                              "print_select_button_icon", subjects_);
     UI_MANAGED_SUBJECT_STRING(blocked_reason_subject_, blocked_reason_buffer_, "",
                               "print_select_blocked_reason", subjects_);
 
@@ -2522,6 +2524,9 @@ void PrintSelectPanel::update_print_button_state() {
     print_button_mode_ = view.mode;
     lv_subject_copy_string(&button_label_subject_,
                            queue_mode ? lv_tr("Add to Queue") : lv_tr("Print"));
+    // The queue operation's clock icon, the one the job queue surfaces use;
+    // the printer icon stays for a direct start.
+    lv_subject_copy_string(&button_icon_subject_, queue_mode ? "progress_clock" : "print");
     // Queue mode's own caption is contextual (in flight, or waiting for the
     // current print) rather than a block, so it is mapped here; the pure
     // function's reason only decides enabled/disabled for it.

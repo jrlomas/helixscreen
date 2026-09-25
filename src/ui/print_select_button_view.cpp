@@ -6,11 +6,15 @@
 namespace helix::ui {
 
 PrintSelectButtonView compute_print_select_button_view(const PrintSelectButtonInputs& in) {
+    // The in-flight guard outranks everything, in both modes: the print can
+    // end while the add is still on the wire, and an enabled Print button at
+    // that moment starts the very file the add is about to queue.
+    if (in.queue_add_in_flight) {
+        return {PrintSelectButtonMode::Queue, "Adding to queue..."};
+    }
+
     if (in.machine_busy) {
         if (in.job_queue_available && !in.macro_analysis_running) {
-            if (in.queue_add_in_flight) {
-                return {PrintSelectButtonMode::Queue, "Adding to queue..."};
-            }
             return {PrintSelectButtonMode::Queue, ""};
         }
         return {PrintSelectButtonMode::Print, "Printing: start after this job"};

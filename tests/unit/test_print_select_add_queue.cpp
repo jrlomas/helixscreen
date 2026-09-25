@@ -129,6 +129,21 @@ class AddQueueFixture : private helix::PrintSelectGlobalStateReset,
             });
     }
 
+    /// Makes the mock hold every add_job answer until the test releases it,
+    /// keeping the flight open across drains the way a real wire does.
+    struct HeldPostJob {
+        std::function<void(const json&)> success_cb;
+    };
+    void hold_post_job(HeldPostJob& held) {
+        helix::MoonrakerClientMockTestAccess::set_method_handler(
+            mock_client_, "server.job_queue.post_job",
+            [&held](MoonrakerClientMock*, const json&, std::function<void(const json&)> success_cb,
+                    std::function<void(const MoonrakerError&)>) -> bool {
+                held.success_cb = std::move(success_cb);
+                return true;
+            });
+    }
+
     int can_print() const {
         return lv_subject_get_int(lv_xml_get_subject(nullptr, "print_select_can_print"));
     }
@@ -183,4 +198,39 @@ TEST_CASE_METHOD(AddQueueFixture, "a refused add re-enables the button and surfa
     CHECK(can_print() == 1);
     CHECK(errors.contains("Could not add to queue"));
     CHECK(queued_count_for(file_.name()) == 0);
+}
+
+TEST_CASE_METHOD(AddQueueFixture, "the print ending mid-flight leaves the button disabled",
+                 "[job_queue][add_queue][button_view]") {
+    AddQueueFixture::HeldPostJob held;
+    hold_post_job(held);
+
+    ::PrintSelectPanelTestAccess::add_to_queue(*panel_);
+    REQUIRE(::PrintSelectPanelTestAccess::queue_add_in_flight(*panel_));
+    CHECK(can_print() == 0);
+
+    // The print ends while the add is still unanswered: the button must not
+    // become a usable Print for the file the add is about to queue.
+    set_wire_state(get_printer_state(), PrintJobState::STANDBY);
+    drain();
+
+    CHECK(::PrintSelectPanelTestAccess::queue_add_in_flight(*panel_));
+    CHECK(can_print() == 0);
+    CHECK(blocked_reason() == "Adding to queue...");
+
+    // The add answering re-enables the button on the now-idle machine.
+    REQUIRE(held.success_cb);
+    json result;
+    result["queue_state"] = "ready";
+    json jobs = json::array();
+    jobs.push_back({{"job_id", "0004"},
+                    {"filename", file_.name()},
+                    {"time_added", 0.0},
+                    {"time_in_queue", 0.0}});
+    result["queued_jobs"] = jobs;
+    held.success_cb(json{{"result", result}});
+    drain();
+
+    CHECK_FALSE(::PrintSelectPanelTestAccess::queue_add_in_flight(*panel_));
+    CHECK(can_print() == 1);
 }

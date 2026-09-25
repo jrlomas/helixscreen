@@ -80,6 +80,11 @@ struct StartBlockedFixture : public LVGLUITestFixture {
         return s ? lv_subject_get_string(s) : std::string("<missing>");
     }
 
+    std::string button_icon() const {
+        lv_subject_t* s = lv_xml_get_subject(nullptr, "print_select_button_icon");
+        return s ? lv_subject_get_string(s) : std::string("<missing>");
+    }
+
     std::string blocked_reason() const {
         lv_subject_t* s = lv_xml_get_subject(nullptr, "print_select_blocked_reason");
         return s ? lv_subject_get_string(s) : std::string("<missing>");
@@ -124,11 +129,13 @@ TEST_CASE_METHOD(StartBlockedFixture,
     for (PrintState s : {PrintState::Printing, PrintState::Paused}) {
         set_print_state(s);
         CAPTURE(static_cast<int>(s));
-        // Queue mode: the button stays enabled, relabels, and the reason line
-        // becomes the queue hint instead of a block.
+        // Queue mode: the button stays enabled, relabels, swaps to the
+        // queue's clock icon, and the reason line becomes the queue hint
+        // instead of a block.
         CHECK(can_print() == 1);
         CHECK(button_mode() == 1);
         CHECK(button_label() == "Add to Queue");
+        CHECK(button_icon() == "progress_clock");
         CHECK(blocked_reason() == "Starts after the current print");
     }
 
@@ -137,6 +144,7 @@ TEST_CASE_METHOD(StartBlockedFixture,
     CHECK(can_print() == 1);
     CHECK(button_mode() == 0);
     CHECK(button_label() == "Print");
+    CHECK(button_icon() == "print");
     CHECK(blocked_reason().empty());
 }
 
@@ -148,6 +156,7 @@ TEST_CASE_METHOD(StartBlockedFixture,
     CHECK(can_print() == 0);
     CHECK(button_mode() == 0);
     CHECK(button_label() == "Print");
+    CHECK(button_icon() == "print");
     CHECK_FALSE(blocked_reason().empty());
 }
 

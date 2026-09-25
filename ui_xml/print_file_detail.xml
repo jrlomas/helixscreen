@@ -398,11 +398,13 @@
               <event_cb trigger="clicked" callback="on_print_select_delete_button"/>
             </ui_button>
             <!-- Print button - primary action styling (disabled when print in progress).
-                 Label follows the mode subject: "Print" idle, "Add to Queue" while
-                 another print holds the machine and Moonraker has the job_queue
-                 component (the same tap then routes to the queue path). -->
+                 Label and icon follow the mode subjects: "Print" + printer icon idle,
+                 "Add to Queue" + the queue's clock icon while another print holds the
+                 machine and Moonraker has the job_queue component (the same tap then
+                 routes to the queue path). -->
             <ui_button name="print_button"
-                       height="#button_height_lg" bind_text="print_select_button_label" flex_grow="1" icon="print">
+                       height="#button_height_lg" bind_text="print_select_button_label" flex_grow="1" icon="print"
+                       bind_icon="print_select_button_icon">
               <event_cb trigger="clicked" callback="on_print_select_print_button"/>
               <bind_state_if_eq subject="print_select_can_print" state="disabled" ref_value="0"/>
             </ui_button>

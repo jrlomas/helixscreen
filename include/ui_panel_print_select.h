@@ -457,8 +457,9 @@ class PrintSelectPanel : public PanelBase {
      * @brief The back-out rule for a pending queued start: an untapped start
      * for exactly the shown file is discarded with the closing view.
      *
-     * Shared by hide_detail_view() and the on_activate() branch that catches
-     * ESC / go_back() popping the overlay without it.
+     * Shared by hide_detail_view() and the detail view's on_dismissed
+     * callback, fired from PrintSelectDetailView::on_deactivating() when
+     * ESC / go_back() pops the overlay without this panel's hide function.
      */
     void discard_pending_queued_start_on_back_out();
 
@@ -670,6 +671,11 @@ class PrintSelectPanel : public PanelBase {
     /// Button label text ("Print" / "Add to Queue")
     lv_subject_t button_label_subject_;
     char button_label_buffer_[32];
+
+    /// Button icon name ("print" / "progress_clock"), bound to the button's
+    /// icon slot the same way the label subject binds to its text
+    lv_subject_t button_icon_subject_;
+    char button_icon_buffer_[32];
 
     /// Why the print button is disabled, shown beside it. Empty when it is not.
     lv_subject_t blocked_reason_subject_;
