@@ -26,6 +26,7 @@
 #include "printer_state.h"
 #include "settings_manager.h"
 #include "static_subject_registry.h"
+#include "zmod_color_status.h"
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
@@ -4777,52 +4778,19 @@ bool AmsBackendAd5xIfs::read_zmod_color_object(const json& obj, ZColorSilentResu
         channel = chan_it->get<int>();
     }
 
-    auto slots_it = obj.find("slots");
-    if (slots_it == obj.end() || !slots_it->is_array()) {
+    auto slots = helix::zmod_color::parse_slots(obj, NUM_PORTS);
+    if (!slots) {
         return false;
     }
     bool saw_slot = false;
-    for (const auto& entry : *slots_it) {
-        if (!entry.is_object()) {
-            continue;
-        }
-        // ID is the 1-based slot number, emitted as a string (str(i) in the
-        // module) but accepted either way — this is somebody else's schema.
-        auto id_it = entry.find("ID");
-        if (id_it == entry.end()) {
-            continue;
-        }
-        int id = 0;
-        if (id_it->is_number_integer()) {
-            id = id_it->get<int>();
-        } else if (id_it->is_string()) {
-            try {
-                id = std::stoi(id_it->get<std::string>());
-            } catch (...) {
-                continue;
-            }
-        } else {
-            continue;
-        }
-        if (id < 1 || id > NUM_PORTS) {
+    for (size_t i = 0; i < slots->size(); ++i) {
+        if (!(*slots)[i]) {
             continue;
         }
         ZColorSlot slot;
-        if (auto mat = entry.find("Material"); mat != entry.end() && mat->is_string()) {
-            slot.material = mat->get<std::string>();
-            // Firmware-native unset sentinel, same one ffmType carries in
-            // Adventurer5M.json (parse_adventurer_json normalizes it there).
-            // A live 1.7.2-37 frame returns Material "?" with HEX "" for every
-            // lane that has no assigned material; passed through it renders as
-            // a literal "?" where the UI should show "--".
-            if (slot.material == "?") {
-                slot.material.clear();
-            }
-        }
-        if (auto hex = entry.find("HEX"); hex != entry.end() && hex->is_string()) {
-            slot.hex = hex->get<std::string>();
-        }
-        result.slots[static_cast<size_t>(id - 1)] = std::move(slot);
+        slot.material = (*slots)[i]->material;
+        slot.hex = (*slots)[i]->hex;
+        result.slots[i] = std::move(slot);
         saw_slot = true;
     }
     if (saw_slot) {
@@ -4915,8 +4883,8 @@ bool AmsBackendAd5xIfs::read_ifs_materials_object(const json& obj, ZColorSilentR
     bool saw_slot = false;
     for (auto slot_it = slots_it->begin(); slot_it != slots_it->end(); ++slot_it) {
         // Moonraker serialises dict keys as strings, so "1".."4" - but accept
-        // an integer key too, same tolerance read_zmod_color_object gives the
-        // ID field (it is somebody else's serializer either way).
+        // an integer key too, same tolerance helix::zmod_color::parse_slots
+        // gives the ID field (it is somebody else's serializer either way).
         int id = 0;
         try {
             id = std::stoi(slot_it.key());

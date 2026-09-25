@@ -558,6 +558,7 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                         // installed correctly hides the corresponding UI rows. The flags
                         // get re-set below if the components are detected.
                         get_printer_state().set_timelapse_available(false);
+                        get_printer_state().set_job_queue_available(false);
 
                         // Check for Spoolman component and verify connection
                         bool has_spoolman_component =
@@ -655,6 +656,17 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                                 },
                                 0,     // default timeout
                                 true); // silent — timelapse not always configured
+                        }
+
+                        // Moonraker ships job_queue as an optional component
+                        // (commented out in stock moonraker.conf). Queue-mode
+                        // affordances key off the capability flag this sets.
+                        bool has_job_queue_component =
+                            std::find(components.begin(), components.end(), "job_queue") !=
+                            components.end();
+                        if (has_job_queue_component) {
+                            spdlog::info("[Moonraker Client] Job queue component detected");
+                            get_printer_state().set_job_queue_available(true);
                         }
                     }
                 }

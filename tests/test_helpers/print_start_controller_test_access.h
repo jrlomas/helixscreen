@@ -45,6 +45,18 @@ class PrintStartControllerTestAccess {
         return c.gate_resume_index_;
     }
 
+    // --- print-start success hook (test_job_queue_start_guard.cpp) ---
+
+    /// Fire on_print_started_, the callback the start pipeline invokes once
+    /// Moonraker confirms the print actually started. Going through the
+    /// stored callback (rather than the owner's consume method) proves the
+    /// panel wired set_on_print_started, not just that the consume exists.
+    static void fire_print_started(helix::ui::PrintStartController& c) {
+        if (c.on_print_started_) {
+            c.on_print_started_();
+        }
+    }
+
     // --- remap-unsupported discriminator (test_print_start_filament_gate.cpp) ---
 
     static bool should_warn_remap_unsupported(const helix::AmsBackend& backend) {

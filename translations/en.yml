@@ -164,7 +164,11 @@ translations:
   Add Widget: Add Widget
   Add custom filament: Add custom filament
   Add page: Add page
+  Add to Queue: Add to Queue
   Added to Spoolman: Added to Spoolman
+  Added to queue (position {}): Added to queue (position {})
+  Added to queue (position {}) - queue is paused: Added to queue (position {}) - queue is paused
+  Adding to queue...: Adding to queue...
   Address: Address
   Adjust screen brightness level: Adjust screen brightness level
   Adjust screws, then re-probe.: Adjust screws, then re-probe.
@@ -456,6 +460,7 @@ translations:
   Cancel Print: Cancel Print
   Cancel macro not configured: Cancel macro not configured
   Cancelled: Cancelled
+  'Cannot add to queue: internal error': 'Cannot add to queue: internal error'
   Cannot be changed from here on a multi-unit MMU: Cannot be changed from here on a multi-unit MMU
   'Cannot control timelapse: printer not connected': 'Cannot control timelapse: printer
     not connected'
@@ -713,6 +718,7 @@ translations:
   Copy failed - use SSH manually: Copy failed - use SSH manually
   Corner roundness: Corner roundness
   Correction (Ki): Correction (Ki)
+  Could not add to queue: Could not add to queue
   Could not analyze PRINT_START macro. Some print options may be unavailable.: Could
     not analyze PRINT_START macro. Some print options may be unavailable.
   Could not answer the connection request: Could not answer the connection request
@@ -725,6 +731,7 @@ translations:
   Could not parse tips database: Could not parse tips database
   Could not reach Spoolman at: Could not reach Spoolman at
   Could not read the screw adjustments from the printer: Could not read the screw adjustments from the printer
+  Could not remove the job from the queue: Could not remove the job from the queue
   Could not resolve printer RFCOMM channel: Could not resolve printer RFCOMM channel
   Could not save filament: Could not save filament
   "Could not save the mesh as '{}': {}": "Could not save the mesh as '{}': {}"
@@ -1232,6 +1239,7 @@ translations:
   File: File
   File Size: File Size
   File Will Stop the Printer: File Will Stop the Printer
+  'File not found: {}': 'File not found: {}'
   Filename: Filename
   Filter Fan: 'Filter Fan'
   'Filter Fan: Off': 'Filter Fan: Off'
@@ -2871,6 +2879,7 @@ translations:
   Start anyway?: Start anyway?
   Start at: Start at
   Start failed: Start failed
+  'Start next: {}': 'Start next: {}'
   Start over: Start over
   Start print anyway?: Start print anyway?
   Started: Started
@@ -2879,6 +2888,7 @@ translations:
   'Starting nozzle clean...': 'Starting nozzle clean...'
   'Starting print...': 'Starting print...'
   Starting...: Starting...
+  Starts after the current print: Starts after the current print
   Startup Brightness: Startup Brightness
   Startup, auto-control, and macro devices: Startup, auto-control, and macro devices
   State: State
@@ -2924,12 +2934,10 @@ translations:
   Switches to a backup spool on runout: Switches to a backup spool on runout
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
-  Switching back to PID changes how this heater is controlled.: Switching back to PID changes how this heater is controlled.
   Switching back to PID requires a config change and Klipper restart.: Switching back to PID requires a config change and Klipper restart.
   Switching heater control to MPC. Klipper will restart.: Switching heater control
     to MPC. Klipper will restart.
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
-  Switching to MPC changes how this heater is controlled.: Switching to MPC changes how this heater is controlled.
   Switching to MPC requires a config change and Klipper restart.: Switching to MPC
     requires a config change and Klipper restart.
   Sync with Spoolman: Sync with Spoolman
@@ -3310,6 +3318,8 @@ translations:
   Unretract Speed: Unretract Speed
   Unsupported tape width: Unsupported tape width
   'Unsupported tape width: ': 'Unsupported tape width: '
+  'Up next: {}': 'Up next: {}'
+  'Up next: {} (+{})': 'Up next: {} (+{})'
   Up to date: Up to date
   Update: Update
   Update Available: Update Available

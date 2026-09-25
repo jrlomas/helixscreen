@@ -256,6 +256,11 @@
                  width="100%" style_pad_ver="#space_md" style_pad_gap="#space_xs" style_bg_color="#elevated_bg"
                  flex_flow="column">
           <bind_flag_if_eq subject="filament_mapping_visible" flag="hidden" ref_value="0"/>
+          <!-- Hidden in queue mode: the mapping is not saved with the job, it
+               is recomputed against the lanes loaded when the job starts. The
+               two bindings OR together (one hidden flag, two independent
+               reasons), so no C++ writer composes them. -->
+          <bind_flag_if_eq subject="print_select_button_mode" flag="hidden" ref_value="1"/>
           <bind_flag_if_eq subject="color_card_remappable" flag="clickable" ref_value="1"/>
           <lv_obj width="100%"
                   height="content" style_pad_all="0" style_pad_gap="#space_xs" flex_flow="row"
@@ -358,6 +363,12 @@
                    width="100%" style_pad_ver="0" style_pad_gap="#space_sm" flex_flow="column"
                    style_bg_color="#elevated_bg">
             <bind_flag_if_eq subject="has_any_preprint_options" flag="hidden" ref_value="0"/>
+            <!-- Hidden in queue mode when Moonraker starts the next job by
+                 itself (automatic_transition): the saved options would never
+                 be read, because no detail view opens on start. One
+                 conjunction, so one cond= rather than two stacked bindings,
+                 which OR. -->
+            <bind_flag_if cond="print_select_button_mode eq 1 and job_queue_automatic_transition eq 1" flag="hidden"/>
             <text_small text="PRINT OPTIONS" translation_tag="PRINT OPTIONS"/>
             <lv_obj name="pre_print_options_container"
                     width="100%" height="content" style_pad_all="0" style_pad_gap="#space_xs" flex_flow="column"
@@ -386,21 +397,28 @@
                        width="#button_height_lg" height="#button_height_lg" variant="danger" icon="trash_can_outline">
               <event_cb trigger="clicked" callback="on_print_select_delete_button"/>
             </ui_button>
-            <!-- Print button - primary action styling (disabled when print in progress) -->
+            <!-- Print button - primary action styling (disabled when print in progress).
+                 Label and icon follow the mode subjects: "Print" + printer icon idle,
+                 "Add to Queue" + the queue's clock icon while another print holds the
+                 machine and Moonraker has the job_queue component (the same tap then
+                 routes to the queue path). -->
             <ui_button name="print_button"
-                       height="#button_height_lg" text="Print" translation_tag="Print" flex_grow="1" icon="print">
+                       height="#button_height_lg" bind_text="print_select_button_label" flex_grow="1" icon="print"
+                       bind_icon="print_select_button_icon">
               <event_cb trigger="clicked" callback="on_print_select_print_button"/>
               <bind_state_if_eq subject="print_select_can_print" state="disabled" ref_value="0"/>
             </ui_button>
           </lv_obj>
 
-          <!-- Why the print button is disabled (active print or macro analysis).
-               Text comes from print_select_blocked_reason; hidden whenever the
-               button is usable so the detail view reads clean when idle. -->
+          <!-- Why the print button is disabled (active print or macro analysis),
+               or the queue hint while it offers Add to Queue. Text comes from
+               print_select_blocked_reason; hidden whenever the button is a plain
+               usable Print so the detail view reads clean when idle. -->
           <text_small name="print_blocked_reason"
                       width="100%" bind_text="print_select_blocked_reason" style_text_color="#text_muted"
                       style_text_align="center" style_pad_top="#space_xs">
-            <bind_flag_if_eq subject="print_select_can_print" flag="hidden" ref_value="1"/>
+            <bind_flag_if cond="print_select_can_print eq 0 or print_select_button_mode eq 1"
+                          flag="hidden" invert="true"/>
           </text_small>
         </lv_obj>
       </lv_obj>
