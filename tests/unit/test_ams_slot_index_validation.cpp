@@ -98,7 +98,7 @@ TEMPLATE_TEST_CASE("Every subscription backend bounds slot indices through the b
         for (int bad : {-2, 3}) {
             CAPTURE(bad);
             // -2 is CFS's external-spool target, not a bay.
-            refused_as_bad_slot(fresh()->load_filament(bad), !is_cfs);
+            refused_as_bad_slot(fresh()->load_filament(bad), !is_cfs || bad != -2);
             refused_as_bad_slot(fresh()->eject_lane(bad), eject_validates);
             if (!is_ad5x) {
                 // AD5X's plugin tool table reads an out-of-range slot as "unmap".
