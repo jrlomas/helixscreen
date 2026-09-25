@@ -1436,12 +1436,14 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     helix::ui::set_test_toast_hook(nullptr);
 }
 
-TEST_CASE("ACE a numeric rfid field reads as a tag read",
+TEST_CASE("ACE an rfid state of 2 (identified) reads as a tag read",
           "[ams][ace][filament_slot_override][1710]") {
-    // ValgACE's bridge and the multiACE lineage send the bay's rfid flag as
-    // 0/1 integers rather than booleans. A nonzero integer is a read, so the
-    // material and colour it accompanies are tag evidence and a swap is a
-    // judged DifferentSpool, not a verdict held forever.
+    // ACEResearch PROTOCOL.md spells the bay's tag-reader state as an
+    // integer: 0 information not found, 1 failed to identify, 2 identified,
+    // 3 identifying. ValgACE's bridge and the multiACE lineage send this
+    // form. Two is a read, so the material and colour it accompanies are tag
+    // evidence and a swap is a judged DifferentSpool, not a verdict held
+    // forever.
     AceTmpCacheDir tmp("task1710_numeric_rfid");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -1470,11 +1472,92 @@ TEST_CASE("ACE a numeric rfid field reads as a tag read",
     REQUIRE(AceTestAccess::get_override(backend, 0).has_value());
     AceTestAccess::parse_ace(backend, make_ace_slot_payload("empty", 0x000000, ""));
 
-    // Numeric nonzero rfid on the insert frame: judged immediately.
-    AceTestAccess::parse_ace(backend, make_ace_slot_payload("available", 0x0055FF, "PETG", 1));
+    // Numeric rfid 2 (identified) on the insert frame: judged immediately.
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("available", 0x0055FF, "PETG", 2));
 
     CHECK_FALSE(AceTestAccess::get_override(backend, 0).has_value());
     CHECK(api.mock_get_db_value("lane_data", "lane1").is_null());
+}
+
+namespace {
+/// The shared body of the rfid-state cases: an insert whose first frame
+/// says 3 (identifying) holds its verdict, and the follow-up frame decides
+/// it. @p closing_clears pairs with @p closing_state: 2 identified with a
+/// different tag clears the override; 0/1 (the reader finished without a
+/// tag) asks, whatever values the frame carries.
+void assert_rfid_state_sequence(std::int64_t closing_state, bool closing_clears) {
+    AceTmpCacheDir tmp("task1710_rfid_states");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    helix::test::RegisteredBackend<AmsBackendAce> backend_reg(&api, nullptr);
+    AmsBackendAce& backend = *backend_reg;
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ace");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    AceTestAccess::inject_override_store(backend, std::move(store));
+
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.brand = "Polymaker";
+    ovr.material = "PLA";
+    ovr.color_rgb = 0xFF5500;
+    AceTestAccess::seed_override(backend, 0, ovr);
+
+    std::vector<std::pair<ToastSeverity, std::string>> toasts;
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg, uint32_t) {
+        toasts.emplace_back(severity, msg);
+    });
+
+    // Baseline: the bay holds the spool the override describes, and the
+    // reader identified it, so the remembered evidence is a real reading.
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("available", 0xFF5500, "PLA", 2));
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("empty", 0x000000, ""));
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(toasts.empty());
+
+    // Insert frame: rfid 3, identifying, while the hub still reports the
+    // OLD spool's material and colour. Judging on that stale memory would
+    // read SameSpool; the read has not landed, so the verdict must hold.
+    AceTestAccess::parse_ace(backend, make_ace_slot_payload("available", 0xFF5500, "PLA", 3));
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+    CHECK(AceTestAccess::get_override(backend, 0).has_value());
+
+    // The deciding frame. A 2 carries the new spool's own reading; a 0/1
+    // carries only hub memory, and the values on it are deliberately the
+    // stale ones, so the state - not the values - decides.
+    if (closing_clears) {
+        AceTestAccess::parse_ace(backend, make_ace_slot_payload("available", 0x0055FF, "PETG", 2));
+    } else {
+        AceTestAccess::parse_ace(
+            backend, make_ace_slot_payload("available", 0xFF5500, "PLA", closing_state));
+    }
+    helix::ui::UpdateQueue::instance().drain();
+
+    if (closing_clears) {
+        CHECK_FALSE(AceTestAccess::get_override(backend, 0).has_value());
+        CHECK(toasts.empty());
+    } else {
+        REQUIRE(toasts.size() == 1);
+        CHECK(toasts[0].first == ToastSeverity::INFO);
+        CHECK(AceTestAccess::get_override(backend, 0).has_value());
+    }
+
+    helix::ui::set_test_toast_hook(nullptr);
+}
+} // namespace
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "ACE rfid 3 holds the insert, then 2 with a different tag clears",
+                 "[ams][ace][filament_slot_override][1710]") {
+    assert_rfid_state_sequence(2, /*closing_clears=*/true);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ACE rfid 3 holds the insert, then 0 or 1 asks instead",
+                 "[ams][ace][filament_slot_override][1710]") {
+    assert_rfid_state_sequence(0, /*closing_clears=*/false);
+    assert_rfid_state_sequence(1, /*closing_clears=*/false);
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture,

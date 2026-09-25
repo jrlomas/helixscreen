@@ -1070,18 +1070,31 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                 // false or absent means the hub is stating its own memory of
                 // the bay, which is not a reading of what is in it now
                 // (prestonbrown/helixscreen#1710). ValgACE's bridge and the
-                // multiACE lineage send the same flag as integers, so a
-                // nonzero number reads as true.
+                // multiACE lineage send the same flag as integers with
+                // ACEResearch's PROTOCOL.md states: 0 information not found,
+                // 1 failed to identify, 2 identified, 3 identifying. Only 2
+                // carries a reading. 3 leaves the evidence incomplete so the
+                // insert edge holds its verdict for the next frame; 0/1 mean
+                // the reader finished without a tag, which is a completed
+                // EMPTY reading, not hub memory.
                 helix::ams::SpoolEvidence evidence;
                 if (slot_json.contains("rfid")) {
                     const auto& rfid = slot_json["rfid"];
-                    const bool tag_read =
-                        (rfid.is_boolean() && rfid.get<bool>()) ||
-                        (rfid.is_number_integer() && rfid.get<std::int64_t>() != 0);
-                    if (tag_read) {
-                        evidence.material = observed_material.value_or(std::string{});
-                        evidence.color_rgb = observed_color;
-                        evidence.tag_read_complete = true;
+                    if (rfid.is_boolean()) {
+                        if (rfid.get<bool>()) {
+                            evidence.material = observed_material.value_or(std::string{});
+                            evidence.color_rgb = observed_color;
+                            evidence.tag_read_complete = true;
+                        }
+                    } else if (rfid.is_number_integer()) {
+                        const auto state = rfid.get<std::int64_t>();
+                        if (state == 2) {
+                            evidence.material = observed_material.value_or(std::string{});
+                            evidence.color_rgb = observed_color;
+                            evidence.tag_read_complete = true;
+                        } else if (state == 0 || state == 1) {
+                            evidence.tag_read_complete = true;
+                        }
                     }
                 }
 
