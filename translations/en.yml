@@ -820,6 +820,7 @@ translations:
   Detecting...: Detecting...
   Detection Length: Detection Length
   Detection Mode: Detection Mode
+  Detection turned off: Detection turned off
   Dev: Dev
   Dev channel requires dev_url in config: Dev channel requires dev_url in config
   Device: Device
@@ -2097,8 +2098,10 @@ translations:
   Path B: Path B
   Pause: Pause
   Pause macro not configured: Pause macro not configured
+  Pause on Detection: Pause on Detection
   Pause the print first, then load, unload, or change filament: Pause the print first,
     then load, unload, or change filament
+  Pause the print when a failure is seen (off = warn only): Pause the print when a failure is seen (off = warn only)
   Pause, resume, or stop the print: Pause, resume, or stop the print
   Paused: Paused
   Paused (attention needed): Paused (attention needed)
@@ -2808,6 +2811,8 @@ translations:
   Source: Source
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod by Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: Spaghetti Detection
+  Spaghetti detected: Spaghetti detected
   Spaghetti detected — print paused: Spaghetti detected — print paused
   Speaker: Speaker
   Speed: Speed
@@ -3242,6 +3247,7 @@ translations:
   Turn On: Turn On
   Turn On LEDs: Turn On LEDs
   Turn endless spool on, then set the backup gate: Turn endless spool on, then set the backup gate
+  Turn off detection: Turn off detection
   Turn on LEDs when printer starts: Turn on LEDs when printer starts
   Turn the extruder heater off after a load or unload finishes: Turn the extruder heater off after a load or unload finishes
   Turn the picture to match how the screen is mounted. Applies after restart.: Turn the picture to match how the screen is mounted. Applies after restart.
@@ -3387,6 +3393,7 @@ translations:
   Warn: Warn
   Warning: Warning
   Warnings & errors: Warnings & errors
+  Watch the camera during a print for failed prints: Watch the camera during a print for failed prints
   Weak battery: Weak battery
   Webcam: Webcam
   Website (optional): Website (optional)

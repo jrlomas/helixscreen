@@ -761,6 +761,7 @@
   <translation tag="Detecting..." ru="Обнаружение..."/>
   <translation tag="Detection Length" ru="Длина обнаружения"/>
   <translation tag="Detection Mode" ru="Режим обнаружения"/>
+  <translation tag="Detection turned off" ru="Обнаружение отключено"/>
   <translation tag="Dev" ru="Разработка"/>
   <translation tag="Dev channel requires dev_url in config" ru="Dev-канал требует dev_url в конфиге"/>
   <translation tag="Device" ru="Устройство"/>
@@ -1945,7 +1946,9 @@
   <translation tag="Path B" ru="Путь B"/>
   <translation tag="Pause" ru="Пауза"/>
   <translation tag="Pause macro not configured" ru="Макрос паузы не настроен"/>
+  <translation tag="Pause on Detection" ru="Пауза при обнаружении"/>
   <translation tag="Pause the print first, then load, unload, or change filament" ru="Сначала приостановите печать, затем загружайте, выгружайте или меняйте филамент"/>
+  <translation tag="Pause the print when a failure is seen (off = warn only)" ru="Приостанавливает печать при обнаружении сбоя (выкл. = только предупреждать)"/>
   <translation tag="Pause, resume, or stop the print" ru="Пауза, продолжение или остановка"/>
   <translation tag="Paused" ru="Приостановлено"/>
   <translation tag="Paused (attention needed)" ru="Приостановлено (требует внимания)"/>
@@ -2589,6 +2592,8 @@
   <translation tag="Sounds" ru="Звуки"/>
   <translation tag="Source" ru="Источник"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" ru="Space Debris мод от Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti Detection" ru="Обнаружение «спагетти»"/>
+  <translation tag="Spaghetti detected" ru="Обнаружены «спагетти»"/>
   <translation tag="Spaghetti detected — print paused" ru="Обнаружены «спагетти» — печать приостановлена"/>
   <translation tag="Speaker" ru="Динамик"/>
   <translation tag="Speed" ru="Скорость"/>
@@ -2954,6 +2959,7 @@
   <translation tag="Turn On" ru="Включить"/>
   <translation tag="Turn On LEDs" ru="Включить LED"/>
   <translation tag="Turn endless spool on, then set the backup gate" ru="Включите бесконечную катушку, затем задайте резервный шлюз"/>
+  <translation tag="Turn off detection" ru="Отключить обнаружение"/>
   <translation tag="Turn on LEDs when printer starts" ru="Включать LED при запуске принтера"/>
   <translation tag="Turn the extruder heater off after a load or unload finishes" ru="Выключать нагреватель экструдера после загрузки или выгрузки"/>
   <translation tag="Turn the picture to match how the screen is mounted. Applies after restart." ru="Поворачивает изображение в соответствии с положением экрана. Применяется после перезапуска."/>
@@ -3092,6 +3098,7 @@
   <translation tag="Warn" ru="Предупреждение"/>
   <translation tag="Warning" ru="Предупреждение"/>
   <translation tag="Warnings &amp; errors" ru="Предупреждения и ошибки"/>
+  <translation tag="Watch the camera during a print for failed prints" ru="Следит за камерой во время печати, выявляя неудачные печати"/>
   <translation tag="Weak battery" ru="Слабый заряд"/>
   <translation tag="Webcam" ru="Веб-камера"/>
   <translation tag="Website (optional)" ru="Веб-сайт (необязательно)"/>

@@ -761,6 +761,7 @@
   <translation tag="Detecting..." de="Wird erkannt..."/>
   <translation tag="Detection Length" de="Erkennungslänge"/>
   <translation tag="Detection Mode" de="Erkennungsmodus"/>
+  <translation tag="Detection turned off" de="Erkennung ausgeschaltet"/>
   <translation tag="Dev" de="Dev"/>
   <translation tag="Dev channel requires dev_url in config" de="Dev-Kanal erfordert dev_url in der Konfiguration"/>
   <translation tag="Device" de="Gerät"/>
@@ -1945,7 +1946,9 @@
   <translation tag="Path B" de="Pfad B"/>
   <translation tag="Pause" de="Pause"/>
   <translation tag="Pause macro not configured" de="Pause-Makro nicht konfiguriert"/>
+  <translation tag="Pause on Detection" de="Bei Erkennung pausieren"/>
   <translation tag="Pause the print first, then load, unload, or change filament" de="Pausieren Sie zuerst den Druck, um Filament zu laden, zu entladen oder zu wechseln"/>
+  <translation tag="Pause the print when a failure is seen (off = warn only)" de="Pausiert den Druck, wenn ein Fehler erkannt wird (aus = nur warnen)"/>
   <translation tag="Pause, resume, or stop the print" de="Druck pausieren, fortsetzen, stoppen"/>
   <translation tag="Paused" de="Pausiert"/>
   <translation tag="Paused (attention needed)" de="Pausiert (Aufmerksamkeit erforderlich)"/>
@@ -2589,6 +2592,8 @@
   <translation tag="Sounds" de="Töne"/>
   <translation tag="Source" de="Quelle"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" de="Space Debris Mod von Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti Detection" de="Spaghetti-Erkennung"/>
+  <translation tag="Spaghetti detected" de="Spaghetti erkannt"/>
   <translation tag="Spaghetti detected — print paused" de="Spaghetti erkannt – Druck pausiert"/>
   <translation tag="Speaker" de="Lautsprecher"/>
   <translation tag="Speed" de="Geschwindigkeit"/>
@@ -2954,6 +2959,7 @@
   <translation tag="Turn On" de="Einschalten"/>
   <translation tag="Turn On LEDs" de="LEDs einschalten"/>
   <translation tag="Turn endless spool on, then set the backup gate" de="Aktivieren Sie die Endlosspule und legen Sie dann das Backup-Gate fest"/>
+  <translation tag="Turn off detection" de="Erkennung ausschalten"/>
   <translation tag="Turn on LEDs when printer starts" de="LEDs beim Druckerstart einschalten"/>
   <translation tag="Turn the extruder heater off after a load or unload finishes" de="Extruder-Heizung nach Laden oder Entladen ausschalten"/>
   <translation tag="Turn the picture to match how the screen is mounted. Applies after restart." de="Dreht das Bild passend zur Einbaulage des Bildschirms. Wird nach einem Neustart wirksam."/>
@@ -3092,6 +3098,7 @@
   <translation tag="Warn" de="Warnung"/>
   <translation tag="Warning" de="Warnung"/>
   <translation tag="Warnings &amp; errors" de="Warnungen &amp; Fehler"/>
+  <translation tag="Watch the camera during a print for failed prints" de="Überwacht die Kamera während des Drucks auf fehlgeschlagene Drucke"/>
   <translation tag="Weak battery" de="Schwache Batterie"/>
   <translation tag="Webcam" de="Webcam"/>
   <translation tag="Website (optional)" de="Webseite (optional)"/>

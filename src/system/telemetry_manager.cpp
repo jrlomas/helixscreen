@@ -405,14 +405,6 @@ void TelemetryManager::init(const std::string& config_dir) {
     // Check for update success flag from a previous session
     check_previous_update();
 
-    // Initialize LVGL subject for settings UI binding
-    if (!subjects_initialized_) {
-        UI_MANAGED_SUBJECT_INT(enabled_subject_, enabled_.load() ? 1 : 0, "telemetry_enabled",
-                               subjects_);
-        subjects_initialized_ = true;
-        spdlog::debug("[TelemetryManager] LVGL subject initialized");
-    }
-
     initialized_.store(true);
     spdlog::info("[TelemetryManager] Initialization complete (enabled={}, queue={})",
                  enabled_.load() ? "true" : "false", queue_size());
@@ -467,17 +459,6 @@ void TelemetryManager::shutdown() {
         send_thread_.join();
     }
 
-    // Expire the deferred subject write before the subject goes away (#1165).
-    // Unconditional: the callback must be dropped even on the LVGL-already-torn-
-    // down path, where deinit_all() is skipped but the subject is just as dead.
-    async_lifetime_.invalidate();
-
-    // Deinitialize LVGL subjects (skip if LVGL already torn down)
-    if (subjects_initialized_ && lv_is_initialized()) {
-        subjects_.deinit_all();
-        subjects_initialized_ = false;
-    }
-
     initialized_.store(false);
     shutting_down_.store(false);
     spdlog::info("[TelemetryManager] Shutdown complete");
@@ -501,15 +482,9 @@ void TelemetryManager::set_enabled(bool enabled) {
         stop_auto_send();
     }
 
-    // Update LVGL subject via queue to ensure thread safety.
     // NOTE: set_enabled() must be called from the LVGL thread since it
     // creates/deletes LVGL timers above. enabled_ is atomic for safe reads
     // from any thread, but the function itself is LVGL-thread-only.
-    if (subjects_initialized_) {
-        async_lifetime_.defer("TelemetryManager::set_enabled", [this, enabled]() {
-            lv_subject_set_int(&enabled_subject_, enabled ? 1 : 0);
-        });
-    }
 
     // Persist to settings.json via Config (single source of truth).
     // SystemSettingsManager::set_telemetry_enabled() also calls this path,
@@ -1396,14 +1371,6 @@ bool TelemetryManager::enqueue_crash_event_unconditional() {
                  "(opt-in bypassed, signal={}, name={})",
                  crash_data.value("signal", 0), crash_data.value("signal_name", "unknown"));
     return true;
-}
-
-// =============================================================================
-// LVGL Subject
-// =============================================================================
-
-lv_subject_t* TelemetryManager::enabled_subject() {
-    return &enabled_subject_;
 }
 
 // =============================================================================

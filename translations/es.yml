@@ -847,6 +847,7 @@ translations:
   Detecting...: Detectando...
   Detection Length: Longitud de detección
   Detection Mode: Modo de detección
+  Detection turned off: Detección desactivada
   Dev: Dev
   Dev channel requires dev_url in config: Canal de desarrollo requiere dev_url en
     la configuración
@@ -2145,7 +2146,9 @@ translations:
   Path B: Ruta B
   Pause: Pausar
   Pause macro not configured: Macro de pausa no configurado
+  Pause on Detection: Pausar al detectar
   Pause the print first, then load, unload, or change filament: Pause primero la impresión y luego cargue, descargue o cambie el filamento
+  Pause the print when a failure is seen (off = warn only): Pausa la impresión cuando se detecta un fallo (desactivado = solo avisar)
   Pause, resume, or stop the print: Pausar, reanudar o detener la impresión
   Paused: Pausado
   Paused (attention needed): Pausado (requiere atención)
@@ -2870,6 +2873,8 @@ translations:
   Source: Fuente
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod por Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: Detección de spaghetti
+  Spaghetti detected: Spaghetti detectado
   Spaghetti detected — print paused: Spaghetti detectado — impresión pausada
   Speaker: Altavoz
   Speed: Velocidad
@@ -3318,6 +3323,7 @@ translations:
   Turn On: Encender
   Turn On LEDs: 'Encender los LED'
   Turn endless spool on, then set the backup gate: 'Active la bobina infinita y luego configure el Gate de respaldo'
+  Turn off detection: Desactivar detección
   Turn on LEDs when printer starts: Encender LEDs cuando la impresora inicia
   Turn the extruder heater off after a load or unload finishes: Apagar el calentador del extrusor al terminar una carga o descarga
   Turn the picture to match how the screen is mounted. Applies after restart.: Gira la imagen para que coincida con el montaje de la pantalla. Se aplica tras reiniciar.
@@ -3465,6 +3471,7 @@ translations:
   Warn: Advertencia
   Warning: Advertencia
   Warnings & errors: 'Advertencias y errores'
+  Watch the camera during a print for failed prints: Vigila la cámara durante la impresión para detectar impresiones fallidas
   Weak battery: Batería baja
   Webcam: Webcam
   Website (optional): Sitio Web (opcional)

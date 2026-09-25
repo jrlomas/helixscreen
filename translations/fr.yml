@@ -852,6 +852,7 @@ translations:
   Detecting...: Détection...
   Detection Length: Longueur de détection
   Detection Mode: Mode de détection
+  Detection turned off: Détection désactivée
   Dev: Dev
   Dev channel requires dev_url in config: Le canal de développement nécessite dev_url
     dans la configuration
@@ -2160,7 +2161,9 @@ translations:
   Path B: Chemin B
   Pause: Pause
   Pause macro not configured: Macro de pause non configurée
+  Pause on Detection: Pause à la détection
   Pause the print first, then load, unload, or change filament: Mettez d'abord l'impression en pause, puis chargez, déchargez ou changez le filament
+  Pause the print when a failure is seen (off = warn only): Met l'impression en pause quand un défaut est vu (désactivé = avertir seulement)
   Pause, resume, or stop the print: Mettre en pause, reprendre ou arrêter
   Paused: En pause
   Paused (attention needed): En pause (attention requise)
@@ -2894,6 +2897,8 @@ translations:
   Source: Source
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris mod par Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: Détection de spaghettis
+  Spaghetti detected: Spaghetti détecté
   Spaghetti detected — print paused: Spaghetti détecté — impression en pause
   Speaker: Haut-parleur
   Speed: Vitesse
@@ -3348,6 +3353,7 @@ translations:
   Turn On: Allumer
   Turn On LEDs: 'Allumer les LED'
   Turn endless spool on, then set the backup gate: 'Activez la bobine infinie, puis définissez le Gate de secours'
+  Turn off detection: Désactiver la détection
   Turn on LEDs when printer starts: Allumer les LED au démarrage de l'imprimante
   Turn the extruder heater off after a load or unload finishes: Éteindre le chauffage de l'extrudeur après un chargement ou un déchargement
   Turn the picture to match how the screen is mounted. Applies after restart.: Fait pivoter l'image selon l'orientation de montage de l'écran. Prend effet après redémarrage.
@@ -3495,6 +3501,7 @@ translations:
   Warn: Avertissement
   Warning: Avertissement
   Warnings & errors: 'Avertissements et erreurs'
+  Watch the camera during a print for failed prints: Surveille la caméra pendant une impression pour détecter les impressions échouées
   Weak battery: Batterie faible
   Webcam: Webcam
   Website (optional): Site web (facultatif)

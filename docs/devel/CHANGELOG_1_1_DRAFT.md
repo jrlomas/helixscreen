@@ -121,6 +121,19 @@ what gets saved.
   lines places ticks at the slicer's own percentages, anything else at file position. A print
   whose gcode was never fetched (an external start during the setup wizard, or a file too
   large to preview) simply shows no ticks.
+- **Spaghetti detection, built in (#1378)** - installing HelixScreen on a K2 Plus stops the
+  stock AI failure-detection loop along with the stock UI, so HelixScreen ships its own
+  detector: during a print it runs Creality's own `/usr/bin/detection` on camera snapshots at
+  the interval and threshold the printer's `ai_control` settings already hold, and never
+  writes them. A confirmed detection pauses the print and opens a dialog offering Resume,
+  Abort, Reduce Sensitivity or Turn off detection. The whole pipeline is vendor-neutral: any
+  detection source only reports, and two settings in Safety & Notifications decide what
+  happens - **Spaghetti Detection** (watch at all) and **Pause on Detection** (pause, or only
+  warn). On the first start both are seeded once from the printer's own stored choice
+  (`switch` / `pausePrint`) and are HelixScreen's from then on. Printers whose firmware
+  pauses by itself, like the U1, are never double-paused and always get the response dialog
+  (their Pause on Detection row hides; the firmware's pause is not HelixScreen's to govern).
+  The rows appear only on printers with detection hardware.
 - **Power-loss recovery works on Qidi printers (#1716)** - on a Q2, Q1 Pro or Plus 4 running
   the stock firmware, the resume dialog now appears after a print was cut short by a power
   loss, offering the printer's own `RESUME_INTERRUPTED` flow or a clean discard.

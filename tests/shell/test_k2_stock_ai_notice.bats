@@ -3,12 +3,13 @@
 #
 # Tests for print_k2_stock_ai_notice() in main.sh (#1378).
 #
-# Installing HelixScreen on a K2 leaves the printer with no failure detection:
-# the launcher hook stops and disables /etc/init.d/app (the procd service that
-# runs Creality's Monitor/master-server/app-server detect loop), and the camera
-# module hands /dev/video0 to ustreamer. Neither is announced anywhere, so the
-# owner keeps printing unwatched. This notice is the announcement, and these
-# tests pin the four claims it has to make.
+# Installing HelixScreen on a K2 stops the stock failure detection loop: the
+# launcher hook stops and disables /etc/init.d/app (the procd service that runs
+# Creality's Monitor/master-server/app-server detect loop), and the camera
+# module hands /dev/video0 to ustreamer. HelixScreen ships its own detector for
+# exactly this gap (K2StockDetectionSource, #1378). The notice has to say BOTH
+# halves - the stock loop stops, and HelixScreen detection takes over - and
+# these tests pin those claims.
 
 WORKTREE_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 MAIN_SH="$WORKTREE_ROOT/scripts/lib/installer/main.sh"
@@ -63,15 +64,21 @@ setup() {
     [[ "$output" == *"uninstall"* ]]
 }
 
-@test "print_k2_stock_ai_notice: does not claim HelixScreen replaces it" {
+@test "print_k2_stock_ai_notice: says HelixScreen provides its own detection" {
     run print_k2_stock_ai_notice "k2"
     [ "$status" -eq 0 ]
-    # The whole point of the notice is that prints are now unwatched. Wording
-    # that implies a substitute is in place would restore the false sense of
-    # safety this notice exists to remove.
-    lacks "HelixScreen now monitors" "$output"
-    lacks "replaced by HelixScreen" "$output"
-    [[ "$output" == *"does not"* ]]
+    # The stock loop stops, so the notice must name the detector that replaces
+    # it: silence here would leave the owner believing prints are unwatched.
+    contains "HelixScreen provides its own" "$output"
+    contains "spaghetti detection" "$output"
+    # What the built-in detector actually does, so the claim is not vague.
+    contains "/usr/bin/detection" "$output"
+    contains "pauses the print" "$output"
+    # Pausing is a setting seeded from the printer's own choice: warn-only must
+    # be visible, and pausePrint named as where the choice starts from.
+    contains "only warns" "$output"
+    contains "pausePrint" "$output"
+    contains "Settings" "$output"
 }
 
 @test "print_k2_stock_ai_notice: silent on every other platform" {

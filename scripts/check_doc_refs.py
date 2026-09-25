@@ -132,6 +132,10 @@ EXEMPT_SUBSTRINGS = (
     # were read from those sources rather than inferred. Nothing named
     # medusahc.py will ever exist in this repo.
     'medusahc.py',
+    # Lives on the printer and is read-only to us: CREALITY_K2_SUPPORT.md
+    # cites the K2's own AI tuning state. Nothing named user_print_refer.json
+    # will ever exist in this repo.
+    'user_print_refer.json',
 )
 
 # Tokens that are obviously placeholders rather than real paths.

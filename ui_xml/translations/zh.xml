@@ -761,6 +761,7 @@
   <translation tag="Detecting..." zh="正在检测..."/>
   <translation tag="Detection Length" zh="检测长度"/>
   <translation tag="Detection Mode" zh="检测模式"/>
+  <translation tag="Detection turned off" zh="检测已关闭"/>
   <translation tag="Dev" zh="开发版"/>
   <translation tag="Dev channel requires dev_url in config" zh="开发频道需要在配置中设置 dev_url"/>
   <translation tag="Device" zh="设备"/>
@@ -1945,7 +1946,9 @@
   <translation tag="Path B" zh="路径 B"/>
   <translation tag="Pause" zh="暂停"/>
   <translation tag="Pause macro not configured" zh="暂停宏未配置"/>
+  <translation tag="Pause on Detection" zh="检测到故障时暂停"/>
   <translation tag="Pause the print first, then load, unload, or change filament" zh="请先暂停打印，然后再加载、卸载或更换耗材"/>
+  <translation tag="Pause the print when a failure is seen (off = warn only)" zh="发现故障时暂停打印（关闭 = 仅提醒）"/>
   <translation tag="Pause, resume, or stop the print" zh="暂停、恢复或停止打印"/>
   <translation tag="Paused" zh="已暂停"/>
   <translation tag="Paused (attention needed)" zh="已暂停（需要处理）"/>
@@ -2589,6 +2592,8 @@
   <translation tag="Sounds" zh="声音"/>
   <translation tag="Source" zh="来源"/>
   <translation tag="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen" zh="Space Debris mod by Markus &apos;Captain&apos; Kaarlonen"/>
+  <translation tag="Spaghetti Detection" zh="拉丝故障检测"/>
+  <translation tag="Spaghetti detected" zh="检测到拉丝故障"/>
   <translation tag="Spaghetti detected — print paused" zh="检测到拉丝故障 — 打印已暂停"/>
   <translation tag="Speaker" zh="扬声器"/>
   <translation tag="Speed" zh="速度"/>
@@ -2954,6 +2959,7 @@
   <translation tag="Turn On" zh="开启"/>
   <translation tag="Turn On LEDs" zh="打开 LED"/>
   <translation tag="Turn endless spool on, then set the backup gate" zh="请先开启无限料盘，再设置备用通道"/>
+  <translation tag="Turn off detection" zh="关闭检测"/>
   <translation tag="Turn on LEDs when printer starts" zh="打印机启动时开启 LED"/>
   <translation tag="Turn the extruder heater off after a load or unload finishes" zh="加载或卸载完成后关闭挤出机加热器"/>
   <translation tag="Turn the picture to match how the screen is mounted. Applies after restart." zh="旋转画面以匹配屏幕的安装方向。重启后生效。"/>
@@ -3092,6 +3098,7 @@
   <translation tag="Warn" zh="警告"/>
   <translation tag="Warning" zh="警告"/>
   <translation tag="Warnings &amp; errors" zh="警告与错误"/>
+  <translation tag="Watch the camera during a print for failed prints" zh="打印期间监视摄像头以发现打印失败"/>
   <translation tag="Weak battery" zh="电池电量低"/>
   <translation tag="Webcam" zh="摄像头"/>
   <translation tag="Website (optional)" zh="网站（可选）"/>

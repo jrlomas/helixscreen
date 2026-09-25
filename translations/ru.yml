@@ -834,6 +834,7 @@ translations:
   Detecting...: Обнаружение...
   Detection Length: Длина обнаружения
   Detection Mode: Режим обнаружения
+  Detection turned off: Обнаружение отключено
   Dev: Разработка
   Dev channel requires dev_url in config: Dev-канал требует dev_url в конфиге
   Device: Устройство
@@ -2121,7 +2122,9 @@ translations:
   Path B: Путь B
   Pause: Пауза
   Pause macro not configured: Макрос паузы не настроен
+  Pause on Detection: Пауза при обнаружении
   Pause the print first, then load, unload, or change filament: Сначала приостановите печать, затем загружайте, выгружайте или меняйте филамент
+  Pause the print when a failure is seen (off = warn only): Приостанавливает печать при обнаружении сбоя (выкл. = только предупреждать)
   Pause, resume, or stop the print: Пауза, продолжение или остановка
   Paused: Приостановлено
   Paused (attention needed): Приостановлено (требует внимания)
@@ -2841,6 +2844,8 @@ translations:
   Source: Источник
   Space Debris mod by Markus 'Captain' Kaarlonen: Space Debris мод от Markus 'Captain'
     Kaarlonen
+  Spaghetti Detection: Обнаружение «спагетти»
+  Spaghetti detected: Обнаружены «спагетти»
   Spaghetti detected — print paused: Обнаружены «спагетти» — печать приостановлена
   Speaker: Динамик
   Speed: Скорость
@@ -3277,6 +3282,7 @@ translations:
   Turn On: Включить
   Turn On LEDs: 'Включить LED'
   Turn endless spool on, then set the backup gate: 'Включите бесконечную катушку, затем задайте резервный шлюз'
+  Turn off detection: Отключить обнаружение
   Turn on LEDs when printer starts: Включать LED при запуске принтера
   Turn the extruder heater off after a load or unload finishes: Выключать нагреватель экструдера после загрузки или выгрузки
   Turn the picture to match how the screen is mounted. Applies after restart.: Поворачивает изображение в соответствии с положением экрана. Применяется после перезапуска.
@@ -3421,6 +3427,7 @@ translations:
   Warn: Предупреждение
   Warning: Предупреждение
   Warnings & errors: 'Предупреждения и ошибки'
+  Watch the camera during a print for failed prints: Следит за камерой во время печати, выявляя неудачные печати
   Weak battery: Слабый заряд
   Webcam: Веб-камера
   Website (optional): Веб-сайт (необязательно)
