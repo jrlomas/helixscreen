@@ -394,17 +394,6 @@ exactly as a different-spool verdict, so the fingerprint must be built from
 the same evidence fields: a fingerprint that includes a field the rule
 ignores would call a same-spool insert a swap.
 
-### Current backend behaviour
-
-Until each backend is moved onto the insert rule, it keeps its own swap
-signal. This table is what ships today; each row is replaced by the one in the
-table after it as that backend moves.
-
-| Backend | Signal today |
-|---------|--------------|
-| AD5X IFS | A colour transition in `Adventurer5M.json` to a materially different RGB, treated as a swap |
-| CFS | A change in the per-slot `material_type|color_value` composite |
-
 ### Per backend, under the insert rule
 
 | Backend | Tag UID | Material and colour read off the spool | Binding | Verdict for an untagged insert |
@@ -417,6 +406,12 @@ table after it as that backend moves.
 | AFC | - | None | Per-lane `spool_id` | No evidence, unless the plugin names a different spool |
 | Happy Hare | - | None: the gate map is user-maintained | Per-gate `spool_id` | No evidence, unless the MMU names a different spool |
 | Tool changer | - | - | - | No insert signal; the rule never runs |
+
+Two rows carry caveats the table cannot hold. AD5X IFS has no presence
+sensor: its insert edge is inferred from the JSON, every insert is No
+evidence, and the rule raises no notice for it. Stock CFS waits up to 3
+frames for the RFID probe before judging an insert, and discounts values
+equal to a label HelixScreen itself pushed while its echo guard stands.
 
 Clearing is a `DELETE` on the slot's `lane_data` key. The first observation
 after startup establishes the baseline fingerprint and is NOT treated as a
