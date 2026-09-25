@@ -1033,6 +1033,43 @@ TEST_CASE_METHOD(LVGLTestFixture, "clearing a spool ends its echo suppression",
     CHECK(after.vendor_cache->material == "PETG");
 }
 
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "Clear Spool on a previously edited lane shows nothing afterwards",
+                 "[lane][ingest][afc]") {
+    AfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    helix::test::edit_slot_as_user(*harness, 0, edit);
+
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+
+    // Clear Spool empties the lane in firmware field by field, so the next
+    // status frame publishes the emptied keys with WEIGHT=0. Nothing of the
+    // edit's identity may survive that frame on screen.
+    harness->clear_slot_override(0);
+    feed_afc_lane(*harness, "lane1",
+                  {{"status", "Loaded"}, {"color", ""}, {"material", ""}, {"weight", 0.0}});
+
+    const auto info = harness->get_slot_info(0);
+    CHECK(info.material.empty());
+    CHECK(info.color_rgb == helix::AMS_DEFAULT_SLOT_COLOR);
+    CHECK(info.remaining_weight_g == -1.0F);
+    CHECK(info.total_weight_g == -1.0F);
+    CHECK(info.brand.empty());
+
+    const auto after = lane_sources(harness.lane(0));
+    REQUIRE(after.vendor_cache.has_value());
+    CHECK_FALSE(after.vendor_cache->color_rgb.has_value());
+    CHECK_FALSE(after.vendor_cache->material.has_value());
+}
+
 TEST_CASE_METHOD(LVGLTestFixture, "a frame with no sensor key neither sets nor erases AFC presence",
                  "[lane][ingest][afc]") {
     AfcHarness harness(nullptr, nullptr);
