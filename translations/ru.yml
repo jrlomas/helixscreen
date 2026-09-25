@@ -1250,6 +1250,7 @@ translations:
   File: Файл
   File Size: Размер файла
   File Will Stop the Printer: 'Файл остановит принтер'
+  'File not found: {}': 'Файл не найден: {}'
   Filename: Имя файла
   Filter Fan: Вентилятор фильтра
   'Filter Fan: Off': 'Вентилятор фильтра: Выкл'

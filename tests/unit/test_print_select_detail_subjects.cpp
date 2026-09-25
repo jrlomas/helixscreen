@@ -29,6 +29,7 @@
 #include "ui_update_queue.h"
 
 #include "../lvgl_ui_test_fixture.h"
+#include "../test_helpers/printer_state_test_access.h"
 #include "ams_backend_mock.h"
 #include "ams_remap.h"
 #include "ams_state.h"
@@ -38,10 +39,12 @@
 #include "pre_print_option.h"
 #include "preflight_validator.h"
 #include "printer_state.h"
+#include "test_helpers/pre_print_option_sets.h"
 #include "tools_used_cache.h"
 
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -49,43 +52,11 @@
 
 #include "../catch_amalgamated.hpp"
 
+using helix::test::make_skip_and_addon_set;
+
 // ============================================================================
 // Pre-print Option Subject Default Tests
 // ============================================================================
-
-namespace {
-
-/// A two-option set in the shape the print-detail panel renders: one "skip"
-/// option that ships enabled, one "add-on" that ships disabled. Built directly
-/// rather than pulled from printer_database.json so the reset contract under
-/// test does not move when the shipped DB does.
-PrePrintOptionSet make_skip_and_addon_set() {
-    PrePrintOptionSet set;
-    set.macro_name = "START_PRINT";
-
-    PrePrintOption skip;
-    skip.id = "bed_mesh";
-    skip.category = PrePrintCategory::Mechanical;
-    skip.order = 10;
-    skip.default_enabled = true; // "don't skip, do what the file says"
-    skip.strategy_kind = PrePrintStrategyKind::MacroParam;
-    // 4-arg form, as test_pre_print_options_renderer.cpp uses: adaptive_value keeps
-    // its "1" default member initializer.
-    skip.strategy = PrePrintStrategyMacroParam{"SKIP_BED_MESH", "0", "1", "0"};
-
-    PrePrintOption addon;
-    addon.id = "timelapse";
-    addon.category = PrePrintCategory::Monitoring;
-    addon.order = 10;
-    addon.default_enabled = false; // "don't add extras by default"
-    addon.strategy_kind = PrePrintStrategyKind::PreStartGcode;
-    addon.strategy = PrePrintStrategyPreStartGcode{"TIMELAPSE_RENDER"};
-
-    set.options = {skip, addon};
-    return set;
-}
-
-} // namespace
 
 // This used to be three TEST_CASEs that each declared their own local
 // lv_subject_t, initialized it, and read the value back — asserting LVGL's own
@@ -170,6 +141,68 @@ struct CacheDirGuard {
 };
 
 } // namespace
+
+// A queued job's saved option states arrive as a seed applied over the
+// freshly-populated rows for that ONE render. The merge rules live in the
+// renderer's set_state(): ids with no row are dropped, ids the seed does not
+// mention keep their defaults — which is why this case can assert all three
+// (override, default-kept, unknown-dropped) from one seed. And the seed is
+// consumed by the show() that applies it, so the NEXT show starts from
+// defaults again: a seed that survived would fight the user's own toggles on
+// every later file.
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "a queued job's saved option states seed the rows for one show only",
+                 "[print_select][detail_view][subjects][pre_print_options][job_queue]") {
+    CacheDirGuard guard;
+
+    register_xml_callbacks({
+        {"on_print_select_detail_backdrop", detail_noop_cb},
+        {"on_print_select_print_button", detail_noop_cb},
+        {"on_print_select_delete_button", detail_noop_cb},
+        {"on_print_detail_back_clicked", detail_noop_cb},
+        {"on_toggle_sliced_colors", detail_noop_cb},
+    });
+
+    PrinterStateTestAccess::set_option_set(get_printer_state(), make_skip_and_addon_set());
+
+    helix::ui::PrintSelectDetailView view;
+    view.set_dependencies(nullptr, &get_printer_state());
+    view.init_subjects();
+    REQUIRE(view.create(test_screen()) != nullptr);
+
+    struct CloseOnExit {
+        helix::ui::PrintSelectDetailView& v;
+        ~CloseOnExit() {
+            v.hide();
+            helix::ui::UpdateQueue::instance().drain();
+        }
+    } closer{view};
+
+    // Saved states for a queued job: bed_mesh flipped off, timelapse flipped
+    // on, plus an id no option set has ever defined.
+    view.seed_option_states({{"bed_mesh", false}, {"timelapse", true}, {"ghost_option", true}});
+    view.show("queued.gcode", "", "PLA");
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto states = view.collect_option_states();
+    REQUIRE(states.count("bed_mesh") == 1);
+    REQUIRE(states.count("timelapse") == 1);
+    CHECK(states.at("bed_mesh") == false);
+    CHECK(states.at("timelapse") == true);
+    CHECK(states.count("ghost_option") == 0);
+
+    // The seed is consumed: the next show of any file starts from defaults.
+    view.hide();
+    helix::ui::UpdateQueue::instance().drain();
+    view.show("other.gcode", "", "PLA");
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto reset_states = view.collect_option_states();
+    REQUIRE(reset_states.count("bed_mesh") == 1);
+    REQUIRE(reset_states.count("timelapse") == 1);
+    CHECK(reset_states.at("bed_mesh") == true);
+    CHECK(reset_states.at("timelapse") == false);
+}
 
 TEST_CASE_METHOD(LVGLUITestFixture, "detail_mapping_ready tracks cache seed and scan readiness",
                  "[print_select][detail_view][subjects]") {

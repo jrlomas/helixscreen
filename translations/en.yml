@@ -1233,6 +1233,7 @@ translations:
   File: File
   File Size: File Size
   File Will Stop the Printer: File Will Stop the Printer
+  'File not found: {}': 'File not found: {}'
   Filename: Filename
   Filter Fan: 'Filter Fan'
   'Filter Fan: Off': 'Filter Fan: Off'

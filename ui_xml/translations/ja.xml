@@ -1149,6 +1149,7 @@
   <translation tag="File" ja="ファイル"/>
   <translation tag="File Size" ja="ファイルサイズ"/>
   <translation tag="File Will Stop the Printer" ja="ファイルがプリンターを停止します"/>
+  <translation tag="File not found: {}" ja="ファイルが見つかりません: {}"/>
   <translation tag="Filename" ja="ファイル名"/>
   <translation tag="Filter Fan" ja="フィルターファン"/>
   <translation tag="Filter Fan: Off" ja="フィルターファン: オフ"/>

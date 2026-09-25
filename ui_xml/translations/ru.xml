@@ -1149,6 +1149,7 @@
   <translation tag="File" ru="Файл"/>
   <translation tag="File Size" ru="Размер файла"/>
   <translation tag="File Will Stop the Printer" ru="Файл остановит принтер"/>
+  <translation tag="File not found: {}" ru="Файл не найден: {}"/>
   <translation tag="Filename" ru="Имя файла"/>
   <translation tag="Filter Fan" ru="Вентилятор фильтра"/>
   <translation tag="Filter Fan: Off" ru="Вентилятор фильтра: Выкл"/>

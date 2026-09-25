@@ -1149,6 +1149,7 @@
   <translation tag="File" zh="文件"/>
   <translation tag="File Size" zh="文件大小"/>
   <translation tag="File Will Stop the Printer" zh="文件会使打印机停止"/>
+  <translation tag="File not found: {}" zh="未找到文件: {}"/>
   <translation tag="Filename" zh="文件名"/>
   <translation tag="Filter Fan" zh="滤网风扇"/>
   <translation tag="Filter Fan: Off" zh="滤网风扇: 关"/>

@@ -1175,6 +1175,7 @@ translations:
   File: ファイル
   File Size: ファイルサイズ
   File Will Stop the Printer: 'ファイルがプリンターを停止します'
+  'File not found: {}': 'ファイルが見つかりません: {}'
   Filename: ファイル名
   Filter Fan: フィルターファン
   'Filter Fan: Off': 'フィルターファン: オフ'

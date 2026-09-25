@@ -251,3 +251,98 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture, "add_job reports the resulting queue"
         [](const MoonrakerError& err) { FAIL(err.message); });
     CHECK(answered);
 }
+
+TEST_CASE_METHOD(QueueOptionsStoreFixture, "load_queued_job_options answers a stored entry",
+                 "[job_queue][options_store]") {
+    using namespace helix::queue;
+
+    QueuedJobOptionsMap seed;
+    seed["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}, {"soak", false}}};
+    seed["0099"] = QueuedJobOptions{"other.gcode", {{"unrelated", true}}};
+    api_->database_post_item(
+        kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
+        [](const MoonrakerError&) { FAIL("seed post failed"); });
+
+    bool answered = false;
+    QueuedJobOptions loaded;
+    load_queued_job_options(guard_, api_.get(), "0001", [&](QueuedJobOptions entry) {
+        answered = true;
+        loaded = std::move(entry);
+    });
+    pump();
+
+    REQUIRE(answered);
+    CHECK(loaded.filename == "benchy_v2.gcode");
+    REQUIRE(loaded.options.size() == 2);
+    CHECK(loaded.options.at("skip_beam") == true);
+    CHECK(loaded.options.at("soak") == false);
+}
+
+TEST_CASE_METHOD(QueueOptionsStoreFixture,
+                 "load_queued_job_options answers empty on a missing key or entry",
+                 "[job_queue][options_store]") {
+    using namespace helix::queue;
+
+    SECTION("nothing stored at all") {
+        // The mock answers the read with the same JSON-RPC 404 the real
+        // server does for a never-written key: defaults, not an error path.
+        bool answered = false;
+        QueuedJobOptions loaded{"sentinel", {{"sentinel", true}}};
+        load_queued_job_options(guard_, api_.get(), "0042", [&](QueuedJobOptions entry) {
+            answered = true;
+            loaded = std::move(entry);
+        });
+        pump();
+
+        REQUIRE(answered);
+        CHECK(loaded.filename.empty());
+        CHECK(loaded.options.empty());
+    }
+
+    SECTION("key stored, job absent from it") {
+        QueuedJobOptionsMap seed;
+        seed["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}}};
+        api_->database_post_item(
+            kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
+            [](const MoonrakerError&) { FAIL("seed post failed"); });
+
+        bool answered = false;
+        load_queued_job_options(guard_, api_.get(), "0042", [&](QueuedJobOptions entry) {
+            answered = true;
+            CHECK(entry.filename.empty());
+            CHECK(entry.options.empty());
+        });
+        pump();
+        CHECK(answered);
+    }
+}
+
+TEST_CASE_METHOD(QueueOptionsStoreFixture,
+                 "delete_queued_job_options removes only that job's entry",
+                 "[job_queue][options_store]") {
+    using namespace helix::queue;
+
+    QueuedJobOptionsMap seed;
+    seed["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}}};
+    seed["0042"] = QueuedJobOptions{"wedge.gcode", {{"soak", false}}};
+    api_->database_post_item(
+        kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
+        [](const MoonrakerError&) { FAIL("seed post failed"); });
+    REQUIRE(read_store().size() == 2);
+
+    delete_queued_job_options(guard_, api_.get(), "0042");
+    pump();
+
+    auto after = read_store();
+    REQUIRE(after.size() == 1);
+    CHECK(after.count("0001") == 1);
+    CHECK(after.count("0042") == 0);
+
+    // Deleting an id that is not stored must not disturb what is.
+    delete_queued_job_options(guard_, api_.get(), "9999");
+    pump();
+
+    after = read_store();
+    REQUIRE(after.size() == 1);
+    CHECK(after.count("0001") == 1);
+}

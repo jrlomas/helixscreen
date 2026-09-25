@@ -21,6 +21,7 @@
 #include "i_moonraker_sub_apis.h" // for JobQueueEntry
 #include "json_fwd.h"
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -111,5 +112,34 @@ std::optional<std::string> find_new_job_id(const std::vector<std::string>& befor
 /// @param options Filename and option row states gathered at queue time
 void save_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
                              const std::string& job_id, QueuedJobOptions options);
+
+/// @brief Read one job's stored options and hand them to @p on_loaded
+///
+/// Always answers exactly once, on the main thread, with defaults on any
+/// miss: nothing stored, no entry for @p job_id, or a read error all deliver
+/// an empty QueuedJobOptions — the caller cannot distinguish "never saved"
+/// from "cannot read", which is the contract a start-with-saved-options flow
+/// needs (it opens with defaults rather than refusing).
+///
+/// @param lifetime Guard of the object owning @p api's lifetime
+/// @param api API to read through; null answers defaults immediately
+/// @param job_id The queued job whose options to load
+/// @param on_loaded Receives the stored entry, or defaults
+void load_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
+                             const std::string& job_id,
+                             std::function<void(QueuedJobOptions)> on_loaded);
+
+/// @brief Read-modify-write one job's entry out of the store
+///
+/// The counterpart of save_queued_job_options for the confirmed-start path:
+/// the job left the queue, so its stored options must not outlive it. A
+/// missing key, a missing entry or a read error is already the desired end
+/// state — logged and done, no write.
+///
+/// @param lifetime Guard of the object owning @p api's lifetime
+/// @param api API to read/write through; null is a no-op
+/// @param job_id The job that just started printing
+void delete_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
+                               const std::string& job_id);
 
 } // namespace helix::queue

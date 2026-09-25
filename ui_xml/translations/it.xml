@@ -1149,6 +1149,7 @@
   <translation tag="File" it="File"/>
   <translation tag="File Size" it="Dimensione file"/>
   <translation tag="File Will Stop the Printer" it="Il file fermerà la stampante"/>
+  <translation tag="File not found: {}" it="File non trovato: {}"/>
   <translation tag="Filename" it="Nome file"/>
   <translation tag="Filter Fan" it="Ventola filtro"/>
   <translation tag="Filter Fan: Off" it="Ventola filtro: Off"/>

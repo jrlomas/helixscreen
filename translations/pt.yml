@@ -1264,6 +1264,7 @@ translations:
   File: Arquivo
   File Size: Tamanho do Arquivo
   File Will Stop the Printer: 'O arquivo vai parar a impressora'
+  'File not found: {}': 'Arquivo não encontrado: {}'
   Filename: Nome do Arquivo
   Filter Fan: Ventoinha do Filtro
   'Filter Fan: Off': 'Ventoinha do Filtro: Desligado'

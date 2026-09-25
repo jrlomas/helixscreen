@@ -22,6 +22,7 @@
 #include "print_file_data.h"
 #include "print_history_manager.h"
 #include "print_select_button_view.h"
+#include "queued_job_options.h"
 #include "subject_managed_panel.h"
 #include "usb_backend.h"
 
@@ -526,6 +527,23 @@ class PrintSelectPanel : public PanelBase {
     void add_to_queue();
 
     /**
+     * @brief Start a queued job through this panel's detail view.
+     *
+     * The job queue's single entry point (the job queue modal's row tap, the
+     * completion screen's "Start next"): guards on can_start_new_print()
+     * (warn and leave the job queued when the printer is busy), reads the
+     * job's saved option states from the store, and opens the file's detail
+     * view seeded with them — the same pipeline a manual Print tap uses, so
+     * every start-time check (filament, preflight, printer-stopping commands)
+     * runs as usual. The queue entry and its stored options are deleted only
+     * from the print-start success callback, never here: a missing file, a
+     * back-out or a failed start leaves the job queued.
+     *
+     * @param job The queue entry to start (job_id + queued filename)
+     */
+    void start_queued_job(const JobQueueEntry& job);
+
+    /**
      * @brief Show the enriched pre-flight filament check modal.
      *
      * Replaces the simple confirmation dialog. Renders a per-tool breakdown of
@@ -667,6 +685,40 @@ class PrintSelectPanel : public PanelBase {
     int selected_success_count_ = 0;      ///< Success count of selected file
     std::string
         pending_file_selection_; ///< File to auto-select when list is populated (--select-file)
+
+    /// A queued job being walked through the detail view toward a start.
+    /// Lives from start_queued_job() until one of:
+    ///   - print-start confirmed  -> finish_pending_queued_job() removes the
+    ///     queue entry and the stored options, then clears this;
+    ///   - the user backs out / opens a different file -> cleared, job stays
+    ///     queued for its own row tap;
+    ///   - a failed start -> kept, so a later confirmed retry still removes
+    ///     the job that was finally started.
+    struct PendingQueuedStart {
+        std::string job_id;
+        std::string filename;                 ///< gcodes-relative, as queued
+        helix::queue::QueuedJobOptions saved; ///< options read from the store (empty is valid)
+        bool saved_loaded = false;            ///< the options read has answered
+        bool start_attempted = false;         ///< a Print tap for THIS file is in flight
+        bool listing_arrived = false;         ///< a file listing answered after the request
+    };
+    std::optional<PendingQueuedStart> pending_queued_start_;
+
+    /// Queue-entry removal + stored-options delete, from the print-start
+    /// success callback only.
+    void finish_pending_queued_job();
+
+    /// Open the pending queued job's file, or toast "file not found" once the
+    /// post-request listing has answered and the file is provably absent.
+    /// The options read and the listing answer in either order; whichever
+    /// lands second is the one that can decide. No-op once a Print tap is in
+    /// flight — from then the pending entry exists only to remove the job on
+    /// a confirmed start, and a refresh must not re-open the file.
+    void try_open_pending_queued_job();
+
+    /// current_path_ + "/" + selected_filename_buffer_, or the bare name at
+    /// the gcodes root — the shape queued filenames have.
+    [[nodiscard]] std::string composed_selected_filename() const;
     bool return_to_home_on_close_ = false;
     int return_home_activation_count_ = 0;
     PrintSelectViewMode current_view_mode_ = PrintSelectViewMode::CARD;

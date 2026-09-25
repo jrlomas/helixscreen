@@ -156,4 +156,60 @@ void save_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
             }));
 }
 
+void load_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
+                             const std::string& job_id,
+                             std::function<void(QueuedJobOptions)> on_loaded) {
+    if (!api) {
+        on_loaded(QueuedJobOptions{});
+        return;
+    }
+
+    api->database_get_item(
+        kOptionsDbNamespace, kOptionsDbKey,
+        lifetime.bg_cb("queue::load_options_read",
+                       [on_loaded, job_id](const json& stored) mutable {
+                           const auto entries = decode_queued_job_options(stored);
+                           const auto it = entries.find(job_id);
+                           on_loaded(it != entries.end() ? it->second : QueuedJobOptions{});
+                       }),
+        lifetime.bg_cb("queue::load_options_read_error", [on_loaded](const MoonrakerError& err) {
+            // A missing key is the never-saved case; every other error also
+            // degrades to defaults rather than refusing the start.
+            spdlog::debug("[queue] Reading queued_job_options for load failed: {}", err.message);
+            on_loaded(QueuedJobOptions{});
+        }));
+}
+
+void delete_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
+                               const std::string& job_id) {
+    if (!api) {
+        return;
+    }
+
+    api->database_get_item(
+        kOptionsDbNamespace, kOptionsDbKey,
+        lifetime.bg_cb(
+            "queue::delete_options_read",
+            [api, job_id](const json& stored) mutable {
+                auto entries = decode_queued_job_options(stored);
+                if (entries.erase(job_id) == 0) {
+                    return; // already gone: the desired end state
+                }
+                api->database_post_item(
+                    kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(entries), []() {},
+                    [job_id](const MoonrakerError& err) {
+                        spdlog::warn(
+                            "[queue] Deleting stored options for job {} failed to write: {}",
+                            job_id, err.user_message());
+                    });
+            }),
+        lifetime.bg_cb("queue::delete_options_read_error", [job_id](const MoonrakerError& err) {
+            // Nothing stored means nothing to delete — that is success. A
+            // real read error leaves a stale entry the queue's own pruning
+            // collects on the next refresh.
+            spdlog::debug("[queue] Reading queued_job_options to delete job {} failed: {}", job_id,
+                          err.message);
+        }));
+}
+
 } // namespace helix::queue

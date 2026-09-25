@@ -1276,6 +1276,7 @@ translations:
   File: Datei
   File Size: Dateigröße
   File Will Stop the Printer: 'Datei stoppt den Drucker'
+  'File not found: {}': 'Datei nicht gefunden: {}'
   Filename: Dateiname
   Filter Fan: Filterlüfter
   'Filter Fan: Off': 'Filterlüfter: Aus'

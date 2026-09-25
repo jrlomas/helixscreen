@@ -744,6 +744,16 @@ void PrintSelectDetailView::on_activate() {
     // Idempotent — only rebuilds when the printer type has changed.
     populate_option_rows();
 
+    // A queued job's saved states override the defaults for this render.
+    // set_state() ignores ids with no row, which is the whole merge rule:
+    // unknown ids drop, unmentioned ids keep their defaults.
+    if (!pending_option_seed_.empty()) {
+        for (const auto& [id, on] : pending_option_seed_) {
+            option_rows_renderer_.set_state(id, on ? 1 : 0);
+        }
+        pending_option_seed_.clear();
+    }
+
     // Cache file size for safety checks (before modification attempts)
     if (prep_manager_ && current_file_size_bytes_ > 0) {
         prep_manager_->set_cached_file_size(current_file_size_bytes_);
@@ -938,6 +948,9 @@ void PrintSelectDetailView::on_ui_destroyed() {
     pre_print_options_container_ = nullptr;
     option_rows_renderer_.clear();
     last_rendered_printer_type_.clear();
+    // A seed that never reached a render dies with the view it was meant
+    // for; the next file to open starts from its own defaults.
+    pending_option_seed_.clear();
     if (prep_manager_) {
         prep_manager_->set_option_state_provider(nullptr);
     }
@@ -2460,6 +2473,10 @@ std::map<std::string, bool> PrintSelectDetailView::collect_option_states() const
         out[id] = option_rows_renderer_.get_state(id, 0) != 0;
     }
     return out;
+}
+
+void PrintSelectDetailView::seed_option_states(std::map<std::string, bool> overrides) {
+    pending_option_seed_ = std::move(overrides);
 }
 
 } // namespace helix::ui

@@ -366,6 +366,19 @@ class PrintSelectDetailView : public OverlayBase {
     [[nodiscard]] std::map<std::string, bool> collect_option_states() const;
 
     /**
+     * @brief Override the NEXT render's initial option-row states
+     *
+     * The queued-job start path's counterpart of collect_option_states():
+     * states are handed back before show() so the rows for that one file open
+     * as they were saved, not at default_enabled. Applied in on_activate()
+     * right after populate_option_rows() re-initializes the rows, then
+     * consumed — a later show starts from defaults again. Ids with no row are
+     * dropped by the renderer's set_state(); ids the seed does not mention
+     * keep their defaults.
+     */
+    void seed_option_states(std::map<std::string, bool> overrides);
+
+    /**
      * @brief Get current filament mappings from the mapping card
      */
     [[nodiscard]] std::vector<helix::ToolMapping> get_filament_mappings() const {
@@ -777,6 +790,10 @@ class PrintSelectDetailView : public OverlayBase {
     PrePrintOptionsRenderer option_rows_renderer_;
     lv_obj_t* pre_print_options_container_ = nullptr;
     std::string last_rendered_printer_type_;
+
+    // States handed over by seed_option_states(), applied over the freshly
+    // populated rows by the next on_activate() and consumed there.
+    std::map<std::string, bool> pending_option_seed_;
 
     // === Cached show() parameters (used by on_activate) ===
     std::string current_filename_;
