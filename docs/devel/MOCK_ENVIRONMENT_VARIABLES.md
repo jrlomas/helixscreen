@@ -684,7 +684,7 @@ It also advertises the Creator 5 fingerprint in `printer.objects.list`
 
 **The persona implies a tool changer.** A Creator 5 Pro is a 4-head changer, so
 with no `HELIX_MOCK_AMS` set it selects the toolchanger backend rather than
-falling back to the generic Happy Hare default — you get 4 tools mapped to
+falling back to the generic Happy Hare default: you get 4 tools mapped to
 `extruder`/`extruder1..3` from `HELIX_MOCK_PRINTER=creator5` alone. An explicit
 `HELIX_MOCK_AMS` always wins, so other topologies stay testable against the
 persona:

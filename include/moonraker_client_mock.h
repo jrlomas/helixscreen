@@ -440,8 +440,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
      * AmsBackend's mock branch (which picks the backend type). One function
      * stops the two env-var parses drifting apart.
      *
-     * True when HELIX_MOCK_AMS selects a tool changer, or — when HELIX_MOCK_AMS
-     * is unset — when the persona is a tool changer by construction. The
+     * True when HELIX_MOCK_AMS selects a tool changer, or, when HELIX_MOCK_AMS
+     * is unset, when the persona is a tool changer by construction. The
      * creator5 persona is: a Creator 5 Pro is a 4-head changer, so leaving it on
      * the Happy Hare default misrepresents the machine. An explicit
      * HELIX_MOCK_AMS always wins, so other topologies stay testable against the
