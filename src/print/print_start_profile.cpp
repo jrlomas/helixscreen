@@ -406,37 +406,6 @@ int PrintStartProfile::get_phase_weight(PrintStartPhase phase) const {
     return (it != phase_weights_.end()) ? it->second : 0;
 }
 
-bool PrintStartProfile::declares_phase_signal(PrintStartPhase phase) const {
-    for (const auto& format : signal_formats_) {
-        for (const auto& mapping : format.mappings) {
-            if (mapping.second.phase == phase) {
-                return true;
-            }
-        }
-    }
-    for (const auto& pattern : response_patterns_) {
-        if (pattern.phase == phase) {
-            return true;
-        }
-    }
-    for (const auto& pattern : state_patterns_) {
-        if (pattern.phase == phase) {
-            return true;
-        }
-    }
-    for (const auto& rule : status_signals_) {
-        if (rule.phase == phase) {
-            return true;
-        }
-    }
-    for (const auto& entry : silent_progression_) {
-        if (entry.phase == phase) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // ============================================================================
 // JSON PARSING
 // ============================================================================

@@ -1325,52 +1325,6 @@ TEST_CASE("PrintStartProfile: declared state patterns win over response patterns
     CHECK(result.phase == PrintStartPhase::HOMING);
 }
 
-TEST_CASE("PrintStartProfile: declares_phase_signal covers every mapping form",
-          "[profile][print]") {
-    auto bare = PrintStartProfileTestAccess::parse(nlohmann::json::parse(R"({"name":"d0"})"));
-    REQUIRE(bare != nullptr);
-    CHECK_FALSE(bare->declares_phase_signal(PrintStartPhase::PURGING));
-
-    auto by_format = PrintStartProfileTestAccess::parse(nlohmann::json::parse(
-        R"({"name":"d1",)"
-        R"("signal_formats":[{"prefix":"// code ",)"
-        R"("mappings":{"PRIME":{"phase":"PURGING","message":"Priming..."}}}]})"));
-    REQUIRE(by_format != nullptr);
-    CHECK(by_format->declares_phase_signal(PrintStartPhase::PURGING));
-
-    auto by_response = PrintStartProfileTestAccess::parse(nlohmann::json::parse(
-        R"({"name":"d2",)"
-        R"("response_patterns":[)"
-        R"({"pattern":"purge","phase":"PURGING","message":"Purging...","weight":5}]})"));
-    REQUIRE(by_response != nullptr);
-    CHECK(by_response->declares_phase_signal(PrintStartPhase::PURGING));
-
-    auto by_state = PrintStartProfileTestAccess::parse(nlohmann::json::parse(
-        R"({"name":"d3",)"
-        R"("state_patterns":[)"
-        R"({"pattern":"PURGE","phase":"PURGING","message":"Purging...","weight":5}]})"));
-    REQUIRE(by_state != nullptr);
-    CHECK(by_state->declares_phase_signal(PrintStartPhase::PURGING));
-
-    auto by_status = PrintStartProfileTestAccess::parse(
-        nlohmann::json::parse(R"({"name":"d4",)"
-                              R"("status_signals":[{"name":"purge_zone","object":"toolhead",)"
-                              R"("when":[{"field":"position","index":0,"op":"gt","value":100}],)"
-                              R"("phase":"PURGING","message":"Purging...","weight":5}]})"));
-    REQUIRE(by_status != nullptr);
-    CHECK(by_status->declares_phase_signal(PrintStartPhase::PURGING));
-
-    auto by_silent = PrintStartProfileTestAccess::parse(nlohmann::json::parse(
-        R"({"name":"d5",)"
-        R"("silent_progression":[)"
-        R"({"after_temps_ready_seconds":45,"phase":"PURGING","message":"Purging..."}]})"));
-    REQUIRE(by_silent != nullptr);
-    CHECK(by_silent->declares_phase_signal(PrintStartPhase::PURGING));
-
-    // A different phase in the same form does not count.
-    CHECK_FALSE(by_format->declares_phase_signal(PrintStartPhase::HOMING));
-}
-
 TEST_CASE("PrintStartProfile: a pattern's hold comes from the capture group it names",
           "[profile][print][pattern][hold]") {
     auto profile = PrintStartProfileTestAccess::parse(nlohmann::json::parse(

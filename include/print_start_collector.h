@@ -198,35 +198,6 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     }
 
     /**
-     * @brief Mark the prime/purge line as in progress (phase UPDATE, not completion)
-     *
-     * Called when print_stats.print_duration first goes positive while the real
-     * first layer has NOT yet been reached (current_layer < 1). On firmwares
-     * whose prime/purge line emits no observable gcode_response (Snapmaker U1:
-     * the initial "G1 X110 E15" prime extrudes silently; the PRINT_PREEXTRUDING
-     * action code only fires for a SECOND tool mid-print), print_duration going
-     * 0->positive is the one real, observable signal that priming has begun.
-     *
-     * This advances the displayed phase to PURGING ("Priming...") but does NOT
-     * complete the pre-print phase — completion stays gated on the genuine
-     * current_layer 0->1 edge (MoonrakerManager::should_complete_preprint).
-     *
-     * The nudge is an inference, so it owns its own gating: it is disabled
-     * outright when the loaded profile declares a PURGING signal in any form
-     * (that profile narrates its own purge — a declared signal outranks the
-     * guess, whose quiet-clock reading cannot tell a long silent calibration
-     * stretch from a prime line); otherwise it speaks at most once per print,
-     * only once the collector has reached BED_MESH or a later phase (before
-     * that the printer is still homing / feeding / heating, and
-     * print_duration goes positive with the first toolhead motion), and only
-     * after the printer has stopped narrating for PRIMING_INFER_QUIET — probe
-     * lines and action codes refresh that clock throughout a live mesh, so a
-     * mesh in progress never reads as priming. A no-op once already at COMPLETE
-     * or PURGING.
-     */
-    void note_priming();
-
-    /**
      * @brief Record the printer's live bed-mesh presence
      *
      * Fed from the bed_mesh status stream. A mesh that disappears while the
@@ -518,10 +489,6 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     // Phase tracking (protected by state_mutex_)
     std::set<helix::PrintStartPhase> detected_phases_;
     helix::PrintStartPhase current_phase_ = helix::PrintStartPhase::IDLE;
-    /// Latched when the inferred priming nudge has spoken this print: it is an
-    /// inference, so once it has spoken it must never speak again — a later
-    /// real signal always wins. Reset in start()/reset().
-    bool priming_noted_ = false;
     bool print_start_detected_ = false;
     int max_sequential_progress_ = 0; // Monotonic progress guard for sequential mode
     helix::sim::SimulatedClock::time_point printing_state_start_;
@@ -585,12 +552,6 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     /// (the K2 spends ~5s per point, ~3s on a manual sweep) with margin for a
     /// heat-soak step that emits nothing at all.
     static constexpr auto PREPRINT_QUIET_TIMEOUT = std::chrono::seconds(90);
-    /// How long the printer must say nothing (no matched line, no probe line,
-    /// no standing hold) before the inferred priming nudge may speak. Above
-    /// the gap between mesh probe points (the K2 spends ~5s per point), so a
-    /// live mesh never reads as priming; below a genuine prime line (predicted
-    /// purge runs ~15s), so the label still appears during one.
-    static constexpr auto PRIMING_INFER_QUIET = std::chrono::seconds(10);
     static constexpr float ADAPTIVE_TIMEOUT_MARGIN =
         1.5f; ///< Multiply predicted total for adaptive timeout
     static constexpr float ABSOLUTE_TIMEOUT_MARGIN =

@@ -3021,28 +3021,6 @@ class SnapmakerCollectorFixture : public PrintStartCollectorHeaterFixture {
         drain_async_updates();
     }
 };
-
-// A profile with NO PURGING mapping in any form — the printer shape the
-// print_duration priming inference exists for. The mesh lines the tests
-// narrate are the only patterns it carries.
-class NoPurgeProfileFixture : public PrintStartCollectorHeaterFixture {
-  public:
-    NoPurgeProfileFixture() {
-        auto profile = PrintStartProfileTestAccess::parse(nlohmann::json::parse(
-            R"({"name":"no_purge",)"
-            R"("response_patterns":[)"
-            R"({"pattern":"z offset:","phase":"BED_MESH","message":"Bed mesh...","weight":5},)"
-            R"({"pattern":"z_mesh_complete:","phase":"BED_MESH","message":"Bed mesh...","weight":5}]})"));
-        REQUIRE(profile != nullptr);
-        collector_->set_profile(profile);
-    }
-
-    void feed_gcode(const std::string& line) {
-        nlohmann::json msg = {{"method", "notify_gcode_response"}, {"params", {line}}};
-        client().dispatch_method_callback("notify_gcode_response", msg);
-        drain_async_updates();
-    }
-};
 } // namespace
 
 TEST_CASE_METHOD(SnapmakerCollectorFixture,
@@ -3823,104 +3801,6 @@ TEST_CASE("heater wait report lines", "[print][collector][heater_wait]") {
 }
 
 // ============================================================================
-// The initial prime/purge line can extrude with NO observable gcode_response
-// and no PURGING mapping in the profile. print_stats.print_duration going
-// 0->positive while current_layer is still < 1 is the one real, observable
-// "priming has begun" signal on such a printer. The collector must show
-// PURGING "Priming..." but must NOT complete the pre-print phase — completion
-// stays gated on the genuine current_layer 0->1 edge.
-// ============================================================================
-
-TEST_CASE_METHOD(NoPurgeProfileFixture,
-                 "priming inference: shows Priming without completing pre-print",
-                 "[print][collector][preprint]") {
-    helix::sim::SimulatedClock::ManualScope clock(helix::sim::SimSpeed::of(1.0));
-    collector().start();
-    drain_async_updates();
-
-    // Before the mesh phases the nudge must change nothing, however often the
-    // print_duration observer fires it (print_duration goes positive with the
-    // first toolhead motion, long before any extrusion).
-    for (int i = 0; i < 3; ++i) {
-        collector().note_priming();
-        drain_async_updates();
-    }
-    REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
-    REQUIRE(get_current_message().find("Priming") == std::string::npos);
-
-    // Sequence has reached the mesh, pre-layer-1.
-    feed_gcode("// z offset: -0.05");
-    feed_gcode("// z_mesh_complete: -0.02573436601557052");
-    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
-
-    // print_duration went positive (prime extrusion) while current_layer < 1,
-    // and the printer has gone quiet — the mesh finished, the prime line is
-    // the silent stretch now running.
-    clock.advance(std::chrono::seconds(10));
-    collector().note_priming();
-    drain_async_updates();
-    INFO("After note_priming: phase=" << static_cast<int>(get_current_phase())
-                                      << " msg=" << get_current_message());
-    REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
-    REQUIRE(get_current_message().find("Priming") != std::string::npos);
-
-    // CRITICAL: priming is a phase UPDATE, not completion. It must NOT advance to
-    // COMPLETE — that only happens on the real first-layer (current_layer 0->1).
-    REQUIRE(get_current_phase() != PrintStartPhase::COMPLETE);
-
-    // Further note_priming calls are a no-op (one-shot) and still not COMPLETE.
-    collector().note_priming();
-    collector().note_priming();
-    drain_async_updates();
-    REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
-
-    // The genuine first-layer signal completes it (as before).
-    collector().complete_from_external_signal("first layer");
-    drain_async_updates();
-    REQUIRE(get_current_phase() == PrintStartPhase::COMPLETE);
-}
-
-// ============================================================================
-// The one-shot priming latch is per PRINT, not per collector: MoonrakerManager
-// reuses one collector across prints (reset() + start() per arm), so the next
-// print's prime line must be inferable again.
-// ============================================================================
-
-TEST_CASE_METHOD(NoPurgeProfileFixture, "priming inference: the nudge re-arms for the next print",
-                 "[print][collector][preprint]") {
-    helix::sim::SimulatedClock::ManualScope clock(helix::sim::SimSpeed::of(1.0));
-    collector().start();
-    drain_async_updates();
-
-    auto prime_at_mesh = [&]() {
-        feed_gcode("// z offset: -0.05");
-        REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
-        clock.advance(std::chrono::seconds(10));
-        collector().note_priming();
-        drain_async_updates();
-        REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
-        REQUIRE(get_current_message().find("Priming") != std::string::npos);
-    };
-
-    prime_at_mesh();
-
-    SECTION("start() alone re-arms (stop/start without reset)") {
-        collector().stop();
-        collector().start();
-        drain_async_updates();
-        REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
-        prime_at_mesh();
-    }
-
-    SECTION("reset() alone re-arms (reset while active)") {
-        collector().reset();
-        drain_async_updates();
-        REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
-        prime_at_mesh();
-    }
-}
-
-// ============================================================================
 // A response_pattern whose phase enum was already detected may still refine
 // the MESSAGE when it differs (the U1 narrates "Probing Z..." and "Bed
 // mesh..." through enums a proactive or earlier signal already claimed), but
@@ -3958,13 +3838,10 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
 // Z calibration mesh, plate detect + 4 probes — then ~129s of true silence
 // while klippy-internal flow calibration and nozzle clean run (no
 // gcode_response exists for them) — then the real bed mesh (~14s), then ~39s
-// of quiet prime line before layer 1. The U1 profile narrates its own purge
-// (PRINT_PREEXTRUDING -> PURGING), so the print_duration priming inference
-// must never speak on it: a quiet-clock guess cannot tell the 129s
-// calibration silence from a prime line, and firing inside the gap would
-// label the whole stretch "Priming..." and spend the one shot before the
-// real mesh. The last declared phase owns the display through each silent
-// stretch.
+// of quiet prime line before layer 1. Nothing narrates the silent prime line,
+// and the collector has no priming inference to guess at it: the last
+// declared phase owns the display through each silent stretch, and only the
+// genuine current_layer 0->1 edge completes the pre-print.
 // ============================================================================
 
 TEST_CASE_METHOD(SnapmakerCollectorFixture,
@@ -3975,10 +3852,9 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     collector().start();
     drain_async_updates();
 
-    // One print_stats tick: 1s of sim time, then the observer's nudge.
+    // One print_stats tick: 1s of sim time.
     auto tick = [&]() {
         clock.advance(std::chrono::seconds(1));
-        collector().note_priming();
         drain_async_updates();
         return get_current_message();
     };
@@ -4002,8 +3878,8 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
     REQUIRE(get_current_message().find("Inspecting bed") != std::string::npos);
 
-    // print_duration goes positive here on the real printer: every tick from
-    // now on calls note_priming().
+    // print_duration goes positive here on the real printer; the sequence
+    // continues ticking through it.
     feed_gcode("// Success: Set action code PRINT_SWITCH_CHECKING");
     REQUIRE(get_current_message().find("Checking extruders") != std::string::npos);
     REQUIRE(tick().find("Checking extruders") != std::string::npos);
@@ -4032,8 +3908,7 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
 
     // ~129s of true silence: flow calibration and nozzle clean are
     // klippy-internal and narrate nothing. The display must keep the plate
-    // label the whole way — this gap is exactly what a "quiet past the mesh
-    // means priming" inference would misread.
+    // label the whole way — nothing speaks during a silent stretch.
     quiet_ticks(129, "Detecting plate");
     REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
 
@@ -4045,8 +3920,8 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     REQUIRE(tick().find("Bed mesh") != std::string::npos);
     feed_gcode("// z_mesh_complete: -0.03000000000000000");
 
-    // ~39s of quiet prime line before layer 1. The profile owns the purge,
-    // so the mesh label holds through it.
+    // ~39s of quiet prime line before layer 1: the prime is not narrated, so
+    // the mesh label holds until the layer edge completes the pre-print.
     quiet_ticks(39, "Bed mesh");
 
     collector().complete_from_external_signal("first layer");
