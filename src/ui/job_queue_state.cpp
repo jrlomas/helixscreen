@@ -8,10 +8,12 @@
 #include "connection_staleness.h"
 #include "i_moonraker_api.h"
 #include "i_moonraker_client.h"
+#include "job_queue_start.h"
 #include "queued_job_options.h"
 #include "static_subject_registry.h"
 #include "subject_debug_registry.h"
 
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -117,6 +119,12 @@ void JobQueueState::init_subjects() {
                                                       LV_SUBJECT_TYPE_STRING, __FILE__, __LINE__);
 
     subjects_initialized_ = true;
+
+    // The "Up next" rows and the completion modal's "Start next" secondary
+    // resolve these callback names; registration must precede any XML that
+    // references them, and this init runs before panel creation. Idempotent,
+    // so the many per-test JobQueueState instances register once per process.
+    helix::register_job_queue_start_callbacks();
 
     // Co-locate cleanup registration with init (CLAUDE.md mandate)
     StaticSubjectRegistry::instance().register_deinit("JobQueueState",
@@ -287,18 +295,20 @@ std::string format_up_next_text(const std::string& display_name, int queued_coun
     if (queued_count <= 0 || display_name.empty()) {
         return {};
     }
-    std::string text = std::string(lv_tr("Up next")) + ": " + display_name;
+    // Whole-format translation keys: a translator must be able to move or
+    // drop the colon and the count suffix, not have it welded on after the
+    // fact around a translated fragment.
     if (queued_count > 1) {
-        text += " (+" + std::to_string(queued_count - 1) + ")";
+        return fmt::format(lv_tr("Up next: {} (+{})"), display_name, queued_count - 1);
     }
-    return text;
+    return fmt::format(lv_tr("Up next: {}"), display_name);
 }
 
 std::string format_start_next_text(const std::string& display_name, int queued_count) {
     if (queued_count <= 0 || display_name.empty()) {
         return {};
     }
-    return std::string(lv_tr("Start next")) + ": " + display_name;
+    return fmt::format(lv_tr("Start next: {}"), display_name);
 }
 
 bool parse_automatic_transition(const json& rpc_response) {

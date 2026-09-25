@@ -2953,7 +2953,7 @@ translations:
   Start anyway?: 'Démarrer quand même ?'
   Start at: Commencer à
   Start failed: Échec du démarrage
-  Start next: Lancer le suivant
+  'Start next: {}': 'Lancer le suivant : {}'
   Start over: Recommencer
   Start print anyway?: Démarrer l'impression quand même ?
   Started: Démarré
@@ -3410,7 +3410,8 @@ translations:
   Unretract Speed: Vitesse de dérétraction
   Unsupported tape width: Largeur de ruban non prise en charge
   'Unsupported tape width: ': 'Largeur de ruban non prise en charge : '
-  Up next: À suivre
+  'Up next: {}': 'À suivre : {}'
+  'Up next: {} (+{})': 'À suivre : {} (+{})'
   Up to date: À jour
   Update: Mettre à jour
   Update Available: Mise à jour disponible

@@ -2645,7 +2645,7 @@
   <translation tag="Start anyway?" ja="それでも開始しますか？"/>
   <translation tag="Start at" ja="開始位置"/>
   <translation tag="Start failed" ja="開始に失敗"/>
-  <translation tag="Start next" ja="次を開始"/>
+  <translation tag="Start next: {}" ja="次を開始：{}"/>
   <translation tag="Start over" ja="やり直す"/>
   <translation tag="Start print anyway?" ja="それでも印刷を開始しますか？"/>
   <translation tag="Started" ja="開始"/>
@@ -3012,7 +3012,8 @@
   <translation tag="Unretract Speed" ja="アンリトラクト速度"/>
   <translation tag="Unsupported tape width" ja="サポートされていないテープ幅"/>
   <translation tag="Unsupported tape width: " ja="サポートされていないテープ幅: "/>
-  <translation tag="Up next" ja="次の印刷"/>
+  <translation tag="Up next: {}" ja="次の印刷：{}"/>
+  <translation tag="Up next: {} (+{})" ja="次の印刷：{}（+{}）"/>
   <translation tag="Up to date" ja="最新の状態です"/>
   <translation tag="Update" ja="更新"/>
   <translation tag="Update Available" ja="更新あり"/>

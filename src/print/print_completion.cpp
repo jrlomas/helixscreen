@@ -19,7 +19,6 @@
 #include "display_manager.h"
 #include "display_settings_manager.h"
 #include "format_utils.h"
-#include "job_queue_start.h"
 #include "moonraker_api.h"
 #include "moonraker_manager.h"
 #include "printer_state.h"
@@ -87,11 +86,6 @@ static void init_completion_subjects() {
     lv_xml_register_subject(nullptr, "print_completion_filament", &s_filament_subject);
     lv_xml_register_subject(nullptr, "print_completion_has_estimate", &s_has_estimate_subject);
     lv_xml_register_subject(nullptr, "print_completion_has_filament", &s_has_filament_subject);
-
-    // The modal's "Start next" secondary (and the "Up next" rows elsewhere)
-    // resolve these callback names; registration must precede any XML that
-    // references them, and subject init runs before panel creation.
-    register_job_queue_start_callbacks();
 
     s_subjects_initialized = true;
 

@@ -2726,7 +2726,7 @@ translations:
   Start anyway?: 'それでも開始しますか？'
   Start at: 開始位置
   Start failed: 開始に失敗
-  Start next: 次を開始
+  'Start next: {}': '次を開始：{}'
   Start over: やり直す
   Start print anyway?: それでも印刷を開始しますか？
   Started: 開始
@@ -3129,7 +3129,8 @@ translations:
   Unretract Speed: アンリトラクト速度
   Unsupported tape width: サポートされていないテープ幅
   'Unsupported tape width: ': 'サポートされていないテープ幅: '
-  Up next: 次の印刷
+  'Up next: {}': '次の印刷：{}'
+  'Up next: {} (+{})': '次の印刷：{}（+{}）'
   Up to date: 最新の状態です
   Update: 更新
   Update Available: 更新あり

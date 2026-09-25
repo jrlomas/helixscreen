@@ -5,6 +5,7 @@
 
 #include "ui_job_queue_modal.h"
 #include "ui_modal.h"
+#include "ui_panel_print_select.h"
 
 #include "app_globals.h"
 #include "helix-xml/src/xml/lv_xml.h"
@@ -56,11 +57,19 @@ UpNextTapAction decide_up_next_tap(bool can_start_new_print) {
 }
 
 void start_next_queued_job() {
-    // Placeholder body: the shared start pipeline (print-queue design §3)
-    // takes over here — navigate to the file, seed saved options, remove the
-    // job once the start succeeds. Until then, show the queue so the tap
-    // still leads somewhere.
-    open_job_queue_modal();
+    auto* jqs = get_job_queue_state();
+    if (!jqs || jqs->get_jobs().empty()) {
+        // The Start next surfaces are count-driven and hide on an empty
+        // queue, so this is only the race where the last job was removed
+        // between the render and the tap.
+        spdlog::debug("[JobQueueStart] Start next found no queued job");
+        return;
+    }
+    // The same entry the queue modal's row tap uses: the busy guard, the
+    // saved option states and the entry's removal on confirmed start all
+    // live in the detail-view pipeline every manual Print tap already uses.
+    get_print_select_panel(get_printer_state(), get_moonraker_api())
+        ->start_queued_job(jqs->get_jobs().front());
 }
 
 void handle_up_next_tap() {

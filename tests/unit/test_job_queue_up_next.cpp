@@ -116,12 +116,15 @@ TEST_CASE("format_up_next_text composes prefix, name and remaining count", "[job
     }
     SECTION("one job names it with no count suffix") {
         const std::string text = format_up_next_text("benchy", 1);
-        REQUIRE(text == std::string(lv_tr("Up next")) + ": benchy");
+        // Literals, not lv_tr compositions: the whole format string is the
+        // translation key now, so what the function returns under the base
+        // locale is exactly this text.
+        REQUIRE(text == "Up next: benchy");
         REQUIRE(text.find(" (+") == std::string::npos);
     }
     SECTION("more than one job appends the remaining count") {
         const std::string text = format_up_next_text("benchy", 3);
-        REQUIRE(text == std::string(lv_tr("Up next")) + ": benchy (+2)");
+        REQUIRE(text == "Up next: benchy (+2)");
     }
 }
 
@@ -131,8 +134,7 @@ TEST_CASE("format_start_next_text composes the completion modal's button label",
         REQUIRE(format_start_next_text("benchy", 0).empty());
     }
     SECTION("a queued job is named after the verb") {
-        REQUIRE(format_start_next_text("benchy", 2) ==
-                std::string(lv_tr("Start next")) + ": benchy");
+        REQUIRE(format_start_next_text("benchy", 2) == "Start next: benchy");
     }
     SECTION("no count suffix leaks into the button") {
         REQUIRE(format_start_next_text("benchy", 5).find(" (+") == std::string::npos);
@@ -203,10 +205,21 @@ TEST_CASE_METHOD(LVGLUITestFixture, "up next subjects publish settled before the
 // XML wiring
 // ============================================================================
 
+TEST_CASE("JobQueueState subject init registers the queue-start XML callbacks",
+          "[job_queue][up_next]") {
+    JobQueueState jqs(nullptr, nullptr);
+    ScopedJobQueueSubjects subject_guard;
+    jqs.init_subjects();
+
+    // The "Up next" rows and the completion modal's secondary resolve these
+    // names; an unbound callback fails silently at XML creation, so the
+    // lookup itself is the only observable that pins the registration.
+    REQUIRE(lv_xml_get_event_cb(nullptr, "on_up_next_tap") != nullptr);
+    REQUIRE(lv_xml_get_event_cb(nullptr, "on_print_complete_start_next") != nullptr);
+}
+
 TEST_CASE_METHOD(LVGLUITestFixture, "completion modal secondary appears only with a queued job",
                  "[job_queue][up_next][print_completion][xml]") {
-    register_job_queue_start_callbacks();
-
     JobQueueState jqs(nullptr, nullptr);
     ScopedJobQueueSubjects subject_guard;
     jqs.init_subjects();
@@ -235,8 +248,6 @@ TEST_CASE_METHOD(LVGLUITestFixture, "completion modal secondary appears only wit
 
 TEST_CASE_METHOD(LVGLUITestFixture, "home print status widget shows the up next line while queued",
                  "[job_queue][up_next][print_status_widget][xml]") {
-    register_job_queue_start_callbacks();
-
     JobQueueState jqs(nullptr, nullptr);
     ScopedJobQueueSubjects subject_guard;
     jqs.init_subjects();
@@ -262,8 +273,6 @@ TEST_CASE_METHOD(LVGLUITestFixture, "home print status widget shows the up next 
 
 TEST_CASE_METHOD(LVGLUITestFixture, "print status panel shows the up next line while queued",
                  "[job_queue][up_next][print_status_panel][xml]") {
-    register_job_queue_start_callbacks();
-
     JobQueueState jqs(nullptr, nullptr);
     ScopedJobQueueSubjects subject_guard;
     jqs.init_subjects();

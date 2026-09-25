@@ -26,15 +26,19 @@
 #include "ui_update_queue.h"
 
 #include "../test_helpers/job_queue_modal_test_access.h"
+#include "../test_helpers/job_queue_state_test_access.h"
 #include "../test_helpers/moonraker_client_mock_test_access.h"
 #include "../test_helpers/print_select_panel_fixture.h"
 #include "../test_helpers/print_select_panel_test_access.h"
 #include "../test_helpers/print_state_test_drivers.h"
 #include "../ui_test_utils.h"
 #include "app_globals.h"
+#include "job_queue_start.h"
+#include "job_queue_state.h"
 #include "moonraker_api.h"
 #include "printer_state.h"
 #include "queued_job_options.h"
+#include "static_panel_registry.h"
 #include "test_helpers/pre_print_option_sets.h"
 #include "test_helpers/printer_state_test_access.h"
 
@@ -315,6 +319,11 @@ TEST_CASE_METHOD(QueuedStartFixture,
                  "[job_queue][queue_start]") {
     PlantedGcode file("queue_start_modal.gcode");
 
+    // The process-global panel binds whichever fixture's api created it; a
+    // case that runs after another one touched it would reuse a dead api, so
+    // every case here retires it at both ends and lets its own tap recreate it.
+    StaticPanelRegistry::instance().destroy_all();
+
     JobQueueModal modal;
     JobQueueModalTestAccess::start_job(modal, "0002", file.name());
     drain();
@@ -330,6 +339,56 @@ TEST_CASE_METHOD(QueuedStartFixture,
     REQUIRE(pending != nullptr);
     CHECK(*pending == "0002");
     CHECK(queue_has("0002"));
+
+    StaticPanelRegistry::instance().destroy_all();
+}
+
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "start next routes the queue's front job through the panel entry point",
+                 "[job_queue][queue_start]") {
+    StaticPanelRegistry::instance().destroy_all();
+
+    JobQueueState jqs(api_.get(), &mock_client_);
+    set_job_queue_state(&jqs);
+    // The ids/filenames mirror the mock's default queue (0001 benchy_v2,
+    // 0002 calibration_cube), so queue_has() below reads the entries the
+    // mock actually holds rather than ones only the cache knows about.
+    JobQueueStateTestAccess::set_jobs(
+        jqs, {entry("0001", "benchy_v2.gcode"), entry("0002", "calibration_cube.gcode")});
+
+    start_next_queued_job();
+    drain();
+
+    // Same delegation proof as the modal's row tap: the lazily-created global
+    // panel is never set up here, so the observable is the pending start
+    // existing for the FRONT job while the queue keeps every entry.
+    const std::string* pending =
+        ::PrintSelectPanelTestAccess::pending_queued_job_id(get_global_print_select_panel());
+    REQUIRE(pending != nullptr);
+    CHECK(*pending == "0001");
+    CHECK(queue_has("0001"));
+    CHECK(queue_has("0002"));
+
+    set_job_queue_state(nullptr);
+    StaticPanelRegistry::instance().destroy_all();
+}
+
+TEST_CASE_METHOD(QueuedStartFixture, "start next with an empty queue touches nothing",
+                 "[job_queue][queue_start]") {
+    StaticPanelRegistry::instance().destroy_all();
+
+    JobQueueState jqs(api_.get(), &mock_client_);
+    set_job_queue_state(&jqs);
+    JobQueueStateTestAccess::set_jobs(jqs, {});
+
+    start_next_queued_job();
+
+    // The factory call creates the panel here (the no-op path never does), so
+    // the read is against a live object, not the pre-call null singleton.
+    CHECK(::PrintSelectPanelTestAccess::pending_queued_job_id(
+              *get_print_select_panel(get_printer_state(), api_.get())) == nullptr);
+    set_job_queue_state(nullptr);
+    StaticPanelRegistry::instance().destroy_all();
 }
 
 TEST_CASE_METHOD(QueuedStartFixture,
