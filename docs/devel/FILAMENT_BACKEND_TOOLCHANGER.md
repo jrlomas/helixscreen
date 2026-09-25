@@ -141,7 +141,8 @@ is what supplies everything below.
 (`src/printer/toolchanger_addon.cpp#zmod_c5_detect`). Both halves are required: the AD5X
 Z-Mod also publishes `zmod_color` but has no carriage grab buttons, so it cannot match,
 and `zmod_color` alone would not say which machine this is. Reforge, the other C5 Pro
-firmware, needs none of this: it already runs on the plain klipper-toolchanger rows above.
+firmware, needs none of this: it matches no provider row and takes the plain
+klipper-toolchanger path described above.
 
 ### Tool reading
 
