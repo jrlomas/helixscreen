@@ -13,16 +13,21 @@ prestonbrown/helixscreen#1714), and Reforge (`Klipper4FlashForge/firmware`) ship
 over SSH with the NaN2008 toolchain; the kernel refuses legacy-NaN executables with
 ENOEXEC (see "NaN encoding").
 
+**Status: the toolchanger works in the UI** on Z-Mod firmware: the four heads are driven
+by the tool changer backend through Z-Mod's own objects, with mount/unmount and per-head
+colour and material (see "Z-Mod tool changer support" below). One upstream export is
+still pending for boot-time tool state and write-through; the section names it.
+
 ## Hardware (from the stock `firmwareExe` ELF and the device rootfs)
 
 | Spec | Value |
 |------|-------|
-| SoC | Ingenic X2000 (XBurst2, MIPS32r2, 2× 1.2 GHz) — same family as the Creality K1's X2000E |
+| SoC | Ingenic X2000 (XBurst2, MIPS32r2, 2x 1.2 GHz) - same family as the Creality K1's X2000E |
 | FPU / ABI | Hard float, 64-bit FPU (`-mfp64`), **NaN2008** (`/lib/ld-linux-mipsn8.so.1`) |
-| RAM | 128–256 MB |
-| Display | 800×480 panel; the framebuffer is exposed **portrait (480×800)**, so the preset sets `display.rotate = 90` (verified on the printer); fbdev `/dev/fb0`, no X11/Wayland/DRM |
+| RAM | 128-256 MB |
+| Display | 800x480 panel; the framebuffer is exposed **portrait (480x800)**, so the preset sets `display.rotate = 90` (verified on the printer); fbdev `/dev/fb0`, no X11/Wayland/DRM |
 | Touch | evdev, `/dev/input/event2` (auto-detected; override with `HELIX_TOUCH_DEVICE`) |
-| Stock UI | `firmwareExe` — LVGL 8 on fbdev. **Also** hosts the port-8898 REST API, the MQTT cloud link, and the tool-pickup orchestration for UI-started prints |
+| Stock UI | `firmwareExe` - LVGL 8 on fbdev. **Also** hosts the port-8898 REST API, the MQTT cloud link, and the tool-pickup orchestration for UI-started prints |
 | C library | glibc 2.33, built with Ingenic "MIPS Linux Tools GCC12.1 Release6.0.1 xburst2" (`mips-gcc1210-glibc233`), min kernel 3.10.14 |
 | Stock libs on device | libcurl, OpenSSL 1.0.0, zlib, OpenCV 4.2, FFmpeg (libav* 56/58), libzip 5, libstdc++ (GCC 12) |
 | Python | 3.8.2 at `/usr/prog/Python-3.8.2` |
@@ -33,18 +38,18 @@ ENOEXEC (see "NaN encoding").
 
 FlashForge layout, same family as the AD5X: `/usr/prog/` (programs), `/usr/data/` (user data,
 large partition), `/usr/data/config/` (Klipper/Moonraker config), `/usr/data/firmwareRes/`
-(stock UI resources, per-unit tool offsets in `config/device_config.conf` — back that up).
+(stock UI resources, per-unit tool offsets in `config/device_config.conf` - back that up).
 
 ### Platform key and self-update
 
 The unified build defines only `HELIX_PLATFORM_MIPS`, so `UpdateChecker::get_platform_key()`
-returns `"mips"` and self-update fetches the unified `mips` asset — the same bytes this
+returns `"mips"` and self-update fetches the unified `mips` asset, the same bytes this
 board runs. No creator5-specific asset exists or is needed.
 
 The installer is the one place the board is still misnamed: `detect_platform()`
 (`scripts/lib/installer/platform.sh`) classifies any MIPS box with `/usr/data` +
-`/usr/prog` as **ad5x**. That downloads the unified mips build under the ad5x alias —
-correct binary, wrong label — so `install.sh` works on this printer but reports it as an
+`/usr/prog` as **ad5x**. That downloads the unified mips build under the ad5x alias
+(correct binary, wrong label), so `install.sh` works on this printer but reports it as an
 AD5X. Giving the installer a Creator 5 Pro fingerprint is open work.
 
 ## NaN encoding
@@ -52,7 +57,7 @@ AD5X. Giving the installer a Creator 5 Pro fingerprint is open work.
 **This kernel refuses legacy-NaN executables.** Verified on the device: a legacy-NaN build
 fails with `execve(...) = -1 ENOEXEC (Exec format error)`, while every stock binary carries
 the `nan2008` ELF flag (busybox: `e_flags 0x70001405, noreorder, cpic, nan2008, o32,
-mips32r2`; the rejected build was `0x70001007` — identical except for that bit). `-mnan=2008`
+mips32r2`; the rejected build was `0x70001007`, identical except for that bit). `-mnan=2008`
 alone does not rescue a legacy-NaN toolchain: its `libc.a` is legacy-NaN and `ld` refuses to
 link mixed NaN encodings.
 
@@ -72,7 +77,7 @@ readelf -h build/mips/bin/helix-screen | grep Flags
 # Flags: 0x70001407, noreorder, pic, cpic, nan2008, o32, mips32r2   <- nan2008 is the point
 ```
 
-Output lands in `build/mips/` — the K1/AD5X build directory, because it is the same build.
+Output lands in `build/mips/`, the K1/AD5X build directory, because it is the same build.
 The docker image is shared with K1/AD5X (`docker/Dockerfile.mips`), so nothing new is built
 on first use if the unified image is already present.
 
@@ -86,9 +91,9 @@ prerendered images first (`make venv-setup && make gen-all-images`, as `release.
 No preset is baked in: first boot runs the hardware wizard, whose detection applies
 `assets/config/presets/creator5.json`.
 
-The binary locates its data root relative to itself (`<root>/bin/helix-screen` →
+The binary locates its data root relative to itself (`<root>/bin/helix-screen` ->
 `<root>/ui_xml`), so unpack the tarball as a whole (e.g. to `/usr/data/helixscreen/`)
-and run `bin/helix-screen` from there — a bare binary fails with "Could not find
+and run `bin/helix-screen` from there; a bare binary fails with "Could not find
 HelixScreen data root". `HELIX_DATA_DIR` overrides the lookup.
 
 ### Build configuration
@@ -96,24 +101,21 @@ HelixScreen data root". `HELIX_DATA_DIR` overrides the lookup.
 | Setting | Value |
 |---------|-------|
 | `PLATFORM_TARGET` | `mips` (`creator5` is an alias) |
-| Toolchain image | `helixscreen/toolchain-mips` — GCC 13.2 + musl 1.2.4, `mipsel-k1-linux-musl-`, nan2008/fp64 defaults |
+| Toolchain image | `helixscreen/toolchain-mips`: GCC 13.2 + musl 1.2.4, `mipsel-k1-linux-musl-`, nan2008/fp64 defaults |
 | Architecture | `-march=mips32r2 -mtune=mips32r2 -mnan=2008 -mfp64`, little-endian, hard float |
 | Linking | Fully static (musl), `-Os`, `-flto=auto`, gc-sections |
 | Display backend | fbdev (`/dev/fb0`), 480x800 portrait framebuffer; the preset's `display.rotate = 90` presents it landscape |
 | Input | evdev (auto-detect; `HELIX_TOUCH_DEVICE=/dev/input/event2` to pin) |
 | SSL | Enabled (static OpenSSL in the toolchain image) |
-| Platform defines | `HELIX_PLATFORM_MIPS` only — no creator5 define |
+| Platform defines | `HELIX_PLATFORM_MIPS` only, no creator5 define |
 | Sound | Compiled in, same as K1/AD5X (`HELIX_HAS_SOUND` + tracker via the jz_pwm backend); whether this board has `/dev/jz_pwm` hardware is unverified |
 | Output | `build/mips/bin/helix-screen`, `helix-splash`; CA bundle in `build/mips/certs/` |
 
-<<<<<<< HEAD
-## On-device bring-up
-=======
 ## Printer detection and preset
 
 `assets/config/printer_database.json` carries a `flashforge_creator_5_pro` entry; the
 preset (`assets/config/presets/creator5.json`, rotate 90) is applied when it wins. Two
-firmware families run on this hardware — the FlashForge fork (K4C5, with `ff_*` printer
+firmware families run on this hardware: the FlashForge fork (K4C5, with `ff_*` printer
 objects) and Z-Mod (`ghzserg/z_c5pro`, no `ff_*` objects but `gcode_button extruder_grab1..4`).
 One entry fingerprints both: `ff_toolchange` names the K4C5 firmware, `gcode_button
 extruder_grab1` names the changer on either firmware, and `zmod_color` is corroborating-only
@@ -126,20 +128,47 @@ Preset macro buttons for macros a firmware does not ship (e.g. `TOOLCHANGE_PARK`
 render greyed out, not dead: `ControlsPanel::update_macro_button` keeps the button visible
 and disabled when the macro is absent.
 
-## On-device bring-up (open work)
->>>>>>> 529759b91 (fix(creator5): database entry detects both C5 firmwares and cannot steal the AD5X)
+## Z-Mod tool changer support
 
-1. **Sanity on the printer** — done: `bin/helix-screen --version` runs. (`readelf -h` on
-   the binary must list `nan2008` in Flags — without it the kernel answers ENOEXEC.)
+On Z-Mod the four heads are driven by the tool changer backend through the Z-Mod row of the
+`toolchanger_addon` provider table: mounting is `_T_IN T=<n>`, unmounting is `_T_OUT`, and
+the mounted head is read from `zmod_color.active_tool_id` (0..3 mounted, -1 empty carriage,
+-2 dock and carriage sensors disagree). Each head's colour and material are read from
+`zmod_color.slots` and written back with `CHANGE_ZCOLOR SLOT=<n> HEX=<RRGGBB> TYPE=<type>
+SILENT=1`, the colour snapped to Z-Mod's palette first. The full contract, including the
+sensor-error and write-through rules, lives in
+[`FILAMENT_BACKEND_TOOLCHANGER.md`](../FILAMENT_BACKEND_TOOLCHANGER.md#z-mod-on-the-creator-5-pro).
+
+One upstream dependency: [ghzserg/z_c5pro#1](https://github.com/ghzserg/z_c5pro/pull/1)
+adds `slots`, `palette` and a live `active_tool_id` to `zmod_color.get_status()`. Without
+it a Z-Mod C5 boots showing a dock sensor error until the first `_T_IN` / `_T_OUT` /
+`GET_ZCOLOR`, and colour or material edits stay local to HelixScreen instead of reaching
+filament.json on the printer. Hardware verification of the Z-Mod behaviour once that export lands is
+open (prestonbrown/helixscreen#1714).
+
+### The `creator5_zmod` mock persona
+
+`HELIX_MOCK_PRINTER=creator5_zmod ./build/bin/helix-screen --test` runs the real
+`AmsBackendToolChanger` against mock Z-Mod hardware: the persona publishes `zmod`,
+`zmod_color`, `save_variables` and the 1-based `gcode_button extruder_pos1..4` /
+`extruder_grab1..4`, answers `_T_IN` / `_T_OUT` / `CHANGE_ZCOLOR`, and implies
+`--real-ams` so the mock AMS gate does not stand a mock backend in front of it. The
+`creator5` persona models the Reforge side only. Details in
+[`MOCK_ENVIRONMENT_VARIABLES.md`](../MOCK_ENVIRONMENT_VARIABLES.md).
+
+## On-device bring-up (open work)
+
+1. **Sanity on the printer**: done, `bin/helix-screen --version` runs. (`readelf -h` on
+   the binary must list `nan2008` in Flags; without it the kernel answers ENOEXEC.)
    `install.sh` reports the board as an AD5X (see "Platform key and self-update" above);
    unpack the tarball by hand, or accept the mislabel, until it gets a fingerprint.
-2. **Stock UI coexistence** — on the stock firmware, unlike the K1's `display-server`,
+2. **Stock UI coexistence**: on the stock firmware, unlike the K1's `display-server`,
    `firmwareExe` is not just a UI: stopping it also kills the 8898 REST API, the cloud
    link and the stock print orchestration (tool grab/release for UI-started prints), and
    two processes drawing to `/dev/fb0` will fight. The other firmwares sidestep it: Z-Mod
    (`ghzserg/z_c5pro`) starts HelixScreen in place of the stock UI (`DISPLAY_OFF HELIX=1`),
    and Reforge (`Klipper4FlashForge/firmware`) removes `firmwareExe` entirely.
-3. **Touch** — `/dev/input/event2`; if auto-detect picks another device, pin it with
+3. **Touch**: `/dev/input/event2`; if auto-detect picks another device, pin it with
    `HELIX_TOUCH_DEVICE`. The capacitive Goodix controller declares an 800x480 ABS range
    on the 480x800 portrait framebuffer: transposed, not mismatched. HelixScreen scales
    such a range by the display size and leaves rotation to LVGL
@@ -147,22 +176,22 @@ and disabled when the macro is absent.
    bad calibration, prestonbrown/helixscreen#1714). With `display.rotate = 90` the touch
    input is auto-rotated to match the display, so `HELIX_TOUCH_SWAP_AXES` must NOT be
    set: it would swap already-correct axes.
-4. **Moonraker** — HelixScreen talks to Moonraker (not `/tmp/uds`). The Moonraker instance
+4. **Moonraker**: HelixScreen talks to Moonraker (not `/tmp/uds`). The Moonraker instance
    that Mainsail uses is the one to point at (port 7125 unless `moonraker.conf` says otherwise).
-5. **Detection + preset** — `printer_database.json` entry `flashforge_creator_5_pro`
+5. **Detection + preset**: `printer_database.json` entry `flashforge_creator_5_pro`
    (fingerprint: `ff_toolchange` / `gcode_button extruder_grab1`, 4 extruders) and preset
    `creator5.json` (4 hotends, chamber heater, part/chamber fans, LED, `fd_ex*` runout
    switches, rotate 90). Without it the detector picked the AD5X (same hostname, MIPS,
    4 tools); the AD5X entry excludes on `gcode_button extruder_grab1`. Uses the
    `generic-corexy` image.
-6. **Toolchanger model** — 4 extruders (`extruder`, `extruder1..3`), 4 filament switch +
+6. **Toolchanger model**: 4 extruders (`extruder`, `extruder1..3`), 4 filament switch +
    4 motion sensors (`fd_ex0..3`, `fm_ex0..3`), `heater_generic chamber_heater`,
    `fan_generic fanM106` (part), `heater_fan heat_fan*`, `fan_generic chamber_*_fan`,
    `led chamber_led`.
-7. **Memory** — 128–256 MB shared with Klipper, Moonraker, `firmwareExe`. HelixScreen's
+7. **Memory**: 128-256 MB shared with Klipper, Moonraker, `firmwareExe`. HelixScreen's
    ~15 MB footprint is fine, but check `free` with the stock stack running.
-8. **Init** — no systemd; the stock stack is started from BusyBox init scripts. An init.d
+8. **Init**: no systemd; the stock stack is started from BusyBox init scripts. An init.d
    script modeled on the AD5X/ZMOD `S80guppyscreen` pattern is the likely shape.
-9. **Runout on an empty docked head** — the preset enables `fd_ex0..3` as runout-role
+9. **Runout on an empty docked head**: the preset enables `fd_ex0..3` as runout-role
    switches; whether an empty docked head trips the runout and pre-print warnings needs
    hardware verification.
