@@ -169,7 +169,10 @@ translations:
   Add Widget: Agregar widget
   Add custom filament: Añadir filamento personalizado
   Add page: 'Añadir página'
+  Add to Queue: Añadir a la cola
   Added to Spoolman: Añadido a Spoolman
+  Added to queue (position {}): Añadido a la cola (posición {})
+  'Added to queue (position {}) - queue is paused': 'Añadido a la cola (posición {}): la cola está en pausa'
   Address: Dirección
   Adjust screen brightness level: Ajustar el nivel de brillo de la pantalla
   Adjust screws, then re-probe.: Ajuste los tornillos, luego vuelva a sondear.
@@ -469,6 +472,7 @@ translations:
   Cancel Print: Cancelar Impresión
   Cancel macro not configured: Macro de cancelar no configurado
   Cancelled: Cancelado
+  'Cannot add to queue: internal error': 'No se puede añadir a la cola: error interno'
   Cannot be changed from here on a multi-unit MMU: No se puede cambiar aquí en un MMU de varias unidades
   'Cannot control timelapse: printer not connected': 'No se puede controlar timelapse:
     impresora no conectada'
@@ -2929,6 +2933,7 @@ translations:
   Starting nozzle clean...: Iniciando limpieza de boquilla...
   Starting print...: Iniciando impresión...
   Starting...: Iniciando...
+  Starts after the current print: Comienza cuando termine la impresión actual
   Startup Brightness: Brillo de inicio
   Startup, auto-control, and macro devices: Inicio, control automático y dispositivos
     de macro

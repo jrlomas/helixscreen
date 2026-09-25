@@ -171,7 +171,10 @@ translations:
   Add Widget: Widget hinzufügen
   Add custom filament: Benutzerdefiniertes Filament hinzufügen
   Add page: 'Seite hinzufügen'
+  Add to Queue: Zur Warteschlange hinzufügen
   Added to Spoolman: Zu Spoolman hinzugefügt
+  Added to queue (position {}): Zur Warteschlange hinzugefügt (Position {})
+  Added to queue (position {}) - queue is paused: Zur Warteschlange hinzugefügt (Position {}) – Warteschlange ist pausiert
   Address: Adresse
   Adjust screen brightness level: Bildschirmhelligkeit anpassen
   Adjust screws, then re-probe.: Schrauben einstellen, dann erneut prüfen.
@@ -474,6 +477,7 @@ translations:
   Cancel Print: Druck abbrechen
   Cancel macro not configured: Abbruch-Makro nicht konfiguriert
   Cancelled: Abgebrochen
+  'Cannot add to queue: internal error': 'Zur Warteschlange hinzufügen nicht möglich: interner Fehler'
   Cannot be changed from here on a multi-unit MMU: Bei einer MMU mit mehreren Einheiten hier nicht änderbar
   'Cannot control timelapse: printer not connected': 'Timelapse nicht steuerbar: Drucker
     nicht verbunden'
@@ -2937,6 +2941,7 @@ translations:
   Starting nozzle clean...: Düsenreinigung starten...
   Starting print...: Druck starten...
   Starting...: Starten...
+  Starts after the current print: Startet nach dem aktuellen Druck
   Startup Brightness: Starthelligkeit
   Startup, auto-control, and macro devices: Start, Auto-Steuerung und Makro-Geräte
   State: Status

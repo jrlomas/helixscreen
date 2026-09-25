@@ -1386,6 +1386,12 @@ void MoonrakerClientMock::discover_printer(
                 spdlog::debug("[MoonrakerClientMock] Spoolman available: {}",
                               mock_spoolman_enabled_);
 
+                // The mock's server.info always lists job_queue among its
+                // components (mock_server_components), so queue-mode UI paths
+                // are reachable under --test the way they are on a printer
+                // with the component enabled.
+                get_printer_state().set_job_queue_available(true);
+
                 // Set webcam availability during discovery (matches real Moonraker behavior)
                 // Real client queries server.webcams.list during discovery
                 if (mock_webcams_.empty()) {

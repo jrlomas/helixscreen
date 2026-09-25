@@ -160,7 +160,10 @@
   <translation tag="Add Widget" en="Add Widget"/>
   <translation tag="Add custom filament" en="Add custom filament"/>
   <translation tag="Add page" en="Add page"/>
+  <translation tag="Add to Queue" en="Add to Queue"/>
   <translation tag="Added to Spoolman" en="Added to Spoolman"/>
+  <translation tag="Added to queue (position {})" en="Added to queue (position {})"/>
+  <translation tag="Added to queue (position {}) - queue is paused" en="Added to queue (position {}) - queue is paused"/>
   <translation tag="Address" en="Address"/>
   <translation tag="Adjust screen brightness level" en="Adjust screen brightness level"/>
   <translation tag="Adjust screws, then re-probe." en="Adjust screws, then re-probe."/>
@@ -425,6 +428,7 @@
   <translation tag="Cancel Print" en="Cancel Print"/>
   <translation tag="Cancel macro not configured" en="Cancel macro not configured"/>
   <translation tag="Cancelled" en="Cancelled"/>
+  <translation tag="Cannot add to queue: internal error" en="Cannot add to queue: internal error"/>
   <translation tag="Cannot be changed from here on a multi-unit MMU" en="Cannot be changed from here on a multi-unit MMU"/>
   <translation tag="Cannot control timelapse: printer not connected" en="Cannot control timelapse: printer not connected"/>
   <translation tag="Cannot delete file: printer not connected" en="Cannot delete file: printer not connected"/>
@@ -2645,6 +2649,7 @@
   <translation tag="Starting nozzle clean..." en="Starting nozzle clean..."/>
   <translation tag="Starting print..." en="Starting print..."/>
   <translation tag="Starting..." en="Starting..."/>
+  <translation tag="Starts after the current print" en="Starts after the current print"/>
   <translation tag="Startup Brightness" en="Startup Brightness"/>
   <translation tag="Startup, auto-control, and macro devices" en="Startup, auto-control, and macro devices"/>
   <translation tag="State" en="State"/>

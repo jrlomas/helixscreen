@@ -18,9 +18,11 @@
 #pragma once
 
 #include "i_moonraker_api.h"
+#include "i_moonraker_sub_apis.h" // for JobQueueEntry
 #include "json_fwd.h"
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -83,5 +85,31 @@ PrunedOptions prune_queued_job_options(QueuedJobOptionsMap entries,
 /// @param queued_job_ids Job ids currently in Moonraker's queue
 void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
                                      const std::vector<std::string>& queued_job_ids);
+
+/// @brief The job id present in @p after but not in @p before
+///
+/// post_job carries no echo of the created id, so it is recovered by diffing
+/// the queue before the call against the queue the response reports.
+/// nullopt when the answer is not exactly one id — an unchanged list, or two
+/// new ids at once (another client queued concurrently): guessing there would
+/// attach the saved options to someone else's job, so the caller skips the
+/// save and the job stays queued without options.
+std::optional<std::string> find_new_job_id(const std::vector<std::string>& before,
+                                           const std::vector<JobQueueEntry>& after);
+
+/// @brief Read-modify-write one job's options into the store
+///
+/// Best-effort like the prune: a missing key is the start-from-empty case
+/// (the write still happens), and a read error that is not a missing key
+/// skips the save rather than clobbering the stored map with one entry.
+/// Marshalled through @p lifetime for the same owner-outlives-request
+/// guarantee.
+///
+/// @param lifetime Guard of the object owning @p api's lifetime
+/// @param api API to read/write through; null is a no-op
+/// @param job_id The newly queued job the options belong to
+/// @param options Filename and option row states gathered at queue time
+void save_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
+                             const std::string& job_id, QueuedJobOptions options);
 
 } // namespace helix::queue

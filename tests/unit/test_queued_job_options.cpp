@@ -103,6 +103,67 @@ TEST_CASE("queued job options prune drops unqueued ids and reports changed",
     }
 }
 
+namespace {
+
+JobQueueEntry entry(const char* job_id, const char* filename) {
+    return {job_id, filename, 0.0, 0.0};
+}
+
+} // namespace
+
+TEST_CASE("find_new_job_id recovers the id added between two queue snapshots",
+          "[job_queue][options]") {
+    using helix::queue::find_new_job_id;
+
+    const std::vector<std::string> before = {"0001", "0002"};
+    const std::vector<JobQueueEntry> after = {entry("0001", "a.gcode"), entry("0002", "b.gcode"),
+                                              entry("0003", "benchy.gcode")};
+
+    SECTION("one new id") {
+        const auto found = find_new_job_id(before, after);
+        REQUIRE(found.has_value());
+        CHECK(*found == "0003");
+    }
+
+    SECTION("unchanged queue: nothing new") {
+        CHECK_FALSE(
+            find_new_job_id({"0001", "0002"}, {entry("0001", "a.gcode"), entry("0002", "b.gcode")})
+                .has_value());
+    }
+
+    SECTION("empty before list: the whole queue is new, but one entry is one id") {
+        const auto found = find_new_job_id({}, {entry("0007", "only.gcode")});
+        REQUIRE(found.has_value());
+        CHECK(*found == "0007");
+    }
+
+    SECTION("two new ids at once: ambiguous, refuse to guess") {
+        // Another client queued concurrently; either id could be ours, so the
+        // saved options must not attach to the wrong job.
+        CHECK_FALSE(find_new_job_id(before, {entry("0001", "a.gcode"), entry("0002", "b.gcode"),
+                                             entry("0003", "x.gcode"), entry("0004", "y.gcode")})
+                        .has_value());
+    }
+
+    SECTION("a job removed while ours was added still yields one new id") {
+        const auto found =
+            find_new_job_id(before, {entry("0002", "b.gcode"), entry("0003", "x.gcode")});
+        REQUIRE(found.has_value());
+        CHECK(*found == "0003");
+    }
+
+    SECTION("duplicate filename already queued: the id is still the new one") {
+        const auto found = find_new_job_id(
+            before, {entry("0001", "a.gcode"), entry("0002", "b.gcode"), entry("0009", "b.gcode")});
+        REQUIRE(found.has_value());
+        CHECK(*found == "0009");
+    }
+
+    SECTION("empty everything") {
+        CHECK_FALSE(find_new_job_id({}, {}).has_value());
+    }
+}
+
 TEST_CASE("automatic_transition parse off server.config", "[job_queue][options]") {
     json response;
     response["jsonrpc"] = "2.0";

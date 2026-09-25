@@ -358,6 +358,14 @@ class PrintSelectDetailView : public OverlayBase {
     }
 
     /**
+     * @brief Current toggle state of every rendered option row (id -> on)
+     *
+     * The queue path's snapshot of the detail view's option rows: what gets
+     * stored with the queued job so it can be re-applied when the job starts.
+     */
+    [[nodiscard]] std::map<std::string, bool> collect_option_states() const;
+
+    /**
      * @brief Get current filament mappings from the mapping card
      */
     [[nodiscard]] std::vector<helix::ToolMapping> get_filament_mappings() const {

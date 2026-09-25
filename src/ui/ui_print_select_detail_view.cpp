@@ -2454,4 +2454,12 @@ void PrintSelectDetailView::populate_option_rows() {
     }
 }
 
+std::map<std::string, bool> PrintSelectDetailView::collect_option_states() const {
+    std::map<std::string, bool> out;
+    for (const auto& id : option_rows_renderer_.rendered_ids()) {
+        out[id] = option_rows_renderer_.get_state(id, 0) != 0;
+    }
+    return out;
+}
+
 } // namespace helix::ui

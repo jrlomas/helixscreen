@@ -155,6 +155,9 @@ class JobQueueState {
     // Display name of the first queued job, "" when the queue is empty.
     lv_subject_t job_queue_next_filename_subject_;
     char next_filename_buffer_[256];
+    // automatic_transition as 0/1, for XML bindings that hide queue-mode UI
+    // Moonraker's own start would bypass.
+    lv_subject_t job_queue_automatic_transition_subject_;
     // Queued-job count. The refresh channel for every queue surface: the home
     // panel's job_queue widget, the print-status widget's queue row, and the
     // job-queue modal each observe it and rebuild off a change. Nothing else

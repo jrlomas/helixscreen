@@ -22,6 +22,7 @@
 
 #include "../lvgl_test_fixture.h"
 #include "../test_helpers/update_queue_test_access.h"
+#include "async_lifetime_guard.h"
 #include "i_moonraker_api.h"
 #include "job_queue_state.h"
 #include "moonraker_api.h"
@@ -84,6 +85,8 @@ class QueueOptionsStoreFixture : public LVGLTestFixture {
     PrinterState printer_state_;
     std::unique_ptr<MoonrakerAPI> api_;
     std::unique_ptr<JobQueueState> state_;
+    /// Stands in for the panel's object_lifetime_ in save_queued_job_options calls
+    AsyncLifetimeGuard guard_;
 };
 
 /// Sets an env var for the scope of a test, restoring (or clearing) it after.
@@ -175,6 +178,50 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
         pump();
         CHECK(state_->automatic_transition());
     }
+}
+
+TEST_CASE_METHOD(QueueOptionsStoreFixture, "save_queued_job_options merges into the stored map",
+                 "[job_queue][options_store]") {
+    using namespace helix::queue;
+
+    // Seed one unrelated job's entry; the save below must keep it.
+    QueuedJobOptionsMap seed;
+    seed["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}}};
+    api_->database_post_item(
+        kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
+        [](const MoonrakerError&) { FAIL("seed post failed"); });
+    REQUIRE(read_store().size() == 1);
+
+    save_queued_job_options(guard_, api_.get(), "0042",
+                            QueuedJobOptions{"wedge.gcode", {{"soak", false}}});
+    pump();
+
+    const auto after = read_store();
+    REQUIRE(after.size() == 2);
+    CHECK(after.count("0001") == 1);
+    CHECK(after.at("0001").options.at("skip_beam") == true);
+    REQUIRE(after.count("0042") == 1);
+    CHECK(after.at("0042").filename == "wedge.gcode");
+    CHECK(after.at("0042").options.at("soak") == false);
+}
+
+TEST_CASE_METHOD(QueueOptionsStoreFixture,
+                 "save_queued_job_options starts from empty on a "
+                 "missing key",
+                 "[job_queue][options_store]") {
+    using namespace helix::queue;
+
+    // Nothing seeded: the mock answers the read with the same JSON-RPC 404 the
+    // real server does, which is the first-ever-save case, not an error.
+    save_queued_job_options(guard_, api_.get(), "0042",
+                            QueuedJobOptions{"wedge.gcode", {{"soak", true}}});
+    pump();
+
+    const auto after = read_store();
+    REQUIRE(after.size() == 1);
+    REQUIRE(after.count("0042") == 1);
+    CHECK(after.at("0042").filename == "wedge.gcode");
+    CHECK(after.at("0042").options.at("soak") == true);
 }
 
 TEST_CASE_METHOD(QueueOptionsStoreFixture, "add_job reports the resulting queue",

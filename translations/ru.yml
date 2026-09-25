@@ -166,7 +166,10 @@ translations:
   Add Widget: Добавить виджет
   Add custom filament: Добавить свой филамент
   Add page: 'Добавить страницу'
+  Add to Queue: Добавить в очередь
   Added to Spoolman: Добавлено в Spoolman
+  Added to queue (position {}): Добавлено в очередь (позиция {})
+  Added to queue (position {}) - queue is paused: Добавлено в очередь (позиция {}) – очередь на паузе
   Address: Адрес
   Adjust screen brightness level: Настроить уровень яркости экрана
   Adjust screws, then re-probe.: Отрегулируйте винты, затем перепроверьте.
@@ -462,6 +465,7 @@ translations:
   Cancel Print: Отменить печать
   Cancel macro not configured: Макрос отмены не настроен
   Cancelled: Отменено
+  'Cannot add to queue: internal error': 'Не удалось добавить в очередь: внутренняя ошибка'
   Cannot be changed from here on a multi-unit MMU: Нельзя изменить здесь на MMU с несколькими блоками
   'Cannot control timelapse: printer not connected': 'Невозможно управлять таймлапсом:
     принтер не подключён'
@@ -2899,6 +2903,7 @@ translations:
   Starting nozzle clean...: Запуск очистки сопла...
   Starting print...: Запуск печати...
   Starting...: Запуск...
+  Starts after the current print: Начнётся после текущей печати
   Startup Brightness: Яркость при запуске
   Startup, auto-control, and macro devices: Запуск, автоуправление и макро-устройства
   State: Состояние

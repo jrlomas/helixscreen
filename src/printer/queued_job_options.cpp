@@ -8,6 +8,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+
 namespace helix::queue {
 
 json encode_queued_job_options(const QueuedJobOptionsMap& entries) {
@@ -98,6 +100,60 @@ void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI
             // A missing key is the first-run state; anything else is informational.
             spdlog::debug("[queue] queued_job_options read failed: {}", err.message);
         }));
+}
+
+std::optional<std::string> find_new_job_id(const std::vector<std::string>& before,
+                                           const std::vector<JobQueueEntry>& after) {
+    std::optional<std::string> found;
+    for (const auto& job : after) {
+        if (std::find(before.begin(), before.end(), job.job_id) != before.end()) {
+            continue;
+        }
+        if (found) {
+            return std::nullopt;
+        }
+        found = job.job_id;
+    }
+    return found;
+}
+
+void save_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
+                             const std::string& job_id, QueuedJobOptions options) {
+    if (!api) {
+        return;
+    }
+
+    auto write = [api, job_id,
+                  options = std::move(options)](const QueuedJobOptionsMap& base) mutable {
+        auto entries = base;
+        entries[job_id] = std::move(options);
+        api->database_post_item(
+            kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(entries),
+            []() { spdlog::debug("[queue] Saved queued_job_options written"); },
+            [](const MoonrakerError& err) {
+                spdlog::warn("[queue] Saving queued_job_options failed to write: {}",
+                             err.user_message());
+            });
+    };
+
+    api->database_get_item(
+        kOptionsDbNamespace, kOptionsDbKey,
+        lifetime.bg_cb(
+            "queue::save_options_read",
+            [write](const json& stored) mutable { write(decode_queued_job_options(stored)); }),
+        lifetime.bg_cb(
+            "queue::save_options_read_error", [write](const MoonrakerError& err) mutable {
+                // A missing key is a first save, not a failure: write over an
+                // empty base. Anything else is a real read error — skip rather
+                // than clobber the stored map down to this one entry.
+                const bool missing_key =
+                    err.code == 404 || err.message.find("not found") != std::string::npos;
+                if (missing_key) {
+                    write({});
+                    return;
+                }
+                spdlog::warn("[queue] Reading queued_job_options to save failed: {}", err.message);
+            }));
 }
 
 } // namespace helix::queue

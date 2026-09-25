@@ -21,6 +21,7 @@
 #include "in_flight_guard.h"
 #include "print_file_data.h"
 #include "print_history_manager.h"
+#include "print_select_button_view.h"
 #include "subject_managed_panel.h"
 #include "usb_backend.h"
 
@@ -514,6 +515,17 @@ class PrintSelectPanel : public PanelBase {
     void start_print(bool force = false);
 
     /**
+     * @brief Queue the selected file instead of starting it.
+     *
+     * The print button's queue-mode action: post_job the original filename,
+     * store the detail view's current option row states against the new
+     * job_id, and toast the queue position. Does not touch
+     * PrintStartController — the job starts through the normal pipeline when
+     * its turn comes.
+     */
+    void add_to_queue();
+
+    /**
      * @brief Show the enriched pre-flight filament check modal.
      *
      * Replaces the simple confirmation dialog. Renders a per-tool breakdown of
@@ -625,6 +637,13 @@ class PrintSelectPanel : public PanelBase {
     /// binding)
     lv_subject_t can_print_subject_;
 
+    /// Button mode subject: 0 = Print, 1 = Queue (label + card visibility)
+    lv_subject_t button_mode_subject_;
+
+    /// Button label text ("Print" / "Add to Queue")
+    lv_subject_t button_label_subject_;
+    char button_label_buffer_[32];
+
     /// Why the print button is disabled, shown beside it. Empty when it is not.
     lv_subject_t blocked_reason_subject_;
     char blocked_reason_buffer_[96];
@@ -713,8 +732,9 @@ class PrintSelectPanel : public PanelBase {
     ObserverGuard connection_observer_;
     ObserverGuard print_state_observer_; ///< Observes print state to enable/disable print button
     ObserverGuard
-        print_in_progress_observer_;      ///< Observes workflow in-progress for immediate disable
-    ObserverGuard helix_plugin_observer_; ///< Observes plugin status for install prompt
+        print_in_progress_observer_; ///< Observes workflow in-progress for immediate disable
+    ObserverGuard print_lifecycle_observer_; ///< Observes the lifecycle the button decision reads
+    ObserverGuard helix_plugin_observer_;    ///< Observes plugin status for install prompt
 
     /// Observer for PrintHistoryManager - updates file status when history changes
     helix::HistoryChangedCallback history_observer_;
@@ -807,11 +827,16 @@ class PrintSelectPanel : public PanelBase {
     void update_empty_state();
 
     /**
-     * @brief Update print button enabled/disabled state based on print job state
+     * @brief Update print button state from the pure mode decision
      *
-     * Disables the print button when a print is in progress to prevent concurrent prints.
+     * Maps compute_print_select_button_view() onto the panel's subjects: mode
+     * (Print/Queue), enabled/disabled, label text and the one-line reason or
+     * queue hint shown beside the button.
      */
     void update_print_button_state();
+
+    /// The mode the button was last rendered in; routes the tap.
+    helix::ui::PrintSelectButtonMode print_button_mode_ = helix::ui::PrintSelectButtonMode::Print;
 
     /**
      * @brief Update sort indicator icons on column headers

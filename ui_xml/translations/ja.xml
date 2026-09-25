@@ -160,7 +160,10 @@
   <translation tag="Add Widget" ja="ウィジェットを追加"/>
   <translation tag="Add custom filament" ja="カスタムフィラメントを追加"/>
   <translation tag="Add page" ja="ページを追加"/>
+  <translation tag="Add to Queue" ja="キューに追加"/>
   <translation tag="Added to Spoolman" ja="Spoolman に追加しました"/>
+  <translation tag="Added to queue (position {})" ja="キューに追加しました（{} 番目）"/>
+  <translation tag="Added to queue (position {}) - queue is paused" ja="キューに追加しました（{} 番目）– キューは一時停止中です"/>
   <translation tag="Address" ja="アドレス"/>
   <translation tag="Adjust screen brightness level" ja="画面の明るさを調整します"/>
   <translation tag="Adjust screws, then re-probe." ja="ネジを調整して、再度プローブしてください。"/>
@@ -425,6 +428,7 @@
   <translation tag="Cancel Print" ja="印刷をキャンセル"/>
   <translation tag="Cancel macro not configured" ja="キャンセルマクロが未設定です"/>
   <translation tag="Cancelled" ja="キャンセル済み"/>
+  <translation tag="Cannot add to queue: internal error" ja="キューに追加できません: 内部エラー"/>
   <translation tag="Cannot be changed from here on a multi-unit MMU" ja="マルチユニット MMU ではここから変更できません"/>
   <translation tag="Cannot control timelapse: printer not connected" ja="タイムラプスを制御できません: プリンター未接続"/>
   <translation tag="Cannot delete file: printer not connected" ja="ファイルを削除できません: プリンター未接続"/>
@@ -2645,6 +2649,7 @@
   <translation tag="Starting nozzle clean..." ja="ノズル清掃を開始中..."/>
   <translation tag="Starting print..." ja="印刷開始中..."/>
   <translation tag="Starting..." ja="開始中..."/>
+  <translation tag="Starts after the current print" ja="現在の印刷が終わったら開始します"/>
   <translation tag="Startup Brightness" ja="起動時の明るさ"/>
   <translation tag="Startup, auto-control, and macro devices" ja="起動、自動制御、マクロデバイス"/>
   <translation tag="State" ja="状態"/>

@@ -160,7 +160,10 @@
   <translation tag="Add Widget" it="Aggiungi widget"/>
   <translation tag="Add custom filament" it="Aggiungi filamento personalizzato"/>
   <translation tag="Add page" it="Aggiungi pagina"/>
+  <translation tag="Add to Queue" it="Aggiungi alla coda"/>
   <translation tag="Added to Spoolman" it="Aggiunto a Spoolman"/>
+  <translation tag="Added to queue (position {})" it="Aggiunto alla coda (posizione {})"/>
+  <translation tag="Added to queue (position {}) - queue is paused" it="Aggiunto alla coda (posizione {}) – la coda è in pausa"/>
   <translation tag="Address" it="Indirizzo"/>
   <translation tag="Adjust screen brightness level" it="Regola il livello di luminosità dello schermo"/>
   <translation tag="Adjust screws, then re-probe." it="Regolare le viti, poi risondare."/>
@@ -425,6 +428,7 @@
   <translation tag="Cancel Print" it="Annulla stampa"/>
   <translation tag="Cancel macro not configured" it="Macro annullamento non configurata"/>
   <translation tag="Cancelled" it="Annullato"/>
+  <translation tag="Cannot add to queue: internal error" it="Impossibile aggiungere alla coda: errore interno"/>
   <translation tag="Cannot be changed from here on a multi-unit MMU" it="Non modificabile da qui su un MMU multi-unità"/>
   <translation tag="Cannot control timelapse: printer not connected" it="Impossibile controllare timelapse: stampante non connessa"/>
   <translation tag="Cannot delete file: printer not connected" it="Impossibile eliminare file: stampante non connessa"/>
@@ -2645,6 +2649,7 @@
   <translation tag="Starting nozzle clean..." it="Avvio pulizia ugello..."/>
   <translation tag="Starting print..." it="Avvio stampa..."/>
   <translation tag="Starting..." it="Avvio..."/>
+  <translation tag="Starts after the current print" it="Inizia dopo la stampa in corso"/>
   <translation tag="Startup Brightness" it="Luminosità all&apos;avvio"/>
   <translation tag="Startup, auto-control, and macro devices" it="Avvio, controllo automatico e dispositivi macro"/>
   <translation tag="State" it="Stato"/>

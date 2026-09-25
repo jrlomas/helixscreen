@@ -42,13 +42,16 @@
 #include "gcode_parser.h" // For extract_thumbnails_from_content (USB thumbnail fallback)
 #include "helix-xml/src/xml/lv_xml.h"
 #include "i_moonraker_api.h"
+#include "job_queue_state.h"
 #include "json_utils.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observer_factory.h"
 #include "preprint_predictor.h"
 #include "print_history_manager.h"
+#include "print_lifecycle_state.h" // job_holds_machine()
 #include "print_start_analyzer.h"
 #include "printer_state.h"
+#include "queued_job_options.h"
 #include "runtime_config.h"
 #include "static_panel_registry.h"
 #include "theme_manager.h"
@@ -344,6 +347,9 @@ void PrintSelectPanel::init_subjects() {
     bool can_print = printer_state_.can_start_new_print();
     UI_MANAGED_SUBJECT_INT(can_print_subject_, can_print ? 1 : 0, "print_select_can_print",
                            subjects_);
+    UI_MANAGED_SUBJECT_INT(button_mode_subject_, 0, "print_select_button_mode", subjects_);
+    UI_MANAGED_SUBJECT_STRING(button_label_subject_, button_label_buffer_, lv_tr("Print"),
+                              "print_select_button_label", subjects_);
     UI_MANAGED_SUBJECT_STRING(blocked_reason_subject_, blocked_reason_buffer_, "",
                               "print_select_blocked_reason", subjects_);
 
@@ -779,6 +785,18 @@ void PrintSelectPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
             [](PrintSelectPanel* self, int) { self->update_print_button_state(); },
             printer_state_.get_subjects_lifetime());
         spdlog::trace("[{}] Registered observer on print job state for print button", get_name());
+    }
+
+    // The lifecycle is what the button decision reads: it also moves on
+    // Preparing, which the wire job state cannot express, so queue mode can
+    // engage for the whole committed life of a job rather than from the first
+    // progress frame on.
+    lv_subject_t* print_lifecycle_subject = printer_state_.get_print_lifecycle_subject();
+    if (print_lifecycle_subject) {
+        print_lifecycle_observer_ = observe_int_sync<PrintSelectPanel>(
+            print_lifecycle_subject, this,
+            [](PrintSelectPanel* self, int) { self->update_print_button_state(); },
+            printer_state_.get_subjects_lifetime());
     }
 
     // Also observe print_in_progress subject - this fires immediately when Print is tapped
@@ -2437,34 +2455,38 @@ void PrintSelectPanel::update_empty_state() {
 }
 
 void PrintSelectPanel::update_print_button_state() {
-    // Update the can_print subject based on current print state and macro analysis
-    // XML binding automatically disables button when value is 0
-    bool can_print = printer_state_.can_start_new_print();
-    const char* blocked_reason = "";
-
-    if (!can_print) {
-        blocked_reason = lv_tr("Printing: start after this job");
-    } else if (detail_view_) {
-        // Also disable if macro analysis is in progress to prevent race conditions
-        // where print starts before we know which skip params to use
+    // Gather the decision inputs and let the pure view function decide; XML
+    // bindings turn the subjects into button state, label and card visibility.
+    helix::ui::PrintSelectButtonInputs inputs;
+    inputs.machine_busy = job_holds_machine(printer_state_.get_print_lifecycle());
+    inputs.print_start_committed = printer_state_.is_print_in_progress();
+    inputs.job_queue_available = printer_state_.is_job_queue_available();
+    if (detail_view_) {
         if (auto* prep_mgr = detail_view_->get_prep_manager()) {
-            if (prep_mgr->is_macro_analysis_in_progress()) {
-                can_print = false;
-                blocked_reason = lv_tr("Analyzing data...");
-                spdlog::trace("[{}] Print button disabled: macro analysis in progress", get_name());
-            }
+            inputs.macro_analysis_running = prep_mgr->is_macro_analysis_in_progress();
         }
     }
 
-    lv_subject_copy_string(&blocked_reason_subject_, blocked_reason);
+    const auto view = helix::ui::compute_print_select_button_view(inputs);
+    const bool queue_mode = view.mode == helix::ui::PrintSelectButtonMode::Queue;
+    const bool enabled = queue_mode || view.blocked_reason[0] == '\0';
 
-    int new_value = can_print ? 1 : 0;
+    print_button_mode_ = view.mode;
+    lv_subject_copy_string(&button_label_subject_,
+                           queue_mode ? lv_tr("Add to Queue") : lv_tr("Print"));
+    lv_subject_copy_string(&blocked_reason_subject_, queue_mode
+                                                         ? lv_tr("Starts after the current print")
+                                                         : lv_tr(view.blocked_reason));
 
+    const int new_value = enabled ? 1 : 0;
     // Only update if value changed (avoid unnecessary subject notifications)
     if (lv_subject_get_int(&can_print_subject_) != new_value) {
         lv_subject_set_int(&can_print_subject_, new_value);
-        spdlog::trace("[{}] Print button {} (can_start_new_print={})", get_name(),
-                      can_print ? "enabled" : "disabled", can_print);
+        spdlog::trace("[{}] Print button {} (mode={}, can_start_new_print={})", get_name(),
+                      enabled ? "enabled" : "disabled", queue_mode ? "queue" : "print", enabled);
+    }
+    if (lv_subject_get_int(&button_mode_subject_) != static_cast<int>(view.mode)) {
+        lv_subject_set_int(&button_mode_subject_, static_cast<int>(view.mode));
     }
 }
 
@@ -2749,6 +2771,11 @@ void PrintSelectPanel::on_file_long_pressed(size_t file_index) {
 }
 
 void PrintSelectPanel::start_print(bool force) {
+    if (print_button_mode_ == helix::ui::PrintSelectButtonMode::Queue) {
+        add_to_queue();
+        return;
+    }
+
     if (!print_controller_) {
         spdlog::error("[{}] Cannot start print - controller not initialized", get_name());
         NOTIFY_ERROR(lv_tr("Cannot start print: internal error"));
@@ -2794,6 +2821,73 @@ void PrintSelectPanel::start_print(bool force) {
 
     // Delegate to the print start controller
     print_controller_->initiate();
+}
+
+void PrintSelectPanel::add_to_queue() {
+    auto* jqs = get_job_queue_state();
+    if (!api_ || !jqs) {
+        NOTIFY_ERROR(lv_tr("Cannot add to queue: internal error"));
+        return;
+    }
+
+    // Moonraker addresses queued files the same way started ones: relative to
+    // the gcodes root, with any subdirectory prefixed.
+    std::string filename = current_path_.empty() ? std::string(selected_filename_buffer_)
+                                                 : current_path_ + "/" + selected_filename_buffer_;
+
+    helix::queue::QueuedJobOptions options;
+    options.filename = filename;
+    if (detail_view_) {
+        options.options = detail_view_->collect_option_states();
+    }
+
+    std::vector<std::string> before_ids;
+    for (const auto& job : jqs->get_jobs()) {
+        before_ids.push_back(job.job_id);
+    }
+
+    spdlog::info("[{}] Queueing '{}' ({} option rows)", get_name(), filename,
+                 options.options.size());
+
+    api_->queue().add_job(
+        filename,
+        object_lifetime_.bg_cb(
+            "PrintSelectPanel::add_to_queue",
+            [this, before_ids = std::move(before_ids),
+             options = std::move(options)](const JobQueueStatus& status) {
+                const auto new_id = helix::queue::find_new_job_id(before_ids, status.queued_jobs);
+                if (new_id) {
+                    helix::queue::save_queued_job_options(object_lifetime_, api_, *new_id, options);
+                } else {
+                    // The job IS queued — only the option
+                    // save is skipped, since a guessed id
+                    // would attach it to another job.
+                    spdlog::warn("[{}] Queue add succeeded but the new job id is "
+                                 "ambiguous; options not saved",
+                                 get_name());
+                }
+
+                int position = static_cast<int>(status.queued_jobs.size());
+                for (size_t i = 0; i < status.queued_jobs.size(); ++i) {
+                    if (new_id && status.queued_jobs[i].job_id == *new_id) {
+                        position = static_cast<int>(i) + 1;
+                        break;
+                    }
+                }
+                if (status.queue_state == "paused") {
+                    NOTIFY_SUCCESS(lv_tr("Added to queue (position {}) - queue is paused"),
+                                   position);
+                } else {
+                    NOTIFY_SUCCESS(lv_tr("Added to queue (position {})"), position);
+                }
+
+                if (auto* jqs_now = get_job_queue_state()) {
+                    jqs_now->fetch();
+                }
+            }),
+        [](const MoonrakerError& err) {
+            spdlog::warn("[PrintSelectPanel] Add to queue failed: {}", err.message);
+        });
 }
 
 void PrintSelectPanel::show_preflight_modal(const helix::PreflightResult& pf) {

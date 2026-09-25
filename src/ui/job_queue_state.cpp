@@ -85,6 +85,12 @@ void JobQueueState::init_subjects() {
     lv_xml_register_subject(nullptr, "job_queue_next_filename", &job_queue_next_filename_subject_);
     subjects_.register_subject(&job_queue_next_filename_subject_, "job_queue_next_filename");
 
+    lv_subject_init_int(&job_queue_automatic_transition_subject_, automatic_transition_ ? 1 : 0);
+    lv_xml_register_subject(nullptr, "job_queue_automatic_transition",
+                            &job_queue_automatic_transition_subject_);
+    subjects_.register_subject(&job_queue_automatic_transition_subject_,
+                               "job_queue_automatic_transition");
+
     SubjectDebugRegistry::instance().register_subject(&job_queue_state_subject_,
                                                       "job_queue_state_text",
                                                       LV_SUBJECT_TYPE_STRING, __FILE__, __LINE__);
@@ -170,6 +176,10 @@ void JobQueueState::fetch_automatic_transition() {
         [this, token](const json& response) {
             token.defer("JobQueueState::on_server_config", [this, response]() {
                 automatic_transition_ = helix::parse_automatic_transition(response);
+                if (subjects_initialized_) {
+                    lv_subject_set_int(&job_queue_automatic_transition_subject_,
+                                       automatic_transition_ ? 1 : 0);
+                }
                 spdlog::debug("[JobQueueState] job_queue automatic_transition={}",
                               automatic_transition_);
             });
@@ -221,6 +231,8 @@ void JobQueueState::update_subjects() {
                       ? ""
                       : helix::gcode::get_display_filename(cached_jobs_.front().filename).c_str());
     lv_subject_copy_string(&job_queue_next_filename_subject_, next_filename_buffer_);
+
+    lv_subject_set_int(&job_queue_automatic_transition_subject_, automatic_transition_ ? 1 : 0);
 
     // Count goes LAST, after cached_jobs_ and both text subjects are settled.
     // It is the rebuild trigger the queue surfaces observe, and PrintStatusWidget's

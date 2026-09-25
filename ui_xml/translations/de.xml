@@ -160,7 +160,10 @@
   <translation tag="Add Widget" de="Widget hinzufügen"/>
   <translation tag="Add custom filament" de="Benutzerdefiniertes Filament hinzufügen"/>
   <translation tag="Add page" de="Seite hinzufügen"/>
+  <translation tag="Add to Queue" de="Zur Warteschlange hinzufügen"/>
   <translation tag="Added to Spoolman" de="Zu Spoolman hinzugefügt"/>
+  <translation tag="Added to queue (position {})" de="Zur Warteschlange hinzugefügt (Position {})"/>
+  <translation tag="Added to queue (position {}) - queue is paused" de="Zur Warteschlange hinzugefügt (Position {}) – Warteschlange ist pausiert"/>
   <translation tag="Address" de="Adresse"/>
   <translation tag="Adjust screen brightness level" de="Bildschirmhelligkeit anpassen"/>
   <translation tag="Adjust screws, then re-probe." de="Schrauben einstellen, dann erneut prüfen."/>
@@ -425,6 +428,7 @@
   <translation tag="Cancel Print" de="Druck abbrechen"/>
   <translation tag="Cancel macro not configured" de="Abbruch-Makro nicht konfiguriert"/>
   <translation tag="Cancelled" de="Abgebrochen"/>
+  <translation tag="Cannot add to queue: internal error" de="Zur Warteschlange hinzufügen nicht möglich: interner Fehler"/>
   <translation tag="Cannot be changed from here on a multi-unit MMU" de="Bei einer MMU mit mehreren Einheiten hier nicht änderbar"/>
   <translation tag="Cannot control timelapse: printer not connected" de="Timelapse nicht steuerbar: Drucker nicht verbunden"/>
   <translation tag="Cannot delete file: printer not connected" de="Datei kann nicht gelöscht werden: Drucker nicht verbunden"/>
@@ -2645,6 +2649,7 @@
   <translation tag="Starting nozzle clean..." de="Düsenreinigung starten..."/>
   <translation tag="Starting print..." de="Druck starten..."/>
   <translation tag="Starting..." de="Starten..."/>
+  <translation tag="Starts after the current print" de="Startet nach dem aktuellen Druck"/>
   <translation tag="Startup Brightness" de="Starthelligkeit"/>
   <translation tag="Startup, auto-control, and macro devices" de="Start, Auto-Steuerung und Makro-Geräte"/>
   <translation tag="State" de="Status"/>

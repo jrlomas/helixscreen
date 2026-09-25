@@ -163,7 +163,10 @@ translations:
   Add Widget: Add Widget
   Add custom filament: Add custom filament
   Add page: Add page
+  Add to Queue: Add to Queue
   Added to Spoolman: Added to Spoolman
+  Added to queue (position {}): Added to queue (position {})
+  Added to queue (position {}) - queue is paused: Added to queue (position {}) - queue is paused
   Address: Address
   Adjust screen brightness level: Adjust screen brightness level
   Adjust screws, then re-probe.: Adjust screws, then re-probe.
@@ -454,6 +457,7 @@ translations:
   Cancel Print: Cancel Print
   Cancel macro not configured: Cancel macro not configured
   Cancelled: Cancelled
+  'Cannot add to queue: internal error': 'Cannot add to queue: internal error'
   Cannot be changed from here on a multi-unit MMU: Cannot be changed from here on a multi-unit MMU
   'Cannot control timelapse: printer not connected': 'Cannot control timelapse: printer
     not connected'
@@ -2866,6 +2870,7 @@ translations:
   'Starting nozzle clean...': 'Starting nozzle clean...'
   'Starting print...': 'Starting print...'
   Starting...: Starting...
+  Starts after the current print: Starts after the current print
   Startup Brightness: Startup Brightness
   Startup, auto-control, and macro devices: Startup, auto-control, and macro devices
   State: State
