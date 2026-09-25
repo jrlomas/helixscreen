@@ -1246,9 +1246,13 @@ class AmsBackendAd5xIfs : public AmsSubscriptionBackend {
     // Presence-edge bookkeeping shared by every presence source (per-port
     // sensors, IFS_STATUS Ports, GET_ZCOLOR slot lines, the pre-SILENT JSON
     // inference): ends the port's echo suppression on any transition and
-    // raises the unverified-insert notice on a rising edge. Caller must hold
-    // mutex_.
-    void note_presence_transition_locked(int slot_index, bool was_present, bool now_present);
+    // raises the unverified-insert notice on a rising edge a presence sensor
+    // observed. A file-inferred edge (sensor_edge false) never raises the
+    // notice: Adventurer5M.json latches identity across an eject and our own
+    // edit writes it, so its rising edge is as likely to be the write coming
+    // back as a spool going in. Caller must hold mutex_.
+    void note_presence_transition_locked(int slot_index, bool was_present, bool now_present,
+                                         bool sensor_edge = true);
     // Per-port instant of the last optimistic eject clear. On the constrained
     // AD5X the RS-485 silk sensor lags ~1s after IFS_F11 cold-retracts a lane, so
     // the eject follow-up IFS_STATUS/GET_ZCOLOR can still read the just-ejected

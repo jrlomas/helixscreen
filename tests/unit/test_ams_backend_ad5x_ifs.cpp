@@ -12031,7 +12031,7 @@ TEST_CASE("AD5X IFS echo of a user edit does not file as firmware truth (#1633)"
     // against the mock before any edit exists. Drain it HERE, while no guard
     // is armed: a poll defer that applies after the arm would present the
     // pre-write file as a differing firmware statement and release the
-    // declaration — the same apply-late race a real UI tick can produce.
+    // declaration: the same apply-late race a real UI tick can produce.
     helix::ui::UpdateQueue::instance().drain();
 
     // Firmware's own last reading: PETG / #00FF00.
@@ -12101,7 +12101,7 @@ TEST_CASE("AD5X IFS echo guard refuses to arm without a presence boundary (#1633
     // Native ZMOD reports no per-port presence and no IFS_STATUS Ports: no
     // signal on that machine can name the spool a write was made against, so
     // arming would withhold readings until the next edit. The guard must
-    // refuse, which leaves the echo filing as VendorCache — the lesser harm,
+    // refuse, which leaves the echo filing as VendorCache: the lesser harm,
     // and the design's explicit call for this hardware.
     Ad5xIfsTmpCacheDir tmp("ifs_echo_no_boundary");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
@@ -12144,8 +12144,8 @@ TEST_CASE("AD5X IFS echo guard refuses to arm without a presence boundary (#1633
 TEST_CASE("AD5X IFS insert with no tag evidence offers Clear (#1710)", "[ams][ad5x_ifs][1710]") {
     // The IFS reads nothing off a spool: its colour and material are its own
     // memory of the last write. Every insert is therefore No evidence under
-    // the slot spec's insert rule — everything is kept and the user is asked
-    // whether it is the same spool.
+    // the slot spec's insert rule, so everything is kept and the user is
+    // asked whether it is the same spool.
     Ad5xIfsTmpCacheDir tmp("ifs_insert_notice");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -12188,6 +12188,75 @@ TEST_CASE("AD5X IFS insert with no tag evidence offers Clear (#1710)", "[ams][ad
     Ad5xIfsTestAccess::handle_status(backend, make_port_sensor(1, true));
     helix::ui::UpdateQueue::instance().drain();
     CHECK(toasts.empty());
+
+    helix::ui::set_test_toast_hook(nullptr);
+}
+
+TEST_CASE("AD5X JSON-inferred presence is not an insert edge (#1710)", "[ams][ad5x_ifs][1710]") {
+    // Pre-SILENT zmod has no silk-truth query, so Adventurer5M.json's colour
+    // is the only presence source. The file latches identity across an eject
+    // and our own edit writes it, so a rising edge read out of the file is as
+    // likely to be the write coming back as a spool going in, and the insert
+    // notice would land on the user's own fresh edit, where Clear wipes it.
+    Ad5xIfsTmpCacheDir tmp("ifs_json_presence_no_notice");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    helix::test::RegisteredBackend<AmsBackendAd5xIfs> backend_reg(&api, nullptr);
+    AmsBackendAd5xIfs& backend = *backend_reg;
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "ifs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    Ad5xIfsTestAccess::inject_override_store(backend, std::move(store));
+    Ad5xIfsTestAccess::set_local_adventurer_json_path(backend,
+                                                      (tmp.path / "Adventurer5M.json").string());
+    // No per-port sensors, no IFS_STATUS Ports, GET_ZCOLOR SILENT refused:
+    // the file is the only presence source this session has.
+    Ad5xIfsTestAccess::set_zcolor_supported(backend, false);
+
+    std::vector<std::pair<ToastSeverity, std::string>> toasts;
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg, uint32_t) {
+        toasts.emplace_back(severity, msg);
+    });
+
+    // Boot with the lane empty: the first file reading is the session's
+    // baseline, never an edge.
+    const char* empty_lane = R"({
+        "FFMInfo": {"ffmColor1": "", "ffmType1": ""}
+    })";
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, empty_lane);
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    // The user assigns an identity to the empty lane.
+    SlotInfo edit;
+    edit.color_rgb = 0x7EC8E3;
+    edit.material = "PLA";
+    helix::test::edit_slot_as_user(backend, 0, edit);
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    // A poll still carrying the pre-edit file reads the lane as ejected (empty
+    // colour while IDLE); the next poll returns the write and presence rises
+    // again. Neither file reading is a spool going in: no notice either time.
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, empty_lane);
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+    Ad5xIfsTestAccess::parse_adventurer_json(backend, R"({
+        "FFMInfo": {"ffmColor1": "#7EC8E3", "ffmType1": "PLA"}
+    })");
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    // A sensor-backed edge still names the physical occupant and asks.
+    Ad5xIfsTestAccess::handle_status(backend, make_port_sensor(1, false));
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+    Ad5xIfsTestAccess::handle_status(backend, make_port_sensor(1, true));
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(toasts.size() == 1);
+    CHECK(toasts[0].first == ToastSeverity::INFO);
 
     helix::ui::set_test_toast_hook(nullptr);
 }

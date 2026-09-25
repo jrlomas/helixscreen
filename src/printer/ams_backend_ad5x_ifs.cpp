@@ -4,7 +4,7 @@
 
 #include "ams_backend_ad5x_ifs.h"
 
-#include "ui_ams_detail.h"
+#include "ui_insert_notice.h"
 #include "ui_temperature_utils.h"
 #include "ui_update_queue.h"
 
@@ -1096,7 +1096,7 @@ void AmsBackendAd5xIfs::parse_port_sensor(int port_1based, bool detected) {
 }
 
 void AmsBackendAd5xIfs::note_presence_transition_locked(int slot_index, bool was_present,
-                                                        bool now_present) {
+                                                        bool now_present, bool sensor_edge) {
     const auto idx = static_cast<size_t>(slot_index);
     // The first sighting of a port is the session's baseline, never an edge:
     // a spool seated at boot is not an insert.
@@ -1111,11 +1111,11 @@ void AmsBackendAd5xIfs::note_presence_transition_locked(int slot_index, bool was
     // transition retires the echo suppression: what the printer states next
     // about the port is its own word again.
     own_write_echoes_.abandon(slot_index);
-    if (!was_present && now_present) {
-        // The IFS reads nothing off a spool — its colour and material are its
-        // own memory of the last write — so an insert carries no evidence
-        // under the slot spec's insert rule and the user is asked instead
-        // (docs/specs/filament_slots.md §6).
+    if (!was_present && now_present && sensor_edge) {
+        // The IFS reads nothing off a spool: its colour and material are its
+        // own memory of the last write. An insert therefore carries no
+        // evidence under the slot spec's insert rule and the user is asked
+        // instead (docs/specs/filament_slots.md §6).
         helix::ui::queue_update(
             [slot_index] { helix::ui::offer_clear_after_unverified_insert(slot_index); });
     }
@@ -2912,14 +2912,14 @@ AmsError AmsBackendAd5xIfs::apply_user_edit(int slot_index, const SlotInfo& info
 
         // The write carries TYPE and COLOR only; every other declared field
         // stays a lane-side record firmware cannot echo, so prune the staging
-        // to those two. Material keeps the write's own spelling — the
+        // to those two. Material keeps the write's own spelling: the
         // normalized name is what IFS_SET_MATERIAL and Adventurer5M.json
         // carry, not the string the user typed.
         //
         // This runs AFTER settle_port_locked(): the settle re-runs
         // update_slot_from_state(), whose ingest still carries firmware's
         // PRE-edit values, and a value differing from the declaration is what
-        // releases it — so arming first would have the settle disarm the guard
+        // releases it, so arming first would have the settle disarm the guard
         // with the very state the edit is about to replace.
         echo_sequence = own_write_echoes_.stage(slot_index, declared);
         if (auto* staged = own_write_echoes_.staged(slot_index)) {
@@ -6000,7 +6000,11 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
                     presence = false;
                     needs_ifs_vars_push = true;
                 }
-                note_presence_transition_locked(idx, was_present, presence);
+                // The file latches identity across an eject and our own edit
+                // writes it, so a rising edge inferred from it is not
+                // evidence a spool went in: bookkeeping only, no notice.
+                note_presence_transition_locked(idx, was_present, presence,
+                                                /*sensor_edge=*/false);
             }
 
             update_slot_from_state(idx);
