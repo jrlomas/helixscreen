@@ -353,7 +353,12 @@ strips `color_rgb`, `color_name` and `material` from the declaration when
 ([`include/ams_backend.h#firmware_stores_color_and_material`](../../../include/ams_backend.h))
 says the machine itself keeps them: today that is the tool changer backend with Z-Mod's
 material source ([`src/printer/toolchanger_addon.cpp#resolve_material_source`](../../../src/printer/toolchanger_addon.cpp)),
-whose `zmod_color` object both stores and echoes each head's type and colour. The ladder is the
+whose `zmod_color` object both stores and echoes each head's type and colour. That true
+answer is earned per machine, not assumed: the question
+([`src/printer/ams_backend_toolchanger.cpp#firmware_stores_color_and_material`](../../../src/printer/ams_backend_toolchanger.cpp))
+turns true only after a status frame has carried both `slots` and `palette`, the two
+fields Z-Mod's pending status update adds - until such a frame arrives it stays false and
+an edit keeps declaring its values. The ladder is the
 reason: a `LocalUser` colour record outranks the firmware's `VendorCache`, so a declaration left
 standing would outrank every change later made at the printer. The edit still writes the values
 through to the firmware, whose echo files them as the vendor's own reading - the declaration is
