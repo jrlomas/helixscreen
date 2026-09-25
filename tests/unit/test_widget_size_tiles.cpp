@@ -12,6 +12,7 @@
 
 #include "../lvgl_ui_test_fixture.h"
 #include "../test_helpers/panel_widget_size_harness.h"
+#include "../test_helpers/scoped_breakpoint.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_component.h"
 #include "helix/ui/shared_font_style.h"
@@ -220,6 +221,32 @@ TEST_CASE("a fan tile declines a box too small to draw in", "[widget_size][tile]
 
     CHECK(fan->fits_at(400, 400));
     CHECK_FALSE(fan->fits_at(6, 6));
+}
+
+TEST_CASE("half a cell at the small tiers depends on whether the tile shows a reading",
+          "[widget_size][tile][1559]") {
+    LVGLUITestFixture fixture;
+    helix::TileSizing icon_only("led:half");
+    icon_only.set_content({"", "", "Light", false});
+    helix::TileSizing reading("thermistor:half");
+    reading.set_content({"110.0°C", "110.0°C", "Sensor", true});
+
+    SECTION("tiny: a 40px track holds a lone glyph but not a reading") {
+        helix::test::ScopedBreakpoint bp(UiBreakpoint::Tiny);
+        const CellMetrics m{40.0f, 36.0f, 2, 10, 8};
+        icon_only.set_cell_metrics(m);
+        reading.set_cell_metrics(m);
+        CHECK(icon_only.fits(40, 76));
+        CHECK_FALSE(reading.fits(40, 76));
+    }
+
+    SECTION("micro: every tile floors at a whole cell") {
+        helix::test::ScopedBreakpoint bp(UiBreakpoint::Micro);
+        const CellMetrics m{34.0f, 30.0f, 2, 12, 8};
+        icon_only.set_cell_metrics(m);
+        CHECK_FALSE(icon_only.fits(34, 64));
+        CHECK(icon_only.fits(70, 64));
+    }
 }
 
 TEST_CASE("every centred-icon tile resolves a different glyph at two sizes",

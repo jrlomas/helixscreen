@@ -81,6 +81,8 @@
 #include "ui_update_queue.h"
 
 #include "../lvgl_ui_test_fixture.h"
+#include "../test_helpers/job_queue_state_test_access.h"
+#include "../test_helpers/job_queue_subjects_fixture.h"
 #include "../test_helpers/panel_widget_size_harness.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/scoped_animations_enabled.h"
@@ -424,6 +426,74 @@ TEST_CASE_METHOD(LVGLUITestFixture,
         UpdateQueueTestAccess::drain_all(UpdateQueue::instance());
         CHECK(lv_subject_get_int(PrintStatusWidget::show_filament_active_subject_for_test()) == 1);
         CHECK_FALSE(lv_obj_has_flag(filament_label, LV_OBJ_FLAG_HIDDEN));
+    }
+    PrintStatusWidget::destroy_formatter_for_test();
+}
+
+// --- Up next row fits inside the active card in BOTH layout variants ---------
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "up next row stays inside the active print card in both layouts",
+                 "[widget_size][print_status][up_next]") {
+    PrintStatusWidget::destroy_formatter_for_test();
+    PrinterStateTestAccess::reset(get_printer_state());
+    get_printer_state().init_subjects(false);
+    ToolState::instance().init_subjects(false);
+    heal_global_print_status_panel_subjects();
+    {
+        // The queue subjects must be live before the component parses, or
+        // up_next_row's bind_flag_if_eq on job_queue_count is dropped at
+        // parse time and the row keeps whatever default the XML gives it.
+        JobQueueState jqs(nullptr, nullptr);
+        ScopedJobQueueSubjects subject_guard; // destroyed AFTER the harness
+        jqs.init_subjects();
+        JobQueueStateTestAccess::deliver_status(jqs, status_with(3));
+        REQUIRE(lv_subject_get_int(lv_xml_get_subject(nullptr, "job_queue_count")) == 3);
+
+        PanelWidgetHarness<PrintStatusWidget> h(test_screen(),
+                                                HarnessConfig{{{"layout_style", "detailed"}}});
+        // Drain attach-time observers first: they fire with STANDBY and would
+        // otherwise override the forced active state on the next pump.
+        process_lvgl(30);
+        auto force_active = [&]() {
+            h.widget().on_print_state_changed_for_test(PrintState::Printing);
+            process_lvgl(30);
+        };
+
+        // Both checks share one contract: the row is VISIBLE (a hidden=false
+        // read is not visibility) and its bottom edge lands inside the card's
+        // content box, with nothing pushed past the card's bottom into a
+        // scroll region the user cannot reach.
+        auto check = [&](int expect_view) {
+            REQUIRE(lv_subject_get_int(PrintStatusWidget::view_subject_for_test()) ==
+                    expect_view); // proves WHICH variant is on stage
+            lv_obj_t* card = h.child("print_card_printing");
+            lv_obj_t* row = h.child("up_next_row");
+            REQUIRE(card != nullptr);
+            REQUIRE(row != nullptr);
+            CHECK_FALSE(lv_obj_has_flag(row, LV_OBJ_FLAG_HIDDEN));
+            lv_obj_update_layout(card);
+            const int content_bottom = lv_obj_get_height(card) -
+                                       lv_obj_get_style_pad_top(card, LV_PART_MAIN) -
+                                       lv_obj_get_style_pad_bottom(card, LV_PART_MAIN);
+            INFO("row y=" << lv_obj_get_y(row) << " h=" << lv_obj_get_height(row)
+                          << " content_bottom=" << content_bottom);
+            CHECK(lv_obj_get_y(row) + lv_obj_get_height(row) <= content_bottom);
+            CHECK(lv_obj_get_scroll_bottom(card) == 0);
+        };
+
+        // Detailed active (view 4) at the granted cell height 800x480 gives
+        // this card. The detailed body flex_grows into the space the Up next
+        // row leaves, rather than claiming 100% and pushing the row out.
+        h.resize(8, 4, w_wide(), 208);
+        force_active();
+        check(4);
+
+        // Compact width forces the library active view (view 3) even with
+        // layout_style=detailed; 480x320 grants the card ~this height.
+        h.resize(8, 4, w_normal() - 1, 142);
+        force_active();
+        check(3);
     }
     PrintStatusWidget::destroy_formatter_for_test();
 }

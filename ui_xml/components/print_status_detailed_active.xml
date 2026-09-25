@@ -2,8 +2,11 @@
 <!-- Copyright (C) 2025-2026 356C LLC -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <component>
+  <!-- flex_grow, not height="100%": this card shares its parent column with
+       the Up next row below it, and a percentage height claims the whole
+       content box, pushing that row past the card's bottom edge. -->
   <view name="print_status_detailed_active"
-        extends="lv_obj" width="100%" height="100%" style_pad_all="0" style_pad_gap="#space_xs" flex_flow="column"
+        extends="lv_obj" width="100%" flex_grow="1" style_pad_all="0" style_pad_gap="#space_xs" flex_flow="column"
         scrollable="false" clickable="false" event_bubble="true">
     <!-- Filename header: spans the whole card so a long name has the full width
          to scroll through instead of just the ~3/7 the data column gives it.

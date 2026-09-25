@@ -55,7 +55,7 @@ translations:
   1 event queued: 1 个事件排队中
   1 hour ago: 1小时前
   1 layer: 1 层
-  1 line in helixscreen.env was ignored: ''
+  1 line in helixscreen.env was ignored: 'helixscreen.env 中有 1 行被忽略'
   1 min: '1分钟'
   1 min ago: 1分钟前
   1 minute: 1 分钟
@@ -161,7 +161,11 @@ translations:
   Add Widget: 添加小组件
   Add custom filament: 添加自定义耗材
   Add page: '添加页面'
+  Add to Queue: 添加到队列
   Added to Spoolman: 已添加到 Spoolman
+  Added to queue (position {}): 已添加到队列（第 {} 位）
+  Added to queue (position {}) - queue is paused: 已添加到队列（第 {} 位）– 队列已暂停
+  Adding to queue...: 正在添加到队列...
   Address: 地址
   Adjust screen brightness level: 调整屏幕亮度
   Adjust screws, then re-probe.: 调整螺丝，然后重新探测。
@@ -223,7 +227,7 @@ translations:
   Assign a role to enable sensor monitoring: 分配角色以启用传感器监控
   Assisted Retract: '辅助回抽'
   Assisting: 辅助中
-  At least {} lines in helixscreen.env were ignored: ''
+  At least {} lines in helixscreen.env were ignored: 'helixscreen.env 中至少有 {} 行被忽略'
   Authentication failed: 认证失败
   Auto: 自动
   Auto Bed Mesh: 自动热床网格
@@ -432,6 +436,7 @@ translations:
   Cancel Print: 取消打印
   Cancel macro not configured: 取消宏未配置
   Cancelled: 已取消
+  'Cannot add to queue: internal error': '无法添加到队列：内部错误'
   Cannot be changed from here on a multi-unit MMU: 多单元 MMU 无法在此处更改
   'Cannot control timelapse: printer not connected': '无法控制延时摄影: 打印机未连接'
   'Cannot delete file: printer not connected': '无法删除文件: 打印机未连接'
@@ -667,6 +672,7 @@ translations:
   Copy failed - use SSH manually: 复制失败 - 请手动使用 SSH
   Corner roundness: 圆角程度
   Correction (Ki): 校正 (Ki)
+  Could not add to queue: 无法添加到队列
   Could not analyze PRINT_START macro. Some print options may be unavailable.: 无法分析
     PRINT_START 宏。部分打印选项可能不可用。
   Could not answer the connection request: '无法响应连接请求'
@@ -679,6 +685,7 @@ translations:
   Could not parse tips database: 无法解析提示数据库
   Could not reach Spoolman at: 无法连接 Spoolman：
   Could not read the screw adjustments from the printer: 无法从打印机读取螺丝调整数据
+  Could not remove the job from the queue: 无法从队列中移除任务
   Could not resolve printer RFCOMM channel: 无法解析打印机 RFCOMM 通道
   Could not save filament: 无法保存耗材
   "Could not save the mesh as '{}': {}": "无法将网格保存为 '{}'：{}"
@@ -1170,6 +1177,7 @@ translations:
   File: 文件
   File Size: 文件大小
   File Will Stop the Printer: '文件会使打印机停止'
+  'File not found: {}': '未找到文件: {}'
   Filename: 文件名
   Filter Fan: 滤网风扇
   'Filter Fan: Off': '滤网风扇: 关'
@@ -1186,8 +1194,8 @@ translations:
   Firmware reports no bypass. Enable if you feed filament straight to the extruder: 固件报告未配置旁路。如果您将耗材直接送入挤出机，请启用此选项
   Firmware restarting...: 固件重启中...
   Firmware saved X = Y's value; the measured X result was discarded: 固件将 X 轴保存为 Y 轴的值；实测的 X 轴结果已被丢弃
-  'Fix: chmod 644 {}, then restart': ''
-  'Fix: chown {} {}, then restart': ''
+  'Fix: chmod 644 {}, then restart': '修复：chmod 644 {}，然后重启'
+  'Fix: chown {} {}, then restart': '修复：chown {} {}，然后重启'
   FlashForge Adventurer 5M: FlashForge Adventurer 5M
   FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
@@ -2526,7 +2534,7 @@ translations:
   Security: 安全
   Security, network, host, and administration: 安全、网络、主机和管理
   See exactly what data will be sent: 查看将发送的确切数据
-  See the log: ''
+  See the log: '请查看日志'
   See the quick tour of HelixScreen again: 再次查看 HelixScreen 的快速漫游
   Select: 选择
   Select 'None' if you don't have a filament sensor, or if you don't want to pause on runout.: 如果您没有耗材传感器，或不想在断料时暂停，请选择「无」。
@@ -2722,6 +2730,7 @@ translations:
   Start anyway?: '仍要开始吗？'
   Start at: 从第
   Start failed: 启动失败
+  'Start next: {}': '开始下一个：{}'
   Start over: 重新开始
   Start print anyway?: 仍要开始打印吗？
   Started: 已开始
@@ -2730,6 +2739,7 @@ translations:
   Starting nozzle clean...: 正在开始清洁喷嘴...
   Starting print...: 正在启动打印...
   Starting...: 正在启动...
+  Starts after the current print: 当前打印完成后开始
   Startup Brightness: 启动亮度
   Startup, auto-control, and macro devices: 启动、自动控制和宏设备
   State: 状态
@@ -2771,11 +2781,9 @@ translations:
   Switches to a backup spool on runout: 耗材用尽时切换到备用料盘
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : 切回 PID 会改变此加热器的控制方式，随后会进行校准。这需要在工作温度下耗时数分钟。
-  Switching back to PID changes how this heater is controlled.: 切回 PID 会改变此加热器的控制方式。
   Switching back to PID requires a config change and Klipper restart.: 切回 PID 需要修改配置并重启 Klipper。
   Switching heater control to MPC. Klipper will restart.: 正在将加热控制切换为 MPC。Klipper 将重启。
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: 切换到 MPC 会改变此加热器的控制方式，随后会进行校准。这需要在工作温度下耗时数分钟。
-  Switching to MPC changes how this heater is controlled.: 切换到 MPC 会改变此加热器的控制方式。
   Switching to MPC requires a config change and Klipper restart.: 切换到 MPC 需要修改配置并重启
     Klipper。
   Sync with Spoolman: 与 Spoolman 同步
@@ -3125,6 +3133,8 @@ translations:
   Unretract Speed: 回抽恢复速度
   Unsupported tape width: 不支持的标签带宽度
   'Unsupported tape width: ': '不支持的标签带宽度: '
+  'Up next: {}': '下一个：{}'
+  'Up next: {} (+{})': '下一个：{}（+{}）'
   Up to date: 已是最新
   Update: 更新
   Update Available: 有可用更新
@@ -3339,10 +3349,10 @@ translations:
   feeder not in automatic mode: '送料器未处于自动模式'
   filament sensor disabled: '耗材传感器已禁用'
   heated bed: 热床
-  'helixscreen.env ignored: owned by uid {}': ''
-  'helixscreen.env ignored: untrusted symlink chain': ''
-  'helixscreen.env ignored: writable by other users': ''
-  'helixscreen.env ignored: {}': ''
+  'helixscreen.env ignored: owned by uid {}': '已忽略 helixscreen.env：属主为 uid {}'
+  'helixscreen.env ignored: untrusted symlink chain': '已忽略 helixscreen.env：符号链接链不受信任'
+  'helixscreen.env ignored: writable by other users': '已忽略 helixscreen.env：其他用户可写入'
+  'helixscreen.env ignored: {}': '已忽略 helixscreen.env：{}'
   idle: 空闲
   in unit {} slot {}: 在单元 {} 槽位 {}
   layers: 层
@@ -3399,7 +3409,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} 已安装，但其备用料盘切换已关闭，因此不会自动切换。'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} 已安装，但无法读取其备用料盘设置 - 请勿指望自动切换。'
   '{} is not set up on this printer': '{} 未在此打印机上设置'
-  '{} lines in helixscreen.env were ignored': ''
+  '{} lines in helixscreen.env were ignored': 'helixscreen.env 中有 {} 行被忽略'
   '{} macro not configured': '{} 宏未配置'
   '{} matches.': '{} 匹配。'
   '{} may cause unintended changes. Are you sure?': '{} 可能导致意外更改。确定吗？'

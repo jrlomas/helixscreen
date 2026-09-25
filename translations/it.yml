@@ -56,7 +56,7 @@ translations:
   1 event queued: 1 evento in coda
   1 hour ago: 1 ora fa
   1 layer: 1 strato
-  1 line in helixscreen.env was ignored: ''
+  1 line in helixscreen.env was ignored: '1 riga di helixscreen.env è stata ignorata'
   1 min: '1 min'
   1 min ago: 1 min fa
   1 minute: 1 minuto
@@ -170,7 +170,11 @@ translations:
   Add Widget: Aggiungi widget
   Add custom filament: Aggiungi filamento personalizzato
   Add page: 'Aggiungi pagina'
+  Add to Queue: Aggiungi alla coda
   Added to Spoolman: Aggiunto a Spoolman
+  Added to queue (position {}): Aggiunto alla coda (posizione {})
+  Added to queue (position {}) - queue is paused: Aggiunto alla coda (posizione {}) – la coda è in pausa
+  Adding to queue...: Aggiunta alla coda...
   Address: Indirizzo
   Adjust screen brightness level: Regola il livello di luminosità dello schermo
   Adjust screws, then re-probe.: Regolare le viti, poi risondare.
@@ -247,7 +251,7 @@ translations:
     del sensore
   Assisted Retract: 'Retrazione assistita'
   Assisting: Assistenza
-  At least {} lines in helixscreen.env were ignored: ''
+  At least {} lines in helixscreen.env were ignored: 'Almeno {} righe di helixscreen.env sono state ignorate'
   Authentication failed: Autenticazione fallita
   Auto: Auto
   Auto Bed Mesh: Mesh piano automatica
@@ -469,6 +473,7 @@ translations:
   Cancel Print: Annulla stampa
   Cancel macro not configured: Macro annullamento non configurata
   Cancelled: Annullato
+  'Cannot add to queue: internal error': 'Impossibile aggiungere alla coda: errore interno'
   Cannot be changed from here on a multi-unit MMU: Non modificabile da qui su un MMU multi-unità
   'Cannot control timelapse: printer not connected': 'Impossibile controllare timelapse:
     stampante non connessa'
@@ -733,6 +738,7 @@ translations:
   Copy failed - use SSH manually: Copia fallita - usa SSH manualmente
   Corner roundness: Arrotondamento angoli
   Correction (Ki): Correzione (Ki)
+  Could not add to queue: Impossibile aggiungere alla coda
   Could not analyze PRINT_START macro. Some print options may be unavailable.: Impossibile
     analizzare la macro PRINT_START. Alcune opzioni di stampa potrebbero non essere
     disponibili.
@@ -746,6 +752,7 @@ translations:
   Could not parse tips database: Impossibile analizzare il database dei suggerimenti
   Could not reach Spoolman at: Impossibile raggiungere Spoolman a
   Could not read the screw adjustments from the printer: Impossibile leggere le regolazioni delle viti dalla stampante
+  Could not remove the job from the queue: Impossibile rimuovere il lavoro dalla coda
   Could not resolve printer RFCOMM channel: Impossibile risolvere il canale RFCOMM
     della stampante
   Could not save filament: Impossibile salvare il filamento
@@ -1263,6 +1270,7 @@ translations:
   File: File
   File Size: Dimensione file
   File Will Stop the Printer: 'Il file fermerà la stampante'
+  'File not found: {}': 'File non trovato: {}'
   Filename: Nome file
   Filter Fan: Ventola filtro
   'Filter Fan: Off': 'Ventola filtro: Off'
@@ -1279,8 +1287,8 @@ translations:
   Firmware reports no bypass. Enable if you feed filament straight to the extruder: Il firmware non rileva un bypass. Abilita se alimenti il filamento direttamente all'estrusore
   Firmware restarting...: Riavvio firmware...
   Firmware saved X = Y's value; the measured X result was discarded: Il firmware ha salvato il valore di Y per X; il risultato misurato di X è stato scartato
-  'Fix: chmod 644 {}, then restart': ''
-  'Fix: chown {} {}, then restart': ''
+  'Fix: chmod 644 {}, then restart': 'Correzione: chmod 644 {}, poi riavvia'
+  'Fix: chown {} {}, then restart': 'Correzione: chown {} {}, poi riavvia'
   FlashForge Adventurer 5M: FlashForge Adventurer 5M
   FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
@@ -2715,7 +2723,7 @@ translations:
   Security: Sicurezza
   Security, network, host, and administration: Sicurezza, rete, host e amministrazione
   See exactly what data will be sent: Vedi esattamente quali dati verranno inviati
-  See the log: ''
+  See the log: 'Controlla il log'
   See the quick tour of HelixScreen again: Rivedi il tour rapido di HelixScreen
   Select: Seleziona
   Select 'None' if you don't have a filament sensor, or if you don't want to pause on runout.: Selezionare
@@ -2933,6 +2941,7 @@ translations:
   Start anyway?: 'Avviare comunque?'
   Start at: Inizia da
   Start failed: Avvio fallito
+  'Start next: {}': 'Avvia il prossimo: {}'
   Start over: Ricomincia
   Start print anyway?: Avviare comunque la stampa?
   Started: Avviato
@@ -2941,6 +2950,7 @@ translations:
   Starting nozzle clean...: Avvio pulizia ugello...
   Starting print...: Avvio stampa...
   Starting...: Avvio...
+  Starts after the current print: Inizia dopo la stampa in corso
   Startup Brightness: Luminosità all'avvio
   Startup, auto-control, and macro devices: Avvio, controllo automatico e dispositivi
     macro
@@ -2988,12 +2998,10 @@ translations:
   Switches to a backup spool on runout: Passa a una bobina di riserva a filamento esaurito
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : Il ritorno al PID cambia come viene controllato questo riscaldatore, poi lo calibra. Richiede diversi minuti a temperatura.
-  Switching back to PID changes how this heater is controlled.: Il ritorno al PID cambia come viene controllato questo riscaldatore.
   Switching back to PID requires a config change and Klipper restart.: Il ritorno al PID richiede una modifica alla configurazione e il riavvio di Klipper.
   Switching heater control to MPC. Klipper will restart.: Passaggio controllo riscaldatore
     a MPC. Klipper si riavvierà.
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: Il passaggio a MPC cambia come viene controllato questo riscaldatore, poi lo calibra. Richiede diversi minuti a temperatura.
-  Switching to MPC changes how this heater is controlled.: Il passaggio a MPC cambia come viene controllato questo riscaldatore.
   Switching to MPC requires a config change and Klipper restart.: Il passaggio a MPC
     richiede una modifica alla configurazione e il riavvio di Klipper.
   Sync with Spoolman: Sincronizza con Spoolman
@@ -3384,6 +3392,8 @@ translations:
   Unretract Speed: Velocità dopo retrazione
   Unsupported tape width: Larghezza nastro non supportata
   'Unsupported tape width: ': 'Larghezza nastro non supportata: '
+  'Up next: {}': 'Prossimo: {}'
+  'Up next: {} (+{})': 'Prossimo: {} (+{})'
   Up to date: Aggiornato
   Update: Aggiorna
   Update Available: Aggiornamento Disponibile
@@ -3615,10 +3625,10 @@ translations:
   feeder not in automatic mode: 'alimentatore non in modalità automatica'
   filament sensor disabled: 'sensore filamento disattivato'
   heated bed: piano riscaldato
-  'helixscreen.env ignored: owned by uid {}': ''
-  'helixscreen.env ignored: untrusted symlink chain': ''
-  'helixscreen.env ignored: writable by other users': ''
-  'helixscreen.env ignored: {}': ''
+  'helixscreen.env ignored: owned by uid {}': 'helixscreen.env ignorato: di proprietà dell''uid {}'
+  'helixscreen.env ignored: untrusted symlink chain': 'helixscreen.env ignorato: catena di collegamenti simbolici non affidabile'
+  'helixscreen.env ignored: writable by other users': 'helixscreen.env ignorato: scrivibile da altri utenti'
+  'helixscreen.env ignored: {}': 'helixscreen.env ignorato: {}'
   idle: inattivo
   in unit {} slot {}: 'nell''unità {} slot {}'
   layers: layer
@@ -3676,7 +3686,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} è installato ma il passaggio alla bobina di riserva è disattivato, quindi non avverrà alcun cambio automatico.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} è installato, ma non è stato possibile leggere la sua impostazione della bobina di riserva - non contare su un cambio automatico.'
   '{} is not set up on this printer': '{} non è configurato su questa stampante'
-  '{} lines in helixscreen.env were ignored': ''
+  '{} lines in helixscreen.env were ignored': '{} righe di helixscreen.env sono state ignorate'
   '{} macro not configured': Macro {} non configurata
   '{} matches.': '{} corrisponde.'
   '{} may cause unintended changes. Are you sure?': '{} potrebbe causare modifiche
