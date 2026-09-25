@@ -722,6 +722,22 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
         }
     }
 
+    // What this frame itself stated about each gate's identity, and the keys
+    // it carried and read as a clear, both gathered as the blocks below amend
+    // the accumulator. The echo guard at the filing tail judges these rather
+    // than gate_readings_: the accumulator carries the gate map's last word on
+    // every key, so a frame silent about material would otherwise offer the
+    // pre-edit material as this frame's statement and release the material
+    // declaration before its echo lands.
+    std::map<int, ams::Observation> frame_stated;
+    std::map<int, ams::Observation> frame_cleared;
+    // Observation has no default constructor, so every entry is created
+    // through this with a definite source.
+    const auto word = [](std::map<int, ams::Observation>& words, int gate) -> ams::Observation& {
+        return words.try_emplace(gate, ams::Observation{ams::ObservationSource::VendorCache})
+            .first->second;
+    };
+
     // Parse gate_color_rgb: integer array [0xRRGGBB, ...] or float array [[R,G,B], ...]
     bool colors_parsed = false;
     if (mmu_data.contains("gate_color_rgb") && mmu_data["gate_color_rgb"].is_array()) {
@@ -736,6 +752,7 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
                 const auto rgb = static_cast<uint32_t>(colors[i].get<int>());
                 entry->info.color_rgb = rgb;
                 reading_for(static_cast<int>(i)).color_rgb = rgb;
+                word(frame_stated, static_cast<int>(i)).color_rgb = rgb;
                 colors_parsed = true;
             } else if (colors[i].is_array() && colors[i].size() >= 3 && colors[i][0].is_number() &&
                        colors[i][1].is_number() && colors[i][2].is_number()) {
@@ -750,6 +767,7 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
                                      (static_cast<uint32_t>(g) << 8) | static_cast<uint32_t>(b);
                 entry->info.color_rgb = rgb;
                 reading_for(static_cast<int>(i)).color_rgb = rgb;
+                word(frame_stated, static_cast<int>(i)).color_rgb = rgb;
                 colors_parsed = true;
             }
         }
@@ -774,9 +792,11 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
             if (color.kind == ams::ColorReadingKind::Observed) {
                 entry->info.color_rgb = color.rgb;
                 reading_for(static_cast<int>(i)).color_rgb = color.rgb;
+                word(frame_stated, static_cast<int>(i)).color_rgb = color.rgb;
             } else if (color.kind == ams::ColorReadingKind::Cleared) {
                 entry->info.color_rgb = AMS_DEFAULT_SLOT_COLOR;
                 reading_for(static_cast<int>(i)).color_rgb.reset();
+                word(frame_cleared, static_cast<int>(i)).color_rgb = 0u;
             }
         }
     }
@@ -798,8 +818,10 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
             auto& reading = reading_for(static_cast<int>(i));
             if (material.empty()) {
                 reading.material.reset();
+                word(frame_cleared, static_cast<int>(i)).material = std::string{};
             } else {
                 reading.material = material;
+                word(frame_stated, static_cast<int>(i)).material = material;
             }
         }
     }
@@ -1016,6 +1038,10 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
                 helix::ams::clear_persisted_override(override_store_.get(), overrides_, gate,
                                                      backend_log_tag());
                 retire_departed_identity_locked(gate);
+                // Another writer moved the gate to a different spool, which is
+                // this backend's auto-clear signal: what the gate map states
+                // from here on is that spool's own reading, not our echo.
+                own_write_echoes_.abandon(gate);
             }
         }
         spdlog::trace("[AMS HappyHare] Parsed gate_spool_id for {} gates", spool_ids.size());
@@ -1284,7 +1310,35 @@ void AmsBackendHappyHare::parse_mmu_state(const nlohmann::json& mmu_data) {
         ams::ingest(lane_id(static_cast<int>(i)), sensed);
     }
     for (const auto& [gate, reading] : gate_readings_) {
-        ams::ingest(lane_id(gate), reading);
+        // The echo guard: a value repeating the user's own MMU_GATE_MAP write
+        // is not a reading, and ingest files the record whole, so a withheld
+        // field goes absent rather than back to its pre-edit value. The copy
+        // is what gets filed because strip_standing also removes fields the
+        // frame was silent about but the accumulator still carries - for an
+        // echoed field that standing value is our own write, and filing it
+        // would put the abandoned edit back as the machine's word one frame
+        // after the echo was withheld. No boundary token: no tag names the
+        // spool a gate-map write was made against, so a differing value, a
+        // key published empty, or the re-bind verdict ends the suppression.
+        ams::Observation stated{ams::ObservationSource::VendorCache};
+        ams::Observation cleared{ams::ObservationSource::VendorCache};
+        if (const auto it = frame_stated.find(gate); it != frame_stated.end()) {
+            stated = it->second;
+        }
+        if (const auto it = frame_cleared.find(gate); it != frame_cleared.end()) {
+            cleared = it->second;
+        }
+        const ams::Observation judged = stated;
+        own_write_echoes_.withhold(gate, std::string{}, stated, cleared);
+        ams::Observation filed = reading;
+        if (judged.color_rgb && !stated.color_rgb) {
+            filed.color_rgb.reset();
+        }
+        if (judged.material && !stated.material) {
+            filed.material.reset();
+        }
+        own_write_echoes_.strip_standing(gate, filed);
+        ams::ingest(lane_id(gate), filed);
     }
 
     // Paint every gate from the lane, after the two loops above have filed this
@@ -2678,6 +2732,10 @@ void AmsBackendHappyHare::clear_slot_override(int slot_index) {
         std::lock_guard<std::mutex> lock(mutex_);
         overrides_.erase(slot_index);
         helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
+        // The Clear Spool gesture: the lane is being emptied deliberately, so
+        // the gate map's next frame is the machine's own reading, not an echo
+        // of the cleared edit.
+        own_write_echoes_.abandon(slot_index);
 
         // Reset the override-exclusive fields on the live slot too: Happy Hare's
         // gate map has no concept of brand / spool_name / total weight / colour
@@ -2800,6 +2858,8 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
     int old_spoolman_id = 0;
     int old_mapped_tool = -1;
     bool old_had_identity = false;
+    std::string old_material;
+    uint32_t old_color_rgb = AMS_DEFAULT_SLOT_COLOR;
     SpoolmanMode spoolman_mode = SpoolmanMode::OFF;
     int current_slot = -1;
     {
@@ -2819,6 +2879,8 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
         old_mapped_tool = entry->info.mapped_tool;
         old_had_identity = old_spoolman_id > 0 || entry->info.has_filament_info() ||
                            !entry->info.brand.empty() || !entry->info.spool_name.empty();
+        old_material = entry->info.material;
+        old_color_rgb = entry->info.color_rgb;
         spoolman_mode = system_info_.spoolman_mode;
         current_slot = system_info_.current_slot;
         write_gate_locked(slot_index, entry->info, info);
@@ -2851,6 +2913,11 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
     // every gate. Never TEMP=0 (falsy means "keep") or AVAILABLE=0 (that
     // marks the gate EMPTY, not unknown).
     if (is_full_clear(info) && old_had_identity) {
+        // The gate is being emptied deliberately, so a frame restating the
+        // edit's values afterwards is the machine's own reading, not an echo
+        // to hide - the guard from an earlier edit must not outlive it.
+        own_write_echoes_.abandon(slot_index);
+
         // Spoolman pull mode: Happy Hare refuses local writes to material,
         // colour, name, vendor and spool id, and logs the refusal rather than
         // returning it - the gate map belongs to Spoolman on this printer.
@@ -2902,22 +2969,32 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
     std::string cmd = fmt::format("MMU_GATE_MAP GATE={}", slot_index);
 
     // Color (hex format, no # prefix). A deliberate pure black (#000000)
-    // reaches the gate map; the "no color reading" sentinel does not.
+    // reaches the gate map; the "no color reading" sentinel does not. A
+    // sentinel where the gate map held a colour is a clear, and an omitted
+    // parameter keeps the current value - the explicit empty is the only form
+    // that empties it (the same rule the full-wipe command relies on).
     if (ams::is_declarable_color(info.color_rgb)) {
         cmd += fmt::format(" COLOR={:06X}", info.color_rgb & 0xFFFFFF);
+        has_changes = true;
+    } else if (ams::is_declarable_color(old_color_rgb)) {
+        cmd += " COLOR=";
         has_changes = true;
     }
 
     // Material (validate to prevent command injection). The material charset is
     // deliberately wider than an identifier's: `PLA+`, `PA6-CF` and `Silk PLA` are
     // all in our own filament database, and gating this on is_safe_gcode_param()
-    // dropped every one of them.
+    // dropped every one of them. An empty where the gate map held a material is
+    // a clear and needs the explicit empty for the same reason as the colour.
     if (!info.material.empty() && IMoonrakerAPI::is_safe_material_param(info.material)) {
         cmd += fmt::format(" MATERIAL={}", IMoonrakerAPI::gcode_param_value(info.material));
         has_changes = true;
     } else if (!info.material.empty()) {
         spdlog::warn("[AMS HappyHare] Skipping MATERIAL - unsafe characters in: {}", info.material);
         rejected_material = info.material;
+    } else if (!old_material.empty()) {
+        cmd += " MATERIAL=";
+        has_changes = true;
     }
 
     // Spoolman ID (-1 to clear)
@@ -2939,7 +3016,43 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
         spdlog::warn("[AMS HappyHare] Spoolman pull mode owns the gate map; gate {} "
                      "edit kept locally only",
                      slot_index);
+        // No write goes out, so no echo is coming: the gate map's next frame
+        // is Spoolman's word, not ours.
+        own_write_echoes_.abandon(slot_index);
     } else if (has_changes) {
+        // Remember what the user declared, pruned to the fields this command
+        // actually carries, so the parse can tell the gate map repeating their
+        // choice back from Happy Hare's own readings. Staged before the
+        // dispatch: the guard has to be standing before any echo can arrive.
+        // A dispatch that failed outright leaves it armed to self-clean the
+        // same way - firmware still holds a value the declaration disagrees
+        // with.
+        own_write_echoes_.stage(slot_index, declared);
+        if (auto* staged = own_write_echoes_.staged(slot_index)) {
+            // COLOR= is skipped for the no-colour sentinel and MATERIAL= for
+            // an unsafe or cleared name: a field the write omitted (or asked
+            // firmware to drop) is the gate map's to keep, so its echo is a
+            // reading.
+            if (!ams::is_declarable_color(info.color_rgb)) {
+                staged->color_rgb.reset();
+            }
+            if (info.material.empty() || !IMoonrakerAPI::is_safe_material_param(info.material)) {
+                staged->material.reset();
+            }
+            // The command carries no name, brand, colour name or product
+            // line, so any value firmware reports for them is its own. An
+            // inert field left declared would keep the entry alive after the
+            // real fields are all released.
+            staged->brand.reset();
+            staged->spool_name.reset();
+            staged->color_name.reset();
+            staged->product_name.reset();
+        }
+        // No boundary token: no tag names the spool a gate-map write was made
+        // against, so suppression ends on a differing value or a key
+        // published empty rather than on a boundary event.
+        own_write_echoes_.arm(slot_index, std::string{});
+
         execute_gcode(cmd);
         spdlog::debug("[AMS HappyHare] Sent: {}", cmd);
     }

@@ -900,6 +900,14 @@ void AmsBackendQidi::parse_save_variables(const nlohmann::json& variables) {
             // reports as untagged shows no brand, matching the clear.
             slot->brand.clear();
         }
+        // The echo guard: ids repeating the user's own SAVE_VARIABLE push are
+        // not a reading, and ingest files the record whole, so a withheld
+        // field goes absent rather than back to its pre-edit value. The cache
+        // is rebuilt from the saved ids every frame, so a frame that carries
+        // no id keys restates the write the same way and is judged the same
+        // way. A key carried with 0 never reaches here armed: it moves the
+        // fingerprint first, and the clear that follows drops the guard.
+        own_write_echoes_.withhold(i, std::string{}, cache);
         helix::ams::ingest(lane_id(i), cache);
     }
 
@@ -1584,6 +1592,51 @@ AmsError AmsBackendQidi::apply_user_edit(int slot_index, const SlotInfo& info,
             staged_echoes = expect_own_write_echoes_locked(slot_index, *base, fila_vals, color_vals,
                                                            vendor_vals);
         }
+
+        // Stage before the first dispatch, so an echo racing the writes is
+        // judged against this edit. The ids name table rows rather than
+        // spelling the values, so each carried field is relocated to what
+        // its row will state; a field whose write does not go out (no fila
+        // match, empty palette, vendor id 0) is pruned, because the Box then
+        // keeps stating whatever it had. No SAVE_VARIABLE carries a name.
+        own_write_echoes_.stage(slot_index, declared);
+        if (auto* staged_echo = own_write_echoes_.staged(slot_index)) {
+            if (fila_id > 0) {
+                const auto row = fila_profiles_.find(fila_id);
+                if (row != fila_profiles_.end() && !row->second.type.empty()) {
+                    staged_echo->material = row->second.type;
+                } else {
+                    staged_echo->material.reset();
+                }
+            } else {
+                staged_echo->material.reset();
+            }
+            if (have_palette && color_id > 0) {
+                staged_echo->color_rgb = color_palette_.at(color_id);
+                if (!helix::ams::is_declarable_color(*staged_echo->color_rgb)) {
+                    staged_echo->color_rgb.reset();
+                }
+            } else {
+                staged_echo->color_rgb.reset();
+            }
+            if (vendor_id > 0) {
+                const auto row = vendor_names_.find(vendor_id);
+                if (row != vendor_names_.end() && !row->second.empty()) {
+                    staged_echo->brand = row->second;
+                } else {
+                    staged_echo->brand.reset();
+                }
+            } else {
+                staged_echo->brand.reset();
+            }
+            staged_echo->spool_name.reset();
+            staged_echo->color_name.reset();
+            staged_echo->product_name.reset();
+        }
+        // The fingerprint tracker above is what separates an echo from a
+        // swap; this lane has no boundary token of its own, so the guard
+        // stands until a value differs or the swap clear drops it.
+        own_write_echoes_.arm(slot_index, std::string{});
     }
 
     const std::string suffix = std::to_string(slot_index);
@@ -1797,6 +1850,10 @@ void AmsBackendQidi::clear_override_locked(int slot_index, SlotInfo& slot) {
     // the parse's paint (or its else-arms, once the zero writes echo back)
     // restates whatever the Box still reports.
     overrides_.erase(slot_index);
+    // What the Box states from here on is its own word: both the user's clear
+    // and the fingerprint-change swap funnel land here before this frame's
+    // cache files, so a swap's identity is not withheld as a lingering echo.
+    own_write_echoes_.abandon(slot_index);
     // The lane's own records go with it: the erase above and this are one
     // clear in two stores, and a clear that reached only one would leave
     // resolve() still reporting the identity just removed.
