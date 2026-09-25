@@ -36,7 +36,7 @@ class OwnWriteEchoes;
 ///   - on_stopping() - pre-stop cleanup
 ///   - additional_start_checks() - extra preconditions before subscribing
 ///   - get_system_info() - if they need to build info from SlotRegistry
-///   - validate_slot_index() - if they need custom validation
+///   - slot_index_bound_locked() - if the valid index range is not total_slots
 class AmsSubscriptionBackend : public AmsBackend {
   public:
     AmsSubscriptionBackend(IMoonrakerAPI* api, helix::IMoonrakerClient* client);
@@ -196,6 +196,17 @@ class AmsSubscriptionBackend : public AmsBackend {
 
   protected:
     // --- Hooks for derived classes ---
+
+    /// Whether @p slot_index names a position this backend has. Zero positions
+    /// means none are discovered yet, which is not the caller's mistake, so it
+    /// reads as not-connected rather than as a bad number. Caller holds mutex_.
+    [[nodiscard]] AmsError validate_slot_index_locked(int slot_index) const;
+    /// validate_slot_index_locked() for a caller that does not hold mutex_.
+    [[nodiscard]] AmsError validate_slot_index(int slot_index) const;
+    /// Exclusive upper bound for a valid slot index. Caller holds mutex_.
+    [[nodiscard]] virtual int slot_index_bound_locked() const {
+        return system_info_.total_slots;
+    }
 
     /// Drop what earlier paints left on a persistent SlotInfo, so the paint
     /// that follows takes the lane's current records as its only supplier.

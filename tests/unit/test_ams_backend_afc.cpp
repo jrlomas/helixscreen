@@ -2639,6 +2639,16 @@ TEST_CASE("AFC recover_lane_position second lane", "[ams][afc][recovery][phase4]
     REQUIRE(helper.has_gcode("AFC_LANE_RESET LANE=lane3"));
 }
 
+TEST_CASE("AFC set_tool_mapping refuses a lane past the discovered range",
+          "[ams][afc][slot_index]") {
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes_with_slots(4);
+    helper.set_running(true);
+
+    CHECK(helper.set_tool_mapping(0, 4).result == AmsResult::INVALID_SLOT);
+    CHECK(helper.set_tool_mapping(0, -2).result == AmsResult::INVALID_SLOT);
+}
+
 TEST_CASE("AFC recover_lane_position validates slot index", "[ams][afc][recovery][phase4]") {
     AmsBackendAfcTestHelper helper;
     helper.initialize_test_lanes_with_slots(4);

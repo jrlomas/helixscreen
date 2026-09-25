@@ -2369,13 +2369,6 @@ void AmsBackendSnapmaker::clear_slot_override(int slot_index) {
 // Internal Helpers
 // ============================================================================
 
-AmsError AmsBackendSnapmaker::validate_slot_index(int slot_index) const {
-    if (slot_index < 0 || slot_index >= NUM_TOOLS) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, NUM_TOOLS - 1);
-    }
-    return AmsErrorHelper::success();
-}
-
 std::vector<int> AmsBackendSnapmaker::task_routing(const std::vector<bool>& extruders_used,
                                                    const std::vector<int>& extruder_map) {
     // Gate on a task actually being configured. With no task the firmware holds

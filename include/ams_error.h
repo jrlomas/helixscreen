@@ -291,6 +291,38 @@ class AmsErrorHelper {
     }
 
     /**
+     * @brief Create a "nothing discovered yet" error for a backend with no slots
+     * @param noun The backend's word for one position
+     * @return AmsError configured for UI display
+     *
+     * The printer is online; the filament system has not reported its positions.
+     */
+    static AmsError no_slots_discovered(ui::LaneNoun noun) {
+        const char* detail = "No slots discovered";
+        switch (noun) {
+        case ui::LaneNoun::Lane:
+            detail = "No lanes discovered";
+            break;
+        case ui::LaneNoun::Gate:
+            detail = "No gates discovered";
+            break;
+        case ui::LaneNoun::Tool:
+            detail = "No tools discovered";
+            break;
+        case ui::LaneNoun::Feeder:
+            detail = "No feeders discovered";
+            break;
+        case ui::LaneNoun::Toolhead:
+            detail = "No toolheads discovered";
+            break;
+        case ui::LaneNoun::Slot:
+            break;
+        }
+        return AmsError(AmsResult::NOT_CONNECTED, detail, lv_tr("Multi-filament system not ready"),
+                        lv_tr("It has not reported its slots yet. Try again in a moment."));
+    }
+
+    /**
      * @brief Create a no AMS detected error
      * @return AmsError configured for UI display
      */

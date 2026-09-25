@@ -1442,6 +1442,7 @@ translations:
   Invalid value type: '值类型无效'
   Issue description: 问题描述
   It can be un-archived in Spoolman's web UI.: 可以在 Spoolman 的网页界面中取消归档。
+  It has not reported its slots yet. Try again in a moment.: 尚未报告其料槽。请稍后再试。
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: 它卡在集线器传感器与集线器齿轮之间。请打开 CFS 清理集线器后重试
   It's a new spool: 这是新料盘
   Jammed at the Toolhead: 工具头处堵塞
@@ -1728,6 +1729,7 @@ translations:
   Multi-Filament System Status: '多耗材系统状态'
   'Multi-Filament System is busy: {}': '多耗材系统忙碌中: {}'
   Multi-Filament System not available: 多耗材系统不可用
+  Multi-filament system not ready: 多耗材系统未就绪
   Must home axes first: 请先归位
   My Custom Theme: 我的自定义主题
   My Panel: 我的面板

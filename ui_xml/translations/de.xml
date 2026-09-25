@@ -1410,6 +1410,7 @@
   <translation tag="Invalid value type" de="Ungültiger Werttyp"/>
   <translation tag="Issue description" de="Problembeschreibung"/>
   <translation tag="It can be un-archived in Spoolman&apos;s web UI." de="Sie kann in der Weboberfläche von Spoolman wiederhergestellt werden."/>
+  <translation tag="It has not reported its slots yet. Try again in a moment." de="Es hat seine Slots noch nicht gemeldet. Versuchen Sie es gleich noch einmal."/>
   <translation tag="It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying" de="Es klemmt zwischen Hub-Sensor und Hub-Antriebsrad. CFS öffnen, den Hub frei machen und erneut versuchen"/>
   <translation tag="It&apos;s a new spool" de="Es ist eine neue Spule"/>
   <translation tag="Jammed at the Toolhead" de="Stau am Werkzeugkopf"/>
@@ -1686,6 +1687,7 @@
   <translation tag="Multi-Filament System Status" de="Multi-Filament-Status"/>
   <translation tag="Multi-Filament System is busy: {}" de="Multi-Filament-System ist beschäftigt: {}"/>
   <translation tag="Multi-Filament System not available" de="Multi-Filament-System nicht verfügbar"/>
+  <translation tag="Multi-filament system not ready" de="Multi-Filament-System nicht bereit"/>
   <translation tag="Must home axes first" de="Achsen müssen zuerst referenziert werden"/>
   <translation tag="My Custom Theme" de="Mein benutzerdefiniertes Thema"/>
   <translation tag="My Panel" de="Mein Panel"/>

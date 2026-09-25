@@ -1410,6 +1410,7 @@
   <translation tag="Invalid value type" en="Invalid value type"/>
   <translation tag="Issue description" en="Issue description"/>
   <translation tag="It can be un-archived in Spoolman&apos;s web UI." en="It can be un-archived in Spoolman&apos;s web UI."/>
+  <translation tag="It has not reported its slots yet. Try again in a moment." en="It has not reported its slots yet. Try again in a moment."/>
   <translation tag="It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying" en="It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying"/>
   <translation tag="It&apos;s a new spool" en="It&apos;s a new spool"/>
   <translation tag="Jammed at the Toolhead" en="Jammed at the Toolhead"/>
@@ -1686,6 +1687,7 @@
   <translation tag="Multi-Filament System Status" en="Multi-Filament System Status"/>
   <translation tag="Multi-Filament System is busy: {}" en="Multi-Filament System is busy: {}"/>
   <translation tag="Multi-Filament System not available" en="Multi-Filament System not available"/>
+  <translation tag="Multi-filament system not ready" en="Multi-filament system not ready"/>
   <translation tag="Must home axes first" en="Must home axes first"/>
   <translation tag="My Custom Theme" en="My Custom Theme"/>
   <translation tag="My Panel" en="My Panel"/>

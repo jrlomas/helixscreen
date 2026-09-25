@@ -4808,13 +4808,6 @@ void AmsBackendAfc::reorganize_slots() {
 
 // check_preconditions() provided by AmsSubscriptionBackend
 
-AmsError AmsBackendAfc::validate_slot_index(int slot_index) const {
-    if (slot_index < 0 || slot_index >= system_info_.total_slots) {
-        return AmsErrorHelper::invalid_slot(lane_noun(), slot_index, system_info_.total_slots - 1);
-    }
-    return AmsErrorHelper::success();
-}
-
 // execute_gcode() provided by AmsSubscriptionBackend
 
 AmsError AmsBackendAfc::execute_gcode_notify(const std::string& gcode,
@@ -4857,7 +4850,7 @@ AmsError AmsBackendAfc::do_load_filament(int slot_index) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        AmsError gate_valid = validate_slot_index(slot_index);
+        AmsError gate_valid = validate_slot_index_locked(slot_index);
         if (!gate_valid) {
             return gate_valid;
         }
@@ -4944,7 +4937,7 @@ AmsError AmsBackendAfc::do_select_slot(int slot_index) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        AmsError gate_valid = validate_slot_index(slot_index);
+        AmsError gate_valid = validate_slot_index_locked(slot_index);
         if (!gate_valid) {
             return gate_valid;
         }
@@ -5398,7 +5391,7 @@ AmsError AmsBackendAfc::eject_lane(int slot_index) {
             return printing;
         }
 
-        AmsError slot_err = validate_slot_index(slot_index);
+        AmsError slot_err = validate_slot_index_locked(slot_index);
         if (!slot_err) {
             return slot_err;
         }
@@ -5776,9 +5769,8 @@ AmsError AmsBackendAfc::set_tool_mapping_impl(int tool_number, int slot_index) {
             return AmsErrorHelper::tool_out_of_range(tool_number);
         }
 
-        if (!slots_.is_valid_index(slot_index)) {
-            return AmsErrorHelper::invalid_slot(lane_noun(), slot_index,
-                                                system_info_.total_slots - 1);
+        if (auto err = validate_slot_index_locked(slot_index); !err.success()) {
+            return err;
         }
 
         // Update registry tool mapping (handles clearing old mappings internally)

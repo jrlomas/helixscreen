@@ -1524,6 +1524,7 @@ translations:
   Invalid value type: Invalid value type
   Issue description: Issue description
   It can be un-archived in Spoolman's web UI.: It can be un-archived in Spoolman's web UI.
+  It has not reported its slots yet. Try again in a moment.: It has not reported its slots yet. Try again in a moment.
   It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying: It is jammed between the hub sensor and the hub gear. Open the CFS and clear the hub before retrying
   It's a new spool: It's a new spool
   Jammed at the Toolhead: Jammed at the Toolhead
@@ -1825,6 +1826,7 @@ translations:
   Multi-Filament System Status: Multi-Filament System Status
   'Multi-Filament System is busy: {}': 'Multi-Filament System is busy: {}'
   Multi-Filament System not available: Multi-Filament System not available
+  Multi-filament system not ready: Multi-filament system not ready
   Must home axes first: Must home axes first
   My Custom Theme: My Custom Theme
   My Panel: My Panel
