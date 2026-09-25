@@ -3,6 +3,7 @@
 
 #include "ui_update_queue.h"
 
+#include "../ui_test_utils.h"
 #include "ams_backend_cfs.h"
 #include "ams_remap.h"
 #include "ams_types.h"
@@ -4370,8 +4371,11 @@ TEST_CASE("CFS probes RFID on a bay insert, without feeding filament",
     // remain_len -1 indefinitely, so a stale override kept painting the lane
     // until BOX_GET_RFID was sent by hand.
     CfsRemapHelper backend;
+    // An insert the reader cannot name queues the same-spool notice; drain
+    // each poll so the queue empties with the test.
     auto poll = [&backend](const json& box) {
         CfsTestAccess::handle_status(backend, make_cfs_notification(box));
+        helix::ui::UpdateQueue::instance().drain();
     };
 
     // Bay A seated, B/C/D empty.
@@ -4465,8 +4469,11 @@ TEST_CASE("CFS defers the insert probe while the box latched runout",
     // bay's remain_len at 255. The probe must wait for an idle poll and fire
     // exactly once when it comes.
     CfsRemapHelper backend;
+    // An insert the reader cannot name queues the same-spool notice; drain
+    // each poll so the queue empties with the test.
     auto poll = [&backend](const json& box) {
         CfsTestAccess::handle_status(backend, make_cfs_notification(box));
+        helix::ui::UpdateQueue::instance().drain();
     };
 
     const json empty_bcd =
@@ -4503,8 +4510,11 @@ TEST_CASE("CFS drops a deferred insert probe when the bay empties first",
     // back out before the box goes idle, there is nothing left to probe and
     // the deferred mask must not fire.
     CfsRemapHelper backend;
+    // An insert the reader cannot name queues the same-spool notice; drain
+    // each poll so the queue empties with the test.
     auto poll = [&backend](const json& box) {
         CfsTestAccess::handle_status(backend, make_cfs_notification(box));
+        helix::ui::UpdateQueue::instance().drain();
     };
 
     const json empty_bcd =
@@ -5797,4 +5807,294 @@ TEST_CASE("CFS: a mirror leaves the material the lane's Spoolman record states",
     REQUIRE(lane.spoolman.has_value());
     CHECK(lane.spoolman->material == "PETG");
     CHECK(helix::ams::resolve(lane).material == std::string("PETG"));
+}
+
+// ============================================================================
+// Own-write echo suppression (prestonbrown/helixscreen#1633) and the insert
+// rule (prestonbrown/helixscreen#1710)
+// ============================================================================
+
+TEST_CASE("CFS stock echo of a user edit does not file as firmware truth (#1633)",
+          "[ams][cfs][1633]") {
+    // BOX_MODIFY_TN_DATA rewrites are republished by the box through the same
+    // material_type / color_value arrays a real tag read uses, decoded through
+    // the same code table. Filing that echo as VendorCache hands the lane the
+    // user's abandoned edit as the machine's word once the override is cleared.
+    CfsTmpCacheDir tmp("cfs_echo_suppressed");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    helix::test::RegisteredBackend<AmsBackendCfs> backend_reg(&api, nullptr);
+    AmsBackendCfs& backend = *backend_reg;
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "cfs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    CfsTestAccess::inject_override_store(backend, std::move(store));
+
+    // Firmware's own reading: bay 1 a tagged PETG spool, bay 2 a tagged PLA
+    // spool (so the edit's material lookup finds an observed code for PLA).
+    CfsTestAccess::handle_status(backend, make_cfs_notification(make_single_unit_box(
+                                              {"100003", "101001", "-1", "-1"},
+                                              {"0FF5500", "0FFFFFF", "0C12E1F", "00A2989"})));
+    const auto lane = backend.lane_id(0);
+    auto vendor = helix::ams::lane_sources(lane).vendor_cache;
+    REQUIRE(vendor.has_value());
+    REQUIRE(vendor->material == "PETG");
+    REQUIRE(vendor->color_rgb == 0xFF5500u);
+
+    // The user edits bay 1 to PLA / #7EC8E3 and the box repeats the edit back.
+    SlotInfo edit;
+    edit.material = "PLA";
+    edit.color_rgb = 0x7EC8E3;
+    helix::test::edit_slot_as_user(backend, 0, edit);
+
+    const json echo_box = make_single_unit_box({"101001", "101001", "-1", "-1"},
+                                               {"07EC8E3", "0FFFFFF", "0C12E1F", "00A2989"});
+    CfsTestAccess::handle_status(backend, make_cfs_notification(echo_box));
+    vendor = helix::ams::lane_sources(lane).vendor_cache;
+    REQUIRE(vendor.has_value());
+    // Withholding removes the field from the record whole: firmware holds the
+    // user's write now, so its previous independent reading is gone too.
+    CHECK_FALSE(vendor->material.has_value());
+    CHECK_FALSE(vendor->color_rgb.has_value());
+    // The override that caused the write is still standing.
+    REQUIRE(CfsTestAccess::get_override(backend, 0).has_value());
+
+    // The declaration is not consumed by one frame: the box keeps repeating
+    // the write, and every repetition is still not a reading.
+    CfsTestAccess::handle_status(backend, make_cfs_notification(echo_box));
+    vendor = helix::ams::lane_sources(lane).vendor_cache;
+    REQUIRE(vendor.has_value());
+    CHECK_FALSE(vendor->material.has_value());
+    CHECK_FALSE(vendor->color_rgb.has_value());
+
+    SECTION("Clear Spool ends it") {
+        backend.clear_slot_override(0);
+        CfsTestAccess::handle_status(backend, make_cfs_notification(echo_box));
+        vendor = helix::ams::lane_sources(lane).vendor_cache;
+        REQUIRE(vendor.has_value());
+        CHECK(vendor->material == "PLA");
+        CHECK(vendor->color_rgb == 0x7EC8E3u);
+    }
+
+    SECTION("a differing reading ends that field's suppression") {
+        // Someone at the box changes just the colour: the frame states
+        // something other than what we wrote for colour, so colour is the
+        // box's own word again while material is still our echo.
+        const json recolored = make_single_unit_box({"101001", "101001", "-1", "-1"},
+                                                    {"000FF00", "0FFFFFF", "0C12E1F", "00A2989"});
+        CfsTestAccess::handle_status(backend, make_cfs_notification(recolored));
+        vendor = helix::ams::lane_sources(lane).vendor_cache;
+        REQUIRE(vendor.has_value());
+        CHECK(vendor->color_rgb == 0x00FF00u);
+        CHECK_FALSE(vendor->material.has_value());
+    }
+}
+
+TEST_CASE("CFS fork echo of a user edit does not file as firmware truth (#1633)",
+          "[ams][cfs][1633]") {
+    // _BOX_SLOT_SET is republished by the fork's box.py through the same
+    // slots[] fields a real read uses. The write uppercases MATERIAL and
+    // re-sends the bay's merged identity, so what comes back is the write
+    // returning, not a reading.
+    CfsTmpCacheDir tmp("cfs_fork_echo_suppressed");
+    // Registered, not bare: lane_id() names a position only once AmsState has
+    // stamped the backend index, and an unregistered backend's ingest lands on
+    // no lane at all.
+    helix::test::RegisteredBackend<CfsRemapHelper> backend_reg;
+    CfsRemapHelper& backend = *backend_reg;
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+    // The identity push runs only with an override store attached.
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "cfs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    CfsTestAccess::inject_override_store(backend, std::move(store));
+
+    CfsTestAccess::handle_status(backend, make_cfs_notification(make_flat_fork_box()));
+    const auto lane = backend.lane_id(0);
+    auto vendor = helix::ams::lane_sources(lane).vendor_cache;
+    REQUIRE(vendor.has_value());
+    REQUIRE(vendor->material == "PLA");
+    REQUIRE(vendor->color_rgb == 0x111111u);
+
+    SlotInfo edit;
+    edit.material = "PETG";
+    edit.color_rgb = 0x0A2989;
+    helix::test::edit_slot_as_user(backend, 0, edit);
+
+    // The echo reports exactly the merged bay the write re-sent: uppercased
+    // material, the new colour, and no brand or name (the edit carried none,
+    // so the write cleared them).
+    json echoed = make_flat_fork_box();
+    echoed["slots"][0]["material"] = "PETG";
+    echoed["slots"][0]["color"] = "#0A2989";
+    echoed["slots"][0]["brand"] = "None";
+    echoed["slots"][0]["name"] = "None";
+    CfsTestAccess::handle_status(backend, make_cfs_notification(echoed));
+    vendor = helix::ams::lane_sources(lane).vendor_cache;
+    REQUIRE(vendor.has_value());
+    CHECK_FALSE(vendor->material.has_value());
+    CHECK_FALSE(vendor->color_rgb.has_value());
+
+    SECTION("Clear Spool ends it") {
+        backend.clear_slot_override(0);
+        CfsTestAccess::handle_status(backend, make_cfs_notification(echoed));
+        vendor = helix::ams::lane_sources(lane).vendor_cache;
+        REQUIRE(vendor.has_value());
+        CHECK(vendor->material == "PETG");
+        CHECK(vendor->color_rgb == 0x0A2989u);
+    }
+}
+
+TEST_CASE("CFS untagged insert offers Clear (#1710)", "[ams][cfs][1710]") {
+    // A bay whose tag was read remembers the spool; the next insert that
+    // carries no complete read is No evidence under the slot spec's insert
+    // rule: keep everything and ask the user whether it is the same spool.
+    CfsTmpCacheDir tmp("cfs_insert_notice");
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    helix::test::RegisteredBackend<AmsBackendCfs> backend_reg(&api, nullptr);
+    AmsBackendCfs& backend = *backend_reg;
+    auto store = std::make_unique<helix::ams::FilamentSlotOverrideStore>(&api, "cfs");
+    FilamentSlotOverrideStoreTestAccess::set_cache_directory(*store, tmp.path);
+    CfsTestAccess::inject_override_store(backend, std::move(store));
+
+    std::vector<std::pair<ToastSeverity, std::string>> toasts;
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg, uint32_t) {
+        toasts.emplace_back(severity, msg);
+    });
+
+    // Boot with a tagged PETG spool seated: the first occupancy observation is
+    // the session's baseline, never an insert edge.
+    CfsTestAccess::handle_status(
+        backend, make_cfs_notification(make_single_unit_box({"100003", "-1", "-1", "-1"},
+                                                            {"0FF5500", "-1", "-1", "-1"})));
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    // The lane carries a user assignment for the spool; that is what the
+    // notice asks about. Made through the edit path so it declares its colour,
+    // which is what lets it survive the bay reading EMPTY below.
+    SlotInfo edit = backend.get_slot_info(0);
+    edit.color_rgb = 0x7EC8E3;
+    helix::test::edit_slot_as_user(backend, 0, edit);
+
+    // Pulling the spool is not an insert. The tag's material and colour stay
+    // latched in the arrays; only the occupancy fields drop.
+    json pulled = make_single_unit_box({"100003", "-1", "-1", "-1"}, {"0FF5500", "-1", "-1", "-1"});
+    pulled["T1"]["vender"][0] = "none";
+    pulled["T1"]["remain_len"][0] = "-1";
+    CfsTestAccess::handle_status(backend, make_cfs_notification(pulled));
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    // A spool goes in that the reader cannot name yet: material_type at its
+    // sentinel, colour still the last latched reading, vender occupied. The
+    // edge carries no complete read, which is No evidence.
+    json inserted = make_single_unit_box({"-1", "-1", "-1", "-1"}, {"0FF5500", "-1", "-1", "-1"});
+    CfsTestAccess::handle_status(backend, make_cfs_notification(inserted));
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(toasts.size() == 1);
+    CHECK(toasts[0].first == ToastSeverity::INFO);
+
+    // Re-stating the same occupancy is not a new edge.
+    toasts.clear();
+    CfsTestAccess::handle_status(backend, make_cfs_notification(inserted));
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    helix::ui::set_test_toast_hook(nullptr);
+}
+
+TEST_CASE("CFS flat insert edge verdicts (#1710)", "[ams][cfs][1710]") {
+    // The fork reports each seated spool's identity fresh in every frame, so
+    // the edge itself carries evidence and the shared rule can decide it.
+    // Registered, not bare: lane_id() names a position only once AmsState has
+    // stamped the backend index, and an unregistered backend's edit files its
+    // declaration on no lane at all.
+    helix::test::RegisteredBackend<CfsRemapHelper> backend_reg;
+    CfsRemapHelper& backend = *backend_reg;
+
+    std::vector<std::pair<ToastSeverity, std::string>> toasts;
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg, uint32_t) {
+        toasts.emplace_back(severity, msg);
+    });
+
+    CfsTestAccess::handle_status(backend, make_cfs_notification(make_flat_fork_box()));
+
+    // A user assignment for the seated spool, made the way the application
+    // makes one: a colour the frame did not report, declared through the edit
+    // path so it survives the bay reading EMPTY below.
+    SlotInfo edit = backend.get_slot_info(0);
+    edit.color_rgb = 0x7EC8E3;
+    helix::test::edit_slot_as_user(backend, 0, edit);
+
+    json pulled = make_flat_fork_box();
+    pulled["slots"][0]["present"] = false;
+    pulled["slots"][0]["loaded"] = false;
+    pulled["slots"][0]["material"] = "None";
+    pulled["slots"][0]["brand"] = "None";
+    pulled["slots"][0]["name"] = "None";
+    pulled["slots"][0]["color"] = "None";
+    pulled["loaded_slot"] = -1;
+    pulled["loaded_mask"] = 0;
+    pulled["runout"] = nullptr;
+    CfsTestAccess::handle_status(backend, make_cfs_notification(pulled));
+    // A deliberate user assignment survives an empty bay, so the assignment
+    // the verdicts below act on is still standing at the edge.
+    REQUIRE(CfsTestAccess::get_override(backend, 0).has_value());
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    SECTION("a different spool drops what described the old one") {
+        json inserted = make_flat_fork_box();
+        inserted["slots"][0]["material"] = "PETG";
+        inserted["slots"][0]["color"] = "#0A2989";
+        inserted["slots"][0]["brand"] = "Jayo";
+        inserted["slots"][0]["name"] = "Blue PETG";
+        CfsTestAccess::handle_status(backend, make_cfs_notification(inserted));
+        CHECK_FALSE(CfsTestAccess::get_override(backend, 0).has_value());
+        // The changed fingerprint clears through the hardware-event path as
+        // well; the assertion pins the end state the spec names.
+    }
+
+    SECTION("a colour-only swap still drops the assignment") {
+        // Same material, different colour: the least swap there is. The
+        // fingerprint path fires on it too (colour is its fourth field), so
+        // this pins the end state rather than one path's work.
+        json inserted = make_flat_fork_box();
+        inserted["slots"][0]["color"] = "#0A2989";
+        CfsTestAccess::handle_status(backend, make_cfs_notification(inserted));
+        CHECK_FALSE(CfsTestAccess::get_override(backend, 0).has_value());
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK(toasts.empty());
+    }
+
+    SECTION("the same spool keeps everything silently") {
+        CfsTestAccess::handle_status(backend, make_cfs_notification(make_flat_fork_box()));
+        CHECK(CfsTestAccess::get_override(backend, 0).has_value());
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK(toasts.empty());
+    }
+
+    SECTION("no evidence asks instead of clearing") {
+        json inserted = make_flat_fork_box();
+        inserted["slots"][0]["material"] = "None";
+        inserted["slots"][0]["brand"] = "None";
+        inserted["slots"][0]["name"] = "None";
+        inserted["slots"][0]["color"] = "None";
+        CfsTestAccess::handle_status(backend, make_cfs_notification(inserted));
+        CHECK(CfsTestAccess::get_override(backend, 0).has_value());
+        helix::ui::UpdateQueue::instance().drain();
+        REQUIRE(toasts.size() == 1);
+        CHECK(toasts[0].first == ToastSeverity::INFO);
+    }
+
+    helix::ui::set_test_toast_hook(nullptr);
 }

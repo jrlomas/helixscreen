@@ -8,6 +8,8 @@
 #include "async_lifetime_guard.h"
 #include "filament_slot_override.h"
 #include "filament_slot_override_store.h"
+#include "lane_binding.h"
+#include "lane_echo.h"
 
 #include <atomic>
 #include <map>
@@ -608,7 +610,16 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// the gcode without a live Moonraker connection.
     virtual void push_slot_identity_to_firmware(int global_index, const std::string& material,
                                                 const std::string& brand,
-                                                const std::string& catalog_id, uint32_t color_rgb);
+                                                const std::string& catalog_id, uint32_t color_rgb,
+                                                const helix::ams::Observation* declared = nullptr);
+
+    /// Both CFS write paths (BOX_MODIFY_TN_DATA, the fork's _BOX_SLOT_SET)
+    /// are republished by firmware through the same material_type /
+    /// color_value fields a real RFID read uses, so this backend's parses
+    /// filter their own writes through this guard.
+    [[nodiscard]] helix::ams::OwnWriteEchoes* own_write_echoes() override {
+        return &own_write_echoes_;
+    }
 
   private:
     friend class helix::CfsTestAccess;
@@ -872,6 +883,26 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     // expected fingerprints for an identity push we issued. Shared with the
     // other RFID-fingerprint backend (Snapmaker). All access under mutex_.
     helix::ams::SlotFingerprintTracker rfid_tracker_;
+
+    // What the user declared in an edit of each bay, staged against the
+    // write so this backend does not file its own write-back echo as the
+    // box's RFID reading. The suppression ends when the user disowns the
+    // write (Clear Spool) or the fingerprint's own swap detection fires.
+    // All access under mutex_.
+    helix::ams::OwnWriteEchoes own_write_echoes_;
+
+    // Insert-edge bookkeeping for docs/specs/filament_slots.md §6: the last
+    // presence this backend derived for each bay, and the tag evidence it
+    // last read there. All access under mutex_.
+    std::unordered_map<int, bool> bay_present_;
+    std::unordered_map<int, helix::ams::SpoolEvidence> bay_evidence_;
+
+    // Classifies a bay's presence transition under the insert rule: a
+    // different spool drops what described the old one through the Clear
+    // Spool funnel, no evidence keeps everything and asks the user, the
+    // same spool keeps everything silently. Returns true when the override
+    // was cleared. Caller must hold mutex_.
+    bool note_insert_edge_locked(SlotInfo& slot, int slot_index);
 
     /// material_type codes THIS app wrote to a bay via
     /// push_slot_identity_to_firmware, keyed by global slot index.

@@ -3,8 +3,10 @@
 
 #include "ams_backend_cfs.h"
 
+#include "ui_ams_detail.h"
 #include "ui_error_reporting.h"
 #include "ui_temperature_utils.h"
+#include "ui_update_queue.h"
 
 #include "ams_bypass_policy.h"
 #include "ams_fault_event.h"
@@ -1369,6 +1371,12 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
                             cache.color_rgb = slot.color_rgb;
                         if (slot.spoolman_id > 0)
                             cache.spoolman_id = slot.spoolman_id;
+                        // A field repeating this bay's armed declaration is our
+                        // own BOX_MODIFY_TN_DATA / _BOX_SLOT_SET write coming
+                        // back, not a tag read. The boundary stays empty: the
+                        // fingerprint's own swap detection and Clear Spool are
+                        // what end the suppression.
+                        own_write_echoes_.withhold(slot.global_index, std::string{}, cache);
                         helix::ams::ingest(lane, cache);
 
                         // Whether the identity declared on this bay still names
@@ -1681,6 +1689,10 @@ void AmsBackendCfs::handle_status_update(const nlohmann::json& notification) {
                     // clear's field reset isn't masked by a stale declaration.
                     bool cleared = check_hardware_event_clear(slot, global_idx, observed_uid);
                     cleared |= clear_stale_override_on_removal_locked(slot, global_idx);
+                    // The insert rule after them: a swap the fingerprint path
+                    // may already have cleared is re-cleared harmlessly here,
+                    // while an untagged insert is this path's alone to notice.
+                    cleared |= note_insert_edge_locked(slot, global_idx);
 
                     // Mirror firmware-truth color/material into lane_data so
                     // OrcaSlicer's MoonrakerPrinterAgent sees the spool. Runs
@@ -2270,7 +2282,7 @@ AmsError AmsBackendCfs::apply_user_edit(int slot_index, const SlotInfo& info,
         // slot. Color always; material_type when a firmware-observed code
         // for the user's pick exists. See push_slot_identity_to_firmware.
         push_slot_identity_to_firmware(slot_index, info.material, info.brand, info.catalog_id,
-                                       info.color_rgb);
+                                       info.color_rgb, &declared);
     }
 
     emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
@@ -2316,7 +2328,8 @@ void AmsBackendCfs::persist_slot_weight(int slot_index, float remaining_weight_g
 void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::string& material,
                                                    const std::string& brand,
                                                    const std::string& catalog_id,
-                                                   uint32_t color_rgb) {
+                                                   uint32_t color_rgb,
+                                                   const helix::ams::Observation* declared) {
     // Validate slot index BEFORE formatting the gcode — invalid args trigger
     // an unhandled TypeError in box_wrapper that Klipper escalates to
     // invoke_shutdown. Better to silently no-op than to crash the printer.
@@ -2344,6 +2357,9 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
         std::string name;
         int spoolman_id = 0;
         std::vector<std::string> staged_echoes;
+        // The echo staging's stamp, for the matched abandons on the failure
+        // paths below.
+        std::uint64_t echo_sequence = 0;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             for (const auto& unit : system_info_.units) {
@@ -2371,11 +2387,37 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
                     {compose_cfs_flat_uid(ascii_uppercase(slot_material), slot_brand, name,
                                           /*has_color=*/true, color_rgb)});
             }
+
+            // The echo guard for the lane model: stage what the user declared,
+            // pruned to the fields _BOX_SLOT_SET actually carries (material in
+            // the wire's uppercased spelling, color, brand, and the slot name
+            // the flat schema reads back as the product line). The stamp is for
+            // the matched abandons on the failure paths below.
+            if (declared) {
+                echo_sequence = own_write_echoes_.stage(global_index, *declared);
+                if (auto* staged = own_write_echoes_.staged(global_index)) {
+                    if (staged->material.has_value()) {
+                        staged->material = ascii_uppercase(slot_material);
+                    }
+                    if (staged->spool_name.has_value()) {
+                        staged->product_name = std::move(staged->spool_name);
+                        staged->spool_name.reset();
+                    } else {
+                        staged->product_name.reset();
+                    }
+                    staged->color_name.reset();
+                }
+                own_write_echoes_.arm(global_index, std::string{});
+            }
         }
         std::string gcode =
             slot_set_gcode(global_index, slot_material, color_rgb, slot_brand, name, spoolman_id);
         if (gcode.empty()) {
             spdlog::debug("{} slot-set skipped for slot {}", backend_log_tag(), global_index);
+            if (declared) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                own_write_echoes_.abandon(global_index, echo_sequence);
+            }
             return;
         }
         auto err = execute_gcode(gcode);
@@ -2385,6 +2427,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
             // expected. Same reason as the stock failure path.
             std::lock_guard<std::mutex> lock(mutex_);
             rfid_tracker_.forget_expected(global_index, staged_echoes);
+            own_write_echoes_.abandon(global_index, echo_sequence);
             spdlog::warn("{} slot-set dispatch failed for slot {}: {}", backend_log_tag(),
                          global_index, err.technical_msg);
         }
@@ -2423,6 +2466,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
     std::string mat_code;
     std::string expected_material_half;
     std::vector<std::string> staged_echoes;
+    std::uint64_t echo_sequence = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto base = rfid_tracker_.baseline(global_index);
@@ -2508,6 +2552,24 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
                 expected.push_back(final_fp);
             staged_echoes = rfid_tracker_.expect_any_of(global_index, std::move(expected));
         }
+
+        // The echo guard for the lane model, pruned to what this dialect's
+        // write carries: color always, material only as the firmware code
+        // BOX_MODIFY_TN_DATA was handed (an observed code, never the user's
+        // own spelling), and no name fields at all.
+        if (declared) {
+            echo_sequence = own_write_echoes_.stage(global_index, *declared);
+            if (auto* staged = own_write_echoes_.staged(global_index)) {
+                staged->brand.reset();
+                staged->spool_name.reset();
+                staged->product_name.reset();
+                staged->color_name.reset();
+                if (staged->material.has_value() && mat_code.empty()) {
+                    staged->material.reset();
+                }
+            }
+            own_write_echoes_.arm(global_index, std::string{});
+        }
     }
 
     if (!mat_code.empty()) {
@@ -2538,6 +2600,7 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
         {
             std::lock_guard<std::mutex> lock(mutex_);
             rfid_tracker_.forget_expected(global_index, staged_echoes);
+            own_write_echoes_.abandon(global_index, echo_sequence);
             // Same reason: no write landed, so firmware will keep reporting
             // whatever it reported before and nothing of ours is echoing back.
             pushed_material_codes_.erase(global_index);
@@ -4443,6 +4506,81 @@ bool AmsBackendCfs::clear_stale_override_on_removal_locked(SlotInfo& slot, int s
     return true;
 }
 
+bool AmsBackendCfs::note_insert_edge_locked(SlotInfo& slot, int slot_index) {
+    const auto present = slot_status_reports_filament(slot.status);
+    if (!present.has_value()) {
+        return false;
+    }
+
+    // What this frame states about the seated spool. The fork re-reads each
+    // bay's identity every frame, so a field it reports is live evidence. The
+    // stock arrays LATCH: they keep the last spool's values after a pull, so
+    // only a material_type that decodes past the sentinels - and past the
+    // code our own label push wrote - says the reader finished with THIS
+    // spool; a bay without one states no evidence at all, latched colour
+    // included.
+    helix::ams::SpoolEvidence after;
+    if (!slot.material.empty()) {
+        after.material = slot.material;
+    }
+    if (helix::ams::is_declarable_color(slot.color_rgb)) {
+        after.color_rgb = slot.color_rgb;
+    }
+    after.tag_read_complete = !after.material.empty() || after.color_rgb.has_value();
+    if (schema_ != CfsSchema::Flat) {
+        const bool tag_read = !after.material.empty() && pushed_material_codes_.find(slot_index) ==
+                                                             pushed_material_codes_.end();
+        if (!tag_read) {
+            after.material.clear();
+            after.color_rgb.reset();
+            after.tag_read_complete = false;
+        }
+    }
+
+    const auto prev = bay_present_.find(slot_index);
+    if (prev == bay_present_.end()) {
+        // The first sighting is the session's baseline, never an edge.
+        bay_present_[slot_index] = *present;
+        if (*present) {
+            bay_evidence_[slot_index] = after;
+        }
+        return false;
+    }
+    if (prev->second == *present) {
+        return false;
+    }
+    prev->second = *present;
+    if (!*present) {
+        // A removal is not an insert. The reading stays filed so the next
+        // insert can be compared against the spool that was just pulled.
+        return false;
+    }
+
+    std::optional<helix::ams::SpoolEvidence> before;
+    if (auto it = bay_evidence_.find(slot_index); it != bay_evidence_.end()) {
+        before = it->second;
+    }
+    bay_evidence_[slot_index] = after;
+
+    switch (helix::ams::classify_insert(before, after)) {
+    case helix::ams::InsertVerdict::DifferentSpool:
+        spdlog::info("{} Slot {} insert carries a different spool's reading - dropping what "
+                     "described the previous one",
+                     backend_log_tag(), slot_index);
+        clear_override_locked(slot_index, slot);
+        return true;
+    case helix::ams::InsertVerdict::NoEvidence:
+        // Keep everything and ask. The notice is self-gating, so a lane with
+        // nothing the new spool could contradict stays silent.
+        helix::ui::queue_update(
+            [slot_index] { helix::ui::offer_clear_after_unverified_insert(slot_index); });
+        return false;
+    case helix::ams::InsertVerdict::SameSpool:
+        break;
+    }
+    return false;
+}
+
 void AmsBackendCfs::clear_override_locked(int slot_index, SlotInfo& slot) {
     // Caller must hold mutex_. Erases the in-memory override, resets STRICTLY
     // override-exclusive fields on the live SlotInfo so the cleared state is
@@ -4459,6 +4597,9 @@ void AmsBackendCfs::clear_override_locked(int slot_index, SlotInfo& slot) {
     // clear in two stores, and a clear that reached only one would leave
     // resolve() still reporting the identity just removed.
     helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
+    // The echo suppression goes too: the user just disowned the write, so
+    // what firmware repeats from here on is its own word again.
+    own_write_echoes_.abandon(slot_index);
 
     slot.clear_spoolman_link();
     slot.remaining_weight_g = -1.0f;
