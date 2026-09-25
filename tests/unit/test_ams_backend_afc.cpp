@@ -313,6 +313,15 @@ class AmsBackendAfcTestHelper : public AmsBackendAfc {
 
     std::function<void()> pending_macro_ack;
 
+    // SET_COLOR/SET_MATERIAL dispatch through the error-callback form so a
+    // refused macro can cancel its echo guard. Capture it like the others.
+    AmsError execute_gcode(const std::string& gcode, std::function<void()>,
+                           std::function<void(const MoonrakerError&)> /*on_error*/,
+                           bool /*silent*/ = true) override {
+        captured_gcodes.push_back(gcode);
+        return AmsErrorHelper::success();
+    }
+
     // Override execute_gcode_notify to capture commands (avoids real API call)
     AmsError execute_gcode_notify(const std::string& gcode, const std::string& /*success_msg*/,
                                   const std::string& /*error_prefix*/) override {

@@ -61,6 +61,13 @@ class OwnWriteEchoes {
     ///         only the edit it belongs to.
     std::uint64_t stage(int slot_index, Observation declared);
 
+    /// The stamp of the slot's current staging, armed or not: 0 when the slot
+    /// holds none. A caller that cannot see stage()'s return (a commit funnel
+    /// around the backend's own apply) captures this before the dispatch and
+    /// answers it to the matched abandon(), so a refusal cancels only the
+    /// staging the refused edit created.
+    [[nodiscard]] std::uint64_t staged_sequence(int slot_index) const;
+
     /// The staged declaration, for the caller to prune down to the fields its
     /// write actually carried and to relocate any field its read path spells
     /// under a different name. nullptr when nothing is staged.

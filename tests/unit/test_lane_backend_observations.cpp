@@ -101,22 +101,56 @@ class RefusedWriteAfc : public AmsBackendAfc {
 
     helix::AmsError apply_user_edit(int slot_index, const helix::SlotInfo& info,
                                     const helix::ams::Observation& declared) override {
-        if (!refuse_writes) {
-            return AmsBackendAfc::apply_user_edit(slot_index, info, declared);
-        }
         // Stage and arm exactly as a write-back backend does ahead of its
-        // dispatch, then report the write itself failing: nothing reached
-        // firmware, so no echo of this edit is coming.
+        // dispatch, then answer as the dispatch itself would: success means
+        // the write went out and its echo is coming, refusal means nothing
+        // reached firmware.
         std::lock_guard<std::mutex> lock(mutex_);
         if (auto* echoes = own_write_echoes()) {
             echoes->stage(slot_index, declared);
             echoes->arm(slot_index, std::string{});
+        }
+        if (!refuse_writes) {
+            return helix::AmsErrorHelper::success();
         }
         return helix::AmsError(helix::AmsResult::COMMAND_FAILED, "refused", lv_tr("Write failed"));
     }
 };
 
 using RefusedWriteAfcHarness = RegisteredBackend<RefusedWriteAfc>;
+
+/// An AFC backend running the real apply_user_edit dispatch chain, whose
+/// SET_COLOR/SET_MATERIAL send answers the way a refused Moonraker call does:
+/// through the error callback, after the send itself already returned
+/// (prestonbrown/helixscreen#1633).
+class RefusedGcodeAfc : public AmsBackendAfc {
+  public:
+    using AmsBackendAfc::AmsBackendAfc;
+
+    // Per command: a case refusing only one SET_* proves that dispatch's own
+    // cancel, where refusing both lets either cancel clear the shared guard.
+    bool refuse_set_color = false;
+    bool refuse_set_material = false;
+
+    helix::AmsError execute_gcode(const std::string& gcode, std::function<void()>,
+                                  std::function<void(const MoonrakerError&)> on_error,
+                                  bool /*silent*/ = true) override {
+        const bool refused = (refuse_set_color && gcode.rfind("SET_COLOR ", 0) == 0) ||
+                             (refuse_set_material && gcode.rfind("SET_MATERIAL ", 0) == 0);
+        if (refused && on_error &&
+            (gcode.rfind("SET_COLOR ", 0) == 0 || gcode.rfind("SET_MATERIAL ", 0) == 0)) {
+            // Inline, on the dispatching thread, while apply_user_edit still
+            // holds the backend mutex: the tightest shape the callback fires in.
+            MoonrakerError err;
+            err.type = MoonrakerErrorType::JSON_RPC_ERROR;
+            err.message = "macro refused";
+            on_error(err);
+        }
+        return helix::AmsErrorHelper::success();
+    }
+};
+
+using RefusedGcodeAfcHarness = RegisteredBackend<RefusedGcodeAfc>;
 
 /// One `box` object, delivered the way Moonraker delivers it. Which schema
 /// parsed, and whether the frame counts as a full update at all, are decisions
@@ -1130,6 +1164,112 @@ TEST_CASE_METHOD(LVGLTestFixture, "a refused write leaves no guard to withhold f
     REQUIRE(sources.vendor_cache->color_rgb.has_value());
     CHECK(*sources.vendor_cache->color_rgb == 0x00FF00u);
     CHECK(sources.vendor_cache->material == "PETG");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a refused write restores the guard of the edit it suspended",
+                 "[lane][ingest][afc]") {
+    // An edit whose write went out arms a guard firmware will echo back. A
+    // LATER edit refused after staging suspends that guard as its carry; the
+    // refusal must stand the earlier guard up again, because erasing it would
+    // let the earlier write's echo file as the machine's own word.
+    RefusedWriteAfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // Edit A goes out: its values are now ours, coming back.
+    const helix::SlotInfo before_a = harness->get_slot_info(0);
+    helix::SlotInfo edit_a = before_a;
+    edit_a.color_rgb = 0xFF0000u;
+    edit_a.material = "ABS";
+    REQUIRE(harness->commit_user_edit(0, before_a, edit_a).success());
+
+    // Edit B is refused: nothing of it reached firmware.
+    harness->refuse_writes = true;
+    const helix::SlotInfo before_b = harness->get_slot_info(0);
+    helix::SlotInfo edit_b = before_b;
+    edit_b.color_rgb = 0x00FF00u;
+    CHECK_FALSE(harness->commit_user_edit(0, before_b, edit_b).success());
+
+    // Firmware's next frame repeats edit A's values: still our own write
+    // being echoed, so neither field may file as the machine's word.
+    feed_afc_lane(*harness, "lane1", {{"color", "#FF0000"}, {"material", "ABS"}});
+    {
+        const auto sources = lane_sources(harness.lane(0));
+        CHECK(!(sources.vendor_cache && sources.vendor_cache->color_rgb == 0xFF0000u));
+        CHECK(!(sources.vendor_cache && sources.vendor_cache->material == "ABS"));
+    }
+
+    // A value neither edit wrote is a reading and files.
+    feed_afc_lane(*harness, "lane1", {{"color", "#0000FF"}});
+    {
+        const auto sources = lane_sources(harness.lane(0));
+        REQUIRE(sources.vendor_cache.has_value());
+        REQUIRE(sources.vendor_cache->color_rgb.has_value());
+        CHECK(*sources.vendor_cache->color_rgb == 0x0000FFu);
+    }
+}
+
+namespace {
+/// The shared body of the two refused-dispatch cases: @p refuse_material
+/// flips exactly one SET_* send to fail through the error callback after the
+/// send returned success, then asserts the edit's values file as readings,
+/// because firmware never received the refused one.
+void assert_refused_set_command_cancels_the_guard(RefusedGcodeAfcHarness& harness,
+                                                  bool refuse_material) {
+    if (refuse_material) {
+        harness->refuse_set_material = true;
+    } else {
+        harness->refuse_set_color = true;
+    }
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // The edit's send returns success, then Moonraker refuses one SET_*
+    // macro through the error callback: the dispatch failed after the guard
+    // was already staged and armed.
+    auto edit = harness->get_slot_info(0);
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    REQUIRE(helix::test::apply_edit(*harness, 0, edit).success());
+    // The cancel hops off the callback's thread before taking the backend
+    // mutex, which apply_user_edit still holds.
+    helix::ui::UpdateQueue::instance().drain();
+
+    // Firmware never received the refused value, so the same value on the next
+    // frame is a reading and must file. filament_name is the proof the frame
+    // parsed, which makes the refused field's presence the cancel's doing
+    // rather than a guard that never armed.
+    feed_afc_lane(*harness, "lane1",
+                  {{"color", "#00FF00"}, {"material", "PETG"}, {"filament_name", "AFC Basics"}});
+
+    const auto sources = lane_sources(harness.lane(0));
+    REQUIRE(sources.vendor_cache.has_value());
+    REQUIRE(sources.vendor_cache->spool_name.has_value());
+    CHECK(*sources.vendor_cache->spool_name == "AFC Basics");
+    REQUIRE(sources.vendor_cache->color_rgb.has_value());
+    CHECK(*sources.vendor_cache->color_rgb == 0x00FF00u);
+    REQUIRE(sources.vendor_cache->material.has_value());
+    CHECK(*sources.vendor_cache->material == "PETG");
+}
+} // namespace
+
+TEST_CASE_METHOD(LVGLTestFixture, "a refused SET_COLOR dispatch cancels the echo guard it staged",
+                 "[lane][ingest][afc]") {
+    RefusedGcodeAfcHarness harness(nullptr, nullptr);
+    assert_refused_set_command_cancels_the_guard(harness, /*refuse_material=*/false);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a refused SET_MATERIAL dispatch cancels the echo guard it staged",
+                 "[lane][ingest][afc]") {
+    RefusedGcodeAfcHarness harness(nullptr, nullptr);
+    assert_refused_set_command_cancels_the_guard(harness, /*refuse_material=*/true);
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a frame with no sensor key neither sets nor erases AFC presence",

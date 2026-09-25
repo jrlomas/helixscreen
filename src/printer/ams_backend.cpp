@@ -399,6 +399,11 @@ AmsError AmsBackend::commit_user_edit(int slot_index, const SlotInfo& original,
         applied.product_name.clear();
     }
 
+    // The slot's staging stamp before the dispatch: a backend that stages its
+    // echo guard inside apply_user_edit() moves it, and a refusal must cancel
+    // that staging without erasing the armed guard of an earlier edit whose
+    // write did go out.
+    const std::uint64_t echo_sequence = own_write_echo_sequence(slot_index);
     AmsError err = apply_user_edit(slot_index, applied, declaration);
     // A partly applied edit still changed what it applied: a binding that
     // reached firmware is bound whatever the call says about the rest.
@@ -406,8 +411,14 @@ AmsError AmsBackend::commit_user_edit(int slot_index, const SlotInfo& original,
         // The dispatch refused the edit, so firmware holds nothing it could
         // echo back. A backend that had staged its guard by then would
         // withhold the next genuine reading as its own failed write, so the
-        // refusal drops it here rather than in each backend's failure path.
-        abandon_own_write_echoes(slot_index);
+        // refusal cancels it here rather than in each backend's failure path.
+        // Matched to the staging this refusal created: an unmoved stamp means
+        // this edit staged nothing, and the cancel restores rather than erases
+        // any armed predecessor the staging suspended.
+        const std::uint64_t refused_sequence = own_write_echo_sequence(slot_index);
+        if (refused_sequence != 0 && refused_sequence != echo_sequence) {
+            abandon_own_write_echoes(slot_index, refused_sequence);
+        }
         return err;
     }
 

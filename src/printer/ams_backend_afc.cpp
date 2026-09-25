@@ -5615,11 +5615,8 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
             // No boundary token: an AFC status frame names no spool the way
             // an RFID read names a tag, so suppression ends on a differing
             // value or on the re-bind verdict in invalidate_broken_binding(),
-            // which is this backend's auto-clear signal. A dispatch that
-            // failed outright leaves the guard armed to self-clean the same
-            // way: firmware still holds a value the declaration disagrees
-            // with.
-            own_write_echoes_.stage(slot_index, declared);
+            // which is this backend's auto-clear signal.
+            const std::uint64_t staged_sequence = own_write_echoes_.stage(slot_index, declared);
             if (auto* staged = own_write_echoes_.staged(slot_index)) {
                 // SET_COLOR is skipped for the no-colour sentinel and
                 // SET_MATERIAL for an unsafe name: a field the write omitted
@@ -5643,6 +5640,27 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
                 staged->product_name.reset();
             }
             own_write_echoes_.arm(slot_index, std::string{});
+
+            // A SET_COLOR or SET_MATERIAL Moonraker refused never reached
+            // firmware, so no echo of it is coming: the guard would withhold
+            // the next genuine reading that happens to equal the declaration.
+            // A TIMEOUT is "may still be running" - the write can still land
+            // and echo - so there the guard stands. The cancel is matched to
+            // this staging and deferred off the callback's background thread:
+            // apply_user_edit holds mutex_ across the dispatches, and an
+            // inline lock here would deadlock a synchronous error callback.
+            const auto tok = lifetime_.token();
+            auto abandon_failed_write = [tok, this, slot_index,
+                                         staged_sequence](const MoonrakerError& err) {
+                if (err.type == MoonrakerErrorType::TIMEOUT) {
+                    return;
+                }
+                tok.defer("AmsBackendAfc::apply_user_edit.abandon_echo",
+                          [this, slot_index, staged_sequence]() {
+                              std::lock_guard<std::mutex> lock(mutex_);
+                              own_write_echoes_.abandon(slot_index, staged_sequence);
+                          });
+            };
 
             // Spoolman ID FIRST — both branches of AFC's set_spoolID() rewrite the
             // lane's material/color/weight/temps, so this must precede our own
@@ -5671,7 +5689,8 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
             if (ams::is_declarable_color(info.color_rgb)) {
                 char color_hex[8];
                 snprintf(color_hex, sizeof(color_hex), "%06X", info.color_rgb & 0xFFFFFF);
-                execute_gcode(fmt::format("SET_COLOR LANE={} COLOR={}", lane_name, color_hex));
+                execute_gcode(fmt::format("SET_COLOR LANE={} COLOR={}", lane_name, color_hex),
+                              nullptr, abandon_failed_write);
             }
 
             // Material (validate to prevent command injection). The material
@@ -5680,7 +5699,8 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
             // gating this on is_safe_gcode_param() dropped every one of them.
             if (!info.material.empty() && IMoonrakerAPI::is_safe_material_param(info.material)) {
                 execute_gcode(fmt::format("SET_MATERIAL LANE={} MATERIAL={}", lane_name,
-                                          IMoonrakerAPI::gcode_param_value(info.material)));
+                                          IMoonrakerAPI::gcode_param_value(info.material)),
+                              nullptr, abandon_failed_write);
             } else if (!info.material.empty()) {
                 spdlog::warn("[AMS AFC] Skipping SET_MATERIAL - unsafe characters in: {}",
                              info.material);

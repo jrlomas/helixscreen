@@ -98,6 +98,11 @@ std::uint64_t OwnWriteEchoes::stage(int slot_index, Observation declared) {
     return entry.sequence;
 }
 
+std::uint64_t OwnWriteEchoes::staged_sequence(int slot_index) const {
+    const auto it = entries_.find(slot_index);
+    return it == entries_.end() ? 0 : it->second.sequence;
+}
+
 Observation* OwnWriteEchoes::staged(int slot_index) {
     auto it = entries_.find(slot_index);
     return it == entries_.end() ? nullptr : &it->second.declared;
