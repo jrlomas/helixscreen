@@ -4,6 +4,7 @@
 #include "ams_backend_afc.h"
 
 #include "ui_error_reporting.h"
+#include "ui_insert_notice.h"
 #include "ui_modal.h"
 #include "ui_notification.h"
 #include "ui_update_queue.h"
@@ -2738,6 +2739,18 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
                                          status_at_frame_start == SlotStatus::AVAILABLE;
     if (filament_present_now && !filament_present_before) {
         maybe_reassert_retained_spool_link(slot_index, lane_name);
+        // The same edge is also an insert, and the spool_id binding is AFC's
+        // only word on what went in: a lane the plugin names keeps its
+        // details silently (same spool, or the re-bind verdict swaps them),
+        // and a lane it leaves unnamed asks. The notice re-checks its own
+        // guards (print-feeding lane, lane with nothing to clear) on the UI
+        // thread (prestonbrown/helixscreen#1710).
+        auto fw_it = lane_firmware_spool_id_.find(lane_name);
+        const int firmware_id = fw_it != lane_firmware_spool_id_.end() ? fw_it->second : 0;
+        if (firmware_id <= 0) {
+            helix::ui::queue_update(
+                [slot_index] { helix::ui::offer_clear_after_unverified_insert(slot_index); });
+        }
     }
 
     // Translate what AFC has reported into the lane source model. Every value

@@ -1,6 +1,9 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_test_utils.h"
+#include "ui_update_queue.h"
+
 #include "../lvgl_test_fixture.h"
 #include "ams_backend_afc.h"
 #include "ams_state.h"
@@ -10,6 +13,7 @@
 #include "filament_op_router.h"
 #include "filament_slot_override_store.h"
 #include "lane_translation.h"
+#include "lvgl_ui_test_fixture.h"
 #include "moonraker_api.h"
 #include "moonraker_api_mock.h"
 #include "moonraker_client_mock.h"
@@ -6359,6 +6363,44 @@ TEST_CASE("AFC parse: null spool_id clears the Spoolman link", "[ams][afc][statu
     // AFC's clear_values() emits spool_id: null
     helper.feed_afc_stepper("lane1", {{"spool_id", nullptr}});
     REQUIRE(helper.get_system_info().get_slot_global(0)->spoolman_id == 0);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "AFC an insert on a lane the plugin names no spool for offers the notice",
+                 "[ams][afc][status][1710]") {
+    // The empty -> loaded edge is an insert, and the spool_id binding is the
+    // plugin's only word on what went in: a lane it leaves unnamed asks (the
+    // stored record could describe a spool that left), a lane it names never
+    // does.
+    helix::test::RegisteredBackend<AmsBackendAfcTestHelper> harness;
+    AmsBackendAfcTestHelper& helper = *harness;
+    helper.initialize_test_lanes(4);
+    helper.initialize_slots_from_discovery();
+
+    SlotInfo info;
+    info.material = "PETG";
+    info.color_rgb = 0x1188FF;
+    helix::test::apply_edit(helper, 0, info);
+    REQUIRE(AfcTestAccess::overrides(helper).count(0) == 1);
+
+    std::vector<std::pair<ToastSeverity, std::string>> toasts;
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg, uint32_t) {
+        toasts.emplace_back(severity, msg);
+    });
+
+    // lane1 (slot 0) goes empty -> present with no spool named.
+    helper.feed_afc_stepper("lane1", {{"status", "Loaded"}});
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(toasts.size() == 1);
+    CHECK(toasts[0].first == ToastSeverity::INFO);
+    CHECK(helper.get_system_info().get_slot_global(0)->status == SlotStatus::AVAILABLE);
+
+    // lane2 (slot 1) inserts with the plugin naming its spool: no ask.
+    helper.feed_afc_stepper("lane2", {{"spool_id", 86}, {"status", "Loaded"}});
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.size() == 1);
+
+    helix::ui::set_test_toast_hook(nullptr);
 }
 
 TEST_CASE("AFC parse: empty colour clears rather than sticking", "[ams][afc][status]") {
