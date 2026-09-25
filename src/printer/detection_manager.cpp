@@ -3,7 +3,6 @@
 
 #include "helix/xml/scoped_subject_registry.h"
 #include "i_moonraker_client.h"
-#include "k2_stock_detection_source.h"
 #include "settings_manager.h"
 #include "u1_stock_detection_source.h"
 
@@ -203,14 +202,14 @@ void DetectionManager::refresh_capabilities() {
     if (!client_) {
         return;
     }
-    // The K2's capability is local (wizard-saved printer type + on-disk
-    // binary), so it re-probes synchronously; the U1's needs the
-    // objects.list round-trip below. id() names exactly one concrete
-    // source, so the match establishes the type for the static_cast
-    // (firmware builds -fno-rtti).
+    // Sources with a local capability probe re-run it here: answers that
+    // depend on state saved after boot can change without a restart, and
+    // connect is the natural re-check point. Sources whose capability
+    // arrives over the wire no-op and take the objects.list round-trip
+    // below.
     for (const auto& src : sources_) {
-        if (src && src->id() == K2StockDetectionSource::SOURCE_ID) {
-            static_cast<K2StockDetectionSource*>(src.get())->refresh_capability();
+        if (src) {
+            src->refresh_capability();
         }
     }
     update_availability();

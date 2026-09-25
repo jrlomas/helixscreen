@@ -74,12 +74,6 @@ class K2StockDetectionSource : public DetectionSource {
     bool available() const override {
         return capable_;
     }
-    /// HelixScreen sends the pause for this source (the stock loop is stopped),
-    /// so the pause-on-detect setting governs it. Sources whose firmware pauses
-    /// by itself report true and the setting does not apply.
-    bool self_pauses() const override {
-        return false;
-    }
     void set_callback(Callback cb) override {
         cb_ = std::move(cb);
     }
@@ -99,7 +93,7 @@ class K2StockDetectionSource : public DetectionSource {
     /// saved config, so a first install that picks K2 only reaches a true
     /// is_creality_k2() after that save; DetectionManager calls this on every
     /// connect so no restart is needed.
-    void refresh_capability();
+    void refresh_capability() override;
 
     /// Test seams (the defaults do real HTTP / popen / HttpExecutor).
     void set_fetcher(SnapshotFetcher f) {

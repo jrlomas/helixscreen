@@ -56,12 +56,23 @@ class DetectionSource {
     virtual bool can_tune() const {
         return false;
     }
+    /// Whether the source's own firmware pauses the print on a detection.
+    /// The default (false) is the common shape: HelixScreen sends the pause,
+    /// so the pause-on-detect setting governs the source and its settings
+    /// row shows. Sources paused in firmware override to true; the setting
+    /// is inert for them, their row hides, and a warn-only response still
+    /// escalates to the modal.
     virtual bool self_pauses() const {
-        return true;
+        return false;
     }
     /// Lower the source's sensitivity (the response modal's Tune button).
     /// Called only while can_tune() is true, on the main thread.
     virtual void tune() {}
+    /// Re-run the local capability probe. Called on every connect: answers
+    /// that depend on state saved after boot (e.g. the wizard's printer
+    /// type) can change without a restart. Sources whose capability arrives
+    /// over the wire keep the base no-op.
+    virtual void refresh_capability() {}
     /// The printer's stored preference, or nullopt when this source has none
     /// (settings then keep their defaults: on, pause on detect).
     virtual std::optional<DetectionPreference> printer_preference() const {

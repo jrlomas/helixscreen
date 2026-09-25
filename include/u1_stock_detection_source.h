@@ -33,6 +33,11 @@ class U1StockSource : public DetectionSource {
     bool can_tune() const override {
         return true;
     }
+    /// The stock firmware pauses the print on the same snapshot it reports,
+    /// so the pause-on-detect setting cannot govern this source.
+    bool self_pauses() const override {
+        return true;
+    }
     void set_callback(Callback cb) override {
         cb_ = std::move(cb);
     }
