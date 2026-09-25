@@ -1422,14 +1422,16 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                     // Capture what this reading physically got off the spool,
                     // before any early exit, so the insert rule sees it
                     // regardless of whether the rest of the RFID fields apply.
-                    // A frame that answered for the channel finished its read:
-                    // a UID names the tag, a UID-less NONE entry is an untagged
-                    // spool, and a decoded MAIN_TYPE with no UID leaves the UID
-                    // the one part of the read still outstanding (so material
-                    // and colour stand as evidence without it).
+                    // A read is finished only when it named a tag: a UID names
+                    // it, and a decoded MAIN_TYPE with no UID leaves the UID
+                    // the one part still outstanding (material and colour
+                    // stand as evidence without it). A NONE entry with no UID
+                    // is three indistinguishable states - reader disabled,
+                    // untagged spool, empty channel - so it files no evidence
+                    // at all and the fingerprint comes out empty (no signal).
                     helix::ams::SpoolEvidence& evidence = observed_evidence[i];
                     evidence.tag_uid = rfid.uid;
-                    if (!rfid.uid.empty() || rfid.main_type == "NONE") {
+                    if (!rfid.uid.empty()) {
                         evidence.tag_read_complete = true;
                     }
                     if (rfid.main_type != "NONE") {

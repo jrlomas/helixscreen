@@ -1823,12 +1823,15 @@ TEST_CASE_METHOD(SnapmakerFixture,
     CHECK(!api.mock_get_db_value("lane_data", "T0").is_null());
 }
 
-TEST_CASE_METHOD(SnapmakerFixture, "Snapmaker a finished read with no tag clears the record",
+TEST_CASE_METHOD(SnapmakerFixture,
+                 "Snapmaker a NONE entry with no UID is no signal; the record stands",
                  "[ams][snapmaker][filament_slot_override][1710]") {
-    // MAIN_TYPE NONE on an answered channel is a finished read that found no
-    // tag: the spool the tag named is gone, so the record describing it goes
-    // too. A tag disappearing is a different spool under the insert rule, not
-    // "no signal".
+    // MAIN_TYPE NONE with no CARD_UID is three indistinguishable states: the
+    // RFID reader disabled (its default on Extended Firmware), an untagged
+    // spool, an empty channel. None of them is a reading of the channel, so
+    // the entry files no evidence at all: the fingerprint is empty, the
+    // tracker reports no signal, no baseline moves and nothing clears.
+    // Unloading a tagged spool therefore leaves the record describing it.
     SnapmakerTmpCacheDir tmp("1710_untagged_clears");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -1854,27 +1857,31 @@ TEST_CASE_METHOD(SnapmakerFixture, "Snapmaker a finished read with no tag clears
         make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker", json::array({1, 2, 3, 4})));
     REQUIRE(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "1,2,3,4");
 
-    // The reader finishes and reports no tag.
+    // The reader answers NONE with no UID: no evidence either way.
     SnapmakerTestAccess::handle_status(
         backend, make_filament_detect_status(0, "NONE", 0xFFFF5500u, "Polymaker", json::array()));
 
-    CHECK_FALSE(SnapmakerTestAccess::get_override(backend, 0).has_value());
-    CHECK(api.mock_get_db_value("lane_data", "T0").is_null());
-    CHECK(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "-");
+    CHECK(SnapmakerTestAccess::get_override(backend, 0).has_value());
+    CHECK(!api.mock_get_db_value("lane_data", "T0").is_null());
+    CHECK(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "1,2,3,4");
 
-    // An untagged channel stays untagged across reads: no second clear, no
-    // crash, nothing to clear any more.
+    // A channel the reader cannot answer stays unanswered across reads: the
+    // baseline never moves, nothing clears, nothing crashes.
     SnapmakerTestAccess::handle_status(
         backend, make_filament_detect_status(0, "NONE", 0xFFFF5500u, "Polymaker", json::array()));
-    CHECK(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "-");
+    CHECK(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "1,2,3,4");
+    CHECK(SnapmakerTestAccess::get_override(backend, 0).has_value());
 }
 
-TEST_CASE_METHOD(SnapmakerFixture,
-                 "Snapmaker a tag appearing on an untagged channel clears the record",
-                 "[ams][snapmaker][filament_slot_override][1710]") {
-    // The mirror of the disappearing tag: an untagged spool swapped for a
-    // tagged one is a different spool even though the tag is the FIRST uid
-    // the channel ever read.
+TEST_CASE_METHOD(
+    SnapmakerFixture,
+    "Snapmaker a tag appearing after only NONE entries is a first baseline, not a swap",
+    "[ams][snapmaker][filament_slot_override][1710]") {
+    // NONE entries are no signal, so a channel that has only ever answered
+    // NONE holds no reading an arriving tag could differ from: the first UID
+    // the reader decodes is a baseline, and the record stands. A swap is only
+    // decidable when both sides read a tag (UID, or material and colour off a
+    // tag whose UID never decoded).
     SnapmakerTmpCacheDir tmp("1710_tag_appears");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -1895,18 +1902,18 @@ TEST_CASE_METHOD(SnapmakerFixture,
     ovr.spoolman_id = 42;
     SnapmakerTestAccess::seed_override(backend, 0, ovr);
 
-    // Baseline: a finished read with no tag.
+    // Baseline attempt: NONE answers carry no reading, so none is taken.
     SnapmakerTestAccess::handle_status(
         backend, make_filament_detect_status(0, "NONE", 0xFFFF5500u, "Polymaker", json::array()));
-    REQUIRE(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "-");
+    REQUIRE_FALSE(SnapmakerTestAccess::last_rfid_uid(backend, 0).has_value());
     REQUIRE(SnapmakerTestAccess::get_override(backend, 0).has_value());
 
     SnapmakerTestAccess::handle_status(
         backend,
         make_filament_detect_status(0, "PLA", 0xFFFF5500u, "Polymaker", json::array({1, 2, 3, 4})));
 
-    CHECK_FALSE(SnapmakerTestAccess::get_override(backend, 0).has_value());
-    CHECK(api.mock_get_db_value("lane_data", "T0").is_null());
+    CHECK(SnapmakerTestAccess::get_override(backend, 0).has_value());
+    CHECK(!api.mock_get_db_value("lane_data", "T0").is_null());
     CHECK(SnapmakerTestAccess::last_rfid_uid(backend, 0) == "1,2,3,4");
 }
 
