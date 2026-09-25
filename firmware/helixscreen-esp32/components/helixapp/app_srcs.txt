@@ -277,6 +277,7 @@ src/ui/filament_tube_stroker.cpp
 src/ui/grid_layout.cpp
 src/ui/helix_sparkline.cpp
 src/ui/job_queue_state.cpp
+src/ui/job_queue_start.cpp
 src/ui/keyboard_layout_provider.cpp
 src/ui/layout_port.cpp
 src/ui/locale_formats.cpp

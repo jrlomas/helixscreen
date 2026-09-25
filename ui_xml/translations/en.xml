@@ -2641,6 +2641,7 @@
   <translation tag="Start anyway?" en="Start anyway?"/>
   <translation tag="Start at" en="Start at"/>
   <translation tag="Start failed" en="Start failed"/>
+  <translation tag="Start next" en="Start next"/>
   <translation tag="Start over" en="Start over"/>
   <translation tag="Start print anyway?" en="Start print anyway?"/>
   <translation tag="Started" en="Started"/>
@@ -3009,6 +3010,7 @@
   <translation tag="Unretract Speed" en="Unretract Speed"/>
   <translation tag="Unsupported tape width" en="Unsupported tape width"/>
   <translation tag="Unsupported tape width: " en="Unsupported tape width: "/>
+  <translation tag="Up next" en="Up next"/>
   <translation tag="Up to date" en="Up to date"/>
   <translation tag="Update" en="Update"/>
   <translation tag="Update Available" en="Update Available"/>

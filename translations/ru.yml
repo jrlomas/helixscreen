@@ -2895,6 +2895,7 @@ translations:
   Start anyway?: 'Всё равно начать?'
   Start at: Начать с
   Start failed: Ошибка запуска
+  Start next: Запустить следующую
   Start over: Начать заново
   Start print anyway?: Всё равно начать печать?
   Started: Начато
@@ -3336,6 +3337,7 @@ translations:
   Unretract Speed: Скорость возврата
   Unsupported tape width: Неподдерживаемая ширина ленты
   'Unsupported tape width: ': 'Неподдерживаемая ширина ленты: '
+  Up next: Далее
   Up to date: Актуальная версия
   Update: Обновить
   Update Available: Доступно обновление

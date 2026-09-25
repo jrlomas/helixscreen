@@ -23,6 +23,15 @@ class IMoonrakerClient;
 /// when the section, the key, or a well-formed response is absent, and when
 /// the value is not a boolean — matching Moonraker's own default.
 bool parse_automatic_transition(const json& rpc_response);
+
+/// "Up next: <name> (+N)" — the while-printing queue line. Empty when
+/// @p queued_count is 0 or the name is; callers bind visibility to
+/// job_queue_count, so the empty form never renders.
+std::string format_up_next_text(const std::string& display_name, int queued_count);
+
+/// "Start next: <name>" — the completion modal's secondary button. Empty on
+/// an empty queue (the button hides with it).
+std::string format_start_next_text(const std::string& display_name, int queued_count);
 } // namespace helix
 
 /**
@@ -152,9 +161,13 @@ class JobQueueState {
     char state_buffer_[64];
     lv_subject_t job_queue_summary_subject_;
     char summary_buffer_[128];
-    // Display name of the first queued job, "" when the queue is empty.
-    lv_subject_t job_queue_next_filename_subject_;
-    char next_filename_buffer_[256];
+    // "Up next: <name> (+N)" for the print-status panel and home widget; the
+    // display name of the first queued job, "" when the queue is empty.
+    lv_subject_t job_queue_up_next_text_subject_;
+    char up_next_text_buffer_[320];
+    // "Start next: <name>" for the completion modal's secondary button.
+    lv_subject_t job_queue_start_next_text_subject_;
+    char start_next_text_buffer_[320];
     // automatic_transition as 0/1, for XML bindings that hide queue-mode UI
     // Moonraker's own start would bypass.
     lv_subject_t job_queue_automatic_transition_subject_;
@@ -164,7 +177,7 @@ class JobQueueState {
     // rebuilds them, so a queue mutation that does not move this subject is
     // invisible until the next resize.
     lv_subject_t job_queue_count_subject_;
-    /// Owns the three subjects above and the death signal
+    /// Owns every subject above and the death signal
     /// get_subjects_lifetime() hands out.
     SubjectManager subjects_;
 

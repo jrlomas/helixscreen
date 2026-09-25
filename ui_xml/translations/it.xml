@@ -2641,6 +2641,7 @@
   <translation tag="Start anyway?" it="Avviare comunque?"/>
   <translation tag="Start at" it="Inizia da"/>
   <translation tag="Start failed" it="Avvio fallito"/>
+  <translation tag="Start next" it="Avvia il prossimo"/>
   <translation tag="Start over" it="Ricomincia"/>
   <translation tag="Start print anyway?" it="Avviare comunque la stampa?"/>
   <translation tag="Started" it="Avviato"/>
@@ -3009,6 +3010,7 @@
   <translation tag="Unretract Speed" it="Velocità dopo retrazione"/>
   <translation tag="Unsupported tape width" it="Larghezza nastro non supportata"/>
   <translation tag="Unsupported tape width: " it="Larghezza nastro non supportata: "/>
+  <translation tag="Up next" it="Prossimo"/>
   <translation tag="Up to date" it="Aggiornato"/>
   <translation tag="Update" it="Aggiorna"/>
   <translation tag="Update Available" it="Aggiornamento Disponibile"/>

@@ -2641,6 +2641,7 @@
   <translation tag="Start anyway?" fr="Démarrer quand même ?"/>
   <translation tag="Start at" fr="Commencer à"/>
   <translation tag="Start failed" fr="Échec du démarrage"/>
+  <translation tag="Start next" fr="Lancer le suivant"/>
   <translation tag="Start over" fr="Recommencer"/>
   <translation tag="Start print anyway?" fr="Démarrer l&apos;impression quand même ?"/>
   <translation tag="Started" fr="Démarré"/>
@@ -3009,6 +3010,7 @@
   <translation tag="Unretract Speed" fr="Vitesse de dérétraction"/>
   <translation tag="Unsupported tape width" fr="Largeur de ruban non prise en charge"/>
   <translation tag="Unsupported tape width: " fr="Largeur de ruban non prise en charge : "/>
+  <translation tag="Up next" fr="À suivre"/>
   <translation tag="Up to date" fr="À jour"/>
   <translation tag="Update" fr="Mettre à jour"/>
   <translation tag="Update Available" fr="Mise à jour disponible"/>

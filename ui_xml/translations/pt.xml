@@ -2641,6 +2641,7 @@
   <translation tag="Start anyway?" pt="Iniciar mesmo assim?"/>
   <translation tag="Start at" pt="Começar em"/>
   <translation tag="Start failed" pt="Falha ao iniciar"/>
+  <translation tag="Start next" pt="Iniciar próximo"/>
   <translation tag="Start over" pt="Recomeçar"/>
   <translation tag="Start print anyway?" pt="Iniciar impressão mesmo assim?"/>
   <translation tag="Started" pt="Iniciado"/>
@@ -3009,6 +3010,7 @@
   <translation tag="Unretract Speed" pt="Velocidade de Desretração"/>
   <translation tag="Unsupported tape width" pt="Largura de fita não suportada"/>
   <translation tag="Unsupported tape width: " pt="Largura de fita não suportada: "/>
+  <translation tag="Up next" pt="A seguir"/>
   <translation tag="Up to date" pt="Atualizado"/>
   <translation tag="Update" pt="Atualizar"/>
   <translation tag="Update Available" pt="Atualização Disponível"/>

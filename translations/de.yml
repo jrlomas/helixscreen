@@ -2933,6 +2933,7 @@ translations:
   Start anyway?: 'Trotzdem starten?'
   Start at: Beginnen bei
   Start failed: Start fehlgeschlagen
+  Start next: Nächstes starten
   Start over: Von vorne beginnen
   Start print anyway?: Druck trotzdem starten?
   Started: Gestartet
@@ -3383,6 +3384,7 @@ translations:
   Unretract Speed: Prime-Geschwindigkeit
   Unsupported tape width: Nicht unterstützte Bandbreite
   'Unsupported tape width: ': 'Nicht unterstützte Bandbreite: '
+  Up next: Als Nächstes
   Up to date: Aktuell
   Update: Aktualisieren
   Update Available: Update verfügbar
