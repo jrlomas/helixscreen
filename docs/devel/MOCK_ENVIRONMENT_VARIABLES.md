@@ -711,21 +711,21 @@ The same machine running Z-Mod firmware: mock HARDWARE, not a mock backend.
 Where `creator5` advertises the Reforge fingerprint (`ff_toolchange`,
 `gcode_button extruder_grab0..3`) and stands the mock toolchanger up, this
 persona publishes Z-Mod's own objects (`zmod`, `zmod_color`, `save_variables`,
-`gcode_button extruder_pos1..4` and `extruder_grab1..4` — Z-Mod's buttons are
+`gcode_button extruder_pos1..4` and `extruder_grab1..4`; Z-Mod's buttons are
 1-based) plus the per-head sensor pairs `fd_ex0..3` / `fm_ex0..3`, and pushes
 no `mmu` and no `toolchanger` object.
 
 The point is that real discovery runs: `AmsBackend::try_create_mock()` declines
 this persona (see `MoonrakerClientMock::mock_hardware_persona()`), so
 `toolchanger_addon` detects the Z-Mod row and the production
-`AmsBackendToolChanger` drives 4 slots against the mock's `zmod_color` status —
+`AmsBackendToolChanger` drives 4 slots against the mock's `zmod_color` status,
 the same escape hatch the MedusaHC modes use. The persona implies `--real-ams`
 (`cli_args.cpp`), so no second flag is needed. An explicit `HELIX_MOCK_AMS`
 still wins over the persona.
 
 The mock answers the firmware's macros: `_T_IN T=<n>` / `_T_OUT` republish
 `zmod_color.active_tool_id`, and `CHANGE_ZCOLOR SLOT=<n> HEX=<hex> TYPE=<t>`
-stores the slot's Material/HEX — upper-cased when the HEX is one of Z-Mod's 24
+stores the slot's Material/HEX: upper-cased when the HEX is one of Z-Mod's 24
 palette colours, snapped to white (`FFFFFF`, palette index 0) when it is not,
 exactly as the firmware does. An unknown `TYPE` is refused with a gcode error.
 
