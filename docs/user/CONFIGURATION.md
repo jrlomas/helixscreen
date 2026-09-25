@@ -1723,8 +1723,14 @@ those URLs serve and `settings.json` is editable from the web UI:
 ```
 
 The override file only takes effect when it is owned by root or the user
-HelixScreen runs as and has no group or world write bit
-(`chown root:root /var/lib/helixscreen/update_urls.json && chmod 644 ...`).
+HelixScreen runs as and has no group or world write bit. `/var/lib/helixscreen`
+is created by the systemd unit or the init script on every platform; on a device
+where it is missing yet:
+
+```bash
+sudo mkdir -p /var/lib/helixscreen && sudo chown root:root /var/lib/helixscreen && sudo chmod 755 /var/lib/helixscreen
+sudo install -o root -g root -m 644 update_urls.json /var/lib/helixscreen/update_urls.json
+```
 
 ### `channel`
 **Type:** integer
@@ -1733,7 +1739,7 @@ HelixScreen runs as and has no group or world write bit
 **Description:** Update channel selection:
 - `0` - **Stable**: Tries R2 CDN first (`{r2_url}/stable/manifest.json`), falls back to GitHub releases API
 - `1` - **Beta**: Tries R2 CDN first (`{r2_url}/beta/manifest.json`), falls back to GitHub pre-releases API
-- `2` - **Dev**: Uses `dev_url` if set (backward compat), otherwise uses R2 CDN (`{r2_url}/dev/manifest.json`)
+- `2` - **Dev**: Uses `dev_url` from the trusted override file if set, otherwise uses R2 CDN (`{r2_url}/dev/manifest.json`)
 
 Can also be changed from the Settings panel. Stable and Beta are offered on any
 install; **Dev** appears only when `beta_features` is enabled.

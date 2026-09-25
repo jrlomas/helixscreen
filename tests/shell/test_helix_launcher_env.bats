@@ -472,6 +472,15 @@ make_fake_stat_map() {
     cat > "$BATS_TEST_TMPDIR/fakebin/stat" <<'FAKE'
 #!/bin/sh
 [ "$1" = "-L" ] && [ "$2" = "-c" ] || exit 1
+if [ "$3" = "%h" ]; then
+    if [ -f "$BATS_TEST_TMPDIR/nlinkmap" ]; then
+        while read -r p n; do
+            [ "$p" = "$4" ] && { echo "$n"; exit 0; }
+        done < "$BATS_TEST_TMPDIR/nlinkmap"
+    fi
+    echo 1
+    exit 0
+fi
 while read -r p u m; do
     [ "$p" = "$4" ] && { echo "$u $m"; exit 0; }
 done < "$BATS_TEST_TMPDIR/statmap"
@@ -765,6 +774,37 @@ print_env_from_file() {
     env -u HELIX_LOG_FILE PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
         "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_LOG_FILE \
         > "$BATS_TEST_TMPDIR/value.out" 2>/dev/null
+    rmdir "$d"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "$d/helix.log" ]
+}
+
+@test "an existing log file with a second hard link is refused" {
+    # A hard link planted at an allowed path still shares its inode with a
+    # file elsewhere: appending to the log would write that file as root.
+    local d="/tmp/helix-bats-$$-hardlink"
+    mkdir -p "$d"
+    : > "$d/helix.log"
+    ln "$d/helix.log" "$d/helix.log.2"
+    make_fake_stat_map
+    printf '%s 0 755\n%s 0 644\n%s 0 644\n' \
+        "$d" "$d/helix.log" "$MOCK_INSTALL/config/helixscreen.env" \
+        > "$BATS_TEST_TMPDIR/statmap"
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    printf 'HELIX_LOG_FILE=%s/helix.log\n' "$d" > "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    # nlink 2: both names for the inode are refused.
+    printf '%s/helix.log 2\n%s/helix.log.2 2\n' "$d" "$d" > "$BATS_TEST_TMPDIR/nlinkmap"
+    env -u HELIX_LOG_FILE PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_LOG_FILE \
+        > "$BATS_TEST_TMPDIR/value.out" 2> "$BATS_TEST_TMPDIR/parse.log"
+    [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "" ]
+    grep -q "HELIX_LOG_FILE must be" "$BATS_TEST_TMPDIR/parse.log"
+    # nlink 1: the same single-link file loads.
+    printf '%s/helix.log 1\n' "$d" > "$BATS_TEST_TMPDIR/nlinkmap"
+    env -u HELIX_LOG_FILE PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_LOG_FILE \
+        > "$BATS_TEST_TMPDIR/value.out" 2>/dev/null
+    rm -f "$d/helix.log" "$d/helix.log.2"
     rmdir "$d"
     [ "$(cat "$BATS_TEST_TMPDIR/value.out")" = "$d/helix.log" ]
 }

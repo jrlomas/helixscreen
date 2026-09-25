@@ -2807,8 +2807,9 @@ UpdateChecker::UpdateChannel UpdateChecker::get_channel() const {
 
     // /update/channel persists independently of /beta_features. Stable and Beta
     // are both offered on a stock install (about_settings_overlay.xml), so only
-    // Dev is gated here: it fetches from the arbitrary /update/dev_url rather
-    // than a published channel, and its picker appears only with beta unlocked.
+    // Dev is gated here: it fetches from the arbitrary dev_url in the
+    // root-owned update_urls.json rather than a published channel, and its
+    // picker appears only with beta unlocked.
     // Fall back to Stable, not to the Beta neighbour, since Beta is a choice the
     // user never made. Clamp the EFFECTIVE channel rather than rewriting the
     // stored value, so re-unlocking beta restores the channel the user picked.

@@ -119,9 +119,9 @@ When beta features are enabled:
 |---------|-------------|
 | **Stable** | Recommended. Tested releases only. |
 | **Beta** | Preview builds with new features. May have rough edges. |
-| **Dev** | Development builds. Appears only with beta features enabled, and requires a `dev_url` configured under the `update` section of your config file. |
+| **Dev** | Development builds. Appears only with beta features enabled, and requires a `dev_url` set in `/var/lib/helixscreen/update_urls.json` (a root-owned file; see [CONFIGURATION](../../CONFIGURATION.md)). |
 
-> **Note:** Selecting the **Dev** channel without a `dev_url` set in your configuration shows a "Dev channel requires dev_url in config" message and won't check for updates. Dev builds are intended for HelixScreen contributors — most users should stay on **Stable** or **Beta**.
+> **Note:** Selecting the **Dev** channel without a `dev_url` set in `update_urls.json` shows a "Dev channel requires dev_url in update_urls.json" message and won't check for updates. Dev builds are intended for HelixScreen contributors - most users should stay on **Stable** or **Beta**.
 
 ---
 

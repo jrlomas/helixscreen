@@ -75,6 +75,12 @@ UpdateUrls read_update_urls() {
     if (stat(path.c_str(), &st) != 0) {
         return urls;
     }
+    if (!dir_locked_to_owner(parent_dir(path))) {
+        spdlog::warn("[ConfigTrust] {} sits in a directory others can write or "
+                     "swap - ignoring (fix: chown root:root {} && chmod 755 {})",
+                     path, parent_dir(path), parent_dir(path));
+        return urls;
+    }
     if (!owned_by_root_or_self(st.st_uid)) {
         spdlog::warn("[ConfigTrust] {} is owned by uid {}, not root or this user - ignoring "
                      "(fix: chown root {} && chmod 644 {})",
@@ -100,16 +106,28 @@ UpdateUrls read_update_urls() {
 }
 
 bool log_path_allowed(const std::string& path) {
-    if (path.size() < 2 || path[0] != '/' || path.compare(path.size() - 4, 4, ".log") != 0) {
+    // size() >= 5 keeps the ".log" compare in bounds: a shorter path such as
+    // "/ab" would wrap size() - 4 and throw out_of_range up through
+    // init_logging, boot-looping the app on a bad settings.json value.
+    if (path.size() < 5 || path[0] != '/' || path.compare(path.size() - 4, 4, ".log") != 0) {
         return false;
     }
     if (has_dot_segment(path)) {
         return false;
     }
     struct stat lst {};
-    if (lstat(path.c_str(), &lst) == 0 && S_ISLNK(lst.st_mode)) {
-        return false;
+    if (lstat(path.c_str(), &lst) == 0) {
+        // A planted file must not redirect the app's writes: no symlink, and
+        // no hard link either (st_nlink > 1 means someone else holds a name
+        // for the same inode), and an owner nobody but root or this user.
+        if (!S_ISREG(lst.st_mode) || lst.st_nlink != 1 || !owned_by_root_or_self(lst.st_uid)) {
+            return false;
+        }
     }
+    // ponytail: this lstat and the later open are separate steps, so a link
+    // planted in between still races the open; the launcher shares the same
+    // window. Close it with O_NOFOLLOW|O_EXCL plus an fstat re-check in
+    // init_logging if a writable-parent threat ever shows up.
 
     const std::string dir = real_path(parent_dir(path));
     if (dir.empty()) {

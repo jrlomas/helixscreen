@@ -6,7 +6,8 @@
  *
  * Stable and Beta are both offered on a stock install (about_settings_overlay.xml),
  * so the effective channel must honour a stored Beta whatever /beta_features says.
- * Dev fetches from the arbitrary /update/dev_url in config and is offered only with
+ * Dev fetches from the arbitrary dev_url in the root-owned update_urls.json and is
+ * offered only with
  * beta unlocked, so a stored Dev on a locked install has to fall back — to Stable,
  * not to Beta, since Beta is a neighbouring choice the user never made.
  *

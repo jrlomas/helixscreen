@@ -25,6 +25,9 @@ class StateDirGuard {
         : prev_(AppConstants::Update::detail::state_dir_ref()),
           dir_(helix::test::unique_temp_dir("helix_ct_state")) {
         std::filesystem::create_directories(dir_);
+        // The trust gate refuses update_urls.json in a group/world-writable
+        // directory, so pin the mode rather than trusting the umask.
+        REQUIRE(::chmod(dir_.c_str(), 0755) == 0);
         AppConstants::Update::detail::state_dir_ref() = dir_;
     }
     ~StateDirGuard() {
@@ -156,6 +159,11 @@ TEST_CASE("config_trust: log path roots", "[config-trust][log-path]") {
     REQUIRE_FALSE(helix::config_trust::log_path_allowed("/tmp/../etc/helix-screen.log"));
     REQUIRE_FALSE(helix::config_trust::log_path_allowed("/tmp/./helix-screen.log"));
     REQUIRE_FALSE(helix::config_trust::log_path_allowed("/proc/helix-screen.log"));
+    // Short values must be refused, never throw: a 2-3 char path wraps the
+    // ".log" suffix arithmetic and would boot-loop the app.
+    REQUIRE_FALSE(helix::config_trust::log_path_allowed(""));
+    REQUIRE_FALSE(helix::config_trust::log_path_allowed("/ab"));
+    REQUIRE_FALSE(helix::config_trust::log_path_allowed("/.log"));
 }
 
 TEST_CASE("config_trust: log path subdirectory must be owner-locked", "[config-trust][log-path]") {
@@ -180,9 +188,59 @@ TEST_CASE("config_trust: log path may sit in the install dir", "[config-trust][l
     REQUIRE_FALSE(helix::config_trust::log_path_allowed(sub + "/helix-screen.log"));
 }
 
+TEST_CASE("config_trust: an existing log path must be a single-link regular file",
+          "[config-trust][log-path]") {
+    const std::string dir = "/tmp/helix_ct_hard_" + helix::test::unique_suffix();
+    std::filesystem::create_directories(dir);
+    // 0755 so only the hard link, not a loose parent, can be the refusing
+    // condition.
+    REQUIRE(chmod(dir.c_str(), 0755) == 0);
+    const std::string log = dir + "/helix-screen.log";
+    { std::ofstream f(log); }
+    REQUIRE(chmod(log.c_str(), 0644) == 0);
+    REQUIRE(helix::config_trust::log_path_allowed(log));
+
+    // A second name for the same inode means an attacker can still reach the
+    // file the app appends to as root.
+    std::error_code ec;
+    std::filesystem::create_hard_link(log, dir + "/twin.log", ec);
+    REQUIRE_FALSE(ec);
+    REQUIRE_FALSE(helix::config_trust::log_path_allowed(log));
+    REQUIRE_FALSE(helix::config_trust::log_path_allowed(dir + "/twin.log"));
+    std::filesystem::remove_all(dir, ec);
+}
+
+TEST_CASE("config_trust: update_urls.json in a loose directory is refused",
+          "[config-trust][update]") {
+    StateDirGuard guard;
+    guard.write("{\"r2_url\": \"https://mirror.example.com\"}", 0644);
+    REQUIRE(chmod(guard.dir().c_str(), 0777) == 0);
+    helix::config_trust::UpdateUrls urls = helix::config_trust::read_update_urls();
+    REQUIRE(urls.r2_url.empty());
+    // The same file in a locked directory reads fine, so the directory was
+    // the refusing condition.
+    REQUIRE(chmod(guard.dir().c_str(), 0755) == 0);
+    urls = helix::config_trust::read_update_urls();
+    REQUIRE(urls.r2_url == "https://mirror.example.com");
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "UpdateChecker: settings.json dev_url is ignored",
+                 "[config-trust][update]") {
+    StateDirGuard guard;
+    auto* config = helix::Config::get_instance();
+    REQUIRE(config != nullptr);
+    config->set<std::string>("/update/dev_url", "https://dev.example.com");
+    helix::config_trust::UpdateUrls urls = helix::config_trust::read_update_urls();
+    REQUIRE(urls.dev_url.empty());
+    REQUIRE(urls.r2_url.empty());
+}
+
 TEST_CASE("config_trust: log path may not be a symlink", "[config-trust][log-path]") {
     const std::string dir = "/tmp/helix_ct_link_" + helix::test::unique_suffix();
     std::filesystem::create_directories(dir);
+    // 0755 so only the symlink, not a loose parent, can be the refusing
+    // condition.
+    REQUIRE(chmod(dir.c_str(), 0755) == 0);
     const std::string target = dir + "/real.log";
     { std::ofstream f(target); }
     std::error_code ec;

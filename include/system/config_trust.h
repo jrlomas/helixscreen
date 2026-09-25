@@ -13,11 +13,12 @@ struct UpdateUrls {
     std::string dev_url;
 };
 
-/// Read update_urls.json. The file only counts when it is owned by root or by
-/// the app's own user and carries no group or world write bit — the settings
-/// the updater acts on must not be writable by the web UI's user. Absent,
-/// unparseable or untrusted file yields empty strings (the compiled-in
-/// defaults), never a partial result: one bad field refuses the whole file.
+/// Read update_urls.json. The file only counts when it and its directory are
+/// owned by root or by the app's own user and carry no group or world write
+/// bit: the settings the updater acts on must not be writable by the web
+/// UI's user. Absent, unparseable or untrusted file yields empty strings
+/// (the compiled-in defaults), never a partial result: one bad field refuses
+/// the whole file.
 UpdateUrls read_update_urls();
 
 /// Whether /log_path from settings.json may aim the app's log file at PATH.
@@ -25,7 +26,8 @@ UpdateUrls read_update_urls();
 /// (scripts/helix-launcher.sh#helix_env_log_file_ok): an absolute *.log path
 /// under /tmp, /var/log or the install dir whose subdirectory is owned by
 /// root or this user with no group/world write bit, with no dot segments and
-/// no symlink at the file itself.
+/// no symlink at the file itself; an existing file must be a regular file
+/// with a single link (st_nlink == 1) owned by root or this user.
 bool log_path_allowed(const std::string& path);
 
 namespace detail {
