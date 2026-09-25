@@ -3,8 +3,8 @@
 
 #include "ams_backend_cfs.h"
 
-#include "ui_ams_detail.h"
 #include "ui_error_reporting.h"
+#include "ui_insert_notice.h"
 #include "ui_temperature_utils.h"
 #include "ui_update_queue.h"
 
@@ -367,6 +367,14 @@ void AmsBackendCfs::on_started() {
             std::lock_guard<std::mutex> lock(mutex_);
             override_store_ = std::move(loaded.store);
             overrides_ = std::move(loaded.overrides);
+            // A persisted four-field composite seeds a baseline the current
+            // two-field fingerprint never matches, which would read as a
+            // swap at the first poll and clear every override on upgrade:
+            // fold each onto the current shape first.
+            for (auto& entry : overrides_) {
+                entry.second.fingerprint =
+                    normalize_legacy_flat_fingerprint(entry.second.fingerprint);
+            }
             helix::ams::bind_fingerprint_persistence(rfid_tracker_, override_store_.get(),
                                                      overrides_);
         }
@@ -1193,35 +1201,57 @@ static std::string ascii_uppercase(std::string s) {
     return s;
 }
 
-// Join the flat schema's identity fields into that fingerprint's spelling.
+// Join the flat schema's evidence fields into that fingerprint's spelling.
+// The slot spec pins a fingerprint to exactly the fields an insert is judged
+// on, material and colour; brand and the product line are presentation, not
+// identity, so two readings that differ only in them are the same spool.
 // Both consumers must agree on it: the payload feed reads what the box
 // reports, and the fork writeback guard reads what _BOX_SLOT_SET pushed, so
 // the echo of our own write classifies as OwnWriteEcho rather than a swap.
-static std::string compose_cfs_flat_uid(const std::string& material, const std::string& brand,
-                                        const std::string& name, bool has_color,
+static std::string compose_cfs_flat_uid(const std::string& material, bool has_color,
                                         uint32_t color_rgb) {
-    if (material.empty() && brand.empty() && name.empty() && !has_color)
+    if (material.empty() && !has_color)
         return "";
     char hex[8];
     std::snprintf(hex, sizeof(hex), "%06X", color_rgb & 0xFFFFFFu);
-    return material + "|" + brand + "|" + name + "|" + (has_color ? hex : "");
+    return material + "|" + (has_color ? hex : "");
+}
+
+std::string AmsBackendCfs::normalize_legacy_flat_fingerprint(const std::string& stored) {
+    // "material|brand|product|HEX" from a build whose composite counted brand
+    // and the product line folds to the two-field shape. Anything else is
+    // already current or a value no build of ours wrote: left as found.
+    std::string head;
+    size_t start = 0;
+    for (int pipes = 0; pipes < 3; ++pipes) {
+        const auto pipe = stored.find('|', start);
+        if (pipe == std::string::npos) {
+            return stored;
+        }
+        if (pipes == 0) {
+            head = stored.substr(0, pipe);
+        }
+        start = pipe + 1;
+    }
+    if (stored.find('|', start) != std::string::npos) {
+        return stored;
+    }
+    return head + "|" + stored.substr(start);
 }
 
 // The flat schema's per-slot fingerprint, fed to the same
-// check_hardware_event_clear path as the stock composite above. The fork's own
-// identity writeback (_BOX_SLOT_SET) writes MATERIAL/BRAND/NAME/COLOR, so
-// those four fields are what distinguishes one tagged bay from another;
-// spoolman_id is excluded because it is a binding, not a tag property, and
-// reconcile_lane_binding owns its rules. All four empty reads as no signal:
-// an occupied bay whose tag did not read is not a fingerprint, for the same
-// reason a stock sentinel read is not (see build_cfs_slot_uid): it must not
-// overwrite the baseline and mask the swap the next good read reports.
+// check_hardware_event_clear path as the stock composite above. It carries
+// exactly the insert rule's evidence fields, material and colour (see
+// compose_cfs_flat_uid); spoolman_id is excluded because it is a binding,
+// not a tag property, and reconcile_lane_binding owns its rules. Both empty
+// reads as no signal: an occupied bay whose tag did not read is not a
+// fingerprint, for the same reason a stock sentinel read is not (see
+// build_cfs_slot_uid): it must not overwrite the baseline and mask the swap
+// the next good read reports.
 static std::string build_cfs_flat_slot_uid(const nlohmann::json& slot_json) {
     const auto color =
         helix::ams::read_lane_color(helix::json_util::safe_string(slot_json, "color"));
     return compose_cfs_flat_uid(flat_text_field(slot_json, "material"),
-                                flat_text_field(slot_json, "brand"),
-                                flat_text_field(slot_json, "name"),
                                 color.kind == helix::ams::ColorReadingKind::Observed, color.rgb);
 }
 
@@ -2383,9 +2413,8 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
             // observation for a slot is always a baseline and never clears.
             if (!slot_material.empty() && rfid_tracker_.baseline(global_index)) {
                 staged_echoes = rfid_tracker_.expect_any_of(
-                    global_index,
-                    {compose_cfs_flat_uid(ascii_uppercase(slot_material), slot_brand, name,
-                                          /*has_color=*/true, color_rgb)});
+                    global_index, {compose_cfs_flat_uid(ascii_uppercase(slot_material),
+                                                        /*has_color=*/true, color_rgb)});
             }
 
             // The echo guard for the lane model: stage what the user declared,
@@ -2555,8 +2584,11 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
 
         // The echo guard for the lane model, pruned to what this dialect's
         // write carries: color always, material only as the firmware code
-        // BOX_MODIFY_TN_DATA was handed (an observed code, never the user's
-        // own spelling), and no name fields at all.
+        // BOX_MODIFY_TN_DATA was handed, and no name fields at all. The
+        // material is staged under the code's own catalog name, because the
+        // echo parses the code back through those tables rather than the
+        // user's spelling; a code the catalog cannot decode states no
+        // material at all.
         if (declared) {
             echo_sequence = own_write_echoes_.stage(global_index, *declared);
             if (auto* staged = own_write_echoes_.staged(global_index)) {
@@ -2564,8 +2596,14 @@ void AmsBackendCfs::push_slot_identity_to_firmware(int global_index, const std::
                 staged->spool_name.reset();
                 staged->product_name.reset();
                 staged->color_name.reset();
-                if (staged->material.has_value() && mat_code.empty()) {
-                    staged->material.reset();
+                if (staged->material.has_value()) {
+                    const auto* entry = FilamentCatalog::load_codes_cached("cfs")->resolve_code(
+                        "cfs", CfsMaterialDb::strip_code(mat_code));
+                    if (entry && !mat_code.empty()) {
+                        staged->material = entry->type;
+                    } else {
+                        staged->material.reset();
+                    }
                 }
             }
             own_write_echoes_.arm(global_index, std::string{});
@@ -4506,62 +4544,19 @@ bool AmsBackendCfs::clear_stale_override_on_removal_locked(SlotInfo& slot, int s
     return true;
 }
 
-bool AmsBackendCfs::note_insert_edge_locked(SlotInfo& slot, int slot_index) {
-    const auto present = slot_status_reports_filament(slot.status);
-    if (!present.has_value()) {
-        return false;
-    }
+namespace {
 
-    // What this frame states about the seated spool. The fork re-reads each
-    // bay's identity every frame, so a field it reports is live evidence. The
-    // stock arrays LATCH: they keep the last spool's values after a pull, so
-    // only a material_type that decodes past the sentinels - and past the
-    // code our own label push wrote - says the reader finished with THIS
-    // spool; a bay without one states no evidence at all, latched colour
-    // included.
-    helix::ams::SpoolEvidence after;
-    if (!slot.material.empty()) {
-        after.material = slot.material;
-    }
-    if (helix::ams::is_declarable_color(slot.color_rgb)) {
-        after.color_rgb = slot.color_rgb;
-    }
-    after.tag_read_complete = !after.material.empty() || after.color_rgb.has_value();
-    if (schema_ != CfsSchema::Flat) {
-        const bool tag_read = !after.material.empty() && pushed_material_codes_.find(slot_index) ==
-                                                             pushed_material_codes_.end();
-        if (!tag_read) {
-            after.material.clear();
-            after.color_rgb.reset();
-            after.tag_read_complete = false;
-        }
-    }
+/// The colour a frame states about a bay, as evidence or absent.
+std::optional<uint32_t> stated_color(uint32_t color_rgb) {
+    return helix::ams::is_declarable_color(color_rgb) ? std::optional<uint32_t>{color_rgb}
+                                                      : std::nullopt;
+}
 
-    const auto prev = bay_present_.find(slot_index);
-    if (prev == bay_present_.end()) {
-        // The first sighting is the session's baseline, never an edge.
-        bay_present_[slot_index] = *present;
-        if (*present) {
-            bay_evidence_[slot_index] = after;
-        }
-        return false;
-    }
-    if (prev->second == *present) {
-        return false;
-    }
-    prev->second = *present;
-    if (!*present) {
-        // A removal is not an insert. The reading stays filed so the next
-        // insert can be compared against the spool that was just pulled.
-        return false;
-    }
+} // namespace
 
-    std::optional<helix::ams::SpoolEvidence> before;
-    if (auto it = bay_evidence_.find(slot_index); it != bay_evidence_.end()) {
-        before = it->second;
-    }
-    bay_evidence_[slot_index] = after;
-
+bool AmsBackendCfs::judge_insert_locked(SlotInfo& slot, int slot_index,
+                                        const std::optional<helix::ams::SpoolEvidence>& before,
+                                        const helix::ams::SpoolEvidence& after) {
     switch (helix::ams::classify_insert(before, after)) {
     case helix::ams::InsertVerdict::DifferentSpool:
         spdlog::info("{} Slot {} insert carries a different spool's reading - dropping what "
@@ -4578,6 +4573,99 @@ bool AmsBackendCfs::note_insert_edge_locked(SlotInfo& slot, int slot_index) {
     case helix::ams::InsertVerdict::SameSpool:
         break;
     }
+    return false;
+}
+
+bool AmsBackendCfs::note_insert_edge_locked(SlotInfo& slot, int slot_index) {
+    const auto present = slot_status_reports_filament(slot.status);
+    if (!present.has_value()) {
+        return false;
+    }
+
+    // What this frame states about the seated spool, minus the fields that
+    // only repeat our own pushed label: a box restating what we wrote is
+    // remembering the write, not reading the spool, on either schema.
+    helix::ams::Observation scratch(helix::ams::ObservationSource::Sensed);
+    if (!slot.material.empty()) {
+        scratch.material = slot.material;
+    }
+    if (helix::ams::is_declarable_color(slot.color_rgb)) {
+        scratch.color_rgb = slot.color_rgb;
+    }
+    own_write_echoes_.strip_standing(slot_index, scratch);
+
+    helix::ams::SpoolEvidence after;
+    if (scratch.material.has_value()) {
+        after.material = std::move(*scratch.material);
+    }
+    after.color_rgb = scratch.color_rgb;
+    after.tag_read_complete = !after.material.empty() || after.color_rgb.has_value();
+
+    const auto prev = bay_present_.find(slot_index);
+    if (prev == bay_present_.end()) {
+        // The first sighting is the session's baseline, never an edge.
+        bay_present_[slot_index] = *present;
+        if (*present) {
+            bay_evidence_[slot_index] = after;
+        }
+        return false;
+    }
+    if (prev->second == *present) {
+        // No edge for the bay, but a pending stock insert still moves: every
+        // frame is another chance for its probe's answer to land.
+        if (schema_ == CfsSchema::Flat || *present) {
+            const auto pit = pending_inserts_.find(slot_index);
+            if (pit != pending_inserts_.end()) {
+                const PendingInsert pending = pit->second;
+                if (slot.material == pending.edge_material &&
+                    stated_color(slot.color_rgb) == pending.edge_color) {
+                    if (++pit->second.quiet_frames < kInsertProbeWaitFrames) {
+                        return false;
+                    }
+                    // The probe had its wait and the reader said nothing new.
+                    // The latched values still describe the PULLED spool, so
+                    // they are judged as no statement at all.
+                    pending_inserts_.erase(pit);
+                    return judge_insert_locked(slot, slot_index, pending.before,
+                                               helix::ams::SpoolEvidence{});
+                }
+                // A statement different from the latched one is the probe's
+                // answer about the inserted spool.
+                pending_inserts_.erase(pit);
+                bay_evidence_[slot_index] = after;
+                return judge_insert_locked(slot, slot_index, pending.before, after);
+            }
+        }
+        return false;
+    }
+    prev->second = *present;
+    if (!*present) {
+        // A removal is not an insert. The reading stays filed so the next
+        // insert can be compared against the spool that was just pulled, and
+        // an insert still awaiting its probe is dropped with the spool: there
+        // is nothing in the bay to ask about.
+        pending_inserts_.erase(slot_index);
+        return false;
+    }
+
+    std::optional<helix::ams::SpoolEvidence> before;
+    if (auto it = bay_evidence_.find(slot_index); it != bay_evidence_.end()) {
+        before = it->second;
+    }
+
+    if (schema_ == CfsSchema::Flat) {
+        // The fork states each bay's identity fresh every frame, so the edge
+        // frame itself is the reading.
+        bay_evidence_[slot_index] = after;
+        return judge_insert_locked(slot, slot_index, before, after);
+    }
+
+    // The stock arrays latch: the edge frame restates the pulled spool's
+    // colour and material, so judging it there calls every untagged insert
+    // the same spool. Open a pending insert and judge the first frame that
+    // states something different - the RFID probe's answer.
+    pending_inserts_[slot_index] =
+        PendingInsert{before, slot.material, stated_color(slot.color_rgb), 0};
     return false;
 }
 
