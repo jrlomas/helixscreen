@@ -615,15 +615,19 @@ class AmsBackendSnapmaker : public AmsSubscriptionBackend {
     /// would empty a lane whose only signal so far is the toolhead pin state.
     std::array<bool, NUM_TOOLS> feed_presence_seen_{{false, false, false, false}};
 
-    /// Per-slot "the latest filament_detect.info entry carried tag evidence":
-    /// a UID or a decoded MAIN_TYPE. The feed-port presence edge is an insert,
-    /// and this flag is the RFID side of that insert at the moment it fires:
-    /// false means reader disabled, untagged spool or a channel whose read
-    /// never landed (three states the backend cannot tell apart), so the
-    /// insert files no evidence and the stored record could describe a spool
-    /// that left. A later entry that reads NONE clears it. Written only from
-    /// handle_status_update's info loop (the single WS-thread writer).
-    std::array<bool, NUM_TOOLS> channel_tag_evidence_{{false, false, false, false}};
+    /// Per-channel pending insert: parse passes held since the feed-port
+    /// presence rose, 0 = none pending. The port edge fires the moment
+    /// filament seats in the bay, but the tag reader's answer for that spool
+    /// lands a frame or two later in filament_detect.info, so the edge itself
+    /// cannot tell a tagged spool from an untagged one. The next info entry
+    /// for the channel decides: tag evidence verifies the insert, an entry
+    /// with none (no UID, MAIN_TYPE NONE) is the reader saying there is no tag
+    /// behind it and asks. No entry at all within kSnapPendingInsertPasses
+    /// parses (reader disabled, read never landed) asks too. Presence dropping
+    /// cancels it: the spool left before any read. A feed the firmware itself
+    /// drives (tool-change load/unload, one of our batch ops) never arms it.
+    /// Written only from handle_status_update (the single WS-thread writer).
+    std::array<int, NUM_TOOLS> pending_insert_passes_{{0, 0, 0, 0}};
 
     /// Last filament_feed frame's raw per-channel fields (channel_state,
     /// channel_error, filament_detected, module_exist, disable_auto), written

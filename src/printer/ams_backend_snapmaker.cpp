@@ -42,6 +42,12 @@ namespace helix {
 
 namespace {
 
+/// Parses a pending insert verdict may hold while waiting for the tag
+/// reader's filament_detect.info entry. Status frames arrive about once a
+/// second, so eight parses is roughly eight seconds: long enough for a read to
+/// land, short enough that an unverified insert cannot sit silent forever.
+constexpr int kSnapPendingInsertPasses = 8;
+
 /// A digit run short enough to parse as an index without overflowing. Ten or
 /// more digits exceeds the narrowest supported target's parse range, and both
 /// stoi and stoul report that by throwing, so the length is checked before the
@@ -1439,12 +1445,20 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                     if (!rfid.uid.empty()) {
                         evidence.tag_read_complete = true;
                     }
-                    // The feed-port presence edge below is an insert, and this
-                    // flag is what the RFID side vouches for at that moment:
-                    // a UID or a decoded MAIN_TYPE. It persists across frames
-                    // (a delta frame silent about the channel keeps the last
-                    // read) and a NONE entry clears it.
-                    channel_tag_evidence_[i] = (!rfid.uid.empty() || rfid.main_type != "NONE");
+                    // A pending insert is judged HERE: this entry is the
+                    // reader's answer for the spool that just went in, which
+                    // the port edge could not know. A UID or a decoded
+                    // MAIN_TYPE verifies it - the tail's
+                    // check_hardware_event_clear judges any swap from this
+                    // very reading - and an entry that files nothing is the
+                    // reader saying no tag is behind the insert, so the stored
+                    // record could describe a spool that left (#1710).
+                    if (pending_insert_passes_[i] > 0) {
+                        pending_insert_passes_[i] = 0;
+                        if (rfid.uid.empty() && rfid.main_type == "NONE") {
+                            unverified_insert_lanes.push_back(i);
+                        }
+                    }
                     if (rfid.main_type != "NONE") {
                         evidence.material = rfid.main_type;
                         if (helix::ams::is_declarable_color(rfid.color_rgb)) {
@@ -1604,17 +1618,29 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                             if (i >= 0 && i < NUM_TOOLS) {
                                 // The port flag's false -> true edge is an
                                 // insert into the channel; the first sighting
-                                // is the baseline, not an edge. An insert with
-                                // no tag evidence behind it (reader disabled,
-                                // untagged spool, read never landed) files
-                                // nothing the insert rule can judge, so the
-                                // stored record could describe a spool that
-                                // left. Offer the notice, which re-checks its
-                                // own guards on the UI thread (#1710).
+                                // is the baseline, not an edge. The tag
+                                // reader's answer lands a frame or two later,
+                                // so the edge holds a pending verdict for the
+                                // info loop to judge (#1710). A drop cancels
+                                // one: the spool left before any read.
+                                //
+                                // A feed the firmware itself drives - its own
+                                // tool-change unload/load, or one of our
+                                // batch ops - drops and raises this flag too,
+                                // and no spool changed hands, so it arms
+                                // nothing. The edge runs before this frame's
+                                // channel_state parse, so the gate reads the
+                                // channel's last reported state; the state
+                                // parse below cancels anything the ordering
+                                // missed.
+                                const bool firmware_driven =
+                                    batch_.active || helix::snapmaker::channel_state_in_progress(
+                                                         channel_snapshots_[i].state);
                                 if (detected && feed_presence_seen_[i] &&
-                                    !port_sensor_filament_present_[i] &&
-                                    !channel_tag_evidence_[i]) {
-                                    unverified_insert_lanes.push_back(i);
+                                    !port_sensor_filament_present_[i] && !firmware_driven) {
+                                    pending_insert_passes_[i] = 1;
+                                } else if (!detected) {
+                                    pending_insert_passes_[i] = 0;
                                 }
                                 port_sensor_filament_present_[i] = detected;
                                 feed_presence_seen_[i] = true;
@@ -1679,6 +1705,16 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
                         channel_snapshots_[static_cast<size_t>(i)] = std::move(snap);
 
                         const ChannelStateInfo info = classify_channel_state(state);
+
+                        // A feed under way on this channel is the firmware
+                        // moving filament itself, so a presence edge that
+                        // armed a pending verdict this parse was not a user
+                        // insert; the spool never left.
+                        if (pending_insert_passes_[i] > 0 &&
+                            (info.action == AmsAction::LOADING ||
+                             info.action == AmsAction::UNLOADING)) {
+                            pending_insert_passes_[i] = 0;
+                        }
 
                         // A channel reporting any state at all makes the
                         // lane's presence inputs live for the
@@ -2249,6 +2285,15 @@ void AmsBackendSnapmaker::handle_status_update(const nlohmann::json& notificatio
             auto* slot = system_info_.units[0].get_slot(i);
             if (!slot)
                 continue;
+
+            // A pending insert ages one pass per parse. A read that never
+            // lands (reader disabled, the channel's entry never came) must
+            // not hold its verdict forever: past the bound, ask (#1710).
+            if (pending_insert_passes_[i] > 0 &&
+                ++pending_insert_passes_[i] > kSnapPendingInsertPasses) {
+                pending_insert_passes_[i] = 0;
+                unverified_insert_lanes.push_back(i);
+            }
 
             // A channel this parse carried no filament_detect.info for keeps
             // its default evidence, which the insert rule reads as no signal -
