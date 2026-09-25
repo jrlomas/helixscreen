@@ -59,6 +59,9 @@ class DetectionSource {
     virtual bool self_pauses() const {
         return true;
     }
+    /// Lower the source's sensitivity (the response modal's Tune button).
+    /// Called only while can_tune() is true, on the main thread.
+    virtual void tune() {}
     /// The printer's stored preference, or nullopt when this source has none
     /// (settings then keep their defaults: on, pause on detect).
     virtual std::optional<DetectionPreference> printer_preference() const {

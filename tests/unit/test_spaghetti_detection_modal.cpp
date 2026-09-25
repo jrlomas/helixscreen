@@ -78,7 +78,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "SpaghettiDetectionModal shows message + inv
         process_lvgl(50);
     }
 
-    // Turn off detection: same shape as Tune — the print decision stays open,
+    // Turn off detection: same shape as Tune; the print decision stays open,
     // so the action fires without hiding the modal.
     {
         auto owned = std::make_unique<SpaghettiDetectionModal>();
@@ -176,6 +176,22 @@ TEST_CASE_METHOD(PresenterFixture, "present_detection response ladder",
         CHECK(toasts[0].second == "Spaghetti detected");
         CHECK(ModalStack::instance().top_component_name().empty());
         CHECK(mock_client.get_print_phase() == MoonrakerClientMock::MockPrintPhase::IDLE);
+    }
+
+    SECTION("WarnOnly: a self-paused print escalates to the modal") {
+        sm.set_detection_enabled(true);
+        sm.set_detection_pause_on_detect(false); // the setting off, not the policy
+        mock_client.gcode_script("SDCARD_PRINT_FILE FILENAME=3DBenchy.gcode");
+        REQUIRE(mock_client.get_print_phase() == MoonrakerClientMock::MockPrintPhase::PREHEAT);
+
+        helix::detection::present_detection(spaghetti_event(true), DetectionPolicy::DeferToSource);
+
+        // A print the firmware already paused cannot sit on a vanishing toast
+        // with no path forward: warn-only still owes the Resume/Abort decision.
+        CHECK(toasts.empty());
+        CHECK(ModalStack::instance().top_component_name() == "spaghetti_detection_modal");
+        CHECK(mock_client.get_print_phase() == MoonrakerClientMock::MockPrintPhase::PREHEAT);
+        ModalStack::instance().clear();
     }
 
     SECTION("PauseAndRespond: a print the source did not pause pauses here") {

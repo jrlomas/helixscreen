@@ -168,9 +168,7 @@ K2StockDetectionSource::K2StockDetectionSource(helix::PrinterState* state) : sta
         };
 }
 
-void K2StockDetectionSource::start() {
-    if (!state_)
-        return;
+void K2StockDetectionSource::refresh_capability() {
     // HELIX_MOCK_DETECTION_CAPABLE=1 forces the capability probe true so the
     // detection UI can be driven on a dev machine (--test mocks are never a
     // K2 and the detection binary does not exist there).
@@ -179,6 +177,18 @@ void K2StockDetectionSource::start() {
     } else {
         capable_ = PrinterDetector::is_creality_k2() && access(DETECTION_BIN, X_OK) == 0;
     }
+    if (capable_) {
+        spdlog::info("[K2StockSource] capable: poll every {} s at prob >= {:.3}", period_s_,
+                     threshold_);
+    } else {
+        spdlog::debug("[K2StockSource] not capable on this machine; poll ticks stay no-ops");
+    }
+}
+
+void K2StockDetectionSource::start() {
+    if (!state_)
+        return;
+    refresh_capability();
 
     // Tuning thresholds and the printer's stored on/off + pause choice: the
     // ai_control block the stock stack reads at startup. Parsed whether or not
@@ -202,17 +212,10 @@ void K2StockDetectionSource::start() {
         }
     }
 
-    if (capable_) {
-        spdlog::info("[K2StockSource] capable: poll every {} s at prob >= {:.3}", period_s_,
-                     threshold_);
-    } else {
-        spdlog::debug("[K2StockSource] not capable on this machine; poll ticks stay no-ops");
-    }
-
     // Between jobs the detection context is new: a second print that starts
     // already failing must be able to fire even though the previous job ended
     // with last_positive_ latched.
-    // RAW_PRINT_STATE_OK: the re-arm wants the job boundary itself — lifecycle's
+    // RAW_PRINT_STATE_OK: the re-arm wants the job boundary itself; lifecycle's
     // Preparing/Idle distinction would leave the edge armed across pre-print.
     state_observer_ = helix::ui::observe_print_state<K2StockDetectionSource>(
         state_->get_print_state_enum_subject(), this,

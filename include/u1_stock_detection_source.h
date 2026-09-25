@@ -41,6 +41,10 @@ class U1StockSource : public DetectionSource {
         capable_ = v;
     }
 
+    /// DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low, the stock firmware's
+    /// one-step-down sensitivity command.
+    void tune() override;
+
     /// Install the print-state observer. Called once.
     void start();
 

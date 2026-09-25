@@ -200,7 +200,7 @@ Selection is scored, not name-matched: `src/api/display_backend_fbdev.cpp#auto_d
 
 Installing HelixScreen stops the stock AI failure-detection loop: the launcher hook stops and disables `/etc/init.d/app` (the procd service whose `Monitor`/`master-server`/`app-server` children run Creality's detect loop), and the camera module hands `/dev/video0` to ustreamer. HelixScreen ships its own detector for that gap, so a K2 running HelixScreen is still watched.
 
-`K2StockDetectionSource` (`src/printer/k2_stock_detection_source.cpp`) is capable only on a Creality K2 with `/usr/bin/detection` present and executable. During an active print it fetches a camera snapshot, runs the stock `/usr/bin/detection` binary on it, and parses the `label:`/`prob:` lines for the maximum spaghetti probability. Detection is edge-triggered: it fires once per spaghetti episode, stays quiet while it persists, and re-arms when the frame goes clean or a new print starts.
+`K2StockDetectionSource` (`src/printer/k2_stock_detection_source.cpp`) is capable only on a Creality K2 with `/usr/bin/detection` present and executable. The probe re-runs on every WebSocket connect (the printer type is read from the wizard's saved config, not cached at boot), so a first install that picks K2 in the wizard gets detection without a restart. During an active print it fetches a camera snapshot, runs the stock `/usr/bin/detection` binary on it, and parses the `label:`/`prob:` lines for the maximum spaghetti probability. Detection is edge-triggered: it fires once per spaghetti episode, stays quiet while it persists, and re-arms when the frame goes clean or a new print starts.
 
 The interval and threshold are the printer's own, read from `/mnt/UDISK/creality/userdata/config/user_print_refer.json` (`ai_control.pastaTime` = poll period, clamped 5-600s; `ai_control.pastaTruth` = confidence threshold). Nothing writes that file.
 
@@ -209,7 +209,7 @@ The source only reports. Whether a detection pauses the print is decided above i
 - **Spaghetti Detection** (on/off)
 - **Pause on Detection** (pause the print, or only warn)
 
-On the first start after install, both are seeded once from the printer's own stored choice in the same `ai_control` block (`switch` -> enabled, `pausePrint` -> pause) and are HelixScreen's from then on. A confirmed detection with pausing on sends `PAUSE`, shows the spaghetti modal (Resume / Abort / Reduce Sensitivity / Turn off detection); with pausing off it only warns. The Reduce Sensitivity button opens the stock DEFECT_DETECTION_CONFIG macro screen.
+On the first start after install, both are seeded once from the printer's own stored choice in the same `ai_control` block (`switch` -> enabled, `pausePrint` -> pause). The copy happens that one time: later changes on Creality's side (the stock UI or a hand-edited `user_print_refer.json`) are not followed, and HelixScreen's toggles are authoritative from then on. HelixScreen never writes that file. A confirmed detection with pausing on sends `PAUSE`, shows the spaghetti modal (Resume / Abort / Reduce Sensitivity / Turn off detection); with pausing off it only warns. The Reduce Sensitivity button sends the stock `DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low` macro.
 
 For desktop development, `HELIX_MOCK_DETECTION_CAPABLE=1` forces the capability probe true (mock printers are never a K2), so the Settings rows and the detection loop can be exercised in `--test` runs.
 

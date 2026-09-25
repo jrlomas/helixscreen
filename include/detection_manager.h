@@ -57,6 +57,7 @@ class DetectionManager {
     DetectionPolicy policy(const std::string& source_id) const;
 
     bool any_available() const;
+    bool any_pause_applicable() const;
 
     /// Classify what a detection from a source with policy @p p should do,
     /// from the global detection settings. Sources never decide this.
@@ -68,10 +69,22 @@ class DetectionManager {
         return &detection_available_subject_;
     }
 
+    /// "Some capable source does NOT pause the print by itself" (integer
+    /// 0/1): the pause-on-detect setting governs those, so the row shows.
+    /// Firmware-pausing sources escalate warn-only to the response modal
+    /// instead, so for them the setting is inert and the row hides.
+    lv_subject_t* subject_detection_pause_applicable() {
+        return &detection_pause_applicable_subject_;
+    }
+
     /// Whether the named registered source exposes tuning
     /// (DetectionSource::can_tune()). Lets generic presenters offer a Tune
     /// button without naming any vendor's source id.
     bool source_can_tune(const std::string& source_id) const;
+
+    /// Ask the named registered source to lower its sensitivity. No-op when
+    /// the id is unknown or the source cannot tune.
+    void tune_source(const std::string& source_id);
 
     using Presenter = std::function<void(const DetectionEvent&, DetectionPolicy)>;
     void set_presenter(Presenter p) {
@@ -97,8 +110,8 @@ class DetectionManager {
     /// wipe observers bound since the first call, so only the flag gates it.
     void ensure_availability_subject();
 
-    /// Push any_available() into the subject and run the one-time preference
-    /// seed when a capable source exists.
+    /// Push any_available() / pause-applicability into the subjects and run
+    /// the one-time preference seed when a capable source exists.
     void update_availability();
 
     /// One-time copy of the printer's stored detection preference into the
@@ -106,6 +119,7 @@ class DetectionManager {
     void maybe_seed_settings();
 
     lv_subject_t detection_available_subject_{};
+    lv_subject_t detection_pause_applicable_subject_{};
     bool availability_subject_ready_ = false;
 
     helix::IMoonrakerClient* client_ = nullptr;

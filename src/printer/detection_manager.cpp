@@ -3,6 +3,7 @@
 
 #include "helix/xml/scoped_subject_registry.h"
 #include "i_moonraker_client.h"
+#include "k2_stock_detection_source.h"
 #include "settings_manager.h"
 #include "u1_stock_detection_source.h"
 
@@ -24,12 +25,16 @@ void DetectionManager::ensure_availability_subject() {
     lv_subject_init_int(&detection_available_subject_, any_available() ? 1 : 0);
     helix::xml::register_subject_in_current_scope("detection_available",
                                                   &detection_available_subject_);
+    lv_subject_init_int(&detection_pause_applicable_subject_, any_pause_applicable() ? 1 : 0);
+    helix::xml::register_subject_in_current_scope("detection_pause_applicable",
+                                                  &detection_pause_applicable_subject_);
     availability_subject_ready_ = true;
 }
 
 void DetectionManager::update_availability() {
     if (availability_subject_ready_) {
         lv_subject_set_int(&detection_available_subject_, any_available() ? 1 : 0);
+        lv_subject_set_int(&detection_pause_applicable_subject_, any_pause_applicable() ? 1 : 0);
     }
     maybe_seed_settings();
 }
@@ -116,6 +121,15 @@ bool DetectionManager::any_available() const {
     return false;
 }
 
+bool DetectionManager::any_pause_applicable() const {
+    for (const auto& src : sources_) {
+        if (src && src->available() && !src->self_pauses()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 DetectionResponse DetectionManager::response_for(DetectionPolicy p) const {
     const SettingsManager& sm = SettingsManager::instance();
     if (!sm.get_detection_enabled() || p == DetectionPolicy::Off) {
@@ -133,6 +147,16 @@ bool DetectionManager::source_can_tune(const std::string& source_id) const {
             return src->can_tune();
     }
     return false;
+}
+
+void DetectionManager::tune_source(const std::string& source_id) {
+    for (const auto& src : sources_) {
+        if (src && src->id() == source_id) {
+            if (src->can_tune())
+                src->tune();
+            return;
+        }
+    }
 }
 
 void DetectionManager::on_event(const DetectionEvent& e) {
@@ -179,6 +203,17 @@ void DetectionManager::refresh_capabilities() {
     if (!client_) {
         return;
     }
+    // The K2's capability is local (wizard-saved printer type + on-disk
+    // binary), so it re-probes synchronously; the U1's needs the
+    // objects.list round-trip below. id() names exactly one concrete
+    // source, so the match establishes the type for the static_cast
+    // (firmware builds -fno-rtti).
+    for (const auto& src : sources_) {
+        if (src && src->id() == K2StockDetectionSource::SOURCE_ID) {
+            static_cast<K2StockDetectionSource*>(src.get())->refresh_capability();
+        }
+    }
+    update_availability();
     client_->send_jsonrpc(
         "printer.objects.list", json::object(),
         lifetime_.bg_cb("DetectionManager::on_objects_list",
@@ -216,6 +251,7 @@ void DetectionManager::reset_for_test() {
     // earlier test in this process); only its value resets.
     if (availability_subject_ready_) {
         lv_subject_set_int(&detection_available_subject_, 0);
+        lv_subject_set_int(&detection_pause_applicable_subject_, 0);
     }
 }
 

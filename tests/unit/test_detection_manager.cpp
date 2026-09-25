@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "../helix_test_fixture.h"
 #include "../test_helpers/config_test_access.h"
+#include "app_globals.h"
 #include "detection_manager.h"
+#include "moonraker_client_mock.h"
 #include "settings_manager.h"
 #include "u1_stock_detection_source.h"
 
@@ -29,6 +31,14 @@ struct StubSource : DetectionSource {
             saved(e);
     }
     bool avail = true;
+    bool tuneable = false; ///< returned by can_tune()
+    int tune_calls = 0;
+    bool can_tune() const override {
+        return tuneable;
+    }
+    void tune() override {
+        ++tune_calls;
+    }
     std::optional<DetectionPreference> pref; ///< returned by printer_preference()
     std::optional<DetectionPreference> printer_preference() const override {
         return pref;
@@ -106,6 +116,39 @@ TEST_CASE_METHOD(HelixTestFixture, "DetectionManager source_can_tune asks the so
     auto u1 = std::make_unique<U1StockSource>(nullptr);
     m.register_source(std::move(u1));
     REQUIRE(m.source_can_tune(U1StockSource::SOURCE_ID));
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "DetectionManager tune_source dispatches, gated on can_tune",
+                 "[detection][manager]") {
+    auto& m = DetectionManager::instance();
+    m.reset_for_test();
+
+    SECTION("a source that cannot tune is not asked") {
+        auto stub = std::make_unique<StubSource>();
+        auto* raw = stub.get();
+        m.register_source(std::move(stub));
+        m.tune_source("stub");
+        CHECK(raw->tune_calls == 0);
+    }
+
+    SECTION("an unknown id dispatches nothing") {
+        auto stub = std::make_unique<StubSource>();
+        auto* raw = stub.get();
+        stub->tuneable = true;
+        m.register_source(std::move(stub));
+        m.tune_source("nobody");
+        CHECK(raw->tune_calls == 0);
+    }
+
+    SECTION("the U1 source sends its own tuning macro") {
+        MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+        set_moonraker_client(&client);
+        m.register_source(std::make_unique<U1StockSource>(nullptr));
+        m.tune_source(U1StockSource::SOURCE_ID);
+        set_moonraker_client(nullptr);
+        REQUIRE(client.last_send_method() == "printer.gcode.script");
+        CHECK(client.last_send_script() == "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low");
+    }
 }
 
 TEST_CASE_METHOD(HelixTestFixture, "DetectionManager capability probe sets U1 source available",
@@ -232,6 +275,9 @@ TEST_CASE_METHOD(HelixTestFixture, "DetectionManager availability subject tracks
     // The probe path (defect_detection present) flips both source and subject.
     m.apply_objects_list_for_test(json::array({"defect_detection"}));
     CHECK(lv_subject_get_int(m.subject_detection_available()) == 1);
+    // The U1's firmware pauses by itself, so even capable the pause setting
+    // does not apply to it.
+    CHECK(lv_subject_get_int(m.subject_detection_pause_applicable()) == 0);
 
     // And back: the subject is re-evaluated on every capability refresh.
     m.apply_objects_list_for_test(json::array({"gcode_move"}));

@@ -4,12 +4,26 @@
 // docs/devel/printers/SNAPMAKER_U1_SUPPORT.md.
 #include "u1_stock_detection_source.h"
 
+#include "app_globals.h"
+#include "i_moonraker_client.h"
 #include "observer_factory.h"
 #include "printer_state.h"
 
 #include <spdlog/spdlog.h>
 
+#include "hv/json.hpp"
+
 namespace helix::detection {
+
+void U1StockSource::tune() {
+    // Null callbacks, not empty lambdas: a non-null error_cb reads as "this
+    // caller reports the failure itself", which would suppress Klipper's `!!`
+    // broadcast for a rejected DEFECT_DETECTION_CONFIG and leave the user with
+    // nothing.
+    get_moonraker_client()->send_jsonrpc(
+        "printer.gcode.script", json{{"script", "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
+        nullptr, nullptr);
+}
 
 void U1StockSource::start() {
     if (!state_)

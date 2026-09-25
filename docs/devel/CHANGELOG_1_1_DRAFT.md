@@ -131,8 +131,9 @@ what gets saved.
   happens - **Spaghetti Detection** (watch at all) and **Pause on Detection** (pause, or only
   warn). On the first start both are seeded once from the printer's own stored choice
   (`switch` / `pausePrint`) and are HelixScreen's from then on. Printers whose firmware
-  pauses by itself, like the U1, are never double-paused. The rows appear only on printers
-  with detection hardware.
+  pauses by itself, like the U1, are never double-paused and always get the response dialog
+  (their Pause on Detection row hides; the firmware's pause is not HelixScreen's to govern).
+  The rows appear only on printers with detection hardware.
 - **Power-loss recovery works on Qidi printers (#1716)** - on a Q2, Q1 Pro or Plus 4 running
   the stock firmware, the resume dialog now appears after a print was cut short by a power
   loss, offering the printer's own `RESUME_INTERRUPTED` flow or a clean discard.

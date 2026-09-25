@@ -277,7 +277,8 @@ void SettingsManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(detection_enabled_subject_, detection_enabled ? 1 : 0,
                            "detection_enabled", subjects_);
 
-    // Pause on detection (default: true — a detection pauses the print; off = warn only)
+    // Pause on detection (default: true; off = warn only for prints HelixScreen
+    // pauses, while a firmware-paused print always gets the response modal)
     bool detection_pause = config->get<bool>("/detection/pause_on_detect", true);
     UI_MANAGED_SUBJECT_INT(detection_pause_on_detect_subject_, detection_pause ? 1 : 0,
                            "detection_pause_on_detect", subjects_);

@@ -8,7 +8,6 @@
 #include "abort_manager.h"
 #include "app_globals.h"
 #include "i_moonraker_api.h"
-#include "i_moonraker_client.h"
 #include "settings_manager.h"
 
 #include <spdlog/spdlog.h>
@@ -28,7 +27,7 @@ void SpaghettiDetectionModal::on_show() {
     wire_quaternary_button("btn_quaternary");
 
     // A dead Tune button is worse than none: hide it, with its divider, when
-    // this source exposes no tuning. (Mirrors the preview hiding below — this
+    // this source exposes no tuning. (Mirrors the preview hiding below; this
     // modal wires itself.)
     const bool show_tune = static_cast<bool>(on_tune_);
     if (lv_obj_t* tune_btn = find_widget("btn_tertiary")) {
@@ -74,13 +73,16 @@ void present_detection(const DetectionEvent& e, DetectionPolicy p) {
     const auto response = DetectionManager::instance().response_for(p);
     if (response == DetectionResponse::Suppressed)
         return;
-    if (response == DetectionResponse::WarnOnly) {
+    // Warn-only still owes a self-paused print the Resume/Abort decision: a
+    // print the firmware already paused cannot be left on a vanishing toast
+    // with no path forward, so it escalates to the modal below.
+    if (response == DetectionResponse::WarnOnly && !e.already_paused) {
         ToastManager::instance().show(ToastSeverity::WARNING, lv_tr("Spaghetti detected"), 8000);
         return;
     }
-    // PauseAndRespond: sources only report, so a print the source did not
-    // already pause (it paused itself) pauses here. With pause-on-detect off
-    // this branch is never reached.
+    // A print the source did not already pause pauses here; sources only
+    // report. already_paused covers both pause-on-detect on (a firmware
+    // pause makes ours redundant) and the warn-only escalation above.
     if (!e.already_paused) {
         get_moonraker_api()->job().pause_print([] { spdlog::info("[Detection] print paused"); },
                                                [](const MoonrakerError& err) {
@@ -100,20 +102,10 @@ void present_detection(const DetectionEvent& e, DetectionPolicy p) {
         SettingsManager::instance().set_detection_enabled(false);
         ToastManager::instance().show(ToastSeverity::INFO, lv_tr("Detection turned off"), 4000);
     });
-    // VENDOR_OK: DEFECT_DETECTION_CONFIG is the tuning macro of the stock
-    // firmware that exposes can_tune(); sources running their own model (the
-    // K2 polls it directly) decline the button.
+    // The source owns its tuning command; can_tune() sources that run their
+    // own model (the K2 polls it directly) decline the button.
     if (DetectionManager::instance().source_can_tune(e.source_id))
-        modal->set_on_tune([] {
-            // Null callbacks, not empty lambdas: a non-null error_cb reads
-            // as "this caller reports the failure itself", which would
-            // suppress Klipper's `!!` broadcast for a rejected
-            // DEFECT_DETECTION_CONFIG and leave the user with nothing.
-            get_moonraker_client()->send_jsonrpc(
-                "printer.gcode.script",
-                nlohmann::json{{"script", "DEFECT_DETECTION_CONFIG NOODLE_SENSITIVITY=low"}},
-                nullptr, nullptr);
-        });
+        modal->set_on_tune([id = e.source_id] { DetectionManager::instance().tune_source(id); });
     Modal::show_owned(std::move(modal), lv_screen_active());
 }
 

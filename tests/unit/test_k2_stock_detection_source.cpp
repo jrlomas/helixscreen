@@ -8,6 +8,7 @@
 #include "settings_manager.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <memory>
 #include <optional>
@@ -301,5 +302,23 @@ TEST_CASE_METHOD(XMLTestFixture, "K2StockSource reports, never pauses the print 
     REQUIRE(h.events.size() == 1);
     CHECK_FALSE(h.events[0].already_paused);
     CHECK_FALSE(capture.contains("[Moonraker API] Pausing print"));
+    // HelixScreen does the pausing for this source, so the pause-on-detect
+    // setting governs it (drives the settings row's visibility subject).
+    CHECK_FALSE(h.src.self_pauses());
     std::remove(AI_JSON);
+}
+
+TEST_CASE("K2StockSource refresh_capability re-probes without a restart", "[detection][k2]") {
+    K2StockDetectionSource src(nullptr);
+    // The env override is the probe's deterministic half on a dev box (which
+    // is never a K2), so it pins the re-probe: the capability must follow a
+    // value that changed after construction.
+    unsetenv("HELIX_MOCK_DETECTION_CAPABLE");
+    REQUIRE(setenv("HELIX_MOCK_DETECTION_CAPABLE", "1", 1) == 0);
+    src.refresh_capability();
+    CHECK(src.available());
+    REQUIRE(setenv("HELIX_MOCK_DETECTION_CAPABLE", "0", 1) == 0);
+    src.refresh_capability();
+    CHECK_FALSE(src.available());
+    unsetenv("HELIX_MOCK_DETECTION_CAPABLE");
 }

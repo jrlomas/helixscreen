@@ -65,7 +65,7 @@ class K2StockDetectionSource : public DetectionSource {
     K2StockDetectionSource(helix::PrinterState* state);
 
     /// Unique registration key. Exposed so DetectionManager can match on id()
-    /// and static_cast instead of dynamic_cast — the firmware builds -fno-rtti.
+    /// and static_cast instead of dynamic_cast; the firmware builds -fno-rtti.
     static constexpr const char* SOURCE_ID = "k2_stock";
 
     std::string id() const override {
@@ -73,6 +73,12 @@ class K2StockDetectionSource : public DetectionSource {
     }
     bool available() const override {
         return capable_;
+    }
+    /// HelixScreen sends the pause for this source (the stock loop is stopped),
+    /// so the pause-on-detect setting governs it. Sources whose firmware pauses
+    /// by itself report true and the setting does not apply.
+    bool self_pauses() const override {
+        return false;
     }
     void set_callback(Callback cb) override {
         cb_ = std::move(cb);
@@ -88,6 +94,12 @@ class K2StockDetectionSource : public DetectionSource {
     /// Probe capability (Creality K2 + /usr/bin/detection present), read the
     /// ai_control thresholds and start the poll timer. Called once.
     void start();
+
+    /// Re-run the capability probe. The printer type comes from the wizard's
+    /// saved config, so a first install that picks K2 only reaches a true
+    /// is_creality_k2() after that save; DetectionManager calls this on every
+    /// connect so no restart is needed.
+    void refresh_capability();
 
     /// Test seams (the defaults do real HTTP / popen / HttpExecutor).
     void set_fetcher(SnapshotFetcher f) {
