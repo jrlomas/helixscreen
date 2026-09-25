@@ -516,15 +516,52 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
 
             // Early hardware discovery callback - allows AMS/MMU backends to initialize
             // BEFORE the subscription response arrives, so they can receive initial state
-            // naturally. Copy hardware_ under lock to prevent data races (#562, #777).
-            if (on_hardware_discovered_) {
+            // naturally. invoke_hardware_discovered() copies hardware_ under lock to prevent
+            // data races (#562, #777).
+            //
+            // A claim that depends on an object's status rather than its name is settled
+            // first, so the callback never creates a backend the printer cannot serve. The
+            // query goes to Klippy ahead of every later discovery request, so its reply
+            // also precedes the subscription.
+            json claim_query;
+            {
+                std::lock_guard<std::mutex> lock(hardware_mutex_);
+                claim_query = hardware_.claim_status_query();
+            }
+            if (claim_query.empty()) {
                 spdlog::debug("[Moonraker Client] Invoking early hardware discovery callback");
-                PrinterDiscovery hw_snapshot;
-                {
-                    std::lock_guard<std::mutex> lock(hardware_mutex_);
-                    hw_snapshot = hardware_;
-                }
-                on_hardware_discovered_(hw_snapshot);
+                invoke_hardware_discovered();
+            } else {
+                auto settle = [this, seq](const json& status) {
+                    if (is_stale() || !is_current_sequence(seq))
+                        return;
+                    {
+                        std::lock_guard<std::mutex> lock(hardware_mutex_);
+                        hardware_.settle_status_claims(status);
+                    }
+                    spdlog::debug("[Moonraker Client] Invoking early hardware discovery callback");
+                    invoke_hardware_discovered();
+                };
+                client_.send_jsonrpc(
+                    "printer.objects.query", json{{"objects", claim_query}},
+                    [settle](json reply) {
+                        const json* status = nullptr;
+                        auto result = reply.find("result");
+                        if (result != reply.end() && result->is_object()) {
+                            auto it = result->find("status");
+                            if (it != result->end() && it->is_object()) {
+                                status = &*it;
+                            }
+                        }
+                        settle(status ? *status : json::object());
+                    },
+                    [settle](const MoonrakerError& err) {
+                        spdlog::debug("[Moonraker Client] Claim status query failed: {}",
+                                      err.message);
+                        settle(json::object());
+                    },
+                    0,     // default timeout
+                    true); // silent: an unanswered claim leaves the printer unclaimed
             }
 
             // Step 2: Get server information
@@ -1503,6 +1540,14 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
         subscription_objects["save_variables"] = nullptr;
     }
 
+    // OpenAMS publishes one versioned snapshot on oams_manager. Its nested
+    // lanes/units/groups arrays arrive whole on every change, so a topology
+    // change and the state that goes with it can never land half-applied.
+    if (hw.mmu_type() == AmsType::OPENAMS) {
+        subscription_objects[helix::openams::kManagerObject] =
+            json::array({"api_version", "schema", "ready", "commands", "lanes", "units", "groups"});
+    }
+
     // Power-loss recovery: the PLR module owns which status objects its
     // backends need for the discovered firmware. A printer already carrying
     // one of these keys from an earlier block just re-assigns the same map
@@ -1642,6 +1687,9 @@ void MoonrakerDiscoverySequence::complete_discovery_subscription(uint64_t seq) {
     if (afc_led_skipped > 0) {
         spdlog::debug("[Moonraker Client] Skipped {} unparsed AFC_led object(s) from subscription",
                       afc_led_skipped);
+    }
+    if (hw.mmu_type() == AmsType::OPENAMS) {
+        spdlog::info("[Moonraker Client] Subscribing to oams_manager (OpenAMS UI API)");
     }
     if (hw.mmu_type() == AmsType::AD5X_IFS) {
         spdlog::info("[Moonraker Client] Subscribing to save_variables (AD5X IFS)");
