@@ -35,25 +35,25 @@
         {
           "enabled": true,
           "klipper_name": "filament_switch_sensor fd_ex0",
-          "role": "runout",
+          "role": "none",
           "type": "switch"
         },
         {
           "enabled": true,
           "klipper_name": "filament_switch_sensor fd_ex1",
-          "role": "runout",
+          "role": "none",
           "type": "switch"
         },
         {
           "enabled": true,
           "klipper_name": "filament_switch_sensor fd_ex2",
-          "role": "runout",
+          "role": "none",
           "type": "switch"
         },
         {
           "enabled": true,
           "klipper_name": "filament_switch_sensor fd_ex3",
-          "role": "runout",
+          "role": "none",
           "type": "switch"
         }
       ]

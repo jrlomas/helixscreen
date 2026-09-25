@@ -192,6 +192,8 @@ open (prestonbrown/helixscreen#1714).
    ~15 MB footprint is fine, but check `free` with the stock stack running.
 8. **Init**: no systemd; the stock stack is started from BusyBox init scripts. An init.d
    script modeled on the AD5X/ZMOD `S80guppyscreen` pattern is the likely shape.
-9. **Runout on an empty docked head**: the preset enables `fd_ex0..3` as runout-role
-   switches; whether an empty docked head trips the runout and pre-print warnings needs
-   hardware verification.
+9. **Runout on an empty docked head**: the preset ships `fd_ex0..3` with role `"none"`, runout
+   disabled. `FilamentSensorManager#lane_index_for_sensor` maps only `e<N>_filament` names to
+   a head, so an fd_ex sensor with the runout role counts any empty docked head as filament
+   loss and raises the runout guidance. Giving them the runout role needs hardware
+   verification of what the switches actually report.

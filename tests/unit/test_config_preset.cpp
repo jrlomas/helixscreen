@@ -793,6 +793,39 @@ TEST_CASE_METHOD(PresetConfigFixture, "k1 preset claims no aux fan and no fixed 
     TearDown();
 }
 
+// The creator5 preset ships the four fd_ex head switches with role "none":
+// FilamentSensorManager maps only e<N>_filament names to a head, so an fd_ex
+// sensor with the runout role counts any empty docked head as a runout and
+// pops the guidance modal. Runout stays off until verified on hardware
+// (prestonbrown/helixscreen#1714). mutate-diff does not mutate assets/*.json,
+// which leaves this the only guard over that data.
+TEST_CASE_METHOD(PresetConfigFixture,
+                 "creator5 preset ships fd_ex switches without the runout role",
+                 "[config][preset][creator5]") {
+    SetUp();
+
+    copy_shipped_preset("creator5");
+    REQUIRE(config.apply_preset_file("creator5") == true);
+
+    auto& pd = printer_data();
+
+    REQUIRE(pd.contains("filament_sensors"));
+    int switches = 0;
+    for (const auto& sensor : pd["filament_sensors"]["sensors"]) {
+        const std::string klipper_name = sensor.at("klipper_name").get<std::string>();
+        if (klipper_name.find("fd_ex") == std::string::npos) {
+            continue;
+        }
+        ++switches;
+        INFO(klipper_name << " has role " << sensor.at("role").get<std::string>());
+        CHECK(sensor.at("role").get<std::string>() != "runout");
+    }
+    // The loop must have seen the four head switches, not an empty array.
+    REQUIRE(switches == 4);
+
+    TearDown();
+}
+
 // ============================================================================
 // apply_preset_file post-wizard migration 2: default_macros
 // ============================================================================
