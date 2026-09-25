@@ -1,6 +1,6 @@
 # Filament Slot Metadata — `lane_data` Convention
 
-**Status**: Informational, v1.13 (2026-09). See [Changelog](#changelog).
+**Status**: Informational, v1.14 (2026-09). See [Changelog](#changelog).
 
 This document describes HelixScreen's use of the `lane_data` Moonraker database
 namespace to share per-slot filament metadata with OrcaSlicer and other tools.
@@ -324,6 +324,23 @@ HelixScreen drops its whole override record for that lane rather than shadowing
 the external write. An override survives only an absent/zero firmware id
 (ejection), which HelixScreen makes user-configurable per system (§6).
 
+**Amendment (v1.14):** when a lane's record disagrees with the statement
+standing on it, the newest edit wins whoever made it
+(prestonbrown/helixscreen#1632). A record carrying none of the `helix_`
+extension keys was written by another tool that replaced ours wholesale — no
+other writer emits the prefix — and files as the lane's statement rather than
+as a memory below it: unstamped it wins outright, because every HelixScreen
+write carries a `scan_time` and a record without one can only be a foreign
+replacement; stamped it wins only over a statement older than its `scan_time`,
+and an older or equal record still files as remembered. Records HelixScreen
+wrote never promote, whatever their `scan_time` says, and while one of our
+writes is still awaiting firmware's echo the re-read strips what matches it
+before judging anything, so our own write coming back is never misread as a
+newer outside edit. This is why §3 asks a rewriter to carry the authorship
+keys through unchanged: a tool that drops them reassigns its own edit to
+nobody, and the next HelixScreen load reads the record as a foreign
+replacement.
+
 A tool reading these records does not need to replicate HelixScreen's merge
 rule — it is documented here so third parties understand why we emit only the
 fields we do, and why we omit defaulted fields rather than writing zeros.
@@ -623,6 +640,11 @@ reader can resolve.
 
 ## Changelog
 
+- **v1.14 (2026-09-25)**: §5 amendment: newest edit wins whoever made it
+  (prestonbrown/helixscreen#1632). A shared-namespace record carrying no
+  `helix_` key is another tool's replacement of ours and files as the lane's
+  statement — unstamped outright, stamped only over an older statement —
+  instead of as a memory below whatever a person said.
 - **v1.13 (2026-09-24)**: §6 states one insert rule for every backend: a
   spool going into a slot is judged on what the hardware read off it (tag UID,
   or material and colour decoded from the tag, or a firmware-named spool id).

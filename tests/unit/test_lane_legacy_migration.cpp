@@ -132,9 +132,10 @@ TEST_CASE_METHOD(HelixTestFixture, "Ingesting the same namespace twice changes n
 
 TEST_CASE_METHOD(HelixTestFixture, "Classification reads the document the store actually received",
                  "[lane][migration]") {
-    // A record with a colour and NO lock key must come back as a cache: a
-    // missing key is never the user's declaration, whatever value it sits
-    // beside.
+    // A record with a colour and NO lock key is not this application's word:
+    // a missing key is never the user's declaration, whatever value it sits
+    // beside. With no helix_ key of any kind on the document, what wrote it
+    // is another tool (#1632), and its colour is that tool's statement.
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
     state.init_subjects(false);
@@ -149,9 +150,9 @@ TEST_CASE_METHOD(HelixTestFixture, "Classification reads the document the store 
 
     ingest_legacy_records(store, LegacyLockKeys::LaneData, 0);
     const auto lane = lane_sources(lane_id_for(0, 0));
-    CHECK_FALSE(lane.local_user.has_value());
-    REQUIRE(lane.remembered.has_value());
-    CHECK(lane.remembered->color_rgb == 0xED2C2Cu);
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->color_rgb == 0xED2C2Cu);
+    CHECK_FALSE(lane.remembered.has_value());
 }
 
 TEST_CASE_METHOD(HelixTestFixture, "A load that falls back to the on-disk cache ingests nothing",
@@ -261,13 +262,16 @@ TEST_CASE_METHOD(HelixTestFixture,
     // its brand counts as declared only beside a colour or material
     // declaration on the same record, which a true lock key over a value is.
     // That declaration is the evidence a person edited the record: the
-    // auto-mirror declares nothing and can populate no brand of its own.
+    // auto-mirror declares nothing and can populate no brand of its own. The
+    // helix_material key is what keeps the document ours: without a helix_
+    // key of any kind it would be another tool's write outright (#1632).
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
     state.init_subjects(false);
     MoonrakerAPIMock api(client, state);
 
-    nlohmann::json record{{"lane", 0}, {"vendor", "Hatchbox"}, {"color", "#3355FF"}};
+    nlohmann::json record{
+        {"lane", 0}, {"vendor", "Hatchbox"}, {"color", "#3355FF"}, {"helix_material", "PLA"}};
     const bool locked = GENERATE(true, false);
     if (locked) {
         record["helix_locked_color"] = true;
@@ -353,6 +357,120 @@ TEST_CASE_METHOD(HelixTestFixture,
     frame.brand = "Firmware Brand";
     ingest(lane, frame);
     CHECK(resolved_lane(lane).brand == "Firmware Brand");
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "A record another tool wrote files as the lane's statement",
+                 "[lane][migration]") {
+    // Mainsail's spool dialog and Orca's printer agent write lane_data with
+    // none of our authorship keys, replacing whatever record stood there. The
+    // newest edit wins whoever made it (prestonbrown/helixscreen#1632), so a
+    // foreign record's identity is a statement about the lane, not a memory:
+    // it files on the user's rung and outranks what firmware's cache says.
+    using helix::ams::from_lane_data_record;
+    using helix::ams::sources_from_record;
+
+    const nlohmann::json wire{{"lane", 0},
+                              {"color", "#ED2C2C"},
+                              {"material", "PLA"},
+                              {"bed_temp", 60},
+                              {"nozzle_temp", 200}};
+    const auto parsed = from_lane_data_record(wire);
+    REQUIRE(parsed.has_value());
+
+    const auto sources = sources_from_record(parsed->second, wire, LegacyLockKeys::LaneData);
+    REQUIRE(sources.local_user.has_value());
+    REQUIRE(sources.local_user->color_rgb.has_value());
+    CHECK(*sources.local_user->color_rgb == 0xED2C2Cu);
+    CHECK(sources.local_user->material == "PLA");
+    CHECK_FALSE(sources.remembered.has_value());
+    // Temps are not lane-model identity, and no weight rode in with this
+    // record, so nothing files as metered.
+    CHECK_FALSE(sources.metered.has_value());
+
+    const helix::ams::LaneId lane = lane_id_for(0, 0);
+    file_lane_sources(lane, sources);
+    Observation frame(ObservationSource::VendorCache);
+    frame.color_rgb = 0x00AEFFu;
+    frame.material = "PETG";
+    ingest(lane, frame);
+    const auto resolved = resolved_lane(lane);
+    REQUIRE(resolved.color_rgb.has_value());
+    CHECK(*resolved.color_rgb == 0xED2C2Cu);
+    CHECK(resolved.material == "PLA");
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "A record's scan_time becomes its statement's stamp",
+                 "[lane][migration]") {
+    using helix::ams::from_lane_data_record;
+    using helix::ams::sources_from_record;
+
+    const nlohmann::json wire{{"lane", 0},
+                              {"color", "#ED2C2C"},
+                              {"material", "PLA"},
+                              {"scan_time", "2026-09-25T12:00:00Z"}};
+    const auto parsed = from_lane_data_record(wire);
+    REQUIRE(parsed.has_value());
+
+    const auto sources = sources_from_record(parsed->second, wire, LegacyLockKeys::LaneData);
+    REQUIRE(sources.local_user.has_value());
+    REQUIRE(sources.local_user->edited_at.has_value());
+    CHECK(*sources.local_user->edited_at == parsed->second.updated_at);
+}
+
+TEST_CASE_METHOD(HelixTestFixture,
+                 "Our own record coming back files as remembered, not a statement",
+                 "[lane][migration]") {
+    // The authorship keys are what tell our own write from another tool's.
+    // A record carrying them files by its declared bits however fresh its
+    // scan_time is, so re-reading our own record never promotes it over the
+    // edit that wrote it.
+    using helix::ams::from_lane_data_record;
+    using helix::ams::sources_from_record;
+
+    const nlohmann::json wire{{"lane", 0},
+                              {"color", "#ED2C2C"},
+                              {"material", "PLA"},
+                              {"helix_declared", nlohmann::json::array()},
+                              {"helix_locked_color", false},
+                              {"helix_locked_material", false},
+                              {"scan_time", "2026-09-25T13:00:00Z"}};
+    const auto parsed = from_lane_data_record(wire);
+    REQUIRE(parsed.has_value());
+
+    const auto sources = sources_from_record(parsed->second, wire, LegacyLockKeys::LaneData);
+    REQUIRE(sources.remembered.has_value());
+    CHECK_FALSE(sources.local_user.has_value());
+}
+
+TEST_CASE("An outside record displaces only a statement it is newer than", "[lane][migration]") {
+    using helix::ams::outside_edit_wins;
+
+    helix::ams::FilamentSlotOverride record;
+    helix::ams::Observation standing(ObservationSource::LocalUser);
+
+    // Nothing standing: the record is the only statement anyone made.
+    CHECK(outside_edit_wins(record, std::nullopt));
+    CHECK(outside_edit_wins(record, standing));
+
+    const auto at = [](int hours) {
+        return std::chrono::system_clock::time_point{
+            std::chrono::seconds(1790337600 + hours * 3600)};
+    };
+    record.updated_at = at(1);
+
+    // Stamped by its writer: newer displaces, equal and older stay below the
+    // lane's own edit.
+    standing.edited_at = at(0);
+    CHECK(outside_edit_wins(record, standing));
+    standing.edited_at = at(1);
+    CHECK_FALSE(outside_edit_wins(record, standing));
+    standing.edited_at = at(2);
+    CHECK_FALSE(outside_edit_wins(record, standing));
+
+    // Unstampable: a foreign writer that writes no scan_time replaced our
+    // stamped record wholesale, so theirs is the newest edit there is.
+    record.updated_at = {};
+    CHECK(outside_edit_wins(record, standing));
 }
 
 TEST_CASE("Colour and material answer through the load rule in both wire formats",

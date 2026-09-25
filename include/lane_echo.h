@@ -152,6 +152,16 @@ class OwnWriteEchoes {
     /// frame after the echo was withheld.
     int strip_standing(int slot_index, Observation& producer_record) const;
 
+    /// Whether an armed declaration stands on @p slot_index: a write of ours
+    /// firmware may still echo. A record read while one stands cannot be
+    /// judged the newest statement on its lane - our own write is the newest
+    /// thing that happened to the lane, and the record is either that write's
+    /// echo or something older - so a caller deciding newest-edit-wins must
+    /// decline while this is true and let the strip alone decide what files.
+    /// An unarmed staging suppresses nothing and its write never went out,
+    /// so it does not count.
+    [[nodiscard]] bool standing(int slot_index) const;
+
   private:
     struct Entry {
         Observation declared{ObservationSource::LocalUser};

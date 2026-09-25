@@ -45,6 +45,7 @@
 #include "test_helpers/toolchanger_test_access.h"
 #include "toolchanger_addon.h"
 
+#include <chrono>
 #include <filesystem>
 #include <map>
 #include <mutex>
@@ -3635,7 +3636,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "the factory mock is registered before it star
 //
 // By source: only records classifying as VendorCache. A record naming a spool
 // is the server's statement and one carrying a lock key is a person's, and
-// neither becomes true again merely because a re-read saw it.
+// neither becomes true again merely because a re-read saw it. A record this
+// application did not write is another tool's statement and may displace the
+// lane's own (#1632) - unless a write of ours is still in flight on the slot,
+// where the guard's strip alone decides what files.
 //
 // By lane: only where firmware states no identity of its own. Everywhere else
 // a status frame already files the vendor-cache record, ingest() replaces a
@@ -3755,10 +3759,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync re-reads the shared namespace into t
 
     CHECK(db.api.mock_db_namespace_get_count() == 1);
     const auto lane = lane_sources(harness.lane(0));
-    REQUIRE(lane.remembered.has_value());
-    CHECK(lane.remembered->material == "ASA");
-    REQUIRE(lane.remembered->color_rgb.has_value());
-    CHECK(*lane.remembered->color_rgb == 0xA4B2BCu);
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "ASA");
+    REQUIRE(lane.local_user->color_rgb.has_value());
+    CHECK(*lane.local_user->color_rgb == 0xA4B2BCu);
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a resync reaches the backend's own block, not slot indices",
@@ -3781,12 +3785,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync reaches the backend's own block, not
 
     // Slot 1, not slot 0: the slot index is carried as well as the block.
     const auto lane = lane_sources(backend->lane_id(1));
-    REQUIRE(lane.remembered.has_value());
-    CHECK(lane.remembered->material == "PC");
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "PC");
 
     // Block 0 belongs to the other backend. Deriving the id from the slot
     // index alone would land the record there.
-    CHECK_FALSE(lane_sources(helix::ams::lane_id_for(0, 1)).remembered.has_value());
+    CHECK_FALSE(lane_sources(helix::ams::lane_id_for(0, 1)).local_user.has_value());
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a resync files no declaration for a record naming a spool",
@@ -3808,8 +3812,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync files no declaration for a record na
     CHECK_FALSE(linked.remembered.has_value());
 
     const auto plain = lane_sources(harness.lane(1));
-    REQUIRE(plain.remembered.has_value());
-    CHECK(plain.remembered->material == "PLA");
+    REQUIRE(plain.local_user.has_value());
+    CHECK(plain.local_user->material == "PLA");
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a resync files no declaration for a locked record",
@@ -3834,8 +3838,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync files no declaration for a locked re
     CHECK_FALSE(locked.remembered.has_value());
 
     const auto plain = lane_sources(harness.lane(1));
-    REQUIRE(plain.remembered.has_value());
-    CHECK(plain.remembered->material == "PLA");
+    REQUIRE(plain.local_user.has_value());
+    CHECK(plain.local_user->material == "PLA");
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a re-read that cannot reach the database leaves the lane alone",
@@ -3847,7 +3851,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "a re-read that cannot reach the database leav
 
     harness->request_resync();
     helix::ui::UpdateQueue::instance().drain();
-    REQUIRE(lane_sources(harness.lane(0)).remembered.has_value());
+    REQUIRE(lane_sources(harness.lane(0)).local_user.has_value());
 
     db.seed("T0", nlohmann::json{{"lane", "0"}, {"material", "TPU"}});
     db.api.mock_reject_next_db_get();
@@ -3855,8 +3859,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "a re-read that cannot reach the database leav
     helix::ui::UpdateQueue::instance().drain();
 
     const auto lane = lane_sources(harness.lane(0));
-    REQUIRE(lane.remembered.has_value());
-    CHECK(lane.remembered->material == "PLA");
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "PLA");
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a resync withholds the fields of a write this backend sent",
@@ -3893,16 +3897,114 @@ TEST_CASE_METHOD(LVGLTestFixture, "a resync withholds the fields of a write this
     CHECK_FALSE(echoed.remembered->material.has_value());
     CHECK_FALSE(echoed.remembered->color_rgb.has_value());
 
-    // Without a write outstanding the same record files whole, so the
-    // withholding is the guard's and not the resync's.
+    // Without a write outstanding the same record files whole - as another
+    // tool's statement, on the user's rung (#1632) - so the withholding is
+    // the guard's and not the resync's.
     db.seed("T1", nlohmann::json{{"lane", "1"}, {"material", "PETG"}, {"color", "#00FF00"}});
     harness->request_resync();
     helix::ui::UpdateQueue::instance().drain();
     const auto plain = lane_sources(harness.lane(1));
-    REQUIRE(plain.remembered.has_value());
-    CHECK(plain.remembered->material == "PETG");
-    REQUIRE(plain.remembered->color_rgb.has_value());
-    CHECK(*plain.remembered->color_rgb == 0x00FF00u);
+    REQUIRE(plain.local_user.has_value());
+    CHECK(plain.local_user->material == "PETG");
+    REQUIRE(plain.local_user->color_rgb.has_value());
+    CHECK(*plain.local_user->color_rgb == 0x00FF00u);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a resync promotes a record another tool wrote over an older edit",
+                 "[lane][ingest][resync]") {
+    ToolChangerHarness harness(nullptr, nullptr);
+    LaneDataDb db;
+
+    // The lane's standing statement: an edit made here, stamped 12:00.
+    const auto at = [](int hours) {
+        return std::chrono::system_clock::time_point{
+            std::chrono::seconds(1790337600 + hours * 3600)};
+    };
+    helix::ams::Observation mine(helix::ams::ObservationSource::LocalUser);
+    mine.color_rgb = 0x00FF00u;
+    mine.material = "PETG";
+    mine.edited_at = at(0);
+    helix::ams::commit_slot_edit(harness.lane(0), mine);
+
+    // Another tool replaced the record at 13:00 with its own identity.
+    db.seed("T0", nlohmann::json{{"lane", "0"},
+                                 {"color", "#ED2C2C"},
+                                 {"material", "PLA"},
+                                 {"scan_time", "2026-09-25T13:00:00Z"}});
+    ToolChangerTestAccess::inject_override_store(*harness, toolchanger_store(db));
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto lane = lane_sources(harness.lane(0));
+    REQUIRE(lane.local_user.has_value());
+    REQUIRE(lane.local_user->color_rgb.has_value());
+    CHECK(*lane.local_user->color_rgb == 0xED2C2Cu);
+    CHECK(lane.local_user->material == "PLA");
+    // The winning statement carries the record's stamp, so a later edit here
+    // displaces it and a later record elsewhere does too.
+    REQUIRE(lane.local_user->edited_at.has_value());
+    CHECK(*lane.local_user->edited_at == at(1));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "a resync keeps an outside record older than the lane's edit below it",
+                 "[lane][ingest][resync]") {
+    ToolChangerHarness harness(nullptr, nullptr);
+    LaneDataDb db;
+
+    const auto at = [](int hours) {
+        return std::chrono::system_clock::time_point{
+            std::chrono::seconds(1790337600 + hours * 3600)};
+    };
+    helix::ams::Observation mine(helix::ams::ObservationSource::LocalUser);
+    mine.color_rgb = 0x00FF00u;
+    mine.material = "PETG";
+    mine.edited_at = at(2);
+    helix::ams::commit_slot_edit(harness.lane(0), mine);
+
+    // Stamped 10:00, two hours before the edit standing on the lane.
+    db.seed("T0", nlohmann::json{{"lane", "0"},
+                                 {"color", "#ED2C2C"},
+                                 {"material", "PLA"},
+                                 {"scan_time", "2026-09-25T10:00:00Z"}});
+    ToolChangerTestAccess::inject_override_store(*harness, toolchanger_store(db));
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto lane = lane_sources(harness.lane(0));
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "PETG");
+    // The older record ranks below the lane's own edit, as a memory.
+    REQUIRE(lane.remembered.has_value());
+    CHECK(lane.remembered->material == "PLA");
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a resync promotes a record another tool left no stamp on",
+                 "[lane][ingest][resync]") {
+    // Mainsail and Orca write no scan_time. Their record still displaced ours
+    // in the namespace - our writes always carry one - so the absence of a
+    // stamp is itself the evidence theirs is the newer edit.
+    ToolChangerHarness harness(nullptr, nullptr);
+    LaneDataDb db;
+
+    helix::ams::Observation mine(helix::ams::ObservationSource::LocalUser);
+    mine.material = "PETG";
+    mine.edited_at = std::chrono::system_clock::time_point{std::chrono::seconds(1790337600)};
+    helix::ams::commit_slot_edit(harness.lane(0), mine);
+
+    db.seed("T0", nlohmann::json{{"lane", "0"}, {"material", "PLA"}});
+    ToolChangerTestAccess::inject_override_store(*harness, toolchanger_store(db));
+
+    harness->request_resync();
+    helix::ui::UpdateQueue::instance().drain();
+
+    const auto lane = lane_sources(harness.lane(0));
+    REQUIRE(lane.local_user.has_value());
+    CHECK(lane.local_user->material == "PLA");
+    CHECK_FALSE(lane.remembered.has_value());
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "AFC's resync consults its own echo guard",

@@ -119,6 +119,30 @@ void withdraw_cleared_fields(Observation& standing, const Observation& edit);
                                               const nlohmann::json& wire,
                                               LegacyLockKeys keys = LegacyLockKeys::LaneData);
 
+/// Whether @p wire is a document this application wrote, so a record that is
+/// not was written by another tool that replaced ours wholesale
+/// (prestonbrown/helixscreen#1632).
+///
+/// The question is provenance, not authorship of any one field: every build
+/// of this application has marked its lane_data records with helix_-prefixed
+/// keys, and no other writer emits the prefix, so a shared-namespace document
+/// carrying none of them can only be a foreign replacement. The local cache
+/// is this application's own file, so every record in it is ours whatever
+/// keys it carries.
+[[nodiscard]] bool wire_authored_by_helix(const nlohmann::json& wire,
+                                          LegacyLockKeys keys = LegacyLockKeys::LaneData);
+
+/// Whether a record another tool wrote displaces the statement standing on
+/// the lane. Newest edit wins whoever made it: a record stamped by its writer
+/// wins only when its stamp is past the statement's, one with no stamp wins
+/// outright because our writes always stamp and an unstampable record can
+/// only be a foreign write that replaced ours, and no statement standing
+/// leaves the record the only one anyone made.
+///
+/// Pure: no clock, no globals, no I/O.
+[[nodiscard]] bool outside_edit_wins(const FilamentSlotOverride& record,
+                                     const std::optional<Observation>& standing_user);
+
 /// The authorship of a record that amends @p prior with @p observed, where
 /// @p amended is the record about to be stored.
 ///

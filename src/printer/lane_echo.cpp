@@ -217,4 +217,9 @@ int OwnWriteEchoes::strip_standing(int slot_index, Observation& producer_record)
     return stripped;
 }
 
+bool OwnWriteEchoes::standing(int slot_index) const {
+    const auto it = entries_.find(slot_index);
+    return it != entries_.end() && it->second.armed;
+}
+
 } // namespace helix::ams

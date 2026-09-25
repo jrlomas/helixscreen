@@ -6,6 +6,7 @@
 #include "color_utils.h"
 #include "json_utils.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
@@ -495,6 +496,31 @@ Observation declared_from_record(const FilamentSlotOverride& record) {
     return obs;
 }
 
+bool wire_authored_by_helix(const nlohmann::json& wire, LegacyLockKeys keys) {
+    // The private cache is this application's own file: nothing else writes
+    // it, so every record in it is ours whatever keys it carries.
+    if (keys == LegacyLockKeys::LocalCache) {
+        return true;
+    }
+    // In the shared namespace the helix_ prefix is ours alone - no other
+    // writer emits it - so any key carrying it was written by some build of
+    // HelixScreen, whatever that build's authorship keys were. A document
+    // with none of them can only have replaced ours wholesale.
+    return std::any_of(wire.items().begin(), wire.items().end(),
+                       [](const auto& entry) { return entry.key().rfind("helix_", 0) == 0; });
+}
+
+bool outside_edit_wins(const FilamentSlotOverride& record,
+                       const std::optional<Observation>& standing_user) {
+    if (!standing_user.has_value() || !standing_user->edited_at.has_value()) {
+        return true;
+    }
+    if (record.updated_at.time_since_epoch().count() <= 0) {
+        return true;
+    }
+    return record.updated_at > *standing_user->edited_at;
+}
+
 LaneSources sources_from_record(const FilamentSlotOverride& record, const nlohmann::json& wire,
                                 LegacyLockKeys keys) {
     LaneSources sources;
@@ -567,6 +593,13 @@ LaneSources sources_from_record(const FilamentSlotOverride& record, const nlohma
     const bool has_declared = wire.contains(declared_key_name(keys));
     const bool legacy_declared = color_declared || declares_material(record);
 
+    // A record without our authorship keys was written by another tool that
+    // replaced ours in the namespace (prestonbrown/helixscreen#1632). Its
+    // identity is that tool's statement about the lane, not a memory of ours,
+    // so it files on the user's rung, where it resolves over firmware's cache
+    // and yields to whatever edit lands next.
+    const bool outside_statement = !wire_authored_by_helix(wire, keys);
+
     // Whether the user declared the field at roster position `index`. Colour
     // and material answer from their bits whatever the record's age, because
     // the parser already read an older record's lock keys into them; the rest
@@ -589,12 +622,13 @@ LaneSources sources_from_record(const FilamentSlotOverride& record, const nlohma
     bool have_remembered = false;
 
     if (record.color_set && is_declarable_color(record.color_rgb)) {
-        Observation& target = color_declared ? user : remembered;
+        const bool to_user = color_declared || outside_statement;
+        Observation& target = to_user ? user : remembered;
         target.color_rgb = record.color_rgb;
         if (!record.color_name.empty()) {
             target.color_name = record.color_name;
         }
-        (color_declared ? have_user : have_remembered) = true;
+        (to_user ? have_user : have_remembered) = true;
     }
     // Every remaining field whose source turns on who wrote it. The colour is
     // not among them: its row is walked above, together with the colour name
@@ -619,7 +653,7 @@ LaneSources sources_from_record(const FilamentSlotOverride& record, const nlohma
                 // cannot either.
                 return;
             }
-            const bool is_declared = declared_field(index);
+            const bool is_declared = declared_field(index) || outside_statement;
             Observation& target = is_declared ? user : remembered;
             target.*(f.obs) = value;
             (is_declared ? have_user : have_remembered) = true;
@@ -630,6 +664,11 @@ LaneSources sources_from_record(const FilamentSlotOverride& record, const nlohma
         have_user = true;
     }
 
+    // The statement carries the record's stamp when its writer left one, so
+    // the next edit - here or in another tool - is measured against it.
+    if (record.updated_at.time_since_epoch().count() > 0) {
+        user.edited_at = record.updated_at;
+    }
     if (have_user) {
         sources.apply(user);
     }
