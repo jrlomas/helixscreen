@@ -154,7 +154,7 @@ The Print Status panel shows:
 | **Cancel** | Stops print (confirmation required). By default, waits for the printer's cancel routine to finish. If **Cancel Escalation** is enabled in **Settings > Safety & Notifications**, an emergency stop triggers automatically after the configured timeout. |
 | **Tune** | Opens Print Tune overlay for real-time adjustments |
 
-**Files button.** While a print runs, a folder icon in the print screen's header opens the file list, so you can line up the next job without leaving the print view. Starting a print from there stays blocked until the current one ends - the Start button tells you so instead of starting a second job.
+**Files button.** While a print runs, a folder icon in the print screen's header opens the file list, so you can line up the next job without leaving the print view. A second print can never start while one runs; when your printer has a job queue, the button becomes **Add to Queue** instead (see [Queueing a Print](#queueing-a-print)).
 
 **Camera button.** If HelixScreen runs on a separate screen or device from the printer (see [Camera](camera.md)) and the printer has a webcam, the header also gains a **Camera** button that opens the full-screen webcam view. On the printer's own screen it stays hidden - you can already see the print.
 
@@ -178,6 +178,27 @@ If the print contains multiple objects, an **objects button** (a skip-objects ic
 If the Moonraker-Timelapse plugin is installed, a **timelapse button** appears in the print controls. Tap it to enable or disable recording for the current print. The button shows a camera icon and toggles between "On" and "Off" states.
 
 During printing, frame captures happen automatically based on your timelapse settings (per-layer or time-based). When the print finishes, the video renders automatically if auto-render is enabled.
+
+---
+
+## Queueing a Print
+
+You don't have to wait for a print to end before picking the next one. While a print is running - or still preparing, before its first layer - open any file and its **Print** button becomes **Add to Queue**, marked with a clock icon. A toast confirms the job's position ("Added to queue (position 2)").
+
+- The pre-print options you set on that screen (bed mesh, nozzle cleaning and so on) are saved with the queued job and come back when the job starts.
+- The filament mapping is not saved: it is worked out again when the job actually starts, against the filament loaded at that moment.
+
+**Where to see the queue:**
+
+- the **Up next** line on the print status screen while a print runs, and on the home print card ("Up next: benchy (+2)" when more jobs follow). Tapping it while a print runs opens the Job Queue.
+- the **Job Queue** itself (see [Home Panel - Job Queue Manager](home-panel.md#job-queue-manager)).
+
+**Starting the next job:**
+
+- When a print finishes, the completion dialog offers a **Start next** button whenever the queue has jobs.
+- When the printer is idle, tap the **Up next** line or a job in the Job Queue. The file opens in the file view with your saved options already set - check that the bed is clear, then tap **Print**. The job leaves the queue only once the print actually starts, so backing out of the file view leaves it queued for later.
+
+> **Note:** The queue is Moonraker's `[job_queue]` component. Without it in `moonraker.conf`, the button stays a disabled **Print**. If you set `automatic_transition: True` there, Moonraker starts queued jobs itself as each print finishes - HelixScreen is not involved in that start, so the options card is hidden while queueing and your options are not applied.
 
 ---
 

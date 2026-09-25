@@ -124,6 +124,20 @@ what gets saved.
 - **Power-loss recovery works on Qidi printers (#1716)** - on a Q2, Q1 Pro or Plus 4 running
   the stock firmware, the resume dialog now appears after a print was cut short by a power
   loss, offering the printer's own `RESUME_INTERRUPTED` flow or a clean discard.
+- **A print can be queued while another one runs** - while a job prints, or is still
+  preparing before its first layer, the file view's Print button becomes Add to Queue with
+  a clock icon, and a toast confirms the job's position. The pre-print options you set are
+  saved with the queued job and come back when it starts; the filament mapping is not
+  saved, it is worked out when the job starts. Needs Moonraker's `[job_queue]` component;
+  with `automatic_transition: True` in `moonraker.conf` the options card is hidden while
+  queueing, because Moonraker starts queued jobs itself.
+- **The queue is visible while a print runs, and starting the next job is one tap** - an
+  "Up next: name (+N)" line on the print status screen and the home print card names the
+  first queued job; tapping it mid-print opens the Job Queue. The completion dialog gains
+  a **Start next** button. Tapping the line, that button or a queue row while the printer
+  is idle opens the file in the file view with its saved options already set - check the
+  bed is clear, tap Print, and the job leaves the queue only once the print actually
+  starts.
 
 ### Changed
 
@@ -261,6 +275,12 @@ what gets saved.
 - **Tapping Done on a later home page slid back to the first page** (#1638) - leaving edit mode
   with a second or later page showing scrolled the home screen back to its first page. The page
   you were on stays on screen, and pages change only when you swipe or tap a page arrow.
+- **Starting a job from the Job Queue skipped the normal print checks** - a tap removed the
+  job from the queue and started the file directly, bypassing the pre-print options, the
+  filament mapping and every start gate, and it did nothing without a notice whenever a
+  print was still preparing or running. A queued job now opens in the file view with its
+  saved options and goes through the same start pipeline as any other print; it leaves the
+  queue only once the print has actually started, and a busy printer says so.
 
 ### Internal
 

@@ -482,8 +482,8 @@ Tap the **Job Queue** widget to open the queue manager — a full-screen modal f
 
 At the top, you'll see the current queue state:
 
-- **Queue: Ready** — the queue is active and will auto-print jobs in order
-- **Queue: Paused** — the queue is paused; queued jobs won't start automatically
+- **Queue: Ready** - the queue is active. It starts jobs in order by itself only if Moonraker's `automatic_transition` is enabled in `moonraker.conf`; otherwise you start each one (see [Printing - Queueing a Print](printing.md#queueing-a-print))
+- **Queue: Paused** - the queue is paused; queued jobs won't start automatically
 
 Tap the **Start** or **Pause** button to toggle the queue state.
 
@@ -496,7 +496,9 @@ Below the state indicator, all queued jobs are listed with:
 
 ### Actions
 
-**Start a print:** Tap any job in the list to start it. The start only goes through when the printer is genuinely free — not just finished with the last print, but also not busy starting one (the heating, homing, and leveling before the first layer count as busy). While a job is preparing or printing, the tap is ignored and the job stays in the queue. There's no on-screen notice when this happens, so if tapping a job does nothing, check whether a print is still preparing or running, and try again once it's done.
+**Open a job:** Tap any job in the list to open it in the file view with the pre-print options it was queued with already set. Check that the bed is clear, then tap **Print** - the job leaves the queue only once the print actually starts, so backing out of the file view leaves it queued. The tap only goes through when the printer is genuinely free - not just finished with the last print, but also not busy starting one (the heating, homing, and leveling before the first layer count as busy). While a job is preparing or printing, the job stays in the queue and a notice tells you so; try again once the printer is free.
+
+Jobs queued from HelixScreen's file view carry their saved options; jobs queued from another interface open with their default options. See [Printing - Queueing a Print](printing.md#queueing-a-print).
 
 **Delete a job:** Tap the **trash icon** on the right side of any job row. The job is immediately removed from the queue.
 
