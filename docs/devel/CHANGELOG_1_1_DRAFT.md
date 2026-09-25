@@ -127,10 +127,11 @@ what gets saved.
 - **FlashForge Creator 5 and Creator 5 Pro are supported printers (#1714)** - both models of
   FlashForge's four-head tool changer are recognized and given their own settings, on either
   of the two firmwares that replace its stock software: Z-Mod and Reforge. Mounting and
-  parking a head is driven from the screen, and on Z-Mod each head's material and colour are
-  read from the printer itself. Z-Mod still owes an update that reports the mounted head and
-  its colours live; until it ships, those details appear after the first head change. All of
-  this is verified against a simulated printer, not yet on the hardware.
+  parking a head is driven from the screen. Reading each head's material and colour from the
+  printer, and showing the mounted head at boot, both need Z-Mod's pending status update:
+  until it ships, a Z-Mod machine reports a dock sensor error at boot until its first tool
+  change, and colour or material edits stay on the screen instead of being saved to the
+  printer. All of this is verified against a simulated printer, not yet on the hardware.
 
 ### Changed
 
