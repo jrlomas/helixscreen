@@ -92,6 +92,7 @@ TEST_CASE("The Z-Mod C5 persona reports Z-Mod's objects", "[mock][creator5][zmod
     const helix::PrinterDiscovery hw = mock.hardware();
     REQUIRE(helix::toolchanger_addon::present(hw));
     CHECK(helix::toolchanger_addon::machine_name(hw) == "Creator 5 Pro");
+    CHECK(helix::toolchanger_addon::resolve_material_source(hw).present);
     CHECK_FALSE(hw.has_tool_changer());
     CHECK(hw.tool_names().size() == 4);
 }
