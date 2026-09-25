@@ -214,10 +214,13 @@ void AmsSubscriptionBackend::request_resync() {
                     // stands there (prestonbrown/helixscreen#1632):
                     // it files on the user's rung, where it
                     // resolves over firmware's cache and yields to
-                    // whatever edit lands next. Anything else keeps
-                    // filing as remembered, below whatever a person
-                    // said.
+                    // whatever edit lands next. A record the
+                    // backend's own firmware plugin wrote is a
+                    // reading, not an edit, and keeps filing as
+                    // remembered; anything else does too, below
+                    // whatever a person said.
                     if (!write_in_flight && !helix::ams::wire_authored_by_helix(entry.wire) &&
+                        !helix::ams::wire_authored_by_firmware(entry.wire) &&
                         helix::ams::outside_edit_wins(entry.record,
                                                       helix::ams::lane_sources(lane).local_user)) {
                         obs.source = helix::ams::ObservationSource::LocalUser;

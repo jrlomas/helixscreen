@@ -482,6 +482,39 @@ TEST_CASE_METHOD(HelixTestFixture,
     CHECK_FALSE(theirs.remembered.has_value());
 }
 
+TEST_CASE_METHOD(HelixTestFixture,
+                 "A record AFC's own plugin wrote is firmware, not an outside edit",
+                 "[lane][migration]") {
+    // send_lane_data writes the lane's record with its own bookkeeping keys
+    // (td, lane, extruder_index) and scan_time = the TD-1's scan time, ""
+    // without a TD-1. Both spellings must file as readings, never as the
+    // lane's statement: the empty one would win the promotion outright, and
+    // the scan-time one would win it whenever a rescan landed after the
+    // user's edit, even though a scan clock is not an edit clock.
+    using helix::ams::from_lane_data_record;
+    using helix::ams::sources_from_record;
+
+    const auto plugin_record = [](const char* scan_time) {
+        return nlohmann::json{{"lane", 0},           {"td", "1"},
+                              {"extruder_index", 0}, {"color", "#ED2C2C"},
+                              {"material", "PLA"},   {"bed_temp", 60},
+                              {"nozzle_temp", 210},  {"spool_id", nullptr},
+                              {"weight", 1000},      {"scan_time", scan_time}};
+    };
+
+    for (const char* scan_time : {"", "2026-09-25T13:00:00Z"}) {
+        const nlohmann::json wire = plugin_record(scan_time);
+        const auto parsed = from_lane_data_record(wire);
+        REQUIRE(parsed.has_value());
+
+        const auto sources = sources_from_record(parsed->second, wire, LegacyLockKeys::LaneData);
+        CHECK_FALSE(sources.local_user.has_value());
+        REQUIRE(sources.remembered.has_value());
+        CHECK(sources.remembered->color_rgb == 0xED2C2Cu);
+        CHECK(sources.remembered->material == "PLA");
+    }
+}
+
 TEST_CASE("An outside record displaces only a statement it is newer than", "[lane][migration]") {
     using helix::ams::outside_edit_wins;
 

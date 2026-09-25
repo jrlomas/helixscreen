@@ -134,6 +134,19 @@ void withdraw_cleared_fields(Observation& standing, const Observation& edit);
 [[nodiscard]] bool wire_authored_by_helix(const nlohmann::json& wire,
                                           LegacyLockKeys keys = LegacyLockKeys::LaneData);
 
+/// Whether @p wire is a lane_data document a firmware plugin wrote, as
+/// opposed to another tool's edit. A plugin that co-authors the namespace
+/// (AFC's send_lane_data) stamps its records with its own bookkeeping keys
+/// (`extruder_index`, `td`, the 0-based `lane`), which no third-party tool
+/// emits, and carries the shared identity spellings (`vendor_name`, `name`)
+/// not at all: a document shaped this way is the firmware stating what it
+/// measured, so it files as a reading, never as the lane's newest statement.
+/// Without this, a plugin record that replaced ours (no helix keys) would
+/// promote to the user's rung - outright when its scan_time is empty, and on
+/// merit of the scan clock when it is not, which is a measurement time, not
+/// an edit time (prestonbrown/helixscreen#1632).
+[[nodiscard]] bool wire_authored_by_firmware(const nlohmann::json& wire);
+
 /// A stamp older than this names no real moment: a device without an RTC
 /// reads 1970 (or its build date) until NTP reaches it, so a statement we
 /// stamped on such a clock cannot be ordered against a foreign record's real
@@ -143,15 +156,10 @@ inline constexpr std::chrono::system_clock::time_point k_unknown_stamp_before =
 
 /// Whether a record another tool wrote displaces the statement standing on
 /// the lane. Newest edit wins whoever made it: a record stamped by its writer
-/// wins only when its stamp is past the statement's, one with no stamp wins
+/// wins only when its stamp is past the statement's; one with no stamp wins
 /// outright because our writes always stamp and an unstampable record can
-/// only be a foreign write that replaced ours, and no statement standing
-/// leaves the record the only one anyone made.
-/// Newest edit wins whoever made it: a record stamped by its writer wins only
-/// when its stamp is past the statement's; one with no stamp wins outright
-/// because our writes always stamp and an unstampable record can only be a
-/// foreign write that replaced ours; no statement standing leaves the record
-/// the only one anyone made; and a statement stamped below
+/// only be a foreign write that replaced ours; no statement standing leaves
+/// the record the only one anyone made; and a statement stamped below
 /// k_unknown_stamp_before cannot be ordered at all, so it keeps the lane
 /// rather than losing it to a record whose claim to be newer is unfalsifiable.
 ///

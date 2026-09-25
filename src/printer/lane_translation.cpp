@@ -496,6 +496,15 @@ Observation declared_from_record(const FilamentSlotOverride& record) {
     return obs;
 }
 
+bool wire_authored_by_firmware(const nlohmann::json& wire) {
+    // AFC's plugin writes each lane's record itself (AFC_lane.py
+    // send_lane_data): colour, material, temps, weight, spool_id and its own
+    // bookkeeping keys - td, lane and extruder_index, which no third-party
+    // tool emits - under the shared identity spellings not at all. A document
+    // shaped this way is the firmware stating what it measured.
+    return wire.contains("extruder_index") && wire.contains("td") && !wire.contains("vendor_name");
+}
+
 bool wire_authored_by_helix(const nlohmann::json& wire, LegacyLockKeys keys) {
     // The private cache is this application's own file: nothing else writes
     // it, so every record in it is ours whatever keys it carries.
@@ -612,8 +621,11 @@ LaneSources sources_from_record(const FilamentSlotOverride& record, const nlohma
     // replaced ours in the namespace (prestonbrown/helixscreen#1632). Its
     // identity is that tool's statement about the lane, not a memory of ours,
     // so it files on the user's rung, where it resolves over firmware's cache
-    // and yields to whatever edit lands next.
-    const bool outside_statement = !wire_authored_by_helix(wire, keys);
+    // and yields to whatever edit lands next. A record the backend's own
+    // firmware plugin wrote is the opposite case: a reading, not an edit, so
+    // it stays on the remembered rung however its scan_time compares.
+    const bool outside_statement =
+        !wire_authored_by_helix(wire, keys) && !wire_authored_by_firmware(wire);
 
     // Whether the user declared the field at roster position `index`. Colour
     // and material answer from their bits whatever the record's age, because
