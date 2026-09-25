@@ -126,6 +126,20 @@ TEST_CASE("config_trust: update_urls.json must be a JSON object", "[config-trust
     REQUIRE(urls.dev_url.empty());
 }
 
+TEST_CASE("config_trust: non-string URL fields are ignored", "[config-trust][update]") {
+    StateDirGuard guard;
+    guard.write("{\"r2_url\": 1, \"dev_url\": true}", 0644);
+    helix::config_trust::UpdateUrls urls = helix::config_trust::read_update_urls();
+    REQUIRE(urls.r2_url.empty());
+    REQUIRE(urls.dev_url.empty());
+
+    // A valid field beside a wrong-typed one still reads.
+    guard.write("{\"r2_url\": 1, \"dev_url\": \"https://dev.example.com\"}", 0644);
+    urls = helix::config_trust::read_update_urls();
+    REQUIRE(urls.r2_url.empty());
+    REQUIRE(urls.dev_url == "https://dev.example.com");
+}
+
 TEST_CASE_METHOD(HelixTestFixture, "UpdateChecker: settings.json r2_url is ignored",
                  "[config-trust][update]") {
     StateDirGuard guard;

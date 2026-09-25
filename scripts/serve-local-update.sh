@@ -275,8 +275,8 @@ echo "  Size:   ${TARBALL_SIZE} bytes"
 # ── Configure remote device ────────────────────────────────────────────────────
 if [[ $CONFIGURE_REMOTE -eq 1 ]]; then
     echo "[serve-local-update] Configuring ${USERNAME}@${PRINTER} ..."
-    ssh "${USERNAME}@${PRINTER}" "python3 -c \"
-import json, os, re
+    REMOTE_PY_OUT="$(ssh "${USERNAME}@${PRINTER}" "python3 -c \"
+import json, os, re, tempfile
 
 # Select the dev channel in settings.json. The dev URL itself lives in the
 # root-owned /var/lib/helixscreen/update_urls.json installed below: settings.json
@@ -299,12 +299,14 @@ with open(path, 'w') as f:
     json.dump(data, f, indent=2)
 print('  update/channel =', data['update']['channel'], '(dev)')
 
-# Stage the trusted override; the sudo install after this ssh drops places it
-# root-owned where config_trust accepts it.
-override = '/tmp/helixscreen-update-urls.json'
-with open(override, 'w') as f:
+# Stage the trusted override under an unpredictable name; the sudo install in
+# the next ssh drops places it root-owned where config_trust accepts it. A
+# fixed /tmp name would let another local user pre-plant or symlink the path
+# between this write and the install.
+_fd, override = tempfile.mkstemp(prefix='helixscreen-update-urls.', suffix='.json', dir='/tmp')
+with os.fdopen(_fd, 'w') as f:
     json.dump({'dev_url': '${BASE_URL}/'}, f)
-print('  staged', override, '(installed to /var/lib/helixscreen next)')
+print('STAGED_OVERRIDE=' + override)
 
 # Enable HELIX_LOG_LEVEL=debug in helixscreen.env (enables debug logging via launcher).
 # Launcher checks INSTALL_DIR/config/ first, then /etc/helixscreen/.
@@ -337,12 +339,21 @@ content = re.sub(r'^#?\s*HELIX_DEBUG=.*\n?', '', content, flags=re.MULTILINE)
 content = content.rstrip('\n') + '\nHELIX_LOG_LEVEL=debug\n'
 open(env_path, 'w').write(content)
 print('  HELIX_LOG_LEVEL=debug  (debug logging enabled in', env_path + ')')
-\""
+\"" 2>&1)"
+    echo "$REMOTE_PY_OUT"
+    # The python above stages the override under an unpredictable mkstemp name
+    # and prints it as STAGED_OVERRIDE=<path>; carry it into the sudo install
+    # below rather than a fixed /tmp path another user could pre-plant.
+    STAGED_OVERRIDE="$(printf '%s\n' "$REMOTE_PY_OUT" | sed -n 's/^STAGED_OVERRIDE=//p')"
+    if [[ -z "$STAGED_OVERRIDE" ]]; then
+        echo "  ERROR: remote setup failed before staging update_urls.json"
+        exit 1
+    fi
     echo ""
     # The state dir must exist and stay owner-locked (755 root:root); a
     # group/world-writable parent makes the app refuse the override file.
     echo "[serve-local-update] Installing update_urls.json (root-owned, 644) on ${USERNAME}@${PRINTER} ..."
-    ssh "${USERNAME}@${PRINTER}" "sudo mkdir -p /var/lib/helixscreen && sudo chmod 755 /var/lib/helixscreen && sudo install -o root -g root -m 644 /tmp/helixscreen-update-urls.json /var/lib/helixscreen/update_urls.json && rm -f /tmp/helixscreen-update-urls.json"
+    ssh "${USERNAME}@${PRINTER}" "sudo mkdir -p /var/lib/helixscreen && sudo chmod 755 /var/lib/helixscreen && sudo install -o root -g root -m 644 '$STAGED_OVERRIDE' /var/lib/helixscreen/update_urls.json && rm -f '$STAGED_OVERRIDE'"
     echo "  dev_url = ${BASE_URL}/  (in /var/lib/helixscreen/update_urls.json)"
     echo ""
     echo "[serve-local-update] Copying install.sh to /tmp/ on ${USERNAME}@${PRINTER} ..."

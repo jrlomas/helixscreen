@@ -100,8 +100,21 @@ UpdateUrls read_update_urls() {
         spdlog::warn("[ConfigTrust] {} is not a valid JSON object - ignoring", path);
         return urls;
     }
-    urls.r2_url = j.value("r2_url", std::string{});
-    urls.dev_url = j.value("dev_url", std::string{});
+    // A wrong-typed entry ({"r2_url": 1}) must be ignored like any other
+    // misconfiguration, not throw json::type_error up through the caller.
+    const auto url_field = [&j, &path](const char* key) {
+        const auto it = j.find(key);
+        if (it == j.end()) {
+            return std::string{};
+        }
+        if (!it->is_string()) {
+            spdlog::warn("[ConfigTrust] {} field {} is not a string - ignoring it", path, key);
+            return std::string{};
+        }
+        return it->get<std::string>();
+    };
+    urls.r2_url = url_field("r2_url");
+    urls.dev_url = url_field("dev_url");
     return urls;
 }
 
