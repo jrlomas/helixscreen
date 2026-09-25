@@ -125,9 +125,11 @@ HelixScreen data root". `HELIX_DATA_DIR` overrides the lookup.
 (preset `assets/config/presets/creator5_pro.json`, rotate 90) and `flashforge_creator_5`
 (preset `assets/config/presets/creator5.json`, rotate 90, no chamber heater or chamber
 fans). The chamber heater separates the models the way the chamber light separates the
-AD5M pair: the Pro identifies on `heater_generic chamber_heater` and requires it once
-objects are reported, while the Creator 5 excludes on its presence, so each model wins
-its own machine. Two firmware families run on this hardware: the FlashForge fork (K4C5,
+AD5M pair: the Pro requires `heater_generic chamber_heater` once objects are reported,
+while the Creator 5 excludes on its presence, so exactly one entry can score on a given
+machine. The heater carries no confidence of its own: its config name is shared with
+other enclosed printers (the K2 Plus ships one), so on its own it would name the Pro on
+hardware that is not a Creator 5 at all. Two firmware families run on this hardware: the FlashForge fork (K4C5,
 with `ff_*` printer objects) and Z-Mod (`ghzserg/z_c5pro`, no `ff_*` objects but
 `gcode_button extruder_grab1..4`). The family fingerprints are shared across both
 entries: `ff_toolchange` names the K4C5 firmware, `gcode_button extruder_grab1` names
@@ -198,8 +200,8 @@ Each item below says whether it is done or still open.
    says otherwise).
 5. **Detection + preset** (done): `printer_database.json` entries
    `flashforge_creator_5_pro` (fingerprint: `ff_toolchange` / `gcode_button
-   extruder_grab1`, 4 extruders, `heater_generic chamber_heater`) and
-   `flashforge_creator_5` for the heater-free model (same fingerprints, excluding the
+   extruder_grab1`, 4 extruders, requires `heater_generic chamber_heater`) and
+   `flashforge_creator_5` for the heater-free model (same fingerprints, excluding on the
    chamber heater). Presets: `creator5_pro.json` (4 hotends, chamber heater,
    part/chamber fans, LED, `fd_ex*` switches with runout off, rotate 90) and
    `creator5.json` (the same minus the chamber heater and chamber fans). Without the

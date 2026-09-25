@@ -815,18 +815,11 @@
           "reason": "Exclude AD5X Z-Mod IFS (object form of the SET_EXTRUDER_SLOT macro exclude)"
         },
         {
-          "type": "object_exists",
-          "field": "printer_objects",
-          "pattern": "heater_generic chamber_heater",
-          "confidence": 92,
-          "reason": "The chamber heater names the Pro inside the Creator 5 line"
-        },
-        {
           "type": "object_required",
           "field": "printer_objects",
           "pattern": "heater_generic chamber_heater",
           "confidence": 0,
-          "reason": "The chamber heater is the only hardware that separates a Creator 5 Pro from a Creator 5; a machine reporting none is a Creator 5"
+          "reason": "The chamber heater is the only hardware that separates a Creator 5 Pro from a Creator 5; a machine reporting none is a Creator 5, and the name itself is shared with other enclosed printers so it never scores on its own"
         }
       ],
       "toolhead_style": "default"

@@ -5203,6 +5203,43 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
     REQUIRE(result.margin() >= PrinterDetector::DETECT_MIN_MARGIN);
 }
 
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: a chamber heater alone is not a Creator 5 Pro",
+                 "[printer][heuristics][creator5]") {
+    // 'heater_generic chamber_heater' is a config name any enclosed printer can
+    // carry: the K2 Plus ships one and custom builds name theirs exactly this
+    // way. Inside the Creator 5 line the heater separates the two models through
+    // the required/exclude pair; outside that line it must not identify the Pro.
+    // "Creator 5" is a substring of "Creator 5 Pro", so one find() covers both
+    // entries as winner and as runner-up.
+    SECTION("A hostname-less Voron Trident rig with a chamber heater") {
+        PrinterHardwareData hardware = printer_capture("voron_trident_tzt85mq3");
+        hardware.hostname = "";
+        hardware.heaters.push_back("heater_generic chamber_heater");
+        hardware.printer_objects.push_back("heater_generic chamber_heater");
+
+        auto result = PrinterDetector::detect(hardware);
+        CAPTURE(result.type_name, result.confidence, result.runner_up_type_name,
+                result.runner_up_confidence, result.margin(), result.tied_count);
+
+        REQUIRE(result.type_name == "Voron Trident");
+        REQUIRE(result.type_name.find("Creator 5") == std::string::npos);
+        REQUIRE(result.runner_up_type_name.find("Creator 5") == std::string::npos);
+    }
+
+    SECTION("The K2 Plus capture carries motor_control and a chamber heater") {
+        PrinterHardwareData hardware = printer_capture("creality_k2_plus");
+
+        auto result = PrinterDetector::detect(hardware);
+        CAPTURE(result.type_name, result.confidence, result.runner_up_type_name,
+                result.runner_up_confidence, result.margin(), result.tied_count);
+
+        REQUIRE(result.type_name == "Creality K2 Plus");
+        REQUIRE(result.type_name.find("Creator 5") == std::string::npos);
+        REQUIRE(result.runner_up_type_name.find("Creator 5") == std::string::npos);
+    }
+}
+
 TEST_CASE_METHOD(
     PrinterDetectorFixture,
     "PrinterDetector: AD5X with chamber LED and generic hostname detects as AD5X, not AD5M Pro",
