@@ -11,6 +11,7 @@
 #include "chamber_heater_backend.h"
 #include "gcode_parser.h"
 #include "macro_param_cache.h"
+#include "mock_persona.h"
 #include "moonraker_client_mock_internal.h"
 #include "power_device_state.h"
 #include "printer_state.h"
@@ -1531,7 +1532,7 @@ bool MoonrakerClientMock::mock_toolchanger_selected() {
 
 bool MoonrakerClientMock::mock_hardware_persona() {
     const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
-    return printer_env && std::string(printer_env) == "creator5_zmod";
+    return printer_env && helix::mock::is_hardware_persona(printer_env);
 }
 
 bool MoonrakerClientMock::is_mock_toolchanger() const {

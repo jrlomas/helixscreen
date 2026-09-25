@@ -7,6 +7,7 @@
 #include "config.h"
 #include "helix_version.h"
 #include "logging_init.h"
+#include "mock_persona.h"
 #include "runtime_config.h"
 #include "theme_manager.h"
 
@@ -749,10 +750,11 @@ bool parse_cli_args(int argc, char** argv, CliArgs& args, int& screen_width, int
                              mode);
             }
         } else if (const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
-                   printer_env && ascii_lower(printer_env) == "creator5_zmod") {
+                   printer_env && helix::mock::is_hardware_persona(printer_env)) {
             config.use_real_ams = true;
-            spdlog::info("[CLI] HELIX_MOCK_PRINTER=creator5_zmod implies --real-ams (mock "
-                         "hardware, real tool-changer backend)");
+            spdlog::info("[CLI] HELIX_MOCK_PRINTER={} implies --real-ams (mock "
+                         "hardware, real tool-changer backend)",
+                         printer_env);
         }
     }
 
