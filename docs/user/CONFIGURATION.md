@@ -347,6 +347,7 @@ Located in the `display` section:
     "bed_mesh_render_mode": 0,
     "bed_mesh_show_zero_plane": true,
     "page_scroll_buttons": false,
+    "speed_flow_physical_units": false,
     "ui_scale_percent": 0,
     "printer_image": ""
   }
@@ -507,6 +508,11 @@ The mode can be overridden per launch without touching settings. Precedence is c
 **Type:** boolean
 **Default:** `false`
 **Description:** Show up/down scroll buttons on long lists throughout the app. Useful on small screens or displays where drag-to-scroll feels unresponsive. See [Display & Sound Settings](guide/settings/display-sound.md#scroll-buttons) for details.
+
+### `speed_flow_physical_units`
+**Type:** boolean
+**Default:** `false`
+**Description:** Show speed and flow as the live toolhead speed in mm/s and the live volumetric flow in mm³/s instead of percentages, on the Print Status screen and as the leading value in the Print Tune overlay. Tapping the Speed / Flow line on Print Status, or either readout in the Tune overlay, flips it. See [Print Tune Overlay](guide/printing.md#print-tune-overlay).
 
 ### `ui_scale_percent`
 **Type:** integer
@@ -2034,6 +2040,7 @@ Environment="HELIX_TOUCH_DEVICE=/dev/input/event0"
     "bed_mesh_render_mode": 0,
     "bed_mesh_show_zero_plane": true,
     "page_scroll_buttons": false,
+    "speed_flow_physical_units": false,
     "printer_image": ""
   },
 

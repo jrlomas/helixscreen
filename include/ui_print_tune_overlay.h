@@ -196,10 +196,10 @@ class PrintTuneOverlay : public OverlayBase {
   private:
     void init_subjects_internal();
     void setup_panel();
+    /// Renders the speed/flow headlines and their live readouts, led by
+    /// whichever units the speed/flow preference picks.
     void update_display();
     void sync_to_state();
-    void update_actual_speed_display();
-    void update_actual_flow_display();
 
     //
     // === Dependencies ===
@@ -246,8 +246,8 @@ class PrintTuneOverlay : public OverlayBase {
     lv_subject_t tune_actual_flow_subject_;
 
     // Subject storage buffers
-    char tune_speed_buf_[16] = "100%";
-    char tune_flow_buf_[16] = "100%";
+    char tune_speed_buf_[32] = "100%";
+    char tune_flow_buf_[32] = "100%";
     char tune_z_offset_buf_[16] = "0.000mm";
     char z_closer_icon_buf_[24] = "arrow_down";
     char z_farther_icon_buf_[24] = "arrow_up";
@@ -284,9 +284,10 @@ class PrintTuneOverlay : public OverlayBase {
     ObserverGuard speed_observer_;
     ObserverGuard tools_version_observer_;
     ObserverGuard active_tool_observer_;
-    ObserverGuard gcode_speed_observer_;
+    ObserverGuard live_velocity_observer_;
     ObserverGuard max_velocity_observer_;
     ObserverGuard extruder_vel_observer_;
+    ObserverGuard units_observer_;
 
     //
     // === Modals ===

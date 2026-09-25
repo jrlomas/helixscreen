@@ -1158,6 +1158,11 @@ class PrinterState {
     lv_subject_t* get_live_extruder_velocity_subject() {
         return motion_state_.get_live_extruder_velocity_subject();
     }
+    /// Measured toolhead speed in mm/s. Unlike the commanded gcode speed it
+    /// falls to 0 when the toolhead stops.
+    lv_subject_t* get_live_velocity_subject() {
+        return motion_state_.get_live_velocity_subject();
+    }
     lv_subject_t* get_fan_speed_subject() {
         return fan_state_.get_fan_speed_subject();
     }
