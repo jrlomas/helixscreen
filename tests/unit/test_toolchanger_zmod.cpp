@@ -4,6 +4,7 @@
 #include "lane_source_store.h"
 #include "printer_discovery.h"
 #include "test_helpers/registered_backend.h"
+#include "test_helpers/toolchanger_test_access.h"
 #include "toolchanger_addon.h"
 
 #include "../catch_amalgamated.hpp"
@@ -334,7 +335,9 @@ TEST_CASE("Before the firmware publishes slots an edit stays local",
 
 TEST_CASE("An unsafe type is refused", "[toolchanger][zmod][material][write]") {
     helix::ams::reset_lane_sources();
-    ToolChangerHelper tc(4);
+    // Registered, because the refusal must also leave the lane model untouched.
+    helix::test::RegisteredBackend<ToolChangerHelper> tc_reg(4);
+    ToolChangerHelper& tc = *tc_reg;
     wire_zmod(tc);
     wire_material_source(tc);
     json frame = full_zmod_color_frame();
@@ -344,7 +347,39 @@ TEST_CASE("An unsafe type is refused", "[toolchanger][zmod][material][write]") {
     const SlotInfo before = tc.get_system_info().units[0].slots[0];
     auto err = tc.commit_user_edit(0, before, edited(tc, 0, 0xF72224, "PLA;M112"));
     CHECK_FALSE(err.success());
+    CHECK_FALSE(err.partially_applied);
     CHECK(zcolor_sends(tc) == 0);
+    // The refusal changes nothing: the slot keeps the firmware reading and no
+    // override is staged anywhere.
+    const SlotInfo after = tc.get_system_info().units[0].slots[0];
+    CHECK(after.material == before.material);
+    CHECK(after.color_rgb == before.color_rgb);
+    CHECK_FALSE(ToolChangerTestAccess::has_overrides(tc));
+    CHECK_FALSE(helix::ams::lane_sources(tc.lane_id(0)).local_user.has_value());
+}
+
+TEST_CASE("A failed firmware write still declares the rest of the edit",
+          "[toolchanger][zmod][material][write]") {
+    helix::ams::reset_lane_sources();
+    helix::test::RegisteredBackend<ToolChangerHelper> tc_reg(4);
+    ToolChangerHelper& tc = *tc_reg;
+    wire_zmod(tc);
+    wire_material_source(tc);
+    tc.feed(full_zmod_color_frame());
+
+    SlotInfo info = edited(tc, 0, 0xF72224, "ABS");
+    info.brand = "Polymaker";
+    const SlotInfo before = tc.get_system_info().units[0].slots[0];
+    tc.set_fail_gcode(true);
+    auto err = tc.commit_user_edit(0, before, info);
+    CHECK_FALSE(err.success());
+    // The colour and material reached everything but the firmware; the brand
+    // is still the user's statement and must be declared on the lane.
+    CHECK(err.partially_applied);
+    CHECK(zcolor_sends(tc) == 1);
+    auto user = helix::ams::lane_sources(tc.lane_id(0)).local_user;
+    REQUIRE(user.has_value());
+    CHECK(user->brand == std::optional<std::string>("Polymaker"));
 }
 
 TEST_CASE("A slots-only frame keeps the latched palette and types",

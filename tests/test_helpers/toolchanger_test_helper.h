@@ -36,13 +36,24 @@ class ToolChangerHelper : public AmsBackendToolChanger {
 
     AmsError execute_gcode(const std::string& gcode) override {
         sent_.push_back(gcode);
+        if (fail_gcode_) {
+            return AmsErrorHelper::command_failed(gcode, "simulated send failure");
+        }
         return AmsErrorHelper::success();
     }
 
     AmsError execute_gcode(const std::string& gcode, std::function<void()> on_complete) override {
         sent_.push_back(gcode);
         (void)on_complete;
+        if (fail_gcode_) {
+            return AmsErrorHelper::command_failed(gcode, "simulated send failure");
+        }
         return AmsErrorHelper::success();
+    }
+
+    /// Make every subsequent execute_gcode() fail, to exercise the error legs.
+    void set_fail_gcode(bool fail) {
+        fail_gcode_ = fail;
     }
 
     void feed(const json& status) {
@@ -60,6 +71,7 @@ class ToolChangerHelper : public AmsBackendToolChanger {
 
   private:
     std::vector<std::string> sent_;
+    bool fail_gcode_ = false;
 };
 
 } // namespace helix::test
