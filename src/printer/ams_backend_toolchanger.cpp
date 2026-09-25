@@ -7,6 +7,7 @@
 #include "ams_fault_event.h"
 #include "ams_state.h"
 #include "ams_tool_map_sync.h"
+#include "color_utils.h"
 #include "i_moonraker_api.h"
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
@@ -737,6 +738,13 @@ std::optional<std::vector<std::string>> AmsBackendToolChanger::get_supported_mat
     return firmware_valid_types_;
 }
 
+bool AmsBackendToolChanger::firmware_stores_color_and_material(int slot_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return material_source_.present && material_source_.write_gcode && firmware_slots_seen_ &&
+           firmware_palette_ && !firmware_palette_->empty() && slot_index >= 0 &&
+           slot_index < static_cast<int>(tool_names_.size());
+}
+
 void AmsBackendToolChanger::parse_toolchanger_state(const nlohmann::json& tc_data) {
     // Parse status: toolchanger.status
     // Values: "ready", "changing", "error", "uninitialized"
@@ -1294,6 +1302,9 @@ void write_filament_fields(SlotInfo& slot, const SlotInfo& info) {
 AmsError AmsBackendToolChanger::apply_user_edit(int slot_index, const SlotInfo& info,
                                                 const helix::ams::Observation& declared) {
     std::string physical_tool_name;
+    bool firmware_edit = false;
+    std::vector<std::pair<int, std::uint32_t>> palette;
+    std::string (*write_gcode)(int, const std::string&, std::uint32_t) = nullptr;
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
@@ -1307,6 +1318,14 @@ AmsError AmsBackendToolChanger::apply_user_edit(int slot_index, const SlotInfo& 
             slot_index < static_cast<int>(system_info_.units[0].slots.size())) {
             auto& slot = system_info_.units[0].slots[slot_index];
             const int old_mapped_tool = slot.mapped_tool;
+            firmware_edit = material_source_.present && material_source_.write_gcode &&
+                            firmware_slots_seen_ && firmware_palette_ &&
+                            !firmware_palette_->empty() &&
+                            (slot.color_rgb != info.color_rgb || slot.material != info.material);
+            if (firmware_edit) {
+                palette = *firmware_palette_;
+                write_gcode = material_source_.write_gcode;
+            }
             write_filament_fields(slot, info);
 
             // Tool mapping change: persist via ASSIGN_TOOL outside the lock.
@@ -1357,6 +1376,30 @@ AmsError AmsBackendToolChanger::apply_user_edit(int slot_index, const SlotInfo& 
     // Emit OUTSIDE the lock to avoid deadlock with callbacks, and ahead of the
     // remap's return so an edit that also moves a tool number is announced too.
     emit_event(EVENT_SLOT_CHANGED, std::to_string(slot_index));
+
+    if (firmware_edit) {
+        // Outside mutex_: normalize_material() reads get_supported_materials(),
+        // which locks. The firmware stores a type from its own list and a colour
+        // from its own palette, so both are mapped before the send.
+        const std::string type = normalize_material(info.material);
+        if (!IMoonrakerAPI::is_safe_material_param(type)) {
+            return AmsErrorHelper::invalid_parameter("Material '" + type +
+                                                     "' cannot be stored on this printer");
+        }
+        const int index = helix::nearest_palette_key(palette, info.color_rgb, -1);
+        std::uint32_t rgb = palette.front().second;
+        for (const auto& [key, packed] : palette) {
+            if (key == index) {
+                rgb = packed;
+                break;
+            }
+        }
+        AmsError sent =
+            execute_gcode(write_gcode(slot_index, IMoonrakerAPI::gcode_param_value(type), rgb));
+        if (!sent.success()) {
+            return sent;
+        }
+    }
 
     if (!physical_tool_name.empty()) {
         spdlog::info("[AMS ToolChanger] Remap via slot edit: T{} -> physical {} (slot {})",

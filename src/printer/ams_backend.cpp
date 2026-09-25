@@ -381,7 +381,12 @@ AmsError AmsBackend::commit_user_edit(int slot_index, const SlotInfo& original,
     // after. apply_user_edit() records the stored authorship from this same
     // answer rather than diffing its own read of the slot, which a frame
     // landing while the editor was open has already moved.
-    const helix::ams::Observation declaration = helix::ams::user_edit_observation(original, info);
+    helix::ams::Observation declaration = helix::ams::user_edit_observation(original, info);
+    if (firmware_stores_color_and_material(slot_index)) {
+        declaration.color_rgb.reset();
+        declaration.color_name.reset();
+        declaration.material.reset();
+    }
     const bool binding_changed = original.spoolman_id != info.spoolman_id;
 
     // An edit that keeps a spool cannot move what the spool states about

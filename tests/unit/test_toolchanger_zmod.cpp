@@ -223,3 +223,146 @@ TEST_CASE("A changer without a material source files no firmware reading",
     CHECK_FALSE(helix::ams::lane_sources(tc.lane_id(1)).vendor_cache.has_value());
     CHECK_FALSE(tc.get_supported_materials().has_value());
 }
+
+namespace {
+
+/// Slot as the editor hands it over: the current slot with the user's change.
+SlotInfo edited(const ToolChangerHelper& tc, int slot, std::optional<uint32_t> rgb,
+                std::optional<std::string> material) {
+    SlotInfo info = tc.get_system_info().units[0].slots[static_cast<size_t>(slot)];
+    if (rgb) {
+        info.color_rgb = *rgb;
+    }
+    if (material) {
+        info.material = *material;
+    }
+    return info;
+}
+
+size_t zcolor_sends(const ToolChangerHelper& tc) {
+    size_t n = 0;
+    for (const auto& g : tc.sent()) {
+        n += g.rfind("CHANGE_ZCOLOR", 0) == 0 ? 1 : 0;
+    }
+    return n;
+}
+
+} // namespace
+
+TEST_CASE("A colour outside the palette is snapped", "[toolchanger][zmod][material][write]") {
+    helix::ams::reset_lane_sources();
+    ToolChangerHelper tc(4);
+    wire_zmod(tc);
+    wire_material_source(tc);
+    tc.feed(full_zmod_color_frame());
+
+    const SlotInfo before = tc.get_system_info().units[0].slots[0];
+    REQUIRE(tc.commit_user_edit(0, before, edited(tc, 0, 0xE01010, std::nullopt)).success());
+    REQUIRE_FALSE(tc.sent().empty());
+    CHECK(tc.sent().back() == "CHANGE_ZCOLOR SLOT=1 HEX=F72224 TYPE=PLA SILENT=1");
+}
+
+TEST_CASE("A material outside the firmware's types is mapped to one of them",
+          "[toolchanger][zmod][material][write]") {
+    helix::ams::reset_lane_sources();
+    ToolChangerHelper tc(4);
+    wire_zmod(tc);
+    wire_material_source(tc);
+    tc.feed(full_zmod_color_frame());
+
+    const SlotInfo before = tc.get_system_info().units[0].slots[1];
+    REQUIRE(tc.commit_user_edit(1, before, edited(tc, 1, std::nullopt, "PETG-CF")).success());
+    CHECK(tc.sent().back() == "CHANGE_ZCOLOR SLOT=2 HEX=0ACC38 TYPE=PETG SILENT=1");
+}
+
+TEST_CASE("The firmware owns colour and material: an edit declares neither",
+          "[toolchanger][zmod][material][write]") {
+    helix::ams::reset_lane_sources();
+    // Registered, because the lane funnels drop what an unstamped lane_id names.
+    helix::test::RegisteredBackend<ToolChangerHelper> tc_reg(4);
+    ToolChangerHelper& tc = *tc_reg;
+    wire_zmod(tc);
+    wire_material_source(tc);
+    tc.feed(full_zmod_color_frame());
+    REQUIRE(tc.firmware_stores_color_and_material(0));
+
+    SlotInfo info = edited(tc, 0, 0xF72224, "ABS");
+    info.brand = "Polymaker";
+    const SlotInfo before = tc.get_system_info().units[0].slots[0];
+    REQUIRE(tc.commit_user_edit(0, before, info).success());
+
+    auto user = helix::ams::lane_sources(tc.lane_id(0)).local_user;
+    REQUIRE(user.has_value());
+    CHECK_FALSE(user->color_rgb.has_value());
+    CHECK_FALSE(user->material.has_value());
+    CHECK(user->brand == std::optional<std::string>("Polymaker"));
+}
+
+TEST_CASE("An edit that changes neither colour nor material sends nothing",
+          "[toolchanger][zmod][material][write]") {
+    helix::ams::reset_lane_sources();
+    ToolChangerHelper tc(4);
+    wire_zmod(tc);
+    wire_material_source(tc);
+    tc.feed(full_zmod_color_frame());
+
+    SlotInfo info = tc.get_system_info().units[0].slots[0];
+    const SlotInfo before = info;
+    info.brand = "Polymaker";
+    REQUIRE(tc.commit_user_edit(0, before, info).success());
+    CHECK(zcolor_sends(tc) == 0);
+}
+
+TEST_CASE("Before the firmware publishes slots an edit stays local",
+          "[toolchanger][zmod][material][write]") {
+    helix::ams::reset_lane_sources();
+    // Registered, because the lane funnels drop what an unstamped lane_id names.
+    helix::test::RegisteredBackend<ToolChangerHelper> tc_reg(4);
+    ToolChangerHelper& tc = *tc_reg;
+    wire_zmod(tc);
+    wire_material_source(tc);
+    tc.feed(json{{"zmod_color", {{"active_tool_id", -1}}}}); // a Z-Mod without the export
+    CHECK_FALSE(tc.firmware_stores_color_and_material(0));
+
+    const SlotInfo before = tc.get_system_info().units[0].slots[0];
+    REQUIRE(tc.commit_user_edit(0, before, edited(tc, 0, 0xF72224, "ABS")).success());
+    CHECK(zcolor_sends(tc) == 0);
+    auto user = helix::ams::lane_sources(tc.lane_id(0)).local_user;
+    REQUIRE(user.has_value());
+    CHECK(user->color_rgb == std::optional<uint32_t>(0xF72224));
+}
+
+TEST_CASE("An unsafe type is refused", "[toolchanger][zmod][material][write]") {
+    helix::ams::reset_lane_sources();
+    ToolChangerHelper tc(4);
+    wire_zmod(tc);
+    wire_material_source(tc);
+    json frame = full_zmod_color_frame();
+    frame["zmod_color"]["valid_types"] = json::array({"PLA;M112", "?"});
+    tc.feed(frame);
+
+    const SlotInfo before = tc.get_system_info().units[0].slots[0];
+    auto err = tc.commit_user_edit(0, before, edited(tc, 0, 0xF72224, "PLA;M112"));
+    CHECK_FALSE(err.success());
+    CHECK(zcolor_sends(tc) == 0);
+}
+
+TEST_CASE("A slots-only frame keeps the latched palette and types",
+          "[toolchanger][zmod][material][write]") {
+    helix::ams::reset_lane_sources();
+    ToolChangerHelper tc(4);
+    wire_zmod(tc);
+    wire_material_source(tc);
+    tc.feed(full_zmod_color_frame());
+    json slots_only = full_zmod_color_frame();
+    slots_only["zmod_color"].erase("palette");
+    slots_only["zmod_color"].erase("valid_types");
+    tc.feed(slots_only);
+
+    const SlotInfo before = tc.get_system_info().units[0].slots[0];
+    REQUIRE(tc.commit_user_edit(0, before, edited(tc, 0, 0xE01010, std::nullopt)).success());
+    CHECK(tc.sent().back() == "CHANGE_ZCOLOR SLOT=1 HEX=F72224 TYPE=PLA SILENT=1");
+    auto types = tc.get_supported_materials();
+    REQUIRE(types.has_value());
+    CHECK(*types == std::vector<std::string>{"PLA", "PETG", "ABS"});
+}

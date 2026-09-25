@@ -87,6 +87,12 @@ class AmsBackendToolChanger : public AmsSubscriptionBackend {
     /// backend that treats material as a free-form label.
     [[nodiscard]] std::optional<std::vector<std::string>> get_supported_materials() const override;
 
+    /// True once a frame has carried the firmware's slots AND palette: only
+    /// then can an edit be snapped into the palette and normalized into the
+    /// types before it is sent. Before that, an edit stays local as on any
+    /// tool changer.
+    [[nodiscard]] bool firmware_stores_color_and_material(int slot_index) const override;
+
     // Tool changers give each tool its own independent toolhead with no shared
     // physical tray/housing, so the AMS detail view's tray graphic is hidden.
     [[nodiscard]] bool has_physical_tray() const override {

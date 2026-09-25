@@ -1658,6 +1658,18 @@ class AmsBackend {
     }
 
     /**
+     * @brief Whether this slot's colour and material live in firmware the backend
+     *        writes through to.
+     *
+     * A user edit then declares neither: the firmware's echo is the only record,
+     * so a change made on the printer is never masked by an older edit here.
+     */
+    [[nodiscard]] virtual bool firmware_stores_color_and_material(int slot_index) const {
+        (void)slot_index;
+        return false;
+    }
+
+    /**
      * @brief Apply a person's edit to a slot and record it on the slot's lane.
      *
      * The backend and lane half of AmsState::commit_slot_edit, which wraps it
