@@ -4,7 +4,9 @@
 
 #include "ams_backend_ad5x_ifs.h"
 
+#include "ui_ams_detail.h"
 #include "ui_temperature_utils.h"
+#include "ui_update_queue.h"
 
 #include "ams_fault_event.h"
 #include "ams_state.h"
@@ -1079,7 +1081,8 @@ void AmsBackendAd5xIfs::parse_port_sensor(int port_1based, bool detected) {
     int slot = port_1based - 1;
     if (slot >= 0 && slot < NUM_PORTS) {
         bool was_first = !has_per_port_sensors_;
-        bool changed = port_presence_[static_cast<size_t>(slot)] != detected;
+        const bool was_present = port_presence_[static_cast<size_t>(slot)];
+        bool changed = was_present != detected;
         has_per_port_sensors_ = true;
         port_presence_[static_cast<size_t>(slot)] = detected;
         if (was_first || changed) {
@@ -1087,6 +1090,33 @@ void AmsBackendAd5xIfs::parse_port_sensor(int port_1based, bool detected) {
                           port_1based, detected ? "present" : "empty",
                           was_first ? ", first detection" : "");
         }
+        note_presence_transition_locked(slot, was_present, detected);
+    }
+}
+
+void AmsBackendAd5xIfs::note_presence_transition_locked(int slot_index, bool was_present,
+                                                        bool now_present) {
+    const auto idx = static_cast<size_t>(slot_index);
+    // The first sighting of a port is the session's baseline, never an edge:
+    // a spool seated at boot is not an insert.
+    if (!presence_observed_[idx]) {
+        presence_observed_[idx] = true;
+        return;
+    }
+    if (was_present == now_present) {
+        return;
+    }
+    // Presence is the only token naming this hardware's occupant, so any
+    // transition retires the echo suppression: what the printer states next
+    // about the port is its own word again.
+    own_write_echoes_.abandon(slot_index);
+    if (!was_present && now_present) {
+        // The IFS reads nothing off a spool — its colour and material are its
+        // own memory of the last write — so an insert carries no evidence
+        // under the slot spec's insert rule and the user is asked instead
+        // (docs/specs/filament_slots.md §6).
+        helix::ui::queue_update(
+            [slot_index] { helix::ui::offer_clear_after_unverified_insert(slot_index); });
     }
 }
 
@@ -1232,6 +1262,25 @@ void AmsBackendAd5xIfs::update_slot_from_state(int slot_index) {
         cache.color_rgb = observed_color;
         if (!materials_[idx].empty()) {
             cache.material = materials_[idx];
+        }
+        // A colour or material repeating this port's armed declaration is our
+        // own write coming back, not a reading. The filter lives here, at the
+        // one ingest every parse path (JSON, GET_ZCOLOR, save_variables)
+        // flows through. The boundary is always empty: nothing this hardware
+        // reads names a spool, so presence transitions (the arm's authority)
+        // are what end the suppression.
+        //
+        // Only a parse that just moved the latch gets the full guard: a
+        // differing value there is firmware's own word and releases the
+        // declaration. settle_port_locked and the slot-info readers re-run
+        // this function with the OLD latch, where pre-edit values differing
+        // from the just-armed declaration would wrongly release it; those
+        // re-files only strip fields equal to the declaration.
+        if (identity_statement_fresh_[idx]) {
+            identity_statement_fresh_[idx] = false;
+            own_write_echoes_.withhold(slot_index, std::string{}, cache);
+        } else {
+            own_write_echoes_.strip_standing(slot_index, cache);
         }
         helix::ams::ingest(lane_id(slot_index), cache);
     }
@@ -1495,6 +1544,9 @@ void AmsBackendAd5xIfs::clear_override_locked(int slot_index, SlotInfo& slot) {
     // clear in two stores, and a clear that reached only one would leave
     // resolve() still reporting the identity just removed.
     helix::ams::reset_lane_to_machine_readings(lane_id(slot_index));
+    // The echo suppression goes too: the user just disowned the write, so
+    // what firmware repeats from here on is its own word again.
+    own_write_echoes_.abandon(slot_index);
 
     slot.brand.clear();
     slot.clear_spoolman_link();
@@ -2830,6 +2882,8 @@ AmsError AmsBackendAd5xIfs::apply_user_edit(int slot_index, const SlotInfo& info
     // (outside the lock, further down) carry the same normalized value
     // write_port_locked() returned.
     std::string normalized_material;
+    // The echo staging's stamp, for the matched abandon on a failed write.
+    std::uint64_t echo_sequence = 0;
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -2854,6 +2908,39 @@ AmsError AmsBackendAd5xIfs::apply_user_edit(int slot_index, const SlotInfo& info
                                         declared);
 
         settle_port_locked(slot_index);
+
+        // The write carries TYPE and COLOR only; every other declared field
+        // stays a lane-side record firmware cannot echo, so prune the staging
+        // to those two. Material keeps the write's own spelling — the
+        // normalized name is what IFS_SET_MATERIAL and Adventurer5M.json
+        // carry, not the string the user typed.
+        //
+        // This runs AFTER settle_port_locked(): the settle re-runs
+        // update_slot_from_state(), whose ingest still carries firmware's
+        // PRE-edit values, and a value differing from the declaration is what
+        // releases it — so arming first would have the settle disarm the guard
+        // with the very state the edit is about to replace.
+        echo_sequence = own_write_echoes_.stage(slot_index, declared);
+        if (auto* staged = own_write_echoes_.staged(slot_index)) {
+            staged->brand.reset();
+            staged->spool_name.reset();
+            staged->color_name.reset();
+            staged->product_name.reset();
+            if (staged->material.has_value()) {
+                staged->material = normalized_material;
+            }
+        }
+        // Presence authority is the write's boundary: with no per-port
+        // sensor, no IFS_STATUS Ports and no confirmed GET_ZCOLOR, nothing on
+        // this machine can ever name the spool the write was made against, so
+        // an armed suppression would outlive every reading it should have
+        // ended on. Refuse to arm there.
+        if (has_per_port_sensors_ || ifs_status_ports_seen_.load() ||
+            zcolor_silent_confirmed_.load()) {
+            own_write_echoes_.arm(slot_index, std::string{});
+        } else {
+            own_write_echoes_.abandon(slot_index, echo_sequence);
+        }
     }
 
     // Bare-hex spelling of the edit's colour — the wire form IFS_SET_MATERIAL,
@@ -2926,6 +3013,11 @@ AmsError AmsBackendAd5xIfs::apply_user_edit(int slot_index, const SlotInfo& info
             dirty_[idx] = false;
         }
         if (!err.success()) {
+            // The write never left: no echo is coming for this staging.
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                own_write_echoes_.abandon(slot_index, echo_sequence);
+            }
             return err;
         }
     } else {
@@ -2941,8 +3033,14 @@ AmsError AmsBackendAd5xIfs::apply_user_edit(int slot_index, const SlotInfo& info
             std::lock_guard<std::mutex> lock(mutex_);
             dirty_[idx] = false;
         }
-        if (!err.success())
+        if (!err.success()) {
+            // The write never left: no echo is coming for this staging.
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                own_write_echoes_.abandon(slot_index, echo_sequence);
+            }
             return err;
+        }
 
         // lessWaste/bambufy users: also persist to the plugin's save_variables
         // store so its purge-skip logic sees consistent colors. zmod does not
@@ -4190,7 +4288,7 @@ bool AmsBackendAd5xIfs::on_gcode_response_line(const std::string& line) {
                                 // GET_ZCOLOR poll will recover.
                             }
                         }
-
+                        identity_statement_fresh_[idx] = true;
                         // Refresh a pre-existing NON-locked auto-mirror override
                         // to match what we just wrote. Without this, the values
                         // above land in colors_/materials_ but
@@ -4337,6 +4435,7 @@ bool AmsBackendAd5xIfs::apply_color_menu_slot_row(const std::string& line) {
             materials_[idx] = tm[1].str();
         if (has_hex)
             colors_[idx] = hex;
+        identity_statement_fresh_[idx] = true;
 
         spdlog::info("{} Slot {} refreshed from COLOR-menu row (material='{}' color='{}')",
                      backend_log_tag(), slot0, materials_[idx], colors_[idx]);
@@ -5311,6 +5410,7 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                     }
                     const bool was_present = port_presence_[idx];
                     port_presence_[idx] = ports[idx];
+                    note_presence_transition_locked(i, was_present, ports[idx]);
                     chan_changed = true;
                     // present->absent: the lane went empty (eject / runout /
                     // unload). #1071: KEEP the lane->Spoolman override so a
@@ -5466,6 +5566,7 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
                 !ifs_status_ports_seen_.load() && port_presence_[idx] != loaded) {
                 const bool was_present = port_presence_[idx];
                 port_presence_[idx] = loaded;
+                note_presence_transition_locked(i, was_present, loaded);
                 changed = true;
 
                 // present->absent: the spool was physically removed. #1071:
@@ -5494,10 +5595,12 @@ void AmsBackendAd5xIfs::apply_zcolor_result(const ZColorSilentResult& result) {
             }
             if (!parsed->hex.empty() && colors_[idx] != parsed->hex) {
                 colors_[idx] = parsed->hex;
+                identity_statement_fresh_[idx] = true;
                 changed = true;
             }
             if (!parsed->material.empty() && materials_[idx] != parsed->material) {
                 materials_[idx] = parsed->material;
+                identity_statement_fresh_[idx] = true;
                 changed = true;
             }
         }
@@ -5867,6 +5970,7 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             if (!live_owns) {
                 colors_[static_cast<size_t>(idx)] = hex;
                 materials_[static_cast<size_t>(idx)] = type;
+                identity_statement_fresh_[static_cast<size_t>(idx)] = true;
             }
 
             // Build a per-slot signature (count + color + material) so the
@@ -5911,6 +6015,7 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
             if (!has_per_port_sensors_ && !zcolor_silent_supported_.load() &&
                 !ifs_status_ports_seen_.load()) {
                 auto& presence = port_presence_[static_cast<size_t>(idx)];
+                const bool was_present = presence;
                 if (has_filament_data) {
                     presence = true;
                 } else if (presence && system_info_.action == AmsAction::IDLE) {
@@ -5927,6 +6032,7 @@ void AmsBackendAd5xIfs::parse_adventurer_json(const std::string& content) {
                     presence = false;
                     needs_ifs_vars_push = true;
                 }
+                note_presence_transition_locked(idx, was_present, presence);
             }
 
             update_slot_from_state(idx);
