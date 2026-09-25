@@ -1483,9 +1483,11 @@ namespace {
 /// The shared body of the rfid-state cases: an insert whose first frame
 /// says 3 (identifying) holds its verdict, and the follow-up frame decides
 /// it. @p closing_clears pairs with @p closing_state: 2 identified with a
-/// different tag clears the override; 0/1 (the reader finished without a
-/// tag) asks, whatever values the frame carries.
-void assert_rfid_state_sequence(std::int64_t closing_state, bool closing_clears) {
+/// different tag clears the override; 1 (the reader finished without a
+/// tag) asks, whatever values the frame carries. @p edge_state is the
+/// insert frame's own state, 3 identifying or 0 not yet started.
+void assert_rfid_state_sequence(std::int64_t closing_state, bool closing_clears,
+                                std::int64_t edge_state = 3) {
     AceTmpCacheDir tmp("task1710_rfid_states");
     MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
     helix::PrinterState state;
@@ -1519,12 +1521,13 @@ void assert_rfid_state_sequence(std::int64_t closing_state, bool closing_clears)
     // Insert frame: rfid 3, identifying, while the hub still reports the
     // OLD spool's material and colour. Judging on that stale memory would
     // read SameSpool; the read has not landed, so the verdict must hold.
-    AceTestAccess::parse_ace(backend, make_ace_slot_payload("available", 0xFF5500, "PLA", 3));
+    AceTestAccess::parse_ace(backend,
+                             make_ace_slot_payload("available", 0xFF5500, "PLA", edge_state));
     helix::ui::UpdateQueue::instance().drain();
     CHECK(toasts.empty());
     CHECK(AceTestAccess::get_override(backend, 0).has_value());
 
-    // The deciding frame. A 2 carries the new spool's own reading; a 0/1
+    // The deciding frame. A 2 carries the new spool's own reading; a 1
     // carries only hub memory, and the values on it are deliberately the
     // stale ones, so the state - not the values - decides.
     if (closing_clears) {
@@ -1554,10 +1557,17 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     assert_rfid_state_sequence(2, /*closing_clears=*/true);
 }
 
-TEST_CASE_METHOD(LVGLUITestFixture, "ACE rfid 3 holds the insert, then 0 or 1 asks instead",
+TEST_CASE_METHOD(LVGLUITestFixture, "ACE rfid 3 holds the insert, then 1 asks instead",
                  "[ams][ace][filament_slot_override][1710]") {
-    assert_rfid_state_sequence(0, /*closing_clears=*/false);
     assert_rfid_state_sequence(1, /*closing_clears=*/false);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ACE rfid 0 on the insert frame holds the verdict too",
+                 "[ams][ace][filament_slot_override][1710]") {
+    // 0 is the reader not yet started. Read as a finished no-tag read it
+    // would judge a tagged spool's reinsert DifferentSpool on the spot.
+    assert_rfid_state_sequence(2, /*closing_clears=*/true, /*edge_state=*/0);
+    assert_rfid_state_sequence(1, /*closing_clears=*/false, /*edge_state=*/0);
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture,

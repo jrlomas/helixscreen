@@ -407,9 +407,9 @@ ignores would call a same-spool insert a swap.
 | Happy Hare | - | None: the gate map is user-maintained | Per-gate `spool_id` | No evidence, unless the MMU names a different spool |
 | Tool changer | - | - | - | No insert signal; the rule never runs |
 
-Two rows carry caveats the table cannot hold. AD5X IFS has no presence
-sensor: its insert edge is inferred from the JSON, every insert is No
-evidence, and the rule raises no notice for it. Stock CFS waits up to 3
+Two rows carry caveats the table cannot hold. Every AD5X IFS insert is No
+evidence; one its port sensor sees raises the notice, and one inferred only
+from `Adventurer5M.json` (no port sensor) raises none. Stock CFS waits up to 3
 frames for the RFID probe before judging an insert, and discounts values
 equal to a label HelixScreen itself pushed while its echo guard stands.
 

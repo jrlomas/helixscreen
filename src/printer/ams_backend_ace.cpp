@@ -1073,10 +1073,11 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                 // multiACE lineage send the same flag as integers with
                 // ACEResearch's PROTOCOL.md states: 0 information not found,
                 // 1 failed to identify, 2 identified, 3 identifying. Only 2
-                // carries a reading. 3 leaves the evidence incomplete so the
-                // insert edge holds its verdict for the next frame; 0/1 mean
-                // the reader finished without a tag, which is a completed
-                // EMPTY reading, not hub memory.
+                // carries a reading and only 1 is a finished read with no
+                // tag. 0 is the reader's idle state, what an empty bay and a
+                // just-inserted spool report before the read starts, so like
+                // 3 it leaves the evidence incomplete and the insert edge
+                // holds its verdict for a later frame.
                 helix::ams::SpoolEvidence evidence;
                 if (slot_json.contains("rfid")) {
                     const auto& rfid = slot_json["rfid"];
@@ -1092,7 +1093,7 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                             evidence.material = observed_material.value_or(std::string{});
                             evidence.color_rgb = observed_color;
                             evidence.tag_read_complete = true;
-                        } else if (state == 0 || state == 1) {
+                        } else if (state == 1) {
                             evidence.tag_read_complete = true;
                         }
                     }

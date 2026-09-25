@@ -215,6 +215,10 @@ void AmsBackendSnapmaker::on_started() {
         override_store_ = std::move(loaded.store);
         overrides_ = std::move(loaded.overrides);
         helix::ams::bind_fingerprint_persistence(rfid_tracker_, override_store_.get(), overrides_);
+        // A reconnect re-baselines the feed ports: an insert pending from
+        // before it is judged against nothing this session has seen.
+        pending_insert_passes_.fill(0);
+        feed_presence_seen_.fill(false);
     }
 }
 
