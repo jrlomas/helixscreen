@@ -915,6 +915,9 @@ void MoonrakerClientMock::populate_capabilities() {
         for (int i = 0; i < 4; ++i) {
             mock_objects.push_back("gcode_button extruder_grab" + std::to_string(i));
         }
+        // The chamber heater object separates the Pro from the heater-free
+        // Creator 5, so a persona modelling the Pro must publish it.
+        mock_objects.push_back("heater_generic chamber_heater");
         mock_objects.push_back("gcode_macro TOOLCHANGE_PARK");
         mock_objects.push_back("gcode_macro BED_MESH_CALIBRATE");
         break;
@@ -929,6 +932,8 @@ void MoonrakerClientMock::populate_capabilities() {
             mock_objects.push_back("gcode_button extruder_pos" + std::to_string(i));
             mock_objects.push_back("gcode_button extruder_grab" + std::to_string(i));
         }
+        // Same Pro-separating chamber heater as the Reforge persona above.
+        mock_objects.push_back("heater_generic chamber_heater");
         break;
     default:
         // Other printers may not have these features

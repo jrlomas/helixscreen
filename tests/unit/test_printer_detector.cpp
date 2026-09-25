@@ -5072,20 +5072,23 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
                  "PrinterDetector: Creator 5 Pro on Z-Mod firmware (no ff_* objects)",
                  "[printer][heuristics][creator5]") {
     // z_c5pro ships none of the ff_* extras; the grab buttons carry the
-    // identification and zmod_color may only corroborate it.
+    // identification and zmod_color may only corroborate it. The chamber heater
+    // and its fan suite are the Pro's hardware and separate it from the
+    // heater-free Creator 5.
     PrinterHardwareData hardware{
         .heaters = {"extruder", "extruder1", "extruder2", "extruder3", "heater_bed"},
         .sensors = {},
-        .fans = {},
+        .fans = {"fan_generic chamber_fan", "fan_generic chamber_heat_fan",
+                 "fan_generic chamber_loop_fan", "fan_generic chamber_cool_fan"},
         .leds = {},
         .hostname = "flashforge",
-        .printer_objects = {"zmod", "zmod_color", "gcode_button extruder_grab1",
-                            "gcode_button extruder_grab2", "gcode_button extruder_grab3",
-                            "gcode_button extruder_grab4", "filament_switch_sensor fd_ex0",
-                            "filament_switch_sensor fd_ex1", "filament_switch_sensor fd_ex2",
-                            "filament_switch_sensor fd_ex3", "filament_motion_sensor fm_ex0",
-                            "filament_motion_sensor fm_ex1", "filament_motion_sensor fm_ex2",
-                            "filament_motion_sensor fm_ex3"},
+        .printer_objects = {"zmod", "zmod_color", "heater_generic chamber_heater",
+                            "gcode_button extruder_grab1", "gcode_button extruder_grab2",
+                            "gcode_button extruder_grab3", "gcode_button extruder_grab4",
+                            "filament_switch_sensor fd_ex0", "filament_switch_sensor fd_ex1",
+                            "filament_switch_sensor fd_ex2", "filament_switch_sensor fd_ex3",
+                            "filament_motion_sensor fm_ex0", "filament_motion_sensor fm_ex1",
+                            "filament_motion_sensor fm_ex2", "filament_motion_sensor fm_ex3"},
         .steppers = {},
         .kinematics = "corexy",
         .cpu_arch = "MIPS Ingenic X2000"};
