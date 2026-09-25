@@ -346,13 +346,17 @@ https://releases.helixscreen.org/
 
 ### R2 Base URL Override
 
-The R2 base URL can be overridden in config for testing:
+The R2 base URL can be overridden for testing. The override lives in
+`/var/lib/helixscreen/update_urls.json`, NOT in settings.json: the updater
+downloads a payload and runs its install.sh from wherever this URL points, and
+settings.json sits where the web UI can write it. The file only counts when it
+is owned by root or the app's user and has no group or world write bit
+(`chown root:root ... && chmod 644 ...`); anything else is ignored with a
+warning.
 
 ```json
 {
-  "update": {
-    "r2_url": "https://my-test-cdn.example.com"
-  }
+  "r2_url": "https://my-test-cdn.example.com"
 }
 ```
 
@@ -565,14 +569,16 @@ Multi-state modal driven by `download_status` subject:
 
 ## Configuration Reference
 
-All update settings live under the `/update/` key in `settings.json`:
+The channel setting lives under the `/update/` key in `settings.json`; the URL
+overrides live in the root-owned `/var/lib/helixscreen/update_urls.json` (see
+"R2 Base URL Override" above):
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `/update/channel` | int | `0` | Update channel: 0=Stable, 1=Beta, 2=Dev |
-| `/update/dev_url` | string | `""` | Custom manifest URL for dev channel |
-| `/update/r2_url` | string | `""` | R2 base URL override (default: `https://releases.helixscreen.org`) |
-| `/update/dismissed_version` | string | `""` | Version the user chose to ignore |
+| Key | Where | Type | Default | Description |
+|-----|-------|------|---------|-------------|
+| `/update/channel` | settings.json | int | `0` | Update channel: 0=Stable, 1=Beta, 2=Dev |
+| `/update/dismissed_version` | settings.json | string | `""` | Version the user chose to ignore |
+| `r2_url` | update_urls.json | string | `""` | R2 base URL override (default: `https://releases.helixscreen.org`) |
+| `dev_url` | update_urls.json | string | `""` | Custom manifest URL for dev channel |
 
 ---
 

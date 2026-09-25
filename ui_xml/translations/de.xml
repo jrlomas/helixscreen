@@ -760,7 +760,7 @@
   <translation tag="Detection Length" de="Erkennungslänge"/>
   <translation tag="Detection Mode" de="Erkennungsmodus"/>
   <translation tag="Dev" de="Dev"/>
-  <translation tag="Dev channel requires dev_url in config" de="Dev-Kanal erfordert dev_url in der Konfiguration"/>
+  <translation tag="Dev channel requires dev_url in update_urls.json" de="Dev-Kanal erfordert dev_url in update_urls.json"/>
   <translation tag="Device" de="Gerät"/>
   <translation tag="Device Section" de="Geräteabschnitt"/>
   <translation tag="Device connected" de="Gerät verbunden"/>

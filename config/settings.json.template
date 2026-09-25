@@ -29,7 +29,7 @@
   "log_dest": "auto",
   "_log_dest_comment": "Log destination: 'auto' (detect best), 'journal' (systemd), 'syslog', 'file', 'console' (disable system log)",
   "log_path": "",
-  "_log_path_comment": "Log file path when using file destination. Empty = auto (/var/log or ~/.local/share)",
+  "_log_path_comment": "Log file path when using file destination. Empty = auto (/var/log or ~/.local/share). Must be an absolute *.log path under /tmp, /var/log or the install dir (subdirectory owned by root or the app user, no group/world write, no .. and not a symlink); anything else is refused and the default location is used.",
   "log_level": "warn",
   "_log_level_comment": "Log verbosity: warn (quiet), info, debug, trace. CLI -v flags override this.",
   "network": {
@@ -334,7 +334,6 @@
   "update": {
     "channel": 0,
     "_channel_comment": "Update channel. 0=Stable, 1=Beta (pre-releases), 2=Dev (custom URL)",
-    "dev_url": "",
-    "_dev_url_comment": "Base URL for dev channel manifest. Set to enable Dev channel option."
+    "_url_comment": "Update URLs live in /var/lib/helixscreen/update_urls.json (owned by root, mode 0644), not here: settings.json is editable from the web UI and the updater installs whatever those URLs serve. Keys: r2_url (manifest base, default https://releases.helixscreen.org), dev_url (dev channel base)."
   }
 }

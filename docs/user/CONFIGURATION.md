@@ -311,6 +311,13 @@ Located in the `theme` section:
 - `/var/log/helix-screen.log` (if writable)
 - `~/.local/share/helix-screen/helix.log` (fallback)
 
+The path must be an absolute `*.log` path under `/tmp`, `/var/log` or the
+install directory; a subdirectory of those must be owned by root or the
+HelixScreen user with no group or world write bit, and the path may not
+contain `..` or be a symlink. Anything else is refused with a warning and the
+default location is used, since `settings.json` is editable from the web UI
+and must not aim the log at arbitrary files.
+
 ### `log_level`
 **Type:** string
 **Default:** `"warn"`
@@ -1695,17 +1702,29 @@ Located in the `plugins` section:
 
 ## Update Settings
 
-Located in the `update` section:
+`channel` lives in the `update` section of `settings.json`. The URL overrides
+(`dev_url`, `r2_url`) live in a separate root-owned file,
+`/var/lib/helixscreen/update_urls.json`, because the updater installs whatever
+those URLs serve and `settings.json` is editable from the web UI:
 
 ```json
 {
   "update": {
-    "channel": 0,
-    "dev_url": "",
-    "r2_url": ""
+    "channel": 0
   }
 }
 ```
+
+```json
+{
+  "r2_url": "",
+  "dev_url": ""
+}
+```
+
+The override file only takes effect when it is owned by root or the user
+HelixScreen runs as and has no group or world write bit
+(`chown root:root /var/lib/helixscreen/update_urls.json && chmod 644 ...`).
 
 ### `channel`
 **Type:** integer
@@ -1720,12 +1739,14 @@ Can also be changed from the Settings panel. Stable and Beta are offered on any
 install; **Dev** appears only when `beta_features` is enabled.
 
 ### `dev_url`
+**Where:** `/var/lib/helixscreen/update_urls.json`
 **Type:** string
 **Default:** `""` (empty)
 **Example:** `"https://releases.helixscreen.org/dev"`
 **Description:** Explicit base URL for the dev update channel. When set and `channel` is `2`, HelixScreen fetches `{dev_url}/manifest.json` directly, bypassing R2. When empty, the dev channel uses the R2 CDN path (`{r2_url}/dev/manifest.json`). Must use `http://` or `https://` scheme. Primarily used for local development servers or self-hosted setups that predate R2 support.
 
 ### `r2_url`
+**Where:** `/var/lib/helixscreen/update_urls.json`
 **Type:** string
 **Default:** `""` (uses built-in `https://releases.helixscreen.org`)
 **Example:** `"https://my-cdn.example.com"`
@@ -2191,8 +2212,7 @@ Environment="HELIX_TOUCH_DEVICE=/dev/input/event0"
   },
 
   "update": {
-    "channel": 0,
-    "dev_url": ""
+    "channel": 0
   }
 }
 ```

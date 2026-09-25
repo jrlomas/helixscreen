@@ -819,7 +819,7 @@ translations:
   Detection Length: Detection Length
   Detection Mode: Detection Mode
   Dev: Dev
-  Dev channel requires dev_url in config: Dev channel requires dev_url in config
+  Dev channel requires dev_url in update_urls.json: Dev channel requires dev_url in update_urls.json
   Device: Device
   Device Section: Device Section
   Device connected: Device connected

@@ -851,8 +851,7 @@ translations:
   Detection Length: Longueur de détection
   Detection Mode: Mode de détection
   Dev: Dev
-  Dev channel requires dev_url in config: Le canal de développement nécessite dev_url
-    dans la configuration
+  Dev channel requires dev_url in update_urls.json: Le canal de développement nécessite dev_url dans update_urls.json
   Device: Appareil
   Device Section: Section des appareils
   Device connected: 'Appareil connecté'
