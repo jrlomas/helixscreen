@@ -246,6 +246,7 @@ translations:
     do sensor
   Assisted Retract: 'Retração assistida'
   Assisting: Assistindo
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: Falha na autenticação
   Auto: Automático
   Auto Bed Mesh: Malha da Mesa Automática

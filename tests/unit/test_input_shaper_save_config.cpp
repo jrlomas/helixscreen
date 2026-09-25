@@ -123,7 +123,7 @@ class ToastRecorder {
   public:
     ToastRecorder() {
         set_test_toast_hook(
-            [this](ToastSeverity, const std::string& msg) { messages_.push_back(msg); });
+            [this](ToastSeverity, const std::string& msg, uint32_t) { messages_.push_back(msg); });
     }
     ~ToastRecorder() {
         set_test_toast_hook(nullptr);

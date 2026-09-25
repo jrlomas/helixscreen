@@ -213,9 +213,9 @@ void ui_notification_warning_with_detail(const char* message, const char* detail
  *
  * Same rendering as ui_notification_warning_with_detail, but the toast stays
  * on screen until its close button is tapped. For warnings where acting is not
- * optional — a refused helixscreen.env means every setting in it is ignored —
- * an 8-second auto-dismiss would hide the problem again before the user has
- * read it.
+ * optional; a refused helixscreen.env means every setting in it is ignored,
+ * and an 8-second auto-dismiss would hide the problem again before the user
+ * has read it.
  *
  * **Thread-safe**: marshals to the LVGL main thread. Safe from any thread.
  *

@@ -224,6 +224,7 @@ translations:
   Assign a role to enable sensor monitoring: センサー監視を有効にするには役割を割り当ててください
   Assisted Retract: 'アシスト付き引き戻し'
   Assisting: アシスト中
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: 認証に失敗しました
   Auto: 自動
   Auto Bed Mesh: 自動ベッドメッシュ

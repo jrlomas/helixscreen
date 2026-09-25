@@ -223,6 +223,7 @@ translations:
   Assign a role to enable sensor monitoring: 分配角色以启用传感器监控
   Assisted Retract: '辅助回抽'
   Assisting: 辅助中
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: 认证失败
   Auto: 自动
   Auto Bed Mesh: 自动热床网格

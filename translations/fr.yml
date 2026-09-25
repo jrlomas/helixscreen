@@ -251,6 +251,7 @@ translations:
     du capteur
   Assisted Retract: 'Rétraction assistée'
   Assisting: Assistance
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: Échec de l'authentification
   Auto: Auto
   Auto Bed Mesh: Maillage auto du plateau

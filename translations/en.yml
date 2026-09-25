@@ -237,6 +237,7 @@ translations:
   Assign a role to enable sensor monitoring: Assign a role to enable sensor monitoring
   Assisted Retract: Assisted Retract
   Assisting: Assisting
+  At least {} lines in helixscreen.env were ignored: At least {} lines in helixscreen.env were ignored
   Authentication failed: Authentication failed
   Auto: Auto
   Auto Bed Mesh: Auto Bed Mesh

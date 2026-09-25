@@ -2065,7 +2065,7 @@ Why the launcher refused to evaluate `helixscreen.env` at all, as a classificati
 
 | Property | Value |
 |----------|-------|
-| **Values** | `kind\|detail\|expected\|path` — kind is `mode`, `owner`, `chain` or `other`; detail is the offending uid (owner) or a short reason (other); expected is the chown target (owner only); a `chain` kind has no producer today (a symlink chain narrows the trusted owners and shows up as `owner`) but the app words it if one appears |
+| **Values** | `kind\|detail\|expected\|path`: kind is `mode`, `owner`, `chain` or `other`; detail is the offending uid (owner) or a short reason (other); expected is the chown target (owner only); a `chain` kind has no producer today (a symlink chain narrows the trusted owners and shows up as `owner`) but the app words it if one appears |
 | **Default** | Unset (no refusal, or no env file) |
 | **Files** | `scripts/helix-launcher.sh` (`helix_env_refuse`), `src/system/env_refusal_notice.cpp` (`parse_env_file_refused`, `env_refusal_copy`) |
 

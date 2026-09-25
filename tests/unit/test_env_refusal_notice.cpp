@@ -175,6 +175,40 @@ TEST_CASE("env-refusal: garbage in either handoff decides to no notice", "[1712]
     CHECK(notice.skipped_lines == 0);
 }
 
+namespace {
+
+/// A HELIX_ENV_LINES_SKIPPED value at the launcher's cap: 12 real entries
+/// closed by the sentinel row the launcher appends once it starts dropping
+/// lines (scripts/helix-launcher.sh helix_env_note_skip).
+std::string capped_handoff_value() {
+    std::string value;
+    for (int i = 1; i <= 12; ++i) {
+        value += "NOT_A_SETTING_" + std::to_string(i) + ":not a setting this file may change|";
+    }
+    return value + "more skipped:not every skipped line is listed";
+}
+
+} // namespace
+
+TEST_CASE("env-refusal: the sentinel entry marks the handoff truncated", "[1712]") {
+    const auto notice = decide_env_refusal_notice(nullptr, capped_handoff_value().c_str());
+    CHECK_FALSE(notice.refusal.valid);
+    // 13 parsed rows, but only 12 are skipped lines: the last is the sentinel.
+    REQUIRE(notice.skipped_lines == 13);
+    CHECK(notice.skipped_truncated);
+    CHECK(notice.skipped.back().label == "more skipped");
+}
+
+TEST_CASE("env-refusal: a complete handoff stays exact at the cap size", "[1712]") {
+    // The same 12 entries WITHOUT the sentinel: nothing was dropped, so the
+    // count is exact and the wording must not claim a lower bound.
+    const std::string value = capped_handoff_value();
+    const auto notice =
+        decide_env_refusal_notice(nullptr, value.substr(0, value.rfind('|')).c_str());
+    REQUIRE(notice.skipped_lines == 12);
+    CHECK_FALSE(notice.skipped_truncated);
+}
+
 // ============================================================================
 // surface_env_refusal_from_launcher: the glue, observed at the notification
 // hooks the test binary substitutes for ui_notification_warning() and
@@ -267,6 +301,32 @@ TEST_CASE("env-refusal: one skipped line uses the singular wording", "[1712]") {
     REQUIRE(surfaced.timed.size() == 1);
     CHECK(surfaced.timed[0].find("1 line in helixscreen.env was ignored") != std::string::npos);
     CHECK(surfaced.timed[0].find("lines in helixscreen.env were ignored") == std::string::npos);
+}
+
+TEST_CASE("env-refusal: a truncated handoff words the count as a lower bound", "[1712]") {
+    const Surfaced surfaced = surfaced_warnings([] {
+        EnvVarGuard skipped("HELIX_ENV_LINES_SKIPPED", capped_handoff_value().c_str());
+        surface_env_refusal_from_launcher();
+    });
+    // The sentinel says lines were dropped, so the message must not name 13
+    // (a count nobody has) and must hedge: "At least 12".
+    REQUIRE(surfaced.timed.size() == 1);
+    CHECK(surfaced.timed[0].find("At least 12 lines in helixscreen.env were ignored") !=
+          std::string::npos);
+    CHECK(surfaced.timed[0].find("13 lines in helixscreen.env were ignored") == std::string::npos);
+    CHECK(surfaced.timed[0].find("more skipped: not every skipped line is listed") !=
+          std::string::npos);
+}
+
+TEST_CASE("env-refusal: a handoff at the cap exactly keeps the exact count", "[1712]") {
+    const Surfaced surfaced = surfaced_warnings([] {
+        const std::string value = capped_handoff_value();
+        EnvVarGuard skipped("HELIX_ENV_LINES_SKIPPED", value.substr(0, value.rfind('|')).c_str());
+        surface_env_refusal_from_launcher();
+    });
+    REQUIRE(surfaced.timed.size() == 1);
+    CHECK(surfaced.timed[0].find("12 lines in helixscreen.env were ignored") != std::string::npos);
+    CHECK(surfaced.timed[0].find("At least") == std::string::npos);
 }
 
 TEST_CASE("env-refusal: no handoff means no warning", "[1712]") {

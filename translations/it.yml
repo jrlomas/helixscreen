@@ -247,6 +247,7 @@ translations:
     del sensore
   Assisted Retract: 'Retrazione assistita'
   Assisting: Assistenza
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: Autenticazione fallita
   Auto: Auto
   Auto Bed Mesh: Mesh piano automatica

@@ -965,10 +965,29 @@ print_env_from_file() {
     env -u MOONRAKER_HOST \
         "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_LINES_SKIPPED \
         > "$BATS_TEST_TMPDIR/skipped.out" 2>/dev/null
-    # 12 entries join on 11 separators; the 13th onward never reaches the app.
-    [ "$(tr -dc '|' < "$BATS_TEST_TMPDIR/skipped.out" | wc -c)" = "11" ]
+    # 12 real entries plus the sentinel row that announces the cap: 13 entries
+    # join on 12 separators, and the 13th line onward never reaches the app.
+    [ "$(tr -dc '|' < "$BATS_TEST_TMPDIR/skipped.out" | wc -c)" = "12" ]
     grep -q 'NOT_A_SETTING_12:' "$BATS_TEST_TMPDIR/skipped.out"
     ! grep -q 'NOT_A_SETTING_13:' "$BATS_TEST_TMPDIR/skipped.out"
+    grep -q 'more skipped:' "$BATS_TEST_TMPDIR/skipped.out"
+}
+
+@test "a skipped-lines handoff at the cap exactly carries no sentinel" {
+    cp "$LAUNCHER" "$MOCK_INSTALL/bin/helix-launcher.sh"
+    : > "$MOCK_INSTALL/config/helixscreen.env"
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+        echo "NOT_A_SETTING_$i=x"
+    done >> "$MOCK_INSTALL/config/helixscreen.env"
+    chmod 644 "$MOCK_INSTALL/config/helixscreen.env"
+    env -u MOONRAKER_HOST \
+        "$MOCK_INSTALL/bin/helix-launcher.sh" --print-env HELIX_ENV_LINES_SKIPPED \
+        > "$BATS_TEST_TMPDIR/skipped.out" 2>/dev/null
+    # The list is complete at 12 entries, so no sentinel row: the app words
+    # the count as exact, never "at least 12".
+    [ "$(tr -dc '|' < "$BATS_TEST_TMPDIR/skipped.out" | wc -c)" = "11" ]
+    grep -q 'NOT_A_SETTING_12:' "$BATS_TEST_TMPDIR/skipped.out"
+    ! grep -q 'more skipped' "$BATS_TEST_TMPDIR/skipped.out"
 }
 
 @test "an ambient handoff value cannot forge a refusal" {

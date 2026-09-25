@@ -166,10 +166,11 @@ void set_test_notification_success_hook(std::function<void(const std::string&)> 
  * ToastManager::show() directly (deliberately bypassing ui_notification_* and
  * its history row) has no other observation point in the test binary — the
  * real ToastManager is excluded from the link. Carries the severity so a
- * wrong-severity toast fails on severity, not just wording. Pass nullptr to
+ * wrong-severity toast fails on severity, not just wording, and the duration
+ * so a sticky (0) call cannot silently read as a timed one. Pass nullptr to
  * clear.
  */
-void set_test_toast_hook(std::function<void(ToastSeverity, const std::string&)> hook);
+void set_test_toast_hook(std::function<void(ToastSeverity, const std::string&, uint32_t)> hook);
 
 } // namespace ui
 } // namespace helix

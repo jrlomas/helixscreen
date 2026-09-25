@@ -95,6 +95,12 @@ EnvRefusalNotice decide_env_refusal_notice(const char* file_refused, const char*
     if (lines_skipped != nullptr && *lines_skipped != '\0') {
         notice.skipped = parse_env_lines_skipped(lines_skipped);
         notice.skipped_lines = notice.skipped.size();
+        for (const EnvLineSkip& skip : notice.skipped) {
+            if (skip.label == kEnvSkipSentinelLabel) {
+                notice.skipped_truncated = true;
+                break;
+            }
+        }
     }
     return notice;
 }
@@ -123,11 +129,20 @@ void surface_env_refusal_from_launcher() {
         }
         detail += skip.label + ": " + skip.reason;
     }
-    const std::string message =
-        notice.skipped_lines == 1
-            ? std::string(lv_tr("1 line in helixscreen.env was ignored"))
-            : fmt::format(fmt::runtime(lv_tr("{} lines in helixscreen.env were ignored")),
-                          notice.skipped_lines);
+    // The sentinel entry is the launcher saying "the list was capped", not a
+    // skipped line: count it out and word the total as a lower bound.
+    const std::size_t listed =
+        notice.skipped_truncated ? notice.skipped_lines - 1 : notice.skipped_lines;
+    std::string message;
+    if (notice.skipped_truncated) {
+        message = fmt::format(
+            fmt::runtime(lv_tr("At least {} lines in helixscreen.env were ignored")), listed);
+    } else if (listed == 1) {
+        message = lv_tr("1 line in helixscreen.env was ignored");
+    } else {
+        message =
+            fmt::format(fmt::runtime(lv_tr("{} lines in helixscreen.env were ignored")), listed);
+    }
     ui_notification_warning_with_detail(message.c_str(), detail.c_str());
 }
 

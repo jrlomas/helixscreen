@@ -45,6 +45,15 @@ struct EnvRefusalCopy {
 };
 
 /**
+ * @brief Label of the sentinel entry that closes a capped skipped-lines list.
+ *
+ * The launcher appends one entry with this label when it hits its cap, so the
+ * count the app names is a lower bound. The label contains a space, so no
+ * variable name or "line N" label can collide with it.
+ */
+inline constexpr const char* kEnvSkipSentinelLabel = "more skipped";
+
+/**
  * @brief Split a HELIX_ENV_LINES_SKIPPED value into its entries.
  *
  * Entries are "label:reason" joined by `|` (the format
@@ -81,6 +90,9 @@ struct EnvRefusalNotice {
     EnvFileRefusal refusal;           ///< valid() when the whole file was refused
     std::size_t skipped_lines = 0;    ///< Parsed entries in @p skipped
     std::vector<EnvLineSkip> skipped; ///< Detail rows, one per skipped line
+    /// True when @p skipped ends in the launcher's sentinel entry: the count
+    /// is a lower bound, so the wording must say "at least N".
+    bool skipped_truncated = false;
 };
 
 /**

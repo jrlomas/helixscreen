@@ -241,6 +241,7 @@ translations:
   Assign a role to enable sensor monitoring: Назначьте роль для мониторинга датчика
   Assisted Retract: 'Ретракция с поддержкой'
   Assisting: Помощь
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: Ошибка аутентификации
   Auto: Авто
   Auto Bed Mesh: Авто сетка стола

@@ -220,6 +220,7 @@
   <translation tag="Assign a role to enable sensor monitoring" en="Assign a role to enable sensor monitoring"/>
   <translation tag="Assisted Retract" en="Assisted Retract"/>
   <translation tag="Assisting" en="Assisting"/>
+  <translation tag="At least {} lines in helixscreen.env were ignored" en="At least {} lines in helixscreen.env were ignored"/>
   <translation tag="Authentication failed" en="Authentication failed"/>
   <translation tag="Auto" en="Auto"/>
   <translation tag="Auto Bed Mesh" en="Auto Bed Mesh"/>

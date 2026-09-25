@@ -251,6 +251,7 @@ translations:
     zu aktivieren
   Assisted Retract: 'Unterstützter Einzug'
   Assisting: Unterstützend
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: Authentifizierung fehlgeschlagen
   Auto: Automatisch
   Auto Bed Mesh: Automatisches Bettnetz

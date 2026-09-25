@@ -384,10 +384,17 @@ helix_env_refuse() {
 # append "label:reason" to _helix_skipped, which helix_load_env_file exports
 # as HELIX_ENV_LINES_SKIPPED once the parse finishes. Labels are the variable
 # name, or "line N" for a line with no parsable key; reasons are fixed
-# sentences that never contain the '|' separator.
+# sentences that never contain the '|' separator. Past the cap one sentinel
+# entry ("more skipped") closes the list so the app can say "at least N"
+# instead of naming N as the whole story; its label has a space, so no
+# variable name or "line N" label can collide with it.
 HELIX_ENV_SKIP_CAP=12
 helix_env_note_skip() {
     if [ "$_hes_count" -ge "$HELIX_ENV_SKIP_CAP" ]; then
+        if [ "$_hes_more" != 1 ]; then
+            _helix_skipped="${_helix_skipped}|more skipped:not every skipped line is listed"
+            _hes_more=1
+        fi
         return 0
     fi
     _helix_skipped="${_helix_skipped}${_helix_skipped:+|}$1"
@@ -557,6 +564,7 @@ helix_load_env_file() {
     _helix_refused=""
     _helix_skipped=""
     _hes_count=0
+    _hes_more=0
     while IFS= read -r _line || [ -n "$_line" ]; do
         _lineno=$((_lineno + 1))
         # Normalize: strip CR, trim whitespace, drop optional `export ` prefix.
@@ -639,7 +647,7 @@ helix_load_env_file() {
         export HELIX_ENV_LINES_SKIPPED="$_helix_skipped"
     fi
     unset _line _var _val _why _existing _lineno _helix_file_set _helix_refused \
-        _helix_skipped _hes_count _helix_env_file
+        _helix_skipped _hes_count _hes_more _helix_env_file
 }
 
 # --print-env NAME: resolve NAME exactly as the env-file read resolves it

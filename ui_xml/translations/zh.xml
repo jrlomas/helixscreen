@@ -220,6 +220,7 @@
   <translation tag="Assign a role to enable sensor monitoring" zh="分配角色以启用传感器监控"/>
   <translation tag="Assisted Retract" zh="辅助回抽"/>
   <translation tag="Assisting" zh="辅助中"/>
+  <translation tag="At least {} lines in helixscreen.env were ignored"/>
   <translation tag="Authentication failed" zh="认证失败"/>
   <translation tag="Auto" zh="自动"/>
   <translation tag="Auto Bed Mesh" zh="自动热床网格"/>
