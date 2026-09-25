@@ -53,13 +53,16 @@ class ToastManager {
      * user should DO about it.
      *
      * Separate entry point rather than a defaulted parameter on show(), so no
-     * existing caller changes shape and a literal 0 duration can never become
-     * ambiguous with a null detail. An empty or null @p detail renders exactly
+     * existing caller changes shape. An empty or null @p detail renders exactly
      * as show() would.
      *
      * Longer default duration than show(): a two-part message is roughly twice
      * the reading time, and the whole point of the detail line is that the user
      * acts on it rather than glancing past it.
+     *
+     * @p duration_ms of 0 means the toast never auto-dismisses: it stays until
+     * its close button is tapped. For a warning the user must act on (a refused
+     * helixscreen.env means every setting in it is being ignored).
      */
     void show_with_detail(ToastSeverity severity, const char* message, const char* detail,
                           uint32_t duration_ms = 8000);

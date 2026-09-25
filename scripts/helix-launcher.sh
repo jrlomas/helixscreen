@@ -27,6 +27,12 @@
 #   HELIX_LOG_DEST=<d>   Same as --log-dest (auto|journal|syslog|file|console)
 #   HELIX_LOG_FILE=<f>   Same as --log-file
 #
+# Exported to helix-screen, never read from the environment
+# (prestonbrown/helixscreen#1712): HELIX_ENV_FILE_REFUSED (whole-file
+# refusal: "kind|detail|expected|path") and HELIX_ENV_LINES_SKIPPED
+# ("label:reason" entries joined by '|', capped). The app turns them into
+# startup notifications; see docs/devel/ENVIRONMENT_VARIABLES.md.
+#
 # All other options are passed through to helix-screen.
 #
 # Logging behavior:
@@ -354,7 +360,52 @@ helix_env_dir_owner() {
     unset _hed_link _hed_real _hed_out
 }
 
+# Refuse the env file: log the detailed reason with the full fix, and hand a
+# structured record to the app (prestonbrown/helixscreen#1712) so the app
+# words the on-screen warning; the launcher's longer hint stays in the log.
+# Callers set _hef_kind (mode|owner|chain|other), _hef_detail (the offending
+# uid for owner, a short reason for other) and _hef_file (the path as
+# configured). The kind decides which fields the export carries, normalized
+# here so no refusal site has to clear a field: mode keeps neither middle,
+# owner keeps both (detail uid + _hef_expected chown target), other and chain
+# keep only the detail. kind|detail|expected|path, every field always present.
+helix_env_refuse() {
+    log "warning: $1 - env file skipped ($_hef_fix)"
+    case "$_hef_kind" in
+        owner) ;;
+        mode) _hef_detail=""; _hef_expected="" ;;
+        *) _hef_expected="" ;;
+    esac
+    export HELIX_ENV_FILE_REFUSED="$_hef_kind|$_hef_detail|$_hef_expected|$_hef_file"
+    helix_env_trust_cleanup
+}
+
+# Record one skipped line for the app (prestonbrown/helixscreen#1712):
+# append "label:reason" to _helix_skipped, which helix_load_env_file exports
+# as HELIX_ENV_LINES_SKIPPED once the parse finishes. Labels are the variable
+# name, or "line N" for a line with no parsable key; reasons are fixed
+# sentences that never contain the '|' separator. Past the cap one sentinel
+# entry ("more skipped") closes the list so the app can say "at least N"
+# instead of naming N as the whole story; its label has a space, so no
+# variable name or "line N" label can collide with it.
+HELIX_ENV_SKIP_CAP=12
+helix_env_note_skip() {
+    if [ "$_hes_count" -ge "$HELIX_ENV_SKIP_CAP" ]; then
+        if [ "$_hes_more" != 1 ]; then
+            _helix_skipped="${_helix_skipped}|more skipped:not every skipped line is listed"
+            _hes_more=1
+        fi
+        return 0
+    fi
+    _helix_skipped="${_helix_skipped}${_helix_skipped:+|}$1"
+    _hes_count=$((_hes_count + 1))
+}
+
 helix_env_file_trusted() {
+    _hef_file="$1"
+    _hef_kind=other
+    _hef_detail=""
+    _hef_expected=""
     _hef_real=$(readlink -f "$1" 2>/dev/null) || _hef_real="$1"
     [ -n "$_hef_real" ] || _hef_real="$1"
     _hef_uid=$(id -u 2>/dev/null) || _hef_uid=""
@@ -373,28 +424,30 @@ helix_env_file_trusted() {
         fi
     fi
     if [ "$_hef_dir_owner" = "0" ]; then
-        _hef_fix="fix: chown root:root $_hef_real && chmod 644 $_hef_real"
+        _hef_expected="root:root"
     else
-        _hef_fix="fix: chown $_hef_dir_owner $_hef_real && chmod 644 $_hef_real"
+        _hef_expected="$_hef_dir_owner"
     fi
+    _hef_fix="fix: chown $_hef_expected $_hef_real && chmod 644 $_hef_real"
     _hef_stat=$(helix_env_stat "$1")
     if [ -z "$_hef_stat" ] || [ -z "$_hef_uid" ]; then
-        log "warning: cannot determine owner/mode of $1 - env file skipped ($_hef_fix)"
-        helix_env_trust_cleanup
+        _hef_detail="its owner or permissions could not be read"
+        helix_env_refuse "cannot determine owner/mode of $1"
         return 1
     fi
     _hef_owner="${_hef_stat%% *}"
     _hef_mode="${_hef_stat##* }"
     if [ "$_hef_owner" != "0" ] && [ "$_hef_owner" != "$_hef_uid" ] &&
         [ "$_hef_owner" != "$_hef_dir_owner" ]; then
-        log "warning: $1 is owned by uid $_hef_owner, not root, this user (uid $_hef_uid) or the owner of its directory - env file skipped ($_hef_fix)"
-        helix_env_trust_cleanup
+        _hef_kind=owner
+        _hef_detail="$_hef_owner"
+        helix_env_refuse "$1 is owned by uid $_hef_owner, not root, this user (uid $_hef_uid) or the owner of its directory"
         return 1
     fi
     case "$_hef_mode" in
         '' | *[!0-9]*)
-            log "warning: unreadable mode '$_hef_mode' on $1 - env file skipped ($_hef_fix)"
-            helix_env_trust_cleanup
+            _hef_detail="its permissions could not be read"
+            helix_env_refuse "unreadable mode '$_hef_mode' on $1"
             return 1
             ;;
     esac
@@ -421,8 +474,8 @@ helix_env_file_trusted() {
                     ;;
             esac
         fi
-        log "warning: $1 (uid $_hef_owner, mode $_hef_mode) is group- or world-writable - env file skipped ($_hef_fix)"
-        helix_env_trust_cleanup
+        _hef_kind=mode
+        helix_env_refuse "$1 (uid $_hef_owner, mode $_hef_mode) is group- or world-writable"
         return 1
     fi
     helix_env_trust_cleanup
@@ -431,7 +484,8 @@ helix_env_file_trusted() {
 
 helix_env_trust_cleanup() {
     unset _hef_stat _hef_uid _hef_owner _hef_mode _hef_real _hef_dir_owner \
-        _hef_hop _hef_fix _hef_again _hef_again_mode
+        _hef_hop _hef_fix _hef_again _hef_again_mode _hef_kind _hef_detail \
+        _hef_expected _hef_file
 }
 
 # Literal value of a `KEY=value` line's right-hand side: one pair of matching
@@ -476,6 +530,10 @@ helix_env_value() {
 }
 
 helix_load_env_file() {
+    # The two handoff variables are launcher-authoritative: an ambient value
+    # (systemd Environment=, an operator shell) must not fabricate a refusal
+    # the launcher never made.
+    unset HELIX_ENV_FILE_REFUSED HELIX_ENV_LINES_SKIPPED
     _helix_env_file=""
     for _env_path in \
         "${INSTALL_DIR}/config/helixscreen.env" \
@@ -504,6 +562,9 @@ helix_load_env_file() {
     _lineno=0
     _helix_file_set=""
     _helix_refused=""
+    _helix_skipped=""
+    _hes_count=0
+    _hes_more=0
     while IFS= read -r _line || [ -n "$_line" ]; do
         _lineno=$((_lineno + 1))
         # Normalize: strip CR, trim whitespace, drop optional `export ` prefix.
@@ -521,12 +582,14 @@ helix_load_env_file() {
             [A-Za-z_]*=*) ;;
             *)
                 log "warning: ${_helix_env_file}:${_lineno}: ignored malformed line: $_line"
+                helix_env_note_skip "line ${_lineno}:malformed line"
                 continue
                 ;;
         esac
         _var="${_line%%=*}"
         if ! helix_env_is_name "$_var"; then
             log "warning: ${_helix_env_file}:${_lineno}: invalid variable name '$_var'"
+            helix_env_note_skip "line ${_lineno}:invalid variable name"
             continue
         fi
         if ! helix_env_key_allowed "$_var"; then
@@ -535,16 +598,19 @@ helix_load_env_file() {
                 *)
                     log "warning: ${_helix_env_file}:${_lineno}: $_var is not a setting this file may change - ignored"
                     _helix_refused="${_helix_refused}${_helix_refused:+ }$_var"
+                    helix_env_note_skip "${_var}:not a setting this file may change"
                     ;;
             esac
             continue
         fi
         if ! _val=$(helix_env_value "${_line#*=}"); then
             log "warning: ${_helix_env_file}:${_lineno}: unterminated quote or text after the closing quote: $_line"
+            helix_env_note_skip "${_var}:unterminated quote"
             continue
         fi
         if _why=$(helix_env_value_refusal "$_var" "$_val"); then
             log "warning: ${_helix_env_file}:${_lineno}: $_var $_why; ignored"
+            helix_env_note_skip "${_var}:${_why}"
             continue
         fi
         # Only set if not already in environment (systemd Environment= /
@@ -555,6 +621,7 @@ helix_load_env_file() {
         if [ -z "$_existing" ]; then
             if ! export "$_var=$_val" 2>/dev/null; then
                 log "warning: ${_helix_env_file}:${_lineno}: failed to export: $_line"
+                helix_env_note_skip "${_var}:could not be exported"
             else
                 case " ${_helix_file_set} " in
                     *" $_var "*) ;;
@@ -576,7 +643,11 @@ helix_load_env_file() {
             esac
         fi
     done < "$_helix_env_file"
-    unset _line _var _val _why _existing _lineno _helix_file_set _helix_refused _helix_env_file
+    if [ -n "$_helix_skipped" ]; then
+        export HELIX_ENV_LINES_SKIPPED="$_helix_skipped"
+    fi
+    unset _line _var _val _why _existing _lineno _helix_file_set _helix_refused \
+        _helix_skipped _hes_count _hes_more _helix_env_file
 }
 
 # --print-env NAME: resolve NAME exactly as the env-file read resolves it

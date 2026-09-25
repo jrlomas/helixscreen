@@ -350,7 +350,7 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     REQUIRE(backend != nullptr);
 
     std::vector<std::pair<ToastSeverity, std::string>> toasts;
-    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg) {
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg, uint32_t) {
         toasts.emplace_back(severity, msg);
     });
 

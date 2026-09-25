@@ -481,9 +481,13 @@ void ToastManager::create_toast_internal(ToastSeverity severity, const char* mes
 
     animate_entrance(widget);
 
-    it->dismiss_timer = lv_timer_create(dismiss_timer_cb, duration_ms, widget);
-    if (it->dismiss_timer)
-        lv_timer_set_repeat_count(it->dismiss_timer, 1);
+    // duration_ms of 0 is the sticky form: no dismiss timer, so the toast
+    // stays until its close button is tapped.
+    if (duration_ms > 0) {
+        it->dismiss_timer = lv_timer_create(dismiss_timer_cb, duration_ms, widget);
+        if (it->dismiss_timer)
+            lv_timer_set_repeat_count(it->dismiss_timer, 1);
+    }
 
     update_notification_bell();
 

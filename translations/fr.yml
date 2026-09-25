@@ -56,6 +56,7 @@ translations:
   1 event queued: 1 événement en attente
   1 hour ago: il y a 1 heure
   1 layer: 1 couche
+  1 line in helixscreen.env was ignored: ''
   1 min: '1 min'
   1 min ago: il y a 1 min
   1 minute: 1 minute
@@ -250,6 +251,7 @@ translations:
     du capteur
   Assisted Retract: 'Rétraction assistée'
   Assisting: Assistance
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: Échec de l'authentification
   Auto: Auto
   Auto Bed Mesh: Maillage auto du plateau
@@ -1293,6 +1295,8 @@ translations:
   Firmware reports no bypass. Enable if you feed filament straight to the extruder: Le firmware ne signale aucun bypass. Activez cette option si vous alimentez l'extrudeur directement en filament
   Firmware restarting...: Redémarrage du firmware...
   Firmware saved X = Y's value; the measured X result was discarded: Le firmware a enregistré la valeur de Y pour X ; le résultat mesuré de X a été écarté
+  'Fix: chmod 644 {}, then restart': ''
+  'Fix: chown {} {}, then restart': ''
   FlashForge Adventurer 5M: FlashForge Adventurer 5M
   FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
@@ -2728,6 +2732,7 @@ translations:
   Security: Sécurité
   Security, network, host, and administration: Sécurité, réseau, hôte et administration
   See exactly what data will be sent: Voir exactement quelles données seront envoyées
+  See the log: ''
   See the quick tour of HelixScreen again: Revoir la visite rapide de HelixScreen
   Select: Sélectionner
   Select 'None' if you don't have a filament sensor, or if you don't want to pause on runout.: Sélectionnez
@@ -3636,6 +3641,10 @@ translations:
   feeder not in automatic mode: 'alimentateur pas en mode automatique'
   filament sensor disabled: 'capteur de filament désactivé'
   heated bed: plateau chauffant
+  'helixscreen.env ignored: owned by uid {}': ''
+  'helixscreen.env ignored: untrusted symlink chain': ''
+  'helixscreen.env ignored: writable by other users': ''
+  'helixscreen.env ignored: {}': ''
   idle: inactif
   in unit {} slot {}: dans l'unité {} slot {}
   layers: couches
@@ -3693,6 +3702,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} est installé mais son passage à la bobine de secours est désactivé, aucun changement automatique n''aura donc lieu.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} est installé, mais son réglage de bobine de secours n''a pas pu être lu - ne comptez pas sur un changement automatique.'
   '{} is not set up on this printer': "{} n'est pas configuré sur cette imprimante"
+  '{} lines in helixscreen.env were ignored': ''
   '{} macro not configured': Macro {} non configurée
   '{} matches.': '{} correspond.'
   '{} may cause unintended changes. Are you sure?': '{} peut entraîner des modifications

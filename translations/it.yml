@@ -56,6 +56,7 @@ translations:
   1 event queued: 1 evento in coda
   1 hour ago: 1 ora fa
   1 layer: 1 strato
+  1 line in helixscreen.env was ignored: ''
   1 min: '1 min'
   1 min ago: 1 min fa
   1 minute: 1 minuto
@@ -246,6 +247,7 @@ translations:
     del sensore
   Assisted Retract: 'Retrazione assistita'
   Assisting: Assistenza
+  At least {} lines in helixscreen.env were ignored: ''
   Authentication failed: Autenticazione fallita
   Auto: Auto
   Auto Bed Mesh: Mesh piano automatica
@@ -1276,6 +1278,8 @@ translations:
   Firmware reports no bypass. Enable if you feed filament straight to the extruder: Il firmware non rileva un bypass. Abilita se alimenti il filamento direttamente all'estrusore
   Firmware restarting...: Riavvio firmware...
   Firmware saved X = Y's value; the measured X result was discarded: Il firmware ha salvato il valore di Y per X; il risultato misurato di X è stato scartato
+  'Fix: chmod 644 {}, then restart': ''
+  'Fix: chown {} {}, then restart': ''
   FlashForge Adventurer 5M: FlashForge Adventurer 5M
   FlashForge Adventurer 5X: FlashForge Adventurer 5X
   FlashForge IFS: FlashForge IFS
@@ -2706,6 +2710,7 @@ translations:
   Security: Sicurezza
   Security, network, host, and administration: Sicurezza, rete, host e amministrazione
   See exactly what data will be sent: Vedi esattamente quali dati verranno inviati
+  See the log: ''
   See the quick tour of HelixScreen again: Rivedi il tour rapido di HelixScreen
   Select: Seleziona
   Select 'None' if you don't have a filament sensor, or if you don't want to pause on runout.: Selezionare
@@ -3601,6 +3606,10 @@ translations:
   feeder not in automatic mode: 'alimentatore non in modalità automatica'
   filament sensor disabled: 'sensore filamento disattivato'
   heated bed: piano riscaldato
+  'helixscreen.env ignored: owned by uid {}': ''
+  'helixscreen.env ignored: untrusted symlink chain': ''
+  'helixscreen.env ignored: writable by other users': ''
+  'helixscreen.env ignored: {}': ''
   idle: inattivo
   in unit {} slot {}: 'nell''unità {} slot {}'
   layers: layer
@@ -3658,6 +3667,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} è installato ma il passaggio alla bobina di riserva è disattivato, quindi non avverrà alcun cambio automatico.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} è installato, ma non è stato possibile leggere la sua impostazione della bobina di riserva - non contare su un cambio automatico.'
   '{} is not set up on this printer': '{} non è configurato su questa stampante'
+  '{} lines in helixscreen.env were ignored': ''
   '{} macro not configured': Macro {} non configurata
   '{} matches.': '{} corrisponde.'
   '{} may cause unintended changes. Are you sure?': '{} potrebbe causare modifiche

@@ -953,8 +953,9 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "AmsContextMenu: a conflicting tool selection names both tools as labels",
                  "[ui][ams][context_menu]") {
     std::vector<std::pair<ToastSeverity, std::string>> toasts;
-    helix::ui::set_test_toast_hook(
-        [&](ToastSeverity sev, const std::string& msg) { toasts.emplace_back(sev, msg); });
+    helix::ui::set_test_toast_hook([&](ToastSeverity sev, const std::string& msg, uint32_t) {
+        toasts.emplace_back(sev, msg);
+    });
 
     auto backend = std::make_unique<AmsBackendMock>(4);
     backend->set_operation_delay(0);
