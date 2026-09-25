@@ -76,6 +76,40 @@ How evidence arbitrates once matched:
 
 ---
 
+## Evidence Rubric
+
+Walk this whole list before writing or changing a profile, a collector rule, or a pre-print
+inference. Console narration is only one source, and a phase that looks unnarrated is often
+plainly visible in another one. For every row, record in the change what the source showed for
+each stretch of the real start, including "nothing".
+
+| Source | Where to read it | What it can settle |
+|--------|------------------|--------------------|
+| The G-code file itself | Moonraker file download, or `GCodeOpsDetector`'s pre-scan in the device log (`Found PRINT_START call at line`, `First extrusion at line`, the operation list) | The exact scripted order when start G-code is inlined (slicer-side start sequences like the U1's): homing, cleaning, mesh, the purge/prime line, with line numbers and byte offsets |
+| File position | `virtual_sdcard.file_position` / `progress` | Which scripted line the printer is executing now, against the pre-scan. The printed file may be HelixScreen's modified copy (`.helix_temp/modified_*`), whose offsets differ from the original |
+| Macro definitions | `configfile.config` (`gcode_macro *`), the vendor's klipper extras | What a `PRINT_START` or vendor macro really does, and in what order, when the file only calls it |
+| Console narration | `server.gcode_store`, the device HelixScreen log (`-vvv`), klippy.log | Firmware/macro lines and action codes, with timestamps |
+| Structured state | `display_status.message`, vendor status objects | Published phase strings (`phase_object`) |
+| Toolhead position | `toolhead.position`, `motion_report.live_position`, `gcode_move` | Probing descents, corner tours, mesh row marches, parking at a purge bucket or cutter, first-layer height |
+| Extrusion | `motion_report.live_extruder_velocity`, E in `live_position` | Purge and prime lines, flow calibration, filament loads: anything that extrudes |
+| Heaters | every heater's `target`, `temperature`, `power` | Heating and soak stretches, reheat before priming, per-tool preheats on a toolchanger |
+| Fans, tools, filament | fan objects, `toolhead.extruder`, AMS/feeder objects | Tool changes, feeds, cooling steps |
+| Print state | `print_stats.state`, `print_duration`, `info.current_layer` | When the printer thinks printing began (often well before layer 1) and the real first-layer edge |
+| Timing | timestamps across all of the above | Silent gaps and how long each stretch really lasts |
+
+Rules that come out of the walk:
+
+- **A declared signal outranks an inference.** When the printer or the file positively
+  identifies a stretch, use that; infer only what no source identifies.
+- **An inference must be checked against every silent gap in a real capture**, not just the one
+  it was written for. A quiet-time or position rule that fits the prime line can fire just as
+  well inside an earlier unnarrated calibration stretch.
+- **Replay tests keep the real timing.** A replay that compresses a two-minute silent gap into
+  one tick proves nothing about a rule that depends on silence or elapsed time. Take the gaps
+  from the capture's timestamps.
+- **No source is also a finding.** Write down which stretches nothing identifies; the bar's
+  weighted progress covers those, and a confident wrong label is worse than a generic one.
+
 ## All Phases
 
 These are the `PrintStartPhase` enum values from `include/print_start_phase.h`. Use the **string name** (case-insensitive) in profile JSON files. The ints are an implementation detail - they order the sequence and nothing else - so profiles name phases and never number them.
@@ -294,7 +328,9 @@ Run a print on the target printer and save the full console output - from `START
 ./build/bin/helix-screen -vvv  # TRACE level shows all G-code responses
 ```
 
-Or check Moonraker's console / gcode store, or klipper's `printer.log`. Then read the capture and ask, in this order (strongest evidence first):
+Or check Moonraker's console / gcode store, or klipper's `printer.log`. The console is only one
+of the sources: walk the whole [Evidence Rubric](#evidence-rubric) for the same start, with
+timestamps. Then read the capture and ask, in this order (strongest evidence first):
 
 - Does the firmware or a mod publish a status object carrying state, or does the macro write its progress to `display_status.message` with `SET_DISPLAY_TEXT` / `M117`? (`phase_object` candidate - and on a macro-driven Klipper printer the console will be nearly empty, so check this first)
 - Do the macros print structured state lines? (`signal_formats` candidate)
