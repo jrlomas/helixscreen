@@ -124,6 +124,13 @@ what gets saved.
 - **Power-loss recovery works on Qidi printers (#1716)** - on a Q2, Q1 Pro or Plus 4 running
   the stock firmware, the resume dialog now appears after a print was cut short by a power
   loss, offering the printer's own `RESUME_INTERRUPTED` flow or a clean discard.
+- **FlashForge Creator 5 and Creator 5 Pro are supported printers (#1714)** - both models of
+  FlashForge's four-head tool changer are recognized and given their own settings, on either
+  of the two firmwares that replace its stock software: Z-Mod and Reforge. Mounting and
+  parking a head is driven from the screen, and on Z-Mod each head's material and colour are
+  read from the printer itself. Z-Mod still owes an update that reports the mounted head and
+  its colours live; until it ships, those details appear after the first head change. All of
+  this is verified against a simulated printer, not yet on the hardware.
 
 ### Changed
 
@@ -261,6 +268,14 @@ what gets saved.
 - **Tapping Done on a later home page slid back to the first page** (#1638) - leaving edit mode
   with a second or later page showing scrolled the home screen back to its first page. The page
   you were on stays on screen, and pages change only when you swipe or tap a page arrow.
+- **A tool changer with nothing mounted showed T0 as active** - when the printer reported that
+  no head was on the carriage, the active-tool highlight fell back to the first head anyway,
+  so the screen claimed head 1 was selected while the carriage was empty. No head is shown as
+  active until one is actually mounted.
+- **The setup wizard's connection step came up with blank address fields** - the IP and port
+  boxes on the Moonraker connection step opened empty instead of carrying the default
+  (127.0.0.1 and port 7125), so the whole address had to be typed by hand. Both fields are
+  seeded again.
 
 ### Internal
 
