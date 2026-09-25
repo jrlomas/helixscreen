@@ -3812,15 +3812,29 @@ TEST_CASE("heater wait report lines", "[print][collector][heater_wait]") {
 TEST_CASE_METHOD(SnapmakerCollectorFixture,
                  "Snapmaker U1: note_priming shows Priming without completing pre-print",
                  "[print][collector][snapmaker][preprint]") {
+    helix::sim::SimulatedClock::ManualScope clock(helix::sim::SimSpeed::of(1.0));
     collector().start();
     drain_async_updates();
+
+    // Before the mesh phases the nudge must change nothing, however often the
+    // print_duration observer fires it (print_duration goes positive with the
+    // first toolhead motion, long before any extrusion).
+    for (int i = 0; i < 3; ++i) {
+        collector().note_priming();
+        drain_async_updates();
+    }
+    REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
+    REQUIRE(get_current_message().find("Priming") == std::string::npos);
 
     // Sequence has reached the mesh, pre-layer-1.
     feed_gcode("// z offset: -0.05");
     feed_gcode("// z_mesh_complete: -0.02573436601557052");
     REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
 
-    // print_duration went positive (prime extrusion) while current_layer < 1.
+    // print_duration went positive (prime extrusion) while current_layer < 1,
+    // and the printer has gone quiet — the mesh finished, the prime line is
+    // the silent stretch now running.
+    clock.advance(std::chrono::seconds(10));
     collector().note_priming();
     drain_async_updates();
     INFO("After note_priming: phase=" << static_cast<int>(get_current_phase())
@@ -3832,7 +3846,8 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     // COMPLETE — that only happens on the real first-layer (current_layer 0->1).
     REQUIRE(get_current_phase() != PrintStartPhase::COMPLETE);
 
-    // A second note_priming is a no-op (already PURGING) and still not COMPLETE.
+    // Further note_priming calls are a no-op (one-shot) and still not COMPLETE.
+    collector().note_priming();
     collector().note_priming();
     drain_async_updates();
     REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
@@ -3844,10 +3859,51 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
 }
 
 // ============================================================================
+// The one-shot priming latch is per PRINT, not per collector: MoonrakerManager
+// reuses one collector across prints (reset() + start() per arm), so the next
+// print's prime line must be inferable again.
+// ============================================================================
+
+TEST_CASE_METHOD(SnapmakerCollectorFixture,
+                 "Snapmaker U1: the priming nudge re-arms for the next print",
+                 "[print][collector][snapmaker][preprint]") {
+    helix::sim::SimulatedClock::ManualScope clock(helix::sim::SimSpeed::of(1.0));
+    collector().start();
+    drain_async_updates();
+
+    auto prime_at_mesh = [&]() {
+        feed_gcode("// z offset: -0.05");
+        REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+        clock.advance(std::chrono::seconds(10));
+        collector().note_priming();
+        drain_async_updates();
+        REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
+        REQUIRE(get_current_message().find("Priming") != std::string::npos);
+    };
+
+    prime_at_mesh();
+
+    SECTION("start() alone re-arms (stop/start without reset)") {
+        collector().stop();
+        collector().start();
+        drain_async_updates();
+        REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
+        prime_at_mesh();
+    }
+
+    SECTION("reset() alone re-arms (reset while active)") {
+        collector().reset();
+        drain_async_updates();
+        REQUIRE(get_current_phase() == PrintStartPhase::INITIALIZING);
+        prime_at_mesh();
+    }
+}
+
+// ============================================================================
 // A response_pattern whose phase enum was already detected may still refine
-// the MESSAGE when it differs (the U1 narrates "Probing Z..." through a
-// HOMING enum the first homing signal already claimed), but it may never
-// move the phase backwards.
+// the MESSAGE when it differs (the U1 narrates "Probing Z..." and "Bed
+// mesh..." through enums a proactive or earlier signal already claimed), but
+// it may never move the phase backwards.
 // ============================================================================
 
 TEST_CASE_METHOD(SnapmakerCollectorFixture,
@@ -3873,6 +3929,97 @@ TEST_CASE_METHOD(SnapmakerCollectorFixture,
     feed_gcode("// probe_start_x: 110.0");
     REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
     REQUIRE(get_current_message().find("Inspecting bed") != std::string::npos);
+}
+
+// ============================================================================
+// Full U1 pre-print replay (the real action-code + response strings from the
+// device's own log): homing, Z touch, bed inspect, extruder switch check,
+// auto-feed, Z calibration mesh, plate detect, the real bed mesh, then the
+// silent prime line before layer 1. The print_duration observer calls
+// note_priming() on every ~1s tick from the switch check onward; the real
+// phases must own the display the whole way, and the inferred Priming may
+// appear only after the final mesh, once.
+// ============================================================================
+
+TEST_CASE_METHOD(SnapmakerCollectorFixture,
+                 "Snapmaker U1: full pre-print replay - real phases display, inferred Priming "
+                 "fires once after the final mesh",
+                 "[print][collector][snapmaker][preprint]") {
+    helix::sim::SimulatedClock::ManualScope clock(helix::sim::SimSpeed::of(1.0));
+    collector().start();
+    drain_async_updates();
+
+    // One print_stats tick: 1s of sim time, then the observer's nudge.
+    auto tick = [&]() {
+        clock.advance(std::chrono::seconds(1));
+        collector().note_priming();
+        drain_async_updates();
+        return get_current_message();
+    };
+
+    feed_gcode("// trigger_mcu_pos: {\"z\": 150}");
+    REQUIRE(get_current_phase() == PrintStartPhase::HOMING);
+    REQUIRE(get_current_message().find("Homing axes") != std::string::npos);
+
+    feed_gcode("// probe_start_x: 110.0");
+    REQUIRE(get_current_message().find("Probing Z") != std::string::npos);
+
+    feed_gcode("// Success: Set action code PRINT_BED_DETECTING");
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+    REQUIRE(get_current_message().find("Inspecting bed") != std::string::npos);
+
+    // print_duration goes positive here on the real printer: every tick from
+    // now on calls note_priming().
+    feed_gcode("// Success: Set action code PRINT_SWITCH_CHECKING");
+    REQUIRE(get_current_message().find("Checking extruders") != std::string::npos);
+    REQUIRE(tick().find("Checking extruders") != std::string::npos);
+
+    feed_gcode("// Success: Set action code PRINT_AUTO_FEEDING");
+    REQUIRE(get_current_message().find("Loading filament") != std::string::npos);
+    REQUIRE(tick().find("Loading filament") != std::string::npos);
+
+    // Z calibration: the BED_MESH enum is already detected and the phase sits
+    // at INITIALIZING, so this is a forward move with a new message.
+    feed_gcode("// z offset: -0.05");
+    REQUIRE(get_current_phase() == PrintStartPhase::BED_MESH);
+    REQUIRE(get_current_message().find("Bed mesh") != std::string::npos);
+    feed_gcode("// probe at 10.000,10.000 is z=-0.100000");
+    feed_gcode("// probe at 50.000,10.000 is z=-0.105000");
+    REQUIRE(tick().find("Bed mesh") != std::string::npos);
+    feed_gcode("// z_mesh_complete: -0.02573436601557052");
+
+    feed_gcode("// Success: Set action code DETECT_PLATE");
+    REQUIRE(get_current_message().find("Detecting plate") != std::string::npos);
+    feed_gcode("// probe at 10.000,10.000 is z=-0.200000");
+    feed_gcode("// probe at 50.000,10.000 is z=-0.205000");
+    REQUIRE(tick().find("Detecting plate") != std::string::npos);
+
+    // The real bed mesh.
+    feed_gcode("// z offset: -0.06");
+    REQUIRE(get_current_message().find("Bed mesh") != std::string::npos);
+    feed_gcode("// probe at 20.000,20.000 is z=-0.300000");
+    feed_gcode("// probe at 60.000,20.000 is z=-0.305000");
+    feed_gcode("// z_mesh_complete: -0.03000000000000000");
+
+    // Silent prime line: nothing narrates. Ticks inside the quiet delay must
+    // leave the mesh label alone.
+    for (int i = 0; i < 9; ++i) {
+        const std::string msg = tick();
+        INFO("tick " << i << ": " << msg);
+        REQUIRE(msg.find("Bed mesh") != std::string::npos);
+    }
+    // The 10th quiet second crosses the delay: Priming, exactly once.
+    REQUIRE(tick().find("Priming") != std::string::npos);
+    REQUIRE(get_current_phase() == PrintStartPhase::PURGING);
+
+    // After the one shot, further ticks overwrite nothing.
+    tick();
+    REQUIRE(get_current_message().find("Priming") != std::string::npos);
+
+    collector().complete_from_external_signal("first layer");
+    drain_async_updates();
+    REQUIRE(get_current_phase() == PrintStartPhase::COMPLETE);
+    REQUIRE(get_current_message().find("Starting Print") != std::string::npos);
 }
 
 // ============================================================================

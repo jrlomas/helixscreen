@@ -209,8 +209,16 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
      *
      * This advances the displayed phase to PURGING ("Priming...") but does NOT
      * complete the pre-print phase — completion stays gated on the genuine
-     * current_layer 0->1 edge (MoonrakerManager::should_complete_preprint). A
-     * no-op once already at COMPLETE or PURGING.
+     * current_layer 0->1 edge (MoonrakerManager::should_complete_preprint).
+     *
+     * The nudge is an inference, so it owns its own gating: it speaks at most
+     * once per print, only once the collector has reached BED_MESH or a later
+     * phase (before that the printer is still homing / feeding / heating, and
+     * print_duration goes positive with the first toolhead motion), and only
+     * after the printer has stopped narrating for PRIMING_INFER_QUIET — probe
+     * lines and action codes refresh that clock throughout a live mesh, so a
+     * mesh in progress never reads as priming. A no-op once already at COMPLETE
+     * or PURGING.
      */
     void note_priming();
 
@@ -506,6 +514,10 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     // Phase tracking (protected by state_mutex_)
     std::set<helix::PrintStartPhase> detected_phases_;
     helix::PrintStartPhase current_phase_ = helix::PrintStartPhase::IDLE;
+    /// Latched when the inferred priming nudge has spoken this print: it is an
+    /// inference, so once it has spoken it must never speak again — a later
+    /// real signal always wins. Reset in start()/reset().
+    bool priming_noted_ = false;
     bool print_start_detected_ = false;
     int max_sequential_progress_ = 0; // Monotonic progress guard for sequential mode
     helix::sim::SimulatedClock::time_point printing_state_start_;
@@ -569,6 +581,12 @@ class PrintStartCollector : public std::enable_shared_from_this<PrintStartCollec
     /// (the K2 spends ~5s per point, ~3s on a manual sweep) with margin for a
     /// heat-soak step that emits nothing at all.
     static constexpr auto PREPRINT_QUIET_TIMEOUT = std::chrono::seconds(90);
+    /// How long the printer must say nothing (no matched line, no probe line,
+    /// no standing hold) before the inferred priming nudge may speak. Above
+    /// the gap between mesh probe points (the K2 spends ~5s per point), so a
+    /// live mesh never reads as priming; below a genuine prime line (predicted
+    /// purge runs ~15s), so the label still appears during one.
+    static constexpr auto PRIMING_INFER_QUIET = std::chrono::seconds(10);
     static constexpr float ADAPTIVE_TIMEOUT_MARGIN =
         1.5f; ///< Multiply predicted total for adaptive timeout
     static constexpr float ABSOLUTE_TIMEOUT_MARGIN =

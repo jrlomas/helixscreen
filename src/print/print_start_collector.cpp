@@ -179,6 +179,7 @@ void PrintStartCollector::start() {
         host_pre_start_echo_lines_.clear();
         detected_phases_.clear();
         current_phase_ = PrintStartPhase::INITIALIZING;
+        priming_noted_ = false;
         print_start_detected_ = false;
         max_sequential_progress_ = 0;
         phase_enter_times_.clear();
@@ -431,6 +432,7 @@ void PrintStartCollector::reset() {
         std::lock_guard<std::mutex> lock(state_mutex_);
         detected_phases_.clear();
         current_phase_ = PrintStartPhase::INITIALIZING;
+        priming_noted_ = false;
         print_start_detected_ = false;
         max_sequential_progress_ = 0;
         printing_state_start_ = helix::sim::SimulatedClock::now();
@@ -502,12 +504,28 @@ void PrintStartCollector::note_priming() {
         // Don't regress out of COMPLETE, and don't re-announce once already
         // showing PURGING. update_phase() also guards COMPLETE→COMPLETE, but we
         // must not flip a finished pre-print back to "Priming...".
-        if (current_phase_ == PrintStartPhase::COMPLETE ||
+        if (priming_noted_ || current_phase_ == PrintStartPhase::COMPLETE ||
             current_phase_ == PrintStartPhase::PURGING) {
             return;
         }
+        // Late only: print_duration goes positive with the first toolhead
+        // motion, so before the mesh phases it says "homing/feeding", not
+        // "priming". The prime line runs after the last mesh-related phase.
+        if (static_cast<int>(current_phase_) < static_cast<int>(PrintStartPhase::BED_MESH)) {
+            return;
+        }
+        // And only once the printer has stopped narrating: probe lines and
+        // action codes refresh the signal clock throughout a live mesh, so a
+        // mesh in progress never reads as priming — the silent prime line is
+        // the quiet stretch this waits for.
+        const auto last_signal = std::max(last_signal_time_, hold_until_);
+        if (helix::sim::SimulatedClock::now() - last_signal < PRIMING_INFER_QUIET) {
+            return;
+        }
+        priming_noted_ = true;
     }
-    spdlog::info("[PrintStartCollector] print_duration positive pre-layer-1 → Priming");
+    spdlog::info("[PrintStartCollector] print_duration positive pre-layer-1, past the mesh and "
+                 "quiet → Priming");
     // Mark as a real signal so the proactive temperature heuristic stays gated
     // off (the firmware/extrusion is authoritative here), then advance the
     // displayed phase. NOT a completion — that stays on the current_layer edge.
