@@ -13,7 +13,7 @@
 
 #include "ams_backend_ace.h"
 
-#include "ui_ams_detail.h"
+#include "ui_insert_notice.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
@@ -74,6 +74,18 @@ AmsBackendAce::~AmsBackendAce() {
 
 void AmsBackendAce::on_started() {
     spdlog::info("[ACE] Backend started — querying initial filament_hub/ace state via WebSocket");
+
+    // A restart re-subscribes and re-parses from a fresh initial query, so
+    // the insert edge re-baselines too: a prev status carried across a
+    // disconnect would judge the first post-reconnect frame as an insert,
+    // and an evidence map carried across a printer swap would compare
+    // spools that never shared a bay.
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        prev_slot_status_.clear();
+        last_spool_evidence_.clear();
+        pending_insert_reads_.clear();
+    }
 
     // Load persisted per-slot overrides from the shared FilamentSlotOverrideStore
     // BEFORE issuing the initial status query — otherwise the first status
@@ -489,6 +501,15 @@ AmsError AmsBackendAce::cancel() {
 // ============================================================================
 
 namespace {
+
+/// Parse passes an insert whose tag read has not landed stays pending before
+/// the no-read fallback verdict runs. The REST poll brings every bay through
+/// the parse each POLL_INTERVAL_MS, so this bounds the wait on that path; the
+/// WebSocket path is change-driven, where a read that never lands can leave
+/// the insert pending until the next frame of any kind arrives - harmless,
+/// since a late verdict is still judged against the occupant that was in the
+/// bay when the spool went in.
+constexpr int kAcePendingReadParsePasses = 8;
 
 /// Put @p info's filament fields on @p slot, covering every SlotInfo field the
 /// caller may have set, so get_slot_info returns them at once.
@@ -1033,7 +1054,7 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                     }
                 }
 
-                // Parse material (e.g., "PLA", "PETG") — see read_slot_material.
+                // Parse material (e.g., "PLA", "PETG") - see read_slot_material.
                 std::optional<std::string> observed_material = read_slot_material(slot_json);
                 if (observed_material) {
                     slot.material = *observed_material;
@@ -1044,17 +1065,24 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                     // SKU is available but not mapped to SlotInfo currently
                 }
 
-                // The rfid boolean is the bay's tag reader: true means the
+                // The rfid field is the bay's tag reader: true means the
                 // material and colour in this frame came off the spool's tag;
                 // false or absent means the hub is stating its own memory of
                 // the bay, which is not a reading of what is in it now
-                // (prestonbrown/helixscreen#1710).
+                // (prestonbrown/helixscreen#1710). ValgACE's bridge and the
+                // multiACE lineage send the same flag as integers, so a
+                // nonzero number reads as true.
                 helix::ams::SpoolEvidence evidence;
-                if (slot_json.contains("rfid") && slot_json["rfid"].is_boolean() &&
-                    slot_json["rfid"].get<bool>()) {
-                    evidence.material = observed_material.value_or(std::string{});
-                    evidence.color_rgb = observed_color;
-                    evidence.tag_read_complete = true;
+                if (slot_json.contains("rfid")) {
+                    const auto& rfid = slot_json["rfid"];
+                    const bool tag_read =
+                        (rfid.is_boolean() && rfid.get<bool>()) ||
+                        (rfid.is_number_integer() && rfid.get<std::int64_t>() != 0);
+                    if (tag_read) {
+                        evidence.material = observed_material.value_or(std::string{});
+                        evidence.color_rgb = observed_color;
+                        evidence.tag_read_complete = true;
+                    }
                 }
 
                 // Insert-edge verdict. Must run BEFORE apply_resolved_lane so
@@ -1076,9 +1104,13 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                 // Remember the reading for the spool now in the bay, and keep
                 // it across the empty interval: the reading of the spool that
                 // left is the comparison side of the insert rule when the next
-                // one arrives. Must follow the check, which reads the previous
-                // entry.
-                if (slot.status == SlotStatus::AVAILABLE || slot.status == SlotStatus::LOADED) {
+                // one arrives. Only a frame carrying a read writes it: a
+                // no-read frame states hub memory, not what the reader got
+                // off the occupant, and overwriting with it would lose the
+                // comparison side while an insert is still pending. Must
+                // follow the check, which reads the previous entry.
+                if ((slot.status == SlotStatus::AVAILABLE || slot.status == SlotStatus::LOADED) &&
+                    evidence.tag_read_complete) {
                     last_spool_evidence_[idx] = evidence;
                 }
 
@@ -1111,7 +1143,7 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                 helix::ams::ingest(lane_id(idx), cache);
 
                 // Layer user-configured overrides on top of firmware-reported
-                // data. Override wins for any non-default field — for ACE
+                // data. Override wins for any non-default field - for ACE
                 // that includes color and material, since ACE hardware
                 // doesn't carry brand/spool_name/weights at all and the user
                 // edit is the authoritative source for color/material too.
@@ -1909,9 +1941,47 @@ void AmsBackendAce::check_hardware_event_clear(SlotInfo& slot, int slot_index, S
     // recorded (caller handles the baseline skip).
     const bool was_empty = (prev == SlotStatus::EMPTY);
     const bool is_present = (curr == SlotStatus::AVAILABLE || curr == SlotStatus::LOADED);
-    if (!was_empty || !is_present)
+    if (!is_present) {
+        // A bay that empties with an insert still waiting on its tag read
+        // drops the insert: the spool left before the reader ever stated
+        // one, and there is nothing in the bay to ask about.
+        pending_insert_reads_.erase(slot_index);
         return;
+    }
+    if (!was_empty) {
+        // Not an edge. The one thing a non-edge frame still owes is a
+        // pending insert: the bay reported the spool on an earlier frame and
+        // this one either carries the read it was waiting for, or is another
+        // pass with none.
+        auto pit = pending_insert_reads_.find(slot_index);
+        if (pit == pending_insert_reads_.end())
+            return;
+        if (inserted.tag_read_complete) {
+            judge_insert_locked(slot, slot_index, inserted);
+            pending_insert_reads_.erase(pit);
+        } else if (++pit->second >= kAcePendingReadParsePasses) {
+            // The read never landed. An empty evidence is NoEvidence under
+            // the rule, which offers the notice rather than clearing.
+            judge_insert_locked(slot, slot_index, helix::ams::SpoolEvidence{});
+            pending_insert_reads_.erase(pit);
+        }
+        return;
+    }
 
+    // EMPTY -> present, the insert edge. A frame carrying no read arms
+    // rather than judges: the read can land frames later, and judging on
+    // nothing would file every insert as no-evidence.
+    if (!inserted.tag_read_complete) {
+        spdlog::debug("[ACE] Slot {} inserted; tag read not landed yet, holding the verdict",
+                      slot_index);
+        pending_insert_reads_[slot_index] = 0;
+        return;
+    }
+    judge_insert_locked(slot, slot_index, inserted);
+}
+
+void AmsBackendAce::judge_insert_locked(SlotInfo& slot, int slot_index,
+                                        const helix::ams::SpoolEvidence& inserted) {
     std::optional<helix::ams::SpoolEvidence> before;
     if (const auto prev_reading = last_spool_evidence_.find(slot_index);
         prev_reading != last_spool_evidence_.end()) {
