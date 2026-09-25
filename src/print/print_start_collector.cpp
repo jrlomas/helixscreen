@@ -1387,25 +1387,32 @@ void PrintStartCollector::apply_profile_match(const PrintStartProfile::MatchResu
     // match.message arrives already translated: the profile matchers
     // resolve the template through the loaded pack before substituting
     // $1 capture groups.
-    // Update when this is a NEW phase, OR when it's a BED_MESH sub-phase
-    // *message* change while already in BED_MESH. The latter is what lets a
-    // mesh-start signal (Snapmaker U1 "// z offset:") relabel the display
-    // from a prior BED_MESH sub-phase (e.g. "Detecting plate") to "Bed
-    // mesh" even though the BED_MESH enum was already detected — without
-    // it, the previous sub-phase label persists through the whole real mesh
-    // because response_patterns otherwise fire once per enum value.
+    // Update when this is a NEW phase, OR when the phase was already detected
+    // and this line names the same or a later one with a DIFFERENT message.
+    // Firmwares narrate several distinct steps through one phase enum (the
+    // U1 routes "Homing axes"/"Probing Z" through HOMING and "Inspecting
+    // bed"/"Detecting plate"/"Bed mesh" through BED_MESH), so without the
+    // message refinement every step after the enum's first detection keeps
+    // the first label. Narration may refine; inference (a status-signal
+    // rule, marks_real_signal=false) may not relabel a phase the printer
+    // already named — except within BED_MESH, where an inferred rule that
+    // re-fires relabels the sub-phase (a restarted sweep). The refinement is
+    // bounded: it may not name a phase earlier than the one on display, so a
+    // late repeat of an old pattern cannot drag the phase backwards.
     // maybe_reset_for_mesh_subphase_locked() (inside update_phase) resets
-    // the probe counter on the message change so the "(n)" count restarts.
+    // the probe counter on a BED_MESH message change so the "(n)" count
+    // restarts.
     bool should_update = false;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         if (detected_phases_.find(match.phase) == detected_phases_.end()) {
             detected_phases_.insert(match.phase);
             should_update = true;
-        } else if (match.phase == PrintStartPhase::BED_MESH &&
-                   current_phase_ == PrintStartPhase::BED_MESH &&
+        } else if ((marks_real_signal || (match.phase == PrintStartPhase::BED_MESH &&
+                                          current_phase_ == PrintStartPhase::BED_MESH)) &&
+                   static_cast<int>(match.phase) >= static_cast<int>(current_phase_) &&
                    trim_trailing_ellipsis(match.message) !=
-                       trim_trailing_ellipsis(current_mesh_message_)) {
+                       trim_trailing_ellipsis(current_message_)) {
             should_update = true;
         } else if (marks_real_signal && heater_wait_shown_) {
             // A heater wait blocks the queue, so a line the printer narrates
