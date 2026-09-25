@@ -147,8 +147,7 @@ void WizardConnectionStep::init_subjects() {
 
     // The macro snprintf()s initial_value INTO buffer; passing the buffer as
     // its own initial value aliases source and destination, and glibc yields
-    // an empty string — the IP/port fields came up blank despite the seeded
-    // 127.0.0.1:7125 above. Seed from a copy.
+    // an empty string, losing the seed. Seed from a copy.
     const std::string ip_seed = connection_ip_buffer_;
     const std::string port_seed = connection_port_buffer_;
     UI_SUBJECT_INIT_AND_REGISTER_STRING(connection_ip_, connection_ip_buffer_, ip_seed.c_str(),
