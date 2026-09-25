@@ -403,6 +403,11 @@ AmsError AmsBackend::commit_user_edit(int slot_index, const SlotInfo& original,
     // A partly applied edit still changed what it applied: a binding that
     // reached firmware is bound whatever the call says about the rest.
     if (!err.success() && !err.partially_applied) {
+        // The dispatch refused the edit, so firmware holds nothing it could
+        // echo back. A backend that had staged its guard by then would
+        // withhold the next genuine reading as its own failed write, so the
+        // refusal drops it here rather than in each backend's failure path.
+        abandon_own_write_echoes(slot_index);
         return err;
     }
 

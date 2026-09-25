@@ -89,6 +89,34 @@ using ToolChangerHarness = RegisteredBackend<AmsBackendToolChanger>;
 using QidiHarness = RegisteredBackend<AmsBackendQidi>;
 using MockHarness = RegisteredBackend<AmsBackendMock>;
 
+/// An AFC backend whose write to firmware can be made to fail after it has
+/// staged its echo guard: the state a refused dispatch leaves behind, which
+/// the shared commit funnel has to clean up (prestonbrown/helixscreen#1633).
+class RefusedWriteAfc : public AmsBackendAfc {
+  public:
+    using AmsBackendAfc::AmsBackendAfc;
+
+    bool refuse_writes = false;
+
+    helix::AmsError apply_user_edit(int slot_index, const helix::SlotInfo& info,
+                                    const helix::ams::Observation& declared) override {
+        if (!refuse_writes) {
+            return AmsBackendAfc::apply_user_edit(slot_index, info, declared);
+        }
+        // Stage and arm exactly as a write-back backend does ahead of its
+        // dispatch, then report the write itself failing: nothing reached
+        // firmware, so no echo of this edit is coming.
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (auto* echoes = own_write_echoes()) {
+            echoes->stage(slot_index, declared);
+            echoes->arm(slot_index, std::string{});
+        }
+        return helix::AmsError(helix::AmsResult::COMMAND_FAILED, "refused", lv_tr("Write failed"));
+    }
+};
+
+using RefusedWriteAfcHarness = RegisteredBackend<RefusedWriteAfc>;
+
 /// One `box` object, delivered the way Moonraker delivers it. Which schema
 /// parsed, and whether the frame counts as a full update at all, are decisions
 /// the production entry point makes, so every CFS case drives that rather than
@@ -1068,6 +1096,39 @@ TEST_CASE_METHOD(LVGLTestFixture,
     REQUIRE(after.vendor_cache.has_value());
     CHECK_FALSE(after.vendor_cache->color_rgb.has_value());
     CHECK_FALSE(after.vendor_cache->material.has_value());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "a refused write leaves no guard to withhold firmware's value",
+                 "[lane][ingest][afc]") {
+    RefusedWriteAfcHarness harness(nullptr, nullptr);
+    init_afc_lanes(*harness);
+
+    feed_afc_lane(
+        *harness, "lane1",
+        {{"prep", true}, {"status", "Loaded"}, {"color", "#ED2C2C"}, {"material", "PLA"}});
+
+    // The commit funnel the application's editor and Clear Spool both ride.
+    // The dispatch fails outright, so the edit is refused whole: nothing is
+    // filed on the lane and firmware was never written.
+    harness->refuse_writes = true;
+    const helix::SlotInfo original = harness->get_slot_info(0);
+    helix::SlotInfo edit = original;
+    edit.color_rgb = 0x00FF00u;
+    edit.material = "PETG";
+    const helix::AmsError error = harness->commit_user_edit(0, original, edit);
+    CHECK_FALSE(error.success());
+    CHECK_FALSE(error.partially_applied);
+    CHECK_FALSE(lane_sources(harness.lane(0)).local_user.has_value());
+
+    // Firmware's next frame is a reading, not an echo: the write never went
+    // out, so the values it states must file rather than be withheld by the
+    // guard the failed dispatch staged.
+    feed_afc_lane(*harness, "lane1", {{"color", "#00FF00"}, {"material", "PETG"}});
+    const auto sources = lane_sources(harness.lane(0));
+    REQUIRE(sources.vendor_cache.has_value());
+    REQUIRE(sources.vendor_cache->color_rgb.has_value());
+    CHECK(*sources.vendor_cache->color_rgb == 0x00FF00u);
+    CHECK(sources.vendor_cache->material == "PETG");
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a frame with no sensor key neither sets nor erases AFC presence",

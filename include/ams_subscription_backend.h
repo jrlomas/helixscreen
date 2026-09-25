@@ -398,6 +398,11 @@ class AmsSubscriptionBackend : public AmsBackend {
         return nullptr;
     }
 
+    /// commit_user_edit()'s refusal hook: a dispatch that failed outright
+    /// wrote nothing firmware can echo, so the guard it staged drops rather
+    /// than withholding the next genuine reading.
+    void abandon_own_write_echoes(int slot_index) override;
+
     // --- Protected state for derived classes ---
     IMoonrakerAPI* api_;
     helix::IMoonrakerClient* client_;

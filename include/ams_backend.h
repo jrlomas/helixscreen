@@ -1620,6 +1620,22 @@ class AmsBackend {
                                      const helix::ams::Observation& declared) = 0;
 
     /**
+     * @brief Drop the echo guard a refused dispatch may have staged.
+     *
+     * commit_user_edit() calls this when apply_user_edit() refuses an edit
+     * outright: a write that never went out has no echo, and a guard left
+     * standing would withhold the next genuine firmware reading until its
+     * boundary moved. The default does nothing, for a backend that writes no
+     * identity back to firmware; AmsSubscriptionBackend drops the guard its
+     * own_write_echoes() names.
+     *
+     * @param slot_index Slot whose staged guard to drop (0-based, global)
+     */
+    virtual void abandon_own_write_echoes(int slot_index) {
+        (void)slot_index;
+    }
+
+    /**
      * @brief Put filament information that arrived from outside on a slot.
      *
      * For values nobody chose here, such as a tool changer's per-tool spool

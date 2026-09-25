@@ -105,6 +105,13 @@ void AmsSubscriptionBackend::stop() {
     spdlog::info("{} Backend stopped", backend_log_tag());
 }
 
+void AmsSubscriptionBackend::abandon_own_write_echoes(int slot_index) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (auto* echoes = own_write_echoes()) {
+        echoes->abandon(slot_index);
+    }
+}
+
 void AmsSubscriptionBackend::release_subscriptions() {
     subscription_.release();
 }
