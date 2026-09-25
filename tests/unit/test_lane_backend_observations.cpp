@@ -1239,10 +1239,13 @@ TEST_CASE_METHOD(LVGLTestFixture, "a refused write restores the guard of the edi
 namespace {
 /// The shared body of the two refused-dispatch cases: @p refuse_material
 /// flips exactly one SET_* send to fail through the error callback after the
-/// send returned success, then asserts the edit's values file as readings,
-/// because firmware never received the refused one.
-void assert_refused_set_command_cancels_the_guard(RefusedGcodeAfcHarness& harness,
-                                                  bool refuse_material) {
+/// send returned success, while the other SET_* went out. The refused
+/// command's field never reached firmware, so the same value on the next
+/// frame is a reading and must file; the accepted command's field DID reach
+/// firmware, so the same value on that frame is our own write echoing and
+/// must stay withheld.
+void assert_refused_set_command_releases_only_its_own_field(RefusedGcodeAfcHarness& harness,
+                                                            bool refuse_material) {
     if (refuse_material) {
         harness->refuse_set_material = true;
     } else {
@@ -1265,10 +1268,9 @@ void assert_refused_set_command_cancels_the_guard(RefusedGcodeAfcHarness& harnes
     // mutex, which apply_user_edit still holds.
     helix::ui::UpdateQueue::instance().drain();
 
-    // Firmware never received the refused value, so the same value on the next
-    // frame is a reading and must file. filament_name is the proof the frame
-    // parsed, which makes the refused field's presence the cancel's doing
-    // rather than a guard that never armed.
+    // filament_name is the proof the frame parsed, which makes each field's
+    // presence or absence below the release's doing rather than a guard that
+    // never armed.
     feed_afc_lane(*harness, "lane1",
                   {{"color", "#00FF00"}, {"material", "PETG"}, {"filament_name", "AFC Basics"}});
 
@@ -1276,24 +1278,32 @@ void assert_refused_set_command_cancels_the_guard(RefusedGcodeAfcHarness& harnes
     REQUIRE(sources.vendor_cache.has_value());
     REQUIRE(sources.vendor_cache->spool_name.has_value());
     CHECK(*sources.vendor_cache->spool_name == "AFC Basics");
-    REQUIRE(sources.vendor_cache->color_rgb.has_value());
-    CHECK(*sources.vendor_cache->color_rgb == 0x00FF00u);
-    REQUIRE(sources.vendor_cache->material.has_value());
-    CHECK(*sources.vendor_cache->material == "PETG");
+    if (refuse_material) {
+        // SET_MATERIAL never reached firmware: PETG on the frame is a
+        // reading and files. SET_COLOR did: the green on the frame is our
+        // own write echoing, and filing it would put the edit back as the
+        // machine's word.
+        REQUIRE(sources.vendor_cache->material.has_value());
+        CHECK(*sources.vendor_cache->material == "PETG");
+        CHECK_FALSE(sources.vendor_cache->color_rgb.has_value());
+    } else {
+        REQUIRE(sources.vendor_cache->color_rgb.has_value());
+        CHECK(*sources.vendor_cache->color_rgb == 0x00FF00u);
+        CHECK_FALSE(sources.vendor_cache->material.has_value());
+    }
 }
 } // namespace
 
-TEST_CASE_METHOD(LVGLTestFixture, "a refused SET_COLOR dispatch cancels the echo guard it staged",
+TEST_CASE_METHOD(LVGLTestFixture, "a refused SET_COLOR releases its own guard, not SET_MATERIAL's",
                  "[lane][ingest][afc]") {
     RefusedGcodeAfcHarness harness(nullptr, nullptr);
-    assert_refused_set_command_cancels_the_guard(harness, /*refuse_material=*/false);
+    assert_refused_set_command_releases_only_its_own_field(harness, /*refuse_material=*/false);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture,
-                 "a refused SET_MATERIAL dispatch cancels the echo guard it staged",
+TEST_CASE_METHOD(LVGLTestFixture, "a refused SET_MATERIAL releases its own guard, not SET_COLOR's",
                  "[lane][ingest][afc]") {
     RefusedGcodeAfcHarness harness(nullptr, nullptr);
-    assert_refused_set_command_cancels_the_guard(harness, /*refuse_material=*/true);
+    assert_refused_set_command_releases_only_its_own_field(harness, /*refuse_material=*/true);
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "a frame with no sensor key neither sets nor erases AFC presence",

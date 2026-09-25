@@ -164,6 +164,28 @@ void OwnWriteEchoes::abandon(int slot_index, std::uint64_t staged_sequence) {
     entries_.erase(it);
 }
 
+void OwnWriteEchoes::abandon_fields(int slot_index, std::uint64_t staged_sequence,
+                                    const Observation& fields) {
+    auto it = entries_.find(slot_index);
+    if (it == entries_.end() || it->second.sequence != staged_sequence)
+        return;
+    Entry& entry = it->second;
+    for_each_suppressible([&](auto member) {
+        if (!(fields.*member).has_value())
+            return;
+        if (entry.carry_armed) {
+            // The refused command's echo is not coming, but firmware still
+            // holds whatever the predecessor's write left at this field and
+            // keeps repeating it, so the predecessor's declaration stands.
+            (entry.declared.*member) = entry.carry_declared.*member;
+        } else {
+            (entry.declared.*member).reset();
+        }
+    });
+    if (!declares_anything(entry.declared))
+        abandon(slot_index, staged_sequence);
+}
+
 int OwnWriteEchoes::withhold(int slot_index, const std::string& boundary,
                              Observation& producer_record, const Observation& cleared) {
     auto it = entries_.find(slot_index);

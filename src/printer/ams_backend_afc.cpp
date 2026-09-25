@@ -5655,24 +5655,31 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
             own_write_echoes_.arm(slot_index, std::string{});
 
             // A SET_COLOR or SET_MATERIAL Moonraker refused never reached
-            // firmware, so no echo of it is coming: the guard would withhold
-            // the next genuine reading that happens to equal the declaration.
-            // A TIMEOUT is "may still be running" - the write can still land
-            // and echo - so there the guard stands. The cancel is matched to
-            // this staging and deferred off the callback's background thread:
-            // apply_user_edit holds mutex_ across the dispatches, and an
-            // inline lock here would deadlock a synchronous error callback.
+            // firmware, so no echo of the REFUSED command is coming: its
+            // fields come off the guard, which would otherwise withhold the
+            // next genuine reading that happens to equal their declaration.
+            // The other command went out, so its fields keep the guard a
+            // whole abandon would drop. A TIMEOUT is "may still be running"
+            // - the write can still land and echo - so there every field
+            // stands. The release is matched to this staging and deferred
+            // off the callback's background thread: apply_user_edit holds
+            // mutex_ across the dispatches, and an inline lock here would
+            // deadlock a synchronous error callback.
             const auto tok = lifetime_.token();
-            auto abandon_failed_write = [tok, this, slot_index,
-                                         staged_sequence](const MoonrakerError& err) {
-                if (err.type == MoonrakerErrorType::TIMEOUT) {
-                    return;
-                }
-                tok.defer("AmsBackendAfc::apply_user_edit.abandon_echo",
-                          [this, slot_index, staged_sequence]() {
-                              std::lock_guard<std::mutex> lock(mutex_);
-                              own_write_echoes_.abandon(slot_index, staged_sequence);
-                          });
+            const auto release_refused_fields = [tok, this, slot_index,
+                                                 staged_sequence](ams::Observation refused) {
+                return
+                    [tok, this, slot_index, staged_sequence, refused](const MoonrakerError& err) {
+                        if (err.type == MoonrakerErrorType::TIMEOUT) {
+                            return;
+                        }
+                        tok.defer("AmsBackendAfc::apply_user_edit.abandon_echo",
+                                  [this, slot_index, staged_sequence, refused]() {
+                                      std::lock_guard<std::mutex> lock(mutex_);
+                                      own_write_echoes_.abandon_fields(slot_index, staged_sequence,
+                                                                       refused);
+                                  });
+                    };
             };
 
             // Spoolman ID FIRST — both branches of AFC's set_spoolID() rewrite the
@@ -5702,8 +5709,10 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
             if (ams::is_declarable_color(info.color_rgb)) {
                 char color_hex[8];
                 snprintf(color_hex, sizeof(color_hex), "%06X", info.color_rgb & 0xFFFFFF);
+                ams::Observation color_fields{ams::ObservationSource::LocalUser};
+                color_fields.color_rgb = info.color_rgb;
                 execute_gcode(fmt::format("SET_COLOR LANE={} COLOR={}", lane_name, color_hex),
-                              nullptr, abandon_failed_write);
+                              nullptr, release_refused_fields(color_fields));
             }
 
             // Material (validate to prevent command injection). The material
@@ -5711,9 +5720,11 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
             // `PA6-CF` and `Silk PLA` are all in our own filament database, and
             // gating this on is_safe_gcode_param() dropped every one of them.
             if (!info.material.empty() && IMoonrakerAPI::is_safe_material_param(info.material)) {
+                ams::Observation material_fields{ams::ObservationSource::LocalUser};
+                material_fields.material = info.material;
                 execute_gcode(fmt::format("SET_MATERIAL LANE={} MATERIAL={}", lane_name,
                                           IMoonrakerAPI::gcode_param_value(info.material)),
-                              nullptr, abandon_failed_write);
+                              nullptr, release_refused_fields(material_fields));
             } else if (!info.material.empty()) {
                 spdlog::warn("[AMS AFC] Skipping SET_MATERIAL - unsafe characters in: {}",
                              info.material);

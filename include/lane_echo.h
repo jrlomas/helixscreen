@@ -121,6 +121,17 @@ class OwnWriteEchoes {
     /// the predecessor's went out and firmware is still repeating it.
     void abandon(int slot_index, std::uint64_t staged_sequence);
 
+    /// The matched, partial form: the failure answer of ONE command of the
+    /// staging @p staged_sequence, whose write carried the fields @p fields
+    /// holds values in. No echo of those is coming, so their declarations
+    /// come off - replaced by the suspended predecessor's for the same
+    /// fields, because firmware still holds whatever the predecessor's write
+    /// put there and keeps repeating it. The staging's other fields stay
+    /// armed: their commands went out, and their echoes are owed the guard a
+    /// whole abandon() would drop. A staging left declaring nothing
+    /// suppressible falls back to the matched abandon().
+    void abandon_fields(int slot_index, std::uint64_t staged_sequence, const Observation& fields);
+
     /// Remove from @p producer_record every field whose value repeats this
     /// slot's armed declaration, and return how many were removed. The count
     /// is the only handle a consumer has on the difference between a field
