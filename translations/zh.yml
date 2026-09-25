@@ -164,6 +164,7 @@ translations:
   Added to Spoolman: 已添加到 Spoolman
   Added to queue (position {}): 已添加到队列（第 {} 位）
   Added to queue (position {}) - queue is paused: 已添加到队列（第 {} 位）– 队列已暂停
+  Adding to queue...: 正在添加到队列...
   Address: 地址
   Adjust screen brightness level: 调整屏幕亮度
   Adjust screws, then re-probe.: 调整螺丝，然后重新探测。
@@ -669,6 +670,7 @@ translations:
   Copy failed - use SSH manually: 复制失败 - 请手动使用 SSH
   Corner roundness: 圆角程度
   Correction (Ki): 校正 (Ki)
+  Could not add to queue: 无法添加到队列
   Could not analyze PRINT_START macro. Some print options may be unavailable.: 无法分析
     PRINT_START 宏。部分打印选项可能不可用。
   Could not answer the connection request: '无法响应连接请求'
@@ -681,6 +683,7 @@ translations:
   Could not parse tips database: 无法解析提示数据库
   Could not reach Spoolman at: 无法连接 Spoolman：
   Could not read the screw adjustments from the printer: 无法从打印机读取螺丝调整数据
+  Could not remove the job from the queue: 无法从队列中移除任务
   Could not resolve printer RFCOMM channel: 无法解析打印机 RFCOMM 通道
   Could not save filament: 无法保存耗材
   "Could not save the mesh as '{}': {}": "无法将网格保存为 '{}'：{}"
@@ -2765,11 +2768,9 @@ translations:
   Switches to a backup spool on runout: 耗材用尽时切换到备用料盘
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : 切回 PID 会改变此加热器的控制方式，随后会进行校准。这需要在工作温度下耗时数分钟。
-  Switching back to PID changes how this heater is controlled.: 切回 PID 会改变此加热器的控制方式。
   Switching back to PID requires a config change and Klipper restart.: 切回 PID 需要修改配置并重启 Klipper。
   Switching heater control to MPC. Klipper will restart.: 正在将加热控制切换为 MPC。Klipper 将重启。
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: 切换到 MPC 会改变此加热器的控制方式，随后会进行校准。这需要在工作温度下耗时数分钟。
-  Switching to MPC changes how this heater is controlled.: 切换到 MPC 会改变此加热器的控制方式。
   Switching to MPC requires a config change and Klipper restart.: 切换到 MPC 需要修改配置并重启
     Klipper。
   Sync with Spoolman: 与 Spoolman 同步

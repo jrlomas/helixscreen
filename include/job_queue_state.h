@@ -155,6 +155,8 @@ class JobQueueState {
     bool subjects_initialized_ = false;
     bool automatic_transition_ = false;
     bool automatic_transition_loaded_ = false;
+    // Option-store prune latched per connect — see on_queue_fetched().
+    bool pruned_this_connect_ = false;
 
     // LVGL subjects
     lv_subject_t job_queue_state_subject_;

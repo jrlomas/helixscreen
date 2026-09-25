@@ -7,12 +7,16 @@
  *
  * Moonraker's job queue carries no per-job data, so the options a user picked
  * when queueing a print (option row states from the file detail view) live in
- * namespace `helix-screen`, key `queued_job_options`:
+ * namespace `helix-screen`, one database key per job:
  *
- *   { "<job_id>": { "filename": "...", "options": { "<option_id>": bool } } }
+ *   queued_job_options.<job_id> =
+ *       { "filename": "...", "options": { "<option_id>": bool } }
  *
- * Encode/decode/prune are pure so they test without LVGL; the store function
- * wires them to IMoonrakerAPI's database get/post.
+ * Dotted keys are Moonraker's nested-record paths, so each job's entry is
+ * written and deleted on its own key — two clients queueing concurrently
+ * never read-modify-write the same record. Encode/decode are pure so they
+ * test without LVGL; the store functions wire them to IMoonrakerAPI's
+ * database get/post/delete.
  */
 
 #pragma once
@@ -35,8 +39,11 @@ namespace helix::queue {
 
 /// Moonraker database namespace shared with tool_state.cpp's spool data
 inline constexpr const char* kOptionsDbNamespace = "helix-screen";
-/// Database key holding the whole queued-job option map
+/// Database key prefix; one job's entry lives at "<kOptionsDbKey>.<job_id>"
 inline constexpr const char* kOptionsDbKey = "queued_job_options";
+
+/// The database key holding @p job_id's entry
+std::string queued_job_option_key(const std::string& job_id);
 
 /// Options saved for one queued job
 struct QueuedJobOptions {
@@ -51,35 +58,35 @@ struct QueuedJobOptions {
 /// job_id -> saved state for that queued job
 using QueuedJobOptionsMap = std::map<std::string, QueuedJobOptions>;
 
-/// @brief Serialize the map to the database value shape
-json encode_queued_job_options(const QueuedJobOptionsMap& entries);
+/// @brief Serialize one job's entry to its per-key database value shape
+json encode_queued_job_entry(const QueuedJobOptions& entry);
 
-/// @brief Parse a database value. Rows are all-or-nothing: an entry that is
-/// not an object, has a non-string filename, a non-object options member or a
-/// non-boolean option state is skipped whole rather than thrown on — the store
-/// is advisory and a bad row must not cost the rest.
+/// @brief Parse one job's stored entry
+///
+/// Any malformed shape reads as defaults: not an object, a non-string
+/// filename, a non-object options member or a non-boolean option state all
+/// collapse to the whole-entry default rather than a half-parsed entry — the
+/// store is advisory and a caller must never act on choices partially kept.
+QueuedJobOptions decode_queued_job_entry(const json& value);
+
+/// @brief Parse a whole stored map (the parent key's value, one entry per
+/// child). Rows follow decode_queued_job_entry's all-or-nothing rule.
 QueuedJobOptionsMap decode_queued_job_options(const json& value);
 
-/// @brief Result of pruning: the surviving entries and whether any dropped
-struct PrunedOptions {
-    QueuedJobOptionsMap entries;
-    bool changed = false;
-};
-
-/// @brief Drop entries whose job_id is no longer queued
+/// @brief Stored job ids whose job is no longer queued
 ///
-/// @param entries Stored map (moved from when entries are dropped)
-/// @param queued_job_ids Job ids currently in Moonraker's queue
-PrunedOptions prune_queued_job_options(QueuedJobOptionsMap entries,
-                                       const std::vector<std::string>& queued_job_ids);
+/// The prune half as a pure rule: ids present in @p stored but absent from
+/// @p queued_job_ids, sorted by key order.
+std::vector<std::string>
+stale_queued_job_option_ids(const QueuedJobOptionsMap& stored,
+                            const std::vector<std::string>& queued_job_ids);
 
-/// @brief Read the stored map, prune it against the current queue, write back
+/// @brief Read the stored map, delete every stale job's own key
 ///
-/// Fire-and-forget and best-effort: a missing key (first run, fresh database)
-/// and any read error leave the store untouched, and nothing is written unless
-/// pruning dropped something. The read completion is marshalled through
-/// @p lifetime so a store whose owner died mid-request never dereferences
-/// @p api.
+/// Fire-and-forget and best-effort: a missing parent key (first run, fresh
+/// database) and any read error leave the store untouched. The read
+/// completion is marshalled through @p lifetime so a store whose owner died
+/// mid-request never dereferences @p api.
 ///
 /// @param lifetime Guard of the object owning @p api's lifetime
 /// @param api API to read/write through; null is a no-op
@@ -98,20 +105,17 @@ void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI
 std::optional<std::string> find_new_job_id(const std::vector<std::string>& before,
                                            const std::vector<JobQueueEntry>& after);
 
-/// @brief Read-modify-write one job's options into the store
+/// @brief Write one job's options to its own database key
 ///
-/// Best-effort like the prune: a missing key is the start-from-empty case
-/// (the write still happens), and a read error that is not a missing key
-/// skips the save rather than clobbering the stored map with one entry.
-/// Marshalled through @p lifetime for the same owner-outlives-request
-/// guarantee.
+/// Best-effort: the write is a single post_item of @p options under
+/// queued_job_options.<job_id>, and a failure is logged, not surfaced — the
+/// job is already queued and must stay so.
 ///
-/// @param lifetime Guard of the object owning @p api's lifetime
-/// @param api API to read/write through; null is a no-op
+/// @param api API to write through; null is a no-op
 /// @param job_id The newly queued job the options belong to
 /// @param options Filename and option row states gathered at queue time
-void save_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
-                             const std::string& job_id, QueuedJobOptions options);
+void save_queued_job_options(IMoonrakerAPI* api, const std::string& job_id,
+                             QueuedJobOptions options);
 
 /// @brief Read one job's stored options and hand them to @p on_loaded
 ///
@@ -129,17 +133,16 @@ void load_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
                              const std::string& job_id,
                              std::function<void(QueuedJobOptions)> on_loaded);
 
-/// @brief Read-modify-write one job's entry out of the store
+/// @brief Delete one job's stored options
 ///
 /// The counterpart of save_queued_job_options for the confirmed-start path:
 /// the job left the queue, so its stored options must not outlive it. A
-/// missing key, a missing entry or a read error is already the desired end
-/// state — logged and done, no write.
+/// missing key is already the desired end state — Moonraker's 404 is
+/// normalized to success by MoonrakerAPI::database_delete_item — and any
+/// other failure is logged. Fire-and-forget.
 ///
-/// @param lifetime Guard of the object owning @p api's lifetime
-/// @param api API to read/write through; null is a no-op
+/// @param api API to delete through; null is a no-op
 /// @param job_id The job that just started printing
-void delete_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
-                               const std::string& job_id);
+void delete_queued_job_options(IMoonrakerAPI* api, const std::string& job_id);
 
 } // namespace helix::queue

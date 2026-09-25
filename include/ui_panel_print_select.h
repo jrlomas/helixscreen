@@ -454,6 +454,15 @@ class PrintSelectPanel : public PanelBase {
     void hide_detail_view();
 
     /**
+     * @brief The back-out rule for a pending queued start: an untapped start
+     * for exactly the shown file is discarded with the closing view.
+     *
+     * Shared by hide_detail_view() and the on_activate() branch that catches
+     * ESC / go_back() popping the overlay without it.
+     */
+    void discard_pending_queued_start_on_back_out();
+
+    /**
      * @brief Access the print start controller (owned by this panel).
      *
      * Exposed so the print status panel's reprint path can route through the
@@ -889,6 +898,10 @@ class PrintSelectPanel : public PanelBase {
 
     /// The mode the button was last rendered in; routes the tap.
     helix::ui::PrintSelectButtonMode print_button_mode_ = helix::ui::PrintSelectButtonMode::Print;
+
+    /// True while an add_job request is on the wire: taps are ignored and the
+    /// button renders disabled until its callback lands (success or failure).
+    bool queue_add_in_flight_ = false;
 
     /**
      * @brief Update sort indicator icons on column headers

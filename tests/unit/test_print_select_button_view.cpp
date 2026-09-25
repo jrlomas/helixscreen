@@ -32,9 +32,11 @@ PrintSelectButtonInputs machine_held(bool job_queue_available) {
     return in;
 }
 
-/// The view the panel renders as "usable": a mode whose reason slot is empty.
+/// The view the panel renders as "usable": a reason slot that is empty — in
+/// every mode, Queue included (queue mode's captions are contextual text the
+/// panel maps, not blocks).
 bool view_actionable(const helix::ui::PrintSelectButtonView& v) {
-    return v.mode == PrintSelectButtonMode::Queue || v.blocked_reason[0] == '\0';
+    return v.blocked_reason[0] == '\0';
 }
 
 } // namespace
@@ -92,4 +94,23 @@ TEST_CASE("button view: a committed but unconfirmed start blocks without queuein
     CHECK(v.mode == PrintSelectButtonMode::Print);
     CHECK_FALSE(view_actionable(v));
     CHECK(std::string(v.blocked_reason) == "Printing: start after this job");
+}
+
+TEST_CASE("button view: an in-flight queue add keeps Queue mode but disables",
+          "[print_select][button_view][job_queue]") {
+    PrintSelectButtonInputs in = machine_held(true);
+    in.queue_add_in_flight = true;
+    const auto v = compute_print_select_button_view(in);
+    CHECK(v.mode == PrintSelectButtonMode::Queue);
+    CHECK_FALSE(view_actionable(v));
+    CHECK(std::string(v.blocked_reason).find("Adding to queue") == 0);
+}
+
+TEST_CASE("button view: the in-flight flag alone changes nothing on an idle printer",
+          "[print_select][button_view][job_queue]") {
+    PrintSelectButtonInputs in;
+    in.queue_add_in_flight = true;
+    const auto v = compute_print_select_button_view(in);
+    CHECK(v.mode == PrintSelectButtonMode::Print);
+    CHECK(view_actionable(v));
 }

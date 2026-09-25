@@ -23,83 +23,105 @@ using helix::queue::QueuedJobOptionsMap;
 
 namespace {
 
+QueuedJobOptions sample_entry() {
+    return QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}, {"soak", false}}};
+}
+
 QueuedJobOptionsMap sample_map() {
     QueuedJobOptionsMap m;
-    m["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}, {"soak", false}}};
+    m["0001"] = sample_entry();
     m["0002"] = QueuedJobOptions{"cube.gcode", {{"skip_beam", false}}};
     return m;
 }
 
 } // namespace
 
-TEST_CASE("queued job options encode/decode round trip", "[job_queue][options]") {
-    const auto original = sample_map();
-
-    const auto decoded =
-        helix::queue::decode_queued_job_options(helix::queue::encode_queued_job_options(original));
-
-    REQUIRE(decoded.size() == original.size());
-    CHECK(decoded.at("0001").filename == "benchy_v2.gcode");
-    CHECK(decoded.at("0001").options.at("skip_beam") == true);
-    CHECK(decoded.at("0001").options.at("soak") == false);
-    CHECK(decoded.at("0002").options.at("skip_beam") == false);
-
-    // A second round trip through the same codec must be stable.
-    const auto re_encoded = helix::queue::encode_queued_job_options(decoded);
-    CHECK(helix::queue::decode_queued_job_options(re_encoded) == decoded);
+TEST_CASE("queued_job_option_key prefixes the job id with the store key", "[job_queue][options]") {
+    CHECK(helix::queue::queued_job_option_key("0001") == "queued_job_options.0001");
+    CHECK(helix::queue::queued_job_option_key("").empty() == false);
 }
 
-TEST_CASE("queued job options malformed value decodes to empty", "[job_queue][options]") {
-    // Not an object at all
-    CHECK(helix::queue::decode_queued_job_options(json::array({"0001"})).empty());
-    CHECK(helix::queue::decode_queued_job_options(json("garbage")).empty());
-    CHECK(helix::queue::decode_queued_job_options(json(nullptr)).empty());
-    CHECK(helix::queue::decode_queued_job_options(json::object()).empty());
+TEST_CASE("queued job entry encode/decode round trip", "[job_queue][options]") {
+    const auto original = sample_entry();
 
-    // Object shape but wrong entry types: bad rows are skipped, good ones kept
+    const auto decoded =
+        helix::queue::decode_queued_job_entry(helix::queue::encode_queued_job_entry(original));
+
+    REQUIRE(decoded.filename == "benchy_v2.gcode");
+    REQUIRE(decoded.options.size() == 2);
+    CHECK(decoded.options.at("skip_beam") == true);
+    CHECK(decoded.options.at("soak") == false);
+}
+
+TEST_CASE("queued job entry decode treats malformed shapes as defaults", "[job_queue][options]") {
+    using helix::queue::decode_queued_job_entry;
+
+    // Not an object at all
+    CHECK(decode_queued_job_entry(json::array({"x"})).filename.empty());
+    CHECK(decode_queued_job_entry(json("garbage")).options.empty());
+    CHECK(decode_queued_job_entry(json(nullptr)).filename.empty());
+    CHECK(decode_queued_job_entry(json::object()).filename.empty());
+
+    // Object shape but wrong member types: the whole entry reads as default,
+    // never half-parsed
+    CHECK(decode_queued_job_entry(json{{"filename", 7}, {"options", json::object()}})
+              .filename.empty());
+    CHECK(decode_queued_job_entry(json{{"filename", "b.gcode"}, {"options", 7}}).options.empty());
+    CHECK(decode_queued_job_entry(json{{"filename", "c.gcode"}, {"options", {{"y", "yes"}}}})
+              .options.empty());
+
+    // A missing options member is valid: filename kept, no choices
+    const auto bare = decode_queued_job_entry(json{{"filename", "a.gcode"}});
+    CHECK(bare.filename == "a.gcode");
+    CHECK(bare.options.empty());
+}
+
+TEST_CASE("queued job options map decode keeps only well-formed rows", "[job_queue][options]") {
+    // The parent key's value: one child per stored job.
     json mixed;
     mixed["good"] = {{"filename", "a.gcode"}, {"options", {{"x", true}}}};
     mixed["not_an_object"] = "oops";
     mixed["no_filename_key"] = {{"options", json::object()}};
     mixed["options_not_object"] = {{"filename", "b.gcode"}, {"options", 7}};
     mixed["option_not_bool"] = {{"filename", "c.gcode"}, {"options", {{"y", "yes"}}}};
+
     const auto decoded = helix::queue::decode_queued_job_options(mixed);
     REQUIRE(decoded.size() == 1);
     CHECK(decoded.count("good") == 1);
     CHECK(decoded.at("good").filename == "a.gcode");
     CHECK(decoded.at("good").options.at("x") == true);
+
+    // Non-object parents decode to an empty map.
+    CHECK(helix::queue::decode_queued_job_options(json::array({"0001"})).empty());
+    CHECK(helix::queue::decode_queued_job_options(json::object()).empty());
 }
 
-TEST_CASE("queued job options prune drops unqueued ids and reports changed",
+TEST_CASE("stale_queued_job_option_ids names stored ids absent from the queue",
           "[job_queue][options]") {
-    auto stored = sample_map();
+    using helix::queue::stale_queued_job_option_ids;
+    const auto stored = sample_map();
 
-    SECTION("nothing to drop: unchanged") {
-        auto result = helix::queue::prune_queued_job_options(stored, {"0002", "0001"});
-        CHECK_FALSE(result.changed);
-        REQUIRE(result.entries.size() == 2);
-        CHECK(result.entries.count("0001") == 1);
-        CHECK(result.entries.count("0002") == 1);
+    SECTION("nothing stale") {
+        CHECK(stale_queued_job_option_ids(stored, {"0002", "0001"}).empty());
     }
 
-    SECTION("empty store: unchanged even with an empty queue") {
-        auto result = helix::queue::prune_queued_job_options({}, {});
-        CHECK_FALSE(result.changed);
-        CHECK(result.entries.empty());
+    SECTION("empty store is never stale") {
+        CHECK(stale_queued_job_option_ids({}, {}).empty());
+        CHECK(stale_queued_job_option_ids({}, {"0001"}).empty());
     }
 
-    SECTION("dropped job disappears and changed is set") {
-        auto result = helix::queue::prune_queued_job_options(stored, {"0002"});
-        REQUIRE(result.changed);
-        REQUIRE(result.entries.size() == 1);
-        CHECK(result.entries.count("0001") == 0);
-        CHECK(result.entries.count("0002") == 1);
+    SECTION("one job left the queue") {
+        const auto stale = stale_queued_job_option_ids(stored, {"0002"});
+        REQUIRE(stale.size() == 1);
+        CHECK(stale[0] == "0001");
     }
 
-    SECTION("empty queue prunes everything") {
-        auto result = helix::queue::prune_queued_job_options(stored, {});
-        REQUIRE(result.changed);
-        CHECK(result.entries.empty());
+    SECTION("empty queue makes every stored id stale") {
+        const auto stale = stale_queued_job_option_ids(stored, {});
+        REQUIRE(stale.size() == 2);
+        // Key order: the store is a std::map
+        CHECK(stale[0] == "0001");
+        CHECK(stale[1] == "0002");
     }
 }
 

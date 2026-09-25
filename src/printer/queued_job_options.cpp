@@ -12,16 +12,58 @@
 
 namespace helix::queue {
 
-json encode_queued_job_options(const QueuedJobOptionsMap& entries) {
-    json out = json::object();
-    for (const auto& [job_id, entry] : entries) {
-        json options = json::object();
-        for (const auto& [option_id, enabled] : entry.options) {
-            options[option_id] = enabled;
-        }
-        out[job_id] = {{"filename", entry.filename}, {"options", std::move(options)}};
+std::string queued_job_option_key(const std::string& job_id) {
+    return std::string(kOptionsDbKey) + "." + job_id;
+}
+
+json encode_queued_job_entry(const QueuedJobOptions& entry) {
+    json options = json::object();
+    for (const auto& [option_id, enabled] : entry.options) {
+        options[option_id] = enabled;
     }
-    return out;
+    return {{"filename", entry.filename}, {"options", std::move(options)}};
+}
+
+namespace {
+
+/// Shared row rule: a well-formed entry is an object with a string filename
+/// and, when present, an object of booleans. Anything else is not an entry.
+bool entry_shape_ok(const json& entry) {
+    if (!entry.is_object() || !entry.contains("filename") || !entry["filename"].is_string()) {
+        return false;
+    }
+    if (!entry.contains("options")) {
+        return true;
+    }
+    const json& options = entry["options"];
+    if (!options.is_object()) {
+        return false;
+    }
+    for (auto opt = options.begin(); opt != options.end(); ++opt) {
+        if (!opt.value().is_boolean()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+QueuedJobOptions decode_queued_job_entry(const json& value) {
+    QueuedJobOptions parsed;
+    if (!entry_shape_ok(value)) {
+        return parsed;
+    }
+    // entry_shape_ok() proved the key holds a string; .value() keeps the
+    // read fallible so a malformed row can never reach a hard assert.
+    parsed.filename = value.value("filename", std::string{});
+    if (value.contains("options")) {
+        const json& options = value["options"];
+        for (auto opt = options.begin(); opt != options.end(); ++opt) {
+            parsed.options[opt.key()] = opt.value().get<bool>();
+        }
+    }
+    return parsed;
 }
 
 QueuedJobOptionsMap decode_queued_job_options(const json& value) {
@@ -30,46 +72,26 @@ QueuedJobOptionsMap decode_queued_job_options(const json& value) {
         return out;
     }
     for (auto it = value.begin(); it != value.end(); ++it) {
-        const json& entry = it.value();
-        if (!entry.is_object() || !entry.contains("filename") || !entry["filename"].is_string()) {
-            continue;
-        }
-        QueuedJobOptions parsed;
-        parsed.filename = entry["filename"].get<std::string>();
-        // A row is all-or-nothing: one kept with a malformed options member
-        // would be written back by the next prune without the choices it did
-        // carry, looking intact.
-        bool row_ok = true;
-        if (entry.contains("options")) {
-            const json& options = entry["options"];
-            row_ok = options.is_object();
-            for (auto opt = options.begin(); row_ok && opt != options.end(); ++opt) {
-                row_ok = opt.value().is_boolean();
-                if (row_ok) {
-                    parsed.options[opt.key()] = opt.value().get<bool>();
-                }
-            }
-        }
-        if (row_ok) {
-            out[it.key()] = std::move(parsed);
+        // A malformed row is skipped whole: one kept partially would be
+        // rewritten without the choices it did carry, looking intact.
+        if (entry_shape_ok(it.value())) {
+            out[it.key()] = decode_queued_job_entry(it.value());
         }
     }
     return out;
 }
 
-PrunedOptions prune_queued_job_options(QueuedJobOptionsMap entries,
-                                       const std::vector<std::string>& queued_job_ids) {
-    PrunedOptions result;
-    result.changed = false;
-    for (const auto& id : queued_job_ids) {
-        auto it = entries.find(id);
-        if (it == entries.end()) {
-            continue;
+std::vector<std::string>
+stale_queued_job_option_ids(const QueuedJobOptionsMap& stored,
+                            const std::vector<std::string>& queued_job_ids) {
+    std::vector<std::string> stale;
+    for (const auto& [job_id, entry] : stored) {
+        if (std::find(queued_job_ids.begin(), queued_job_ids.end(), job_id) ==
+            queued_job_ids.end()) {
+            stale.push_back(job_id);
         }
-        result.entries.emplace(id, std::move(it->second));
     }
-    result.changed = result.entries.size() != entries.size();
-    return result;
+    return stale;
 }
 
 void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
@@ -83,18 +105,18 @@ void prune_stored_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI
         lifetime.bg_cb(
             "queue::prune_options_read",
             [api, queued_job_ids](const json& stored) {
-                auto pruned =
-                    prune_queued_job_options(decode_queued_job_options(stored), queued_job_ids);
-                if (!pruned.changed) {
-                    return;
+                for (const auto& job_id : stale_queued_job_option_ids(
+                         decode_queued_job_options(stored), queued_job_ids)) {
+                    api->database_delete_item(
+                        kOptionsDbNamespace, queued_job_option_key(job_id),
+                        [job_id]() {
+                            spdlog::debug("[queue] Pruned stored options for job {}", job_id);
+                        },
+                        [job_id](const MoonrakerError& err) {
+                            spdlog::warn("[queue] Pruning stored options for job {} failed: {}",
+                                         job_id, err.user_message());
+                        });
                 }
-                api->database_post_item(
-                    kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(pruned.entries),
-                    []() { spdlog::debug("[queue] Pruned queued_job_options written"); },
-                    [](const MoonrakerError& err) {
-                        spdlog::warn("[queue] Pruning queued_job_options failed to write: {}",
-                                     err.user_message());
-                    });
             }),
         lifetime.bg_cb("queue::prune_options_read_error", [](const MoonrakerError& err) {
             // A missing key is the first-run state; anything else is informational.
@@ -117,43 +139,19 @@ std::optional<std::string> find_new_job_id(const std::vector<std::string>& befor
     return found;
 }
 
-void save_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
-                             const std::string& job_id, QueuedJobOptions options) {
+void save_queued_job_options(IMoonrakerAPI* api, const std::string& job_id,
+                             QueuedJobOptions options) {
     if (!api) {
         return;
     }
 
-    auto write = [api, job_id,
-                  options = std::move(options)](const QueuedJobOptionsMap& base) mutable {
-        auto entries = base;
-        entries[job_id] = std::move(options);
-        api->database_post_item(
-            kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(entries),
-            []() { spdlog::debug("[queue] Saved queued_job_options written"); },
-            [](const MoonrakerError& err) {
-                spdlog::warn("[queue] Saving queued_job_options failed to write: {}",
-                             err.user_message());
-            });
-    };
-
-    api->database_get_item(
-        kOptionsDbNamespace, kOptionsDbKey,
-        lifetime.bg_cb(
-            "queue::save_options_read",
-            [write](const json& stored) mutable { write(decode_queued_job_options(stored)); }),
-        lifetime.bg_cb(
-            "queue::save_options_read_error", [write](const MoonrakerError& err) mutable {
-                // A missing key is a first save, not a failure: write over an
-                // empty base. Anything else is a real read error — skip rather
-                // than clobber the stored map down to this one entry.
-                const bool missing_key =
-                    err.code == 404 || err.message.find("not found") != std::string::npos;
-                if (missing_key) {
-                    write({});
-                    return;
-                }
-                spdlog::warn("[queue] Reading queued_job_options to save failed: {}", err.message);
-            }));
+    api->database_post_item(
+        kOptionsDbNamespace, queued_job_option_key(job_id), encode_queued_job_entry(options),
+        [job_id]() { spdlog::debug("[queue] Stored options for job {} written", job_id); },
+        [job_id](const MoonrakerError& err) {
+            spdlog::warn("[queue] Storing options for job {} failed: {}", job_id,
+                         err.user_message());
+        });
 }
 
 void load_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
@@ -165,51 +163,31 @@ void load_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
     }
 
     api->database_get_item(
-        kOptionsDbNamespace, kOptionsDbKey,
+        kOptionsDbNamespace, queued_job_option_key(job_id),
         lifetime.bg_cb("queue::load_options_read",
-                       [on_loaded, job_id](const json& stored) mutable {
-                           const auto entries = decode_queued_job_options(stored);
-                           const auto it = entries.find(job_id);
-                           on_loaded(it != entries.end() ? it->second : QueuedJobOptions{});
+                       [on_loaded](const json& stored) mutable {
+                           on_loaded(decode_queued_job_entry(stored));
                        }),
         lifetime.bg_cb("queue::load_options_read_error", [on_loaded](const MoonrakerError& err) {
             // A missing key is the never-saved case; every other error also
             // degrades to defaults rather than refusing the start.
-            spdlog::debug("[queue] Reading queued_job_options for load failed: {}", err.message);
+            spdlog::debug("[queue] Reading stored options for load failed: {}", err.message);
             on_loaded(QueuedJobOptions{});
         }));
 }
 
-void delete_queued_job_options(AsyncLifetimeGuard& lifetime, IMoonrakerAPI* api,
-                               const std::string& job_id) {
+void delete_queued_job_options(IMoonrakerAPI* api, const std::string& job_id) {
     if (!api) {
         return;
     }
 
-    api->database_get_item(
-        kOptionsDbNamespace, kOptionsDbKey,
-        lifetime.bg_cb(
-            "queue::delete_options_read",
-            [api, job_id](const json& stored) mutable {
-                auto entries = decode_queued_job_options(stored);
-                if (entries.erase(job_id) == 0) {
-                    return; // already gone: the desired end state
-                }
-                api->database_post_item(
-                    kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(entries), []() {},
-                    [job_id](const MoonrakerError& err) {
-                        spdlog::warn(
-                            "[queue] Deleting stored options for job {} failed to write: {}",
-                            job_id, err.user_message());
-                    });
-            }),
-        lifetime.bg_cb("queue::delete_options_read_error", [job_id](const MoonrakerError& err) {
-            // Nothing stored means nothing to delete — that is success. A
-            // real read error leaves a stale entry the queue's own pruning
-            // collects on the next refresh.
-            spdlog::debug("[queue] Reading queued_job_options to delete job {} failed: {}", job_id,
-                          err.message);
-        }));
+    api->database_delete_item(
+        kOptionsDbNamespace, queued_job_option_key(job_id),
+        [job_id]() { spdlog::debug("[queue] Stored options for job {} deleted", job_id); },
+        [job_id](const MoonrakerError& err) {
+            spdlog::warn("[queue] Deleting stored options for job {} failed: {}", job_id,
+                         err.user_message());
+        });
 }
 
 } // namespace helix::queue

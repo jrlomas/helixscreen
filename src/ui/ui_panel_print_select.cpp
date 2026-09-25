@@ -1971,6 +1971,18 @@ void PrintSelectPanel::on_deactivating(DeactivateReason) {
         }
     }
 
+    // A pending queued start the user never confirmed with a Print tap is
+    // abandoned by leaving: a later visit's on_files_ready would otherwise
+    // reopen the file unasked. One that DID start is removal bookkeeping and
+    // survives to finish_pending_queued_job(). Opening the detail view itself
+    // deactivates this panel (push_overlay covers it), and that deactivation
+    // is mid-open, not a leave — the overlay flag is what tells them apart.
+    if (pending_queued_start_ && !pending_queued_start_->start_attempted &&
+        !NavigationManager::instance().main_panel_deactivated_for_overlay()) {
+        pending_queued_start_.reset();
+        spdlog::debug("[{}] Discarded unconfirmed pending queued start on deactivate", get_name());
+    }
+
     // Mark that the panel was fully deactivated so on_activate() knows to refresh
     was_deactivated_ = true;
 
@@ -2154,10 +2166,7 @@ void PrintSelectPanel::forward_sliced_colors_toggle(bool checked) {
     }
 }
 
-void PrintSelectPanel::hide_detail_view() {
-    // Clear detail view open flag (on_activate will check files_changed_while_detail_open_)
-    detail_view_open_ = false;
-
+void PrintSelectPanel::discard_pending_queued_start_on_back_out() {
     // The start pipeline closes the view mid-start (a failed start re-shows
     // it); that close must not cancel the bookkeeping that removes the job
     // on success. The filename match keeps an unrelated view's close from
@@ -2166,6 +2175,13 @@ void PrintSelectPanel::hide_detail_view() {
         pending_queued_start_->filename == composed_selected_filename()) {
         pending_queued_start_.reset();
     }
+}
+
+void PrintSelectPanel::hide_detail_view() {
+    // Clear detail view open flag (on_activate will check files_changed_while_detail_open_)
+    detail_view_open_ = false;
+
+    discard_pending_queued_start_on_back_out();
 
     if (detail_view_) {
         // hide() pops the overlay via go_back(), and its only guard is
@@ -2491,6 +2507,7 @@ void PrintSelectPanel::update_print_button_state() {
     inputs.machine_busy = job_holds_machine(printer_state_.get_print_lifecycle());
     inputs.print_start_committed = printer_state_.is_print_in_progress();
     inputs.job_queue_available = printer_state_.is_job_queue_available();
+    inputs.queue_add_in_flight = queue_add_in_flight_;
     if (detail_view_) {
         if (auto* prep_mgr = detail_view_->get_prep_manager()) {
             inputs.macro_analysis_running = prep_mgr->is_macro_analysis_in_progress();
@@ -2499,12 +2516,17 @@ void PrintSelectPanel::update_print_button_state() {
 
     const auto view = helix::ui::compute_print_select_button_view(inputs);
     const bool queue_mode = view.mode == helix::ui::PrintSelectButtonMode::Queue;
-    const bool enabled = queue_mode || view.blocked_reason[0] == '\0';
+    const bool enabled = view.blocked_reason[0] == '\0';
+    const bool queue_busy = queue_mode && view.blocked_reason[0] != '\0';
 
     print_button_mode_ = view.mode;
     lv_subject_copy_string(&button_label_subject_,
                            queue_mode ? lv_tr("Add to Queue") : lv_tr("Print"));
-    lv_subject_copy_string(&blocked_reason_subject_, queue_mode
+    // Queue mode's own caption is contextual (in flight, or waiting for the
+    // current print) rather than a block, so it is mapped here; the pure
+    // function's reason only decides enabled/disabled for it.
+    lv_subject_copy_string(&blocked_reason_subject_, queue_busy ? lv_tr("Adding to queue...")
+                                                     : queue_mode
                                                          ? lv_tr("Starts after the current print")
                                                          : lv_tr(view.blocked_reason));
 
@@ -2628,6 +2650,10 @@ void PrintSelectPanel::create_detail_view() {
         return;
     }
     detail_view_ = std::make_unique<helix::ui::PrintSelectDetailView>();
+    // ESC / go_back() and a navbar switch pop the overlay without this
+    // panel's hide function; the view's on_deactivating() is the one hook
+    // every close path reaches, so the back-out rule hangs off it.
+    detail_view_->set_on_dismissed([this]() { discard_pending_queued_start_on_back_out(); });
 
     // Initialize subjects BEFORE create() so XML bindings can find them [L004]
     detail_view_->init_subjects();
@@ -2866,6 +2892,13 @@ void PrintSelectPanel::start_print(bool force) {
 }
 
 void PrintSelectPanel::add_to_queue() {
+    // One Add in flight at a time: the button is disabled while the request
+    // runs, but a hardware double-tap can still land before the subject
+    // propagates, and a second add_job would queue the file twice.
+    if (queue_add_in_flight_) {
+        return;
+    }
+
     auto* jqs = get_job_queue_state();
     if (!api_ || !jqs) {
         NOTIFY_ERROR(lv_tr("Cannot add to queue: internal error"));
@@ -2890,15 +2923,21 @@ void PrintSelectPanel::add_to_queue() {
     spdlog::info("[{}] Queueing '{}' ({} option rows)", get_name(), filename,
                  options.options.size());
 
+    queue_add_in_flight_ = true;
+    update_print_button_state();
+
     api_->queue().add_job(
         filename,
         object_lifetime_.bg_cb(
             "PrintSelectPanel::add_to_queue",
             [this, before_ids = std::move(before_ids),
              options = std::move(options)](const JobQueueStatus& status) {
+                queue_add_in_flight_ = false;
+                update_print_button_state();
+
                 const auto new_id = helix::queue::find_new_job_id(before_ids, status.queued_jobs);
                 if (new_id) {
-                    helix::queue::save_queued_job_options(object_lifetime_, api_, *new_id, options);
+                    helix::queue::save_queued_job_options(api_, *new_id, options);
                 } else {
                     // The job IS queued — only the option
                     // save is skipped, since a guessed id
@@ -2926,9 +2965,13 @@ void PrintSelectPanel::add_to_queue() {
                     jqs_now->fetch();
                 }
             }),
-        [](const MoonrakerError& err) {
-            spdlog::warn("[PrintSelectPanel] Add to queue failed: {}", err.message);
-        });
+        object_lifetime_.bg_cb(
+            "PrintSelectPanel::add_to_queue_failed", [this](const MoonrakerError& err) {
+                spdlog::warn("[PrintSelectPanel] Add to queue failed: {}", err.message);
+                queue_add_in_flight_ = false;
+                update_print_button_state();
+                NOTIFY_ERROR(lv_tr("Could not add to queue"));
+            }));
 }
 
 std::string PrintSelectPanel::composed_selected_filename() const {
@@ -2944,6 +2987,37 @@ void PrintSelectPanel::start_queued_job(const JobQueueEntry& job) {
 
     pending_queued_start_ = PendingQueuedStart{job.job_id, job.filename, {}, false, false};
     spdlog::info("[{}] Starting queued job {} -> '{}'", get_name(), job.job_id, job.filename);
+
+    // The listing must show the queued file's own directory before
+    // try_open_pending_queued_job matches it: the panel may be browsing a
+    // subdirectory, USB, or anywhere else, and the match is by basename
+    // within current_path_ — composed, it must equal the queued filename.
+    if (usb_source_) {
+        usb_source_->select_printer_source();
+    }
+    path_navigator_.reset();
+    const size_t dir_end = job.filename.rfind('/');
+    if (dir_end != std::string::npos) {
+        const std::string dir = job.filename.substr(0, dir_end);
+        size_t start = 0;
+        while (start <= dir.size()) {
+            const size_t slash = dir.find('/', start);
+            const std::string segment =
+                dir.substr(start, slash == std::string::npos ? std::string::npos : slash - start);
+            if (!segment.empty()) {
+                path_navigator_.navigate_to(segment);
+            }
+            if (slash == std::string::npos) {
+                break;
+            }
+            start = slash + 1;
+        }
+    }
+    current_path_ = path_navigator_.current_path();
+    // In-flight metadata callbacks addressed the directory we just left;
+    // retargeting without bumping the generation lets them land on files
+    // that are no longer listed.
+    ++nav_generation_;
 
     const std::string job_id = job.job_id;
     helix::queue::load_queued_job_options(
@@ -2972,8 +3046,9 @@ void PrintSelectPanel::try_open_pending_queued_job() {
         return;
     }
 
-    // The listing is flat-name matched (like --select-file and Print Last):
-    // a queued subdirectory file is opened by its basename.
+    // Match by basename against the listing of current_path_ — the retarget
+    // in start_queued_job put that path at the queued file's directory, so a
+    // hit composes to exactly the queued filename.
     const std::string& queued = pending_queued_start_->filename;
     const size_t slash = queued.rfind('/');
     const std::string name = slash == std::string::npos ? queued : queued.substr(slash + 1);
@@ -3003,19 +3078,28 @@ void PrintSelectPanel::finish_pending_queued_job() {
     }
 
     spdlog::info("[{}] Print started for queued job {} - removing from queue", get_name(), job_id);
-    api_->queue().remove_jobs({job_id},
-                              object_lifetime_.bg_cb("PrintSelectPanel::queued_job_started",
-                                                     [this]() {
-                                                         if (auto* jqs = get_job_queue_state()) {
-                                                             jqs->fetch();
-                                                         }
-                                                     }),
-                              [job_id](const MoonrakerError& err) {
-                                  spdlog::warn(
-                                      "[PrintSelectPanel] Removing queued job {} failed: {}",
-                                      job_id, err.message);
-                              });
-    helix::queue::delete_queued_job_options(object_lifetime_, api_, job_id);
+    api_->queue().remove_jobs(
+        {job_id},
+        object_lifetime_.bg_cb("PrintSelectPanel::queued_job_started",
+                               [this, job_id]() {
+                                   // Options are deleted only once Moonraker confirms the removal:
+                                   // a refusal (or a stale id after a Moonraker restart) leaves the
+                                   // job queued, and Start next must still find its saved options.
+                                   helix::queue::delete_queued_job_options(api_, job_id);
+                                   if (auto* jqs = get_job_queue_state()) {
+                                       jqs->fetch();
+                                   }
+                               }),
+        object_lifetime_.bg_cb("PrintSelectPanel::queued_job_removal_failed",
+                               [this, job_id](const MoonrakerError& err) {
+                                   spdlog::warn(
+                                       "[PrintSelectPanel] Removing queued job {} failed: {}",
+                                       job_id, err.message);
+                                   NOTIFY_WARNING(lv_tr("Could not remove the job from the queue"));
+                                   if (auto* jqs = get_job_queue_state()) {
+                                       jqs->fetch();
+                                   }
+                               }));
 }
 
 void PrintSelectPanel::show_preflight_modal(const helix::PreflightResult& pf) {

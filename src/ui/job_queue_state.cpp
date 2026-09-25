@@ -36,6 +36,9 @@ void JobQueueState::invalidate() {
     // A dropped socket may hide a Moonraker restart, and a restart is the
     // only thing that changes server config: re-read it on the next connect.
     automatic_transition_loaded_ = false;
+    // Same re-arm for the option-store prune: it must not run against a
+    // queue snapshot taken before a reconnect's mutations.
+    pruned_this_connect_ = false;
 }
 
 void JobQueueState::watch_connection_state() {
@@ -161,14 +164,19 @@ void JobQueueState::fetch() {
 }
 
 void JobQueueState::on_queue_fetched(const JobQueueStatus& status) {
-    // Always called on the main thread now — JobQueueState::fetch's success
-    // callback wraps the call in tok.defer(). Earlier code did the defer
-    // here via lifetime_.defer(this), which raced #707 (TOCTOU between
-    // bg-thread alive-check and lifetime_ access).
+    // Main-thread only: fetch()'s success callback wraps this call in
+    // tok.defer(), so everything below may touch subjects and LVGL state.
     cached_jobs_ = status.queued_jobs;
     queue_state_ = status.queue_state;
     is_loaded_ = true;
-    prune_option_store();
+    // Prune once per connect, on the FIRST fetch. A later fetch's snapshot
+    // can predate a fresh Add to Queue whose save has not landed when the
+    // prune reads the store — pruning there would delete options for a job
+    // that is in fact queued.
+    if (!pruned_this_connect_) {
+        pruned_this_connect_ = true;
+        prune_option_store();
+    }
     update_subjects();
     spdlog::debug("[JobQueueState] Updated: state={}, jobs={}", queue_state_, cached_jobs_.size());
 }

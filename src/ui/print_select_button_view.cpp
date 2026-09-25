@@ -8,6 +8,9 @@ namespace helix::ui {
 PrintSelectButtonView compute_print_select_button_view(const PrintSelectButtonInputs& in) {
     if (in.machine_busy) {
         if (in.job_queue_available && !in.macro_analysis_running) {
+            if (in.queue_add_in_flight) {
+                return {PrintSelectButtonMode::Queue, "Adding to queue..."};
+            }
             return {PrintSelectButtonMode::Queue, ""};
         }
         return {PrintSelectButtonMode::Print, "Printing: start after this job"};

@@ -75,4 +75,26 @@ struct PrintSelectPanelTestAccess {
         }
         return panel.detail_view_->collect_option_states();
     }
+
+    /// Queue the shown file the way the detail-view button's tap handler does.
+    static void add_to_queue(PrintSelectPanel& panel) {
+        panel.add_to_queue();
+    }
+
+    /// Whether an add_job request is on the wire (button disabled for it).
+    static bool queue_add_in_flight(const PrintSelectPanel& panel) {
+        return panel.queue_add_in_flight_;
+    }
+
+    /// current_path_ joined with the selected filename — the path Moonraker
+    /// is addressed by, and the identity a queued start must reproduce.
+    static std::string composed_selected_filename(const PrintSelectPanel& panel) {
+        return panel.composed_selected_filename();
+    }
+
+    /// Drop any pending queued start; cleanup for the process-global panel,
+    /// whose pending state would otherwise leak into later tests.
+    static void clear_pending_queued_start(PrintSelectPanel& panel) {
+        panel.pending_queued_start_.reset();
+    }
 };

@@ -81,11 +81,23 @@ class QueueOptionsStoreFixture : public LVGLTestFixture {
         return out;
     }
 
+    /// Seeds the store by posting the parent object whole — the shape a
+    /// database dump or an earlier run leaves behind.
+    void seed_store(const queue::QueuedJobOptionsMap& entries) {
+        json value = json::object();
+        for (const auto& [id, entry] : entries) {
+            value[id] = queue::encode_queued_job_entry(entry);
+        }
+        api_->database_post_item(
+            queue::kOptionsDbNamespace, queue::kOptionsDbKey, value, []() {},
+            [](const MoonrakerError&) { FAIL("seed post failed"); });
+    }
+
     MoonrakerClientMock client_;
     PrinterState printer_state_;
     std::unique_ptr<MoonrakerAPI> api_;
     std::unique_ptr<JobQueueState> state_;
-    /// Stands in for the panel's object_lifetime_ in save_queued_job_options calls
+    /// Stands in for the panel's object_lifetime_ in load_queued_job_options calls
     AsyncLifetimeGuard guard_;
 };
 
@@ -127,9 +139,7 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
     QueuedJobOptionsMap seed;
     seed["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}}};
     seed["dead-job"] = QueuedJobOptions{"gone.gcode", {{"soak", false}}};
-    api_->database_post_item(
-        kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
-        [](const MoonrakerError&) { FAIL("seed post failed"); });
+    seed_store(seed);
     REQUIRE(read_store().size() == 2);
 
     state_->fetch();
@@ -150,9 +160,7 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
 
     QueuedJobOptionsMap seed;
     seed["0002"] = QueuedJobOptions{"calibration_cube.gcode", {{"soak", true}}};
-    api_->database_post_item(
-        kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
-        [](const MoonrakerError&) { FAIL("seed post failed"); });
+    seed_store(seed);
 
     state_->fetch();
     pump();
@@ -160,6 +168,52 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
     const auto after = read_store();
     REQUIRE(after.size() == 1);
     CHECK(after.count("0002") == 1);
+}
+
+TEST_CASE_METHOD(QueueOptionsStoreFixture, "a refresh after the first keeps freshly saved options",
+                 "[job_queue][options_store]") {
+    using namespace helix::queue;
+
+    // The first fetch of the connection takes the prune (latches it).
+    state_->fetch();
+    pump();
+
+    // A job queued and saved after that fetch: the mock's queue is still
+    // 0001-0003, so "0004" is new from the queue's point of view.
+    save_queued_job_options(api_.get(), "0004", QueuedJobOptions{"wedge.gcode", {{"soak", true}}});
+    pump();
+    REQUIRE(read_store().count("0004") == 1);
+
+    // The next refresh's queue snapshot cannot name 0004, but the prune must
+    // not run against it — a fetch racing an Add would otherwise delete the
+    // options the Add just wrote.
+    state_->fetch();
+    pump();
+
+    CHECK(read_store().count("0004") == 1);
+}
+
+TEST_CASE_METHOD(QueueOptionsStoreFixture,
+                 "the first refresh after a reconnect prunes stale options again",
+                 "[job_queue][options_store]") {
+    using namespace helix::queue;
+
+    const QueuedJobOptionsMap seed = {
+        {"dead-job", QueuedJobOptions{"gone.gcode", {{"soak", false}}}}};
+
+    seed_store(seed);
+    state_->fetch();
+    pump();
+    REQUIRE(read_store().empty());
+
+    // A reconnect re-arms the prune: a stale entry written while the socket
+    // was down must still be collected on the next connect's first fetch.
+    seed_store(seed);
+    state_->invalidate();
+    state_->fetch();
+    pump();
+
+    CHECK(read_store().empty());
 }
 
 TEST_CASE_METHOD(QueueOptionsStoreFixture,
@@ -180,20 +234,17 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
     }
 }
 
-TEST_CASE_METHOD(QueueOptionsStoreFixture, "save_queued_job_options merges into the stored map",
+TEST_CASE_METHOD(QueueOptionsStoreFixture, "save_queued_job_options writes its own job's key",
                  "[job_queue][options_store]") {
     using namespace helix::queue;
 
     // Seed one unrelated job's entry; the save below must keep it.
     QueuedJobOptionsMap seed;
     seed["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}}};
-    api_->database_post_item(
-        kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
-        [](const MoonrakerError&) { FAIL("seed post failed"); });
+    seed_store(seed);
     REQUIRE(read_store().size() == 1);
 
-    save_queued_job_options(guard_, api_.get(), "0042",
-                            QueuedJobOptions{"wedge.gcode", {{"soak", false}}});
+    save_queued_job_options(api_.get(), "0042", QueuedJobOptions{"wedge.gcode", {{"soak", false}}});
     pump();
 
     const auto after = read_store();
@@ -206,15 +257,35 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture, "save_queued_job_options merges into 
 }
 
 TEST_CASE_METHOD(QueueOptionsStoreFixture,
-                 "save_queued_job_options starts from empty on a "
-                 "missing key",
+                 "save_queued_job_options stores a dotted child key readable on its own",
                  "[job_queue][options_store]") {
     using namespace helix::queue;
 
-    // Nothing seeded: the mock answers the read with the same JSON-RPC 404 the
-    // real server does, which is the first-ever-save case, not an error.
-    save_queued_job_options(guard_, api_.get(), "0042",
-                            QueuedJobOptions{"wedge.gcode", {{"soak", true}}});
+    save_queued_job_options(api_.get(), "0042", QueuedJobOptions{"wedge.gcode", {{"soak", true}}});
+    pump();
+
+    bool answered = false;
+    QueuedJobOptions direct;
+    api_->database_get_item(
+        kOptionsDbNamespace, queued_job_option_key("0042"),
+        [&answered, &direct](const json& value) {
+            answered = true;
+            direct = decode_queued_job_entry(value);
+        },
+        [](const MoonrakerError&) {});
+    REQUIRE(answered);
+    CHECK(direct.filename == "wedge.gcode");
+    CHECK(direct.options.at("soak") == true);
+}
+
+TEST_CASE_METHOD(QueueOptionsStoreFixture,
+                 "save_queued_job_options starts from empty on a missing key",
+                 "[job_queue][options_store]") {
+    using namespace helix::queue;
+
+    // Nothing seeded: the child key simply does not exist yet, which is the
+    // first-ever-save case, not an error.
+    save_queued_job_options(api_.get(), "0042", QueuedJobOptions{"wedge.gcode", {{"soak", true}}});
     pump();
 
     const auto after = read_store();
@@ -259,9 +330,7 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture, "load_queued_job_options answers a st
     QueuedJobOptionsMap seed;
     seed["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}, {"soak", false}}};
     seed["0099"] = QueuedJobOptions{"other.gcode", {{"unrelated", true}}};
-    api_->database_post_item(
-        kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
-        [](const MoonrakerError&) { FAIL("seed post failed"); });
+    seed_store(seed);
 
     bool answered = false;
     QueuedJobOptions loaded;
@@ -284,8 +353,8 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
     using namespace helix::queue;
 
     SECTION("nothing stored at all") {
-        // The mock answers the read with the same JSON-RPC 404 the real
-        // server does for a never-written key: defaults, not an error path.
+        // The mock answers the child-key read with the same JSON-RPC 404 the
+        // real server does for a never-written key: defaults, not an error.
         bool answered = false;
         QueuedJobOptions loaded{"sentinel", {{"sentinel", true}}};
         load_queued_job_options(guard_, api_.get(), "0042", [&](QueuedJobOptions entry) {
@@ -299,12 +368,10 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
         CHECK(loaded.options.empty());
     }
 
-    SECTION("key stored, job absent from it") {
+    SECTION("store present, job's key absent") {
         QueuedJobOptionsMap seed;
         seed["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}}};
-        api_->database_post_item(
-            kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
-            [](const MoonrakerError&) { FAIL("seed post failed"); });
+        seed_store(seed);
 
         bool answered = false;
         load_queued_job_options(guard_, api_.get(), "0042", [&](QueuedJobOptions entry) {
@@ -325,12 +392,10 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
     QueuedJobOptionsMap seed;
     seed["0001"] = QueuedJobOptions{"benchy_v2.gcode", {{"skip_beam", true}}};
     seed["0042"] = QueuedJobOptions{"wedge.gcode", {{"soak", false}}};
-    api_->database_post_item(
-        kOptionsDbNamespace, kOptionsDbKey, encode_queued_job_options(seed), []() {},
-        [](const MoonrakerError&) { FAIL("seed post failed"); });
+    seed_store(seed);
     REQUIRE(read_store().size() == 2);
 
-    delete_queued_job_options(guard_, api_.get(), "0042");
+    delete_queued_job_options(api_.get(), "0042");
     pump();
 
     auto after = read_store();
@@ -338,8 +403,9 @@ TEST_CASE_METHOD(QueueOptionsStoreFixture,
     CHECK(after.count("0001") == 1);
     CHECK(after.count("0042") == 0);
 
-    // Deleting an id that is not stored must not disturb what is.
-    delete_queued_job_options(guard_, api_.get(), "9999");
+    // Deleting an id that is not stored must not disturb what is: the 404 is
+    // normalized to success before it reaches here.
+    delete_queued_job_options(api_.get(), "9999");
     pump();
 
     after = read_store();

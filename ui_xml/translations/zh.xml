@@ -164,6 +164,7 @@
   <translation tag="Added to Spoolman" zh="已添加到 Spoolman"/>
   <translation tag="Added to queue (position {})" zh="已添加到队列（第 {} 位）"/>
   <translation tag="Added to queue (position {}) - queue is paused" zh="已添加到队列（第 {} 位）– 队列已暂停"/>
+  <translation tag="Adding to queue..." zh="正在添加到队列..."/>
   <translation tag="Address" zh="地址"/>
   <translation tag="Adjust screen brightness level" zh="调整屏幕亮度"/>
   <translation tag="Adjust screws, then re-probe." zh="调整螺丝，然后重新探测。"/>
@@ -659,6 +660,7 @@
   <translation tag="Copy failed - use SSH manually" zh="复制失败 - 请手动使用 SSH"/>
   <translation tag="Corner roundness" zh="圆角程度"/>
   <translation tag="Correction (Ki)" zh="校正 (Ki)"/>
+  <translation tag="Could not add to queue" zh="无法添加到队列"/>
   <translation tag="Could not analyze PRINT_START macro. Some print options may be unavailable." zh="无法分析 PRINT_START 宏。部分打印选项可能不可用。"/>
   <translation tag="Could not answer the connection request" zh="无法响应连接请求"/>
   <translation tag="Could not check webcam status.&#10;Check printer connection." zh="无法检查摄像头状态。&#10;请检查打印机连接。"/>
@@ -669,6 +671,7 @@
   <translation tag="Could not parse tips database" zh="无法解析提示数据库"/>
   <translation tag="Could not reach Spoolman at" zh="无法连接 Spoolman："/>
   <translation tag="Could not read the screw adjustments from the printer" zh="无法从打印机读取螺丝调整数据"/>
+  <translation tag="Could not remove the job from the queue" zh="无法从队列中移除任务"/>
   <translation tag="Could not resolve printer RFCOMM channel" zh="无法解析打印机 RFCOMM 通道"/>
   <translation tag="Could not save filament" zh="无法保存耗材"/>
   <translation tag="Could not save the mesh as &apos;{}&apos;: {}" zh="无法将网格保存为 &apos;{}&apos;：{}"/>
@@ -2691,11 +2694,9 @@
   <translation tag="Switched to {}" zh="已切换到 {}"/>
   <translation tag="Switches to a backup spool on runout" zh="耗材用尽时切换到备用料盘"/>
   <translation tag="Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." zh="切回 PID 会改变此加热器的控制方式，随后会进行校准。这需要在工作温度下耗时数分钟。"/>
-  <translation tag="Switching back to PID changes how this heater is controlled." zh="切回 PID 会改变此加热器的控制方式。"/>
   <translation tag="Switching back to PID requires a config change and Klipper restart." zh="切回 PID 需要修改配置并重启 Klipper。"/>
   <translation tag="Switching heater control to MPC. Klipper will restart." zh="正在将加热控制切换为 MPC。Klipper 将重启。"/>
   <translation tag="Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature." zh="切换到 MPC 会改变此加热器的控制方式，随后会进行校准。这需要在工作温度下耗时数分钟。"/>
-  <translation tag="Switching to MPC changes how this heater is controlled." zh="切换到 MPC 会改变此加热器的控制方式。"/>
   <translation tag="Switching to MPC requires a config change and Klipper restart." zh="切换到 MPC 需要修改配置并重启 Klipper。"/>
   <translation tag="Sync with Spoolman" zh="与 Spoolman 同步"/>
   <translation tag="Sysfs" zh="Sysfs"/>

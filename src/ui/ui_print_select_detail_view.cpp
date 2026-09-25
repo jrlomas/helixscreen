@@ -801,6 +801,12 @@ void PrintSelectDetailView::on_activate() {
 void PrintSelectDetailView::on_deactivating(DeactivateReason) {
     spdlog::debug("[DetailView] on_deactivating()");
 
+    // The owning panel's close bookkeeping runs for every dismissal path —
+    // this hook is the only one ESC/go_back() and a navbar switch reach.
+    if (on_dismissed_cb_) {
+        on_dismissed_cb_();
+    }
+
     // Clear and pause gcode viewer immediately so the old model doesn't
     // linger when the user selects a different file
     if (gcode_viewer_) {

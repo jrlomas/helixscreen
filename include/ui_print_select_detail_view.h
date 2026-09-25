@@ -176,6 +176,19 @@ class PrintSelectDetailView : public OverlayBase {
     }
 
     /**
+     * @brief Set callback fired from on_deactivating().
+     *
+     * Every close path funnels through that hook — the back button and
+     * backdrop via hide(), but also ESC / go_back() and a navbar switch,
+     * which pop the overlay without the owning panel's hide function. The
+     * panel wires its back-out bookkeeping (a pending queued start) here so
+     * those paths cannot miss it.
+     */
+    void set_on_dismissed(std::function<void()> callback) {
+        on_dismissed_cb_ = std::move(callback);
+    }
+
+    /**
      * @brief Handle a tap on the filament card.
      *
      * Gates on the active backend's remap strategy and, when applicable, fires
@@ -826,6 +839,7 @@ class PrintSelectDetailView : public OverlayBase {
     // informational.
     std::function<void()> on_remap_requested_;
     std::function<void()> on_plugin_setup_requested_;
+    std::function<void()> on_dismissed_cb_;
 
     // === Internal Methods ===
 

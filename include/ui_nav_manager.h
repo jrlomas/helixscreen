@@ -405,6 +405,20 @@ class NavigationManager {
     void push_overlay(lv_obj_t* overlay_panel, bool hide_previous = true);
 
     /**
+     * @brief Whether this deactivation is the active panel being covered by
+     * an overlay rather than left for another screen.
+     *
+     * push_overlay() deactivates the main panel it covers — the panel's own
+     * on_deactivating() then runs with NavigateAway just like a real leave,
+     * so state that must survive its own overlay (an in-flight open of the
+     * detail view) needs this to tell the two apart. True only between the
+     * cover and the next main-panel activation.
+     */
+    bool main_panel_deactivated_for_overlay() const {
+        return main_panel_deactivated_for_overlay_;
+    }
+
+    /**
      * @brief Push overlay with zoom-from-rect animation
      *
      * Shows the overlay panel with a zoom animation originating from the

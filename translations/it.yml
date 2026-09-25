@@ -173,6 +173,7 @@ translations:
   Added to Spoolman: Aggiunto a Spoolman
   Added to queue (position {}): Aggiunto alla coda (posizione {})
   Added to queue (position {}) - queue is paused: Aggiunto alla coda (posizione {}) – la coda è in pausa
+  Adding to queue...: Aggiunta alla coda...
   Address: Indirizzo
   Adjust screen brightness level: Regola il livello di luminosità dello schermo
   Adjust screws, then re-probe.: Regolare le viti, poi risondare.
@@ -735,6 +736,7 @@ translations:
   Copy failed - use SSH manually: Copia fallita - usa SSH manualmente
   Corner roundness: Arrotondamento angoli
   Correction (Ki): Correzione (Ki)
+  Could not add to queue: Impossibile aggiungere alla coda
   Could not analyze PRINT_START macro. Some print options may be unavailable.: Impossibile
     analizzare la macro PRINT_START. Alcune opzioni di stampa potrebbero non essere
     disponibili.
@@ -748,6 +750,7 @@ translations:
   Could not parse tips database: Impossibile analizzare il database dei suggerimenti
   Could not reach Spoolman at: Impossibile raggiungere Spoolman a
   Could not read the screw adjustments from the printer: Impossibile leggere le regolazioni delle viti dalla stampante
+  Could not remove the job from the queue: Impossibile rimuovere il lavoro dalla coda
   Could not resolve printer RFCOMM channel: Impossibile risolvere il canale RFCOMM
     della stampante
   Could not save filament: Impossibile salvare il filamento
@@ -2982,12 +2985,10 @@ translations:
   Switches to a backup spool on runout: Passa a una bobina di riserva a filamento esaurito
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : Il ritorno al PID cambia come viene controllato questo riscaldatore, poi lo calibra. Richiede diversi minuti a temperatura.
-  Switching back to PID changes how this heater is controlled.: Il ritorno al PID cambia come viene controllato questo riscaldatore.
   Switching back to PID requires a config change and Klipper restart.: Il ritorno al PID richiede una modifica alla configurazione e il riavvio di Klipper.
   Switching heater control to MPC. Klipper will restart.: Passaggio controllo riscaldatore
     a MPC. Klipper si riavvierà.
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: Il passaggio a MPC cambia come viene controllato questo riscaldatore, poi lo calibra. Richiede diversi minuti a temperatura.
-  Switching to MPC changes how this heater is controlled.: Il passaggio a MPC cambia come viene controllato questo riscaldatore.
   Switching to MPC requires a config change and Klipper restart.: Il passaggio a MPC
     richiede una modifica alla configurazione e il riavvio di Klipper.
   Sync with Spoolman: Sincronizza con Spoolman

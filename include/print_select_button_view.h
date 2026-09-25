@@ -35,13 +35,18 @@ struct PrintSelectButtonInputs {
     bool macro_analysis_running = false;
     /// True when Moonraker's server.info lists the job_queue component.
     bool job_queue_available = false;
+    /// True while an add_job request is on the wire: the button disables for
+    /// the flight so a double-tap cannot queue the file twice.
+    bool queue_add_in_flight = false;
 };
 
 /// Decide the button. Queue mode needs all three: the machine held by an
 /// active job (not merely an unconfirmed local start), the job_queue
 /// component present to receive the job, and macro analysis finished — an
 /// analysis in progress leaves the button disabled exactly as it does for
-/// Print, because the option rows that get saved are not settled yet.
+/// Print, because the option rows that get saved are not settled yet. A
+/// queue-mode decision combined with an in-flight add keeps Queue mode but
+/// disables the button for the flight.
 PrintSelectButtonView compute_print_select_button_view(const PrintSelectButtonInputs& in);
 
 } // namespace helix::ui

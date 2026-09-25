@@ -170,6 +170,7 @@ translations:
   Added to Spoolman: Добавлено в Spoolman
   Added to queue (position {}): Добавлено в очередь (позиция {})
   Added to queue (position {}) - queue is paused: Добавлено в очередь (позиция {}) – очередь на паузе
+  Adding to queue...: Добавление в очередь...
   Address: Адрес
   Adjust screen brightness level: Настроить уровень яркости экрана
   Adjust screws, then re-probe.: Отрегулируйте винты, затем перепроверьте.
@@ -728,6 +729,7 @@ translations:
   Copy failed - use SSH manually: Ошибка копирования - используйте SSH вручную
   Corner roundness: Скругление углов
   Correction (Ki): Коррекция (Ki)
+  Could not add to queue: Не удалось добавить в очередь
   Could not analyze PRINT_START macro. Some print options may be unavailable.: Не
     удалось проанализировать макрос PRINT_START. Некоторые параметры печати могут
     быть недоступны.
@@ -741,6 +743,7 @@ translations:
   Could not parse tips database: Не удалось разобрать базу данных советов
   Could not reach Spoolman at: Не удалось связаться со Spoolman по адресу
   Could not read the screw adjustments from the printer: Не удалось получить данные регулировки винтов от принтера
+  Could not remove the job from the queue: Не удалось удалить задание из очереди
   Could not resolve printer RFCOMM channel: Не удалось определить RFCOMM-канал принтера
   Could not save filament: Не удалось сохранить филамент
   "Could not save the mesh as '{}': {}": "Не удалось сохранить сетку как '{}': {}"
@@ -2952,12 +2955,10 @@ translations:
   Switches to a backup spool on runout: При обрыве переключится на резервную катушку
   ? Switching back to PID changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.
   : Возврат к PID меняет способ управления этим нагревателем, а затем калибрует его. Это занимает несколько минут при рабочей температуре.
-  Switching back to PID changes how this heater is controlled.: Возврат к PID меняет способ управления этим нагревателем.
   Switching back to PID requires a config change and Klipper restart.: Возврат к PID требует изменения конфига и перезапуска Klipper.
   Switching heater control to MPC. Klipper will restart.: Переключение управления
     нагревом на MPC. Klipper перезапустится.
   Switching to MPC changes how this heater is controlled, then calibrates it. That takes several minutes at temperature.: Переход на MPC меняет способ управления этим нагревателем, а затем калибрует его. Это занимает несколько минут при рабочей температуре.
-  Switching to MPC changes how this heater is controlled.: Переход на MPC меняет способ управления этим нагревателем.
   Switching to MPC requires a config change and Klipper restart.: Переход на MPC требует
     изменения конфига и перезапуска Klipper.
   Sync with Spoolman: Синхронизация со Spoolman

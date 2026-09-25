@@ -2,8 +2,8 @@
 
 /**
  * @file test_job_queue_up_next.cpp
- * @brief Phase 3 of the print-queue design: the "Up next" line and the
- * completion modal's "Start next" secondary.
+ * @brief The home panel's "Up next" line and the completion modal's
+ * "Start next" secondary.
  *
  * Three layers, each pinned separately:
  *  - the pure pieces: text composition (format_up_next_text /

@@ -8,8 +8,8 @@
  * Run with: ./build/bin/helix-tests "[job_queue][queue_start]"
  *
  * PrintSelectPanel::start_queued_job() is the queue's single entry point (the
- * job queue modal's row tap today, the completion screen's "Start next" in
- * Phase 3). It owns three contracts:
+ * job queue modal's row tap, and the completion screen's Start next). It owns
+ * three contracts:
  *
  * 1. The busy guard: can_start_new_print() covers BOTH the printer's reported
  *    state AND the app's committed-but-unconfirmed host-side start, so a tap
@@ -26,6 +26,7 @@
 #include "ui_update_queue.h"
 
 #include "../test_helpers/job_queue_modal_test_access.h"
+#include "../test_helpers/moonraker_client_mock_test_access.h"
 #include "../test_helpers/print_select_panel_fixture.h"
 #include "../test_helpers/print_select_panel_test_access.h"
 #include "../test_helpers/print_state_test_drivers.h"
@@ -78,22 +79,8 @@ struct WarningLog {
     }
 };
 
-/// Resets the shard-global PrinterState BEFORE the panel fixture builds the
-/// real panel over it (bases construct in declaration order). Without this, a
-/// prior case's subjects or preparing job decide this one's answers.
-struct GlobalStateReset {
-    GlobalStateReset() {
-        auto& ps = get_printer_state();
-        PrinterStateTestAccess::reset(ps);
-        ps.init_subjects(false);
-        if (ps.has_preparing_job()) {
-            ps.retire_preparing(helix::PreparingExit::Superseded);
-        }
-        set_wire_state(ps, PrintJobState::STANDBY);
-    }
-};
-
-class QueuedStartFixture : private GlobalStateReset, public helix::PrintSelectPanelFixture {
+class QueuedStartFixture : private helix::PrintSelectGlobalStateReset,
+                           public helix::PrintSelectPanelFixture {
   public:
     QueuedStartFixture()
         : helix::PrintSelectPanelFixture(helix::PrintSelectFilelistHandler::Unregistered) {
@@ -115,16 +102,15 @@ class QueuedStartFixture : private GlobalStateReset, public helix::PrintSelectPa
         set_moonraker_api(previous_api_);
     }
 
-    /// Writes a stored-options entry the way add_to_queue does. The mock
-    /// dispatches inline, so the post answers before it returns.
+    /// Writes a stored-options entry the way add_to_queue does: one post to
+    /// the job's own key. The mock dispatches inline, so it answers before
+    /// returning.
     void seed_store(const std::string& job_id, const std::string& filename,
                     std::map<std::string, bool> options) {
-        QueuedJobOptionsMap seed = read_store();
-        seed[job_id] = QueuedJobOptions{filename, std::move(options)};
         api_->database_post_item(
-            helix::queue::kOptionsDbNamespace, helix::queue::kOptionsDbKey,
-            helix::queue::encode_queued_job_options(seed), []() {},
-            [](const MoonrakerError&) { FAIL("seed post failed"); });
+            helix::queue::kOptionsDbNamespace, helix::queue::queued_job_option_key(job_id),
+            helix::queue::encode_queued_job_entry(QueuedJobOptions{filename, std::move(options)}),
+            []() {}, [](const MoonrakerError&) { FAIL("seed post failed"); });
     }
 
     /// Reads the stored option map straight from the (mock) database.
@@ -344,4 +330,135 @@ TEST_CASE_METHOD(QueuedStartFixture,
     REQUIRE(pending != nullptr);
     CHECK(*pending == "0002");
     CHECK(queue_has("0002"));
+}
+
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "leaving the panel before the queued file opens abandons the pending start",
+                 "[job_queue][queue_start]") {
+    PlantedGcode file("queue_start_abandon.gcode");
+    seed_store("0001", file.name(), {{"bed_mesh", false}});
+
+    // The pending start exists with no detail view open yet: the panel has
+    // left for another screen before the saved-options load answered, which
+    // is the state a navbar switch or go_back lands on.
+    panel_->start_queued_job(entry("0001", file.name()));
+    REQUIRE(pending_job_id() != nullptr);
+    CHECK_FALSE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+
+    panel_->on_deactivating(DeactivateReason::NavigateAway);
+    drain();
+
+    // A later visit's refresh must not reopen the queued file unasked, and
+    // the entry stays queued with its options.
+    CHECK(pending_job_id() == nullptr);
+    CHECK(queue_has("0001"));
+    CHECK(read_store().count("0001") == 1);
+}
+
+TEST_CASE_METHOD(QueuedStartFixture, "a queued subdirectory file is found from the gcodes root",
+                 "[job_queue][queue_start]") {
+    PlantedGcode file("sub_file.gcode", "queue_start_subdir");
+    seed_store("0001", file.relative(), {{"bed_mesh", false}});
+
+    panel_->start_queued_job(entry("0001", file.relative()));
+    drain();
+
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    CHECK(::PrintSelectPanelTestAccess::composed_selected_filename(*panel_) == file.relative());
+    const auto states = ::PrintSelectPanelTestAccess::collect_option_states(*panel_);
+    REQUIRE(states.count("bed_mesh") == 1);
+    CHECK(states.at("bed_mesh") == false);
+}
+
+TEST_CASE_METHOD(QueuedStartFixture, "a queued root file is found while browsing a subdirectory",
+                 "[job_queue][queue_start]") {
+    PlantedGcode nested("nested.gcode", "queue_start_browse");
+    PlantedGcode root_file("queue_start_root.gcode");
+    seed_store("0001", root_file.name(), {{"bed_mesh", false}});
+
+    // Browse into a subdirectory first — the queued start must retarget the
+    // listing back to the root, not match against what is on screen.
+    panel_->navigate_to_directory("queue_start_browse");
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::list_contains(*panel_, nested.name()));
+
+    panel_->start_queued_job(entry("0001", root_file.name()));
+    drain();
+
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    CHECK(::PrintSelectPanelTestAccess::composed_selected_filename(*panel_) == root_file.name());
+}
+
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "two same-named files in different directories resolve to the queued one",
+                 "[job_queue][queue_start]") {
+    PlantedGcode first("dup.gcode", "queue_start_dup_one");
+    PlantedGcode second("dup.gcode", "queue_start_dup_two");
+    seed_store("0001", second.relative(), {{"bed_mesh", false}});
+
+    // The listing the panel starts from shows the FIRST directory's file;
+    // the queued filename names the second.
+    panel_->navigate_to_directory("queue_start_dup_one");
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::list_contains(*panel_, first.name()));
+
+    panel_->start_queued_job(entry("0001", second.relative()));
+    drain();
+
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    CHECK(::PrintSelectPanelTestAccess::composed_selected_filename(*panel_) == second.relative());
+}
+
+TEST_CASE_METHOD(QueuedStartFixture, "a refused queue removal keeps the job and its saved options",
+                 "[job_queue][queue_start]") {
+    WarningLog warnings;
+    PlantedGcode file("queue_start_refused.gcode");
+    seed_store("0001", file.name(), {{"bed_mesh", false}});
+
+    // Moonraker refuses the removal — a stale id after a restart, say. The
+    // override answers error_cb where the stock handler succeeds.
+    helix::MoonrakerClientMockTestAccess::set_method_handler(
+        mock_client_, "server.job_queue.delete_job",
+        [](MoonrakerClientMock*, const json&, std::function<void(const json&)> /*success_cb*/,
+           std::function<void(const MoonrakerError&)> error_cb) -> bool {
+            if (error_cb) {
+                error_cb(MoonrakerError::unknown("refused", "server.job_queue.delete_job"));
+            }
+            return true;
+        });
+
+    panel_->start_queued_job(entry("0001", file.name()));
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    ::PrintSelectPanelTestAccess::fire_print_started(*panel_);
+    drain();
+
+    // The job stays queued AND keeps its options, so Start next can offer it
+    // again exactly as it was saved; the refusal is surfaced, not just logged.
+    CHECK(queue_has("0001"));
+    CHECK(read_store().count("0001") == 1);
+    CHECK(warnings.contains("Could not remove the job from the queue"));
+}
+
+TEST_CASE_METHOD(QueuedStartFixture,
+                 "closing the detail overlay via go_back drops an untapped pending start",
+                 "[job_queue][queue_start]") {
+    PlantedGcode file("queue_start_esc.gcode");
+    seed_store("0001", file.name(), {{"bed_mesh", false}});
+
+    panel_->start_queued_job(entry("0001", file.name()));
+    drain();
+    REQUIRE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
+    REQUIRE(pending_job_id() != nullptr);
+
+    // ESC and the Android back key pop the overlay through NavigationManager
+    // alone - hide_detail_view() never runs, so on_activate() is where the
+    // back-out bookkeeping has to land.
+    REQUIRE(NavigationManager::instance().go_back());
+    drain();
+
+    CHECK(pending_job_id() == nullptr);
+    CHECK(queue_has("0001"));
+    CHECK(read_store().count("0001") == 1);
+    CHECK_FALSE(::PrintSelectPanelTestAccess::detail_view_visible(*panel_));
 }
