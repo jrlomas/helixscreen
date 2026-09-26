@@ -383,13 +383,22 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
     // OpenAMS reads nothing off a spool, so every insert is one the hardware
     // has no evidence about: the record stays and the user is asked
     // (docs/specs/filament_slots.md §6). Only an observed empty counts, so the
-    // first frame after start is a baseline, not a wave of inserts.
+    // first frame after start is a baseline, not a wave of inserts. A unit
+    // that is offline, or a manager that is not ready, reports bays it has not
+    // read, so those frames neither raise an insert nor move the baseline.
     std::unordered_map<int, bool> present_now;
     for (const auto& unit : next.units) {
+        const bool bays_read = manager_ready_ && unit.connected;
         for (const auto& slot : unit.slots) {
             const int slot_id = remote_slot_ids_[static_cast<std::size_t>(slot.global_index)];
-            const bool present = slot.status != SlotStatus::EMPTY;
             auto before = present_by_slot_id_.find(slot_id);
+            if (!bays_read) {
+                if (before != present_by_slot_id_.end()) {
+                    present_now[slot_id] = before->second;
+                }
+                continue;
+            }
+            const bool present = slot.status != SlotStatus::EMPTY;
             if (present && before != present_by_slot_id_.end() && !before->second) {
                 const int slot_index = slot.global_index;
                 helix::ui::queue_update(
@@ -447,8 +456,10 @@ SlotInfo* AmsBackendOpenAms::cached_slot_locked(int slot_index) {
 }
 
 void AmsBackendOpenAms::prepare_lane_repaint_locked(int slot_index, SlotInfo& slot) {
-    const auto it = overrides_.find(slot_index);
-    helix::ams::clear_lane_only_identity(slot, it == overrides_.end() ? nullptr : &it->second);
+    (void)slot_index;
+    // The lane is the only supplier. overrides_ is not refreshed by a resync,
+    // so restating a field from it would bring back what the lane has dropped.
+    helix::ams::clear_lane_only_identity(slot, nullptr);
 }
 
 PathTopology AmsBackendOpenAms::get_topology() const {
@@ -777,6 +788,11 @@ AmsError AmsBackendOpenAms::cancel() {
         }
     }
     return execute_gcode(command);
+}
+
+bool AmsBackendOpenAms::can_cancel_operation() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return !command_locked(kCancel).empty() && pending_action_ == AmsAction::IDLE;
 }
 
 AmsError AmsBackendOpenAms::clear_fault(int slot_index) {

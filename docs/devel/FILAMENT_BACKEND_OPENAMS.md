@@ -64,7 +64,7 @@ disables only its own action**; status and the other actions keep working.
 |--------|--------------|---------------------|
 | Load slot | `OPENAMS_LOAD GROUP=<group> SLOT=<id>` | Load and tool change refuse with NOT_SUPPORTED |
 | Unload | `OPENAMS_UNLOAD` | `can_unload_from_toolhead()` answers false, so Unload is not offered |
-| Cancel | `OAMSM_LOAD_FILAMENT_CANCEL` | refuses with NOT_SUPPORTED |
+| Cancel | `OAMSM_LOAD_FILAMENT_CANCEL` | refuses with NOT_SUPPORTED; Abort is disabled |
 | Reset / recover | `OAMSM_CLEAR_ERRORS` | refuses with NOT_SUPPORTED |
 
 The manager advertises load and unload only once the user has merged the updated
@@ -85,8 +85,10 @@ and can reset, but cannot load. While `ready` is false, every action is refused.
   reload. `OAMSM_LOAD_FILAMENT_CANCEL` is ordinary G-code: while a load started from the
   screen runs, `OPENAMS_LOAD` holds Klipper's G-code queue, and the cancel could not run
   until nothing was left to cancel. That case is refused as busy, and the backend's own
-  record of the load is left alone. The manager's `openams/cancel_load` webhook can
-  interrupt a load, but Moonraker does not expose it.
+  record of the load is left alone. `can_cancel_operation()` answers false in that case,
+  so Device Operations shows Abort disabled rather than offering one that fails. The
+  manager's `openams/cancel_load` webhook can interrupt a load, but Moonraker does not
+  expose it.
 - **Homing** is the macro's job, so none is added (`skip_homing`).
 
 ## Slot identity
@@ -100,10 +102,14 @@ OpenAMS reports no colour, material or spool identity, so identity is HelixScree
   metered weights survive a restart, and "clear slot metadata" empties both the record
   and the live slot;
 - `firmware_publishes_lane_identity()` is false and `lane_record_store()` names the
-  store, so a resync re-reads what other `lane_data` writers changed;
+  store, so a resync re-reads what other `lane_data` writers changed. A repaint between
+  frames takes identity from the lane alone: `overrides_` is what the store persists and
+  a resync does not refresh it, so nothing is decided from it;
 - a spool inserted into a slot last seen empty is, under the insert rule
   (`docs/specs/filament_slots.md` §6), always "no evidence": the record stays and
-  the "same spool?" notice offers Clear. The first frame after start is a baseline.
+  the "same spool?" notice offers Clear. The first frame after start is a baseline, and
+  a frame from an offline unit or a manager that is not `ready` neither raises the notice
+  nor moves the baseline, since those bays have not been read.
 
 ## Capabilities
 

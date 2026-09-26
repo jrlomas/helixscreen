@@ -544,9 +544,45 @@ TEST_CASE_METHOD(HelixTestFixture, "OpenAMS cancel", "[ams][openams]") {
     }
 }
 
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS offers Abort only when cancel can reach the load",
+                 "[ams][openams]") {
+    OpenAmsHarness backend;
+    backend.feed(manager());
+    CHECK(backend.can_cancel_operation());
+
+    REQUIRE(backend.load_filament(1).success());
+    CHECK_FALSE(backend.can_cancel_operation());
+
+    backend.complete_operation();
+    CHECK(backend.can_cancel_operation());
+
+    json no_cancel = all_commands();
+    no_cancel.erase("cancel");
+    backend.feed(manager(json::array({lane("loading", "T1", nullptr)}), no_cancel));
+    CHECK_FALSE(backend.can_cancel_operation());
+}
+
 // ============================================================================
 // Slot identity persistence
 // ============================================================================
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS repaints a slot from the lane, not the stored record",
+                 "[ams][openams][filament_slot_override]") {
+    // A resync refreshes the lane but not overrides_, so a repaint that
+    // restated a field from overrides_ would disagree with the next frame.
+    OpenAmsHarness backend;
+    backend.feed(manager());
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.brand = "Polymaker";
+    ovr.spool_name = "Galaxy Black";
+    helix::OpenAmsTestAccess::seed_override(backend, 1, ovr);
+
+    backend.repaint_slot_from_lane(1);
+
+    const auto info = backend.get_slot_info(1);
+    CHECK(info.brand.empty());
+    CHECK(info.spool_name.empty());
+}
 
 TEST_CASE_METHOD(HelixTestFixture, "OpenAMS persists metered weight and clears slot metadata",
                  "[ams][openams][filament_slot_override]") {
@@ -650,6 +686,64 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     helix::ui::UpdateQueue::instance().drain();
     CHECK_FALSE(helix::OpenAmsTestAccess::get_override(backend, 1).has_value());
     CHECK(api.mock_get_db_value("lane_data", "lane2").is_null());
+
+    helix::ui::set_test_toast_hook(nullptr);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "OpenAMS judges no insert from bays an offline unit or unready manager reports",
+                 "[ams][openams][filament_slot_override][1710]") {
+    MoonrakerClientMock client(MoonrakerClientMock::PrinterType::VORON_24);
+    helix::PrinterState state;
+    state.init_subjects(false);
+    MoonrakerAPIMock api(client, state);
+
+    helix::test::RegisteredBackend<OpenAmsHarness> backend_reg(&api);
+    OpenAmsHarness& backend = *backend_reg;
+
+    // Every bay carries details, so any insert the backend judged would ask.
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.brand = "Polymaker";
+    ovr.material = "PLA";
+    ovr.color_rgb = 0xFF5500;
+    for (int bay = 0; bay < 4; ++bay) {
+        helix::test::file_override_as_lane_records(backend, bay, ovr);
+    }
+
+    std::vector<std::pair<ToastSeverity, std::string>> toasts;
+    helix::ui::set_test_toast_hook([&](ToastSeverity severity, const std::string& msg, uint32_t) {
+        toasts.emplace_back(severity, msg);
+    });
+
+    // Baseline: bay 0 empty, bays 1-3 holding a spool.
+    backend.feed(manager());
+    helix::ui::UpdateQueue::instance().drain();
+    REQUIRE(toasts.empty());
+
+    json unread = manager();
+    for (auto& bay : unread["units"][0]["slots"]) {
+        bay["ready"] = false;
+    }
+    SECTION("the unit goes offline") {
+        unread["units"][0]["connected"] = false;
+    }
+    SECTION("the manager is not ready") {
+        unread["ready"] = false;
+    }
+    backend.feed(unread);
+    helix::ui::UpdateQueue::instance().drain();
+
+    // Bays 1-3 come back as they were: nothing was inserted.
+    backend.feed(manager());
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.empty());
+
+    // Bay 0 was last read empty, so a spool there now is still an insert.
+    json inserted = manager();
+    inserted["units"][0]["slots"][0]["ready"] = true;
+    backend.feed(inserted);
+    helix::ui::UpdateQueue::instance().drain();
+    CHECK(toasts.size() == 1);
 
     helix::ui::set_test_toast_hook(nullptr);
 }

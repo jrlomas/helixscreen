@@ -60,6 +60,7 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
     /// finishes, so the cancel command could not run until there is nothing
     /// left to cancel; that case is refused as busy.
     AmsError cancel() override;
+    [[nodiscard]] bool can_cancel_operation() const override;
 
     /// Bookkeeping only: drops the failure a dispatch latched. The manager's
     /// own errors are cleared by reset().
