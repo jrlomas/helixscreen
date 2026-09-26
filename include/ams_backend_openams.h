@@ -32,6 +32,13 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
     AmsBackendOpenAms(IMoonrakerAPI* api, helix::IMoonrakerClient* client);
     ~AmsBackendOpenAms() override = default;
 
+    /// The oams_manager fields this backend reads, as a
+    /// `printer.objects.subscribe` objects map; empty unless @p hw was claimed
+    /// for OpenAMS. The nested lanes/units/groups arrays arrive whole on every
+    /// change, so a topology change and the state that goes with it never land
+    /// half-applied.
+    [[nodiscard]] static nlohmann::json required_status_objects(const helix::PrinterDiscovery& hw);
+
     [[nodiscard]] AmsType get_type() const override {
         return AmsType::OPENAMS;
     }

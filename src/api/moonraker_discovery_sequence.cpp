@@ -6,6 +6,7 @@
 #include "ui_update_queue.h"
 
 #include "accel_sensor_manager.h"
+#include "ams_backend_openams.h"
 #include "ams_state.h"
 #include "batch_feed_reconcile.h"
 #include "screws_tilt_dialect.h"
@@ -1540,12 +1541,10 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
         subscription_objects["save_variables"] = nullptr;
     }
 
-    // OpenAMS publishes one versioned snapshot on oams_manager. Its nested
-    // lanes/units/groups arrays arrive whole on every change, so a topology
-    // change and the state that goes with it can never land half-applied.
-    if (hw.mmu_type() == AmsType::OPENAMS) {
-        subscription_objects[helix::openams::kManagerObject] =
-            json::array({"api_version", "schema", "ready", "commands", "lanes", "units", "groups"});
+    // OpenAMS: the backend owns which oams_manager fields it reads.
+    const json openams_objects = AmsBackendOpenAms::required_status_objects(hw);
+    for (auto it = openams_objects.begin(); it != openams_objects.end(); ++it) {
+        subscription_objects[it.key()] = it.value();
     }
 
     // Power-loss recovery: the PLR module owns which status objects its

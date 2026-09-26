@@ -21,7 +21,8 @@ on its own:
 2. `claim_status_query()` then names `oams_manager.api_version` and `schema`, but only
    when no other filament system claimed the printer. **Any other MMU wins**, AFC
    included, whatever the object-list order, so a leftover `[oams_manager]` section
-   never takes over a working AFC setup.
+   never takes over a working AFC setup. A settled claim is an MMU claim like AFC's, so
+   it also outranks the multi-extruder and toolchanger backends on the same printer.
 3. `MoonrakerDiscoverySequence` sends that query before the early hardware callback and
    hands the reply to `settle_status_claims()`, which claims `AmsType::OPENAMS` only for
    `api_version == 1` with schema `openams.manager`. A missing or newer version, or a
@@ -31,7 +32,8 @@ on its own:
 
 Printers with no `oams_manager` take the unchanged path: the callback fires at once.
 
-The subscription asks for `api_version schema ready commands lanes units groups`. Those
+The subscription, from `AmsBackendOpenAms::required_status_objects()`, asks for
+`api_version schema ready commands lanes units groups`. Those
 arrays arrive whole on every change, so topology and state never land half-applied.
 
 ## Status model
@@ -130,4 +132,6 @@ not; AFC keeps it in either object order), the snapshot model, partial updates, 
 public `load_filament()` / `change_tool()` / `unload_filament()` entry points. It checks
 completion and error callbacks, each missing command, `ready=false`, a multi-slot group,
 cancel in each state, weight persistence with slot-metadata clearing, and the
-insert notice.
+insert notice. `tests/unit/test_discovery_klippy_gate.cpp` drives the real discovery
+sequence through the claim query, and `tests/unit/test_moonraker_subscription_fields.cpp`
+pins the subscribed fields.

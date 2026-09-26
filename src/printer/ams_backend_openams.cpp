@@ -11,6 +11,7 @@
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
 #include "openams_api.h"
+#include "printer_discovery.h"
 
 #include <spdlog/spdlog.h>
 
@@ -115,6 +116,15 @@ void write_filament_fields(SlotInfo& slot, const SlotInfo& info) {
 }
 
 } // namespace
+
+json AmsBackendOpenAms::required_status_objects(const PrinterDiscovery& hw) {
+    json objects = json::object();
+    if (hw.mmu_type() == AmsType::OPENAMS) {
+        objects[openams::kManagerObject] =
+            json::array({"api_version", "schema", "ready", "commands", "lanes", "units", "groups"});
+    }
+    return objects;
+}
 
 AmsBackendOpenAms::AmsBackendOpenAms(IMoonrakerAPI* api, IMoonrakerClient* client)
     : AmsSubscriptionBackend(api, client) {
