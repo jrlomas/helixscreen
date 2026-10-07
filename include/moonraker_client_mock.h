@@ -4,6 +4,7 @@
 #pragma once
 
 #include "axis.h"
+#include "mock_persona.h"
 #include "moonraker_client.h"
 #include "moonraker_client_mock_spoolman.h"
 #include "moonraker_types.h"
@@ -72,19 +73,7 @@ enum class BeltMockFailure { // NAMESPACE_OK: sits beside MoonrakerClientMock, t
  */
 class MoonrakerClientMock : public helix::MoonrakerClient {
   public:
-    enum class PrinterType {
-        VORON_24,                 // Voron 2.4 (CoreXY, chamber heating)
-        VORON_TRIDENT,            // Voron Trident (3Z, CoreXY)
-        CREALITY_K1,              // Creality K1/K1C (bed slinger style)
-        CREALITY_K1_MAX,          // Creality K1 Max (the #1282 CFS capture machine)
-        FLASHFORGE_AD5M,          // FlashForge Adventurer 5M (enclosed)
-        FLASHFORGE_CREATOR5,      // FlashForge Creator 5 Pro (4-head tool changer)
-        FLASHFORGE_CREATOR5_ZMOD, // FlashForge Creator 5 Pro on Z-Mod (no klipper-toolchanger)
-        GENERIC_COREXY,           // Generic CoreXY printer
-        GENERIC_BEDSLINGER,       // Generic i3-style printer
-        MULTI_EXTRUDER,           // Multi-extruder test case (2 extruders)
-        DELTA                     // Generic linear delta (every axis homes together)
-    };
+    using PrinterType = helix::mock::PrinterType;
 
     /**
      * @brief Print simulation phase state machine
@@ -468,12 +457,12 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
      * AmsBackend's mock branch (which picks the backend type). One function
      * stops the two env-var parses drifting apart.
      *
-     * True when HELIX_MOCK_AMS selects a tool changer, or, when HELIX_MOCK_AMS
-     * is unset, when the persona is a tool changer by construction. The
-     * creator5 persona is: a Creator 5 Pro is a 4-head changer, so leaving it on
-     * the Happy Hare default misrepresents the machine. An explicit
-     * HELIX_MOCK_AMS always wins, so other topologies stay testable against the
-     * persona.
+     * True when the effective mock AMS (helix::mock::effective_mock_ams: an
+     * explicit HELIX_MOCK_AMS, else the persona's default) is a tool changer.
+     * The creator5 persona defaults to one: a Creator 5 Pro is a 4-head
+     * changer, so leaving it on the Happy Hare default misrepresents the
+     * machine. An explicit HELIX_MOCK_AMS always wins, so other topologies stay
+     * testable against the persona.
      *
      * Static because AmsBackend decides before any client instance exists.
      */

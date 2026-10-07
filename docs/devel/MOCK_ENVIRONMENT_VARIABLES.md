@@ -764,9 +764,9 @@ Select which printer the mock Moonraker client impersonates. Drives the mock's r
 
 | Property | Value |
 |----------|-------|
-| **Values** | `voron_24`, `voron_trident`, `k1`, `k1max`, `snapmaker_u1`, `ad5m`, `creator5`, `creator5_zmod`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta` |
-| **Default** | `voron_24` (Voron 2.4) |
-| **File** | `src/application/moonraker_manager.cpp` |
+| **Values** | see `include/mock_persona.h#PERSONAS`: currently `voron_24`, `voron_trident`, `k1`, `k1max`, `ad5m`, `creator5`, `creator5_zmod`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta`, `snapmaker_u1`. Matched exactly (case-sensitive); an unrecognised value falls back to `voron_24` with a warning listing the valid ids |
+| **Default** | `voron_24` (Voron 2.4); unset and empty both select it silently |
+| **File** | `include/mock_persona.h` |
 
 ```bash
 # FlashForge AD5M mock (ships pre_print_options + load-cell probe)
@@ -822,9 +822,10 @@ HELIX_MOCK_PRINTER=creator5 ./build/bin/helix-screen --test -vv
 HELIX_MOCK_PRINTER=creator5 HELIX_MOCK_AMS=afc ./build/bin/helix-screen --test -vv
 ```
 
-The rule lives in `MoonrakerClientMock::mock_toolchanger_selected()`, which both
-the mock client and `ams_backend.cpp` consult so they cannot disagree about what
-the mock is presenting.
+The default is the persona's `default_mock_ams` in
+`include/mock_persona.h#descriptor`, applied by
+`include/mock_persona.h#effective_mock_ams`, which every `HELIX_MOCK_AMS` reader
+consults so they cannot disagree about what the mock is presenting.
 
 Build volume is deliberately left at the generic mock value: the Creator 5 Pro's
 real travel limits are not documented in this repo, and detection keys off

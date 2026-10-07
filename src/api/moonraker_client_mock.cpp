@@ -1480,19 +1480,16 @@ void MoonrakerClientMock::discover_printer(
     }
 }
 
+namespace {
+std::string effective_mock_ams_env() {
+    return helix::mock::effective_mock_ams(std::getenv("HELIX_MOCK_AMS"),
+                                           std::getenv("HELIX_MOCK_PRINTER"));
+}
+} // namespace
+
 bool MoonrakerClientMock::mock_toolchanger_selected() {
-    // Toolchanger mode is selected by "toolchanger", "tool_changer", or "tc"
-    // (case-insensitive), matching the HELIX_MOCK_AMS parsing in ams_backend.cpp.
-    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (ams_env && ams_env[0]) {
-        std::string ams_type(ams_env);
-        ams_type = helix::text_io::to_lower(ams_type);
-        return ams_type == "toolchanger" || ams_type == "tool_changer" || ams_type == "tc";
-    }
-    // No explicit topology: fall back to the persona. A Creator 5 Pro is a
-    // 4-head changer, so the generic Happy Hare default would misrepresent it.
-    const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
-    return printer_env && std::string(printer_env) == "creator5";
+    const std::string ams_type = effective_mock_ams_env();
+    return ams_type == "toolchanger" || ams_type == "tool_changer" || ams_type == "tc";
 }
 
 bool MoonrakerClientMock::mock_hardware_persona() {
@@ -1505,12 +1502,7 @@ bool MoonrakerClientMock::is_mock_toolchanger() const {
 }
 
 MoonrakerClientMock::MedusaVariant MoonrakerClientMock::mock_medusa_variant() {
-    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (!ams_env || !ams_env[0]) {
-        return MedusaVariant::NONE;
-    }
-    std::string ams_type(ams_env);
-    ams_type = helix::text_io::to_lower(ams_type);
+    const std::string ams_type = effective_mock_ams_env();
     if (ams_type == "medusahc-fork" || ams_type == "medusa-fork") {
         return MedusaVariant::FORK;
     }
@@ -1528,12 +1520,7 @@ bool MoonrakerClientMock::is_mock_cfs() const {
     // "cfs"/"cfs-k1": the K1 stock dialect. try_create_mock() declines these
     // values so the production AmsBackendCfs runs (pair with
     // HELIX_MOCK_PRINTER=k1 to latch the dialect).
-    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (!ams_env || !ams_env[0]) {
-        return false;
-    }
-    std::string ams_type(ams_env);
-    ams_type = helix::text_io::to_lower(ams_type);
+    const std::string ams_type = effective_mock_ams_env();
     return ams_type == "cfs" || ams_type == "cfs-k1";
 }
 
@@ -1670,12 +1657,7 @@ bool MoonrakerClientMock::is_mock_ifs_module() const {
     // "ifs-module", not "ifs": the bare value (and "ad5x") selects the
     // AmsBackendMock simulation in try_create_mock(); this mode runs the real
     // backend, so the two must not collide.
-    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (!ams_env || !ams_env[0]) {
-        return false;
-    }
-    std::string ams_type(ams_env);
-    ams_type = helix::text_io::to_lower(ams_type);
+    const std::string ams_type = effective_mock_ams_env();
     return ams_type == "ifs-module" || ams_type == "ifs_module" || ams_type == "ad5x-module";
 }
 
