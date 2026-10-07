@@ -226,6 +226,30 @@ MoonrakerClientMock::MoonrakerClientMock(PrinterType type, double speedup_factor
         }
     }
 
+    // OpenAMS reads no identity off its spools: color and material come from the
+    // override store, which reads the shared lane_data namespace (laneN keys,
+    // N = 1-based global slot; inner "lane" is 0-based).
+    if (is_mock_openams()) {
+        mock_db_set("lane_data", "lane3",
+                    json{{"lane", "2"},
+                         {"color", "#3CE05A"},
+                         {"color_name", "Green"},
+                         {"material", "ASA"},
+                         {"helix_material", "ASA"},
+                         {"helix_locked_color", true},
+                         {"helix_locked_material", true}});
+        mock_db_set("lane_data", "lane4",
+                    json{{"lane", "3"},
+                         {"color", "#303030"},
+                         {"color_name", "Dark Gray"},
+                         {"material", "ASA"},
+                         {"helix_material", "ASA"},
+                         {"vendor", "Polymaker"},
+                         {"vendor_name", "Polymaker"},
+                         {"helix_locked_color", true},
+                         {"helix_locked_material", true}});
+    }
+
     // Populate hardware immediately (available for wizard without calling discover_printer())
     populate_hardware();
     spdlog::debug(
@@ -1170,10 +1194,11 @@ void MoonrakerClientMock::populate_capabilities() {
     mock_objects.push_back("timelapse"); // Moonraker-Timelapse plugin
 
     // MMU/AMS system - Happy Hare uses "mmu" object name.
-    // Suppressed in the MedusaHC modes, the standalone IFS module mode and any
+    // Suppressed in the MedusaHC modes, the standalone IFS module mode, the OpenAMS mode and any
     // persona that omits it: "mmu" detects Happy Hare (priority over every
     // other filament system) and would stand the wrong backend up.
-    if (mmu_enabled_ && !is_mock_medusahc() && !is_mock_ifs_module() && inherits(HAPPY_HARE_MMU)) {
+    if (mmu_enabled_ && !is_mock_medusahc() && !is_mock_ifs_module() && !is_mock_openams() &&
+        inherits(HAPPY_HARE_MMU)) {
         mock_objects.push_back("mmu");
     }
 
@@ -1336,6 +1361,14 @@ void MoonrakerClientMock::populate_capabilities() {
     if (is_mock_cfs()) {
         mock_objects.push_back("box");
         spdlog::info("[MoonrakerClientMock] CFS mock: box status object");
+    }
+
+    // OpenAMS mock mode (HELIX_MOCK_AMS=openams): the `oams_manager` status
+    // object the production AmsBackendOpenAms claims through discovery.
+    // try_create_mock() declines this value so the real backend runs.
+    if (is_mock_openams()) {
+        mock_objects.push_back("oams_manager");
+        spdlog::info("[MoonrakerClientMock] OpenAMS mock: oams_manager status object");
     }
 
     // Parse objects into hardware discovery (unified hardware access)
@@ -1594,6 +1627,51 @@ bool MoonrakerClientMock::is_mock_cfs() const {
     // HELIX_MOCK_PRINTER=k1 to latch the dialect).
     const std::string ams_type = effective_mock_ams_env();
     return ams_type == "cfs" || ams_type == "cfs-k1";
+}
+
+bool MoonrakerClientMock::is_mock_openams() const {
+    return effective_mock_ams_env() == "openams";
+}
+
+nlohmann::json MoonrakerClientMock::openams_status_json() const {
+    // One hub unit, four bays, one FPS lane. Only bays 2 and 3 hold spools;
+    // the lane's current slot follows openams_loaded_slot_.
+    static const char* const GROUP_OF_SLOT[] = {"T0", "T1", "T2", "T0"};
+    const int loaded = openams_loaded_slot_.load();
+    nlohmann::json slots = nlohmann::json::array();
+    for (int i = 0; i < 4; ++i) {
+        slots.push_back({{"id", i}, {"bay", i}, {"ready", i >= 2}, {"loaded", i == loaded}});
+    }
+    nlohmann::json lane = {{"id", "fps"},
+                           {"state", loaded >= 0 ? "loaded" : "unloaded"},
+                           {"pressure", 0.5},
+                           {"set_point", 0.5}};
+    if (loaded >= 0) {
+        lane["current_group"] = GROUP_OF_SLOT[loaded];
+        lane["current_slot"] = loaded;
+    } else {
+        lane["current_group"] = nullptr;
+        lane["current_slot"] = -1;
+    }
+    return {{"api_version", 1},
+            {"schema", "openams.manager"},
+            {"ready", true},
+            {"commands",
+             {{"load", "OPENAMS_LOAD"},
+              {"unload", "OPENAMS_UNLOAD"},
+              {"cancel", "OAMSM_LOAD_FILAMENT_CANCEL"},
+              {"reset", "OAMSM_CLEAR_ERRORS"}}},
+            {"lanes", nlohmann::json::array({lane})},
+            {"units", nlohmann::json::array({{{"id", "1"},
+                                              {"name", "OpenAMS"},
+                                              {"kind", "oams"},
+                                              {"topology", "hub"},
+                                              {"lane", "fps"},
+                                              {"connected", true},
+                                              {"slots", slots}}})},
+            {"groups", nlohmann::json::array({{{"name", "T0"}, {"lane", "fps"}, {"slots", {0, 3}}},
+                                              {{"name", "T1"}, {"lane", "fps"}, {"slots", {1}}},
+                                              {{"name", "T2"}, {"lane", "fps"}, {"slots", {2}}}})}};
 }
 
 nlohmann::json MoonrakerClientMock::cfs_box_status_json() const {
@@ -4623,6 +4701,9 @@ void MoonrakerClientMock::temperature_simulation_loop() {
         }
         if (printer_type_ == PrinterType::CREALITY_K2_PLUS) {
             append_k2_status(status_obj);
+        }
+        if (is_mock_openams()) {
+            status_obj["oams_manager"] = openams_status_json();
         }
 
         // Add klippy state if not ready (only send when abnormal)
