@@ -42,16 +42,13 @@
 using namespace helix;
 
 // Generate mock geometry for exclude_object status updates.
-// Spreads objects in a grid inset from the edges of the mock bed, matching the
-// `center` + `polygon` shape Moonraker reports for EXCLUDE_OBJECT_DEFINE.
-static json mock_object_entry(const std::string& name, int index, int total) {
+// Spreads objects in a grid inset from the edges of the persona's bed, matching
+// the `center` + `polygon` shape Moonraker reports for EXCLUDE_OBJECT_DEFINE.
+static json mock_object_entry(const std::string& name, int index, int total,
+                              const helix::mock::AxisMax& bed) {
     constexpr float INSET = 20.0f; // keep the plate margin visible in the map
-    const float bed_w =
-        static_cast<float>(mock_internal::MOCK_BED_X_MAX - mock_internal::MOCK_BED_X_MIN) -
-        2.0f * INSET;
-    const float bed_h =
-        static_cast<float>(mock_internal::MOCK_BED_Y_MAX - mock_internal::MOCK_BED_Y_MIN) -
-        2.0f * INSET;
+    const float bed_w = static_cast<float>(bed.x - mock_internal::MOCK_BED_X_MIN) - 2.0f * INSET;
+    const float bed_h = static_cast<float>(bed.y - mock_internal::MOCK_BED_Y_MIN) - 2.0f * INSET;
     int cols = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(std::max(1, total)))));
     int rows = std::max(1, (total + cols - 1) / cols);
     int row = index / cols, col = index % cols;
@@ -390,25 +387,6 @@ bool MoonrakerClientMock::arm_event_replay(const std::string& json_path) {
                  json_path, static_cast<double>(replay_events_.back().t_ms) / 1000.0);
     return true;
 }
-
-namespace {
-/// Per-persona travel bounds reported as toolhead axis_maximum. The K1
-/// persona carries the real values from a K1C capture (printer.cfg
-/// position_max 229/227/255) and the K1 Max persona the values from the
-/// #1282 klippy.log (300/307.5/300), so printer detection scores each as the
-/// Creality it is; every other persona keeps the long-standing generic
-/// volume and detects exactly as before.
-std::array<double, 3> persona_axis_maximum(MoonrakerClientMock::PrinterType type) {
-    switch (type) {
-    case MoonrakerClientMock::PrinterType::CREALITY_K1:
-        return {229.0, 227.0, 255.0};
-    case MoonrakerClientMock::PrinterType::CREALITY_K1_MAX:
-        return {300.0, 307.5, 300.0};
-    default:
-        return {235.0, 235.0, 250.0};
-    }
-}
-} // namespace
 
 void MoonrakerClientMock::start_replay_timer() {
     if (replay_events_.empty() || replay_timer_ != nullptr) {
@@ -893,31 +871,10 @@ int MoonrakerClientMock::connect(const char* url, std::function<void()> on_conne
     return 0; // Success
 }
 
-namespace mock_internal {
-
-// NAMESPACE_OK: mock_internal sits at global scope with the mock's other helpers
-std::string mock_kinematics(MoonrakerClientMock::PrinterType type) {
-    switch (type) {
-    case MoonrakerClientMock::PrinterType::VORON_24:
-    case MoonrakerClientMock::PrinterType::VORON_TRIDENT:
-    case MoonrakerClientMock::PrinterType::CREALITY_K1:
-    case MoonrakerClientMock::PrinterType::CREALITY_K1_MAX:
-    case MoonrakerClientMock::PrinterType::FLASHFORGE_CREATOR5:
-    case MoonrakerClientMock::PrinterType::FLASHFORGE_CREATOR5_ZMOD:
-    case MoonrakerClientMock::PrinterType::GENERIC_COREXY:
-        return "corexy";
-    case MoonrakerClientMock::PrinterType::DELTA:
-        return "delta";
-    default:
-        return "cartesian";
-    }
-}
-
-} // namespace mock_internal
-
 std::string MoonrakerClientMock::kinematics() const {
-    return kinematics_override_.empty() ? mock_internal::mock_kinematics(printer_type_)
-                                        : kinematics_override_;
+    return kinematics_override_.empty()
+               ? std::string(helix::mock::descriptor(printer_type_).kinematics)
+               : kinematics_override_;
 }
 
 void MoonrakerClientMock::populate_capabilities() {
@@ -927,6 +884,13 @@ void MoonrakerClientMock::populate_capabilities() {
 
     // Create mock Klipper object list for capabilities parsing
     json mock_objects = json::array();
+
+    // Every persona inherits the default objects below unless its descriptor omits them.
+    const auto persona = helix::mock::descriptor(printer_type_);
+    auto inherits = [&persona](helix::mock::DefaultObjects object) {
+        return (persona.omit & object) == 0;
+    };
+    using namespace helix::mock::default_object;
 
     // Add common objects
     mock_objects.push_back("heater_bed");
@@ -938,7 +902,9 @@ void MoonrakerClientMock::populate_capabilities() {
     mock_objects.push_back("firmware_retraction"); // Triggers has_firmware_retraction_ capability
 
     // Chamber temperature sensor for UI testing
-    mock_objects.push_back("temperature_sensor chamber");
+    if (inherits(CHAMBER_SENSOR)) {
+        mock_objects.push_back("temperature_sensor chamber");
+    }
 
     // HELIX_MOCK_OBJECTS: space-separated list of additional Klipper objects to add
     // e.g., HELIX_MOCK_OBJECTS="temperature_fan chamber" to test temperature_fan chamber
@@ -1070,10 +1036,12 @@ void MoonrakerClientMock::populate_capabilities() {
     }
 
     // Add LED effects (klipper-led_effect plugin objects)
-    mock_objects.push_back("led_effect breathing");
-    mock_objects.push_back("led_effect fire_comet");
-    mock_objects.push_back("led_effect rainbow");
-    mock_objects.push_back("led_effect static_white");
+    if (inherits(LED_EFFECTS)) {
+        mock_objects.push_back("led_effect breathing");
+        mock_objects.push_back("led_effect fire_comet");
+        mock_objects.push_back("led_effect rainbow");
+        mock_objects.push_back("led_effect static_white");
+    }
 
     // [exclude_object] — present on modern Klipper/Kalico configs. Trips
     // has_exclude_object_ in PrinterDiscovery so capability-gated features
@@ -1094,43 +1062,55 @@ void MoonrakerClientMock::populate_capabilities() {
     mock_objects.push_back("gcode_macro _SYSTEM_MACRO"); // System macro (hidden by default)
 
     // Add LED-related macros (auto-detected by printer_discovery via LED keywords)
-    mock_objects.push_back("gcode_macro LIGHTS_ON");
-    mock_objects.push_back("gcode_macro LIGHTS_OFF");
-    mock_objects.push_back("gcode_macro LIGHTS_TOGGLE");
-    mock_objects.push_back("gcode_macro LED_PARTY");
-    mock_objects.push_back("gcode_macro LED_NIGHTLIGHT");
+    if (inherits(LED_EFFECTS)) {
+        mock_objects.push_back("gcode_macro LIGHTS_ON");
+        mock_objects.push_back("gcode_macro LIGHTS_OFF");
+        mock_objects.push_back("gcode_macro LIGHTS_TOGGLE");
+        mock_objects.push_back("gcode_macro LED_PARTY");
+        mock_objects.push_back("gcode_macro LED_NIGHTLIGHT");
+    }
 
     // MCU objects for discovery
     mock_objects.push_back("mcu");
-    mock_objects.push_back("mcu EBBCan");
+    if (inherits(EBB_CAN_MCU)) {
+        mock_objects.push_back("mcu EBBCan");
+    }
 
     // Humidity sensors (BME280/HTU21D for enclosure monitoring)
-    mock_objects.push_back("bme280 chamber");
-    mock_objects.push_back("htu21d dryer");
-    spdlog::debug("[MoonrakerClientMock] Mock humidity sensors: bme280 chamber, htu21d dryer");
+    if (inherits(BME280_CHAMBER)) {
+        mock_objects.push_back("bme280 chamber");
+    }
+    if (inherits(HTU21D_DRYER)) {
+        mock_objects.push_back("htu21d dryer");
+    }
 
     // Width sensor (filament diameter measurement via Hall effect sensor)
-    mock_objects.push_back("hall_filament_width_sensor");
+    if (inherits(WIDTH_SENSOR)) {
+        mock_objects.push_back("hall_filament_width_sensor");
+    }
 
     // Moonraker plugins
     mock_objects.push_back("timelapse"); // Moonraker-Timelapse plugin
 
     // MMU/AMS system - Happy Hare uses "mmu" object name.
-    // Suppressed in the MedusaHC modes, the standalone IFS module mode and the
-    // creator5_zmod persona: the default mock ships "mmu", which detects Happy
-    // Hare (priority over every other filament system) and stands the wrong
-    // backend up.
-    if (mmu_enabled_ && !is_mock_medusahc() && !is_mock_ifs_module() &&
-        printer_type_ != PrinterType::FLASHFORGE_CREATOR5_ZMOD) {
+    // Suppressed in the MedusaHC modes, the standalone IFS module mode and any
+    // persona that omits it: "mmu" detects Happy Hare (priority over every
+    // other filament system) and would stand the wrong backend up.
+    if (mmu_enabled_ && !is_mock_medusahc() && !is_mock_ifs_module() && inherits(HAPPY_HARE_MMU)) {
         mock_objects.push_back("mmu");
     }
 
     // Probe sensor (HELIX_MOCK_PROBE_TYPE: cartographer, tap, bltouch, beacon, klicky, standard,
     // none)
+    // An explicit HELIX_MOCK_PROBE_TYPE wins over a persona that omits the
+    // default cartographer.
     const char* probe_env = std::getenv("HELIX_MOCK_PROBE_TYPE");
-    std::string mock_probe_type = (probe_env && probe_env[0]) ? probe_env : "cartographer";
+    const bool probe_set = probe_env && probe_env[0];
+    std::string mock_probe_type = probe_set ? probe_env : "cartographer";
     if (mock_probe_type == "none") {
         spdlog::debug("[MoonrakerClientMock] Probe disabled via env var");
+    } else if (!probe_set && !inherits(CARTOGRAPHER)) {
+        spdlog::debug("[MoonrakerClientMock] Persona has no default probe");
     } else {
         const json probe_status = helix::sim::mock_probe_status();
         for (auto it = probe_status.begin(); it != probe_status.end(); ++it) {
@@ -1181,7 +1161,7 @@ void MoonrakerClientMock::populate_capabilities() {
             }
         }
         spdlog::debug("[MoonrakerClientMock] Creator 5 filament sensors: fd_ex0..fd_ex3");
-    } else {
+    } else if (inherits(RUNOUT_SENSOR)) {
         // Default: one switch sensor (typical Voron setup)
         mock_objects.push_back("filament_switch_sensor runout_sensor");
         spdlog::debug(
@@ -1307,12 +1287,12 @@ void MoonrakerClientMock::populate_capabilities() {
     // subscribe handlers report. The real discovery sequence derives the build
     // volume from these before detection runs, so the mock has to carry them or
     // --test detects against an empty volume the live path no longer sees.
+    const auto axis_max = persona.axis_max;
     mock_config["stepper_x"] = {{"position_min", mock_internal::MOCK_BED_X_MIN},
-                                {"position_max", mock_internal::MOCK_BED_X_MAX}};
+                                {"position_max", axis_max.x}};
     mock_config["stepper_y"] = {{"position_min", mock_internal::MOCK_BED_Y_MIN},
-                                {"position_max", mock_internal::MOCK_BED_Y_MAX}};
-    mock_config["stepper_z"] = {{"position_min", 0.0},
-                                {"position_max", mock_internal::MOCK_BED_Z_MAX}};
+                                {"position_max", axis_max.y}};
+    mock_config["stepper_z"] = {{"position_min", 0.0}, {"position_max", axis_max.z}};
 
     std::unordered_set<std::string> macros_snapshot;
     discovery_.modify_hardware([&](PrinterDiscovery& hw) {
@@ -1337,11 +1317,17 @@ void MoonrakerClientMock::populate_capabilities() {
     update_cached_chamber_key();
 
     // Set mock MCU version data (after parse_objects which clears everything)
-    discovery_.modify_hardware([](PrinterDiscovery& hw) {
+    const bool ebb_can = inherits(EBB_CAN_MCU);
+    discovery_.modify_hardware([ebb_can](PrinterDiscovery& hw) {
         hw.set_mcu("stm32f446xx");
-        hw.set_mcu_list({"stm32f446xx", "stm32g0b1xx"});
-        hw.set_mcu_versions(
-            {{"mcu", "v0.12.0-155-g4cfa273e"}, {"mcu EBBCan", "v0.12.0-155-g4cfa273e"}});
+        if (ebb_can) {
+            hw.set_mcu_list({"stm32f446xx", "stm32g0b1xx"});
+            hw.set_mcu_versions(
+                {{"mcu", "v0.12.0-155-g4cfa273e"}, {"mcu EBBCan", "v0.12.0-155-g4cfa273e"}});
+        } else {
+            hw.set_mcu_list({"stm32f446xx"});
+            hw.set_mcu_versions({{"mcu", "v0.12.0-155-g4cfa273e"}});
+        }
     });
 
     // Also populate filament_sensors vector for subscription (same as real parse_objects)
@@ -1568,7 +1554,7 @@ void MoonrakerClientMock::simulate_cfs_find_cut_pos() {
     // registered before the send sees them, and the RPC's completion fires
     // after. The cut position scales off the persona envelope (a K1 Max
     // envelope reproduces the verified 304.0 reading).
-    const double cut_y = persona_axis_maximum(printer_type_)[1] - 3.5;
+    const double cut_y = helix::mock::descriptor(printer_type_).axis_max.y - 3.5;
     char buf[96];
     snprintf(buf, sizeof(buf), "Found cut position y: %.1f", cut_y);
     dispatch_gcode_response(buf);
@@ -1592,9 +1578,9 @@ bool MoonrakerClientMock::apply_cfs_box_custom_command(const std::string& gcode)
     // values scale off its 307.5: safe_pos_y = y_max - 16 (291.5 on a Max).
     // The Max parks at the captured box.cfg extrude_pos_x (184.5); smaller
     // K1s were never captured, so they scale the X envelope.
-    const auto max = persona_axis_maximum(printer_type_);
-    const double safe_y = max[1] - 16.0;
-    const double extrude_x = printer_type_ == PrinterType::CREALITY_K1_MAX ? 184.5 : max[0] * 0.8;
+    const auto max = helix::mock::descriptor(printer_type_).axis_max;
+    const double safe_y = max.y - 16.0;
+    const double extrude_x = printer_type_ == PrinterType::CREALITY_K1_MAX ? 184.5 : max.x * 0.8;
 
     // Move to a parked position: homed, motors on, snapshot-dispatched as one
     // frame (same shape the G0 handler emits).
@@ -2394,14 +2380,15 @@ void MoonrakerClientMock::parse_incoming_bed_mesh(const json& bed_mesh) {
 
 void MoonrakerClientMock::generate_mock_bed_mesh() {
     // Helper lambda to generate a mesh with given shape parameters
-    auto generate_mesh = [](const std::string& name, float amplitude, float x_tilt,
-                            float y_tilt) -> BedMeshProfile {
+    const auto bounds = mock_internal::mesh_bounds(printer_type_);
+    auto generate_mesh = [bounds](const std::string& name, float amplitude, float x_tilt,
+                                  float y_tilt) -> BedMeshProfile {
         BedMeshProfile mesh;
         mesh.name = name;
-        mesh.mesh_min[0] = static_cast<float>(mock_internal::MOCK_MESH_X_MIN);
-        mesh.mesh_min[1] = static_cast<float>(mock_internal::MOCK_MESH_Y_MIN);
-        mesh.mesh_max[0] = static_cast<float>(mock_internal::MOCK_MESH_X_MAX);
-        mesh.mesh_max[1] = static_cast<float>(mock_internal::MOCK_MESH_Y_MAX);
+        mesh.mesh_min[0] = static_cast<float>(bounds.x_min);
+        mesh.mesh_min[1] = static_cast<float>(bounds.y_min);
+        mesh.mesh_max[0] = static_cast<float>(bounds.x_max);
+        mesh.mesh_max[1] = static_cast<float>(bounds.y_max);
         mesh.x_count = 7;
         mesh.y_count = 7;
         mesh.algo = "lagrange";
@@ -2450,11 +2437,12 @@ void MoonrakerClientMock::generate_mock_bed_mesh_with_variation() {
     // Generate a realistic bed mesh with true randomness
     // Simulates re-probing with measurement noise and slight bed changes
 
-    // Keep existing configuration using centralized mock printer constants
-    active_bed_mesh_.mesh_min[0] = static_cast<float>(mock_internal::MOCK_MESH_X_MIN);
-    active_bed_mesh_.mesh_min[1] = static_cast<float>(mock_internal::MOCK_MESH_Y_MIN);
-    active_bed_mesh_.mesh_max[0] = static_cast<float>(mock_internal::MOCK_MESH_X_MAX);
-    active_bed_mesh_.mesh_max[1] = static_cast<float>(mock_internal::MOCK_MESH_Y_MAX);
+    // Probed area of the persona's bed
+    const auto bounds = mock_internal::mesh_bounds(printer_type_);
+    active_bed_mesh_.mesh_min[0] = static_cast<float>(bounds.x_min);
+    active_bed_mesh_.mesh_min[1] = static_cast<float>(bounds.y_min);
+    active_bed_mesh_.mesh_max[0] = static_cast<float>(bounds.x_max);
+    active_bed_mesh_.mesh_max[1] = static_cast<float>(bounds.y_max);
     active_bed_mesh_.x_count = 7;
     active_bed_mesh_.y_count = 7;
     active_bed_mesh_.algo = "lagrange";
@@ -3042,7 +3030,8 @@ bool MoonrakerClientMock::start_print_internal(const std::string& filename) {
         json objects_array = json::array();
         for (int i = 0; i < total; ++i) {
             names.emplace_back(MOCK_EXCLUDE_OBJECT_NAMES[i]);
-            objects_array.push_back(mock_object_entry(names.back(), i, total));
+            objects_array.push_back(mock_object_entry(
+                names.back(), i, total, helix::mock::descriptor(printer_type_).axis_max));
         }
 
         {
@@ -3468,8 +3457,9 @@ void MoonrakerClientMock::dispatch_initial_state() {
           {"homed_axes", homed},
           {"axis_minimum", {0.0, 0.0, 0.0, 0.0}},
           {"axis_maximum",
-           {persona_axis_maximum(printer_type_)[0], persona_axis_maximum(printer_type_)[1],
-            persona_axis_maximum(printer_type_)[2], 0.0}},
+           {helix::mock::descriptor(printer_type_).axis_max.x,
+            helix::mock::descriptor(printer_type_).axis_max.y,
+            helix::mock::descriptor(printer_type_).axis_max.z, 0.0}},
           {"kinematics", kinematics()}}},
         {"gcode_move",
          {{"gcode_position", {x, y, z, 0.0}}, // Commanded position (same as toolhead in mock)
@@ -4295,8 +4285,9 @@ void MoonrakerClientMock::temperature_simulation_loop() {
               {"homed_axes", homed},
               {"axis_minimum", {0.0, 0.0, 0.0, 0.0}},
               {"axis_maximum",
-               {persona_axis_maximum(printer_type_)[0], persona_axis_maximum(printer_type_)[1],
-                persona_axis_maximum(printer_type_)[2], 0.0}},
+               {helix::mock::descriptor(printer_type_).axis_max.x,
+                helix::mock::descriptor(printer_type_).axis_max.y,
+                helix::mock::descriptor(printer_type_).axis_max.z, 0.0}},
               {"kinematics", kinematics()}}},
             {"gcode_move",
              {{"gcode_position", {x, y, z, 0.0}}, // Commanded position (same as toolhead in mock)

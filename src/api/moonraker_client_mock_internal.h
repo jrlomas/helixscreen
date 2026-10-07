@@ -24,12 +24,9 @@ namespace mock_internal {
 // Mock Printer Configuration Constants
 // ============================================================================
 
-// Bed dimensions (mm)
+// Bed origin (mm). The far edge is the persona's descriptor().axis_max.
 constexpr double MOCK_BED_X_MIN = 0.0;
-constexpr double MOCK_BED_X_MAX = 250.0;
 constexpr double MOCK_BED_Y_MIN = 0.0;
-constexpr double MOCK_BED_Y_MAX = 250.0;
-constexpr double MOCK_BED_Z_MAX = 300.0;
 
 // Probe margins - typical probes can't reach bed edges
 constexpr double MOCK_PROBE_MARGIN = 15.0;
@@ -39,16 +36,19 @@ constexpr double MOCK_PROBE_MARGIN = 15.0;
 // the mock's SCREWS_TILT_CALCULATE output agrees with the config it reports.
 constexpr const char* MOCK_SCREW_THREAD = "CW-M3";
 
-// Default kinematics for a printer type. MoonrakerClientMock::kinematics()
-// applies the HELIX_MOCK_KINEMATICS override on top.
-// NAMESPACE_OK: mock_internal sits at global scope with the mock's other helpers
-std::string mock_kinematics(MoonrakerClientMock::PrinterType type);
+/// Area a probe can reach: the persona's bed inset by MOCK_PROBE_MARGIN.
+struct MeshBounds {
+    double x_min;
+    double x_max;
+    double y_min;
+    double y_max;
+};
 
-// Derived mesh bounds (bed size minus probe margins)
-constexpr double MOCK_MESH_X_MIN = MOCK_BED_X_MIN + MOCK_PROBE_MARGIN;
-constexpr double MOCK_MESH_X_MAX = MOCK_BED_X_MAX - MOCK_PROBE_MARGIN;
-constexpr double MOCK_MESH_Y_MIN = MOCK_BED_Y_MIN + MOCK_PROBE_MARGIN;
-constexpr double MOCK_MESH_Y_MAX = MOCK_BED_Y_MAX - MOCK_PROBE_MARGIN;
+[[nodiscard]] inline MeshBounds mesh_bounds(helix::mock::PrinterType type) {
+    const auto max = helix::mock::descriptor(type).axis_max;
+    return {MOCK_BED_X_MIN + MOCK_PROBE_MARGIN, max.x - MOCK_PROBE_MARGIN,
+            MOCK_BED_Y_MIN + MOCK_PROBE_MARGIN, max.y - MOCK_PROBE_MARGIN};
+}
 
 /**
  * @brief Type for method handler functions

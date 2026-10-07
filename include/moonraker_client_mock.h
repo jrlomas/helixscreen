@@ -1297,10 +1297,11 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     void populate_capabilities();
 
     /**
-     * @brief Detect toolchanger mock mode from HELIX_MOCK_AMS env var
+     * @brief Detect toolchanger mock mode
      *
-     * Mirrors the parsing in ams_backend.cpp: returns true when HELIX_MOCK_AMS
-     * (lowercased) is one of "toolchanger", "tool_changer", or "tc". Used to gate
+     * Returns mock_toolchanger_selected(): true when the mode
+     * helix::mock::effective_mock_ams() resolves (an explicit HELIX_MOCK_AMS,
+     * else the persona's default) is "toolchanger", "tool_changer" or "tc". Used to gate
      * the multi-extruder toolchanger emulation (4 distinct extruder heaters,
      * toolchanger + tool objects) so single-extruder/AFC/MMU/mixed/IFS modes are
      * unaffected.
