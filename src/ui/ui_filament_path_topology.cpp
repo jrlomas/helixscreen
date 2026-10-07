@@ -492,6 +492,13 @@ struct LinearHubFrame {
     int32_t buf_fil_bot = 0;
     bool has_buffer = false;
     bool continuous_output = false;
+    // HUB with the bypass hidden: hub and buffer are stacked upward from the
+    // toolhead glyph instead of sitting at their ratio positions.
+    bool hub_stacked = false;
+    // The output run, buffer and toolhead are one stroke ending at the toolhead
+    // sensor's center, where the nozzle line begins.
+    bool single_output_stroke = false;
+    int32_t nozzle_line_start_y = 0;
 
     // Resolved colors
     lv_color_t idle_color, bg_color, active_color, hub_bg, hub_border;
@@ -583,6 +590,41 @@ LinearHubFrame compute_linear_hub_frame(const RenderCtx& ctx) {
     // Sizes from theme
     f.line_active = data->theme.line_width_active;
     f.sensor_r = data->theme.sensor_radius;
+    f.nozzle_line_start_y = f.toolhead_y + f.sensor_r;
+
+    // HUB with no bypass lane: the hub and buffer hang above the toolhead glyph,
+    // giving the lane fan the height they would otherwise occupy. The stack
+    // only ever moves them down; a canvas too short for it keeps the ratio
+    // layout.
+    if (data->topology == 1 && !data->hub_on_toolhead && !data->show_bypass && !data->hub_only) {
+        // The run ends at the glyph's nozzle inlet; the boxes clear the glyph's
+        // whole silhouette, which rises above the inlet.
+        const int32_t inlet_y = f.nozzle_y - data->theme.extruder_scale * 2;
+        const int32_t glyph_top = toolhead_top_y(f.nozzle_y, data->theme.extruder_scale);
+        // Equal clearance above and below the buffer box (or above the glyph
+        // when there is none): hub bottom, buffer and glyph top are evenly spaced.
+        const int32_t gap = f.hub_h / 2 + 2 * f.sensor_r;
+        int32_t stacked_buffer_y = f.buffer_y;
+        int32_t hub_bottom = glyph_top - 2 * gap;
+        if (f.has_buffer) {
+            hub_bottom = glyph_top - (buf_box_h + 2 * gap);
+            stacked_buffer_y = (hub_bottom + glyph_top) / 2;
+        }
+        const int32_t stacked_hub_y = hub_bottom - f.hub_h / 2;
+        if (stacked_hub_y > f.hub_y) {
+            f.hub_stacked = true;
+            // The glyph's inlet is the toolhead: the output run ends there.
+            f.toolhead_y = inlet_y;
+            f.nozzle_line_start_y = inlet_y;
+            f.hub_y = stacked_hub_y;
+            f.output_y = f.hub_y + f.hub_h / 2;
+            if (f.has_buffer) {
+                f.buffer_y = stacked_buffer_y;
+                f.buf_fil_top = f.buffer_y - buf_box_h / 2 - buf_extend;
+                f.buf_fil_bot = f.buffer_y + buf_box_h / 2 + buf_extend;
+            }
+        }
+    }
 
     // LINEAR topology: butt SELECTOR directly against prep sensors (no gap/lines between)
     if (data->topology == 0) {
@@ -612,8 +654,8 @@ LinearHubFrame compute_linear_hub_frame(const RenderCtx& ctx) {
     // A fully loaded, uninterrupted hub-to-toolhead run is one physical tube.
     // Splitting it at invisible sensor boundaries leaves caps and gaps.
     f.continuous_output = data->topology == 1 && !data->hub_only && !data->hub_on_toolhead &&
-                          !data->show_bypass && !f.has_buffer && !f.has_error &&
-                          data->active_slot >= 0 && f.fil_seg == PathSegment::NOZZLE;
+                          !data->show_bypass && !f.has_error && data->active_slot >= 0 &&
+                          f.fil_seg == PathSegment::NOZZLE;
     return f;
 }
 
@@ -697,7 +739,7 @@ void build_linear_hub_merge_fan(const RenderCtx& ctx, LinearHubFrame& f) {
     const int32_t max_width = LV_MAX(data->theme.hub_width, slot_span + 2 * ENTRY_MARGIN);
     const int32_t min_width = LV_CLAMP(data->theme.hub_width, want_w, max_width);
     const int32_t separation = LV_MAX(f.line_active + GLOW_WIDTH_EXTRA + 2, 2 * f.sensor_r + 2);
-    if (fan_n > 2 && !data->hub_on_toolhead) {
+    if (fan_n > 2 && !data->hub_on_toolhead && !f.hub_stacked) {
         // Borrow unused output-run height before widening the hub. Keep the
         // buffer/bypass area clear and leave on-toolhead hubs in place.
         float deepest_start = fan_in[0].start_y;
@@ -1124,11 +1166,26 @@ void draw_hub_section(const RenderCtx& ctx, LinearHubFrame& f) {
     draw_selector_tube(ctx, f);
 }
 
-// Output section: hub output sensor + the hub-to-merge/toolhead segment, with
-// the optional buffer ("BUF") element in the middle. The output sensor is
-// butted against the hub bottom (mirrors input sensors at hub top). When the
-// bypass is shown the segment runs output → bypass merge point; when hidden it
-// runs output → toolhead directly.
+// Buffer box ("BUF") painted over the filament, plus its recorded hit rect.
+void paint_buffer_box(const RenderCtx& ctx, const LinearHubFrame& f, bool has_filament,
+                      lv_color_t filament_color) {
+    FilamentPathData* data = ctx.data;
+    draw_buffer_coil(ctx, f.center_x, f.buffer_y, f.hub_h, has_filament, filament_color);
+
+    // Record the exact drawn box (absolute coords) for the click
+    // hit-test. Mirrors draw_buffer_coil()'s internal clamping so the
+    // click handler never re-derives the geometry.
+    int32_t buf_hit_w = data->theme.hub_width * 4 / 5;
+    int32_t buf_hit_h = f.hub_h;
+    if (buf_hit_w < 36)
+        buf_hit_w = 36;
+    if (buf_hit_h < 16)
+        buf_hit_h = 16;
+    data->hits.buffer = {f.center_x - buf_hit_w / 2, f.buffer_y - buf_hit_h / 2,
+                         f.center_x + buf_hit_w / 2, f.buffer_y + buf_hit_h / 2};
+    data->hits.buffer_valid = true;
+}
+
 // Buffer (TurtleNeck / eSpooler) element: straight filament (no caps) + the
 // "BUF" box on top + the continuation run down to the merge/toolhead, plus
 // the recorded buffer hit rect.
@@ -1153,21 +1210,7 @@ void draw_buffer_element(const RenderCtx& ctx, LinearHubFrame& f, int32_t output
                             : nullptr);
     }
 
-    // Buffer box on top
-    draw_buffer_coil(ctx, f.center_x, f.buffer_y, f.hub_h, buffer_has_filament, buf_fil_color);
-
-    // Record the exact drawn box (absolute coords) for the click
-    // hit-test. Mirrors draw_buffer_coil()'s internal clamping so the
-    // click handler never re-derives the geometry.
-    int32_t buf_hit_w = data->theme.hub_width * 4 / 5;
-    int32_t buf_hit_h = f.hub_h;
-    if (buf_hit_w < 36)
-        buf_hit_w = 36;
-    if (buf_hit_h < 16)
-        buf_hit_h = 16;
-    data->hits.buffer = {f.center_x - buf_hit_w / 2, f.buffer_y - buf_hit_h / 2,
-                         f.center_x + buf_hit_w / 2, f.buffer_y + buf_hit_h / 2};
-    data->hits.buffer_valid = true;
+    paint_buffer_box(ctx, f, buffer_has_filament, buf_fil_color);
 
     // Continuation: buffer bottom → merge/toolhead
     {
@@ -1180,6 +1223,11 @@ void draw_buffer_element(const RenderCtx& ctx, LinearHubFrame& f, int32_t output
     }
 }
 
+// Output section: hub output sensor + the hub-to-merge/toolhead segment, with
+// the optional buffer ("BUF") element in the middle. The output sensor is
+// butted against the hub bottom (mirrors input sensors at hub top). When the
+// bypass is shown the segment runs output → bypass merge point; when hidden it
+// runs output → toolhead directly.
 void draw_output_section(const RenderCtx& ctx, LinearHubFrame& f) {
     FilamentPathData* data = ctx.data;
     if (data->hub_only)
@@ -1213,6 +1261,27 @@ void draw_output_section(const RenderCtx& ctx, LinearHubFrame& f) {
     // glyph - reading as a gap in the tube.
     if (data->hub_on_toolhead)
         output_end_y = f.nozzle_y;
+
+    // With the bypass hidden there is no toolhead sensor to interrupt the run, so
+    // output sensor -> buffer -> toolhead is one stroke whose end is where the
+    // nozzle line starts. Independent capped strokes would show their caps at
+    // the buffer's edges and a gap at the undrawn toolhead sensor.
+    f.single_output_stroke = !data->show_bypass && !data->bypass_active && !data->hub_on_toolhead &&
+                             !(data->topology == 0 && f.output_x != f.center_x);
+    if (f.single_output_stroke) {
+        lv_color_t stroke_color = f.active_color;
+        if (ams_output_active && f.has_error && f.error_seg == PathSegment::OUTPUT) {
+            stroke_color = f.error_color;
+        }
+        LaneStyle st =
+            lane_style(ams_output_active, stroke_color, f.idle_color, f.bg_color, f.line_active);
+        draw_lane_vline(ctx.layer, f.center_x, f.output_y + f.sensor_r, f.toolhead_y, st,
+                        ams_output_active ? &f.active_path : nullptr);
+        f.nozzle_line_start_y = f.toolhead_y;
+        if (f.has_buffer)
+            paint_buffer_box(ctx, f, ams_output_active, stroke_color);
+        return;
+    }
 
     // No-cap endpoints where buffer segments meet
     int32_t seg_end_y = f.has_buffer ? f.buf_fil_top : (output_end_y - f.sensor_r);
@@ -1317,7 +1386,7 @@ void draw_nozzle_section(const RenderCtx& ctx, LinearHubFrame& f) {
     if (!f.continuous_output) {
         LaneStyle st =
             lane_style(nozzle_has_filament, noz_color, f.idle_color, f.bg_color, f.line_active);
-        draw_lane_vline(ctx.layer, f.center_x, f.toolhead_y + f.sensor_r,
+        draw_lane_vline(ctx.layer, f.center_x, f.nozzle_line_start_y,
                         f.nozzle_y - extruder_half_height, st,
                         (nozzle_has_filament && !data->bypass_active) ? &f.active_path : nullptr);
     }
@@ -1373,6 +1442,8 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
     draw_hub_section(ctx, f);
     if (f.continuous_output) {
         draw_sensor_dot(ctx.layer, f.output_x, f.output_y, f.active_color, true, f.sensor_r);
+        if (f.has_buffer)
+            paint_buffer_box(ctx, f, true, f.active_color);
     } else {
         draw_output_section(ctx, f);
         draw_toolhead_section(ctx, f);
