@@ -2997,7 +2997,8 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
     };
     const std::vector<Case> cases = {
         {"enabled, awaiting auto-place", widget_json(off, true, -1, -1, cs, rs), 0},
-        {"placed", widget_json(off, false, 0, 0, cs, rs), 0},
+        {"column only", widget_json(off, false, 0, -1, cs, rs), 0},
+        {"row only", widget_json(off, false, -1, 0, cs, rs), 0},
         {"configured", widget_json(off, false, -1, -1, cs, rs, {{"k", "v"}}), 0},
         {"non-default colspan", widget_json(off, false, -1, -1, cs + 1, rs), 0},
         {"non-default rowspan", widget_json(off, false, -1, -1, cs, rs + 1), 0},
