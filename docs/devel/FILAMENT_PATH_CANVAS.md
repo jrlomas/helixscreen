@@ -78,12 +78,12 @@ overview canvas.
 ┌───────────────────────────▼──────────────────────────────────┐
 │  ui_filament_path_topology.cpp                                │
 │  render_overlay_content() → render_linear_hub / render_mixed  │
-│  / render_parallel — phase functions per topology             │
+│  / render_parallel — plan (ui_filament_path_plan) + glyphs    │
 └──────────┬──────────────────────────────┬────────────────────┘
-           │ draw_lane*/draw_merge_fan      │ draw_sensor_dot/hub/nozzle
+           │ paint_tubes → stroke_path      │ hub/buffer/nozzle/badges
 ┌──────────▼──────────────┐  ┌──────────────▼────────────────────┐
 │ filament_tube_stroker   │  │ ui_filament_path_glyphs.cpp        │
-│ (strokes pathgeo paths) │  │ sensor dots, hub box, buffer,      │
+│ (strokes pathgeo paths) │  │ hub box, buffer, filament tip,     │
 └──────────┬──────────────┘  │ nozzle, toolhead, badges           │
            │                 └────────────────────────────────────┘
 ┌──────────▼──────────────┐
@@ -344,10 +344,11 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
 }
 ```
 
-PARALLEL and MIXED still draw per-lane tubes and `draw_sensor_dot` glyphs in
-named phases.
+PARALLEL and MIXED take the same shape with `plan_parallel` and `plan_mixed`
+(MIXED from `compute_mixed_frame`), then draw the MIXED hub box and every
+toolhead glyph and badge over the painted tubes.
 
-### The LINEAR/HUB route plan
+### The route plan
 
 `src/ui/ui_filament_path_plan.{h,cpp}`, pure apart from `paint_tubes` and
 `draw_sensor_band`, so `[filament-path][plan]` tests it without a display.
@@ -358,7 +359,11 @@ named phases.
   bypass is active, the bypass route from the merge down (the AMS trunk then
   ends at the merge and is styled from AMS state alone), or a separate idle trunk
   when nothing is active. Inactive slots end at their hub-top entry (HUB) or the
-  selector top (LINEAR).
+  selector top (LINEAR). PARALLEL: one route per tool, entry → sensor → nozzle
+  top, the mounted tool active. MIXED: hub lanes run entry → sensor → fan → hub
+  top, one trunk route runs hub bottom → nozzle top (styled from the first hub
+  lane that reached the nozzle), direct lanes run entry → sensor → their own
+  nozzle top.
 - **Span tags.** Each run is tagged with the `PathSegment` at which it fills:
   spool entry → prep `SPOOL`; prep → hub entry / selector top `LANE`; hub or
   selector interior `HUB`; hub bottom → bypass merge (or the toolhead when the
@@ -367,11 +372,14 @@ named phases.
   reached, whether it is the active route and the error segment into a
   `SpanStyle` (`Plain`/`Active`/`Error` walls, bore, filled, painted). The hub
   interior is `painted = false` under the opaque HUB box; the LINEAR selector
-  passage is painted and shows through the 60% selector.
+  passage is painted and shows through the 60% selector. PARALLEL and MIXED
+  lanes are `SPOOL` down to their sensor and through the hub fan, `NOZZLE` from
+  the sensor (or the hub bottom) to the nozzle top.
 - **Bands.** Clamp bands replace the sensor dots: prep (per slot with a prep
   sensor), hub entry (HUB), output (hub bottom, not on-toolhead), bypass merge
   (bypass shown) and toolhead (whenever the unit reports a toolhead sensor,
-  `FilamentPathData::has_toolhead_sensor`). `band_state()`: Error on the active
+  `FilamentPathData::has_toolhead_sensor`). PARALLEL and MIXED lanes each get
+  one band at their sensor, read as `TOOLHEAD`. `band_state()`: Error on the active
   route at the error segment, Active once triggered on the active route, Loaded
   (the lane's own filament color) once triggered off it, else Empty.
 - **Paint.** `coalesce()` joins adjacent painted segments with equal styles into
@@ -408,7 +416,7 @@ NOZZLE`.
 | Topology | Renderer | Shape |
 |----------|----------|-------|
 | LINEAR / HUB | `render_linear_hub()` | Entry lanes converge through a merge fan into a hub/selector box, one output tube to a shared nozzle. LINEAR and HUB share the renderer; they differ in layout/labeling. |
-| PARALLEL | `render_parallel()` | Each slot is an independent column with its own sensor and nozzle. Per-slot loop calls `draw_parallel_slot()`. |
+| PARALLEL | `render_parallel()` | Each slot is an independent column with its own sensor and nozzle: `plan_parallel()`, then `draw_parallel_tool()` per slot. |
 | MIXED | `render_mixed()` | A subset of lanes route directly to their own nozzle; the rest merge through a hub to a shared toolhead. `compute_mixed_frame()` identifies which lanes are hub-routed. |
 
 Per-slot render state (color, segment, mounted-ness, at-sensor, at-nozzle) is
@@ -559,8 +567,8 @@ run without a display and assert exact arc tangents and lane separation.
 | `src/ui/ui_filament_path_canvas.cpp` | Widget lifecycle, theme, click dispatch, DRAW_POST callback, C API, XML registration |
 | `src/ui/ui_filament_path_layers.cpp` | Canvas/buffer management, dirty flags, async refresh, size-change handling, teardown |
 | `src/ui/ui_filament_path_topology.cpp` | The three topology renderers + phase functions + DRAW_POST `render_animation_overlay()` |
-| `src/ui/ui_filament_path_plan.h`, `.cpp` | LINEAR/HUB frame, route plan, span styles, sensor bands, layered `paint_tubes()` |
-| `src/ui/ui_filament_path_glyphs.cpp` | Sensor dots, hub box, buffer coil, nozzle, toolhead, badges |
+| `src/ui/ui_filament_path_plan.h`, `.cpp` | LINEAR/HUB and MIXED frames, route plans for all three topologies, span styles, sensor bands, layered `paint_tubes()` |
+| `src/ui/ui_filament_path_glyphs.cpp` | Hub box, buffer coil, filament tip, nozzle, toolhead, badges |
 | `src/ui/ui_filament_path_anim.cpp` | The five `lv_anim`-driven animation systems |
 | `src/ui/ui_system_path_canvas.cpp` | AMS overview canvas — second consumer of the tube stroker |
 

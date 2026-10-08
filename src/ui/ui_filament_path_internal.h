@@ -34,8 +34,8 @@
  * FILE MAP
  *   ui_filament_path_canvas.cpp   widget lifecycle, theme, click dispatch, C API
  *   ui_filament_path_topology.cpp the three topology renderers + DRAW_POST pass
- *   ui_filament_path_plan.cpp     LINEAR/HUB frame → route plan → layered tube paint
- *   ui_filament_path_glyphs.cpp   sensor dots, hub box, buffer, nozzle, badges
+ *   ui_filament_path_plan.cpp     frames → route plans → layered tube and band paint
+ *   ui_filament_path_glyphs.cpp   hub box, buffer, nozzle, filament tip, badges
  *   ui_filament_path_anim.cpp     the five lv_anim-driven animation systems
  *   ui_filament_path_layers.cpp   canvas buffer management + async refresh
  */
@@ -386,7 +386,7 @@ SlotRenderStates compute_slot_render_states(const FilamentPathData* data);
 bool is_segment_active(PathSegment segment, PathSegment filament_segment);
 
 // Color manipulation helpers — thin aliases over the shared stroker color math
-// so the many local call sites (sensor dots, hub tinting, buffer coil) stay
+// so the many local call sites (filament tip, hub tinting, buffer coil) stay
 // terse.
 inline lv_color_t ph_darken(lv_color_t c, uint8_t amt) {
     return helix::ui::tube_darken(c, amt);
@@ -411,10 +411,6 @@ struct RenderCtx {
 // ============================================================================
 // Glyphs (ui_filament_path_glyphs.cpp)
 // ============================================================================
-
-/// Push-to-connect fitting at a sensor position (shadow + body + highlight).
-void draw_sensor_dot(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t color, bool filled,
-                     int32_t radius);
 
 /// Labeled rounded box (HUB / SELECTOR / BUF). Text color, font and corner
 /// radius come from the theme cache in ctx. Returns the number of pixels the
