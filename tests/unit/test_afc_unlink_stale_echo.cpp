@@ -4,10 +4,18 @@
 /**
  * @file test_afc_unlink_stale_echo.cpp
  * @brief A lane unlinked from HelixScreen stays unlinked while AFC keeps
- *        restating the old spool_id (remember_spool lanes) (#1717).
+ *        restating the old spool_id (remember_spool lanes), across a reconnect
+ *        or restart too (#1717).
+ *
+ * A live subscription only carries changed fields, so the restatement that
+ * matters is the full snapshot after a reconnect. Each restart here is a fresh
+ * backend loading the first one's records from the same mock Moonraker DB.
  */
 
+#include "ui_update_queue.h"
+
 #include "../lvgl_test_fixture.h"
+#include "../test_helpers/mock_printer.h"
 #include "ams_backend_afc.h"
 #include "test_helpers/afc_test_access.h"
 #include "test_helpers/backend_user_edit.h"
@@ -24,9 +32,15 @@ namespace helix {
 
 class AfcUnlinkHelper : public AmsBackendAfc {
   public:
-    AfcUnlinkHelper() : AmsBackendAfc(nullptr, nullptr) {
+    explicit AfcUnlinkHelper(IMoonrakerAPI* api) : AmsBackendAfc(api, nullptr) {
         std::vector<std::string> names{"lane1", "lane2"};
         AfcTestAccess::initialize_slots(*this, names);
+        on_started();
+        helix::ui::UpdateQueue::instance().drain();
+    }
+
+    ~AfcUnlinkHelper() override {
+        helix::ui::UpdateQueue::instance().drain();
     }
 
     void feed_stepper(const nlohmann::json& data) {
@@ -55,18 +69,25 @@ class AfcUnlinkHelper : public AmsBackendAfc {
         return false;
     }
 
-    void restart() {
-        on_started();
-    }
-
     [[nodiscard]] int spool_id() const {
         return get_slot_info(0).spoolman_id;
     }
 
     void unlink() {
+        link(0);
+    }
+
+    void link(int spool_id) {
         SlotInfo info = get_slot_info(0);
-        info.spoolman_id = 0;
+        info.spoolman_id = spool_id;
         helix::test::apply_edit(*this, 0, info);
+    }
+
+    [[nodiscard]] int persisted_unlink() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto& overrides = AfcTestAccess::overrides(*this);
+        const auto it = overrides.find(0);
+        return it == overrides.end() ? 0 : it->second.unlinked_spool_id;
     }
 
     std::vector<std::string> captured_gcodes;
@@ -82,7 +103,8 @@ nlohmann::json loaded(const nlohmann::json& spool_id) {
 
 TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: restated old spool_id stays cleared (#1717)",
                  "[1717][ams][afc]") {
-    helix::test::RegisteredBackend<AfcUnlinkHelper> reg;
+    MockPrinter printer;
+    helix::test::RegisteredBackend<AfcUnlinkHelper> reg(&printer.api);
     AfcUnlinkHelper& afc = *reg;
     afc.feed_stepper(loaded(42));
     REQUIRE(afc.spool_id() == 42);
@@ -97,7 +119,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: restated old spool_id stays clear
 
 TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: a different id afterwards is accepted (#1717)",
                  "[1717][ams][afc]") {
-    helix::test::RegisteredBackend<AfcUnlinkHelper> reg;
+    MockPrinter printer;
+    helix::test::RegisteredBackend<AfcUnlinkHelper> reg(&printer.api);
     AfcUnlinkHelper& afc = *reg;
     afc.feed_stepper(loaded(42));
     afc.unlink();
@@ -113,30 +136,24 @@ TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: a different id afterwards is acce
 
 TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: no unlink means a restated id is accepted (#1717)",
                  "[1717][ams][afc]") {
-    helix::test::RegisteredBackend<AfcUnlinkHelper> reg;
+    MockPrinter printer;
+    helix::test::RegisteredBackend<AfcUnlinkHelper> reg(&printer.api);
     AfcUnlinkHelper& afc = *reg;
     afc.feed_stepper(loaded(42));
     afc.feed_stepper(loaded(42));
     CHECK(afc.spool_id() == 42);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: guard ends on lane unload and on restart (#1717)",
+TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: guard ends on lane unload and on a null id (#1717)",
                  "[1717][ams][afc]") {
-    helix::test::RegisteredBackend<AfcUnlinkHelper> reg;
+    MockPrinter printer;
+    helix::test::RegisteredBackend<AfcUnlinkHelper> reg(&printer.api);
     AfcUnlinkHelper& afc = *reg;
 
     SECTION("lane unload") {
         afc.feed_stepper(loaded(42));
         afc.unlink();
         afc.feed_stepper({{"prep", false}, {"load", false}});
-        afc.feed_stepper(loaded(42));
-        CHECK(afc.spool_id() == 42);
-    }
-
-    SECTION("restart") {
-        afc.feed_stepper(loaded(42));
-        afc.unlink();
-        afc.restart();
         afc.feed_stepper(loaded(42));
         CHECK(afc.spool_id() == 42);
     }
@@ -152,7 +169,8 @@ TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: guard ends on lane unload and on 
 
 TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: no clear sent means no guard (#1717)",
                  "[1717][ams][afc]") {
-    helix::test::RegisteredBackend<AfcUnlinkHelper> reg;
+    MockPrinter printer;
+    helix::test::RegisteredBackend<AfcUnlinkHelper> reg(&printer.api);
     AfcUnlinkHelper& afc = *reg;
     afc.feed_stepper(loaded(42));
     // The slot shows no id although firmware holds one, so the edit has no
@@ -163,4 +181,88 @@ TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: no clear sent means no guard (#17
     CHECK_FALSE(afc.sent_spool_id_write());
     afc.feed_stepper(loaded(42));
     CHECK(afc.spool_id() == 42);
+}
+
+// =============================================================================
+// The unlink survives a reconnect and a restart
+// =============================================================================
+
+namespace {
+
+/// Unlink spool 127 from lane1 in one backend, run @p before_restart on it,
+/// then hand a fresh backend on the same database to @p after_restart.
+template <typename Before, typename After>
+void across_restart(Before before_restart, After after_restart) {
+    MockPrinter printer;
+    {
+        helix::test::RegisteredBackend<AfcUnlinkHelper> reg(&printer.api);
+        AfcUnlinkHelper& afc = *reg;
+        afc.feed_stepper(loaded(127));
+        afc.unlink();
+        REQUIRE(afc.spool_id() == 0);
+        before_restart(afc);
+    }
+    helix::test::RegisteredBackend<AfcUnlinkHelper> reg(&printer.api);
+    after_restart(*reg);
+}
+
+} // namespace
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "AFC unlink: a restart restating the old id stays unlinked (#1717)",
+                 "[1717][ams][afc]") {
+    SECTION("unlink through an edit") {
+        across_restart([](AfcUnlinkHelper&) {},
+                       [](AfcUnlinkHelper& afc) {
+                           afc.feed_stepper(loaded(127));
+                           CHECK(afc.spool_id() == 0);
+                       });
+    }
+
+    SECTION("Clear Spool, which also drops the slot's override") {
+        across_restart([](AfcUnlinkHelper& afc) { afc.clear_slot_override(0); },
+                       [](AfcUnlinkHelper& afc) {
+                           afc.feed_stepper(loaded(127));
+                           CHECK(afc.spool_id() == 0);
+                       });
+    }
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "AFC unlink: a different id after a restart ends the unlink and links (#1717)",
+                 "[1717][ams][afc]") {
+    across_restart([](AfcUnlinkHelper&) {},
+                   [](AfcUnlinkHelper& afc) {
+                       afc.feed_stepper(loaded(77));
+                       CHECK(afc.spool_id() == 77);
+                       CHECK(afc.persisted_unlink() == 0);
+                       afc.feed_stepper(loaded(127));
+                       CHECK(afc.spool_id() == 127);
+                   });
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: linking from HelixScreen ends the unlink (#1717)",
+                 "[1717][ams][afc]") {
+    across_restart(
+        [](AfcUnlinkHelper& afc) {
+            afc.link(127);
+            CHECK(afc.persisted_unlink() == 0);
+        },
+        [](AfcUnlinkHelper& afc) {
+            afc.feed_stepper(loaded(127));
+            CHECK(afc.spool_id() == 127);
+        });
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: emptying the lane ends the unlink (#1717)",
+                 "[1717][ams][afc]") {
+    across_restart(
+        [](AfcUnlinkHelper& afc) {
+            afc.feed_stepper({{"prep", false}, {"load", false}});
+            CHECK(afc.persisted_unlink() == 0);
+        },
+        [](AfcUnlinkHelper& afc) {
+            afc.feed_stepper(loaded(127));
+            CHECK(afc.spool_id() == 127);
+        });
 }

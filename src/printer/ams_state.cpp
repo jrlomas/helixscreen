@@ -1908,7 +1908,9 @@ AmsError AmsState::commit_slot_edit(int slot_index, const SlotInfo& original,
                 [](const MoonrakerError& err) {
                     spdlog::warn("[AmsState] Failed to set active spool: {}", err.message);
                 });
-        } else if (original.spoolman_id > 0) {
+        } else if (original.spoolman_id > 0 && backend->slot_is_actively_loaded(slot_index)) {
+            // The active spool is the one feeding the toolhead, so only
+            // unlinking the loaded lane clears it.
             api_->spoolman().set_active_spool(
                 0, []() {},
                 [](const MoonrakerError& err) {

@@ -185,6 +185,14 @@ struct FilamentSlotOverride {
     // otherwise. Not in the local cache: the mirror is republished from
     // settings, never read back as a bay.
     bool external_mirror = false;
+    // The firmware spool id the user unlinked from this lane while firmware
+    // kept stating it (AFC lanes with remember_spool, #1717). A frame naming
+    // this id is the stale restatement and reads as no link; any other id, a
+    // link made here or the lane emptying ends it. Bookkeeping, not identity:
+    // a Clear Spool keeps it and an edit carries it forward unless it links.
+    // Persistence: `helix_unlinked_spool_id` in the lane_data record, omitted
+    // when 0, and `unlinked_spool_id` in the local cache.
+    int unlinked_spool_id = 0;
     // Conflict avoidance for third-party writers.
     // ISO-8601 UTC on the wire. Second precision only — sub-second fractions
     // are truncated on format/parse.
