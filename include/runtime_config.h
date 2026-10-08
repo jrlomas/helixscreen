@@ -52,6 +52,11 @@ struct RuntimeConfig {
 
     bool disable_sound = false; ///< Disable all sound/audio output (--no-sound or settings.json)
 
+    /// Set for this run only when startup detects a crash loop: plugins stay
+    /// unloaded and the home panel shows the default layout without touching
+    /// the saved one. The next clean start runs normally.
+    bool crash_loop_safe_mode = false;
+
     // Debug/testing options
     bool test_history_api = false; ///< Test print history API on startup (--test-history)
 

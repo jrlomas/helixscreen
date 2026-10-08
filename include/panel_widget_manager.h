@@ -118,6 +118,11 @@ class PanelWidgetManager {
     static void unregister_rebuild_callback(const std::string& panel_id);
     void notify_config_changed(const std::string& panel_id);
 
+    /// Crash-loop safe mode shows default layouts and saves nothing, so an edit
+    /// would vanish at the next reload. Returns true, after a toast saying so,
+    /// when that holds; the caller returns without editing.
+    static bool refuse_layout_edit();
+
     // -- Widget subjects --
 
     /// Initialize subjects for all registered widgets that have init_subjects hooks.

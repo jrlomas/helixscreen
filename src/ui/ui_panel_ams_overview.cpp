@@ -34,6 +34,7 @@
 #include "helix-xml/src/xml/lv_xml.h"
 #include "i_moonraker_api.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "memory_monitor.h"
 #include "observer_factory.h"
 #include "overlay_base.h"
 #include "printer_detector.h"
@@ -46,6 +47,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -125,7 +127,7 @@ void AmsOverviewPanel::init_subjects() {
         slots_version_observer_ = observe<int>(
             AmsState::instance().get_slots_version_subject(), this,
             [](AmsOverviewPanel* self, int) {
-                if (!self->panel_)
+                if (!self->open_ || !self->panel_)
                     return;
                 if (self->detail_unit_index_ >= 0) {
                     // In detail mode — only rebuild slots if
@@ -156,7 +158,7 @@ void AmsOverviewPanel::init_subjects() {
         current_slot_observer_ = observe<int>(
             AmsState::instance().get_current_slot_subject(), this,
             [](AmsOverviewPanel* self, int) {
-                if (!self->panel_)
+                if (!self->open_ || !self->panel_)
                     return;
                 if (self->detail_unit_index_ >= 0) {
                     self->refresh_detail_if_needed();
@@ -249,9 +251,7 @@ void AmsOverviewPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     g_overview_panel_instance.store(this);
 
     // Set up the shared sidebar component
-    sidebar_ = std::make_unique<helix::ui::AmsOperationSidebar>(printer_state_);
-    sidebar_->setup(panel_);
-    sidebar_->init_observers();
+    sidebar_ = helix::ui::AmsOperationSidebar::attach(printer_state_, panel_);
 
     // Initial population from backend state
     refresh_units();
@@ -265,7 +265,18 @@ void AmsOverviewPanel::on_activate() {
 
     spdlog::debug("[{}] Activated - syncing from backend", get_name());
 
+    const bool opening = !open_;
+    open_ = true;
+    if (!sidebar_) {
+        sidebar_ = helix::ui::AmsOperationSidebar::attach(printer_state_, panel_);
+    }
+
     AmsState::instance().sync_from_backend();
+
+    // The closed panel's card observers skipped every change; rebuild once.
+    if (opening && cards_row_ && detail_unit_index_ < 0) {
+        refresh_units();
+    }
 
     if (sidebar_)
         sidebar_->sync_from_state();
@@ -274,6 +285,34 @@ void AmsOverviewPanel::on_activate() {
         // Re-entering while in detail mode — refresh the detail slots
         show_unit_detail(detail_unit_index_);
     }
+}
+
+void AmsOverviewPanel::run_close() {
+    if (auto* p = helix::lazy_global_if_exists<AmsOverviewPanel>()) {
+        p->on_closed();
+    }
+}
+
+void AmsOverviewPanel::on_closed() {
+    // A close callback can run after a reopen has already pushed the panel again.
+    // Its own callback was consumed by that run, so arm the next close again.
+    if (panel_ && (helix::nav::is_in_stack(panel_) || helix::nav::is_push_pending(panel_))) {
+        helix::nav::on_close(panel_, &AmsOverviewPanel::run_close);
+        return;
+    }
+    open_ = false;
+    sidebar_.reset();
+    if (detail_path_canvas_) {
+        helix::ui::filament_path_canvas_release_buffer(detail_path_canvas_);
+    }
+}
+
+bool AmsOverviewPanel::rebuild() {
+    if (!panel_ || helix::nav::is_showing(panel_)) {
+        return false;
+    }
+    destroy_ams_overview_panel_ui();
+    return true;
 }
 
 void AmsOverviewPanel::on_deactivating(DeactivateReason) {
@@ -293,6 +332,7 @@ void AmsOverviewPanel::refresh_units() {
     if (!cards_row_) {
         return;
     }
+    ++units_refreshes_;
 
     // Overview shows units from the active backend. Multi-unit support handles
     // backends with multiple physical units (e.g., 2x Box Turtle on one AFC system).
@@ -1072,6 +1112,7 @@ void AmsOverviewPanel::setup_detail_path_canvas(const AmsUnit& unit, const AmsSy
 // ============================================================================
 
 void AmsOverviewPanel::clear_panel_reference() {
+    open_ = false;
     // Cancel animations and dismiss menus while widget pointers are still valid
     if (detail_container_) {
         lv_anim_delete(detail_container_, nullptr);
@@ -1124,6 +1165,8 @@ void AmsOverviewPanel::clear_panel_reference() {
 // ============================================================================
 
 static lv_obj_t* s_ams_overview_panel_obj = nullptr;
+// Theme generation the cached tree was built under.
+static int s_ams_overview_theme_gen = 0;
 
 // Lazy registration flag for XML component
 static bool s_overview_registered = false;
@@ -1215,8 +1258,15 @@ AmsOverviewPanel& get_global_ams_overview_panel() {
         "AmsOverviewPanel", destroy_ams_overview_panel_ui, get_printer_state(),
         get_moonraker_api());
 
+    const int theme_gen = lv_subject_get_int(theme_manager_get_changed_subject());
+    if (s_ams_overview_panel_obj && s_ams_overview_theme_gen != theme_gen &&
+        !helix::nav::is_showing(s_ams_overview_panel_obj)) {
+        destroy_ams_overview_panel_ui();
+    }
+
     // Lazy create the panel UI if not yet created
     if (!s_ams_overview_panel_obj) {
+        s_ams_overview_theme_gen = theme_gen;
         ensure_overview_registered();
 
         // Initialize AmsState subjects BEFORE XML creation so bindings work
@@ -1236,14 +1286,11 @@ AmsOverviewPanel& get_global_ams_overview_panel() {
             panel.setup(s_ams_overview_panel_obj, screen);
             lv_obj_add_flag(s_ams_overview_panel_obj, LV_OBJ_FLAG_HIDDEN);
 
-            // Register overlay instance for lifecycle management
+            // Kept alive between opens, like the AMS panel; open_ams_overview_panel()
+            // registers the overlay and its close callback on every open.
             helix::nav::register_overlay(s_ams_overview_panel_obj, &panel);
 
-            // Register close callback to destroy UI when overlay is closed
-            helix::nav::on_close(s_ams_overview_panel_obj,
-                                 []() { destroy_ams_overview_panel_ui(); });
-
-            spdlog::info("[AMS Overview] Lazy-created panel UI with close callback");
+            spdlog::info("[AMS Overview] Lazy-created panel UI");
         } else {
             spdlog::error("[AMS Overview] Failed to create panel from XML");
         }
@@ -1383,6 +1430,85 @@ void AmsOverviewPanel::update_bypass_widgets_position() {
 // Multi-unit Navigation
 // ============================================================================
 
+namespace {
+
+void drop_hidden_ams_panel_ui() {
+    const AmsPanel* detail = get_existing_ams_panel();
+    if (detail && detail->get_panel() && !helix::nav::is_showing(detail->get_panel())) {
+        destroy_ams_panel_ui();
+    }
+}
+
+void drop_hidden_overview_ui() {
+    if (s_ams_overview_panel_obj && !helix::nav::is_showing(s_ams_overview_panel_obj)) {
+        destroy_ams_overview_panel_ui();
+    }
+}
+
+// Critical memory pressure drops the hidden cached AMS trees, which the small-RAM
+// printers (AD5M/AD5X) need back. Linux only in practice: the monitor is never
+// started on the ESP32.
+void ensure_ams_pressure_responder() {
+    static bool registered = false;
+    if (registered) {
+        return;
+    }
+    registered = true;
+    helix::MemoryMonitor::instance().add_pressure_responder([](helix::MemoryPressureLevel level) {
+        if (level < helix::MemoryPressureLevel::critical) {
+            return;
+        }
+        helix::ui::queue_update("AMS::drop_hidden_ui", []() {
+            drop_hidden_ams_panel_ui();
+            drop_hidden_overview_ui();
+        });
+    });
+}
+
+// The panels outlive a close, so a reopen usually has nothing to build; only a
+// first open (or one after the tree was dropped) waits under the loading pill.
+void open_ams_overlay(bool built, const std::function<void()>& open) {
+    ensure_ams_pressure_responder();
+    if (built) {
+        open();
+    } else {
+        helix::nav::build_under_loading_pill(open);
+    }
+}
+
+// Close callbacks fire once, so every open registers its own.
+void push_ams_overlay(lv_obj_t* root, IPanelLifecycle* lifecycle,
+                      helix::OverlayCloseCallback on_closed) {
+    helix::nav::register_overlay(root, lifecycle);
+    helix::nav::on_close(root, std::move(on_closed));
+    helix::nav::push_overlay(root);
+}
+
+void open_ams_overview_panel(int units) {
+    drop_hidden_ams_panel_ui();
+    open_ams_overlay(s_ams_overview_panel_obj != nullptr, [units]() {
+        spdlog::info("[AMS] Multi-unit setup ({} units) - showing overview", units);
+        auto& overview = get_global_ams_overview_panel();
+        if (lv_obj_t* panel = overview.get_panel()) {
+            push_ams_overlay(panel, &overview, &AmsOverviewPanel::run_close);
+        }
+    });
+}
+
+} // namespace
+
+void helix::ui::open_ams_detail_panel() {
+    drop_hidden_overview_ui();
+    const AmsPanel* existing = get_existing_ams_panel();
+    open_ams_overlay(existing && existing->get_panel(), []() {
+        spdlog::info("[AMS] Single-unit setup - showing detail panel directly");
+        auto& detail = get_global_ams_panel();
+        if (lv_obj_t* panel = detail.get_panel()) {
+            push_ams_overlay(panel, &detail, &AmsPanel::run_close);
+        }
+    });
+}
+
 void navigate_to_ams_panel() {
     auto* backend = AmsState::instance().get_backend();
     if (!backend) {
@@ -1390,45 +1516,12 @@ void navigate_to_ams_panel() {
         return;
     }
 
+    // Only one of the two panels serves a given unit count; opening one drops the
+    // other's hidden tree rather than holding both.
     const AmsSystemInfo info = backend->get_system_info();
-    const bool multi_unit = info.is_multi_unit();
-
-    auto open = [multi_unit, units = info.unit_count()]() {
-        if (multi_unit) {
-            // Multi-unit: show overview panel
-            spdlog::info("[AMS] Multi-unit setup ({} units) - showing overview", units);
-            auto& overview = get_global_ams_overview_panel();
-            lv_obj_t* panel = overview.get_panel();
-            if (panel) {
-                // Re-register before push: switch_to_panel_impl() clears
-                // overlay_instances_ on navbar switches (keeping only the
-                // persistent map), so a cached panel re-opened after a navbar tap
-                // loses its lifecycle registration. Idempotent (keyed by widget).
-                helix::nav::register_overlay(panel, &overview);
-                helix::nav::push_overlay(panel);
-            }
-        } else {
-            // Single-unit (or no units): go directly to detail panel
-            spdlog::info("[AMS] Single-unit setup - showing detail panel directly");
-            auto& detail = get_global_ams_panel();
-            lv_obj_t* panel = detail.get_panel();
-            if (panel) {
-                // Re-register before push (see multi-unit branch above): cached
-                // panel re-opened after a navbar switch loses its registration.
-                helix::nav::register_overlay(panel, &detail);
-                helix::nav::push_overlay(panel);
-            }
-        }
-    };
-
-    // Both panels are destroyed on close, so an open usually builds one: too
-    // slow on the ESP32 to go without feedback.
-    const AmsPanel* detail = get_existing_ams_panel();
-    const bool built =
-        multi_unit ? s_ams_overview_panel_obj != nullptr : detail && detail->get_panel();
-    if (built) {
-        open();
+    if (info.is_multi_unit()) {
+        open_ams_overview_panel(info.unit_count());
     } else {
-        helix::nav::build_under_loading_pill(open);
+        helix::ui::open_ams_detail_panel();
     }
 }

@@ -16,6 +16,7 @@
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "panel_widget.h"
 #include "panel_widget_config.h"
+#include "panel_widget_manager.h"
 #include "panel_widget_registry.h"
 #include "panel_widget_size.h"
 #include "theme_manager.h"
@@ -263,10 +264,13 @@ void GridEditMode::notify_gesture_ownership() {
     }
 }
 
-void GridEditMode::enter(lv_obj_t* container, PanelWidgetConfig* config, int page_index) {
+bool GridEditMode::enter(lv_obj_t* container, PanelWidgetConfig* config, int page_index) {
     if (active_) {
         spdlog::debug("[GridEditMode] Already active, ignoring enter()");
-        return;
+        return true;
+    }
+    if (PanelWidgetManager::refuse_layout_edit()) {
+        return false;
     }
     active_ = true;
     container_ = container;
@@ -285,6 +289,7 @@ void GridEditMode::enter(lv_obj_t* container, PanelWidgetConfig* config, int pag
     attach_to_current_page(/*sync_config=*/true);
 
     spdlog::info("[GridEditMode] Entered edit mode (page {})", page_index_);
+    return true;
 }
 
 void GridEditMode::attach_to_current_page(bool sync_config) {
