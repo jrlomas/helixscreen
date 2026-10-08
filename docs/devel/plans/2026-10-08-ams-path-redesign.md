@@ -307,17 +307,24 @@ helix-screen <name> ams -s 800x480` (and `-s small`), dark and `--light`, for: d
   the hub top, bands 4. Existing `[filament-path][canvas][mixed]` stay green.
 - Gate: `[filament-path]`, `[filament_path]`.
 
-### Phase 4: current-slot highlight (`src/ui/ui_ams_slot.cpp`)
-- Extract `void ams_slot_apply_highlight(lv_obj_t* target, bool active, bool simple)`
-  (declared in `include/ui_ams_slot.h`, `helix::ui::detail`), called with
-  `reduced_effects()`. Active + capable: border 3 px primary, shadow 24 px, `LV_OPA_70`,
-  spread 2 (from #1753). Active + simple: border 3 px primary, **no shadow**, outline 2 px
-  primary at pad 2. Inactive and `ui_ams_slot_clear_highlight`: clear border, shadow and
-  outline. File is an `lv_xml_register_widget` file, so `check_imperative_ui.py` exempts it.
-- Tests in `tests/unit/test_ui_ams_slot.cpp`, `[ams_slot][highlight]`: simple=true →
-  `shadow_width == 0`, `outline_width == 2`; simple=false → `shadow_width == 24`,
-  `shadow_opa == LV_OPA_70`; inactive → border 0, shadow 0, outline 0.
-- Gate: `[ams_slot]`.
+### Phase 4: current-slot highlight: a glow around the spool (`src/ui/ui_spool_canvas.cpp`, `src/ui/ui_ams_slot.cpp`)
+- Maintainer's ruling: the current slot is marked by an accent glow around the SPOOL's own
+  silhouette, not by a border/shadow box around the slot. `apply_current_slot_highlight`
+  stops setting border, shadow and outline on the slot; it sets a `highlighted` flag on the
+  slot's spool canvas instead.
+- Spool canvas, highlighted, capable hardware: drawn behind the spool, from the spool's alpha
+  mask: two halo passes (dilate 3 px, blur 5 px, accent at 100% then 60%), then a tight rim
+  (dilate 1 px, blur 0.8 px, accent lightened by 60). The canvas grows by the glow margin so
+  nothing clips. Cache key includes `highlighted`.
+- `reduced_effects()`: no blur and no shadow; a 2 px accent outline of the silhouette
+  (enlarged flange ellipses plus the body rect).
+- Accent = `theme_manager_get_color("primary")`.
+- Tests (`[ams_slot][highlight]`, `[spool_canvas]`): the highlighted slot has border 0,
+  shadow 0 and outline 0 on the slot object and its spool canvas has `highlighted == true`;
+  un-highlighting clears it; with `simple` the canvas output has accent pixels only within
+  2 px of the silhouette (no blur tail); the cache keys differ for highlighted and plain.
+- Gate: `[ams_slot]`, `[spool_canvas]`.
+- Reference: `docs/devel/plans/2026-10-08-ams-path-redesign/unit_render.py` (`ACTIVE`).
 
 ### Phase 5: re-apply the rest of #1753 on the new structure (pixels change, HUB)
 Commits carry `Co-authored-by: JR Lomas <lomas.jr@gmail.com>`.
@@ -423,6 +430,16 @@ Spools stand on the floor (layout change: today they sit above the tray):
   `ams_detail_update_tray` positions `slot_grid` so each spool canvas's center lands there:
   the row shifts right by `S/2` and down until the flange bottom is 2 px above `FB` (front
   plane). Badges and tool labels follow the spool center as they do today.
+
+Box extent and spool pitch:
+- The box's x-extent is DERIVED from the slot row, for every lid mode: `FL = slot_x[0] - h`,
+  `FR = slot_x[n-1] + h`, `h = lane_lid_half_width`. The outer per-lane lids then meet the
+  box corners exactly: lid 0 starts at `fl_t`, the last lid's right cap ends at `br_t`.
+- Spool pitch tightens to about 72 px at 800x480 (from about 97): spool footprint
+  (`spool_width + 2*flange_rx`, about 43) + `K*DZ/2` (lid-cap tuck, about 12.7) + about 16 px.
+  The material labels still fit ("Silk PLA").
+- Tests: per-lane lid 0's `x0 == FL`; the last per-lane lid's `cap_point(θ = 0) == br_t`;
+  at pitch 72, `lane_lid_half_width(72, b) == 72/2 - 25.364/4 - 1 = 28.659`.
 
 Lid (`lid_mode` != `None`):
 - Half-elliptical cross-section on the sloped chord from the front-wall top to the

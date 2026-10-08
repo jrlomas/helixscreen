@@ -22,8 +22,11 @@ def proj(x, y, z):            # x along the row, y screen-down at the front plan
     return (x + K * z, y - RISE * z / DZ)
 
 # --- layout (unscaled px) ------------------------------------------------------------------
-SLOTS = [58, 155, 251, 348]   # spool row x centers (front plane), from the 800x480 AFC view
-FL, FR = 10, 392              # box front face left/right
+PITCH = float(sys.argv[4]) if len(sys.argv) > 4 else 72.0   # spool pitch along the row
+SLOTS = [58 + i * PITCH for i in range(4)]                     # spool x centers (front plane)
+ACTIVE = 0                                                      # current spool: glow around the spool itself
+HALF = (SLOTS[1] - SLOTS[0]) / 2 - S / 4 - 1   # per-lane lid half-width: each end cap tucks halfway behind the next lid
+FL, FR = SLOTS[0] - HALF, SLOTS[-1] + HALF     # box ends = the outer per-lane lids' ends, so lids meet its corners
 FT, FB = 101, 126             # front wall top / bottom
 EB = 10                       # back wall is this much taller than the front
 FLOOR_MID = FB - RISE / 2
@@ -120,7 +123,6 @@ def hull(points):
         while len(up) >= 2 and cr(up[-2], up[-1], p) <= 0: up.pop()
         up.append(p)
     return lo[:-1] + up[:-1]
-HALF = (SLOTS[1] - SLOTS[0]) / 2 - S / 4 - 1   # per-lane lid half-width: each end cap tucks halfway behind the next lid
 SEGS = [(FL, FR)] if MODE != 2 else [(x - HALF, x + HALF) for x in SLOTS]
 LIDS = []
 for x0, x1 in SEGS:
@@ -142,9 +144,23 @@ if LID:
     line([bl_t, br_t], edge, 0.6)
 
 # 2. Spools, at mid-depth.
-for x, fil in zip(SLOTS, FIL):
+accent = (90, 141, 238) if theme == "dark" else (47, 111, 214)
+for i, (x, fil) in enumerate(zip(SLOTS, FIL)):
     sx, sy = proj(x, CY, DZ / 2)
+    if i != ACTIVE:
+        spool(sx, sy, fil); continue
+    # Draw the current spool on its own layer, glow its silhouette, then lay the spool on top.
+    base_img = img
+    img = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
     spool(sx, sy, fil)
+    sp = img; img = base_img
+    al = sp.getchannel("A")
+    halo = al.filter(ImageFilter.MaxFilter(3 * SS + 1)).filter(ImageFilter.GaussianBlur(5 * SS))
+    rim = al.filter(ImageFilter.MaxFilter(1 * SS + 1)).filter(ImageFilter.GaussianBlur(0.8 * SS))
+    comp(tinted(halo, accent, 1.0))
+    comp(tinted(halo, accent, 0.6))
+    comp(tinted(rim, lighten(accent, 60), 1.0))
+    comp(sp)
 
 # 3. Front face (translucent, as the tray draws it today) and the right side face.
 poly([fl_t, fr_t, fr_b, fl_b], face, face_a)
