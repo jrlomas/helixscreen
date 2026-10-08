@@ -38,6 +38,8 @@
 #include "../lvgl_ui_test_fixture.h"
 #include "../test_fixtures.h"
 #include "../test_helpers/grid_edit_mode_test_access.h"
+#include "../test_helpers/scoped_runtime_config.h"
+#include "../ui_test_utils.h"
 #include "config.h"
 #include "grid_edit_mode.h"
 #include "grid_layout.h"
@@ -469,4 +471,34 @@ TEST_CASE_METHOD(XMLTestFixture,
     REQUIRE(placed != nullptr);
     CHECK(placed->is_placed());
     CHECK(placed->config.is_object());
+}
+
+// Crash-loop safe mode shows the default layout and saves nothing, so an add
+// would vanish on the next reload. The catalog refuses to open and says why.
+TEST_CASE_METHOD(XMLTestFixture, "Catalog: crash-loop safe mode refuses an add with a toast",
+                 "[widget_catalog][grid_edit][crash_loop]") {
+    ScopedRuntimeConfig scoped_config;
+    get_runtime_config()->crash_loop_safe_mode = true;
+
+    PanelWidgetConfig config("test_catalog_safe_mode", *Config::get_instance());
+    config.load();
+    const auto before = config.page_entries(0);
+
+    lv_obj_t* container = lv_obj_create(test_screen());
+    lv_obj_set_size(container, 800, 480);
+    process_lvgl(10);
+
+    std::vector<ToastSeverity> toasts;
+    helix::ui::set_test_toast_hook(
+        [&](ToastSeverity sev, const std::string&, uint32_t) { toasts.push_back(sev); });
+    GridEditMode em;
+    em.enter(container, &config, /*page_index=*/0);
+    em.open_widget_catalog(test_screen());
+    CHECK_FALSE(em.is_catalog_open());
+    helix::ui::set_test_toast_hook(nullptr);
+    CHECK(toasts == std::vector<ToastSeverity>{ToastSeverity::WARNING});
+    em.exit();
+    process_lvgl(10);
+
+    CHECK(config.page_entries(0) == before);
 }

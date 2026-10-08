@@ -136,14 +136,14 @@ bool record_start_and_check_crash_loop(const std::string& marker_path, long long
     return false;
 }
 
-bool crash_loop_detected_and_record() {
+void crash_loop_detected_and_record() {
     if (get_runtime_config()->is_test_mode()) {
-        return false;
+        return;
     }
     const auto now_epoch = std::chrono::duration_cast<std::chrono::seconds>(
                                std::chrono::system_clock::now().time_since_epoch())
                                .count();
-    return record_start_and_check_crash_loop(crash_marker_path(), now_epoch);
+    record_start_and_check_crash_loop(crash_marker_path(), now_epoch);
 }
 
 void promote_surviving_gpu_guards() {

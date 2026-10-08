@@ -1596,6 +1596,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." ja="レイヤーモードはレイヤー変更ごとに1フレームをキャプチャします。ほとんどの印刷に最適です。"/>
   <translation tag="Layers" ja="レイヤー"/>
   <translation tag="Layout" ja="レイアウト"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." ja="セーフモードではレイアウトを変更できません。編集するには再起動してください。"/>
   <translation tag="Learn More" ja="詳細を見る"/>
   <translation tag="LedSelect" ja="LEDを選択"/>
   <translation tag="Left" ja="左"/>
@@ -2571,7 +2572,7 @@
   <translation tag="STYLE PROPERTIES" ja="スタイルプロパティ"/>
   <translation tag="SWITCH SENSORS" ja="スイッチセンサー"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." ja="セーフモードが有効です。起動時にアプリがクラッシュし続けたため、プリンター接続は無効になっています。設定を開いて問題を解決してから再起動してください。"/>
-  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal." ja="セーフモード: 起動時にアプリがクラッシュし続けたため、プラグインは無効になり、ホーム画面はデフォルトのレイアウトを表示しています。再起動すると通常に戻ります。"/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." ja="セーフモード: 起動時にアプリがクラッシュし続けたため、プラグインは無効になり、ウィジェットのレイアウトはデフォルトで表示されています。再起動すると通常に戻ります。"/>
   <translation tag="Safety &amp; Alerts" ja="安全とアラート"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." ja="{} は同じスプールですか？新しいスプールならクリアをタップしてください。"/>
   <translation tag="Sample" ja="サンプル"/>

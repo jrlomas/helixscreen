@@ -16,6 +16,7 @@
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "panel_widget.h"
 #include "panel_widget_config.h"
+#include "panel_widget_manager.h"
 #include "panel_widget_registry.h"
 #include "panel_widget_size.h"
 #include "theme_manager.h"
@@ -2919,6 +2920,9 @@ GridEditMode::find_catalog_placement(const PanelWidgetDef& def) const {
 void GridEditMode::open_widget_catalog(lv_obj_t* screen) {
     if (!config_) {
         spdlog::warn("[GridEditMode] Cannot open catalog: no config");
+        return;
+    }
+    if (PanelWidgetManager::refuse_layout_edit()) {
         return;
     }
 

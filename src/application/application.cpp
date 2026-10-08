@@ -477,7 +477,7 @@ int Application::run(int argc, char** argv) {
     // test mode — automation (screenshot pipeline, helixctl-driven runs) relaunches
     // the binary rapidly by design, and this guard exists to protect users on a
     // real device from an infinite restart loop, never a dev running --test.
-    // A loop boots this run in crash-loop safe mode rather than halting.
+    // A loop boots this run in crash-loop safe mode.
     helix::crash_loop_detected_and_record();
 
     helix::promote_surviving_gpu_guards();
@@ -849,8 +849,8 @@ int Application::run(int argc, char** argv) {
         if (get_runtime_config()->crash_loop_safe_mode) {
             ToastManager::instance().show(
                 ToastSeverity::WARNING,
-                lv_tr("Safe mode: the app kept crashing on startup, so plugins are off and the "
-                      "home screen shows the default layout. Restart to return to normal."),
+                lv_tr("Safe mode: the app kept crashing on startup, so plugins are off and "
+                      "widget layouts show their defaults. Restart to return to normal."),
                 0 /* sticky */);
         }
 

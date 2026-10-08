@@ -1655,6 +1655,7 @@ translations:
   Layer mode captures one frame per layer change. Best for most prints.: 层模式在每次换层时捕获一帧。适用于大多数打印。
   Layers: 层
   Layout: 布局
+  Layout changes are off in safe mode. Restart to edit.: '安全模式下无法更改布局。请重启后再编辑。'
   Learn More: 了解更多
   LedSelect: 选择 LED
   Left: '左'
@@ -2665,8 +2666,8 @@ translations:
   ? Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
   : 安全模式已激活。由于应用程序在启动时反复崩溃，打印机连接已被禁用。请打开设置以解决问题，然后重启。
-  ? 'Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal.'
-  : '安全模式：由于应用程序在启动时反复崩溃，插件已禁用，主屏幕显示默认布局。重启即可恢复正常。'
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : '安全模式：由于应用程序在启动时反复崩溃，插件已禁用，小部件布局显示为默认设置。重启即可恢复正常。'
   Safety & Alerts: 安全与警报
   Same spool in {}? Tap Clear if it is a new one.: '{} 是同一个料盘吗？如果是新料盘，请点击清除。'
   Sample: 样本
