@@ -3113,7 +3113,7 @@ define release-package
 endef
 
 # Package Pi release
-release-pi: $(INSTALLER_BUNDLES) | build/pi/bin/helix-screen build/pi/bin/helix-splash build/pi-fbdev/bin/helix-screen
+release-pi: $(INSTALLER_BUNDLES) | build/pi/bin/helix-screen build/pi/bin/helix-splash build/pi-fbdev/bin/helix-screen build/pi/bin/helix-screen-egl
 	$(call release-package,pi)
 
 # Package Pi 32-bit release (same structure as 64-bit Pi)
