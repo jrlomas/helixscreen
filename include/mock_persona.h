@@ -114,7 +114,7 @@ struct PersonaDescriptor {
                 {270.0, 270.0, 400.0},
                 "cartesian",
                 HAPPY_HARE_MMU | CARTOGRAPHER | BME280_CHAMBER | HTU21D_DRYER | EBB_CAN_MCU |
-                    WIDTH_SENSOR | RUNOUT_SENSOR,
+                    CHAMBER_SENSOR | WIDTH_SENSOR | RUNOUT_SENSOR,
                 "snapmaker",
                 false};
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD:

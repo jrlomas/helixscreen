@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "ui_update_queue.h"
+
 #include "../../src/api/moonraker_client_mock_internal.h"
 #include "../helix_test_fixture.h"
 #include "mock_persona.h"
@@ -21,12 +23,18 @@ using helix::test::PersonaEnv;
 
 /// What the app does under --test: the real discovery sequence over the mock.
 helix::PrinterDiscovery discover(const helix::mock::PersonaEntry& p) {
-    MoonrakerClientMock mock(p.type);
-    mock.connect("ws://mock/websocket", [] {}, [] {});
-    bool done = false;
-    mock.discover_printer([&done] { done = true; });
-    REQUIRE(done);
-    return mock.hardware();
+    helix::PrinterDiscovery hw;
+    {
+        MoonrakerClientMock mock(p.type);
+        mock.connect("ws://mock/websocket", [] {}, [] {});
+        bool done = false;
+        mock.discover_printer([&done] { done = true; });
+        REQUIRE(done);
+        hw = mock.hardware();
+    }
+    // Discovery queues UI-thread callbacks; run them before the test ends.
+    helix::ui::UpdateQueue::instance().drain();
+    return hw;
 }
 
 struct Expectation {
