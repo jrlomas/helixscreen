@@ -25,14 +25,17 @@ TIMEOUT_CMD := $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/
 # Must be generous: some shards with threading tests take 60-90s under load.
 SHARD_TIMEOUT := 300
 
-# Timeout for a single-process run of the binary (`make t`), which can be a
-# whole tag rather than one shard's slice of the suite.
+# Timeout for a single-process run of the binary on a tag or filter (`make t`),
+# which can be a whole tag rather than one shard's slice of the suite.
 TEST_TIMEOUT ?= 900
+# Timeout for a single-process run of the whole suite (test-serial, test-verbose).
+SUITE_TIMEOUT ?= 3600
 
 # Runs the rest of the line under a $(1)-second timeout. SIGTERM first, so
-# Catch2 can name the test that hung; SIGKILL $(TIMEOUT_KILL_AFTER)s later, because a binary whose
-# heap is corrupt can deadlock in Catch2's own signal handler on the malloc lock
-# and never act on SIGTERM. Exits 124 after SIGTERM, 137 after SIGKILL.
+# Catch2 can name the test that hung; SIGKILL $(TIMEOUT_KILL_AFTER)s later,
+# because a binary whose heap is corrupt can deadlock in Catch2's own signal
+# handler on the malloc lock and never act on SIGTERM. Exits 124 after SIGTERM,
+# 137 after SIGKILL.
 TIMEOUT_KILL_AFTER ?= 30
 timeout_run = $(if $(TIMEOUT_CMD),$(TIMEOUT_CMD) -k $(TIMEOUT_KILL_AFTER) $(1))
 
@@ -575,7 +578,7 @@ dev-timing:
 test-serial: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running unit tests sequentially (excluding slow)...$(RESET)"
 	@START_TIME=$$(date +%s); \
-	$(TEST_BIN) "~[.] ~[slow]"; \
+	$(call timeout_run,$(SUITE_TIMEOUT)) $(TEST_BIN) "~[.] ~[slow]"; \
 	$(call report_test_result,Unit tests)
 
 # Run ALL tests including slow ones (for thorough validation)
@@ -623,7 +626,7 @@ HIDDEN_FILTER ?= [.]
 test-hidden: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running HIDDEN tests ($(HIDDEN_FILTER)) sequentially from $(CURDIR)...$(RESET)"
 	@START_TIME=$$(date +%s); \
-	cd $(CURDIR) && $(TEST_BIN) "$(HIDDEN_FILTER)"; \
+	cd $(CURDIR) && $(call timeout_run,$(TEST_TIMEOUT)) $(TEST_BIN) "$(HIDDEN_FILTER)"; \
 	$(call report_test_result,Hidden tests)
 
 # List the hidden set without running it — the inventory behind the tracker doc.
@@ -788,13 +791,13 @@ test-plugin:
 # Run tests with per-test timing (shows slow tests)
 test-verbose: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running tests with timing...$(RESET)"
-	$(Q)$(TEST_BIN) --durations yes --use-colour yes
+	$(Q)$(call timeout_run,$(SUITE_TIMEOUT)) $(TEST_BIN) --durations yes --use-colour yes
 
 # Run UI-related tests
 test-ui: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running UI tests...$(RESET)"
 	@START_TIME=$$(date +%s); \
-	$(TEST_BIN) "[navigation],[theme],[wizard]"; \
+	$(call timeout_run,$(TEST_TIMEOUT)) $(TEST_BIN) "[navigation],[theme],[wizard]"; \
 	$(call report_test_result,UI tests)
 
 # List all available test tags
