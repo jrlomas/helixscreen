@@ -137,6 +137,8 @@ bool PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
         restore_boot_crash_record(replaced);
         return false;
     }
+    // A wizard left by a switch has nothing for a late cancel to restore.
+    clear_wizard_previous_printer_id();
 
     // Per-printer state lives at /printers/<active>/… and is reached via Config::df().
     // The active printer just changed, so df() now points at the new printer — fire every
@@ -234,7 +236,7 @@ void PrinterSwitchFlow::cancel_add_printer_wizard() {
     restore_boot_crash_record(restored);
     // Unsaved, the abandoned entry reappears after a restart; the restore still runs.
     save_or_report();
-    m_wizard_previous_printer_id.clear();
+    clear_wizard_previous_printer_id();
 
     // Defer wizard teardown + soft restart — we're called from a wizard button click handler,
     // so the wizard_container must survive until the event callback returns.

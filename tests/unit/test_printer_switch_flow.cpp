@@ -390,3 +390,52 @@ TEST_CASE_METHOD(SwitchFlowFixture,
     CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == "beta");
     CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 2);
 }
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: a cancel after the add-printer wizard ended restores nothing",
+                 "[multi-printer][switch_flow]") {
+    cfg_->set<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "beta");
+    cfg_->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
+    flow_.add_printer_via_wizard();
+    set_wizard_cancel_callback(nullptr);
+    const std::string added = cfg_->get_active_printer_id();
+    REQUIRE(added != "alpha");
+
+    std::string expected_active;
+    SECTION("the wizard completed") {
+        flow_.clear_wizard_previous_printer_id();
+        expected_active = added;
+    }
+    SECTION("a switch left the wizard") {
+        REQUIRE(flow_.request_switch("beta"));
+        expected_active = "beta";
+    }
+    const std::string previous = cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "");
+    const int streak = cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1);
+
+    flow_.cancel_add_printer_wizard();
+    UpdateQueue::instance().drain();
+
+    CHECK(cfg_->get_active_printer_id() == expected_active);
+    CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == previous);
+    CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == streak);
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: a wizard start whose save fails keeps the boot-crash record",
+                 "[multi-printer][switch_flow]") {
+    cfg_->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, true);
+    cfg_->set<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "gamma");
+    cfg_->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
+    helix::ConfigTestAccess::read_only_mode(*cfg_) = true;
+
+    flow_.add_printer_via_wizard();
+
+    CHECK(cfg_->get_active_printer_id() == "alpha");
+    CHECK(cfg_->get_printer_ids().size() == 2);
+    CHECK(cfg_->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, false));
+    CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == "gamma");
+    CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 2);
+    CHECK(flow_.wizard_previous_printer_id().empty());
+    CHECK(events_.empty());
+}

@@ -75,9 +75,11 @@ class PrinterSwitchFlow {
         return m_wizard_previous_printer_id;
     }
 
-    /// The add-printer wizard finished: there is nothing left to cancel back to.
+    /// The add-printer wizard finished, or a switch left it: there is nothing left to cancel
+    /// back to.
     void clear_wizard_previous_printer_id() {
         m_wizard_previous_printer_id.clear();
+        m_wizard_replaced_record = {};
     }
 
   private:
