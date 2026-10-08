@@ -185,8 +185,8 @@ static SpoolCanvasData* get_data(lv_obj_t* obj) {
 }
 
 // Size @p canvas's draw buffer to @p size plus @p margin on every side. The
-// object keeps @p size so layout never moves; the image is offset by the
-// margin and the overhang draws in the ext draw area.
+// object keeps @p size so layout never moves; the image is centred on it and
+// the overhang draws in the ext draw area.
 static bool sync_canvas_buf(lv_obj_t* canvas, lv_draw_buf_t*& draw_buf, int32_t size,
                             int32_t margin) {
     const int32_t dim = size + 2 * margin;
@@ -208,8 +208,7 @@ static bool sync_canvas_buf(lv_obj_t* canvas, lv_draw_buf_t*& draw_buf, int32_t 
     }
     // An image larger than its object is overhang, not scrollable content.
     lv_obj_remove_flag(canvas, LV_OBJ_FLAG_SCROLLABLE);
-    lv_image_set_offset_x(canvas, -margin);
-    lv_image_set_offset_y(canvas, -margin);
+    lv_image_set_inner_align(canvas, LV_IMAGE_ALIGN_CENTER);
     lv_obj_set_size(canvas, size, size);
     lv_obj_refresh_ext_draw_size(canvas);
     return true;

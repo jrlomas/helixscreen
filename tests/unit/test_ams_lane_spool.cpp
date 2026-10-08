@@ -294,3 +294,64 @@ TEST_CASE("lane_material_text: the spool family's label rule", "[ams][lane_spool
     CHECK(std::string(helix::ui::lane_material_text(LaneState::Present, nullptr)) == "--");
     CHECK(std::string(helix::ui::lane_material_text(LaneState::Present, "PLA")) == "PLA");
 }
+
+namespace {
+/// Alpha-weighted centroid of a canvas's draw buffer, in buffer pixels.
+std::pair<double, double> alpha_centroid(lv_obj_t* canvas) {
+    lv_draw_buf_t* buf = lv_canvas_get_draw_buf(canvas);
+    REQUIRE(buf != nullptr);
+    double sx = 0, sy = 0, sa = 0;
+    for (uint32_t y = 0; y < buf->header.h; y++) {
+        const auto* row = reinterpret_cast<const lv_color32_t*>(buf->data + y * buf->header.stride);
+        for (uint32_t x = 0; x < buf->header.w; x++) {
+            sx += x * row[x].alpha;
+            sy += y * row[x].alpha;
+            sa += row[x].alpha;
+        }
+    }
+    REQUIRE(sa > 0);
+    return {sx / sa, sy / sa};
+}
+} // namespace
+
+TEST_CASE_METHOD(XMLTestFixture, "ams_lane_spool: the glow is centred on the spool",
+                 "[ams][lane_spool][highlight]") {
+    ui_ams_lane_spool_register();
+    AmsState::instance().init_subjects(true);
+    lv_subject_set_int(AmsState::instance().get_slot_lane_state_subject(0),
+                       static_cast<int>(helix::ui::LaneState::Present));
+    lv_obj_t* spool = make_spool(test_screen(), 0);
+    REQUIRE(spool != nullptr);
+    process_lvgl(20);
+
+    helix::ui::ams_lane_spool_set_highlight(spool, helix::ui::SpoolHighlight::Steady);
+    process_lvgl(20);
+    lv_obj_t* glow = part(spool, "spool_glow");
+    lv_obj_t* graphic = part(spool, "spool_graphic");
+    REQUIRE_FALSE(lv_obj_has_flag(glow, LV_OBJ_FLAG_HIDDEN));
+
+    const int32_t m = (static_cast<int32_t>(lv_canvas_get_draw_buf(glow)->header.w) -
+                       static_cast<int32_t>(lv_canvas_get_draw_buf(graphic)->header.w)) /
+                      2;
+    REQUIRE(m > 0);
+    // Same object rectangle; the buffer overhang sits m px outside it.
+    lv_obj_update_layout(spool);
+    lv_area_t a, b;
+    lv_obj_get_coords(glow, &a);
+    lv_obj_get_coords(graphic, &b);
+    CHECK(a.x1 == b.x1);
+    CHECK(a.y1 == b.y1);
+    // Centred, not offset: an offset would stack on the centring.
+    CHECK(lv_image_get_inner_align(glow) == LV_IMAGE_ALIGN_CENTER);
+    CHECK(lv_image_get_offset_x(glow) == 0);
+    CHECK(lv_image_get_offset_y(glow) == 0);
+
+    const auto [gx, gy] = alpha_centroid(glow);
+    const auto [sx, sy] = alpha_centroid(graphic);
+    CHECK(std::abs(gx - (sx + m)) < 1.5);
+    CHECK(std::abs(gy - (sy + m)) < 1.5);
+
+    helix::ui::ams_lane_spool_set_highlight(spool, helix::ui::SpoolHighlight::None);
+    CHECK(lv_obj_has_flag(glow, LV_OBJ_FLAG_HIDDEN));
+    lv_obj_delete(spool);
+}
