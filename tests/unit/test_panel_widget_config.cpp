@@ -2948,3 +2948,111 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
 
     CHECK_FALSE(PanelWidgetConfig::has_uninterpretable_coordinates(saved, 30));
 }
+
+// ============================================================================
+// Save omits only what the reader re-appends
+// ============================================================================
+
+namespace {
+const PanelWidgetDef* first_def_where(bool default_enabled, bool multi_instance) {
+    for (const auto& def : get_all_widget_defs()) {
+        if (def.default_enabled == default_enabled && def.multi_instance == multi_instance) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
+json widget_json(const std::string& id, bool enabled, int col, int row, int colspan, int rowspan,
+                 const json& config = json()) {
+    json item = {{"id", id},   {"enabled", enabled}, {"col", col},
+                 {"row", row}, {"colspan", colspan}, {"rowspan", rowspan}};
+    if (!config.is_null()) {
+        item["config"] = config;
+    }
+    return item;
+}
+} // namespace
+
+// Each case breaks exactly one condition of the omitted shape (off by default,
+// disabled, unplaced, unconfigured, registry spans, base id, first page), so the
+// entry carries information and must survive a save and reload field for field.
+TEST_CASE_METHOD(PanelWidgetConfigFixture,
+                 "PanelWidgetConfig: save keeps every entry that differs from the appended default",
+                 "[panel_widget][widget_config]") {
+    const auto* off_def = first_def_where(false, false);
+    const auto* on_def = first_def_where(true, false);
+    const auto* multi_def = first_def_where(false, true);
+    REQUIRE(off_def != nullptr);
+    REQUIRE(on_def != nullptr);
+    REQUIRE(multi_def != nullptr);
+    const std::string off = off_def->id;
+    const int cs = off_def->colspan;
+    const int rs = off_def->rowspan;
+
+    struct Case {
+        const char* why;
+        json entry;
+        size_t page;
+    };
+    const std::vector<Case> cases = {
+        {"enabled, awaiting auto-place", widget_json(off, true, -1, -1, cs, rs), 0},
+        {"placed", widget_json(off, false, 0, 0, cs, rs), 0},
+        {"configured", widget_json(off, false, -1, -1, cs, rs, {{"k", "v"}}), 0},
+        {"non-default colspan", widget_json(off, false, -1, -1, cs + 1, rs), 0},
+        {"non-default rowspan", widget_json(off, false, -1, -1, cs, rs + 1), 0},
+        {"on by default", widget_json(on_def->id, false, -1, -1, on_def->colspan, on_def->rowspan),
+         0},
+        {"multi-instance id",
+         widget_json(std::string(multi_def->id) + ":3", false, -1, -1, multi_def->colspan,
+                     multi_def->rowspan),
+         0},
+        {"second page", widget_json(off, false, -1, -1, cs, rs), 1},
+    };
+
+    for (const auto& c : cases) {
+        CAPTURE(c.why);
+        const std::string id = c.entry["id"].get<std::string>();
+        json page0 = json::array();
+        json page1 = json::array();
+        (c.page == 0 ? page0 : page1).push_back(c.entry);
+        setup_with_pages({{"main", page0}, {"p2", page1}});
+
+        PanelWidgetConfig wc1("home", config);
+        wc1.load();
+        wc1.save();
+
+        const json saved = get_saved_root()["pages"][c.page]["widgets"];
+        auto in_saved = std::find_if(saved.begin(), saved.end(),
+                                     [&](const json& item) { return item["id"] == id; });
+        REQUIRE(in_saved != saved.end());
+
+        PanelWidgetConfig wc2("home", config);
+        wc2.load();
+        const auto& entries = wc2.page_entries(c.page);
+        auto it = std::find_if(entries.begin(), entries.end(),
+                               [&](const PanelWidgetEntry& e) { return e.id == id; });
+        REQUIRE(it != entries.end());
+        CHECK(it->enabled == c.entry["enabled"].get<bool>());
+        CHECK(it->col == c.entry["col"].get<int>());
+        CHECK(it->row == c.entry["row"].get<int>());
+        CHECK(it->colspan == c.entry["colspan"].get<int>());
+        CHECK(it->rowspan == c.entry["rowspan"].get<int>());
+        CHECK(it->config == c.entry.value("config", json::object()));
+    }
+}
+
+TEST_CASE_METHOD(PanelWidgetConfigFixture,
+                 "PanelWidgetConfig: save omits a default-off widget left at its appended default",
+                 "[panel_widget][widget_config]") {
+    const auto* off_def = first_def_where(false, false);
+    REQUIRE(off_def != nullptr);
+    setup_with_pages({{"main", json::array({widget_json(off_def->id, false, -1, -1,
+                                                        off_def->colspan, off_def->rowspan)})}});
+    PanelWidgetConfig wc("home", config);
+    wc.load();
+    wc.save();
+    const auto saved = get_saved_page0_widgets();
+    CHECK(std::none_of(saved.begin(), saved.end(),
+                       [&](const json& item) { return item["id"] == off_def->id; }));
+}

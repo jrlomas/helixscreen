@@ -960,8 +960,10 @@ void Config::init(const std::string& config_path) {
                     spdlog::debug("[Config] Keeping existing v{} pre-migration copy: {}",
                                   version_before, snapshot);
                     snapshot_kept = true;
-                } else if (copy_from_file ? write_backup_file(path, snapshot)
-                                          : tio::write_file_atomic(snapshot, data.dump(2))) {
+                } else if (copy_from_file
+                               ? write_backup_file(path, snapshot)
+                               : tio::write_file_atomic(
+                                     snapshot, helix::json_util::safe_dump(data, small ? -1 : 2))) {
                     spdlog::info("[Config] Saved v{} config before migrating: {}", version_before,
                                  snapshot);
                     snapshot_kept = true;
