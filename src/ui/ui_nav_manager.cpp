@@ -1715,11 +1715,7 @@ bool NavigationManager::go_back() {
 }
 
 void NavigationManager::build_under_loading_pill(const std::function<void()>& build) {
-    lv_subject_t* tier = lv_xml_get_subject(nullptr, "platform_tier");
-    const bool limited_tier =
-        tier && !helix::full_style_effects_allowed(
-                    static_cast<helix::PlatformTier>(lv_subject_get_int(tier)));
-    if (!limited_tier || nav_scrim_active_) {
+    if (helix::ui::full_style_effects_active() || nav_scrim_active_) {
         build();
         return;
     }

@@ -355,8 +355,11 @@ void ModalStack::animate_entrance(lv_obj_t* dialog) {
     lv_obj_set_style_transform_pivot_x(dialog, LV_PCT(50), LV_PART_MAIN);
     lv_obj_set_style_transform_pivot_y(dialog, LV_PCT(50), LV_PART_MAIN);
 
-    // Skip animation if disabled - show in final state
-    if (!DisplaySettingsManager::instance().get_animations_enabled()) {
+    // Show the final state when animations are off, or on a tier where each frame
+    // of a full-screen fade plus a scaled dialog (an ARGB layer and a transformed
+    // blit) costs more than the frame budget.
+    if (!DisplaySettingsManager::instance().get_animations_enabled() ||
+        !helix::ui::full_style_effects_active()) {
         lv_obj_set_style_opa(backdrop, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_transform_scale(dialog, MODAL_SCALE_END, LV_PART_MAIN);
         lv_obj_set_style_opa(dialog, LV_OPA_COVER, LV_PART_MAIN);
@@ -491,8 +494,9 @@ void ModalStack::animate_exit(lv_obj_t* backdrop, lv_obj_t* dialog) {
     lv_anim_delete(backdrop, nullptr);
     lv_anim_delete(dialog, nullptr);
 
-    // Skip animation if disabled
-    if (!DisplaySettingsManager::instance().get_animations_enabled()) {
+    // Same rule as animate_entrance: no animation, or too costly on this tier
+    if (!DisplaySettingsManager::instance().get_animations_enabled() ||
+        !helix::ui::full_style_effects_active()) {
         lv_obj_set_style_transform_scale(dialog, MODAL_SCALE_END, LV_PART_MAIN);
         lv_obj_set_style_opa(dialog, LV_OPA_COVER, LV_PART_MAIN);
         spdlog::debug(
