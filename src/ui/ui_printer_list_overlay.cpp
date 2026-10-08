@@ -16,6 +16,7 @@
 #include "config.h"
 #include "observer_factory.h"
 #include "printer_state.h"
+#include "printer_switch_flow.h"
 #include "settings_manager.h"
 #include "static_panel_registry.h"
 #include "ui/ui_widget_helpers.h"
@@ -198,8 +199,9 @@ void PrinterListOverlay::populate_printer_list() {
 
 void PrinterListOverlay::handle_switch_printer(const std::string& printer_id) {
     auto* cfg = Config::get_instance();
-    if (printer_id == cfg->get_active_printer_id()) {
-        return; // Already active
+    // The active printer, while disconnected, goes through so the pick connects it.
+    if (printer_id == cfg->get_active_printer_id() && helix::printer_connection_live()) {
+        return;
     }
     spdlog::info("[{}] Switching to printer '{}'", get_name(), printer_id);
     helix::ui::drop_held_connection_failed();

@@ -14,6 +14,10 @@ class ApplicationTestAccess; // NAMESPACE_OK: test accessor, declared at global 
 namespace helix {
 class Config;
 
+/// Whether the app's Moonraker connection is up or on its way up; false only when it is
+/// disconnected or has failed. Main thread only.
+[[nodiscard]] bool printer_connection_live();
+
 /// The state machine behind switching to another printer, adding one through the setup
 /// wizard, and backing out of that wizard. It decides what the config says and in which
 /// order the restart steps run; the steps arrive as hooks, because the desktop rebuilds the
@@ -33,8 +37,9 @@ class PrinterSwitchFlow {
     PrinterSwitchFlow(Config*& config, AsyncLifetimeGuard& async, Restart restart);
 
     /// Switches to `printer_id`, asking first when the current printer is printing.
-    /// Picking the connected printer does nothing. Returns whether it switched before
-    /// returning; asking first returns false.
+    /// Picking the connected printer does nothing while its connection is up, and connects it
+    /// otherwise. A pick that switches clears a boot-crash connection hold. Returns whether it
+    /// switched before returning; asking first returns false.
     bool request_switch(const std::string& printer_id);
 
     /// Adds the printer at `host`:`port` and switches to it the way request_switch() does. An
@@ -71,9 +76,11 @@ class PrinterSwitchFlow {
         return m_wizard_previous_printer_id;
     }
 
-    /// The add-printer wizard finished: there is nothing left to cancel back to.
+    /// The add-printer wizard finished, or a switch left it: there is nothing left to cancel
+    /// back to.
     void clear_wizard_previous_printer_id() {
         m_wizard_previous_printer_id.clear();
+        m_wizard_replaced_record = {};
     }
 
   private:
@@ -93,11 +100,29 @@ class PrinterSwitchFlow {
     /// Whether that confirmation is still on screen. A hidden one is closed and forgotten.
     bool confirm_pending();
 
+    /// The boot-crash bookkeeping (boot_crash_guard.h) as a move found it.
+    struct BootCrashRecord {
+        bool connect_held = false;
+        std::string previous_printer_id;
+        int crash_streak = 0;
+    };
+
     std::string m_wizard_previous_printer_id;
+    /// The record the add-printer wizard's move replaced; cancelling the wizard puts it back.
+    BootCrashRecord m_wizard_replaced_record;
     std::string m_connected_printer_id;
 
     /// Saves the config, telling the user when it could not.
     bool save_or_report();
+
+    /// The boot-crash bookkeeping (boot_crash_guard.h) of a user's move to `to_id`, unsaved:
+    /// any move ends a connection hold, and a move to another printer starts a new crash run
+    /// whose fallback is `from_id`. Re-picking the same printer keeps both as they are.
+    /// Returns the record as it was, for restore_boot_crash_record() to undo the move.
+    BootCrashRecord record_switch_away(const std::string& from_id, const std::string& to_id);
+
+    /// Puts back a record that record_switch_away() returned, unsaved.
+    void restore_boot_crash_record(const BootCrashRecord& record);
 };
 
 } // namespace helix
