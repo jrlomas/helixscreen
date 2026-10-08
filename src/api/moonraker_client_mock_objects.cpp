@@ -496,6 +496,11 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
                     status_obj["medusahc"] = medusa;
                 }
             }
+            // OpenAMS (HELIX_MOCK_AMS=openams): the claim query and the
+            // subscribe snapshot both read the manager's status.
+            if (objects.contains("oams_manager") && self->is_mock_openams()) {
+                status_obj["oams_manager"] = self->openams_status_json();
+            }
             // Z-Mod's colour registry (creator5_zmod persona).
             if (objects.contains("zmod_color")) {
                 status_obj["zmod_color"] = self->zmod_color_status();
@@ -736,6 +741,11 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
             // mmu (Happy Hare MMU status — --real-ams)
             if (objects.contains("mmu")) {
                 status_obj["mmu"] = get_mock_mmu_status();
+            }
+
+            // OpenAMS (HELIX_MOCK_AMS=openams): the subscribe snapshot.
+            if (objects.contains("oams_manager") && self->is_mock_openams()) {
+                status_obj["oams_manager"] = self->openams_status_json();
             }
 
             // MedusaHC (HELIX_MOCK_AMS=medusahc[-fork]). Emitted only for

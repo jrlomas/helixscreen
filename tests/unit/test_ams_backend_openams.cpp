@@ -821,3 +821,29 @@ TEST_CASE_METHOD(LVGLUITestFixture,
 
     helix::ui::set_test_toast_hook(nullptr);
 }
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS only highlights a path error when an error is reported",
+                 "[ams][openams]") {
+    OpenAmsHarness backend;
+    for (const char* state : {"idle", "loaded", "loading", "unloading"}) {
+        CAPTURE(state);
+        backend.feed(manager(json::array({lane(state, "T1", 2)})));
+        CHECK(backend.infer_error_segment() == helix::PathSegment::NONE);
+    }
+    json errored = loaded_manager();
+    errored["lanes"] = json::array({lane("error", "T1", 2)});
+    backend.feed(errored);
+    CHECK(backend.infer_error_segment() == helix::PathSegment::NOZZLE);
+    backend.feed(loaded_manager());
+    CHECK(backend.infer_error_segment() == helix::PathSegment::NONE);
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS locates a reported error during a pending load",
+                 "[ams][openams]") {
+    OpenAmsHarness backend;
+    backend.feed(manager());
+    REQUIRE(backend.load_filament(1).success());
+    CHECK(backend.infer_error_segment() == helix::PathSegment::NONE);
+    backend.feed(manager(json::array({lane("error", "T1", 2)})));
+    CHECK(backend.infer_error_segment() == helix::PathSegment::OUTPUT);
+}

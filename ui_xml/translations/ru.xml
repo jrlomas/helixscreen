@@ -186,6 +186,7 @@
   <translation tag="Added to Spoolman" ru="Добавлено в Spoolman"/>
   <translation tag="Added to queue (position {})" ru="Добавлено в очередь (позиция {})"/>
   <translation tag="Added to queue (position {}) - queue is paused" ru="Добавлено в очередь (позиция {}) – очередь на паузе"/>
+  <translation tag="Adding printer" ru="Добавление принтера"/>
   <translation tag="Adding to queue..." ru="Добавление в очередь..."/>
   <translation tag="Address" ru="Адрес"/>
   <translation tag="Adjust screen brightness level" ru="Настроить уровень яркости экрана"/>

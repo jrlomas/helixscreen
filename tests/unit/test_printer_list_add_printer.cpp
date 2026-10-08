@@ -155,7 +155,11 @@ class PickerSwitchFixture : public AddPrinterFixture {
     PickerSwitchFixture()
         : flow_(cfg_, async_,
                 {[this] { events_.push_back("teardown"); },
-                 [this] { events_.push_back("rebuild"); }, [this] { events_.push_back("home"); }}) {
+                 [this] {
+                     events_.push_back("rebuild");
+                     return true;
+                 },
+                 [this] { events_.push_back("home"); }}) {
         cfg_ = Config::get_instance();
         saved_data_ = ConfigTestAccess::data(*cfg_);
         saved_active_ = ConfigTestAccess::active_printer_id(*cfg_);
