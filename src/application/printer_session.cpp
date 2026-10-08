@@ -460,13 +460,10 @@ void PrinterSession::setup_discovery_callbacks() {
                            }});
 }
 
-bool PrinterSession::connect_moonraker() {
-    // Boot and every rebuild connect through here, to the active printer.
-    m_flow.set_connected_printer_id(m_config->get_active_printer_id());
-
-    // Determine if we should connect
-    std::string saved_host = m_config->get<std::string>(m_config->df() + "moonraker_host", "");
-    bool has_cli_url = !m_host.args.moonraker_url.empty();
+bool PrinterSession::connect_wanted() const {
+    const std::string saved_host =
+        m_config->get<std::string>(m_config->df() + "moonraker_host", "");
+    const bool has_cli_url = !m_host.args.moonraker_url.empty();
     // Always connect at boot when we have a host (fresh-install scaffold seeds
     // moonraker_host=127.0.0.1, so embedded devices can reach Moonraker without
     // user intervention). Connecting during the wizard is what lets auto-detection
@@ -476,13 +473,18 @@ bool PrinterSession::connect_moonraker() {
     // (or replaces it if the user changed the host).
     // In test mode, gate on m_host.wizard_active so unit/integration tests that
     // launch with --wizard don't race against fixture setup.
-    bool should_connect = has_cli_url ||
-                          (get_runtime_config()->test_mode && !m_host.wizard_active) ||
-                          !saved_host.empty();
+    return has_cli_url || (get_runtime_config()->test_mode && !m_host.wizard_active) ||
+           !saved_host.empty();
+}
 
-    if (!should_connect) {
+bool PrinterSession::connect_moonraker() {
+    // Boot and every rebuild connect through here, to the active printer.
+    m_flow.set_connected_printer_id(m_config->get_active_printer_id());
+
+    if (!connect_wanted()) {
         return true; // Not connecting is not an error
     }
+    const bool has_cli_url = !m_host.args.moonraker_url.empty();
 
     std::string moonraker_url;
     std::string http_base_url;
@@ -610,7 +612,8 @@ bool PrinterSession::rebuild() {
 #endif
 
     // 9. Connect to new printer's Moonraker
-    const bool connecting = connect_moonraker();
+    // connect_moonraker() also succeeds when the printer has nothing to connect to.
+    const bool connecting = connect_wanted() && connect_moonraker();
     if (!connecting) {
         spdlog::warn("[Application] Running without printer connection after switch");
     }
