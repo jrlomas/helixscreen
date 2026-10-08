@@ -64,16 +64,22 @@ namespace helix::ui {
 bool reduced_effects();
 
 /**
- * @brief Mark the spool as the current one with an accent glow around its silhouette.
- *
- * Capable hardware draws a soft halo plus a tight rim grown from the spool's
- * alpha mask; the draw buffer grows by the glow margin on every side while the
- * object keeps the spool's size, so layout does not move and the glow spills
- * into the ext draw area. @p simple draws a 2 px solid outline instead, inside
- * the spool's own buffer.
+ * @brief Create a glow layer: a canvas the caller places behind a spool,
+ *        centered on it and sized like it.
  */
-void spool_canvas_set_highlighted(lv_obj_t* canvas, bool highlighted,
-                                  bool simple = reduced_effects());
-bool spool_canvas_highlighted(lv_obj_t* canvas);
+lv_obj_t* spool_glow_create(lv_obj_t* parent);
+
+/**
+ * @brief Paint the current-spool glow for a silhouette of @p size px.
+ *
+ * The silhouette is @p spool_canvas's own alpha (3D style), or a disc of
+ * diameter @p size when it is null (flat style). Capable hardware gets a soft
+ * accent halo plus a lighter tight rim; @p simple a 2 px solid outline. The
+ * layer's buffer extends past the object by the glow margin, reported as ext
+ * draw size, so layout never moves. Cached per (shape, accent, simple): a
+ * repaint with an unchanged shape is a no-op, a known shape is a memcpy.
+ */
+void spool_glow_paint(lv_obj_t* glow, lv_obj_t* spool_canvas, int32_t size,
+                      bool simple = reduced_effects());
 } // namespace helix::ui
 #endif

@@ -49,6 +49,7 @@ struct SpoolVisual {
     lv_obj_t* container = nullptr;
     bool use_3d = true;
     int32_t spool_size = 0;
+    lv_obj_t* glow = nullptr;              ///< current-lane glow layer, behind the spool (hidden)
     lv_obj_t* canvas = nullptr;            ///< 3D-only: pseudo-3D spool canvas
     lv_obj_t* spool_outer = nullptr;       ///< flat-only: outer flange ring
     lv_obj_t* color_swatch = nullptr;      ///< flat-only: filament color ring
@@ -118,6 +119,15 @@ static SpoolVisual create_spool_visual(lv_obj_t* container, int32_t spool_size) 
 
     int32_t container_size = spool_size + helix::ui::AMS_LANE_SPOOL_BADGE_MARGIN_PX; // badge slack
     lv_obj_set_size(container, container_size, container_size);
+
+    // Created first so it draws behind every spool layer.
+    sv.glow = helix::ui::spool_glow_create(container);
+    if (sv.glow) {
+        lv_obj_set_size(sv.glow, spool_size, spool_size);
+        lv_obj_align(sv.glow, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_add_flag(sv.glow, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_name(sv.glow, "spool_glow");
+    }
 
     if (sv.use_3d) {
         // ====================================================================
@@ -323,7 +333,7 @@ struct LaneSpoolData {
     /// Last-applied presentation, so a size rebuild can repaint fresh layers.
     helix::ui::LaneState lane_state = helix::ui::LaneState::Empty;
     uint32_t color_int = 0x808080;
-    bool highlighted = false; ///< Current lane: the 3D spool glows.
+    helix::ui::SpoolHighlight highlight = helix::ui::SpoolHighlight::None;
 
     SpoolVisual sv; ///< Layer handles (3D canvas or flat rings + placeholder + dot).
 
@@ -399,6 +409,45 @@ static void cleanup_all_lane_spool_data() {
 // Rendering
 // ============================================================================
 
+static void glow_opa_anim_cb(void* obj, int32_t value) {
+    lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value), LV_PART_MAIN);
+}
+
+/// Current-lane glow: painted from the spool's silhouette (cached), shown
+/// while the lane is highlighted and holds a spool; Pulse animates only the
+/// layer's opacity, so no frame repaints or re-blurs anything.
+static void apply_highlight(LaneSpoolData* d) {
+    lv_obj_t* glow = d->sv.glow;
+    if (!glow)
+        return;
+    using helix::ui::SpoolHighlight;
+    const bool on =
+        d->highlight != SpoolHighlight::None && d->lane_state != helix::ui::LaneState::Empty;
+    lv_anim_delete(glow, glow_opa_anim_cb);
+    lv_obj_set_style_opa(glow, LV_OPA_COVER, LV_PART_MAIN);
+    if (!on) {
+        lv_obj_add_flag(glow, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    helix::ui::spool_glow_paint(glow, d->sv.canvas, d->sv.spool_size);
+    lv_obj_remove_flag(glow, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_refresh_ext_draw_size(d->sv.container);
+    if (d->highlight == SpoolHighlight::Pulse) {
+        constexpr int32_t PULSE_DIM_OPA = LV_OPA_40;
+        constexpr uint32_t PULSE_DURATION_MS = 600;
+        lv_anim_t pulse;
+        lv_anim_init(&pulse);
+        lv_anim_set_var(&pulse, glow);
+        lv_anim_set_values(&pulse, PULSE_DIM_OPA, LV_OPA_COVER);
+        lv_anim_set_duration(&pulse, PULSE_DURATION_MS);
+        lv_anim_set_reverse_duration(&pulse, PULSE_DURATION_MS);
+        lv_anim_set_repeat_count(&pulse, LV_ANIM_REPEAT_INFINITE);
+        lv_anim_set_path_cb(&pulse, lv_anim_path_ease_in_out);
+        lv_anim_set_exec_cb(&pulse, glow_opa_anim_cb);
+        lv_anim_start(&pulse);
+    }
+}
+
 /**
  * @brief THE lane presentation rule, in spool form.
  *
@@ -444,6 +493,7 @@ static void apply_lane_state(LaneSpoolData* d, helix::ui::LaneState state) {
     set_opa(d->sv.spool_outer, spool_opa);
     set_opa(d->sv.color_swatch, spool_opa);
     set_visible(d->sv.empty_placeholder, !show_spool);
+    apply_highlight(d);
 }
 
 static void apply_color(LaneSpoolData* d, int color_int) {
@@ -473,6 +523,8 @@ static void apply_fill_pct(LaneSpoolData* d, int pct) {
     pct = std::clamp(pct, 0, 100);
     d->fill_level = static_cast<float>(pct) / 100.0f;
     spool_visual_set_fill(d->sv, d->fill_level);
+    if (d->highlight != helix::ui::SpoolHighlight::None && d->sv.canvas)
+        helix::ui::spool_glow_paint(d->sv.glow, d->sv.canvas, d->sv.spool_size);
 }
 
 /// Error dot: severity color + visibility (+ pulse when animations allow).
@@ -740,19 +792,14 @@ void ams_lane_spool_set_size(lv_obj_t* spool, int32_t spool_size) {
     apply_lane_state(data, data->lane_state);
     apply_color(data, static_cast<int>(data->color_int));
     apply_error_decoration(data);
-    if (data->sv.canvas)
-        spool_canvas_set_highlighted(data->sv.canvas, data->highlighted);
-    lv_obj_refresh_ext_draw_size(spool);
 }
 
-void ams_lane_spool_set_highlighted(lv_obj_t* spool, bool highlighted) {
+void ams_lane_spool_set_highlight(lv_obj_t* spool, SpoolHighlight highlight) {
     auto* data = get_lane_spool_data(spool);
-    if (!data)
+    if (!data || highlight == data->highlight)
         return;
-    data->highlighted = highlighted;
-    if (data->sv.canvas)
-        spool_canvas_set_highlighted(data->sv.canvas, highlighted);
-    lv_obj_refresh_ext_draw_size(spool);
+    data->highlight = highlight;
+    apply_highlight(data);
 }
 
 const char* lane_material_text(helix::ui::LaneState state, const char* material) {

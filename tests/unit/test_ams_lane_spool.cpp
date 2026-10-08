@@ -39,15 +39,16 @@ lv_obj_t* part(lv_obj_t* root, const char* name) {
     return o;
 }
 
-/// The error dot is the one root child that is neither the spool graphic nor
-/// the empty placeholder (it is unnamed by the drawing utils).
+/// The error dot is the one root child that is not the spool graphic, the
+/// empty placeholder or the glow layer (it is unnamed by the drawing utils).
 lv_obj_t* find_error_dot(lv_obj_t* root) {
     lv_obj_t* graphic = lv_obj_find_by_name(root, "spool_graphic");
     lv_obj_t* placeholder = lv_obj_find_by_name(root, "empty_placeholder");
+    lv_obj_t* glow = lv_obj_find_by_name(root, "spool_glow");
     uint32_t n = lv_obj_get_child_count(root);
     for (uint32_t i = 0; i < n; i++) {
         lv_obj_t* child = lv_obj_get_child(root, i);
-        if (child && child != graphic && child != placeholder) {
+        if (child && child != graphic && child != placeholder && child != glow) {
             return child;
         }
     }

@@ -102,41 +102,49 @@ lv_obj_t* make_canvas(lv_obj_t* parent) {
 
 } // namespace
 
-TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: simple highlight is a tight outline, no tail",
+/// The glow layer for @p c, painted; its buffer sits @p m px outside the spool.
+lv_obj_t* make_glow(lv_obj_t* c, bool simple, int32_t* m) {
+    lv_obj_t* g = helix::ui::spool_glow_create(lv_obj_get_parent(c));
+    REQUIRE(g != nullptr);
+    helix::ui::spool_glow_paint(g, c, SPOOL, simple);
+    const Pixels px = snapshot(g);
+    REQUIRE(px.w == px.h);
+    REQUIRE(px.w >= SPOOL);
+    REQUIRE((px.w - SPOOL) % 2 == 0);
+    *m = (px.w - SPOOL) / 2;
+    return g;
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: simple glow is a tight outline, no tail",
                  "[spool_canvas][highlight]") {
     lv_obj_t* c = make_canvas(test_screen());
     const Pixels plain = snapshot(c);
+    int32_t m = 0;
+    lv_obj_t* g = make_glow(c, /*simple=*/true, &m);
 
-    helix::ui::spool_canvas_set_highlighted(c, true, /*simple=*/true);
-    CHECK(helix::ui::spool_canvas_highlighted(c));
-    const Pixels lit = snapshot(c);
-
-    // Same buffer: the outline fits inside the spool's own canvas.
-    REQUIRE(lit.w == SPOOL);
-    REQUIRE(lit.h == SPOOL);
-    const GlowReach r = glow_reach(plain, lit, 0);
+    const GlowReach r = glow_reach(plain, snapshot(g), m);
     CHECK(r.count > 20);
     CHECK(r.max_dist <= 2);
+    // The spool's own buffer is untouched.
+    CHECK(same(plain, snapshot(c)));
 
+    lv_obj_delete(g);
     lv_obj_delete(c);
 }
 
-TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: capable highlight glows past 3px, inside margin",
+TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: capable glow reaches past 3px, inside margin",
                  "[spool_canvas][highlight]") {
     lv_obj_t* c = make_canvas(test_screen());
     const Pixels plain = snapshot(c);
+    int32_t m = 0;
+    lv_obj_t* g = make_glow(c, /*simple=*/false, &m);
+    const Pixels lit = snapshot(g);
 
-    helix::ui::spool_canvas_set_highlighted(c, true, /*simple=*/false);
-    const Pixels lit = snapshot(c);
-
-    // The buffer grows by the margin on every side; the object keeps the spool's size.
-    REQUIRE(lit.w > SPOOL);
-    REQUIRE(lit.w == lit.h);
-    REQUIRE((lit.w - SPOOL) % 2 == 0);
-    const int32_t m = (lit.w - SPOOL) / 2;
-    lv_obj_update_layout(c);
-    CHECK(lv_obj_get_width(c) == SPOOL);
-    CHECK(lv_obj_get_height(c) == SPOOL);
+    // The layer's object keeps the spool's size; the buffer overhangs it.
+    lv_obj_update_layout(g);
+    CHECK(lv_obj_get_width(g) == SPOOL);
+    CHECK(lv_obj_get_height(g) == SPOOL);
+    CHECK(plain.w == SPOOL);
 
     const GlowReach r = glow_reach(plain, lit, m);
     CHECK(r.max_dist > 3);
@@ -158,28 +166,44 @@ TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: capable highlight glows past 
     }
     CHECK(edge_max <= 4);
 
+    lv_obj_delete(g);
     lv_obj_delete(c);
 }
 
-TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: highlighted and plain renders cache separately",
+TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: glow follows the shape, not the color",
                  "[spool_canvas][highlight]") {
     for (bool simple : {true, false}) {
         CAPTURE(simple);
         lv_obj_t* c = make_canvas(test_screen());
-        const Pixels plain = snapshot(c);
+        int32_t m = 0;
+        lv_obj_t* g = make_glow(c, simple, &m);
+        const Pixels full = snapshot(g);
 
-        helix::ui::spool_canvas_set_highlighted(c, true, simple);
-        const Pixels lit = snapshot(c);
-        CHECK_FALSE(same(plain, lit));
+        // A new color is the same silhouette: same glow.
+        ui_spool_canvas_set_color(c, lv_color_hex(0x2BD3D1));
+        helix::ui::spool_glow_paint(g, c, SPOOL, simple);
+        CHECK(same(full, snapshot(g)));
 
-        helix::ui::spool_canvas_set_highlighted(c, false, simple);
-        CHECK_FALSE(helix::ui::spool_canvas_highlighted(c));
-        CHECK(same(plain, snapshot(c)));
+        // A thinner wind is a different silhouette. The 2px outline closes
+        // the notch between the flanges either way, so only the halo shows it.
+        ui_spool_canvas_set_fill_level(c, 0.1f);
+        helix::ui::spool_glow_paint(g, c, SPOOL, simple);
+        if (!simple)
+            CHECK_FALSE(same(full, snapshot(g)));
 
-        // Back on: served from the cache, identical to the first highlighted render.
-        helix::ui::spool_canvas_set_highlighted(c, true, simple);
-        CHECK(same(lit, snapshot(c)));
+        // Back to full: the cached glow, identical.
+        ui_spool_canvas_set_fill_level(c, 0.8f);
+        helix::ui::spool_glow_paint(g, c, SPOOL, simple);
+        CHECK(same(full, snapshot(g)));
 
+        // No spool canvas: a disc (flat style), its own shape.
+        helix::ui::spool_glow_paint(g, nullptr, SPOOL, simple);
+        const Pixels disc = snapshot(g);
+        CHECK_FALSE(same(full, disc));
+        int32_t opaque_centre = disc.at(disc.w / 2, disc.h / 2).alpha;
+        CHECK(opaque_centre > 200);
+
+        lv_obj_delete(g);
         lv_obj_delete(c);
     }
 }

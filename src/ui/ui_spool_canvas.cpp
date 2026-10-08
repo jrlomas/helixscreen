@@ -38,8 +38,8 @@ static constexpr float SPOOL_DEPTH = 0.35f; // Depth/width of spool (distance be
 static constexpr int32_t DEFAULT_SIZE = 64;
 static constexpr uint32_t DEFAULT_COLOR = 0xE0E0E0; // Default white/light filament
 
-// Current-spool highlight. Capable hardware grows a halo and a tight rim from
-// the spool's own alpha mask; reduced effects draw a solid outline instead.
+// Current-spool glow layer, grown from the spool's silhouette. Capable
+// hardware gets a soft halo and a tight rim; reduced effects a solid outline.
 namespace {
 enum class SpoolGlow : uint8_t { None, Outline, Halo };
 } // namespace
@@ -52,6 +52,7 @@ static constexpr uint8_t GLOW_RIM_LIGHTEN = 60;
 static constexpr lv_opa_t GLOW_HALO_SECOND_OPA = 153; // 60%
 static constexpr int32_t GLOW_MARGIN = GLOW_HALO_DILATE + GLOW_HALO_PASSES * GLOW_HALO_BOX_R;
 static constexpr int32_t OUTLINE_PX = 2;
+static constexpr uint8_t GLOW_DISC_SHAPE = 0xFF; // fill_bucket of a flat-style (disc) glow
 
 // Note: Spool body colors now come from theme tokens in globals.xml:
 // - spool_body: Front flange color
@@ -170,7 +171,6 @@ struct SpoolCanvasData {
     int32_t size = DEFAULT_SIZE;
     lv_color_t color = lv_color_hex(DEFAULT_COLOR);
     float fill_level = 1.0f;
-    SpoolGlow glow = SpoolGlow::None;
 
     // Last-rendered key, for dedup (idea #1). Valid only when has_rendered.
     SpoolCacheKey last_key{0, 0, 0, SpoolGlow::None};
@@ -184,18 +184,14 @@ static SpoolCanvasData* get_data(lv_obj_t* obj) {
     return (it != s_registry.end()) ? it->second : nullptr;
 }
 
-static int32_t glow_margin(const SpoolCanvasData* d) {
-    return d->glow == SpoolGlow::Halo ? GLOW_MARGIN : 0;
-}
-
-// Size the draw buffer to the spool plus the glow margin on every side. The
-// object keeps the spool's size so layout never moves; the image is offset by
-// the margin and the overhang draws in the ext draw area.
-static bool sync_draw_buf(SpoolCanvasData* d) {
-    const int32_t m = glow_margin(d);
-    const int32_t dim = d->size + 2 * m;
-    if (!d->draw_buf || static_cast<int32_t>(d->draw_buf->header.w) != dim ||
-        static_cast<int32_t>(d->draw_buf->header.h) != dim) {
+// Size @p canvas's draw buffer to @p size plus @p margin on every side. The
+// object keeps @p size so layout never moves; the image is offset by the
+// margin and the overhang draws in the ext draw area.
+static bool sync_canvas_buf(lv_obj_t* canvas, lv_draw_buf_t*& draw_buf, int32_t size,
+                            int32_t margin) {
+    const int32_t dim = size + 2 * margin;
+    if (!draw_buf || static_cast<int32_t>(draw_buf->header.w) != dim ||
+        static_cast<int32_t>(draw_buf->header.h) != dim) {
         lv_draw_buf_t* buf = lv_draw_buf_create(dim, dim, LV_COLOR_FORMAT_ARGB8888, 0);
         if (!buf) {
             spdlog::error("[SpoolCanvas] Failed to create draw buffer for size {}", dim);
@@ -205,20 +201,22 @@ static bool sync_draw_buf(SpoolCanvasData* d) {
         lv_draw_buf_clear(buf, nullptr);
         // Set the new buffer BEFORE destroying the old one: lv_canvas_set_draw_buf
         // drops the old image source from LVGL's cache, which reads its header.
-        lv_draw_buf_t* old_buf = d->draw_buf;
-        d->draw_buf = buf;
-        lv_canvas_set_draw_buf(d->canvas, buf);
+        lv_draw_buf_t* old_buf = draw_buf;
+        draw_buf = buf;
+        lv_canvas_set_draw_buf(canvas, buf);
         helix::safe_draw_buf_destroy(old_buf, "spool");
-        d->has_rendered = false;
     }
-    // The image is larger than the object while glowing; that is overhang, not
-    // scrollable content.
-    lv_obj_remove_flag(d->canvas, LV_OBJ_FLAG_SCROLLABLE);
-    lv_image_set_offset_x(d->canvas, -m);
-    lv_image_set_offset_y(d->canvas, -m);
-    lv_obj_set_size(d->canvas, d->size, d->size);
-    lv_obj_refresh_ext_draw_size(d->canvas);
+    // An image larger than its object is overhang, not scrollable content.
+    lv_obj_remove_flag(canvas, LV_OBJ_FLAG_SCROLLABLE);
+    lv_image_set_offset_x(canvas, -margin);
+    lv_image_set_offset_y(canvas, -margin);
+    lv_obj_set_size(canvas, size, size);
+    lv_obj_refresh_ext_draw_size(canvas);
     return true;
+}
+
+static bool sync_draw_buf(SpoolCanvasData* d) {
+    return sync_canvas_buf(d->canvas, d->draw_buf, d->size, 0);
 }
 
 // The spool is drawn as one fill per row span, hundreds per render. They are
@@ -397,33 +395,34 @@ static std::vector<uint8_t> grow_and_soften(std::vector<uint8_t> a, int32_t w, i
     return a;
 }
 
-// Composite the spool over its own glow: two accent halo passes (100%, then
-// 60%) and a lighter tight rim, all grown from the spool's alpha mask.
-static void composite_glow(lv_draw_buf_t* buf, lv_color_t accent) {
+// Paint the glow for a padded alpha mask into @p buf (same dimensions): two
+// accent halo passes (100%, then 60%) and a lighter tight rim, or under
+// reduced effects the mask grown by OUTLINE_PX in solid accent.
+static void paint_glow(lv_draw_buf_t* buf, const std::vector<uint8_t>& mask, SpoolGlow glow,
+                       lv_color_t accent) {
     const int32_t w = buf->header.w;
     const int32_t h = buf->header.h;
-    std::vector<uint8_t> mask(static_cast<size_t>(w * h));
-    for (int32_t y = 0; y < h; y++) {
-        const auto* row = reinterpret_cast<const lv_color32_t*>(buf->data + y * buf->header.stride);
-        for (int32_t x = 0; x < w; x++)
-            mask[y * w + x] = row[x].alpha;
-    }
-    const auto halo =
-        grow_and_soften(mask, w, h, GLOW_HALO_DILATE, GLOW_HALO_BOX_R, GLOW_HALO_PASSES);
-    const auto rim = grow_and_soften(mask, w, h, GLOW_RIM_DILATE, GLOW_RIM_BOX_R, 1);
-    const lv_color_t rim_color = ams_draw::lighten_color(accent, GLOW_RIM_LIGHTEN);
-
     auto over = [](lv_color32_t fg, lv_color32_t bg) {
         return fg.alpha <= LV_OPA_MIN ? bg : spool_blend(fg, bg);
     };
+    std::vector<uint8_t> halo, rim;
+    if (glow == SpoolGlow::Halo) {
+        halo = grow_and_soften(mask, w, h, GLOW_HALO_DILATE, GLOW_HALO_BOX_R, GLOW_HALO_PASSES);
+        rim = grow_and_soften(mask, w, h, GLOW_RIM_DILATE, GLOW_RIM_BOX_R, 1);
+    } else {
+        halo = grow_and_soften(mask, w, h, OUTLINE_PX, 0, 0);
+    }
+    const lv_color_t rim_color = ams_draw::lighten_color(accent, GLOW_RIM_LIGHTEN);
     for (int32_t y = 0; y < h; y++) {
         auto* row = reinterpret_cast<lv_color32_t*>(buf->data + y * buf->header.stride);
         for (int32_t x = 0; x < w; x++) {
             const size_t i = static_cast<size_t>(y * w + x);
             lv_color32_t px = lv_color_to_32(accent, halo[i]);
-            px = over(lv_color_to_32(accent, LV_OPA_MIX2(halo[i], GLOW_HALO_SECOND_OPA)), px);
-            px = over(lv_color_to_32(rim_color, rim[i]), px);
-            row[x] = over(row[x], px);
+            if (glow == SpoolGlow::Halo) {
+                px = over(lv_color_to_32(accent, LV_OPA_MIX2(halo[i], GLOW_HALO_SECOND_OPA)), px);
+                px = over(lv_color_to_32(rim_color, rim[i]), px);
+            }
+            row[x] = px;
         }
     }
 }
@@ -432,8 +431,7 @@ static void composite_glow(lv_draw_buf_t* buf, lv_color_t accent) {
 // dedup and cache. This function unconditionally draws into data->draw_buf.
 static void render_spool_pixels(SpoolCanvasData* data) {
     int32_t size = data->size;
-    const int32_t margin = glow_margin(data);
-    int32_t cy = margin + size / 2; // Vertical center
+    int32_t cy = size / 2; // Vertical center
 
     // Calculate dimensions - vertical radius and horizontal (compressed) radius
     int32_t flange_ry = (int32_t)(size * FLANGE_RADIUS);      // Vertical radius
@@ -443,7 +441,7 @@ static void render_spool_pixels(SpoolCanvasData* data) {
     int32_t spool_width = (int32_t)(size * SPOOL_DEPTH);
 
     // X positions for left (back) and right (front) flanges
-    int32_t center_x = margin + size / 2;
+    int32_t center_x = size / 2;
     int32_t left_x = center_x - spool_width / 2;  // Left side (back flange)
     int32_t right_x = center_x + spool_width / 2; // Right side (front flange)
 
@@ -464,20 +462,6 @@ static void render_spool_pixels(SpoolCanvasData* data) {
     lv_canvas_fill_bg(data->canvas, lv_color_black(), LV_OPA_TRANSP);
 
     SpoolLayer layer{data->draw_buf};
-
-    // Reduced-effects highlight: the silhouette (both flanges plus the wound
-    // body between them) grown by OUTLINE_PX in solid accent, behind the spool.
-    if (data->glow == SpoolGlow::Outline) {
-        const lv_color_t accent = helix::ui::tube_accent();
-        draw_gradient_ellipse(&layer, left_x, cy, flange_rx + OUTLINE_PX, flange_ry + OUTLINE_PX,
-                              accent, accent);
-        draw_gradient_ellipse(&layer, right_x, cy, flange_rx + OUTLINE_PX, flange_ry + OUTLINE_PX,
-                              accent, accent);
-        if (fill > 0.01f) {
-            draw_gradient_rect(&layer, left_x, cy - filament_ry - OUTLINE_PX, right_x,
-                               cy + filament_ry + OUTLINE_PX, accent, accent);
-        }
-    }
 
     // ========================================
     // STEP 1: Draw BACK FLANGE (left side) with gradient + edge highlight
@@ -544,10 +528,6 @@ static void render_spool_pixels(SpoolCanvasData* data) {
         theme_manager_get_color("spool_hub_bottom"); // Noticeably lighter at bottom (light hits it)
     draw_gradient_ellipse(&layer, right_x, cy, hub_rx, hub_ry, hub_top, hub_bottom);
 
-    if (data->glow == SpoolGlow::Halo) {
-        composite_glow(data->draw_buf, helix::ui::tube_accent());
-    }
-
     lv_obj_invalidate(data->canvas);
 
     spdlog::trace("[SpoolCanvas] Redrawn: size={}, fill={:.0f}%", size, fill * 100.0f);
@@ -562,7 +542,7 @@ static void redraw_spool(SpoolCanvasData* data) {
         return;
 
     SpoolCacheKey key{color_to_rgb24(data->color), static_cast<uint16_t>(data->size),
-                      compute_fill_bucket(data->fill_level), data->glow};
+                      compute_fill_bucket(data->fill_level), SpoolGlow::None};
 
     // Dedup: already rendered this bucketed state, nothing to do.
     if (data->has_rendered && data->last_key == key) {
@@ -596,11 +576,6 @@ static void redraw_spool(SpoolCanvasData* data) {
 }
 
 static void spool_canvas_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) == LV_EVENT_REFR_EXT_DRAW_SIZE) {
-        if (auto* data = get_data(lv_event_get_target_obj(e)))
-            lv_event_set_ext_draw_size(e, glow_margin(data));
-        return;
-    }
     if (lv_event_get_code(e) == LV_EVENT_DELETE) {
         lv_obj_t* obj = lv_event_get_target_obj(e);
         auto it = s_registry.find(obj);
@@ -635,7 +610,6 @@ static void* spool_canvas_xml_create(lv_xml_parser_state_t* state, const char** 
     sync_draw_buf(data_ptr.get());
     s_registry[canvas] = data_ptr.get();
     lv_obj_add_event_cb(canvas, spool_canvas_event_cb, LV_EVENT_DELETE, nullptr);
-    lv_obj_add_event_cb(canvas, spool_canvas_event_cb, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
 
     SpoolCanvasData* data = data_ptr.release();
 
@@ -722,7 +696,6 @@ lv_obj_t* ui_spool_canvas_create(lv_obj_t* parent, int32_t size) {
     }
     s_registry[canvas] = data_ptr.get();
     lv_obj_add_event_cb(canvas, spool_canvas_event_cb, LV_EVENT_DELETE, nullptr);
-    lv_obj_add_event_cb(canvas, spool_canvas_event_cb, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
 
     SpoolCanvasData* data = data_ptr.release();
 
@@ -800,28 +773,102 @@ void ui_spool_canvas_invalidate_cache(void) {
     spdlog::debug("[SpoolCanvas] Render cache invalidated");
 }
 
-namespace helix::ui {
+// ----------------------------------------------------------------------------
+// Glow layer
+// ----------------------------------------------------------------------------
+namespace {
+struct SpoolGlowData {
+    lv_draw_buf_t* draw_buf = nullptr;
+    int32_t margin = 0;
+    SpoolCacheKey last_key{0, 0, 0, SpoolGlow::None};
+    bool painted = false;
+};
+} // namespace
 
-void spool_canvas_set_highlighted(lv_obj_t* canvas, bool highlighted, bool simple) {
-    auto* data = get_data(canvas);
-    if (!data)
+static std::unordered_map<lv_obj_t*, SpoolGlowData> s_glow_registry;
+
+static void spool_glow_event_cb(lv_event_t* e) {
+    lv_obj_t* obj = lv_event_get_target_obj(e);
+    auto it = s_glow_registry.find(obj);
+    if (it == s_glow_registry.end())
         return;
-    const SpoolGlow glow =
-        !highlighted ? SpoolGlow::None : (simple ? SpoolGlow::Outline : SpoolGlow::Halo);
-    if (glow == data->glow)
-        return;
-    const SpoolGlow old_glow = data->glow;
-    data->glow = glow;
-    if (!sync_draw_buf(data)) {
-        data->glow = old_glow;
-        return;
+    if (lv_event_get_code(e) == LV_EVENT_REFR_EXT_DRAW_SIZE) {
+        lv_event_set_ext_draw_size(e, it->second.margin);
+    } else if (lv_event_get_code(e) == LV_EVENT_DELETE) {
+        // The canvas was a composite source until this delete.
+        helix::safe_draw_buf_destroy(it->second.draw_buf, "spool_glow");
+        s_glow_registry.erase(it);
     }
-    redraw_spool(data);
 }
 
-bool spool_canvas_highlighted(lv_obj_t* canvas) {
-    auto* data = get_data(canvas);
-    return data && data->glow != SpoolGlow::None;
+// The silhouette, padded by @p m: the 3D canvas's own alpha, or a disc of
+// diameter @p size for the flat style.
+static std::vector<uint8_t> silhouette_mask(SpoolCanvasData* spool, int32_t size, int32_t m) {
+    const int32_t dim = size + 2 * m;
+    std::vector<uint8_t> mask(static_cast<size_t>(dim * dim), 0);
+    if (spool && spool->draw_buf) {
+        const lv_image_header_t& h = spool->draw_buf->header;
+        for (int32_t y = 0; y < std::min<int32_t>(h.h, size); y++) {
+            const auto* row =
+                reinterpret_cast<const lv_color32_t*>(spool->draw_buf->data + y * h.stride);
+            for (int32_t x = 0; x < std::min<int32_t>(h.w, size); x++)
+                mask[(y + m) * dim + x + m] = row[x].alpha;
+        }
+        return mask;
+    }
+    const float c = static_cast<float>(dim - 1) / 2.0f;
+    const float r = static_cast<float>(size) / 2.0f;
+    for (int32_t y = 0; y < dim; y++) {
+        for (int32_t x = 0; x < dim; x++) {
+            const float d = sqrtf((x - c) * (x - c) + (y - c) * (y - c));
+            mask[y * dim + x] = static_cast<uint8_t>(LV_CLAMP(r - d + 0.5f, 0.0f, 1.0f) * 255.0f);
+        }
+    }
+    return mask;
+}
+
+namespace helix::ui {
+
+lv_obj_t* spool_glow_create(lv_obj_t* parent) {
+    lv_obj_t* glow = lv_canvas_create(parent);
+    if (!glow)
+        return nullptr;
+    lv_obj_remove_flag(glow, LV_OBJ_FLAG_CLICKABLE);
+    s_glow_registry[glow] = SpoolGlowData{};
+    lv_obj_add_event_cb(glow, spool_glow_event_cb, LV_EVENT_DELETE, nullptr);
+    lv_obj_add_event_cb(glow, spool_glow_event_cb, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
+    return glow;
+}
+
+void spool_glow_paint(lv_obj_t* glow, lv_obj_t* spool_canvas, int32_t size, bool simple) {
+    auto it = s_glow_registry.find(glow);
+    if (it == s_glow_registry.end() || size <= 0)
+        return;
+    SpoolGlowData& g = it->second;
+    SpoolCanvasData* spool = get_data(spool_canvas);
+    const SpoolGlow mode = simple ? SpoolGlow::Outline : SpoolGlow::Halo;
+    const lv_color_t accent = tube_accent();
+    // A glow depends only on the silhouette, never the filament color, so the
+    // key carries the accent where a spool render carries its color.
+    const SpoolCacheKey key{color_to_rgb24(accent), static_cast<uint16_t>(size),
+                            spool ? spool->last_key.fill_bucket : GLOW_DISC_SHAPE, mode};
+    if (g.painted && g.last_key == key)
+        return;
+
+    g.margin = simple ? OUTLINE_PX : GLOW_MARGIN;
+    if (!sync_canvas_buf(glow, g.draw_buf, size, g.margin))
+        return;
+    if (const SpoolCacheEntry* entry = cache_get(key);
+        entry && entry->pixels.size() == g.draw_buf->data_size) {
+        memcpy(g.draw_buf->data, entry->pixels.data(), entry->pixels.size());
+    } else {
+        paint_glow(g.draw_buf, silhouette_mask(spool, size, g.margin), mode, accent);
+        cache_put(key,
+                  std::vector<uint8_t>(g.draw_buf->data, g.draw_buf->data + g.draw_buf->data_size));
+    }
+    lv_obj_invalidate(glow);
+    g.last_key = key;
+    g.painted = true;
 }
 
 } // namespace helix::ui

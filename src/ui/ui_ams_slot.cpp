@@ -313,14 +313,11 @@ static void apply_lane_state(AmsSlotData* data, int state_int) {
     refresh_slot_material_label(data);
 }
 
-// The current lane is marked by the spool's own glow. The pulse borrows
-// spool_container's border, so the static state clears it.
-static void set_spool_glow(AmsSlotData* data, bool on) {
-    helix::ui::ams_lane_spool_set_highlighted(data->lane_spool, on);
-    if (data->spool_container) {
-        lv_obj_set_style_border_width(data->spool_container, 0, LV_PART_MAIN);
+// The current lane is marked by the spool's own glow, never a box on the slot.
+static void set_spool_glow(AmsSlotData* data, helix::ui::SpoolHighlight highlight) {
+    helix::ui::ams_lane_spool_set_highlight(data->lane_spool, highlight);
+    if (data->spool_container)
         lv_obj_refresh_ext_draw_size(data->spool_container);
-    }
     lv_obj_refresh_ext_draw_size(data->container);
 }
 
@@ -353,7 +350,8 @@ static void apply_current_slot_highlight(AmsSlotData* data, int current_slot) {
         active_loaded_subject ? (lv_subject_get_int(active_loaded_subject) != 0) : false;
     (void)current_slot; // retained for the pulse/observer signature only
 
-    set_spool_glow(data, is_active);
+    set_spool_glow(data,
+                   is_active ? helix::ui::SpoolHighlight::Steady : helix::ui::SpoolHighlight::None);
 
     spdlog::debug("[AmsSlot] Slot {} highlight active={} (from slot_active_loaded subject)",
                   data->slot_index, is_active);
@@ -1168,13 +1166,6 @@ void ui_ams_slot_move_badge_to_layer(lv_obj_t* obj, lv_obj_t* badge_layer, int32
 // Pulse Animation for Loading Operations
 // ============================================================================
 
-/**
- * @brief Animation callback for spool border opacity pulse
- */
-static void spool_border_opa_anim_cb(void* obj, int32_t value) {
-    lv_obj_set_style_border_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value), 0);
-}
-
 void ui_ams_slot_set_pulsing(lv_obj_t* obj, bool pulsing) {
     if (!obj) {
         return;
@@ -1185,12 +1176,7 @@ void ui_ams_slot_set_pulsing(lv_obj_t* obj, bool pulsing) {
         return;
     }
 
-    lv_obj_t* target = data->spool_container;
-
-    // Always stop existing animation first
-    lv_anim_delete(target, spool_border_opa_anim_cb);
-
-    // Update pulsing flag BEFORE applying styles
+    // Update pulsing flag BEFORE applying the highlight
     data->is_pulsing = pulsing;
 
     if (!pulsing) {
@@ -1203,28 +1189,8 @@ void ui_ams_slot_set_pulsing(lv_obj_t* obj, bool pulsing) {
         return;
     }
 
-    // Ensure border is visible for pulsing
-    lv_color_t primary = theme_manager_get_color("primary");
-    lv_obj_set_style_border_color(target, primary, LV_PART_MAIN);
-    lv_obj_set_style_border_width(target, 3, LV_PART_MAIN);
-
-    // Start continuous pulsing animation
-    constexpr int32_t PULSE_DIM_OPA = 100;
-    constexpr int32_t PULSE_BRIGHT_OPA = 255;
-    constexpr uint32_t PULSE_DURATION_MS = 600;
-
-    lv_anim_t pulse;
-    lv_anim_init(&pulse);
-    lv_anim_set_var(&pulse, target);
-    lv_anim_set_values(&pulse, PULSE_DIM_OPA, PULSE_BRIGHT_OPA);
-    lv_anim_set_time(&pulse, PULSE_DURATION_MS);
-    lv_anim_set_playback_time(&pulse, PULSE_DURATION_MS); // Oscillate back
-    lv_anim_set_repeat_count(&pulse, LV_ANIM_REPEAT_INFINITE);
-    lv_anim_set_path_cb(&pulse, lv_anim_path_ease_in_out);
-    lv_anim_set_exec_cb(&pulse, spool_border_opa_anim_cb);
-    lv_anim_start(&pulse);
-
-    spdlog::debug("[AmsSlot] Slot {} pulse started on spool_container", data->slot_index);
+    set_spool_glow(data, helix::ui::SpoolHighlight::Pulse);
+    spdlog::debug("[AmsSlot] Slot {} pulse started on the spool glow", data->slot_index);
 }
 
 void ui_ams_slot_clear_highlight(lv_obj_t* obj) {
@@ -1237,15 +1203,10 @@ void ui_ams_slot_clear_highlight(lv_obj_t* obj) {
         return;
     }
 
-    lv_obj_t* target = data->spool_container;
-
-    // Stop any existing animation
-    lv_anim_delete(target, spool_border_opa_anim_cb);
-
     // Set is_pulsing to block automatic highlight restoration from observers
     data->is_pulsing = true;
 
-    set_spool_glow(data, false);
+    set_spool_glow(data, helix::ui::SpoolHighlight::None);
 
     spdlog::debug("[AmsSlot] Slot {} highlight cleared", data->slot_index);
 }
