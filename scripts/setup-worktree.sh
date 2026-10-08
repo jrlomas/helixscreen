@@ -619,6 +619,12 @@ materialize_private_submodule() {
     # hunks in its working tree.
     git -C "$dst" update-ref --no-deref HEAD "$src_head"
     git -C "$dst" read-tree HEAD
+    # The HEAD file is a prerequisite of build/.patches-applied, which every
+    # object reaches through the PCH and libhv.a, so a fresh mtime here rebuilds
+    # the whole tree. It now names the commit the main tree's HEAD names, so
+    # adopt that file's mtime, as the source mtime sync does for identical bytes.
+    # A pin that differs is checked out below and rewrites HEAD fresh again.
+    touch -r "$src_gitdir/HEAD" "$wt_gitdir/HEAD"
     if [[ -f "$src_gitdir/$PATCH_DRIFT_STAMP" ]]; then
         clone_file "$src_gitdir/$PATCH_DRIFT_STAMP" "$wt_gitdir/$PATCH_DRIFT_STAMP"
     fi
@@ -1320,7 +1326,26 @@ copy_marker_mtime() {
 }
 copy_marker_mtime "build/.patches-applied"
 copy_marker_mtime ".fonts.stamp"
-echo "native" > "$WORKTREE_PATH/build/.build-target"
+# These two hold a hash that make compares at parse time, and a missing or
+# differing one is rewritten `now`. .thirdparty-abi is a prerequisite of every
+# object and .patches-applied-id of .patches-applied, so either one written fresh
+# rebuilds the whole tree. Copy content and mtime together: when this tree's
+# headers and patch records match the main tree's, make finds the same hash and
+# leaves them alone; when they differ, make rewrites them and rebuilds, as it must.
+for stamp in build/.thirdparty-abi build/.patches-applied-id; do
+    if [[ -f "$MAIN_TREE/$stamp" ]]; then
+        clone_file "$MAIN_TREE/$stamp" "$WORKTREE_PATH/$stamp"
+    fi
+done
+# .build-target names the target and compiler the objects in build/ came from,
+# and make runs `make clean` when it does not match the toolchain it is about to
+# use. That clean deletes every cloned object and the PCH, and runs the clean
+# recipe of lib/wpa_supplicant, a checkout this tree shares with the main tree.
+# The objects came from the main tree, so its marker is the true one. With no
+# marker there, write none: make records the current toolchain without cleaning.
+if [[ -f "$MAIN_TREE/build/.build-target" ]]; then
+    cp "$MAIN_TREE/build/.build-target" "$WORKTREE_PATH/build/.build-target"
+fi
 echo -e "${GREEN}✓ Build markers created${RESET}"
 
 # Step 9c: Seed runtime config from the main tree

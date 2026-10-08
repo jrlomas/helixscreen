@@ -199,6 +199,37 @@ pool_target() {
     printf '%s\n' "$t"
 }
 
+# Heavy runners outside the pool: a bats, GNU parallel or ninja, or a docker
+# run, with neither JOBPOOL_SLOTS (`jobpool hold`) nor a jobserver in its own
+# environment or any ancestor's. bats and parallel are scripts, so their comm
+# is the interpreter's and they are matched by argv. A container's processes
+# descend from containerd, not the docker client, so they are judged by the
+# environment the run gave them. Prints "pid etime args" for the outermost of
+# each tree.
+unpooled_runners() {
+    ps -eo pid=,ppid=,etime=,comm=,args= 2>/dev/null | awk '
+        function base(w) { sub(/.*\//, "", w); return w }
+        $4 == "ninja" || ($4 == "docker" && $6 == "run") ||
+            base($5) ~ /^(bats|parallel)$/ ||
+            ($4 ~ /^(bash|sh|perl)$/ && base($6) ~ /^(bats|parallel)$/) { heavy[$1] = 1 }
+        { parent[$1] = $2; line[$1] = $1 " " $3; for (i = 5; i <= NF; i++) line[$1] = line[$1] " " $i }
+        END {
+            for (p in heavy) {
+                for (q = parent[p]; q > 1 && !(q in heavy); q = parent[q]) ;
+                if (!(q in heavy)) print line[p]
+            }
+        }' | while read -r pid rest; do
+        p=$pid
+        while [ "${p:-0}" -gt 1 ]; do
+            tr '\0' '\n' 2>/dev/null < "/proc/$p/environ" |
+                grep -qE '^(JOBPOOL_SLOTS=|MAKEFLAGS=.*--jobserver-(auth|fds)=)' && continue 2
+            st=$(cat "/proc/$p/stat" 2>/dev/null) || break
+            st=${st##*) }; st=${st#* }; p=${st%% *}
+        done
+        printf '%s %s\n' "$pid" "$rest"
+    done
+}
+
 cmd=${1:-}; shift 2>/dev/null || true
 case "$cmd" in
 take)
@@ -269,6 +300,32 @@ list)
     ;;
 pool)
     pool_target
+    ;;
+hold)
+    # Run a command that sizes its own parallelism (bats -j, ninja -j, a
+    # container build) from JOBPOOL_SLOTS. With jobpool installed it holds
+    # that many pool tokens for the command's life (`jobpool hold`, which
+    # starts the daemon and has its own unpooled fallback); without it
+    # (CI, a Mac, a fresh clone) JOBPOOL_SLOTS is -n, or the cores.
+    # --min/--min-wait pass through to jobpool; with no pool they mean nothing.
+    usage="usage: helix-claim hold [-n N] [--min M] [--min-wait SECS] -- <cmd...>"
+    n="" pass=()
+    while :; do
+        case ${1:-} in
+            -n) [ $# -ge 2 ] || die "$usage"; n=$2; pass+=(-n "$2"); shift 2 ;;
+            --min|--min-wait) [ $# -ge 2 ] || die "$usage"; pass+=("$1" "$2"); shift 2 ;;
+            *) break ;;
+        esac
+    done
+    [ "${1:-}" = -- ] && shift
+    [ $# -gt 0 ] || die "$usage"
+    jp=${HELIX_JOBPOOL:-jobpool}
+    if [ "${JOBPOOL:-}" != 0 ] && command -v "$jp" >/dev/null 2>&1; then
+        exec "$jp" hold "${pass[@]}" -- "$@"
+    fi
+    JOBPOOL_SLOTS=${n:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}
+    export JOBPOOL_SLOTS
+    exec "$@"
     ;;
 jobs)
     # The -j a build should take. With jobpool installed, every make on the box
@@ -370,6 +427,15 @@ resources)
             "$(json_get "$body" session)" "$age" "$rss" "$(json_get "$body" note)"
     done
     [ "$live" = 0 ] && printf 'live claims: none\n'
+    if pool_target >/dev/null; then
+        runners=$(unpooled_runners)
+        if [ -n "$runners" ]; then
+            printf "unpooled heavy runners (outside the jobpool budget; wrap in \`helix-claim hold\`):\n"
+            printf '%s\n' "$runners" | cut -c1-160 | sed 's/^/  pid /'
+        else
+            printf 'unpooled heavy runners: none\n'
+        fi
+    fi
     # The named groups always show when present; clangd in particular grows
     # without bound per session. The rest fill in by size.
     printf 'memory by command (count, total RSS, largest):\n'
@@ -490,8 +556,13 @@ helix-claim - advisory claims on resources shared between agent sessions
   jobs [-v]                                   the -j a build takes: the jobpool's
                                               target, else cores capped by memory
   pool                                        the live jobpool's target; exit 1 if none
+  hold [-n N] [--min M] [--min-wait S] -- <cmd...>
+                                              run cmd with JOBPOOL_SLOTS set: up to N
+                                              pool tokens (waiting up to S seconds
+                                              for M) under jobpool, else N or cores
   resources [--no-zeus]                       memory, load, build -j, live claims,
-                                              top memory users, and zeus
+                                              unpooled heavy runners, top memory
+                                              users, and zeus
 
 worktree: and build: names are resolved (basename, branch, or bare = the tree
 you are in), so two spellings cannot claim one resource twice.
