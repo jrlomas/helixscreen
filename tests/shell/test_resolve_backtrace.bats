@@ -344,3 +344,57 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"main+0x50"* ]]
 }
+
+# A crash file whose mapped executable is the given path, with no platform line.
+write_mapped_crash() {
+    cat > "$TEST_DIR/crash.txt" << EOF2
+version:0.9.9
+load_base:0x400000
+bt:0x400150
+map:00400000-00500000 r-xp 00000000 b3:02 1234 $1
+EOF2
+}
+
+@test "a pi crash mapped from helix-screen-fbdev resolves against pi-fbdev" {
+    export HELIX_SYM_FILE="$TEST_DIR/test.sym"
+    write_mapped_crash /home/m1/helixscreen/bin/helix-screen-fbdev
+    run bash "$SCRIPT" --crash-file "$TEST_DIR/crash.txt" pi
+    [ "$status" -eq 0 ]
+    contains "using platform pi-fbdev" "$output"
+    contains "against v0.9.9/pi-fbdev" "$output"
+}
+
+@test "a pi crash mapped from the DRM helix-screen stays on pi" {
+    export HELIX_SYM_FILE="$TEST_DIR/test.sym"
+    write_mapped_crash /home/m1/helixscreen/bin/helix-screen
+    run bash "$SCRIPT" --crash-file "$TEST_DIR/crash.txt" pi
+    [ "$status" -eq 0 ]
+    contains "against v0.9.9/pi" "$output"
+    [[ "$output" != *pi-fbdev* ]]
+}
+
+@test "a platform with no fbdev variant ignores an -fbdev map name" {
+    export HELIX_SYM_FILE="$TEST_DIR/test.sym"
+    write_mapped_crash /usr/data/helixscreen/bin/helix-screen-fbdev
+    run bash "$SCRIPT" --crash-file "$TEST_DIR/crash.txt" k1
+    [ "$status" -eq 0 ]
+    contains "against v0.9.9/k1" "$output"
+    [[ "$output" != *k1-fbdev* ]]
+}
+
+@test "pi-fbdev uses the aarch64 addr2line" {
+    export HELIX_SYM_FILE="$TEST_DIR/test.sym"
+    local script_path a2l_log
+    script_path="$(pwd)/$SCRIPT"
+    a2l_log="$TEST_DIR/a2l.log"
+    mock_command_script "aarch64-linux-gnu-addr2line" "printf '%s\n' \"\$*\" >> '$a2l_log'; exit 1"
+
+    mkdir -p "$TEST_DIR/cwd/build/pi-fbdev/bin"
+    printf '#!/bin/sh\n' > "$TEST_DIR/cwd/build/pi-fbdev/bin/helix-screen"
+    chmod +x "$TEST_DIR/cwd/build/pi-fbdev/bin/helix-screen"
+
+    cd "$TEST_DIR/cwd"
+    run bash "$script_path" 0.9.9 pi-fbdev 0x400150
+    [ "$status" -eq 0 ]
+    grep -q "build/pi-fbdev/bin/helix-screen" "$a2l_log"
+}

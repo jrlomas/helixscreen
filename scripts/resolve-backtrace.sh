@@ -570,6 +570,18 @@ elif [[ -n "$CRASH_FILE" ]]; then
         echo "Parsed ${#MEMORY_MAPS[@]} executable memory mappings from crash file" >&2
     fi
 
+    # pi and pi32 ship a DRM and an fbdev binary under one platform name, with
+    # separate symbol maps. The mapped executable says which one crashed.
+    if [[ "$PLATFORM" == "pi" || "$PLATFORM" == "pi32" ]]; then
+        for m in "${MEMORY_MAPS[@]}"; do
+            if [[ "$m" == */helix-screen-fbdev ]]; then
+                echo "Crash is from helix-screen-fbdev: using platform ${PLATFORM}-fbdev" >&2
+                PLATFORM="${PLATFORM}-fbdev"
+                break
+            fi
+        done
+    fi
+
     echo "Parsed crash file: v${VERSION}/${PLATFORM}, ${#ADDRS[@]} addresses" >&2
     set -- "${ADDRS[@]}"
 else
@@ -893,7 +905,7 @@ resolve_address() {
 
 # Map platform names to cross-compile prefixes for addr2line
 platform_to_cross_prefix() {
-    case "$1" in
+    case "${1%-fbdev}" in
         pi)         echo "aarch64-linux-gnu-" ;;
         pi32)       echo "arm-linux-gnueabihf-" ;;
         ad5m|cc1)   echo "arm-none-linux-gnueabihf-" ;;
