@@ -167,6 +167,16 @@ void init_subsystems_from_hardware(const PrinterDiscovery& hardware, IMoonrakerA
     // Sync printer name from Mainsail/Fluidd DB (seeds local config on first connect)
     helix::PrinterNameSync::resolve(api, hardware.hostname());
 
+    // The connection-failed prompt re-finds the printer over mDNS by this name (#1217).
+    if (!hardware.hostname().empty() && hardware.hostname() != "unknown") {
+        Config* config = Config::get_instance();
+        const std::string path = config->df() + helix::wizard::HOSTNAME;
+        if (config->get<std::string>(path, "") != hardware.hostname()) {
+            config->set<std::string>(path, hardware.hostname());
+            config->save();
+        }
+    }
+
     // Initialize standard macros
     // Type from Config, NOT PrinterState: this callback runs before
     // auto_detect_and_save sets PrinterState's copy, so reading that one hands

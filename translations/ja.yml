@@ -1314,6 +1314,7 @@ translations:
   Forward Multiplier: '順方向倍率'
   Found %zu printers: '%zu台のプリンターを検出'
   Found 1 printer: プリンター1台を検出
+  Found {} at {}.: '{} を {} で検出しました。'
   Framerate: フレームレート
   From Buffer: バッファから
   From SpoolmanDB: 'SpoolmanDB から'
@@ -3431,6 +3432,7 @@ translations:
   Uptime: 稼働時間
   Use Android native keyboard for text input: テキスト入力に Android ネイティブキーボードを使用
   Use G10/G11 firmware retraction: G10/G11 ファームウェアリトラクションを使用
+  Use New Address: '新しいアドレスを使用'
   Use Unload before Eject: '先に「アンロード」してから「排出」してください'
   Use first HID scanner found: '最初に見つかった HID スキャナーを使用'
   Use printer type to select image: プリンタータイプで画像を選択

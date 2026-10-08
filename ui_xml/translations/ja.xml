@@ -1271,6 +1271,7 @@
   <translation tag="Forward Multiplier" ja="順方向倍率"/>
   <translation tag="Found %zu printers" ja="%zu台のプリンターを検出"/>
   <translation tag="Found 1 printer" ja="プリンター1台を検出"/>
+  <translation tag="Found {} at {}." ja="{} を {} で検出しました。"/>
   <translation tag="Framerate" ja="フレームレート"/>
   <translation tag="From Buffer" ja="バッファから"/>
   <translation tag="From SpoolmanDB" ja="SpoolmanDB から"/>
@@ -3272,6 +3273,7 @@
   <translation tag="Uptime" ja="稼働時間"/>
   <translation tag="Use Android native keyboard for text input" ja="テキスト入力に Android ネイティブキーボードを使用"/>
   <translation tag="Use G10/G11 firmware retraction" ja="G10/G11 ファームウェアリトラクションを使用"/>
+  <translation tag="Use New Address" ja="新しいアドレスを使用"/>
   <translation tag="Use Unload before Eject" ja="先に「アンロード」してから「排出」してください"/>
   <translation tag="Use first HID scanner found" ja="最初に見つかった HID スキャナーを使用"/>
   <translation tag="Use printer type to select image" ja="プリンタータイプで画像を選択"/>

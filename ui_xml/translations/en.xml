@@ -1271,6 +1271,7 @@
   <translation tag="Forward Multiplier" en="Forward Multiplier"/>
   <translation tag="Found %zu printers" en="Found %zu printers"/>
   <translation tag="Found 1 printer" en="Found 1 printer"/>
+  <translation tag="Found {} at {}." en="Found {} at {}."/>
   <translation tag="Framerate" en="Framerate"/>
   <translation tag="From Buffer" en="From Buffer"/>
   <translation tag="From SpoolmanDB" en="From SpoolmanDB"/>
@@ -3272,6 +3273,7 @@
   <translation tag="Uptime" en="Uptime"/>
   <translation tag="Use Android native keyboard for text input" en="Use Android native keyboard for text input"/>
   <translation tag="Use G10/G11 firmware retraction" en="Use G10/G11 firmware retraction"/>
+  <translation tag="Use New Address" en="Use New Address"/>
   <translation tag="Use Unload before Eject" en="Use Unload before Eject"/>
   <translation tag="Use first HID scanner found" en="Use first HID scanner found"/>
   <translation tag="Use printer type to select image" en="Use printer type to select image"/>

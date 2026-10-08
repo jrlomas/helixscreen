@@ -1413,6 +1413,7 @@ translations:
   Forward Multiplier: 'Vorwärtsmultiplikator'
   Found %zu printers: '%zu Drucker gefunden'
   Found 1 printer: 1 Drucker gefunden
+  Found {} at {}.: '{} unter {} gefunden.'
   Framerate: Bildrate
   From Buffer: Aus Puffer
   From SpoolmanDB: 'Aus SpoolmanDB'
@@ -3686,6 +3687,7 @@ translations:
   Use Android native keyboard for text input: Native Android-Tastatur für Texteingabe
     verwenden
   Use G10/G11 firmware retraction: G10/G11-Firmware-Retraktion verwenden
+  Use New Address: 'Neue Adresse verwenden'
   Use Unload before Eject: 'Verwenden Sie Entladen vor Auswerfen'
   Use first HID scanner found: 'Ersten gefundenen HID-Scanner verwenden'
   Use printer type to select image: Druckertyp zur Bildauswahl verwenden

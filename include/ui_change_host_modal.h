@@ -6,8 +6,14 @@
 #include "ui_modal.h"
 #include "ui_observer_guard.h"
 
+#include "mdns_discovery.h"
+
+#include <cstdint>
 #include <functional>
+#include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 /**
  * @file ui_change_host_modal.h
@@ -69,6 +75,24 @@ void drop_held_connection_failed();
  * @param message Body text; should name the host:port that could not be reached
  */
 void show_connection_failed_modal(const std::string& title, const std::string& message);
+
+/// How long the connection-failed prompt browses mDNS before it shows.
+constexpr uint32_t REDISCOVERY_WINDOW_MS = 4000;
+
+/**
+ * @brief The one discovered Moonraker that is the saved printer at another address
+ *
+ * A printer is recognised by hostname, compared without case, ".local" or a trailing dot.
+ * Empty when no printer carries any of @p identities, when more than one does, or when one
+ * still answers at the saved address (the address is not what is wrong).
+ */
+std::optional<DiscoveredPrinter> find_moved_printer(const std::vector<DiscoveredPrinter>& found,
+                                                    const std::string& saved_host, int saved_port,
+                                                    const std::vector<std::string>& identities);
+
+/// Where the connection-failed prompt gets its one-shot mDNS browse. Unset, it does not
+/// browse at all; the app sets it at startup, outside --test.
+void set_printer_rediscovery_source(std::function<std::unique_ptr<IMdnsDiscovery>()> source);
 
 } // namespace helix::ui
 

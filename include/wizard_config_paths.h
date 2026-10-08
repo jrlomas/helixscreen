@@ -29,6 +29,8 @@ namespace wizard {
 
 // Printer identification
 constexpr const char* PRINTER_NAME = "printer_name";
+// The hostname the printer's Klipper reports; how mDNS re-finds it at a new address
+constexpr const char* HOSTNAME = "hostname";
 constexpr const char* PRINTER_TYPE = "type";
 // Which saved printer type the one-time saved-vs-detected mismatch warning
 // (HardwareSetupPrompter::maybe_warn_type_mismatch) was last shown for. Changing the

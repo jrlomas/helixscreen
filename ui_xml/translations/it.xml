@@ -1271,6 +1271,7 @@
   <translation tag="Forward Multiplier" it="Moltiplicatore in avanti"/>
   <translation tag="Found %zu printers" it="%zu stampanti trovate"/>
   <translation tag="Found 1 printer" it="1 stampante trovata"/>
+  <translation tag="Found {} at {}." it="{} trovata su {}."/>
   <translation tag="Framerate" it="Frequenza fotogrammi"/>
   <translation tag="From Buffer" it="Dal buffer"/>
   <translation tag="From SpoolmanDB" it="Da SpoolmanDB"/>
@@ -3272,6 +3273,7 @@
   <translation tag="Uptime" it="Tempo di attività"/>
   <translation tag="Use Android native keyboard for text input" it="Usa la tastiera nativa di Android per l&apos;inserimento testo"/>
   <translation tag="Use G10/G11 firmware retraction" it="Usa retrazione firmware G10/G11"/>
+  <translation tag="Use New Address" it="Usa nuovo indirizzo"/>
   <translation tag="Use Unload before Eject" it="Usa Scarica prima di Espelli"/>
   <translation tag="Use first HID scanner found" it="Usa il primo scanner HID trovato"/>
   <translation tag="Use printer type to select image" it="Usa il tipo di stampante per selezionare l&apos;immagine"/>

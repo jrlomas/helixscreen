@@ -1387,6 +1387,7 @@ translations:
   Forward Multiplier: 'Множитель прямого хода'
   Found %zu printers: Найдено %zu принтеров
   Found 1 printer: Найден 1 принтер
+  Found {} at {}.: '{} найден по адресу {}.'
   Framerate: Частота кадров
   From Buffer: Из буфера
   From SpoolmanDB: 'Из SpoolmanDB'
@@ -3637,6 +3638,7 @@ translations:
   Use Android native keyboard for text input: Использовать нативную клавиатуру Android
     для ввода текста
   Use G10/G11 firmware retraction: Использовать аппаратный ретракт G10/G11
+  Use New Address: 'Использовать новый адрес'
   Use Unload before Eject: 'Используйте «Выгрузить» перед «Извлечь»'
   Use first HID scanner found: 'Использовать первый найденный HID-сканер'
   Use printer type to select image: Использовать тип принтера для выбора изображения

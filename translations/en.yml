@@ -1355,6 +1355,7 @@ translations:
   Forward Multiplier: Forward Multiplier
   Found %zu printers: Found %zu printers
   Found 1 printer: Found 1 printer
+  Found {} at {}.: Found {} at {}.
   Framerate: Framerate
   From Buffer: From Buffer
   From SpoolmanDB: From SpoolmanDB
@@ -3565,6 +3566,7 @@ translations:
   Use Android native keyboard for text input: Use Android native keyboard for text
     input
   Use G10/G11 firmware retraction: Use G10/G11 firmware retraction
+  Use New Address: Use New Address
   Use Unload before Eject: Use Unload before Eject
   Use first HID scanner found: Use first HID scanner found
   Use printer type to select image: Use printer type to select image

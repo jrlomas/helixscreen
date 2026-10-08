@@ -22,6 +22,7 @@
 #include "ui_printer_switch_menu.h"
 #include "ui_update_queue.h"
 
+#include "../mocks/mock_mdns_discovery.h"
 #include "../test_fixtures.h"
 #include "../test_helpers/config_test_access.h"
 #include "../ui_test_utils.h"
@@ -31,6 +32,7 @@
 #include "i_moonraker_client.h"
 #include "moonraker_error.h"
 #include "printer_discovery.h"
+#include "wizard_config_paths.h"
 
 #include <lvgl.h>
 #include <string>
@@ -432,4 +434,180 @@ TEST_CASE_METHOD(ConnFailedFixture,
     CHECK(Modal::get_top() == nullptr);
     helix::ConfigTestAccess::data(*cfg) = saved_data;
     helix::ConfigTestAccess::active_printer_id(*cfg) = saved_active;
+}
+
+// ============================================================================
+// Re-discovering a printer whose address changed (#1217)
+// ============================================================================
+
+TEST_CASE("find_moved_printer picks the one printer carrying the saved identity",
+          "[connection][mdns][rediscover]") {
+    using helix::DiscoveredPrinter;
+    using helix::ui::find_moved_printer;
+    const std::vector<DiscoveredPrinter> found = {
+        {"voron", "voron.local", "192.168.1.50", 7125},
+        {"k1", "k1.local", "192.168.1.60", 7125},
+    };
+
+    SECTION("a single match at another address") {
+        auto moved = find_moved_printer(found, "192.168.1.20", 7125, {"voron"});
+        REQUIRE(moved.has_value());
+        CHECK(moved->ip_address == "192.168.1.50");
+    }
+    SECTION("hostnames compare without case, .local or a trailing dot") {
+        const std::vector<DiscoveredPrinter> fqdn = {
+            {"Voron", "Voron.local.", "192.168.1.50", 7125}};
+        CHECK(find_moved_printer(fqdn, "192.168.1.20", 7125, {"VORON.local"}).has_value());
+    }
+    SECTION("no printer carries the identity") {
+        CHECK_FALSE(find_moved_printer(found, "192.168.1.20", 7125, {"ender"}).has_value());
+    }
+    SECTION("two printers carry it") {
+        auto twins = found;
+        twins.push_back({"voron", "voron.local", "192.168.1.51", 7125});
+        CHECK_FALSE(find_moved_printer(twins, "192.168.1.20", 7125, {"voron"}).has_value());
+    }
+    SECTION("the printer still answers at the saved address") {
+        CHECK_FALSE(find_moved_printer(found, "192.168.1.50", 7125, {"voron"}).has_value());
+    }
+    SECTION("no identity is known") {
+        CHECK_FALSE(find_moved_printer(found, "192.168.1.20", 7125, {"", ""}).has_value());
+    }
+}
+
+namespace {
+
+/// Hands out MockMdnsDiscovery instances answering with `printers`, counting each browse.
+struct FakeMdnsSource {
+    std::vector<helix::DiscoveredPrinter> printers;
+    int browses = 0;
+
+    FakeMdnsSource() {
+        helix::ui::set_printer_rediscovery_source([this] {
+            ++browses;
+            auto mdns = std::make_unique<MockMdnsDiscovery>();
+            for (const auto& p : printers) {
+                mdns->add_fake_printer(p.name, p.hostname, p.ip_address, p.port);
+            }
+            return mdns;
+        });
+    }
+    ~FakeMdnsSource() {
+        helix::ui::set_printer_rediscovery_source(nullptr);
+    }
+};
+
+/// Sets the active printer's saved host and hostname for one test.
+struct SavedPrinter {
+    Config* cfg = Config::get_instance();
+    std::string host_key = cfg->df() + "moonraker_host";
+    std::string port_key = cfg->df() + "moonraker_port";
+    std::string hostname_key = cfg->df() + helix::wizard::HOSTNAME;
+    std::string prev_host = cfg->get<std::string>(host_key, "");
+    int prev_port = cfg->get<int>(port_key, 7125);
+    std::string prev_hostname = cfg->get<std::string>(hostname_key, "");
+
+    SavedPrinter(const std::string& host, const std::string& hostname) {
+        cfg->set<std::string>(host_key, host);
+        cfg->set<int>(port_key, 7125);
+        cfg->set<std::string>(hostname_key, hostname);
+        helix::invalidate_host_identity_cache();
+    }
+    ~SavedPrinter() {
+        cfg->set<std::string>(host_key, prev_host);
+        cfg->set<int>(port_key, prev_port);
+        cfg->set<std::string>(hostname_key, prev_hostname);
+        helix::invalidate_host_identity_cache();
+    }
+};
+
+} // namespace
+
+TEST_CASE_METHOD(ConnFailedFixture, "Connection-failed prompt offers the printer's new address",
+                 "[modal][connection][change_host][mdns][rediscover]") {
+    ScopedGlobalClient client;
+    SavedPrinter saved("192.0.2.1", "voron");
+    FakeMdnsSource mdns;
+    mdns.printers = {{"voron", "voron.local", "192.0.2.50", 7125}};
+
+    helix::ui::show_connection_failed_modal("Connection Failed",
+                                            "Unable to reach printer at 192.0.2.1:7125.");
+    UpdateQueue::instance().drain();
+    // The prompt waits for the browse, so it can carry what it found.
+    CHECK(Modal::get_top() == nullptr);
+    process_lvgl(helix::ui::REDISCOVERY_WINDOW_MS + 100);
+    UpdateQueue::instance().drain();
+
+    lv_obj_t* dialog = Modal::get_top();
+    REQUIRE(dialog != nullptr);
+    CHECK(mdns.browses == 1);
+    lv_obj_t* msg = lv_obj_find_by_name(dialog, "dialog_message");
+    REQUIRE(msg != nullptr);
+    CHECK(std::string(lv_label_get_text(msg)).find("192.0.2.50:7125") != std::string::npos);
+    CHECK(UITest::button_text(dialog, "btn_primary").find("Use New Address") != std::string::npos);
+    CHECK(UITest::button_text(dialog, "btn_secondary").find("Change Address") != std::string::npos);
+
+    lv_obj_send_event(lv_obj_find_by_name(dialog, "btn_primary"), LV_EVENT_CLICKED, nullptr);
+    UpdateQueue::instance().drain();
+    CHECK(saved.cfg->get<std::string>(saved.host_key, "") == "192.0.2.50");
+    CHECK(Modal::get_top() == nullptr);
+}
+
+TEST_CASE_METHOD(ConnFailedFixture,
+                 "Connection-failed prompt offers nothing new without exactly one match",
+                 "[modal][connection][change_host][mdns][rediscover]") {
+    ScopedGlobalClient client;
+    SavedPrinter saved("192.0.2.1", "voron");
+    FakeMdnsSource mdns;
+
+    SECTION("no printer answers") {}
+    SECTION("only other printers answer") {
+        mdns.printers = {{"k1", "k1.local", "192.0.2.60", 7125}};
+    }
+    SECTION("two printers carry the name") {
+        mdns.printers = {{"voron", "voron.local", "192.0.2.50", 7125},
+                         {"voron", "voron.local", "192.0.2.51", 7125}};
+    }
+
+    helix::ui::show_connection_failed_modal("Connection Failed",
+                                            "Unable to reach printer at 192.0.2.1:7125.");
+    UpdateQueue::instance().drain();
+    process_lvgl(helix::ui::REDISCOVERY_WINDOW_MS + 100);
+    UpdateQueue::instance().drain();
+
+    lv_obj_t* dialog = Modal::get_top();
+    REQUIRE(dialog != nullptr);
+    CHECK(mdns.browses == 1);
+    CHECK(UITest::button_text(dialog, "btn_primary").find("Reconnect") != std::string::npos);
+    CHECK(saved.cfg->get<std::string>(saved.host_key, "") == "192.0.2.1");
+}
+
+TEST_CASE_METHOD(ConnFailedFixture, "A failure escalation browses once",
+                 "[modal][connection][change_host][mdns][rediscover]") {
+    ScopedGlobalClient client;
+    SavedPrinter saved("192.0.2.1", "voron");
+    FakeMdnsSource mdns;
+
+    helix::ui::show_connection_failed_modal("Connection Failed", "Unable to reach printer.");
+    helix::ui::show_connection_failed_modal("Connection Failed", "Unable to reach printer.");
+    UpdateQueue::instance().drain();
+    process_lvgl(helix::ui::REDISCOVERY_WINDOW_MS + 100);
+    UpdateQueue::instance().drain();
+    CHECK(mdns.browses == 1);
+    process_lvgl(3 * helix::ui::REDISCOVERY_WINDOW_MS);
+    CHECK(mdns.browses == 1);
+}
+
+TEST_CASE_METHOD(ConnFailedFixture, "A printer on this machine is never browsed for",
+                 "[modal][connection][change_host][mdns][rediscover]") {
+    ScopedGlobalClient client;
+    SavedPrinter saved("127.0.0.1", "voron");
+    FakeMdnsSource mdns;
+    mdns.printers = {{"voron", "voron.local", "192.0.2.50", 7125}};
+
+    helix::ui::show_connection_failed_modal("Connection Failed",
+                                            "Moonraker is not responding at 127.0.0.1:7125.");
+    UpdateQueue::instance().drain();
+    REQUIRE(Modal::get_top() != nullptr);
+    CHECK(mdns.browses == 0);
 }

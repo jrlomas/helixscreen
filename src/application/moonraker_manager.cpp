@@ -118,6 +118,13 @@ bool MoonrakerManager::init(const RuntimeConfig& runtime_config, Config* config)
         configure_timeouts(config);
     }
 
+    // The connection-failed prompt browses for the printer at a new address. A mock printer
+    // has no network presence to find.
+    if (!runtime_config.should_mock_mdns()) {
+        helix::ui::set_printer_rediscovery_source(
+            [] { return std::make_unique<helix::MdnsDiscovery>(); });
+    }
+
     // Register callbacks for notifications and state changes
     register_callbacks();
 
