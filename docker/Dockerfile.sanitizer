@@ -1,29 +1,32 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# HelixScreen - Sanitizer / CI-parity Build Environment  (container: helix-tsan)
+# HelixScreen - Sanitizer / CI-parity Build Environment for a test host
 #
+# scripts/test-host-setup.sh builds this image on the test host and starts the
+# container; by hand that is:
 # Build: docker build -t helixscreen/sanitizer -f docker/Dockerfile.sanitizer docker/
-# Run:   docker run -d --name helix-tsan \
-#          -v "$HOME/helix-tsan":/work -w /work \
+# Run:   docker run -d --name helix-test \
+#          -v "$HOME/helix-test":/work -w /work \
 #          helixscreen/sanitizer
 #
-# This is the environment `scripts/zeus-run.sh` drives on zeus. It exists because
-# ASAN cannot run on thelio: /etc/ld.so.preload there loads libinput-config.so, so
-# the sanitizer runtime initializes second and the binary produces no test output
-# and exits 0 — a pass that ran nothing. This image has no /etc/ld.so.preload.
+# This is the environment `scripts/test-host-run.sh` drives on a test host. It
+# exists because ASAN cannot run on a desktop whose /etc/ld.so.preload loads a
+# library (libinput-config.so, say): the sanitizer runtime initializes second
+# and the binary produces no test output and exits 0 - a pass that ran nothing.
+# This image has no /etc/ld.so.preload.
 #
 # Ubuntu 22.04 to match the runner the nightly's AddressSanitizer job uses, so a
 # sanitizer finding here reproduces there.
 #
-# The container is long-lived and holds no state worth keeping: the tree, the
-# ccache and the build outputs all live on the /work bind mount, and zeus-run.sh
-# fetches and hard-resets the checkout on every run. Recreating it from this file
-# is the supported recovery.
+# The container is long-lived and holds no state worth keeping: the tree
+# mirrors, the ccache and the build outputs all live on the /work bind mount,
+# which test-host-run.sh refreshes on every run. Recreating it from this file is
+# the supported recovery.
 
 FROM ubuntu@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc
 
 LABEL maintainer="HelixScreen <dev@helixscreen.io>"
-LABEL description="ASAN/TSAN + mutation gate environment for zeus (container name: helix-tsan)"
+LABEL description="ASAN/TSAN + mutation gate environment for a test host (scripts/test-host-setup.sh)"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -104,7 +107,7 @@ RUN git config --global --add safe.directory '*'
 # ccache belongs on the bind mount. Unset, it defaults to /root/.cache/ccache
 # inside the container, which dies with the container: every recreate then starts
 # from a cold cache and the only symptom is that builds got slow. Callers may
-# still override it; scripts/zeus-run.sh passes the same value explicitly so it
+# still override it; scripts/test-host-run.sh passes the same value explicitly so it
 # also holds for a container predating this file.
 ENV CCACHE_DIR=/work/ccache
 

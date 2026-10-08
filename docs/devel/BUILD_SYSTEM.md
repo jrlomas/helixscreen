@@ -359,7 +359,7 @@ make deploy-pi PI_HOST=192.168.1.50 PI_USER=pi
 # Full cycle: remote build on thelio + deploy + run
 make ad5m-test
 
-# Remote build only (builds on thelio.local, fetches binaries)
+# Remote build only (builds on REMOTE_HOST, fetches binaries)
 make remote-ad5m
 
 # Deploy only (after building)
@@ -1229,9 +1229,9 @@ holds no tokens, so its share flows to whoever is compiling. It is not a
 dependency: nothing in the build requires it, and without it everything above
 holds as written.
 
-This project's own build machines (thelio, and zeus for `scripts/zeus-run.sh`)
-have it installed. The repo is `~/Code/Tools/jobpool` on thelio, mirrored to
-zeus; its README covers install, configuration and macOS.
+This project's own build machines (the maintainer's desktop and its test host)
+have it installed. The repo is `~/Code/Tools/jobpool` there; its README covers
+install, configuration and macOS.
 
 Where it is installed:
 
@@ -1262,13 +1262,85 @@ Where it is installed:
 - `helix-claim resources` lists heavy runners (bats, GNU parallel, ninja,
   `docker run`) running outside the pool, and the resource advisor names one
   about to start.
-- On zeus, `scripts/zeus-run.sh` joins the container to zeus's pool: zeus's
-  jobpool conf puts the state dir under the directory the `helix-tsan` container
-  already mounts, the host runs `docker exec` under `jobpool exec`, and the
-  container opens the FIFO and exports `MAKEFLAGS` (`jobpool container-env`)
-  with no `-j` on make. Without a pool there it sizes `-j` from `MemAvailable`.
-  zeus keeps 64 GiB free for builds with the `zfs_arc_sys_free` ZFS tunable,
-  and the ARC self-adjusts above that.
+- On a test host with jobpool installed, `scripts/test-host-run.sh` joins the
+  container to the host's pool: the host's jobpool conf puts the state dir under
+  the directory the test container already mounts, the host runs `docker exec`
+  under `jobpool exec`, and the container opens the FIFO and exports `MAKEFLAGS`
+  (`jobpool container-env`) with no `-j` on make. Without a pool there it sizes
+  `-j` from `MemAvailable`, and runs of different trees take turns. A ZFS host
+  should keep build headroom free with the `zfs_arc_sys_free` tunable; the run
+  warns when it is under 32 GiB.
+
+## Using your own build/test host
+
+Two kinds of remote machine help here, and both are optional:
+
+- a **test host** runs the expensive, non-interactive jobs (`sweep`, `asan`,
+  `tsan`, `mutate`) in a container: `scripts/test-host-run.sh`. It mirrors your
+  working tree as it is on disk, uncommitted edits included, into a per-tree
+  directory whose `build/` persists, so a warm run rebuilds only what changed.
+  `make full-test-run TEST_HOST=1` runs the C++ sweep there while bats runs
+  locally.
+- a **remote build host** builds natively or for the cross targets:
+  `make remote-native`, `make remote-test`, `make remote-pi` and siblings
+  (`mk/remote.mk`, `scripts/remote-build.sh`).
+
+Both are named in one file outside the tree, so every worktree and clone shares
+it:
+
+```
+${XDG_CONFIG_HOME:-$HOME/.config}/helixscreen/build-hosts.env
+```
+
+`KEY=VALUE` lines and `#` comments, with no quotes and no spaces around `=`:
+the scripts parse it and make reads it with `-include`. A variable set in the
+environment wins over the file (`HELIX_BUILD_HOSTS_FILE` names a different
+file). Nothing has a host default: a command that needs a host you have not
+configured stops with one line naming the variable and this file, and nothing
+ever connects to a host you did not name. `make full-test-run` with no test
+host simply runs both suites locally.
+
+| Variable | Used by | Meaning (default) |
+|----------|---------|-------------------|
+| `HELIX_TEST_HOST` | `test-host-run.sh`, `full-test-run`, `helix-claim resources`, teardown | ssh name of the test host (none) |
+| `HELIX_TEST_CONTAINER` | same | container name (`helix-test`) |
+| `HELIX_TEST_TREES_HOST` | same | mirror root on the host, relative to the ssh user's home unless absolute (`helix-test/trees`) |
+| `HELIX_TEST_TREES` | same | the same directory inside the container (`/work/trees`) |
+| `HELIX_TEST_CCACHE` | same | ccache dir inside the container (`/work/ccache`) |
+| `HELIX_TEST_WORKDIR` | `test-host-run.sh --commit`, `mutate` | git checkout inside the container (`/work/helixscreen`) |
+| `HELIX_TEST_LOCK_DIR` | `test-host-run.sh` | lock directory on the host (`/tmp`) |
+| `REMOTE_HOST`, `REMOTE_USER` | `mk/remote.mk`, `remote-build.sh` | remote build host and optional user (none) |
+| `REMOTE_DIR` | `mk/remote.mk` | rsync target on the remote for the cross targets (none) |
+| `REMOTE_BUILD_DIR` | `remote-build.sh` | its own clone on the remote (`~/helix-remote`); kept apart from `REMOTE_DIR` because the script hard-resets it |
+
+An example file:
+
+```
+HELIX_TEST_HOST=buildbox.local
+HELIX_TEST_CONTAINER=helix-test
+HELIX_TEST_TREES_HOST=/srv/helix-test/trees
+HELIX_TEST_TREES=/work/trees
+REMOTE_HOST=buildbox.local
+REMOTE_DIR=~/src/helixscreen
+```
+
+**Setting up a test host.** Any Linux machine with Docker works, if you can ssh
+to it with a key and run `sudo -n docker` there. Name it in the file, then run
+from your own machine:
+
+```bash
+scripts/test-host-setup.sh                    # image, container, toolchain checks
+scripts/test-host-setup.sh --commit-checkout  # also clone the checkout --commit and mutate use
+scripts/test-host-run.sh test '[netd]'        # first run: syncs the tree and builds (minutes)
+```
+
+The setup builds the image from `docker/Dockerfile.sanitizer` in your tree,
+streamed over ssh, and starts the container with the parent of
+`HELIX_TEST_TREES_HOST` mounted at the parent of `HELIX_TEST_TREES`. Re-run it
+after the Dockerfile changes; `--recreate` swaps the container for one from the
+new image. `scripts/test-host-run.sh --prune [DAYS]` removes mirrors nobody has
+synced for DAYS (14), and `teardown-worktree.sh` drops a tree's mirror with the
+tree.
 
 ## Font Generation
 
@@ -1611,7 +1683,9 @@ These get their own deep section above — see **[Cross-Compilation](#cross-comp
     rsync is delta-based, but it still exchanges metadata for every file under `lib/` and
     `assets/` before deciding nothing changed, and a **fresh destination directory transfers
     ~260 MB** — so reuse one `REMOTE_DIR` rather than a new one per branch or worktree.
-  - `REMOTE_HOST` defaults to `thelio.local`; `make remote-status` checks readiness.
+  - `REMOTE_HOST` and `REMOTE_DIR` come from the build-hosts file
+    ([Using your own build/test host](#using-your-own-buildtest-host)); `make remote-status`
+    checks readiness.
 
 ### Utilities
 

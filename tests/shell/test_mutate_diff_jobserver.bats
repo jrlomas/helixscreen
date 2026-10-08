@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# mutate_diff.py rebuilds once per mutant. Inside a jobserver (zeus's jobpool,
-# joined by zeus-run.sh) a -j on make's command line would pull the build out
+# mutate_diff.py rebuilds once per mutant. Inside a jobserver (a test host's jobpool,
+# joined by test-host-run.sh) a -j on make's command line would pull the build out
 # of the pool, so build() passes --jobs as -j only when no jobserver is set.
 
 load helpers
