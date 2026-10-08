@@ -454,10 +454,8 @@ AmsDetailSlotResult ams_detail_create_slots(AmsDetailWidgets& w, lv_obj_t* slot_
     lv_obj_set_style_pad_column(w.slot_grid, result.layout.overlap > 0 ? -result.layout.overlap : 0,
                                 LV_PART_MAIN);
 
-    // Center slots within the tray by adding left padding for the rounding remainder
-    if (result.layout.centering_offset > 0) {
-        lv_obj_set_style_pad_left(w.slot_grid, result.layout.centering_offset, LV_PART_MAIN);
-    }
+    // Center the row (and the box around it) in the slot container
+    lv_obj_set_style_pad_left(w.slot_grid, result.layout.centering_offset, LV_PART_MAIN);
 
     for (int i = 0; i < count; ++i) {
         if (slot_widgets[i]) {
@@ -541,12 +539,12 @@ AmsSlotLayout helix::ui::ams_detail_slot_layout(int32_t available_width, int slo
     if (spool <= 0)
         return calculate_ams_slot_layout(available_width, slot_count);
     // The box reaches past the outer slots: its first lid starts S/4 - 1 left of
-    // the row (for any pitch), and its right side face ends S/4 right of it,
-    // where the readout stands space_md further on. Spools stand at the tray's
-    // pitch rather than spreading across the width.
+    // the row (for any pitch), and its right side face ends S/4 right of it.
+    // The readout's gap is its own margin in the row. Spools stand at the
+    // tray's pitch rather than spreading across the width, centered with the box.
     const float skew = tray::DEPTH_SKEW * tray::box_depth(spool);
     const int32_t lead = (int32_t)std::ceil(std::max(0.0f, skew / 4 - 1));
-    const int32_t tail = (int32_t)std::ceil(skew / 4) + theme_manager_get_spacing("space_md");
+    const int32_t tail = (int32_t)std::ceil(skew / 4);
     AmsSlotLayout layout =
         calculate_ams_slot_layout(std::max<int32_t>(0, available_width - lead - tail), slot_count,
                                   (int32_t)tray::spool_pitch(spool));

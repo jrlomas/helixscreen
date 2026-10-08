@@ -19,8 +19,10 @@
 #include "ams_tray_projection.h"
 #include "filament_tube_stroker.h"
 #include "helix-xml/src/xml/lv_xml.h"
+#include "src/ui/ui_filament_path_internal.h"
 #include "theme_manager.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -250,4 +252,53 @@ TEST_CASE_METHOD(AmsTrayPanelFixture,
 
     theme_manager_toggle_dark_mode();
     process_lvgl(20);
+}
+
+TEST_CASE_METHOD(AmsTrayPanelFixture,
+                 "AMS unit detail: the unit is centered and its tubes drop from the spools",
+                 "[ams][tray][ui_integration]") {
+    const char* mode = GENERATE("passive", "off");
+    CAPTURE(mode);
+    build(mode);
+
+    // The unit: the box's faces, plus the readout standing beside it.
+    const tray::TrayFaces f = tray::tray_faces(box_);
+    float lo = 1e9f, hi = -1e9f;
+    for (const auto* face : {f.back_wall, f.floor, f.left_wall, f.front, f.right_side}) {
+        for (int k = 0; k < 4; k++) {
+            lo = std::min(lo, face[k].x);
+            hi = std::max(hi, face[k].x);
+        }
+    }
+    int32_t left = origin_.x + (int32_t)std::lround(lo);
+    int32_t right = origin_.x + (int32_t)std::lround(hi);
+    lv_obj_t* readout = lv_obj_find_by_name(panel_obj_, "env_indicator");
+    REQUIRE(readout != nullptr);
+    if (!lv_obj_has_flag(readout, LV_OBJ_FLAG_HIDDEN)) {
+        lv_area_t ra;
+        lv_obj_get_coords(readout, &ra);
+        right = std::max(right, (int32_t)ra.x2);
+    }
+    lv_obj_t* row = lv_obj_get_parent(container_);
+    lv_area_t rc;
+    lv_obj_get_content_coords(row, &rc);
+    INFO("unit " << left << ".." << right << " in row " << rc.x1 << ".." << rc.x2);
+    CHECK(std::abs((left - rc.x1) - (rc.x2 - right)) <= 4);
+
+    // The path canvas reads the laid-out spools, so each lane sits under its spool.
+    lv_obj_t* canvas = lv_obj_find_by_name(panel_obj_, "path_canvas");
+    REQUIRE(canvas != nullptr);
+    const auto* data = helix::ui::fpath::get_data(canvas);
+    REQUIRE(data != nullptr);
+    lv_area_t cc;
+    lv_obj_get_coords(canvas, &cc);
+    for (int i = 0; i < 4; ++i) {
+        CAPTURE(i);
+        lv_obj_t* spool = lv_obj_find_by_name(slot(i), "spool_graphic");
+        REQUIRE(spool != nullptr);
+        lv_area_t a;
+        lv_obj_get_coords(spool, &a);
+        const int32_t lane_x = cc.x1 + helix::ui::fpath::get_slot_x(data, i, cc.x1);
+        CHECK(std::abs(lane_x - (a.x1 + a.x2) / 2) <= 2);
+    }
 }
