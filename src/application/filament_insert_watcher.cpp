@@ -32,7 +32,9 @@ std::optional<bool> sensed_presence() {
 /// The editor is still open while something (QR scanner, keyboard) covers it, and
 /// reopening it then would replace the edit in progress.
 bool editor_open() {
-    return NavigationManager::instance().is_on_overlay_stack(ui::get_ams_edit_overlay().get_root());
+    auto& nav = NavigationManager::instance();
+    lv_obj_t* root = ui::get_ams_edit_overlay().get_root();
+    return root && (nav.is_panel_in_stack(root) || nav.is_push_pending(root));
 }
 
 } // namespace

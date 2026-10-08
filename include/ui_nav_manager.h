@@ -520,11 +520,6 @@ class NavigationManager {
      */
     bool has_open_overlays() const;
 
-    /// Whether @p overlay is on the stack above the base panel, covered or not.
-    /// lv_obj visibility is false while something sits on top of it, so this is
-    /// the question for "is this overlay still open".
-    bool is_on_overlay_stack(const lv_obj_t* overlay) const;
-
     /**
      * @brief Consume the "on-screen keyboard was visible when the dismiss-
      * backdrop was pressed" latch.
