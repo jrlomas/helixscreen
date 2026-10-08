@@ -230,15 +230,21 @@ a `pathgeo::FilamentPath` as a tube. **Used by both** the detail canvas
 
 ### Stroking model
 
-A tube is drawn as **concentric passes** (e.g. wide low-opacity glow → outline
-→ core → highlight). `stroke_path()` walks the path segment by segment:
+A tube is a PTFE sleeve drawn as **concentric opaque passes** in three layers:
+halo (active route only: two bands at gauge+6 and gauge+3, pre-blended from the
+background toward the wall color at 0.25 and 0.55), wall (`{wall, gauge}`), then
+bore (`{bore, gauge-2}`, so walls are 1 px). The bore shows the filament color
+when loaded and the background when empty. Only a loaded lane on the active
+route gets accent (`primary`) walls and the halo; an errored run takes error
+walls. Detail lanes use `ThemeCache::tube_gauge` (`line_width_active + 2`).
+`stroke_path()` walks the path segment by segment:
 
 - Straight runs use `lv_draw_line` with float coordinates.
 - Arcs are sampled as chords from the exact float parametrization — **not**
   `lv_draw_arc`, which rounds integer center/radius and produces visibly faceted
   corners at small radii.
-- Interior joints use butt caps (avoids double-blending in translucent passes);
-  first/last segment caps are round.
+- Opaque passes round-join every segment and chord; translucent passes use
+  butt caps at interior joints (no double-blending). First/last caps are round.
 
 ### Public interface
 
@@ -246,20 +252,23 @@ A tube is drawn as **concentric passes** (e.g. wide low-opacity glow → outline
 struct TubePass { lv_color_t color; int32_t width; lv_opa_t opa; };
 
 struct LaneStyle {
-    bool       solid;  // solid filament tube vs hollow idle PTFE bore
-    lv_color_t color;  // filament color (solid) or idle wall color (hollow)
-    lv_color_t bg;     // background for the hollow bore
-    int32_t    width;  // tube outer width
-    bool       glow;   // wide low-opacity backdrop (active lanes only)
+    lv_color_t wall;   // idle wall token, accent on the active route, error on error
+    lv_color_t bore;   // filament color when loaded, background when empty
+    lv_color_t bg;     // background the halo bands pre-blend against
+    int32_t    width;  // outer gauge, walls included
+    bool       halo;   // active route only; halo color is the wall color
 };
+enum class TubeLayer : uint8_t { Halo, Wall, Bore };
 
 void      stroke_path(lv_layer_t* layer, const pg::FilamentPath& path,
                       const TubePass* passes, int n_passes);
-int       build_passes(const LaneStyle& style, TubePass* out);
-LaneStyle lane_style(bool has_filament, lv_color_t tool_color,
-                     lv_color_t idle_color, lv_color_t bg, int32_t active_w);
+int       build_passes(const LaneStyle& style, TubeLayer layer, TubePass* out,
+                       bool simple = reduced_effects());
+LaneStyle lane_style(bool has_filament, bool active, lv_color_t fill,
+                     lv_color_t idle_wall, lv_color_t accent, lv_color_t bg,
+                     int32_t gauge);
 
-// High-level lane drawing. The optional `record` out-param captures the
+// High-level lane drawing (Halo, Wall, Bore in order). The optional `record` out-param captures the
 // centerline into a FilamentPath for the animation overlay to replay.
 void draw_lane(lv_layer_t*, const pg::FilamentPath&, const LaneStyle&,
                pg::FilamentPath* record = nullptr);
@@ -282,12 +291,11 @@ void draw_merge_fan(lv_layer_t*, const MergeFanLane* lanes, int n,
 lv_color_t tube_darken(lv_color_t, uint8_t);
 lv_color_t tube_lighten(lv_color_t, uint8_t);
 lv_color_t tube_blend(lv_color_t, lv_color_t, float);
-lv_color_t get_glow_color(lv_color_t);
-bool       reduced_effects();   // drops glow passes on low-perf platforms
+bool       reduced_effects();   // drops the halo on low-perf platforms
 ```
 
-`reduced_effects()` lets the stroker shed the wide glow pass on constrained
-devices without the caller branching.
+`reduced_effects()` lets the stroker shed the halo on constrained devices
+without the caller branching; walls and bore still draw.
 
 ---
 

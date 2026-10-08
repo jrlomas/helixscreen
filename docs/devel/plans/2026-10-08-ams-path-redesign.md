@@ -150,12 +150,19 @@ void draw_sensor_band(lv_layer_t* layer, const SensorBand& band, int32_t gauge, 
 | prep → hub-top entry (HUB fan) / selector top (LINEAR, on-toolhead) / merge (other) | `LANE` | hub entry (`HUB`), HUB only |
 | inside the hub or selector box | `HUB` | output (`OUTPUT`), at hub bottom, not on-toolhead |
 | hub bottom → bypass merge (or toolhead when bypass hidden); buffer lies inside this run | `OUTPUT` | bypass merge, if `show_bypass` |
-| bypass merge → toolhead sensor | `TOOLHEAD` | toolhead (`TOOLHEAD`), if `show_bypass` |
+| bypass merge (or hub bottom when the bypass is hidden) → toolhead sensor | `TOOLHEAD` | toolhead (`TOOLHEAD`), whenever the unit reports one |
 | toolhead sensor → nozzle inlet (`nozzle_y - extruder_scale*2`) | `NOZZLE` | – |
 
 The band set and visibility conditions equal today's `draw_sensor_dot` calls; only the glyph
 changes. Runs are split at every band and box edge, so styles change only at segment
 boundaries.
+
+**Toolhead sensor band** (maintainer's ruling): drawn whenever the unit reports a toolhead
+sensor (`AmsUnit::has_toolhead_sensor`, carried into `FilamentPathData::has_toolhead_sensor`),
+whether or not the bypass is shown. With the bypass hidden, the trunk runs from the hub bottom
+through the toolhead band, unbroken, into the glyph's inlet. Tests: HUB, bypass hidden,
+`has_toolhead_sensor` → a TOOLHEAD band on the trunk and the route contiguous through it;
+`has_toolhead_sensor == false` → no toolhead band.
 
 **span_style**: not `is_segment_active(span, reached)` → `{Plain, bg, filled=false}`, except
 `on_active_route && span == error_seg` → `{Error, bg}`. Filled: `on_active_route && span ==
