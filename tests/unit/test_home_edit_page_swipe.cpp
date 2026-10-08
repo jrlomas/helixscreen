@@ -4589,9 +4589,12 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "[1638][edit-swipe][home]") {
     // build_carousel() creates every page and the next-page slot from these
     // components by name. EditHomeFixture registers them from file itself and
-    // the registry is process-wide, so the case starts from neither.
+    // the registry and component loader are process-wide, so the case starts
+    // from neither: the lookups below resolve only through what
+    // register_xml_components() installs.
     static constexpr std::array<const char*, 2> PAGE_COMPONENTS = {"home_page_container",
                                                                    "home_next_page_slot"};
+    lv_xml_set_component_loader(nullptr);
     for (const char* name : PAGE_COMPONENTS) {
         INFO(name);
         lv_xml_component_unregister(name);

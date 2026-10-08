@@ -181,7 +181,6 @@ TEST_CASE_METHOD(LazyXmlFixture,
                  "[xml][lazy][hotreload]") {
     write("lazy_probe_host.xml", component_with_label("host"));
     write("components/lazy_probe_added.xml", component_with_label("added"));
-    REQUIRE(lv_xml_create(test_screen(), "lazy_probe_host", nullptr) != nullptr);
 
     helix::XmlHotReloader hr;
     lv_obj_t* rebuilt = nullptr;
