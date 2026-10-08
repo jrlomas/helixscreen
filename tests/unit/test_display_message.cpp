@@ -241,6 +241,109 @@ TEST_CASE("Display message: normal end-of-print sequence leaves the END_PRINT "
 }
 
 // ============================================================================
+// Snapshots of an ended job
+// ============================================================================
+
+namespace {
+std::string shown_message(PrinterState& state) {
+    return lv_subject_get_string(state.print_state().get_display_message_subject());
+}
+int message_visible(PrinterState& state) {
+    return lv_subject_get_int(state.print_state().get_display_message_visible_subject());
+}
+json ended_frame(const char* end_state, const char* message) {
+    return {{"print_stats", {{"state", end_state}, {"filename", "cover_ASA_7h44m.gcode"}}},
+            {"display_status", {{"progress", 0.0}, {"message", message}}}};
+}
+} // namespace
+
+TEST_CASE("Display message: a snapshot of an ended job does not show its leftover M117",
+          "[print][display_message]") {
+    lv_init_safe();
+
+    auto run = [](const char* end_state) {
+        PrinterState& state = get_printer_state();
+        PrinterStateTestAccess::reset(state);
+        state.init_subjects(false);
+
+        // Klipper still holds PRINT_START's M117 after the job was cancelled; this
+        // is the subscription snapshot the app receives when it connects.
+        state.update_from_status(ended_frame(end_state, "Print starting..."), 0.0,
+                                 /*from_cached_snapshot=*/true);
+
+        REQUIRE(shown_message(state).empty());
+        REQUIRE(message_visible(state) == 0);
+
+        // A message the printer sets after connecting is live and shows.
+        state.update_from_status({{"display_status", {{"message", "Bed cooled"}}}});
+        REQUIRE(shown_message(state) == "Bed cooled");
+        REQUIRE(message_visible(state) == 1);
+    };
+
+    SECTION("cancelled") {
+        run("cancelled");
+    }
+    SECTION("complete") {
+        run("complete");
+    }
+    SECTION("error") {
+        run("error");
+    }
+}
+
+TEST_CASE("Display message: a reconnect snapshot keeps the message shown live",
+          "[print][display_message]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    state.update_from_status({{"print_stats", {{"state", "printing"}}}});
+    state.update_from_status({{"print_stats", {{"state", "cancelled"}}}});
+    state.update_from_status({{"display_status", {{"message", "Print cancelled"}}}});
+    REQUIRE(shown_message(state) == "Print cancelled");
+
+    SECTION("snapshot carrying the same message") {
+        state.update_from_status(ended_frame("cancelled", "Print cancelled"), 0.0, true);
+    }
+    SECTION("snapshot captured before the live message landed") {
+        state.update_from_status(ended_frame("cancelled", "Print starting..."), 0.0, true);
+    }
+
+    REQUIRE(shown_message(state) == "Print cancelled");
+    REQUIRE(message_visible(state) == 1);
+}
+
+TEST_CASE("Display message: snapshot rule is limited to snapshots of ended jobs",
+          "[print][display_message]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    SECTION("live frame ending the job together with a farewell M117") {
+        state.update_from_status({{"print_stats", {{"state", "printing"}}}});
+        state.update_from_status(ended_frame("cancelled", "Print cancelled"));
+        REQUIRE(shown_message(state) == "Print cancelled");
+        REQUIRE(message_visible(state) == 1);
+    }
+    SECTION("snapshot of an idle printer") {
+        state.update_from_status(
+            {{"print_stats", {{"state", "standby"}}}, {"display_status", {{"message", "Ready"}}}},
+            0.0, true);
+        REQUIRE(shown_message(state) == "Ready");
+        REQUIRE(message_visible(state) == 1);
+    }
+    SECTION("snapshot of a running print") {
+        state.update_from_status({{"print_stats", {{"state", "printing"}}},
+                                  {"display_status", {{"message", "Layer 3/120"}}}},
+                                 0.0, true);
+        REQUIRE(shown_message(state) == "Layer 3/120");
+        REQUIRE(message_visible(state) == 1);
+    }
+}
+
+// ============================================================================
 // Initial State
 // ============================================================================
 

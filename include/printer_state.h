@@ -125,6 +125,12 @@ constexpr bool printer_has_job(PrintJobState state) {
     return state == PrintJobState::PRINTING || state == PrintJobState::PAUSED;
 }
 
+/// True when the printer reports how its last job ended: complete, cancelled or error.
+constexpr bool job_has_ended(PrintJobState state) {
+    return state == PrintJobState::COMPLETE || state == PrintJobState::CANCELLED ||
+           state == PrintJobState::ERROR;
+}
+
 /**
  * @brief Terminal outcome of a print job (for UI persistence)
  *

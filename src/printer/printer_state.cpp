@@ -330,7 +330,7 @@ void PrinterState::update_from_status(const json& state, double eventtime,
         helix::preprint_prefs::read_persisted_defaults(discovery_, state));
 
     // Delegate print updates to print state component
-    print_domain_.update_from_status(state);
+    print_domain_.update_from_status(state, from_cached_snapshot);
 
     // A loaded mesh and an applied level are what offer the skip toggles.
     if (helix::skip_wrappers::update_gates(skip_gates_, state)) {

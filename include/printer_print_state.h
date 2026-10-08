@@ -75,8 +75,11 @@ class PrinterPrintState {
     /**
      * @brief Update print state from Moonraker status JSON
      * @param status JSON object containing print_stats, virtual_sdcard data
+     * @param from_snapshot true when @p status is a whole-object snapshot (the
+     *        subscription response replayed at discovery) rather than a delta of
+     *        what changed. A snapshot carries every field whether or not it changed.
      */
-    void update_from_status(const nlohmann::json& status);
+    void update_from_status(const nlohmann::json& status, bool from_snapshot = false);
 
     /// True if a Moonraker status object indicates an active (printing or paused) print.
     /// Pure: depends only on status["print_stats"]["state"]. Used by both the
