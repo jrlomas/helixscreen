@@ -603,3 +603,59 @@ mark_tree() {
     [ "$status" -eq 0 ] || fail "your own claim blocked you: $output"
     rm -rf "$tmp"
 }
+
+# --- build stamps that decide whether the cloned objects survive ---------------
+#
+# Each of these is either compared by content at parse time (and rewritten `now`
+# on a mismatch) or is a prerequisite of build/.patches-applied, which every
+# object reaches. A fresh one on any of them rebuilds the whole cloned tree, and
+# a stale .build-target makes the first make run `make clean`.
+
+@test "the main tree's build stamps reach the worktree with content and mtime" {
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    mkdir -p "$tmp/main/build"
+    printf 'native | some compiler 1.0\n' > "$tmp/main/build/.build-target"
+    printf '123_456' > "$tmp/main/build/.thirdparty-abi"
+    printf '789_10' > "$tmp/main/build/.patches-applied-id"
+    touch -d '2020-01-02 03:04:05' "$tmp/main/build/.thirdparty-abi" "$tmp/main/build/.patches-applied-id"
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/stamps
+    [ "$status" -eq 0 ] || fail "setup failed: $output"
+
+    wt="$tmp/main/.worktrees/stamps"
+    for f in build/.build-target build/.thirdparty-abi build/.patches-applied-id; do
+        cmp -s "$tmp/main/$f" "$wt/$f" || fail "$f differs from the main tree's: $(cat "$wt/$f" 2>&1)"
+    done
+    for f in build/.thirdparty-abi build/.patches-applied-id; do
+        [ "$(stat -c %Y "$wt/$f")" = "$(stat -c %Y "$tmp/main/$f")" ] || fail "$f has a fresh mtime"
+    done
+    rm -rf "$tmp"
+}
+
+@test "with no .build-target in the main tree the worktree gets none" {
+    # make then records the current toolchain without cleaning. Any value the
+    # script invents can disagree with make's and clean the cloned objects away.
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/nomarker
+    [ "$status" -eq 0 ] || fail "setup failed: $output"
+    [ ! -e "$tmp/main/.worktrees/nomarker/build/.build-target" ] || fail "an invented .build-target was written"
+    rm -rf "$tmp"
+}
+
+@test "a private submodule's HEAD adopts the main tree's HEAD mtime" {
+    # The HEAD file is a prerequisite of build/.patches-applied.
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    main_head="$(git -C "$tmp/main/lib/lvgl" rev-parse --absolute-git-dir)/HEAD"
+    touch -d '2020-01-02 03:04:05' "$main_head"
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/headtime
+    [ "$status" -eq 0 ] || fail "setup failed: $output"
+
+    wt_head="$(git -C "$tmp/main/.worktrees/headtime/lib/lvgl" rev-parse --absolute-git-dir)/HEAD"
+    [ "$(stat -c %Y "$wt_head")" = "$(stat -c %Y "$main_head")" ] || fail "HEAD has a fresh mtime"
+    rm -rf "$tmp"
+}
