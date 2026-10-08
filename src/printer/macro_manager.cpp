@@ -162,31 +162,50 @@ std::string with_include_after_last(const std::string& content, const std::strin
     return include_line(filename) + "\n" + content;
 }
 
+/// Whether printer.cfg has this include as a live line; a commented-out one
+/// does not count.
+bool has_include(const std::string& content, const std::string& filename) {
+    std::istringstream input(content);
+    std::string line;
+    while (std::getline(input, line)) {
+        if (helix::text_io::trim(line) == include_line(filename)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// printer.cfg with both includes the install needs. The skip wrappers go on
 /// the very first line: Klipper merges same-named macro sections with the later
 /// one winning, so every user macro must load after ours.
 std::string with_includes(const std::string& content, bool with_skips) {
     std::string out = content;
-    if (out.find(include_line(HELIX_MACROS_FILENAME)) == std::string::npos) {
+    if (!has_include(out, HELIX_MACROS_FILENAME)) {
         out = with_include_after_last(out, HELIX_MACROS_FILENAME);
     }
-    if (with_skips && out.find(include_line(skip_wrappers::FILENAME)) == std::string::npos) {
+    if (with_skips && !has_include(out, skip_wrappers::FILENAME)) {
         out = include_line(skip_wrappers::FILENAME) + "\n" + out;
     }
     return out;
 }
 
-/// printer.cfg without these include lines.
+/// printer.cfg without the live include lines for these files. Other lines,
+/// commented-out includes among them, are kept byte for byte.
 std::string without_includes(const std::string& content, const std::vector<std::string>& files) {
-    std::string out = content;
-    for (const auto& file : files) {
-        size_t pos = out.find(include_line(file));
-        if (pos == std::string::npos) {
-            continue;
+    std::string out;
+    size_t start = 0;
+    while (start < content.size()) {
+        size_t end = content.find('\n', start);
+        end = end == std::string::npos ? content.size() : end + 1;
+        const std::string_view line(content.data() + start, end - start);
+        const auto trimmed = helix::text_io::trim(line);
+        const bool drop = std::any_of(files.begin(), files.end(), [&](const std::string& f) {
+            return trimmed == include_line(f);
+        });
+        if (!drop) {
+            out.append(line);
         }
-        size_t line_end = out.find('\n', pos);
-        line_end = line_end == std::string::npos ? out.length() : line_end + 1;
-        out = out.substr(0, pos) + out.substr(line_end);
+        start = end;
     }
     return out;
 }
@@ -239,8 +258,9 @@ MacroInstallStatus MacroManager::evaluate_status(const PrinterDiscovery& hardwar
         return MacroInstallStatus::OUTDATED;
     }
 
-    // A step the skip wrappers could wrap but do not yet: an install from
-    // before them, or a printer that gained a leveling step. Updating stages it.
+    // A step the skip wrappers could wrap but the loaded file does not: the
+    // file or its include is missing, or the printer has a leveling section the
+    // file lacks. Updating stages it.
     const auto& active = hardware.skip_active();
     for (auto op : hardware.skip_wrappable()) {
         if (std::find(active.begin(), active.end(), op) == active.end()) {
@@ -320,7 +340,7 @@ void MacroManager::update_files(SuccessCallback on_success, ErrorCallback on_err
                 }
                 return;
             }
-            // An install from before the skip wrappers has no include for them.
+            // printer.cfg may still lack the helix_skips.cfg include.
             upload_skips_file([this, on_success,
                                on_error]() { add_include_to_config(true, on_success, on_error); },
                               on_error);

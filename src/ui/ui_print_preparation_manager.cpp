@@ -103,6 +103,9 @@ macro_option_for(const std::optional<helix::PrintStartAnalysis>& analysis,
 // ============================================================================
 
 PrintPreparationManager::~PrintPreparationManager() {
+    if (printer_state_) {
+        printer_state_->set_skip_pending_handler(nullptr);
+    }
     // lifetime_ destructor calls invalidate() automatically
 }
 
@@ -181,8 +184,9 @@ void PrintPreparationManager::set_dependencies(IMoonrakerAPI* api, PrinterState*
             printer_state_->get_subjects_lifetime());
         job_holds_observer_ = helix::ui::observe<int>(
             printer_state_->print_state().get_job_holds_machine_subject(), this,
-            [](PrintPreparationManager* self, int holds) { self->on_job_holds_machine(holds); },
+            [](PrintPreparationManager* self, int) { self->reset_pending_skips(); },
             printer_state_->get_subjects_lifetime());
+        printer_state_->set_skip_pending_handler([this]() { reset_pending_skips(); });
     }
 }
 
@@ -212,13 +216,20 @@ void PrintPreparationManager::on_klippy_state(int state) {
     }
 }
 
-void PrintPreparationManager::on_job_holds_machine(int holds) {
-    const bool released = last_job_holds_ != 0 && holds == 0;
-    last_job_holds_ = holds;
-    if (!released || !api_ || !printer_state_ || !printer_state_->skip_pending()) {
+void PrintPreparationManager::reset_pending_skips() {
+    if (!api_ || !printer_state_) {
         return;
     }
-    spdlog::info("[PrintPreparationManager] Job ended with a leveling skip unconsumed; resetting");
+    if (!printer_state_->skip_pending()) {
+        skip_reset_sent_ = false;
+        return;
+    }
+    if (skip_reset_sent_ ||
+        lv_subject_get_int(printer_state_->print_state().get_job_holds_machine_subject()) != 0) {
+        return;
+    }
+    skip_reset_sent_ = true;
+    spdlog::info("[PrintPreparationManager] Leveling skip set with no job running; resetting");
     api_->execute_gcode(
         helix::skip_wrappers::PREP_MACRO, []() {},
         [](const MoonrakerError& err) {

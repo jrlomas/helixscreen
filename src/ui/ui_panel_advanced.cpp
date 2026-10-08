@@ -370,18 +370,19 @@ bool AdvancedPanel::restart_helix_macros_when_idle() {
         return false;
     }
 
+    // Armed before the request: the restart can leave READY before its
+    // acknowledgement arrives, and the watch must see that.
+    skips_load_watch_ = helix::skip_wrappers::LoadWatch{};
+    skips_load_watching_ = macro_manager_->stages_skips();
     macro_manager_->request_restart(
         [this]() {
             spdlog::info("[{}] Klipper restart accepted; helper macros activating", get_name());
-            if (macro_manager_ && macro_manager_->stages_skips()) {
-                skips_load_watch_ = helix::skip_wrappers::LoadWatch{};
-                skips_load_watching_ = true;
-            }
             ToastManager::instance().show(ToastSeverity::SUCCESS,
                                           lv_tr("Klipper restarting - macros activating"), 3000);
         },
         [this](const MoonrakerError& err) {
             spdlog::error("[{}] Klipper restart request failed: {}", get_name(), err.message);
+            skips_load_watching_ = false;
             // The files are staged but unactivated: keep offering the restart.
             printer_state_.plugin_status_state().set_helix_macros_restart_pending(true);
             ToastManager::instance().show(ToastSeverity::ERROR, lv_tr("Failed to restart Klipper"),

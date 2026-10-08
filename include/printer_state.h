@@ -32,6 +32,7 @@
 #include "subject_managed_panel.h"
 
 #include <atomic>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -634,6 +635,12 @@ class PrinterState {
         return helix::skip_wrappers::any_skip_pending(skip_gates_);
     }
 
+    /// Called on the main thread whenever a status frame changes the skip
+    /// gates while skip_pending() holds. Empty clears it.
+    void set_skip_pending_handler(std::function<void()> handler) {
+        skip_pending_handler_ = std::move(handler);
+    }
+
     /**
      * @brief Set printer kinematics type and update has_individual_xyz_homing and
      *        bed_moves subjects.
@@ -937,6 +944,7 @@ class PrinterState {
 
     /// What offers the leveling skip toggles, folded from status frames.
     helix::skip_wrappers::Gates skip_gates_;
+    std::function<void()> skip_pending_handler_;
 
     /**
      * @brief Update combined nav_buttons_enabled subject

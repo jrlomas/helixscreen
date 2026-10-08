@@ -575,11 +575,13 @@ class PrintPreparationManager {
     // Analyze on connect; re-read the macro on a reconnect or a Klipper restart.
     ObserverGuard connection_observer_;
     ObserverGuard klippy_observer_;
-    /// A job releasing the machine with a leveling skip still set resets it,
-    /// so the next print, started from anywhere, runs every step.
+    /// A leveling skip still set while no job holds the machine is reset: on
+    /// the job's release, and on the status frame that reports it pending, so
+    /// a frame landing after the release or a reconnect still clears it and
+    /// the next print, started from anywhere, runs every step.
     ObserverGuard job_holds_observer_;
-    int last_job_holds_ = 0;
-    void on_job_holds_machine(int holds);
+    bool skip_reset_sent_ = false; ///< One reset per pending skip, until it reads clear
+    void reset_pending_skips();
 
     // === Pre-start completion wait ===
     // When the pre-start gcode RPC times out but Klipper still reports

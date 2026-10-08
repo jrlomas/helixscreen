@@ -2,6 +2,7 @@
 
 #include "preprint_skip_wrappers.h"
 
+#include "bed_mesh_presence.h"
 #include "text_io.h"
 
 namespace helix::skip_wrappers {
@@ -9,6 +10,8 @@ namespace helix::skip_wrappers {
 namespace {
 
 constexpr const char* BASE_PREFIX = "_HELIX_BASE_";
+
+constexpr Op ALL_OPS[] = {Op::BedMesh, Op::Qgl, Op::ZTilt};
 
 /// One gcode_macro section an Op writes. A consuming wrapper skips its command
 /// when the flag is 0 and restores the flag; a guarding one only skips.
@@ -43,9 +46,9 @@ const char* label_for(Op op) {
     return "";
 }
 
-std::string set_flag_line(Op op, int value) {
+std::string set_flag_line(Op op, const std::string& value) {
     return std::string("SET_GCODE_VARIABLE MACRO=") + PREP_MACRO + " VARIABLE=" + flag_for(op) +
-           " VALUE=" + std::to_string(value);
+           " VALUE=" + value;
 }
 
 std::string flag_expr(Op op) {
@@ -60,7 +63,7 @@ std::vector<std::string> wrapper_body(Op op, const Wrapper& w) {
         return {"{% if " + flag_expr(op) + " == 1 %}", base, "{% endif %}"};
     }
     return {"{% if " + flag_expr(op) + " == 0 %}",
-            set_flag_line(op, 1),
+            set_flag_line(op, "1"),
             std::string("{action_respond_info(\"HelixScreen: ") + label_for(op) +
                 " skipped for this print\")}",
             "{% else %}",
@@ -168,7 +171,7 @@ std::vector<Op> active(const nlohmann::json& configfile_settings) {
     if (macro_section(configfile_settings, PREP_MACRO) == nullptr) {
         return ops;
     }
-    for (Op op : {Op::BedMesh, Op::Qgl, Op::ZTilt}) {
+    for (Op op : ALL_OPS) {
         if (ours_intact(configfile_settings, op)) {
             ops.push_back(op);
         }
@@ -177,8 +180,6 @@ std::vector<Op> active(const nlohmann::json& configfile_settings) {
 }
 
 namespace {
-
-constexpr Op ALL_OPS[] = {Op::BedMesh, Op::Qgl, Op::ZTilt};
 
 bool fold_bool(bool& slot, bool value) {
     const bool changed = slot != value;
@@ -217,7 +218,7 @@ bool update_gates(Gates& gates, const nlohmann::json& status) {
     bool changed = false;
     if (auto mesh = status.find("bed_mesh"); mesh != status.end() && mesh->is_object()) {
         if (auto m = mesh->find("probed_matrix"); m != mesh->end()) {
-            changed |= fold_bool(gates.mesh_loaded, m->is_array() && !m->empty());
+            changed |= fold_bool(gates.mesh_loaded, probed_matrix_has_mesh(*m));
         }
     }
     if (const auto* a = applied_field(status, "quad_gantry_level")) {
@@ -290,8 +291,7 @@ PrePrintOption option_for(Op op) {
     opt.requires_macro = PREP_MACRO;
     opt.strategy_kind = PrePrintStrategyKind::PreStartGcode;
     PrePrintStrategyPreStartGcode line;
-    line.gcode_template = std::string("SET_GCODE_VARIABLE MACRO=") + PREP_MACRO +
-                          " VARIABLE=" + flag_for(op) + " VALUE={value}";
+    line.gcode_template = set_flag_line(op, "{value}");
     line.emit_when_disabled = true;
     opt.strategy = std::move(line);
     return opt;
@@ -314,7 +314,7 @@ LoadWatch::Verdict LoadWatch::feed(bool ready, bool error) {
 
 std::vector<Op> wrappable(const nlohmann::json& configfile_settings) {
     std::vector<Op> ops;
-    for (Op op : {Op::BedMesh, Op::Qgl, Op::ZTilt}) {
+    for (Op op : ALL_OPS) {
         if (!has_builtin(configfile_settings, op)) {
             continue;
         }
@@ -348,7 +348,7 @@ std::string generate(const std::vector<Op>& ops) {
     }
     out += "gcode:\n";
     for (Op op : ops) {
-        out += "    " + set_flag_line(op, 1) + "\n";
+        out += "    " + set_flag_line(op, "1") + "\n";
     }
 
     for (Op op : ops) {

@@ -146,7 +146,7 @@ TEST_CASE_METHOD(SkipToggleFixture, "a skip toggle is offered only while its gat
         CHECK(offered("bed_mesh"));
     }
     SECTION("a cleared mesh withdraws the bed mesh toggle") {
-        frame({{"bed_mesh", {{"probed_matrix", json::array()}}}});
+        frame({{"bed_mesh", {{"probed_matrix", json::array({json::array()})}}}});
         CHECK_FALSE(offered("bed_mesh"));
     }
 }
@@ -236,21 +236,42 @@ TEST_CASE_METHOD(SkipToggleFixture, "a skipped step embedded in the file is left
     CHECK(Access::get_ops_to_disable(manager).empty());
 }
 
-TEST_CASE_METHOD(SkipToggleFixture, "a job ending with a skip unconsumed resets it",
+TEST_CASE_METHOD(SkipToggleFixture, "a skip left set with no job running is reset",
                  "[skip_wrappers][preprint]") {
     wrappers_loaded();
-    set_job_holds(1);
 
-    SECTION("pending skip") {
+    SECTION("the job ends before reaching the step") {
+        set_job_holds(1);
         frame({{"gcode_macro _HELIX_PREP", {{"run_qgl", 0}}}});
+        CHECK(api->sent.empty()); // the job may still reach QUAD_GANTRY_LEVEL
         set_job_holds(0);
         CHECK(api->sent == std::vector<std::string>{"_HELIX_PREP"});
     }
+    SECTION("the frame reporting it lands after the job ended") {
+        set_job_holds(1);
+        set_job_holds(0);
+        frame({{"gcode_macro _HELIX_PREP", {{"run_qgl", 0}}}});
+        CHECK(api->sent == std::vector<std::string>{"_HELIX_PREP"});
+    }
+    SECTION("found pending on connect with nothing running") {
+        frame({{"gcode_macro _HELIX_PREP", {{"run_bed_mesh", 0}}}});
+        CHECK(api->sent == std::vector<std::string>{"_HELIX_PREP"});
+    }
     SECTION("every skip consumed") {
+        set_job_holds(1);
         frame({{"gcode_macro _HELIX_PREP", {{"run_qgl", 1}}}});
         set_job_holds(0);
         CHECK(api->sent.empty());
     }
+}
+
+TEST_CASE_METHOD(SkipToggleFixture, "an empty mesh as Klipper reports it offers no mesh skip",
+                 "[skip_wrappers][preprint]") {
+    wrappers_loaded();
+    frame({{"bed_mesh", {{"probed_matrix", json::array({json::array()})}}},
+           {"quad_gantry_level", {{"applied", true}}}});
+    CHECK(offered("qgl"));
+    CHECK_FALSE(offered("bed_mesh"));
 }
 
 // ============================================================================

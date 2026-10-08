@@ -216,7 +216,9 @@ line of `printer.cfg`:
   says so on the console.
 - `BED_MESH_CLEAR` is wrapped with the mesh calibration and does nothing while a mesh
   skip is pending: `PRINT_START` commonly clears right before it calibrates, which
-  would throw away the mesh the skip keeps.
+  would throw away the mesh the skip keeps. While a mesh skip is pending, a
+  `BED_MESH_CLEAR` elsewhere (a `PRINT_END`) is skipped too; the pending skip is
+  reset as soon as no job holds the machine.
 
 The print-detail panel offers a step's toggle only while skipping it is safe: a mesh
 is loaded (`bed_mesh.probed_matrix`), or the gantry or bed has been leveled since the
@@ -225,8 +227,9 @@ last motors-off (`quad_gantry_level.applied`, `z_tilt.applied`, Kalico's
 `SET_GCODE_VARIABLE MACRO=_HELIX_PREP VARIABLE=run_<step> VALUE=0` in the pre-start
 block, which always opens with `_HELIX_PREP`. No HelixPrint plugin is involved. A
 database option or a `PRINT_START` skip parameter for the same step wins over the
-toggle, and a job that ends with a skip unconsumed resets it, so a later print started
-from anywhere runs every step.
+toggle, and a skip still set while no job holds the machine (the job ended before
+reaching the step, or HelixScreen reconnects to find one) is reset with `_HELIX_PREP`,
+so a later print started from anywhere runs every step.
 
 What keeps it safe to install:
 
@@ -236,7 +239,9 @@ What keeps it safe to install:
 | The user adds one later | Klipper merges same-named macro sections, later file winning per option. `helix_skips.cfg` loads first, so the user's macro wins, `ours_intact()` reads false, and the toggle hides. The leftover section in `helix_skips.cfg` is inert, and the next regeneration leaves the step out |
 | Klipper reports an error after the restart that loads the file | The Advanced panel removes the file and its include and restarts once (`skip_wrappers::LoadWatch`) |
 | Beacon, Cartographer or Creality prtouch replace the command in Python | They do it at config load; `rename_existing` runs later at connect, so the wrapper layers over them |
-| A wrappable step is not yet wrapped (an install from before this, or a printer that gained `[z_tilt]`) | The helper macros read as Outdated, and Update stages the file |
+| A wrappable step is not wrapped (the file or its include is missing, or the printer gained `[z_tilt]`) | The helper macros read as Outdated, and Update stages the file |
+| The user later removes `[bed_mesh]`, `[quad_gantry_level]` or `[z_tilt]` while its wrapper is loaded | Klipper refuses to start: `Existing command '...' not found in gcode_macro rename`. Only the restart HelixScreen itself requests is watched, so this one is not rolled back. Remove the `[include helix_skips.cfg]` line, or reinstall the helper macros after restarting |
+| A Klipper error after HelixScreen's restart has another cause (a CAN board that did not come up) | The rollback still removes the file, since it cannot tell the causes apart; Update stages it again once Klipper is healthy |
 
 ### Parameter Semantics
 

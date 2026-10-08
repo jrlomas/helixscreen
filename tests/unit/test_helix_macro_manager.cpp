@@ -753,3 +753,26 @@ TEST_CASE_METHOD(MacroManagerTestFixture,
     hardware_.set_skip_wrappers(VORON_OPS, VORON_OPS);
     CHECK(manager_.get_status() == MacroInstallStatus::INSTALLED);
 }
+
+TEST_CASE_METHOD(MacroStageFixture, "a commented-out include is neither counted nor mangled",
+                 "[config][install][skip_wrappers]") {
+    const std::string commented =
+        std::string("#[include helix_skips.cfg]\n[include helix_macros.cfg]\n") + PRINTER_CFG;
+
+    SECTION("install still adds the live include") {
+        api_.set_config_files({{"printer.cfg", commented}});
+        hardware_.parse_objects(json::array({"gcode_macro START_PRINT", "bed_mesh"}));
+        hardware_.set_skip_wrappers(VORON_OPS, {});
+        manager_.install_files([] {}, [](const MoonrakerError&) {});
+        settle();
+        CHECK(api_.get_uploaded_config("printer.cfg").value_or("") ==
+              "[include helix_skips.cfg]\n" + commented);
+    }
+    SECTION("uninstall removes the live lines and keeps the commented one whole") {
+        api_.set_config_files({{"printer.cfg", commented}});
+        manager_.uninstall([] {}, [](const MoonrakerError&) {});
+        settle();
+        CHECK(api_.get_uploaded_config("printer.cfg").value_or("") ==
+              std::string("#[include helix_skips.cfg]\n") + PRINTER_CFG);
+    }
+}

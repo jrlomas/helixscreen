@@ -336,6 +336,9 @@ void PrinterState::update_from_status(const json& state, double eventtime,
     if (helix::skip_wrappers::update_gates(skip_gates_, state)) {
         apply_dynamic_options();
         update_gcode_modification_visibility();
+        if (skip_pending() && skip_pending_handler_) {
+            skip_pending_handler_();
+        }
     }
 
     // Extract kinematics type (determines if bed moves on Z or gantry moves)

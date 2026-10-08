@@ -10,6 +10,7 @@
  * against what generate() actually produces once Klipper has parsed it.
  */
 
+#include "bed_mesh_presence.h"
 #include "preprint_skip_wrappers.h"
 #include "text_io.h"
 
@@ -238,7 +239,8 @@ TEST_CASE("update_gates folds full and delta status frames", "[skip_wrappers]") 
     SECTION("a probed mesh opens the bed mesh gate and an empty one closes it") {
         CHECK(sw::update_gates(g, {{"bed_mesh", {{"probed_matrix", {{0.1, 0.2}}}}}}));
         CHECK(g.mesh_loaded);
-        CHECK(sw::update_gates(g, {{"bed_mesh", {{"probed_matrix", json::array()}}}}));
+        CHECK(
+            sw::update_gates(g, {{"bed_mesh", {{"probed_matrix", json::array({json::array()})}}}}));
         CHECK_FALSE(g.mesh_loaded);
     }
     SECTION("a frame without the field keeps the value") {
@@ -306,4 +308,12 @@ TEST_CASE("option_for renders the flag line for both toggle states", "[skip_wrap
     PrePrintOption plain;
     plain.id = "qgl";
     CHECK_FALSE(sw::is_wrapper_option(plain));
+}
+
+TEST_CASE("probed_matrix_has_mesh reads Klipper's empty mesh as absent",
+          "[bed_mesh][skip_wrappers]") {
+    CHECK_FALSE(helix::probed_matrix_has_mesh(json::array({json::array()}))); // Klipper, no mesh
+    CHECK_FALSE(helix::probed_matrix_has_mesh(json::array()));
+    CHECK_FALSE(helix::probed_matrix_has_mesh(json()));
+    CHECK(helix::probed_matrix_has_mesh(json::array({json::array({0.1, 0.2})})));
 }
