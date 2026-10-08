@@ -18,6 +18,7 @@
 #include "lua_bindings.h"
 #include "lvgl_log_handler.h"
 #include "plugin_overlay_host.h"
+#include "xml_registration.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -242,11 +243,14 @@ TEST_CASE("plugin_event user_data parsing", "[plugin][bindings][ui]") {
 
 TEST_CASE_METHOD(LVGLTestFixture, "a confirm dialog that cannot be shown holds no slot",
                  "[plugin][bindings][ui]") {
-    // Without the modal_dialog component the dialog cannot be built; the component is
-    // restored afterwards for the tests that share this process.
+    // Without the modal_dialog component the dialog cannot be built. The component
+    // loader would register it again on the dialog's first lookup, so it is off for
+    // the case; both are restored afterwards for the tests that share this process.
     struct HideModalDialog {
-        bool was_registered = lv_xml_component_get_scope("modal_dialog") != nullptr;
+        bool was_registered = false;
         HideModalDialog() {
+            lv_xml_set_component_loader(nullptr);
+            was_registered = lv_xml_component_get_scope("modal_dialog") != nullptr;
             if (was_registered)
                 lv_xml_component_unregister("modal_dialog");
         }
@@ -256,6 +260,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "a confirm dialog that cannot be shown holds n
                     "A:" + helix::LayoutManager::instance().resolve_xml_path("modal_dialog.xml");
                 lv_xml_register_component_from_file(path.c_str());
             }
+            helix::register_xml_on_first_use();
         }
     } hidden;
     BoundRuntime b({&install_ui_bindings}, {});

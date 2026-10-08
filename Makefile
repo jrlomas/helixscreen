@@ -1203,8 +1203,9 @@ CXXFLAGS += -DHELIX_HAS_LABEL_PRINTER=$(HELIX_HAS_LABEL_PRINTER) \
 
 # Parallel build control
 # A make that picks its own -j (plain `make`, or unlimited `make -j`) takes
-# JOBS: this session's fair share of the box from `scripts/helix-claim jobs`,
-# which splits the cores between the trees building now. An explicit -jN passes
+# JOBS from `scripts/helix-claim jobs`: the jobpool's size when one is live,
+# else the cores capped by memory. A make under the jobpool shim already
+# carries the pool's jobserver and never reads JOBS. An explicit -jN passes
 # through unchanged. The two-phase re-invoke that applies it lives in
 # mk/rules.mk `all:` and mk/tests.mk `$(TEST_BIN)`.
 #
@@ -1214,6 +1215,12 @@ CXXFLAGS += -DHELIX_HAS_LABEL_PRINTER=$(HELIX_HAS_LABEL_PRINTER) \
 #
 # Asked once, and only when read, so a make under a bounded -jN never pays for it.
 JOBS ?= $(eval JOBS := $(shell scripts/helix-claim jobs 2>/dev/null || echo $(NPROC)))$(JOBS)
+
+# The same answer as shell text, for the re-invoke recipes. make expands a
+# recipe's whole logical line before the shell picks a branch, so $(JOBS) there
+# would ask helix-claim even when MAKEFLAGS already carries a jobserver. A JOBS
+# the caller set is used as given.
+JOBS_SH = $(if $(filter file,$(origin JOBS)),$$(scripts/helix-claim jobs 2>/dev/null || echo $(NPROC)),$(JOBS))
 
 # Output synchronization for parallel builds (requires make 4.0+, ignored on 3.81).
 # Only a JOBS=1 the caller set means serial; reading the default here would ask

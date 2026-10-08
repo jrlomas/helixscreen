@@ -556,7 +556,7 @@ lender, and a marked scope is held instead of freed. The mark is one-way, so a f
 that lends styles is held until `lv_xml_component_deinit()` -- one retained scope per
 hot-reload save of `styles.xml`, which is why the library is worth keeping small.
 
-**Registration order matters.** `styles.xml` is registered from
+**Registration order matters.** `styles.xml` is the one component registered eagerly, from
 `register_xml_components()` (`src/xml_registration.cpp`), which runs *after*
 `theme_manager_init()` has injected the theme constants. Style `#token` values resolve
 at registration time, so a theme-token style placed in `globals.xml` (parsed before

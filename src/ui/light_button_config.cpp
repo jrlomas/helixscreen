@@ -9,6 +9,7 @@
 #include "panel_widget_config.h"
 #include "panel_widget_manager.h"
 #include "panel_widget_registry.h"
+#include "panel_widgets/led_widget.h"
 
 #include <spdlog/spdlog.h>
 
@@ -80,6 +81,15 @@ std::vector<std::string> home_light_button_targets() {
                                   pending_value(*cfg));
 
     return led::union_light_targets(keys, ctrl.switchable_ids(), ctrl.chamber_light());
+}
+
+bool home_light_buttons_lit() {
+    auto& ctrl = led::LedController::instance();
+    std::vector<led::DeviceState> states;
+    for (const auto& id : home_light_button_targets()) {
+        states.push_back(ctrl.device_state(id));
+    }
+    return light_icon_look(states).brightness > 0;
 }
 
 void settle_light_buttons() {

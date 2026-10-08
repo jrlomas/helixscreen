@@ -863,18 +863,21 @@ STANDARD       → {}   // base ui_xml/ only
 
 ### How XML Registration Works
 
-In `xml_registration.cpp`, a helper function resolves paths through the LayoutManager:
+Components register on first use. When the engine cannot find a component name, the loader installed by `helix::register_xml_on_first_use()` (`src/xml_registration.cpp`) registers `ui_xml/<name>.xml`, or else `ui_xml/components/<name>.xml`. The eager `register_xml()` helper (used for `styles.xml`) and the loader both resolve paths through the LayoutManager, so layout overrides apply identically:
 
 ```cpp
-static void register_xml(const char* filename) {
+static bool register_xml(const char* filename) {
     auto& lm = helix::LayoutManager::instance();
     std::string path = "A:" + lm.resolve_xml_path(filename);
-    lv_xml_register_component_from_file(path.c_str());
+    return lv_xml_register_component_from_file(path.c_str()) == LV_RESULT_OK;
 }
 
-// Usage — automatically resolves layout overrides:
-register_xml("home_panel.xml");
+// Either path picks portrait/home_panel.xml when the portrait variant is active:
+register_xml("styles.xml");              // eager
+lv_xml_create(parent, "home_panel", nullptr);  // first use -> loader
 ```
+
+A component's layout variant and the px tokens its `<styles>` use are fixed when it registers. On a runtime resize (`Application`'s resize callback), `helix::unregister_idle_xml_components()` drops every first-use component no live widget is built from, so its next use registers it at the new geometry. Components with live instances, a C++-registered subject or a style another scope borrowed keep their registration, and so keep the old geometry until they are rebuilt.
 
 ### Config
 

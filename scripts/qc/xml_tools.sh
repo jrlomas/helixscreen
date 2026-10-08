@@ -21,10 +21,9 @@
 # limit. Its check runs in the unit suite instead (see qc_xml_const).
 qc_xml_tools() {
   local EXIT_CODE=0
-  # Same bounded share the build-verification phase uses: this is a real make
-  # invocation, and unbounded -j from a hook is N unbounded builds at once.
+  # Same bounded -j the build-verification phase uses (qc_build_jobs).
   local TOOL_JOBS
-  TOOL_JOBS="${HELIX_QC_JOBS:-$(scripts/helix-claim jobs 2>/dev/null || echo 6)}"
+  TOOL_JOBS=$(qc_build_jobs)
 echo "🔧 Building XML validator tools..."
 
 if make SKIP_COMPILE_COMMANDS=1 -j"$TOOL_JOBS" validate-xml-attrs >/tmp/qc_xml_tools.out 2>&1; then

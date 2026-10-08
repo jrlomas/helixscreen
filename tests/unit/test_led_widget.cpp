@@ -5,6 +5,7 @@
 
 #include "../lvgl_test_fixture.h"
 #include "../test_fixtures.h"
+#include "../test_helpers/scoped_home_layout.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "app_globals.h"
 #include "config.h"
@@ -25,6 +26,8 @@
 
 using namespace helix;
 using namespace helix::led;
+using helix::test::placed_light;
+using helix::test::ScopedHomeLayout;
 
 namespace {
 struct LedWidgetFixture : public LVGLTestFixture {
@@ -70,49 +73,6 @@ struct LedWidgetFixture : public LVGLTestFixture {
             lv_xml_get_subject(nullptr, (instance_id + "_led_name").c_str()));
     }
 };
-
-/// A home layout holding exactly @p widgets on its one page, restored on exit.
-class ScopedHomeLayout {
-  public:
-    explicit ScopedHomeLayout(const nlohmann::json& widgets) {
-        auto* cfg = Config::get_instance();
-        const std::string key = cfg->df() + "panel_widgets/home";
-        const nlohmann::json* prior = cfg->try_get_json(key);
-        had_prior_ = prior != nullptr;
-        if (had_prior_) {
-            prior_ = *prior;
-        }
-        cfg->set<nlohmann::json>(key, {{"main_page_index", 0},
-                                       {"next_page_id", 1},
-                                       {"pages", {{{"id", "main"}, {"widgets", widgets}}}}});
-        reload();
-    }
-    ~ScopedHomeLayout() {
-        auto* cfg = Config::get_instance();
-        const std::string key = cfg->df() + "panel_widgets/home";
-        cfg->set<nlohmann::json>(key, had_prior_ ? prior_ : nlohmann::json::object());
-        cfg->set(cfg->df() + LIGHT_BUTTON_PENDING_PATH, nlohmann::json());
-        reload();
-    }
-    ScopedHomeLayout(const ScopedHomeLayout&) = delete;
-    ScopedHomeLayout& operator=(const ScopedHomeLayout&) = delete;
-
-  private:
-    /// The manager caches a loaded layout; the next reader must see this one.
-    static void reload() {
-        auto& mgr = PanelWidgetManager::instance();
-        mgr.clear_panel_config("home");
-        mgr.get_widget_config("home").mark_dirty();
-    }
-
-    bool had_prior_ = false;
-    nlohmann::json prior_;
-};
-
-nlohmann::json placed_light(const std::string& id, int col) {
-    return {{"id", id}, {"enabled", true}, {"col", col},
-            {"row", 0}, {"colspan", 2},    {"rowspan", 2}};
-}
 
 size_t scripts_naming(const MoonrakerClientMock& client, const std::string& what) {
     const auto& h = client.gcode_script_history();

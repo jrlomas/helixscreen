@@ -598,6 +598,10 @@ static void* ui_thread_main(void* arg) {
     return NULL;
 }
 
+bool helix_on_ui_task(void) {
+    return s_ui_task == NULL || xTaskGetCurrentTaskHandle() == s_ui_task;
+}
+
 const uint8_t* lvgl_glue_frame(uint32_t* w, uint32_t* h, size_t* stride) {
     *w = BOARD_LCD_H_RES;
     *h = BOARD_LCD_V_RES;

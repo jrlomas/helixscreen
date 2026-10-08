@@ -27,6 +27,13 @@ setup() {
     export TMPDIR="$BATS_TEST_TMPDIR"
     export ZEUS_WORKDIR="$BATS_TEST_TMPDIR/work/helixscreen"
     export MOCK_DOCKER_LOG="$BATS_TEST_TMPDIR/docker.log"
+    # No jobpool on "zeus" unless a test installs the fake below.
+    export ZEUS_JOBPOOL="$BATS_TEST_TMPDIR/no-jobpool"
+    # No ZFS on "zeus" unless a test installs the fake below.
+    export ZEUS_ARC_PARAM="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_max"
+    export ZEUS_ARCSTATS="$BATS_TEST_TMPDIR/arcstats"
+    export ZEUS_ARC_MARK="$BATS_TEST_TMPDIR/arc-mark"
+    export ZEUS_ARC_SETTLE_SECS=0
 
     # ssh <host> bash -se: drop the host argument and run the heredoc locally.
     mock_command_script ssh 'shift; exec "$@"'
@@ -50,6 +57,7 @@ esac'
 case "$1" in
     ps) echo helix-tsan ;;
     start) exit 0 ;;
+    inspect) [ -n "${MOCK_MOUNTS:-}" ] && echo "$MOCK_MOUNTS" ;;
     exec)
         case "$*" in
             *pgrep*)
@@ -233,7 +241,8 @@ esac
 exit 0'
     run "$SCRIPT" tsan
     [ "$status" -eq 0 ]
-    grep -qF 'make test-tsan -j' "$MOCK_DOCKER_LOG"
+    grep -qF 'make test-tsan $HELIX_JFLAG' "$MOCK_DOCKER_LOG"
+    grep -qE 'HELIX_JFLAG=-j[0-9]+ ' "$MOCK_DOCKER_LOG"
     refute_grep 'test-tsan-one' "$MOCK_DOCKER_LOG"
 }
 
@@ -242,4 +251,199 @@ exit 0'
     run "$SCRIPT" tsan '[ams]'
     [ "$status" -eq 1 ]
     contains "not a clean TSAN result" "$output"
+}
+
+# A jobpool on "zeus" whose state dir is $BATS_TEST_TMPDIR/mnt/.jobpool. It
+# records exec, and container-env prints a marker naming the dir it was given.
+fake_jobpool() {
+    export ZEUS_JOBPOOL="$BATS_TEST_TMPDIR/fake-jobpool"
+    export MOCK_JOBPOOL_LOG="$BATS_TEST_TMPDIR/jobpool.log"
+    cat > "$ZEUS_JOBPOOL" <<'FAKE'
+#!/bin/sh
+case "$1" in
+    ensure) echo "$BATS_TEST_TMPDIR/mnt/.jobpool/fifo" ;;
+    container-env) echo "POOLENV:$2" ;;
+    status) echo '{"running":true,"target":30,"available":30}' ;;
+    exec) echo "jobpool exec" >> "$MOCK_JOBPOOL_LOG"; shift 2; exec "$@" ;;
+    *) exit 2 ;;
+esac
+FAKE
+    chmod +x "$ZEUS_JOBPOOL"
+}
+
+@test "without jobpool on zeus the job sizes -j from memory" {
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    contains "using -j" "$output"
+    grep -qE 'HELIX_JFLAG=-j[0-9]+ helix-tsan bash -lc make test \$HELIX_JFLAG' "$MOCK_DOCKER_LOG"
+}
+
+# The container half run for real: docker exec of the job exports its -e
+# variables and runs the bash -lc script here, against a make that prints what
+# it was given. container-env opens a real FIFO, so its mode decides whether
+# the job joins.
+run_container_job() {
+    export POOL_FIFO="$BATS_TEST_TMPDIR/pool-fifo"
+    mkfifo -m 600 "$POOL_FIFO"
+    cat > "$ZEUS_JOBPOOL" <<'FAKE'
+#!/bin/sh
+case "$1" in
+    ensure) echo "$BATS_TEST_TMPDIR/mnt/.jobpool/fifo" ;;
+    container-env) echo "exec 3<>$POOL_FIFO 4<>$POOL_FIFO && export MAKEFLAGS=POOLED:$2" ;;
+    status) echo '{"running":true,"target":30,"available":30}' ;;
+    exec) echo "jobpool exec" >> "$MOCK_JOBPOOL_LOG"; shift 2; exec "$@" ;;
+    *) exit 2 ;;
+esac
+FAKE
+    mock_command_script make 'echo "MAKE: $* MAKEFLAGS=${MAKEFLAGS:-}"'
+    mock_command_script docker '
+case "$1" in
+    ps) echo helix-tsan ;;
+    inspect) echo "$MOCK_MOUNTS" ;;
+    exec)
+        case "$*" in
+            *pgrep*) exit 1 ;;
+            *unit-sweep*)
+                # A container starts from its own environment.
+                unset MAKEFLAGS MFLAGS MAKELEVEL
+                shift
+                while [ "$1" != bash ]; do
+                    [ "$1" = -e ] && export "$2"
+                    shift
+                done
+                exec bash -c "$3" ;;
+        esac ;;
+esac
+exit 0'
+    export MOCK_MOUNTS="$BATS_TEST_TMPDIR/mnt /work"
+}
+
+@test "with jobpool on zeus the container joins it and make gets no -j" {
+    fake_jobpool
+    run_container_job
+    run "$SCRIPT" sweep
+    [ "$status" -eq 0 ]
+    contains "joining jobpool: target 30" "$output"
+    contains "MAKE: unit-sweep NPROCS=96 MAKEFLAGS=POOLED:/work/.jobpool" "$output"
+    [ "$(cat "$MOCK_JOBPOOL_LOG")" = "jobpool exec" ]
+}
+
+@test "a container uid that cannot open the FIFO runs with its own -j" {
+    [ "$(id -u)" != 0 ] || skip "root opens a mode-000 FIFO anyway"
+    fake_jobpool
+    run_container_job
+    chmod 000 "$POOL_FIFO"
+    run "$SCRIPT" sweep
+    [ "$status" -eq 0 ]
+    contains "cannot open the jobpool FIFO; using -j" "$output"
+    printf '%s\n' "$output" | grep -qE '^MAKE: unit-sweep NPROCS=96 -j[0-9]+ MAKEFLAGS=$'
+}
+
+@test "a pool whose state the container cannot see is not joined" {
+    fake_jobpool
+    export MOCK_MOUNTS="/elsewhere /data"
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    contains "is not mounted in helix-tsan; sizing -j from memory" "$output"
+    contains "using -j" "$output"
+    refute_grep "POOLENV" "$MOCK_DOCKER_LOG"
+    [ ! -e "$MOCK_JOBPOOL_LOG" ]
+}
+
+@test "a jobpool that will not start is named, and the job sizes -j from memory" {
+    fake_jobpool
+    printf '#!/bin/sh\nexit 1\n' > "$ZEUS_JOBPOOL"
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    contains "jobpool ensure failed" "$output"
+    contains "using -j" "$output"
+}
+
+# --- ZFS ARC cap ---------------------------------------------------------------
+
+CAP=$((64 * 1024 * 1024 * 1024))
+
+# fake_zfs <zfs_arc_max> <arcstats c_max>: a ZFS module the run can cap. The
+# docker stub records the parameter while the job runs, and JOB_RC/JOB_TERM
+# make the job fail or signal the remote shell.
+fake_zfs() {
+    export ZEUS_ARC_PARAM="$BATS_TEST_TMPDIR/zfs_arc_max"
+    echo "$1" > "$ZEUS_ARC_PARAM"
+    printf '13 1 0x01 147 39984 0 0\nname type data\nc_min 4 1000\nc_max 4 %s\nsize 4 5\n' "$2" > "$ZEUS_ARCSTATS"
+    export ARC_DURING="$BATS_TEST_TMPDIR/arc-during"
+    mock_command_script docker '
+case "$1" in
+    ps) echo helix-tsan ;;
+    exec)
+        case "$*" in
+            *pgrep*) exit 1 ;;
+            *"make test"*)
+                cat "$ZEUS_ARC_PARAM" > "$ARC_DURING"
+                [ -n "${JOB_TERM:-}" ] && { kill -TERM "$PPID"; sleep 1; }
+                exit "${JOB_RC:-0}" ;;
+        esac ;;
+esac
+exit 0'
+}
+
+@test "an ARC left at the default is restored as the c_max it ran with" {
+    fake_zfs 0 200000000000
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    [ "$(cat "$ARC_DURING")" = "$CAP" ]
+    [ "$(cat "$ZEUS_ARC_PARAM")" = 200000000000 ]
+    contains "restored to 200000000000" "$output"
+    [ ! -e "$ZEUS_ARC_MARK" ]
+}
+
+@test "an explicit zfs_arc_max is restored as itself" {
+    fake_zfs 100000000000 200000000000
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    [ "$(cat "$ARC_DURING")" = "$CAP" ]
+    [ "$(cat "$ZEUS_ARC_PARAM")" = 100000000000 ]
+}
+
+@test "a failed job still restores the ARC" {
+    fake_zfs 0 200000000000
+    JOB_RC=2 run "$SCRIPT" test
+    [ "$status" -ne 0 ]
+    [ "$(cat "$ARC_DURING")" = "$CAP" ]
+    [ "$(cat "$ZEUS_ARC_PARAM")" = 200000000000 ]
+}
+
+@test "a job killed by a signal still restores the ARC" {
+    fake_zfs 0 200000000000
+    JOB_TERM=1 run "$SCRIPT" test
+    [ "$status" -ne 0 ]
+    [ "$(cat "$ARC_DURING")" = "$CAP" ]
+    [ "$(cat "$ZEUS_ARC_PARAM")" = 200000000000 ]
+    [ ! -e "$ZEUS_ARC_MARK" ]
+}
+
+@test "a cap abandoned by a dead run is restored to the bytes it recorded" {
+    local dead
+    true & dead=$!; wait "$dead"
+    fake_zfs "$CAP" "$CAP"
+    echo "$dead 123456789" > "$ZEUS_ARC_MARK"
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    contains "abandoned by dead pid $dead; restoring 123456789" "$output"
+    # The run then caps from the recovered value and hands that back.
+    [ "$(cat "$ARC_DURING")" = "$CAP" ]
+    [ "$(cat "$ZEUS_ARC_PARAM")" = 123456789 ]
+    [ ! -e "$ZEUS_ARC_MARK" ]
+}
+
+@test "a marker with no bytes to restore stays, and the run does not cap" {
+    local dead
+    true & dead=$!; wait "$dead"
+    fake_zfs "$CAP" "$CAP"
+    echo "$dead 0" > "$ZEUS_ARC_MARK"
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    contains "could not restore zfs_arc_max" "$output"
+    lacks "for this run" "$output"
+    [ -e "$ZEUS_ARC_MARK" ]
+    [ "$(cat "$ZEUS_ARC_PARAM")" = "$CAP" ]
 }

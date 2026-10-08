@@ -80,7 +80,8 @@ static const HelpEntry HELP[] = {
     {nullptr, "current, pwd", "Show the panel, overlay stack, and working directory", nullptr},
     {nullptr, "resolve <target>", "Print the absolute locator a target resolves to", nullptr},
     {nullptr, "list_panels", "List available panels", nullptr},
-    {nullptr, "list_components", "List every registered XML component (live registry)", nullptr},
+    {nullptr, "list_components",
+     "List XML components registered so far (they register on first use)", nullptr},
     {nullptr, "list_callbacks", "List every registered event-callback name", nullptr},
     {nullptr, "screenshot [path] [--target W] [--stable]", "Capture the screen",
      "a .png path encodes PNG; default is a timestamped .bmp in the\n"
