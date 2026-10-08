@@ -99,9 +99,10 @@ scripts/zeus-run.sh sweep                   # make unit-sweep on zeus
 #   second, so the binary produces NO test output and exits 0 - a pass that ran
 #   nothing. The container has no ld.so.preload and its image matches CI's.
 #   The commit has to be pushed; the container fetches it, it does not take your
-#   tree. zeus is memory-bound, not core-bound (ZFS ARC holds most of its 251GB),
-#   so the script caps the ARC for the run. The container then joins zeus's
-#   jobpool when one is installed there, else sizes -j from what is then free.
+#   tree. zeus is memory-bound, not core-bound (ZFS ARC holds most of its 251GB);
+#   its zfs_arc_sys_free tunable keeps 64 GiB free and the ARC self-adjusts above
+#   that. The container joins zeus's jobpool when one is installed there, else
+#   sizes -j from MemAvailable.
 
 # Worktrees — MUST use for MAJOR work. Always in .worktrees/ (project root).
 scripts/setup-worktree.sh feature/my-branch  # Symlinks shared deps, builds fast
