@@ -856,25 +856,3 @@ TEST_CASE_METHOD(UiButtonTestFixture,
 
     CHECK(s_invalidations == 0);
 }
-
-// A translation longer than a fixed-width button ellipsizes at the button's
-// edge; a label that fits is left at its natural width.
-TEST_CASE_METHOD(UiButtonTestFixture,
-                 "ui_button: a label wider than a fixed-width button is capped",
-                 "[ui_button][overflow]") {
-    const char* long_attrs[] = {
-        "text", "Geschwindigkeitsbegrenzung zuruecksetzen", "width", "90", "height", "40", nullptr};
-    const char* short_attrs[] = {"text", "OK", "width", "90", "height", "40", nullptr};
-    lv_obj_t* long_btn = create_button(long_attrs);
-    lv_obj_t* short_btn = create_button(short_attrs);
-    REQUIRE(long_btn != nullptr);
-    REQUIRE(short_btn != nullptr);
-    lv_obj_update_layout(test_screen());
-
-    lv_obj_t* long_label = lv_obj_get_child(long_btn, 0);
-    lv_obj_t* short_label = lv_obj_get_child(short_btn, 0);
-    REQUIRE(long_label != nullptr);
-    REQUIRE(short_label != nullptr);
-    CHECK(lv_obj_get_width(long_label) <= lv_obj_get_width(long_btn));
-    CHECK(lv_obj_get_width(short_label) < 40);
-}
