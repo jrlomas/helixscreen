@@ -378,7 +378,8 @@ static void alpha_pass(std::vector<uint8_t>& a, int32_t w, int32_t h, int r, boo
             const int32_t pos = horizontal ? x : y;
             uint32_t acc = 0;
             uint8_t mx = 0;
-            for (int32_t k = std::max(0, pos - r); k <= std::min(len - 1, pos + r); k++) {
+            for (int32_t k = std::max<int32_t>(0, pos - r);
+                 k <= std::min<int32_t>(len - 1, pos + r); k++) {
                 const uint8_t v = horizontal ? a[y * w + k] : a[k * w + x];
                 acc += v;
                 mx = std::max(mx, v);
