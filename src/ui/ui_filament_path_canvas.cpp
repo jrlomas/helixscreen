@@ -63,6 +63,7 @@ static void load_theme_colors(FilamentPathData* data) {
     theme.color_text = theme_manager_get_color("text");
     theme.color_bg = theme_manager_get_color("card_bg");
     theme.color_success = theme_manager_get_color("success");
+    theme.color_accent = helix::ui::tube_accent();
     for (int s = 0; s < 3; ++s) {
         theme.color_buffer[s] = theme_manager_get_color(
             helix::ui::buffer_status_token(static_cast<helix::ui::ClogMeterStatus>(s)));
@@ -75,6 +76,7 @@ static void load_theme_colors(FilamentPathData* data) {
     // Scale line widths based on spacing (responsive)
     theme.line_width_idle = LV_MAX(2, space_xs / 2);
     theme.line_width_active = LV_MAX(3, space_xs - 3);
+    theme.tube_gauge = theme.line_width_active + 2;
     theme.sensor_radius = LV_MAX(4, space_xs);
     theme.hub_width = LV_MAX(50, space_md * 5);
     theme.border_radius = LV_MAX(4, space_xs);

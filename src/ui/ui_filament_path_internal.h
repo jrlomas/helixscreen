@@ -144,10 +144,12 @@ struct ThemeCache {
     lv_color_t color_text;
     lv_color_t color_bg;        // Canvas background (for hollow tube bore)
     lv_color_t color_success;   // Success color (cached for draw callbacks)
+    lv_color_t color_accent;    // Active route walls and halo ("primary")
     lv_color_t color_buffer[3]; // Buffer box by ClogMeterStatus: text_muted, warning, danger
 
     int32_t line_width_idle = LINE_WIDTH_IDLE_BASE;
     int32_t line_width_active = LINE_WIDTH_ACTIVE_BASE;
+    int32_t tube_gauge = LINE_WIDTH_ACTIVE_BASE + 2; // tube outer width, walls included
     int32_t sensor_radius = SENSOR_RADIUS_BASE;
     int32_t hub_width = 60;
     int32_t border_radius = 6;

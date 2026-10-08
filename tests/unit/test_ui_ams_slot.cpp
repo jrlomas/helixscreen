@@ -1037,3 +1037,46 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: a secondary backend's slot shows 
     ams.set_active_backend(0);
     ams.clear_backends();
 }
+
+// An ams_slot showing a secondary backend shows that backend's tool mapping in
+// its badge, not backend 0's mapping for the same lane index.
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: a secondary backend's slot shows its own tool badge",
+                 "[ui][ams_slot][multi_backend]") {
+    ui_ams_slot_register();
+    auto& ams = AmsState::instance();
+    ams.init_subjects(true);
+
+    auto primary = AmsBackend::create_mock(4);
+    auto secondary = AmsBackend::create_mock(4);
+    auto* secondary_ptr = static_cast<AmsBackendMock*>(secondary.get());
+    SlotInfo sec = secondary_ptr->get_slot_info(0);
+    sec.mapped_tool = 3;
+    helix::test::apply_edit(*secondary_ptr, 0, sec);
+
+    ams.set_backend(std::move(primary));
+    const int second = ams.add_backend(std::move(secondary));
+    REQUIRE(second == 1);
+    ams.sync_from_backend();
+    ams.sync_backend(second);
+
+    ams.set_active_backend(second);
+    process_lvgl(50);
+    lv_obj_t* slot = create_ams_slot(test_screen(), 0);
+    REQUIRE(slot != nullptr);
+    process_lvgl(50);
+
+    // The two backends really disagree on lane 0's tool.
+    REQUIRE(ams.get_backend(0)->get_slot_info(0).mapped_tool == 0);
+    REQUIRE(ams.get_backend(second)->get_slot_info(0).mapped_tool == 3);
+
+    lv_obj_t* badge_bg = UITest::find_by_name(slot, "tool_badge");
+    REQUIRE(badge_bg != nullptr);
+    CHECK_FALSE(lv_obj_has_flag(badge_bg, LV_OBJ_FLAG_HIDDEN));
+    lv_obj_t* badge_label = UITest::find_by_name(slot, "tool_badge_label");
+    REQUIRE(badge_label != nullptr);
+    CHECK(std::string(UITest::get_text(badge_label)) == "T3");
+
+    lv_obj_delete(slot);
+    ams.set_active_backend(0);
+    ams.clear_backends();
+}
