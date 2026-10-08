@@ -1629,11 +1629,7 @@ bool MoonrakerClientMock::is_mock_cfs() const {
 }
 
 bool MoonrakerClientMock::is_mock_openams() const {
-    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (!ams_env || !ams_env[0]) {
-        return false;
-    }
-    return helix::text_io::to_lower(std::string(ams_env)) == "openams";
+    return effective_mock_ams_env() == "openams";
 }
 
 nlohmann::json MoonrakerClientMock::openams_status_json() const {
