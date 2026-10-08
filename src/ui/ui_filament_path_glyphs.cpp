@@ -351,8 +351,16 @@ int32_t toolhead_tip_y(int32_t nozzle_y, int32_t extruder_scale) {
 // restates its renderer's top edge (src/rendering/nozzle_renderer_*.cpp) at the
 // same effective scale draw_toolhead() passes it: the polygon styles map their
 // highest design coordinate, the isometric bodies add their cap and iso-top
-// offset above the body, and AntHead is the scaled image's top.
+// offset above the body, and AntHead is the scaled image's top (the default
+// glyph's on ESP32, which draws that glyph in its place).
 int32_t toolhead_top_y(int32_t nozzle_y, int32_t extruder_scale) {
+    // Default body plus its raised cap and bevel (each a tenth of the body).
+    auto default_top = [&]() {
+        const int32_t body_height = extruder_scale * 4;
+        const int32_t cap_height = body_height / 10;
+        const int32_t body_depth = (extruder_scale * 6) / 10;
+        return nozzle_y - body_height / 2 - 2 * cap_height - body_depth / 2;
+    };
     switch (helix::SettingsManager::instance().get_effective_toolhead_style()) {
     case helix::ToolheadStyle::A4T: {
         const float scale = (float)(extruder_scale * 6 / 5 * 10) / 2000.0f;
@@ -367,18 +375,17 @@ int32_t toolhead_top_y(int32_t nozzle_y, int32_t extruder_scale) {
         return nozzle_y + (int32_t)((2 - 687) * scale);
     }
     case helix::ToolheadStyle::ANTHEAD:
+#if defined(HELIX_PLATFORM_ESP32)
+        return default_top(); // the default glyph stands in for the unshipped image
+#else
         return nozzle_y - (81 * ((extruder_scale * 65) / 10)) / 163;
+#endif
     case helix::ToolheadStyle::CREALITY_K1:
         return nozzle_y - (extruder_scale * 48) / 10 / 2 - (extruder_scale * 6) / 10 / 2;
     case helix::ToolheadStyle::CREALITY_K2:
         return nozzle_y - (extruder_scale * 48) / 10 / 2 - (extruder_scale * 5) / 10 / 2;
-    default: {
-        // Default body plus its raised cap and bevel (each a tenth of the body).
-        const int32_t body_height = extruder_scale * 4;
-        const int32_t cap_height = body_height / 10;
-        const int32_t body_depth = (extruder_scale * 6) / 10;
-        return nozzle_y - body_height / 2 - 2 * cap_height - body_depth / 2;
-    }
+    default:
+        return default_top();
     }
 }
 
