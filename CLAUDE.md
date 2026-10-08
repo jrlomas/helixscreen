@@ -41,7 +41,7 @@ ps -eo pid,etime,time,pcpu,comm --sort=-time | head   # abandoned spinners
 - **The commit hook builds too.** `scripts/quality-checks.sh` verifies an incremental build of the app with a bounded `-j` from `helix-claim jobs` (`qc_build_jobs`), so N sessions committing never become N unbounded builds; under the jobpool shim the pool bounds it instead. `HELIX_QC_JOBS` overrides it. `scripts/qc_timing.py [--staged-only]` runs the gate and prints where its time went, which is how you find out whether you are waiting on that build or on a check.
 
 ```bash
-make                                 # Build ONLY the program binary (NOT tests), at a fair -j
+make                                 # Build ONLY the program binary (NOT tests); it picks its own -j
 ./build/bin/helix-screen --test -vv  # Mock printer + DEBUG logs
 # ALWAYS use verbosity: -v=INFO, -vv=DEBUG, -vvv=TRACE (default=WARN)
 

@@ -36,7 +36,7 @@ EOF
     chmod +x "$HELIX_ADVISOR_JOBS_CMD"
 }
 roomy() { stub_jobs 16 60; }
-tight_share() { stub_jobs 6 60; }
+narrow_share() { stub_jobs 6 60; }
 tight_memory() { stub_jobs 16 12; }
 
 advise() {
@@ -61,14 +61,14 @@ context() {
 }
 
 @test "a single-tag test run is not heavy" {
-    tight_share
+    tight_memory
     advise "make t F='[ams]'"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
 
 @test "a command already on zeus is left alone" {
-    tight_share
+    tight_memory
     advise "scripts/zeus-run.sh mutate --tests '[ams]'"
     [ -z "$output" ]
     advise "ssh zeus.local 'sudo -n docker exec helix-tsan make full-test-run'"
@@ -142,15 +142,15 @@ zeus_modes() {
 # Only when thelio is tight
 # ---------------------------------------------------------------------------
 
-@test "an explicit -j above the fair share is flagged" {
-    tight_share
+@test "an explicit -j above the box's -j is flagged" {
+    narrow_share
     advise "make -j24"
     contains '-j$(scripts/helix-claim jobs)' "$(context)"
     contains "-j6" "$(context)"
 }
 
-@test "an explicit -j at or under the fair share is not flagged" {
-    tight_share
+@test "an explicit -j at or under the box's -j is not flagged" {
+    narrow_share
     advise "make -j4 test"
     [ -z "$output" ]
 }
@@ -165,7 +165,7 @@ zeus_modes() {
 }
 
 @test "an idf build in docker is heavy when thelio is tight" {
-    tight_share
+    tight_memory
     advise "docker run --rm -v \$PWD:/src espressif/idf idf.py build"
     contains "zeus" "$(context)"
 }
@@ -253,7 +253,7 @@ zeus_modes() {
     export HELIX_ADVISOR_JOBS_CMD="$TEST_DIR/a b/jobs"
     stub_jobs 6 60
     advise "make -j40 x"
-    contains "fair share, -j6" "$(context)"
+    contains "above the -j6 this box takes" "$(context)"
 }
 
 # ---------------------------------------------------------------------------
@@ -261,20 +261,19 @@ zeus_modes() {
 # ---------------------------------------------------------------------------
 
 @test "-j equal to the share is fine and one above is flagged" {
-    tight_share
+    narrow_share
     advise "make -j6 x"
     [ -z "$output" ]
     advise "make -j7 x"
-    contains "fair share, -j6" "$(context)"
+    contains "above the -j6 this box takes" "$(context)"
 }
 
-@test "a share of 8 is tight and 9 is not" {
-    local loop='for i in 1 2; do ./build/bin/helix-tests x; done'
-    stub_jobs 8 60
-    advise "$loop"
-    contains "loop" "$(context)"
-    stub_jobs 9 60
-    advise "$loop"
+@test "with no pool a narrow -j alone is not tight" {
+    # Without a pool the -j is cores capped by memory, so memory already
+    # carries the signal; a small -j on a box with room is a small box.
+    stub_jobs 2 60
+    advise 'for i in 1 2; do ./build/bin/helix-tests x; done'
+    [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
 
@@ -346,7 +345,7 @@ zeus_modes() {
 }
 
 @test "every spelling of an oversized -j is flagged" {
-    tight_share
+    narrow_share
     # The advisor expands $(nproc) on the host, so pin it: a 4-core runner's
     # -j$(nproc) sits under the share of 6 and would not be oversized there.
     mkdir -p "$TEST_DIR/nproc-bin"
@@ -355,12 +354,12 @@ zeus_modes() {
     PATH="$TEST_DIR/nproc-bin:$PATH"
     for c in 'make -j$(nproc)' 'make -j 32 test' 'make --jobs=32' 'make --jobs 32'; do
         advise "$c"
-        contains "fair share, -j6" "$(context)" || fail "missed: $c"
+        contains "above the -j6 this box takes" "$(context)" || fail "missed: $c"
     done
 }
 
 @test "a computed or bare -j is left to its source" {
-    tight_share
+    narrow_share
     for c in 'make -j"$(scripts/helix-claim jobs)"' 'make -j$(scripts/helix-claim jobs) test' 'make -j'; do
         advise "$c"
         [ -z "$output" ] || fail "flagged: $c"
@@ -369,17 +368,17 @@ zeus_modes() {
 
 @test "an explicit -j above the share is flagged even on a roomy box" {
     advise "make -j24 test"
-    contains "fair share, -j16" "$(context)"
+    contains "above the -j16 this box takes" "$(context)"
 }
 
 @test "xargs over the test binary is a loop" {
-    tight_share
+    tight_memory
     advise "seq 200 | xargs -I{} ./build/bin/helix-tests '[x]'"
     contains "loop" "$(context)"
 }
 
 @test "a docker toolchain target is a container build" {
-    tight_share
+    tight_memory
     advise "make docker-toolchain-k1"
     contains "zeus" "$(context)"
 }
@@ -446,5 +445,5 @@ EOF
     json=$(jq -cn --arg c "make -j9999" '{tool_name: "Bash", tool_input: {command: $c}}')
     run env -u JOBPOOL PATH="$p" bash -c "printf '%s' \"\$1\" | $ADVISOR" _ "$json"
     [ "$status" -eq 0 ]
-    contains "-j9999 is above the fair share" "$(context)"
+    contains "-j9999 is above the -j" "$(context)"
 }

@@ -353,9 +353,10 @@ resources)
     [ "${1:-}" = "--no-zeus" ] && zeus=0
     avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)
     read -r l1 l5 l15 _ < /proc/loadavg
-    printf '%s: %.1fGB available, load %s %s %s on %s cpus, fair share -j%s\n' \
+    if j=$(pool_target); then jl="jobpool target $j"; else jl="build -j$("${BASH_SOURCE[0]}" jobs)"; fi
+    printf '%s: %.1fGB available, load %s %s %s on %s cpus, %s\n' \
         "$(hostname -s)" "$(awk -v kb="$avail_kb" 'BEGIN{print kb/1048576}')" \
-        "$l1" "$l5" "$l15" "$(nproc)" "$("${BASH_SOURCE[0]}" jobs)"
+        "$l1" "$l5" "$l15" "$(nproc)" "$jl"
     shopt -s nullglob
     live=0
     for f in "$CLAIM_DIR"/*.json; do
@@ -489,7 +490,7 @@ helix-claim - advisory claims on resources shared between agent sessions
   jobs [-v]                                   the -j a build takes: the jobpool's
                                               target, else cores capped by memory
   pool                                        the live jobpool's target; exit 1 if none
-  resources [--no-zeus]                       memory, load, fair -j, live claims,
+  resources [--no-zeus]                       memory, load, build -j, live claims,
                                               top memory users, and zeus
 
 worktree: and build: names are resolved (basename, branch, or bare = the tree

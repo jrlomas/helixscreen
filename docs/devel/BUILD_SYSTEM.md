@@ -1238,7 +1238,12 @@ Where it is installed:
 - `JOBPOOL=0 make ...` bypasses the pool for one run. `helix-claim jobs` honours
   the same switch.
 - `helix-claim jobs` reports the pool's size while the daemon is live, so the
-  sweep, the commit hook and the resource advisor read the machine budget.
+  sweep, the commit hook and the resource advisor read the machine budget. It
+  asks `jobpool target`, which takes no lock and moves no tokens; only
+  `jobs -v` reads `jobpool status` for the free count.
+- The unit sweep runs its shards three to a pool token (`jobpool with-token`
+  around each batch of three), so every sweep on the box together stays within
+  three shards per token.
 - Container builds on thelio (`*-docker` targets) do not join the pool.
 - On zeus, `scripts/zeus-run.sh` joins the container to zeus's pool: zeus's
   jobpool conf puts the state dir under the directory the `helix-tsan` container
