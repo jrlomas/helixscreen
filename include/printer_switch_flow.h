@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include "ui_observer_guard.h"
+#include "ui_timer_guard.h"
+
 #include "async_lifetime_guard.h"
 
 #include <functional>
@@ -35,6 +38,13 @@ class PrinterSwitchFlow {
     /// `config` is read through the reference because its owner assigns it after
     /// construction.
     PrinterSwitchFlow(Config*& config, AsyncLifetimeGuard& async, Restart restart);
+    ~PrinterSwitchFlow();
+
+    PrinterSwitchFlow(const PrinterSwitchFlow&) = delete;
+    PrinterSwitchFlow& operator=(const PrinterSwitchFlow&) = delete;
+
+    /// How long the switch card waits for the new printer to connect before it steps aside.
+    static constexpr uint32_t CONNECT_WAIT_MS = 30000;
 
     /// Switches to `printer_id`, asking first when the current printer is printing.
     /// Picking the connected printer does nothing while its connection is up, and connects it
@@ -111,6 +121,20 @@ class PrinterSwitchFlow {
     /// The record the add-printer wizard's move replaced; cancelling the wizard puts it back.
     BootCrashRecord m_wizard_replaced_record;
     std::string m_connected_printer_id;
+
+    /// The card on the top layer that covers a restart; null when none is up.
+    lv_obj_t* m_interstitial = nullptr;
+    ObserverGuard m_connect_observer;
+    ui::LvglTimerGuard m_connect_timeout;
+
+    /// Puts up the switch card reading `title` and `phase`, replacing any card already up.
+    void show_interstitial(const std::string& title, const char* phase);
+    /// Puts up the switch card reading "Loading...", paints it, and runs the teardown.
+    void tear_down_under_interstitial(const std::string& title);
+    /// The restart is done: the card reads "Connecting..." until the new printer connects,
+    /// fails, or CONNECT_WAIT_MS passes. A setup wizard on screen takes over at once.
+    void await_connection(const std::string& title);
+    void dismiss_interstitial();
 
     /// Saves the config, telling the user when it could not.
     bool save_or_report();

@@ -8,10 +8,12 @@
  * The desktop's Application-level cases live in
  * tests/unit/application/test_application_printer_switch.cpp. These cover what the flow adds
  * for a user's pick: nothing happens for the active printer, and a printer that is printing
- * is only left after the user confirms.
+ * is only left after the user confirms. The switch card on the top layer covers every restart
+ * until the new printer connects.
  */
 
 #include "ui_modal.h"
+#include "ui_spinner.h"
 #include "ui_update_queue.h"
 
 #include "../test_fixtures.h"
@@ -26,6 +28,7 @@
 #include "printer_state.h"
 #include "printer_switch_flow.h"
 
+#include <functional>
 #include <lvgl.h>
 #include <string>
 #include <vector>
@@ -36,7 +39,47 @@
 using helix::PrintJobState;
 using helix::ui::UpdateQueue;
 
+namespace helix {
+class PrinterSwitchFlowTestAccess {
+  public:
+    static lv_timer_t* connect_timeout(PrinterSwitchFlow& flow) {
+        return flow.m_connect_timeout.get();
+    }
+};
+} // namespace helix
+
 namespace {
+
+/// The switch cards on the top layer that are still showing; one being deleted is hidden.
+std::vector<lv_obj_t*> visible_switch_cards() {
+    std::vector<lv_obj_t*> cards;
+    lv_obj_t* top = lv_layer_top();
+    for (uint32_t i = 0; i < lv_obj_get_child_count(top); ++i) {
+        lv_obj_t* child = lv_obj_get_child(top, static_cast<int32_t>(i));
+        const char* name = lv_obj_get_name(child);
+        if (name && std::string(name) == "printer_switch_interstitial" &&
+            !lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN)) {
+            cards.push_back(child);
+        }
+    }
+    return cards;
+}
+
+/// "title / phase" of the one card showing, "none" without one, "several" with more.
+std::string switch_card() {
+    const auto cards = visible_switch_cards();
+    if (cards.empty()) {
+        return "none";
+    }
+    if (cards.size() > 1) {
+        return "several";
+    }
+    auto text = [&](const char* name) {
+        lv_obj_t* label = lv_obj_find_by_name(cards.front(), name);
+        return std::string(label ? lv_label_get_text(label) : "?");
+    };
+    return text("switch_interstitial_title") + " / " + text("switch_interstitial_phase");
+}
 
 class SwitchFlowFixture : public XMLTestFixture {
   public:
@@ -45,10 +88,21 @@ class SwitchFlowFixture : public XMLTestFixture {
                 {[this] {
                      events_.push_back("teardown");
                      active_at_teardown_ = cfg_->get_active_printer_id();
+                     card_at_teardown_ = switch_card();
+                     flushes_at_teardown_ = s_flushes;
                  },
-                 [this] { events_.push_back("rebuild"); }, [this] { events_.push_back("home"); }}) {
+                 [this] {
+                     events_.push_back("rebuild");
+                     card_at_rebuild_ = switch_card();
+                     if (on_rebuild_) {
+                         on_rebuild_();
+                     }
+                 },
+                 [this] { events_.push_back("home"); }}) {
         helix::ui::modal_init_subjects();
         REQUIRE(register_component("modal_dialog"));
+        ui_spinner_init();
+        REQUIRE(register_component("printer_switch_interstitial"));
 
         cfg_ = helix::Config::get_instance();
         saved_data_ = helix::ConfigTestAccess::data(*cfg_);
@@ -72,6 +126,7 @@ class SwitchFlowFixture : public XMLTestFixture {
     }
 
     ~SwitchFlowFixture() override {
+        set_wizard_active(false);
         while (lv_obj_t* top = Modal::get_top()) {
             Modal::hide(top);
             UpdateQueue::instance().drain();
@@ -105,6 +160,11 @@ class SwitchFlowFixture : public XMLTestFixture {
     helix::AsyncLifetimeGuard async_;
     std::vector<std::string> events_;
     std::string active_at_teardown_;
+    std::string card_at_teardown_;
+    int flushes_at_teardown_ = 0;
+    static inline int s_flushes = 0;
+    std::string card_at_rebuild_;
+    std::function<void()> on_rebuild_;
     helix::PrinterSwitchFlow flow_;
 
   private:
@@ -438,4 +498,138 @@ TEST_CASE_METHOD(SwitchFlowFixture,
     CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 2);
     CHECK(flow_.wizard_previous_printer_id().empty());
     CHECK(events_.empty());
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: the switch card covers the restart until the printer connects",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    REQUIRE(switch_card() == "none");
+
+    REQUIRE(flow_.request_switch("beta"));
+
+    CHECK(card_at_teardown_ == "Switching to Beta / Loading...");
+    CHECK(card_at_rebuild_ == "Switching to Beta / Loading...");
+    CHECK(switch_card() == "Switching to Beta / Connecting...");
+
+    // The previous printer's CONNECTED, still in the subject when the wait starts, is not
+    // the new printer connecting.
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "Switching to Beta / Connecting...");
+    set_connection(helix::ConnectionState::CONNECTING);
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "Switching to Beta / Connecting...");
+
+    set_connection(helix::ConnectionState::CONNECTED);
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "none");
+    CHECK(helix::PrinterSwitchFlowTestAccess::connect_timeout(flow_) == nullptr);
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture, "Switch flow: a failed connection drops the switch card",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    REQUIRE(flow_.request_switch("beta"));
+    set_connection(helix::ConnectionState::CONNECTING);
+    UpdateQueue::instance().drain();
+    REQUIRE(switch_card() != "none");
+
+    set_connection(helix::ConnectionState::FAILED);
+    UpdateQueue::instance().drain();
+
+    CHECK(switch_card() == "none");
+    CHECK(helix::PrinterSwitchFlowTestAccess::connect_timeout(flow_) == nullptr);
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: the switch card steps aside when the printer never connects",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    REQUIRE(flow_.request_switch("beta"));
+    set_connection(helix::ConnectionState::RECONNECTING);
+    UpdateQueue::instance().drain();
+    lv_timer_t* timeout = helix::PrinterSwitchFlowTestAccess::connect_timeout(flow_);
+    REQUIRE(timeout != nullptr);
+    REQUIRE(switch_card() != "none");
+
+    lv_timer_ready(timeout);
+    lv_timer_handler();
+
+    CHECK(switch_card() == "none");
+    CHECK(helix::PrinterSwitchFlowTestAccess::connect_timeout(flow_) == nullptr);
+    // Nothing the wait left behind fires on a later connection.
+    set_connection(helix::ConnectionState::CONNECTED);
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "none");
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture, "Switch flow: repeated switches leave no switch cards behind",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    lv_timer_handler();
+    const uint32_t before = lv_obj_get_child_count(lv_layer_top());
+
+    for (int i = 0; i < 3; ++i) {
+        REQUIRE(flow_.request_switch("beta"));
+        // A second switch while the first is still connecting replaces its card.
+        REQUIRE(flow_.request_switch("alpha"));
+        CHECK(switch_card() == "Switching to Alpha / Connecting...");
+        set_connection(helix::ConnectionState::CONNECTING);
+        UpdateQueue::instance().drain();
+        set_connection(helix::ConnectionState::CONNECTED);
+        UpdateQueue::instance().drain();
+        CHECK(switch_card() == "none");
+    }
+    lv_timer_handler();
+    lv_timer_handler();
+
+    CHECK(lv_obj_get_child_count(lv_layer_top()) == before);
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: the add-printer wizard takes over from the switch card",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    on_rebuild_ = [] { set_wizard_active(true); };
+
+    flow_.add_printer_via_wizard();
+    set_wizard_cancel_callback(nullptr);
+
+    CHECK(card_at_teardown_ == "Adding printer / Loading...");
+    CHECK(card_at_rebuild_ == "Adding printer / Loading...");
+    CHECK(switch_card() == "none");
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: cancelling the add-printer wizard covers the restart back",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    flow_.add_printer_via_wizard();
+    set_wizard_cancel_callback(nullptr);
+    set_connection(helix::ConnectionState::CONNECTING);
+    set_connection(helix::ConnectionState::CONNECTED);
+    UpdateQueue::instance().drain();
+    REQUIRE(switch_card() == "none");
+
+    flow_.cancel_add_printer_wizard();
+    UpdateQueue::instance().drain();
+
+    CHECK(card_at_teardown_ == "Switching to Alpha / Loading...");
+    CHECK(switch_card() == "Switching to Alpha / Connecting...");
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture, "Switch flow: the switch card is painted before the teardown",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    lv_display_t* display = lv_display_get_default();
+    REQUIRE(display != nullptr);
+    lv_display_set_flush_cb(display, [](lv_display_t* d, const lv_area_t*, uint8_t*) {
+        ++s_flushes;
+        lv_display_flush_ready(d);
+    });
+    lv_refr_now(display);
+    s_flushes = 0;
+
+    REQUIRE(flow_.request_switch("beta"));
+
+    // The teardown and rebuild block the thread that renders, so a card left for the next
+    // timer pass would only appear once they are over.
+    CHECK(card_at_teardown_ == "Switching to Beta / Loading...");
+    CHECK(flushes_at_teardown_ > 0);
+
+    lv_display_set_flush_cb(
+        display, [](lv_display_t* d, const lv_area_t*, uint8_t*) { lv_display_flush_ready(d); });
 }

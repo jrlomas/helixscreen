@@ -5,12 +5,14 @@
 
 #include "ui_modal.h"
 #include "ui_toast_manager.h"
+#include "ui_utils.h"
 #include "ui_wizard.h"
 
 #include "app_globals.h"
 #include "boot_crash_guard.h"
 #include "config.h"
 #include "connection_state.h"
+#include "observer_factory.h"
 #include "print_lifecycle_state.h"
 #include "printer_cache_registry.h"
 #include "printer_state.h"
@@ -19,6 +21,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "hv/json.hpp"
 
@@ -68,6 +71,72 @@ bool printer_connection_live() {
 
 PrinterSwitchFlow::PrinterSwitchFlow(Config*& config, AsyncLifetimeGuard& async, Restart restart)
     : m_config(config), m_async(async), m_restart(std::move(restart)) {}
+
+PrinterSwitchFlow::~PrinterSwitchFlow() {
+    dismiss_interstitial();
+}
+
+void PrinterSwitchFlow::show_interstitial(const std::string& title, const char* phase) {
+    dismiss_interstitial();
+    // On the top layer, which the restart does not tear down. Recreated per phase rather
+    // than updated: the teardown stops every animation, the spinner's included.
+    const char* attrs[] = {
+        "name", "printer_switch_interstitial", "title", title.c_str(), "phase", phase, nullptr};
+    m_interstitial =
+        static_cast<lv_obj_t*>(lv_xml_create(lv_layer_top(), "printer_switch_interstitial", attrs));
+    if (!m_interstitial) {
+        spdlog::error("[PrinterSwitchFlow] printer_switch_interstitial creation failed");
+    }
+}
+
+void PrinterSwitchFlow::tear_down_under_interstitial(const std::string& title) {
+    // The restart blocks this thread for seconds, so the card paints before each step.
+    show_interstitial(title, lv_tr("Loading..."));
+    lv_refr_now(nullptr);
+    m_restart.teardown();
+    lv_refr_now(nullptr);
+}
+
+void PrinterSwitchFlow::await_connection(const std::string& title) {
+    if (is_wizard_active()) {
+        dismiss_interstitial();
+        return;
+    }
+    show_interstitial(title, lv_tr("Connecting..."));
+    // State changes arrive queued, so the value seen on attach can still be the previous
+    // printer's CONNECTED; only a later CONNECTED belongs to the new printer. FAILED hands
+    // over to the connection-failed UI.
+    m_connect_observer = ui::observe<int>(
+        get_printer_state().network_state().get_printer_connection_state_subject(), this,
+        [first = true](PrinterSwitchFlow* self, int value) mutable {
+            const auto state = static_cast<ConnectionState>(value);
+            const bool on_attach = std::exchange(first, false);
+            if ((state == ConnectionState::CONNECTED && !on_attach) ||
+                state == ConnectionState::FAILED) {
+                spdlog::info("[PrinterSwitchFlow] Connection state {} ends the switch card", value);
+                self->dismiss_interstitial();
+            }
+        },
+        get_printer_state().get_subjects_lifetime());
+    lv_timer_t* timeout = lv_timer_create(
+        [](lv_timer_t* timer) {
+            auto* self = static_cast<PrinterSwitchFlow*>(lv_timer_get_user_data(timer));
+            // One-shot: LVGL deletes the timer after this run.
+            self->m_connect_timeout.release();
+            spdlog::warn("[PrinterSwitchFlow] No connection after {} ms; dropping the switch card",
+                         CONNECT_WAIT_MS);
+            self->dismiss_interstitial();
+        },
+        CONNECT_WAIT_MS, this);
+    lv_timer_set_repeat_count(timeout, 1);
+    m_connect_timeout.reset(timeout);
+}
+
+void PrinterSwitchFlow::dismiss_interstitial() {
+    m_connect_observer.reset();
+    m_connect_timeout.reset();
+    ui::safe_delete_deferred(m_interstitial);
+}
 
 bool PrinterSwitchFlow::confirm_pending() {
     if (!m_confirm_dialog) {
@@ -165,16 +234,14 @@ bool PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
     // correct, so nothing keeps serving the previous printer's values (#804).
     PrinterCacheRegistry::instance().invalidate_all();
 
-    m_restart.teardown();
+    const std::string title =
+        fmt::format(fmt::runtime(lv_tr("Switching to {}")), m_config->get_active_printer_name());
+    tear_down_under_interstitial(title);
     m_restart.rebuild();
 
     m_restart.land_home();
     m_connected_printer_id = printer_id;
-
-    // Show toast with the new printer name
-    const std::string printer_name = m_config->get_active_printer_name();
-    std::string toast_msg = fmt::format(fmt::runtime(lv_tr("Switched to {}")), printer_name);
-    ToastManager::instance().show(ToastSeverity::INFO, toast_msg.c_str());
+    await_connection(title);
 
     spdlog::info("[PrinterSwitchFlow] Switched to printer '{}'", printer_id);
     return true;
@@ -217,7 +284,8 @@ void PrinterSwitchFlow::add_printer_via_wizard() {
 
     // The rebuild runs the wizard itself when is_wizard_required() returns true (it does for
     // the new empty entry), so the wizard must not be launched again here.
-    m_restart.teardown();
+    const std::string title = lv_tr("Adding printer");
+    tear_down_under_interstitial(title);
 
     // Registered after the teardown (which clears it) and before the rebuild (which runs the
     // wizard).
@@ -225,6 +293,7 @@ void PrinterSwitchFlow::add_printer_via_wizard() {
 
     m_restart.rebuild();
     m_connected_printer_id = new_id;
+    await_connection(title);
 }
 
 void PrinterSwitchFlow::cancel_add_printer_wizard() {
@@ -269,10 +338,13 @@ void PrinterSwitchFlow::cancel_add_printer_wizard() {
         // again — drop every per-printer cache before teardown.
         PrinterCacheRegistry::instance().invalidate_all();
 
-        m_restart.teardown();
+        const std::string title = fmt::format(fmt::runtime(lv_tr("Switching to {}")),
+                                              m_config->get_active_printer_name());
+        tear_down_under_interstitial(title);
         m_restart.rebuild();
         m_restart.land_home();
         m_connected_printer_id = m_config->get_active_printer_id();
+        await_connection(title);
     });
 }
 
