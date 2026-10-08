@@ -177,8 +177,13 @@ namespace {
 struct ScopedToolheadStyle {
     helix::ToolheadStyle previous;
     explicit ScopedToolheadStyle(helix::ToolheadStyle style)
-        : previous(helix::SettingsManager::instance().get_toolhead_style()) {
+        : previous(prepared().get_toolhead_style()) {
         helix::SettingsManager::instance().set_toolhead_style(style);
+    }
+    // The style lives in a subject; without one, set_toolhead_style() stores nothing.
+    static helix::SettingsManager& prepared() {
+        helix::SettingsManager::instance().init_subjects();
+        return helix::SettingsManager::instance();
     }
     ~ScopedToolheadStyle() {
         helix::SettingsManager::instance().set_toolhead_style(previous);
@@ -254,4 +259,76 @@ TEST_CASE_METHOD(HubStackFixture, "HUB with the bypass shown keeps the ratio lay
     REQUIRE(c.data->hits.buffer_valid);
     CHECK(center_y(c.data->hits.hub) == Catch::Approx(ratio_y(c, HUB_Y_RATIO)).margin(1));
     CHECK(center_y(c.data->hits.buffer) == Catch::Approx(ratio_y(c, BUFFER_Y_RATIO)).margin(1));
+}
+
+TEST_CASE_METHOD(HubStackFixture, "HUB in hub_only mode keeps the ratio layout",
+                 "[filament-path][hub-stack]") {
+    auto c = make(false, false);
+    ui_filament_path_canvas_set_hub_only(c.obj, true);
+    load(c, static_cast<int>(helix::PathSegment::HUB));
+    render(c);
+    REQUIRE(c.data->hits.hub_valid);
+    CHECK(center_y(c.data->hits.hub) == Catch::Approx(ratio_y(c, HUB_Y_RATIO)).margin(1));
+}
+
+TEST_CASE_METHOD(HubStackFixture, "LINEAR never stacks its selector or buffer",
+                 "[filament-path][hub-stack]") {
+    auto c = make(true, false);
+    ui_filament_path_canvas_set_topology(c.obj, 0);
+    load(c, static_cast<int>(helix::PathSegment::NOZZLE));
+    render(c);
+    REQUIRE(c.data->hits.hub_valid);
+    REQUIRE(c.data->hits.buffer_valid);
+    // The selector butts against the prep sensors; the buffer keeps its ratio.
+    const int32_t hub_h = c.data->hits.hub.y2 - c.data->hits.hub.y1;
+    CHECK(center_y(c.data->hits.hub) ==
+          Catch::Approx(ratio_y(c, PREP_Y_RATIO) + c.data->theme.sensor_radius + hub_h / 2)
+              .margin(1));
+    CHECK(center_y(c.data->hits.buffer) == Catch::Approx(ratio_y(c, BUFFER_Y_RATIO)).margin(1));
+}
+
+TEST_CASE_METHOD(HubStackFixture, "HUB on a canvas too short to stack keeps the ratio layout",
+                 "[filament-path][hub-stack]") {
+    auto c = make(false, false);
+    lv_obj_set_size(c.obj, CANVAS_W, 100);
+    load(c, static_cast<int>(helix::PathSegment::NOZZLE));
+    render(c);
+    REQUIRE(c.data->hits.hub_valid);
+
+    // Stacked, the hub would sit above its ratio position: the stack only moves it down.
+    const int32_t hub_h = (int32_t)(100 * HUB_HEIGHT_RATIO);
+    const int32_t gap = hub_h / 2 + 2 * c.data->theme.sensor_radius;
+    const int32_t glyph_top =
+        toolhead_top_y(ratio_y(c, NOZZLE_Y_RATIO), c.data->theme.extruder_scale);
+    REQUIRE(glyph_top - 2 * gap - hub_h / 2 <= ratio_y(c, HUB_Y_RATIO));
+    CHECK(center_y(c.data->hits.hub) == Catch::Approx(ratio_y(c, HUB_Y_RATIO)).margin(1));
+}
+
+// Each expected top restates its renderer's top edge in src/rendering/nozzle_renderer_*.cpp
+// at nozzle_y 300, extruder scale 10; a renderer change and its constant change together.
+TEST_CASE_METHOD(HubStackFixture, "toolhead_top_y matches each renderer's top edge",
+                 "[filament-path][hub-stack]") {
+    struct Case {
+        helix::ToolheadStyle style;
+        int32_t top;
+    };
+    const Case c = GENERATE(
+        // Bambu body: 40 tall, cap 4 over a 4 bevel, iso depth 6 -> 300 - 20 - 8 - 3
+        Case{helix::ToolheadStyle::DEFAULT, 269},
+        // Design y 0 vs center 630, render 12*10 = 120 over 2000 -> -37.8, truncated
+        Case{helix::ToolheadStyle::A4T, 263},
+        // Design y 78 vs center 500, render 100 over 1000 -> -42.2, truncated
+        Case{helix::ToolheadStyle::STEALTHBURNER, 258},
+        // Design y 2 vs center 687, render 100 over 2400 -> -28.5, truncated
+        Case{helix::ToolheadStyle::JABBERWOCKY, 272},
+        // Image row 0 vs pivot 81 of 163, scaled to 65 px -> -32.3, truncated
+        Case{helix::ToolheadStyle::ANTHEAD, 268},
+        // Body 48 tall, iso depth 6 -> 300 - 24 - 3
+        Case{helix::ToolheadStyle::CREALITY_K1, 273},
+        // Body 48 tall, iso depth 5 -> 300 - 24 - 2
+        Case{helix::ToolheadStyle::CREALITY_K2, 274});
+    ScopedToolheadStyle scoped(c.style);
+    CAPTURE(static_cast<int>(c.style));
+    REQUIRE(helix::SettingsManager::instance().get_effective_toolhead_style() == c.style);
+    CHECK(toolhead_top_y(300, 10) == c.top);
 }
