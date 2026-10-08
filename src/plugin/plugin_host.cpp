@@ -436,7 +436,7 @@ void PluginHost::unload(const std::string& id) {
     }
     l.rt.reset();
     for (const auto& [name, scope] : l.components) {
-        if (lv_xml_component_get_scope(name.c_str()) == scope)
+        if (lv_xml_component_find_scope(name.c_str()) == scope)
             lv_xml_component_unregister(name.c_str());
     }
     l.ctx.reset();

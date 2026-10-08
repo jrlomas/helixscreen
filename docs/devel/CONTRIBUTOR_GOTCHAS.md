@@ -12,17 +12,11 @@ Flip here when stuck. Search by symptom.
 
 ### My new XML component doesn't render — the `<my_component/>` tag is just nothing.
 
-**Cause:** The component isn't registered. XML components must be registered in C++ before they can be instantiated.
+**Cause:** The engine found no XML file for the tag. Components register on first use, by file name: the tag `<my_component/>` loads `ui_xml/<my_component>.xml` or `ui_xml/components/<my_component>.xml` (resolved through the active layout variant).
 
-**Fix:** Add a line to `register_xml_components()` in `src/xml_registration.cpp`:
+**Fix:** Name the file exactly `<component>.xml` and put it in `ui_xml/` or `ui_xml/components/`. There is no registration list to edit, and no ordering between components. A C++ widget, callback or subject the XML uses still has to be registered before the XML is created.
 
-```cpp
-register_xml("my_component.xml");
-```
-
-Order matters if your component depends on a custom widget or another component — register dependencies first. The file is already grouped by category; find a similar component and put yours near it.
-
-**Why silent?** The XML parser treats an unregistered component as a no-op. No log, no error — the container just ends up empty.
+**Check the log:** A name with no file makes `lv_xml_create()` return NULL and log an error. A tag nested in a view whose file is missing leaves its container empty.
 
 ---
 
@@ -420,7 +414,7 @@ Run through this before opening a PR:
 
 - [ ] **XML-only change?** Confirm hot reload or plain relaunch shows your changes. No rebuild needed.
 - [ ] **Added an icon?** Ran `make regen-fonts` and rebuilt.
-- [ ] **Added a new XML component?** Registered in `src/xml_registration.cpp`.
+- [ ] **Added a new XML component?** File is `ui_xml/<name>.xml` or `ui_xml/components/<name>.xml`, named for the component.
 - [ ] **Added an event callback?** Registered with `lv_xml_register_event_cb()`.
 - [ ] **Any hardcoded colors or pixel values?** Swap for design tokens.
 - [ ] **Any new user-visible strings?** Wrapped for translation — `lv_tr()` in C++, or a literal `text=` in XML, which is its own translation key (the path most first contributions use) — *except* product names, URLs, material codes.

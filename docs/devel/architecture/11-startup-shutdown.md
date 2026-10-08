@@ -56,7 +56,7 @@ sequenceDiagram
 | [`src/application/static_subject_registry.cpp`](../../../src/application/static_subject_registry.cpp) | LIFO registry of subject `deinit_subjects()` callbacks |
 | [`src/application/static_panel_registry.cpp`](../../../src/application/static_panel_registry.cpp) | Self-registration registry for panel/overlay destruction |
 | [`src/application/display_manager.cpp`](../../../src/application/display_manager.cpp) | Display/backend lifecycle; `shutdown()` (`src/application/display_manager.cpp#shutdown`) runs `lv_deinit()` → `lv_xml_deinit()` in that order |
-| [`src/xml_registration.cpp`](../../../src/xml_registration.cpp) | `helix::register_xml_components()` (`src/xml_registration.cpp#register_xml_components`): responsive consts, semantic widgets, shared callbacks, ~300 XML files |
+| [`src/xml_registration.cpp`](../../../src/xml_registration.cpp) | `helix::register_xml_components()` (`src/xml_registration.cpp#register_xml_components`): responsive consts, semantic widgets, shared callbacks, `styles.xml`, and the first-use component loader |
 | [`src/helix_watchdog.cpp`](../../../src/helix_watchdog.cpp) | Supervisor process: fork/supervise/restart helix-screen, crash dialog, Safe Mode |
 | [`src/helix_splash.cpp`](../../../src/helix_splash.cpp) | Standalone splash process: paints fb0, self-exits on SIGUSR1 or 30s cap |
 | [`include/splash_screen_manager.h`](../../../include/splash_screen_manager.h) | App-side splash handoff: 8s discovery timeout, post-splash repaint |
@@ -78,7 +78,7 @@ The display/theme/XML block has three ordering constraints the code comments def
 - **Rotation before input.** On a first boot the kernel's `panel_orientation` is decided in Phase 4 and handed to `DisplayManager::init()` as the startup rotation (`include/display_backend.h#startup_rotation`), because the backends gate the stored touch range and calibration on the display's rotation when they create the input devices (#1428). Phase 8b only persists it.
 - **Layout before panels.** Phase 8b runs the first-boot rotation probe (fbdev/DRM only) and resolves `LayoutManager`, so variant XML overrides and portrait orientation are known before any panel subtree exists (`src/application/application.cpp#run_rotation_probe_and_layout`).
 
-Phase 8c (`register_xml_components`, `src/application/application.cpp#register_xml_components`) calls `helix::register_xml_components()` ([`src/xml_registration.cpp#register_xml_components`](../../../src/xml_registration.cpp)), which registers responsive constants, the semantic text/button widgets, shared event callbacks, then 305 XML component files (`register_xml()` call sites, recounted at audit) through `LayoutManager::resolve_xml_path()` (variant-aware), yielding every 16 components on ESP32 so the idle task is not starved. If `HELIX_HOT_RELOAD` is on (default for native builds), the hot-reloader thread starts here too.
+Phase 8c (`register_xml_components`, `src/application/application.cpp#register_xml_components`) calls `helix::register_xml_components()` ([`src/xml_registration.cpp#register_xml_components`](../../../src/xml_registration.cpp)), which registers responsive constants, the semantic text/button widgets, shared event callbacks, then `styles.xml` and installs the first-use component loader (`helix::register_xml_on_first_use()`), which registers every other component through `LayoutManager::resolve_xml_path()` (variant-aware) the first time its name is looked up. `color_picker` and `ams_edit_overlay` also register at boot because C++ writes responsive consts into their scopes. If `HELIX_HOT_RELOAD` is on (default for native builds), the hot-reloader thread starts here too.
 
 The whole ladder, one line per phase comment (all in `run()` unless noted):
 
@@ -95,7 +95,7 @@ The whole ladder, one line per phase comment (all in `run()` unless noted):
 | 7 | `register_widgets()` | `src/application/application.cpp#register_widgets` | 12 custom C widgets + header-bar system |
 | 8a | `init_translations()` | `src/application/application.cpp#init_translations` | Current locale only; `lv_tr()` for the probe |
 | 8b | `run_rotation_probe_and_layout()` | `src/application/application.cpp#run_rotation_probe_and_layout` | Rotation + `LayoutManager` before variant XML resolves |
-| 8c | `register_xml_components()` | `src/application/application.cpp#register_xml_components` | ~300 component files + hot reloader |
+| 8c | `register_xml_components()` | `src/application/application.cpp#register_xml_components` | `styles.xml`, component loader, hot reloader |
 | 9a | `init_core_subjects()` | `src/application/printer_session.cpp#init_core_subjects` | `SubjectInitializer` core/state/navigation sweep |
 | 9b | `HttpExecutor::start_all()`, `init_moonraker()` | `src/system/http_executor.cpp#start_all`, `src/application/printer_session.cpp#init_moonraker` | Pools before the API that submits to them |
 | — | UpdateChecker, UpgradeBanner, CrashReporter, TelemetryManager | `src/application/application.cpp#run` | Services panels bind, plus the first heap snapshot |
@@ -187,7 +187,7 @@ Read in this order; about 30 minutes total.
 2. [`src/application/application.cpp#run`](../../../src/application/application.cpp) — `run()`: skim top-to-bottom once reading only the `Phase N` comments; this is the authoritative ladder.
 3. [`src/application/application.cpp#init_display`](../../../src/application/application.cpp) — `init_display()`: DPI forcing, and the splash suppression block at `src/application/application.cpp#init_display/"Replace the flush callback with a no-op"` (invalidation off + no-op flush callback).
 4. [`src/application/application.cpp#init_theme`](../../../src/application/application.cpp) — `init_theme()`: note [`globals.xml`](../../../ui_xml/globals.xml) registered *before* `theme_manager_init()` and why.
-5. [`src/xml_registration.cpp#register_xml_components`](../../../src/xml_registration.cpp) — `register_xml_components()`: responsive consts → semantic widgets → callbacks → XML files; the `boot_yield` cadence note at `src/xml_registration.cpp#register_xml`.
+5. [`src/xml_registration.cpp#register_xml_components`](../../../src/xml_registration.cpp) — `register_xml_components()`: responsive consts → semantic widgets → callbacks → `styles.xml` → first-use loader (`src/xml_registration.cpp#register_xml_on_first_use`).
 6. [`src/application/subject_initializer.cpp#init_core_and_state`](../../../src/application/subject_initializer.cpp) — `init_core_and_state()`: the dependency phases, and the NavigationManager-registers-last comment.
 7. [`src/application/printer_session.cpp#connect_moonraker`](../../../src/application/application.cpp) — `connect_moonraker()`: when it connects, what Safe Mode skips, where `start_auto_send` lands.
 8. [`src/application/printer_session.cpp#init_ui`](../../../src/application/application.cpp) — `init_ui()`: the timed `lv_xml_create`, navbar wiring, `PanelFactory` handoff.
