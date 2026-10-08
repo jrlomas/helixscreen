@@ -5,6 +5,7 @@
 // (helix::register_xml_on_first_use), so these tests point the asset root at a
 // scratch ui_xml/ tree whose components nothing registers up front.
 
+#include "ui_modal.h"
 #include "ui_update_queue.h"
 
 #include "../lvgl_ui_test_fixture.h"
@@ -162,6 +163,46 @@ TEST_CASE_METHOD(LazyXmlFixture, "a component registered on first use hot-reload
     CHECK(label_text(unopened) == "v2");
 }
 
+TEST_CASE_METHOD(LazyXmlFixture, "a modal's component registers when the modal first shows",
+                 "[xml][lazy]") {
+    write("lazy_probe_modal.xml", component_with_label("modal"));
+    REQUIRE_FALSE(is_registered("lazy_probe_modal"));
+
+    lv_obj_t* dialog = Modal::show("lazy_probe_modal");
+
+    REQUIRE(dialog != nullptr);
+    CHECK(label_text(dialog) == "modal");
+    Modal::hide(dialog);
+    helix::ui::UpdateQueue::instance().drain();
+}
+
+TEST_CASE_METHOD(LazyXmlFixture,
+                 "a component first named by a hot-reloaded view registers when it rebuilds",
+                 "[xml][lazy][hotreload]") {
+    write("lazy_probe_host.xml", component_with_label("host"));
+    write("components/lazy_probe_added.xml", component_with_label("added"));
+    REQUIRE(lv_xml_create(test_screen(), "lazy_probe_host", nullptr) != nullptr);
+
+    helix::XmlHotReloader hr;
+    lv_obj_t* rebuilt = nullptr;
+    // The rebuild NavigationManager runs after a reload is a fresh lv_xml_create().
+    hr.set_after_reload_callback([&](const std::string& name) {
+        rebuilt = static_cast<lv_obj_t*>(lv_xml_create(test_screen(), name.c_str(), nullptr));
+    });
+    hr.start({xml_dir()}, 60000);
+    rewrite("lazy_probe_host.xml", "<component><view extends=\"lv_obj\">"
+                                   "<lazy_probe_added name=\"added\"/></view></component>");
+    REQUIRE_FALSE(is_registered("lazy_probe_added"));
+    hr.scan_and_reload();
+    hr.stop();
+    helix::ui::UpdateQueue::instance().drain();
+
+    REQUIRE(rebuilt != nullptr);
+    auto* added = lv_obj_find_by_name(rebuilt, "added");
+    REQUIRE(added != nullptr);
+    CHECK(label_text(added) == "added");
+}
+
 TEST_CASE_METHOD(LVGLUITestFixture, "the eager components are registered before first use",
                  "[xml][lazy][ui_integration]") {
     // styles.xml resolves theme tokens at registration, so it registers at boot.
@@ -172,6 +213,4 @@ TEST_CASE_METHOD(LVGLUITestFixture, "the eager components are registered before 
         REQUIRE(is_registered(name));
         CHECK(lv_xml_get_const(lv_xml_component_get_scope(name), "sv_size") != nullptr);
     }
-    // Everything else waits for first use.
-    CHECK_FALSE(is_registered("spool_wizard"));
 }

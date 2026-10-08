@@ -43,6 +43,7 @@
 #include "ui_z_offset_indicator.h"
 
 #include "async_lifetime_guard.h"
+#include "boot_yield.h"
 #include "helix_fs.h"
 #include "layout_manager.h"
 #include "page_scroll_auto_inject.h"
@@ -249,6 +250,14 @@ static void register_xml(const char* filename) {
     std::string path = "A:" + lm.resolve_xml_path(filename);
     if (lv_xml_register_component_from_file(path.c_str()) != LV_RESULT_OK) {
         spdlog::error("[XML Registration] Failed to register: {}", path);
+    }
+    // Each registration is a frogfs decompress + expat parse; a panel nesting
+    // many first-use components registers them back-to-back on the UI task,
+    // which starves the idle task on ESP. Yield every few so the Task WDT never
+    // fires. No-op on desktop (see boot_yield.h).
+    static int s_reg_count = 0;
+    if ((++s_reg_count & 0x0F) == 0) {
+        HELIX_BOOT_YIELD();
     }
 }
 
