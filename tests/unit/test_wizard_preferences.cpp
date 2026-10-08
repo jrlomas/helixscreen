@@ -4,6 +4,7 @@
 
 #include "../../src/ui/wizard_step_registry.h"
 #include "../lvgl_ui_test_fixture.h"
+#include "audio_settings_manager.h"
 #include "config.h"
 #include "display_settings_manager.h"
 #include "settings_manager.h"
@@ -16,18 +17,25 @@ using helix::wizard::preference_rows;
 using helix::wizard::StepId;
 
 TEST_CASE("Preference rows: global rows only on the first printer", "[wizard][preferences]") {
-    CHECK(preference_rows(false, false, false, false).global);
-    CHECK_FALSE(preference_rows(true, false, false, false).global);
+    CHECK(preference_rows(false, false, false, false, false).global);
+    CHECK_FALSE(preference_rows(true, false, false, false, false).global);
 }
 
 TEST_CASE("Preference rows: AMS rows follow what the backend does", "[wizard][preferences]") {
-    CHECK_FALSE(preference_rows(false, false, false, false).bypass_spool);
-    CHECK(preference_rows(false, true, false, false).bypass_spool);
+    CHECK_FALSE(preference_rows(false, false, false, false, false).bypass_spool);
+    CHECK(preference_rows(false, true, false, false, false).bypass_spool);
 
-    CHECK_FALSE(preference_rows(false, false, false, false).keep_spool_info);
-    CHECK(preference_rows(false, false, true, false).keep_spool_info);
+    CHECK_FALSE(preference_rows(false, false, false, false, false).keep_spool_info);
+    CHECK(preference_rows(false, false, true, false, false).keep_spool_info);
     // Firmware that keeps the spool itself leaves the toggle with nothing to do.
-    CHECK_FALSE(preference_rows(false, false, true, true).keep_spool_info);
+    CHECK_FALSE(preference_rows(false, false, true, true, false).keep_spool_info);
+}
+
+TEST_CASE("Preference rows: UI sounds need a sound backend on the first printer",
+          "[wizard][preferences]") {
+    CHECK_FALSE(preference_rows(false, false, false, false, false).ui_sounds);
+    CHECK(preference_rows(false, false, false, false, true).ui_sounds);
+    CHECK_FALSE(preference_rows(true, false, false, false, true).ui_sounds);
 }
 
 TEST_CASE("Preferences step sits between InputShaper and Summary", "[wizard][preferences]") {
@@ -87,6 +95,22 @@ TEST_CASE_METHOD(LVGLUITestFixture, "Preference rows write the same setting as t
     flip_on(
         "row_sleep_while_printing", [&](bool v) { display.set_sleep_while_printing(v); },
         [&] { return display.get_sleep_while_printing(); });
+
+    // The sounds row follows its twin: hidden while master sounds are off.
+    lv_obj_t* sounds_row = lv_obj_find_by_name(root, "row_ui_sounds");
+    REQUIRE(sounds_row != nullptr);
+    auto& audio = helix::AudioSettingsManager::instance();
+    audio.set_sounds_enabled(false);
+    lv_subject_set_int(lv_xml_get_subject(nullptr, "wizard_prefs_show_ui_sounds"), 1);
+    CHECK(lv_obj_has_flag(sounds_row, LV_OBJ_FLAG_HIDDEN));
+    audio.set_sounds_enabled(true);
+    CHECK_FALSE(lv_obj_has_flag(sounds_row, LV_OBJ_FLAG_HIDDEN));
+    lv_subject_set_int(lv_xml_get_subject(nullptr, "wizard_prefs_show_ui_sounds"), 0);
+    CHECK(lv_obj_has_flag(sounds_row, LV_OBJ_FLAG_HIDDEN));
+    lv_subject_set_int(lv_xml_get_subject(nullptr, "wizard_prefs_show_ui_sounds"), 1);
+    flip_on(
+        "row_ui_sounds", [&](bool v) { audio.set_ui_sounds_enabled(v); },
+        [&] { return audio.get_ui_sounds_enabled(); });
 
     step->cleanup();
 }

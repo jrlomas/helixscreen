@@ -11,15 +11,18 @@ namespace helix::wizard {
 
 /// Which preference row groups the page offers. Global rows are written once, so
 /// a printer added after the first run does not repeat them; the two AMS rows
-/// are offered only where the backend makes them do something.
+/// are offered only where the backend makes them do something, and the sounds row only where
+/// a sound backend exists.
 struct PreferenceRows {
     bool global = false;
     bool bypass_spool = false;
     bool keep_spool_info = false;
+    bool ui_sounds = false;
 };
 
 PreferenceRows preference_rows(bool is_subsequent_printer, bool bypass_is_virtual,
-                               bool reports_spool_ids, bool retains_spool_info);
+                               bool reports_spool_ids, bool retains_spool_info,
+                               bool has_sound_backend);
 
 /// Wizard page of taste-only toggles. Each row is bound to the same subject and
 /// callback as its settings-overlay twin, so there is no second copy of the state.
@@ -55,6 +58,7 @@ class WizardPreferencesStep : public Step {
     lv_subject_t show_global_{};
     lv_subject_t show_bypass_spool_{};
     lv_subject_t show_keep_spool_info_{};
+    lv_subject_t show_ui_sounds_{};
 };
 
 WizardPreferencesStep* get_wizard_preferences_step();

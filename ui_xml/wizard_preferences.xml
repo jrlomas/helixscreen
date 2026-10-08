@@ -46,6 +46,11 @@
                           subject="settings_sleep_while_printing" callback="on_sleep_while_printing_changed">
         <bind_flag_if_eq subject="wizard_prefs_show_global" flag="hidden" ref_value="0"/>
       </setting_toggle_row>
+      <setting_toggle_row name="row_ui_sounds"
+                          label="UI Sounds" icon="notifications" description="Button taps and navigation sounds"
+                          subject="settings_ui_sounds_enabled" callback="on_ui_sounds_changed">
+        <bind_flag_if cond="wizard_prefs_show_ui_sounds eq 0 or settings_sounds_enabled eq 0" flag="hidden"/>
+      </setting_toggle_row>
     </ui_card>
   </view>
 </component>

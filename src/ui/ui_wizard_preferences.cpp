@@ -6,11 +6,13 @@
 #include "ui_settings_appearance.h"
 #include "ui_settings_display.h"
 #include "ui_settings_printing.h"
+#include "ui_settings_sound.h"
 #include "ui_wizard_helpers.h"
 
 #include "ams_backend.h"
 #include "ams_state.h"
 #include "observer_factory.h"
+#include "sound_manager.h"
 #include "static_panel_registry.h"
 #include "wizard_step_registry.h"
 
@@ -19,12 +21,14 @@
 namespace helix::wizard {
 
 PreferenceRows preference_rows(bool is_subsequent_printer, bool bypass_is_virtual,
-                               bool reports_spool_ids, bool retains_spool_info) {
+                               bool reports_spool_ids, bool retains_spool_info,
+                               bool has_sound_backend) {
     PreferenceRows r;
     r.global = !is_subsequent_printer;
     r.bypass_spool = bypass_is_virtual;
     // Firmware that keeps the spool itself leaves the toggle with nothing to do.
     r.keep_spool_info = reports_spool_ids && !retains_spool_info;
+    r.ui_sounds = !is_subsequent_printer && has_sound_backend;
     return r;
 }
 
@@ -40,19 +44,22 @@ void WizardPreferencesStep::init_subjects() {
                                         "wizard_prefs_show_bypass_spool");
     helix::ui::wizard::init_int_subject(subjects_, &show_keep_spool_info_, 0,
                                         "wizard_prefs_show_keep_spool_info");
+    helix::ui::wizard::init_int_subject(subjects_, &show_ui_sounds_, 0,
+                                        "wizard_prefs_show_ui_sounds");
     update_rows();
 }
 
 void WizardPreferencesStep::update_rows() {
     const auto ctx = build_context();
     AmsBackend* backend = AmsState::instance().get_backend();
-    const auto rows =
-        preference_rows(ctx.is_subsequent_printer, backend && backend->bypass_is_virtual(),
-                        backend && backend->printer_reports_spool_ids(),
-                        backend && backend->printer_retains_spool_info());
+    const auto rows = preference_rows(
+        ctx.is_subsequent_printer, backend && backend->bypass_is_virtual(),
+        backend && backend->printer_reports_spool_ids(),
+        backend && backend->printer_retains_spool_info(), SoundManager::instance().has_backend());
     lv_subject_set_int(&show_global_, rows.global ? 1 : 0);
     lv_subject_set_int(&show_bypass_spool_, rows.bypass_spool ? 1 : 0);
     lv_subject_set_int(&show_keep_spool_info_, rows.keep_spool_info ? 1 : 0);
+    lv_subject_set_int(&show_ui_sounds_, rows.ui_sounds ? 1 : 0);
 }
 
 void WizardPreferencesStep::register_callbacks() {
@@ -61,6 +68,7 @@ void WizardPreferencesStep::register_callbacks() {
     helix::settings::get_printing_settings_overlay().register_callbacks();
     helix::settings::get_appearance_settings_overlay().register_callbacks();
     helix::settings::get_display_settings_overlay().register_callbacks();
+    helix::settings::get_sound_settings_overlay().register_callbacks();
     helix::ui::get_ams_device_operations_overlay().register_callbacks();
 }
 
