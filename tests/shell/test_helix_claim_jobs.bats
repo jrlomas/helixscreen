@@ -202,10 +202,11 @@ sizes() {
 }
 
 # make's two-phase re-invoke (mk/rules.mk `all:`, mk/tests.mk `$(TEST_BIN)`),
-# dry-run with the sub-make replaced by an echo of its command line.
+# dry-run with the sub-make replaced by an echo of its command line, and clear
+# of any jobserver the suite itself runs under (`make test-shell`).
 reinvoke() {
-    (cd "$REPO" && env PATH="$(path_without_jobpool)" make -n --no-print-directory \
-        MAKE='echo SUBMAKE' "$@" 2>&1)
+    (cd "$REPO" && env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL PATH="$(path_without_jobpool)" \
+        make -n --no-print-directory MAKE='echo SUBMAKE' "$@" 2>&1)
 }
 
 @test "a make that already has a jobserver never asks helix-claim for a -j" {

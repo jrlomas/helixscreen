@@ -304,6 +304,8 @@ case "$1" in
         case "$*" in
             *pgrep*) exit 1 ;;
             *unit-sweep*)
+                # A container starts from its own environment.
+                unset MAKEFLAGS MFLAGS MAKELEVEL
                 shift
                 while [ "$1" != bash ]; do
                     [ "$1" = -e ] && export "$2"
