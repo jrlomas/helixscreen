@@ -2,6 +2,7 @@
 #pragma once
 #include "esp_lcd_panel_ops.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -28,3 +29,7 @@ void lvgl_glue_start(void (*ui_build)(void), void (*ui_tick)(void));
 /// Read it from the UI thread between lv_timer_handler calls, where the frame
 /// is complete and nothing writes it.
 const uint8_t* lvgl_glue_frame(uint32_t* w, uint32_t* h, size_t* stride);
+
+/// True on the UI pthread, and before it has started (nothing else can touch
+/// LVGL then). The app core's main-thread check never records a thread here.
+bool helix_on_ui_task(void);

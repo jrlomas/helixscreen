@@ -120,6 +120,10 @@ XMLTestFixture::XMLTestFixture() : LVGLTestFixture() {
         m_test_screen = nullptr;
     }
 
+    // Every component the one-time setup does not register registers on first
+    // use, as in production. Installed per case: LVGLUITestFixture's teardown
+    // removes the loader with the rest of the XML state.
+    helix::register_xml_on_first_use();
     setup_global_xml_registrations_once();
 
     // Fresh per-instance state. init_subjects(true) registers subjects into the
@@ -261,9 +265,6 @@ void XMLTestFixture::setup_global_xml_registrations_once() {
     // textarea row the editor builds its parameter inputs from).
     lv_xml_register_component_from_file("A:ui_xml/macro_param_modal.xml");
     lv_xml_register_component_from_file("A:ui_xml/form_field.xml");
-
-    // Every component not registered above registers on first use, as in production.
-    helix::register_xml_on_first_use();
 
     // <afc_fault_path> + the afc_fault_segment subject it binds. Embedded by
     // ams_loading_error_modal.xml and action_prompt_modal.xml, both of which

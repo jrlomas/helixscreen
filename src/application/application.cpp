@@ -1479,6 +1479,9 @@ bool Application::init_display() {
         // #1255.
         layout.init(w, h);
         theme_manager_refresh_layout_constants(disp);
+        // Components register with the tokens and layout variant of the moment;
+        // idle ones register again at the new geometry on their next use.
+        helix::unregister_idle_xml_components();
 
         // Overlays cache their root widget across show/hide cycles, so the
         // width applied at push time goes stale when the canvas changes size

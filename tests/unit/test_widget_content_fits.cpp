@@ -57,11 +57,11 @@
 #include "src/ui/panel_widgets/print_status_widget.h"
 #include "theme_manager.h"
 #include "tool_state.h"
+#include "xml_registration.h"
 
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
-#include <cstring>
 #include <optional>
 #include <set>
 #include <string>
@@ -366,21 +366,6 @@ struct Rendered {
 /// Build @p def through its registry factory, size it to @p c x @p r tracks of
 /// grid @p m with the arithmetic PanelWidgetManager applies (truncation
 /// included), and measure what spills.
-/// A component's <styles> resolve their tokens when it registers, which in the app is
-/// the first time a tile is built at the running geometry. Unregistering the tile
-/// components after a resolution change lets them register again at the new one.
-void unregister_widget_components() {
-    std::vector<std::string> names;
-    lv_xml_component_foreach(
-        [](const char* name, void* ud) {
-            if (std::strncmp(name, "panel_widget_", 13) == 0)
-                static_cast<std::vector<std::string>*>(ud)->emplace_back(name);
-        },
-        &names);
-    for (const auto& name : names)
-        lv_xml_component_unregister(name.c_str());
-}
-
 Rendered render_at(lv_obj_t* screen, const PanelWidgetDef& def, const CellMetrics& m, int c, int r,
                    const char* icon_name = nullptr) {
     Rendered out;
@@ -635,7 +620,9 @@ TEST_CASE_METHOD(ContentFitsFixture,
     for (const auto& g : kShipping) {
         ScopedResolution res(disp, g.panel_w, g.panel_h);
         theme_manager_refresh_layout_constants(disp);
-        unregister_widget_components();
+        // What the app's resize handler does: idle components register again
+        // at the new geometry, as they would on a panel that booted at it.
+        helix::unregister_idle_xml_components();
 
         const UiBreakpoint bp = breakpoint_for(std::min(g.panel_w, g.panel_h));
         const GridDimensions dims = GridLayout::get_dimensions(bp, g.content_w, g.content_h);
@@ -791,7 +778,7 @@ TEST_CASE_METHOD(ContentFitsFixture, "every icon tile renders its content grown 
     for (const auto& g : kShipping) {
         ScopedResolution res(disp, g.panel_w, g.panel_h);
         theme_manager_refresh_layout_constants(disp);
-        unregister_widget_components();
+        helix::unregister_idle_xml_components();
         const UiBreakpoint bp = breakpoint_for(std::min(g.panel_w, g.panel_h));
         const GridDimensions dims = GridLayout::get_dimensions(bp, g.content_w, g.content_h);
         const CellMetrics m =
@@ -849,7 +836,7 @@ TEST_CASE_METHOD(ContentFitsFixture,
         REQUIRE(g != kShipping.end());
         ScopedResolution res(disp, g->panel_w, g->panel_h);
         theme_manager_refresh_layout_constants(disp);
-        unregister_widget_components();
+        helix::unregister_idle_xml_components();
         const UiBreakpoint bp = breakpoint_for(std::min(g->panel_w, g->panel_h));
         const GridDimensions dims = GridLayout::get_dimensions(bp, g->content_w, g->content_h);
         const CellMetrics m =

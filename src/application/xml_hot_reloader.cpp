@@ -95,7 +95,7 @@ bool xml_is_well_formed(const std::string& xml_def, std::string& err_out) {
 void count_scope_subjects(const char* component_name, size_t& owned_out, size_t& borrowed_out) {
     owned_out = 0;
     borrowed_out = 0;
-    lv_xml_component_scope_t* scope = lv_xml_component_get_scope(component_name);
+    lv_xml_component_scope_t* scope = lv_xml_component_find_scope(component_name);
     if (!scope)
         return;
     // LV_LL_READ is a C macro that relies on implicit void* conversion — expand it manually
@@ -115,7 +115,7 @@ namespace helix {
 
 std::vector<BorrowedSubject> snapshot_borrowed_subjects(const char* component_name) {
     std::vector<BorrowedSubject> borrowed;
-    lv_xml_component_scope_t* scope = lv_xml_component_get_scope(component_name);
+    lv_xml_component_scope_t* scope = lv_xml_component_find_scope(component_name);
     if (!scope)
         return borrowed;
     for (void* node = lv_ll_get_head(&scope->subjects_ll); node != nullptr;

@@ -44,6 +44,7 @@
 
 #include "async_lifetime_guard.h"
 #include "boot_yield.h"
+#include "helix-xml/src/xml/lv_xml_component_private.h"
 #include "helix_fs.h"
 #include "layout_manager.h"
 #include "page_scroll_auto_inject.h"
@@ -245,10 +246,11 @@ static void on_setting_info_clicked(lv_event_t* e) {
     LVGL_SAFE_EVENT_CB_END();
 }
 
-static void register_xml(const char* filename) {
+static bool register_xml(const char* filename) {
     auto& lm = helix::LayoutManager::instance();
     std::string path = "A:" + lm.resolve_xml_path(filename);
-    if (lv_xml_register_component_from_file(path.c_str()) != LV_RESULT_OK) {
+    const bool ok = lv_xml_register_component_from_file(path.c_str()) == LV_RESULT_OK;
+    if (!ok) {
         spdlog::error("[XML Registration] Failed to register: {}", path);
     }
     // Each registration is a frogfs decompress + expat parse; a panel nesting
@@ -259,7 +261,28 @@ static void register_xml(const char* filename) {
     if ((++s_reg_count & 0x0F) == 0) {
         HELIX_BOOT_YIELD();
     }
+    return ok;
 }
+
+#if defined(HELIX_PLATFORM_ESP32)
+extern "C" bool helix_on_ui_task(void);
+#endif
+
+/// The LVGL thread on every platform. ESP never records a main thread, so
+/// on_main_thread() is true on every task there; ask the firmware instead.
+static bool on_lvgl_thread() {
+#if defined(HELIX_PLATFORM_ESP32)
+    return helix_on_ui_task();
+#else
+    return helix::internal::on_main_thread();
+#endif
+}
+
+/// Names with no file to load, or whose file failed to register. Lookups also
+/// name widgets and slot prefixes that have no file; each costs one probe.
+static std::unordered_set<std::string> s_no_file;
+/// Components the loader registered: what a geometry change may drop.
+static std::unordered_set<std::string> s_loaded;
 
 /**
  * The engine's component loader: registers a component the first time a tag,
@@ -268,9 +291,7 @@ static void register_xml(const char* filename) {
  * layout-variant resolution register_xml() applies.
  */
 static void register_on_first_use(const char* name) {
-    // Lookups also name widgets and slot prefixes that have no file; each costs one probe.
-    static std::unordered_set<std::string> s_no_file;
-    if (!helix::internal::on_main_thread()) {
+    if (!on_lvgl_thread()) {
         spdlog::error("[XML Registration] '{}' looked up off the LVGL thread; not registering",
                       name);
         return;
@@ -282,11 +303,43 @@ static void register_on_first_use(const char* name) {
         std::string file = std::string(dir) + name + ".xml";
         if (helix::fs::exists(lm.resolve_xml_path(file))) {
             spdlog::debug("[XML Registration] Registering {} on first use", file);
-            register_xml(file.c_str());
+            // A file that does not parse is not read again on every lookup; the
+            // hot reloader registers a fixed copy from its own buffer.
+            if (register_xml(file.c_str()))
+                s_loaded.emplace(name);
+            else
+                s_no_file.emplace(name);
             return;
         }
     }
     s_no_file.emplace(name);
+}
+
+/// A scope C++ has extended (a subject registered into it from C++) or lent a
+/// style to another scope cannot be rebuilt from its file alone.
+static bool scope_holds_cpp_state(lv_xml_component_scope_t* scope) {
+    if (scope->styles_borrowed)
+        return true;
+    for (void* node = lv_ll_get_head(&scope->subjects_ll); node != nullptr;
+         node = lv_ll_get_next(&scope->subjects_ll, node)) {
+        if (!static_cast<lv_xml_subject_t*>(node)->owned)
+            return true;
+    }
+    return false;
+}
+
+void unregister_idle_xml_components() {
+    s_no_file.clear();
+    for (auto it = s_loaded.begin(); it != s_loaded.end();) {
+        lv_xml_component_scope_t* scope = lv_xml_component_find_scope(it->c_str());
+        if (scope && (scope->instance_cnt > 0 || scope_holds_cpp_state(scope))) {
+            ++it;
+            continue;
+        }
+        if (scope)
+            lv_xml_component_unregister(it->c_str());
+        it = s_loaded.erase(it);
+    }
 }
 
 void register_xml_on_first_use() {
@@ -407,6 +460,9 @@ void register_xml_components() {
 }
 
 void deinit_xml_subjects() {
+    // Teardown looks components up to release what it registered; none of
+    // that may load a file.
+    lv_xml_set_component_loader(nullptr);
     if (s_noop_subject_initialized) {
         lv_subject_deinit(&s_noop_subject);
         s_noop_subject_initialized = false;

@@ -34,10 +34,21 @@ void register_xml_components();
 void register_xml_on_first_use();
 
 /**
+ * @brief Drop first-use components no live widget is built from
+ *
+ * A component's px tokens and its layout variant are fixed when it registers.
+ * After a resize or layout change, unregistering the idle ones lets their next
+ * use register them again at the new geometry. A component with live
+ * instances, a C++-registered subject or a style another scope borrowed keeps
+ * its registration.
+ */
+void unregister_idle_xml_components();
+
+/**
  * @brief Deinitialize XML-related subjects
  *
  * Must be called during shutdown before lv_deinit().
- * Called by StaticPanelRegistry.
+ * Called by StaticPanelRegistry. Also removes the component loader.
  */
 void deinit_xml_subjects();
 

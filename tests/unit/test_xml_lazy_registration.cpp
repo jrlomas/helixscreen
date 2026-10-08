@@ -11,6 +11,7 @@
 #include "../lvgl_ui_test_fixture.h"
 #include "../test_fixtures.h"
 #include "../test_helpers/layout_manager_test_access.h"
+#include "../test_helpers/scope_exit.h"
 #include "data_root_resolver.h"
 #include "layout_manager.h"
 #include "xml_hot_reloader.h"
@@ -200,6 +201,66 @@ TEST_CASE_METHOD(LazyXmlFixture,
     auto* added = lv_obj_find_by_name(rebuilt, "added");
     REQUIRE(added != nullptr);
     CHECK(label_text(added) == "added");
+}
+
+TEST_CASE_METHOD(LazyXmlFixture, "a component file that does not parse is read once",
+                 "[xml][lazy]") {
+    write("lazy_probe_broken.xml", "<component><view extends=\"lv_obj\">");
+
+    CHECK(lv_xml_component_get_scope("lazy_probe_broken") == nullptr);
+    // Fixed on disk: a second lookup reading the file again would now register it.
+    rewrite("lazy_probe_broken.xml", component_with_label("fixed"));
+    CHECK(lv_xml_component_get_scope("lazy_probe_broken") == nullptr);
+    CHECK_FALSE(is_registered("lazy_probe_broken"));
+}
+
+TEST_CASE_METHOD(LazyXmlFixture,
+                 "after a layout change an idle component registers its new variant",
+                 "[xml][lazy]") {
+    write("lazy_probe_resized.xml", component_with_label("base"));
+    write("portrait/lazy_probe_resized.xml", component_with_label("portrait"));
+    auto& lm = helix::LayoutManager::instance();
+    auto* before =
+        static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "lazy_probe_resized", nullptr));
+    REQUIRE(before != nullptr);
+    REQUIRE(label_text(before) == "base");
+    lv_obj_delete(before);
+
+    lm.set_override("portrait");
+    lm.init(480, 800);
+    helix::unregister_idle_xml_components();
+
+    auto* after =
+        static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "lazy_probe_resized", nullptr));
+    REQUIRE(after != nullptr);
+    CHECK(label_text(after) == "portrait");
+}
+
+TEST_CASE_METHOD(LazyXmlFixture, "a layout change keeps a component with a live instance",
+                 "[xml][lazy]") {
+    write("lazy_probe_live.xml", component_with_label("base"));
+    write("portrait/lazy_probe_live.xml", component_with_label("portrait"));
+    auto* live = static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "lazy_probe_live", nullptr));
+    REQUIRE(live != nullptr);
+    lv_xml_component_scope_t* scope = lv_xml_component_find_scope("lazy_probe_live");
+
+    auto& lm = helix::LayoutManager::instance();
+    lm.set_override("portrait");
+    lm.init(480, 800);
+    helix::unregister_idle_xml_components();
+
+    CHECK(lv_xml_component_find_scope("lazy_probe_live") == scope);
+    CHECK(label_text(live) == "base");
+}
+
+TEST_CASE_METHOD(LazyXmlFixture, "XML teardown removes the loader", "[xml][lazy]") {
+    write("lazy_probe_teardown.xml", component_with_label("x"));
+    helix::test::ScopeExit restore_loader([] { helix::register_xml_on_first_use(); });
+
+    helix::deinit_xml_subjects();
+
+    CHECK(lv_xml_component_get_scope("lazy_probe_teardown") == nullptr);
+    CHECK_FALSE(is_registered("lazy_probe_teardown"));
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture, "the eager components are registered before first use",
