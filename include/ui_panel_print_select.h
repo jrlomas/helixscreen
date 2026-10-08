@@ -19,6 +19,7 @@
 
 #include "ams_backend.h"
 #include "async_lifetime_guard.h"
+#include "connection_state.h"
 #include "gcode_ops_detector.h"
 #include "helix_plugin_installer.h"
 #include "in_flight_guard.h"
@@ -190,6 +191,25 @@ inline bool dir_error_should_reset_to_root(const std::string& error_message, boo
     lower = helix::text_io::to_lower(lower);
     return lower.find("does not exist") != std::string::npos;
 }
+
+/**
+ * @brief Decide whether a connection-state notification should re-list the files.
+ *
+ * A reconnect re-lists, since files may have been uploaded while the socket was
+ * down (#577). The observer's first notification is not a reconnect: it fires on
+ * registration and reports the state the panel was built in, and the panel's
+ * first activation lists anyway. A forced refresh there supersedes that request,
+ * so the first fill waits for a second listing.
+ *
+ * @param previous The state of the previous notification, or -1 for the first.
+ * @param state The state now (a ConnectionState value).
+ */
+namespace helix {
+inline bool connection_change_should_refresh(int previous, int state) {
+    const int connected = static_cast<int>(ConnectionState::CONNECTED);
+    return state == connected && previous != -1 && previous != connected;
+}
+} // namespace helix
 
 /**
  * @brief Value to publish to a thumbnail POINTER subject (lv_image_bind_src).
