@@ -68,11 +68,11 @@ struct PersonaDescriptor {
     constexpr AxisMax standard{250.0, 250.0, 300.0};
     switch (type) {
     case PrinterType::CREALITY_K1:
-        return {"mock-printer", {229.0, 227.0, 255.0}, "corexy", NONE, "", false};
+        return {"k1c-mock", {229.0, 227.0, 255.0}, "corexy", NONE, "", false};
     case PrinterType::CREALITY_K1_MAX:
-        return {"mock-printer", {300.0, 307.5, 300.0}, "corexy", NONE, "", false};
+        return {"k1max-mock", {300.0, 307.5, 300.0}, "corexy", NONE, "", false};
     case PrinterType::FLASHFORGE_AD5M:
-        return {"ad5m-mock", standard, "cartesian", NONE, "", false};
+        return {"ad5m-mock", {220.0, 220.0, 220.0}, "corexy", NONE, "", false};
     case PrinterType::FLASHFORGE_CREATOR5:
         return {"mock-printer", standard, "corexy", NONE, "toolchanger", false};
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD:

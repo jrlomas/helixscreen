@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "mock_persona.h"
+#include "test_helpers/persona_types.h"
 
+#include <algorithm>
 #include <set>
 #include <string>
 
@@ -38,6 +40,15 @@ TEST_CASE("Persona ids are unique and every type has a persona", "[mock][persona
         CHECK(named);
     }
     CHECK(helix::mock::PERSONAS[0].id == "voron_24");
+}
+
+TEST_CASE("persona_printer_types lists every type exactly once", "[mock][persona]") {
+    const auto types = helix::test::persona_printer_types();
+    CHECK(types.size() == std::size(ALL_TYPES));
+    for (PrinterType t : ALL_TYPES) {
+        INFO("PrinterType " << static_cast<int>(t));
+        CHECK(std::count(types.begin(), types.end(), t) == 1);
+    }
 }
 
 TEST_CASE("resolve_persona: unset and empty are the silent default", "[mock][persona]") {

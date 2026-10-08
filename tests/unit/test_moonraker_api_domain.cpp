@@ -19,6 +19,7 @@
 #include "../../include/printer_hardware.h"
 #include "../../lvgl/lvgl.h"
 #include "../helix_test_fixture.h"
+#include "../test_helpers/persona_types.h"
 #include "../ui_test_utils.h"
 
 #include <chrono>
@@ -225,17 +226,7 @@ TEST_CASE_METHOD(HelixTestFixture,
     PrinterState state;
     state.init_subjects(false);
 
-    std::vector<MoonrakerClientMock::PrinterType> printer_types = {
-        MoonrakerClientMock::PrinterType::VORON_24,
-        MoonrakerClientMock::PrinterType::VORON_TRIDENT,
-        MoonrakerClientMock::PrinterType::CREALITY_K1,
-        MoonrakerClientMock::PrinterType::FLASHFORGE_AD5M,
-        MoonrakerClientMock::PrinterType::GENERIC_COREXY,
-        MoonrakerClientMock::PrinterType::GENERIC_BEDSLINGER,
-        MoonrakerClientMock::PrinterType::MULTI_EXTRUDER,
-    };
-
-    for (auto printer_type : printer_types) {
+    for (auto printer_type : helix::test::persona_printer_types()) {
         DYNAMIC_SECTION("Printer type " << static_cast<int>(printer_type)) {
             MoonrakerClientMock mock(printer_type);
             mock.connect("ws://mock/websocket", []() {}, []() {});

@@ -2176,8 +2176,10 @@ void MoonrakerClientMock::populate_hardware() {
         discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
                                 "extruder", // Hotend thermistor (Klipper naming: bare heater name)
                                 "temperature_sensor chamber", "temperature_sensor mcu_temp"};
-        discovery_.fans() = {"heater_fan hotend_fan", "fan", "fan_generic chamber_fan"};
-        discovery_.leds() = {"led chamber_led"};
+        // Fans mirror assets/config/presets/ad5m.json hardware/expected. No chamber
+        // light: `led chamber_led` is what tells the 5M Pro apart.
+        discovery_.fans() = {"fan", "heater_fan hotend_fan", "controller_fan stepper_driver_fan"};
+        discovery_.leds() = {};
         break;
 
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD: // Z-Mod: same machine, same hardware
