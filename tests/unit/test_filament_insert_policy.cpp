@@ -61,3 +61,14 @@ TEST_CASE("insert policy: only a stated-empty to stated-present edge counts",
     }
     REQUIRE_FALSE(should_open_editor_on_insert(c));
 }
+
+TEST_CASE("insert policy: manual load presence combines the entry and toolhead readings",
+          "[filament][insert_policy]") {
+    using helix::manual_load_presence;
+    REQUIRE(manual_load_presence(1, 0) == true);
+    REQUIRE(manual_load_presence(0, 1) == true);
+    REQUIRE(manual_load_presence(-1, 1) == true);
+    REQUIRE(manual_load_presence(0, -1) == false);
+    REQUIRE(manual_load_presence(0, 0) == false);
+    REQUIRE_FALSE(manual_load_presence(-1, -1).has_value());
+}

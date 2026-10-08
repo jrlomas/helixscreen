@@ -6,6 +6,7 @@
 #include "ui_ams_context_menu.h"
 #include "ui_ams_edit_overlay.h"
 #include "ui_external_spool_menu.h"
+#include "ui_nav_manager.h"
 
 #include "ams_backend.h"
 #include "ams_state.h"
@@ -22,18 +23,16 @@ namespace helix {
 
 namespace {
 
-/// Presence the ENTRY/TOOLHEAD sensors state together: any sensor seeing
-/// filament wins, otherwise any sensor stating none; -1 (no sensor) states
-/// nothing.
-std::optional<bool> manual_load_presence() {
+std::optional<bool> sensed_presence() {
     auto& mgr = FilamentSensorManager::instance();
-    const int entry = lv_subject_get_int(mgr.get_entry_detected_subject());
-    const int toolhead = lv_subject_get_int(mgr.get_toolhead_detected_subject());
-    if (entry == 1 || toolhead == 1)
-        return true;
-    if (entry == 0 || toolhead == 0)
-        return false;
-    return std::nullopt;
+    return manual_load_presence(lv_subject_get_int(mgr.get_entry_detected_subject()),
+                                lv_subject_get_int(mgr.get_toolhead_detected_subject()));
+}
+
+/// The editor is still open while something (QR scanner, keyboard) covers it, and
+/// reopening it then would replace the edit in progress.
+bool editor_open() {
+    return NavigationManager::instance().is_on_overlay_stack(ui::get_ams_edit_overlay().get_root());
 }
 
 } // namespace
@@ -54,10 +53,14 @@ void FilamentInsertWatcher::start() {
     toolhead_observer_ = ui::observe<int>(sensors.get_toolhead_detected_subject(), this, on_sensor,
                                           sensors.get_subjects_lifetime());
 
-    connection_observer_ = ui::observe<int>(
-        get_printer_state().network_state().get_printer_connection_state_subject(), this,
-        [](FilamentInsertWatcher* self, int state) { self->on_connection_changed(state); },
-        get_printer_state().get_subjects_lifetime());
+    auto on_reseed = [](FilamentInsertWatcher* self, int) { self->reseed(); };
+    auto& net = get_printer_state().network_state();
+    connection_observer_ = ui::observe<int>(net.get_printer_connection_state_subject(), this,
+                                            on_reseed, get_printer_state().get_subjects_lifetime());
+    klippy_observer_ = ui::observe<int>(net.get_klippy_state_subject(), this, on_reseed,
+                                        get_printer_state().get_subjects_lifetime());
+    config_observer_ = ui::observe<int>(sensors.get_config_revision_subject(), this, on_reseed,
+                                        sensors.get_subjects_lifetime());
 }
 
 bool FilamentInsertWatcher::operation_busy() const {
@@ -66,8 +69,9 @@ bool FilamentInsertWatcher::operation_busy() const {
     return ams_action_is_busy(action) || get_printer_state().app_macro_activity().recently_active();
 }
 
-void FilamentInsertWatcher::on_connection_changed(int /*state*/) {
-    // Whatever arrives next is a snapshot, not an insertion.
+void FilamentInsertWatcher::reseed() {
+    // A reconnect, a Klipper restart or a sensor reconfiguration moves readings
+    // without anyone inserting filament; whatever arrives next is a snapshot.
     lane_prev_.assign(lane_prev_.size(), std::nullopt);
     sensor_prev_.reset();
 }
@@ -86,7 +90,7 @@ void FilamentInsertWatcher::on_ams_changed() {
         lv_subject_get_int(get_printer_state().print_state().get_print_active_subject()) != 0;
     ctx.operation_busy = operation_busy();
     ctx.setting_enabled = SettingsManager::instance().get_filament_auto_open_editor();
-    ctx.editor_open = ui::get_ams_edit_overlay().is_visible();
+    ctx.editor_open = editor_open();
 
     int open_slot = -1;
     for (int i = 0; i < count; ++i) {
@@ -109,7 +113,7 @@ void FilamentInsertWatcher::on_ams_changed() {
 void FilamentInsertWatcher::on_sensor_changed() {
     FilamentInsertContext ctx;
     ctx.was_present = sensor_prev_;
-    ctx.is_present = manual_load_presence();
+    ctx.is_present = sensed_presence();
     sensor_prev_ = ctx.is_present;
 
     // With an AMS in charge its lanes (or an operation) own the filament; only a
@@ -122,7 +126,7 @@ void FilamentInsertWatcher::on_sensor_changed() {
         lv_subject_get_int(get_printer_state().print_state().get_print_active_subject()) != 0;
     ctx.operation_busy = operation_busy();
     ctx.setting_enabled = SettingsManager::instance().get_filament_auto_open_editor();
-    ctx.editor_open = ui::get_ams_edit_overlay().is_visible();
+    ctx.editor_open = editor_open();
     if (should_open_editor_on_insert(ctx)) {
         open_external();
     }

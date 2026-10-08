@@ -776,3 +776,34 @@ TEST_CASE_METHOD(OverlayActivationFixture, "Overlay slides follow the tier's sty
         CHECK(closes == 1);
     }
 }
+
+TEST_CASE_METHOD(OverlayActivationFixture,
+                 "is_on_overlay_stack stays true while another overlay covers it",
+                 "[navigation][overlay][insert_policy]") {
+    auto& nav = NavigationManager::instance();
+
+    REQUIRE_FALSE(nav.is_on_overlay_stack(overlay_));
+    REQUIRE_FALSE(nav.is_on_overlay_stack(nullptr));
+    // The base panel is not an overlay.
+    REQUIRE_FALSE(nav.is_on_overlay_stack(home_widget_));
+
+    open_overlay();
+    REQUIRE(nav.is_on_overlay_stack(overlay_));
+
+    lv_obj_t* cover = lv_obj_create(test_screen());
+    lv_obj_add_flag(cover, LV_OBJ_FLAG_HIDDEN);
+    RecordingOverlay cover_lifecycle;
+    nav.register_overlay_instance(cover, &cover_lifecycle);
+    nav.push_overlay(cover);
+    drain();
+    REQUIRE(nav.is_on_overlay_stack(overlay_));
+
+    nav.go_back();
+    nav.go_back();
+    drain();
+    REQUIRE_FALSE(nav.is_on_overlay_stack(overlay_));
+
+    nav.unregister_overlay_instance(cover);
+    drain();
+    lv_obj_delete(cover);
+}
