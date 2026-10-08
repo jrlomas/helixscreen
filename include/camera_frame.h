@@ -38,18 +38,26 @@ CameraFrame decode_jpeg_frame(const std::string& jpeg, int max_w, int max_h);
 /// Main thread only. Null for an empty frame.
 lv_draw_buf_t* to_draw_buf(const CameraFrame& f);
 
+/// One snapshot to fetch and how to present it.
+struct SnapshotTarget {
+    std::string url; ///< empty when no camera is configured
+    /// Applied to the decoded frame on the worker (rotation/flip); empty = as decoded.
+    std::function<CameraFrame(CameraFrame)> adjust;
+};
+
 /// Where a still of the camera comes from. Injectable so the choice between
 /// them is testable without a camera.
 struct CameraFrameSources {
     /// Latest frame of a running stream, empty when none runs. Main thread.
     std::function<CameraFrame(int max_w, int max_h)> stream_frame;
-    /// Snapshot URL of the camera to use, empty when none is configured. Main thread.
-    std::function<std::string()> snapshot_url;
+    /// The camera to take a snapshot from. Main thread.
+    std::function<SnapshotTarget()> snapshot;
     /// Fetch @p url on a worker and call @p done there with the body (empty on failure).
     std::function<void(const std::string& url, std::function<void(std::string)> done)> fetch;
 };
 
-/// The sources backed by the running CameraStreams and the printer's webcam list.
+/// The sources backed by the running CameraStreams and the camera widget's
+/// configured camera (source, rotation, flips), else the auto-picked one.
 CameraFrameSources live_camera_sources();
 
 /// A frame now when a stream is running. Otherwise, with a snapshot URL

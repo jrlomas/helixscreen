@@ -240,7 +240,7 @@ bool show_demo_overlay(const std::string& name) {
         auto sources = helix::live_camera_sources();
         if (const char* url = std::getenv("HELIX_DEMO_SNAPSHOT_URL"); url && *url) {
             sources.stream_frame = nullptr;
-            sources.snapshot_url = [u = std::string(url)] { return u; };
+            sources.snapshot = [u = std::string(url)] { return helix::SnapshotTarget{u, nullptr}; };
         }
         auto modal = std::make_unique<SpaghettiDetectionModal>();
         modal->set_detection("Spaghetti detected (78%)");

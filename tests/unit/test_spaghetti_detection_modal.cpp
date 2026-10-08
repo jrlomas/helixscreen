@@ -183,7 +183,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "SpaghettiDetectionModal preview follows the
         std::function<void(std::string)> pending;
         helix::CameraFrameSources src;
         src.stream_frame = [](int, int) { return helix::CameraFrame{}; };
-        src.snapshot_url = [] { return std::string("http://cam/snapshot"); };
+        src.snapshot = [] { return helix::SnapshotTarget{"http://cam/snapshot", nullptr}; };
         src.fetch = [&](const std::string&, std::function<void(std::string)> done) {
             pending = std::move(done);
         };

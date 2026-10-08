@@ -12,6 +12,7 @@
 #if HELIX_HAS_CAMERA
 #include "camera_stream.h"
 #include "hv/requests.h"
+#include "panel_widget_manager.h"
 #include "stb_image.h"
 #endif
 
@@ -56,15 +57,18 @@ CameraFrame acquire_camera_frame(const CameraFrameSources& src, int max_w, int m
         if (!f.empty())
             return f;
     }
-    const std::string url = src.snapshot_url ? src.snapshot_url() : std::string();
-    if (url.empty() || !src.fetch)
+    SnapshotTarget target = src.snapshot ? src.snapshot() : SnapshotTarget{};
+    if (target.url.empty() || !src.fetch)
         return {};
-    src.fetch(url, [token, max_w, max_h, cb = std::move(on_late_frame)](std::string body) mutable {
+    src.fetch(target.url, [token, max_w, max_h, adjust = std::move(target.adjust),
+                           cb = std::move(on_late_frame)](std::string body) mutable {
         if (body.empty())
             return;
         CameraFrame f = decode_jpeg_frame(body, max_w, max_h);
         if (f.empty())
             return;
+        if (adjust)
+            f = adjust(std::move(f));
         token.defer("CameraFrame::late_snapshot",
                     [cb = std::move(cb), f = std::move(f)]() mutable { cb(std::move(f)); });
     });
@@ -97,9 +101,23 @@ CameraFrameSources live_camera_sources() {
     s.stream_frame = [](int max_w, int max_h) {
         return CameraStream::latest_running_frame(max_w, max_h);
     };
-    s.snapshot_url = [] {
-        auto feed = CameraStream::resolve_from_printer("");
-        return feed ? feed->snapshot_url : std::string();
+    s.snapshot = [] {
+        // The feed the camera widget shows: its configured source, the
+        // auto-pick when none is configured, with the widget's rotation/flips.
+        auto& wc = PanelWidgetManager::instance().get_widget_config("home");
+        const nlohmann::json cfg = wc.get_widget_config("camera");
+        std::string source;
+        if (cfg.is_object() && cfg.contains("source") && cfg["source"].is_string())
+            source = cfg["source"].get<std::string>();
+        auto feed = CameraStream::resolve_from_printer(source);
+        if (!feed)
+            return SnapshotTarget{};
+        SnapshotTarget t;
+        t.url = feed->snapshot_url;
+        t.adjust = [tf = CameraStream::transform_from_config(cfg, *feed)](CameraFrame f) {
+            return CameraStream::transform_frame(f, tf);
+        };
+        return t;
     };
     s.fetch = [](const std::string& url, std::function<void(std::string)> done) {
         helix::http::HttpExecutor::fast().submit([url, done = std::move(done)]() {

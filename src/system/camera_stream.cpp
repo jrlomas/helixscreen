@@ -760,11 +760,12 @@ void CameraStream::transpose_pixels_cw(const uint8_t* src, uint8_t* dst, int src
 // Transform Helpers
 // ============================================================================
 
-CameraStream::TransformParams CameraStream::resolve_transform(int src_w, int src_h) const {
+CameraStream::TransformParams CameraStream::resolve_transform(const Transform& t, int src_w,
+                                                              int src_h) {
     TransformParams p;
-    p.rotation = static_cast<CameraRotation>(rotation_.load());
-    p.flip_h = flip_h_.load();
-    p.flip_v = flip_v_.load();
+    p.rotation = t.rotation;
+    p.flip_h = t.flip_h;
+    p.flip_v = t.flip_v;
 
     // 180° is equivalent to flip_h + flip_v
     if (p.rotation == CameraRotation::Rotate180) {
@@ -780,11 +781,65 @@ CameraStream::TransformParams CameraStream::resolve_transform(int src_w, int src
     return p;
 }
 
+CameraStream::TransformParams CameraStream::resolve_transform(int src_w, int src_h) const {
+    return resolve_transform(
+        Transform{static_cast<CameraRotation>(rotation_.load()), flip_h_.load(), flip_v_.load()},
+        src_w, src_h);
+}
+
+CameraStream::Transform CameraStream::transform_from_config(const nlohmann::json& config,
+                                                            const WebcamInfo& feed) {
+    Transform t;
+    if (config.contains("rotation") && config["rotation"].is_number_integer()) {
+        switch (config["rotation"].get<int>()) {
+        case 90:
+            t.rotation = CameraRotation::Rotate90;
+            break;
+        case 180:
+            t.rotation = CameraRotation::Rotate180;
+            break;
+        case 270:
+            t.rotation = CameraRotation::Rotate270;
+            break;
+        default:
+            break;
+        }
+    }
+    bool user_flip_h =
+        config.contains("flip_h") && config["flip_h"].is_boolean() && config["flip_h"].get<bool>();
+    bool user_flip_v =
+        config.contains("flip_v") && config["flip_v"].is_boolean() && config["flip_v"].get<bool>();
+    t.flip_h = feed.flip_horizontal != user_flip_h;
+    t.flip_v = feed.flip_vertical != user_flip_v;
+    return t;
+}
+
+CameraFrame CameraStream::transform_frame(const CameraFrame& frame, const Transform& t) {
+    if (frame.empty())
+        return {};
+    auto params = resolve_transform(t, frame.w, frame.h);
+    CameraFrame out;
+    out.w = params.out_w;
+    out.h = params.out_h;
+    out.bgr.resize(static_cast<size_t>(out.w) * out.h * 3);
+    std::unique_ptr<uint8_t[]> scratch;
+    size_t scratch_size = 0;
+    transform_pixels(frame.bgr.data(), frame.w, frame.h, frame.w * 3, false, params, out.bgr.data(),
+                     out.w * 3, scratch, scratch_size);
+    return out;
+}
+
 void CameraStream::apply_pixel_transform(const uint8_t* src, int src_w, int src_h, int src_stride,
                                          bool swap_rb, const TransformParams& params) {
-    auto* dst = static_cast<uint8_t*>(back_buf_->data);
-    int dst_stride = static_cast<int>(back_buf_->header.stride);
+    transform_pixels(
+        src, src_w, src_h, src_stride, swap_rb, params, static_cast<uint8_t*>(back_buf_->data),
+        static_cast<int>(back_buf_->header.stride), transpose_buf_, transpose_buf_size_);
+}
 
+void CameraStream::transform_pixels(const uint8_t* src, int src_w, int src_h, int src_stride,
+                                    bool swap_rb, const TransformParams& params, uint8_t* dst,
+                                    int dst_stride, std::unique_ptr<uint8_t[]>& scratch,
+                                    size_t& scratch_size) {
     if (params.needs_transpose) {
         // 270° CW = 90° CW + flip both axes
         bool eff_fh = params.flip_h;
@@ -800,13 +855,13 @@ void CameraStream::apply_pixel_transform(const uint8_t* src, int src_w, int src_
             // Transpose to cached scratch buffer, then flip-copy to dst
             int trans_stride = params.out_w * 3;
             auto trans_size = static_cast<size_t>(trans_stride) * static_cast<size_t>(params.out_h);
-            if (trans_size > transpose_buf_size_) {
-                transpose_buf_ = std::make_unique<uint8_t[]>(trans_size);
-                transpose_buf_size_ = trans_size;
+            if (trans_size > scratch_size) {
+                scratch = std::make_unique<uint8_t[]>(trans_size);
+                scratch_size = trans_size;
             }
-            transpose_pixels_cw(src, transpose_buf_.get(), src_w, src_h, src_stride, trans_stride,
+            transpose_pixels_cw(src, scratch.get(), src_w, src_h, src_stride, trans_stride,
                                 swap_rb);
-            copy_pixels_to_lvgl(transpose_buf_.get(), dst, params.out_w, params.out_h, trans_stride,
+            copy_pixels_to_lvgl(scratch.get(), dst, params.out_w, params.out_h, trans_stride,
                                 dst_stride, eff_fh, eff_fv, false);
         }
     } else {

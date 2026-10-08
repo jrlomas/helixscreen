@@ -167,6 +167,39 @@ class CameraStream {
      */
     static std::string parse_boundary(const std::string& content_type);
 
+    /// Rotation and flip a view applies to a feed.
+    struct Transform {
+        CameraRotation rotation = CameraRotation::None;
+        bool flip_h = false;
+        bool flip_v = false;
+    };
+
+    /// The transform a camera view's per-widget config (`rotation`, `flip_h`,
+    /// `flip_v`) asks of @p feed: the user's flips XOR Moonraker's own, so
+    /// toggling a flip Moonraker already applies undoes it.
+    static Transform transform_from_config(const nlohmann::json& config, const WebcamInfo& feed);
+
+    /// Apply @p t to a decoded frame, by the same pixel code the stream uses.
+    static CameraFrame transform_frame(const CameraFrame& frame, const Transform& t);
+
+    /// Rotation + flip resolved to output dimensions and the effective pixel transform.
+    struct TransformParams {
+        CameraRotation rotation;
+        bool flip_h;
+        bool flip_v;
+        bool needs_transpose;
+        int out_w;
+        int out_h;
+    };
+    static TransformParams resolve_transform(const Transform& t, int src_w, int src_h);
+
+    /// Transpose and/or flip BGR/RGB888 pixels from src into dst. @p scratch
+    /// is reused across calls for the transpose-then-flip case.
+    static void transform_pixels(const uint8_t* src, int src_w, int src_h, int src_stride,
+                                 bool swap_rb, const TransformParams& params, uint8_t* dst,
+                                 int dst_stride, std::unique_ptr<uint8_t[]>& scratch,
+                                 size_t& scratch_size);
+
     /**
      * @brief Downscaled copy of the newest frame of any running stream.
      *
@@ -215,15 +248,6 @@ class CameraStream {
     // Only invokes if the lifetime token is still valid.
     void report_error(const helix::LifetimeToken& token, const char* message);
 
-    // Resolve rotation + flip atomics into output dimensions and effective transform
-    struct TransformParams {
-        CameraRotation rotation;
-        bool flip_h;
-        bool flip_v;
-        bool needs_transpose;
-        int out_w;
-        int out_h;
-    };
     TransformParams resolve_transform(int src_w, int src_h) const;
 
     // Apply transpose and/or flip from decoded pixels (src) into back_buf_
