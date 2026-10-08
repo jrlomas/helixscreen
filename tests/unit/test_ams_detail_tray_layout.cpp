@@ -156,18 +156,26 @@ TEST_CASE_METHOD(AmsTrayPanelFixture, "AMS unit with a reading: spools in the bo
     CHECK(std::fabs((float)(ra.x1 - origin_.x) - (br_t.x + space_md)) <= 1);
 }
 
-TEST_CASE_METHOD(AmsTrayPanelFixture, "AMS unit with no climate data: no lid, labels over the wall",
+TEST_CASE_METHOD(AmsTrayPanelFixture,
+                 "AMS unit with no climate data: no lid, labels over the wall and the spools",
                  "[ams][tray][ui_integration]") {
     build("off");
     REQUIRE(lid_ == tray::LidMode::None);
     const int32_t space_md = theme_manager_get_spacing("space_md");
-    CHECK(top() == Catch::Approx(box_.ft - box_.back_extra - box_.rise));
+    const float wall_top = box_.ft - box_.back_extra - box_.rise;
     for (int i = 0; i < 4; ++i) {
+        CAPTURE(i);
         lv_obj_t* label = lv_obj_find_by_name(slot(i), "material_label");
+        lv_obj_t* spool = lv_obj_find_by_name(slot(i), "spool_graphic");
         REQUIRE(label != nullptr);
-        lv_area_t la;
+        REQUIRE(spool != nullptr);
+        lv_area_t la, sa;
         lv_obj_get_coords(label, &la);
-        CHECK(std::fabs((float)(la.y2 - origin_.y) - (top() - space_md)) <= 1);
+        lv_obj_get_coords(spool, &sa);
+        const float spool_top = (sa.y1 + sa.y2 + 1) / 2.0f - origin_.y -
+                                tray::SPOOL_FLANGE_RADIUS * lv_area_get_width(&sa);
+        CHECK((float)(la.y2 - origin_.y) <= wall_top - space_md + 1);
+        CHECK((float)(la.y2 - origin_.y) <= spool_top - space_md + 1);
     }
 }
 

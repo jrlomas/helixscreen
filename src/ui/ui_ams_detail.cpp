@@ -649,7 +649,11 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
     s_tray.valid = true;
 
     // Labels sit space_md above the unit's top, lane humidity above them.
-    const float top = tray::unit_top_y(box, s_tray.lid_h, s_tray.lid != tray::LidMode::None);
+    // Without a lid the spools rise above the back wall; the labels clear both.
+    const bool has_lid = s_tray.lid != tray::LidMode::None;
+    const float spool_top = cy_sum / n - flange_ry;
+    const float top = has_lid ? tray::unit_top_y(box, s_tray.lid_h, true)
+                              : std::min(tray::unit_top_y(box, 0, false), spool_top);
     const int32_t gap = theme_manager_get_spacing("space_md");
     const int32_t label_bottom = origin.y + (int32_t)std::lround(top) - gap;
     if (n <= 4) {

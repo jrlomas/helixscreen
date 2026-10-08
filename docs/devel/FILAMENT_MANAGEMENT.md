@@ -1142,7 +1142,7 @@ drawing is `src/ui/ui_ams_detail.cpp`.
   fading in from the left cap and out before the right), the silhouette edge and the
   cap rims. `reduced_effects()` keeps outlines only.
 - **Labels and readout.** Material labels sit `space_md` above `unit_top_y()` (the lid's
-  top, or the back-wall top); the readout stands `space_md` right of the back-right
+  top) or, without a lid, above the back-wall top and the spool tops; the readout stands `space_md` right of the back-right
   corner. Face and glass colors are `ams_unit_detail.xml` tokens (`tray_*_dark` and
   `tray_*_light`).
 
