@@ -19,7 +19,9 @@
 #include "../test_helpers/print_state_test_drivers.h"
 #include "app_globals.h"
 #include "async_lifetime_guard.h"
+#include "boot_crash_guard.h"
 #include "config.h"
+#include "connection_state.h"
 #include "printer_cache_registry.h"
 #include "printer_state.h"
 #include "printer_switch_flow.h"
@@ -66,6 +68,7 @@ class SwitchFlowFixture : public XMLTestFixture {
 
         get_printer_state().init_subjects(false);
         set_job(PrintJobState::STANDBY);
+        set_connection(helix::ConnectionState::CONNECTED);
     }
 
     ~SwitchFlowFixture() override {
@@ -83,6 +86,11 @@ class SwitchFlowFixture : public XMLTestFixture {
     static void set_job(PrintJobState state) {
         helix::test::set_wire_state(get_printer_state(), state);
         UpdateQueue::instance().drain();
+    }
+
+    static void set_connection(helix::ConnectionState state) {
+        get_printer_state().network_state().set_printer_connection_state_internal(
+            static_cast<int>(state), "");
     }
 
     static void click(lv_obj_t* dialog, const char* name) {
@@ -126,6 +134,36 @@ TEST_CASE_METHOD(SwitchFlowFixture, "Switch flow: picking the active printer doe
 
     CHECK(Modal::get_top() == nullptr);
     CHECK(events_.empty());
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: picking the active printer while disconnected connects it",
+                 "[multi-printer][switch_flow]") {
+    const auto state =
+        GENERATE(helix::ConnectionState::DISCONNECTED, helix::ConnectionState::RECONNECTING,
+                 helix::ConnectionState::FAILED);
+    set_connection(state);
+    // A job the disconnected printer last reported does not make the pick ask.
+    set_job(PrintJobState::PRINTING);
+
+    CHECK(flow_.request_switch("alpha"));
+
+    CHECK(Modal::get_top() == nullptr);
+    CHECK(events_ == kFullRestart);
+    CHECK(cfg_->get_active_printer_id() == "alpha");
+    CHECK(flow_.connected_printer_id() == "alpha");
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture, "Switch flow: a pick clears the boot-crash connection hold",
+                 "[multi-printer][switch_flow]") {
+    const std::string pick = GENERATE(std::string("alpha"), std::string("beta"));
+    cfg_->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, true);
+    set_connection(helix::ConnectionState::DISCONNECTED);
+
+    flow_.request_switch(pick);
+
+    CHECK_FALSE(cfg_->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, true));
+    CHECK(events_ == kFullRestart);
 }
 
 TEST_CASE_METHOD(SwitchFlowFixture, "Switch flow: leaving a printing printer asks first",

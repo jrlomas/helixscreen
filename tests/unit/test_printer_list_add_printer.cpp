@@ -3,7 +3,8 @@
 
 /**
  * @file test_printer_list_add_printer.cpp
- * @brief Add Printer from the Printers list opens what it opens after the list closes.
+ * @brief Picks in the Printers list: Add Printer opens what it opens after the list closes,
+ *        and a tap on the active printer reaches the switch only while it is disconnected.
  *
  * Closing the list pops an overlay, and the pop hides every stray child of the screen. What
  * the add callback puts on screen must arrive after that sweep, or it is hidden as it opens.
@@ -15,8 +16,12 @@
 
 #include "../lvgl_ui_test_fixture.h"
 #include "../test_helpers/update_queue_test_access.h"
+#include "app_globals.h"
+#include "config.h"
+#include "connection_state.h"
 #include "display_settings_manager.h"
 #include "lvgl/lvgl.h"
+#include "printer_state.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -71,4 +76,27 @@ TEST_CASE_METHOD(AddPrinterFixture, "Printers list: Add Printer opens after the 
 
     REQUIRE(opened != nullptr);
     CHECK_FALSE(lv_obj_has_flag(opened, LV_OBJ_FLAG_HIDDEN));
+}
+
+TEST_CASE_METHOD(AddPrinterFixture,
+                 "Printers list: a tap on the active printer switches only while disconnected",
+                 "[multi-printer][navigation]") {
+    get_printer_state().init_subjects(false);
+    const std::string active = Config::get_instance()->get_active_printer_id();
+    std::vector<std::string> picked;
+    NavigationManager::instance().set_printer_callbacks(
+        [&](const std::string& id) { picked.push_back(id); }, [] {});
+
+    const auto state = GENERATE(ConnectionState::CONNECTED, ConnectionState::DISCONNECTED);
+    get_printer_state().network_state().set_printer_connection_state_internal(
+        static_cast<int>(state), "");
+
+    helix::ui::get_printer_list_overlay().handle_switch_printer(active);
+    drain();
+
+    if (state == ConnectionState::CONNECTED) {
+        CHECK(picked.empty());
+    } else {
+        CHECK(picked == std::vector<std::string>{active});
+    }
 }

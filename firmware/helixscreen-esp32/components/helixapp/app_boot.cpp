@@ -274,35 +274,41 @@ bool reset_was_crash() {
     }
 }
 
-// Set when a run of crash resets moved this boot off the printer it would have connected to.
+// The printer a run of crash resets moved this boot away from, when it fell back.
 std::string g_boot_crashed_printer_name;
+// False while the connection is held after a run of crashes, until the user picks a printer.
 bool g_boot_auto_connect = true;
 
 // Counts crash resets since the last healthy session, and past the threshold boots the
-// printer the last switch came from, or none (prestonbrown/helixscreen#1750). Runs before
-// anything reads the active printer.
+// printer the last switch came from, or holds the connection (prestonbrown/helixscreen#1750).
+// Runs before anything reads the active printer.
 void apply_boot_crash_guard(helix::Config* config) {
     const bool crash = reset_was_crash();
     const helix::BootPrinterChoice choice = helix::choose_boot_printer(
-        crash, config->get<int>("/boot_crash_streak", 0), config->get_active_printer_id(),
+        crash, config->get<int>("/boot_crash_streak", 0),
+        config->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, false), config->get_active_printer_id(),
         config->get<std::string>("/switch_previous_printer_id", ""), config->get_printer_ids());
+    g_boot_auto_connect = choice.auto_connect;
+    if (!g_boot_auto_connect) {
+        ESP_LOGW(TAG, "app_boot: connection held after repeated crashes; pick a printer");
+    }
     if (!crash) {
         return;
     }
     config->set<int>("/boot_crash_streak", choice.crash_streak);
-    if (choice.auto_connect && choice.fallback_id.empty()) {
+    config->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, !choice.auto_connect);
+    if (!choice.tripped) {
         ESP_LOGW(TAG, "app_boot: crash reset %d of %d before falling back", choice.crash_streak,
                  helix::BOOT_CRASH_FALLBACK_THRESHOLD);
     } else {
-        g_boot_crashed_printer_name = config->get_active_printer_name();
-        g_boot_auto_connect = choice.auto_connect;
+        ESP_LOGE(TAG, "app_boot: '%s' crashed the panel %d times; %s",
+                 config->get_active_printer_name().c_str(), helix::BOOT_CRASH_FALLBACK_THRESHOLD,
+                 choice.auto_connect ? "falling back to the previous printer" : "not connecting");
         if (!choice.fallback_id.empty()) {
+            g_boot_crashed_printer_name = config->get_active_printer_name();
             config->set_active_printer(choice.fallback_id);
         }
         config->set<std::string>("/switch_previous_printer_id", "");
-        ESP_LOGE(TAG, "app_boot: '%s' crashed the panel %d times; %s",
-                 g_boot_crashed_printer_name.c_str(), helix::BOOT_CRASH_FALLBACK_THRESHOLD,
-                 choice.auto_connect ? "falling back to the previous printer" : "not connecting");
     }
     config->save();
 }
@@ -401,9 +407,7 @@ void wire_printer_callbacks() {
     helix::EspMoonrakerClient::set_transport_stall_handler([] {
         helix::ui::queue_update("app_boot::transport_stall", [] { restart_into_active_printer(); });
     });
-    // Unconnected, the active printer can be picked again to retry it.
-    switch_flow().set_connected_printer_id(
-        g_boot_auto_connect ? helix::Config::get_instance()->get_active_printer_id() : "");
+    switch_flow().set_connected_printer_id(helix::Config::get_instance()->get_active_printer_id());
     NavigationManager::instance().set_printer_callbacks(
         [](const std::string& printer_id) { switch_flow().request_switch(printer_id); },
         [] {
@@ -1177,7 +1181,7 @@ extern "C" void app_boot_ui(void) {
             "Touchscreen not detected - display only");
     }
 
-    if (!g_boot_crashed_printer_name.empty()) {
+    if (!g_boot_auto_connect || !g_boot_crashed_printer_name.empty()) {
         const std::string text =
             g_boot_auto_connect
                 ? fmt::format(
@@ -1185,7 +1189,7 @@ extern "C" void app_boot_ui(void) {
                       g_boot_crashed_printer_name, config->get_active_printer_name())
                 : fmt::format(
                       fmt::runtime(lv_tr("{} kept crashing the panel; pick a printer to connect")),
-                      g_boot_crashed_printer_name);
+                      config->get_active_printer_name());
         helix::PendingStartupWarnings::instance().enqueue(
             helix::PendingStartupWarnings::Severity::WARNING, text, 15000);
     }

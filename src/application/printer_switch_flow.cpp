@@ -8,7 +8,9 @@
 #include "ui_wizard.h"
 
 #include "app_globals.h"
+#include "boot_crash_guard.h"
 #include "config.h"
+#include "connection_state.h"
 #include "print_lifecycle_state.h"
 #include "printer_cache_registry.h"
 #include "printer_state.h"
@@ -58,6 +60,12 @@ bool active_printer_is_printing() {
 
 } // namespace
 
+bool printer_connection_live() {
+    return lv_subject_get_int(
+               get_printer_state().network_state().get_printer_connection_state_subject()) ==
+           static_cast<int>(ConnectionState::CONNECTED);
+}
+
 PrinterSwitchFlow::PrinterSwitchFlow(Config*& config, AsyncLifetimeGuard& async, Restart restart)
     : m_config(config), m_async(async), m_restart(std::move(restart)) {}
 
@@ -67,8 +75,15 @@ bool PrinterSwitchFlow::request_switch(const std::string& printer_id) {
                      printer_id);
         return false;
     }
+    // A user pick, of any printer, ends a connection hold left by a run of boot crashes.
+    if (m_config->get<bool>(BOOT_CONNECT_HOLD_KEY, false)) {
+        m_config->set<bool>(BOOT_CONNECT_HOLD_KEY, false);
+        save_or_report();
+    }
     if (printer_id == m_connected_printer_id) {
-        return false;
+        // Picking the printer the panel is not connected to connects it; nothing is left
+        // behind to ask about.
+        return printer_connection_live() ? false : switch_printer(printer_id);
     }
     // A connected printer that is no longer in the list was removed, and its removal was
     // already confirmed; nothing is left to ask about.

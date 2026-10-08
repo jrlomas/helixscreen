@@ -13,6 +13,9 @@ class ApplicationTestAccess; // NAMESPACE_OK: test accessor, declared at global 
 namespace helix {
 class Config;
 
+/// Whether the app's Moonraker connection is up right now. Main thread only.
+[[nodiscard]] bool printer_connection_live();
+
 /// The state machine behind switching to another printer, adding one through the setup
 /// wizard, and backing out of that wizard. It decides what the config says and in which
 /// order the restart steps run; the steps arrive as hooks, because the desktop rebuilds the
@@ -32,7 +35,8 @@ class PrinterSwitchFlow {
     PrinterSwitchFlow(Config*& config, AsyncLifetimeGuard& async, Restart restart);
 
     /// Switches to `printer_id`, asking first when the current printer is printing.
-    /// Picking the connected printer does nothing. Returns whether it switched before
+    /// Picking the connected printer does nothing while its connection is up, and connects it
+    /// otherwise. Any pick clears a boot-crash connection hold. Returns whether it switched before
     /// returning; asking first returns false.
     bool request_switch(const std::string& printer_id);
 
