@@ -511,6 +511,10 @@ class FilamentSensorManager {
      */
     [[nodiscard]] lv_subject_t* get_sensor_count_subject();
 
+    /// Ticks when a sensor's role or enabled flag, or the master switch, changes.
+    /// A reading that moves because of configuration is not a physical event.
+    [[nodiscard]] lv_subject_t* get_config_revision_subject();
+
     /**
      * @brief Check if still within sensor stabilization grace period
      *
@@ -609,6 +613,7 @@ class FilamentSensorManager {
      * @brief Update all LVGL subjects from current state
      */
     void update_subjects();
+    void bump_config_revision();
 
     // Recursive mutex for thread-safe state access
     // Recursive because update_subjects() calls has_any_runout()/is_motion_active()
@@ -674,6 +679,7 @@ class FilamentSensorManager {
     lv_subject_t motion_active_{};
     lv_subject_t master_enabled_subject_{};
     lv_subject_t sensor_count_{};
+    lv_subject_t config_revision_{};
 };
 
 } // namespace helix

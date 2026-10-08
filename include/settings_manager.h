@@ -588,6 +588,25 @@ class SettingsManager {
         return settings_.subject(Key::FilamentAutoCooldown);
     }
 
+    /**
+     * @brief Open the slot editor when a person newly inserts filament.
+     *
+     * Default false. Per-printer setting.
+     */
+    bool get_filament_auto_open_editor() const {
+        return settings_.get_bool(Key::FilamentAutoOpenEditor);
+    }
+
+    /** @brief Set whether the slot editor opens on a newly detected filament insert */
+    void set_filament_auto_open_editor(bool enabled) {
+        settings_.set(Key::FilamentAutoOpenEditor, enabled);
+    }
+
+    /** @brief Auto-open-editor subject (integer: 0=off, 1=on) */
+    lv_subject_t* subject_filament_auto_open_editor() {
+        return settings_.subject(Key::FilamentAutoOpenEditor);
+    }
+
     // =========================================================================
     // CONSOLE FILTERS (owned by SettingsManager — gcode console noise toggles)
     // =========================================================================
@@ -798,6 +817,7 @@ class SettingsManager {
         AmsKeepSpoolInfoOnEject,
         AmsForceBypassControls,
         FilamentAutoCooldown,
+        FilamentAutoOpenEditor,
         ConsoleFilterTemps,
         ConsoleFilterFirmwareNoise,
         DetectionEnabled,

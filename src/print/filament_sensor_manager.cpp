@@ -142,6 +142,7 @@ void FilamentSensorManager::init_subjects() {
     UI_MANAGED_SUBJECT_INT(master_enabled_subject_, master_enabled_ ? 1 : 0,
                            "filament_master_enabled", subjects_);
     UI_MANAGED_SUBJECT_INT(sensor_count_, 0, "filament_sensor_count", subjects_);
+    UI_MANAGED_SUBJECT_INT(config_revision_, 0, "filament_sensor_config_revision", subjects_);
 
     subjects_initialized_ = true;
 
@@ -384,6 +385,7 @@ void FilamentSensorManager::set_sensor_role(const std::string& klipper_name,
         sensor->role = role;
         spdlog::info("[FilamentSensorManager] Set role for {} to {}", sensor->sensor_name,
                      role_to_config_string(role));
+        bump_config_revision();
         update_subjects();
     }
 }
@@ -396,6 +398,7 @@ void FilamentSensorManager::set_sensor_enabled(const std::string& klipper_name, 
         sensor->enabled = enabled;
         spdlog::info("[FilamentSensorManager] Set enabled for {} to {}", sensor->sensor_name,
                      enabled);
+        bump_config_revision();
         update_subjects();
     }
 }
@@ -411,6 +414,7 @@ void FilamentSensorManager::set_master_enabled(bool enabled) {
     }
 
     spdlog::info("[FilamentSensorManager] Master enabled set to {}", enabled);
+    bump_config_revision();
     update_subjects();
 }
 
@@ -1340,6 +1344,16 @@ lv_subject_t* FilamentSensorManager::get_motion_active_subject() {
 
 lv_subject_t* FilamentSensorManager::get_master_enabled_subject() {
     return &master_enabled_subject_;
+}
+
+lv_subject_t* FilamentSensorManager::get_config_revision_subject() {
+    return &config_revision_;
+}
+
+void FilamentSensorManager::bump_config_revision() {
+    if (subjects_initialized_) {
+        lv_subject_set_int(&config_revision_, lv_subject_get_int(&config_revision_) + 1);
+    }
 }
 
 lv_subject_t* FilamentSensorManager::get_sensor_count_subject() {

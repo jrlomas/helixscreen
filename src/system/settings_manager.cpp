@@ -157,6 +157,9 @@ static constexpr settings::PersistedSetting SETTINGS[] = {
      nullptr},
     // Filament systems that run their own cooldown (AFC) want ours off.
     {"filament_auto_cooldown", "filament/auto_cooldown", Scope::PerPrinter, true, 1, 0, 1, nullptr},
+    // #1335. Off: a popup the user did not ask for is opt-in.
+    {"filament_auto_open_editor", "filament/auto_open_editor", Scope::PerPrinter, true, 0, 0, 1,
+     nullptr},
     {"console_filter_temps", "/console/filter_temps", Scope::Global, true, 1, 0, 1, nullptr},
     {"console_filter_firmware_noise", "/console/filter_firmware_noise", Scope::Global, true, 1, 0,
      1, nullptr},

@@ -1003,6 +1003,7 @@ translations:
   'Edit Spool #{}': 'Modifica bobina #{}'
   Edit Theme Colors: Modifica colori tema
   Edit Theme Colors (Modified): Modifica colori tema (modificato)
+  Edit filament on insert: 'Modifica filamento all''inserimento'
   Effect: Effetto
   Effects: Effetti
   Eject: Espelli
@@ -2243,6 +2244,7 @@ translations:
 
   Open motion controls for jogging: Apri i controlli di movimento
   Open the CFS unit and remove the broken filament from the slot: Aprire l'unità CFS e rimuovere il filamento spezzato dallo slot
+  Open the slot editor when you load a new spool: 'Apri l''editor dello slot quando carichi una nuova bobina'
   Operation already in progress: Operazione già in corso
   Operation timed out: Timeout dell'operazione
   Operations: Operazioni

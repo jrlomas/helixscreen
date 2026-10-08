@@ -932,6 +932,7 @@ translations:
   'Edit Spool #{}': '编辑线轴 #{}'
   Edit Theme Colors: 编辑主题颜色
   Edit Theme Colors (Modified): 编辑主题颜色（已修改）
+  Edit filament on insert: '插入时编辑耗材'
   Effect: 效果
   Effects: 特效
   Eject: 弹出
@@ -2100,6 +2101,7 @@ translations:
 
   Open motion controls for jogging: 打开手动移动控制
   Open the CFS unit and remove the broken filament from the slot: 请打开 CFS 单元并从槽位中取出断裂的耗材
+  Open the slot editor when you load a new spool: '装入新料盘时打开槽位编辑器'
   Operation already in progress: 操作正在进行中
   Operation timed out: 操作超时
   Operations: 操作

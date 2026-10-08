@@ -904,6 +904,7 @@
   <translation tag="Edit Spool #{}" ja="スプール #{} を編集"/>
   <translation tag="Edit Theme Colors" ja="テーマカラーを編集"/>
   <translation tag="Edit Theme Colors (Modified)" ja="テーマカラーを編集（変更済み）"/>
+  <translation tag="Edit filament on insert" ja="挿入時にフィラメントを編集"/>
   <translation tag="Effect" ja="エフェクト"/>
   <translation tag="Effects" ja="エフェクト"/>
   <translation tag="Eject" ja="取り出し"/>
@@ -2029,6 +2030,7 @@
   <translation tag="Open frame" ja="オープンフレーム"/>
   <translation tag="Open motion controls for jogging" ja="ジョグ操作を開く"/>
   <translation tag="Open the CFS unit and remove the broken filament from the slot" ja="CFS ユニットを開け、スロットから折れたフィラメントを取り除いてください"/>
+  <translation tag="Open the slot editor when you load a new spool" ja="新しいスプールを装填したときにスロットエディタを開く"/>
   <translation tag="Operation already in progress" ja="操作がすでに進行中です"/>
   <translation tag="Operation timed out" ja="操作がタイムアウトしました"/>
   <translation tag="Operations" ja="操作"/>

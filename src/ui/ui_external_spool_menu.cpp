@@ -32,6 +32,12 @@ void show_external_spool_editor(lv_obj_t* parent_screen, const ExternalSpoolMenu
         hooks.on_edit(open_on_picker);
         return;
     }
+    open_external_spool_editor(parent_screen, open_on_picker);
+}
+
+} // namespace
+
+void open_external_spool_editor(lv_obj_t* parent_screen, bool open_on_picker) {
     if (!parent_screen) {
         return;
     }
@@ -51,8 +57,6 @@ void show_external_spool_editor(lv_obj_t* parent_screen, const ExternalSpoolMenu
         },
         open_on_picker);
 }
-
-} // namespace
 
 ExternalSpoolMenuHooks sidebar_external_spool_hooks(AmsOperationSidebar* sidebar) {
     if (!sidebar) {

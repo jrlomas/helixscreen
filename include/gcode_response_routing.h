@@ -10,6 +10,7 @@ class IMoonrakerAPI; // NAMESPACE_OK: the interface is declared at global scope
 namespace helix {
 class ActionPromptManager;
 class AmsErrorBridge;
+class FilamentInsertWatcher;
 class GcodeErrorRouter;
 class GcodeNarrationRouter;
 class IMoonrakerClient;
@@ -77,6 +78,9 @@ class GcodeResponseRouting {
 
     // Routes AmsAction::ERROR edges from AmsState's action subject to the presenter.
     std::unique_ptr<AmsErrorBridge> m_ams_error_bridge;
+
+    // Opens the slot editor when a person newly inserts filament (opt-in setting).
+    std::unique_ptr<FilamentInsertWatcher> m_filament_insert_watcher;
 };
 
 } // namespace helix

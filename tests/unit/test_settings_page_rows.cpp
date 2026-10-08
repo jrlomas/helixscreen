@@ -171,6 +171,7 @@ TEST_CASE_METHOD(PageRowsFixture,
     CHECK_FALSE(has("row_toolhead_style"));
     CHECK(has("row_allow_cold_extrude"));
     CHECK(has("row_filament_auto_cooldown"));
+    CHECK(has("row_filament_auto_open_editor"));
     build("settings_safety_overlay");
     CHECK_FALSE(has("row_allow_cold_extrude"));
 }

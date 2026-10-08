@@ -51,6 +51,10 @@
                             label="Cool nozzle after filament ops" icon="cooldown"
                             description="Turn the extruder heater off after a load or unload finishes"
                             subject="filament_auto_cooldown" callback="on_filament_auto_cooldown_changed"/>
+        <setting_toggle_row name="row_filament_auto_open_editor"
+                            label="Edit filament on insert" icon="filament"
+                            description="Open the slot editor when you load a new spool"
+                            subject="filament_auto_open_editor" callback="on_filament_auto_open_editor_changed"/>
       </setting_group>
       <!-- ================================================================== -->
       <!-- EXTRAS -->

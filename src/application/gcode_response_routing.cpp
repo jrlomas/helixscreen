@@ -11,6 +11,7 @@
 #include "ams_error_bridge.h"
 #include "ams_state.h"
 #include "app_globals.h"
+#include "filament_insert_watcher.h"
 #include "gcode_error_router.h"
 #include "gcode_narration_router.h"
 #include "gcode_response_lines.h"
@@ -136,6 +137,9 @@ void GcodeResponseRouting::attach(IMoonrakerClient* client, IMoonrakerAPI* api) 
     m_ams_error_bridge = std::make_unique<AmsErrorBridge>(*m_recovery_presenter);
     m_ams_error_bridge->start();
 
+    m_filament_insert_watcher = std::make_unique<FilamentInsertWatcher>(api);
+    m_filament_insert_watcher->start();
+
     // Layer tracking fallback: some slicers don't emit SET_PRINT_STATS_INFO, so
     // print_stats.info never updates current_layer. The response lines carry it.
     client->register_method_callback(
@@ -184,6 +188,7 @@ void GcodeResponseRouting::release_routers() {
     m_lan_client_auth_router.reset();
     m_gcode_error_router.reset();
     m_ams_error_bridge.reset();
+    m_filament_insert_watcher.reset();
     m_recovery_presenter.reset();
 }
 
