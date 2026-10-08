@@ -1558,6 +1558,9 @@
         "size": {
           "type": "enum",
           "enum": "spinner_size"
+        },
+        "animated": {
+          "type": "string"
         }
       },
       "inherits": "lv_obj"
