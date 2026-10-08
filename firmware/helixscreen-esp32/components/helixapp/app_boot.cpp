@@ -83,6 +83,7 @@
 #include "panel_factory.h"
 #include "panel_widget_manager.h"
 #include "pending_startup_warnings.h"
+#include "performance_state.h"
 #include "print_history_manager.h"
 #include "printer_retarget.h"
 #include "printer_state.h"
@@ -96,6 +97,7 @@
 #include "status_dispatch.h"
 #include "subject_initializer.h"
 #include "system/afc_message_dedup.h"
+#include "system/update_checker.h"
 #include "text_io.h"
 #include "theme_manager.h"
 #include "thumbnail_cache.h"
@@ -948,6 +950,12 @@ extern "C" void app_boot_ui(void) {
     static JobQueueState job_queue(manager.api(), manager.client());
     job_queue.init_subjects();
     set_job_queue_state(&job_queue);
+
+    // Settings rows bind these by name. No performance source or update checker
+    // runs on this platform, so the Performance row stays hidden (perf_available
+    // = 0) and the update rows read Idle.
+    helix::perf::PerformanceState::instance().init_subjects();
+    UpdateChecker::instance().init();
 
     // Print history cache: Reprint Last, the print-status idle card and the
     // file list's success marks all read it through get_print_history_manager()

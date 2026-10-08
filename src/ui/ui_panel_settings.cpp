@@ -369,9 +369,12 @@ void register_settings_panel_callbacks() {
         {"on_touch_input_clicked", nav_row<get_touch_settings_overlay>()},
         {"on_connection_clicked", nav_row<get_connection_settings_overlay>()},
         {"on_updates_clicked", nav_row<get_updates_settings_overlay>()},
-// Without a plugin host the Plugins row stays hidden, so it needs no callback.
 #if HELIX_HAS_PLUGINS
         {"on_plugins_clicked", nav_row<helix::plugin::get_plugins_overlay>()},
+#else
+        // No plugin host: the row stays hidden (settings_plugins_available = 0) and
+        // this only lets the XML resolve its callback.
+        {"on_plugins_clicked", [](lv_event_t*) {}},
 #endif
 
         // Devices page

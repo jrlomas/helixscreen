@@ -495,6 +495,11 @@ UpdateChecker& UpdateChecker::instance() {
     return checker;
 }
 UpdateChecker::~UpdateChecker() = default;
+// No checker runs here; init() only registers the shared subjects
+// (update_checker_subjects.cpp) so the update rows bind to Idle.
+void UpdateChecker::init() {
+    init_subjects();
+}
 void UpdateChecker::on_language_changed() {}
 void UpdateChecker::clear_cache() {}
 void UpdateChecker::start_download() {}

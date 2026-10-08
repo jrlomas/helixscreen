@@ -165,6 +165,18 @@ def test_stage_config_ships_the_default_print_start_profile(tmp_path):
     assert sorted(p.name for p in staged.iterdir()) == ["default.json"]
 
 
+def test_stage_config_ships_printer_presets(tmp_path):
+    presets = tmp_path / "assets" / "config" / "presets"
+    presets.mkdir(parents=True)
+    (presets / "ad5m_pro_forgex.json").write_text('{"printer": {}}', encoding="utf-8")
+    (presets / "README.md").write_text("docs", encoding="utf-8")
+
+    stage_config(tmp_path / "assets", tmp_path / "out")
+
+    staged = tmp_path / "out" / "assets" / "config" / "presets"
+    assert sorted(p.name for p in staged.iterdir()) == ["ad5m_pro_forgex.json"]
+
+
 def test_stage_printer_images_generates_absent_renditions(tmp_path):
     pytest.importorskip("PIL")
     renditions = tmp_path / "renditions"
