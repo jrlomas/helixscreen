@@ -509,21 +509,15 @@ unit-sweep: test-build
 	DURATION=$$((END_TIME - START_TIME)); \
 	echo "$(GREEN)$(BOLD)✓ Unit tests passed in $${DURATION}s$(RESET)"
 
-# full-test-run: the completion gate. Its name promises everything the normal
-# cadence covers, so it runs both suites that cadence has: the C++ unit sweep
-# and the bats shell suite. Nothing else runs bats locally - not the commit
-# hook, not test-xml - so without it 200-plus shell tests reach CI unrun.
-#
-# [.] and [slow] stay outside deliberately. They are slow by design and already
-# have gates: scripts/quality-checks.sh runs [.] on any staged code change, and
-# nightly CI runs [slow]. Folding them in would tax the target reached for most.
+# full-test-run: the completion gate - the C++ unit sweep and the bats shell
+# suite. ZEUS=1 sends the sweep to zeus while bats runs here, ZEUS=0 keeps both
+# local; scripts/full-test-run.sh says what each setting does and holds the
+# automatic default's switch.
 #
 # Ask it once, when a feature is finished. Mid-feature the question is
 # `make t F='[tag]'`, and a full run cannot answer it anyway.
-full-test-run: unit-sweep
-	$(Q)$(MAKE) --no-print-directory test-shell
-	$(ECHO) "$(GREEN)$(BOLD)✓ Completion gate passed: unit sweep + shell suite$(RESET)"
-	$(ECHO) "  Outside this gate: [.] (commit hook) and [slow] (nightly). Both: make test-all"
+full-test-run:
+	$(Q)ZEUS="$(ZEUS)" MAKE="$(MAKE)" scripts/full-test-run.sh
 
 # ----------------------------------------------------------------------------
 # test-run: a signpost that refuses
