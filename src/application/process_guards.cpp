@@ -120,10 +120,11 @@ bool record_start_and_check_crash_loop(const std::string& marker_path, long long
     }
 
     if (recent_timestamps.size() >= MAX_CRASH_RESTARTS) {
-        spdlog::error("[Application] Crash loop detected: {} restarts within {}s — "
-                      "halting to prevent infinite restart loop",
+        spdlog::error("[Application] Crash loop detected: {} restarts within {}s - "
+                      "booting in safe mode (no plugins, default home layout)",
                       recent_timestamps.size(), CRASH_WINDOW_SEC);
         std::filesystem::remove(marker_path);
+        get_runtime_config()->crash_loop_safe_mode = true;
         return true;
     }
     // Write filtered timestamps plus current restart
@@ -135,14 +136,14 @@ bool record_start_and_check_crash_loop(const std::string& marker_path, long long
     return false;
 }
 
-bool crash_loop_detected_and_record() {
+void crash_loop_detected_and_record() {
     if (get_runtime_config()->is_test_mode()) {
-        return false;
+        return;
     }
     const auto now_epoch = std::chrono::duration_cast<std::chrono::seconds>(
                                std::chrono::system_clock::now().time_since_epoch())
                                .count();
-    return record_start_and_check_crash_loop(crash_marker_path(), now_epoch);
+    record_start_and_check_crash_loop(crash_marker_path(), now_epoch);
 }
 
 void promote_surviving_gpu_guards() {
