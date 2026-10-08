@@ -21,6 +21,17 @@ else
   EXIT_CODE=1
 fi
 
+# XML bindings: every subject and callback the desktop registers must be
+# registered by a file the firmware compiles, or the device shows a dead row.
+if python3 scripts/check_esp32_xml_bindings.py --baseline scripts/esp32_xml_binding_baseline.txt \
+    >/tmp/esp32_xml_bindings.out 2>&1; then
+  cat /tmp/esp32_xml_bindings.out
+else
+  cat /tmp/esp32_xml_bindings.out
+  echo "   Run: python3 scripts/check_esp32_xml_bindings.py --list"
+  EXIT_CODE=1
+fi
+
 # The same boundary at link level: a listed file calling a symbol that only an
 # excluded file defines compiles everywhere and fails the firmware link. It reads
 # the native build's objects, which this hook may not have built yet or may hold
@@ -38,4 +49,4 @@ echo ""
   return $EXIT_CODE
 }
 
-QC_TRIGGER_qc_esp32_app_srcs='^src/|^firmware/helixscreen-esp32/components/helixapp/|^scripts/check_esp32_app_srcs\.py$|^scripts/esp32_link_baseline\.txt$'
+QC_TRIGGER_qc_esp32_app_srcs='^src/|^include/|^ui_xml/|^firmware/helixscreen-esp32/components/helixapp/|^scripts/check_esp32_app_srcs\.py$|^scripts/esp32_link_baseline\.txt$|^scripts/check_esp32_xml_bindings\.py$|^scripts/esp32_xml_binding_baseline\.txt$|^scripts/check_orphan_(callbacks|subjects)\.py$'
