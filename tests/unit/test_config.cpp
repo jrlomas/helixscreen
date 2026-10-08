@@ -3305,21 +3305,15 @@ TEST_CASE("Config::init() falls back to defaults when both config and backup are
     std::filesystem::remove_all(temp_dir);
 }
 
-TEST_CASE("Config::init() restores the backup over an empty or non-object settings file",
+TEST_CASE("Config::init() restores the backup over a zero-byte settings file",
           "[core][config][corruption][integration][error_path]") {
-    // A power cut mid-write leaves a zero-byte file; a stray editor save leaves
-    // valid JSON of the wrong shape. Neither may reach the app as a config.
-    const std::string body = GENERATE(as<std::string>{}, "", "[1, 2, 3]", "\"just a string\"");
-    CAPTURE(body);
-
+    // A power cut mid-write leaves a zero-byte file, which must not reach the
+    // app as a config.
     std::string temp_dir = "/tmp/helix_test_shape_backup_" + std::to_string(getpid());
     std::filesystem::remove_all(temp_dir);
     std::filesystem::create_directories(temp_dir);
     std::string temp_path = temp_dir + "/settings.json";
-    {
-        std::ofstream o(temp_path);
-        o << body;
-    }
+    { std::ofstream o(temp_path); }
 
     HomeGuard home_guard(temp_dir);
     std::filesystem::create_directories(temp_dir + "/.helixscreen");

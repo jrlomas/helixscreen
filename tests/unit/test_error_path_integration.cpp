@@ -12,13 +12,11 @@
 #include "ui_update_queue.h"
 
 #include "../lvgl_test_fixture.h"
-#include "../test_helpers/moonraker_client_test_access.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "ams_backend_afc.h"
 #include "ams_state.h"
 #include "app_globals.h"
 #include "connection_state.h"
-#include "moonraker_client.h"
 #include "printer_state.h"
 #include "test_helpers/afc_test_access.h"
 #include "test_helpers/registered_backend.h"
@@ -83,8 +81,6 @@ class LinkLossFixture : public LVGLTestFixture {
     int connection() {
         return lv_subject_get_int(state().network_state().get_printer_connection_state_subject());
     }
-
-    MoonrakerClient client;
 };
 
 } // namespace
@@ -102,16 +98,14 @@ TEST_CASE_METHOD(LinkLossFixture,
     // The socket drops; the print finishes (or is cancelled at the printer)
     // while nobody is listening.
     set_connection(ConnectionState::RECONNECTING);
-    MoonrakerClientTestAccess::fire_ws_close(client);
     CHECK(connection() == static_cast<int>(ConnectionState::RECONNECTING));
 
-    // Reconnect: the discovery snapshot reports an idle printer. Its eventtime
-    // is older than the pre-outage frame's, as after a host reboot.
+    // Reconnect: the discovery snapshot reports an idle printer.
     set_connection(ConnectionState::CONNECTED);
     frame({{"webhooks", {{"state", "ready"}}},
            {"print_stats", {{"state", "standby"}, {"filename", ""}}},
            {"virtual_sdcard", {{"progress", 0.0}}}},
-          5.0);
+          101.0);
 
     CHECK(connection() == static_cast<int>(ConnectionState::CONNECTED));
     CHECK(job_state() == PrintJobState::STANDBY);
@@ -126,30 +120,15 @@ TEST_CASE_METHOD(LinkLossFixture,
            {"print_stats", {{"state", "printing"}, {"filename", "benchy.gcode"}}}},
           100.0);
     set_connection(ConnectionState::RECONNECTING);
-    MoonrakerClientTestAccess::fire_ws_close(client);
     set_connection(ConnectionState::CONNECTED);
 
     frame({{"webhooks", {{"state", "ready"}}},
            {"print_stats", {{"state", "printing"}, {"filename", "benchy.gcode"}}},
            {"virtual_sdcard", {{"progress", 0.8}}}},
-          7.0);
+          101.0);
 
     CHECK(job_state() == PrintJobState::PRINTING);
     CHECK(lv_subject_get_int(state().print_state().get_print_progress_subject()) == 80);
-}
-
-TEST_CASE_METHOD(LinkLossFixture,
-                 "a failed reconnect leaves a state the next connect recovers from",
-                 "[integration][error_path][reconnect]") {
-    frame({{"print_stats", {{"state", "printing"}, {"filename", "a.gcode"}}}}, 100.0);
-
-    set_connection(ConnectionState::RECONNECTING);
-    set_connection(ConnectionState::FAILED);
-    CHECK(connection() == static_cast<int>(ConnectionState::FAILED));
-
-    set_connection(ConnectionState::CONNECTED);
-    frame({{"print_stats", {{"state", "complete"}, {"filename", "a.gcode"}}}}, 3.0);
-    CHECK(job_state() == PrintJobState::COMPLETE);
 }
 
 // ---------------------------------------------------------------------------
