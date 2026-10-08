@@ -83,6 +83,7 @@ Exit 0 when the manifest and exclusion baseline cover src/ exactly, 1 otherwise.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -150,13 +151,17 @@ def native_only_flags(repo: Path, cmake_text: str) -> set[str]:
     """HELIX_* names only the native Makefile's -D sets, which the firmware never sees.
 
     The firmware's flags come from its CMake and sdkconfig alone, so a name the
-    Makefile passes, the CMake never mentions and no source #defines is undefined
-    there.
+    Makefile passes, no firmware CMake or sdkconfig file mentions and no source
+    #defines is undefined there.
     """
     makefiles = [repo / "Makefile", *sorted((repo / "mk").glob("*.mk"))]
     names = {n for m in makefiles if m.is_file()
              for n in re.findall(r"-D\s*(HELIX_\w+)", m.read_text(errors="replace"))}
-    names = {n for n in names if not re.search(rf"\b{n}\b", cmake_text)}
+    firmware_config = [cmake_text] + [
+        f.read_text(errors="replace") for f in (repo / "firmware").rglob("*")
+        if (f.name == "CMakeLists.txt" or f.suffix == ".cmake" or f.name.startswith("sdkconfig"))
+        and "build" not in f.relative_to(repo).parts and f.is_file()]
+    names = {n for n in names if not any(re.search(rf"\b{n}\b", t) for t in firmware_config)}
     if not names:
         return names
     hash_defined = re.compile(r"^\s*#\s*define\s+(HELIX_\w+)", re.M)
@@ -535,7 +540,7 @@ def load_link_baseline(path: Path) -> tuple[set[tuple[str, str]], int | None]:
 
 
 IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
-QUOTED_INCLUDE = re.compile(r'^\s*#\s*include\s*"([^"]+)"', re.M)
+INCLUDE = re.compile(r'^\s*#\s*include\s*["<]([^">]+)[">]', re.M)
 
 
 def object_path(obj_root: Path, rel: str) -> Path:
@@ -694,12 +699,34 @@ def compute_link(manifest: Path, exclusions: Path, src_root: Path, obj_root: Pat
             firmware_namespaces |= set(ns.split("::"))
     firmware_classes = {d.split("::")[-2] for d in firmware_defined if "::" in d}
     header_dirs = [base / "include", *include_dirs]
+    forced = [base / h for h in re.findall(r"-include\b[^$]*?\$\{REPO_ROOT\}/([\w./-]+)",
+                                           cmake_text, re.S) if (base / h).is_file()]
     header_words: dict[Path, set[str]] = {}
+    header_includes: dict[Path, list[Path]] = {}
+
+    def resolve(names, includer: Path) -> list[Path]:
+        return [Path(os.path.normpath(hits[0])) for h in names
+                if (hits := [d / h for d in (includer.parent, *header_dirs) if (d / h).is_file()])]
 
     def words_of(header: Path) -> set[str]:
         if header not in header_words:
-            header_words[header] = set(IDENTIFIER.findall(header.read_text(errors="replace")))
+            code = STRING_LITERAL.sub('""', header.read_text(errors="replace"))
+            code = re.sub(r"/\*.*?\*/|//[^\n]*", " ", code, flags=re.S)
+            header_words[header] = set(IDENTIFIER.findall(code))
         return header_words[header]
+
+    def closure(roots: list[Path]) -> set[Path]:
+        """Every header `roots` reach. A header's own #if branches all count."""
+        out, todo = set(), list(roots)
+        while todo:
+            h = todo.pop()
+            if h in out:
+                continue
+            out.add(h)
+            if h not in header_includes:
+                header_includes[h] = resolve(INCLUDE.findall(h.read_text(errors="replace")), h)
+            todo += header_includes[h]
+        return out
 
     seen: set[tuple[str, str]] = set()
     for f in sorted(undefined):
@@ -710,23 +737,23 @@ def compute_link(manifest: Path, exclusions: Path, src_root: Path, obj_root: Pat
         words = set(IDENTIFIER.findall(text))
         live_words = {w for _, c in firmware_code_lines(text, defines)
                       for w in IDENTIFIER.findall(c)}
-        live_includes = {h for _, c in firmware_code_lines(text, defines, includes=True)
-                         for h in QUOTED_INCLUDE.findall(c)}
-        headers = {h: hits[0] for h in QUOTED_INCLUDE.findall(text)
-                   if (hits := [d / h for d in ((base / f).parent, *header_dirs)
-                                if (d / h).is_file()])}
+        src = base / f
+        live_headers = closure(forced + resolve(
+            [h for _, c in firmware_code_lines(text, defines, includes=True)
+             for h in INCLUDE.findall(c)], src))
+        all_headers = live_headers | closure(resolve(INCLUDE.findall(text), src))
 
         def dead(word: str) -> bool:
             """Every mention of `word` sits in a branch the firmware does not compile.
 
-            A name the source never spells comes from an inline in a header it
-            includes directly; it is dead when each such header is included only
-            in a dead branch.
+            A name the source never spells comes from an inline in a header; it is
+            dead when some header mentions it and none the firmware's compiled
+            includes reach does.
             """
             if word in words:
                 return word not in live_words
-            mentions = [h for h, path in headers.items() if word in words_of(path)]
-            return bool(mentions) and not live_includes.intersection(mentions)
+            return (any(word in words_of(h) for h in all_headers - live_headers)
+                    and not any(word in words_of(h) for h in live_headers))
 
         for sym in syms:
             parts = symbol_name(demangled[sym])
@@ -735,10 +762,7 @@ def compute_link(manifest: Path, exclusions: Path, src_root: Path, obj_root: Pat
                     continue
             elif firmware_defines_symbol(parts, firmware_defined, firmware_namespaces):
                 continue
-            # A member is dead when its own name or its class's is. Code that never
-            # names the class could still reach a member through `auto`; that
-            # case reads as dead here and is left to the firmware link.
-            if dead(parts[-1].lstrip("~")) or (len(parts) > 1 and dead(parts[-2])):
+            if dead(parts[-1].lstrip("~")):
                 continue
             edge = (f, owner[sym])
             seen.add(edge)
