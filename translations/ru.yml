@@ -992,6 +992,7 @@ translations:
   'Edit Spool #{}': 'Изменить катушку #{}'
   Edit Theme Colors: Редактировать цвета темы
   Edit Theme Colors (Modified): Редактировать цвета темы (изменено)
+  Edit filament on insert: 'Править филамент при установке'
   Effect: Эффект
   Effects: Эффекты
   Eject: Извлечь
@@ -2222,6 +2223,7 @@ translations:
 
   Open motion controls for jogging: Управление перемещением осей
   Open the CFS unit and remove the broken filament from the slot: Откройте блок CFS и извлеките сломанный филамент из слота
+  Open the slot editor when you load a new spool: 'Открывать редактор слота при установке новой катушки'
   Operation already in progress: Операция уже выполняется
   Operation timed out: Время ожидания операции истекло
   Operations: Операции

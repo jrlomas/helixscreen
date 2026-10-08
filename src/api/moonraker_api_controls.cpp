@@ -330,9 +330,8 @@ void MoonrakerAPI::execute_gcode(const std::string& gcode, SuccessCallback on_su
         // latch stays armed and a genuinely external op later in the same
         // episode can still announce itself.
         //
-        // This is the ONLY consumer of app_macro_activity(). The blocking-op
-        // predicates deliberately do not read it — narrowing them would let a
-        // late jog through during a filament op (#1108).
+        // The blocking-op predicates deliberately do not read app_macro_activity():
+        // narrowing them would let a late jog through during a filament op (#1108).
         if (!silent && !state_.app_macro_activity().recently_active() &&
             state_.calibration_state().claim_busy_queue_toast()) {
             NOTIFY_INFO("Printer is busy — your {} will run when it's ready.",

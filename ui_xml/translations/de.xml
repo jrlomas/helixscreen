@@ -903,6 +903,7 @@
   <translation tag="Edit Spool #{}" de="Spule #{} bearbeiten"/>
   <translation tag="Edit Theme Colors" de="Themenfarben bearbeiten"/>
   <translation tag="Edit Theme Colors (Modified)" de="Themenfarben bearbeiten (Geändert)"/>
+  <translation tag="Edit filament on insert" de="Filament beim Einlegen bearbeiten"/>
   <translation tag="Effect" de="Effekt"/>
   <translation tag="Effects" de="Effekte"/>
   <translation tag="Eject" de="Auswerfen"/>
@@ -2028,6 +2029,7 @@
   <translation tag="Open frame" de="Offener Rahmen"/>
   <translation tag="Open motion controls for jogging" de="Bewegungssteuerung öffnen"/>
   <translation tag="Open the CFS unit and remove the broken filament from the slot" de="CFS-Einheit öffnen und das gebrochene Filament aus dem Slot entfernen"/>
+  <translation tag="Open the slot editor when you load a new spool" de="Slot-Editor öffnen, wenn eine neue Spule eingelegt wird"/>
   <translation tag="Operation already in progress" de="Vorgang läuft bereits"/>
   <translation tag="Operation timed out" de="Zeitüberschreitung beim Vorgang"/>
   <translation tag="Operations" de="Operationen"/>

@@ -55,6 +55,10 @@ struct ExternalSpoolMenuHooks {
 ///                dispatch, which is correct but shows no stepper.
 [[nodiscard]] ExternalSpoolMenuHooks sidebar_external_spool_hooks(AmsOperationSidebar* sidebar);
 
+/// Open the external-spool editor directly. Needs only a parent screen and the
+/// global API.
+void open_external_spool_editor(lv_obj_t* parent_screen, bool open_on_picker = false);
+
 void show_external_spool_menu(lv_obj_t* parent_screen, lv_obj_t* anchor_widget,
                               std::unique_ptr<AmsContextMenu>& context_menu,
                               ExternalSpoolMenuHooks hooks);

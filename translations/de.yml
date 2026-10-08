@@ -1009,6 +1009,7 @@ translations:
   'Edit Spool #{}': 'Spule #{} bearbeiten'
   Edit Theme Colors: Themenfarben bearbeiten
   Edit Theme Colors (Modified): Themenfarben bearbeiten (Geändert)
+  Edit filament on insert: 'Filament beim Einlegen bearbeiten'
   Effect: Effekt
   Effects: Effekte
   Eject: Auswerfen
@@ -2252,6 +2253,7 @@ translations:
 
   Open motion controls for jogging: Bewegungssteuerung öffnen
   Open the CFS unit and remove the broken filament from the slot: CFS-Einheit öffnen und das gebrochene Filament aus dem Slot entfernen
+  Open the slot editor when you load a new spool: 'Slot-Editor öffnen, wenn eine neue Spule eingelegt wird'
   Operation already in progress: Vorgang läuft bereits
   Operation timed out: Zeitüberschreitung beim Vorgang
   Operations: Operationen

@@ -934,6 +934,7 @@ translations:
   'Edit Spool #{}': 'スプール #{} を編集'
   Edit Theme Colors: テーマカラーを編集
   Edit Theme Colors (Modified): テーマカラーを編集（変更済み）
+  Edit filament on insert: '挿入時にフィラメントを編集'
   Effect: エフェクト
   Effects: エフェクト
   Eject: 取り出し
@@ -2106,6 +2107,7 @@ translations:
 
   Open motion controls for jogging: ジョグ操作を開く
   Open the CFS unit and remove the broken filament from the slot: CFS ユニットを開け、スロットから折れたフィラメントを取り除いてください
+  Open the slot editor when you load a new spool: '新しいスプールを装填したときにスロットエディタを開く'
   Operation already in progress: 操作がすでに進行中です
   Operation timed out: 操作がタイムアウトしました
   Operations: 操作

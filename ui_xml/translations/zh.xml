@@ -903,6 +903,7 @@
   <translation tag="Edit Spool #{}" zh="编辑线轴 #{}"/>
   <translation tag="Edit Theme Colors" zh="编辑主题颜色"/>
   <translation tag="Edit Theme Colors (Modified)" zh="编辑主题颜色（已修改）"/>
+  <translation tag="Edit filament on insert" zh="插入时编辑耗材"/>
   <translation tag="Effect" zh="效果"/>
   <translation tag="Effects" zh="特效"/>
   <translation tag="Eject" zh="弹出"/>
@@ -2028,6 +2029,7 @@
   <translation tag="Open frame" zh="开放式机架"/>
   <translation tag="Open motion controls for jogging" zh="打开手动移动控制"/>
   <translation tag="Open the CFS unit and remove the broken filament from the slot" zh="请打开 CFS 单元并从槽位中取出断裂的耗材"/>
+  <translation tag="Open the slot editor when you load a new spool" zh="装入新料盘时打开槽位编辑器"/>
   <translation tag="Operation already in progress" zh="操作正在进行中"/>
   <translation tag="Operation timed out" zh="操作超时"/>
   <translation tag="Operations" zh="操作"/>
