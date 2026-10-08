@@ -473,9 +473,10 @@ TEST_CASE_METHOD(XMLTestFixture,
     CHECK(placed->config.is_object());
 }
 
-// Crash-loop safe mode shows the default layout and saves nothing, so an add
-// would vanish on the next reload. The catalog refuses to open and says why.
-TEST_CASE_METHOD(XMLTestFixture, "Catalog: crash-loop safe mode refuses an add with a toast",
+// Crash-loop safe mode shows the default layout and saves nothing, so any
+// layout edit would vanish on the next reload. Edit mode refuses to start, and
+// says why, so neither the catalog nor a rearrange can be reached.
+TEST_CASE_METHOD(XMLTestFixture, "Grid edit: crash-loop safe mode refuses to enter with a toast",
                  "[widget_catalog][grid_edit][crash_loop]") {
     ScopedRuntimeConfig scoped_config;
     get_runtime_config()->crash_loop_safe_mode = true;
@@ -492,13 +493,11 @@ TEST_CASE_METHOD(XMLTestFixture, "Catalog: crash-loop safe mode refuses an add w
     helix::ui::set_test_toast_hook(
         [&](ToastSeverity sev, const std::string&, uint32_t) { toasts.push_back(sev); });
     GridEditMode em;
-    em.enter(container, &config, /*page_index=*/0);
-    em.open_widget_catalog(test_screen());
-    CHECK_FALSE(em.is_catalog_open());
+    const bool entered = em.enter(container, &config, /*page_index=*/0);
     helix::ui::set_test_toast_hook(nullptr);
-    CHECK(toasts == std::vector<ToastSeverity>{ToastSeverity::WARNING});
-    em.exit();
-    process_lvgl(10);
 
+    CHECK_FALSE(entered);
+    CHECK_FALSE(em.is_active());
+    CHECK(toasts == std::vector<ToastSeverity>{ToastSeverity::WARNING});
     CHECK(config.page_entries(0) == before);
 }

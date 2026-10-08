@@ -264,10 +264,13 @@ void GridEditMode::notify_gesture_ownership() {
     }
 }
 
-void GridEditMode::enter(lv_obj_t* container, PanelWidgetConfig* config, int page_index) {
+bool GridEditMode::enter(lv_obj_t* container, PanelWidgetConfig* config, int page_index) {
     if (active_) {
         spdlog::debug("[GridEditMode] Already active, ignoring enter()");
-        return;
+        return true;
+    }
+    if (PanelWidgetManager::refuse_layout_edit()) {
+        return false;
     }
     active_ = true;
     container_ = container;
@@ -286,6 +289,7 @@ void GridEditMode::enter(lv_obj_t* container, PanelWidgetConfig* config, int pag
     attach_to_current_page(/*sync_config=*/true);
 
     spdlog::info("[GridEditMode] Entered edit mode (page {})", page_index_);
+    return true;
 }
 
 void GridEditMode::attach_to_current_page(bool sync_config) {
@@ -2920,9 +2924,6 @@ GridEditMode::find_catalog_placement(const PanelWidgetDef& def) const {
 void GridEditMode::open_widget_catalog(lv_obj_t* screen) {
     if (!config_) {
         spdlog::warn("[GridEditMode] Cannot open catalog: no config");
-        return;
-    }
-    if (PanelWidgetManager::refuse_layout_edit()) {
         return;
     }
 
