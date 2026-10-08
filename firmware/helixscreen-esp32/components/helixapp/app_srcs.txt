@@ -463,6 +463,7 @@ src/ui/ui_filament_path_anim.cpp
 src/ui/ui_filament_path_canvas.cpp
 src/ui/ui_filament_path_glyphs.cpp
 src/ui/ui_filament_path_layers.cpp
+src/ui/ui_filament_path_plan.cpp
 src/ui/ui_filament_path_topology.cpp
 src/ui/ui_filament_runout_handler.cpp
 src/ui/ui_filament_slot_picker.cpp

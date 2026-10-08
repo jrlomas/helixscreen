@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <map>
 #include <set>
 #include <utility>
 
@@ -43,6 +44,28 @@ static bool default_enabled_for(const std::string& id) {
         }
     }
     return false;
+}
+
+/// What a save-and-reload must preserve: every widget's enabled state, and the
+/// order of the enabled ones. Disabled unplaced widgets may come back in
+/// registry order, since nothing reads their position.
+static void require_same_widget_state(const std::vector<PanelWidgetEntry>& a,
+                                      const std::vector<PanelWidgetEntry>& b) {
+    REQUIRE(a.size() == b.size());
+    std::map<std::string, bool> state_a, state_b;
+    std::vector<std::string> enabled_a, enabled_b;
+    for (const auto& e : a) {
+        state_a[e.id] = e.enabled;
+        if (e.enabled)
+            enabled_a.push_back(e.id);
+    }
+    for (const auto& e : b) {
+        state_b[e.id] = e.enabled;
+        if (e.enabled)
+            enabled_b.push_back(e.id);
+    }
+    REQUIRE(state_a == state_b);
+    REQUIRE(enabled_a == enabled_b);
 }
 
 // ============================================================================
@@ -251,7 +274,16 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
 
     auto& saved = root["pages"][0]["widgets"];
     REQUIRE(saved.is_array());
-    REQUIRE(saved.size() == default_grid_widget_count());
+    // A widget that is off by default and unplaced is left out: the reader
+    // appends it from the registry, so writing it costs bytes and says nothing.
+    REQUIRE(saved.size() < default_grid_widget_count());
+    for (const auto& item : saved) {
+        const auto* def = find_widget_def(item["id"].get<std::string>());
+        REQUIRE(def != nullptr);
+        CAPTURE(def->id);
+        REQUIRE_FALSE(
+            (!def->default_enabled && !item["enabled"].get<bool>() && item["col"].get<int>() < 0));
+    }
 
     // Each entry should have id and enabled
     for (const auto& item : saved) {
@@ -262,7 +294,11 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
     }
 
     // The third entry should be disabled
-    REQUIRE(saved[2]["enabled"].get<bool>() == false);
+    const std::string third = wc.entries()[2].id;
+    auto it = std::find_if(saved.begin(), saved.end(),
+                           [&](const json& item) { return item["id"] == third; });
+    REQUIRE(it != saved.end());
+    REQUIRE((*it)["enabled"].get<bool>() == false);
 }
 
 TEST_CASE_METHOD(
@@ -325,14 +361,7 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
     PanelWidgetConfig wc2("home", config);
     wc2.load();
 
-    const auto& e1 = wc1.entries();
-    const auto& e2 = wc2.entries();
-    REQUIRE(e1.size() == e2.size());
-
-    for (size_t i = 0; i < e1.size(); ++i) {
-        REQUIRE(e1[i].id == e2[i].id);
-        REQUIRE(e1[i].enabled == e2[i].enabled);
-    }
+    require_same_widget_state(wc1.entries(), wc2.entries());
 }
 
 // ============================================================================
@@ -983,12 +1012,7 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
     PanelWidgetConfig wc2("home", config);
     wc2.load();
 
-    REQUIRE(wc1.entries().size() == wc2.entries().size());
-    for (size_t i = 0; i < wc1.entries().size(); ++i) {
-        CAPTURE(i);
-        REQUIRE(wc1.entries()[i].id == wc2.entries()[i].id);
-        REQUIRE(wc1.entries()[i].enabled == wc2.entries()[i].enabled);
-    }
+    require_same_widget_state(wc1.entries(), wc2.entries());
 }
 
 // ============================================================================
@@ -2923,4 +2947,113 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
     REQUIRE_FALSE(saved.contains("grid"));
 
     CHECK_FALSE(PanelWidgetConfig::has_uninterpretable_coordinates(saved, 30));
+}
+
+// ============================================================================
+// Save omits only what the reader re-appends
+// ============================================================================
+
+namespace {
+const PanelWidgetDef* first_def_where(bool default_enabled, bool multi_instance) {
+    for (const auto& def : get_all_widget_defs()) {
+        if (def.default_enabled == default_enabled && def.multi_instance == multi_instance) {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
+json widget_json(const std::string& id, bool enabled, int col, int row, int colspan, int rowspan,
+                 const json& config = json()) {
+    json item = {{"id", id},   {"enabled", enabled}, {"col", col},
+                 {"row", row}, {"colspan", colspan}, {"rowspan", rowspan}};
+    if (!config.is_null()) {
+        item["config"] = config;
+    }
+    return item;
+}
+} // namespace
+
+// Each case breaks exactly one condition of the omitted shape (off by default,
+// disabled, unplaced, unconfigured, registry spans, base id, first page), so the
+// entry carries information and must survive a save and reload field for field.
+TEST_CASE_METHOD(PanelWidgetConfigFixture,
+                 "PanelWidgetConfig: save keeps every entry that differs from the appended default",
+                 "[panel_widget][widget_config]") {
+    const auto* off_def = first_def_where(false, false);
+    const auto* on_def = first_def_where(true, false);
+    const auto* multi_def = first_def_where(false, true);
+    REQUIRE(off_def != nullptr);
+    REQUIRE(on_def != nullptr);
+    REQUIRE(multi_def != nullptr);
+    const std::string off = off_def->id;
+    const int cs = off_def->colspan;
+    const int rs = off_def->rowspan;
+
+    struct Case {
+        const char* why;
+        json entry;
+        size_t page;
+    };
+    const std::vector<Case> cases = {
+        {"enabled, awaiting auto-place", widget_json(off, true, -1, -1, cs, rs), 0},
+        {"column only", widget_json(off, false, 0, -1, cs, rs), 0},
+        {"row only", widget_json(off, false, -1, 0, cs, rs), 0},
+        {"configured", widget_json(off, false, -1, -1, cs, rs, {{"k", "v"}}), 0},
+        {"non-default colspan", widget_json(off, false, -1, -1, cs + 1, rs), 0},
+        {"non-default rowspan", widget_json(off, false, -1, -1, cs, rs + 1), 0},
+        {"on by default", widget_json(on_def->id, false, -1, -1, on_def->colspan, on_def->rowspan),
+         0},
+        {"multi-instance id",
+         widget_json(std::string(multi_def->id) + ":3", false, -1, -1, multi_def->colspan,
+                     multi_def->rowspan),
+         0},
+        {"second page", widget_json(off, false, -1, -1, cs, rs), 1},
+    };
+
+    for (const auto& c : cases) {
+        CAPTURE(c.why);
+        const std::string id = c.entry["id"].get<std::string>();
+        json page0 = json::array();
+        json page1 = json::array();
+        (c.page == 0 ? page0 : page1).push_back(c.entry);
+        setup_with_pages({{"main", page0}, {"p2", page1}});
+
+        PanelWidgetConfig wc1("home", config);
+        wc1.load();
+        wc1.save();
+
+        const json saved = get_saved_root()["pages"][c.page]["widgets"];
+        auto in_saved = std::find_if(saved.begin(), saved.end(),
+                                     [&](const json& item) { return item["id"] == id; });
+        REQUIRE(in_saved != saved.end());
+
+        PanelWidgetConfig wc2("home", config);
+        wc2.load();
+        const auto& entries = wc2.page_entries(c.page);
+        auto it = std::find_if(entries.begin(), entries.end(),
+                               [&](const PanelWidgetEntry& e) { return e.id == id; });
+        REQUIRE(it != entries.end());
+        CHECK(it->enabled == c.entry["enabled"].get<bool>());
+        CHECK(it->col == c.entry["col"].get<int>());
+        CHECK(it->row == c.entry["row"].get<int>());
+        CHECK(it->colspan == c.entry["colspan"].get<int>());
+        CHECK(it->rowspan == c.entry["rowspan"].get<int>());
+        CHECK(it->config == c.entry.value("config", json::object()));
+    }
+}
+
+TEST_CASE_METHOD(PanelWidgetConfigFixture,
+                 "PanelWidgetConfig: save omits a default-off widget left at its appended default",
+                 "[panel_widget][widget_config]") {
+    const auto* off_def = first_def_where(false, false);
+    REQUIRE(off_def != nullptr);
+    setup_with_pages({{"main", json::array({widget_json(off_def->id, false, -1, -1,
+                                                        off_def->colspan, off_def->rowspan)})}});
+    PanelWidgetConfig wc("home", config);
+    wc.load();
+    wc.save();
+    const auto saved = get_saved_page0_widgets();
+    CHECK(std::none_of(saved.begin(), saved.end(),
+                       [&](const json& item) { return item["id"] == off_def->id; }));
 }

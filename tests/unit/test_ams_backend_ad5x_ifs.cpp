@@ -422,6 +422,30 @@ TEST_CASE("AD5X IFS native ZMOD motion sensor parsing", "[ams][ad5x_ifs]") {
     REQUIRE_FALSE(Ad5xIfsTestAccess::head_filament(backend));
 }
 
+TEST_CASE("AD5X IFS reports a toolhead sensor once its head switch publishes",
+          "[ams][ad5x_ifs][toolhead_sensor]") {
+    helix::test::RegisteredBackend<AmsBackendAd5xIfs> backend_reg(nullptr, nullptr);
+    AmsBackendAd5xIfs& backend = *backend_reg;
+    Ad5xIfsTestAccess::set_has_ifs_vars(backend, true);
+    json notification;
+    notification["save_variables"] = json{{"variables", standard_variables()}};
+    notification["filament_motion_sensor ifs_motion_sensor"] = json{{"filament_detected", true}};
+
+    SECTION("motion sensor only") {
+        Ad5xIfsTestAccess::handle_status(backend, notification);
+        auto sys = backend.get_system_info();
+        REQUIRE(sys.units.size() == 1);
+        CHECK_FALSE(sys.units[0].has_toolhead_sensor);
+    }
+    SECTION("head switch present") {
+        notification.update(make_head_sensor(false));
+        Ad5xIfsTestAccess::handle_status(backend, notification);
+        auto sys = backend.get_system_info();
+        REQUIRE(sys.units.size() == 1);
+        CHECK(sys.units[0].has_toolhead_sensor);
+    }
+}
+
 TEST_CASE("AD5X IFS native ZMOD combined update (no per-port sensors)", "[ams][ad5x_ifs]") {
     helix::test::RegisteredBackend<AmsBackendAd5xIfs> backend_reg(nullptr, nullptr);
     AmsBackendAd5xIfs& backend = *backend_reg;

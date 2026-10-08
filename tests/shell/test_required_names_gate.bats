@@ -121,6 +121,17 @@ CPP
     contains "required-names" "$output"
 }
 
+@test "a component built by create_xml_laid_out counts as created" {
+    cat > "$ROOT/src/demo.cpp" <<'CPP'
+void Demo::show(lv_obj_t* p) {
+    lv_obj_t* root = helix::ui::create_xml_laid_out(p, "demo_overlay", nullptr);
+    find_required(root, "row_volume", "Demo");
+}
+CPP
+    run python3 "$GATE" --repo-root "$ROOT"
+    [ "$status" -eq 0 ]
+}
+
 @test "find_optional and non-literal names are left alone" {
     cat > "$ROOT/src/demo.cpp" <<'CPP'
 lv_obj_t* Demo::create(lv_obj_t* p) { return create_overlay_from_xml(p, "demo_overlay"); }

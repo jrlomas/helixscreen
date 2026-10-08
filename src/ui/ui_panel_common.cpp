@@ -165,6 +165,15 @@ lv_obj_t* create_xml_hidden(lv_obj_t* parent, const char* component, const char*
     lv_obj_delete(holder);
     return root;
 }
+
+lv_obj_t* create_xml_laid_out(lv_obj_t* parent, const char* component, const char** attrs) {
+    lv_obj_t* root = create_xml_hidden(parent, component, attrs);
+    if (root) {
+        lv_obj_update_layout(root);
+        lv_obj_remove_flag(root, LV_OBJ_FLAG_HIDDEN);
+    }
+    return root;
+}
 } // namespace helix::ui
 
 void ui_overlay_panel_setup_standard(lv_obj_t* panel, lv_obj_t* parent_screen,

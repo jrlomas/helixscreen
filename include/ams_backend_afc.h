@@ -206,6 +206,9 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
         /// Lowercased AFC_OpenAMS unit name -> lowercased `oams` option, the
         /// [AFC_OAMS] controller (and temperature sensor) name.
         std::unordered_map<std::string, std::string> oams_names;
+        /// Any AFC_extruder section wires a physical tool_start/tool_end pin;
+        /// nullopt when the config has no AFC_extruder section at all.
+        std::optional<bool> toolhead_sensor_fitted;
     };
 
     /// Reduces a printer.objects.query(configfile=settings) response to the
@@ -1031,6 +1034,9 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     /// @pre mutex_ held.
     void apply_unit_environment();
 
+    /// Commit a configfile.settings answer (UI thread, takes mutex_).
+    void apply_configfile_topology(ConfigfileTopology topo);
+
     /**
      * @brief Parse AFC_extruder object for toolhead sensor states
      *
@@ -1440,6 +1446,9 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     /// looked yet" — an empty extruder_klipper_names_ means both, and only the
     /// first justifies telling the user their config is missing something.
     bool configfile_answered_{false};
+    /// From the AFC_extruder pins in configfile; unknown until it answers,
+    /// and units report a toolhead sensor meanwhile.
+    std::optional<bool> toolhead_sensor_fitted_;
 
     /// True once an `[AFC_Toolchanger …]` section has been seen in
     /// configfile.settings. Never cleared by a config that lacks one — absence

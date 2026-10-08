@@ -466,6 +466,17 @@ void ui_filament_path_canvas_set_slot_hub_routed(lv_obj_t* obj, int slot, bool i
 void ui_filament_path_canvas_set_eject_mode(lv_obj_t* obj, bool eject);
 
 /**
+ * @brief Set whether the unit reports a toolhead filament sensor
+ *
+ * LINEAR/HUB draws the toolhead sensor band on the trunk only when it does,
+ * whether or not the bypass is shown. Defaults to true.
+ *
+ * @param obj The filament_path_canvas widget
+ * @param has_sensor true when the unit has a toolhead sensor
+ */
+void ui_filament_path_canvas_set_toolhead_sensor(lv_obj_t* obj, bool has_sensor);
+
+/**
  * @brief Set click callback for the selector/hub box
  *
  * When the user taps the selector/hub box on the path diagram, this callback

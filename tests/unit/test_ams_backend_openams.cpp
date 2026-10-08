@@ -250,6 +250,9 @@ TEST_CASE_METHOD(HelixTestFixture, "OpenAMS snapshot maps units, slots, groups a
     CHECK(info.units[0].topology == PathTopology::HUB);
     CHECK(info.units[1].topology == PathTopology::LINEAR);
     CHECK(backend.get_topology() == PathTopology::MIXED);
+    // The contract carries no toolhead sensor, so no unit claims one.
+    CHECK_FALSE(info.units[0].has_toolhead_sensor);
+    CHECK_FALSE(info.units[1].has_toolhead_sensor);
     CHECK(info.units[0].slots[0].status == SlotStatus::EMPTY);
     CHECK(info.units[0].slots[1].status == SlotStatus::AVAILABLE);
     CHECK(info.units[0].slots[2].status == SlotStatus::LOADED);

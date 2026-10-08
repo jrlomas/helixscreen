@@ -534,6 +534,17 @@ void ams_detail_setup_path_canvas(lv_obj_t* canvas, lv_obj_t* slot_grid, int uni
     ui_filament_path_canvas_set_topology(canvas, static_cast<int>(topo));
     ui_filament_path_canvas_set_hub_on_toolhead(canvas, backend->hub_on_toolhead());
 
+    // A unit-scoped view asks its own unit; the all-units view asks whether any has one.
+    bool has_toolhead_sensor = false;
+    if (unit_index >= 0 && unit_index < static_cast<int>(info.units.size())) {
+        has_toolhead_sensor = info.units[unit_index].has_toolhead_sensor;
+    } else {
+        has_toolhead_sensor =
+            std::any_of(info.units.begin(), info.units.end(),
+                        [](const helix::AmsUnit& u) { return u.has_toolhead_sensor; });
+    }
+    ui_filament_path_canvas_set_toolhead_sensor(canvas, has_toolhead_sensor);
+
     // Pass slot_grid reference so draw callback can read actual slot positions
     // at render time — avoids setup-vs-draw timing mismatches across breakpoints.
     if (slot_grid) {

@@ -19,6 +19,7 @@ class MockConfigStorage : public helix::ConfigStorage {
     // reports a read error, matching the real ConfigStorage::load() contract
     // (config_storage.h).
     bool unreadable = false;
+    bool small = false;
 
     explicit MockConfigStorage(std::optional<std::string> initial = std::nullopt)
         : doc(std::move(initial)) {}
@@ -47,6 +48,9 @@ class MockConfigStorage : public helix::ConfigStorage {
     }
     std::string describe() const override {
         return "mock://config";
+    }
+    bool small_footprint() const override {
+        return small;
     }
 };
 

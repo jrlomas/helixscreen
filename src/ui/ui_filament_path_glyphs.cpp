@@ -1,8 +1,8 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Glyph drawing for the filament_path_canvas widget: sensor dots (push-to-
-// connect fittings), the hub/selector box (incl. its interactive gear badge),
+// Glyph drawing for the filament_path_canvas widget: the hub/selector box
+// (incl. its interactive gear badge),
 // the buffer ("BUF") box, the animated filament tip, the nozzle heat glow,
 // flow particles, tool badges, and the style-dispatched toolhead glyph.
 // See ui_filament_path_internal.h for the widget architecture.
@@ -20,11 +20,11 @@
 
 namespace helix::ui::fpath {
 
-// Draw a push-to-connect fitting at a sensor position.
-// Uses same shadow/highlight language as tubes: shadow (darker) behind, highlight (lighter) offset.
-// Same overall size as before — no bigger than the original radius.
-void draw_sensor_dot(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t color, bool filled,
-                     int32_t radius) {
+namespace {
+
+// A shaded dot: darker shadow behind, the body, a lighter highlight offset
+// toward the top right.
+void draw_shaded_dot(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t color, int32_t radius) {
     const bool simple = reduced_effects();
     lv_draw_arc_dsc_t arc_dsc;
     lv_draw_arc_dsc_init(&arc_dsc);
@@ -41,35 +41,27 @@ void draw_sensor_dot(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t color
         lv_draw_arc(layer, &arc_dsc);
     }
 
-    if (filled) {
-        // Body: full radius in simple mode, slightly inset on full quality
-        int32_t body_r = simple ? radius : LV_MAX(1, radius - 1);
-        arc_dsc.center.x = cx;
-        arc_dsc.center.y = cy;
-        arc_dsc.radius = static_cast<uint16_t>(body_r);
-        arc_dsc.width = static_cast<uint16_t>(body_r * 2);
-        arc_dsc.color = color;
-        lv_draw_arc(layer, &arc_dsc);
+    // Body: full radius in simple mode, slightly inset on full quality
+    int32_t body_r = simple ? radius : LV_MAX(1, radius - 1);
+    arc_dsc.radius = static_cast<uint16_t>(body_r);
+    arc_dsc.width = static_cast<uint16_t>(body_r * 2);
+    arc_dsc.color = color;
+    lv_draw_arc(layer, &arc_dsc);
 
-        // Highlight: small bright dot offset toward top-right
-        if (!simple) {
-            int32_t hl_r = LV_MAX(1, radius / 3);
-            int32_t hl_off = LV_MAX(1, radius / 3);
-            arc_dsc.center.x = cx + hl_off;
-            arc_dsc.center.y = cy - hl_off;
-            arc_dsc.radius = static_cast<uint16_t>(hl_r);
-            arc_dsc.width = static_cast<uint16_t>(hl_r * 2);
-            arc_dsc.color = ph_lighten(color, 44);
-            lv_draw_arc(layer, &arc_dsc);
-        }
-    } else {
-        // Empty fitting: outline ring only (no fill)
-        arc_dsc.radius = static_cast<uint16_t>(radius - 1);
-        arc_dsc.width = 2;
-        arc_dsc.color = color;
+    // Highlight: small bright dot offset toward top-right
+    if (!simple) {
+        int32_t hl_r = LV_MAX(1, radius / 3);
+        int32_t hl_off = LV_MAX(1, radius / 3);
+        arc_dsc.center.x = cx + hl_off;
+        arc_dsc.center.y = cy - hl_off;
+        arc_dsc.radius = static_cast<uint16_t>(hl_r);
+        arc_dsc.width = static_cast<uint16_t>(hl_r * 2);
+        arc_dsc.color = ph_lighten(color, 44);
         lv_draw_arc(layer, &arc_dsc);
     }
 }
+
+} // namespace
 
 int32_t draw_hub_box(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t width, int32_t height,
                      lv_color_t bg_color, lv_color_t border_color, const char* label,
@@ -223,11 +215,11 @@ void draw_buffer_coil(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t hub_
 void draw_filament_tip(lv_layer_t* layer, int32_t x, int32_t y, lv_color_t color, int32_t radius) {
     // Outer glow (lighter, larger)
     lv_color_t glow_color = ph_lighten(color, 60);
-    draw_sensor_dot(layer, x, y, glow_color, true, radius + 2);
+    draw_shaded_dot(layer, x, y, glow_color, radius + 2);
 
     // Inner core (bright)
     lv_color_t core_color = ph_lighten(color, 100);
-    draw_sensor_dot(layer, x, y, core_color, true, radius);
+    draw_shaded_dot(layer, x, y, core_color, radius);
 }
 
 // Draw heat glow effect around nozzle tip
