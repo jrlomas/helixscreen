@@ -154,13 +154,12 @@ MixedFrame compute_mixed_frame(const FilamentPathData& data, const BaseGeometry&
     for (int i = 0; i < FilamentPathData::MAX_SLOTS; i++)
         f.slot_to_fan[i] = -1;
     const int32_t hub_top = f.hub_cy - f.hub_h / 2;
-    const int32_t sensor_r = data.theme.sensor_radius;
     pg::MergeLaneIn fan_in[FilamentPathData::MAX_SLOTS];
     int fan_n = 0;
     for (int i = 0; i < n; i++) {
         if (!data.slot_is_hub_routed[i])
             continue;
-        fan_in[fan_n] = {(float)g.slot_x[i], (float)(f.sensor_y + sensor_r)};
+        fan_in[fan_n] = {(float)g.slot_x[i], (float)f.sensor_y};
         f.slot_to_fan[i] = fan_n++;
     }
     pg::build_merge_fan(fan_in, fan_n, (float)f.hub_cx, (float)hub_top, (float)f.hub_w,
@@ -436,11 +435,8 @@ void plan_mixed(const MixedFrame& f, const FilamentPathData& data, const BaseGeo
         Route& r = start_lane(out, lane, x, f.entry_y, f.sensor_y);
         const int fi = f.slot_to_fan[i];
         if (fi >= 0) {
-            pg::PathPoint pts[4] = {f.hub_fan[fi].pts[0], f.hub_fan[fi].pts[1],
-                                    f.hub_fan[fi].pts[2], f.hub_fan[fi].pts[3]};
-            pts[0].y = (float)f.sensor_y;
             pg::FilamentPath fan;
-            pg::route_polyline_filleted(fan, pts, 4, 8.0f);
+            pg::route_polyline_filleted(fan, f.hub_fan[fi].pts, 4, 8.0f);
             route_append(r, fan, lane.style(PathSegment::SPOOL));
         } else {
             append_line(r, x, (float)f.sensor_y, x, nozzle_top, lane.style(PathSegment::NOZZLE));
@@ -451,7 +447,11 @@ void plan_mixed(const MixedFrame& f, const FilamentPathData& data, const BaseGeo
 
     if (f.hub_count > 0) {
         // The shared trunk shows the first hub lane that reached the nozzle.
-        Lane trunk{PathSegment::NONE, false, error, f.states[f.first_hub_lane].color, bg};
+        // With none there it is idle, and still shows an error unless a direct
+        // lane is the mounted one.
+        const bool direct_mounted = data.active_slot >= 0 && data.active_slot < n &&
+                                    !data.slot_is_hub_routed[data.active_slot];
+        Lane trunk{PathSegment::NONE, !direct_mounted, error, f.states[f.first_hub_lane].color, bg};
         for (int j = 0; j < n; j++) {
             if (data.slot_is_hub_routed[j] && f.states[j].segment >= PathSegment::NOZZLE) {
                 trunk = lane_of(f.states[j], error, bg);

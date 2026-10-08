@@ -897,3 +897,92 @@ TEST_CASE("FilamentPath plan: MIXED direct lanes and the hub trunk reach a nozzl
     CHECK(near(seg_end(t.path.segs[t.path.count - 1]), 300, 236));
     CHECK(plan.band_count == 4);
 }
+
+TEST_CASE("FilamentPath plan: the MIXED trunk fills from the first hub lane at the nozzle",
+          "[filament-path][plan][mixed]") {
+    auto d = make_data(helix::PathTopology::MIXED);
+    d->slot_is_hub_routed[2] = true;
+    d->slot_is_hub_routed[3] = true;
+
+    SECTION("no hub lane at the nozzle: empty") {
+        d->slot_filament_states[2] = {PathSegment::TOOLHEAD, SLOT_COLORS[2]};
+        const PathPlan& plan = mixed_plan(*d);
+        CHECK_FALSE(plan.routes[plan.trunk_route].style[0].filled);
+    }
+    SECTION("the lane at the nozzle colors it, not an earlier staged lane") {
+        d->slot_filament_states[2] = {PathSegment::TOOLHEAD, SLOT_COLORS[2]};
+        d->slot_filament_states[3] = {PathSegment::NOZZLE, SLOT_COLORS[3]};
+        const PathPlan& plan = mixed_plan(*d);
+        const SpanStyle t = plan.routes[plan.trunk_route].style[0];
+        CHECK(t.filled);
+        CHECK(lv_color_eq(t.bore, lv_color_hex(SLOT_COLORS[3])));
+    }
+    SECTION("two lanes at the nozzle: the first wins") {
+        d->slot_filament_states[2] = {PathSegment::NOZZLE, SLOT_COLORS[2]};
+        d->slot_filament_states[3] = {PathSegment::NOZZLE, SLOT_COLORS[3]};
+        const PathPlan& plan = mixed_plan(*d);
+        CHECK(
+            lv_color_eq(plan.routes[plan.trunk_route].style[0].bore, lv_color_hex(SLOT_COLORS[2])));
+    }
+}
+
+TEST_CASE("FilamentPath plan: a MIXED direct lane short of the nozzle fills to its sensor",
+          "[filament-path][plan][mixed]") {
+    auto d = make_data(helix::PathTopology::MIXED);
+    d->slot_is_hub_routed[2] = true;
+    d->slot_is_hub_routed[3] = true;
+    d->slot_filament_states[0] = {PathSegment::TOOLHEAD, SLOT_COLORS[0]};
+    const PathPlan& plan = mixed_plan(*d);
+
+    const Route& r = plan.routes[0];
+    REQUIRE(r.path.count == 2);
+    CHECK(r.style[0].filled);
+    CHECK_FALSE(r.style[1].filled);
+    CHECK(near(seg_end(r.path.segs[1]), 50, 236));
+}
+
+TEST_CASE("FilamentPath plan: PARALLEL and MIXED show an error on the mounted lane",
+          "[filament-path][plan]") {
+    SECTION("PARALLEL") {
+        auto d = make_data(helix::PathTopology::PARALLEL);
+        load_active(*d, 1, PathSegment::NOZZLE);
+        d->error_segment = static_cast<int>(PathSegment::NOZZLE);
+        const PathPlan& plan = parallel_plan(*d);
+        const Route& r = plan.routes[1];
+        CHECK(r.style[0].wall == TubeWall::Active);
+        CHECK(r.style[1].wall == TubeWall::Error);
+        CHECK(plan.routes[0].style[1].wall == TubeWall::Plain);
+    }
+    SECTION("MIXED direct lane") {
+        auto d = make_data(helix::PathTopology::MIXED);
+        d->slot_is_hub_routed[2] = true;
+        d->slot_is_hub_routed[3] = true;
+        load_active(*d, 0, PathSegment::NOZZLE);
+        d->error_segment = static_cast<int>(PathSegment::NOZZLE);
+        const PathPlan& plan = mixed_plan(*d);
+        CHECK(plan.routes[0].style[1].wall == TubeWall::Error);
+        // A direct lane is mounted: the idle hub trunk is not its route.
+        CHECK(plan.routes[plan.trunk_route].style[0].wall == TubeWall::Plain);
+    }
+    SECTION("MIXED idle trunk with nothing mounted") {
+        auto d = make_data(helix::PathTopology::MIXED);
+        d->slot_is_hub_routed[2] = true;
+        d->slot_is_hub_routed[3] = true;
+        d->error_segment = static_cast<int>(PathSegment::NOZZLE);
+        const PathPlan& plan = mixed_plan(*d);
+        CHECK(plan.active_route == -1);
+        CHECK(plan.routes[plan.trunk_route].style[0].wall == TubeWall::Error);
+    }
+}
+
+TEST_CASE("FilamentPath plan: PARALLEL and MIXED bands do not wait on a toolhead sensor",
+          "[filament-path][plan]") {
+    auto d = make_data(helix::PathTopology::PARALLEL);
+    d->has_toolhead_sensor = false;
+    CHECK(parallel_plan(*d).band_count == 4);
+
+    d->topology = static_cast<int>(helix::PathTopology::MIXED);
+    d->slot_is_hub_routed[2] = true;
+    d->slot_is_hub_routed[3] = true;
+    CHECK(mixed_plan(*d).band_count == 4);
+}

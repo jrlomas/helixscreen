@@ -23,9 +23,8 @@ namespace helix::ui::fpath {
 namespace {
 
 // A shaded dot: darker shadow behind, the body, a lighter highlight offset
-// toward the top right. Unfilled, an outline ring only.
-void draw_shaded_dot(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t color, bool filled,
-                     int32_t radius) {
+// toward the top right.
+void draw_shaded_dot(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t color, int32_t radius) {
     const bool simple = reduced_effects();
     lv_draw_arc_dsc_t arc_dsc;
     lv_draw_arc_dsc_init(&arc_dsc);
@@ -42,32 +41,22 @@ void draw_shaded_dot(lv_layer_t* layer, int32_t cx, int32_t cy, lv_color_t color
         lv_draw_arc(layer, &arc_dsc);
     }
 
-    if (filled) {
-        // Body: full radius in simple mode, slightly inset on full quality
-        int32_t body_r = simple ? radius : LV_MAX(1, radius - 1);
-        arc_dsc.center.x = cx;
-        arc_dsc.center.y = cy;
-        arc_dsc.radius = static_cast<uint16_t>(body_r);
-        arc_dsc.width = static_cast<uint16_t>(body_r * 2);
-        arc_dsc.color = color;
-        lv_draw_arc(layer, &arc_dsc);
+    // Body: full radius in simple mode, slightly inset on full quality
+    int32_t body_r = simple ? radius : LV_MAX(1, radius - 1);
+    arc_dsc.radius = static_cast<uint16_t>(body_r);
+    arc_dsc.width = static_cast<uint16_t>(body_r * 2);
+    arc_dsc.color = color;
+    lv_draw_arc(layer, &arc_dsc);
 
-        // Highlight: small bright dot offset toward top-right
-        if (!simple) {
-            int32_t hl_r = LV_MAX(1, radius / 3);
-            int32_t hl_off = LV_MAX(1, radius / 3);
-            arc_dsc.center.x = cx + hl_off;
-            arc_dsc.center.y = cy - hl_off;
-            arc_dsc.radius = static_cast<uint16_t>(hl_r);
-            arc_dsc.width = static_cast<uint16_t>(hl_r * 2);
-            arc_dsc.color = ph_lighten(color, 44);
-            lv_draw_arc(layer, &arc_dsc);
-        }
-    } else {
-        // Empty fitting: outline ring only (no fill)
-        arc_dsc.radius = static_cast<uint16_t>(radius - 1);
-        arc_dsc.width = 2;
-        arc_dsc.color = color;
+    // Highlight: small bright dot offset toward top-right
+    if (!simple) {
+        int32_t hl_r = LV_MAX(1, radius / 3);
+        int32_t hl_off = LV_MAX(1, radius / 3);
+        arc_dsc.center.x = cx + hl_off;
+        arc_dsc.center.y = cy - hl_off;
+        arc_dsc.radius = static_cast<uint16_t>(hl_r);
+        arc_dsc.width = static_cast<uint16_t>(hl_r * 2);
+        arc_dsc.color = ph_lighten(color, 44);
         lv_draw_arc(layer, &arc_dsc);
     }
 }
@@ -226,11 +215,11 @@ void draw_buffer_coil(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t hub_
 void draw_filament_tip(lv_layer_t* layer, int32_t x, int32_t y, lv_color_t color, int32_t radius) {
     // Outer glow (lighter, larger)
     lv_color_t glow_color = ph_lighten(color, 60);
-    draw_shaded_dot(layer, x, y, glow_color, true, radius + 2);
+    draw_shaded_dot(layer, x, y, glow_color, radius + 2);
 
     // Inner core (bright)
     lv_color_t core_color = ph_lighten(color, 100);
-    draw_shaded_dot(layer, x, y, core_color, true, radius);
+    draw_shaded_dot(layer, x, y, core_color, radius);
 }
 
 // Draw heat glow effect around nozzle tip
