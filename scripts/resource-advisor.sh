@@ -27,6 +27,11 @@
 # pool-docker.sh is outside the jobpool's budget; with a live pool that is
 # always worth a word, tight or not.
 #
+# `helix-claim jobs` is make's -j: with a pool live it is the whole pool. A
+# non-make runner sized from it (docker --cpus, ninja -j, parallel -j, xargs -P,
+# idf.py, bats --jobs) runs that many jobs on top of every build, so that is
+# always named, with or without a pool.
+#
 # Runs on EVERY Bash call: a command matching no heavy word returns before
 # touching jq, /proc or helix-claim. Never ssh from here.
 #
@@ -42,7 +47,7 @@ input=$(cat)
 
 # Fast path: a plain substring test on the raw JSON, no parsing.
 case "$input" in
-    *addr2line*|*gdb*|*llvm-symbolizer*|*full-test-run*|*unit-sweep*|*mutate*|*asan*|*SANITIZE*|*docker*|*-j*|*helix-tests*|*bats*|*parallel*|*ninja*|*idf.py*) ;;
+    *addr2line*|*gdb*|*"helix-claim jobs"*|*llvm-symbolizer*|*full-test-run*|*unit-sweep*|*mutate*|*asan*|*SANITIZE*|*docker*|*-j*|*helix-tests*|*bats*|*parallel*|*ninja*|*idf.py*) ;;
     *) exit 0 ;;
 esac
 
@@ -73,9 +78,15 @@ emit() {
     exit 0
 }
 
-# Quoted text becomes Q, so `-j"$(helix-claim jobs)"` reads as -jQ (a computed
-# -j) and a quoted mention of a target reads as nothing.
-masked=$(printf '%s' "$cmd" | sed -E "s/'[^']*'/Q/g; s/\"[^\"]*\"/Q/g")
+# A `$(helix-claim jobs)` substitution, bare or as the whole of a double-quoted
+# word, becomes $CLAIMJOBS so the runner it sizes can be named. Other quoted
+# text becomes Q, so `-j"$(nproc)"` reads as -jQ (a computed -j) and a quoted
+# mention of a target, or of the substitution inside a sentence, reads as nothing.
+# shellcheck disable=SC2016  # $CLAIMJOBS is literal marker text
+masked=$(printf '%s' "$cmd" | sed -E \
+    -e 's/"\$\([^()"]*helix-claim[[:space:]]+jobs[[:space:]]*\)"/$CLAIMJOBS/g' \
+    -e 's/\$\([^()"]*helix-claim[[:space:]]+jobs[[:space:]]*\)/$CLAIMJOBS/g' \
+    -e "s/'[^']*'/Q/g; s/\"[^\"]*\"/Q/g")
 segments=$(printf '%s\n' "$masked" | sed -E 's/(&&|\|\||[;|])/\n/g')
 
 # Patterns live in variables: `;|&(` inside a literal [[ =~ ]] break the parse.
@@ -87,7 +98,7 @@ re_container_target='(^|[[:space:]])([A-Za-z0-9_.-]+-docker|docker-[A-Za-z0-9_.-
 re_jobs='(^|[[:space:]])(-j[[:space:]]*|--jobs[=[:space:]]*)([0-9]+|\$\(nproc\)|Q|\$[A-Za-z(]|)([[:space:]]|$)'
 
 want_symbolizer="" want_gdb="" want_mutate="" want_sweep="" want_asan=""
-want_container="" want_loop="" jobs_asked="" in_loop="" unpooled=""
+want_container="" want_loop="" jobs_asked="" in_loop="" unpooled="" claim_sized=""
 
 while IFS= read -r seg; do
     # Leading keywords, env assignments and wrappers do not name the program.
@@ -106,6 +117,17 @@ while IFS= read -r seg; do
     done
     word=${seg%%[[:space:]]*}
     base=${word##*/}
+    # shellcheck disable=SC2016  # literal marker text
+    if [[ "$seg" == *'$CLAIMJOBS'* ]]; then
+        case "$base" in
+            docker) [[ "$seg" == *--cpus* ]] && claim_sized="docker --cpus" ;;
+            ninja) claim_sized="ninja -j" ;;
+            parallel) claim_sized="GNU parallel -j" ;;
+            xargs) [[ "$seg" == *-P* ]] && claim_sized="xargs -P" ;;
+            idf.py) claim_sized="idf.py" ;;
+            bats) claim_sized="bats --jobs" ;;
+        esac
+    fi
     case "$base" in
         for|while|until) in_loop=1 ;;
         make)
@@ -145,6 +167,13 @@ while IFS= read -r seg; do
         idf.py) [[ "$seg" == *build* ]] && unpooled="idf.py build" ;;
     esac
 done <<< "$segments"
+
+# --- Always -----------------------------------------------------------------
+
+if [ -n "$claim_sized" ]; then
+    # shellcheck disable=SC2016  # literal text for the reader to copy
+    emit "\`helix-claim jobs\` is make's -j: with a jobpool live it is the whole pool, so ${claim_sized} sized from it runs that many jobs on top of every build. Size it from its own pool share: \`scripts/helix-claim hold [--min M] -- sh -c '<cmd> -j \"\$JOBPOOL_SLOTS\"'\`, or for a container \`scripts/pool-docker.sh docker run ...\`."
+fi
 
 # --- Always on zeus --------------------------------------------------------
 

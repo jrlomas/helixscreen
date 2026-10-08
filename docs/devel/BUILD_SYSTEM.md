@@ -1204,6 +1204,16 @@ The two-phase re-invoke that applies `JOBS` lives in `mk/rules.mk` `all:` and
 jobserver. An explicit `make -jN` or `make JOBS=N` passes through untouched.
 `scripts/helix-claim jobs -v` prints the decision and what it was made from.
 
+**`helix-claim jobs` is make's `-j` and nothing else's.** With a pool live it is
+the whole pool, which is right for a make (it draws its jobs from the pool) and
+wrong for anything else: `docker run --cpus $(scripts/helix-claim jobs)`,
+`ninja -j$(...)` or `parallel -j$(...)` runs that many jobs on top of every build
+on the box. Work outside make sizes itself with
+`scripts/helix-claim hold [--min M] -- CMD`, which exports `JOBPOOL_SLOTS`, and a
+container goes through `scripts/pool-docker.sh`. Called outside a make while a
+pool is live, `jobs` says so on stderr (stdout stays the bare number), and the
+resource advisor names a runner sized from it.
+
 The same number sizes the unit sweep (3 shards per slot, `SHARD_CONCURRENCY`
 overrides) and the commit hook's build (`qc_build_jobs` in `scripts/qc/_lib.sh`,
 `HELIX_QC_JOBS` overrides). The build uses `--output-sync=target`, so parallel
