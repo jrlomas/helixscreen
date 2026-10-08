@@ -139,6 +139,11 @@ TEST_CASE("apply_mock_printer_identity settles the saved type", "[application][m
         CHECK(helix::apply_mock_printer_identity(cfg, "k1"));
         CHECK(cfg.get<std::string>(type_path, "") == "Creality K1C");
     }
+    SECTION("snapmaker_u1 declares nothing and clears a stale type") {
+        cfg.set<std::string>(type_path, "Voron 2.4");
+        CHECK(helix::apply_mock_printer_identity(cfg, "snapmaker_u1"));
+        CHECK(cfg.get<std::string>(type_path, "x").empty());
+    }
     SECTION("an unrecognised value still clears (it runs as voron_24)") {
         cfg.set<std::string>(type_path, "Creality K1C");
         CHECK(helix::apply_mock_printer_identity(cfg, "AD5M"));

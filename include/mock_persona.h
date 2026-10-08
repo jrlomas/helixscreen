@@ -28,6 +28,7 @@ enum class PrinterType {
     ELEGOO_CC1,               // Elegoo Centauri Carbon on COSMOS (load-cell probe)
     FLASHFORGE_AD5X,          // FlashForge Adventurer 5X (IFS, simulated by the mock AMS)
     CREALITY_K2_PLUS,         // Creality K2 Plus (CFS box, chamber heater)
+    SNAPMAKER_U1,             // Snapmaker U1 (4 independent extruders)
 };
 
 /// Bit set of the objects every mock persona inherits by default.
@@ -108,6 +109,14 @@ struct PersonaDescriptor {
                     CHAMBER_SENSOR | WIDTH_SENSOR | RUNOUT_SENSOR | LED_EFFECTS,
                 "cfs",
                 false};
+    case PrinterType::SNAPMAKER_U1:
+        return {"snapmaker-u1",
+                {270.0, 270.0, 400.0},
+                "cartesian",
+                HAPPY_HARE_MMU | CARTOGRAPHER | BME280_CHAMBER | HTU21D_DRYER | EBB_CAN_MCU |
+                    WIDTH_SENSOR | RUNOUT_SENSOR,
+                "snapmaker",
+                false};
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD:
         return {"mock-printer", standard, "corexy", HAPPY_HARE_MMU, "", true};
     case PrinterType::VORON_24:
@@ -153,7 +162,7 @@ inline constexpr std::array<PersonaEntry, 15> PERSONAS = {{
     {"generic_bedslinger", PrinterType::GENERIC_BEDSLINGER, "Generic Bedslinger", ""},
     {"multi_extruder", PrinterType::MULTI_EXTRUDER, "Multi-Extruder", ""},
     {"delta", PrinterType::DELTA, "Generic Delta", ""},
-    {"snapmaker_u1", PrinterType::MULTI_EXTRUDER, "Snapmaker U1 (multi-extruder mock)", "Snapmaker U1"},
+    {"snapmaker_u1", PrinterType::SNAPMAKER_U1, "Snapmaker U1", ""},
     {"cc1", PrinterType::ELEGOO_CC1, "Elegoo Centauri Carbon", ""},
     {"ad5x", PrinterType::FLASHFORGE_AD5X, "Flashforge AD5X (mock IFS)", ""},
     {"k2", PrinterType::CREALITY_K2_PLUS, "Creality K2 Plus", ""},

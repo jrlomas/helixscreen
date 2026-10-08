@@ -775,7 +775,7 @@ HELIX_MOCK_PRINTER=ad5m ./build/bin/helix-screen --test -vv
 # Multi-extruder mock
 HELIX_MOCK_PRINTER=multi_extruder ./build/bin/helix-screen --test -vv
 
-# Snapmaker U1: multi-extruder mock with the U1's four pre-print options
+# Snapmaker U1: four extruders, auto-detected, with the mock Snapmaker AMS
 HELIX_MOCK_PRINTER=snapmaker_u1 ./build/bin/helix-screen --test -vv
 
 # Linear delta: reports kinematics=delta, so per-axis homing is hidden
@@ -823,6 +823,17 @@ removes the box. `CR_BOX_EXTRUDE TNN=T<n><bay>` loads that bay and `CR_BOX_RETRU
 it: the next `box` frame names the bay, and the toolhead `filament_switch_sensor
 filament_sensor` follows it. The RPC answer of a script holding a `CR_BOX_*` line comes about a
 second after the frames, so a caller that checks the outcome on completion finds them applied.
+
+`snapmaker_u1`: the **Snapmaker U1**. Hostname `snapmaker-u1`, the capture's 270x270x400
+Cartesian volume, heaters `extruder`..`extruder3` and `heater_bed`, the per-head fans and
+`filament_motion_sensor e0_filament`..`e3_filament`, `led cavity_led`, and
+`temperature_sensor cavity`, from `tests/fixtures/printers/snapmaker_u1.json` and
+`assets/config/presets/snapmaker_u1.json`. It publishes the capture's identifying objects
+(`fm175xx_reader`, `tmc2240 stepper_x`, `purifier`, `camera`, the `FILAMENT_DT_*` and
+`EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_ALL` macros), so detection resolves it to Snapmaker U1
+and applies its preset; no printer type is saved for it. Its default `HELIX_MOCK_AMS` is
+`snapmaker`, the mock Snapmaker simulation. It does not publish `filament_detect`, which
+would make discovery stand up the production Snapmaker backend.
 
 The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 235x235x250 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
 

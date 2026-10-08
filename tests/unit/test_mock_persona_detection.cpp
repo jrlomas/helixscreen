@@ -49,7 +49,7 @@ constexpr Expectation EXPECTED[] = {
     {"generic_bedslinger", "",                          "",             false},
     {"multi_extruder",     "",                          "",             false},
     {"delta",              "",                          "",             false},
-    {"snapmaker_u1",       "",                          "",             false},
+    {"snapmaker_u1",       "Snapmaker U1",              "snapmaker_u1", true},
     {"cc1",                "Elegoo Centauri Carbon",    "cc1",          true},
     {"ad5x",               "FlashForge Adventurer 5X",  "ad5x",         true},
     {"k2",                 "Creality K2 Plus",          "k2",           true},
@@ -192,4 +192,20 @@ TEST_CASE_METHOD(HelixTestFixture, "HELIX_MOCK_AMS=none removes the k2 persona's
     const auto hw = discover(*helix::mock::find_persona("k2"));
     const auto& objs = hw.printer_objects();
     CHECK(std::find(objs.begin(), objs.end(), "box") == objs.end());
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "The snapmaker_u1 persona mirrors the U1 capture",
+                 "[mock][persona][snapmaker]") {
+    PersonaEnv env("snapmaker_u1");
+    const auto hw = discover(*helix::mock::find_persona("snapmaker_u1"));
+    check_mirrors_capture(hw, "snapmaker_u1");
+
+    size_t extruders = 0;
+    for (const auto& h : hw.heaters()) {
+        extruders += h.rfind("extruder", 0) == 0;
+    }
+    CHECK(extruders == 4);
+    CHECK(helix::mock::effective_mock_ams(nullptr, "snapmaker_u1") == "snapmaker");
+    const auto& objs = hw.printer_objects();
+    CHECK(std::find(objs.begin(), objs.end(), "filament_detect") == objs.end());
 }

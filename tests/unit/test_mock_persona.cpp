@@ -26,6 +26,7 @@ constexpr PrinterType ALL_TYPES[] = {
     PrinterType::ELEGOO_CC1,
     PrinterType::FLASHFORGE_AD5X,
     PrinterType::CREALITY_K2_PLUS,
+    PrinterType::SNAPMAKER_U1,
 };
 } // namespace
 
@@ -94,6 +95,7 @@ TEST_CASE("effective_mock_ams: explicit wins, else the persona default", "[mock]
     CHECK(effective_mock_ams(nullptr, "ad5x") == "ifs");
     CHECK(effective_mock_ams("afc", "ad5x") == "afc");
     CHECK(effective_mock_ams(nullptr, "k2") == "cfs");
+    CHECK(effective_mock_ams(nullptr, "snapmaker_u1") == "snapmaker");
 }
 
 TEST_CASE("A persona's own probe stands in for the default cartographer", "[mock][persona]") {

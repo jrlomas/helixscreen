@@ -1090,6 +1090,19 @@ void MoonrakerClientMock::populate_capabilities() {
             mock_objects.push_back(obj);
         }
         break;
+    case PrinterType::SNAPMAKER_U1:
+        // The U1 capture's identifying objects. Not `filament_detect`, which would
+        // make discovery stand up the production Snapmaker backend; this persona
+        // runs the mock one.
+        for (const char* obj : {"tool", "fm175xx_reader", "tmc2240 stepper_x", "purifier", "camera",
+                                "gcode_macro FILAMENT_DT_UPDATE", "gcode_macro FILAMENT_DT_QUERY",
+                                "gcode_macro EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_ALL"}) {
+            mock_objects.push_back(obj);
+        }
+        for (int i = 0; i < 4; ++i) {
+            mock_objects.push_back("filament_motion_sensor e" + std::to_string(i) + "_filament");
+        }
+        break;
     default:
         // Other printers may not have these features
         break;
@@ -2382,6 +2395,25 @@ void MoonrakerClientMock::populate_hardware() {
         discovery_.fans() = {"fan", "heater_fan chamber_fan", "output_pin fan0", "output_pin fan1",
                              "output_pin fan2"};
         discovery_.leds() = {"output_pin LED"};
+        break;
+
+    case PrinterType::SNAPMAKER_U1:
+        // Snapmaker U1: four independent extruders. Names mirror
+        // tests/fixtures/printers/snapmaker_u1.json and assets/config/presets/snapmaker_u1.json.
+        discovery_.heaters() = {"heater_bed", "extruder", "extruder1", "extruder2", "extruder3"};
+        discovery_.sensors() = {"heater_bed", "extruder",  "extruder1",
+                                "extruder2",  "extruder3", "temperature_sensor cavity"};
+        discovery_.fans() = {"fan",
+                             "heater_fan power_fan",
+                             "fan_generic cavity_fan",
+                             "heater_fan e0_nozzle_fan",
+                             "fan_generic e1_fan",
+                             "heater_fan e1_nozzle_fan",
+                             "fan_generic e2_fan",
+                             "heater_fan e2_nozzle_fan",
+                             "fan_generic e3_fan",
+                             "heater_fan e3_nozzle_fan"};
+        discovery_.leds() = {"led cavity_led"};
         break;
 
     case PrinterType::MULTI_EXTRUDER:
