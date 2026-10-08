@@ -27,6 +27,8 @@
 #include "ui_filament_path_internal.h"
 #include "ui_filament_path_plan.h"
 
+#include <spdlog/spdlog.h>
+
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -698,6 +700,17 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
     // Rendering is single-threaded and not re-entrant.
     static PathPlan plan;
     plan_linear_hub(f, *data, ctx.geo, plan);
+    if (plan.dropped > 0) {
+        // Every repaint would repeat it; one line per 10 s is enough to notice.
+        static uint32_t last_warn_ms = 0;
+        static bool warned = false;
+        if (!warned || lv_tick_elaps(last_warn_ms) >= 10000) {
+            warned = true;
+            last_warn_ms = lv_tick_get();
+            spdlog::warn("[FilamentPath] Route plan over budget: {} segment(s)/band(s) dropped",
+                         plan.dropped);
+        }
+    }
 
     const ThemeCache& theme = data->theme;
     const TubePalette pal{theme.color_idle, theme.color_accent, f.error_color, theme.color_bg,
@@ -709,8 +722,11 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
         draw_buffer_section(ctx, f, plan);
     // Bands on the hub/selector edges clamp the tube where it enters the box.
     paint_box_bands(layer, plan, pal);
-    if (data->hub_only)
+    if (data->hub_only) {
+        // Nothing below the hub is drawn: no nozzle to glow, no path to replay.
+        data->path_cache = PathCache{};
         return;
+    }
     if (data->show_bypass)
         record_bypass_hit(ctx, f);
     draw_nozzle_glyph(ctx, f);

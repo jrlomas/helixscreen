@@ -10,12 +10,14 @@
 // 100), output 140, buffer 184, merge 232, toolhead 272, nozzle 328, inlet 308.
 
 #include "ui_filament_path_canvas.h"
+#include "ui_fonts.h"
 
 #include "../lvgl_test_fixture.h"
 #include "ams_types.h"
 #include "lvgl/lvgl.h"
 #include "src/ui/ui_filament_path_internal.h"
 #include "src/ui/ui_filament_path_plan.h"
+#include "theme_manager.h"
 
 #include <cmath>
 #include <memory>
@@ -569,7 +571,8 @@ TEST_CASE("FilamentPath plan: the on-toolhead route fits the segment budget",
 
     REQUIRE(plan.active_route == 0);
     const Route& r = plan.routes[0];
-    CHECK(r.path.count <= pg::FilamentPath::MAX_SEGS);
+    CHECK(r.dropped == 0);
+    CHECK(plan.dropped == 0);
     CHECK(contiguous(r.path));
     CHECK(near(seg_start(r.path.segs[0]), 50, -48));
     CHECK(near(seg_end(r.path.segs[r.path.count - 1]), 200, 308));
@@ -629,7 +632,170 @@ TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: the animation replays one unbro
     render(*this, w);
 
     const FilamentPathData* d = get_data(w);
+    lv_area_t c;
+    lv_obj_get_coords(w, &c);
+    const pg::FilamentPath& p = d->path_cache.path;
     REQUIRE(d->path_cache.valid);
-    REQUIRE(d->path_cache.path.count > 0);
-    CHECK(contiguous(d->path_cache.path));
+    REQUIRE(p.count > 0);
+    CHECK(contiguous(p));
+    // From slot 1's spool entry to the nozzle glyph's inlet.
+    const int32_t nozzle_y = c.y1 + (int32_t)(H * NOZZLE_Y_RATIO);
+    CHECK(near(seg_start(p.segs[0]), (float)(c.x1 + 150),
+               (float)(c.y1 + (int32_t)(H * ENTRY_Y_RATIO))));
+    CHECK(near(seg_end(p.segs[p.count - 1]), (float)(c.x1 + 200),
+               (float)(nozzle_y - d->theme.extruder_scale * 2)));
+}
+
+TEST_CASE("FilamentPath plan: sixteen HUB lanes fit the segment and band budgets",
+          "[filament-path][plan]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    d->slot_count = 16;
+    for (int i = 0; i < 16; i++)
+        d->slot_has_prep_sensor[i] = true;
+    d->buffer_present = true;
+    load_active(*d, 1, PathSegment::NOZZLE);
+    BaseGeometry g;
+    g.width = 800;
+    g.height = 400;
+    g.slot_count = 16;
+    for (int i = 0; i < 16; i++)
+        g.slot_x[i] = 25 + 50 * i;
+    g.center_x = 400;
+    static PathPlan plan;
+    plan_linear_hub(compute_linear_hub_frame(*d, g), *d, g, plan);
+
+    CHECK(plan.dropped == 0);
+    for (int i = 0; i < plan.route_count; i++)
+        CHECK(plan.routes[i].dropped == 0);
+    // 16 prep + 16 hub entry + output, merge, toolhead.
+    CHECK(plan.band_count == 35);
+    CHECK(contiguous(plan.routes[plan.active_route].path));
+}
+
+TEST_CASE("FilamentPath plan: route_append reports what it drops", "[filament-path][plan]") {
+    Route r;
+    pg::FilamentPath piece;
+    for (int i = 0; i < 10; i++)
+        piece.add_line(0, (float)i, 0, (float)i + 1);
+    CHECK(route_append(r, piece, style_a()));
+    CHECK_FALSE(route_append(r, piece, style_a()));
+    CHECK(r.path.count == pg::FilamentPath::MAX_SEGS);
+    CHECK(r.dropped == 20 - pg::FilamentPath::MAX_SEGS);
+}
+
+TEST_CASE("FilamentPath plan: a toolhead error under an active bypass marks the bypass route",
+          "[filament-path][plan]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    d->bypass_active = true;
+    d->active_slot = -1;
+    d->error_segment = static_cast<int>(PathSegment::TOOLHEAD);
+    const PathPlan& plan = plan_for(*d);
+
+    const SensorBand* th = band_at(plan, 200, 272);
+    REQUIRE(th != nullptr);
+    CHECK(th->state == BandState::Error);
+
+    REQUIRE(plan.bypass_route >= 0);
+    const Route& b = plan.routes[plan.bypass_route];
+    REQUIRE(b.path.count == 3);
+    // Spool → merge, merge → toolhead, toolhead → inlet: the TOOLHEAD run is the
+    // error, as on an AMS route; the run past the sensor stays filled.
+    CHECK(b.style[0].wall == TubeWall::Active);
+    CHECK(b.style[1].wall == TubeWall::Error);
+    CHECK(near(seg_end(b.path.segs[1]), 200, 272));
+    CHECK(b.style[2].wall == TubeWall::Active);
+    for (int i = 0; i < 3; i++)
+        CHECK(b.style[i].filled);
+
+    // The same input on an AMS lane styles its trunk the same way.
+    auto ams = make_data(helix::PathTopology::HUB);
+    load_active(*ams, 1, PathSegment::NOZZLE);
+    ams->error_segment = static_cast<int>(PathSegment::TOOLHEAD);
+    const PathPlan& ap = plan_for(*ams);
+    const Route& a = ap.routes[ap.active_route];
+    CHECK(a.style[a.path.count - 2].wall == TubeWall::Error);
+    CHECK(a.style[a.path.count - 1].wall == TubeWall::Active);
+}
+
+TEST_CASE("FilamentPath plan: an idle trunk still shows an OUTPUT error", "[filament-path][plan]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    d->active_slot = -1;
+    d->error_segment = static_cast<int>(PathSegment::OUTPUT);
+    const PathPlan& plan = plan_for(*d);
+
+    CHECK(plan.active_route == -1);
+    REQUIRE(plan.trunk_route >= 0);
+    const SensorBand* out = band_at(plan, 200, 140);
+    REQUIRE(out != nullptr);
+    CHECK(out->state == BandState::Error);
+    const Route& t = plan.routes[plan.trunk_route];
+    REQUIRE(t.path.count > 0);
+    CHECK(t.style[0].wall == TubeWall::Error);
+    CHECK_FALSE(t.style[0].filled);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: a gear outside the hub box widens its hit rect",
+                 "[filament-path][plan][hits]") {
+    lv_obj_t* w = make_canvas(test_screen(), static_cast<int>(helix::PathTopology::HUB));
+    ui_filament_path_canvas_set_slot_count(w, 2);
+    ui_filament_path_canvas_set_hub_callback(w, [](lv_point_t, void*) {}, nullptr);
+    render(*this, w);
+
+    const FilamentPathData* d = get_data(w);
+    lv_area_t c;
+    lv_obj_get_coords(w, &c);
+    // Two slots 100 px apart: the hub keeps its nominal width.
+    const int32_t hw = d->theme.hub_width;
+    const int32_t hub_w = LV_CLAMP(22 + 2 * 8, hw, LV_MAX(hw, 100));
+    const int32_t cx = c.x1 + 100;
+
+    const lv_font_t* icon = theme_manager_get_font("icon_font_sm");
+    REQUIRE(icon != nullptr);
+    REQUIRE(d->theme.label_font != nullptr);
+    lv_point_t gear, label;
+    lv_text_get_size(&gear, ICON_SETTINGS, icon, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    lv_text_get_size(&label, "HUB", d->theme.label_font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    REQUIRE((hub_w - label.x) / 2 < gear.x + 4); // the gear sits outside the box
+
+    REQUIRE(d->hits.hub_valid);
+    CHECK(d->hits.hub.x1 == cx - hub_w / 2);
+    CHECK(d->hits.hub.x2 == cx + hub_w / 2 + gear.x / 2);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: on-toolhead records the selector as the hub hit",
+                 "[filament-path][plan][hits]") {
+    lv_obj_t* w = make_canvas(test_screen(), static_cast<int>(helix::PathTopology::HUB));
+    ui_filament_path_canvas_set_hub_on_toolhead(w, true);
+    render(*this, w);
+
+    const FilamentPathData* d = get_data(w);
+    lv_area_t c;
+    lv_obj_get_coords(w, &c);
+    const int32_t r = d->theme.sensor_radius;
+    const int32_t cx = c.x1 + 200;
+    const int32_t hub_h = (int32_t)(H * HUB_HEIGHT_RATIO);
+    const int32_t sel_y =
+        c.y1 + (int32_t)(H * PREP_Y_RATIO) + (int32_t)(H * (HUB_HEIGHT_RATIO / 2 + 0.02f));
+    const int32_t sel_w = 300 + LV_MAX(100, r * 4);
+
+    REQUIRE(d->hits.hub_valid);
+    CHECK(area_eq(d->hits.hub,
+                  {cx - sel_w / 2, sel_y - hub_h / 2, cx + sel_w / 2, sel_y + hub_h / 2}));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: hub_only drops the cached nozzle path",
+                 "[filament-path][plan]") {
+    lv_obj_t* w = make_canvas(test_screen(), static_cast<int>(helix::PathTopology::HUB));
+    ui_filament_path_canvas_set_active_slot(w, 1);
+    ui_filament_path_canvas_set_filament_segment(w, static_cast<int>(PathSegment::NOZZLE));
+    render(*this, w);
+    const FilamentPathData* d = get_data(w);
+    REQUIRE(d->path_cache.valid);
+    const int before = d->layers.render_count;
+
+    ui_filament_path_canvas_set_hub_only(w, true);
+    process_lvgl(120);
+    REQUIRE(d->layers.render_count > before);
+    CHECK_FALSE(d->path_cache.valid);
+    CHECK(d->path_cache.path.count == 0);
 }

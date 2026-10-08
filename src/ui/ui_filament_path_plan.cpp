@@ -109,11 +109,16 @@ bool operator==(const SpanStyle& a, const SpanStyle& b) {
            a.painted == b.painted;
 }
 
-void route_append(Route& r, const pg::FilamentPath& piece, SpanStyle s) {
-    for (int i = 0; i < piece.count && r.path.count < pg::FilamentPath::MAX_SEGS; i++) {
+bool route_append(Route& r, const pg::FilamentPath& piece, SpanStyle s) {
+    for (int i = 0; i < piece.count; i++) {
+        if (r.path.count == pg::FilamentPath::MAX_SEGS) {
+            r.dropped += piece.count - i;
+            return false;
+        }
         r.style[r.path.count] = s;
         r.path.segs[r.path.count++] = piece.segs[i];
     }
+    return true;
 }
 
 int coalesce(const Route& r, Stroke* out, int max_out) {
@@ -196,25 +201,39 @@ void append_line(Route& r, float x0, float y0, float x1, float y1, SpanStyle s) 
     route_append(r, piece, s);
 }
 
-void add_band(PathPlan& plan, pg::PathPoint at, pg::PathPoint tangent, BandState state,
-              lv_color_t fill, bool on_box_edge = false) {
-    if (plan.band_count < MAX_BANDS)
-        plan.bands[plan.band_count++] = {at, tangent, state, fill, on_box_edge};
+// Lane bands (prep, hub entry) stop short of the last few slots, so a full
+// band table drops a lane band and never the trunk's output, merge or
+// toolhead band.
+inline constexpr int TRUNK_BANDS = 3;
+enum class BandKind : uint8_t { Lane, Trunk };
+
+void add_band(PathPlan& plan, BandKind kind, pg::PathPoint at, pg::PathPoint tangent,
+              BandState state, lv_color_t fill, bool on_box_edge = false) {
+    const bool full = (kind == BandKind::Lane)
+                          ? plan.band_count - plan.trunk_band_count >= MAX_BANDS - TRUNK_BANDS
+                          : plan.band_count >= MAX_BANDS;
+    if (full) {
+        plan.dropped++;
+        return;
+    }
+    plan.trunk_band_count += kind == BandKind::Trunk;
+    plan.bands[plan.band_count++] = {at, tangent, state, fill, on_box_edge};
 }
 
 // A band where the route currently ends, across its last segment.
-void add_band_at_end(PathPlan& plan, const Route& r, BandState state, lv_color_t fill,
-                     bool on_box_edge = false) {
+void add_band_at_end(PathPlan& plan, BandKind kind, const Route& r, BandState state,
+                     lv_color_t fill, bool on_box_edge = false) {
     if (r.path.count == 0)
         return;
     pg::PathPoint tangent;
     const pg::PathPoint at = pg::path_point_at(r.path, pg::path_length(r.path), &tangent);
-    add_band(plan, at, tangent, state, fill, on_box_edge);
+    add_band(plan, kind, at, tangent, state, fill, on_box_edge);
 }
 
 Route& new_route(PathPlan& plan) {
     Route& r = plan.routes[plan.route_count++];
     r.path.clear();
+    r.dropped = 0;
     return r;
 }
 
@@ -240,14 +259,14 @@ struct Lane {
 };
 
 // Hub bottom → inlet, appended to the route that owns the trunk. Ends at the
-// merge when an active bypass owns everything below it.
+// merge when an active bypass (@p bypass_owner) owns everything below it.
 void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFrame& f,
-                  const FilamentPathData& data, bool bypass_on_trunk, bool bypass_owns) {
+                  const FilamentPathData& data, bool bypass_on_trunk, const Lane* bypass_owner) {
     const float cx = (float)f.center_x;
     const float hub_bot = (float)f.output_y;
     if (!data.hub_on_toolhead) {
-        add_band(plan, {(float)f.output_x, hub_bot}, {0, 1}, lane.band(PathSegment::OUTPUT),
-                 lane.color, /*on_box_edge=*/true);
+        add_band(plan, BandKind::Trunk, {(float)f.output_x, hub_bot}, {0, 1},
+                 lane.band(PathSegment::OUTPUT), lane.color, /*on_box_edge=*/true);
     }
 
     const float output_end = (float)(bypass_on_trunk ? f.bypass_merge_y : f.toolhead_y);
@@ -260,15 +279,16 @@ void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFra
         append_line(r, cx, jog_end, cx, output_end, lane.style(PathSegment::OUTPUT));
 
     if (bypass_on_trunk) {
-        if (bypass_owns) {
-            add_band_at_end(plan, r, BandState::Active, lv_color_hex(data.bypass_color));
+        if (bypass_owner) {
+            add_band_at_end(plan, BandKind::Trunk, r, bypass_owner->band(PathSegment::OUTPUT),
+                            bypass_owner->color);
             return;
         }
-        add_band_at_end(plan, r, lane.band(PathSegment::OUTPUT), lane.color);
+        add_band_at_end(plan, BandKind::Trunk, r, lane.band(PathSegment::OUTPUT), lane.color);
         append_line(r, cx, output_end, cx, (float)f.toolhead_y, lane.style(PathSegment::TOOLHEAD));
     }
     if (data.has_toolhead_sensor)
-        add_band_at_end(plan, r, lane.band(PathSegment::TOOLHEAD), lane.color);
+        add_band_at_end(plan, BandKind::Trunk, r, lane.band(PathSegment::TOOLHEAD), lane.color);
     append_line(r, cx, (float)f.toolhead_y, cx, (float)f.inlet_y, lane.style(PathSegment::NOZZLE));
 }
 
@@ -282,6 +302,8 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
                      PathPlan& out) {
     out.route_count = 0;
     out.band_count = 0;
+    out.trunk_band_count = 0;
+    out.dropped = 0;
     out.active_route = -1;
     out.trunk_route = -1;
     out.bypass_route = -1;
@@ -296,6 +318,12 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
     // On-toolhead the merge point sits above the head hub, off the trunk.
     const bool bypass_on_trunk = bypass && !on_head;
     const bool bypass_owns = bypass_on_trunk && data.bypass_active;
+    // The bypass filament reached the nozzle; on its own route it takes the
+    // same error rules as an AMS lane.
+    const Lane bypass_lane{data.bypass_active ? PathSegment::NOZZLE : PathSegment::NONE,
+                           data.bypass_active, f.error_seg, lv_color_hex(data.bypass_color),
+                           data.theme.color_bg};
+    const Lane* bypass_owner = bypass_owns ? &bypass_lane : nullptr;
     // Box edges in whole pixels, as the boxes are drawn.
     const int32_t hub_top_px = f.hub_y - f.hub_h / 2;
     const float hub_top = (float)hub_top_px;
@@ -315,7 +343,7 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
 
         append_line(r, x, (float)f.entry_y, x, (float)f.prep_y, lane.style(PathSegment::SPOOL));
         if (data.slot_has_prep_sensor[i])
-            add_band_at_end(out, r, lane.band(PathSegment::PREP), s.color);
+            add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::PREP), s.color);
 
         if (linear) {
             append_line(r, x, (float)f.prep_y, x, hub_top, lane.style(PathSegment::LANE));
@@ -337,7 +365,8 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
             pg::FilamentPath fan;
             pg::route_polyline_filleted(fan, pts, 4, 8.0f);
             route_append(r, fan, lane.style(PathSegment::LANE));
-            add_band_at_end(out, r, lane.band(PathSegment::HUB), s.color, /*on_box_edge=*/true);
+            add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::HUB), s.color,
+                            /*on_box_edge=*/true);
             if (!lane.on)
                 continue;
             append_line(r, pts[3].x, hub_top, cx, hub_bot, unpainted(lane.style(PathSegment::HUB)));
@@ -345,7 +374,7 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
 
         out.active_route = i;
         if (trunk)
-            append_trunk(out, r, lane, f, data, bypass_on_trunk, bypass_owns);
+            append_trunk(out, r, lane, f, data, bypass_on_trunk, bypass_owner);
     }
 
     if (trunk && active < 0) {
@@ -353,26 +382,30 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
         const Lane idle{PathSegment::NONE, true, f.error_seg, f.idle_color, bg};
         out.trunk_route = out.route_count;
         Route& r = new_route(out);
-        append_trunk(out, r, idle, f, data, bypass_on_trunk, bypass_owns);
+        append_trunk(out, r, idle, f, data, bypass_on_trunk, bypass_owner);
     }
 
     if (bypass) {
-        const lv_color_t color = lv_color_hex(data.bypass_color);
-        const SpanStyle st = data.bypass_active ? SpanStyle{TubeWall::Active, color, true, true}
-                                                : SpanStyle{TubeWall::Plain, bg, false, true};
         const float merge_y = (float)f.bypass_merge_y;
         // The spool widget is centered at BYPASS_X_RATIO; the tube stops at its left edge.
         const float spool_edge = (float)(g.x_off + (int32_t)(g.width * (BYPASS_X_RATIO - 0.05f)));
         out.bypass_route = out.route_count;
         Route& b = new_route(out);
-        append_line(b, spool_edge, merge_y, cx, merge_y, st);
+        // Spool → merge carries the SPOOL tag: no AMS error lands on it.
+        append_line(b, spool_edge, merge_y, cx, merge_y, bypass_lane.style(PathSegment::SPOOL));
         if (bypass_owns) {
-            append_line(b, cx, merge_y, cx, (float)f.toolhead_y, st);
+            append_line(b, cx, merge_y, cx, (float)f.toolhead_y,
+                        bypass_lane.style(PathSegment::TOOLHEAD));
             if (data.has_toolhead_sensor)
-                add_band_at_end(out, b, BandState::Active, color);
-            append_line(b, cx, (float)f.toolhead_y, cx, (float)f.inlet_y, st);
+                add_band_at_end(out, BandKind::Trunk, b, bypass_lane.band(PathSegment::TOOLHEAD),
+                                bypass_lane.color);
+            append_line(b, cx, (float)f.toolhead_y, cx, (float)f.inlet_y,
+                        bypass_lane.style(PathSegment::NOZZLE));
         }
     }
+
+    for (int i = 0; i < out.route_count; i++)
+        out.dropped += out.routes[i].dropped;
 }
 
 // ============================================================================

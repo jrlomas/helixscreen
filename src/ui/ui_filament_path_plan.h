@@ -75,10 +75,12 @@ bool operator==(const SpanStyle& a, const SpanStyle& b);
 struct Route {
     pg::FilamentPath path;
     SpanStyle style[pg::FilamentPath::MAX_SEGS];
+    int dropped = 0; // segments that did not fit in MAX_SEGS
 };
 
-/// Append @p piece's segments with style @p s; segments past MAX_SEGS are dropped.
-void route_append(Route& r, const pg::FilamentPath& piece, SpanStyle s);
+/// Append @p piece's segments with style @p s. Segments past MAX_SEGS are
+/// dropped and counted in Route::dropped; returns false when any were.
+bool route_append(Route& r, const pg::FilamentPath& piece, SpanStyle s);
 
 enum class BandState : uint8_t { Empty, Loaded, Active, Error };
 
@@ -101,6 +103,8 @@ struct PathPlan {
     int bypass_route = -1; // bypass horizontal (and the trunk below it when active)
     SensorBand bands[MAX_BANDS];
     int band_count = 0;
+    int trunk_band_count = 0; // of band_count: output, merge and toolhead bands
+    int dropped = 0; // segments and bands that did not fit; the plan is incomplete when > 0
     bool buffer_has_filament = false;
     lv_color_t buffer_fill;
 };
