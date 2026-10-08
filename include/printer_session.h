@@ -102,7 +102,10 @@ class PrinterSession {
     bool init_moonraker();
     bool init_panel_subjects();
     bool init_ui();
+    /// Connects to the active printer. True also when it has nothing to connect to.
     bool connect_moonraker();
+    /// Whether the active printer has an address to connect to (or the mock stands in).
+    [[nodiscard]] bool connect_wanted() const;
 #if HELIX_HAS_PLUGINS
     /// Rebuilds the plugin host, watcher and sync driver against the active printer.
     void init_plugins();
@@ -111,8 +114,9 @@ class PrinterSession {
     /// Tears down the current printer scope for a switch.
     void tear_down_printer_state();
 
-    /// Builds the next printer scope after tear_down_printer_state().
-    void rebuild();
+    /// Builds the next printer scope after tear_down_printer_state(). Returns whether it got
+    /// as far as starting the connection to the new printer.
+    bool rebuild();
 
     /// What survives the teardown: a printer switch keeps the process and LVGL alive,
     /// ProcessExit ends both.

@@ -186,6 +186,7 @@
   <translation tag="Added to Spoolman" ja="Spoolman に追加しました"/>
   <translation tag="Added to queue (position {})" ja="キューに追加しました（{} 番目）"/>
   <translation tag="Added to queue (position {}) - queue is paused" ja="キューに追加しました（{} 番目）– キューは一時停止中です"/>
+  <translation tag="Adding printer" ja="プリンターを追加中"/>
   <translation tag="Adding to queue..." ja="キューに追加中..."/>
   <translation tag="Address" ja="アドレス"/>
   <translation tag="Adjust screen brightness level" ja="画面の明るさを調整します"/>
@@ -1543,6 +1544,8 @@
   <translation tag="Kinematics" ja="キネマティクス"/>
   <translation tag="Klipper" ja="Klipper"/>
   <translation tag="Klipper Error" ja="Klipper エラー"/>
+  <translation tag="Klipper failed to start with the skip macros, so they were removed" ja="スキップ用マクロでは Klipper が起動しなかったため、削除しました"/>
+  <translation tag="Klipper failed to start. Remove the helix_skips.cfg include from printer.cfg." ja="Klipper を起動できませんでした。printer.cfg から helix_skips.cfg の include を削除してください。"/>
   <translation tag="Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart." ja="Klipper ファームウェアがホストから切断されました。Klipper を再起動するか、ファームウェア再起動を実行してみてください。"/>
   <translation tag="Klipper has disconnected from Moonraker. Check for errors in your printer interface." ja="Klipper が Moonraker から切断されました。プリンターのインターフェースでエラーを確認してください。"/>
   <translation tag="Klipper has entered an error state. This is typically caused by an MCU connection failure or configuration error. Try a firmware restart." ja="Klipper がエラー状態になりました。これは通常、MCU 接続の失敗または設定エラーが原因です。ファームウェア再起動を試してください。"/>

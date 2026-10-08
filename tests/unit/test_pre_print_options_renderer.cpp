@@ -793,16 +793,28 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     // Resolved styles, not just state flags: the tile's look rides
     // state-selector styles, which silently no-op if the selector spelling
     // drifts.
-    CHECK(lv_obj_get_style_opa(tab, LV_PART_MAIN) == 255);
+    lv_obj_t* check = lv_obj_get_child(tab, 0);
+    REQUIRE(check != nullptr);
+    CHECK(lv_obj_get_style_bg_opa(tab, LV_PART_MAIN) == 255);
+    CHECK(lv_obj_get_style_opa(check, LV_PART_MAIN) == 255);
     CHECK(lv_color_eq(lv_obj_get_style_border_color(tile, LV_PART_MAIN),
                       theme_manager_get_color("primary")));
     const lv_color_t icon_checked = lv_obj_get_style_text_color(icon, LV_PART_MAIN);
+    CHECK(lv_color_eq(lv_obj_get_style_text_color(label, LV_PART_MAIN),
+                      theme_manager_get_color("text")));
 
     renderer.set_state("bed_mesh", 0);
     process_lvgl(10);
     CHECK_FALSE(lv_obj_has_state(tile, LV_STATE_CHECKED));
     CHECK_FALSE(lv_obj_has_state(tab, LV_STATE_CHECKED));
-    CHECK(lv_obj_get_style_opa(tab, LV_PART_MAIN) == 0);
+    // Off is an empty outlined box, not an absent one, and a muted label.
+    CHECK(lv_obj_get_style_opa(tab, LV_PART_MAIN) == 255);
+    CHECK(lv_obj_get_style_bg_opa(tab, LV_PART_MAIN) == 0);
+    CHECK(lv_obj_get_style_opa(check, LV_PART_MAIN) == 0);
+    CHECK(lv_color_eq(lv_obj_get_style_border_color(tab, LV_PART_MAIN),
+                      theme_manager_get_color("text_muted")));
+    CHECK(lv_color_eq(lv_obj_get_style_text_color(label, LV_PART_MAIN),
+                      theme_manager_get_color("text_muted")));
     CHECK(lv_color_eq(lv_obj_get_style_border_color(tile, LV_PART_MAIN),
                       theme_manager_get_color("border")));
     CHECK_FALSE(lv_color_eq(lv_obj_get_style_text_color(icon, LV_PART_MAIN), icon_checked));

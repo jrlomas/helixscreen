@@ -327,6 +327,28 @@ in a mock run, including the pre-print options and the G-code rewrite remap.
 HELIX_MOCK_HELIX_PLUGIN=1 ./build/bin/helix-screen --test -vv # Uninstall row
 ```
 
+### `HELIX_MOCK_SKIP_WRAPPERS`
+
+Behave as if `helix_skips.cfg` is loaded, so the print-detail leveling skips
+([PRINT_START_INTEGRATION.md](PRINT_START_INTEGRATION.md) § "Skipping steps
+PRINT_START always runs") can be driven under `--test`.
+
+| Property | Value |
+|----------|-------|
+| Values | `1`/`true`/`yes`/`on` = loaded |
+| Default | not loaded |
+| Affects | `configfile` (the wrapper sections, plus `[bed_mesh]` / `[quad_gantry_level]` / `[z_tilt]` for the persona's leveling objects), the objects list, `gcode_macro _HELIX_PREP` and leveling `applied` status, the simulated print start |
+
+QGL and Z-tilt report `applied: true` from the start, so their toggles show
+without leveling first. The pre-start block's `SET_GCODE_VARIABLE` lines set the
+flags, and the simulated print start prints `HelixScreen: ... skipped for this
+print` in place of the step it skips, restoring the flag as the real wrapper does.
+File: `src/api/moonraker_client_mock_skips.cpp`.
+
+```bash
+HELIX_MOCK_SKIP_WRAPPERS=1 ./build/bin/helix-screen --test -vv   # default persona: Voron 2.4
+```
+
 ### `HELIX_MOCK_MOONRAKER_VERSION`
 
 Override the Moonraker version the mock reports in `server.info`.

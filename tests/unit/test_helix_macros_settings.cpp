@@ -27,6 +27,7 @@
 #include "printer_state.h"
 #include "static_panel_registry.h"
 
+#include <algorithm>
 #include <string>
 
 #include "../catch_amalgamated.hpp"
@@ -87,7 +88,7 @@ struct MacrosSettingsFixture : LVGLUITestFixture {
 
     /// A drained step can queue the next one; pump until quiet.
     void settle() {
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 12; ++i) {
             UpdateQueue::instance().drain();
         }
     }
@@ -496,4 +497,89 @@ TEST_CASE_METHOD(MacrosSettingsFixture, "setup wires the macro restart observer"
     CHECK(AdvancedPanelTestAccess::macro_observer_wired(fresh));
 
     lv_obj_delete(root);
+}
+
+// ============================================================================
+// Skip wrappers: one rollback when Klipper will not start with them
+// ============================================================================
+
+namespace {
+
+struct SkipsRollbackFixture : MacrosSettingsFixture {
+    SkipsRollbackFixture() {
+        auto hw = discovery_with({"gcode_macro START_PRINT", "bed_mesh"});
+        hw.set_skip_wrappers({helix::skip_wrappers::Op::BedMesh}, {});
+        state().set_hardware(hw);
+        klippy(KlippyState::READY);
+        tap_install_row();
+        confirm_install();
+        REQUIRE(restart_sent());
+        REQUIRE(api_.get_uploaded_config("printer.cfg")
+                    .value_or("")
+                    .find("[include helix_skips.cfg]") != std::string::npos);
+        mark_sends();
+    }
+
+    void klippy(KlippyState s) {
+        state().set_klippy_state_sync(s);
+        settle();
+    }
+
+    /// Moves the mock's last-send record off printer.restart, so the next
+    /// restart_sent() answers for what happens after this point.
+    void mark_sends() {
+        client_.send_jsonrpc(
+            "server.info", nlohmann::json::object(), [](const nlohmann::json&) {},
+            [](const MoonrakerError&) {});
+        REQUIRE_FALSE(restart_sent());
+    }
+
+    bool skips_removed() {
+        const auto& deleted = api_.files_mock().deleted_files();
+        return std::find(deleted.begin(), deleted.end(), "config/helix_skips.cfg") !=
+                   deleted.end() &&
+               api_.get_uploaded_config("printer.cfg").value_or("").find("helix_skips") ==
+                   std::string::npos;
+    }
+};
+
+} // namespace
+
+TEST_CASE_METHOD(SkipsRollbackFixture,
+                 "a Klipper error after loading the skips removes them and restarts once",
+                 "[advanced][macros][skip_wrappers]") {
+    klippy(KlippyState::STARTUP);
+    klippy(KlippyState::ERROR);
+
+    CHECK(skips_removed());
+    CHECK(api_.get_uploaded_config("printer.cfg").value_or("").find("[include helix_macros.cfg]") !=
+          std::string::npos);
+    CHECK(restart_sent());
+
+    SECTION("a second failure does not loop") {
+        mark_sends();
+        klippy(KlippyState::STARTUP);
+        klippy(KlippyState::ERROR);
+        CHECK_FALSE(restart_sent());
+        CHECK(api_.files_mock().deleted_files().size() == 1);
+    }
+}
+
+TEST_CASE_METHOD(SkipsRollbackFixture, "a clean load ends the watch",
+                 "[advanced][macros][skip_wrappers]") {
+    klippy(KlippyState::STARTUP);
+    klippy(KlippyState::READY);
+    klippy(KlippyState::ERROR); // a later, unrelated error
+
+    CHECK_FALSE(skips_removed());
+    CHECK_FALSE(restart_sent());
+}
+
+TEST_CASE_METHOD(SkipsRollbackFixture, "the READY the restart starts from is not a clean load",
+                 "[advanced][macros][skip_wrappers]") {
+    klippy(KlippyState::READY);
+    klippy(KlippyState::STARTUP);
+    klippy(KlippyState::ERROR);
+
+    CHECK(skips_removed());
 }

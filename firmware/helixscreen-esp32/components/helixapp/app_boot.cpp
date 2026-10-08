@@ -244,11 +244,14 @@ void restart_into_active_printer() {
         ESP_LOGE(TAG, "app_boot: %d fallback restarts without a connection; staying up", streak);
         return;
     }
-    lv_obj_t* label = lv_label_create(lv_layer_top());
-    const std::string text =
-        fmt::format(fmt::runtime(lv_tr("Switching to {}")), config->get_active_printer_name());
-    lv_label_set_text(label, text.c_str());
-    lv_obj_center(label);
+    // A switch in progress already shows its card, which says the same thing.
+    if (!lv_obj_find_by_name(lv_layer_top(), "printer_switch_interstitial")) {
+        lv_obj_t* label = lv_label_create(lv_layer_top());
+        const std::string text =
+            fmt::format(fmt::runtime(lv_tr("Switching to {}")), config->get_active_printer_name());
+        lv_label_set_text(label, text.c_str());
+        lv_obj_center(label);
+    }
     lv_refr_now(nullptr);
 
     // Counted across restarts: how often a switch fell back, and how many in a row.
@@ -376,7 +379,8 @@ helix::PrinterSwitchFlow& switch_flow() {
          },
          [] {
              helix::LapLog laps("switch rebuild");
-             if (!helix::retarget_printer_connection()) {
+             const bool connecting = helix::retarget_printer_connection();
+             if (!connecting) {
                  restart_into_active_printer();
              }
              laps.lap("retarget");
@@ -388,6 +392,7 @@ helix::PrinterSwitchFlow& switch_flow() {
                  helix::PanelWidgetManager::instance().notify_config_changed("home");
                  laps.lap("home grid");
              }
+             return connecting;
          },
          [] {
              NavigationManager::instance().request_panel(helix::PanelId::Home,

@@ -99,7 +99,7 @@ PrinterSession::PrinterSession(Config*& config, AsyncLifetimeGuard& async, lv_ob
                                Host host)
     : m_config(config), m_async(async), m_host(std::move(host)),
       m_flow(config, async,
-             {[this] { tear_down_printer_state(); }, [this] { rebuild(); },
+             {[this] { tear_down_printer_state(); }, [this] { return rebuild(); },
               [] { helix::nav::set_active(PanelId::Home); }}),
       m_screen(screen), m_prompter(
                             async, [this] { return m_screen; },
@@ -460,13 +460,10 @@ void PrinterSession::setup_discovery_callbacks() {
                            }});
 }
 
-bool PrinterSession::connect_moonraker() {
-    // Boot and every rebuild connect through here, to the active printer.
-    m_flow.set_connected_printer_id(m_config->get_active_printer_id());
-
-    // Determine if we should connect
-    std::string saved_host = m_config->get<std::string>(m_config->df() + "moonraker_host", "");
-    bool has_cli_url = !m_host.args.moonraker_url.empty();
+bool PrinterSession::connect_wanted() const {
+    const std::string saved_host =
+        m_config->get<std::string>(m_config->df() + "moonraker_host", "");
+    const bool has_cli_url = !m_host.args.moonraker_url.empty();
     // Always connect at boot when we have a host (fresh-install scaffold seeds
     // moonraker_host=127.0.0.1, so embedded devices can reach Moonraker without
     // user intervention). Connecting during the wizard is what lets auto-detection
@@ -476,13 +473,18 @@ bool PrinterSession::connect_moonraker() {
     // (or replaces it if the user changed the host).
     // In test mode, gate on m_host.wizard_active so unit/integration tests that
     // launch with --wizard don't race against fixture setup.
-    bool should_connect = has_cli_url ||
-                          (get_runtime_config()->test_mode && !m_host.wizard_active) ||
-                          !saved_host.empty();
+    return has_cli_url || (get_runtime_config()->test_mode && !m_host.wizard_active) ||
+           !saved_host.empty();
+}
 
-    if (!should_connect) {
+bool PrinterSession::connect_moonraker() {
+    // Boot and every rebuild connect through here, to the active printer.
+    m_flow.set_connected_printer_id(m_config->get_active_printer_id());
+
+    if (!connect_wanted()) {
         return true; // Not connecting is not an error
     }
+    const bool has_cli_url = !m_host.args.moonraker_url.empty();
 
     std::string moonraker_url;
     std::string http_base_url;
@@ -534,7 +536,7 @@ void PrinterSession::tear_down_printer_state() {
     spdlog::info("[Application] Printer state torn down");
 }
 
-void PrinterSession::rebuild() {
+bool PrinterSession::rebuild() {
     spdlog::info("[Application] Initializing printer state...");
 
     // Show error on screen so user isn't left with blank display after init failure.
@@ -561,7 +563,7 @@ void PrinterSession::rebuild() {
     if (!init_core_subjects()) {
         spdlog::error("[Application] Failed to reinitialize core subjects");
         show_init_error();
-        return;
+        return false;
     }
 
     // 2b. Seed the active printer's display name from config
@@ -571,21 +573,21 @@ void PrinterSession::rebuild() {
     if (!init_moonraker()) {
         spdlog::error("[Application] Failed to reinitialize Moonraker");
         show_init_error();
-        return;
+        return false;
     }
 
     // 4. Initialize panel subjects with API injection + post-init
     if (!init_panel_subjects()) {
         spdlog::error("[Application] Failed to reinitialize panel subjects");
         show_init_error();
-        return;
+        return false;
     }
 
     // 5. Recreate UI (app_layout from XML, wire navigation)
     if (!init_ui()) {
         spdlog::error("[Application] Failed to reinitialize UI");
         show_init_error();
-        return;
+        return false;
     }
 
     // 6. Run wizard if needed for new printer
@@ -610,7 +612,9 @@ void PrinterSession::rebuild() {
 #endif
 
     // 9. Connect to new printer's Moonraker
-    if (!connect_moonraker()) {
+    // connect_moonraker() also succeeds when the printer has nothing to connect to.
+    const bool connecting = connect_wanted() && connect_moonraker();
+    if (!connecting) {
         spdlog::warn("[Application] Running without printer connection after switch");
     }
 
@@ -620,6 +624,7 @@ void PrinterSession::rebuild() {
     lv_refr_now(nullptr);
 
     spdlog::info("[Application] Printer state initialized");
+    return connecting;
 }
 
 // The one ordered teardown behind both soft restart (PrinterSwitch: the process and LVGL

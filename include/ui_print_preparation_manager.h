@@ -575,6 +575,13 @@ class PrintPreparationManager {
     // Analyze on connect; re-read the macro on a reconnect or a Klipper restart.
     ObserverGuard connection_observer_;
     ObserverGuard klippy_observer_;
+    /// A leveling skip still set while no job holds the machine is reset: on
+    /// the job's release, and on the status frame that reports it pending, so
+    /// a frame landing after the release or a reconnect still clears it and
+    /// the next print, started from anywhere, runs every step.
+    ObserverGuard job_holds_observer_;
+    bool skip_reset_sent_ = false; ///< One reset per pending skip, until it reads clear
+    void reset_pending_skips();
 
     // === Pre-start completion wait ===
     // When the pre-start gcode RPC times out but Klipper still reports
@@ -777,10 +784,14 @@ class PrintPreparationManager {
      * Lines are returned in the same (category, order) order the option set is
      * sorted in, so callers can fire them sequentially before START_PRINT.
      *
+     * @param with_skip_toggles False leaves out the leveling-skip toggles
+     *        (skip_wrappers::option_for()): those set a flag and carry no
+     *        START_PRINT skip parameter, so they are no delivery path for one.
      * @return Vector of rendered gcode lines, e.g. {"LOAD_AI_RUN SWITCH=1"}.
      */
     [[nodiscard]] std::vector<std::string>
-    collect_pre_start_gcode_lines(const std::string& filename = {}) const;
+    collect_pre_start_gcode_lines(const std::string& filename = {},
+                                  bool with_skip_toggles = true) const;
 
     /**
      * @brief Build the combined pre-start gcode block executed before START_PRINT.

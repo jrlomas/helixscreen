@@ -261,18 +261,11 @@ static inline lv_color_t sp_lighten(lv_color_t c, uint8_t amt) {
 // the callers and passed straight through here via LaneStyle.
 namespace pg = helix::ui::pathgeo;
 
-// Build a solid-tube LaneStyle for the overview. The overview never draws a
-// hollow PTFE bore — idle lanes are simply dimmer solid tubes — so `solid` is
-// always true. `active` lanes get the wide glow backdrop (matches the detail
-// panel's highlighted-path treatment).
+// Overview tubes are solid: the bore takes the lane color whatever its load
+// state, and the active route adds accent walls and the halo.
 static helix::ui::LaneStyle sp_lane_style(lv_color_t color, int32_t width, bool active) {
-    helix::ui::LaneStyle st{};
-    st.solid = true;
-    st.color = color;
-    st.bg = color; // unused for solid tubes
-    st.width = width;
-    st.glow = active;
-    return st;
+    return {active ? helix::ui::tube_accent() : color, color, theme_manager_get_color("card_bg"),
+            width, active};
 }
 
 // Straight tube between two arbitrary points.

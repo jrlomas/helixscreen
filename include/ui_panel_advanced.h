@@ -217,6 +217,14 @@ class AdvancedPanel : public PanelBase {
     /// activates the macros (status leaves RestartPending).
     bool macro_restart_offer_made_ = false;
 
+    /// Follows Klipper across the restart that loads a staged helix_skips.cfg.
+    /// A config error there removes the file and restarts once more, never
+    /// re-arming, so a failure that is not ours cannot loop.
+    void on_klippy_state_for_skips(int state);
+    ObserverGuard skips_klippy_observer_;
+    helix::skip_wrappers::LoadWatch skips_load_watch_;
+    bool skips_load_watching_ = false;
+
     //
     // === Shared Power Dialog ===
     //

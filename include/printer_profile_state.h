@@ -3,6 +3,7 @@
 #pragma once
 
 #include "pre_print_option.h"
+#include "preprint_skip_wrappers.h"
 #include "subject_managed_panel.h"
 
 #include <lvgl.h>
@@ -61,8 +62,13 @@ class PrinterProfileState {
      * plugin is installed), and the bed_mesh option goes adaptive only when the
      * firmware has [exclude_object]. Idempotent: re-running clears previously
      * synthesized options before re-adding the ones that apply now.
+     *
+     * @param skip_ops Leveling steps whose skip toggle is offered now
+     *        (skip_wrappers::offerable()); a database option for the same
+     *        step wins over the toggle.
      */
-    void apply_dynamic_options(bool exclude_object_known, bool timelapse_available);
+    void apply_dynamic_options(bool exclude_object_known, bool timelapse_available,
+                               const std::vector<skip_wrappers::Op>& skip_ops = {});
 
     /**
      * @brief Record whether an installed module persists the z-offset itself

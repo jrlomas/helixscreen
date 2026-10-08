@@ -187,6 +187,7 @@ translations:
   Added to Spoolman: Spoolman に追加しました
   Added to queue (position {}): キューに追加しました（{} 番目）
   Added to queue (position {}) - queue is paused: キューに追加しました（{} 番目）– キューは一時停止中です
+  Adding printer: プリンターを追加中
   Adding to queue...: キューに追加中...
   Address: アドレス
   Adjust screen brightness level: 画面の明るさを調整します
@@ -1601,6 +1602,8 @@ translations:
   Kinematics: キネマティクス
   Klipper: Klipper
   Klipper Error: Klipper エラー
+  Klipper failed to start with the skip macros, so they were removed: 'スキップ用マクロでは Klipper が起動しなかったため、削除しました'
+  Klipper failed to start. Remove the helix_skips.cfg include from printer.cfg.: 'Klipper を起動できませんでした。printer.cfg から helix_skips.cfg の include を削除してください。'
   Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart.: Klipper
     ファームウェアがホストから切断されました。Klipper を再起動するか、ファームウェア再起動を実行してみてください。
   Klipper has disconnected from Moonraker. Check for errors in your printer interface.: Klipper が Moonraker から切断されました。プリンターのインターフェースでエラーを確認してください。

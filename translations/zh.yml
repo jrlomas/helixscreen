@@ -186,6 +186,7 @@ translations:
   Added to Spoolman: 已添加到 Spoolman
   Added to queue (position {}): 已添加到队列（第 {} 位）
   Added to queue (position {}) - queue is paused: 已添加到队列（第 {} 位）– 队列已暂停
+  Adding printer: 正在添加打印机
   Adding to queue...: 正在添加到队列...
   Address: 地址
   Adjust screen brightness level: 调整屏幕亮度
@@ -1596,6 +1597,8 @@ translations:
   Kinematics: 运动学
   Klipper: Klipper
   Klipper Error: Klipper 错误
+  Klipper failed to start with the skip macros, so they were removed: 'Klipper 无法在加载跳过宏后启动，已将其移除'
+  Klipper failed to start. Remove the helix_skips.cfg include from printer.cfg.: 'Klipper 无法启动。请从 printer.cfg 中删除 helix_skips.cfg 的 include。'
   Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart.: Klipper
     固件已与主机断开连接。请尝试重启 Klipper 或执行固件重启。
   Klipper has disconnected from Moonraker. Check for errors in your printer interface.: Klipper 已与 Moonraker 断开连接。请在打印机界面中检查错误。
