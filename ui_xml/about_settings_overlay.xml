@@ -81,25 +81,25 @@
       <lv_obj name="container_install_root" width="100%" style_pad_all="0" scrollable="false">
         <bind_flag_if_eq subject="settings_is_android" flag="hidden" ref_value="1"/>
         <setting_info_row name="row_install_root" label="Install Root" icon="folder_home">
-          <text_muted name="value" bind_text="install_root_value"/>
+          <text_muted name="value" width="75%" bind_text="install_root_value" style_text_align="right" long_mode="wrap"/>
         </setting_info_row>
       </lv_obj>
       <!-- Config Dir (hidden on Android) -->
       <lv_obj name="container_config_dir" width="100%" style_pad_all="0" scrollable="false">
         <bind_flag_if_eq subject="settings_is_android" flag="hidden" ref_value="1"/>
         <setting_info_row name="row_config_dir" label="Config Dir" icon="cog">
-          <text_muted name="value" bind_text="config_dir_value"/>
+          <text_muted name="value" width="75%" bind_text="config_dir_value" style_text_align="right" long_mode="wrap"/>
         </setting_info_row>
       </lv_obj>
       <!-- Logs (active spdlog destination — journal/syslog/file path/console/logcat) -->
       <setting_info_row name="row_log_dest" label="Logs" icon="script_text">
-        <text_muted name="value" bind_text="log_dest_value"/>
+        <text_muted name="value" width="75%" bind_text="log_dest_value" style_text_align="right" long_mode="wrap"/>
       </setting_info_row>
       <!-- Cache Dir (hidden on Android) -->
       <lv_obj name="container_cache_dir" width="100%" style_pad_all="0" scrollable="false">
         <bind_flag_if_eq subject="settings_is_android" flag="hidden" ref_value="1"/>
         <setting_info_row name="row_cache_dir" label="Cache Dir" icon="database">
-          <text_muted name="value" bind_text="cache_dir_value"/>
+          <text_muted name="value" width="75%" bind_text="cache_dir_value" style_text_align="right" long_mode="wrap"/>
         </setting_info_row>
       </lv_obj>
       <!-- Total Print Hours (opens history dashboard) -->
