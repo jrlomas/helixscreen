@@ -69,6 +69,12 @@ class HeldFileTransfers : public MoonrakerFileTransferAPIMock {
         return held_.size();
     }
 
+    /// A transport that writes no local copies, as on the ESP32.
+    bool local_copies = true;
+    bool supports_local_copies() const override {
+        return local_copies;
+    }
+
   private:
     struct Held {
         std::string path;

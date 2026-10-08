@@ -233,6 +233,14 @@ void MoonrakerFileTransferAPI::download_file_tail(const std::string& root, const
     });
 }
 
+bool MoonrakerFileTransferAPI::supports_local_copies() const {
+    return true;
+}
+
+bool MoonrakerFileTransferAPI::supports_tail_reads() const {
+    return true;
+}
+
 void MoonrakerFileTransferAPI::download_file_to_path(
     const std::string& root, const std::string& path, const std::string& dest_path,
     StringCallback on_success, ErrorCallback on_error, ProgressCallback on_progress) {
