@@ -499,7 +499,9 @@ read -r l1 l5 l15 _ < /proc/loadavg
 printf '%.1fGB available, load %s %s %s on %s cpus\n' \
     "$(awk '/^MemAvailable:/{print $2/1048576}' /proc/meminfo)" "$l1" "$l5" "$l15" "$(nproc)"
 jobs=0
-for lock in "$2"/helix-test-host-run*.lock; do
+# The --commit lock keeps the zeus-run.sh name; the global lock names no job.
+for lock in "$2"/helix-test-host-run*.lock "$2"/helix-zeus-run-*.lock; do
+    case "$lock" in *.global.lock) continue ;; esac
     [ -e "$lock" ] || continue
     flock -n "$lock" true 2>/dev/null && continue
     printf '  test-host-run job: %s\n' "$(tail -n 1 "$lock")"; jobs=$((jobs + 1))

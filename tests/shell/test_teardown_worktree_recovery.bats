@@ -384,3 +384,12 @@ stub_test_host_run() { # <exit code>
     [ $((SECONDS - t0)) -lt 15 ]
     contains "mirror on testhost.invalid" "$output"
 }
+
+@test "a tree name that can have no mirror tears down without a warning" {
+    make_worktree plain
+    stub_test_host_run 2
+    HELIX_TEST_HOST=testhost.invalid run "$SCRIPT" plain --into master
+    [ "$status" -eq 0 ]
+    [ "$(cat "$BATS_TEST_TMPDIR/host-calls")" = "--drop plain" ]
+    lacks "mirror" "$output"
+}

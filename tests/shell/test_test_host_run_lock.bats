@@ -82,10 +82,11 @@ esac
 exit 0'
 }
 
-# Pins the lock naming rule: directory overridable, file named after the
-# workdir. If the script renames its lock, these tests must follow on purpose.
+# Pins the --commit lock name: directory overridable, file named after the
+# checkout with the helix-zeus-run- prefix, the one name every client of that
+# checkout takes. If the script renames it, these tests must follow on purpose.
 lock_file() {
-    printf '%s/helix-test-host-run-%s.lock\n' "$HELIX_TEST_LOCK_DIR" "$(basename "$HELIX_TEST_WORKDIR")"
+    printf '%s/helix-zeus-run-%s.lock\n' "$HELIX_TEST_LOCK_DIR" "$(basename "$HELIX_TEST_WORKDIR")"
 }
 
 wait_for_file() { # <path>
@@ -432,4 +433,25 @@ SYS_FREE=$((64 * 1024 * 1024 * 1024))
     run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     lacks "zfs_arc_sys_free" "$output"
+}
+
+@test "--commit excludes a client that still runs zeus-run.sh against the same checkout" {
+    # zeus-run.sh locks helix-zeus-run-<checkout>.lock; both reset the checkout.
+    local lock="$HELIX_TEST_LOCK_DIR/helix-zeus-run-helixscreen.lock" out runner holder
+    (
+        exec 9>>"$lock"
+        flock 9
+        printf 'held by pid %s: mutate abc1234 since 2026-10-08 12:00:00\n' "$$" >&9
+        touch "$BATS_TEST_TMPDIR/ready"
+        sleep 30 9>&-
+    ) &
+    holder=$!
+    wait_for_file "$BATS_TEST_TMPDIR/ready"
+    out="$BATS_TEST_TMPDIR/waiting.log"
+    "$SCRIPT" --commit test >"$out" 2>&1 &
+    runner=$!
+    wait_for_line "busy:" "$out"
+    grep -q "mutate abc1234" "$out"
+    kill "$holder"; wait "$holder" 2>/dev/null || true
+    wait "$runner"
 }

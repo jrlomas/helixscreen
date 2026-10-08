@@ -1279,8 +1279,9 @@ Two kinds of remote machine help here, and both are optional:
   `tsan`, `mutate`) in a container: `scripts/test-host-run.sh`. It mirrors your
   working tree as it is on disk, uncommitted edits included, into a per-tree
   directory whose `build/` persists, so a warm run rebuilds only what changed.
-  `make full-test-run TEST_HOST=1` runs the C++ sweep there while bats runs
-  locally.
+  With one configured, `make full-test-run` runs the C++ sweep there while bats
+  runs locally whenever the link makes that pay (`TEST_HOST=1` forces it,
+  `TEST_HOST=0` or `HELIX_TEST_HOST_AUTO=0` keeps both local).
 - a **remote build host** builds natively or for the cross targets:
   `make remote-native`, `make remote-test`, `make remote-pi` and siblings
   (`mk/remote.mk`, `scripts/remote-build.sh`).
@@ -1292,13 +1293,24 @@ it:
 ${XDG_CONFIG_HOME:-$HOME/.config}/helixscreen/build-hosts.env
 ```
 
-`KEY=VALUE` lines and `#` comments, with no quotes and no spaces around `=`:
-the scripts parse it and make reads it with `-include`. A variable set in the
-environment wins over the file (`HELIX_BUILD_HOSTS_FILE` names a different
-file). Nothing has a host default: a command that needs a host you have not
+One parser reads it, `scripts/lib/build_hosts.sh`: the scripts source it, and
+make asks it for a value the first time a remote target needs one, so an
+ordinary `make` never reads the file at all. Its rules:
+
+- `KEY=VALUE` at the start of a line, no spaces around `=`; `#` starts a
+  comment only at the start of a line.
+- Only the keys in the table below; any other key is named and skipped.
+- Values are literal: no `$` expansion, nothing runs, a CRLF line ending is
+  fine. A value cannot hold whitespace or quotes, so a trailing comment or a
+  quoted value is named and skipped rather than half-read.
+- If a key appears twice, the last line wins.
+- A variable set in the environment (or on the make command line) wins over
+  the file. `HELIX_BUILD_HOSTS_FILE` names a different file.
+
+Nothing has a host default: a command that needs a host you have not
 configured stops with one line naming the variable and this file, and nothing
 ever connects to a host you did not name. `make full-test-run` with no test
-host simply runs both suites locally.
+host simply runs both suites locally, without a word.
 
 | Variable | Used by | Meaning (default) |
 |----------|---------|-------------------|
@@ -1309,9 +1321,10 @@ host simply runs both suites locally.
 | `HELIX_TEST_CCACHE` | same | ccache dir inside the container (`/work/ccache`) |
 | `HELIX_TEST_WORKDIR` | `test-host-run.sh --commit`, `mutate` | git checkout inside the container (`/work/helixscreen`) |
 | `HELIX_TEST_LOCK_DIR` | `test-host-run.sh` | lock directory on the host (`/tmp`) |
+| `HELIX_TEST_HOST_AUTO` | `full-test-run` | `0` keeps an unforced gate local even with a test host configured (`1`) |
 | `REMOTE_HOST`, `REMOTE_USER` | `mk/remote.mk`, `remote-build.sh` | remote build host and optional user (none) |
-| `REMOTE_DIR` | `mk/remote.mk` | rsync target on the remote for the cross targets (none) |
-| `REMOTE_BUILD_DIR` | `remote-build.sh` | its own clone on the remote (`~/helix-remote`); kept apart from `REMOTE_DIR` because the script hard-resets it |
+| `REMOTE_DIR` | `mk/remote.mk` | rsync target on the remote for the cross targets (none). `remote-sync` rsyncs `--delete` into it, so give it a directory of its own, never a checkout you work in |
+| `REMOTE_BUILD_DIR` | `remote-build.sh` | its own clone on the remote (`~/helix-remote`), which it hard-resets and cleans every run. It works only in a directory it created (marked `.helix-remote-build`) and refuses any other |
 
 An example file:
 
@@ -1321,7 +1334,7 @@ HELIX_TEST_CONTAINER=helix-test
 HELIX_TEST_TREES_HOST=/srv/helix-test/trees
 HELIX_TEST_TREES=/work/trees
 REMOTE_HOST=buildbox.local
-REMOTE_DIR=~/src/helixscreen
+REMOTE_DIR=~/helix-remote-sync
 ```
 
 **Setting up a test host.** Any Linux machine with Docker works, if you can ssh
