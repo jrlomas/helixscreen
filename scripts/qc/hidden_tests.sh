@@ -52,13 +52,23 @@ elif ! HIDDEN_STALE=$(scripts/check_test_binary_current.sh); then
 else
   SECTION_START=$(date +%s)
   # The binary runs directly here: `make test-hidden` carries a test-build
-  # prerequisite that would relink, and this block never builds.
-  if build/bin/helix-tests "[.]" >/tmp/test_hidden.out 2>&1; then
+  # prerequisite that would relink, and this block never builds. It runs under
+  # a timeout so a hung test cannot freeze the commit (SIGKILL backstop as in
+  # mk/tests.mk#timeout_run).
+  local HIDDEN_TIMEOUT=() TIMEOUT_BIN HIDDEN_RC
+  TIMEOUT_BIN=$(command -v timeout || command -v gtimeout || true)
+  [ -n "$TIMEOUT_BIN" ] && HIDDEN_TIMEOUT=("$TIMEOUT_BIN" -k "${TIMEOUT_KILL_AFTER:-30}" "${TEST_TIMEOUT:-900}")
+  HIDDEN_RC=0
+  "${HIDDEN_TIMEOUT[@]}" build/bin/helix-tests "[.]" >/tmp/test_hidden.out 2>&1 || HIDDEN_RC=$?
+  if [ "$HIDDEN_RC" -eq 0 ]; then
     printf "✅ Hidden tests passed (%s)" "$(grep -E '^test cases:' /tmp/test_hidden.out | tail -1)"
     section_time $SECTION_START
     echo ""
   else
     grep -E '^(tests/|  |test cases:|assertions:)' /tmp/test_hidden.out | tail -40
+    if [ "$HIDDEN_RC" -eq 124 ] || [ "$HIDDEN_RC" -eq 137 ]; then
+      echo "❌ Hidden tests were killed after ${TEST_TIMEOUT:-900}s: a hung test, or a deadlocked crash handler"
+    fi
     echo "❌ Hidden tests failed"
     echo "   Run: make test-hidden"
     EXIT_CODE=1
