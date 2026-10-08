@@ -734,7 +734,13 @@ TEST_CASE_METHOD(OverlayActivationFixture, "Overlay slides follow the tier's sty
     DisplaySettingsManager::instance().set_animations_enabled(true);
     lv_subject_t* tier = lv_xml_get_subject(nullptr, "platform_tier");
     REQUIRE(tier != nullptr);
-    const int saved_tier = lv_subject_get_int(tier);
+    struct RestoreTier {
+        lv_subject_t* tier;
+        int saved = lv_subject_get_int(tier);
+        ~RestoreTier() {
+            lv_subject_set_int(tier, saved);
+        }
+    } restore_tier{tier};
     int closes = 0;
     nav.register_overlay_close_callback(overlay_, [&closes] { ++closes; });
 
@@ -769,6 +775,4 @@ TEST_CASE_METHOD(OverlayActivationFixture, "Overlay slides follow the tier's sty
         process_lvgl(500);
         CHECK(closes == 1);
     }
-
-    lv_subject_set_int(tier, saved_tier);
 }
