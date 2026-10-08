@@ -5,38 +5,44 @@
 # shell suite. Nothing else runs bats locally - not the commit hook, not
 # test-xml - so without it the shell suite reaches CI unrun.
 #
-#   ZEUS=1   the sweep runs on zeus (scripts/zeus-run.sh sweep, against this
-#            tree's mirror) while bats runs here; the gate costs the longer of
-#            the two, and fails if either fails. bats stays here because the
-#            zeus container is root with no shellcheck.
-#   ZEUS=0   both run here, sweep first.
-#   unset    automatic: zeus-run.sh --probe decides from the link (it prints
-#            the numbers), and only while HELIX_ZEUS_AUTO=1.
+#   TEST_HOST=1  the sweep runs on the test host (scripts/test-host-run.sh sweep,
+#                against this tree's mirror) while bats runs here; the gate
+#                costs the longer of the two, and fails if either fails. bats
+#                stays here because the test container is root with no shellcheck.
+#   TEST_HOST=0  both run here, sweep first.
+#   unset        automatic: with a test host configured and HELIX_TEST_HOST_AUTO=1,
+#                test-host-run.sh --probe decides from the link and prints the
+#                numbers. With no test host configured, both run here, silently.
 #
 # [.] and [slow] stay outside deliberately: quality-checks.sh runs [.] on any
 # staged code change, and nightly CI runs [slow].
 set -uo pipefail
 
-# Automatic offload stays off until a warm zeus sweep is measured finishing
+# Automatic offload stays off until a warm test-host sweep is measured finishing
 # before bats; turning it on is this one line.
-HELIX_ZEUS_AUTO=${HELIX_ZEUS_AUTO:-0}
+HELIX_TEST_HOST_AUTO=${HELIX_TEST_HOST_AUTO:-0}
 
 MAKE=${MAKE:-make}
-ZEUS_RUN=${ZEUS_RUN:-$(dirname "$0")/zeus-run.sh}
+TEST_HOST_RUN=${TEST_HOST_RUN:-$(dirname "$0")/test-host-run.sh}
+# shellcheck source-path=SCRIPTDIR source=lib/build_hosts.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/build_hosts.sh"
 
-case "${ZEUS:-}" in
-    1) where=zeus ;;
+case "${TEST_HOST:-}" in
+    1) require_build_host HELIX_TEST_HOST || exit 2
+       where=remote ;;
     0) where=local ;;
     "")
-        if [ "$HELIX_ZEUS_AUTO" != 1 ]; then
-            echo "→ unit sweep runs here (automatic zeus offload is off; HELIX_ZEUS_AUTO=1 turns it on, ZEUS=1 forces it)"
+        if [ -z "${HELIX_TEST_HOST:-}" ]; then
             where=local
-        elif "$ZEUS_RUN" --probe; then
-            where=zeus
+        elif [ "$HELIX_TEST_HOST_AUTO" != 1 ]; then
+            echo "→ unit sweep runs here (automatic test-host offload is off; HELIX_TEST_HOST_AUTO=1 turns it on, TEST_HOST=1 forces it)"
+            where=local
+        elif "$TEST_HOST_RUN" --probe; then
+            where=remote
         else
             where=local
         fi ;;
-    *) echo "✗ ZEUS must be 1, 0 or unset, not '$ZEUS'" >&2; exit 2 ;;
+    *) echo "✗ TEST_HOST must be 1, 0 or unset, not '$TEST_HOST'" >&2; exit 2 ;;
 esac
 
 done_msg() {
@@ -51,31 +57,31 @@ if [ "$where" = local ]; then
     exit 0
 fi
 
-zlog="${TMPDIR:-/tmp}/full-test-run-zeus.$$.log"
-echo "→ unit sweep on zeus (output: $zlog), shell suite here"
+zlog="${TMPDIR:-/tmp}/full-test-run-sweep.$$.log"
+echo "→ unit sweep on $HELIX_TEST_HOST (output: $zlog), shell suite here"
 # Its own process group, so one signal reaches its job ssh too: a background
-# job ignores the terminal's Ctrl-C, and a zeus run left behind keeps its
+# job ignores the terminal's Ctrl-C, and a sweep left behind keeps its
 # tree's lock and a build nobody is waiting for.
 if command -v setsid >/dev/null 2>&1; then
-    setsid "$ZEUS_RUN" sweep >"$zlog" 2>&1 &
+    setsid "$TEST_HOST_RUN" sweep >"$zlog" 2>&1 &
 else
-    "$ZEUS_RUN" sweep >"$zlog" 2>&1 &
+    "$TEST_HOST_RUN" sweep >"$zlog" 2>&1 &
 fi
 zpid=$!
 trap 'kill -TERM -- "-$zpid" 2>/dev/null || kill -TERM "$zpid" 2>/dev/null; exit 130' INT TERM
 "$MAKE" --no-print-directory test-shell
 bats_rc=$?
-if kill -0 "$zpid" 2>/dev/null; then echo "→ shell suite done; waiting for the zeus sweep"; fi
+if kill -0 "$zpid" 2>/dev/null; then echo "→ shell suite done; waiting for the test-host sweep"; fi
 wait "$zpid"
-zeus_rc=$?
+remote_rc=$?
 trap - INT TERM
 
 verdict() { [ "$1" -eq 0 ] && echo passed || echo "FAILED (exit $1)"; }
-if [ "$zeus_rc" -ne 0 ]; then
-    echo "--- zeus sweep, last 40 lines of $zlog ---"
+if [ "$remote_rc" -ne 0 ]; then
+    echo "--- $HELIX_TEST_HOST sweep, last 40 lines of $zlog ---"
     tail -n 40 "$zlog"
 fi
-echo "  zeus unit sweep: $(verdict "$zeus_rc")"
+echo "  test-host unit sweep: $(verdict "$remote_rc")"
 echo "  local shell suite: $(verdict "$bats_rc")"
-[ "$zeus_rc" -eq 0 ] && [ "$bats_rc" -eq 0 ] || exit 1
+[ "$remote_rc" -eq 0 ] && [ "$bats_rc" -eq 0 ] || exit 1
 done_msg

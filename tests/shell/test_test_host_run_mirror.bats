@@ -1,33 +1,34 @@
 #!/usr/bin/env bats
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# zeus-run.sh mirrors the working tree to zeus (scripts/zeus-run.sh).
+# test-host-run.sh mirrors the working tree to the test host (scripts/test-host-run.sh).
 #
 # A plain run copies the tree as it is on disk - uncommitted edits and
 # untracked files included, ignored files and build output excluded - into a
-# per-tree mirror on zeus, and runs the job there. Each mirror has its own
+# per-tree mirror on the test host, and runs the job there. Each mirror has its own
 # lock, so two trees run at once while two runs of one tree queue.
 #
 # ssh is stubbed so its command runs here: rsync's remote half, the lock
 # holder and the job heredoc all execute against a sandbox directory that
-# stands in for zeus's mirror root. docker is stubbed to record, so no build
+# stands in for the test host's mirror root. docker is stubbed to record, so no build
 # runs. git is real: each test builds a small repository to sync.
 
-ZEUS_RUN="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)/scripts/zeus-run.sh"
+TEST_HOST_RUN="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)/scripts/test-host-run.sh"
 
 setup() {
     load helpers
-    export ZEUS_LOCK_DIR="$BATS_TEST_TMPDIR/locks"
-    export ZEUS_TREES_HOST="$BATS_TEST_TMPDIR/zeus-trees"
+    export HELIX_TEST_HOST=testhost.invalid
+    export HELIX_TEST_LOCK_DIR="$BATS_TEST_TMPDIR/locks"
+    export HELIX_TEST_TREES_HOST="$BATS_TEST_TMPDIR/host-trees"
     export TMPDIR="$BATS_TEST_TMPDIR"
     export MOCK_DOCKER_LOG="$BATS_TEST_TMPDIR/docker.log"
-    export ZEUS_JOBPOOL="$BATS_TEST_TMPDIR/no-jobpool"
-    export ZEUS_ARC_PARAM="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_max"
-    export ZEUS_ARC_SYS_FREE="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_sys_free"
-    export ZEUS_ARC_MARK="$BATS_TEST_TMPDIR/arc-mark"
-    export ZEUS_TREES=/work/trees
-    export ZEUS_ORPHAN_POLL_SECS=0
-    mkdir -p "$ZEUS_LOCK_DIR"
+    export HELIX_TEST_JOBPOOL="$BATS_TEST_TMPDIR/no-jobpool"
+    export HELIX_TEST_ARC_PARAM="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_max"
+    export HELIX_TEST_ARC_SYS_FREE="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_sys_free"
+    export HELIX_TEST_ARC_MARK="$BATS_TEST_TMPDIR/arc-mark"
+    export HELIX_TEST_TREES=/work/trees
+    export HELIX_TEST_ORPHAN_POLL_SECS=0
+    mkdir -p "$HELIX_TEST_LOCK_DIR"
     REAL_RSYNC=$(command -v rsync)
     export REAL_RSYNC
 
@@ -42,7 +43,7 @@ exec bash -c "$*"'
     mock_command_script sudo 'shift; exec "$@"'
     mock_command_script docker '
 case "$1" in
-    ps) echo helix-tsan ;;
+    ps) echo helix-test ;;
     start) exit 0 ;;
     inspect) exit 0 ;;
     exec)
@@ -86,7 +87,7 @@ make_tree() { # <name>
     echo "$t"
 }
 
-mirror_of() { echo "$ZEUS_TREES_HOST/$1"; }
+mirror_of() { echo "$HELIX_TEST_TREES_HOST/$1"; }
 
 @test "an uncommitted edit and an untracked file reach the mirror; ignored files and build/ do not" {
     local t m
@@ -98,7 +99,7 @@ mirror_of() { echo "$ZEUS_TREES_HOST/$1"; }
     mkdir -p "$t/build"; echo obj > "$t/build/thing.o"
 
     cd "$t"
-    run "$ZEUS_RUN" test '[x]'
+    run "$TEST_HOST_RUN" test '[x]'
     [ "$status" -eq 0 ]
     [ "$(cat "$m/tracked.txt")" = edited ]
     [ "$(cat "$m/untracked.txt")" = new ]
@@ -119,7 +120,7 @@ mirror_of() { echo "$ZEUS_TREES_HOST/$1"; }
     git -C "$t" add committed-delete.txt worktree-delete.txt
     git -C "$t" commit -qm more --no-verify
     cd "$t"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     [ -e "$m/committed-delete.txt" ] && [ -e "$m/worktree-delete.txt" ] && [ -e "$m/untracked-delete.txt" ]
     # Build output the job wrote is the mirror's own, never in the file list.
@@ -128,7 +129,7 @@ mirror_of() { echo "$ZEUS_TREES_HOST/$1"; }
     git -C "$t" rm -q committed-delete.txt
     git -C "$t" commit -qm drop --no-verify
     rm "$t/worktree-delete.txt" "$t/untracked-delete.txt"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     [ ! -e "$m/committed-delete.txt" ]
     [ ! -e "$m/worktree-delete.txt" ]
@@ -165,7 +166,7 @@ add_symlinked_submodule() { # <tree> <name> [private]
     echo created > "$BATS_TEST_TMPDIR/shared-lvgl/patch-created.h"
     echo arm > "$BATS_TEST_TMPDIR/shared-wpa_supplicant/libwpa_client.a"
     cd "$t"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     [ -d "$m/lib/lvgl" ] && [ ! -L "$m/lib/lvgl" ]
     [ "$(cat "$m/lib/lvgl/source.c")" = "lvgl source" ]
@@ -201,20 +202,20 @@ hold_lock() { # <lock file> <ready marker>: prints the holder pid
     local a b holder out runner
     a=$(make_tree tree-a)
     b=$(make_tree tree-b)
-    holder=$(hold_lock "$ZEUS_LOCK_DIR/helix-zeus-run.tree-tree-a.lock" "$BATS_TEST_TMPDIR/ready")
+    holder=$(hold_lock "$HELIX_TEST_LOCK_DIR/helix-test-host-run.tree-tree-a.lock" "$BATS_TEST_TMPDIR/ready")
     wait_for_file "$BATS_TEST_TMPDIR/ready"
 
     # tree-a's lock is held: tree-b runs straight through.
     cd "$b"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     lacks "busy:" "$output"
-    grep -q "held by pid [0-9]*: test " "$ZEUS_LOCK_DIR/helix-zeus-run.tree-tree-b.lock"
+    grep -q "held by pid [0-9]*: test " "$HELIX_TEST_LOCK_DIR/helix-test-host-run.tree-tree-b.lock"
 
     # A run of tree-a waits for it, names the holder, and has synced nothing.
     out="$BATS_TEST_TMPDIR/waiting.log"
     cd "$a"
-    "$ZEUS_RUN" test >"$out" 2>&1 &
+    "$TEST_HOST_RUN" test >"$out" 2>&1 &
     runner=$!
     wait_for_line "busy:" "$out"
     grep -q "busy: held by pid.*: sweep 0123456 since " "$out"
@@ -227,15 +228,15 @@ hold_lock() { # <lock file> <ready marker>: prints the holder pid
     [ -e "$(mirror_of tree-a)/tracked.txt" ]
 }
 
-@test "with no jobpool on zeus, runs of different trees take turns" {
+@test "with no jobpool on the test host, runs of different trees take turns" {
     # -j is sized from MemAvailable at start, which only holds for one run.
     local b holder out runner
     b=$(make_tree tree-b)
-    holder=$(hold_lock "$ZEUS_LOCK_DIR/helix-zeus-run.global.lock" "$BATS_TEST_TMPDIR/ready")
+    holder=$(hold_lock "$HELIX_TEST_LOCK_DIR/helix-test-host-run.global.lock" "$BATS_TEST_TMPDIR/ready")
     wait_for_file "$BATS_TEST_TMPDIR/ready"
     out="$BATS_TEST_TMPDIR/waiting.log"
     cd "$b"
-    "$ZEUS_RUN" test >"$out" 2>&1 &
+    "$TEST_HOST_RUN" test >"$out" 2>&1 &
     runner=$!
     wait_for_line "no jobpool on" "$out"
     refute_grep "MemAvailable" "$out"
@@ -252,22 +253,22 @@ hold_lock() { # <lock file> <ready marker>: prints the holder pid
     sha=$(git rev-parse HEAD)
     short=$(git rev-parse --short HEAD)
 
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     contains "HEAD $sha + clean" "$output"
-    [ -f "$TMPDIR/zeus-test-tree-a-$short.log" ]
+    [ -f "$TMPDIR/test-host-test-tree-a-$short.log" ]
     lacks "dirty" "$output"
 
     echo edited > tracked.txt
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     h1=$(printf '%s\n' "$output" | sed -n 's/.*HEAD [0-9a-f]* + dirty \([0-9a-f]*\), 0 untracked.*/\1/p' | head -1)
     [ -n "$h1" ]
-    [ -f "$TMPDIR/zeus-test-tree-a-$short-dirty-$h1.log" ]
+    [ -f "$TMPDIR/test-host-test-tree-a-$short-dirty-$h1.log" ]
 
     # Another edit is another hash; an untracked file is counted and hashed.
     echo new > untracked.txt
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     h2=$(printf '%s\n' "$output" | sed -n 's/.*HEAD [0-9a-f]* + dirty \([0-9a-f]*\), 1 untracked.*/\1/p' | head -1)
     [ -n "$h2" ]
@@ -278,7 +279,7 @@ hold_lock() { # <lock file> <ready marker>: prints the holder pid
     local t
     t=$(make_tree tree-a)
     cd "$t"
-    run "$ZEUS_RUN" --commit test
+    run "$TEST_HOST_RUN" --commit test
     [ "$status" -eq 1 ]
     contains "is not on any remote branch" "$output"
     [ ! -e "$MOCK_DOCKER_LOG" ]
@@ -286,8 +287,8 @@ hold_lock() { # <lock file> <ready marker>: prints the holder pid
 }
 
 make_mirror() { # <name> <age in days>
-    mkdir -p "$ZEUS_TREES_HOST/$1"
-    touch -d "$2 days ago" "$ZEUS_TREES_HOST/$1/.zeus-mirror-files"
+    mkdir -p "$HELIX_TEST_TREES_HOST/$1"
+    touch -d "$2 days ago" "$HELIX_TEST_TREES_HOST/$1/.helix-mirror-files"
 }
 
 @test "--prune removes an old mirror, keeps a fresh one and one in use" {
@@ -295,68 +296,68 @@ make_mirror() { # <name> <age in days>
     make_mirror fresh 1
     make_mirror busy 20
     local holder
-    holder=$(hold_lock "$ZEUS_LOCK_DIR/helix-zeus-run.tree-busy.lock" "$BATS_TEST_TMPDIR/ready")
+    holder=$(hold_lock "$HELIX_TEST_LOCK_DIR/helix-test-host-run.tree-busy.lock" "$BATS_TEST_TMPDIR/ready")
     wait_for_file "$BATS_TEST_TMPDIR/ready"
 
-    run "$ZEUS_RUN" --prune
+    run "$TEST_HOST_RUN" --prune
     kill "$holder"; wait "$holder" 2>/dev/null || true
     [ "$status" -eq 0 ]
-    [ ! -e "$ZEUS_TREES_HOST/old" ]
-    [ -d "$ZEUS_TREES_HOST/fresh" ]
-    [ -d "$ZEUS_TREES_HOST/busy" ]
+    [ ! -e "$HELIX_TEST_TREES_HOST/old" ]
+    [ -d "$HELIX_TEST_TREES_HOST/fresh" ]
+    [ -d "$HELIX_TEST_TREES_HOST/busy" ]
     contains "removed old" "$output"
 
     # DAYS is honoured: a 1-day-old mirror goes at --prune 0.
-    run "$ZEUS_RUN" --prune 0
+    run "$TEST_HOST_RUN" --prune 0
     [ "$status" -eq 0 ]
-    [ ! -e "$ZEUS_TREES_HOST/fresh" ]
+    [ ! -e "$HELIX_TEST_TREES_HOST/fresh" ]
 }
 
 @test "--drop removes one tree's mirror" {
     make_mirror gone 0
     make_mirror stays 0
-    run "$ZEUS_RUN" --drop gone
+    run "$TEST_HOST_RUN" --drop gone
     [ "$status" -eq 0 ]
-    [ ! -e "$ZEUS_TREES_HOST/gone" ]
-    [ -d "$ZEUS_TREES_HOST/stays" ]
+    [ ! -e "$HELIX_TEST_TREES_HOST/gone" ]
+    [ -d "$HELIX_TEST_TREES_HOST/stays" ]
 }
 
 # --- --probe: the automatic full-test-run default ---------------------------
 
-@test "--probe: an unreachable zeus means local" {
+@test "--probe: an unreachable test host means local" {
     mock_command_fail ssh
-    run "$ZEUS_RUN" --probe
+    run "$TEST_HOST_RUN" --probe
     [ "$status" -eq 1 ]
     contains "unreachable" "$output"
 }
 
-@test "--probe: a LAN round trip means zeus without measuring the sync" {
-    mock_command ping "64 bytes from zeus: icmp_seq=1 ttl=64 time=0.137 ms"
+@test "--probe: a LAN round trip means the test host without measuring the sync" {
+    mock_command ping "64 bytes from testhost: icmp_seq=1 ttl=64 time=0.137 ms"
     local t
     t=$(make_tree tree-a)
     cd "$t"
-    run "$ZEUS_RUN" --probe
+    run "$TEST_HOST_RUN" --probe
     [ "$status" -eq 0 ]
     contains "rtt 0.137 ms" "$output"
-    contains "zeus" "$output"
+    contains "sweep runs on testhost.invalid" "$output"
     lacks "estimated sync" "$output"
 }
 
-@test "--probe: a slow link with a cold mirror means local, a warm one means zeus" {
-    mock_command ping "64 bytes from zeus: icmp_seq=1 ttl=64 time=40.5 ms"
-    export ZEUS_PROBE_BYTES_PER_SEC=1000   # pins the measured throughput
+@test "--probe: a slow link with a cold mirror means local, a warm one means the test host" {
+    mock_command ping "64 bytes from testhost: icmp_seq=1 ttl=64 time=40.5 ms"
+    export HELIX_TEST_PROBE_BYTES_PER_SEC=1000   # pins the measured throughput
     local t
     t=$(make_tree tree-a)
     head -c 50000 /dev/urandom > "$t/big.bin"
     cd "$t"
-    run "$ZEUS_RUN" --probe
+    run "$TEST_HOST_RUN" --probe
     [ "$status" -eq 1 ]
     contains "estimated sync" "$output"
 
     # Warm: the mirror already holds every byte, so almost nothing would move.
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
-    run "$ZEUS_RUN" --probe
+    run "$TEST_HOST_RUN" --probe
     [ "$status" -eq 0 ]
     contains "estimated sync" "$output"
 }
@@ -371,13 +372,13 @@ make_mirror() { # <name> <age in days>
     m=$(mirror_of tree-a)
     echo doomed > "$t/doomed.txt"
     cd "$t"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     echo second-sync > tracked.txt
     rm doomed.txt
     export MOCK_PGREP_HITS="$BATS_TEST_TMPDIR/hits" MOCK_PGREP_SAW="$BATS_TEST_TMPDIR/saw"
     export MOCK_MIRROR_PROBE="$m/tracked.txt"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     contains "orphaned build still running" "$output"
     # At the first poll the mirror still held the previous sync, untouched.
@@ -388,10 +389,10 @@ make_mirror() { # <name> <age in days>
 
 @test "the orphan wait counts only makes whose cwd is inside this tree's mirror" {
     local t rundir other pid
-    export ZEUS_TREES="$BATS_TEST_TMPDIR/container-trees"
+    export HELIX_TEST_TREES="$BATS_TEST_TMPDIR/container-trees"
     export MOCK_RUN_PROBE=1
-    rundir="$ZEUS_TREES/tree-a"
-    other="$ZEUS_TREES/tree-ab"
+    rundir="$HELIX_TEST_TREES/tree-a"
+    other="$HELIX_TEST_TREES/tree-ab"
     mkdir -p "$rundir/lib" "$other"
     # pgrep reports one make; its cwd decides whether it is ours.
     mock_command_script pgrep 'cat "$BATS_TEST_TMPDIR/make.pid"'
@@ -401,7 +402,7 @@ make_mirror() { # <name> <age in days>
     # Another tree's build, in a sibling whose name extends ours: not ours.
     (cd "$other" && exec sleep 30) & pid=$!
     echo "$pid" > "$BATS_TEST_TMPDIR/make.pid"
-    run timeout 20 "$ZEUS_RUN" test
+    run timeout 20 "$TEST_HOST_RUN" test
     kill "$pid"; wait "$pid" 2>/dev/null || true
     [ "$status" -eq 0 ]
     lacks "orphaned build" "$output"
@@ -409,7 +410,7 @@ make_mirror() { # <name> <age in days>
     # A sub-make inside our mirror: waited out until it is gone.
     (cd "$rundir/lib" && exec sleep 30) & pid=$!
     echo "$pid" > "$BATS_TEST_TMPDIR/make.pid"
-    "$ZEUS_RUN" test > "$BATS_TEST_TMPDIR/out" 2>&1 &
+    "$TEST_HOST_RUN" test > "$BATS_TEST_TMPDIR/out" 2>&1 &
     local runner=$!
     for _ in $(seq 1 200); do grep -q "orphaned build" "$BATS_TEST_TMPDIR/out" && break; sleep 0.05; done
     grep -q "orphaned build" "$BATS_TEST_TMPDIR/out"
@@ -424,7 +425,7 @@ make_mirror() { # <name> <age in days>
     echo x > "$t/thing"; mkdir -p "$t/dir"; echo y > "$t/dir/a"
     git -C "$t" add thing dir/a; git -C "$t" commit -qm kinds --no-verify
     cd "$t"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     # Output the job wrote there: the directory is not empty when it goes.
     echo obj > "$m/dir/out.o"
@@ -433,27 +434,27 @@ make_mirror() { # <name> <age in days>
     mkdir thing; echo y > thing/a
     echo z > dir
     git add thing/a dir; git commit -qm swapped --no-verify
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     [ "$(cat "$m/thing/a")" = y ]
     [ "$(cat "$m/dir")" = z ]
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
 
     # A stale path that is a directory in the mirror, as an interrupted sync
     # leaves one, does not stop the run either.
     rm -rf "${m:?}/dir"; mkdir -p "$m/dir/sub"
     git rm -q dir; git commit -qm gone --no-verify
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
 }
 
-@test "a tree named global runs with no jobpool on zeus" {
+@test "a tree named global runs with no jobpool on the test host" {
     # The per-tree lock and the no-pool global lock are different files.
     local t
     t=$(make_tree global)
     cd "$t"
-    run timeout 20 "$ZEUS_RUN" test
+    run timeout 20 "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
 }
 
@@ -467,7 +468,7 @@ make_mirror() { # <name> <age in days>
 for a in "$@"; do case "$a" in *vanishing.txt) echo "sha1sum: $a: No such file" >&2; exit 1 ;; esac; done
 exec '"$real"' "$@"'
     cd "$t"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     contains "+ dirty " "$output"
 }
@@ -481,9 +482,9 @@ exec '"$real"' "$@"'
 case " $* " in *" --server "*|*" --dry-run "*) exit 0 ;; esac
 case " $* " in *" --files-from="*) exit "${MOCK_RSYNC_RC:-0}" ;; esac'
     cd "$t"
-    MOCK_RSYNC_RC=24 run "$ZEUS_RUN" test
+    MOCK_RSYNC_RC=24 run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
-    MOCK_RSYNC_RC=23 run "$ZEUS_RUN" test
+    MOCK_RSYNC_RC=23 run "$TEST_HOST_RUN" test
     [ "$status" -ne 0 ]
 }
 
@@ -492,29 +493,29 @@ case " $* " in *" --files-from="*) exit "${MOCK_RSYNC_RC:-0}" ;; esac'
     t=$(make_tree tree-a)
     add_symlinked_submodule "$t" helix-xml private
     cd "$t"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     contains "+ clean" "$output"
     echo new > lib/helix-xml/new_widget.c
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     contains "+ dirty " "$output"
     contains "1 untracked" "$output"
 }
 
 @test "a tree or --drop name that is not a plain name is refused" {
-    mkdir -p "$ZEUS_TREES_HOST/keep"
+    mkdir -p "$HELIX_TEST_TREES_HOST/keep"
     local bad
     for bad in '*' '..' '.' 'a b' 'x$(touch pwned)' 'a/b'; do
-        run "$ZEUS_RUN" --drop "$bad"
+        run "$TEST_HOST_RUN" --drop "$bad"
         [ "$status" -eq 2 ]
     done
-    [ -d "$ZEUS_TREES_HOST/keep" ]
-    [ ! -e pwned ] && [ ! -e "$ZEUS_TREES_HOST/pwned" ]
+    [ -d "$HELIX_TEST_TREES_HOST/keep" ]
+    [ ! -e pwned ] && [ ! -e "$HELIX_TEST_TREES_HOST/pwned" ]
     local t
     t=$(make_tree 'tree$x')
     cd "$t"
-    run "$ZEUS_RUN" test
+    run "$TEST_HOST_RUN" test
     [ "$status" -eq 2 ]
     [ ! -e "$MOCK_DOCKER_LOG" ]
 }
@@ -523,7 +524,32 @@ case " $* " in *" --files-from="*) exit "${MOCK_RSYNC_RC:-0}" ;; esac'
     local t
     t=$(make_tree tree-a)
     cd "$t"
-    run "$ZEUS_RUN" test '[x]' --commit
+    run "$TEST_HOST_RUN" test '[x]' --commit
     [ "$status" -eq 1 ]
     contains "is not on any remote branch" "$output"
+}
+
+@test "with no test host configured every command refuses in one line and reaches nothing" {
+    unset HELIX_TEST_HOST
+    local t cmd
+    t=$(make_tree tree-a)
+    cd "$t"
+
+    # The build-hosts file alone names one.
+    echo "HELIX_TEST_HOST=testhost.invalid" > "$HELIX_BUILD_HOSTS_FILE"
+    run "$TEST_HOST_RUN" test
+    [ "$status" -eq 0 ]
+    contains "testhost.invalid:helix-test" "$output"
+
+    rm "$HELIX_BUILD_HOSTS_FILE"
+    mock_command_script ssh 'touch "$BATS_TEST_TMPDIR/ssh-called"; exit 255'
+    for cmd in "test" "--commit sweep" "--prune" "--drop tree-a" "--probe"; do
+        # shellcheck disable=SC2086  # one argument per word
+        run "$TEST_HOST_RUN" $cmd
+        [ "$status" -eq 2 ]
+        [ "${#lines[@]}" -eq 1 ]
+        contains "HELIX_TEST_HOST is not set" "$output"
+        contains "$HELIX_BUILD_HOSTS_FILE" "$output"
+    done
+    [ ! -e "$BATS_TEST_TMPDIR/ssh-called" ]
 }

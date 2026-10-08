@@ -338,40 +338,49 @@ teardown() {
     [ -d "$MAIN/.worktrees/doomed" ]
 }
 
-# The tree's mirror on zeus goes with it, best effort: zeus being unreachable
-# must never stop a teardown.
-stub_zeus_run() { # <exit code>
+# The tree's mirror on the test host goes with it, best effort: a host that is
+# unreachable must never stop a teardown, and with none configured nothing is asked.
+stub_test_host_run() { # <exit code>
     mkdir -p "$MAIN/scripts"
-    printf '#!/bin/sh\necho "$*" >> "%s"\nexit %s\n' "$BATS_TEST_TMPDIR/zeus-calls" "$1" > "$MAIN/scripts/zeus-run.sh"
-    chmod +x "$MAIN/scripts/zeus-run.sh"
+    printf '#!/bin/sh\necho "$*" >> "%s"\nexit %s\n' "$BATS_TEST_TMPDIR/host-calls" "$1" > "$MAIN/scripts/test-host-run.sh"
+    chmod +x "$MAIN/scripts/test-host-run.sh"
 }
 
-@test "teardown drops the tree's zeus mirror" {
+@test "teardown drops the tree's test-host mirror" {
     make_worktree mirrored
-    stub_zeus_run 0
-    run "$SCRIPT" mirrored --into master
+    stub_test_host_run 0
+    HELIX_TEST_HOST=testhost.invalid run "$SCRIPT" mirrored --into master
     [ "$status" -eq 0 ]
-    [ "$(cat "$BATS_TEST_TMPDIR/zeus-calls")" = "--drop mirrored" ]
+    [ "$(cat "$BATS_TEST_TMPDIR/host-calls")" = "--drop mirrored" ]
 }
 
-@test "an unreachable zeus warns and the teardown still completes" {
-    make_worktree offline
-    stub_zeus_run 1
-    run "$SCRIPT" offline --into master
+@test "with no test host configured, teardown asks for no mirror drop" {
+    make_worktree unhosted
+    stub_test_host_run 0
+    run "$SCRIPT" unhosted --into master
     [ "$status" -eq 0 ]
-    contains "zeus mirror" "$output"
+    [ ! -e "$BATS_TEST_TMPDIR/host-calls" ]
+    lacks "mirror" "$output"
+}
+
+@test "an unreachable test host warns and the teardown still completes" {
+    make_worktree offline
+    stub_test_host_run 1
+    HELIX_TEST_HOST=testhost.invalid run "$SCRIPT" offline --into master
+    [ "$status" -eq 0 ]
+    contains "mirror on testhost.invalid" "$output"
     contains "Teardown complete" "$output"
     [ ! -d "$MAIN/.worktrees/offline" ]
 }
 
-@test "a zeus that never answers cannot stall the teardown" {
+@test "a test host that never answers cannot stall the teardown" {
     make_worktree hung
     mkdir -p "$MAIN/scripts"
-    printf '#!/bin/sh\nexec sleep 60\n' > "$MAIN/scripts/zeus-run.sh"
-    chmod +x "$MAIN/scripts/zeus-run.sh"
+    printf '#!/bin/sh\nexec sleep 60\n' > "$MAIN/scripts/test-host-run.sh"
+    chmod +x "$MAIN/scripts/test-host-run.sh"
     local t0=$SECONDS
-    HELIX_ZEUS_DROP_TIMEOUT=1 run "$SCRIPT" hung --into master
+    HELIX_TEST_HOST=testhost.invalid HELIX_TEST_HOST_DROP_TIMEOUT=1 run "$SCRIPT" hung --into master
     [ "$status" -eq 0 ]
     [ $((SECONDS - t0)) -lt 15 ]
-    contains "zeus mirror" "$output"
+    contains "mirror on testhost.invalid" "$output"
 }

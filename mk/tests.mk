@@ -510,14 +510,14 @@ unit-sweep: test-build
 	echo "$(GREEN)$(BOLD)✓ Unit tests passed in $${DURATION}s$(RESET)"
 
 # full-test-run: the completion gate - the C++ unit sweep and the bats shell
-# suite. ZEUS=1 sends the sweep to zeus while bats runs here, ZEUS=0 keeps both
-# local; scripts/full-test-run.sh says what each setting does and holds the
-# automatic default's switch.
+# suite. TEST_HOST=1 sends the sweep to the configured test host while bats
+# runs here, TEST_HOST=0 keeps both local; scripts/full-test-run.sh says what
+# each setting does and holds the automatic default's switch.
 #
 # Ask it once, when a feature is finished. Mid-feature the question is
 # `make t F='[tag]'`, and a full run cannot answer it anyway.
 full-test-run:
-	$(Q)ZEUS="$(ZEUS)" MAKE="$(MAKE)" scripts/full-test-run.sh
+	$(Q)TEST_HOST="$(TEST_HOST)" MAKE="$(MAKE)" scripts/full-test-run.sh
 
 # ----------------------------------------------------------------------------
 # test-run: a signpost that refuses

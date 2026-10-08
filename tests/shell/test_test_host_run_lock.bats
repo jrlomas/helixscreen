@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# zeus-run.sh serializes jobs on the remote workdir (scripts/zeus-run.sh).
+# test-host-run.sh serializes jobs on the remote workdir (scripts/test-host-run.sh).
 #
 # A job resets the checkout and rebuilds in $WORKDIR on the container host, so
 # two runs in that tree corrupt each other. The remote half of the script
@@ -12,27 +12,28 @@
 #
 # These tests stub ssh so the remote heredoc runs locally, and stub git,
 # sudo and docker so nothing leaves the sandbox and no build runs; what is
-# under test is the lock protocol itself. ZEUS_LOCK_DIR points the lock at
-# the per-test sandbox, the same way ZEUS_WORKDIR and TMPDIR do.
+# under test is the lock protocol itself. HELIX_TEST_LOCK_DIR points the lock at
+# the per-test sandbox, the same way HELIX_TEST_WORKDIR and TMPDIR do.
 #
 # The tsan cases at the end pin that job's make target and its refusal to
 # call a run with no test output clean.
 
 WORKTREE_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-SCRIPT="$WORKTREE_ROOT/scripts/zeus-run.sh"
+SCRIPT="$WORKTREE_ROOT/scripts/test-host-run.sh"
 
 setup() {
     load helpers
-    export ZEUS_LOCK_DIR="$BATS_TEST_TMPDIR"
+    export HELIX_TEST_HOST=testhost.invalid
+    export HELIX_TEST_LOCK_DIR="$BATS_TEST_TMPDIR"
     export TMPDIR="$BATS_TEST_TMPDIR"
-    export ZEUS_WORKDIR="$BATS_TEST_TMPDIR/work/helixscreen"
+    export HELIX_TEST_WORKDIR="$BATS_TEST_TMPDIR/work/helixscreen"
     export MOCK_DOCKER_LOG="$BATS_TEST_TMPDIR/docker.log"
-    # No jobpool on "zeus" unless a test installs the fake below.
-    export ZEUS_JOBPOOL="$BATS_TEST_TMPDIR/no-jobpool"
-    # No ZFS on "zeus" unless a test installs the fake below.
-    export ZEUS_ARC_PARAM="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_max"
-    export ZEUS_ARC_SYS_FREE="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_sys_free"
-    export ZEUS_ARC_MARK="$BATS_TEST_TMPDIR/arc-mark"
+    # No jobpool on the test host unless a test installs the fake below.
+    export HELIX_TEST_JOBPOOL="$BATS_TEST_TMPDIR/no-jobpool"
+    # No ZFS on the test host unless a test installs the fake below.
+    export HELIX_TEST_ARC_PARAM="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_max"
+    export HELIX_TEST_ARC_SYS_FREE="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_sys_free"
+    export HELIX_TEST_ARC_MARK="$BATS_TEST_TMPDIR/arc-mark"
 
     # ssh [-o opt]... <host> bash -se: drop the options and the host, and run
     # the heredoc locally.
@@ -59,7 +60,7 @@ esac'
     # the polls. Without the knob every poll reports no make.
     mock_command_script docker '
 case "$1" in
-    ps) echo helix-tsan ;;
+    ps) echo helix-test ;;
     start) exit 0 ;;
     inspect) [ -n "${MOCK_MOUNTS:-}" ] && echo "$MOCK_MOUNTS" ;;
     exec)
@@ -84,7 +85,7 @@ exit 0'
 # Pins the lock naming rule: directory overridable, file named after the
 # workdir. If the script renames its lock, these tests must follow on purpose.
 lock_file() {
-    printf '%s/helix-zeus-run-%s.lock\n' "$ZEUS_LOCK_DIR" "$(basename "$ZEUS_WORKDIR")"
+    printf '%s/helix-test-host-run-%s.lock\n' "$HELIX_TEST_LOCK_DIR" "$(basename "$HELIX_TEST_WORKDIR")"
 }
 
 wait_for_file() { # <path>
@@ -155,12 +156,12 @@ wait_for_line() { # <substring> <file>
 @test "a run waits out an orphaned container build before touching the tree" {
     # A build left running in the container by a run whose ssh side died
     # holds no lock; the next run must not reset the tree under it.
-    export ZEUS_ORPHAN_POLL_SECS=0
+    export HELIX_TEST_ORPHAN_POLL_SECS=0
     export MOCK_PGREP_HITS="$BATS_TEST_TMPDIR/pgrep-hits"
 
     run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
-    contains "orphaned build still running in helix-tsan; waiting" "$output"
+    contains "orphaned build still running in helix-test; waiting" "$output"
     # Two polls: the first sees the make, the second sees it gone.
     [ "$(cat "$MOCK_PGREP_HITS")" -eq 2 ]
     # The git sequence ran, and only after the wait cleared.
@@ -184,7 +185,7 @@ wait_for_line() { # <substring> <file>
     [ "$status" -eq 0 ]
     lacks "requires at least" "$output"
     [ -s "$MOCK_DOCKER_LOG" ]
-    run grep -v ' helix-tsan bash -lc ' "$MOCK_DOCKER_LOG"
+    run grep -v ' helix-test bash -lc ' "$MOCK_DOCKER_LOG"
     [ "$status" -eq 1 ]
 }
 
@@ -216,7 +217,7 @@ wait_for_line() { # <substring> <file>
     # Stub the Catch2 summary a real tagged run tees into the log.
     mock_command_script docker '
 case "$1" in
-    ps) echo helix-tsan ;;
+    ps) echo helix-test ;;
     exec)
         case "$*" in
             *pgrep*) exit 1 ;;
@@ -234,7 +235,7 @@ exit 0'
 @test "tsan with no tag runs the sharded suite" {
     mock_command_script docker '
 case "$1" in
-    ps) echo helix-tsan ;;
+    ps) echo helix-test ;;
     exec)
         case "$*" in
             *pgrep*) exit 1 ;;
@@ -257,12 +258,12 @@ exit 0'
     contains "not a clean TSAN result" "$output"
 }
 
-# A jobpool on "zeus" whose state dir is $BATS_TEST_TMPDIR/mnt/.jobpool. It
+# A jobpool on the test host whose state dir is $BATS_TEST_TMPDIR/mnt/.jobpool. It
 # records exec, and container-env prints a marker naming the dir it was given.
 fake_jobpool() {
-    export ZEUS_JOBPOOL="$BATS_TEST_TMPDIR/fake-jobpool"
+    export HELIX_TEST_JOBPOOL="$BATS_TEST_TMPDIR/fake-jobpool"
     export MOCK_JOBPOOL_LOG="$BATS_TEST_TMPDIR/jobpool.log"
-    cat > "$ZEUS_JOBPOOL" <<'FAKE'
+    cat > "$HELIX_TEST_JOBPOOL" <<'FAKE'
 #!/bin/sh
 case "$1" in
     ensure) echo "$BATS_TEST_TMPDIR/mnt/.jobpool/fifo" ;;
@@ -272,14 +273,14 @@ case "$1" in
     *) exit 2 ;;
 esac
 FAKE
-    chmod +x "$ZEUS_JOBPOOL"
+    chmod +x "$HELIX_TEST_JOBPOOL"
 }
 
-@test "without jobpool on zeus the job sizes -j from memory" {
+@test "without jobpool on the test host the job sizes -j from memory" {
     run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "using -j" "$output"
-    grep -qE 'HELIX_JFLAG=-j[0-9]+ helix-tsan bash -lc make test \$HELIX_JFLAG' "$MOCK_DOCKER_LOG"
+    grep -qE 'HELIX_JFLAG=-j[0-9]+ helix-test bash -lc make test \$HELIX_JFLAG' "$MOCK_DOCKER_LOG"
 }
 
 # The container half run for real: docker exec of the job exports its -e
@@ -289,7 +290,7 @@ FAKE
 run_container_job() {
     export POOL_FIFO="$BATS_TEST_TMPDIR/pool-fifo"
     mkfifo -m 600 "$POOL_FIFO"
-    cat > "$ZEUS_JOBPOOL" <<'FAKE'
+    cat > "$HELIX_TEST_JOBPOOL" <<'FAKE'
 #!/bin/sh
 case "$1" in
     ensure) echo "$BATS_TEST_TMPDIR/mnt/.jobpool/fifo" ;;
@@ -302,7 +303,7 @@ FAKE
     mock_command_script make 'echo "MAKE: $* MAKEFLAGS=${MAKEFLAGS:-}"'
     mock_command_script docker '
 case "$1" in
-    ps) echo helix-tsan ;;
+    ps) echo helix-test ;;
     inspect) echo "$MOCK_MOUNTS" ;;
     exec)
         case "$*" in
@@ -322,7 +323,7 @@ exit 0'
     export MOCK_MOUNTS="$BATS_TEST_TMPDIR/mnt /work"
 }
 
-@test "with jobpool on zeus the container joins it and make gets no -j" {
+@test "with jobpool on the test host the container joins it and make gets no -j" {
     fake_jobpool
     run_container_job
     run "$SCRIPT" --commit sweep
@@ -348,7 +349,7 @@ exit 0'
     export MOCK_MOUNTS="/elsewhere /data"
     run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
-    contains "is not mounted in helix-tsan; sizing -j from memory" "$output"
+    contains "is not mounted in helix-test; sizing -j from memory" "$output"
     contains "using -j" "$output"
     refute_grep "POOLENV" "$MOCK_DOCKER_LOG"
     [ ! -e "$MOCK_JOBPOOL_LOG" ]
@@ -356,7 +357,7 @@ exit 0'
 
 @test "a jobpool that will not start is named, and the job sizes -j from memory" {
     fake_jobpool
-    printf '#!/bin/sh\nexit 1\n' > "$ZEUS_JOBPOOL"
+    printf '#!/bin/sh\nexit 1\n' > "$HELIX_TEST_JOBPOOL"
     run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "jobpool ensure failed" "$output"
@@ -367,10 +368,10 @@ exit 0'
 
 fake_zfs() { # <zfs_arc_max> <zfs_arc_sys_free>
     mkdir -p "$BATS_TEST_TMPDIR/zfs"
-    export ZEUS_ARC_PARAM="$BATS_TEST_TMPDIR/zfs/zfs_arc_max"
-    export ZEUS_ARC_SYS_FREE="$BATS_TEST_TMPDIR/zfs/zfs_arc_sys_free"
-    echo "$1" > "$ZEUS_ARC_PARAM"
-    echo "$2" > "$ZEUS_ARC_SYS_FREE"
+    export HELIX_TEST_ARC_PARAM="$BATS_TEST_TMPDIR/zfs/zfs_arc_max"
+    export HELIX_TEST_ARC_SYS_FREE="$BATS_TEST_TMPDIR/zfs/zfs_arc_sys_free"
+    echo "$1" > "$HELIX_TEST_ARC_PARAM"
+    echo "$2" > "$HELIX_TEST_ARC_SYS_FREE"
 }
 
 SYS_FREE=$((64 * 1024 * 1024 * 1024))
@@ -379,7 +380,7 @@ SYS_FREE=$((64 * 1024 * 1024 * 1024))
     fake_zfs 269272276992 "$SYS_FREE"
     run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
-    [ "$(cat "$ZEUS_ARC_PARAM")" = 269272276992 ]
+    [ "$(cat "$HELIX_TEST_ARC_PARAM")" = 269272276992 ]
     lacks "zfs_arc" "$output"
 }
 
@@ -387,33 +388,33 @@ SYS_FREE=$((64 * 1024 * 1024 * 1024))
     local dead
     true & dead=$!; wait "$dead"
     fake_zfs 68719476736 "$SYS_FREE"
-    echo "$dead 123456789" > "$ZEUS_ARC_MARK"
+    echo "$dead 123456789" > "$HELIX_TEST_ARC_MARK"
     run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "restored zfs_arc_max to 123456789" "$output"
-    [ "$(cat "$ZEUS_ARC_PARAM")" = 123456789 ]
-    [ ! -e "$ZEUS_ARC_MARK" ]
+    [ "$(cat "$HELIX_TEST_ARC_PARAM")" = 123456789 ]
+    [ ! -e "$HELIX_TEST_ARC_MARK" ]
 }
 
 @test "a cap marker whose run is still live is left to that run" {
     fake_zfs 68719476736 "$SYS_FREE"
-    echo "$$ 123456789" > "$ZEUS_ARC_MARK"
+    echo "$$ 123456789" > "$HELIX_TEST_ARC_MARK"
     run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
-    [ "$(cat "$ZEUS_ARC_PARAM")" = 68719476736 ]
-    [ -e "$ZEUS_ARC_MARK" ]
+    [ "$(cat "$HELIX_TEST_ARC_PARAM")" = 68719476736 ]
+    [ -e "$HELIX_TEST_ARC_MARK" ]
 }
 
 @test "a cap marker with no bytes to restore stays and is named" {
     local dead
     true & dead=$!; wait "$dead"
     fake_zfs 68719476736 "$SYS_FREE"
-    echo "$dead 0" > "$ZEUS_ARC_MARK"
+    echo "$dead 0" > "$HELIX_TEST_ARC_MARK"
     run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "holds no bytes to restore" "$output"
-    [ -e "$ZEUS_ARC_MARK" ]
-    [ "$(cat "$ZEUS_ARC_PARAM")" = 68719476736 ]
+    [ -e "$HELIX_TEST_ARC_MARK" ]
+    [ "$(cat "$HELIX_TEST_ARC_PARAM")" = 68719476736 ]
 }
 
 @test "zfs_arc_sys_free under the floor is warned about" {

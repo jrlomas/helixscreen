@@ -23,13 +23,21 @@
 #
 # USAGE
 #   scripts/remote-build.sh [make targets...]        # default: test
-#   REMOTE_HOST=zeus scripts/remote-build.sh -j32 test
+#   REMOTE_HOST=buildbox scripts/remote-build.sh -j32 test
 #   scripts/remote-build.sh --run '[cfs][homing]'    # build, then run one tag
+#
+# REMOTE_HOST comes from the build-hosts file (scripts/lib/build_hosts.sh), the
+# environment or --host; there is no default. The clone lives in
+# REMOTE_BUILD_DIR (default ~/helix-remote on the remote), never REMOTE_DIR:
+# that one is mk/remote.mk's rsync target, often a real checkout, and this
+# script hard-resets whatever directory it is given.
 #
 set -euo pipefail
 
-REMOTE_HOST="${REMOTE_HOST:-thelio}"
-REMOTE_DIR="${REMOTE_DIR:-\$HOME/helix-remote}"
+# shellcheck source-path=SCRIPTDIR source=lib/build_hosts.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/build_hosts.sh"
+REMOTE_HOST="${REMOTE_HOST:-}"
+REMOTE_DIR="${REMOTE_BUILD_DIR:-\$HOME/helix-remote}"
 JOBS="${JOBS:-}"
 RUN_TAG=""
 QUIET="${QUIET:-0}"
@@ -43,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         *) break ;;
     esac
 done
+require_build_host REMOTE_HOST || exit 2
 MAKE_ARGS=("$@")
 [[ ${#MAKE_ARGS[@]} -eq 0 ]] && MAKE_ARGS=(test)
 

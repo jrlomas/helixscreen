@@ -105,7 +105,8 @@ def classify_segment(toks):
         return "ctl" if args and args[0] == "ctl" else "app-run"
     if base == "bats":
         return "shell-suite"
-    if base == "zeus-run.sh":
+    # Transcripts also hold runs under the script's former name.
+    if base in ("test-host-run.sh", "zeus-run.sh"):
         sub = args[0] if args else ""
         return "mutate" if sub.startswith("mutate") else "sanitizer" if sub in ("asan", "tsan") else None
     if base == "quality-checks.sh" or base == "qc_timing.py":

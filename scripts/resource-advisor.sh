@@ -5,11 +5,12 @@
 # heavy command should run; it never blocks and never decides permission. The
 # answer is a context block the model reads before the command runs, or nothing.
 #
-# thelio is shared by several sessions at once; zeus has twice the RAM and is
-# usually idle. Mutation, sanitizers and symbolizers belong on zeus however quiet
+# thelio is shared by several sessions at once; the test host (HELIX_TEST_HOST,
+# driven by scripts/test-host-run.sh) is a bigger box that is usually idle.
+# Mutation, sanitizers and symbolizers belong on the test host however quiet
 # thelio looks, and so does a sweep: `make unit-sweep` and the C++ half of
-# `make full-test-run` map to zeus-run.sh's sweep mode; bats stays on thelio,
-# because the zeus container runs as root with no shellcheck. Container builds
+# `make full-test-run` map to test-host-run.sh's sweep mode; bats stays on thelio,
+# because the test container runs as root with no shellcheck. Container builds
 # and test loops are only worth moving when thelio is tight. "Tight" is not
 # decided here: `helix-claim jobs -v` reports MemAvailable, plus the jobpool's
 # free tokens when one is live, and this applies one threshold to each. With no
@@ -41,7 +42,7 @@
 #                             tests stub the pool here, so they never read the real one
 #   HELIX_ADVISOR_MIN_FREE    free pool tokens at or below which thelio is tight (default 8)
 #   HELIX_ADVISOR_MIN_GB      availGB below which thelio is tight (default 16)
-#   HELIX_ADVISOR_ZEUS_RUN    zeus-run.sh whose modes are offered (default: beside this script)
+#   HELIX_ADVISOR_TEST_HOST_RUN    test-host-run.sh whose modes are offered (default: beside this script)
 
 input=$(cat)
 
@@ -51,7 +52,7 @@ case "$input" in
     *) exit 0 ;;
 esac
 
-# The advice names thelio and zeus; a cloud session or a Mac has neither.
+# The advice is about thelio and its test host; a cloud session or a Mac has neither.
 host=$(hostname -s 2>/dev/null)
 case " ${HELIX_ADVISOR_HOSTS:-thelio} " in
     *" $host "*) ;;
@@ -64,13 +65,13 @@ cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) |
 cmd=${cmd:0:8192}
 
 case "$cmd" in
-    *zeus-run.sh*|*"ssh zeus"*) exit 0 ;;
+    # Already on the test host, or on some other box over ssh.
+    *test-host-run.sh*|"ssh "*) exit 0 ;;
 esac
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-zeus_run=${HELIX_ADVISOR_ZEUS_RUN:-"$here/zeus-run.sh"}
-push_then="zeus runs only pushed SHAs: push the branch (never main), then"
-see_load="\`scripts/helix-claim resources\` shows what thelio and zeus are running now."
+host_run=${HELIX_ADVISOR_TEST_HOST_RUN:-"$here/test-host-run.sh"}
+see_load="\`scripts/helix-claim resources\` shows what thelio and the test host are running now."
 
 emit() {
     jq -cn --arg c "[resource-advisor] $1" \
@@ -175,25 +176,25 @@ if [ -n "$claim_sized" ]; then
     emit "\`helix-claim jobs\` is make's -j: with a jobpool live it is the whole pool, so ${claim_sized} sized from it runs that many jobs on top of every build. Size it from its own pool share: \`scripts/helix-claim hold [--min M] -- sh -c '<cmd> -j \"\$JOBPOOL_SLOTS\"'\`, or for a container \`scripts/pool-docker.sh docker run ...\`."
 fi
 
-# --- Always on zeus --------------------------------------------------------
+# --- Always on the test host -----------------------------------------------
 
 if [ -n "$want_gdb" ]; then
-    emit "gdb against a helix binary takes ~35 min and tens of GB on thelio. \`coredumpctl info <pid>\` symbolizes a core in seconds; anything more goes to zeus (${push_then} build there and run gdb -batch)."
+    emit "gdb against a helix binary takes ~35 min and tens of GB on thelio. \`coredumpctl info <pid>\` symbolizes a core in seconds; anything more goes to the test host: build there (\`scripts/test-host-run.sh test\` mirrors this tree) and run gdb -batch in its container."
 fi
 if [ -n "$want_symbolizer" ]; then
-    emit "addr2line loads the whole DWARF of helix-tests per call (21GB+ RSS on thelio) and ignores SIGTERM. Symbolize on zeus: ${push_then} build in the helix-tsan container and use llvm-symbolizer or one \`gdb -batch -ex 'info symbol 0x..'\` there. For a function name alone, \`nm -C --defined-only\` plus a sorted lookup is seconds."
+    emit "addr2line loads the whole DWARF of helix-tests per call (21GB+ RSS on thelio) and ignores SIGTERM. Symbolize on the test host: build there (\`scripts/test-host-run.sh test\` mirrors this tree) and use llvm-symbolizer or one \`gdb -batch -ex 'info symbol 0x..'\` there. For a function name alone, \`nm -C --defined-only\` plus a sorted lookup is seconds."
 fi
 if [ -n "$want_mutate" ]; then
-    emit "Mutation rebuilds and reruns the suite per hunk. Run it on zeus: ${push_then} \`scripts/zeus-run.sh mutate --tests '[tag]'\`."
+    emit "Mutation rebuilds and reruns the suite per hunk. Run it on the test host: \`scripts/test-host-run.sh mutate --tests '[tag]'\` (mutate runs the pushed commit: push the branch, never main)."
 fi
 if [ -n "$want_asan" ]; then
-    emit "ASAN produces no output on thelio (ld.so.preload loads its runtime second) and exits 0. Run it on zeus: ${push_then} \`scripts/zeus-run.sh asan '[tag]'\`."
+    emit "ASAN produces no output on thelio (ld.so.preload loads its runtime second) and exits 0. Run it on the test host: \`scripts/test-host-run.sh asan '[tag]'\` (it mirrors this tree, uncommitted edits included)."
 fi
 if [ -n "$want_sweep" ]; then
-    if grep -qE '^[[:space:]]*sweep\)' "$zeus_run" 2>/dev/null; then
+    if grep -qE '^[[:space:]]*sweep\)' "$host_run" 2>/dev/null; then
         bats=""
-        [ "$want_sweep" = full ] && bats=" Run the bats half on thelio with \`make test-shell\`: the zeus container runs as root with no shellcheck, so bats fails there for reasons that are not the code."
-        emit "A full sweep starts dozens of shards at once. Run it on zeus: ${push_then} \`scripts/zeus-run.sh sweep\`.${bats} Keep it local only when you need the verdict on uncommitted work in this exact tree. ${see_load}"
+        [ "$want_sweep" = full ] && bats=" Run the bats half on thelio with \`make test-shell\`: the test container runs as root with no shellcheck, so bats fails there for reasons that are not the code."
+        emit "A full sweep starts dozens of shards at once. Run it on the test host: \`scripts/test-host-run.sh sweep\` (it mirrors this tree, uncommitted edits included).${bats} ${see_load}"
     fi
 fi
 
@@ -234,10 +235,10 @@ else
 fi
 
 if [ -n "$want_container" ]; then
-    emit "Container builds are heavy, and ${tight}. Run it on zeus (it has the Docker images and twice the RAM), or wait for peers' builds to finish. ${see_load}"
+    emit "Container builds are heavy, and ${tight}. Run it on the test host (it has the Docker images and the RAM), or wait for peers' builds to finish. ${see_load}"
 fi
 if [ -n "$want_loop" ]; then
-    emit "A loop over the test binary multiplies its load, and ${tight}. Cut the count, or run the loop on zeus: ${push_then} use the helix-tsan container. ${see_load}"
+    emit "A loop over the test binary multiplies its load, and ${tight}. Cut the count, or run the loop on the test host, in its container. ${see_load}"
 fi
 
 exit 0
