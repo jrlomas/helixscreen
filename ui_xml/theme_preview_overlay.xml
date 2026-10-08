@@ -57,7 +57,8 @@
           </lv_obj>
           <text_body name="preview_sample_body"
                      width="100%" text="Body text supports longer guidance while staying readable." long_mode="wrap"/>
-          <text_small name="preview_sample_small" text="Small labels help keep controls calm and focused."/>
+          <text_small name="preview_sample_small"
+                      width="100%" text="Small labels help keep controls calm and focused." long_mode="wrap"/>
           <divider_horizontal/>
           <lv_obj width="100%"
                   height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_md"
@@ -118,7 +119,7 @@
           <ui_button name="example_btn_danger" width="100%" height="#button_height_sm" text="Danger" variant="danger"/>
           <divider_horizontal/>
           <lv_obj width="100%"
-                  height="content" flex_flow="row" style_pad_all="0" style_pad_gap="#space_sm"
+                  height="content" flex_flow="row_wrap" style_pad_all="0" style_pad_gap="#space_sm"
                   style_flex_cross_place="center" scrollable="false">
             <icon src="info" size="sm" variant="info"/>
             <icon src="check_circle" size="sm" variant="success"/>

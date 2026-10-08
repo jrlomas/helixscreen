@@ -15,6 +15,7 @@
          screens get larger targets. A swatch's size is its whole target: the
          colored disc sits inside it, inset by the selection ring's reach. -->
     <px name="led_swatch_size_micro" value="32"/>
+    <px name="led_swatch_size_tiny" value="36"/>
     <px name="led_swatch_size_small" value="48"/>
     <px name="led_swatch_size_medium" value="62"/>
     <px name="led_swatch_size_large" value="80"/>
@@ -23,11 +24,13 @@
     <!-- Gap between swatches, and half of it: each swatch's hit area reaches
          half the gap to each side, so a row has no dead gaps and no overlap. -->
     <px name="led_swatch_gap_micro" value="4"/>
+    <px name="led_swatch_gap_tiny" value="2"/>
     <px name="led_swatch_gap_small" value="8"/>
     <px name="led_swatch_gap_medium" value="8"/>
     <px name="led_swatch_gap_large" value="12"/>
     <px name="led_swatch_gap_xlarge" value="14"/>
     <px name="led_swatch_gap_half_micro" value="2"/>
+    <px name="led_swatch_gap_half_tiny" value="1"/>
     <px name="led_swatch_gap_half_small" value="4"/>
     <px name="led_swatch_gap_half_medium" value="4"/>
     <px name="led_swatch_gap_half_large" value="6"/>
