@@ -799,3 +799,101 @@ TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: hub_only drops the cached nozzl
     CHECK_FALSE(d->path_cache.valid);
     CHECK(d->path_cache.path.count == 0);
 }
+
+// ============================================================================
+// PARALLEL and MIXED
+// ============================================================================
+// Same 400x400 frame. PARALLEL: entry -48, sensor 152, toolhead 220, nozzle top
+// 208. MIXED: sensor 60, hub 128 (h 32, top 112, bottom 144) at x 300 for hub
+// lanes 2 and 3, toolhead 248, nozzle top 236.
+
+namespace {
+
+PathPlan& parallel_plan(const FilamentPathData& d) {
+    static PathPlan plan;
+    plan_parallel(d, geometry(), plan);
+    return plan;
+}
+
+PathPlan& mixed_plan(const FilamentPathData& d) {
+    static PathPlan plan;
+    const BaseGeometry g = geometry();
+    plan_mixed(compute_mixed_frame(d, g), d, g, plan);
+    return plan;
+}
+
+} // namespace
+
+TEST_CASE("FilamentPath plan: idle PARALLEL tools are one stroke each through their sensor",
+          "[filament-path][plan][parallel]") {
+    auto d = make_data(helix::PathTopology::PARALLEL);
+    const PathPlan& plan = parallel_plan(*d);
+
+    REQUIRE(plan.route_count == 4);
+    CHECK(plan.active_route == -1);
+    const float sensor_y = 400 * PARALLEL_SENSOR_Y_RATIO;
+    for (int i = 0; i < 4; i++) {
+        const Route& r = plan.routes[i];
+        Stroke strokes[16];
+        CHECK(coalesce(r, strokes, 16) == 1);
+        CHECK(near(seg_start(r.path.segs[0]), 50.0f + 100 * i, -48));
+        CHECK(near(seg_end(r.path.segs[r.path.count - 1]), 50.0f + 100 * i, 208));
+        CHECK(has_boundary(r.path, 50.0f + 100 * i, sensor_y));
+    }
+    REQUIRE(plan.band_count == 4);
+    for (int i = 0; i < 4; i++) {
+        const SensorBand* b = band_at(plan, 50.0f + 100 * i, sensor_y);
+        REQUIRE(b != nullptr);
+        CHECK(b->state == BandState::Empty);
+    }
+}
+
+TEST_CASE("FilamentPath plan: the mounted PARALLEL tool is one active stroke",
+          "[filament-path][plan][parallel]") {
+    auto d = make_data(helix::PathTopology::PARALLEL);
+    load_active(*d, 2, PathSegment::NOZZLE);
+    d->slot_filament_states[0] = {PathSegment::TOOLHEAD, SLOT_COLORS[0]};
+    const PathPlan& plan = parallel_plan(*d);
+    const float sensor_y = 400 * PARALLEL_SENSOR_Y_RATIO;
+
+    REQUIRE(plan.active_route == 2);
+    Stroke strokes[16];
+    REQUIRE(coalesce(plan.routes[2], strokes, 16) == 1);
+    CHECK(strokes[0].style.wall == TubeWall::Active);
+    CHECK(strokes[0].style.filled);
+    const SensorBand* mounted = band_at(plan, 250, sensor_y);
+    REQUIRE(mounted != nullptr);
+    CHECK(mounted->state == BandState::Active);
+
+    // A docked tool loaded to its sensor keeps a band in its own color.
+    const SensorBand* docked = band_at(plan, 50, sensor_y);
+    REQUIRE(docked != nullptr);
+    CHECK(docked->state == BandState::Loaded);
+    CHECK(lv_color_eq(docked->fill, lv_color_hex(SLOT_COLORS[0])));
+}
+
+TEST_CASE("FilamentPath plan: MIXED direct lanes and the hub trunk reach a nozzle",
+          "[filament-path][plan][mixed]") {
+    auto d = make_data(helix::PathTopology::MIXED);
+    d->slot_is_hub_routed[2] = true;
+    d->slot_is_hub_routed[3] = true;
+    const PathPlan& plan = mixed_plan(*d);
+
+    int at_nozzle = 0;
+    for (int i = 0; i < plan.route_count; i++) {
+        const Route& r = plan.routes[i];
+        REQUIRE(r.path.count > 0);
+        CHECK(contiguous(r.path));
+        at_nozzle += std::fabs(seg_end(r.path.segs[r.path.count - 1]).y - 236) < 0.01f;
+    }
+    CHECK(at_nozzle == 3);
+    for (int i : {2, 3}) {
+        const Route& r = plan.routes[i];
+        CHECK(seg_end(r.path.segs[r.path.count - 1]).y == Catch::Approx(112));
+    }
+    REQUIRE(plan.trunk_route >= 0);
+    const Route& t = plan.routes[plan.trunk_route];
+    CHECK(near(seg_start(t.path.segs[0]), 300, 144));
+    CHECK(near(seg_end(t.path.segs[t.path.count - 1]), 300, 236));
+    CHECK(plan.band_count == 4);
+}

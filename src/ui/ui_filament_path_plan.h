@@ -62,6 +62,32 @@ struct LinearHubFrame {
 
 LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const BaseGeometry& g);
 
+// MIXED (HTLF) layout: some lanes run direct to their own nozzle, the rest fan
+// into a shared hub feeding one nozzle.
+struct MixedFrame {
+    int32_t entry_y = 0;
+    int32_t sensor_y = 0;
+    int32_t hub_cy = 0;
+    int32_t hub_h = 0;
+    int32_t hub_bottom = 0;
+    int32_t toolhead_y = 0;
+    int32_t tool_scale = 0;
+
+    int hub_count = 0;       // lanes routed through the hub
+    int first_hub_lane = -1; // first hub-routed slot index
+    int32_t hub_cx = 0;      // hub box center X (mean of hub lane Xs)
+    int32_t hub_w = 0;
+
+    // Merge fan for the hub lanes: parallel diagonals per side spread across
+    // distinct hub-top entries.
+    pg::MergeLaneOut hub_fan[FilamentPathData::MAX_SLOTS];
+    int slot_to_fan[FilamentPathData::MAX_SLOTS]; // slot index -> hub-lane order (-1 none)
+
+    SlotRenderStates states;
+};
+
+MixedFrame compute_mixed_frame(const FilamentPathData& data, const BaseGeometry& g);
+
 enum class TubeWall : uint8_t { Plain, Active, Error };
 
 struct SpanStyle {
@@ -129,11 +155,21 @@ BandState band_state(PathSegment sensor, PathSegment reached, bool on_active_rou
 
 void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, const BaseGeometry& g,
                      PathPlan& out);
+/// One route per tool: entry → sensor band → nozzle top; the mounted tool is active.
+void plan_parallel(const FilamentPathData& data, const BaseGeometry& g, PathPlan& out);
+/// Hub lanes: entry → sensor band → fan → hub top. One shared trunk: hub bottom
+/// → nozzle top. Direct lanes: entry → sensor band → their own nozzle top.
+void plan_mixed(const MixedFrame& f, const FilamentPathData& data, const BaseGeometry& g,
+                PathPlan& out);
 
 struct TubePalette {
     lv_color_t idle_wall, accent, error, bg;
     int32_t gauge;
 };
+/// The error token, blended toward its darker shade with the pulse phase.
+lv_color_t pulsed_error_color(const FilamentPathData& data);
+/// Theme walls, accent, pulsed error, background and gauge.
+TubePalette tube_palette(const FilamentPathData& data);
 /// Halo, walls, bores, then every band not on a box edge.
 void paint_tubes(lv_layer_t* layer, const PathPlan& plan, const TubePalette& pal,
                  bool simple = reduced_effects());
