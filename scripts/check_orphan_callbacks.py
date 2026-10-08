@@ -53,35 +53,41 @@ CPP_ATTR_REF_RE = re.compile(r'"[a-z_]*callback"\s*,\s*"(\w+)"')
 ENTRY_RE = re.compile(r'\{\s*"([A-Za-z_]\w*)"\s*,')
 
 
-def collect_registrations(root: Path) -> dict[str, set[str]]:
-    """name -> files registering it."""
+def source_files(root: Path) -> list[Path]:
+    return sorted(f for d in ("src", "include") for ext in ("*.cpp", "*.h")
+                  for f in (root / d).rglob(ext))
+
+
+def collect_registrations(root: Path, files=None, read=None) -> dict[str, set[str]]:
+    """name -> files registering it.
+
+    `files` narrows the scan to a build's own sources and `read` lets a caller
+    preprocess each file's text; both default to src/ and include/ as is.
+    """
     regs: dict[str, set[str]] = defaultdict(set)
-    for d in ("src", "include"):
-        base = root / d
-        if not base.is_dir():
-            continue
-        for f in sorted(list(base.rglob("*.cpp")) + list(base.rglob("*.h"))):
-            code = strip_comments(f.read_text(errors="replace"))
-            rel = str(f.relative_to(root))
-            loop_registers = False
-            for m in re.finditer(r"\blv_xml_register_event_cb\s*\(", code):
-                args, _ = call_args(code, m.end() - 1)
-                if len(args) < 3:
-                    continue  # a declaration or a wrapper's own body
-                lit = re.fullmatch(r'"(\w+)"', args[1])
-                if lit:
-                    regs[lit.group(1)].add(rel)
-                elif args[1] != "cb.name":  # cb.name: register_xml_callbacks itself
-                    loop_registers = True
-            for m in re.finditer(r"\bregister_xml_callbacks\s*\(", code):
-                args, end = call_args(code, m.end() - 1)
-                if not args or args[0].startswith("std::initializer_list"):
-                    continue
-                for name in ENTRY_RE.findall(code[m.end():end]):
-                    regs[name].add(rel)
-            if loop_registers:
-                for name in ENTRY_RE.findall(code):
-                    regs[name].add(rel)
+    read = read or (lambda f: f.read_text(errors="replace"))
+    for f in source_files(root) if files is None else files:
+        code = strip_comments(read(f))
+        rel = str(f.relative_to(root))
+        loop_registers = False
+        for m in re.finditer(r"\blv_xml_register_event_cb\s*\(", code):
+            args, _ = call_args(code, m.end() - 1)
+            if len(args) < 3:
+                continue  # a declaration or a wrapper's own body
+            lit = re.fullmatch(r'"(\w+)"', args[1])
+            if lit:
+                regs[lit.group(1)].add(rel)
+            elif args[1] != "cb.name":  # cb.name: register_xml_callbacks itself
+                loop_registers = True
+        for m in re.finditer(r"\bregister_xml_callbacks\s*\(", code):
+            args, end = call_args(code, m.end() - 1)
+            if not args or args[0].startswith("std::initializer_list"):
+                continue
+            for name in ENTRY_RE.findall(code[m.end():end]):
+                regs[name].add(rel)
+        if loop_registers:
+            for name in ENTRY_RE.findall(code):
+                regs[name].add(rel)
     return regs
 
 

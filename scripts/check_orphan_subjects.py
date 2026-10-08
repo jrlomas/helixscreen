@@ -202,8 +202,16 @@ def find_managed_macro_calls(text: str):
         yield literal.group(1), member.group(0) if member else None, m.start(), end
 
 
-def collect_registrations(root: pathlib.Path):
+def source_files(root: pathlib.Path) -> list:
+    return [p for d in SRC_DIRS for p in (root / d).rglob("*")
+            if p.suffix in (".cpp", ".h", ".hpp", ".cc")]
+
+
+def collect_registrations(root: pathlib.Path, files=None, read=None):
     """Map subject name -> (sites, members, owned).
+
+    `files` narrows the scan to a build's own sources and `read` lets a caller
+    preprocess each file's text; both default to every file under SRC_DIRS as is.
 
     `owned` keys each member by its owner - the stem of the file that
     registers it or defines its accessor - so two classes that both name a
@@ -215,64 +223,61 @@ def collect_registrations(root: pathlib.Path):
     # accessor name -> every (owner, member) it could return. A name defined in
     # more than one owner is ambiguous and resolves to nothing.
     accessors: dict[str, set[tuple[str, str]]] = {}
-    for d in SRC_DIRS:
-        for path in (root / d).rglob("*"):
-            if path.suffix in (".cpp", ".h", ".hpp", ".cc"):
-                for m in ACCESSOR_DEF_RE.finditer(path.read_text(errors="ignore")):
-                    accessors.setdefault(m.group(1), set()).add((path.stem, m.group(2)))
-    for d in SRC_DIRS:
-        for path in (root / d).rglob("*"):
-            if path.suffix not in (".cpp", ".h", ".hpp", ".cc"):
+    files = source_files(root) if files is None else files
+    read = read or (lambda p: p.read_text(errors="ignore"))
+    texts = {path: read(path) for path in files}
+    for path, text in texts.items():
+        for m in ACCESSOR_DEF_RE.finditer(text):
+            accessors.setdefault(m.group(1), set()).add((path.stem, m.group(2)))
+    for path, text in texts.items():
+        if str(path.relative_to(root)) in SKIP_FILES:
+            continue
+        lines = text.splitlines()
+        rel = path.relative_to(root)
+        # The macro families wrap freely, so their name literal is often not
+        # on the line the macro starts. Scan the whole text for those.
+        for name, member, start, end in find_managed_macro_calls(text):
+            first = text.count("\n", 0, start)
+            last = text.count("\n", 0, end)
+            if any(ALLOW_RE.search(l) for l in lines[first:last + 2]):
                 continue
-            if str(path.relative_to(root)) in SKIP_FILES:
+            found.setdefault(name, []).append(f"{rel}:{first + 1}")
+            if member:
+                members.setdefault(name, set()).add(member)
+                owned.setdefault(name, set()).add((path.stem, member))
+        for n, line in enumerate(lines, 1):
+            # Prose naming a macro is not a registration, and the macros are
+            # documented with worked examples wherever they are mentioned.
+            if COMMENT_LINE_RE.match(line):
                 continue
-            text = path.read_text(errors="ignore")
-            lines = text.splitlines()
-            rel = path.relative_to(root)
-            # The macro families wrap freely, so their name literal is often not
-            # on the line the macro starts. Scan the whole text for those.
-            for name, member, start, end in find_managed_macro_calls(text):
-                first = text.count("\n", 0, start)
-                last = text.count("\n", 0, end)
-                if any(ALLOW_RE.search(l) for l in lines[first:last + 2]):
+            # The call may wrap; accept the opt-out on any of its lines.
+            if any(ALLOW_RE.search(l) for l in lines[n - 1:n + 2]):
+                continue
+            for m in REGISTER_RE.finditer(line):
+                name = m.group(1)
+                found.setdefault(name, []).append(f"{rel}:{n}")
+                tail = line[m.end():]
+                # The pointer argument wraps onto the next line only while
+                # the call's paren is still open.
+                if (line.count("(", m.start()) > line.count(")", m.start())
+                        and n < len(lines)):
+                    tail += " " + lines[n]
+                mem = MEMBER_RE.search(tail)
+                if mem:
+                    members.setdefault(name, set()).add(mem.group(1))
+                    owned.setdefault(name, set()).add((path.stem, mem.group(1)))
                     continue
-                found.setdefault(name, []).append(f"{rel}:{first + 1}")
-                if member:
-                    members.setdefault(name, set()).add(member)
-                    owned.setdefault(name, set()).add((path.stem, member))
-            for n, line in enumerate(lines, 1):
-                # Prose naming a macro is not a registration, and the macros are
-                # documented with worked examples wherever they are mentioned.
-                if COMMENT_LINE_RE.match(line):
-                    continue
-                # The call may wrap; accept the opt-out on any of its lines.
-                if any(ALLOW_RE.search(l) for l in lines[n - 1:n + 2]):
-                    continue
-                for m in REGISTER_RE.finditer(line):
-                    name = m.group(1)
-                    found.setdefault(name, []).append(f"{rel}:{n}")
-                    tail = line[m.end():]
-                    # The pointer argument wraps onto the next line only while
-                    # the call's paren is still open.
-                    if (line.count("(", m.start()) > line.count(")", m.start())
-                            and n < len(lines)):
-                        tail += " " + lines[n]
-                    mem = MEMBER_RE.search(tail)
-                    if mem:
-                        members.setdefault(name, set()).add(mem.group(1))
-                        owned.setdefault(name, set()).add((path.stem, mem.group(1)))
-                        continue
-                    # Re-published through the owner's accessor: the alias
-                    # shares the member, so binding either name reads it.
-                    call = ACCESSOR_CALL_RE.search(tail)
-                    targets = accessors.get(call.group(1), set()) if call else set()
-                    if len(targets) == 1:
-                        owned.setdefault(name, set()).update(targets)
-                for m in MACRO_REGISTER_RE.finditer(line):
-                    name = m.group(1)
-                    found.setdefault(name, []).append(f"{rel}:{n}")
-                    members.setdefault(name, set()).add(f"{name}_")
-                    owned.setdefault(name, set()).add((path.stem, f"{name}_"))
+                # Re-published through the owner's accessor: the alias
+                # shares the member, so binding either name reads it.
+                call = ACCESSOR_CALL_RE.search(tail)
+                targets = accessors.get(call.group(1), set()) if call else set()
+                if len(targets) == 1:
+                    owned.setdefault(name, set()).update(targets)
+            for m in MACRO_REGISTER_RE.finditer(line):
+                name = m.group(1)
+                found.setdefault(name, []).append(f"{rel}:{n}")
+                members.setdefault(name, set()).add(f"{name}_")
+                owned.setdefault(name, set()).add((path.stem, f"{name}_"))
     return found, members, owned
 
 

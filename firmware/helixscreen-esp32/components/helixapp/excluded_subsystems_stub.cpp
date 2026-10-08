@@ -197,7 +197,7 @@ ZOffsetCalibrationPanel& get_global_zoffset_cal_panel() {
     return *reinterpret_cast<ZOffsetCalibrationPanel*>(storage);
 }
 
-// Advanced-panel staged-calibration rows (Input Shaping / Belt Tension / Z-Offset)
+// Advanced-panel staged-calibration rows (Input Shaping / Belt Tension / Z-Offset / Screws Tilt)
 // stay VISIBLE — they are features the user should learn exist — but their panels
 // are excluded from the v1 cut. Instead of the old silent no-op registration,
 // register a real handler that shows the shared "not yet available" toast so the
@@ -216,9 +216,11 @@ void init_input_shaper_row_handler() {
     lv_xml_register_event_cb(nullptr, "on_input_shaper_row_clicked", esp32_staged_feature_row_cb);
 }
 
-// src/ui/ui_panel_screws_tilt.cpp — Advanced screws-tilt row stays a no-op; it is
-// XML-gated on printer_has_screws_tilt and reached crash-safely (unregistered cb).
-void init_screws_tilt_row_handler() {}
+// src/ui/ui_panel_screws_tilt.cpp — the row shows only on printers with
+// screws_tilt_adjust (printer_has_screws_tilt), where a tap needs feedback.
+void init_screws_tilt_row_handler() {
+    lv_xml_register_event_cb(nullptr, "on_screws_tilt_row_clicked", esp32_staged_feature_row_cb);
+}
 
 // src/ui/ui_panel_calibration_zoffset.cpp
 void init_zoffset_row_handler() {
