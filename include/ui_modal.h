@@ -479,6 +479,10 @@ class ModalStack {
     std::vector<ModalEntry> stack_;
 
     static void exit_animation_done(lv_anim_t* anim);
+
+    /// Frees an owned instance, then queues the backdrop's delete: the instance's
+    /// destructor may still touch its widgets. A no-op once the entry is gone.
+    static void finish_exit(lv_obj_t* backdrop);
 };
 
 // ============================================================================

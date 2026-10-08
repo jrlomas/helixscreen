@@ -899,9 +899,9 @@ Tests 9 scenarios with 22 assertions covering dependency detection, platform-spe
 
 - **`V=1`** - Verbose mode: shows full compiler commands instead of short `[CC]`/`[CXX]` tags
 - **`OPT=0|1|2`** - Optimization level (default: 2). Use `OPT=0` for fastest compilation, `OPT=2` for release. `make dev` is shorthand for `OPT=0 -j`.
-- **`JOBS=N`** - Set parallel job count (default: auto-detects CPU cores)
+- **`JOBS=N`** - Set parallel job count (default: `scripts/helix-claim jobs`, see Parallel Compilation)
 - **`NO_COLOR=1`** - Disable colored output (useful for CI/CD)
-- **`-j<N>`** - Enable parallel builds with N jobs (NOT auto-enabled by default)
+- **`-j<N>`** - Run N jobs; without it, plain `make` picks its own (see Parallel Compilation)
 
 ### Build Output
 
@@ -1197,33 +1197,60 @@ This ensures the UI window appears on a different display from the terminal, mak
 
 ## Parallel Compilation
 
-**Important**: Parallel builds are **NOT** enabled by default. Use `-j` flag explicitly.
+Plain `make` (or `make -j`) picks its own `-j`, so there is no need to pass one.
+The answer comes from `scripts/helix-claim jobs`:
 
-### Platform Detection
+| Box | `-j` |
+|-----|------|
+| No jobpool (CI, a Mac, a fresh clone) | the cores (`nproc`, or `sysctl -n hw.ncpu` on macOS), capped at one job per GB of `MemAvailable` where `/proc/meminfo` exists, never below 2 |
+| jobpool installed | the shared pool (below); the Makefile never reads `JOBS` |
 
-```makefile
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Darwin)
-    # macOS
-    NPROC := $(shell sysctl -n hw.ncpu 2>/dev/null || echo 4)
-    PLATFORM := macOS
-else
-    # Linux
-    NPROC := $(shell nproc 2>/dev/null || echo 4)
-    PLATFORM := Linux
-endif
-```
+The two-phase re-invoke that applies `JOBS` lives in `mk/rules.mk` `all:` and
+`mk/tests.mk` `$(TEST_BIN)`; it is skipped whenever `MAKEFLAGS` already carries a
+jobserver. An explicit `make -jN` or `make JOBS=N` passes through untouched.
+`scripts/helix-claim jobs -v` prints the decision and what it was made from.
 
-### Usage
+The same number sizes the unit sweep (3 shards per slot, `SHARD_CONCURRENCY`
+overrides) and the commit hook's build (`qc_build_jobs` in `scripts/qc/_lib.sh`,
+`HELIX_QC_JOBS` overrides). The build uses `--output-sync=target`, so parallel
+output does not interleave.
 
-```bash
-make -j          # Auto-detect CPU cores and parallelize (recommended)
-make -j16        # Explicit job count (current system has 16 cores)
-make JOBS=16     # Set job count via variable
-make build       # Clean parallel build (auto-detects cores)
-```
+### Optional: one build pool per machine (jobpool)
 
-The build system uses `--output-sync=target` to prevent interleaved output during parallel builds.
+jobpool is a machine-wide GNU make jobserver: a small daemon owns a FIFO of
+tokens sized from the cores and available memory, and every build that joins
+draws its jobs from it. Two sessions building on one box then share the cores
+instead of each taking all of them, and a tree that is linking or running tests
+holds no tokens, so its share flows to whoever is compiling. It is not a
+dependency: nothing in the build requires it, and without it everything above
+holds as written.
+
+This project's own build machines (thelio, and zeus for `scripts/zeus-run.sh`)
+have it installed. The repo is `~/Code/Tools/jobpool` on thelio, mirrored to
+zeus; its README covers install, configuration and macOS.
+
+Where it is installed:
+
+- `make` on `PATH` is jobpool's shim. Every top-level make joins the pool, and
+  the shim strips any `-j` from the command line, because GNU make leaves an
+  inherited jobserver when it sees one.
+- `jobpool status` shows the target, free tokens and consumers.
+- `JOBPOOL=0 make ...` bypasses the pool for one run. `helix-claim jobs` honours
+  the same switch.
+- `helix-claim jobs` reports the pool's size while the daemon is live, so the
+  sweep, the commit hook and the resource advisor read the machine budget. It
+  asks `jobpool target`, which takes no lock and moves no tokens; only
+  `jobs -v` reads `jobpool status` for the free count.
+- The unit sweep runs its shards three to a pool token (`jobpool with-token`
+  around each batch of three), so every sweep on the box together stays within
+  three shards per token.
+- Container builds on thelio (`*-docker` targets) do not join the pool.
+- On zeus, `scripts/zeus-run.sh` joins the container to zeus's pool: zeus's
+  jobpool conf puts the state dir under the directory the `helix-tsan` container
+  already mounts, the host runs `docker exec` under `jobpool exec`, and the
+  container opens the FIFO and exports `MAKEFLAGS` (`jobpool container-env`)
+  with no `-j` on make. Without a pool there it sizes `-j` from the memory free
+  after its ARC cap.
 
 ## Font Generation
 

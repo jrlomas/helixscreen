@@ -11,6 +11,7 @@
 
 #include "i_moonraker_api.h"
 #include "led/led_controller.h"
+#include "light_button_config.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "observe_language.h"
 #include "observer_factory.h"
@@ -120,12 +121,17 @@ void PrintLightTimelapseControls::handle_light_button() {
             ToastSeverity::INFO, lv_tr("Light will switch when the current operation finishes"));
         return;
     }
-    auto& ctrl = helix::led::LedController::instance();
-    // Toggles the chamber light alone. The icon updates when its state does,
-    // via refresh_light_state().
-    const bool on = ctrl.toggle_power({ctrl.chamber_light()});
-    spdlog::info("[PrintLightTimelapseControls] Light button clicked, chamber light -> {}",
-                 on ? "ON" : "OFF");
+    // Drives what the home light buttons drive (the light the user picked), or
+    // the chamber light when none is placed. The icon updates when its state
+    // does, via refresh_light_state().
+    const auto targets = helix::home_light_button_targets();
+    if (targets.empty()) {
+        spdlog::warn("[PrintLightTimelapseControls] Light button clicked but no light resolves");
+        return;
+    }
+    const bool on = helix::led::LedController::instance().toggle_power(targets);
+    spdlog::info("[PrintLightTimelapseControls] Light button clicked, {} device(s) -> {}",
+                 targets.size(), on ? "ON" : "OFF");
 }
 
 void PrintLightTimelapseControls::refresh_timelapse_display() {
@@ -175,7 +181,7 @@ void PrintLightTimelapseControls::refresh_light_state() {
     if (!subjects_initialized_) {
         return;
     }
-    const bool on = helix::led::chamber_light_on();
+    const bool on = helix::home_light_buttons_lit();
 
     // Update light button icon: lightbulb_on (F06E8) or lightbulb_outline (F0336)
     if (on) {
@@ -185,5 +191,5 @@ void PrintLightTimelapseControls::refresh_light_state() {
     }
     lv_subject_copy_string(&light_button_subject_, light_button_buf_);
 
-    spdlog::debug("[PrintLightTimelapseControls] Chamber light: {}", on ? "ON" : "OFF");
+    spdlog::debug("[PrintLightTimelapseControls] Light: {}", on ? "ON" : "OFF");
 }

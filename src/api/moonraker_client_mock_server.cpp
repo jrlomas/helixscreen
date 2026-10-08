@@ -529,20 +529,9 @@ void register_server_handlers(std::unordered_map<std::string, MethodHandler>& re
         bool mock_kalico = helix::env_flag("HELIX_MOCK_KALICO");
         std::string app_name = mock_kalico ? "Kalico" : "Klipper";
 
-        // Printer-type-specific hostname so PrinterDetector's hostname heuristic
-        // resolves the mock to the matching printer_database.json entry. The
-        // generic "mock-printer" matches no fingerprint, leaving the printer
-        // type empty (and thus get_pre_print_option_set() empty). AD5M needs an
-        // "ad5m" hostname to hit its 90%-confidence heuristic so its pre-print
-        // options (incl. the bed_mesh adaptive_param) load under --test.
-        const char* hostname = "mock-printer";
-        switch (self->get_printer_type()) {
-        case MoonrakerClientMock::PrinterType::FLASHFORGE_AD5M:
-            hostname = "ad5m-mock";
-            break;
-        default:
-            break;
-        }
+        // The persona's hostname, which PrinterDetector's hostname heuristic
+        // scores (an "ad5m" hostname is what loads the AD5M pre-print options).
+        const std::string hostname(helix::mock::descriptor(self->get_printer_type()).hostname);
 
         json response = {{"jsonrpc", "2.0"},
                          {"result",

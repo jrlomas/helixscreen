@@ -354,12 +354,12 @@ Select the mock AMS topology/type.
 | Property | Value |
 |----------|-------|
 | **Values** | `none`, `afc`, `toolchanger` / `tc`, `mixed`, `multi`, `torture`, `vivid`, `ifs`, `htlf`, `snapmaker`, `medusahc` / `medusahc-fork`, `ifs-module`, `cfs` |
-| **Default** | Happy Hare, LINEAR, 4 slots |
+| **Default** | The persona's own (`helix::mock::effective_mock_ams`): `toolchanger` on `creator5`, `ifs` on `ad5x`, `cfs` on `k2`, `snapmaker` on `snapmaker_u1`; Happy Hare, LINEAR, 4 slots on every other persona |
 | **File** | `src/printer/ams_backend.cpp` |
 
 | Value | Units | What it simulates |
 |-------|-------|-------------------|
-| *(unset)* | 1 | Happy Hare, LINEAR, 4 slots (default constructor) |
+| *(unset)* | 1 | The persona's default AMS (see **Default**); Happy Hare, LINEAR, 4 slots where the persona has none |
 | `none` | - | No mock AMS at all |
 | `afc` | 1 | AFC Box Turtle, HUB, 4 slots. Aliases: `box_turtle`, `boxturtle` |
 | `toolchanger` / `tc` | 1 | Tool Changer, PARALLEL topology. Alias: `tool_changer` |
@@ -774,13 +774,13 @@ MOCK_EMPTY_POWER=1 ./build/bin/helix-screen --test
 
 ### `HELIX_MOCK_PRINTER`
 
-Select which printer the mock Moonraker client impersonates. Drives the mock's reported identity, kinematics defaults, bed dimensions, and (for AD5M) the `pre_print_options` set that gates print-option UI.
+Select which printer the mock Moonraker client impersonates. Drives the mock's reported identity, kinematics defaults, bed dimensions, hardware objects, and the printer type detection resolves. Each named persona is asserted to auto-detect as its printer by `tests/unit/test_mock_persona_detection.cpp`.
 
 | Property | Value |
 |----------|-------|
-| **Values** | `voron_24`, `voron_trident`, `k1`, `k1max`, `snapmaker_u1`, `ad5m`, `creator5`, `creator5_zmod`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta` |
-| **Default** | `voron_24` (Voron 2.4) |
-| **File** | `src/application/moonraker_manager.cpp` |
+| **Values** | see `include/mock_persona.h#PERSONAS`: currently `voron_24`, `voron_trident`, `k1`, `k1max`, `ad5m`, `creator5`, `creator5_zmod`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta`, `snapmaker_u1`, `cc1`, `ad5x`, `k2`. Matched exactly (case-sensitive); an unrecognised value falls back to `voron_24` with a warning listing the valid ids |
+| **Default** | `voron_24` (Voron 2.4); unset and empty both select it silently |
+| **File** | `include/mock_persona.h` |
 
 ```bash
 # FlashForge AD5M mock (ships pre_print_options + load-cell probe)
@@ -789,8 +789,8 @@ HELIX_MOCK_PRINTER=ad5m ./build/bin/helix-screen --test -vv
 # Multi-extruder mock
 HELIX_MOCK_PRINTER=multi_extruder ./build/bin/helix-screen --test -vv
 
-# Snapmaker U1: multi-extruder mock with the U1's four pre-print options
-HELIX_MOCK_PRINTER=snapmaker_u1 ./build/bin/helix-screen --test -vv
+# Snapmaker U1: four extruders, auto-detected, with the mock Snapmaker AMS
+HELIX_MOCK_PRINTER=snapmaker_u1 ./build/bin/helix-screen --test -s tiny -vv
 
 # Linear delta: reports kinematics=delta, so per-axis homing is hidden
 HELIX_MOCK_PRINTER=delta ./build/bin/helix-screen --test -vv
@@ -800,9 +800,56 @@ HELIX_MOCK_PRINTER=creator5 ./build/bin/helix-screen --test -vv
 
 # FlashForge Creator 5 Pro on Z-Mod firmware (mock hardware, real tool changer backend)
 HELIX_MOCK_PRINTER=creator5_zmod ./build/bin/helix-screen --test -vv
+
+# Elegoo Centauri Carbon on COSMOS, at the CC1's own 480x272 screen size
+HELIX_MOCK_PRINTER=cc1 ./build/bin/helix-screen --test -s micro -vv
+
+# FlashForge Adventurer 5X with the mock IFS (4 slots)
+HELIX_MOCK_PRINTER=ad5x ./build/bin/helix-screen --test -vv
+
+# Creality K2 Plus with the CFS box
+HELIX_MOCK_PRINTER=k2 ./build/bin/helix-screen --test -s 800x480 -vv
 ```
 
-The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 235x235x250 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
+`cc1`: run with `-s micro`, the CC1's 480x272 screen. The persona mirrors the
+bench CC1 capture (`tests/fixtures/printers/elegoo_centauri_carbon.json`): hostname
+`cosmos`, a 256x265x258 CoreXY volume, the mainline `load_cell_probe` (probe type
+`load_cell_probe`), the chassis switch `filament_switch_sensor filament_sensor`,
+LEDs `led case` / `led hotend`, and the COSMOS macros that name the machine.
+
+`ad5x`: hostname `ad5x-mock`, a 220x220x220 CoreXY volume, the hardware in
+`assets/config/presets/ad5x.json` `hardware/expected`, the Flashforge `loadcell`
+probe, and `gcode_macro SET_EXTRUDER_SLOT`, which names the machine. Its default
+`HELIX_MOCK_AMS` is `ifs`, the mock IFS simulation. It publishes none of the IFS
+module's own objects (`ifs`, `ifs_materials`, `zmod_ifs`, `_ifs_port_sensor_*`),
+since those make discovery stand up the production AD5X IFS backend; use
+`HELIX_MOCK_AMS=ifs-module` for that.
+
+`k2`: the Creality **K2 Plus**. Hostname `K2Plus-50C1`, the capture's 352.5x400x360
+CoreXY volume, and the hardware in `tests/fixtures/printers/creality_k2_plus.json` and
+`assets/config/presets/k2.json` `hardware/expected`: `motor_control`, `fan_feedback`,
+`load_ai`, `filament_rack`, the chamber heater `heater_generic chamber_heater` with
+`temperature_sensor chamber_temp`, and fans `fan` / `heater_fan chamber_fan`. It reports the
+declared 350x350 bed through `gcode_macro product_param`, which is what separates the K2 Plus
+from the K2 Pro. Its default `HELIX_MOCK_AMS` is `cfs`, so the `box` object is published
+and the production `AmsBackendCfs` latches the K2 `CR_BOX_*` dialect; `HELIX_MOCK_AMS=none`
+removes the box. `CR_BOX_EXTRUDE TNN=T<n><bay>` loads that bay and `CR_BOX_RETRUDE` unloads
+it: the next `box` frame names the bay, and the toolhead `filament_switch_sensor
+filament_sensor` follows it. The RPC answer of a script holding a `CR_BOX_*` line comes about a
+second after the frames, so a caller that checks the outcome on completion finds them applied.
+
+`snapmaker_u1`: the **Snapmaker U1**. Hostname `snapmaker-u1`, the capture's 270x270x400
+Cartesian volume, heaters `extruder`..`extruder3` and `heater_bed`, the per-head fans and
+`filament_motion_sensor e0_filament`..`e3_filament`, `led cavity_led`, and
+`temperature_sensor cavity`, from `tests/fixtures/printers/snapmaker_u1.json` and
+`assets/config/presets/snapmaker_u1.json`. It publishes the capture's identifying objects
+(`fm175xx_reader`, `tmc2240 stepper_x`, `purifier`, `camera`, the `FILAMENT_DT_*` and
+`EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_ALL` macros), so detection resolves it to Snapmaker U1
+and applies its preset; no printer type is saved for it. Its default `HELIX_MOCK_AMS` is
+`snapmaker`, the mock Snapmaker simulation. It does not publish `filament_detect`, which
+would make discovery stand up the production Snapmaker backend.
+
+The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 250x250x300 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
 
 #### The `creator5` persona
 
@@ -836,9 +883,10 @@ HELIX_MOCK_PRINTER=creator5 ./build/bin/helix-screen --test -vv
 HELIX_MOCK_PRINTER=creator5 HELIX_MOCK_AMS=afc ./build/bin/helix-screen --test -vv
 ```
 
-The rule lives in `MoonrakerClientMock::mock_toolchanger_selected()`, which both
-the mock client and `ams_backend.cpp` consult so they cannot disagree about what
-the mock is presenting.
+The default is the persona's `default_mock_ams` in
+`include/mock_persona.h#descriptor`, applied by
+`include/mock_persona.h#effective_mock_ams`, which every `HELIX_MOCK_AMS` reader
+consults so they cannot disagree about what the mock is presenting.
 
 Build volume is deliberately left at the generic mock value: the Creator 5 Pro's
 real travel limits are not documented in this repo, and detection keys off
@@ -880,18 +928,19 @@ Choose which Z-probe the mock printer advertises. Controls both the Klipper obje
 
 | Property | Value |
 |----------|-------|
-| **Values** | `cartographer`, `beacon`, `bltouch`, `loadcell`, `tap`, `klicky`, `standard`, `none` |
-| **Default** | `cartographer` |
+| **Values** | `cartographer`, `beacon`, `bltouch`, `loadcell`, `load_cell_probe`, `tap`, `klicky`, `standard`, `none` |
+| **Default** | the persona's probe: `cartographer`, except `load_cell_probe` on `cc1` and `loadcell` on `ad5x` |
 | **File** | `src/api/moonraker_client_mock_objects.cpp` |
 
 Each value exposes the objects and full `get_status()` payload the real module publishes (`helix::sim::mock_probe_status()`; per-type table in `docs/devel/SENSOR_MANAGEMENT.md` § Probe status keys).
 
 | Value | Objects exposed | Status detail |
 |-------|-----------------|---------------|
-| `cartographer` *(default)* | `cartographer`, `probe` | `cartographer`: `scan`/`touch`/`mcu`; `probe`: `last_query: 0`, `last_z_result: -0.425` |
+| `cartographer` *(default on most personas)* | `cartographer`, `probe` | `cartographer`: `scan`/`touch`/`mcu`; `probe`: `last_query: 0`, `last_z_result: -0.425` |
 | `beacon` | `beacon`, `probe` | `beacon`: `last_z_result: -0.312` plus Beacon's other keys; `probe`: `{name: "beacon"}` |
 | `bltouch` | `bltouch`, `probe` (same payload) | `last_query: false`, `last_z_result: 0.130` |
-| `loadcell` | generic `probe` | `last_z_result: 0.0`, `z_offset: null` (the Flashforge shape) |
+| `loadcell` | generic `probe` | `last_z_result: 0.0`, `z_offset: null` (the Flashforge shape, as on the AD5X) |
+| `load_cell_probe` | `load_cell_probe`, `probe` (same payload) | `last_query: false`, `last_z_result: 0.0` (mainline Klipper's load cell, as on the CC1) |
 | `tap` / `klicky` / `standard` / anything else | generic `probe` | `last_query: false`, `last_z_result: 0.0` |
 | `none` | *(no probe object)* | *(no probe status)* |
 
@@ -912,7 +961,7 @@ Override the kinematics string the mock reports in `configfile.config.printer.ki
 | Property | Value |
 |----------|-------|
 | **Values** | Any Klipper kinematics name (e.g. `corexy`, `cartesian`, `delta`, `corexz`) |
-| **Default** | Derived from the mock printer type: `corexy` for Voron 2.4, Voron Trident, Creality K1/K1 Max, FlashForge Creator 5 (both variants) and `generic_corexy`; `delta` for `delta`; `cartesian` for everything else |
+| **Default** | The persona descriptor's kinematics (`include/mock_persona.h#descriptor`): `cartesian` for `snapmaker_u1`, `generic_bedslinger` and `multi_extruder`; `delta` for `delta`; `corexy` for every other persona |
 | **File** | `src/api/moonraker_client_mock.cpp` |
 
 ```bash
@@ -955,7 +1004,7 @@ HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbr
 
 ### `HELIX_MOCK_DETECTION_CAPABLE`
 
-Force the K2 spaghetti-detection source's capability probe, so the Settings > Safety & Alerts detection rows and the detection loop can be exercised in a mock run. Mock printers are never a K2 and no mock type carries `/usr/bin/detection`, so without this the source reports incapable everywhere off a real printer. Capability normally requires `PrinterDetector::is_creality_k2()` AND `/usr/bin/detection` present and executable; the U1 source is unaffected (its capability comes from the `defect_detection` object probe).
+Force the K2 spaghetti-detection source's capability probe, so the Settings > Safety & Alerts detection rows and the detection loop can be exercised in a mock run. The `k2` persona detects as a K2, but no mock carries `/usr/bin/detection`, so without this the source reports incapable everywhere off a real printer. Capability normally requires `PrinterDetector::is_creality_k2()` AND `/usr/bin/detection` present and executable; the U1 source is unaffected (its capability comes from the `defect_detection` object probe).
 
 | Property | Value |
 |----------|-------|

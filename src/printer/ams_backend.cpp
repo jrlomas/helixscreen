@@ -11,6 +11,7 @@
 #ifdef HELIX_ENABLE_MOCKS
 #include "ams_backend_mock.h"
 #include "app_globals.h"
+#include "mock_persona.h"
 #include "moonraker_client_mock.h"
 #endif
 #if HELIX_HAS_IFS
@@ -589,21 +590,8 @@ create_mock_with_features(int gate_count, IMoonrakerClient* mock_client = nullpt
     // ========================================================================
     // HELIX_MOCK_AMS — topology/type selection
     // ========================================================================
-    const char* mock_ams_env = std::getenv("HELIX_MOCK_AMS");
-    std::string ams_type;
-
-    if (mock_ams_env) {
-        ams_type = helix::text_io::to_lower(mock_ams_env);
-    }
-
-    // No explicit topology: let the printer persona choose one. A Creator 5 Pro
-    // is a 4-head tool changer, so the generic Happy Hare default would
-    // misrepresent it. MoonrakerClientMock owns the rule so this and
-    // is_mock_toolchanger() cannot disagree about what the mock is presenting.
-    if (ams_type.empty() && MoonrakerClientMock::mock_toolchanger_selected()) {
-        ams_type = "toolchanger";
-        spdlog::info("[AMS Backend] Persona implies a tool changer (no HELIX_MOCK_AMS set)");
-    }
+    const std::string ams_type = helix::mock::effective_mock_ams(std::getenv("HELIX_MOCK_AMS"),
+                                                                 std::getenv("HELIX_MOCK_PRINTER"));
 
     if (!ams_type.empty()) {
         if (ams_type == "afc" || ams_type == "box_turtle" || ams_type == "boxturtle") {
@@ -728,8 +716,9 @@ static std::unique_ptr<AmsBackend> try_create_mock(IMoonrakerClient* mock_client
         return nullptr;
     }
 
-    const char* mock_ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (mock_ams_env && helix::text_io::to_lower(mock_ams_env) == "none") {
+    const std::string mode = helix::mock::effective_mock_ams(std::getenv("HELIX_MOCK_AMS"),
+                                                             std::getenv("HELIX_MOCK_PRINTER"));
+    if (mode == "none") {
         spdlog::info("[AMS Backend] Mock AMS disabled via HELIX_MOCK_AMS=none");
         return nullptr;
     }
@@ -738,20 +727,17 @@ static std::unique_ptr<AmsBackend> try_create_mock(IMoonrakerClient* mock_client
     // the point is to exercise the production AmsBackendToolChanger +
     // toolchanger_addon path against them. Declining here is what lets real
     // discovery run, the same escape hatch HELIX_MOCK_AMS=none uses.
-    if (mock_ams_env) {
-        const std::string mode = helix::text_io::to_lower(mock_ams_env);
-        if (mode == "medusahc" || mode == "medusa" || mode == "mhc" || mode == "medusahc-fork" ||
-            mode == "medusa-fork") {
-            spdlog::info("[AMS Backend] HELIX_MOCK_AMS={} selects mock hardware, not a mock "
-                         "backend - deferring to real discovery",
-                         mode);
-            return nullptr;
-        }
+    if (mode == "medusahc" || mode == "medusa" || mode == "mhc" || mode == "medusahc-fork" ||
+        mode == "medusa-fork") {
+        spdlog::info("[AMS Backend] HELIX_MOCK_AMS={} selects mock hardware, not a mock "
+                     "backend - deferring to real discovery",
+                     mode);
+        return nullptr;
     }
     // Personas that model firmware HelixScreen talks to through a production
     // backend are mock hardware too: decline, and real discovery builds that
     // backend against the mock's objects.
-    if (!mock_ams_env && MoonrakerClientMock::mock_hardware_persona()) {
+    if (mode.empty() && MoonrakerClientMock::mock_hardware_persona()) {
         spdlog::info("[AMS Backend] Mock printer persona is mock hardware - deferring to real "
                      "discovery");
         return nullptr;

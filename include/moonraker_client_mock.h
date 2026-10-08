@@ -4,6 +4,7 @@
 #pragma once
 
 #include "axis.h"
+#include "mock_persona.h"
 #include "moonraker_client.h"
 #include "moonraker_client_mock_spoolman.h"
 #include "moonraker_types.h"
@@ -72,19 +73,7 @@ enum class BeltMockFailure { // NAMESPACE_OK: sits beside MoonrakerClientMock, t
  */
 class MoonrakerClientMock : public helix::MoonrakerClient {
   public:
-    enum class PrinterType {
-        VORON_24,                 // Voron 2.4 (CoreXY, chamber heating)
-        VORON_TRIDENT,            // Voron Trident (3Z, CoreXY)
-        CREALITY_K1,              // Creality K1/K1C (bed slinger style)
-        CREALITY_K1_MAX,          // Creality K1 Max (the #1282 CFS capture machine)
-        FLASHFORGE_AD5M,          // FlashForge Adventurer 5M (enclosed)
-        FLASHFORGE_CREATOR5,      // FlashForge Creator 5 Pro (4-head tool changer)
-        FLASHFORGE_CREATOR5_ZMOD, // FlashForge Creator 5 Pro on Z-Mod (no klipper-toolchanger)
-        GENERIC_COREXY,           // Generic CoreXY printer
-        GENERIC_BEDSLINGER,       // Generic i3-style printer
-        MULTI_EXTRUDER,           // Multi-extruder test case (2 extruders)
-        DELTA                     // Generic linear delta (every axis homes together)
-    };
+    using PrinterType = helix::mock::PrinterType;
 
     /**
      * @brief Print simulation phase state machine
@@ -468,12 +457,12 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
      * AmsBackend's mock branch (which picks the backend type). One function
      * stops the two env-var parses drifting apart.
      *
-     * True when HELIX_MOCK_AMS selects a tool changer, or, when HELIX_MOCK_AMS
-     * is unset, when the persona is a tool changer by construction. The
-     * creator5 persona is: a Creator 5 Pro is a 4-head changer, so leaving it on
-     * the Happy Hare default misrepresents the machine. An explicit
-     * HELIX_MOCK_AMS always wins, so other topologies stay testable against the
-     * persona.
+     * True when the effective mock AMS (helix::mock::effective_mock_ams: an
+     * explicit HELIX_MOCK_AMS, else the persona's default) is a tool changer.
+     * The creator5 persona defaults to one: a Creator 5 Pro is a 4-head
+     * changer, so leaving it on the Happy Hare default misrepresents the
+     * machine. An explicit HELIX_MOCK_AMS always wins, so other topologies stay
+     * testable against the persona.
      *
      * Static because AmsBackend decides before any client instance exists.
      */
@@ -1287,8 +1276,18 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     /// message. The refusal path is otherwise unreachable in mock mode, and it
     /// is one of the states the panel handles most visibly.
     std::vector<PendingPaLine> pending_pa_lines_;
+    /// RPC answers defer_cfs_script_ack() still owes, and when.
+    struct PendingScriptAck {
+        std::chrono::steady_clock::time_point due;
+        std::function<void(const nlohmann::json&)> success_cb;
+        std::function<void(const MoonrakerError&)> error_cb;
+    };
+    std::vector<PendingScriptAck> pending_script_acks_;
     mutable std::mutex pa_cal_mutex_;
     void service_pending_pa_lines();
+    void service_pending_script_acks();
+    /// Answer every ack still owed with a connection-lost error.
+    void fail_pending_script_acks();
 
     /**
      * @brief Populate hardware lists based on configured printer type
@@ -1308,10 +1307,11 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     void populate_capabilities();
 
     /**
-     * @brief Detect toolchanger mock mode from HELIX_MOCK_AMS env var
+     * @brief Detect toolchanger mock mode
      *
-     * Mirrors the parsing in ams_backend.cpp: returns true when HELIX_MOCK_AMS
-     * (lowercased) is one of "toolchanger", "tool_changer", or "tc". Used to gate
+     * Returns mock_toolchanger_selected(): true when the mode
+     * helix::mock::effective_mock_ams() resolves (an explicit HELIX_MOCK_AMS,
+     * else the persona's default) is "toolchanger", "tool_changer" or "tc". Used to gate
      * the multi-extruder toolchanger emulation (4 distinct extruder heaters,
      * toolchanger + tool objects) so single-extruder/AFC/MMU/mixed/IFS modes are
      * unaffected.
@@ -1443,6 +1443,10 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
      * @return true if "temperature_sensor chamber" is in sensors list
      */
     bool has_chamber_sensor() const;
+
+    /// True when the chamber reading is simulated: the default chamber sensor,
+    /// or the K2 Plus's "temperature_sensor chamber_temp".
+    bool simulates_chamber_temp() const;
 
     /**
      * @brief Get the Klipper object name used for chamber heater status updates
@@ -2241,6 +2245,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     // answers the K1 calibration macros (BOX_FIND_CUT_POS,
     // BOX_CUSTOM_COMMAND) with the response lines a real box firmware sends.
     bool is_mock_cfs() const;
+    /// The K2 Plus's `motor_control` and `fan_feedback` frames.
+    void append_k2_status(json& status) const;
     /// The `box` object frame, stock K1 shape (T1 unit, four bays).
     [[nodiscard]] nlohmann::json cfs_box_status_json() const;
     /// Emit the BOX_FIND_CUT_POS response lines synchronously inside
@@ -2249,7 +2255,30 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     void simulate_cfs_find_cut_pos();
     /// Apply one BOX_CUSTOM_COMMAND. @return true when CMD= was one of ours.
     bool apply_cfs_box_custom_command(const std::string& gcode);
+    /// Apply the K2 CR_BOX_EXTRUDE / CR_BOX_RETRUDE lines of a load, unload or
+    /// swap script to the loaded bay and push the `box` frame.
+    /// @return true when the script held one.
+    bool apply_cfs_cr_box_script(const std::string& gcode);
+    /// Global slot the box reports loaded, or -1 when none is.
+    std::atomic<int> cfs_loaded_slot_{-1};
 
+  public:
+    /// The toolhead switch sees filament exactly while a bay is loaded.
+    [[nodiscard]] bool cfs_toolhead_filament_detected() const {
+        return cfs_loaded_slot_.load() >= 0;
+    }
+
+    /// Hold the RPC answer of a K2 box script back a moment, as the real macro's
+    /// minutes of motion do, so the status frames it pushed (the loaded bay,
+    /// the toolhead switch) reach their subscribers before the caller checks
+    /// the outcome. Only the K2 dialect emits CR_BOX_* lines, and the K1 dialect's BOX_*
+    /// scripts never contain them, so `is_mock_cfs()` is the whole gate.
+    /// @return true when `script` was one and an answer is now owed.
+    bool defer_cfs_script_ack(const std::string& script,
+                              std::function<void(const nlohmann::json&)> success_cb,
+                              std::function<void(const MoonrakerError&)> error_cb);
+
+  private:
     // --- gcode_script() handlers (moonraker_client_mock_gcode*.cpp) -----------
     // One handler per command family. A handler returns a code to end the
     // script, or std::nullopt to let the checks after it see the same line.

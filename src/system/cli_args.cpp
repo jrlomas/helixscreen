@@ -739,27 +739,26 @@ bool parse_cli_args(int argc, char** argv, CliArgs& args, int& screen_width, int
     }
 
     if (config.test_mode && !config.use_real_ams) {
-        if (const char* ams_env = std::getenv("HELIX_MOCK_AMS"); ams_env && ams_env[0]) {
-            const std::string mode = helix::text_io::to_lower(ams_env);
-            if (mode == "medusahc" || mode == "medusa" || mode == "mhc" ||
-                mode == "medusahc-fork" || mode == "medusa-fork") {
-                config.use_real_ams = true;
-                spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
-                             "tool-changer backend)",
-                             mode);
-            } else if (mode == "ifs-module" || mode == "ifs_module" || mode == "ad5x-module") {
-                config.use_real_ams = true;
-                spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
-                             "AD5X IFS backend)",
-                             mode);
-            } else if (mode == "cfs" || mode == "cfs-k1") {
-                config.use_real_ams = true;
-                spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
-                             "CFS backend)",
-                             mode);
-            }
-        } else if (const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
-                   printer_env && helix::mock::is_hardware_persona(printer_env)) {
+        const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
+        const std::string mode =
+            helix::mock::effective_mock_ams(std::getenv("HELIX_MOCK_AMS"), printer_env);
+        if (mode == "medusahc" || mode == "medusa" || mode == "mhc" || mode == "medusahc-fork" ||
+            mode == "medusa-fork") {
+            config.use_real_ams = true;
+            spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
+                         "tool-changer backend)",
+                         mode);
+        } else if (mode == "ifs-module" || mode == "ifs_module" || mode == "ad5x-module") {
+            config.use_real_ams = true;
+            spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
+                         "AD5X IFS backend)",
+                         mode);
+        } else if (mode == "cfs" || mode == "cfs-k1") {
+            config.use_real_ams = true;
+            spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
+                         "CFS backend)",
+                         mode);
+        } else if (mode.empty() && printer_env && helix::mock::is_hardware_persona(printer_env)) {
             config.use_real_ams = true;
             spdlog::info("[CLI] HELIX_MOCK_PRINTER={} implies --real-ams (mock "
                          "hardware, real tool-changer backend)",

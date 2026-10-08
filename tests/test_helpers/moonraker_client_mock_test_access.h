@@ -28,6 +28,12 @@ class MoonrakerClientMockTestAccess {
         c.dispatch_initial_state();
     }
 
+    // Simulation-loop iterations begun so far. Once it reads n + 1, iteration
+    // n has pushed its status frame.
+    static uint32_t tick_count(const MoonrakerClientMock& c) {
+        return c.tick_count_.load();
+    }
+
     // Replay cursor control. start_replay_timer() puts the origin 2.5s into the
     // future and drives pump_replay() from an lv_timer; setting the origin and
     // pumping by hand reaches the same code with neither wait nor timer.

@@ -118,12 +118,13 @@ lv_xml_register_component_from_file("A:ui_xml/globals.xml");
 theme_manager_register_responsive_spacing(display);  // Sets #space_md, #space_lg, etc.
 theme_manager_register_responsive_fonts(display);    // Sets #font_body, etc.
 
-// 4. Register components (order doesn't matter after globals)
-lv_xml_register_component_from_file("A:ui_xml/icon.xml");
-lv_xml_register_component_from_file("A:ui_xml/text_heading.xml");
-lv_xml_register_component_from_file("A:ui_xml/home_panel.xml");
-// ... etc
+// 4. Components register on first use: when a tag, extends= base or
+//    lv_xml_create() name is not yet known, the loader installed by
+//    helix::register_xml_on_first_use() registers ui_xml/<name>.xml or
+//    ui_xml/components/<name>.xml. No list, no ordering between components.
 ```
+
+Only `styles.xml` registers eagerly (its theme-token consts resolve at registration), plus `color_picker` and `ams_edit_overlay`, whose scopes C++ fills with responsive consts. A name with no XML file makes `lv_xml_create()` return NULL and log an error.
 
 ---
 

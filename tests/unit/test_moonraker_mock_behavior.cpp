@@ -952,12 +952,15 @@ TEST_CASE_METHOD(HelixTestFixture, "MoonrakerClientMock hardware discovery",
         auto hw = mock.hardware();
 
         const auto& heaters = hw.heaters();
+        const auto& fans = hw.fans();
         const auto& leds = hw.leds();
 
         REQUIRE(std::find(heaters.begin(), heaters.end(), "heater_bed") != heaters.end());
         REQUIRE(std::find(heaters.begin(), heaters.end(), "extruder") != heaters.end());
-        // AD5M has chamber light
-        REQUIRE(!leds.empty());
+        CHECK(std::find(fans.begin(), fans.end(), "controller_fan stepper_driver_fan") !=
+              fans.end());
+        // The plain 5M has no chamber light; that LED is the 5M Pro's.
+        CHECK(leds.empty());
     }
 
     SECTION("GENERIC_COREXY has minimal hardware") {
