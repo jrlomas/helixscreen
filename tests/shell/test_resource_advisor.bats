@@ -30,7 +30,7 @@ stub_jobs() {
     cat > "$HELIX_ADVISOR_JOBS_CMD" <<EOF
 #!/usr/bin/env bash
 touch "$JOBS_CALLED"
-echo "ncpu=32 peers=1(claimed+inferred) cc1plus=0 availGB=$avail -> -j$share$extra" >&2
+echo "ncpu=32 availGB=$avail -> -j$share$extra" >&2
 echo "$share"
 EOF
     chmod +x "$HELIX_ADVISOR_JOBS_CMD"
@@ -391,4 +391,60 @@ zeus_modes() {
     advise "$big"
     [ "$status" -eq 0 ]
     [ $((SECONDS - start)) -lt 5 ] || fail "took $((SECONDS - start))s"
+}
+
+# ---------------------------------------------------------------------------
+# With a jobpool: the make shim strips -j, and tightness is the pool's free tokens
+# ---------------------------------------------------------------------------
+
+stub_pool() {
+    local target="$1" free="$2" avail="$3"
+    cat > "$HELIX_ADVISOR_JOBS_CMD" <<EOF
+#!/usr/bin/env bash
+touch "$JOBS_CALLED"
+echo "pool target=$target available=$free availGB=$avail -> -j$target" >&2
+echo "$target"
+EOF
+    chmod +x "$HELIX_ADVISOR_JOBS_CMD"
+}
+
+@test "with a live pool an explicit -j says nothing, since the shim strips it" {
+    stub_pool 30 0 60
+    advise "make -j64"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "with a live pool a container build is tight when few tokens are free" {
+    stub_pool 30 3 60
+    advise "make pi-docker"
+    contains "the build pool has 3 of 30 tokens free" "$(context)"
+    contains "escape thelio's build pool" "$(context)"
+}
+
+@test "with a live pool and tokens to spare a container build is silent" {
+    stub_pool 30 20 60
+    advise "make pi-docker"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "a pool with free tokens is still tight on memory" {
+    stub_pool 30 20 12
+    advise "for i in 1 2 3; do ./build/bin/helix-tests '[ams]'; done"
+    contains "12GB available" "$(context)"
+}
+
+@test "without jobpool installed the real helix-claim still judges -j" {
+    unset HELIX_ADVISOR_JOBS_CMD HELIX_JOBPOOL
+    unset -f jobpool 2>/dev/null || true
+    local d p=""
+    local IFS=:
+    for d in $PATH; do [ -e "$d/jobpool" ] || p=${p:+$p:}$d; done
+    unset IFS
+    local json
+    json=$(jq -cn --arg c "make -j9999" '{tool_name: "Bash", tool_input: {command: $c}}')
+    run env -u JOBPOOL PATH="$p" bash -c "printf '%s' \"\$1\" | $ADVISOR" _ "$json"
+    [ "$status" -eq 0 ]
+    contains "-j9999 is above the fair share" "$(context)"
 }
