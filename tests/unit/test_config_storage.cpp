@@ -7,6 +7,7 @@
 #include "config.h"
 #include "config_storage.h"
 #include "panel_widget_config.h"
+#include "text_io.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -238,4 +239,29 @@ TEST_CASE("small-footprint storage keeps no .pre-migration copy", "[config][stor
     REQUIRE_FALSE(boot_leaves_pre_migration_copy(helix::ConfigFootprint::Small, migrating, true));
     REQUIRE_FALSE(boot_leaves_pre_migration_copy(helix::ConfigFootprint::Small,
                                                  helix::CURRENT_CONFIG_VERSION, true));
+}
+
+// A below-floor document is replaced by defaults and its copy is the only one
+// left, so small storage still writes it, compact. Serialized from memory here
+// because the document did not come from the snapshot's sibling file.
+TEST_CASE("small-footprint storage writes a below-floor copy compact", "[config][storage]") {
+    ScopedRuntimeConfig scoped_config;
+    get_runtime_config()->test_mode = true;
+    ConfigDirGuard guard("belowfloor");
+    const std::string path = (guard.dir / "settings.json").string();
+    auto mock = std::make_unique<helix::test::MockConfigStorage>(
+        std::string(R"({"config_version": 3, "wizard_completed": true, "marker": "kept"})"));
+    mock->small = true;
+
+    helix::Config cfg;
+    cfg.set_storage(std::move(mock));
+    cfg.init(path);
+
+    const auto copy = helix::text_io::read_file(path + ".pre-migration");
+    REQUIRE(copy.has_value());
+    CHECK(copy->find('\n') == std::string::npos);
+    const auto doc = nlohmann::json::parse(*copy, nullptr, false);
+    REQUIRE(doc.is_object());
+    CHECK(doc.value("marker", "") == "kept");
+    cfg.clear_path();
 }
