@@ -19,8 +19,10 @@
 #include "src/ui/ui_filament_path_plan.h"
 #include "theme_manager.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
+#include <vector>
 
 #include "../catch_amalgamated.hpp"
 
@@ -49,6 +51,14 @@ void render(LVGLTestFixture& fx, lv_obj_t* w) {
     REQUIRE(get_data(w)->layers.render_count > 0);
 }
 
+// The frame the widget renders from: where its hub box is fitted.
+LinearHubFrame widget_frame(lv_obj_t* w) {
+    const FilamentPathData* d = get_data(w);
+    const BaseGeometry g = compute_base_geometry(w, d);
+    const int32_t nozzle_y = g.y_off + (int32_t)(g.height * NOZZLE_Y_RATIO);
+    return compute_linear_hub_frame(*d, g, toolhead_top_y(nozzle_y, d->theme.extruder_scale));
+}
+
 bool area_eq(const lv_area_t& a, const lv_area_t& b) {
     return a.x1 == b.x1 && a.y1 == b.y1 && a.x2 == b.x2 && a.y2 == b.y2;
 }
@@ -69,10 +79,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: HUB hit rects match the drawn b
     const int32_t hw = d->theme.hub_width;
     const int32_t cx = c.x1 + 200;
     const int32_t hub_h = (int32_t)(H * HUB_HEIGHT_RATIO);
-    const int32_t hub_y = c.y1 + (int32_t)(H * HUB_Y_RATIO);
-
-    // Four lanes widen the hub to 3 * 22 + 2 * 8 px, within [hub_width, slot span].
-    const int32_t hub_w = LV_CLAMP(3 * 22 + 2 * 8, hw, LV_MAX(hw, 300));
+    // Fitted to the lanes' clearance: at least 3 * 22 + 2 * 8, at most the slot span + 16.
+    const LinearHubFrame f = widget_frame(w);
+    const int32_t hub_y = f.hub_y;
+    const int32_t hub_w = f.hub_box_w;
+    CHECK(hub_w >= LV_MAX(hw, 3 * 22 + 2 * 8));
+    CHECK(hub_w <= 300 + 2 * 8);
     REQUIRE(d->hits.hub_valid);
     CHECK(area_eq(d->hits.hub,
                   {cx - hub_w / 2, hub_y - hub_h / 2, cx + hub_w / 2, hub_y + hub_h / 2}));
@@ -136,6 +148,8 @@ namespace pg = helix::ui::pathgeo;
 constexpr uint32_t SLOT_COLORS[4] = {0xE53935, 0x1E88E5, 0x43A047, 0xFDD835};
 constexpr uint32_t BYPASS_COLOR = 0x8E24AA;
 const lv_color_t BG = lv_color_hex(0x101010);
+// The default toolhead glyph's top for nozzle 328 at extruder scale 10.
+constexpr int32_t GLYPH_TOP = 297;
 
 std::unique_ptr<FilamentPathData> make_data(helix::PathTopology topo) {
     auto d = std::make_unique<FilamentPathData>();
@@ -176,13 +190,13 @@ BaseGeometry geometry() {
 }
 
 float hub_entry_x(const FilamentPathData& d, int slot) {
-    return compute_linear_hub_frame(d, geometry()).hub_fan[slot].pts[3].x;
+    return compute_linear_hub_frame(d, geometry(), GLYPH_TOP).hub_fan[slot].pts[3].x;
 }
 
 PathPlan& plan_for(const FilamentPathData& d) {
     static PathPlan plan;
     const BaseGeometry g = geometry();
-    plan_linear_hub(compute_linear_hub_frame(d, g), d, g, plan);
+    plan_linear_hub(compute_linear_hub_frame(d, g, GLYPH_TOP), d, g, plan);
     return plan;
 }
 
@@ -254,7 +268,7 @@ using helix::PathSegment;
 TEST_CASE("FilamentPath plan: the frame fixture lays out as the plan states",
           "[filament-path][plan]") {
     auto d = make_data(helix::PathTopology::HUB);
-    const LinearHubFrame f = compute_linear_hub_frame(*d, geometry());
+    const LinearHubFrame f = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
     CHECK(f.entry_y == -48);
     CHECK(f.prep_y == 40);
     CHECK(f.hub_y == 120);
@@ -595,8 +609,9 @@ TEST_CASE("FilamentPath plan: an OUTPUT error is one stroke through the buffer",
         if (strokes[i].style.wall != TubeWall::Error)
             continue;
         errors++;
-        CHECK(near(seg_start(r.path.segs[strokes[i].first]), 200, 140));
-        CHECK(near(seg_end(r.path.segs[strokes[i].end - 1]), 200, 272));
+        // Stacked over the glyph: hub bottom 201, buffer 229..269, toolhead band 283.
+        CHECK(near(seg_start(r.path.segs[strokes[i].first]), 200, 201));
+        CHECK(near(seg_end(r.path.segs[strokes[i].end - 1]), 200, 283));
     }
     CHECK(errors == 1);
 }
@@ -607,20 +622,21 @@ TEST_CASE("FilamentPath plan: the toolhead band follows the unit's sensor, bypas
     d->show_bypass = false;
     load_active(*d, 1, PathSegment::NOZZLE);
 
+    // Stacked over the glyph: hub bottom 241, toolhead band midway to the glyph top.
     SECTION("a unit with a toolhead sensor gets a band on the trunk") {
         const PathPlan& plan = plan_for(*d);
-        const SensorBand* b = band_at(plan, 200, 272);
+        const SensorBand* b = band_at(plan, 200, 269);
         REQUIRE(b != nullptr);
         CHECK(b->state == BandState::Active);
         const Route& r = plan.routes[plan.active_route];
         CHECK(contiguous(r.path));
-        CHECK(has_boundary(r.path, 200, 272));
+        CHECK(has_boundary(r.path, 200, 269));
         CHECK(near(seg_end(r.path.segs[r.path.count - 1]), 200, 308));
     }
     SECTION("a unit without one gets none") {
         d->has_toolhead_sensor = false;
         const PathPlan& plan = plan_for(*d);
-        CHECK(band_at(plan, 200, 272) == nullptr);
+        CHECK(band_at(plan, 200, 269) == nullptr);
     }
 }
 
@@ -662,7 +678,7 @@ TEST_CASE("FilamentPath plan: sixteen HUB lanes fit the segment and band budgets
         g.slot_x[i] = 25 + 50 * i;
     g.center_x = 400;
     static PathPlan plan;
-    plan_linear_hub(compute_linear_hub_frame(*d, g), *d, g, plan);
+    plan_linear_hub(compute_linear_hub_frame(*d, g, GLYPH_TOP), *d, g, plan);
 
     CHECK(plan.dropped == 0);
     for (int i = 0; i < plan.route_count; i++)
@@ -744,9 +760,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: a gear outside the hub box wide
     const FilamentPathData* d = get_data(w);
     lv_area_t c;
     lv_obj_get_coords(w, &c);
-    // Two slots 100 px apart: the hub keeps its nominal width.
-    const int32_t hw = d->theme.hub_width;
-    const int32_t hub_w = LV_CLAMP(22 + 2 * 8, hw, LV_MAX(hw, 100));
+    const int32_t hub_w = widget_frame(w).hub_box_w;
     const int32_t cx = c.x1 + 100;
 
     const lv_font_t* icon = theme_manager_get_font("icon_font_sm");
@@ -985,4 +999,87 @@ TEST_CASE("FilamentPath plan: PARALLEL and MIXED bands do not wait on a toolhead
     d->slot_is_hub_routed[2] = true;
     d->slot_is_hub_routed[3] = true;
     CHECK(mixed_plan(*d).band_count == 4);
+}
+
+TEST_CASE("FilamentPath plan: the fitted hub stays on the canvas and catches every lane",
+          "[filament-path][plan][fan-clearance]") {
+    struct Canvas {
+        const char* name;
+        int32_t w, h;
+    };
+    const Canvas canvas =
+        GENERATE(Canvas{"micro 285x138", 285, 138}, Canvas{"800x480 470x294", 470, 294});
+    const int count = GENERATE(2, 4, 8);
+    CAPTURE(canvas.name, count);
+
+    auto d = make_data(helix::PathTopology::HUB);
+    d->slot_count = count;
+    for (int i = 0; i < count; i++)
+        d->slot_has_prep_sensor[i] = true;
+    BaseGeometry g;
+    g.width = canvas.w;
+    g.height = canvas.h;
+    g.slot_count = count;
+    for (int i = 0; i < count; i++)
+        g.slot_x[i] = (int32_t)(canvas.w * (i + 0.5f) / count);
+    g.center_x = (g.slot_x[0] + g.slot_x[count - 1]) / 2;
+    const int32_t nozzle_y = (int32_t)(canvas.h * NOZZLE_Y_RATIO);
+    const LinearHubFrame f = compute_linear_hub_frame(*d, g, nozzle_y - 31);
+    static PathPlan plan;
+    plan_linear_hub(f, *d, g, plan);
+
+    const float left = f.center_x - f.hub_box_w / 2.0f;
+    const float right = f.center_x + f.hub_box_w / 2.0f;
+    CAPTURE(f.hub_box_w, left, right);
+    CHECK(left >= 0);
+    CHECK(right <= canvas.w);
+    const float hub_top = (float)(f.hub_y - f.hub_h / 2);
+    for (int i = 0; i < count; i++) {
+        const Route& r = plan.routes[i];
+        const pg::PathPoint end = seg_end(r.path.segs[r.path.count - 1]);
+        CAPTURE(i, end.x, end.y);
+        CHECK(end.x >= left);
+        CHECK(end.x <= right);
+        CHECK(end.y == Catch::Approx(hub_top));
+    }
+}
+
+TEST_CASE("FilamentPath plan: a 4-lane micro hub with the bypass hidden keeps its lanes apart",
+          "[filament-path][plan][fan-clearance]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    d->show_bypass = false;
+    BaseGeometry g;
+    g.width = 285;
+    g.height = 138;
+    g.slot_count = 4;
+    for (int i = 0; i < 4; i++)
+        g.slot_x[i] = (int32_t)(285 * (i + 0.5f) / 4);
+    g.center_x = (g.slot_x[0] + g.slot_x[3]) / 2;
+    const int32_t nozzle_y = (int32_t)(138 * NOZZLE_Y_RATIO);
+    const LinearHubFrame f = compute_linear_hub_frame(*d, g, nozzle_y - 31);
+    static PathPlan plan;
+    plan_linear_hub(f, *d, g, plan);
+
+    const int32_t hub_top = f.hub_y - f.hub_h / 2;
+    const int32_t fan_start = f.prep_y + f.sensor_r;
+    INFO("micro 4-lane fan zone " << (hub_top - fan_start) << " px (prep+r " << fan_start
+                                  << " -> hub top " << hub_top << "), hub width " << f.hub_box_w
+                                  << " of slot row + 16 = " << (g.slot_x[3] - g.slot_x[0] + 16)
+                                  << ", stacked " << f.hub_stacked);
+
+    // Separation: gauge 5 + halo 6 + 2 px.
+    float nearest = 10000;
+    std::vector<pg::PathPoint> previous;
+    for (int i = 0; i < 4; i++) {
+        const pg::FilamentPath& p = plan.routes[i].path;
+        const float len = pg::path_length(p);
+        std::vector<pg::PathPoint> samples;
+        for (int s = 0; s <= 500; s++)
+            samples.push_back(pg::path_point_at(p, len * s / 500));
+        for (auto a : previous)
+            for (auto b : samples)
+                nearest = std::min(nearest, std::hypot(a.x - b.x, a.y - b.y));
+        previous = std::move(samples);
+    }
+    CHECK(nearest >= 13 - 0.1f);
 }

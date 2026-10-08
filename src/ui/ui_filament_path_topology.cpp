@@ -27,6 +27,8 @@
 #include "ui_filament_path_internal.h"
 #include "ui_filament_path_plan.h"
 
+#include "helix_psram_attr.h"
+
 #include <spdlog/spdlog.h>
 
 #include <cmath>
@@ -104,10 +106,11 @@ bool is_segment_active(PathSegment segment, PathSegment filament_segment) {
 namespace {
 
 // One plan for whichever topology is rendering. About 14 KB: kept off the
-// stack, which on the ESP32 is the LVGL task's. Rendering is single-threaded
-// and not re-entrant.
+// stack, which on the ESP32 is the LVGL task's, and out of internal DRAM,
+// which the WiFi driver needs for its RX buffers. Rendering is single-threaded
+// and not re-entrant, and nothing DMA- or ISR-side touches it.
 PathPlan& plan_scratch() {
-    static PathPlan plan;
+    static HELIX_PSRAM_BSS PathPlan plan;
     return plan;
 }
 
@@ -504,7 +507,10 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
         data->anim.output_x_target = ctx.geo.slot_x[active];
     }
 
-    const LinearHubFrame f = compute_linear_hub_frame(*data, ctx.geo);
+    const LinearHubFrame f = compute_linear_hub_frame(
+        *data, ctx.geo,
+        toolhead_top_y(ctx.geo.y_off + (int32_t)(ctx.geo.height * NOZZLE_Y_RATIO),
+                       data->theme.extruder_scale));
     PathPlan& plan = plan_scratch();
     plan_linear_hub(f, *data, ctx.geo, plan);
     warn_if_dropped(plan);

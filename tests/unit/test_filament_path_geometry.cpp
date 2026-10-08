@@ -745,3 +745,116 @@ TEST_CASE("build_merge_fan reserves fillet room at every corner", "[filament-pat
         }
     }
 }
+
+TEST_CASE("compact merge fans leave room for tube glow through rounded bends",
+          "[filament-path][geometry][fan-clearance]") {
+    const float separation = GENERATE(15.0f, 19.0f, 24.0f);
+    for (int count : {2, 3, 4, 8}) {
+        for (float height : {200.0f, 240.0f, 300.0f, 400.0f}) {
+            CAPTURE(count, height, separation);
+            MergeLaneIn in[8];
+            MergeLaneOut fan[8];
+            const float span = 360.0f;
+            for (int i = 0; i < count; ++i)
+                in[i] = {span * i / (count - 1), height * 0.1f};
+            // Cover compact tube/glow widths and larger high-resolution sensors.
+            const float tube_end = height * 0.25f - 4;
+            float width = merge_fan_width(in, count, span / 2, tube_end, 82, span + 16, 8, 8, 1.2f,
+                                          separation);
+            REQUIRE(width >= 82);
+            REQUIRE(width <= span + 16);
+            build_merge_fan(in, count, span / 2, tube_end, width, 8, 8, 1.2f, fan);
+            std::vector<PathPoint> previous;
+            for (int i = 0; i < count; ++i) {
+                FilamentPath path;
+                route_polyline_filleted(path, fan[i].pts, 4, 8);
+                float length = path_length(path);
+                std::vector<PathPoint> samples;
+                for (int s = 0; s <= 500; ++s)
+                    samples.push_back(path_point_at(path, length * s / 500));
+                float nearest = 10000;
+                for (auto a : previous)
+                    for (auto b : samples)
+                        nearest = std::min(nearest, dist(a, b));
+                if (!previous.empty()) {
+                    CAPTURE(width, nearest, i);
+                    REQUIRE(nearest >= separation - 0.1f);
+                }
+                previous = std::move(samples);
+            }
+        }
+    }
+}
+
+TEST_CASE("merge fan fitting preserves sufficient widths and respects bounds",
+          "[filament-path][geometry][fan-clearance]") {
+    MergeLaneIn in[4] = {{0, 0}, {40, 0}, {80, 0}, {120, 0}};
+    CHECK(merge_fan_width(in, 4, 60, 120, 90, 136, 8, 8, 1.2f, 15) == 90);
+    CHECK(merge_fan_width(in, 4, 60, 30, 50, 80, 8, 8, 1.2f, 15) == 80);
+    CHECK(merge_fan_width(in, 1, 0, 30, 50, 80, 8, 8, 1.2f, 15) == 50);
+    CHECK(merge_fan_width(nullptr, 0, 0, 30, 50, 80, 8, 8, 1.2f, 15) == 50);
+    MergeLaneIn pair[2] = {{0, 20}, {360, 20}};
+    CHECK(merge_fan_width(pair, 2, 180, 50, 82, 376, 8, 8, 1.2f, 15) == 82);
+}
+
+namespace {
+
+// Nearest distance between neighbouring lanes' centerlines, sampled 500 times per lane.
+float neighbour_clearance(const MergeLaneOut* fan, int count) {
+    float nearest = 10000;
+    std::vector<PathPoint> previous;
+    for (int i = 0; i < count; ++i) {
+        FilamentPath path;
+        route_polyline_filleted(path, fan[i].pts, 4, 8);
+        const float length = path_length(path);
+        std::vector<PathPoint> samples;
+        for (int s = 0; s <= 500; ++s)
+            samples.push_back(path_point_at(path, length * s / 500));
+        for (auto a : previous)
+            for (auto b : samples)
+                nearest = std::min(nearest, dist(a, b));
+        previous = std::move(samples);
+    }
+    return nearest;
+}
+
+} // namespace
+
+// The detail canvas as measured on the afc mock: 470x294 at 800x480 and 285x138
+// at micro (480x272). Separation is the tube gauge (5 at both) + halo (6) + 2 px
+// between halos; neighbouring hub-entry bands (gauge + 10 long) need 17 px.
+TEST_CASE("merge fans on the measured detail canvases clear tube, halo and bands",
+          "[filament-path][geometry][fan-clearance]") {
+    struct Canvas {
+        const char* name;
+        float w, h;
+    };
+    const Canvas canvas =
+        GENERATE(Canvas{"micro 285x138", 285, 138}, Canvas{"800x480 470x294", 470, 294});
+    const int count = GENERATE(8, 4, 2);
+    CAPTURE(canvas.name, count);
+
+    constexpr float SENSOR_R = 4, SEPARATION = 13, MARGIN = 8, BAND_STEP = 17;
+    MergeLaneIn in[8];
+    for (int i = 0; i < count; ++i)
+        in[i] = {canvas.w * (i + 0.5f) / count, 0.10f * canvas.h + SENSOR_R};
+    const float slot_span = in[count - 1].slot_x - in[0].slot_x;
+    const float tube_end = 0.25f * canvas.h - SENSOR_R;
+    const float min_width = (count - 1) * 22.0f + 2 * MARGIN;
+    const float max_width = slot_span + 2 * MARGIN;
+
+    const float width = merge_fan_width(in, count, canvas.w / 2, tube_end, min_width, max_width,
+                                        MARGIN, 8, 1.2f, SEPARATION);
+    MergeLaneOut fan[8];
+    build_merge_fan(in, count, canvas.w / 2, tube_end, width, MARGIN, 8, 1.2f, fan);
+    const float clearance = neighbour_clearance(fan, count);
+    const float entry_step = (width - 2 * MARGIN) / (count - 1);
+    CAPTURE(width, max_width, clearance, entry_step);
+
+    // The micro fan zone is shorter than the two fillet legs, so only vertical
+    // drops clear there: the hub widens to the slot row, at the clamp.
+    if (canvas.w > 285)
+        CHECK(width < max_width); // fitted, not clamped
+    CHECK(clearance >= SEPARATION - 0.1f);
+    CHECK(entry_step >= BAND_STEP);
+}

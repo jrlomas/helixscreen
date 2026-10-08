@@ -3,12 +3,14 @@
 
 #include "ui_utils.h"
 
-#include "lvgl/src/indev/lv_indev_private.h" // pointer.act_obj: no public getter outside dispatch
+#include "lvgl/src/core/lv_obj_draw_private.h" // lv_obj_get_ext_draw_size: no public getter
+#include "lvgl/src/indev/lv_indev_private.h"   // pointer.act_obj: no public getter outside dispatch
 #include "theme_manager.h"
 #include "ui/ui_widget_helpers.h"
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -253,6 +255,29 @@ lv_obj_t* find_required(lv_obj_t* root, const char* name, const char* owner) {
         }
     }
     return obj;
+}
+
+static void child_overhang_cb(lv_event_t* e) {
+    lv_obj_t* obj = lv_event_get_current_target_obj(e);
+    int32_t s = 0;
+    for (uint32_t i = 0; i < lv_obj_get_child_count(obj); i++) {
+        lv_obj_t* child = lv_obj_get_child(obj, i);
+        if (!lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN))
+            s = std::max<int32_t>(s, lv_obj_get_ext_draw_size(child));
+    }
+    lv_event_set_ext_draw_size(e, s);
+}
+
+void pass_child_overhang(lv_obj_t* obj) {
+    lv_obj_add_flag(obj, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    lv_obj_add_event_cb(obj, child_overhang_cb, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
+}
+
+void refresh_overhang_chain(lv_obj_t* child) {
+    lv_obj_refresh_ext_draw_size(child);
+    for (lv_obj_t* p = lv_obj_get_parent(child);
+         p && lv_obj_has_flag(p, LV_OBJ_FLAG_OVERFLOW_VISIBLE); p = lv_obj_get_parent(p))
+        lv_obj_refresh_ext_draw_size(p);
 }
 
 } // namespace helix::ui

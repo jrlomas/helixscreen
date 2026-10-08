@@ -176,27 +176,9 @@ void invalidate_static(lv_display_t* disp, lv_area_t a, const lv_area_t& r, int3
 
 /// Everything in `r` that does not move with the content: the scroller's own
 /// rounded corners and border, and its scrollbars.
-void invalidate_static_parts(lv_display_t* disp, lv_obj_t* obj, const lv_area_t& r, int32_t dy) {
+/// Both scrollbar tracks along the whole scroller, before and after the shift.
+void invalidate_tracks(lv_display_t* disp, lv_obj_t* obj, const lv_area_t& r, int32_t dy) {
     const lv_area_t& c = obj->coords;
-    int32_t edge = lv_obj_get_style_radius(obj, LV_PART_MAIN);
-    int32_t bw = 0;
-    if (lv_obj_get_style_border_opa(obj, LV_PART_MAIN) > LV_OPA_TRANSP)
-        bw = lv_obj_get_style_border_width(obj, LV_PART_MAIN);
-    if (bw > edge)
-        edge = bw;
-    if (edge > 0) {
-        invalidate_static(disp, {c.x1, c.y1, c.x2, c.y1 + edge - 1}, r, dy);
-        invalidate_static(disp, {c.x1, c.y2 - edge + 1, c.x2, c.y2}, r, dy);
-    }
-    if (bw > 0) {
-        invalidate_static(disp, {c.x1, c.y1, c.x1 + bw - 1, c.y2}, r, dy);
-        invalidate_static(disp, {c.x2 - bw + 1, c.y1, c.x2, c.y2}, r, dy);
-    }
-
-    if (lv_obj_get_scrollbar_mode(obj) == LV_SCROLLBAR_MODE_OFF)
-        return;
-    // The bars' whole tracks, from the scrollbar styles: a bar shown or hidden
-    // by this scroll is covered either way.
     const int32_t sb_w = lv_obj_get_style_width(obj, LV_PART_SCROLLBAR);
     const int32_t sb_x2 = c.x2 - lv_obj_get_style_pad_right(obj, LV_PART_SCROLLBAR);
     const int32_t sb_y2 = c.y2 - lv_obj_get_style_pad_bottom(obj, LV_PART_SCROLLBAR);
@@ -210,6 +192,58 @@ void invalidate_static_parts(lv_display_t* disp, lv_obj_t* obj, const lv_area_t&
         lv_area_join(&row, &row, &hor);
     invalidate_static(disp, col, r, dy);
     invalidate_static(disp, row, r, dy);
+}
+
+void invalidate_static_parts(lv_display_t* disp, lv_obj_t* obj, const lv_area_t& r, int32_t dy) {
+    const lv_area_t& c = obj->coords;
+    int32_t bw = 0;
+    if (lv_obj_get_style_border_opa(obj, LV_PART_MAIN) > LV_OPA_TRANSP)
+        bw = lv_obj_get_style_border_width(obj, LV_PART_MAIN);
+    // Rounded corners stay put only where the scroller draws them: its own
+    // background or border, or a clip of its content to the corners.
+    int32_t edge = 0;
+    if (bw > 0 || lv_obj_get_style_bg_opa(obj, LV_PART_MAIN) > LV_OPA_TRANSP ||
+        lv_obj_get_style_clip_corner(obj, LV_PART_MAIN))
+        edge = lv_obj_get_style_radius(obj, LV_PART_MAIN);
+    if (bw > edge)
+        edge = bw;
+    if (edge > 0) {
+        invalidate_static(disp, {c.x1, c.y1, c.x2, c.y1 + edge - 1}, r, dy);
+        invalidate_static(disp, {c.x1, c.y2 - edge + 1, c.x2, c.y2}, r, dy);
+    }
+    if (bw > 0) {
+        invalidate_static(disp, {c.x1, c.y1, c.x1 + bw - 1, c.y2}, r, dy);
+        invalidate_static(disp, {c.x2 - bw + 1, c.y1, c.x2, c.y2}, r, dy);
+    }
+
+    if (lv_obj_get_scrollbar_mode(obj) == LV_SCROLLBAR_MODE_OFF)
+        return;
+    // A bar draws over the content, so the shift carried the old one along;
+    // the rest of a track is content the shift already moved right. A vertical
+    // scroll leaves the horizontal thumb where it was: it and its moved copy.
+    // The vertical thumb travels no further than the content does, so the old
+    // one sat within dy of the new one and its copy within 2 * dy: the new
+    // thumb grown that far toward the shift covers both, including a new thumb
+    // this scroll shows. A styled thumb length breaks that bound, so a bar
+    // with one is redrawn along its whole track.
+    if (lv_obj_get_style_length(obj, LV_PART_SCROLLBAR) > 0) {
+        invalidate_tracks(disp, obj, r, dy);
+        return;
+    }
+    lv_area_t hor, ver;
+    lv_obj_get_scrollbar_area(obj, &hor, &ver);
+    if (lv_area_get_width(&hor) > 0) {
+        lv_area_increase(&hor, 1, 1); // a rounded thumb's antialiased edge
+        invalidate_static(disp, hor, r, dy);
+    }
+    if (lv_area_get_width(&ver) > 0) {
+        lv_area_increase(&ver, 1, 1);
+        if (dy > 0)
+            ver.y2 += 2 * dy;
+        else
+            ver.y1 += 2 * dy;
+        invalidate_clipped(disp, ver, r);
+    }
 }
 
 /// The area `lv_obj_invalidate(obj)` hands to the display.
