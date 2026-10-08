@@ -835,8 +835,8 @@ from the K2 Pro. Its default `HELIX_MOCK_AMS` is `cfs`, so the `box` object is p
 and the production `AmsBackendCfs` latches the K2 `CR_BOX_*` dialect; `HELIX_MOCK_AMS=none`
 removes the box. `CR_BOX_EXTRUDE TNN=T<n><bay>` loads that bay and `CR_BOX_RETRUDE` unloads
 it: the next `box` frame names the bay, and the toolhead `filament_switch_sensor
-filament_sensor` follows it. The RPC answer of a script holding a `CR_BOX_*` line comes about a
-second after the frames, so a caller that checks the outcome on completion finds them applied.
+filament_sensor` follows it. The script's RPC answer follows its frames in the same call, so
+frame and answer arrive back to back, the tightest ordering real hardware can produce.
 
 `snapmaker_u1`: the **Snapmaker U1**. Hostname `snapmaker-u1`, the capture's 270x270x400
 Cartesian volume, heaters `extruder`..`extruder3` and `heater_bed`, the per-head fans and

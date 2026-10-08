@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_update_queue.h"
+
+#include "../test_helpers/mock_printer.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../ui_test_utils.h"
 #include "ams_backend_cfs.h"
@@ -7,15 +10,17 @@
 #include "cfs_status_parse.h"
 #include "moonraker_client_mock.h"
 #include "printer_state.h"
+#include "test_helpers/cfs_test_access.h"
 #include "test_helpers/mock_personas.h"
 #include "test_helpers/moonraker_client_mock_test_access.h"
+#include "test_helpers/update_queue_test_access.h"
 
 #include <chrono>
 #include <condition_variable>
 #include <functional>
-#include <future>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
@@ -107,51 +112,6 @@ TEST_CASE("The k2 persona's CR_BOX load and unload scripts move the box frame",
     CHECK(frames.wait_for(mark, [](const json& st) { return loaded_bay(st) == "C"; }));
 }
 
-TEST_CASE("The k2 persona answers a box script only after its frames are out",
-          "[mock][persona][k2][cfs]") {
-    helix::test::PersonaEnv env("k2");
-    MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::CREALITY_K2_PLUS);
-    BoxFrames frames;
-    mock.register_notify_update(frames.callback());
-    mock.connect("ws://mock/websocket", [] {}, [] {});
-
-    std::promise<void> acked_promise;
-    auto acked_future = acked_promise.get_future();
-    const size_t mark = frames.mark();
-    mock.send_jsonrpc(
-        "printer.gcode.script",
-        {{"script",
-          helix::printer::AmsBackendCfs::load_gcode(0, helix::printer::CfsMacroVariant::K2)}},
-        [&acked_promise](const json&) { acked_promise.set_value(); }, [](const MoonrakerError&) {});
-
-    // The loaded bay is out before the answer, which a caller verifying the
-    // outcome on completion depends on.
-    CHECK(acked_future.wait_for(std::chrono::seconds(0)) == std::future_status::timeout);
-    CHECK(frames.wait_for(mark, [](const json& st) { return loaded_bay(st) == "A"; }));
-    CHECK(acked_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
-    mock.disconnect();
-}
-
-TEST_CASE("The k2 persona answers a box script with an error when it disconnects first",
-          "[mock][persona][k2][cfs]") {
-    helix::test::PersonaEnv env("k2");
-    MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::CREALITY_K2_PLUS);
-    mock.connect("ws://mock/websocket", [] {}, [] {});
-
-    bool succeeded = false;
-    bool failed = false;
-    mock.send_jsonrpc(
-        "printer.gcode.script",
-        {{"script",
-          helix::printer::AmsBackendCfs::unload_gcode(helix::printer::CfsMacroVariant::K2)}},
-        [&succeeded](const json&) { succeeded = true; },
-        [&failed](const MoonrakerError&) { failed = true; });
-    mock.disconnect();
-
-    CHECK(failed);
-    CHECK_FALSE(succeeded);
-}
-
 TEST_CASE("The k2 persona's motor_control and fan_feedback frames parse",
           "[mock][persona][k2][cfs]") {
     helix::test::PersonaEnv env("k2");
@@ -193,21 +153,111 @@ TEST_CASE("The k2 persona reports the declared 350 bed through discovery", "[moc
     CHECK(volume.declared_bed_y == Catch::Approx(350.0f));
 }
 
-TEST_CASE("Destroying the k2 mock answers an owed box script with an error",
+TEST_CASE("The k2 persona pushes a box script's frames before it answers",
           "[mock][persona][k2][cfs]") {
     helix::test::PersonaEnv env("k2");
-    bool succeeded = false;
-    bool failed = false;
-    {
-        MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::CREALITY_K2_PLUS);
-        mock.connect("ws://mock/websocket", [] {}, [] {});
-        mock.send_jsonrpc(
-            "printer.gcode.script",
-            {{"script",
-              helix::printer::AmsBackendCfs::unload_gcode(helix::printer::CfsMacroVariant::K2)}},
-            [&succeeded](const json&) { succeeded = true; },
-            [&failed](const MoonrakerError&) { failed = true; });
+    MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::CREALITY_K2_PLUS);
+    mock.connect("ws://mock/websocket", [] {}, [] {});
+
+    std::vector<std::string> events;
+    mock.register_notify_update([&events](const json& n) {
+        const auto& params = n["params"];
+        if (params.is_array() && !params.empty() && params[0].contains("box") &&
+            loaded_bay(params[0]) == "A") {
+            events.push_back("frame");
+        }
+    });
+    mock.send_jsonrpc(
+        "printer.gcode.script",
+        {{"script",
+          helix::printer::AmsBackendCfs::load_gcode(0, helix::printer::CfsMacroVariant::K2)}},
+        [&events](const json&) { events.push_back("ack"); }, [](const MoonrakerError&) {});
+
+    // The loaded bay is out before the answer, as on the wire.
+    CHECK(events == std::vector<std::string>{"frame", "ack"});
+    mock.disconnect();
+}
+
+// The k2 mock answers a box script inside the same call that pushes its frames,
+// so the status frame and the RPC answer reach the backend back to back. The
+// backend applies frames on the main thread, so completion has to queue behind
+// them and judge the toolhead switch the frame reported (#1761).
+namespace {
+
+/// The real CFS backend subscribed to the k2 mock, dispatching through the
+/// real MoonrakerAPI path.
+struct K2Cfs {
+    helix::test::PersonaEnv env{"k2"};
+    MockPrinter printer{MoonrakerClientMock::PrinterType::CREALITY_K2_PLUS};
+    helix::printer::AmsBackendCfs backend{&printer.api, &printer.client};
+
+    K2Cfs() {
+        helix::CfsTestAccess::set_macro_variant_k2(backend);
+        REQUIRE(backend.start().success());
+        drain();
     }
-    CHECK(failed);
-    CHECK_FALSE(succeeded);
+    ~K2Cfs() {
+        backend.stop();
+        drain();
+    }
+
+    static void drain() {
+        helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+    }
+
+    /// Run @p script as an @p intent action with the toolhead switch reading
+    /// @p at_nozzle beforehand, and return where the action settled.
+    AmsSystemInfo run(AmsAction intent, bool at_nozzle, std::string script) {
+        helix::CfsTestAccess::set_filament_sensor(backend, /*seen=*/true, at_nozzle);
+        helix::CfsTestAccess::force_phase_intent(backend, intent);
+        REQUIRE(backend.get_system_info().filament_loaded == at_nozzle);
+        REQUIRE(helix::CfsTestAccess::call_dispatch_action_script(backend, std::move(script))
+                    .success());
+        drain();
+        return backend.get_system_info();
+    }
+};
+
+} // namespace
+
+TEST_CASE("A K2 CFS unload succeeds when the frame before its answer cleared the nozzle",
+          "[ams][cfs][mock][persona][k2][1761]") {
+    K2Cfs k2;
+    const auto info =
+        k2.run(AmsAction::UNLOADING, /*at_nozzle=*/true,
+               helix::printer::AmsBackendCfs::unload_gcode(helix::printer::CfsMacroVariant::K2));
+    CHECK_FALSE(info.filament_loaded);
+    CHECK(info.operation_detail.empty());
+    CHECK(info.action == AmsAction::IDLE);
+}
+
+TEST_CASE("A K2 CFS load succeeds when the frame before its answer reached the nozzle",
+          "[ams][cfs][mock][persona][k2][1761]") {
+    K2Cfs k2;
+    const auto info =
+        k2.run(AmsAction::LOADING, /*at_nozzle=*/false,
+               helix::printer::AmsBackendCfs::load_gcode(0, helix::printer::CfsMacroVariant::K2));
+    CHECK(info.filament_loaded);
+    CHECK(info.operation_detail.empty());
+    CHECK(info.action == AmsAction::IDLE);
+}
+
+TEST_CASE("CFS action completion runs from the UpdateQueue, not the answering thread",
+          "[ams][cfs][mock][persona][k2][1761]") {
+    K2Cfs k2;
+    bool ran = false;
+    const char* ran_from = nullptr;
+    REQUIRE(helix::CfsTestAccess::dispatch_with_completion(
+                k2.backend,
+                helix::printer::AmsBackendCfs::unload_gcode(helix::printer::CfsMacroVariant::K2),
+                [&ran, &ran_from]() {
+                    ran = true;
+                    ran_from = helix::ui::UpdateQueue::current_callback_tag();
+                })
+                .success());
+    // The mock answered inside that call; completion waits for the queue.
+    CHECK_FALSE(ran);
+    K2Cfs::drain();
+    REQUIRE(ran);
+    CHECK(ran_from != nullptr);
 }

@@ -783,7 +783,6 @@ MoonrakerClientMock::~MoonrakerClientMock() {
 
     // Pass true to skip logging during destruction - spdlog may already be destroyed
     stop_temperature_simulation(true);
-    fail_pending_script_acks();
 
     // Clean up any outstanding calibration timers (PID, MPC, shaper) to prevent
     // use-after-free when a subsequent test calls process_lvgl().
@@ -2746,7 +2745,6 @@ void MoonrakerClientMock::dispatch_bed_mesh_update() {
 void MoonrakerClientMock::disconnect() {
     spdlog::info("[MoonrakerClientMock] Simulating disconnection");
     stop_temperature_simulation(false);
-    fail_pending_script_acks();
     set_connection_state(ConnectionState::DISCONNECTED);
     sim_link_down_ = true;
 }
@@ -4149,9 +4147,6 @@ void MoonrakerClientMock::temperature_simulation_loop() {
         // value a caller wrote into a subject by hand stays written. The wait is
         // bounded like the one at the bottom of the loop, so a notify that races
         // the predicate costs one interval rather than wedging shutdown.
-        // Parked or not, an owed RPC answer still goes out: a caller waiting on
-        // it holds an in-flight request that nothing else would release.
-        service_pending_script_acks();
         if (simulation_paused_.load()) {
             std::unique_lock<std::mutex> lock(sim_mutex_);
             sim_cv_.wait_for(lock, std::chrono::milliseconds(SIMULATION_INTERVAL_MS), [this] {
@@ -5248,52 +5243,6 @@ bool MoonrakerClientMock::simulate_pa_calibration(
     spdlog::info("[MoonrakerClientMock] FLOW_CALIBRATE: simulating {} candidates (~{}s)",
                  CANDIDATES, ((CANDIDATES + 1) * STEP_MS) / 1000);
     return true;
-}
-
-bool MoonrakerClientMock::defer_cfs_script_ack(
-    const std::string& script, std::function<void(const nlohmann::json&)> success_cb,
-    std::function<void(const MoonrakerError&)> error_cb) {
-    if (!is_mock_cfs() || script.find("CR_BOX_") == std::string::npos || !success_cb) {
-        return false;
-    }
-    constexpr auto ACK_DELAY = std::chrono::milliseconds(1500);
-    std::lock_guard<std::mutex> lock(pa_cal_mutex_);
-    pending_script_acks_.push_back(
-        {std::chrono::steady_clock::now() + ACK_DELAY, std::move(success_cb), std::move(error_cb)});
-    return true;
-}
-
-void MoonrakerClientMock::fail_pending_script_acks() {
-    std::vector<PendingScriptAck> owed;
-    {
-        std::lock_guard<std::mutex> lock(pa_cal_mutex_);
-        owed.swap(pending_script_acks_);
-    }
-    for (auto& ack : owed) {
-        if (ack.error_cb) {
-            ack.error_cb(MoonrakerError::json_rpc_error("printer.gcode.script",
-                                                        "Connection to the mock was closed"));
-        }
-    }
-}
-
-void MoonrakerClientMock::service_pending_script_acks() {
-    std::vector<PendingScriptAck> due;
-    {
-        std::lock_guard<std::mutex> lock(pa_cal_mutex_);
-        const auto now = std::chrono::steady_clock::now();
-        for (auto it = pending_script_acks_.begin(); it != pending_script_acks_.end();) {
-            if (it->due <= now) {
-                due.push_back(std::move(*it));
-                it = pending_script_acks_.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-    for (auto& ack : due) {
-        ack.success_cb(json::object());
-    }
 }
 
 void MoonrakerClientMock::service_pending_pa_lines() {
