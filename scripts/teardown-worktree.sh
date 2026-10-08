@@ -313,6 +313,17 @@ if [[ -x "$MAIN_ABS/scripts/helix-claim" ]]; then
     run "$MAIN_ABS/scripts/helix-claim" release --force "worktree:$(basename "$WT_ABS")" >/dev/null 2>&1 || true
 fi
 
+# The tree's mirror on zeus (scripts/zeus-run.sh) goes with it. Best effort:
+# zeus being off or unreachable must never stop a teardown, and --prune
+# collects whatever this misses.
+if [[ -x "$MAIN_ABS/scripts/zeus-run.sh" ]]; then
+    if (( DRY_RUN )); then
+        say "  ${CYAN}would run:${RESET} scripts/zeus-run.sh --drop $(basename "$WT_ABS")"
+    elif ! "$MAIN_ABS/scripts/zeus-run.sh" --drop "$(basename "$WT_ABS")" >/dev/null 2>&1; then
+        say "${YELLOW}! could not remove this tree's zeus mirror (zeus unreachable or busy); scripts/zeus-run.sh --prune collects it later.${RESET}"
+    fi
+fi
+
 # --- branch -------------------------------------------------------------------
 
 if (( DELETE_BRANCH )); then

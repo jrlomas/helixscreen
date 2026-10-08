@@ -98,9 +98,13 @@ scripts/zeus-run.sh sweep                   # make unit-sweep on zeus
 #   ASAN especially: thelio's /etc/ld.so.preload makes ASAN's runtime load
 #   second, so the binary produces NO test output and exits 0 - a pass that ran
 #   nothing. The container has no ld.so.preload and its image matches CI's.
-#   The commit has to be pushed; the container fetches it, it does not take your
-#   tree. zeus is memory-bound, not core-bound (ZFS ARC holds most of its 251GB);
-#   its zfs_arc_sys_free tunable keeps 64 GiB free and the ARC self-adjusts above
+#   It runs your tree as it is on disk, uncommitted edits included: an rsync to
+#   a per-tree mirror (/work/trees/<tree>) whose build/ persists, so a warm run
+#   rebuilds only what changed, and different trees run at once. The output says
+#   HEAD + clean or + dirty <hash>. `--commit` runs the pushed HEAD instead, for a
+#   verdict others must reproduce (mutate always does). `make full-test-run
+#   ZEUS=1` runs the sweep there while bats runs here. zeus is memory-bound, not
+#   core-bound (ZFS ARC holds most of its 251GB); its zfs_arc_sys_free tunable keeps 64 GiB free and the ARC self-adjusts above
 #   that. The container joins zeus's jobpool when one is installed there, else
 #   sizes -j from MemAvailable.
 

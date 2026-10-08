@@ -95,7 +95,7 @@ wait_for_line() { # <substring> <file>
 }
 
 @test "a solo run takes the workdir lock, records itself, and releases it" {
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     # No contention: the run never announces a holder other than itself.
     lacks "busy:" "$output"
@@ -108,7 +108,7 @@ wait_for_line() { # <substring> <file>
     flock -n "$(lock_file)" -c true
 
     # Successive runs rewrite the holder line rather than appending.
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     [ "$(wc -l < "$(lock_file)")" -eq 1 ]
 }
@@ -132,7 +132,7 @@ wait_for_line() { # <substring> <file>
     holder=$!
     wait_for_file "$ready"
 
-    "$SCRIPT" test >"$out" 2>&1 &
+    "$SCRIPT" --commit test >"$out" 2>&1 &
     runner=$!
 
     # The run names the holder from the lock file and stays blocked: every
@@ -153,7 +153,7 @@ wait_for_line() { # <substring> <file>
     export ZEUS_ORPHAN_POLL_SECS=0
     export MOCK_PGREP_HITS="$BATS_TEST_TMPDIR/pgrep-hits"
 
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "orphaned build still running in helix-tsan; waiting" "$output"
     # Two polls: the first sees the make, the second sees it gone.
@@ -167,7 +167,7 @@ wait_for_line() { # <substring> <file>
     # block every later run.
     export MOCK_PGREP_LOG="$BATS_TEST_TMPDIR/pgrep-log"
 
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     grep -qF "pgrep -x -r R,S,D,T,t make" "$MOCK_PGREP_LOG"
 }
@@ -175,7 +175,7 @@ wait_for_line() { # <substring> <file>
 @test "every docker exec names the container and a command" {
     # The heredoc is unquoted, so a backtick or $( ) left unescaped in it runs
     # on the caller's machine before ssh starts.
-    run "$SCRIPT" mutate
+    run "$SCRIPT" --commit mutate
     [ "$status" -eq 0 ]
     lacks "requires at least" "$output"
     [ -s "$MOCK_DOCKER_LOG" ]
@@ -186,7 +186,7 @@ wait_for_line() { # <substring> <file>
 @test "the checkout's local main is brought level with origin/main before the reset" {
     # mutate_diff.py's default base reads the local main; a stale one yields a
     # base that refuses the run.
-    run "$SCRIPT" mutate
+    run "$SCRIPT" --commit mutate
     [ "$status" -eq 0 ]
     grep -qF "git update-ref refs/heads/main FETCH_HEAD" "$MOCK_DOCKER_LOG"
     local sync_line reset_line
@@ -198,7 +198,7 @@ wait_for_line() { # <substring> <file>
 @test "patches are reapplied after the checkout, before the job runs" {
     # A submodule already at its pin keeps an earlier job's patches; a commit
     # that edits a patch would otherwise fail the build's drift check.
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     local reset_line reapply_line
     reset_line=$(grep -nF "git reset" "$MOCK_DOCKER_LOG" | head -1 | cut -d: -f1)
@@ -220,7 +220,7 @@ case "$1" in
         esac ;;
 esac
 exit 0'
-    run "$SCRIPT" tsan '[ams],[spoolman]'
+    run "$SCRIPT" --commit tsan '[ams],[spoolman]'
     [ "$status" -eq 0 ]
     grep -qF 'make test-tsan-one TEST="[ams],[spoolman]"' "$MOCK_DOCKER_LOG"
     refute_grep 'make test-tsan ' "$MOCK_DOCKER_LOG"
@@ -238,7 +238,7 @@ case "$1" in
         esac ;;
 esac
 exit 0'
-    run "$SCRIPT" tsan
+    run "$SCRIPT" --commit tsan
     [ "$status" -eq 0 ]
     grep -qF 'make test-tsan $HELIX_JFLAG' "$MOCK_DOCKER_LOG"
     grep -qE 'HELIX_JFLAG=-j[0-9]+ ' "$MOCK_DOCKER_LOG"
@@ -247,7 +247,7 @@ exit 0'
 
 @test "a tsan run that printed no Catch2 summary is not reported clean" {
     # The default docker stub runs nothing, so the log carries no summary.
-    run "$SCRIPT" tsan '[ams]'
+    run "$SCRIPT" --commit tsan '[ams]'
     [ "$status" -eq 1 ]
     contains "not a clean TSAN result" "$output"
 }
@@ -271,7 +271,7 @@ FAKE
 }
 
 @test "without jobpool on zeus the job sizes -j from memory" {
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "using -j" "$output"
     grep -qE 'HELIX_JFLAG=-j[0-9]+ helix-tsan bash -lc make test \$HELIX_JFLAG' "$MOCK_DOCKER_LOG"
@@ -320,7 +320,7 @@ exit 0'
 @test "with jobpool on zeus the container joins it and make gets no -j" {
     fake_jobpool
     run_container_job
-    run "$SCRIPT" sweep
+    run "$SCRIPT" --commit sweep
     [ "$status" -eq 0 ]
     contains "joining jobpool: target 30" "$output"
     contains "MAKE: unit-sweep NPROCS=96 MAKEFLAGS=POOLED:/work/.jobpool" "$output"
@@ -332,7 +332,7 @@ exit 0'
     fake_jobpool
     run_container_job
     chmod 000 "$POOL_FIFO"
-    run "$SCRIPT" sweep
+    run "$SCRIPT" --commit sweep
     [ "$status" -eq 0 ]
     contains "cannot open the jobpool FIFO; using -j" "$output"
     printf '%s\n' "$output" | grep -qE '^MAKE: unit-sweep NPROCS=96 -j[0-9]+ MAKEFLAGS=$'
@@ -341,7 +341,7 @@ exit 0'
 @test "a pool whose state the container cannot see is not joined" {
     fake_jobpool
     export MOCK_MOUNTS="/elsewhere /data"
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "is not mounted in helix-tsan; sizing -j from memory" "$output"
     contains "using -j" "$output"
@@ -352,7 +352,7 @@ exit 0'
 @test "a jobpool that will not start is named, and the job sizes -j from memory" {
     fake_jobpool
     printf '#!/bin/sh\nexit 1\n' > "$ZEUS_JOBPOOL"
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "jobpool ensure failed" "$output"
     contains "using -j" "$output"
@@ -372,7 +372,7 @@ SYS_FREE=$((64 * 1024 * 1024 * 1024))
 
 @test "a run leaves zfs_arc_max alone" {
     fake_zfs 269272276992 "$SYS_FREE"
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     [ "$(cat "$ZEUS_ARC_PARAM")" = 269272276992 ]
     lacks "zfs_arc" "$output"
@@ -383,7 +383,7 @@ SYS_FREE=$((64 * 1024 * 1024 * 1024))
     true & dead=$!; wait "$dead"
     fake_zfs 68719476736 "$SYS_FREE"
     echo "$dead 123456789" > "$ZEUS_ARC_MARK"
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "restored zfs_arc_max to 123456789" "$output"
     [ "$(cat "$ZEUS_ARC_PARAM")" = 123456789 ]
@@ -393,7 +393,7 @@ SYS_FREE=$((64 * 1024 * 1024 * 1024))
 @test "a cap marker whose run is still live is left to that run" {
     fake_zfs 68719476736 "$SYS_FREE"
     echo "$$ 123456789" > "$ZEUS_ARC_MARK"
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     [ "$(cat "$ZEUS_ARC_PARAM")" = 68719476736 ]
     [ -e "$ZEUS_ARC_MARK" ]
@@ -404,7 +404,7 @@ SYS_FREE=$((64 * 1024 * 1024 * 1024))
     true & dead=$!; wait "$dead"
     fake_zfs 68719476736 "$SYS_FREE"
     echo "$dead 0" > "$ZEUS_ARC_MARK"
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "holds no bytes to restore" "$output"
     [ -e "$ZEUS_ARC_MARK" ]
@@ -413,17 +413,17 @@ SYS_FREE=$((64 * 1024 * 1024 * 1024))
 
 @test "zfs_arc_sys_free under the floor is warned about" {
     fake_zfs 269272276992 0
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     contains "zfs_arc_sys_free is 0 bytes" "$output"
 }
 
 @test "zfs_arc_sys_free at 64 GiB, or no ZFS at all, is not warned about" {
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     lacks "zfs_arc_sys_free" "$output"
     fake_zfs 269272276992 "$SYS_FREE"
-    run "$SCRIPT" test
+    run "$SCRIPT" --commit test
     [ "$status" -eq 0 ]
     lacks "zfs_arc_sys_free" "$output"
 }

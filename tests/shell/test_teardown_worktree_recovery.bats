@@ -337,3 +337,29 @@ teardown() {
     contains " $PARKED_PID" "$output"
     [ -d "$MAIN/.worktrees/doomed" ]
 }
+
+# The tree's mirror on zeus goes with it, best effort: zeus being unreachable
+# must never stop a teardown.
+stub_zeus_run() { # <exit code>
+    mkdir -p "$MAIN/scripts"
+    printf '#!/bin/sh\necho "$*" >> "%s"\nexit %s\n' "$BATS_TEST_TMPDIR/zeus-calls" "$1" > "$MAIN/scripts/zeus-run.sh"
+    chmod +x "$MAIN/scripts/zeus-run.sh"
+}
+
+@test "teardown drops the tree's zeus mirror" {
+    make_worktree mirrored
+    stub_zeus_run 0
+    run "$SCRIPT" mirrored --into master
+    [ "$status" -eq 0 ]
+    [ "$(cat "$BATS_TEST_TMPDIR/zeus-calls")" = "--drop mirrored" ]
+}
+
+@test "an unreachable zeus warns and the teardown still completes" {
+    make_worktree offline
+    stub_zeus_run 1
+    run "$SCRIPT" offline --into master
+    [ "$status" -eq 0 ]
+    contains "zeus mirror" "$output"
+    contains "Teardown complete" "$output"
+    [ ! -d "$MAIN/.worktrees/offline" ]
+}
