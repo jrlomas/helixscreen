@@ -509,21 +509,15 @@ unit-sweep: test-build
 	DURATION=$$((END_TIME - START_TIME)); \
 	echo "$(GREEN)$(BOLD)✓ Unit tests passed in $${DURATION}s$(RESET)"
 
-# full-test-run: the completion gate. Its name promises everything the normal
-# cadence covers, so it runs both suites that cadence has: the C++ unit sweep
-# and the bats shell suite. Nothing else runs bats locally - not the commit
-# hook, not test-xml - so without it 200-plus shell tests reach CI unrun.
-#
-# [.] and [slow] stay outside deliberately. They are slow by design and already
-# have gates: scripts/quality-checks.sh runs [.] on any staged code change, and
-# nightly CI runs [slow]. Folding them in would tax the target reached for most.
+# full-test-run: the completion gate - the C++ unit sweep and the bats shell
+# suite. TEST_HOST=1 sends the sweep to the configured test host while bats
+# runs here, TEST_HOST=0 keeps both local; scripts/full-test-run.sh says what
+# each setting does and holds the automatic default's switch.
 #
 # Ask it once, when a feature is finished. Mid-feature the question is
 # `make t F='[tag]'`, and a full run cannot answer it anyway.
-full-test-run: unit-sweep
-	$(Q)$(MAKE) --no-print-directory test-shell
-	$(ECHO) "$(GREEN)$(BOLD)✓ Completion gate passed: unit sweep + shell suite$(RESET)"
-	$(ECHO) "  Outside this gate: [.] (commit hook) and [slow] (nightly). Both: make test-all"
+full-test-run:
+	$(Q)TEST_HOST="$(TEST_HOST)" MAKE="$(MAKE)" scripts/full-test-run.sh
 
 # ----------------------------------------------------------------------------
 # test-run: a signpost that refuses
@@ -653,19 +647,16 @@ test-kiauh:
 
 # Run shell/bats tests for platform hooks and installer scripts. The parallel
 # run holds its -j as jobpool tokens (`helix-claim hold`), so it shares the
-# machine budget with compiles; without jobpool the -j is the cores. It waits
-# up to 60s for a third of the pool (`--min`): a third keeps the suite within
-# about 3x its full-pool time while leaving two thirds to compiles, and the
-# bounded wait turns a saturated pool into seconds of delay, never a serial
-# run. One slot runs serially: bats refuses --no-parallelize-within-files
-# below --jobs 2.
+# machine budget with compiles; without jobpool the -j is the cores. The hold
+# waits briefly for a third of the pool (helix-claim hold's default floor), so
+# a saturated pool delays the suite instead of running it serially. One slot
+# runs serially: bats refuses --no-parallelize-within-files below --jobs 2.
 test-shell:
 	$(ECHO) "$(CYAN)$(BOLD)Running shell tests (bats)...$(RESET)"
 	@if command -v bats >/dev/null 2>&1; then \
 		START_TIME=$$(date +%s); \
 		if command -v parallel >/dev/null 2>&1; then \
-			j=$$(scripts/helix-claim jobs 2>/dev/null || echo 3); \
-			scripts/helix-claim hold --min $$(( j / 3 > 0 ? j / 3 : 1 )) -- \
+			scripts/helix-claim hold -- \
 				sh -c '[ "$$JOBPOOL_SLOTS" -gt 1 ] || exec bats "$$@"; \
 				exec bats --jobs "$$JOBPOOL_SLOTS" --no-parallelize-within-files "$$@"' bats tests/shell/; \
 		else \

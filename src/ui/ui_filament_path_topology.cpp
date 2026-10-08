@@ -507,7 +507,10 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
         data->anim.output_x_target = ctx.geo.slot_x[active];
     }
 
-    const LinearHubFrame f = compute_linear_hub_frame(*data, ctx.geo);
+    const LinearHubFrame f = compute_linear_hub_frame(
+        *data, ctx.geo,
+        toolhead_top_y(ctx.geo.y_off + (int32_t)(ctx.geo.height * NOZZLE_Y_RATIO),
+                       data->theme.extruder_scale));
     PathPlan& plan = plan_scratch();
     plan_linear_hub(f, *data, ctx.geo, plan);
     warn_if_dropped(plan);

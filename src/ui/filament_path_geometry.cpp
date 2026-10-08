@@ -329,6 +329,53 @@ void route_polyline_filleted(FilamentPath& out, const PathPoint* pts, int n, flo
     out.add_line(cursor.x, cursor.y, pts[n - 1].x, pts[n - 1].y);
 }
 
+float merge_fan_width(const MergeLaneIn* lanes, int n, float hub_cx, float hub_top, float min_width,
+                      float max_width, float entry_margin, float fillet_r, float max_slope,
+                      float min_separation) {
+    max_width = std::max(min_width, max_width);
+    if (!lanes || n < 2 || min_separation <= 0)
+        return min_width;
+    const int count = std::min(n, FilamentPath::MAX_SEGS);
+    float deepest_start = lanes[0].start_y;
+    for (int i = 1; i < count; ++i)
+        deepest_start = std::max(deepest_start, lanes[i].start_y);
+    const float budget = std::max(0.0f, hub_top - deepest_start - 2.0f * (fillet_r + FILLET_SLACK));
+
+    auto clearance = [&](float width) {
+        float usable = std::max(0.0f, width - 2.0f * entry_margin);
+        float step = usable / (count - 1);
+        float max_dx[2] = {0, 0};
+        int side_count[2] = {0, 0};
+        for (int i = 0; i < count; ++i) {
+            float entry = hub_cx - usable / 2 + step * i;
+            int side = entry <= hub_cx ? 0 : 1;
+            ++side_count[side];
+            max_dx[side] = std::max(max_dx[side], std::fabs(entry - lanes[i].slot_x));
+        }
+        float separation = step;
+        for (int side = 0; side < 2; ++side) {
+            if (side_count[side] < 2 || max_dx[side] < 1e-3f)
+                continue; // no neighboring diagonals, or all vertical
+            float slope = std::min(max_slope, budget / max_dx[side]);
+            separation = std::min(separation, step * slope / std::sqrt(1.0f + slope * slope));
+        }
+        return separation;
+    };
+    if (clearance(min_width) >= min_separation)
+        return min_width;
+    if (clearance(max_width) < min_separation)
+        return max_width;
+    float lo = min_width, hi = max_width;
+    for (int iteration = 0; iteration < 16; ++iteration) {
+        float mid = (lo + hi) / 2;
+        if (clearance(mid) < min_separation)
+            lo = mid;
+        else
+            hi = mid;
+    }
+    return hi;
+}
+
 void build_merge_fan(const MergeLaneIn* lanes, int n, float hub_cx, float hub_top, float hub_w,
                      float entry_margin, float fillet_r, float max_slope, MergeLaneOut* out) {
     if (!lanes || !out || n <= 0)

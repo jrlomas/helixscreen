@@ -6,6 +6,7 @@
 
 #include "ui_filament_path_plan.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace helix::ui::fpath {
@@ -31,7 +32,8 @@ TubePalette tube_palette(const FilamentPathData& data) {
 // Layout mirrors the ratios at the top of ui_filament_path_internal.h; LINEAR
 // butts the selector against the prep sensors and slides the output exit under
 // the active slot.
-LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const BaseGeometry& g) {
+LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const BaseGeometry& g,
+                                        int32_t glyph_top) {
     LinearHubFrame f;
     const ThemeCache& theme = data.theme;
     const bool linear = data.topology == static_cast<int>(PathTopology::LINEAR);
@@ -54,15 +56,41 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
     f.center_x = g.center_x;
     f.sensor_r = theme.sensor_radius;
 
+    f.buffer_y = g.y_off + (int32_t)(g.height * BUFFER_Y_RATIO);
+    const int32_t buf_box_h = LV_MAX(16, f.hub_h);
+    f.has_buffer = data.buffer_present;
+
+    // HUB with no bypass lane: the hub and buffer hang above the toolhead glyph,
+    // giving the lane fan the height they would otherwise occupy. The stack
+    // only ever moves them down; a canvas too short for it keeps the ratio
+    // layout.
+    if (!linear && !data.hub_on_toolhead && !data.show_bypass && !data.hub_only) {
+        // Equal clearance above and below the buffer box (or above the glyph
+        // when there is none): hub bottom, buffer and glyph top evenly spaced.
+        const int32_t gap = f.hub_h / 2 + 2 * f.sensor_r;
+        int32_t stacked_buffer_y = f.buffer_y;
+        int32_t hub_bottom = glyph_top - 2 * gap;
+        if (f.has_buffer) {
+            hub_bottom = glyph_top - (buf_box_h + 2 * gap);
+            stacked_buffer_y = (hub_bottom + glyph_top) / 2;
+        }
+        const int32_t stacked_hub_y = hub_bottom - f.hub_h / 2;
+        if (stacked_hub_y > f.hub_y) {
+            f.hub_stacked = true;
+            f.hub_y = stacked_hub_y;
+            if (f.has_buffer)
+                f.buffer_y = stacked_buffer_y;
+            // The toolhead sensor band sits in the clear gap above the glyph.
+            const int32_t last_box_bottom = f.has_buffer ? f.buffer_y + buf_box_h / 2 : hub_bottom;
+            f.toolhead_y = (last_box_bottom + glyph_top) / 2;
+        }
+    }
+    f.buf_fil_top = f.buffer_y - buf_box_h;
+
     if (linear)
         f.hub_y = f.prep_y + f.sensor_r + f.hub_h / 2;
     // Output sensor butted against the hub bottom (mirrors the hub-top entries)
     f.output_y = f.hub_y + f.hub_h / 2;
-
-    f.buffer_y = g.y_off + (int32_t)(g.height * BUFFER_Y_RATIO);
-    const int32_t buf_box_h = LV_MAX(16, f.hub_h);
-    f.buf_fil_top = f.buffer_y - buf_box_h;
-    f.has_buffer = data.buffer_present;
 
     f.idle_color = theme.color_idle;
     f.active_color = lv_color_hex(data.filament_color);
@@ -81,13 +109,13 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
     f.fil_seg = static_cast<PathSegment>(data.filament_segment);
     f.states = compute_slot_render_states(&data);
 
-    // HUB merge fan. The nominal hub_width is too narrow for many lanes, so the
-    // entry span widens toward the slot row (~22 px between entries), clamped
-    // to the slot span; the hub box is drawn at the same width.
+    // HUB merge fan. Horizontal entry spacing alone does not keep shallow
+    // diagonals apart: the hub is widened until neighbouring tubes clear the
+    // tube, its halo and a gap, and drawn at exactly that width.
     f.hub_box_w = theme.hub_width;
     if (linear)
         return f;
-    const int32_t hub_top = f.hub_y - f.hub_h / 2;
+    int32_t hub_top = f.hub_y - f.hub_h / 2;
     pg::MergeLaneIn fan_in[FilamentPathData::MAX_SLOTS];
     const int fan_n = LV_MIN(data.slot_count, FilamentPathData::MAX_SLOTS);
     for (int i = 0; i < fan_n; i++) {
@@ -103,7 +131,29 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
         (fan_n > 1) ? (fan_n - 1) * TARGET_ENTRY_SPACING + 2 * ENTRY_MARGIN : theme.hub_width;
     const int32_t slot_span =
         (data.slot_count > 1) ? (g.slot_x[data.slot_count - 1] - g.slot_x[0]) : theme.hub_width;
-    f.hub_box_w = LV_CLAMP(want_w, theme.hub_width, LV_MAX(theme.hub_width, slot_span));
+    const int32_t max_width = LV_MAX(theme.hub_width, slot_span + 2 * ENTRY_MARGIN);
+    const int32_t min_width = LV_CLAMP(theme.hub_width, want_w, max_width);
+    // Outer tube + its halo + 2 px between halos, and never less than two bands.
+    const int32_t separation = LV_MAX(theme.tube_gauge + HALO_WIDTH_EXTRA + 2, 2 * f.sensor_r + 2);
+    if (fan_n > 2 && !data.hub_on_toolhead && !f.hub_stacked) {
+        // Borrow unused output-run height before widening the hub. Keep the
+        // buffer/bypass area clear and leave on-toolhead hubs in place.
+        float deepest_start = fan_in[0].start_y;
+        for (int i = 1; i < fan_n; ++i)
+            deepest_start = std::max(deepest_start, fan_in[i].start_y);
+        const int32_t next_y = f.has_buffer ? f.buf_fil_top : f.bypass_merge_y;
+        const int32_t max_top = next_y - f.hub_h - 2 * f.sensor_r - 8;
+        const int32_t wanted_top = (int32_t)deepest_start + 24 + 2 * separation + f.sensor_r;
+        hub_top = LV_MAX(hub_top, LV_MIN(wanted_top, max_top));
+        f.hub_y = hub_top + f.hub_h / 2;
+        f.output_y = f.hub_y + f.hub_h / 2;
+    }
+    // The width is fitted to a fan ending one sensor radius above the hub, so
+    // the final legs keep their clearance across the hub-entry bands.
+    const int32_t tube_end_y = hub_top - f.sensor_r;
+    f.hub_box_w = (int32_t)std::ceil(pg::merge_fan_width(
+        fan_in, fan_n, (float)f.center_x, (float)tube_end_y, (float)min_width, (float)max_width,
+        (float)ENTRY_MARGIN, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, (float)separation));
     pg::build_merge_fan(fan_in, fan_n, (float)f.center_x, (float)hub_top, (float)f.hub_box_w,
                         (float)ENTRY_MARGIN, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, f.hub_fan);
     return f;

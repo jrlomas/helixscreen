@@ -3,7 +3,7 @@
 #
 # `helix-claim run heavy:<what> -- cmd` holds a claim for exactly as long as the
 # command runs, owned by the wrapper, and passes the command's status through.
-# `resources` is a read-only snapshot that must never hang on an unreachable zeus.
+# `resources` is a read-only snapshot that must never hang on an unreachable test host.
 
 load helpers
 
@@ -151,31 +151,44 @@ wait_for_file() {
     lacks "rss=" "$output"
 }
 
-@test "resources with zeus unreachable prints thelio and exits 0" {
+@test "resources with the test host unreachable prints this box and exits 0" {
     sleep 120 &
     OWNER=$!
     "$CLAIM" take device:x "hw" --pid "$OWNER" --note "192.0.2.7" >/dev/null
-    ZEUS_HOST=zeus.invalid run timeout 10 "$CLAIM" resources
+    HELIX_TEST_HOST=testhost.invalid run timeout 10 "$CLAIM" resources
     [ "$status" -eq 0 ]
     contains "cpus, build -j" "$output"
     contains "device:x" "$output"
     contains "192.0.2.7" "$output"
     contains "memory by command" "$output"
-    contains "zeus (zeus.invalid): unreachable" "$output"
+    contains "test host (testhost.invalid): unreachable" "$output"
 }
 
-@test "resources --no-zeus never reaches for zeus" {
+@test "resources --no-test-host never reaches for the test host" {
     mock_command_script ssh 'touch "$BATS_TEST_TMPDIR/ssh-called"; exit 255'
-    run "$CLAIM" resources --no-zeus
+    HELIX_TEST_HOST=testhost.invalid run "$CLAIM" resources --no-test-host
     [ "$status" -eq 0 ]
-    lacks "zeus" "$output"
+    lacks "test host" "$output"
     [ ! -e "$BATS_TEST_TMPDIR/ssh-called" ]
 }
 
-@test "resources cuts off a zeus that hangs and still exits 0" {
+@test "resources skips the test-host section when none is configured" {
+    mock_command_script ssh 'touch "$BATS_TEST_TMPDIR/ssh-called"; exit 255'
+    run "$CLAIM" resources
+    [ "$status" -eq 0 ]
+    contains "memory by command" "$output"
+    lacks "test host" "$output"
+    [ ! -e "$BATS_TEST_TMPDIR/ssh-called" ]
+    # The build-hosts file is enough to turn it on.
+    echo "HELIX_TEST_HOST=testhost.invalid" > "$HELIX_BUILD_HOSTS_FILE"
+    run "$CLAIM" resources
+    contains "test host (testhost.invalid): unreachable" "$output"
+}
+
+@test "resources cuts off a test host that hangs and still exits 0" {
     mock_command_script ssh 'exec sleep 120'
     SECONDS=0
-    run timeout 100 "$CLAIM" resources
+    HELIX_TEST_HOST=testhost.invalid run timeout 100 "$CLAIM" resources
     [ "$status" -eq 0 ]
     [ "$SECONDS" -lt 90 ]
     contains "unreachable" "$output"

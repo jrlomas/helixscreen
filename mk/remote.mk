@@ -10,10 +10,10 @@
 #   make remote-sync            # Just sync source to remote (no build)
 #   make remote-fetch           # Just fetch binaries from remote
 #
-# Configuration:
-#   REMOTE_HOST=thelio.local    # Remote build host
-#   REMOTE_USER=                # Remote user (empty = use SSH config)
-#   REMOTE_DIR=~/Code/Printing/helixscreen  # Source location on remote
+# Configuration: REMOTE_HOST, REMOTE_USER (empty = your SSH config) and
+# REMOTE_DIR (the source location on the remote), from the build-hosts file
+# (scripts/lib/build_hosts.sh), the environment, or the make command line.
+# There are no defaults: a target that needs one stops and names the file.
 #
 # The remote host needs:
 #   - Docker (for pi-docker, ad5m-docker targets)
@@ -24,17 +24,36 @@
 # Remote Build Configuration
 # =============================================================================
 
-# Remote build host settings (override via environment or command line)
-# Example: make remote-pi REMOTE_HOST=buildbox.local REMOTE_USER=builder
-REMOTE_HOST ?= thelio.local
-REMOTE_USER ?=
-REMOTE_DIR ?= ~/Code/Printing/helixscreen
+# The build-hosts file is KEY=VALUE, readable by make and the shell alike. A
+# value the environment already holds wins over the file, as it does in the
+# scripts; one on the make command line wins over both.
+BUILD_HOSTS_FILE := $(or $(HELIX_BUILD_HOSTS_FILE),$(or $(XDG_CONFIG_HOME),$(HOME)/.config)/helixscreen/build-hosts.env)
+BUILD_HOSTS_VARS := REMOTE_HOST REMOTE_USER REMOTE_DIR
+$(foreach v,$(BUILD_HOSTS_VARS),$(if $(filter environment,$(origin $(v))),$(eval _env_$(v) := $(value $(v)))))
+-include $(BUILD_HOSTS_FILE)
+$(foreach v,$(BUILD_HOSTS_VARS),$(if $(filter file,$(origin _env_$(v))),$(eval $(v) := $(_env_$(v)))))
 
 # Build SSH target string
 ifdef REMOTE_USER
     REMOTE_SSH_TARGET := $(REMOTE_USER)@$(REMOTE_HOST)
 else
     REMOTE_SSH_TARGET := $(REMOTE_HOST)
+endif
+
+# A remote target with no host stops before anything runs, in one line naming
+# the file. REMOTE_DIR is checked for every target that uses it: rsync --delete
+# to "$(REMOTE_HOST):/" is what an empty one would mean. remote-native and
+# remote-test go through scripts/remote-build.sh, which keeps its own clone.
+build_hosts_missing = $(error $(1) is not set: add $(1)=<value> to $(BUILD_HOSTS_FILE) (or export it))
+ifneq ($(filter remote-%,$(MAKECMDGOALS)),)
+ifeq ($(strip $(REMOTE_HOST)),)
+$(call build_hosts_missing,REMOTE_HOST)
+endif
+ifneq ($(filter-out remote-native remote-test,$(filter remote-%,$(MAKECMDGOALS))),)
+ifeq ($(strip $(REMOTE_DIR)),)
+$(call build_hosts_missing,REMOTE_DIR)
+endif
+endif
 endif
 
 # =============================================================================

@@ -9,8 +9,8 @@
 // unbalanced free surfaces here as an ASAN use-after-free instead of only on
 // slow dual-core hardware.
 //
-// Run under ASAN on zeus:
-//   scripts/zeus-run.sh asan '[info_qr_modal]'
+// Run under ASAN on the test host:
+//   scripts/test-host-run.sh asan '[info_qr_modal]'
 // Soak locally:
 //   INFO_QR_STRESS_ITERATIONS=500 ./build/bin/helix-tests '[info_qr_modal]'
 //

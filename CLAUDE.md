@@ -87,22 +87,30 @@ make remote-native                   # build the app there
 #   `make remote-sync` rsyncs the whole tree and is for the Docker cross targets
 #   only; a fresh REMOTE_DIR costs ~260MB, so never make one per branch.
 
-scripts/zeus-run.sh mutate --tests '[tag]'   # mutation gate on zeus
-scripts/zeus-run.sh asan '[tag]'            # AddressSanitizer on zeus
-scripts/zeus-run.sh sweep                   # make unit-sweep on zeus
-#   bats stays on thelio (`make test-shell`): the container runs as root with no
+scripts/test-host-run.sh mutate --tests '[tag]'   # mutation gate on the test host
+scripts/test-host-run.sh asan '[tag]'            # AddressSanitizer on the test host
+scripts/test-host-run.sh sweep                   # make unit-sweep on the test host
+#   The test host is any Linux box with Docker, named in
+#   ~/.config/helixscreen/build-hosts.env (HELIX_TEST_HOST=..., zeus here) and set
+#   up once by scripts/test-host-setup.sh; docs/devel/BUILD_SYSTEM.md "Using your
+#   own build/test host". With none configured these refuse in one line.
+#   bats stays local (`make test-shell`): the container runs as root with no
 #   shellcheck, so about 190 shell tests fail there on the environment alone.
 #   All three are expensive and non-interactive, so they belong on the idle
-#   72-core box. `zeus-run.sh test` with no tag runs the suite in ONE process,
+#   big box. `test-host-run.sh test` with no tag runs the suite in ONE process,
 #   where cross-test contamination fails cases no branch touched: not a gate.
 #   ASAN especially: thelio's /etc/ld.so.preload makes ASAN's runtime load
 #   second, so the binary produces NO test output and exits 0 - a pass that ran
 #   nothing. The container has no ld.so.preload and its image matches CI's.
-#   The commit has to be pushed; the container fetches it, it does not take your
-#   tree. zeus is memory-bound, not core-bound (ZFS ARC holds most of its 251GB);
-#   its zfs_arc_sys_free tunable keeps 64 GiB free and the ARC self-adjusts above
-#   that. The container joins zeus's jobpool when one is installed there, else
-#   sizes -j from MemAvailable.
+#   It runs your tree as it is on disk, uncommitted edits included: an rsync to
+#   a per-tree mirror (/work/trees/<tree>) whose build/ persists, so a warm run
+#   rebuilds only what changed, and different trees run at once. The output says
+#   HEAD + clean or + dirty <hash>. `--commit` runs the pushed HEAD instead, for a
+#   verdict others must reproduce (mutate always does). `make full-test-run
+#   TEST_HOST=1` runs the sweep there while bats runs here. On a ZFS host keep
+#   build headroom with the zfs_arc_sys_free tunable (zeus keeps 64 GiB). The
+#   container joins the host's jobpool when one is installed there, else sizes
+#   -j from MemAvailable.
 
 # Worktrees — MUST use for MAJOR work. Always in .worktrees/ (project root).
 scripts/setup-worktree.sh feature/my-branch  # Symlinks shared deps, builds fast
@@ -241,7 +249,7 @@ What is shared here:
   if scripts/helix-claim take device:k2plus deploy --pid $$ --note 192.168.1.50; then  # gate on the exit code; never pipe take
       trap 'scripts/helix-claim release-if-owned-by $$ device:k2plus' EXIT; make deploy-k2plus; fi
   scripts/helix-claim list                       # everything, with derived liveness
-  scripts/helix-claim resources                  # memory, load, claims, top RSS, zeus: before heavy work
+  scripts/helix-claim resources                  # memory, load, claims, top RSS, test host: before heavy work
   scripts/helix-claim run heavy:sweep -- make unit-sweep   # claimed while it runs
   scripts/helix-claim jobs -v                    # make's -j: the jobpool's size, or cores capped by memory. Never size docker/ninja/parallel from it: `hold`
   ```
