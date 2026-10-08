@@ -530,7 +530,10 @@ with `environment` (per-lane sensors, e.g. EMU) → `PerLane`; else `None`. `Per
 the same lid once per slot over `[slot_x - h, slot_x + h]`, `h = lane_lid_half_width` (each lid's
 right end cap tucks halfway behind the next lid; lids are drawn left to right so the nearer one
 covers it), and shows
-each lane's humidity above its material label instead of the unit readout. Reference:
+each lane's humidity above its material label instead of the unit readout, each value led by the
+same water-droplet icon and color as the unit readout's humidity row (the existing icon-font
+glyph from `include/ui_icon_codepoints.h`), so it never reads as filament remaining. Test: in
+`PerLane` mode each label row holds the droplet icon before the value. Reference:
 `unit_render.py` mode 2.
 
 Tests, `tests/unit/test_ams_tray_projection.cpp`, `[ams][tray]` (pure, no LVGL). Box
