@@ -1874,10 +1874,10 @@ footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem; }
 </dl>
 </div>
 </details>
-<details class="f" id="RAM-4" data-tag="footprint" data-size="later" data-status="open">
-<summary><span class="fid">RAM-4</span><span class="chip t-footprint">footprint</span><span class="chip sz">later</span><span class="pill st-open">open</span><span class="ftitle">342 XML components parsed at boot and held on heap; *_tag attrs duplicate text</span><span class="fimpact">~0.5-1MB heap and boot parse time</span></summary>
+<details class="f" id="RAM-4" data-tag="footprint" data-size="later" data-status="done">
+<summary><span class="fid">RAM-4</span><span class="chip t-footprint">footprint</span><span class="chip sz">later</span><span class="pill st-done">done</span><span class="ftitle">342 XML components parsed at boot and held on heap; *_tag attrs duplicate text</span><span class="fimpact">~0.5-1MB heap and boot parse time</span></summary>
 <div class="fbody">
-<p class="branch">RAM-4a shipped at <code>f3d0e5b72</code>: a literal text attribute implies its own translation tag and 1,661 redundant <code>*_tag</code> attributes are gone. RAM-4b (register-on-first-use, needs an on-device heap measure) is open.</p>
+<p class="branch">RAM-4a shipped at <code>f3d0e5b72</code>: a literal text attribute implies its own translation tag and 1,661 redundant <code>*_tag</code> attributes are gone. RAM-4b shipped at <code>8cc5448dd</code>: components register on first use, so boot registers 65 of 354 components (442 KB instead of 1.83 MB, 0.8 ms instead of 21 ms).</p>
 <dl>
 <dt>Locations</dt><dd><code>src/xml_registration.cpp#register_xml_components</code>, <code>lib/helix-xml/src/xml/lv_xml_component.c#lv_xml_register_component_from_data</code>, <code>lib/helix-xml/src/xml/lv_xml.c#apply_pending_inline_text</code></dd>
 <dt>Evidence</dt><dd><code>register_xml_components</code> is 832 lines with 342 <code>register_xml</code> calls (329 commits in 2026); each keeps its <code>view_def</code> text on the heap. Base-layout XML minifies to ~1.2 MB (estimate), all parsed with expat at boot and retained, including one-shot wizard screens and dead dev panels. 1,722 of 1,774 <code>*_tag</code> attributes repeat their text exactly (62 KB source, also resident in <code>view_def</code>). The hand list is how <code>width_sensor_row.xml</code> broke.</dd>
