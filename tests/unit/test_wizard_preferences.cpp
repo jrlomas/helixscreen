@@ -4,6 +4,7 @@
 
 #include "../../src/ui/wizard_step_registry.h"
 #include "../lvgl_ui_test_fixture.h"
+#include "config.h"
 #include "display_settings_manager.h"
 #include "settings_manager.h"
 
@@ -88,4 +89,38 @@ TEST_CASE_METHOD(LVGLUITestFixture, "Preference rows write the same setting as t
         [&] { return display.get_sleep_while_printing(); });
 
     step->cleanup();
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "Preferences page writes per-printer rows to the printer the wizard is adding",
+                 "[wizard][preferences]") {
+    auto* config = helix::Config::get_instance();
+    const std::string previous_df = config->df();
+
+    // The add-printer flow makes the new entry active before it rebuilds into the wizard.
+    const std::string new_id = config->next_printer_id();
+    config->add_printer(new_id, {{"wizard_completed", false}});
+    REQUIRE(config->set_active_printer(new_id));
+
+    auto& settings = SettingsManager::instance();
+    settings.init_subjects();
+    settings.set_filament_auto_open_editor(false);
+
+    auto* step = helix::wizard::get_wizard_preferences_step();
+    step->register_callbacks();
+    lv_obj_t* root = step->create(test_screen());
+    REQUIRE(root != nullptr);
+
+    lv_obj_t* sw =
+        lv_obj_find_by_name(lv_obj_find_by_name(root, "row_filament_auto_open_editor"), "toggle");
+    REQUIRE(sw != nullptr);
+    lv_obj_add_state(sw, LV_STATE_CHECKED);
+    lv_obj_send_event(sw, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    REQUIRE(config->df() != previous_df);
+    CHECK(config->get<bool>(config->df() + "filament/auto_open_editor", false));
+    CHECK_FALSE(config->get<bool>(previous_df + "filament/auto_open_editor", false));
+
+    step->cleanup();
+    config->remove_printer(new_id);
 }

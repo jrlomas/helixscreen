@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ui_observer_guard.h"
+
 #include "lvgl/lvgl.h"
 #include "subject_managed_panel.h"
 #include "wizard_step.h"
@@ -43,7 +45,12 @@ class WizardPreferencesStep : public Step {
     void cleanup() override;
 
   private:
+    /// Recompute the three visibility subjects from the live AMS backend.
+    void update_rows();
+
     lv_obj_t* root_ = nullptr;
+    ObserverGuard backend_count_observer_;
+    ObserverGuard ams_type_observer_;
     SubjectManager subjects_;
     lv_subject_t show_global_{};
     lv_subject_t show_bypass_spool_{};
