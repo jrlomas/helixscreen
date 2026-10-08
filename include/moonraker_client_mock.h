@@ -1280,11 +1280,14 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     struct PendingScriptAck {
         std::chrono::steady_clock::time_point due;
         std::function<void(const nlohmann::json&)> success_cb;
+        std::function<void(const MoonrakerError&)> error_cb;
     };
     std::vector<PendingScriptAck> pending_script_acks_;
     mutable std::mutex pa_cal_mutex_;
     void service_pending_pa_lines();
     void service_pending_script_acks();
+    /// Answer every ack still owed with a connection-lost error.
+    void fail_pending_script_acks();
 
     /**
      * @brief Populate hardware lists based on configured printer type
@@ -2268,9 +2271,12 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     /// Hold the RPC answer of a K2 box script back a moment, as the real macro's
     /// minutes of motion do, so the status frames it pushed (the loaded bay,
     /// the toolhead switch) reach their subscribers before the caller checks
-    /// the outcome. @return true when `script` was one and `success_cb` is now owed.
+    /// the outcome. Only the K2 dialect emits CR_BOX_* lines, and the K1 dialect's BOX_*
+    /// scripts never contain them, so `is_mock_cfs()` is the whole gate.
+    /// @return true when `script` was one and an answer is now owed.
     bool defer_cfs_script_ack(const std::string& script,
-                              std::function<void(const nlohmann::json&)> success_cb);
+                              std::function<void(const nlohmann::json&)> success_cb,
+                              std::function<void(const MoonrakerError&)> error_cb);
 
   private:
     // --- gcode_script() handlers (moonraker_client_mock_gcode*.cpp) -----------

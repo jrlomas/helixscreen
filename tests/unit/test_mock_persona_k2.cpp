@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../test_helpers/printer_state_test_access.h"
+#include "../ui_test_utils.h"
 #include "ams_backend_cfs.h"
+#include "app_globals.h"
+#include "cfs_status_parse.h"
 #include "moonraker_client_mock.h"
+#include "printer_state.h"
 #include "test_helpers/mock_personas.h"
+#include "test_helpers/moonraker_client_mock_test_access.h"
 
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <future>
 #include <mutex>
 #include <optional>
-#include <thread>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
@@ -110,21 +115,67 @@ TEST_CASE("The k2 persona answers a box script only after its frames are out",
     mock.register_notify_update(frames.callback());
     mock.connect("ws://mock/websocket", [] {}, [] {});
 
-    std::atomic<bool> acked{false};
+    std::promise<void> acked_promise;
+    auto acked_future = acked_promise.get_future();
     const size_t mark = frames.mark();
     mock.send_jsonrpc(
         "printer.gcode.script",
         {{"script",
           helix::printer::AmsBackendCfs::load_gcode(0, helix::printer::CfsMacroVariant::K2)}},
-        [&acked](const json&) { acked = true; }, [](const MoonrakerError&) {});
+        [&acked_promise](const json&) { acked_promise.set_value(); }, [](const MoonrakerError&) {});
 
     // The loaded bay is out before the answer, which a caller verifying the
     // outcome on completion depends on.
-    CHECK_FALSE(acked.load());
+    CHECK(acked_future.wait_for(std::chrono::seconds(0)) == std::future_status::timeout);
     CHECK(frames.wait_for(mark, [](const json& st) { return loaded_bay(st) == "A"; }));
-    for (int i = 0; i < 400 && !acked.load(); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    CHECK(acked.load());
+    CHECK(acked_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
     mock.disconnect();
+}
+
+TEST_CASE("The k2 persona answers a box script with an error when it disconnects first",
+          "[mock][persona][k2][cfs]") {
+    helix::test::PersonaEnv env("k2");
+    MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::CREALITY_K2_PLUS);
+    mock.connect("ws://mock/websocket", [] {}, [] {});
+
+    bool succeeded = false;
+    bool failed = false;
+    mock.send_jsonrpc(
+        "printer.gcode.script",
+        {{"script",
+          helix::printer::AmsBackendCfs::unload_gcode(helix::printer::CfsMacroVariant::K2)}},
+        [&succeeded](const json&) { succeeded = true; },
+        [&failed](const MoonrakerError&) { failed = true; });
+    mock.disconnect();
+
+    CHECK(failed);
+    CHECK_FALSE(succeeded);
+}
+
+TEST_CASE("The k2 persona's motor_control and fan_feedback frames parse",
+          "[mock][persona][k2][cfs]") {
+    helix::test::PersonaEnv env("k2");
+    MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::CREALITY_K2_PLUS);
+    json frame;
+    const auto id =
+        mock.register_notify_update([&frame](const json& n) { frame = n["params"][0]; });
+    helix::MoonrakerClientMockTestAccess::dispatch_initial_state(mock);
+    mock.unsubscribe_notify_update(id);
+    REQUIRE(frame.contains("motor_control"));
+    REQUIRE(frame.contains("fan_feedback"));
+
+    const auto motor = helix::cfs::parse_motor_control(frame);
+    REQUIRE(motor.has_value());
+    CHECK(motor->motor_ready == std::optional<bool>(true));
+
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+    state.fan_state().init_fans({"output_pin fan0", "output_pin fan1", "output_pin fan2"});
+    state.update_from_status(frame);
+    for (const auto& fan : state.fan_state().get_fans()) {
+        INFO(fan.object_name);
+        CHECK(fan.rpm.has_value());
+    }
 }
