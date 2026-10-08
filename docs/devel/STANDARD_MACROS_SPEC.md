@@ -302,7 +302,7 @@ void FilamentPanel::execute_load() {
 |-------|-------|-------|-------------|
 | 1 | Core class | `standard_macros.h/cpp` | Compiles, unit tests pass |
 | 2 | Discovery integration | `moonraker_manager.cpp` | Auto-detection logs on connect |
-| 3 | Overlay UI | `macro_buttons_overlay.xml`, `xml_registration.cpp` | UI renders, dropdowns populate |
+| 3 | Overlay UI | `macro_buttons_overlay.xml` | UI renders, dropdowns populate |
 | 4 | Settings handler | `ui_panel_settings.cpp/h` | Overlay opens, saves to config |
 | 5 | Controls integration | `ui_panel_controls.cpp/h` | Quick buttons use StandardMacros |
 | 6 | Filament integration | `ui_panel_filament.cpp` | Load/Unload use StandardMacros |
@@ -329,7 +329,6 @@ void FilamentPanel::execute_load() {
 ### Files Modified (historical planning list; paths updated to as-built locations)
 - `src/ui/ui_panel_settings.cpp/h` - Add overlay handler
 - `ui_xml/settings_panel.xml` - Add action row
-- `src/xml_registration.cpp` - Register new component
 - `src/application/moonraker_manager.cpp` - Init after discovery
 - `src/ui/ui_panel_controls.cpp/h` - Use StandardMacros
 - `src/ui/ui_panel_filament.cpp` - Use StandardMacros

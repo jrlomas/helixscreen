@@ -262,15 +262,8 @@ void XMLTestFixture::setup_global_xml_registrations_once() {
     lv_xml_register_component_from_file("A:ui_xml/macro_param_modal.xml");
     lv_xml_register_component_from_file("A:ui_xml/form_field.xml");
 
-    // Register components used by filament_catalog_picker (Modal subclass, no
-    // pre-registered app-wide entry point yet — Task 5/7 wires that up).
-    // register_filament_catalog_components() is the same function production
-    // calls, so the selector's row/add-row/empty-row templates (created by
-    // name at runtime, never referenced from XML markup) can't go missing
-    // from this fixture the way a hand-listed copy of the set could.
-    lv_xml_register_component_from_file("A:ui_xml/divider_vertical.xml");
-    lv_xml_register_component_from_file("A:ui_xml/modal_button_row.xml");
-    helix::register_filament_catalog_components();
+    // Every component not registered above registers on first use, as in production.
+    helix::register_xml_on_first_use();
 
     // <afc_fault_path> + the afc_fault_segment subject it binds. Embedded by
     // ams_loading_error_modal.xml and action_prompt_modal.xml, both of which

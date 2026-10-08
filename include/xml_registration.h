@@ -3,7 +3,7 @@
 
 /**
  * @file xml_registration.h
- * @brief XML component registration in correct dependency order
+ * @brief XML component registration: a short eager list, the rest on first use
  *
  * @threading Main thread only; must complete before UI creation
  * @note Fonts and images are registered via AssetManager::register_fonts/images()
@@ -16,22 +16,22 @@ namespace helix {
 /**
  * @brief Register XML components from ui_xml/ directory
  *
- * Registers all XML component definitions in dependency order.
+ * Registers the components that must exist before their first use and
+ * installs the loader for the rest.
  * Must be called after AssetManager initialization and theme init.
  */
 void register_xml_components();
 
 /**
- * @brief Register the filament_catalog_selector family of XML components
+ * @brief Register each XML component the first time anything names it
  *
- * filament_catalog_row / filament_catalog_add_row / filament_catalog_empty_row
- * are never named in any XML markup: FilamentCatalogSelector::rebuild_product_list()
- * creates them by name at runtime, so a caller that never invokes this leaves
- * lv_xml_create() silently returning nullptr for those names. Shared between
- * register_xml_components() and XMLTestFixture::setup_global_xml_registrations_once()
- * so a component added to the set cannot be forgotten in one of the two.
+ * Installs the engine's component loader: a tag, extends= base, lv_xml_create()
+ * or lv_xml_component_get_scope() naming an unregistered component registers
+ * ui_xml/<name>.xml or ui_xml/components/<name>.xml, layout variant applied.
+ * register_xml_components() calls it; a test fixture that skips that calls it
+ * directly.
  */
-void register_filament_catalog_components();
+void register_xml_on_first_use();
 
 /**
  * @brief Deinitialize XML-related subjects

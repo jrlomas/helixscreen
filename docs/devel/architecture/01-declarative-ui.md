@@ -2,7 +2,7 @@
 
 HelixScreen builds every screen the same way: an XML file describes the widget tree, C++ owns the data, and named reactive slots ("subjects") connect the two. A small XML engine — `lib/helix-xml/`, our own MIT-licensed fork of the engine LVGL removed in 9.5 — parses those files at runtime and instantiates real LVGL widgets from them, so editing a layout never requires recompiling. The contract to hold in your head is one line: **data lives in C++, appearance lives in XML, subjects connect them.**
 
-The engine resolves three questions at runtime: *what widgets exist* (C++ registration), *what components exist* (XML file registration), and *where bindings find their data* (scope-ordered subject lookup). Everything else in this chapter is those three answers plus the lint gate that keeps new code declarative.
+The engine resolves three questions at runtime: *what widgets exist* (C++ registration), *what components exist* (XML files, registered on first use), and *where bindings find their data* (scope-ordered subject lookup). Everything else in this chapter is those three answers plus the lint gate that keeps new code declarative.
 
 ```mermaid
 flowchart TD
@@ -11,9 +11,9 @@ flowchart TD
         LAYOUTS["panels, overlays, modals<br/>+ components/ fragments"]
     end
 
-    subgraph BOOT["Boot — one-time registration"]
+    subgraph BOOT["Boot registration"]
         WIDGETS["29 C++ widget files<br/>call lv_xml_register_widget()"]
-        REG["src/xml_registration.cpp<br/>~300 components via<br/>lv_xml_register_component_from_file()"]
+        REG["src/xml_registration.cpp<br/>styles.xml eagerly; every other<br/>component on first use"]
         SUBJ["SubjectInitializer<br/>registers C++ data as named subjects"]
     end
 
@@ -34,7 +34,7 @@ flowchart TD
 
 | File | Role |
 |------|------|
-| [`src/xml_registration.cpp`](../../../src/xml_registration.cpp) | Registers every XML component file at boot; registers global event callbacks |
+| [`src/xml_registration.cpp`](../../../src/xml_registration.cpp) | Registers `styles.xml` at boot and installs the first-use component loader; registers global event callbacks |
 | [`src/application/application.cpp`](../../../src/application/application.cpp) | Startup ordering: widgets → XML components → subjects → root layout |
 | [`src/application/subject_initializer.cpp`](../../../src/application/subject_initializer.cpp) | Creates subjects and publishes C++ state into them |
 | [`src/application/xml_hot_reloader.cpp`](../../../src/application/xml_hot_reloader.cpp) | `HELIX_HOT_RELOAD` live re-registration and active-view rebuild |
@@ -59,11 +59,11 @@ At boot, `Application` runs the phases in a fixed order (phase numbers and lines
 1. Phase 7 — `register_widgets()` (`src/application/application.cpp#register_widgets`): registers the first 13 C++ widget types so the engine knows tags like `ui_card` and `ui_button`.
 2. Phase 8a — translations, before any UI exists.
 3. Phase 8b — rotation probe and layout-manager init, so per-display XML variant directories are known.
-4. Phase 8c — `register_xml_components()` (`src/application/application.cpp#register_xml_components`): registers every XML component file.
+4. Phase 8c — `register_xml_components()` (`src/application/application.cpp#register_xml_components`): registers `styles.xml` and installs the first-use loader.
 5. Phase 9a — subject initialization, so every binding can resolve.
 6. Finally `lv_xml_create(m_screen, "app_layout", nullptr)` (`src/application/printer_session.cpp#"lv_xml_create(m_screen"`) instantiates the root layout.
 
-`register_xml_components()` in [`src/xml_registration.cpp#register_xml_components`](../../../src/xml_registration.cpp) walks roughly 300 `register_xml("file.xml")` calls. Each resolves the path through `LayoutManager::resolve_xml_path()` ([`src/layout_manager.cpp#resolve_xml_path`](../../../src/layout_manager.cpp)) — which prefers a per-display variant subdirectory when one is active — prefixes an LVGL filesystem drive letter, and hands it to `lv_xml_register_component_from_file()`. The result is a table of component templates: named XML fragments like
+`register_xml_components()` in [`src/xml_registration.cpp#register_xml_components`](../../../src/xml_registration.cpp) registers only `styles.xml` eagerly (its theme-token consts resolve at registration, after theme init) and installs a component loader with `lv_xml_set_component_loader()` ([`src/xml_registration.cpp#register_xml_on_first_use`](../../../src/xml_registration.cpp)). Whenever `lv_xml_component_get_scope()` misses a name (every tag in a view, every `extends=` base, every `lv_xml_create()` and every C++ scope lookup goes through it), the loader registers `ui_xml/<name>.xml` or else `ui_xml/components/<name>.xml`, so no component needs a registration line and none has to be registered before the one that nests or extends it. A name with no file fails loudly: `lv_xml_create` returns NULL and logs an error. The path resolves through `LayoutManager::resolve_xml_path()` ([`src/layout_manager.cpp#resolve_xml_path`](../../../src/layout_manager.cpp)) — which prefers a per-display variant subdirectory when one is active — prefixes an LVGL filesystem drive letter, and hands it to `lv_xml_register_component_from_file()`. The result is a growing table of component templates: named XML fragments like
 
 ```xml
 <component>
@@ -78,17 +78,17 @@ At boot, `Application` runs the phases in a fixed order (phase numbers and lines
 </component>
 ```
 
-(excerpted from [`ui_xml/history_dashboard_panel.xml`](../../../ui_xml/history_dashboard_panel.xml); comments removed). A template is not yet widgets — just a parsed definition waiting to be instantiated. On ESP-class targets the registration sweep yields periodically ([`boot_yield.h`](../../../include/boot_yield.h)) so the watchdog never fires mid-sweep.
+(excerpted from [`ui_xml/history_dashboard_panel.xml`](../../../ui_xml/history_dashboard_panel.xml); comments removed). A template is not yet widgets — just a parsed definition waiting to be instantiated.
 
 Creation happens later, on demand. When navigation needs a panel, its owner calls `lv_xml_create(parent, "history_dashboard_panel", attrs)` ([`src/ui/ui_panel_history_dashboard.cpp#create`](../../../src/ui/ui_panel_history_dashboard.cpp)). The engine (`lib/helix-xml/src/xml/lv_xml.c#lv_xml_create`) first looks the name up in the widget-processor table — the built-in `lv_label`/`lv_slider` types plus our custom `ui_*` widgets. If that misses, it looks up a registered component scope and instantiates the template: recursively creating child widgets, applying attributes, and resolving bindings as it goes.
 
-Components compose. A panel's `<view extends="overlay_panel">` inherits a registered wrapper template ([`ui_xml/overlay_panel.xml`](../../../ui_xml/overlay_panel.xml), registered at [`src/xml_registration.cpp#register_xml_components`](../../../src/xml_registration.cpp)) instead of a bare `lv_obj`; the `extends` link is resolved at instantiation time through the same widget/component tables (`lib/helix-xml/src/xml/lv_xml_component.c#extended_proc`). A component file may also declare `<consts>` — named values visible to that component's bindings and styles — which is where per-panel colors and sizes live when they are not global theme tokens.
+Components compose. A panel's `<view extends="overlay_panel">` inherits a wrapper template ([`ui_xml/overlay_panel.xml`](../../../ui_xml/overlay_panel.xml), loaded on first use) instead of a bare `lv_obj`; the `extends` link is resolved at instantiation time through the same widget/component tables (`lib/helix-xml/src/xml/lv_xml_component.c#extended_proc`). A component file may also declare `<consts>` — named values visible to that component's bindings and styles — which is where per-panel colors and sizes live when they are not global theme tokens.
 
 Widget naming follows a three-level precedence, set in the engine at `lib/helix-xml/src/xml/lv_xml.c#lv_xml_create`: an explicit `name="..."` at the instantiation site wins; otherwise a `name` the component set on its own `<view>` root is kept; otherwise the object gets a default `<component>_#`. (Older docs claimed `<view name>` never propagated and unnamed instances were unfindable — our fork fixed that; an instance-site name that displaces a `<view>` name now logs a one-time warning, `lib/helix-xml/src/xml/lv_xml.c#value_of_name`.)
 
-That boot-time registration is also what makes live editing work.
+Because components are plain files resolved by name, live editing works.
 
-**Nothing above is compiled in.** `ui_xml/` files are read from disk at startup, so an XML edit takes effect on the next launch with no `make` needed. With `HELIX_HOT_RELOAD=1` you do not even relaunch: `XmlHotReloader` ([`src/application/xml_hot_reloader.cpp`](../../../src/application/xml_hot_reloader.cpp)) polls `ui_xml/` every 500 ms on a background thread, well-formedness-checks changed files with expat (no LVGL state touched off the main thread), re-registers changed components, and rebuilds the active panel/overlay/modal in place via `NavigationManager::rebuild_active_views()`. Invalid XML — mid-write truncation, syntax errors — is silently skipped; the existing UI stays live and the next poll retries. Hot reload defaults ON for native dev builds and OFF for cross-compiled release builds; `HELIX_HOT_RELOAD={0,1}` overrides either way ([`src/system/runtime_config.cpp#hot_reload_enabled`](../../../src/system/runtime_config.cpp)). Three components are exempt because C++ extends their scopes after registration — `globals`, `color_picker`, `color_swatch_grid` ([`src/application/xml_hot_reloader.cpp`](../../../src/application/xml_hot_reloader.cpp)) — a fresh registration of those would lose theme tokens and breakpoint constants. Editing [`globals.xml`](../../../ui_xml/globals.xml) therefore still needs a relaunch.
+**Nothing above is compiled in.** `ui_xml/` files are read from disk on first use, so an XML edit takes effect on the next launch with no `make` needed. With `HELIX_HOT_RELOAD=1` you do not even relaunch: `XmlHotReloader` ([`src/application/xml_hot_reloader.cpp`](../../../src/application/xml_hot_reloader.cpp)) polls `ui_xml/` every 500 ms on a background thread, well-formedness-checks changed files with expat (no LVGL state touched off the main thread), re-registers changed components, and rebuilds the active panel/overlay/modal in place via `NavigationManager::rebuild_active_views()`. Invalid XML — mid-write truncation, syntax errors — is silently skipped; the existing UI stays live and the next poll retries. Hot reload defaults ON for native dev builds and OFF for cross-compiled release builds; `HELIX_HOT_RELOAD={0,1}` overrides either way ([`src/system/runtime_config.cpp#hot_reload_enabled`](../../../src/system/runtime_config.cpp)). Three components are exempt because C++ extends their scopes after registration — `globals`, `color_picker`, `color_swatch_grid` ([`src/application/xml_hot_reloader.cpp`](../../../src/application/xml_hot_reloader.cpp)) — a fresh registration of those would lose theme tokens and breakpoint constants. Editing [`globals.xml`](../../../ui_xml/globals.xml) therefore still needs a relaunch.
 
 One trap follows directly from runtime loading: the XML and the binary can drift. XML referencing a widget that this binary never registered produces an unknown-element path, not a build error (`lib/helix-xml/src/xml/lv_xml.c#lv_xml_create`). If a layout change "does nothing", confirm the binary actually contains the C++ side of what the XML uses.
 
@@ -198,7 +198,7 @@ Read in this order; about 25 minutes total.
 
 1. [`ui_xml/temp_graph_overlay.xml#temp_graph_overlay`](../../../ui_xml/temp_graph_overlay.xml) — a whole live overlay in ~450 lines. Notice the orthogonal `<styles>` pairs driven by `bind_style_if cond=`, the structural `<if>` branches for portrait/landscape and the chamber-diagnostics card, `bind_text` on preset buttons (line 170), and the shared component instantiation (`<chamber_diagnostics_card/>`).
 2. [`ui_xml/overlay_panel.xml`](../../../ui_xml/overlay_panel.xml) — the wrapper component those panels extend: positioning, header, and the content slot convention.
-3. [`src/xml_registration.cpp#register_xml`](../../../src/xml_registration.cpp) — the `register_xml()` helper: path resolution, the LVGL drive-letter prefix, and the ESP boot-yield. Then skim `register_xml_components()` at [`src/xml_registration.cpp#register_xml_components`](../../../src/xml_registration.cpp) to feel the size of the sweep.
+3. [`src/xml_registration.cpp#register_xml`](../../../src/xml_registration.cpp) — the `register_xml()` helper: path resolution and the LVGL drive-letter prefix. Then `register_xml_on_first_use()` in the same file, the loader every other component goes through.
 4. [`src/application/application.cpp#register_widgets`](../../../src/application/application.cpp) — `register_widgets()` (the first wave of C++ widget registrations), then `src/application/application.cpp#register_xml_components` `register_xml_components()` and its hot-reloader wiring, and finally `src/application/printer_session.cpp#"lv_xml_create(m_screen"` the single `lv_xml_create` that instantiates the root layout. This is the whole boot ordering in four stops.
 5. `lib/helix-xml/src/xml/lv_xml.c#lv_xml_create` — `lv_xml_create`: widget-processor table first, component scope second. Then `lib/helix-xml/src/xml/lv_xml.c#lv_xml_create/"Set a default indexed name"` — the name-precedence rules and the default `<component>_#` fallback.
 6. `lib/helix-xml/src/xml/lv_xml.c#lv_xml_get_subject` — `lv_xml_get_subject`: the component-scope-then-globals walk, and the WARN on miss you will grep for.
