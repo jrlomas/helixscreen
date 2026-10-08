@@ -188,6 +188,17 @@ describe() {
     return 0
 }
 
+# The live jobpool's target, or exit 1 when there is none. `jobpool target`
+# takes no lock and moves no tokens, so this is safe on every make and under a
+# timeout. JOBPOOL=0 is jobpool's own bypass, so it bypasses here too.
+# HELIX_JOBPOOL names the jobpool binary (tests point it at a fake).
+pool_target() {
+    local t
+    [ "${JOBPOOL:-}" != 0 ] || return 1
+    t=$("${HELIX_JOBPOOL:-jobpool}" target 2>/dev/null) && [ "$t" -gt 0 ] 2>/dev/null || return 1
+    printf '%s\n' "$t"
+}
+
 cmd=${1:-}; shift 2>/dev/null || true
 case "$cmd" in
 take)
@@ -256,48 +267,37 @@ list)
     for f in "$CLAIM_DIR"/*.json; do describe "$f"; n=$((n+1)); done
     [ "$n" = 0 ] && printf 'no claims\n'
     ;;
+pool)
+    pool_target
+    ;;
 jobs)
-    # A fair -j, derived rather than guessed. Peers are counted from LIVE
-    # build: claims, and cross-checked against compilers actually running, so
-    # a session that never claimed is still counted.
-    ncpu=$(nproc)
-    shopt -s nullglob
-    peers=0
-    for f in "$CLAIM_DIR"/build_*.json; do
-        [ "$(state_of "$f")" = "LIVE" ] || continue
-        body=$(tr -d '\n' < "$f"); pid=$(json_get "$body" pid)
-        [ "$pid" = "$(session_pid)" ] || peers=$((peers+1))
-    done
-    # Claims undercount: a session that never claimed still burns cores. Count
-    # DISTINCT trees with live compilers - that is the real number of competing
-    # builds, where a raw cc1plus count would just be one build's -j.
-    # The caller's own makes are not peers: called from a Makefile's $(shell),
-    # the make asking would otherwise count itself and halve its own share.
-    self=" "; p=$$
-    while [ "$p" -gt 1 ] 2>/dev/null && read -r st < "/proc/$p/stat" 2>/dev/null; do
-        self="$self$p "
-        st=${st##*) }; st=${st#* }; p=${st%% *}   # fields after comm: state ppid ...
-    done
-    trees=$(for q in $(pgrep -x cc1plus 2>/dev/null; pgrep -x make 2>/dev/null); do
-                case "$self" in *" $q "*) continue;; esac
-                readlink "/proc/$q/cwd" 2>/dev/null
-            done | sed 's#\(/\.worktrees/[^/]*\).*#\1#; s#^\(/[^/]*/[^/]*/[^/]*/[^/]*\)$#\1#' \
-              | sort -u | grep -c . )
-    running=$(pgrep -x cc1plus 2>/dev/null | wc -l)
-    [ "$trees" -gt "$peers" ] && peers=$trees
-    avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)
-    j=$(( ncpu / (peers + 1) ))
-    # Each cc1plus peaks around 1GB on this tree; never promise more parallel
-    # compiles than memory can hold.
-    mem_cap=$(( avail_kb / 1048576 ))
-    [ "$mem_cap" -lt 1 ] && mem_cap=1
-    [ "$j" -gt "$mem_cap" ] && j=$mem_cap
+    # The -j a build should take. With jobpool installed, every make on the box
+    # draws from one machine pool, so the answer is the pool's size and the
+    # pool divides it between builds as they run. Without it (CI, a Mac, a
+    # contributor's box) it is the cores, capped by memory at ~1GB per
+    # compile.
+    avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo 2>/dev/null)
+    mem_gb=$(( ${avail_kb:-0} / 1048576 ))
+    if target=$(pool_target); then
+        if [ "${1:-}" = "-v" ]; then
+            # status drains the FIFO and writes the tokens back, so a signal
+            # between the two loses them; the advisor runs this under timeout.
+            free=$( (trap '' INT TERM HUP PIPE; "${HELIX_JOBPOOL:-jobpool}" status --json 2>/dev/null) |
+                sed -n 's/.*"available":\([0-9][0-9]*\).*/\1/p')
+            printf 'pool target=%s available=%s availGB=%s -> -j%s\n' \
+                "$target" "${free:-0}" "$mem_gb" "$target" >&2
+        fi
+        printf '%s\n' "$target"
+        exit 0
+    fi
+    ncpu=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+    j=$ncpu
+    # No /proc/meminfo (a Mac): cores alone.
+    [ -n "$avail_kb" ] && [ "$j" -gt "$mem_gb" ] && j=$mem_gb
     [ "$j" -lt 2 ] && j=2
     [ "$j" -gt "$ncpu" ] && j=$ncpu
-    if [ "${1:-}" = "-v" ]; then
-        printf 'ncpu=%s peers=%s(claimed+inferred) cc1plus=%s availGB=%s -> -j%s\n' \
-            "$ncpu" "$peers" "$running" "$mem_cap" "$j" >&2
-    fi
+    [ "${1:-}" = "-v" ] &&
+        printf 'ncpu=%s availGB=%s -> -j%s\n' "$ncpu" "$mem_gb" "$j" >&2
     printf '%s\n' "$j"
     ;;
 run)
@@ -353,9 +353,10 @@ resources)
     [ "${1:-}" = "--no-zeus" ] && zeus=0
     avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)
     read -r l1 l5 l15 _ < /proc/loadavg
-    printf '%s: %.1fGB available, load %s %s %s on %s cpus, fair share -j%s\n' \
+    if j=$(pool_target); then jl="jobpool target $j"; else jl="build -j$("${BASH_SOURCE[0]}" jobs)"; fi
+    printf '%s: %.1fGB available, load %s %s %s on %s cpus, %s\n' \
         "$(hostname -s)" "$(awk -v kb="$avail_kb" 'BEGIN{print kb/1048576}')" \
-        "$l1" "$l5" "$l15" "$(nproc)" "$("${BASH_SOURCE[0]}" jobs)"
+        "$l1" "$l5" "$l15" "$(nproc)" "$jl"
     shopt -s nullglob
     live=0
     for f in "$CLAIM_DIR"/*.json; do
@@ -486,7 +487,10 @@ helix-claim - advisory claims on resources shared between agent sessions
   run heavy:<what> [--note X] -- <cmd...>     hold heavy:<what> while cmd runs and
                                               exit with its status; exits 75 with
                                               cmd unrun if the claim is held
-  resources [--no-zeus]                       memory, load, fair -j, live claims,
+  jobs [-v]                                   the -j a build takes: the jobpool's
+                                              target, else cores capped by memory
+  pool                                        the live jobpool's target; exit 1 if none
+  resources [--no-zeus]                       memory, load, build -j, live claims,
                                               top memory users, and zeus
 
 worktree: and build: names are resolved (basename, branch, or bare = the tree

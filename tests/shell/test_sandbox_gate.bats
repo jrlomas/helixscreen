@@ -8,7 +8,7 @@
 # file. A blocked call recorded in the suite ledger fails the run, and these
 # tests must not do that.
 
-SANDBOX_COMMANDS_DOC="killall pkill pidof reboot shutdown halt poweroff telinit launchctl crontab mount umount diskutil mkfs addr2line systemctl"
+SANDBOX_COMMANDS_DOC="killall pkill pidof reboot shutdown halt poweroff telinit launchctl crontab mount umount diskutil mkfs addr2line systemctl jobpool"
 
 setup() {
     load helpers
@@ -29,6 +29,10 @@ escape() {
         *":$HELIX_TEST_SANDBOX_BIN:"*) ;;
         *) fail "sandbox bin is not on PATH: $PATH" ;;
     esac
+}
+
+@test "sandbox: makes the suite runs bypass the host's build pool" {
+    [ "${JOBPOOL:-}" = 0 ]
 }
 
 @test "sandbox: every documented command has a shim on PATH" {

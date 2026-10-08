@@ -61,6 +61,13 @@ WORKDIR="${ZEUS_WORKDIR:-/work/helixscreen}"
 ARC_CAP_GB="${ZEUS_ARC_CAP_GB:-64}"     # 0 disables the cap entirely
 GB_PER_JOB="${ZEUS_GB_PER_JOB:-1}"      # asan overrides to 1.5 below
 
+# When jobpool is installed on zeus, the container's make draws from zeus's
+# machine pool instead of a -j of its own, so two runs (or a run and anything
+# else pooled there) share the cores. The pool's state dir has to sit inside a
+# directory the container already mounts (STATE_DIR in zeus's jobpool conf).
+# Without it the run sizes -j from memory as below. Resolved on zeus.
+JOBPOOL_BIN="${ZEUS_JOBPOOL:-\$HOME/.local/bin/jobpool}"   # $HOME is zeus's
+
 WHAT="${1:-}"
 [ -n "$WHAT" ] || { sed -n '2,37p' "$0" | sed 's/^# \?//'; exit 2; }
 shift
@@ -73,6 +80,8 @@ if ! git branch -r --contains "$SHA" 2>/dev/null | grep -q .; then
 fi
 
 # $HELIX_J is resolved on zeus, after the cap, from the memory that is then free.
+# $HELIX_JFLAG is -j$HELIX_J, or empty when the container joins zeus's jobpool:
+# make leaves an inherited jobserver when its command line has any -j.
 # shellcheck disable=SC2016  # $HELIX_J must reach zeus unexpanded
 case "$WHAT" in
     mutate) CMD='python3 scripts/mutate_diff.py --jobs $HELIX_J '"$*" ;;
@@ -82,27 +91,27 @@ case "$WHAT" in
             # turns a recycled-memory SEGV into a heap-use-after-free report).
             # No tag is the nightly's own sharded run, leak ratchet included.
             if [ -z "$_tag" ]; then
-                CMD='make test-asan -j$HELIX_J '"$*"
+                CMD='make test-asan $HELIX_JFLAG '"$*"
             else
-                CMD='make test-asan-one TEST="'"$_tag"'" -j$HELIX_J '"$*"
+                CMD='make test-asan-one TEST="'"$_tag"'" $HELIX_JFLAG '"$*"
             fi
             GB_PER_JOB=1.5 ;;
     tsan)   _tag="${1:-}"; [ $# -gt 0 ] && shift
             # Same shape as asan: trailing args become make overrides, and no
             # tag is the sharded full-suite run.
             if [ -z "$_tag" ]; then
-                CMD='make test-tsan -j$HELIX_J '"$*"
+                CMD='make test-tsan $HELIX_JFLAG '"$*"
             else
-                CMD='make test-tsan-one TEST="'"$_tag"'" -j$HELIX_J '"$*"
+                CMD='make test-tsan-one TEST="'"$_tag"'" $HELIX_JFLAG '"$*"
             fi
             TSAN_TAG="$_tag"
             GB_PER_JOB=1.5 ;;
-    test)   CMD='make test -j$HELIX_J && ./build/bin/helix-tests "'"${1:-}"'"' ;;
+    test)   CMD='make test $HELIX_JFLAG && ./build/bin/helix-tests "'"${1:-}"'"' ;;
     # Trailing args become make overrides, e.g. SHARD_CONCURRENCY=24.
     # NPROCS pins the shard count to thelio's 96. The count decides which tests
     # share a process, so zeus's own 216 would judge a grouping nobody runs
     # locally; a trailing NPROCS= still overrides it.
-    sweep)  CMD='make unit-sweep NPROCS=96 -j$HELIX_J '"$*" ;;
+    sweep)  CMD='make unit-sweep NPROCS=96 $HELIX_JFLAG '"$*" ;;
     asan-app|tsan-app)
         # RECIPE is the positional argument; --repeat N (default 25 in the
         # make target) widens the drive. Both map onto the make target's
@@ -127,7 +136,7 @@ case "$WHAT" in
         _vars=""
         if [ -n "$_recipe" ]; then _vars="RECIPE=$_recipe"; fi
         if [ -n "$_repeat" ]; then _vars="$_vars REPEAT=$_repeat"; fi
-        CMD="make $WHAT $_vars"' -j$HELIX_J'
+        CMD="make $WHAT $_vars"' $HELIX_JFLAG'
         EXPECTED_REPEAT="${_repeat:-25}"
         GB_PER_JOB=1.5 ;;
     *)      echo "✗ unknown job '$WHAT' (mutate | asan | tsan | test | sweep | asan-app | tsan-app)" >&2; exit 2 ;;
@@ -164,26 +173,72 @@ fi
 : > "\$LOCK"
 printf 'held by pid %s: %s %s since %s\n' "\$\$" "$WHAT" "$SHORT" "\$(date '+%F %T')" >&9
 
+# --- jobpool: join zeus's machine pool when it is installed ------------------
+# Started before the ARC cap, so the daemon re-sizes from the freed memory
+# while the cap settles. The container sees the FIFO through whichever bind
+# mount covers the pool's state dir; no such mount means no pool.
+JP=$JOBPOOL_BIN
+POOL_ENV=""
+if [ ! -x "\$JP" ]; then
+    :
+elif ! _fifo=\$("\$JP" ensure 2>/dev/null); then
+    echo "→ jobpool ensure failed on \$(hostname); sizing -j from memory"
+else
+    _state=\${_fifo%/fifo}
+    while read -r _src _dst; do
+        [ -n "\$_src" ] || continue
+        case "\$_state/" in
+            "\$_src"/*) POOL_ENV=\$("\$JP" container-env "\$_dst\${_state#"\$_src"}") && break ;;
+        esac
+    done <<< "\$(sudo -n docker inspect -f '{{range .Mounts}}{{.Source}} {{.Destination}}{{println}}{{end}}' "$CONTAINER" 2>/dev/null)"
+    [ -n "\$POOL_ENV" ] || echo "→ jobpool state \$_state is not mounted in $CONTAINER; sizing -j from memory"
+fi
+
 # --- ZFS ARC: borrow the RAM for the duration, hand it back on any exit -------
-# The marker records "<pid> <value to restore>". Liveness is derived from that
+# The marker records "<pid> <bytes to restore>". Liveness is derived from that
 # pid, never asserted: a run that died without restoring leaves a marker whose
 # pid is gone, and the next run recovers from it. Asserting instead would let one
 # crash cap this NAS permanently, since every later run would read the CAPPED
 # value as the original.
-ARC_PARAM=/sys/module/zfs/parameters/zfs_arc_max
-ARC_MARK=/tmp/.helix-zeus-arc-orig
+#
+# The value restored is always explicit bytes. Writing 0 ("use the default")
+# does not raise c_max again on OpenZFS 2.3, and neither does a value at or
+# above physical memory, so a parameter left at 0 is recorded as the c_max the
+# ARC was running with before the cap.
+ARC_PARAM=${ZEUS_ARC_PARAM:-/sys/module/zfs/parameters/zfs_arc_max}
+ARC_STATS=${ZEUS_ARCSTATS:-/proc/spl/kstat/zfs/arcstats}
+ARC_MARK=${ZEUS_ARC_MARK:-/tmp/.helix-zeus-arc-orig}
 ARC_HELD=no
 
 arc_write() { sudo -n sh -c "echo \$1 > \$ARC_PARAM" 2>/dev/null; }
 
+arc_ceiling() {
+    _v=\$(cat "\$ARC_PARAM" 2>/dev/null) || return 1
+    [ "\${_v:-0}" != 0 ] || _v=\$(awk '\$1 == "c_max" { print \$3 }' "\$ARC_STATS" 2>/dev/null)
+    [ "\${_v:-0}" -gt 0 ] 2>/dev/null || return 1
+    printf '%s' "\$_v"
+}
+
+# The write comes before any output: a run whose ssh side is gone dies of
+# SIGPIPE on its first echo.
+arc_put_back() {
+    if [ "\${1:-0}" -gt 0 ] 2>/dev/null && arc_write "\$1"; then
+        sudo -n rm -f "\$ARC_MARK" 2>/dev/null || true
+        echo "→ zfs_arc_max restored to \$1"
+    else
+        echo "✗ could not restore zfs_arc_max from \$ARC_MARK ('\$(cat "\$ARC_MARK" 2>/dev/null)'); set it by hand, then delete the marker" >&2
+        return 1
+    fi
+}
+
 arc_restore() {
     [ "\$ARC_HELD" = yes ] || return 0
-    _orig=\$(awk '{print \$2}' "\$ARC_MARK" 2>/dev/null || echo 0)
-    arc_write "\${_orig:-0}" || true
-    sudo -n rm -f "\$ARC_MARK" 2>/dev/null || true
-    echo "→ zfs_arc_max restored to \${_orig:-0}"
+    ARC_HELD=no
+    arc_put_back "\$(awk '{print \$2}' "\$ARC_MARK" 2>/dev/null)" || true
 }
-trap arc_restore EXIT INT TERM HUP
+# bash runs the EXIT trap when a signal kills it too. Trapping a signal
+# itself would resume the job after the handler.
+trap arc_restore EXIT
 
 if [ -e "\$ARC_MARK" ]; then
     _mpid=\$(awk '{print \$1}' "\$ARC_MARK" 2>/dev/null)
@@ -192,18 +247,19 @@ if [ -e "\$ARC_MARK" ]; then
         ARC_CAP_GB=0
     else
         _stale=\$(awk '{print \$2}' "\$ARC_MARK" 2>/dev/null)
-        echo "→ recovering ARC cap abandoned by dead pid \${_mpid:-?}; restoring \${_stale:-0}"
-        arc_write "\${_stale:-0}" || true
-        sudo -n rm -f "\$ARC_MARK" 2>/dev/null || true
+        echo "→ recovering ARC cap abandoned by dead pid \${_mpid:-?}; restoring \${_stale:-?}"
+        # A marker that cannot be restored stays, and this run does not cap:
+        # the parameter now holds the dead run's cap, not the original.
+        arc_put_back "\$_stale" || ARC_CAP_GB=0
     fi
 fi
 
 if [ "\${ARC_CAP_GB:-$ARC_CAP_GB}" -gt 0 ] && [ -r "\$ARC_PARAM" ]; then
-    _orig=\$(cat "\$ARC_PARAM")
-    if sudo -n sh -c "echo '\$\$ \$_orig' > \$ARC_MARK" 2>/dev/null &&
+    if _orig=\$(arc_ceiling) &&
+       sudo -n sh -c "echo '\$\$ \$_orig' > \$ARC_MARK" 2>/dev/null &&
        arc_write "\$(( $ARC_CAP_GB * 1024 * 1024 * 1024 ))"; then
         ARC_HELD=yes
-        sleep 10   # ARC evicts to the new ceiling in well under this
+        sleep "${ZEUS_ARC_SETTLE_SECS:-10}"   # ARC evicts to the new ceiling in well under this
         echo "→ zfs_arc_max \$_orig -> ${ARC_CAP_GB}GB for this run"
     else
         echo "→ could not cap zfs_arc_max; sizing jobs for memory as-is" >&2
@@ -216,7 +272,13 @@ fi
 HELIX_J=\$(awk -v per=$GB_PER_JOB -v cpus="\$(nproc)" '
     /^MemAvailable/ { j = int((\$2/1048576) / per); if (j > cpus) j = cpus; if (j < 4) j = 4; print j }
 ' /proc/meminfo)
-echo "→ MemAvailable \$(awk '/^MemAvailable/{printf "%.0fGB", \$2/1048576}' /proc/meminfo), using -j\$HELIX_J"
+if [ -n "\$POOL_ENV" ]; then
+    HELIX_JFLAG=""
+    echo "→ MemAvailable \$(awk '/^MemAvailable/{printf "%.0fGB", \$2/1048576}' /proc/meminfo), joining jobpool: \$("\$JP" status --json 2>/dev/null | sed -n 's/.*"target":\([0-9]*\).*/target \1/p')"
+else
+    HELIX_JFLAG="-j\$HELIX_J"
+    echo "→ MemAvailable \$(awk '/^MemAvailable/{printf "%.0fGB", \$2/1048576}' /proc/meminfo), using -j\$HELIX_J"
+fi
 
 # The container is long-lived but has no restart policy, so it is stopped after
 # every NAS reboot and docker exec fails with a message about the container
@@ -230,7 +292,7 @@ if ! sudo -n docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
     }
 fi
 
-D() { sudo -n docker exec -w "$WORKDIR" -e CCACHE_DIR=/work/ccache -e HELIX_J="\$HELIX_J" "$CONTAINER" bash -lc "\$1"; }
+D() { sudo -n docker exec -w "$WORKDIR" -e CCACHE_DIR=/work/ccache -e HELIX_J="\$HELIX_J" -e HELIX_JFLAG="\$HELIX_JFLAG" "$CONTAINER" bash -lc "\$1"; }
 
 # A run whose ssh side died leaves its build running in the container while
 # the lock is already released; resetting the tree under that build is the
@@ -260,7 +322,16 @@ D 'git reset --hard --quiet $SHA && git submodule update --init --recursive --qu
 # drift check refuses. Reapply against this commit's patches/ every run.
 D 'make reapply-patches >/dev/null'
 D 'git log --oneline -1'
-D '$CMD 2>&1'
+if [ -n "\$POOL_ENV" ]; then
+    # jobpool exec on the host keeps the pool's consumer live for the whole
+    # build; inside, the container opens the FIFO and exports MAKEFLAGS. The
+    # FIFO is mode 600, so a container uid that is not root (or is a remapped
+    # root) cannot open it; that run takes its own -j instead.
+    "\$JP" exec -- sudo -n docker exec -w "$WORKDIR" -e CCACHE_DIR=/work/ccache -e HELIX_J="\$HELIX_J" -e HELIX_JFLAG= "$CONTAINER" bash -lc \
+        "if { \$POOL_ENV; } 2>/dev/null; then :; else "'echo "→ uid \$(id -u) cannot open the jobpool FIFO; using -j\$HELIX_J"; HELIX_JFLAG=-j\$HELIX_J; fi; $CMD 2>&1'
+else
+    D '$CMD 2>&1'
+fi
 REMOTE
 
 # A sanitizer run that produced no Catch2 summary ran nothing, whatever its exit

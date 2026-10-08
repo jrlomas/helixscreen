@@ -9,12 +9,13 @@
 # usually idle. Mutation, sanitizers and symbolizers belong on zeus however quiet
 # thelio looks, and so does a sweep: `make unit-sweep` and the C++ half of
 # `make full-test-run` map to zeus-run.sh's sweep mode; bats stays on thelio,
-# because the zeus container runs as root with no shellcheck. An
-# explicit -j above the fair share is always worth a word. Container builds and
-# test loops are only worth moving when thelio is tight. "Tight" is not decided
-# here: `helix-claim jobs -v` folds in claimed builds, live build trees and
-# MemAvailable, so this reads its share and availGB and applies one threshold to
-# each.
+# because the zeus container runs as root with no shellcheck. Container builds
+# and test loops are only worth moving when thelio is tight. "Tight" is not
+# decided here: `helix-claim jobs -v` reports MemAvailable, plus the jobpool's
+# free tokens when one is live, and this applies one threshold to each. With no
+# pool the -j is cores capped by memory, so memory is the whole signal. An
+# explicit -j above that -j is worth a word only with no pool: with one, the
+# make shim strips the -j and the pool decides.
 #
 # A command is judged segment by segment (split on && || ; | and newlines), by
 # each segment's own first word, with quoted text masked. So a commit message,
@@ -26,8 +27,9 @@
 #
 # Env:
 #   HELIX_ADVISOR_HOSTS       hosts the advice is about (default: thelio); elsewhere it is silent
-#   HELIX_ADVISOR_JOBS_CMD    command printing the `jobs -v` line (default: helix-claim jobs)
-#   HELIX_ADVISOR_MIN_SHARE   share at or below which thelio is tight (default 8)
+#   HELIX_ADVISOR_JOBS_CMD    command printing the `jobs -v` line (default: helix-claim jobs);
+#                             tests stub the pool here, so they never read the real one
+#   HELIX_ADVISOR_MIN_FREE    free pool tokens at or below which thelio is tight (default 8)
 #   HELIX_ADVISOR_MIN_GB      availGB below which thelio is tight (default 16)
 #   HELIX_ADVISOR_ZEUS_RUN    zeus-run.sh whose modes are offered (default: beside this script)
 
@@ -169,23 +171,25 @@ fi
 share=$(printf '%s' "$line" | sed -n 's/.*-> -j\([0-9][0-9]*\).*/\1/p')
 avail=$(printf '%s' "$line" | sed -n 's/.*availGB=\([0-9][0-9]*\).*/\1/p')
 [ -n "$share" ] && [ -n "$avail" ] || exit 0
+# A live pool: `pool target=T available=F ...`.
+free=$(printf '%s' "$line" | sed -n 's/^pool .*available=\([0-9][0-9]*\).*/\1/p')
 
-if [ -n "$jobs_asked" ] && [ "$jobs_asked" -gt "$share" ]; then
-    emit "-j${jobs_asked} is above the fair share, -j${share} (${avail}GB available; \`scripts/helix-claim jobs -v\` shows who else is building). Use \`-j\$(scripts/helix-claim jobs)\`."
+if [ -z "$free" ] && [ -n "$jobs_asked" ] && [ "$jobs_asked" -gt "$share" ]; then
+    emit "-j${jobs_asked} is above the -j${share} this box takes (${avail}GB available). Use plain \`make\`, or \`-j\$(scripts/helix-claim jobs)\`."
 fi
 
-min_share=${HELIX_ADVISOR_MIN_SHARE:-8}
+min_free=${HELIX_ADVISOR_MIN_FREE:-8}
 min_gb=${HELIX_ADVISOR_MIN_GB:-16}
 if [ "$avail" -lt "$min_gb" ]; then
     tight="thelio has ${avail}GB available"
-elif [ "$share" -le "$min_share" ]; then
-    tight="thelio's fair share is -j${share}"
+elif [ -n "$free" ] && [ "$free" -le "$min_free" ]; then
+    tight="the build pool has ${free} of ${share} tokens free"
 else
     exit 0
 fi
 
 if [ -n "$want_container" ]; then
-    emit "Container builds escape thelio's -j and nice, and ${tight}. Run it on zeus (it has the Docker images and twice the RAM), or wait for peers' builds to finish. ${see_load}"
+    emit "Container builds escape thelio's build pool, -j and nice, and ${tight}. Run it on zeus (it has the Docker images and twice the RAM), or wait for peers' builds to finish. ${see_load}"
 fi
 if [ -n "$want_loop" ]; then
     emit "A loop over the test binary multiplies its load, and ${tight}. Cut the count, or run the loop on zeus: ${push_then} use the helix-tsan container. ${see_load}"

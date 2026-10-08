@@ -37,7 +37,7 @@
 
 # Commands that address the host by name. Keep this list and the gate test's
 # copy in step - the gate fails if they diverge.
-HELIX_SANDBOX_COMMANDS="killall pkill pidof reboot shutdown halt poweroff telinit launchctl crontab mount umount diskutil mkfs addr2line systemctl"
+HELIX_SANDBOX_COMMANDS="killall pkill pidof reboot shutdown halt poweroff telinit launchctl crontab mount umount diskutil mkfs addr2line systemctl jobpool"
 
 setup_suite() {
     # The installer bundles are generated, never committed. Build them once per
@@ -77,6 +77,12 @@ SHIM
     done
 
     export PATH="$HELIX_TEST_SANDBOX_BIN:$PATH"
+
+    # The host's build pool is shared with every other session on the box. A
+    # make the suite runs bypasses it (JOBPOOL=0 turns the shim into a plain
+    # passthrough), and jobpool itself is blocked above; a test that exercises
+    # pool handling names a fake through HELIX_JOBPOOL and unsets JOBPOOL.
+    export JOBPOOL=0
 
     # The function layer, which exists for the case where PATH no longer holds
     # the shim. bash resolves a function before PATH, so it would otherwise
