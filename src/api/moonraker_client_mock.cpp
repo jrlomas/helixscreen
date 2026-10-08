@@ -3628,6 +3628,10 @@ void MoonrakerClientMock::dispatch_initial_state() {
                   ext_temp, ext_target, bed_temp_val, bed_target_val, homed, led_json.size(),
                   discovery_.filament_sensors().size());
 
+    // The discovery subscription is built before configfile is read here, so
+    // the leveling-skip objects it never asked for are announced with the rest.
+    initial_status.update(skip_wrapper_status());
+
     // Use the base class dispatch method (same as real client)
     dispatch_status_update(initial_status);
 }
