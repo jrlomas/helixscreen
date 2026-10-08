@@ -27,6 +27,7 @@ enum class PrinterType {
     DELTA,                    // Generic linear delta (every axis homes together)
     ELEGOO_CC1,               // Elegoo Centauri Carbon on COSMOS (load-cell probe)
     FLASHFORGE_AD5X,          // FlashForge Adventurer 5X (IFS, simulated by the mock AMS)
+    CREALITY_K2_PLUS,         // Creality K2 Plus (CFS box, chamber heater)
 };
 
 /// Bit set of the objects every mock persona inherits by default.
@@ -98,6 +99,15 @@ struct PersonaDescriptor {
                 "ifs",
                 false,
                 "loadcell"};
+    case PrinterType::CREALITY_K2_PLUS:
+        // Chamber reads from "temperature_sensor chamber_temp", not the default one.
+        return {"K2Plus-50C1",
+                {352.5, 400.0, 360.0},
+                "corexy",
+                HAPPY_HARE_MMU | CARTOGRAPHER | BME280_CHAMBER | HTU21D_DRYER | EBB_CAN_MCU |
+                    CHAMBER_SENSOR | WIDTH_SENSOR | RUNOUT_SENSOR | LED_EFFECTS,
+                "cfs",
+                false};
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD:
         return {"mock-printer", standard, "corexy", HAPPY_HARE_MMU, "", true};
     case PrinterType::VORON_24:
@@ -131,7 +141,7 @@ struct PersonaEntry {
 /// Every HELIX_MOCK_PRINTER value. Row 0 is the default persona. One row per
 /// line: scripts/screenshot.sh extracts the ids with sed.
 // clang-format off
-inline constexpr std::array<PersonaEntry, 14> PERSONAS = {{
+inline constexpr std::array<PersonaEntry, 15> PERSONAS = {{
     {"voron_24", PrinterType::VORON_24, "Voron 2.4", ""},
     {"voron_trident", PrinterType::VORON_TRIDENT, "Voron Trident", ""},
     {"k1", PrinterType::CREALITY_K1, "Creality K1", "Creality K1C"},
@@ -146,6 +156,7 @@ inline constexpr std::array<PersonaEntry, 14> PERSONAS = {{
     {"snapmaker_u1", PrinterType::MULTI_EXTRUDER, "Snapmaker U1 (multi-extruder mock)", "Snapmaker U1"},
     {"cc1", PrinterType::ELEGOO_CC1, "Elegoo Centauri Carbon", ""},
     {"ad5x", PrinterType::FLASHFORGE_AD5X, "Flashforge AD5X (mock IFS)", ""},
+    {"k2", PrinterType::CREALITY_K2_PLUS, "Creality K2 Plus", ""},
 }};
 // clang-format on
 

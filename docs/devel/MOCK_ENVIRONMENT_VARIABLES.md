@@ -764,7 +764,7 @@ Select which printer the mock Moonraker client impersonates. Drives the mock's r
 
 | Property | Value |
 |----------|-------|
-| **Values** | see `include/mock_persona.h#PERSONAS`: currently `voron_24`, `voron_trident`, `k1`, `k1max`, `ad5m`, `creator5`, `creator5_zmod`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta`, `snapmaker_u1`, `cc1`, `ad5x`. Matched exactly (case-sensitive); an unrecognised value falls back to `voron_24` with a warning listing the valid ids |
+| **Values** | see `include/mock_persona.h#PERSONAS`: currently `voron_24`, `voron_trident`, `k1`, `k1max`, `ad5m`, `creator5`, `creator5_zmod`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta`, `snapmaker_u1`, `cc1`, `ad5x`, `k2`. Matched exactly (case-sensitive); an unrecognised value falls back to `voron_24` with a warning listing the valid ids |
 | **Default** | `voron_24` (Voron 2.4); unset and empty both select it silently |
 | **File** | `include/mock_persona.h` |
 
@@ -792,6 +792,9 @@ HELIX_MOCK_PRINTER=cc1 ./build/bin/helix-screen --test -s micro -vv
 
 # FlashForge Adventurer 5X with the mock IFS (4 slots)
 HELIX_MOCK_PRINTER=ad5x ./build/bin/helix-screen --test -vv
+
+# Creality K2 Plus with the CFS box
+HELIX_MOCK_PRINTER=k2 ./build/bin/helix-screen --test -vv
 ```
 
 `cc1`: run with `-s micro`, the CC1's 480x272 screen. The persona mirrors the
@@ -807,6 +810,19 @@ probe, and `gcode_macro SET_EXTRUDER_SLOT`, which names the machine. Its default
 module's own objects (`ifs`, `ifs_materials`, `zmod_ifs`, `_ifs_port_sensor_*`),
 since those make discovery stand up the production AD5X IFS backend; use
 `HELIX_MOCK_AMS=ifs-module` for that.
+
+`k2`: the Creality **K2 Plus**. Hostname `K2Plus-50C1`, the capture's 352.5x400x360
+CoreXY volume, and the hardware in `tests/fixtures/printers/creality_k2_plus.json` and
+`assets/config/presets/k2.json` `hardware/expected`: `motor_control`, `fan_feedback`,
+`load_ai`, `filament_rack`, the chamber heater `heater_generic chamber_heater` with
+`temperature_sensor chamber_temp`, and fans `fan` / `heater_fan chamber_fan`. It reports the
+declared 350x350 bed through `gcode_macro product_param`, which is what separates the K2 Plus
+from the K2 Pro. Its default `HELIX_MOCK_AMS` is `cfs`, so the `box` object is published
+and the production `AmsBackendCfs` latches the K2 `CR_BOX_*` dialect; `HELIX_MOCK_AMS=none`
+removes the box. `CR_BOX_EXTRUDE TNN=T<n><bay>` loads that bay and `CR_BOX_RETRUDE` unloads
+it: the next `box` frame names the bay, and the toolhead `filament_switch_sensor
+filament_sensor` follows it. The RPC answer of a script holding a `CR_BOX_*` line comes about a
+second after the frames, so a caller that checks the outcome on completion finds them applied.
 
 The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 235x235x250 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
 

@@ -1276,8 +1276,15 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     /// message. The refusal path is otherwise unreachable in mock mode, and it
     /// is one of the states the panel handles most visibly.
     std::vector<PendingPaLine> pending_pa_lines_;
+    /// RPC answers defer_cfs_script_ack() still owes, and when.
+    struct PendingScriptAck {
+        std::chrono::steady_clock::time_point due;
+        std::function<void(const nlohmann::json&)> success_cb;
+    };
+    std::vector<PendingScriptAck> pending_script_acks_;
     mutable std::mutex pa_cal_mutex_;
     void service_pending_pa_lines();
+    void service_pending_script_acks();
 
     /**
      * @brief Populate hardware lists based on configured printer type
@@ -1433,6 +1440,10 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
      * @return true if "temperature_sensor chamber" is in sensors list
      */
     bool has_chamber_sensor() const;
+
+    /// True when the chamber reading is simulated: the default chamber sensor,
+    /// or the K2 Plus's "temperature_sensor chamber_temp".
+    bool simulates_chamber_temp() const;
 
     /**
      * @brief Get the Klipper object name used for chamber heater status updates
@@ -2231,6 +2242,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     // answers the K1 calibration macros (BOX_FIND_CUT_POS,
     // BOX_CUSTOM_COMMAND) with the response lines a real box firmware sends.
     bool is_mock_cfs() const;
+    /// The K2 Plus's `motor_control` and `fan_feedback` frames.
+    void append_k2_status(json& status) const;
     /// The `box` object frame, stock K1 shape (T1 unit, four bays).
     [[nodiscard]] nlohmann::json cfs_box_status_json() const;
     /// Emit the BOX_FIND_CUT_POS response lines synchronously inside
@@ -2239,7 +2252,27 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     void simulate_cfs_find_cut_pos();
     /// Apply one BOX_CUSTOM_COMMAND. @return true when CMD= was one of ours.
     bool apply_cfs_box_custom_command(const std::string& gcode);
+    /// Apply the K2 CR_BOX_EXTRUDE / CR_BOX_RETRUDE lines of a load, unload or
+    /// swap script to the loaded bay and push the `box` frame.
+    /// @return true when the script held one.
+    bool apply_cfs_cr_box_script(const std::string& gcode);
+    /// Global slot the box reports loaded, or -1 when none is.
+    std::atomic<int> cfs_loaded_slot_{-1};
 
+  public:
+    /// The toolhead switch sees filament exactly while a bay is loaded.
+    [[nodiscard]] bool cfs_toolhead_filament_detected() const {
+        return cfs_loaded_slot_.load() >= 0;
+    }
+
+    /// Hold the RPC answer of a K2 box script back a moment, as the real macro's
+    /// minutes of motion do, so the status frames it pushed (the loaded bay,
+    /// the toolhead switch) reach their subscribers before the caller checks
+    /// the outcome. @return true when `script` was one and `success_cb` is now owed.
+    bool defer_cfs_script_ack(const std::string& script,
+                              std::function<void(const nlohmann::json&)> success_cb);
+
+  private:
     // --- gcode_script() handlers (moonraker_client_mock_gcode*.cpp) -----------
     // One handler per command family. A handler returns a code to end the
     // script, or std::nullopt to let the checks after it see the same line.

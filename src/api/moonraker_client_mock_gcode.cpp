@@ -108,8 +108,8 @@ MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_medusa(const std::st
     return std::nullopt;
 }
 
-// CFS calibration commands (HELIX_MOCK_AMS=cfs), matched on the command token
-// exactly. BOX_FIND_CUT_POS and BOX_CUSTOM_COMMAND are CFS-only vocabulary, and
+// CFS commands (HELIX_MOCK_AMS=cfs). The calibration commands match on the
+// command token exactly. BOX_FIND_CUT_POS and BOX_CUSTOM_COMMAND are CFS-only vocabulary, and
 // the chute jog script (BOX_CUSTOM_COMMAND aside) falls through to the generic
 // G91/G0 simulation.
 MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_cfs(const std::string& gcode) {
@@ -121,6 +121,10 @@ MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_cfs(const std::strin
         return 0;
     }
     if (cmd == "BOX_CUSTOM_COMMAND" && apply_cfs_box_custom_command(gcode)) {
+        return 0;
+    }
+    // K2 load, unload and swap scripts: CR_BOX_* lines inside the park envelope.
+    if (apply_cfs_cr_box_script(gcode)) {
         return 0;
     }
     return std::nullopt;

@@ -25,6 +25,7 @@ constexpr PrinterType ALL_TYPES[] = {
     PrinterType::DELTA,
     PrinterType::ELEGOO_CC1,
     PrinterType::FLASHFORGE_AD5X,
+    PrinterType::CREALITY_K2_PLUS,
 };
 } // namespace
 
@@ -92,6 +93,7 @@ TEST_CASE("effective_mock_ams: explicit wins, else the persona default", "[mock]
     CHECK(effective_mock_ams(nullptr, nullptr).empty());
     CHECK(effective_mock_ams(nullptr, "ad5x") == "ifs");
     CHECK(effective_mock_ams("afc", "ad5x") == "afc");
+    CHECK(effective_mock_ams(nullptr, "k2") == "cfs");
 }
 
 TEST_CASE("A persona's own probe stands in for the default cartographer", "[mock][persona]") {

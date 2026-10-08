@@ -52,6 +52,7 @@ constexpr Expectation EXPECTED[] = {
     {"snapmaker_u1",       "",                          "",             false},
     {"cc1",                "Elegoo Centauri Carbon",    "cc1",          true},
     {"ad5x",               "FlashForge Adventurer 5X",  "ad5x",         true},
+    {"k2",                 "Creality K2 Plus",          "k2",           true},
 };
 // clang-format on
 
@@ -169,4 +170,26 @@ TEST_CASE_METHOD(HelixTestFixture, "The ad5x persona does not stand up the produ
         CHECK(o.rfind("zmod_ifs", 0) != 0);
         CHECK(o.find("_ifs_port_sensor") == std::string::npos);
     }
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "The k2 persona mirrors the K2 Plus capture",
+                 "[mock][persona][k2]") {
+    PersonaEnv env("k2");
+    check_mirrors_capture(discover(*helix::mock::find_persona("k2")), "creality_k2_plus");
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "HELIX_MOCK_AMS=none removes the k2 persona's box",
+                 "[mock][persona][k2][ams]") {
+    PersonaEnv env("k2");
+    CHECK(helix::mock::effective_mock_ams(nullptr, "k2") == "cfs");
+    {
+        const auto hw = discover(*helix::mock::find_persona("k2"));
+        const auto& objs = hw.printer_objects();
+        CHECK(std::find(objs.begin(), objs.end(), "box") != objs.end());
+    }
+    helix::ScopedEnv none("HELIX_MOCK_AMS", "none");
+    CHECK(helix::mock::effective_mock_ams("none", "k2") == "none");
+    const auto hw = discover(*helix::mock::find_persona("k2"));
+    const auto& objs = hw.printer_objects();
+    CHECK(std::find(objs.begin(), objs.end(), "box") == objs.end());
 }

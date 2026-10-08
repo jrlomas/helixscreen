@@ -746,8 +746,14 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
             for (auto it = objects.begin(); it != objects.end(); ++it) {
                 if (it.key().rfind("filament_switch_sensor ", 0) == 0 ||
                     it.key().rfind("filament_motion_sensor ", 0) == 0) {
+                    // The K2 Plus's toolhead switch follows the loaded bay.
+                    const bool detected = it.key() == "filament_switch_sensor filament_sensor" &&
+                                                  self->get_printer_type() ==
+                                                      helix::mock::PrinterType::CREALITY_K2_PLUS
+                                              ? self->cfs_toolhead_filament_detected()
+                                              : true;
                     status_obj[it.key()] = {
-                        {"filament_detected", true}, {"enabled", true}, {"detection_count", 0}};
+                        {"filament_detected", detected}, {"enabled", true}, {"detection_count", 0}};
                 }
             }
 

@@ -156,6 +156,12 @@ MoonrakerClientMock::MoonrakerClientMock(PrinterType type, double speedup_factor
     if (const char* kin_env = std::getenv("HELIX_MOCK_KINEMATICS"); kin_env && kin_env[0]) {
         kinematics_override_ = kin_env;
     }
+    // Creality firmware declares the bed in a macro's variables; detection reads
+    // it to tell the K2 Plus from the K2 Pro, whose stepper travel overshoots alike.
+    if (type == PrinterType::CREALITY_K2_PLUS) {
+        set_config_settings_section("gcode_macro product_param", {{"variable_bed_size_x", "350"},
+                                                                  {"variable_bed_size_y", "350"}});
+    }
     dragonbreath_fault_ = helix::env_flag("HELIX_MOCK_DRAGONBREATH_FAULT");
     dragonbreath_offline_ = helix::env_flag("HELIX_MOCK_DRAGONBREATH_OFFLINE");
     dragonbreath_external_ = helix::env_flag("HELIX_MOCK_DRAGONBREATH_EXTERNAL");
@@ -512,6 +518,18 @@ bool MoonrakerClientMock::has_chamber_sensor() const {
         }
     }
     return false;
+}
+
+bool MoonrakerClientMock::simulates_chamber_temp() const {
+    {
+        std::lock_guard<std::mutex> discovery_lock(discovery_mutex_);
+        for (const auto& s : discovery_.sensors()) {
+            if (s == "temperature_sensor chamber_temp") {
+                return true;
+            }
+        }
+    }
+    return has_chamber_sensor();
 }
 
 std::string MoonrakerClientMock::chamber_heater_status_key() const {
@@ -1063,6 +1081,15 @@ void MoonrakerClientMock::populate_capabilities() {
         // production AD5X IFS backend, and this persona runs the mock IFS.
         mock_objects.push_back("gcode_macro SET_EXTRUDER_SLOT");
         break;
+    case PrinterType::CREALITY_K2_PLUS:
+        // The K2 Plus capture's identifying objects. `box` rides on is_mock_cfs().
+        for (const char* obj :
+             {"motor_control", "fan_feedback", "load_ai", "filament_rack",
+              "output_pin extruder_fan", "output_pin power", "output_pin ptc_power",
+              "temperature_sensor mcu_temp", "heater_fan chamber_heater_fan"}) {
+            mock_objects.push_back(obj);
+        }
+        break;
     default:
         // Other printers may not have these features
         break;
@@ -1190,6 +1217,9 @@ void MoonrakerClientMock::populate_capabilities() {
     } else if (printer_type_ == PrinterType::FLASHFORGE_AD5X) {
         // The toolhead switch, named as in assets/config/presets/ad5x.json.
         mock_objects.push_back("filament_switch_sensor head_switch_sensor");
+    } else if (printer_type_ == PrinterType::CREALITY_K2_PLUS) {
+        // The toolhead switch, named as in assets/config/presets/k2.json.
+        mock_objects.push_back("filament_switch_sensor filament_sensor");
     } else if (inherits(RUNOUT_SENSOR)) {
         // Default: one switch sensor (typical Voron setup)
         mock_objects.push_back("filament_switch_sensor runout_sensor");
@@ -1322,6 +1352,9 @@ void MoonrakerClientMock::populate_capabilities() {
     mock_config["stepper_y"] = {{"position_min", mock_internal::MOCK_BED_Y_MIN},
                                 {"position_max", axis_max.y}};
     mock_config["stepper_z"] = {{"position_min", 0.0}, {"position_max", axis_max.z}};
+    for (const auto& [name, settings] : extra_config_settings_.items()) {
+        mock_config[name] = settings;
+    }
 
     std::unordered_set<std::string> macros_snapshot;
     discovery_.modify_hardware([&](PrinterDiscovery& hw) {
@@ -1536,6 +1569,13 @@ bool MoonrakerClientMock::is_mock_medusahc() const {
     return mock_medusa_variant() != MedusaVariant::NONE;
 }
 
+void MoonrakerClientMock::append_k2_status(json& status) const {
+    // Creality's motor controller and fan tachometer modules, in the fields
+    // cfs::parse_motor_control and PrinterFanState read.
+    status["motor_control"] = {{"motor_ready", true}};
+    status["fan_feedback"] = {{"fan0_speed", 0}, {"fan1_speed", 0}, {"fan2_speed", 0}};
+}
+
 bool MoonrakerClientMock::is_mock_cfs() const {
     // "cfs"/"cfs-k1": the K1 stock dialect. try_create_mock() declines these
     // values so the production AmsBackendCfs runs (pair with
@@ -1576,6 +1616,13 @@ nlohmann::json MoonrakerClientMock::cfs_box_status_json() const {
             box["map"][unit + bay] = unit + bay;
         }
     }
+    // The loaded bay: its unit's `filament` carries the bay letter, "None" elsewhere.
+    if (const int loaded = cfs_loaded_slot_.load(); loaded >= 0) {
+        const std::string unit = "T" + std::to_string(loaded / 4 + 1);
+        if (box.contains(unit)) {
+            box[unit]["filament"] = std::string(1, static_cast<char>('A' + loaded % 4));
+        }
+    }
     return box;
 }
 
@@ -1596,6 +1643,38 @@ void MoonrakerClientMock::simulate_cfs_find_cut_pos() {
     dispatch_gcode_response(buf);
     snprintf(buf, sizeof(buf), "SAVE_BOX_CFG ok: cut_pos_y=%.1f", cut_y);
     dispatch_gcode_response(buf);
+}
+
+bool MoonrakerClientMock::apply_cfs_cr_box_script(const std::string& gcode) {
+    bool touched = false;
+    std::istringstream lines(gcode);
+    for (std::string line; std::getline(lines, line);) {
+        if (line.rfind("CR_BOX_EXTRUDE", 0) == 0) {
+            // CR_BOX_EXTRUDE TNN=T<unit><bay>
+            const size_t t = line.find("TNN=T");
+            if (t == std::string::npos || t + 6 >= line.size()) {
+                continue;
+            }
+            const int unit = line[t + 5] - '0';
+            const int bay = line[t + 6] - 'A';
+            if (unit < 1 || unit > 4 || bay < 0 || bay > 3) {
+                continue;
+            }
+            cfs_loaded_slot_.store((unit - 1) * 4 + bay);
+            touched = true;
+        } else if (line.rfind("CR_BOX_RETRUDE", 0) == 0) {
+            cfs_loaded_slot_.store(-1);
+            touched = true;
+        }
+    }
+    if (touched) {
+        // The toolhead switch sees filament exactly while a bay is loaded.
+        dispatch_status_update(
+            {{"box", cfs_box_status_json()},
+             {"filament_switch_sensor filament_sensor",
+              {{"filament_detected", cfs_toolhead_filament_detected()}, {"enabled", true}}}});
+    }
+    return touched;
 }
 
 bool MoonrakerClientMock::apply_cfs_box_custom_command(const std::string& gcode) {
@@ -2291,6 +2370,18 @@ void MoonrakerClientMock::populate_hardware() {
         discovery_.fans() = {"fan_generic fanM106", "heater_fan heat_fan",
                              "fan_generic chamber_fan", "fan_generic pcb_fan"};
         discovery_.leds() = {};
+        break;
+
+    case PrinterType::CREALITY_K2_PLUS:
+        // Creality K2 Plus. Names mirror tests/fixtures/printers/creality_k2_plus.json
+        // and assets/config/presets/k2.json hardware/expected.
+        discovery_.heaters() = {"heater_bed", "extruder", "heater_generic chamber_heater"};
+        discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
+                                "extruder", // Hotend thermistor (Klipper naming: bare heater name)
+                                "temperature_sensor chamber_temp"};
+        discovery_.fans() = {"fan", "heater_fan chamber_fan", "output_pin fan0", "output_pin fan1",
+                             "output_pin fan2"};
+        discovery_.leds() = {"output_pin LED"};
         break;
 
     case PrinterType::MULTI_EXTRUDER:
@@ -3651,6 +3742,12 @@ void MoonrakerClientMock::dispatch_initial_state() {
         initial_status["hall_filament_width_sensor"] = {
             {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
     }
+    if (printer_type_ == PrinterType::CREALITY_K2_PLUS) {
+        append_k2_status(initial_status);
+        // The box starts with nothing loaded, so the toolhead switch sees none.
+        initial_status["filament_switch_sensor filament_sensor"] = {
+            {"filament_detected", cfs_toolhead_filament_detected()}, {"enabled", true}};
+    }
 
     // Probe objects (the same ones populate_capabilities() lists)
     // (assigned, not merge_patch'd: a patch drops the null fields they carry).
@@ -3916,7 +4013,7 @@ void MoonrakerClientMock::dispatch_historical_temperatures() {
     extruder_temp_.store(ext_temp_hist);
     bed_temp_.store(bed_temp_hist);
     // Store chamber temp at midpoint for initial state
-    if (has_chamber_sensor()) {
+    if (simulates_chamber_temp()) {
         chamber_temp_.store(35.0);
     }
 
@@ -4028,6 +4125,7 @@ void MoonrakerClientMock::temperature_simulation_loop() {
 
         // Fire any due mock pressure-advance console lines
         service_pending_pa_lines();
+        service_pending_script_acks();
 
         // Simulated time step covered by one real tick
         double effective_dt = sim_speed().accelerate_progress(base_dt);
@@ -4099,7 +4197,7 @@ void MoonrakerClientMock::temperature_simulation_loop() {
 
         // Simulate chamber temperature change (scaled by speedup)
         // Chamber responds to target temperature like bed/extruder, but slower
-        if (has_chamber_sensor()) {
+        if (simulates_chamber_temp()) {
             constexpr double CHAMBER_IDLE_VARIATION_AMPLITUDE = 1.5;
             constexpr double CHAMBER_WAVE_PERIOD = 90.0; // 90 second period for idle variation
 
@@ -4484,6 +4582,9 @@ void MoonrakerClientMock::temperature_simulation_loop() {
         // map, and the vendor/color/material arrays).
         if (is_mock_cfs()) {
             status_obj["box"] = cfs_box_status_json();
+        }
+        if (printer_type_ == PrinterType::CREALITY_K2_PLUS) {
+            append_k2_status(status_obj);
         }
 
         // Add klippy state if not ready (only send when abnormal)
@@ -5109,6 +5210,37 @@ bool MoonrakerClientMock::simulate_pa_calibration(
     spdlog::info("[MoonrakerClientMock] FLOW_CALIBRATE: simulating {} candidates (~{}s)",
                  CANDIDATES, ((CANDIDATES + 1) * STEP_MS) / 1000);
     return true;
+}
+
+bool MoonrakerClientMock::defer_cfs_script_ack(
+    const std::string& script, std::function<void(const nlohmann::json&)> success_cb) {
+    if (!is_mock_cfs() || script.find("CR_BOX_") == std::string::npos || !success_cb) {
+        return false;
+    }
+    constexpr auto ACK_DELAY = std::chrono::milliseconds(1500);
+    std::lock_guard<std::mutex> lock(pa_cal_mutex_);
+    pending_script_acks_.push_back(
+        {std::chrono::steady_clock::now() + ACK_DELAY, std::move(success_cb)});
+    return true;
+}
+
+void MoonrakerClientMock::service_pending_script_acks() {
+    std::vector<PendingScriptAck> due;
+    {
+        std::lock_guard<std::mutex> lock(pa_cal_mutex_);
+        const auto now = std::chrono::steady_clock::now();
+        for (auto it = pending_script_acks_.begin(); it != pending_script_acks_.end();) {
+            if (it->due <= now) {
+                due.push_back(std::move(*it));
+                it = pending_script_acks_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (auto& ack : due) {
+        ack.success_cb(json::object());
+    }
 }
 
 void MoonrakerClientMock::service_pending_pa_lines() {
