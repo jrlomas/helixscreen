@@ -886,12 +886,13 @@ $(TEST_BIN): FORCE
 	@if echo "$(MAKEFLAGS)" | grep -q 'jobserver'; then \
 		exec $(MAKE) _PARALLEL_GUARD=1 --no-print-directory $@; \
 	else \
+		j=$(JOBS_SH); \
 		if echo "$(MAKEFLAGS)" | grep -q 'j'; then \
 			echo ""; \
-			printf '\033[1;33m⚠️  make -j (unlimited) detected - auto-fixing to -j%s\033[0m\n' "$(JOBS)"; \
+			printf '\033[1;33m⚠️  make -j (unlimited) detected - auto-fixing to -j%s\033[0m\n' "$$j"; \
 			echo ""; \
 		fi; \
-		exec $(MAKE) _PARALLEL_GUARD=1 --no-print-directory -j$(JOBS) $@; \
+		exec $(MAKE) _PARALLEL_GUARD=1 --no-print-directory -j$$j $@; \
 	fi
 else
 # $(LIBHV_LIB) and $(LIBHV_JSON_HEADER) are prerequisites for the same reason

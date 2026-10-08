@@ -200,3 +200,33 @@ sizes() {
     [ "$j" -le "$(nproc)" ]
     contains "SHARDS=$((j * 3)) " "$output"
 }
+
+# make's two-phase re-invoke (mk/rules.mk `all:`, mk/tests.mk `$(TEST_BIN)`),
+# dry-run with the sub-make replaced by an echo of its command line.
+reinvoke() {
+    (cd "$REPO" && env PATH="$(path_without_jobpool)" make -n --no-print-directory \
+        MAKE='echo SUBMAKE' "$@" 2>&1)
+}
+
+@test "a make that already has a jobserver never asks helix-claim for a -j" {
+    fake_pool 7 7
+    run reinvoke -j3 all
+    [ "$status" -eq 0 ]
+    contains "SUBMAKE _PARALLEL_CHECKED=1 all" "$output"
+    run reinvoke -j3 build/bin/helix-tests
+    [ "$status" -eq 0 ]
+    contains "SUBMAKE _PARALLEL_GUARD=1 --no-print-directory build/bin/helix-tests" "$output"
+    [ ! -e "$FAKE_LOG" ]
+}
+
+@test "a make with no jobserver takes its -j from helix-claim, or from JOBS" {
+    fake_pool 7 7
+    run reinvoke all
+    contains "SUBMAKE _PARALLEL_CHECKED=1 -j7 all" "$output"
+    run reinvoke build/bin/helix-tests
+    contains "SUBMAKE _PARALLEL_GUARD=1 --no-print-directory -j7 build/bin/helix-tests" "$output"
+    rm -f "$FAKE_LOG"
+    run reinvoke JOBS=5 all
+    contains "SUBMAKE _PARALLEL_CHECKED=1 -j5 all" "$output"
+    [ ! -e "$FAKE_LOG" ]
+}
