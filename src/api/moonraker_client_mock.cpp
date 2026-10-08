@@ -1562,11 +1562,6 @@ bool MoonrakerClientMock::mock_toolchanger_selected() {
     return ams_type == "toolchanger" || ams_type == "tool_changer" || ams_type == "tc";
 }
 
-bool MoonrakerClientMock::mock_hardware_persona() {
-    const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
-    return printer_env && helix::mock::is_hardware_persona(printer_env);
-}
-
 bool MoonrakerClientMock::is_mock_toolchanger() const {
     return mock_toolchanger_selected();
 }

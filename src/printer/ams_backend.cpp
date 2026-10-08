@@ -736,8 +736,10 @@ static std::unique_ptr<AmsBackend> try_create_mock(IMoonrakerClient* mock_client
     }
     // Personas that model firmware HelixScreen talks to through a production
     // backend are mock hardware too: decline, and real discovery builds that
-    // backend against the mock's objects.
-    if (mode.empty() && MoonrakerClientMock::mock_hardware_persona()) {
+    // backend against the mock's objects. Decided from the header-only persona table: the
+    // firmware build's link check reads this object and must find no MoonrakerClientMock symbol.
+    const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
+    if (mode.empty() && printer_env && helix::mock::is_hardware_persona(printer_env)) {
         spdlog::info("[AMS Backend] Mock printer persona is mock hardware - deferring to real "
                      "discovery");
         return nullptr;
