@@ -33,7 +33,7 @@
 #include "../../lvgl/lvgl.h"
 #include "../helix_test_fixture.h"
 #include "../mocks/mock_printer_state.h"
-#include "../test_helpers/persona_types.h"
+#include "../test_helpers/mock_personas.h"
 #include "../ui_test_utils.h"
 
 #include <algorithm>
@@ -502,12 +502,13 @@ TEST_CASE_METHOD(HelixTestFixture, "Full stack: All printer types work correctly
     PrinterState state;
     state.init_subjects(false);
 
-    for (auto printer_type : helix::test::persona_printer_types()) {
-        DYNAMIC_SECTION("Printer type " << static_cast<int>(printer_type)) {
+    for (const auto* persona : helix::test::personas_one_per_type()) {
+        DYNAMIC_SECTION(persona->id) {
+            helix::test::PersonaEnv env(persona->id);
             // Create full stack for this printer type
             auto shared_state = std::make_shared<MockPrinterState>();
 
-            MoonrakerClientMock client(printer_type, 1000.0);
+            MoonrakerClientMock client(persona->type, 1000.0);
             client.set_mock_state(shared_state);
 
             MoonrakerAPIMock api(client, state);

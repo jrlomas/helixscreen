@@ -14,7 +14,7 @@
 #include "mock_persona.h"
 #include "moonraker_client_mock.h"
 #include "printer_discovery.h"
-#include "test_helpers/scoped_env.h"
+#include "test_helpers/mock_personas.h"
 
 #include <algorithm>
 #include <string>
@@ -26,17 +26,7 @@ using json = nlohmann::json;
 
 namespace {
 
-/// Every env var that changes the mock's objects list, pinned so a value
-/// another test leaked cannot add or remove objects here.
-struct PersonaEnv {
-    explicit PersonaEnv(const char* printer) : printer_env{"HELIX_MOCK_PRINTER", printer} {}
-    helix::ScopedEnv printer_env;
-    helix::ScopedEnv ams{"HELIX_MOCK_AMS", nullptr};
-    helix::ScopedEnv objects{"HELIX_MOCK_OBJECTS", nullptr};
-    helix::ScopedEnv probe{"HELIX_MOCK_PROBE_TYPE", nullptr};
-    helix::ScopedEnv sensors{"HELIX_MOCK_FILAMENT_SENSORS", nullptr};
-    helix::ScopedEnv kinematics{"HELIX_MOCK_KINEMATICS", nullptr};
-};
+using helix::test::PersonaEnv;
 
 std::vector<std::string> discovered_objects(MoonrakerClientMock& mock) {
     mock.connect("ws://mock/websocket", [] {}, [] {});

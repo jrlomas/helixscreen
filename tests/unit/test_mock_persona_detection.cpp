@@ -4,7 +4,7 @@
 #include "moonraker_client_mock.h"
 #include "printer_detector.h"
 #include "printer_discovery.h"
-#include "test_helpers/scoped_env.h"
+#include "test_helpers/mock_personas.h"
 
 #include <string>
 #include <string_view>
@@ -12,19 +12,6 @@
 #include "../catch_amalgamated.hpp"
 
 namespace {
-
-/// The persona's own objects, not what another test in this shard left in the
-/// mock-topology env vars.
-struct PersonaEnv {
-    helix::ScopedEnv ams{"HELIX_MOCK_AMS", nullptr};
-    helix::ScopedEnv objects{"HELIX_MOCK_OBJECTS", nullptr};
-    helix::ScopedEnv probe{"HELIX_MOCK_PROBE_TYPE", nullptr};
-    helix::ScopedEnv sensors{"HELIX_MOCK_FILAMENT_SENSORS", nullptr};
-    helix::ScopedEnv kinematics{"HELIX_MOCK_KINEMATICS", nullptr};
-    helix::ScopedEnv printer;
-    explicit PersonaEnv(std::string_view id)
-        : printer("HELIX_MOCK_PRINTER", std::string(id).c_str()) {}
-};
 
 /// What the app does under --test: the real discovery sequence over the mock.
 helix::PrinterDiscovery discover(const helix::mock::PersonaEntry& p) {
@@ -82,7 +69,7 @@ TEST_CASE_METHOD(HelixTestFixture, "Each mock persona auto-detects as the printe
         DYNAMIC_SECTION(e.id) {
             const auto* p = helix::mock::find_persona(e.id);
             REQUIRE(p != nullptr);
-            PersonaEnv env(e.id);
+            helix::test::PersonaEnv env(e.id);
             const auto r = PrinterDetector::auto_detect(discover(*p));
             INFO(r.type_name << " " << r.confidence << "% margin " << r.margin() << ": "
                              << r.reason);

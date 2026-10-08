@@ -19,7 +19,7 @@
 #include "../../include/printer_hardware.h"
 #include "../../lvgl/lvgl.h"
 #include "../helix_test_fixture.h"
-#include "../test_helpers/persona_types.h"
+#include "../test_helpers/mock_personas.h"
 #include "../ui_test_utils.h"
 
 #include <chrono>
@@ -226,9 +226,10 @@ TEST_CASE_METHOD(HelixTestFixture,
     PrinterState state;
     state.init_subjects(false);
 
-    for (auto printer_type : helix::test::persona_printer_types()) {
-        DYNAMIC_SECTION("Printer type " << static_cast<int>(printer_type)) {
-            MoonrakerClientMock mock(printer_type);
+    for (const auto* persona : helix::test::personas_one_per_type()) {
+        DYNAMIC_SECTION(persona->id) {
+            helix::test::PersonaEnv env(persona->id);
+            MoonrakerClientMock mock(persona->type);
             mock.connect("ws://mock/websocket", []() {}, []() {});
             mock.discover_printer([]() {});
 
