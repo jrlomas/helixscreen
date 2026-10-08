@@ -324,8 +324,11 @@ D 'make reapply-patches >/dev/null'
 D 'git log --oneline -1'
 if [ -n "\$POOL_ENV" ]; then
     # jobpool exec on the host keeps the pool's consumer live for the whole
-    # build; inside, the container opens the FIFO and exports MAKEFLAGS.
-    "\$JP" exec -- sudo -n docker exec -w "$WORKDIR" -e CCACHE_DIR=/work/ccache -e HELIX_J="\$HELIX_J" -e HELIX_JFLAG= "$CONTAINER" bash -lc "\$POOL_ENV"' && $CMD 2>&1'
+    # build; inside, the container opens the FIFO and exports MAKEFLAGS. The
+    # FIFO is mode 600, so a container uid that is not root (or is a remapped
+    # root) cannot open it; that run takes its own -j instead.
+    "\$JP" exec -- sudo -n docker exec -w "$WORKDIR" -e CCACHE_DIR=/work/ccache -e HELIX_J="\$HELIX_J" -e HELIX_JFLAG= "$CONTAINER" bash -lc \
+        "if { \$POOL_ENV; } 2>/dev/null; then :; else "'echo "→ uid \$(id -u) cannot open the jobpool FIFO; using -j\$HELIX_J"; HELIX_JFLAG=-j\$HELIX_J; fi; $CMD 2>&1'
 else
     D '$CMD 2>&1'
 fi

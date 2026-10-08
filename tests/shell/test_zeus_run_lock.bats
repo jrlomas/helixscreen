@@ -278,16 +278,63 @@ FAKE
     grep -qE 'HELIX_JFLAG=-j[0-9]+ helix-tsan bash -lc make test \$HELIX_JFLAG' "$MOCK_DOCKER_LOG"
 }
 
+# The container half run for real: docker exec of the job exports its -e
+# variables and runs the bash -lc script here, against a make that prints what
+# it was given. container-env opens a real FIFO, so its mode decides whether
+# the job joins.
+run_container_job() {
+    export POOL_FIFO="$BATS_TEST_TMPDIR/pool-fifo"
+    mkfifo -m 600 "$POOL_FIFO"
+    cat > "$ZEUS_JOBPOOL" <<'FAKE'
+#!/bin/sh
+case "$1" in
+    ensure) echo "$BATS_TEST_TMPDIR/mnt/.jobpool/fifo" ;;
+    container-env) echo "exec 3<>$POOL_FIFO 4<>$POOL_FIFO && export MAKEFLAGS=POOLED:$2" ;;
+    status) echo '{"running":true,"target":30,"available":30}' ;;
+    exec) echo "jobpool exec" >> "$MOCK_JOBPOOL_LOG"; shift 2; exec "$@" ;;
+    *) exit 2 ;;
+esac
+FAKE
+    mock_command_script make 'echo "MAKE: $* MAKEFLAGS=${MAKEFLAGS:-}"'
+    mock_command_script docker '
+case "$1" in
+    ps) echo helix-tsan ;;
+    inspect) echo "$MOCK_MOUNTS" ;;
+    exec)
+        case "$*" in
+            *pgrep*) exit 1 ;;
+            *unit-sweep*)
+                shift
+                while [ "$1" != bash ]; do
+                    [ "$1" = -e ] && export "$2"
+                    shift
+                done
+                exec bash -c "$3" ;;
+        esac ;;
+esac
+exit 0'
+    export MOCK_MOUNTS="$BATS_TEST_TMPDIR/mnt /work"
+}
+
 @test "with jobpool on zeus the container joins it and make gets no -j" {
     fake_jobpool
-    export MOCK_MOUNTS="/elsewhere /data
-$BATS_TEST_TMPDIR/mnt /work"
-    run "$SCRIPT" test '[ams]'
+    run_container_job
+    run "$SCRIPT" sweep
     [ "$status" -eq 0 ]
     contains "joining jobpool: target 30" "$output"
-    grep -qF 'bash -lc POOLENV:/work/.jobpool && make test $HELIX_JFLAG && ./build/bin/helix-tests "[ams]"' "$MOCK_DOCKER_LOG"
-    grep -qF "HELIX_JFLAG= helix-tsan" "$MOCK_DOCKER_LOG"
+    contains "MAKE: unit-sweep NPROCS=96 MAKEFLAGS=POOLED:/work/.jobpool" "$output"
     [ "$(cat "$MOCK_JOBPOOL_LOG")" = "jobpool exec" ]
+}
+
+@test "a container uid that cannot open the FIFO runs with its own -j" {
+    [ "$(id -u)" != 0 ] || skip "root opens a mode-000 FIFO anyway"
+    fake_jobpool
+    run_container_job
+    chmod 000 "$POOL_FIFO"
+    run "$SCRIPT" sweep
+    [ "$status" -eq 0 ]
+    contains "cannot open the jobpool FIFO; using -j" "$output"
+    printf '%s\n' "$output" | grep -qE '^MAKE: unit-sweep NPROCS=96 -j[0-9]+ MAKEFLAGS=$'
 }
 
 @test "a pool whose state the container cannot see is not joined" {
