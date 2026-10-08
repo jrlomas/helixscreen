@@ -12,7 +12,9 @@
  * SpanStyle per segment, plus the sensor bands. paint_tubes then strokes every
  * route in layers (halo, walls, bores, bands), so tubes run unbroken under
  * every sensor and a junction never shows a neighbour's cap over the active
- * fill. The active route's filled prefix is what the animation pass replays.
+ * fill. Bands on a box edge wait for paint_box_bands, after the boxes, so they
+ * clamp the tube where it enters. The active route's filled prefix is what the
+ * animation pass replays.
  */
 
 #include "ui_filament_path_internal.h"
@@ -84,7 +86,8 @@ struct SensorBand {
     pg::PathPoint at;
     pg::PathPoint tangent; // unit direction of the tube under the band
     BandState state;
-    lv_color_t fill; // the lane's filament color (Loaded)
+    lv_color_t fill;          // the lane's filament color (Loaded)
+    bool on_box_edge = false; // straddles a hub/selector edge: painted over the box
 };
 
 inline constexpr int MAX_ROUTES = FilamentPathData::MAX_SLOTS + 2; // lanes + trunk + bypass
@@ -127,8 +130,11 @@ struct TubePalette {
     lv_color_t idle_wall, accent, error, bg;
     int32_t gauge;
 };
+/// Halo, walls, bores, then every band not on a box edge.
 void paint_tubes(lv_layer_t* layer, const PathPlan& plan, const TubePalette& pal,
                  bool simple = reduced_effects());
+/// The bands on a hub/selector edge; called after the boxes are drawn.
+void paint_box_bands(lv_layer_t* layer, const PathPlan& plan, const TubePalette& pal);
 
 // Clamp band: a short rounded bar across the tube.
 inline constexpr int32_t BAND_EXTRA = 10;    // band length = gauge + BAND_EXTRA

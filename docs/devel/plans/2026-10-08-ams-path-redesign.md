@@ -33,7 +33,10 @@ A render is **frame → plan → paint tubes → boxes and glyphs**.
 - **Plan** (new, pure): routes (centerline + one `SpanStyle` per segment) and sensor bands.
 - **Paint**: `paint_tubes` runs halo → walls → bores → bands over the whole plan; then the
   renderer draws boxes and glyphs exactly as today (`draw_hub_box`, `draw_buffer_coil`,
-  `draw_toolhead`, `draw_tool_badge`), still recording `hits.*` at those draw sites.
+  `draw_toolhead`, `draw_tool_badge`), still recording `hits.*` at those draw sites. Bands
+  on a hub/selector edge (hub entries, output) are flagged `on_box_edge` and painted by
+  `paint_box_bands` after the boxes, straddling the edge like a fitting clamped where the
+  tube enters (maintainer's ruling).
 - `render_linear_hub` copies `filled_prefix(plan.routes[plan.active_route])` into
   `path_cache.path`. `PathPlan` is ~14 KB, so the renderer uses one function-local
   `static PathPlan` (LVGL is single-threaded; render is not re-entrant) instead of the
@@ -206,7 +209,9 @@ joint, so a coalesced run has caps only at its two ends.
 3. Bores: empty strokes, then filled strokes off the active route, then the active route.
    The active route's bore is painted last so at a T (bypass, hub landings) its fill wins
    over a neighbor's cap.
-4. Bands (`draw_sensor_band`), in plan order.
+4. Bands (`draw_sensor_band`), in plan order, except those flagged `on_box_edge`.
+5. After the hub/selector/buffer boxes: `paint_box_bands` paints the `on_box_edge` bands
+   (hub-entry bands on the hub top, the output band on the hub/selector bottom).
 `simple` drops step 1 only.
 
 **Bands**: `band_segment` returns `at ± n * ((gauge + BAND_EXTRA)/2 - BAND_THICKNESS/2)`,

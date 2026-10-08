@@ -389,6 +389,32 @@ TEST_CASE("FilamentPath plan: HUB active route runs unbroken from spool to inlet
     CHECK(empty == 6);
 }
 
+TEST_CASE("FilamentPath plan: hub-edge bands are painted after the hub box",
+          "[filament-path][plan]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::NOZZLE);
+    const PathPlan& plan = plan_for(*d);
+
+    // paint_tubes paints the rest; render_linear_hub calls paint_box_bands
+    // after draw_hub_section, so these clamp the tube over the box edge.
+    for (int i = 0; i < 4; i++) {
+        const SensorBand* hub = band_at(plan, hub_entry_x(*d, i), 100);
+        REQUIRE(hub != nullptr);
+        CHECK(hub->on_box_edge);
+    }
+    const SensorBand* output = band_at(plan, 200, 140);
+    REQUIRE(output != nullptr);
+    CHECK(output->on_box_edge);
+
+    int on_edge = 0;
+    for (int i = 0; i < plan.band_count; i++)
+        on_edge += plan.bands[i].on_box_edge;
+    CHECK(on_edge == 5);
+    CHECK_FALSE(band_at(plan, 150, 40)->on_box_edge);
+    CHECK_FALSE(band_at(plan, 200, 232)->on_box_edge);
+    CHECK_FALSE(band_at(plan, 200, 272)->on_box_edge);
+}
+
 TEST_CASE("FilamentPath plan: a lane loaded to the hub fills to the hub bottom",
           "[filament-path][plan]") {
     auto d = make_data(helix::PathTopology::HUB);

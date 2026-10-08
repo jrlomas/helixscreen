@@ -197,18 +197,19 @@ void append_line(Route& r, float x0, float y0, float x1, float y1, SpanStyle s) 
 }
 
 void add_band(PathPlan& plan, pg::PathPoint at, pg::PathPoint tangent, BandState state,
-              lv_color_t fill) {
+              lv_color_t fill, bool on_box_edge = false) {
     if (plan.band_count < MAX_BANDS)
-        plan.bands[plan.band_count++] = {at, tangent, state, fill};
+        plan.bands[plan.band_count++] = {at, tangent, state, fill, on_box_edge};
 }
 
 // A band where the route currently ends, across its last segment.
-void add_band_at_end(PathPlan& plan, const Route& r, BandState state, lv_color_t fill) {
+void add_band_at_end(PathPlan& plan, const Route& r, BandState state, lv_color_t fill,
+                     bool on_box_edge = false) {
     if (r.path.count == 0)
         return;
     pg::PathPoint tangent;
     const pg::PathPoint at = pg::path_point_at(r.path, pg::path_length(r.path), &tangent);
-    add_band(plan, at, tangent, state, fill);
+    add_band(plan, at, tangent, state, fill, on_box_edge);
 }
 
 Route& new_route(PathPlan& plan) {
@@ -246,7 +247,7 @@ void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFra
     const float hub_bot = (float)f.output_y;
     if (!data.hub_on_toolhead) {
         add_band(plan, {(float)f.output_x, hub_bot}, {0, 1}, lane.band(PathSegment::OUTPUT),
-                 lane.color);
+                 lane.color, /*on_box_edge=*/true);
     }
 
     const float output_end = (float)(bypass_on_trunk ? f.bypass_merge_y : f.toolhead_y);
@@ -295,7 +296,9 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
     // On-toolhead the merge point sits above the head hub, off the trunk.
     const bool bypass_on_trunk = bypass && !on_head;
     const bool bypass_owns = bypass_on_trunk && data.bypass_active;
-    const float hub_top = (float)(f.hub_y - f.hub_h / 2);
+    // Box edges in whole pixels, as the boxes are drawn.
+    const int32_t hub_top_px = f.hub_y - f.hub_h / 2;
+    const float hub_top = (float)hub_top_px;
     const float hub_bot = (float)f.output_y;
     const float cx = (float)f.center_x;
 
@@ -324,7 +327,8 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
             pg::PathPoint pts[4] = {f.hub_fan[i].pts[0], f.hub_fan[i].pts[1], f.hub_fan[i].pts[2],
                                     f.hub_fan[i].pts[3]};
             if (on_head) {
-                const float sel_top = (float)(f.selector_y - f.hub_h / 2);
+                const int32_t sel_top_px = f.selector_y - f.hub_h / 2;
+                const float sel_top = (float)sel_top_px;
                 append_line(r, x, (float)f.prep_y, x, sel_top, lane.style(PathSegment::LANE));
                 append_line(r, x, sel_top, x, pts[0].y, unpainted(lane.style(PathSegment::LANE)));
             } else {
@@ -333,7 +337,7 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
             pg::FilamentPath fan;
             pg::route_polyline_filleted(fan, pts, 4, 8.0f);
             route_append(r, fan, lane.style(PathSegment::LANE));
-            add_band_at_end(out, r, lane.band(PathSegment::HUB), s.color);
+            add_band_at_end(out, r, lane.band(PathSegment::HUB), s.color, /*on_box_edge=*/true);
             if (!lane.on)
                 continue;
             append_line(r, pts[3].x, hub_top, cx, hub_bot, unpainted(lane.style(PathSegment::HUB)));
@@ -396,6 +400,20 @@ void stroke_layer(lv_layer_t* layer, const Route& r, const Stroke& st, const Tub
     stroke_path(layer, sub, passes, n);
 }
 
+void paint_bands(lv_layer_t* layer, const PathPlan& plan, const TubePalette& pal,
+                 bool on_box_edge) {
+    for (int i = 0; i < plan.band_count; i++) {
+        const SensorBand& b = plan.bands[i];
+        if (b.on_box_edge != on_box_edge)
+            continue;
+        const lv_color_t color = b.state == BandState::Active   ? pal.accent
+                                 : b.state == BandState::Error  ? pal.error
+                                 : b.state == BandState::Loaded ? b.fill
+                                                                : pal.idle_wall;
+        draw_sensor_band(layer, b, pal.gauge, color);
+    }
+}
+
 } // namespace
 
 void paint_tubes(lv_layer_t* layer, const PathPlan& plan, const TubePalette& pal, bool simple) {
@@ -418,14 +436,11 @@ void paint_tubes(lv_layer_t* layer, const PathPlan& plan, const TubePalette& pal
     each(TubeLayer::Bore,
          [&](int ri, const Stroke& s) { return s.style.filled && ri == plan.active_route; });
 
-    for (int i = 0; i < plan.band_count; i++) {
-        const SensorBand& b = plan.bands[i];
-        const lv_color_t color = b.state == BandState::Active   ? pal.accent
-                                 : b.state == BandState::Error  ? pal.error
-                                 : b.state == BandState::Loaded ? b.fill
-                                                                : pal.idle_wall;
-        draw_sensor_band(layer, b, pal.gauge, color);
-    }
+    paint_bands(layer, plan, pal, /*on_box_edge=*/false);
+}
+
+void paint_box_bands(lv_layer_t* layer, const PathPlan& plan, const TubePalette& pal) {
+    paint_bands(layer, plan, pal, /*on_box_edge=*/true);
 }
 
 } // namespace helix::ui::fpath

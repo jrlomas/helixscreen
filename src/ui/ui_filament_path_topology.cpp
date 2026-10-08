@@ -700,15 +700,17 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
     plan_linear_hub(f, *data, ctx.geo, plan);
 
     const ThemeCache& theme = data->theme;
-    paint_tubes(
-        layer, plan,
-        {theme.color_idle, theme.color_accent, f.error_color, theme.color_bg, theme.tube_gauge});
+    const TubePalette pal{theme.color_idle, theme.color_accent, f.error_color, theme.color_bg,
+                          theme.tube_gauge};
+    paint_tubes(layer, plan, pal);
 
     draw_hub_section(ctx, f);
+    if (!data->hub_only && f.has_buffer)
+        draw_buffer_section(ctx, f, plan);
+    // Bands on the hub/selector edges clamp the tube where it enters the box.
+    paint_box_bands(layer, plan, pal);
     if (data->hub_only)
         return;
-    if (f.has_buffer)
-        draw_buffer_section(ctx, f, plan);
     if (data->show_bypass)
         record_bypass_hit(ctx, f);
     draw_nozzle_glyph(ctx, f);
