@@ -3233,6 +3233,8 @@ translations:
   Tag Parts: Отметить узлы
   Tag parts: Отметить узлы
   Takes 3-5 min. Do not interrupt.: Занимает 3-5 мин. Не прерывайте.
+  Tangle prevention active: Защита от спутывания активна
+  Tangle prevention boosted: Защита от спутывания усилена
   'Tangle sensitivity': 'Чувствительность к спутыванию'
   Tap + to add: Нажмите +, чтобы добавить
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Нажмите «Перезапуск прошивки» для восстановления. На K2 это также перезапускает мост MCU rpi

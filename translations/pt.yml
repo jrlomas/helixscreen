@@ -3268,6 +3268,8 @@ translations:
   Tag Parts: Marcar Componentes
   Tag parts: Marcar componentes
   Takes 3-5 min. Do not interrupt.: Leva 3-5 min. Não interrompa.
+  Tangle prevention active: Prevenção de emaranhados ativa
+  Tangle prevention boosted: Prevenção de emaranhados reforçada
   'Tangle sensitivity': 'Sensibilidade a emaranhados'
   Tap + to add: Toque em + para adicionar
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Toque em Reiniciar firmware para recuperar. Na K2 isso também reinicia a ponte MCU rpi

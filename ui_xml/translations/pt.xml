@@ -2937,6 +2937,8 @@
   <translation tag="Tag Parts" pt="Marcar Componentes"/>
   <translation tag="Tag parts" pt="Marcar componentes"/>
   <translation tag="Takes 3-5 min. Do not interrupt." pt="Leva 3-5 min. Não interrompa."/>
+  <translation tag="Tangle prevention active" pt="Prevenção de emaranhados ativa"/>
+  <translation tag="Tangle prevention boosted" pt="Prevenção de emaranhados reforçada"/>
   <translation tag="Tangle sensitivity" pt="Sensibilidade a emaranhados"/>
   <translation tag="Tap + to add" pt="Toque em + para adicionar"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" pt="Toque em Reiniciar firmware para recuperar. Na K2 isso também reinicia a ponte MCU rpi"/>

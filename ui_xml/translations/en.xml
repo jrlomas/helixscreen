@@ -2937,6 +2937,8 @@
   <translation tag="Tag Parts" en="Tag Parts"/>
   <translation tag="Tag parts" en="Tag parts"/>
   <translation tag="Takes 3-5 min. Do not interrupt." en="Takes 3-5 min. Do not interrupt."/>
+  <translation tag="Tangle prevention active" en="Tangle prevention active"/>
+  <translation tag="Tangle prevention boosted" en="Tangle prevention boosted"/>
   <translation tag="Tangle sensitivity" en="Tangle sensitivity"/>
   <translation tag="Tap + to add" en="Tap + to add"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" en="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge"/>
