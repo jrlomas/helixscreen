@@ -212,8 +212,8 @@ json get_mock_mmu_status() {
               {"max_tangle", -0.3}}},
             {"tangle_prevention",
              {{"enabled", true},
-              {"active", true},
-              {"boosted", true},
+              {"active", false},
+              {"boosted", false},
               {"threshold", 0.6},
               {"release", 0.3}}}};
 }

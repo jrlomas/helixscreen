@@ -1393,8 +1393,8 @@ struct FlowguardInfo {
     std::string reason;   ///< Why the last trip fired (v4 `flowguard.reason`); "" when none
 };
 
-/// Happy Hare v4 tangle prevention (`tangle_prevention`): the proportional
-/// sensor boosts the gate stepper to untangle before FlowGuard trips.
+/// Tangle prevention: the proportional buffer sensor boosts the gate stepper
+/// to untangle before the flow detector trips.
 struct TanglePreventionInfo {
     bool present = false; ///< The selected unit published the object (it has a buffer)
     bool enabled = false;

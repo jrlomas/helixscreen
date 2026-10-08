@@ -941,6 +941,8 @@ void AmsBackendHappyHare::apply_mmu_telemetry_locked(const happy_hare::MmuTeleme
         }
         if (fg.reason) {
             info.reason = *fg.reason;
+        } else if (fg.trigger && fg.trigger->empty()) {
+            info.reason.clear();
         }
         if (fg.encoder_mode) {
             flowguard_encoder_mode_ = *fg.encoder_mode;

@@ -3319,6 +3319,12 @@ TEST_CASE("Happy Hare: v4 flowguard reason and tangle_prevention parse",
     CHECK(info.tangle_prevention.threshold == Catch::Approx(0.6f));
     CHECK(info.tangle_prevention.release == Catch::Approx(0.3f));
 
+    // Un-trip clears the reason; a later trip without one cannot show it.
+    helper.test_parse_mmu_state(nlohmann::json{{"flowguard", {{"trigger", ""}}}});
+    CHECK(helper.get_system_info().flowguard_info.reason.empty());
+    helper.test_parse_mmu_state(nlohmann::json{{"flowguard", {{"trigger", "CLOG"}}}});
+    CHECK(helper.get_system_info().flowguard_info.reason.empty());
+
     // A unit without a buffer publishes null: the state clears.
     helper.test_parse_mmu_state(nlohmann::json{{"tangle_prevention", nullptr}});
     CHECK_FALSE(helper.get_system_info().tangle_prevention.present);

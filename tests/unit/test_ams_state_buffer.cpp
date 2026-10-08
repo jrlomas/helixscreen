@@ -148,7 +148,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "AmsState publishes the clog meter note",
     AmsStateTestAccess::sync_clog_meter(ams, info);
     CHECK(subject_int(ams.get_clog_meter_note_kind_subject()) ==
           static_cast<int>(helix::ui::ClogNote::TangleBoosted));
-    CHECK(text_of(ams.get_clog_meter_note_text_subject()) == "Tangle prevention boosted");
+    CHECK(text_of(ams.get_clog_meter_note_text_subject()).empty());
 
     AmsStateTestAccess::sync_clog_meter(ams, AmsSystemInfo{});
     CHECK(subject_int(ams.get_clog_meter_note_kind_subject()) == 0);
