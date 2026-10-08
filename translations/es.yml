@@ -301,6 +301,7 @@ translations:
   Automatic Heater Control Calibration: Calibración Automática de Control de Calentador
   Automatic LED Control: Control Automático de LED
   Automatic calibration: 'Calibración automática'
+  Automatic slot swap on runout: 'Cambio automático de ranura al agotarse'
   Aux: Aux
   Available: Disponible
   Available Networks: Redes Disponibles
@@ -1057,6 +1058,7 @@ translations:
   Encoder: Encoder
   Encoder Error: 'Error del encoder'
   Ended: Terminado
+  Endless Spool: 'Bobina infinita'
   Endless spool failover cleared for every slot: 'Bobina de reserva borrada para todas las ranuras'
   Endless spool is turned off on this MMU: 'La bobina infinita está desactivada en este MMU'
   Ensure Happy Hare or AFC is installed and configured: Asegúrese de que Happy Hare o AFC esté instalado y configurado
@@ -1929,6 +1931,7 @@ translations:
   Mark a printer you enclosed yourself: Marca una impresora que cerraste tú mismo
 
   Master volume level: Nivel de volumen principal
+  Match Mode: 'Modo de coincidencia'
   Match your typical print fan speed: Ajuste a su velocidad típica de ventilador de
     impresión
   Matching printers: Impresoras coincidentes
@@ -3220,6 +3223,7 @@ translations:
     de módulos del firmware de la impresora
   Surfaces inherit app background tokens for light and dark modes.: Las superficies
     heredan los tokens de fondo de la aplicación para modos claro y oscuro.
+  Swap to another slot automatically when one runs out: 'Cambiar automáticamente a otra ranura cuando una se agota'
   Sweep: Barrido
   Switch Printer: Cambiar Impresora
   Switch a power device on or off: Encender o apagar un dispositivo
@@ -3897,6 +3901,7 @@ translations:
   enable: habilitar
   enabled: activado
   error: error
+  'exact: same material and color. material: same material. next: any ready slot, even a different material': 'exact: mismo material y color. material: mismo material. next: cualquier ranura lista, aunque sea otro material'
   extruder: extrusor
   extruder(s): extrusor(es)
   extruders: extrusores

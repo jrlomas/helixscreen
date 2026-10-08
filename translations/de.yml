@@ -306,6 +306,7 @@ translations:
   Automatic Heater Control Calibration: Automatische Heizungsregelung Kalibrierung
   Automatic LED Control: Automatische LED-Steuerung
   Automatic calibration: 'Automatische Kalibrierung'
+  Automatic slot swap on runout: 'Automatischer Slot-Wechsel bei Filamentende'
   Aux: Aux
   Available: Verfügbar
   Available Networks: Verfügbare Netzwerke
@@ -1061,6 +1062,7 @@ translations:
   Encoder: Encoder
   Encoder Error: 'Encoder-Fehler'
   Ended: Beendet
+  Endless Spool: 'Endlosspule'
   Endless spool failover cleared for every slot: 'Endlosspulen-Zuordnung für alle Slots gelöscht'
   Endless spool is turned off on this MMU: 'Die Endlosspule ist auf diesem MMU deaktiviert'
   Ensure Happy Hare or AFC is installed and configured: Stellen Sie sicher, dass Happy Hare oder AFC installiert und konfiguriert ist
@@ -1940,6 +1942,7 @@ translations:
   Mark a printer you enclosed yourself: Einen selbst eingehausten Drucker markieren
 
   Master volume level: Hauptlautstärke
+  Match Mode: 'Abgleichmodus'
   Match your typical print fan speed: Typische Drucklüftergeschwindigkeit einstellen
   Matching printers: Passende Drucker
   Material: Material
@@ -3227,6 +3230,7 @@ translations:
     Drucker-Firmware-Modulen unterdrücken
   Surfaces inherit app background tokens for light and dark modes.: Oberflächen erben
     App-Hintergrund-Tokens für Hell- und Dunkelmodus.
+  Swap to another slot automatically when one runs out: 'Bei Filamentende automatisch zu einem anderen Slot wechseln'
   Sweep: Sweep
   Switch Printer: Drucker wechseln
   Switch a power device on or off: Stromgerät ein- oder ausschalten
@@ -3907,6 +3911,7 @@ translations:
   enable: aktivieren
   enabled: aktiviert
   error: Fehler
+  'exact: same material and color. material: same material. next: any ready slot, even a different material': 'exact: gleiches Material und gleiche Farbe. material: gleiches Material. next: beliebiger bereiter Slot, auch anderes Material'
   extruder: Extruder
   extruder(s): Extruder
   extruders: Extruder

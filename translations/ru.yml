@@ -296,6 +296,7 @@ translations:
   Automatic Heater Control Calibration: Автоматическая калибровка нагревателя
   Automatic LED Control: Автоматическое управление LED
   Automatic calibration: 'Автоматическая калибровка'
+  Automatic slot swap on runout: 'Автоматическая смена слота при окончании'
   Aux: Доп
   Available: Доступен
   Available Networks: Доступные сети
@@ -1044,6 +1045,7 @@ translations:
   Encoder: Энкодер
   Encoder Error: 'Ошибка энкодера'
   Ended: Завершено
+  Endless Spool: 'Бесконечная катушка'
   Endless spool failover cleared for every slot: 'Резервные катушки очищены для всех слотов'
   Endless spool is turned off on this MMU: 'Бесконечная катушка отключена на этом MMU'
   Ensure Happy Hare or AFC is installed and configured: Убедитесь, что Happy Hare или AFC установлен и настроен
@@ -1912,6 +1914,7 @@ translations:
   Mark a printer you enclosed yourself: Отметить принтер, который вы закрыли сами
 
   Master volume level: Основной уровень громкости
+  Match Mode: 'Режим сопоставления'
   Match your typical print fan speed: Настройте типичную скорость вентилятора печати
   Matching printers: Подходящие принтеры
   Material: Материал
@@ -3190,6 +3193,7 @@ translations:
     модулей прошивки принтера
   Surfaces inherit app background tokens for light and dark modes.: Поверхности наследуют
     токены фона приложения для светлого и тёмного режимов.
+  Swap to another slot automatically when one runs out: 'Автоматически переключаться на другой слот, когда в одном кончился пруток'
   Sweep: Свип
   Switch Printer: Переключить принтер
   Switch a power device on or off: Включить или выключить питание
@@ -3856,6 +3860,7 @@ translations:
   enable: включить
   enabled: включено
   error: ошибка
+  'exact: same material and color. material: same material. next: any ready slot, even a different material': 'exact: тот же материал и цвет. material: тот же материал. next: любой готовый слот, даже с другим материалом'
   extruder: экструдер
   extruder(s): экструдер(ы)
   extruders: экструдеры
