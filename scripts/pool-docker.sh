@@ -54,6 +54,9 @@ for a in "$@"; do
         *) args+=("$a") ;;
     esac
 done
-exec "$jp" exec -- "$docker" run "$mount" "${opts[@]}" sh -c \
+# Without MAKEFLAGS, exec registers this run with the pool even under a make
+# whose jobserver is private (`make -j4`, no shim), which would otherwise hide
+# the container's tokens from the daemon's idle reset.
+exec env -u MAKEFLAGS -u MFLAGS "$jp" exec -- "$docker" run "$mount" "${opts[@]}" sh -c \
     "if (exec 3<>$dir/fifo) 2>/dev/null; then $join; else set -- \"\$@\"$jflags; fi; exec make \"\$@\"" \
     make "${args[@]}"

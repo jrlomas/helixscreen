@@ -41,8 +41,8 @@ fake_pool() {
 echo "$*" >> "$FAKE_LOG"
 case "$1" in
     target) echo 7 ;;
-    hold) shift; [ "$1" = -n ] && shift 2; shift; JOBPOOL_SLOTS=${FAKE_SLOTS:-5} exec "$@" ;;
-    exec) shift 2; exec "$@" ;;
+    hold) shift; while [ "$1" != -- ]; do shift; done; shift; JOBPOOL_SLOTS=${FAKE_SLOTS:-5} exec "$@" ;;
+    exec) echo "exec MAKEFLAGS=[${MAKEFLAGS-}]" >> "$FAKE_LOG"; shift 2; exec "$@" ;;
     docker-args) echo "--volume=/pool:$2" ;;
     container-env) echo "exec 3<>$2/fifo 4<>$2/fifo && export MAKEFLAGS=-j\\ --jobserver-auth=3,4" ;;
     *) exit 2 ;;
@@ -74,10 +74,10 @@ no_pool() {
 
 @test "hold runs the command under jobpool hold when jobpool is installed" {
     fake_pool
-    run "$CLAIM" hold -n 3 -- sh -c 'echo "slots=$JOBPOOL_SLOTS"'
+    run "$CLAIM" hold -n 3 --min 2 --min-wait 9 -- sh -c 'echo "slots=$JOBPOOL_SLOTS"'
     [ "$status" -eq 0 ]
     [ "$output" = "slots=5" ]
-    [ "$(cat "$FAKE_LOG")" = "hold -n 3 -- sh -c echo \"slots=\$JOBPOOL_SLOTS\"" ]
+    [ "$(cat "$FAKE_LOG")" = "hold -n 3 --min 2 --min-wait 9 -- sh -c echo \"slots=\$JOBPOOL_SLOTS\"" ]
 }
 
 @test "hold without jobpool, or with JOBPOOL=0, sizes from -n or the cores" {
@@ -109,7 +109,8 @@ test_shell() {
     run test_shell
     [ "$status" -eq 0 ]
     contains "BATS --jobs 5 --no-parallelize-within-files tests/shell/" "$output"
-    grep -q '^hold -- ' "$FAKE_LOG"
+    # A third of the fake pool's target of 7.
+    grep -q '^hold --min 2 -- ' "$FAKE_LOG"
 }
 
 @test "make test-shell on a single slot runs bats serially" {
@@ -146,6 +147,14 @@ test_shell() {
     [ "${lines[10]}" = PLATFORM_TARGET=pi ]
     [ "${lines[11]}" = all ]
     grep -qx 'exec -- docker run --volume=/pool:/run/jobpool --rm -v /a:/b img sh -c .*' "$FAKE_LOG"
+}
+
+@test "pool-docker: under a make's private jobserver the run still registers with the pool" {
+    fake_pool
+    export PATH="$BIN:$PATH"
+    MAKEFLAGS=" -j4 --jobserver-auth=3,4" run "$POOL_DOCKER" docker run img make all
+    [ "$status" -eq 0 ]
+    grep -qx 'exec MAKEFLAGS=\[\]' "$FAKE_LOG"
 }
 
 # The in-container line pool-docker.sh writes, run here with the pool dir
