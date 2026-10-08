@@ -24,6 +24,7 @@ constexpr PrinterType ALL_TYPES[] = {
     PrinterType::MULTI_EXTRUDER,
     PrinterType::DELTA,
     PrinterType::ELEGOO_CC1,
+    PrinterType::FLASHFORGE_AD5X,
 };
 } // namespace
 
@@ -89,6 +90,17 @@ TEST_CASE("effective_mock_ams: explicit wins, else the persona default", "[mock]
     CHECK(effective_mock_ams(nullptr, "voron_24").empty());
     CHECK(effective_mock_ams(nullptr, "nonsense").empty());
     CHECK(effective_mock_ams(nullptr, nullptr).empty());
+    CHECK(effective_mock_ams(nullptr, "ad5x") == "ifs");
+    CHECK(effective_mock_ams("afc", "ad5x") == "afc");
+}
+
+TEST_CASE("A persona's own probe stands in for the default cartographer", "[mock][persona]") {
+    for (const auto& p : helix::mock::PERSONAS) {
+        const auto d = helix::mock::descriptor(p.type);
+        INFO(p.id);
+        if (!d.probe.empty())
+            CHECK((d.omit & helix::mock::default_object::CARTOGRAPHER) != 0);
+    }
 }
 
 TEST_CASE("is_hardware_persona follows the descriptor", "[mock][persona]") {

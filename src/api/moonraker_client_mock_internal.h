@@ -174,8 +174,8 @@ json get_mock_accel_config();
  * @brief The probe profile the mock reports for a persona
  *
  * HELIX_MOCK_PROBE_TYPE when set. Otherwise "cartographer" for a persona that
- * inherits the default probe, else the persona's own probe ("load_cell_probe"
- * on the CC1), else "none".
+ * inherits the default probe, else the persona's own probe
+ * (PersonaDescriptor::probe), else "none".
  */
 std::string mock_probe_type(helix::mock::PrinterType type);
 

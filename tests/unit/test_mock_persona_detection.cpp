@@ -9,6 +9,7 @@
 #include "test_helpers/printer_capture.h"
 
 #include <algorithm>
+#include <fstream>
 #include <string>
 #include <string_view>
 
@@ -50,6 +51,7 @@ constexpr Expectation EXPECTED[] = {
     {"delta",              "",                          "",             false},
     {"snapmaker_u1",       "",                          "",             false},
     {"cc1",                "Elegoo Centauri Carbon",    "cc1",          true},
+    {"ad5x",               "FlashForge Adventurer 5X",  "ad5x",         true},
 };
 // clang-format on
 
@@ -136,5 +138,35 @@ TEST_CASE_METHOD(HelixTestFixture, "An env override restores an omitted default"
     for (auto it = probe_objects.begin(); it != probe_objects.end(); ++it) {
         INFO(it.key());
         CHECK(std::find(objs.begin(), objs.end(), it.key()) != objs.end());
+    }
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "The ad5x persona carries the AD5X preset's expected hardware",
+                 "[mock][persona][ad5x]") {
+    PersonaEnv env("ad5x");
+    const auto hw = discover(*helix::mock::find_persona("ad5x"));
+    std::ifstream f("assets/config/presets/ad5x.json");
+    REQUIRE(f.good());
+    const auto preset = nlohmann::json::parse(f);
+    const auto& expected = preset["printer"]["hardware"]["expected"];
+    REQUIRE_FALSE(expected.empty());
+    const auto& objs = hw.printer_objects();
+    for (const auto& name : expected) {
+        INFO(name);
+        CHECK(std::find(objs.begin(), objs.end(), name.get<std::string>()) != objs.end());
+    }
+    CHECK(std::find(objs.begin(), objs.end(), "gcode_macro SET_EXTRUDER_SLOT") != objs.end());
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "The ad5x persona does not stand up the production IFS backend",
+                 "[mock][persona][ad5x][ams]") {
+    PersonaEnv env("ad5x");
+    const auto hw = discover(*helix::mock::find_persona("ad5x"));
+    CHECK(hw.mmu_type() != helix::AmsType::AD5X_IFS);
+    for (const auto& o : hw.printer_objects()) {
+        INFO(o);
+        CHECK(o.rfind("ifs", 0) != 0);
+        CHECK(o.rfind("zmod_ifs", 0) != 0);
+        CHECK(o.find("_ifs_port_sensor") == std::string::npos);
     }
 }

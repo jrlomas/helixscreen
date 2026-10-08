@@ -293,6 +293,14 @@ TEST_CASE("Unset HELIX_MOCK_PROBE_TYPE reports the persona's own probe", "[mock]
         CHECK(keys_of(mock_internal::get_mock_probe_config(type)) == Keys{"load_cell_probe"});
     }
 
+    SECTION("ad5x reports the Flashforge load cell on the generic probe") {
+        const auto type = helix::mock::PrinterType::FLASHFORGE_AD5X;
+        const json st = helix::sim::mock_probe_status(type);
+        CHECK(keys_of(st) == Keys{"probe"});
+        CHECK(st["probe"]["z_offset"].is_null());
+        CHECK(keys_of(mock_internal::get_mock_probe_config(type)) == Keys{"probe"});
+    }
+
     SECTION("an explicit type overrides the persona's own probe") {
         helix::ScopedEnv bltouch("HELIX_MOCK_PROBE_TYPE", "bltouch");
         const auto type = helix::mock::PrinterType::ELEGOO_CC1;

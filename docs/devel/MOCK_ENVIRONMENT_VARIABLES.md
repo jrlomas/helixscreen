@@ -764,7 +764,7 @@ Select which printer the mock Moonraker client impersonates. Drives the mock's r
 
 | Property | Value |
 |----------|-------|
-| **Values** | see `include/mock_persona.h#PERSONAS`: currently `voron_24`, `voron_trident`, `k1`, `k1max`, `ad5m`, `creator5`, `creator5_zmod`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta`, `snapmaker_u1`, `cc1`. Matched exactly (case-sensitive); an unrecognised value falls back to `voron_24` with a warning listing the valid ids |
+| **Values** | see `include/mock_persona.h#PERSONAS`: currently `voron_24`, `voron_trident`, `k1`, `k1max`, `ad5m`, `creator5`, `creator5_zmod`, `generic_corexy`, `generic_bedslinger`, `multi_extruder`, `delta`, `snapmaker_u1`, `cc1`, `ad5x`. Matched exactly (case-sensitive); an unrecognised value falls back to `voron_24` with a warning listing the valid ids |
 | **Default** | `voron_24` (Voron 2.4); unset and empty both select it silently |
 | **File** | `include/mock_persona.h` |
 
@@ -789,6 +789,9 @@ HELIX_MOCK_PRINTER=creator5_zmod ./build/bin/helix-screen --test -vv
 
 # Elegoo Centauri Carbon on COSMOS, at the CC1's own 480x272 screen size
 HELIX_MOCK_PRINTER=cc1 ./build/bin/helix-screen --test -s micro -vv
+
+# FlashForge Adventurer 5X with the mock IFS (4 slots)
+HELIX_MOCK_PRINTER=ad5x ./build/bin/helix-screen --test -vv
 ```
 
 `cc1`: run with `-s micro`, the CC1's 480x272 screen. The persona mirrors the
@@ -796,6 +799,14 @@ bench CC1 capture (`tests/fixtures/printers/elegoo_centauri_carbon.json`): hostn
 `cosmos`, a 256x265x258 CoreXY volume, the mainline `load_cell_probe` (probe type
 `load_cell_probe`), the chassis switch `filament_switch_sensor filament_sensor`,
 LEDs `led case` / `led hotend`, and the COSMOS macros that name the machine.
+
+`ad5x`: hostname `ad5x-mock`, a 220x220x220 CoreXY volume, the hardware in
+`assets/config/presets/ad5x.json` `hardware/expected`, the Flashforge `loadcell`
+probe, and `gcode_macro SET_EXTRUDER_SLOT`, which names the machine. Its default
+`HELIX_MOCK_AMS` is `ifs`, the mock IFS simulation. It publishes none of the IFS
+module's own objects (`ifs`, `ifs_materials`, `zmod_ifs`, `_ifs_port_sensor_*`),
+since those make discovery stand up the production AD5X IFS backend; use
+`HELIX_MOCK_AMS=ifs-module` for that.
 
 The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 235x235x250 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
 
@@ -877,17 +888,17 @@ Choose which Z-probe the mock printer advertises. Controls both the Klipper obje
 | Property | Value |
 |----------|-------|
 | **Values** | `cartographer`, `beacon`, `bltouch`, `loadcell`, `load_cell_probe`, `tap`, `klicky`, `standard`, `none` |
-| **Default** | the persona's probe: `cartographer`, except `load_cell_probe` on `cc1` |
+| **Default** | the persona's probe: `cartographer`, except `load_cell_probe` on `cc1` and `loadcell` on `ad5x` |
 | **File** | `src/api/moonraker_client_mock_objects.cpp` |
 
 Each value exposes the objects and full `get_status()` payload the real module publishes (`helix::sim::mock_probe_status()`; per-type table in `docs/devel/SENSOR_MANAGEMENT.md` § Probe status keys).
 
 | Value | Objects exposed | Status detail |
 |-------|-----------------|---------------|
-| `cartographer` *(default)* | `cartographer`, `probe` | `cartographer`: `scan`/`touch`/`mcu`; `probe`: `last_query: 0`, `last_z_result: -0.425` |
+| `cartographer` *(default on most personas)* | `cartographer`, `probe` | `cartographer`: `scan`/`touch`/`mcu`; `probe`: `last_query: 0`, `last_z_result: -0.425` |
 | `beacon` | `beacon`, `probe` | `beacon`: `last_z_result: -0.312` plus Beacon's other keys; `probe`: `{name: "beacon"}` |
 | `bltouch` | `bltouch`, `probe` (same payload) | `last_query: false`, `last_z_result: 0.130` |
-| `loadcell` | generic `probe` | `last_z_result: 0.0`, `z_offset: null` (the Flashforge shape) |
+| `loadcell` | generic `probe` | `last_z_result: 0.0`, `z_offset: null` (the Flashforge shape, as on the AD5X) |
 | `load_cell_probe` | `load_cell_probe`, `probe` (same payload) | `last_query: false`, `last_z_result: 0.0` (mainline Klipper's load cell, as on the CC1) |
 | `tap` / `klicky` / `standard` / anything else | generic `probe` | `last_query: false`, `last_z_result: 0.0` |
 | `none` | *(no probe object)* | *(no probe status)* |

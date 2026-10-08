@@ -26,6 +26,7 @@ enum class PrinterType {
     MULTI_EXTRUDER,           // Multi-extruder test case (2 extruders)
     DELTA,                    // Generic linear delta (every axis homes together)
     ELEGOO_CC1,               // Elegoo Centauri Carbon on COSMOS (load-cell probe)
+    FLASHFORGE_AD5X,          // FlashForge Adventurer 5X (IFS, simulated by the mock AMS)
 };
 
 /// Bit set of the objects every mock persona inherits by default.
@@ -62,6 +63,9 @@ struct PersonaDescriptor {
     DefaultObjects omit;               // inherited defaults this persona does not have
     std::string_view default_mock_ams; // HELIX_MOCK_AMS when unset; "" = none chosen
     bool hardware_persona;             // production backend drives it (implies --real-ams)
+    /// Probe profile (HELIX_MOCK_PROBE_TYPE value) reported in place of the
+    /// default cartographer when the persona omits CARTOGRAPHER; "" = no probe.
+    std::string_view probe = {};
 };
 
 [[nodiscard]] constexpr PersonaDescriptor descriptor(PrinterType type) {
@@ -81,9 +85,19 @@ struct PersonaDescriptor {
                 {256.0, 265.0, 258.0},
                 "corexy",
                 HAPPY_HARE_MMU | CARTOGRAPHER | BME280_CHAMBER | HTU21D_DRYER | EBB_CAN_MCU |
-                    WIDTH_SENSOR | RUNOUT_SENSOR,
+                    WIDTH_SENSOR | RUNOUT_SENSOR | LED_EFFECTS,
                 "",
-                false};
+                false,
+                "load_cell_probe"};
+    case PrinterType::FLASHFORGE_AD5X:
+        return {"ad5x-mock",
+                {220.0, 220.0, 220.0},
+                "corexy",
+                HAPPY_HARE_MMU | CARTOGRAPHER | BME280_CHAMBER | HTU21D_DRYER | EBB_CAN_MCU |
+                    WIDTH_SENSOR | RUNOUT_SENSOR | LED_EFFECTS,
+                "ifs",
+                false,
+                "loadcell"};
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD:
         return {"mock-printer", standard, "corexy", HAPPY_HARE_MMU, "", true};
     case PrinterType::VORON_24:
@@ -99,6 +113,11 @@ struct PersonaDescriptor {
     return {"mock-printer", standard, "corexy", NONE, "", false};
 }
 
+/// True when `type` keeps the default object(s) `object` (its descriptor does not omit them).
+[[nodiscard]] constexpr bool inherits_default(PrinterType type, DefaultObjects object) {
+    return (descriptor(type).omit & object) == 0;
+}
+
 /// One HELIX_MOCK_PRINTER value.
 struct PersonaEntry {
     std::string_view id; // HELIX_MOCK_PRINTER value
@@ -112,7 +131,7 @@ struct PersonaEntry {
 /// Every HELIX_MOCK_PRINTER value. Row 0 is the default persona. One row per
 /// line: scripts/screenshot.sh extracts the ids with sed.
 // clang-format off
-inline constexpr std::array<PersonaEntry, 13> PERSONAS = {{
+inline constexpr std::array<PersonaEntry, 14> PERSONAS = {{
     {"voron_24", PrinterType::VORON_24, "Voron 2.4", ""},
     {"voron_trident", PrinterType::VORON_TRIDENT, "Voron Trident", ""},
     {"k1", PrinterType::CREALITY_K1, "Creality K1", "Creality K1C"},
@@ -126,6 +145,7 @@ inline constexpr std::array<PersonaEntry, 13> PERSONAS = {{
     {"delta", PrinterType::DELTA, "Generic Delta", ""},
     {"snapmaker_u1", PrinterType::MULTI_EXTRUDER, "Snapmaker U1 (multi-extruder mock)", "Snapmaker U1"},
     {"cc1", PrinterType::ELEGOO_CC1, "Elegoo Centauri Carbon", ""},
+    {"ad5x", PrinterType::FLASHFORGE_AD5X, "Flashforge AD5X (mock IFS)", ""},
 }};
 // clang-format on
 

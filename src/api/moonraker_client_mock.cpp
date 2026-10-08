@@ -1057,6 +1057,12 @@ void MoonrakerClientMock::populate_capabilities() {
             mock_objects.push_back(obj);
         }
         break;
+    case PrinterType::FLASHFORGE_AD5X:
+        // The stock AD5X's public IFS macro, which names the machine. None of
+        // the IFS module's own objects: those make discovery stand up the
+        // production AD5X IFS backend, and this persona runs the mock IFS.
+        mock_objects.push_back("gcode_macro SET_EXTRUDER_SLOT");
+        break;
     default:
         // Other printers may not have these features
         break;
@@ -1181,6 +1187,9 @@ void MoonrakerClientMock::populate_capabilities() {
     } else if (printer_type_ == PrinterType::ELEGOO_CC1) {
         // The chassis runout switch, named as in assets/config/presets/cc1.json.
         mock_objects.push_back("filament_switch_sensor filament_sensor");
+    } else if (printer_type_ == PrinterType::FLASHFORGE_AD5X) {
+        // The toolhead switch, named as in assets/config/presets/ad5x.json.
+        mock_objects.push_back("filament_switch_sensor head_switch_sensor");
     } else if (inherits(RUNOUT_SENSOR)) {
         // Default: one switch sensor (typical Voron setup)
         mock_objects.push_back("filament_switch_sensor runout_sensor");
@@ -1327,11 +1336,16 @@ void MoonrakerClientMock::populate_capabilities() {
     spdlog::debug("[MoonrakerClientMock] Mock config: adxl345, resonance_tester, kinematics={}",
                   kinematics());
 
-    // Populate printer objects for hardware discovery
+    // Populate printer objects for hardware discovery. Klipper lists each object
+    // once; a persona's own lists can repeat an inherited default (a chamber
+    // sensor, a chamber heater, a macro), so keep only the first.
     std::vector<std::string> all_objects;
+    std::unordered_set<std::string> listed;
     for (const auto& obj : mock_objects) {
         std::string name = obj.get<std::string>();
-        all_objects.push_back(name);
+        if (listed.insert(name).second) {
+            all_objects.push_back(std::move(name));
+        }
     }
     discovery_.modify_hardware([&](PrinterDiscovery& hw) { hw.set_printer_objects(all_objects); });
     update_cached_chamber_key();
@@ -2265,6 +2279,18 @@ void MoonrakerClientMock::populate_hardware() {
         discovery_.fans() = {"heater_fan extruder", "fan", "fan_generic aux_fan",
                              "fan_generic case_fan", "temperature_fan mainboard"};
         discovery_.leds() = {"led case", "led hotend"};
+        break;
+
+    case PrinterType::FLASHFORGE_AD5X:
+        // FlashForge Adventurer 5X. Fans mirror assets/config/presets/ad5x.json
+        // hardware/expected.
+        discovery_.heaters() = {"heater_bed", "extruder"};
+        discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
+                                "extruder", // Hotend thermistor (Klipper naming: bare heater name)
+                                "temperature_sensor chamber"};
+        discovery_.fans() = {"fan_generic fanM106", "heater_fan heat_fan",
+                             "fan_generic chamber_fan", "fan_generic pcb_fan"};
+        discovery_.leds() = {};
         break;
 
     case PrinterType::MULTI_EXTRUDER:
@@ -3480,13 +3506,6 @@ void MoonrakerClientMock::dispatch_initial_state() {
          {{"temperature", bed_temp_val},
           {"target", bed_target_val},
           {"power", mock_heater_duty(bed_temp_val, bed_target_val)}}},
-        {[this]() {
-             auto key = chamber_heater_status_key();
-             return key.empty() ? "heater_generic chamber" : key;
-         }(),
-         {{"temperature", 42.3},
-          {"target", chamber_target_.load()},
-          {"power", mock_heater_duty(42.3, chamber_target_.load())}}},
         {"toolhead",
          {{"position", {x, y, z, 0.0}},
           {"homed_axes", homed},
@@ -3609,14 +3628,29 @@ void MoonrakerClientMock::dispatch_initial_state() {
         initial_status[sensor] = {{"filament_detected", detected}, {"enabled", true}};
     }
 
-    // The chamber sensor carries status only where the persona reports it.
-    const auto omit = helix::mock::descriptor(printer_type_).omit;
-    if (!(omit & helix::mock::default_object::CHAMBER_SENSOR) || has_chamber_sensor()) {
+    // The chamber and width sensors carry status only where the persona reports them.
+    using helix::mock::inherits_default;
+    namespace default_object = helix::mock::default_object;
+    if (inherits_default(printer_type_, default_object::CHAMBER_SENSOR) || has_chamber_sensor()) {
         initial_status["temperature_sensor chamber"] = {{"temperature", 42.3}};
     }
-    // Add width sensor data (Hall-effect filament diameter measurement)
-    initial_status["hall_filament_width_sensor"] = {
-        {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+    // The chamber heater: the persona's own, else the inherited default one
+    // (which rides with the chamber sensor).
+    {
+        const auto heater_key = chamber_heater_status_key();
+        if (!heater_key.empty() ||
+            inherits_default(printer_type_, default_object::CHAMBER_SENSOR)) {
+            initial_status[heater_key.empty() ? "heater_generic chamber" : heater_key] = {
+                {"temperature", 42.3},
+                {"target", chamber_target_.load()},
+                {"power", mock_heater_duty(42.3, chamber_target_.load())}};
+        }
+    }
+    if (inherits_default(printer_type_, default_object::WIDTH_SENSOR)) {
+        // Hall-effect filament diameter measurement
+        initial_status["hall_filament_width_sensor"] = {
+            {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+    }
 
     // Probe objects (the same ones populate_capabilities() lists)
     // (assigned, not merge_patch'd: a patch drops the null fields they carry).
@@ -3833,10 +3867,13 @@ void MoonrakerClientMock::dispatch_historical_temperatures() {
         json status_obj = {{"extruder", {{"temperature", ext_with_noise}, {"target", 0.0}}},
                            {"heater_bed", {{"temperature", bed_with_noise}, {"target", 0.0}}}};
 
-        // Add width sensor data (Hall-effect filament diameter measurement)
-        // Always include to ensure WidthSensorManager receives updates
-        status_obj["hall_filament_width_sensor"] = {
-            {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+        // Add width sensor data (Hall-effect filament diameter measurement) on
+        // every frame of a persona that has one, so WidthSensorManager receives updates
+        if (helix::mock::inherits_default(printer_type_,
+                                          helix::mock::default_object::WIDTH_SENSOR)) {
+            status_obj["hall_filament_width_sensor"] = {
+                {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+        }
 
         // Add historical temperature data for all temperature sensors
         for (const auto& s : discovery_.sensors()) {
@@ -4394,10 +4431,13 @@ void MoonrakerClientMock::temperature_simulation_loop() {
                                    }
                                }()}}}};
 
-        // Add width sensor data (Hall-effect filament diameter measurement)
-        // Always include to ensure WidthSensorManager receives updates
-        status_obj["hall_filament_width_sensor"] = {
-            {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+        // Add width sensor data (Hall-effect filament diameter measurement) on
+        // every frame of a persona that has one, so WidthSensorManager receives updates
+        if (helix::mock::inherits_default(printer_type_,
+                                          helix::mock::default_object::WIDTH_SENSOR)) {
+            status_obj["hall_filament_width_sensor"] = {
+                {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+        }
 
         // Toolchanger mock mode: keep the 3 extra extruder temps on the live
         // subscription stream so they don't go stale. Static values (matching the

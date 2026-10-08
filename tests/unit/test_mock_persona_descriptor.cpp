@@ -18,8 +18,12 @@
 #include "test_helpers/moonraker_client_mock_test_access.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
+#include <iterator>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../catch_amalgamated.hpp"
@@ -150,6 +154,17 @@ TEST_CASE_METHOD(LVGLTestFixture, "Every persona reports its descriptor on every
             }
             if (d.omit & CHAMBER_SENSOR)
                 CHECK_FALSE(frame.contains("temperature_sensor chamber"));
+            if (d.omit & WIDTH_SENSOR)
+                CHECK_FALSE(frame.contains("hall_filament_width_sensor"));
+            // Without a chamber sensor or a heater of its own, no chamber heater reports.
+            if ((d.omit & CHAMBER_SENSOR) && !lists(objs, "heater_generic chamber_heater"))
+                CHECK_FALSE(frame.contains("heater_generic chamber"));
+
+            // Klipper lists each object once.
+            for (auto it = objs.begin(); it != objs.end(); ++it) {
+                INFO(*it);
+                CHECK(std::find(std::next(it), objs.end(), *it) == objs.end());
+            }
         }
     }
 }
@@ -175,5 +190,44 @@ TEST_CASE_METHOD(LVGLTestFixture, "Omitted defaults drop only the persona's own 
         CHECK(lists(objs, "filament_switch_sensor runout_sensor"));
         CHECK(lists(objs, "led_effect rainbow"));
         CHECK(lists(objs, "cartographer"));
+    }
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "Width sensor status follows the persona on every pushed frame",
+                 "[mock][persona][descriptor]") {
+    // voron_24 keeps the default width sensor, ad5x omits it.
+    for (const char* id : {"voron_24", "ad5x"}) {
+        DYNAMIC_SECTION(id) {
+            PersonaEnv env(id);
+            const auto* p = helix::mock::find_persona(id);
+            REQUIRE(p != nullptr);
+            const bool has_width =
+                helix::mock::inherits_default(p->type, helix::mock::default_object::WIDTH_SENSOR);
+
+            std::mutex mu;
+            std::vector<json> frames;
+            MoonrakerClientMock mock(p->type);
+            const auto sub = mock.register_notify_update([&](const json& n) {
+                std::lock_guard<std::mutex> lock(mu);
+                frames.push_back(n["params"][0]);
+            });
+            // connect() pushes the historical temperature burst and the initial
+            // state, then the simulation loop pushes one frame per tick.
+            mock.connect("ws://mock/websocket", [] {}, [] {});
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            while (helix::MoonrakerClientMockTestAccess::tick_count(mock) < 2 &&
+                   std::chrono::steady_clock::now() < deadline) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            REQUIRE(helix::MoonrakerClientMockTestAccess::tick_count(mock) >= 2);
+            mock.unsubscribe_notify_update(sub);
+
+            std::lock_guard<std::mutex> lock(mu);
+            REQUIRE(frames.size() > 2);
+            for (size_t i = 0; i < frames.size(); ++i) {
+                INFO("frame " << i << " of " << frames.size());
+                CHECK(frames[i].contains("hall_filament_width_sensor") == has_width);
+            }
+        }
     }
 }

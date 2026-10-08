@@ -125,15 +125,11 @@ std::string mock_probe_type(helix::mock::PrinterType type) {
     if (probe_env && probe_env[0]) {
         return probe_env;
     }
-    if ((helix::mock::descriptor(type).omit & helix::mock::default_object::CARTOGRAPHER) == 0) {
+    if (helix::mock::inherits_default(type, helix::mock::default_object::CARTOGRAPHER)) {
         return "cartographer";
     }
-    switch (type) {
-    case helix::mock::PrinterType::ELEGOO_CC1:
-        return "load_cell_probe";
-    default:
-        return "none";
-    }
+    const std::string_view own = helix::mock::descriptor(type).probe;
+    return own.empty() ? "none" : std::string(own);
 }
 
 json get_mock_probe_config(helix::mock::PrinterType type) {
