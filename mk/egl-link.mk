@@ -82,9 +82,9 @@ EGL_APP_VARIANT_OBJS := $(EGL_VARIANT_DIR)/display_backend_drm.o
 EGL_APP_REPLACED := $(OBJ_DIR)/api/display_backend_drm.o
 EGL_APP_OBJS := $(filter-out $(EGL_APP_REPLACED),$(APP_OBJS))
 
-$(EGL_VARIANT_DIR)/display_backend_drm.o: src/api/display_backend_drm.cpp $(LIBHV_LIB) $(PCH) $(ABI_STAMP) | $(EGL_VARIANT_DIR)
+$(EGL_VARIANT_DIR)/display_backend_drm.o: src/api/display_backend_drm.cpp $(LIBHV_LIB) $(PATCHES_STAMP) $(ABI_STAMP) | $(EGL_VARIANT_DIR) $(PATCH_MARKER_STAMP)
 	$(ECHO) "$(CYAN)[CXX/egl]$(RESET) $<"
-	$(Q)$(CXX) $(EGL_APP_CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(Q)$(CXX) $(EGL_APP_CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@
 
 $(EGL_VARIANT_DIR):
 	$(Q)mkdir -p $@

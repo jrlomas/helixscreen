@@ -284,3 +284,13 @@ TEST_CASE_METHOD(LVGLTestFixture, "opening the panel builds its rows once", "[ma
     CHECK(MacrosPanelTestAccess::displayed(p).size() == 1);
     MacrosPanelTestAccess::teardown(p);
 }
+
+TEST_CASE("panel_macros leaves out the leveling-skip wrappers", "[macros][skip_wrappers]") {
+    const std::unordered_set<std::string> macros = {"PRINT_START", "BED_MESH_CALIBRATE",
+                                                    "QUAD_GANTRY_LEVEL", "_HELIX_PREP"};
+    CHECK(panel_macros(macros, {"BED_MESH_CALIBRATE", "BED_MESH_CLEAR", "QUAD_GANTRY_LEVEL"}) ==
+          std::vector<std::string>{"PRINT_START", "_HELIX_PREP"});
+    // Not wrapped: the printer's own BED_MESH_CALIBRATE macro stays listed.
+    CHECK(panel_macros(macros, {}) == std::vector<std::string>{"BED_MESH_CALIBRATE", "PRINT_START",
+                                                               "QUAD_GANTRY_LEVEL", "_HELIX_PREP"});
+}

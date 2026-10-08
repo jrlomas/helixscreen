@@ -16,7 +16,8 @@
 #include "ams_types.h"
 #include "filament_database.h" // filament::DEFAULT_DIAMETER_MM
 #include "leveling_probe_points.h"
-#include "openams_api.h"      // OpenAMS claims only a manager speaking its API
+#include "openams_api.h" // OpenAMS claims only a manager speaking its API
+#include "preprint_skip_wrappers.h"
 #include "printer_detector.h" // For BuildVolume struct
 #include "text_io.h"          // helix::text_io::to_upper
 
@@ -646,6 +647,22 @@ class PrinterDiscovery {
         return host_halting_macros_;
     }
 
+    /// Leveling steps helix_skips.cfg can wrap on this printer, and the ones it
+    /// wraps right now; skip_wrappers::wrappable()/active() over configfile.settings.
+    void set_skip_wrappers(std::vector<skip_wrappers::Op> wrappable,
+                           std::vector<skip_wrappers::Op> active) {
+        skip_wrappable_ = std::move(wrappable);
+        skip_active_ = std::move(active);
+    }
+
+    [[nodiscard]] const std::vector<skip_wrappers::Op>& skip_wrappable() const {
+        return skip_wrappable_;
+    }
+
+    [[nodiscard]] const std::vector<skip_wrappers::Op>& skip_active() const {
+        return skip_active_;
+    }
+
     /// Macros that set LEDs, directly or through another macro, from
     /// helix::analyze_led_driving_macros(); stored uppercased like macros_.
     void set_led_driving_macros(std::unordered_set<std::string> macros) {
@@ -918,6 +935,8 @@ class PrinterDiscovery {
     std::unordered_set<std::string> host_restarting_macros_; ///< Macros that reach a host restart
     std::unordered_set<std::string> host_halting_macros_;    ///< Macros that reach a host halt
     std::unordered_set<std::string> led_driving_macros_;     ///< Macros that set LEDs
+    std::vector<skip_wrappers::Op> skip_wrappable_;
+    std::vector<skip_wrappers::Op> skip_active_;
     std::string sensor_toggle_command_; ///< Empty = the SET_FILAMENT_SENSOR builtin
     std::unordered_set<std::string> helix_macros_;
     std::string nozzle_clean_macro_;

@@ -1598,6 +1598,8 @@ translations:
   Kinematics: 运动学
   Klipper: Klipper
   Klipper Error: Klipper 错误
+  Klipper failed to start with the skip macros, so they were removed: 'Klipper 无法在加载跳过宏后启动，已将其移除'
+  Klipper failed to start. Remove the helix_skips.cfg include from printer.cfg.: 'Klipper 无法启动。请从 printer.cfg 中删除 helix_skips.cfg 的 include。'
   Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart.: Klipper
     固件已与主机断开连接。请尝试重启 Klipper 或执行固件重启。
   Klipper has disconnected from Moonraker. Check for errors in your printer interface.: Klipper 已与 Moonraker 断开连接。请在打印机界面中检查错误。

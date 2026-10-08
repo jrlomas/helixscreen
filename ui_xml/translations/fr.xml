@@ -1545,6 +1545,8 @@
   <translation tag="Kinematics" fr="Cinématique"/>
   <translation tag="Klipper" fr="Klipper"/>
   <translation tag="Klipper Error" fr="Erreur Klipper"/>
+  <translation tag="Klipper failed to start with the skip macros, so they were removed" fr="Klipper n&apos;a pas démarré avec les macros de saut, elles ont donc été supprimées"/>
+  <translation tag="Klipper failed to start. Remove the helix_skips.cfg include from printer.cfg." fr="Klipper n&apos;a pas pu démarrer. Retirez l&apos;include de helix_skips.cfg de printer.cfg."/>
   <translation tag="Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart." fr="Le firmware Klipper s&apos;est déconnecté de l&apos;hôte. Essayez de redémarrer Klipper ou d&apos;effectuer un redémarrage du firmware."/>
   <translation tag="Klipper has disconnected from Moonraker. Check for errors in your printer interface." fr="Klipper s&apos;est déconnecté de Moonraker. Vérifiez les erreurs dans l&apos;interface de votre imprimante."/>
   <translation tag="Klipper has entered an error state. This is typically caused by an MCU connection failure or configuration error. Try a firmware restart." fr="Klipper est entré dans un état d&apos;erreur. Cela est généralement causé par un échec de connexion MCU ou une erreur de configuration. Essayez un redémarrage du firmware."/>

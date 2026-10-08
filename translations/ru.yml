@@ -1697,6 +1697,8 @@ translations:
   Kinematics: Кинематика
   Klipper: Klipper
   Klipper Error: Ошибка Klipper
+  Klipper failed to start with the skip macros, so they were removed: 'Klipper не запустился с макросами пропуска, поэтому они удалены'
+  Klipper failed to start. Remove the helix_skips.cfg include from printer.cfg.: 'Klipper не запустился. Удалите include helix_skips.cfg из printer.cfg.'
   Klipper firmware has disconnected from the host. Try restarting Klipper or performing a firmware restart.: Прошивка
     Klipper отключилась от хоста. Попробуйте перезапустить Klipper или выполнить перезапуск
     прошивки.

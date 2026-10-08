@@ -860,6 +860,9 @@ void PrintSelectPanel::toggle_view() {
     if (current_view_mode_ == PrintSelectViewMode::CARD) {
         // Switch to list view
         current_view_mode_ = PrintSelectViewMode::LIST;
+        if (card_view_) {
+            card_view_->stop_prebuild();
+        }
 
         // Update reactive subject - XML bindings handle container visibility
         lv_subject_set_int(&view_mode_subject_, 1);
@@ -1894,6 +1897,13 @@ void PrintSelectPanel::on_activate() {
 
     first_activation_ = false;
 
+    // A card is slow to build on small hardware: build the first screen's
+    // while the listing is on its way, not all at once inside its fill.
+    if (current_view_mode_ == PrintSelectViewMode::CARD && card_view_ && card_view_container_) {
+        card_view_->prebuild(calculate_card_dimensions(),
+                             file_list_loaded_ ? file_list_.size() : SIZE_MAX);
+    }
+
     if (!is_usb_active && api_) {
         // Printer (Moonraker) source — always refresh to pick up external uploads
         spdlog::info("[{}] Panel activated, refreshing file list", get_name());
@@ -1959,6 +1969,10 @@ void PrintSelectPanel::on_deactivating(DeactivateReason) {
         !NavigationManager::instance().main_panel_deactivated_for_overlay()) {
         pending_queued_start_.reset();
         spdlog::debug("[{}] Discarded unconfirmed pending queued start on deactivate", get_name());
+    }
+
+    if (card_view_) {
+        card_view_->stop_prebuild();
     }
 
     // Mark that the panel was fully deactivated so on_activate() knows to refresh

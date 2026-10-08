@@ -30,8 +30,10 @@
         style_min_width="#card_min_width" style_max_width="#card_max_width" style_pad_all="0" style_border_width="0"
         style_radius="#border_radius" clickable="true">
     <!-- Pre-rendered gradient background (LVGL native .bin for instant blitting)
-         Source updated at runtime by C++ based on theme mode (dark/light) and card size -->
-    <lv_image name="gradient_bg" width="100%" height="100%" inner_align="stretch"/>
+         Source updated at runtime by C++ based on theme mode (dark/light) and card size.
+         Rendered at the card's exact size, so it draws 1:1: a stretched image lays the
+         whole screen out on every source change, once per card as the pool is built. -->
+    <lv_image name="gradient_bg" width="100%" height="100%"/>
     <!-- Thumbnail image - pre-scaled to exact display size via ThumbnailProcessor.
          Widget dimensions set by C++ to match .bin target (e.g. 160x160 for 800px),
          ensuring 1:1 blit with zero per-frame scaling overhead. Every source that

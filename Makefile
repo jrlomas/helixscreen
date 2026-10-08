@@ -321,7 +321,7 @@ BUILD_DIR ?= build
 #
 # BIN_DIR is deliberately NOT suffixed. mk/tests.mk computes TEST_ASAN_BIN from
 # BIN_DIR in the PARENT make (where SANITIZE is unset) and passes only
-# OBJ_DIR/PCH down, so moving BIN_DIR here would have the sub-make build into a
+# OBJ_DIR down, so moving BIN_DIR here would have the sub-make build into a
 # directory the parent is not looking in. The app binary is therefore still
 # replaced in place — but it is genuinely instrumented, which is the part that
 # matters. Pass BIN_DIR=... explicitly to keep both.
@@ -818,23 +818,11 @@ WPA_CLIENT_LIB := $(BUILD_DIR)/lib/libwpa_client.a
 # Use -isystem to suppress warnings from third-party headers in strict mode
 WPA_INC := -isystem $(WPA_DIR)/src/common -isystem $(WPA_DIR)/src/utils
 
-# Precompiled header for LVGL (30-50% faster clean builds)
-# Only supported by gcc and clang (not MSVC)
-PCH_HEADER := $(INC_DIR)/lvgl_pch.h
-# Sanitizer builds get their own PCH for the same reason they get their own
-# OBJ_DIR: a PCH compiled without -fsanitize cannot be reused by an
-# instrumented compile, and sharing one silently poisons the whole tree.
-# `:=` is fine — a command-line PCH=... still overrides it.
-ifeq ($(SANITIZE),address)
-PCH := $(BUILD_DIR)/asan-lvgl_pch.h.gch
-else ifeq ($(SANITIZE),thread)
-PCH := $(BUILD_DIR)/tsan-lvgl_pch.h.gch
-else ifeq ($(COVERAGE),1)
-PCH := $(BUILD_DIR)/cov-lvgl_pch.h.gch
-else
-PCH := $(BUILD_DIR)/lvgl_pch.h.gch
-endif
-PCH_FLAGS := -include $(PCH_HEADER)
+# Force-included ahead of every app and test C++ source. It supplies LVGL,
+# helix-xml, spdlog and the common STL headers, and many sources compile only
+# because of it. It is an ordinary header, tracked through each object's .d
+# file; nothing is precompiled.
+FORCED_INCLUDE := -include $(INC_DIR)/lvgl_pch.h
 
 # Include paths
 # Project includes use -I (warnings enabled), library includes use -isystem (warnings suppressed)

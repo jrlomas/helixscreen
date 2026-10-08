@@ -58,7 +58,7 @@ if [ "$BUILD" = "1" ]; then
     echo "=== $(date +%T) build"
     build_claim="build:$(basename "$HELIX_PERF_BUILD_TREE")"
     "$CLAIM" take "$build_claim" "pi-docker arm $ARM" >/dev/null
-    build_jobs=$("$CLAIM" jobs)
+    build_jobs=$("$CLAIM" jobs 2>/dev/null)
     make pi-docker NPROC_DOCKER_RUN="$build_jobs" > "$S/pi-$ARM.log" 2>&1
     build_exit=$?
     "$CLAIM" release "$build_claim" >/dev/null

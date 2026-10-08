@@ -1370,6 +1370,8 @@ void MoonrakerClientMock::populate_capabilities() {
         spdlog::info("[MoonrakerClientMock] OpenAMS mock: oams_manager status object");
     }
 
+    append_skip_wrapper_objects(mock_objects);
+
     // Parse objects into hardware discovery (unified hardware access)
     discovery_.modify_hardware([&](PrinterDiscovery& hw) { hw.parse_objects(mock_objects); });
 
@@ -1388,6 +1390,7 @@ void MoonrakerClientMock::populate_capabilities() {
     mock_config["printer"] = {{"kinematics", kinematics()}};
     // Add gcode_macro entries for param detection (shared with configfile.config response)
     mock_config.merge_patch(mock_internal::get_mock_gcode_macro_config());
+    mock_config.merge_patch(skip_wrapper_sections());
     // Probe section — shared with the configfile.config query/subscribe responses
     // so all three payloads describe the same probe.
     mock_config.merge_patch(mock_internal::get_mock_probe_config(printer_type_));
@@ -3877,6 +3880,10 @@ void MoonrakerClientMock::dispatch_initial_state() {
                   ext_temp, ext_target, bed_temp_val, bed_target_val, homed, led_json.size(),
                   discovery_.filament_sensors().size());
 
+    // The discovery subscription is built before configfile is read here, so
+    // the leveling-skip objects it never asked for are announced with the rest.
+    initial_status.update(skip_wrapper_status());
+
     // Use the base class dispatch method (same as real client)
     dispatch_status_update(initial_status);
 }
@@ -5928,8 +5935,12 @@ void MoonrakerClientMock::advance_print_start_simulation() {
 
     // Phase 5: QGL (when bed is ~50% heated - simulate while heating)
     if (current_phase < static_cast<uint8_t>(SimulatedPrintStartPhase::QGL) && bed_progress > 0.4) {
-        dispatch_gcode_response("QUAD_GANTRY_LEVEL");
-        dispatch_gcode_response("// Gantry leveling complete");
+        if (consume_skip(helix::skip_wrappers::Op::Qgl)) {
+            dispatch_gcode_response("HelixScreen: quad gantry level skipped for this print");
+        } else {
+            dispatch_gcode_response("QUAD_GANTRY_LEVEL");
+            dispatch_gcode_response("// Gantry leveling complete");
+        }
         simulated_print_start_phase_.store(static_cast<uint8_t>(SimulatedPrintStartPhase::QGL));
         return;
     }
@@ -5937,8 +5948,12 @@ void MoonrakerClientMock::advance_print_start_simulation() {
     // Phase 6: Bed mesh (when bed is ~70% heated)
     if (current_phase < static_cast<uint8_t>(SimulatedPrintStartPhase::BED_MESH) &&
         bed_progress > 0.65) {
-        dispatch_gcode_response("BED_MESH_CALIBRATE");
-        dispatch_gcode_response("// Bed mesh calibration complete");
+        if (consume_skip(helix::skip_wrappers::Op::BedMesh)) {
+            dispatch_gcode_response("HelixScreen: bed mesh skipped for this print");
+        } else {
+            dispatch_gcode_response("BED_MESH_CALIBRATE");
+            dispatch_gcode_response("// Bed mesh calibration complete");
+        }
         simulated_print_start_phase_.store(
             static_cast<uint8_t>(SimulatedPrintStartPhase::BED_MESH));
         return;

@@ -929,6 +929,9 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                                     hardware_.set_host_halting_macros(std::move(halting));
                                     hardware_.set_led_driving_macros(
                                         helix::analyze_led_driving_macros(settings));
+                                    hardware_.set_skip_wrappers(
+                                        helix::skip_wrappers::wrappable(settings),
+                                        helix::skip_wrappers::active(settings));
                                     hardware_.parse_sensor_toggle_command(settings);
                                 }
 
@@ -1313,6 +1316,12 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     // profile/topology fields; the rest of `bed_mesh` is internal state.
     subscription_objects["bed_mesh"] = json::array(
         {"profile_name", "probed_matrix", "mesh_min", "mesh_max", "mesh_params", "profiles"});
+
+    // Leveling-skip gates and flags (include/preprint_skip_wrappers.h).
+    const json skip_fields = helix::skip_wrappers::status_fields(hw.skip_active(), hw.has_z_tilt());
+    for (auto it = skip_fields.begin(); it != skip_fields.end(); ++it) {
+        subscription_objects[it.key()] = it.value();
+    }
 
     // Exclude object (for mid-print object exclusion). PrinterState reads
     // excluded_objects + objects (with name/center/polygon) + current_object.

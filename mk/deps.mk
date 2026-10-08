@@ -345,6 +345,17 @@ libs-clean: libhv-clean sdl2-clean lvgl-clean libnl-clean wpa-clean
 # clean step below and the cross-compile lock (mk/cross.mk).
 LIBHV_OBJDIR := $(abspath $(BUILD_DIR)/libhv-objs)
 
+# libhv's `make libhv` copies every header into include/hv/ on each run, and
+# $(LIBHV_JSON_HEADER) is a prerequisite of every C++ object, so a fresh mtime
+# there rebuilds the whole tree. This wrapper restores the mtime of each header
+# whose bytes did not change, so a cross build in this tree leaves native
+# objects up to date.
+LIBHV_KEEP_MTIMES := scripts/keep-unchanged-mtimes.sh $(LIBHV_DIR)/include/hv --
+# The cross recipe clears MAKEFLAGS for libhv's sub-make, which also drops -n;
+# make runs any recipe line naming $(MAKE) even under -n, so without this a
+# `make -n PLATFORM_TARGET=...` really compiles libhv.
+LIBHV_DRY_RUN = $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n)
+
 # libhv's Makefile takes `CXXFLAGS ?=` and `CFLAGS ?=`, so any flags reaching it
 # replace its own. test-asan/test-tsan re-invoke make with a sanitizer CXXFLAGS
 # on the command line, and make hands a command-line variable to every sub-make
@@ -393,9 +404,9 @@ ifneq ($(CROSS_COMPILE),)
 	# paths resolve relative to libhv's own working directory, where they don't
 	# exist, breaking libhv's internal example/test links under test-asan/tsan.
 	if [ -n "$$OPENSSL_ARCHIVES" ]; then \
-		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(MAKE) -j1 -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC OPENSSL_LIBS="$$OPENSSL_ARCHIVES" libhv; \
+		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(LIBHV_KEEP_MTIMES) $(MAKE) -j1 $(LIBHV_DRY_RUN) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC OPENSSL_LIBS="$$OPENSSL_ARCHIVES" libhv; \
 	else \
-		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(MAKE) -j1 -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv; \
+		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(LIBHV_KEEP_MTIMES) $(MAKE) -j1 $(LIBHV_DRY_RUN) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv; \
 	fi
 else ifeq ($(UNAME_S),Darwin)
 	$(Q)cd $(LIBHV_DIR) && \
@@ -407,13 +418,13 @@ else ifeq ($(UNAME_S),Darwin)
 	# because libhv's Makefile doesn't pass `-framework CoreFoundation -framework
 	# Security` (needed by ssl/appletls.o). We only consume libhv as a static
 	# archive anyway, so the dylib is just dead weight that breaks the build.
-	$(Q)env -u CFLAGS -u CXXFLAGS MACOSX_DEPLOYMENT_TARGET=$(MACOS_MIN_VERSION) $(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv
+	$(Q)$(LIBHV_KEEP_MTIMES) env -u CFLAGS -u CXXFLAGS MACOSX_DEPLOYMENT_TARGET=$(MACOS_MIN_VERSION) $(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv
 else
 	$(Q)cd $(LIBHV_DIR) && env -u CFLAGS -u CXXFLAGS ./configure --with-http-client $(if $(filter yes,$(ENABLE_SSL)),--with-openssl)
 	# LDFLAGS= override: see cross-compile branch above for rationale. Critical
 	# for test-asan/test-tsan where the parent invokes us with the project's
 	# full LDFLAGS containing `build/lib/lib*.a` paths.
-	$(Q)env -u CFLAGS -u CXXFLAGS $(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= libhv
+	$(Q)$(LIBHV_KEEP_MTIMES) env -u CFLAGS -u CXXFLAGS $(MAKE) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= libhv
 endif
 	# Copy built library from the per-arch out-of-tree objdir to the architecture-
 	# specific output directory. Falls back to the legacy in-tree locations so an

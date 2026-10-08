@@ -97,9 +97,9 @@ DRM_CRASH_OBJ := $(OBJ_DIR)/system/crash_reporter.o
 # Strip the DRM variant define and add fbdev
 FBDEV_VARIANT_CXXFLAGS := $(subst -DHELIX_BINARY_VARIANT=\"drm\",-DHELIX_BINARY_VARIANT=\"fbdev\",$(CXXFLAGS))
 
-$(FBDEV_CRASH_OBJ): src/system/crash_reporter.cpp $(LIBHV_LIB) $(PCH) $(ABI_STAMP) | $(FBDEV_VARIANT_DIR)
+$(FBDEV_CRASH_OBJ): src/system/crash_reporter.cpp $(LIBHV_LIB) $(PATCHES_STAMP) $(ABI_STAMP) | $(FBDEV_VARIANT_DIR) $(PATCH_MARKER_STAMP)
 	@echo "[CXX/fbdev] $< (variant=fbdev)"
-	$(Q)$(CXX) $(FBDEV_VARIANT_CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(Q)$(CXX) $(FBDEV_VARIANT_CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@
 
 $(FBDEV_VARIANT_DIR):
 	$(Q)mkdir -p $@
@@ -142,32 +142,32 @@ DRM_GLES_APP_OBJS := \
     $(OBJ_DIR)/ui/backdrop_blur.o \
     $(OBJ_DIR)/application/probe_egl_cmd.o
 
-$(FBDEV_GLES_VARIANT_DIR)/gcode_gles_renderer.o: src/rendering/gcode_gles_renderer.cpp $(LIBHV_LIB) $(PCH) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR)
+$(FBDEV_GLES_VARIANT_DIR)/gcode_gles_renderer.o: src/rendering/gcode_gles_renderer.cpp $(LIBHV_LIB) $(PATCHES_STAMP) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR) $(PATCH_MARKER_STAMP)
 	@echo "[CXX/fbdev] $< (no GLES)"
-	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@
 
-$(FBDEV_GLES_VARIANT_DIR)/ui_gcode_viewer.o: src/ui/ui_gcode_viewer.cpp $(LIBHV_LIB) $(PCH) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR)
+$(FBDEV_GLES_VARIANT_DIR)/ui_gcode_viewer.o: src/ui/ui_gcode_viewer.cpp $(LIBHV_LIB) $(PATCHES_STAMP) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR) $(PATCH_MARKER_STAMP)
 	@echo "[CXX/fbdev] $< (no GLES)"
-	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@
 
-$(FBDEV_GLES_VARIANT_DIR)/gcode_viewer_input.o: src/ui/gcode_viewer_input.cpp $(LIBHV_LIB) $(PCH) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR)
+$(FBDEV_GLES_VARIANT_DIR)/gcode_viewer_input.o: src/ui/gcode_viewer_input.cpp $(LIBHV_LIB) $(PATCHES_STAMP) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR) $(PATCH_MARKER_STAMP)
 	@echo "[CXX/fbdev] $< (no GLES)"
-	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@
 
-$(FBDEV_GLES_VARIANT_DIR)/gcode_viewer_loader.o: src/ui/gcode_viewer_loader.cpp $(LIBHV_LIB) $(PCH) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR)
+$(FBDEV_GLES_VARIANT_DIR)/gcode_viewer_loader.o: src/ui/gcode_viewer_loader.cpp $(LIBHV_LIB) $(PATCHES_STAMP) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR) $(PATCH_MARKER_STAMP)
 	@echo "[CXX/fbdev] $< (no GLES)"
-	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@
 
-$(FBDEV_GLES_VARIANT_DIR)/backdrop_blur.o: src/ui/backdrop_blur.cpp $(LIBHV_LIB) $(PCH) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR)
+$(FBDEV_GLES_VARIANT_DIR)/backdrop_blur.o: src/ui/backdrop_blur.cpp $(LIBHV_LIB) $(PATCHES_STAMP) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR) $(PATCH_MARKER_STAMP)
 	@echo "[CXX/fbdev] $< (no GLES)"
-	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@
 
 # Without the GLES defines this compiles to the stub that reports "built
 # without EGL support", which is what keeps libEGL and libgbm out of the fbdev
 # binary and verify-fbdev green.
-$(FBDEV_GLES_VARIANT_DIR)/probe_egl_cmd.o: src/application/probe_egl_cmd.cpp $(LIBHV_LIB) $(PCH) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR)
+$(FBDEV_GLES_VARIANT_DIR)/probe_egl_cmd.o: src/application/probe_egl_cmd.cpp $(LIBHV_LIB) $(PATCHES_STAMP) $(ABI_STAMP) | $(FBDEV_GLES_VARIANT_DIR) $(PATCH_MARKER_STAMP)
 	@echo "[CXX/fbdev] $< (no GLES)"
-	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(Q)$(CXX) $(FBDEV_GLES_CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@
 
 $(FBDEV_GLES_VARIANT_DIR):
 	$(Q)mkdir -p $@

@@ -61,7 +61,7 @@ usage() {
     echo "  - Symlinks the unpatched lib/ submodules from the main tree (sources +"
     echo "    generated headers), and gives lvgl/libhv/lua/helix-xml a PRIVATE checkout"
     echo "    copied from it, so this branch's patches/ stay inside this worktree"
-    echo "  - Clones compiled libraries (libhv.a) and the PCH — copies, not symlinks,"
+    echo "  - Clones compiled libraries (libhv.a) — copies, not symlinks,"
     echo "    so a rebuild here can never write back into the main tree"
     echo "  - Copies compile_commands.json with rewritten paths for clangd"
     echo "  - Symlinks node_modules and .venv for font/python tools"
@@ -620,7 +620,7 @@ materialize_private_submodule() {
     git -C "$dst" update-ref --no-deref HEAD "$src_head"
     git -C "$dst" read-tree HEAD
     # The HEAD file is a prerequisite of build/.patches-applied, which every
-    # object reaches through the PCH and libhv.a, so a fresh mtime here rebuilds
+    # object lists directly and reaches through libhv.a, so a fresh mtime here rebuilds
     # the whole tree. It now names the commit the main tree's HEAD names, so
     # adopt that file's mtime, as the source mtime sync does for identical bytes.
     # A pin that differs is checked out below and rewrites HEAD fresh again.
@@ -802,10 +802,9 @@ link_lib_from_main
 # every file fresh, so the whole checkout is newer than the artifacts we are
 # about to clone, and make rebuilds essentially all of them — twice over:
 #
-#   - $(PCH) lists include/lvgl_pch.h and lv_conf.h as prerequisites, and EVERY
-#     C++ object lists $(PCH), so one fresh header invalidates the entire tree;
-#   - the .d files list include/*.h per object, and those are fresh too, so
-#     fixing only the PCH would still leave every object out of date.
+#   - the .d files list include/*.h per object, lvgl_pch.h and lv_conf.h among
+#     them, and EVERY C++ object force-includes lvgl_pch.h, so one fresh header
+#     invalidates the entire tree.
 #
 # Measured on a fresh worktree of an up-to-date main tree: 1945 of 1967 cloned
 # objects recompiled (~6.5 min) purely because of checkout timestamps.
@@ -866,7 +865,7 @@ if [[ -d "$MAIN_OBJ" ]]; then
         # is usually enough to force a rebuild, but it is not enough on its own:
         # the compiler cache can still answer the fresh compile with an object
         # built elsewhere (base_dir collapses the worktree path, and
-        # `sloppiness = pch_defines` lets a differing PCH through). The failure is
+        # `sloppiness = pch_defines` relaxes what it hashes). The failure is
         # silent and lands at link time as an undefined reference, pointing at
         # whichever worktree compiled first.
         #
@@ -893,7 +892,7 @@ if [[ -d "$MAIN_OBJ" ]]; then
             # GNU "architecture:" line for Mach-O at all, so under `set -euo
             # pipefail` the grep found nothing, the pipeline exited 1, and the
             # whole setup aborted HERE — leaving the worktree with cloned objects
-            # but no PCH, no build markers, no git excludes and no initial build.
+            # but no build markers, no git excludes and no initial build.
             # (Re-running the script "fixed" it only because the second run skips
             # this branch entirely.) `file -b` answers on both toolchains:
             #   macOS: "Mach-O 64-bit object arm64"
@@ -1087,12 +1086,11 @@ fi
 
 # Step 4: Clone compiled libraries from the main tree
 #
-# Copies, not symlinks, for the same reason as the PCH below: these are build
-# OUTPUTS. `make libhv-build` ends by copying the freshly-ar'd archive to
+# Copies, not symlinks: these are build OUTPUTS. `make libhv-build` ends by copying the freshly-ar'd archive to
 # build/lib/libhv.a, and cp follows a symlink — so a worktree that rebuilds
 # libhv writes into the MAIN TREE's build/lib. Observed: a single fresh-worktree
 # build moved the main tree's libhv.a mtime forward by five days, which left the
-# main tree's own PCH older than it and put ~1900 objects back on the main
+# main tree's own objects older than it and put them all back on the main
 # tree's next build. One worktree setup, and the main tree rebuilds the world.
 #
 # The old `touch -h` here was also load-bearing in the wrong direction: it
@@ -1120,38 +1118,6 @@ for lib in "${MAIN_LIBS[@]}"; do
         echo -e "  $lib: ${YELLOW}not found in main tree (will build from scratch)${RESET}"
     fi
 done
-
-# Step 5: Clone the precompiled header if it exists
-#
-# Deliberately a COPY, not a symlink. The PCH is a build OUTPUT: make rebuilds it
-# whenever lv_conf.h / include/lvgl_pch.h / the patch stamp move, and clang opens
-# the output path with O_CREAT|O_TRUNC, which follows a symlink. A symlinked PCH
-# therefore lets a worktree write its own PCH straight into the main tree — and a
-# worktree that changed lv_conf.h would leave the main tree, and every other
-# worktree sharing that symlink, linking against a PCH built for someone else's
-# feature flags. On APFS `cp -c` is a clonefile: instant, zero disk until one
-# side diverges, and independent. mtime is preserved so make still sees it as
-# up to date relative to the (now mtime-synced) prerequisites.
-MAIN_PCH="$MAIN_TREE/build/lvgl_pch.h.gch"
-WORKTREE_PCH="$WORKTREE_PATH/build/lvgl_pch.h.gch"
-if [[ -f "$MAIN_PCH" ]]; then
-    if [[ -L "$WORKTREE_PCH" ]]; then
-        # Legacy worktree from an older setup run — swap the symlink for a clone
-        # before a build can write through it.
-        rm -f "$WORKTREE_PCH"
-        clone_file "$MAIN_PCH" "$WORKTREE_PCH"
-        echo -e "  lvgl_pch.h.gch: ${YELLOW}was a symlink into the main tree, replaced with a private clone${RESET}"
-    elif [[ -f "$WORKTREE_PCH" ]]; then
-        # This worktree already has its own PCH. It may have been built here from
-        # locally-modified prerequisites, so leave it alone and let make decide.
-        echo -e "  lvgl_pch.h.gch: ${GREEN}already present (worktree-local)${RESET}"
-    else
-        clone_file "$MAIN_PCH" "$WORKTREE_PCH"
-        echo -e "  lvgl_pch.h.gch: ${GREEN}cloned${RESET}"
-    fi
-else
-    echo -e "  lvgl_pch.h.gch: ${YELLOW}not found in main tree (will build from scratch)${RESET}"
-fi
 
 # Step 5b: Validate library architectures
 # Cross-compilation (make pi-test) can leave ARM .a files in build/lib/.
@@ -1306,8 +1272,8 @@ echo -e "${GREEN}✓ Git excludes configured${RESET}"
 #
 # .patches-applied and .fonts.stamp are prerequisites, not just markers, so a
 # fresh `now` timestamp on them is not free:
-#   - $(PATCHES_STAMP) is a prerequisite of $(PCH), every LVGL/helix-xml/font
-#     object and libhv.a — stamping it `now` invalidates all of them;
+#   - $(PATCHES_STAMP) is a prerequisite of every C++, LVGL, helix-xml and font
+#     object and of libhv.a — stamping it `now` invalidates all of them;
 #   - .fonts.stamp is a prerequisite of assets/fonts/*.c, which have no recipe,
 #     so make marks them updated and recompiles all 46 font objects.
 # Adopt the main tree's timestamps when it has them, for the same reason the
@@ -1339,7 +1305,7 @@ for stamp in build/.thirdparty-abi build/.patches-applied-id; do
 done
 # .build-target names the target and compiler the objects in build/ came from,
 # and make runs `make clean` when it does not match the toolchain it is about to
-# use. That clean deletes every cloned object and the PCH, and runs the clean
+# use. That clean deletes every cloned object, and runs the clean
 # recipe of lib/wpa_supplicant, a checkout this tree shares with the main tree.
 # The objects came from the main tree, so its marker is the true one. With no
 # marker there, write none: make records the current toolchain without cleaning.
@@ -1416,7 +1382,7 @@ if [[ -n "$CCACHE_BIN" ]]; then
     fi
 
     # WITHOUT THIS, ccache CACHES NOTHING. Every native build compiles with
-    # -include $(PCH), and ccache refuses to cache any compilation using a
+    # -include include/lvgl_pch.h, and ccache refuses to cache any compilation using a
     # precompiled header unless sloppiness allows it. Measured before/after on
     # a single -include compile: "Uncacheable calls: 1/1 (100%)" -> "Cacheable
     # calls: 1/1 (100%)", with the repeat compile hitting. base_dir and hash_dir
@@ -1432,9 +1398,9 @@ if [[ -n "$CCACHE_BIN" ]]; then
     CUR_SLOPPY="$(ccache --get-config sloppiness 2>/dev/null || true)"
     if [[ "$CUR_SLOPPY" != *pch_defines* || "$CUR_SLOPPY" != *time_macros* ]]; then
         ccache --set-config sloppiness=pch_defines,time_macros 2>/dev/null \
-            && echo -e "  sloppiness: ${GREEN}pch_defines,time_macros (PCH builds are now cacheable)${RESET}"
+            && echo -e "  sloppiness: ${GREEN}pch_defines,time_macros (forced-include builds are now cacheable)${RESET}"
     else
-        echo -e "  sloppiness: ${GREEN}already allows PCH caching ($CUR_SLOPPY)${RESET}"
+        echo -e "  sloppiness: ${GREEN}already allows forced-include caching ($CUR_SLOPPY)${RESET}"
     fi
 
     # The shared cache thrashes hard once a couple of worktrees + cross-compiles
@@ -1487,7 +1453,7 @@ else
     echo -e "${RED}${BOLD}================================================================${RESET}"
     echo -e "${YELLOW}A clean worktree still builds fast (timestamps are aligned above)."
     echo -e "But any build that has to recompile — you edit lv_conf.h, or another"
-    echo -e "tree rebuilds libhv and re-invalidates the shared PCH — pays full"
+    echo -e "tree rebuilds libhv and re-invalidates every object — pays full"
     echo -e "price with no cache to fall back on: ~400s instead of ~10s.${RESET}"
     echo ""
     case "$(uname -s)" in
@@ -1509,7 +1475,7 @@ fi
 # different patch sets at once. The copy above arrives carrying the main tree's
 # patches, so it is already correct whenever the two trees agree on patches/ —
 # and reapplying anyway is not free: build/.patches-applied is a prerequisite of
-# the PCH, and therefore of every object, so re-stamping it turns a warm worktree
+# every object, so re-stamping it turns a warm worktree
 # cold. Reapply exactly when the copy cannot be trusted to describe this branch.
 cd "$WORKTREE_PATH"
 if [[ "$PRIVATE_SUBMODULES_NEED_PATCHES" != "true" ]] \

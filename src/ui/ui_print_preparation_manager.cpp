@@ -23,6 +23,7 @@
 #include "moonraker_manager.h"
 #include "observer_factory.h"
 #include "operation_registry.h"
+#include "preprint_skip_wrappers.h"
 #include "print_start_collector.h"
 #include "system/telemetry_manager.h"
 #include "text_io.h"
@@ -102,6 +103,9 @@ macro_option_for(const std::optional<helix::PrintStartAnalysis>& analysis,
 // ============================================================================
 
 PrintPreparationManager::~PrintPreparationManager() {
+    if (printer_state_) {
+        printer_state_->set_skip_pending_handler(nullptr);
+    }
     // lifetime_ destructor calls invalidate() automatically
 }
 
@@ -178,6 +182,11 @@ void PrintPreparationManager::set_dependencies(IMoonrakerAPI* api, PrinterState*
             printer_state_->network_state().get_klippy_state_subject(), this,
             [](PrintPreparationManager* self, int state) { self->on_klippy_state(state); },
             printer_state_->get_subjects_lifetime());
+        job_holds_observer_ = helix::ui::observe<int>(
+            printer_state_->print_state().get_job_holds_machine_subject(), this,
+            [](PrintPreparationManager* self, int) { self->reset_pending_skips(); },
+            printer_state_->get_subjects_lifetime());
+        printer_state_->set_skip_pending_handler([this]() { reset_pending_skips(); });
     }
 }
 
@@ -205,6 +214,29 @@ void PrintPreparationManager::on_klippy_state(int state) {
         klippy_restarting_ = false;
         refresh_macro_analysis();
     }
+}
+
+void PrintPreparationManager::reset_pending_skips() {
+    if (!api_ || !printer_state_) {
+        return;
+    }
+    if (!printer_state_->skip_pending()) {
+        skip_reset_sent_ = false;
+        return;
+    }
+    if (skip_reset_sent_ ||
+        lv_subject_get_int(printer_state_->print_state().get_job_holds_machine_subject()) != 0) {
+        return;
+    }
+    skip_reset_sent_ = true;
+    spdlog::info("[PrintPreparationManager] Leveling skip set with no job running; resetting");
+    api_->execute_gcode(
+        helix::skip_wrappers::PREP_MACRO, []() {},
+        [](const MoonrakerError& err) {
+            spdlog::warn("[PrintPreparationManager] Resetting the leveling skips failed: {}",
+                         err.message);
+        },
+        0, true, nullptr, /*caller_surfaces_errors=*/false);
 }
 
 void PrintPreparationManager::refresh_macro_analysis() {
@@ -844,6 +876,11 @@ void PrintPreparationManager::start_print(const std::string& filename,
     // block to Klipper as a single gcode_script.
     const auto& db_options = get_cached_options();
     std::vector<std::string> pre_start_lines = collect_pre_start_gcode_lines(filename_to_print);
+    // A skip an earlier print left unconsumed must not ride into this one,
+    // including for a step whose toggle is hidden now.
+    if (printer_state_ && !printer_state_->get_discovery().skip_active().empty()) {
+        pre_start_lines.insert(pre_start_lines.begin(), helix::skip_wrappers::PREP_MACRO);
+    }
     const bool emit_printer_setup = !macro_skip_params.empty() && !db_options.setup_gcode.empty();
     std::string combined =
         build_pre_start_gcode_block(db_options.setup_gcode, pre_start_lines, emit_printer_setup);
@@ -964,9 +1001,10 @@ std::optional<gcode::OperationType> file_embeddable_op_for_id(const std::string&
 // when a self-storing firmware holds the option's value (supplied through
 // preprint_prefs::read_persisted_defaults()): that firmware skips the file's
 // own command when its setting is off, so the option only drives its
-// pre-start line. Every other option may.
+// pre-start line. Nor for a leveling-skip toggle: its wrapper intercepts the
+// file's own command too. Every other option may.
 bool option_may_strip_file(const PrePrintOption& opt) {
-    return !opt.default_from_firmware;
+    return !opt.default_from_firmware && !helix::skip_wrappers::is_wrapper_option(opt);
 }
 
 // Transfer callbacks run on the HTTP thread. BusyOverlay is process-wide, so
@@ -1031,7 +1069,7 @@ bool PrintPreparationManager::disabling_option_requires_plugin(const PrePrintOpt
     // stay visible without the plugin.
     const auto& option_set = get_cached_options();
     const bool pre_start_block =
-        !option_set.setup_gcode.empty() || !collect_pre_start_gcode_lines().empty();
+        !option_set.setup_gcode.empty() || !collect_pre_start_gcode_lines({}, false).empty();
     if (opt.strategy_kind == PrePrintStrategyKind::PreStartGcode ||
         (is_macro_param && pre_start_block)) {
         return false;
@@ -1139,7 +1177,7 @@ bool PrintPreparationManager::adaptive_emit_is_deliverable() const {
     if (!get_cached_options().setup_gcode.empty()) {
         return true;
     }
-    return !collect_pre_start_gcode_lines().empty();
+    return !collect_pre_start_gcode_lines({}, false).empty();
 }
 
 std::vector<std::pair<std::string, std::string>>
@@ -1260,7 +1298,8 @@ PrintPreparationManager::collect_macro_skip_params() const {
 }
 
 std::vector<std::string>
-PrintPreparationManager::collect_pre_start_gcode_lines(const std::string& filename) const {
+PrintPreparationManager::collect_pre_start_gcode_lines(const std::string& filename,
+                                                       bool with_skip_toggles) const {
     std::vector<std::string> lines;
 
     const auto& db_options = get_cached_options();
@@ -1269,7 +1308,8 @@ PrintPreparationManager::collect_pre_start_gcode_lines(const std::string& filena
     }
 
     for (const auto& opt : db_options.options) {
-        if (opt.strategy_kind != PrePrintStrategyKind::PreStartGcode) {
+        if (opt.strategy_kind != PrePrintStrategyKind::PreStartGcode ||
+            (!with_skip_toggles && helix::skip_wrappers::is_wrapper_option(opt))) {
             continue;
         }
 

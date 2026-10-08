@@ -343,6 +343,15 @@ jobs)
                 sed -n 's/.*"available":\([0-9][0-9]*\).*/\1/p')
             printf 'pool target=%s available=%s availGB=%s -> -j%s\n' \
                 "$target" "${free:-0}" "$mem_gb" "$target" >&2
+        else
+            # The whole pool is right for a make, which draws its jobs from the
+            # pool, and wrong for anything else, which would run that many on
+            # top of it. A make below this one carries the jobserver; the
+            # Makefile's own callers discard stderr.
+            case " ${MAKEFLAGS:-} " in
+                *--jobserver-auth=*|*--jobserver-fds=*) ;;
+                *) printf '%s\n' "helix-claim: jobs is make's -j (the whole pool, $target). Size other work with: scripts/helix-claim hold [--min M] -- cmd (exports JOBPOOL_SLOTS), or scripts/pool-docker.sh for a container." >&2 ;;
+            esac
         fi
         printf '%s\n' "$target"
         exit 0

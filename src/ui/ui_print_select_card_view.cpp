@@ -89,6 +89,8 @@ bool PrintSelectCardView::setup(lv_obj_t* container, FileClickCallback on_file_c
 }
 
 void PrintSelectCardView::clear_cached_state() {
+    stop_prebuild();
+
     // Deinitialize subjects - this properly removes all attached observers.
     // We use lv_subject_deinit() instead of lv_observer_remove() because
     // widget-bound observers (from lv_label_bind_text, lv_obj_bind_flag_if_*)
@@ -375,6 +377,61 @@ void PrintSelectCardView::grow_pool(size_t count, const CardDimensions& dims) {
     card_pool_indices_.resize(card_pool_.size(), -1);
 }
 
+VirtualWindow PrintSelectCardView::window_at(int32_t scroll_y, size_t file_count,
+                                             const CardDimensions& dims) const {
+    const int columns = std::max(dims.num_columns, 1);
+    const int row_height = dims.card_height + lv_obj_get_style_pad_row(container_, LV_PART_MAIN);
+    const int total_rows = static_cast<int>((file_count + static_cast<size_t>(columns) - 1) /
+                                            static_cast<size_t>(columns));
+    return compute_window(scroll_y, lv_obj_get_height(container_), row_height, total_rows,
+                          BUFFER_ROWS);
+}
+
+void PrintSelectCardView::prebuild(const CardDimensions& dims, size_t expected_files) {
+    stop_prebuild();
+    if (!container_ || dims.num_columns <= 0) {
+        return;
+    }
+    init_pool(dims);
+    create_spacers();
+
+    // An unknown count is bounded by the rows one screen can show.
+    const size_t files = std::min<size_t>(expected_files, 1U << 16);
+    const VirtualWindow win = window_at(0, files, dims);
+    const size_t columns = static_cast<size_t>(dims.num_columns);
+    const size_t first = static_cast<size_t>(win.first) * columns;
+    const size_t last = std::min(files, static_cast<size_t>(win.last) * columns);
+    prebuild_target_ = last > first ? last - first : 0;
+    if (card_pool_.size() >= prebuild_target_) {
+        return;
+    }
+    prebuild_dims_ = std::make_unique<CardDimensions>(dims);
+
+    // One card per tick. LVGL measures the period from the start of a tick and
+    // a card takes tens of ms to build, so the period has to be well past that
+    // for the display refresh and input to run between cards. The tick ends the
+    // timer itself; it never runs out on its own.
+    constexpr uint32_t PREBUILD_TICK_MS = 100;
+    prebuild_timer_.reset(lv_timer_create(on_prebuild_tick, PREBUILD_TICK_MS, this));
+    spdlog::debug("[PrintSelectCardView] Prebuilding pool {} -> {}", card_pool_.size(),
+                  prebuild_target_);
+}
+
+void PrintSelectCardView::stop_prebuild() {
+    prebuild_timer_.reset();
+}
+
+void PrintSelectCardView::on_prebuild_tick(lv_timer_t* timer) {
+    auto* self = static_cast<PrintSelectCardView*>(lv_timer_get_user_data(timer));
+    const size_t before = self->card_pool_.size();
+    if (before < self->prebuild_target_) {
+        self->grow_pool(before + 1, *self->prebuild_dims_);
+    }
+    if (self->card_pool_.size() >= self->prebuild_target_ || self->card_pool_.size() == before) {
+        self->stop_prebuild();
+    }
+}
+
 void PrintSelectCardView::create_spacers() {
     if (!container_) {
         return;
@@ -649,12 +706,7 @@ void PrintSelectCardView::update_visible(const std::vector<PrintFileData>& file_
 
     cards_per_row_ = dims.num_columns;
 
-    int card_gap = lv_obj_get_style_pad_row(container_, LV_PART_MAIN);
-    int row_height = dims.card_height + card_gap;
-    int total_rows = (static_cast<int>(file_list.size()) + cards_per_row_ - 1) / cards_per_row_;
-
-    const VirtualWindow win =
-        compute_window(scroll_y, viewport_height, row_height, total_rows, BUFFER_ROWS);
+    const VirtualWindow win = window_at(scroll_y, file_list.size(), dims);
     const int first_visible_row = win.first;
     const int last_visible_row = win.last;
 

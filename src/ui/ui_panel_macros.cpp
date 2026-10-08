@@ -25,6 +25,7 @@
 #include "macro_param_cache.h"
 #include "macro_param_defaults.h"
 #include "observer_factory.h"
+#include "preprint_skip_wrappers.h"
 #include "printer_state.h"
 #include "safety_settings_manager.h"
 #include "settings_manager.h"
@@ -267,9 +268,9 @@ bool MacrosPanel::refresh_macros() {
         // the current list intact rather than clobbering it to empty.
         return false;
     }
-    const auto& macros = api->hardware().macros();
-    std::vector<std::string> fresh(macros.begin(), macros.end());
-    std::sort(fresh.begin(), fresh.end());
+    const auto& hw = api->hardware();
+    std::vector<std::string> fresh = helix::macros::panel_macros(
+        hw.macros(), helix::skip_wrappers::wrapped_commands(hw.skip_active()));
     if (fresh == all_macros_) {
         return false;
     }
