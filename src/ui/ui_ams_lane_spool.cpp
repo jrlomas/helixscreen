@@ -323,6 +323,7 @@ struct LaneSpoolData {
     /// Last-applied presentation, so a size rebuild can repaint fresh layers.
     helix::ui::LaneState lane_state = helix::ui::LaneState::Empty;
     uint32_t color_int = 0x808080;
+    bool highlighted = false; ///< Current lane: the 3D spool glows.
 
     SpoolVisual sv; ///< Layer handles (3D canvas or flat rings + placeholder + dot).
 
@@ -640,6 +641,8 @@ static void* ams_lane_spool_xml_create(lv_xml_parser_state_t* state, const char*
         spdlog::error("[AmsLaneSpool] failed to create root container");
         return nullptr;
     }
+    // The current-lane glow spills past the spool canvas and this root.
+    helix::ui::pass_child_overhang(root);
 
     auto data_ptr = std::make_unique<LaneSpoolData>();
     data_ptr->slot_index = -1; // Set by xml_apply when slot_index attr is parsed.
@@ -737,6 +740,19 @@ void ams_lane_spool_set_size(lv_obj_t* spool, int32_t spool_size) {
     apply_lane_state(data, data->lane_state);
     apply_color(data, static_cast<int>(data->color_int));
     apply_error_decoration(data);
+    if (data->sv.canvas)
+        spool_canvas_set_highlighted(data->sv.canvas, data->highlighted);
+    lv_obj_refresh_ext_draw_size(spool);
+}
+
+void ams_lane_spool_set_highlighted(lv_obj_t* spool, bool highlighted) {
+    auto* data = get_lane_spool_data(spool);
+    if (!data)
+        return;
+    data->highlighted = highlighted;
+    if (data->sv.canvas)
+        spool_canvas_set_highlighted(data->sv.canvas, highlighted);
+    lv_obj_refresh_ext_draw_size(spool);
 }
 
 const char* lane_material_text(helix::ui::LaneState state, const char* material) {

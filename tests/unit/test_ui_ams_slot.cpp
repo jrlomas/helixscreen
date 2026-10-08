@@ -26,6 +26,7 @@
 #include "ams_lane_state.h"
 #include "ams_state.h"
 #include "config.h"
+#include "lvgl/src/core/lv_obj_draw_private.h"
 #include "printer_state.h"
 #include "ui/ams_drawing_utils.h"
 
@@ -1110,12 +1111,20 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: current slot glows the spool, dra
     CHECK(helix::ui::spool_canvas_highlighted(canvas));
     no_box(slot);
     no_box(spool_container);
+    // The glow overhangs the canvas; every ancestor up to the slot carries it
+    // or LVGL clips it at that ancestor's edge.
+    const int32_t glow = lv_obj_get_ext_draw_size(canvas);
+    CHECK(glow > 0);
+    CHECK(lv_obj_get_ext_draw_size(lv_obj_get_parent(canvas)) >= glow);
+    CHECK(lv_obj_get_ext_draw_size(spool_container) >= glow);
+    CHECK(lv_obj_get_ext_draw_size(slot) >= glow);
 
     lv_subject_set_int(AmsState::instance().get_slot_active_loaded_subject(0), 0);
     process_lvgl(20);
     CHECK_FALSE(helix::ui::spool_canvas_highlighted(canvas));
     no_box(slot);
     no_box(spool_container);
+    CHECK(lv_obj_get_ext_draw_size(spool_container) == 0);
 
     lv_obj_delete(slot);
 }

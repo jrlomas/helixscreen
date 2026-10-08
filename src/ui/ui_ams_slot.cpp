@@ -7,6 +7,7 @@
 #include "ui_fonts.h"
 #include "ui_observer_guard.h"
 #include "ui_update_queue.h"
+#include "ui_utils.h"
 
 #include "ams_lane_state.h"
 #include "ams_state.h"
@@ -312,10 +313,21 @@ static void apply_lane_state(AmsSlotData* data, int state_int) {
     refresh_slot_material_label(data);
 }
 
+// The current lane is marked by the spool's own glow. The pulse borrows
+// spool_container's border, so the static state clears it.
+static void set_spool_glow(AmsSlotData* data, bool on) {
+    helix::ui::ams_lane_spool_set_highlighted(data->lane_spool, on);
+    if (data->spool_container) {
+        lv_obj_set_style_border_width(data->spool_container, 0, LV_PART_MAIN);
+        lv_obj_refresh_ext_draw_size(data->spool_container);
+    }
+    lv_obj_refresh_ext_draw_size(data->container);
+}
+
 /**
  * @brief Apply current slot highlight logic
  *
- * Active slots get a glowing border effect using shadows for visual emphasis.
+ * The active slot's spool glows around its own silhouette.
  * Used by both current_slot and filament_loaded observers.
  */
 static void apply_current_slot_highlight(AmsSlotData* data, int current_slot) {
@@ -341,30 +353,7 @@ static void apply_current_slot_highlight(AmsSlotData* data, int current_slot) {
         active_loaded_subject ? (lv_subject_get_int(active_loaded_subject) != 0) : false;
     (void)current_slot; // retained for the pulse/observer signature only
 
-    // Apply highlight to spool_container (not container) so it doesn't include label padding area
-    lv_obj_t* highlight_target = data->spool_container ? data->spool_container : data->container;
-
-    if (is_active) {
-        // Active slot: glowing border effect
-        lv_color_t primary = theme_manager_get_color("primary");
-
-        // Border highlight on spool area only
-        lv_obj_set_style_border_color(highlight_target, primary, LV_PART_MAIN);
-        lv_obj_set_style_border_opa(highlight_target, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_border_width(highlight_target, 3, LV_PART_MAIN);
-
-        // Outer glow using shadow
-        lv_obj_set_style_shadow_width(highlight_target, 16, LV_PART_MAIN);
-        lv_obj_set_style_shadow_color(highlight_target, primary, LV_PART_MAIN);
-        lv_obj_set_style_shadow_opa(highlight_target, LV_OPA_50, LV_PART_MAIN);
-        lv_obj_set_style_shadow_spread(highlight_target, 2, LV_PART_MAIN);
-    } else {
-        // Inactive: no border or glow
-        lv_obj_set_style_border_opa(highlight_target, LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_border_width(highlight_target, 0, LV_PART_MAIN);
-        lv_obj_set_style_shadow_width(highlight_target, 0, LV_PART_MAIN);
-        lv_obj_set_style_shadow_opa(highlight_target, LV_OPA_TRANSP, LV_PART_MAIN);
-    }
+    set_spool_glow(data, is_active);
 
     spdlog::debug("[AmsSlot] Slot {} highlight active={} (from slot_active_loaded subject)",
                   data->slot_index, is_active);
@@ -718,6 +707,10 @@ static void* ams_slot_xml_create(lv_xml_parser_state_t* state, const char** attr
     if (!data->spool_container || !data->lane_spool) {
         return obj; // Return obj anyway so it gets cleaned up properly
     }
+
+    // The current spool's glow spills past the spool container and the slot.
+    helix::ui::pass_child_overhang(data->spool_container);
+    helix::ui::pass_child_overhang(obj);
 
     // Set initial text on labels (direct imperative updates, no subject indirection)
     if (data->material_label) {
@@ -1252,11 +1245,7 @@ void ui_ams_slot_clear_highlight(lv_obj_t* obj) {
     // Set is_pulsing to block automatic highlight restoration from observers
     data->is_pulsing = true;
 
-    // Clear the border completely
-    lv_obj_set_style_border_opa(target, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(target, 0, LV_PART_MAIN);
-    lv_obj_set_style_shadow_width(target, 0, LV_PART_MAIN);
-    lv_obj_set_style_shadow_opa(target, LV_OPA_TRANSP, LV_PART_MAIN);
+    set_spool_glow(data, false);
 
     spdlog::debug("[AmsSlot] Slot {} highlight cleared", data->slot_index);
 }

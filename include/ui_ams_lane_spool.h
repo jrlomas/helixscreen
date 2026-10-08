@@ -84,6 +84,13 @@ float ams_lane_spool_get_fill_level(lv_obj_t* spool);
 void ams_lane_spool_set_fill_level(lv_obj_t* spool, float fill_level);
 
 /**
+ * @brief Mark the lane as the current one: the 3D spool glows around its
+ *        silhouette (spool_canvas_set_highlighted). Survives a size rebuild;
+ *        the flat style has no glow.
+ */
+void ams_lane_spool_set_highlighted(lv_obj_t* spool, bool highlighted);
+
+/**
  * @brief Resize the spool graphic (px; <= 0 is refused)
  *
  * Rebuilds the visual layers at the new size and repaints them with the
