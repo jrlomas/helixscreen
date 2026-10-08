@@ -1244,7 +1244,20 @@ Where it is installed:
 - The unit sweep runs its shards three to a pool token (`jobpool with-token`
   around each batch of three), so every sweep on the box together stays within
   three shards per token.
-- Container builds on thelio (`*-docker` targets) do not join the pool.
+- Runners that size themselves rather than join a jobserver hold their share
+  through `scripts/helix-claim hold [-n N] -- CMD`, which exports
+  `JOBPOOL_SLOTS` (`jobpool hold`; without jobpool, `-n` or the cores):
+  `make test-shell` runs `bats --jobs "$JOBPOOL_SLOTS"`, and the helix-xml test
+  build its `cmake --build -j`.
+- Container builds go through `scripts/pool-docker.sh`: a container's make
+  joins the pool (state dir mounted, FIFO opened inside, `-j` dropped, kept as
+  the fallback when the container cannot open the FIFO), and any other
+  container command (idf.py, the ustreamer script) holds tokens and gets
+  `JOBPOOL_SLOTS` and `IDF_PY_BUILD_JOBS`. The native cross targets (`make pi`
+  and siblings) give their sub-make no `-j` while a pool is live.
+- `helix-claim resources` lists heavy runners (bats, GNU parallel, ninja,
+  `docker run`) running outside the pool, and the resource advisor names one
+  about to start.
 - On zeus, `scripts/zeus-run.sh` joins the container to zeus's pool: zeus's
   jobpool conf puts the state dir under the directory the `helix-tsan` container
   already mounts, the host runs `docker exec` under `jobpool exec`, and the
@@ -1818,7 +1831,7 @@ docker-ccache-args = -v "$(DOCKER_CCACHE_BASE)/$(1)":/ccache -e CCACHE_DIR=/ccac
 
 So `make pi-docker` caches into `~/.cache/helixscreen-ccache/pi/`, `make ad5m-docker` into `.../ad5m/`, etc. — one cache per architecture (they must stay separate; a Pi aarch64 object is meaningless to an AD5M armv7-a build). First cross-build of a target is cold; subsequent ones hit ~98%. Override the base location with `DOCKER_CCACHE_BASE=/path make pi-docker`. To wipe a single target's cache, `rm -rf ~/.cache/helixscreen-ccache/<target>`.
 
-Concurrent Docker cross-builds are serialized by `scripts/cross-compile-lock.sh` to avoid thrashing the machine — this is automatic.
+Every Docker cross-build runs through `scripts/pool-docker.sh`. With jobpool installed, the container's make joins the machine pool (its `-j` is dropped) and any other in-container build holds pool tokens through `helix-claim hold`; without jobpool the command runs exactly as written.
 
 ### Clang Standard Library Issues (Arch Linux)
 

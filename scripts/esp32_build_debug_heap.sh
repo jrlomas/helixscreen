@@ -42,8 +42,9 @@ if [ "$PRIMARY" != "$REPO" ]; then
 fi
 
 # safe.directory: git inside the container (IDF's version stamp) runs as this uid
-# against a tree whose .git points into the read-only main tree.
-"$DOCKER" run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+# against a tree whose .git points into the read-only main tree. pool-docker.sh
+# sizes idf.py's ninja from the jobpool (IDF_PY_BUILD_JOBS) when one is installed.
+"$REPO/scripts/pool-docker.sh" "$DOCKER" run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
     -e HELIX_SDKCONFIG_OVERLAY=sdkconfig.debug-heap \
     "${MOUNTS[@]}" -w "$FW" "$IDF_IMAGE" \
     bash -c "git config --global --add safe.directory '*' && . /opt/esp/idf/export.sh >/dev/null && idf.py -B '$BUILD' -DSDKCONFIG='$BUILD/sdkconfig' build"

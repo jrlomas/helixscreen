@@ -418,7 +418,34 @@ EOF
     stub_pool 30 3 60
     advise "make pi-docker"
     contains "the build pool has 3 of 30 tokens free" "$(context)"
-    contains "escape thelio's build pool" "$(context)"
+    contains "Container builds are heavy" "$(context)"
+}
+
+@test "with a live pool a heavy runner outside it is named, tight or not" {
+    stub_pool 30 20 60
+    advise "bats --jobs 32 --no-parallelize-within-files tests/shell/"
+    contains "bats --jobs sizes itself to the machine and runs outside the jobpool (20 of 30 tokens free)" "$(context)"
+    contains "scripts/helix-claim hold --" "$(context)"
+    advise "cd firmware && docker run --rm -v \$PWD:/src espressif/idf:v5.5.5 idf.py build"
+    contains "a docker run of idf.py sizes itself" "$(context)"
+    contains "scripts/pool-docker.sh" "$(context)"
+    advise "ninja -C build"
+    contains "ninja sizes itself" "$(context)"
+    advise "ls | parallel -j 8 gzip"
+    contains "GNU parallel sizes itself" "$(context)"
+}
+
+@test "a heavy runner already under the pool, or with no pool live, is silent" {
+    stub_pool 30 20 60
+    advise "scripts/helix-claim hold -- sh -c 'bats --jobs \"\$JOBPOOL_SLOTS\" tests/shell/'"
+    [ -z "$output" ]
+    advise "scripts/pool-docker.sh docker run --rm espressif/idf:v5.5.5 idf.py build"
+    [ -z "$output" ]
+    advise "bats tests/shell/test_foo.bats"
+    [ -z "$output" ]
+    roomy
+    advise "bats --jobs 32 tests/shell/"
+    [ -z "$output" ]
 }
 
 @test "with a live pool and tokens to spare a container build is silent" {
