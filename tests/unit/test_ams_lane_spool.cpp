@@ -18,7 +18,9 @@
 #include "ams_state.h"
 #include "ams_types.h"
 #include "config.h"
+#include "filament_tube_stroker.h"
 #include "helix-xml/src/xml/lv_xml.h"
+#include "theme_manager.h"
 #include "ui/ams_drawing_utils.h"
 
 #include "../catch_amalgamated.hpp"
@@ -297,8 +299,14 @@ TEST_CASE("lane_material_text: the spool family's label rule", "[ams][lane_spool
 
 namespace {
 /// Alpha-weighted centroid of a canvas's draw buffer, in buffer pixels.
+const lv_draw_buf_t* buf_of(lv_obj_t* obj) {
+    if (lv_obj_check_type(obj, &lv_canvas_class))
+        return lv_canvas_get_draw_buf(obj);
+    return static_cast<const lv_draw_buf_t*>(lv_image_get_src(obj));
+}
+
 std::pair<double, double> alpha_centroid(lv_obj_t* canvas) {
-    lv_draw_buf_t* buf = lv_canvas_get_draw_buf(canvas);
+    const lv_draw_buf_t* buf = buf_of(canvas);
     REQUIRE(buf != nullptr);
     double sx = 0, sy = 0, sa = 0;
     for (uint32_t y = 0; y < buf->header.h; y++) {
@@ -330,8 +338,8 @@ TEST_CASE_METHOD(XMLTestFixture, "ams_lane_spool: the glow is centred on the spo
     lv_obj_t* graphic = part(spool, "spool_graphic");
     REQUIRE_FALSE(lv_obj_has_flag(glow, LV_OBJ_FLAG_HIDDEN));
 
-    const int32_t m = (static_cast<int32_t>(lv_canvas_get_draw_buf(glow)->header.w) -
-                       static_cast<int32_t>(lv_canvas_get_draw_buf(graphic)->header.w)) /
+    const int32_t m = (static_cast<int32_t>(buf_of(glow)->header.w) -
+                       static_cast<int32_t>(buf_of(graphic)->header.w)) /
                       2;
     REQUIRE(m > 0);
     // Same object rectangle; the buffer overhang sits m px outside it.
@@ -353,5 +361,82 @@ TEST_CASE_METHOD(XMLTestFixture, "ams_lane_spool: the glow is centred on the spo
 
     helix::ui::ams_lane_spool_set_highlight(spool, helix::ui::SpoolHighlight::None);
     CHECK(lv_obj_has_flag(glow, LV_OBJ_FLAG_HIDDEN));
+    CHECK(lv_image_get_src(glow) == nullptr); // un-highlight drops the image
+    lv_obj_delete(spool);
+}
+
+TEST_CASE_METHOD(XMLTestFixture, "ams_lane_spool: a theme change repaints a lit glow",
+                 "[ams][lane_spool][highlight]") {
+    ui_ams_lane_spool_register();
+    AmsState::instance().init_subjects(true);
+    lv_subject_set_int(AmsState::instance().get_slot_lane_state_subject(0),
+                       static_cast<int>(helix::ui::LaneState::Present));
+    lv_obj_t* spool = make_spool(test_screen(), 0);
+    REQUIRE(spool != nullptr);
+    helix::ui::ams_lane_spool_set_highlight(spool, helix::ui::SpoolHighlight::Steady);
+    process_lvgl(20);
+    lv_obj_t* glow = part(spool, "spool_glow");
+    const lv_draw_buf_t* before = buf_of(glow);
+    REQUIRE(before != nullptr);
+
+    // Dark/light flips the accent (tube_accent lightens it in light mode).
+    const lv_color_t old_accent = helix::ui::tube_accent();
+    theme_manager_toggle_dark_mode();
+    const lv_color_t new_accent = helix::ui::tube_accent();
+    REQUIRE_FALSE(lv_color_eq(old_accent, new_accent));
+    process_lvgl(20);
+
+    const lv_draw_buf_t* after = buf_of(glow);
+    REQUIRE(after != nullptr);
+    CHECK(after != before);
+    // The far halo is pure accent: the first visible pixel in from the left
+    // on the middle row.
+    const uint32_t mid = after->header.h / 2;
+    const auto* row =
+        reinterpret_cast<const lv_color32_t*>(after->data + mid * after->header.stride);
+    lv_color32_t best{};
+    for (uint32_t x = 0; x < after->header.w && best.alpha <= 20; x++)
+        best = row[x];
+    REQUIRE(best.alpha > 0);
+    CHECK(std::abs(best.red - new_accent.red) <= 2);
+    CHECK(std::abs(best.green - new_accent.green) <= 2);
+    CHECK(std::abs(best.blue - new_accent.blue) <= 2);
+
+    theme_manager_toggle_dark_mode();
+    process_lvgl(20);
+    lv_obj_delete(spool);
+}
+
+TEST_CASE_METHOD(XMLTestFixture, "ams_lane_spool: a running pulse is never restarted",
+                 "[ams][lane_spool][highlight]") {
+    ui_ams_lane_spool_register();
+    AmsState::instance().init_subjects(true);
+    lv_subject_t* lane = AmsState::instance().get_slot_lane_state_subject(0);
+    lv_subject_set_int(lane, static_cast<int>(helix::ui::LaneState::Present));
+    lv_obj_t* spool = make_spool(test_screen(), 0);
+    REQUIRE(spool != nullptr);
+    process_lvgl(20);
+    lv_obj_t* glow = part(spool, "spool_glow");
+
+    helix::ui::ams_lane_spool_set_highlight(spool, helix::ui::SpoolHighlight::Pulse);
+    lv_anim_t* anim = lv_anim_get(glow, nullptr);
+    REQUIRE(anim != nullptr);
+    process_lvgl(200);
+    const int32_t elapsed = anim->act_time;
+    REQUIRE(elapsed > 0);
+
+    // A re-apply from a lane-state update while still pulsing.
+    lv_subject_set_int(lane, static_cast<int>(helix::ui::LaneState::Ghosted));
+    process_lvgl(20);
+    lv_subject_set_int(lane, static_cast<int>(helix::ui::LaneState::Present));
+    process_lvgl(20);
+    lv_anim_t* still = lv_anim_get(glow, nullptr);
+    REQUIRE(still == anim);
+    CHECK(still->act_time > elapsed);
+
+    // Pulse to Steady stops it and restores full opacity.
+    helix::ui::ams_lane_spool_set_highlight(spool, helix::ui::SpoolHighlight::Steady);
+    CHECK(lv_anim_get(glow, nullptr) == nullptr);
+    CHECK(lv_obj_get_style_opa(glow, LV_PART_MAIN) == LV_OPA_COVER);
     lv_obj_delete(spool);
 }

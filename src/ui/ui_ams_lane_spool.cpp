@@ -347,6 +347,7 @@ struct LaneSpoolData {
     ObserverGuard fill_observer;
     ObserverGuard has_error_observer;
     ObserverGuard severity_observer;
+    ObserverGuard theme_observer; ///< a lit glow re-reads the accent
 };
 
 static std::unordered_map<lv_obj_t*, LaneSpoolData*> s_lane_spool_registry;
@@ -378,6 +379,7 @@ static void unregister_lane_spool_data(lv_obj_t* obj) {
             data->fill_observer.reset();
             data->has_error_observer.reset();
             data->severity_observer.reset();
+            data->theme_observer.reset();
         }
         s_lane_spool_registry.erase(it);
     }
@@ -399,6 +401,7 @@ static void cleanup_all_lane_spool_data() {
         data->fill_observer.release();
         data->has_error_observer.release();
         data->severity_observer.release();
+        data->theme_observer.release();
         delete data;
     }
     s_lane_spool_registry.clear();
@@ -413,9 +416,10 @@ static void glow_opa_anim_cb(void* obj, int32_t value) {
     lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value), LV_PART_MAIN);
 }
 
-/// Current-lane glow: painted from the spool's silhouette (cached), shown
-/// while the lane is highlighted and holds a spool; Pulse animates only the
-/// layer's opacity, so no frame repaints or re-blurs anything.
+/// Current-lane glow: bound to the spool's silhouette (cached, shared), shown
+/// while the lane is highlighted and holds a spool. Pulse animates only the
+/// layer's opacity, so no frame repaints or re-blurs anything; a running pulse
+/// is left alone, so repeated applies never restart it.
 static void apply_highlight(LaneSpoolData* d) {
     lv_obj_t* glow = d->sv.glow;
     if (!glow)
@@ -423,28 +427,34 @@ static void apply_highlight(LaneSpoolData* d) {
     using helix::ui::SpoolHighlight;
     const bool on =
         d->highlight != SpoolHighlight::None && d->lane_state != helix::ui::LaneState::Empty;
-    lv_anim_delete(glow, glow_opa_anim_cb);
-    lv_obj_set_style_opa(glow, LV_OPA_COVER, LV_PART_MAIN);
+    const bool pulse = on && d->highlight == SpoolHighlight::Pulse;
+    const bool pulsing = lv_anim_get(glow, glow_opa_anim_cb) != nullptr;
+    if (pulsing && !pulse) {
+        lv_anim_delete(glow, glow_opa_anim_cb);
+        lv_obj_set_style_opa(glow, LV_OPA_COVER, LV_PART_MAIN);
+    }
     if (!on) {
+        helix::ui::spool_glow_clear(glow);
         lv_obj_add_flag(glow, LV_OBJ_FLAG_HIDDEN);
+        helix::ui::refresh_overhang_chain(glow);
         return;
     }
     helix::ui::spool_glow_paint(glow, d->sv.canvas, d->sv.spool_size);
     lv_obj_remove_flag(glow, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_refresh_ext_draw_size(d->sv.container);
-    if (d->highlight == SpoolHighlight::Pulse) {
+    helix::ui::refresh_overhang_chain(glow);
+    if (pulse && !pulsing) {
         constexpr int32_t PULSE_DIM_OPA = LV_OPA_40;
         constexpr uint32_t PULSE_DURATION_MS = 600;
-        lv_anim_t pulse;
-        lv_anim_init(&pulse);
-        lv_anim_set_var(&pulse, glow);
-        lv_anim_set_values(&pulse, PULSE_DIM_OPA, LV_OPA_COVER);
-        lv_anim_set_duration(&pulse, PULSE_DURATION_MS);
-        lv_anim_set_reverse_duration(&pulse, PULSE_DURATION_MS);
-        lv_anim_set_repeat_count(&pulse, LV_ANIM_REPEAT_INFINITE);
-        lv_anim_set_path_cb(&pulse, lv_anim_path_ease_in_out);
-        lv_anim_set_exec_cb(&pulse, glow_opa_anim_cb);
-        lv_anim_start(&pulse);
+        lv_anim_t anim;
+        lv_anim_init(&anim);
+        lv_anim_set_var(&anim, glow);
+        lv_anim_set_values(&anim, PULSE_DIM_OPA, LV_OPA_COVER);
+        lv_anim_set_duration(&anim, PULSE_DURATION_MS);
+        lv_anim_set_reverse_duration(&anim, PULSE_DURATION_MS);
+        lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
+        lv_anim_set_path_cb(&anim, lv_anim_path_ease_in_out);
+        lv_anim_set_exec_cb(&anim, glow_opa_anim_cb);
+        lv_anim_start(&anim);
     }
 }
 
@@ -523,8 +533,6 @@ static void apply_fill_pct(LaneSpoolData* d, int pct) {
     pct = std::clamp(pct, 0, 100);
     d->fill_level = static_cast<float>(pct) / 100.0f;
     spool_visual_set_fill(d->sv, d->fill_level);
-    if (d->highlight != helix::ui::SpoolHighlight::None && d->sv.canvas)
-        helix::ui::spool_glow_paint(d->sv.glow, d->sv.canvas, d->sv.spool_size);
 }
 
 /// Error dot: severity color + visibility (+ pulse when animations allow).
@@ -706,6 +714,18 @@ static void* ams_lane_spool_xml_create(lv_xml_parser_state_t* state, const char*
     LaneSpoolData* data = data_ptr.get();
     register_lane_spool_data(root, data_ptr.release());
     lv_obj_add_event_cb(root, ams_lane_spool_event_cb, LV_EVENT_DELETE, nullptr);
+
+    if (lv_subject_t* theme = theme_manager_get_changed_subject()) {
+        data->theme_observer = helix::ui::observe<int>(
+            theme, root,
+            [](lv_obj_t* o, int /*generation*/) {
+                auto* d = get_lane_spool_data(o);
+                if (d && d->highlight != helix::ui::SpoolHighlight::None && d->sv.glow &&
+                    !lv_obj_has_flag(d->sv.glow, LV_OBJ_FLAG_HIDDEN))
+                    helix::ui::spool_glow_paint(d->sv.glow, d->sv.canvas, d->sv.spool_size);
+            },
+            subject_never_freed());
+    }
 
     spdlog::debug("[AmsLaneSpool] Created widget from XML");
     return root;

@@ -12,6 +12,7 @@
 #include "helix-xml/src/xml/parsers/lv_xml_obj_parser.h"
 #include "lv_draw_buf_guard.h"
 #include "lvgl/lvgl.h"
+#include "lvgl/src/misc/cache/instance/lv_image_cache.h" // not in the lvgl.h umbrella
 #include "theme_manager.h"
 #include "ui/ams_drawing_utils.h"
 
@@ -215,7 +216,12 @@ static bool sync_canvas_buf(lv_obj_t* canvas, lv_draw_buf_t*& draw_buf, int32_t 
 }
 
 static bool sync_draw_buf(SpoolCanvasData* d) {
-    return sync_canvas_buf(d->canvas, d->draw_buf, d->size, 0);
+    const lv_draw_buf_t* before = d->draw_buf;
+    if (!sync_canvas_buf(d->canvas, d->draw_buf, d->size, 0))
+        return false;
+    if (d->draw_buf != before)
+        d->has_rendered = false; // a fresh buffer holds no render yet
+    return true;
 }
 
 // The spool is drawn as one fill per row span, hundreds per render. They are
@@ -532,20 +538,33 @@ static void render_spool_pixels(SpoolCanvasData* data) {
     spdlog::trace("[SpoolCanvas] Redrawn: size={}, fill={:.0f}%", size, fill * 100.0f);
 }
 
-// Cache-aware redraw entry point. Handles:
+static void repaint_bound_glows(lv_obj_t* spool_canvas);
+static void unbind_glows(lv_obj_t* spool_canvas);
+static void clear_glow_cache();
+
+static bool redraw_spool_pixels(SpoolCanvasData* data);
+
+// Redraw entry point. A new silhouette repaints the glows bound to this spool.
+static void redraw_spool(SpoolCanvasData* data) {
+    if (redraw_spool_pixels(data))
+        repaint_bound_glows(data->canvas);
+}
+
+// Cache-aware render. Handles:
 //   - dedup (idea #1): same state as last render → no-op
 //   - cache hit (idea #2): memcpy cached pixels into draw_buf
 //   - cache miss: full render + capture into cache
-static void redraw_spool(SpoolCanvasData* data) {
+// Returns true when the buffer now holds a different render.
+static bool redraw_spool_pixels(SpoolCanvasData* data) {
     if (!data || !data->canvas || !data->draw_buf)
-        return;
+        return false;
 
     SpoolCacheKey key{color_to_rgb24(data->color), static_cast<uint16_t>(data->size),
                       compute_fill_bucket(data->fill_level), SpoolGlow::None};
 
     // Dedup: already rendered this bucketed state, nothing to do.
     if (data->has_rendered && data->last_key == key) {
-        return;
+        return false;
     }
 
     // Cache hit: copy rendered pixels into the canvas buffer.
@@ -557,7 +576,7 @@ static void redraw_spool(SpoolCanvasData* data) {
             data->has_rendered = true;
             spdlog::trace("[SpoolCanvas] cache hit (size={} bucket={} color=0x{:06X})", key.size,
                           key.fill_bucket, key.color_rgb);
-            return;
+            return true;
         }
     }
 
@@ -572,6 +591,7 @@ static void redraw_spool(SpoolCanvasData* data) {
 
     data->last_key = key;
     data->has_rendered = true;
+    return true;
 }
 
 static void spool_canvas_event_cb(lv_event_t* e) {
@@ -585,6 +605,7 @@ static void spool_canvas_event_cb(lv_event_t* e) {
             if (data) {
                 helix::safe_draw_buf_destroy(data->draw_buf, "spool");
             }
+            unbind_glows(obj);
             lv_obj_set_user_data(obj, nullptr);
             s_registry.erase(it);
             // data automatically freed
@@ -764,6 +785,7 @@ lv_color_t ui_spool_canvas_get_color(lv_obj_t* canvas) {
 void ui_spool_canvas_invalidate_cache(void) {
     s_cache_list.clear();
     s_cache_index.clear();
+    clear_glow_cache();
     for (auto& [canvas, data] : s_registry) {
         if (data) {
             data->has_rendered = false;
@@ -775,29 +797,74 @@ void ui_spool_canvas_invalidate_cache(void) {
 // ----------------------------------------------------------------------------
 // Glow layer
 // ----------------------------------------------------------------------------
+// A glow is one image per (shape, accent, simple), shared by every layer that
+// shows it: the cache and the layers hold references, so a buffer lives
+// exactly as long as something needs it. Glows keep their own small LRU so
+// they never evict spool renders.
+static constexpr size_t GLOW_CACHE_MAX_ENTRIES = 4;
+
 namespace {
+using GlowImage = std::shared_ptr<lv_draw_buf_t>;
+
+struct GlowCacheEntry {
+    SpoolCacheKey key;
+    GlowImage image;
+};
+
 struct SpoolGlowData {
-    lv_draw_buf_t* draw_buf = nullptr;
+    lv_obj_t* spool = nullptr; ///< bound 3D spool canvas; null = disc (flat style)
+    int32_t size = 0;
+    bool simple = false;
+    bool lit = false; ///< painted, or waiting on the spool's first render
+    GlowImage image;
     int32_t margin = 0;
-    SpoolCacheKey last_key{0, 0, 0, SpoolGlow::None};
-    bool painted = false;
 };
 } // namespace
 
+static std::list<GlowCacheEntry> s_glow_cache;
 static std::unordered_map<lv_obj_t*, SpoolGlowData> s_glow_registry;
 
-static void spool_glow_event_cb(lv_event_t* e) {
-    lv_obj_t* obj = lv_event_get_target_obj(e);
-    auto it = s_glow_registry.find(obj);
-    if (it == s_glow_registry.end())
-        return;
-    if (lv_event_get_code(e) == LV_EVENT_REFR_EXT_DRAW_SIZE) {
-        lv_event_set_ext_draw_size(e, it->second.margin);
-    } else if (lv_event_get_code(e) == LV_EVENT_DELETE) {
-        // The canvas was a composite source until this delete.
-        helix::safe_draw_buf_destroy(it->second.draw_buf, "spool_glow");
-        s_glow_registry.erase(it);
+static GlowImage make_glow_image(int32_t dim) {
+    lv_draw_buf_t* buf = lv_draw_buf_create(dim, dim, LV_COLOR_FORMAT_ARGB8888, 0);
+    if (!buf)
+        return nullptr;
+    return GlowImage(buf, [](lv_draw_buf_t* b) {
+        if (!lv_is_initialized())
+            return; // process teardown: LVGL's image cache is already gone
+        // A layer that showed it may still be in an in-flight blend.
+        lv_image_cache_drop(b);
+        helix::safe_draw_buf_destroy(b, "spool_glow");
+    });
+}
+
+static GlowImage glow_cache_get(const SpoolCacheKey& key) {
+    for (auto it = s_glow_cache.begin(); it != s_glow_cache.end(); ++it) {
+        if (it->key == key) {
+            s_glow_cache.splice(s_glow_cache.begin(), s_glow_cache, it);
+            return it->image;
+        }
     }
+    return nullptr;
+}
+
+static void glow_cache_put(const SpoolCacheKey& key, GlowImage image) {
+    s_glow_cache.push_front({key, std::move(image)});
+    if (s_glow_cache.size() > GLOW_CACHE_MAX_ENTRIES)
+        s_glow_cache.pop_back();
+}
+
+// Layers keep the images they show; only the cache's references go.
+static void clear_glow_cache() {
+    s_glow_cache.clear();
+}
+
+static void set_glow_image(lv_obj_t* glow, SpoolGlowData& g, GlowImage image, int32_t margin) {
+    g.image = std::move(image);
+    g.margin = g.image ? margin : 0;
+    lv_image_set_src(glow, g.image.get());
+    if (g.size > 0)
+        lv_obj_set_size(glow, g.size, g.size);
+    helix::ui::refresh_overhang_chain(glow);
 }
 
 // The silhouette, padded by @p m: the 3D canvas's own alpha, or a disc of
@@ -826,13 +893,73 @@ static std::vector<uint8_t> silhouette_mask(SpoolCanvasData* spool, int32_t size
     return mask;
 }
 
+// Show the glow for the layer's bound shape. A 3D spool that has not rendered
+// yet has no silhouette to read: the layer stays empty until its first render.
+static void paint_glow_layer(lv_obj_t* glow, SpoolGlowData& g) {
+    SpoolCanvasData* spool = get_data(g.spool);
+    if (g.spool && (!spool || !spool->has_rendered)) {
+        set_glow_image(glow, g, nullptr, 0);
+        return;
+    }
+    const SpoolGlow mode = g.simple ? SpoolGlow::Outline : SpoolGlow::Halo;
+    const int32_t margin = g.simple ? OUTLINE_PX : GLOW_MARGIN;
+    const lv_color_t accent = helix::ui::tube_accent();
+    // A glow depends only on the silhouette, never the filament color, so the
+    // key carries the accent where a spool render carries its color.
+    const SpoolCacheKey key{color_to_rgb24(accent), static_cast<uint16_t>(g.size),
+                            spool ? spool->last_key.fill_bucket : GLOW_DISC_SHAPE, mode};
+    GlowImage image = glow_cache_get(key);
+    if (!image) {
+        image = make_glow_image(g.size + 2 * margin);
+        if (!image) {
+            spdlog::error("[SpoolCanvas] Failed to create glow buffer for size {}", g.size);
+            return;
+        }
+        paint_glow(image.get(), silhouette_mask(spool, g.size, margin), mode, accent);
+        glow_cache_put(key, image);
+    }
+    if (image != g.image)
+        set_glow_image(glow, g, std::move(image), margin);
+}
+
+static void repaint_bound_glows(lv_obj_t* spool_canvas) {
+    for (auto& [glow, g] : s_glow_registry)
+        if (g.lit && g.spool == spool_canvas)
+            paint_glow_layer(glow, g);
+}
+
+static void unbind_glows(lv_obj_t* spool_canvas) {
+    for (auto& [glow, g] : s_glow_registry) {
+        if (g.spool == spool_canvas) {
+            g.spool = nullptr;
+            g.lit = false;
+            set_glow_image(glow, g, nullptr, 0);
+        }
+    }
+}
+
+static void spool_glow_event_cb(lv_event_t* e) {
+    lv_obj_t* obj = lv_event_get_target_obj(e);
+    auto it = s_glow_registry.find(obj);
+    if (it == s_glow_registry.end())
+        return;
+    if (lv_event_get_code(e) == LV_EVENT_REFR_EXT_DRAW_SIZE) {
+        lv_event_set_ext_draw_size(e, it->second.margin);
+    } else if (lv_event_get_code(e) == LV_EVENT_DELETE) {
+        s_glow_registry.erase(it);
+    }
+}
+
 namespace helix::ui {
 
 lv_obj_t* spool_glow_create(lv_obj_t* parent) {
-    lv_obj_t* glow = lv_canvas_create(parent);
+    lv_obj_t* glow = lv_image_create(parent);
     if (!glow)
         return nullptr;
     lv_obj_remove_flag(glow, LV_OBJ_FLAG_CLICKABLE);
+    // An image larger than its object is overhang, not scrollable content.
+    lv_obj_remove_flag(glow, LV_OBJ_FLAG_SCROLLABLE);
+    lv_image_set_inner_align(glow, LV_IMAGE_ALIGN_CENTER);
     s_glow_registry[glow] = SpoolGlowData{};
     lv_obj_add_event_cb(glow, spool_glow_event_cb, LV_EVENT_DELETE, nullptr);
     lv_obj_add_event_cb(glow, spool_glow_event_cb, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
@@ -844,30 +971,20 @@ void spool_glow_paint(lv_obj_t* glow, lv_obj_t* spool_canvas, int32_t size, bool
     if (it == s_glow_registry.end() || size <= 0)
         return;
     SpoolGlowData& g = it->second;
-    SpoolCanvasData* spool = get_data(spool_canvas);
-    const SpoolGlow mode = simple ? SpoolGlow::Outline : SpoolGlow::Halo;
-    const lv_color_t accent = tube_accent();
-    // A glow depends only on the silhouette, never the filament color, so the
-    // key carries the accent where a spool render carries its color.
-    const SpoolCacheKey key{color_to_rgb24(accent), static_cast<uint16_t>(size),
-                            spool ? spool->last_key.fill_bucket : GLOW_DISC_SHAPE, mode};
-    if (g.painted && g.last_key == key)
-        return;
+    g.spool = spool_canvas;
+    g.size = size;
+    g.simple = simple;
+    g.lit = true;
+    paint_glow_layer(glow, g);
+}
 
-    g.margin = simple ? OUTLINE_PX : GLOW_MARGIN;
-    if (!sync_canvas_buf(glow, g.draw_buf, size, g.margin))
+void spool_glow_clear(lv_obj_t* glow) {
+    auto it = s_glow_registry.find(glow);
+    if (it == s_glow_registry.end())
         return;
-    if (const SpoolCacheEntry* entry = cache_get(key);
-        entry && entry->pixels.size() == g.draw_buf->data_size) {
-        memcpy(g.draw_buf->data, entry->pixels.data(), entry->pixels.size());
-    } else {
-        paint_glow(g.draw_buf, silhouette_mask(spool, size, g.margin), mode, accent);
-        cache_put(key,
-                  std::vector<uint8_t>(g.draw_buf->data, g.draw_buf->data + g.draw_buf->data_size));
-    }
-    lv_obj_invalidate(glow);
-    g.last_key = key;
-    g.painted = true;
+    it->second.lit = false;
+    it->second.spool = nullptr;
+    set_glow_image(glow, it->second, nullptr, 0);
 }
 
 } // namespace helix::ui

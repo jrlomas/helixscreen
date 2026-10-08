@@ -552,11 +552,17 @@ const char* get_owned_user_string(lv_obj_t* obj);
 
 /**
  * Let @p obj's children draw past its edges: makes it overflow-visible and
- * gives it an ext draw size equal to its children's largest. LVGL clips an
- * overflow-visible parent's children to the parent's own ext draw area, so a
- * child's overhang (a spool glow) reaches the screen only if each such parent
- * carries it. Call lv_obj_refresh_ext_draw_size(obj) after a child's changes.
+ * gives it an ext draw size equal to its visible children's largest. LVGL
+ * clips an overflow-visible parent's children to the parent's own ext draw
+ * area, so a child's overhang (a spool glow) reaches the screen only if each
+ * such parent carries it. refresh_overhang_chain() after a child's changes.
  */
 void pass_child_overhang(lv_obj_t* obj);
+
+/**
+ * Re-measure @p child's ext draw size and every overflow-visible ancestor's
+ * above it, after the child's overhang changed or it was shown or hidden.
+ */
+void refresh_overhang_chain(lv_obj_t* child);
 
 } // namespace helix::ui

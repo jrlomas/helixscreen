@@ -10,6 +10,7 @@
 
 #include "../lvgl_ui_test_fixture.h"
 #include "filament_tube_stroker.h"
+#include "lvgl/src/core/lv_obj_draw_private.h"
 
 #include <cstdlib>
 #include <vector>
@@ -29,8 +30,15 @@ struct Pixels {
     }
 };
 
+/// A canvas's draw buffer, or the draw buffer an image (the glow layer) shows.
+const lv_draw_buf_t* buf_of(lv_obj_t* obj) {
+    if (lv_obj_check_type(obj, &lv_canvas_class))
+        return lv_canvas_get_draw_buf(obj);
+    return static_cast<const lv_draw_buf_t*>(lv_image_get_src(obj));
+}
+
 Pixels snapshot(lv_obj_t* canvas) {
-    lv_draw_buf_t* buf = lv_canvas_get_draw_buf(canvas);
+    const lv_draw_buf_t* buf = buf_of(canvas);
     REQUIRE(buf != nullptr);
     Pixels p;
     p.w = buf->header.w;
@@ -206,4 +214,46 @@ TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: glow follows the shape, not t
         lv_obj_delete(g);
         lv_obj_delete(c);
     }
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: layers with one shape share one glow image",
+                 "[spool_canvas][highlight]") {
+    lv_obj_t* c = make_canvas(test_screen());
+    int32_t m = 0;
+    lv_obj_t* a = make_glow(c, /*simple=*/false, &m);
+    lv_obj_t* b = make_glow(c, /*simple=*/false, &m);
+    CHECK(buf_of(a) == buf_of(b));
+
+    helix::ui::spool_glow_clear(a);
+    CHECK(lv_image_get_src(a) == nullptr);
+    CHECK(lv_obj_get_ext_draw_size(a) == 0);
+    CHECK(buf_of(b) != nullptr); // the other layer keeps its reference
+
+    lv_obj_delete(a);
+    lv_obj_delete(b);
+    lv_obj_delete(c);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "spool_canvas: no glow before the spool has rendered",
+                 "[spool_canvas][highlight]") {
+    lv_obj_t* c = make_canvas(test_screen());
+    const Pixels plain = snapshot(c);
+    // Invalidation leaves the spool unrendered with its old pixels in place.
+    ui_spool_canvas_invalidate_cache();
+
+    lv_obj_t* g = helix::ui::spool_glow_create(test_screen());
+    helix::ui::spool_glow_paint(g, c, SPOOL, /*simple=*/false);
+    CHECK(lv_image_get_src(g) == nullptr);
+
+    // The first render paints the bound glow.
+    ui_spool_canvas_redraw(c);
+    REQUIRE(lv_image_get_src(g) != nullptr);
+    const Pixels lit = snapshot(g);
+    const int32_t m = (lit.w - SPOOL) / 2;
+    const GlowReach r = glow_reach(plain, lit, m);
+    CHECK(r.max_dist > 3);
+    CHECK(r.max_dist <= m);
+
+    lv_obj_delete(g);
+    lv_obj_delete(c);
 }

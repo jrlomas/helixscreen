@@ -26,9 +26,12 @@
 #include "ams_lane_state.h"
 #include "ams_state.h"
 #include "config.h"
+#include "display_settings_manager.h"
 #include "lvgl/src/core/lv_obj_draw_private.h"
 #include "printer_state.h"
 #include "ui/ams_drawing_utils.h"
+
+#include <array>
 
 #include "../catch_amalgamated.hpp"
 
@@ -1146,8 +1149,11 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: current slot glows the spool, dra
     lv_subject_set_int(AmsState::instance().get_slot_active_loaded_subject(0), 0);
     process_lvgl(20);
     CHECK_FALSE(shown(glow));
+    CHECK(lv_image_get_src(glow) == nullptr);
     check_no_box(slot);
     check_no_box(spool_container);
+    // A hidden glow reserves no overhang anywhere up the chain.
+    CHECK(lv_obj_get_ext_draw_size(spool_container) == 0);
 
     lv_obj_delete(slot);
 }
@@ -1207,10 +1213,60 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: flat style glows too", "[ui][ams_
     lv_obj_t* glow = glow_of(slot);
     CHECK(shown(glow));
     CHECK(lv_obj_get_ext_draw_size(glow) > 0);
-    lv_draw_buf_t* buf = lv_canvas_get_draw_buf(glow);
+    const auto* buf = static_cast<const lv_draw_buf_t*>(lv_image_get_src(glow));
     REQUIRE(buf != nullptr);
     CHECK(buf->header.w > static_cast<uint32_t>(lv_obj_get_width(glow)));
 
     lv_obj_delete(slot);
     helix::Config::get_instance()->set<std::string>("/ams/spool_style", "3d");
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: a load pulses the current and target slots only",
+                 "[ui][ams_slot][highlight]") {
+    ui_ams_slot_register();
+    AmsState& ams = AmsState::instance();
+    ams.init_subjects(true);
+    auto& display = DisplaySettingsManager::instance();
+    const bool animations_were = display.get_animations_enabled();
+
+    for (bool animations : {true, false}) {
+        CAPTURE(animations);
+        display.set_animations_enabled(animations);
+        lv_subject_set_int(ams.get_ams_action_subject(), static_cast<int>(AmsAction::IDLE));
+        std::array<lv_obj_t*, 4> slots{};
+        for (int i = 0; i < 4; i++) {
+            lv_subject_set_int(ams.get_slot_lane_state_subject(i),
+                               static_cast<int>(helix::ui::LaneState::Present));
+            lv_subject_set_int(ams.get_slot_active_loaded_subject(i), 0);
+            slots[i] = create_ams_slot(test_screen(), i);
+            REQUIRE(slots[i] != nullptr);
+        }
+        process_lvgl(20);
+
+        // Swapping from slot 0 into slot 2.
+        lv_subject_set_int(ams.get_current_slot_subject(), 0);
+        lv_subject_set_int(ams.get_pending_target_slot_subject(), 2);
+        lv_subject_set_int(ams.get_ams_action_subject(), static_cast<int>(AmsAction::LOADING));
+        process_lvgl(20);
+
+        for (int i = 0; i < 4; i++) {
+            CAPTURE(i);
+            lv_obj_t* glow = glow_of(slots[i]);
+            const bool should_pulse = animations && (i == 0 || i == 2);
+            CHECK((lv_anim_get(glow, nullptr) != nullptr) == should_pulse);
+            CHECK(shown(glow) == should_pulse);
+            check_no_box(slots[i]);
+            check_no_box(UITest::find_by_name(slots[i], "spool_container"));
+        }
+
+        lv_subject_set_int(ams.get_ams_action_subject(), static_cast<int>(AmsAction::IDLE));
+        process_lvgl(20);
+        for (lv_obj_t* slot : slots) {
+            CHECK(lv_anim_get(glow_of(slot), nullptr) == nullptr);
+            lv_obj_delete(slot);
+        }
+    }
+    display.set_animations_enabled(animations_were);
+    lv_subject_set_int(ams.get_pending_target_slot_subject(), -1);
+    lv_subject_set_int(ams.get_current_slot_subject(), -1);
 }

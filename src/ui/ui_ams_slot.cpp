@@ -316,9 +316,6 @@ static void apply_lane_state(AmsSlotData* data, int state_int) {
 // The current lane is marked by the spool's own glow, never a box on the slot.
 static void set_spool_glow(AmsSlotData* data, helix::ui::SpoolHighlight highlight) {
     helix::ui::ams_lane_spool_set_highlight(data->lane_spool, highlight);
-    if (data->spool_container)
-        lv_obj_refresh_ext_draw_size(data->spool_container);
-    lv_obj_refresh_ext_draw_size(data->container);
 }
 
 /**
