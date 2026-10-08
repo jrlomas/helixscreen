@@ -1080,3 +1080,62 @@ TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: a secondary backend's slot shows 
     ams.set_active_backend(0);
     ams.clear_backends();
 }
+
+// ============================================================================
+// Current-slot highlight - the spool glows; the slot draws no box
+// ============================================================================
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: current slot glows the spool, draws no box",
+                 "[ui][ams_slot][highlight]") {
+    ui_ams_slot_register();
+    AmsState::instance().init_subjects(true);
+
+    lv_obj_t* slot = create_ams_slot(test_screen(), 0);
+    REQUIRE(slot != nullptr);
+    process_lvgl(20);
+
+    lv_obj_t* spool_container = UITest::find_by_name(slot, "spool_container");
+    lv_obj_t* canvas = find_spool_canvas(spool_container);
+    REQUIRE(canvas != nullptr);
+    REQUIRE_FALSE(helix::ui::spool_canvas_highlighted(canvas));
+
+    auto no_box = [](lv_obj_t* o) {
+        CHECK(lv_obj_get_style_border_width(o, LV_PART_MAIN) == 0);
+        CHECK(lv_obj_get_style_shadow_width(o, LV_PART_MAIN) == 0);
+        CHECK(lv_obj_get_style_outline_width(o, LV_PART_MAIN) == 0);
+    };
+
+    lv_subject_set_int(AmsState::instance().get_slot_active_loaded_subject(0), 1);
+    process_lvgl(20);
+    CHECK(helix::ui::spool_canvas_highlighted(canvas));
+    no_box(slot);
+    no_box(spool_container);
+
+    lv_subject_set_int(AmsState::instance().get_slot_active_loaded_subject(0), 0);
+    process_lvgl(20);
+    CHECK_FALSE(helix::ui::spool_canvas_highlighted(canvas));
+    no_box(slot);
+    no_box(spool_container);
+
+    lv_obj_delete(slot);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "ams_slot: clear_highlight drops the spool glow",
+                 "[ui][ams_slot][highlight]") {
+    ui_ams_slot_register();
+    AmsState::instance().init_subjects(true);
+
+    lv_obj_t* slot = create_ams_slot(test_screen(), 0);
+    REQUIRE(slot != nullptr);
+    lv_subject_set_int(AmsState::instance().get_slot_active_loaded_subject(0), 1);
+    process_lvgl(20);
+
+    lv_obj_t* canvas = find_spool_canvas(UITest::find_by_name(slot, "spool_container"));
+    REQUIRE(canvas != nullptr);
+    REQUIRE(helix::ui::spool_canvas_highlighted(canvas));
+
+    ui_ams_slot_clear_highlight(slot);
+    CHECK_FALSE(helix::ui::spool_canvas_highlighted(canvas));
+
+    lv_obj_delete(slot);
+}

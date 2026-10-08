@@ -690,3 +690,10 @@ void ui_spool_canvas_invalidate_cache(void) {
     }
     spdlog::debug("[SpoolCanvas] Render cache invalidated");
 }
+
+namespace helix::ui {
+void spool_canvas_set_highlighted(lv_obj_t*, bool, bool) {}
+bool spool_canvas_highlighted(lv_obj_t*) {
+    return false;
+}
+} // namespace helix::ui

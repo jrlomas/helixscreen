@@ -59,4 +59,21 @@ void ui_spool_canvas_invalidate_cache(void);
 
 #ifdef __cplusplus
 }
+
+namespace helix::ui {
+bool reduced_effects();
+
+/**
+ * @brief Mark the spool as the current one with an accent glow around its silhouette.
+ *
+ * Capable hardware draws a soft halo plus a tight rim grown from the spool's
+ * alpha mask; the draw buffer grows by the glow margin on every side while the
+ * object keeps the spool's size, so layout does not move and the glow spills
+ * into the ext draw area. @p simple draws a 2 px solid outline instead, inside
+ * the spool's own buffer.
+ */
+void spool_canvas_set_highlighted(lv_obj_t* canvas, bool highlighted,
+                                  bool simple = reduced_effects());
+bool spool_canvas_highlighted(lv_obj_t* canvas);
+} // namespace helix::ui
 #endif
