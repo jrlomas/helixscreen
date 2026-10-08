@@ -412,9 +412,10 @@ TEST_CASE("Subscription: AFC field lists are exactly the parsers' inputs",
                                     "extruders",
                                     "buffers"});
     const json stepper =
-        json::array({"buffer_status", "color", "current_map", "dist_hub", "extruder",
-                     "filament_status", "hub", "load", "loaded_to_hub", "map", "material", "prep",
-                     "runout_lane", "spool_id", "status", "tool_loaded", "weight"});
+        json::array({"buffer_status",   "color",         "current_map", "dist_hub",      "extruder",
+                     "filament_status", "hub",           "load",        "loaded_to_hub", "map",
+                     "material",        "prep",          "runout_lane", "spool_id",      "status",
+                     "td1_color",       "td1_scan_time", "td1_td",      "tool_loaded",   "weight"});
 
     CHECK(subs["AFC"] == state);
     CHECK(subs["afc"] == state);
