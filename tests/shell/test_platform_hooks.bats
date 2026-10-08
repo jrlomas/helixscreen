@@ -187,24 +187,34 @@ REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platfo
     # never touches a real printer.
     command -v python3 >/dev/null 2>&1 || skip "python3 not available"
 
-    local tmp port status_file
+    local tmp port status_file port_file
     tmp="$(mktemp -d)"
     status_file="$tmp/splash-status"
-    port=7191
+    port_file="$tmp/port"
 
-    # Minimal mock Moonraker /server/info on 127.0.0.1:$port
+    # Mock Moonraker /server/info on an ephemeral port: a fixed port collides
+    # with a concurrent run of this test, whose teardown kills the server this
+    # one is polling. The port file appears only once the socket is listening.
     python3 -c "
-import http.server, sys
+import http.server, os, sys
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self): self.send_response(200); self.end_headers(); self.wfile.write(b'{}')
     def log_message(self, *a): pass
-http.server.HTTPServer(('127.0.0.1', $port), H).serve_forever()
+s = http.server.HTTPServer(('127.0.0.1', 0), H)
+open('$port_file.tmp', 'w').write(str(s.server_address[1]))
+os.rename('$port_file.tmp', '$port_file')
+s.serve_forever()
 " &
     local server_pid=$!
-    sleep 1
+    local i
+    for i in $(seq 1 600); do
+        [ -s "$port_file" ] && break
+        sleep 0.1
+    done
+    port="$(cat "$port_file")"
 
     HELIX_MOONRAKER_READY_URL="http://127.0.0.1:$port/server/info" \
-        HELIX_MOONRAKER_WAIT_TIMEOUT=10 \
+        HELIX_MOONRAKER_WAIT_TIMEOUT=60 \
         HELIX_SPLASH_STATUS_FILE="$status_file" \
         bash -c ". '$HOOKS_DIR/hooks-k2.sh'; platform_wait_for_services"
     local rc=$?
