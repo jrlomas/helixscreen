@@ -527,17 +527,21 @@ AmsSlotLayout helix::ui::ams_detail_slot_layout(int32_t available_width, int slo
     auto* backend = helix::AmsState::instance().get_backend(0);
     if (backend && !backend->has_physical_tray())
         return calculate_ams_slot_layout(available_width, slot_count);
-    // In the box, spools stand at the tray's pitch, the row led in far enough
-    // that the first lane's lid starts inside the container.
     const float spool = (float)theme_manager_get_spacing("ams_slot_spool_size");
     if (spool <= 0)
         return calculate_ams_slot_layout(available_width, slot_count);
-    const float pitch = tray::spool_pitch(spool);
-    const tray::TrayBox depth_only{0, 0, 0, 0, tray::box_depth(spool), 0, 0};
-    const float lead_in = tray::DEPTH_SKEW * depth_only.depth / 2 +
-                          tray::lane_lid_half_width(pitch, depth_only) - pitch / 2;
-    return calculate_ams_slot_layout(available_width, slot_count, (int32_t)pitch,
-                                     (int32_t)std::ceil(std::max(0.0f, lead_in)));
+    // The box reaches past the outer slots: its first lid starts S/4 - 1 left of
+    // the row (for any pitch), and its right side face ends S/4 right of it,
+    // where the readout stands space_md further on. Spools stand at the tray's
+    // pitch rather than spreading across the width.
+    const float skew = tray::DEPTH_SKEW * tray::box_depth(spool);
+    const int32_t lead = (int32_t)std::ceil(std::max(0.0f, skew / 4 - 1));
+    const int32_t tail = (int32_t)std::ceil(skew / 4) + theme_manager_get_spacing("space_md");
+    AmsSlotLayout layout =
+        calculate_ams_slot_layout(std::max<int32_t>(0, available_width - lead - tail), slot_count,
+                                  (int32_t)tray::spool_pitch(spool));
+    layout.centering_offset += lead;
+    return layout;
 }
 
 bool helix::ui::ams_detail_tray_geometry(tray::TrayBox& box, tray::LidMode& lid, float& lid_height,
@@ -579,6 +583,26 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
     lv_obj_t* container = lv_obj_get_parent(w.slot_grid);
     if (!container || !slot_widgets || slot_count <= 0)
         return;
+    const int n = std::min(slot_count, AMS_DETAIL_MAX_SLOTS);
+
+    // Any climate data gets glass.
+    helix::AmsUnit unit;
+    bool dryer = false;
+    if (backend) {
+        const helix::AmsSystemInfo info = backend->get_system_info();
+        const int u = unit_index >= 0 ? unit_index : 0;
+        if (u < static_cast<int>(info.units.size()))
+            unit = info.units[u];
+        dryer = backend->get_dryer_info(u).supported;
+    }
+    const tray::LidMode lid = tray::lid_mode(unit, true, dryer);
+    const bool per_lane = lid == tray::LidMode::PerLane;
+
+    // Under per-lane lids each lane's humidity sits above its label.
+    for (int i = 0; i < n; ++i) {
+        if (slot_widgets[i])
+            ui_ams_slot_set_lane_humidity_visible(slot_widgets[i], per_lane);
+    }
     lv_obj_update_layout(container);
     lv_area_t c;
     lv_obj_get_coords(container, &c);
@@ -587,7 +611,6 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
     // Spools as laid out: front-plane centres sit S/2 left of the drawn ones.
     float cx[AMS_DETAIL_MAX_SLOTS], cy_sum = 0;
     int32_t spool_size = 0;
-    const int n = std::min(slot_count, AMS_DETAIL_MAX_SLOTS);
     for (int i = 0; i < n; ++i) {
         float y = 0;
         if (!slot_widgets[i] || !spool_centre(slot_widgets[i], origin, cx[i], y, spool_size))
@@ -615,17 +638,7 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
     box.fl = s_tray.lane_x[0] - half;
     box.fr = s_tray.lane_x[n - 1] + half;
 
-    // Any climate data gets glass.
-    helix::AmsUnit unit;
-    bool dryer = false;
-    if (backend) {
-        const helix::AmsSystemInfo info = backend->get_system_info();
-        const int u = unit_index >= 0 ? unit_index : 0;
-        if (u < static_cast<int>(info.units.size()))
-            unit = info.units[u];
-        dryer = backend->get_dryer_info(u).supported;
-    }
-    s_tray.lid = tray::lid_mode(unit, true, dryer);
+    s_tray.lid = lid;
     s_tray.lid_h = tray::lid_height(box, flange_ry);
     s_tray.lane_half = half;
     s_tray.lane_count = n;
@@ -639,7 +652,6 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
     const float top = tray::unit_top_y(box, s_tray.lid_h, s_tray.lid != tray::LidMode::None);
     const int32_t gap = theme_manager_get_spacing("space_md");
     const int32_t label_bottom = origin.y + (int32_t)std::lround(top) - gap;
-    const bool per_lane = s_tray.lid == tray::LidMode::PerLane;
     if (n <= 4) {
         for (int i = 0; i < n; ++i) {
             lv_obj_t* label = lv_obj_find_by_name(slot_widgets[i], "material_label");
@@ -650,6 +662,8 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
             lv_area_t la;
             lv_obj_get_coords(label, &la);
             lv_obj_set_style_translate_y(label, label_bottom - la.y2, LV_PART_MAIN);
+            if (lv_obj_t* row = ui_ams_slot_get_lane_humidity(slot_widgets[i]))
+                lv_obj_set_style_translate_y(row, label_bottom - la.y2, LV_PART_MAIN);
         }
     } else if (w.labels_layer) {
         lv_obj_set_style_translate_y(w.labels_layer, 0, LV_PART_MAIN);
@@ -663,23 +677,6 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
         if (lowest != INT32_MIN)
             lv_obj_set_style_translate_y(w.labels_layer, label_bottom - lowest, LV_PART_MAIN);
     }
-    for (int i = 0; i < n; ++i) {
-        ui_ams_slot_set_lane_humidity_visible(slot_widgets[i], per_lane);
-        lv_obj_t* row = ui_ams_slot_get_lane_humidity(slot_widgets[i]);
-        lv_obj_t* label = lv_obj_find_by_name(slot_widgets[i], "material_label");
-        if (!per_lane || !row || !label)
-            continue;
-        lv_obj_update_layout(slot_widgets[i]);
-        lv_area_t la, sa;
-        lv_obj_get_coords(label, &la);
-        lv_obj_get_coords(slot_widgets[i], &sa);
-        const int32_t pad_top = lv_obj_get_style_pad_top(slot_widgets[i], LV_PART_MAIN);
-        const int32_t pad_left = lv_obj_get_style_pad_left(slot_widgets[i], LV_PART_MAIN);
-        const int32_t row_w = lv_obj_get_width(row), row_h = lv_obj_get_height(row);
-        lv_obj_set_pos(row, (la.x1 + la.x2) / 2 - sa.x1 - pad_left - row_w / 2,
-                       la.y1 - sa.y1 - pad_top - row_h - theme_manager_get_spacing("space_xxs"));
-    }
-
     // The unit readout stands beside the drum, right of the back-right corner.
     if (w.env_indicator && !lv_obj_has_flag(w.env_indicator, LV_OBJ_FLAG_HIDDEN)) {
         const tray::PointF br_t = tray::tray_faces(box).back_wall[1];

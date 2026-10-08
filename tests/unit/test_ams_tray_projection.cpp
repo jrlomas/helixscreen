@@ -4,6 +4,8 @@
 // The AMS detail unit's projection, box, lid and sheen on the 800x480 numbers:
 // spool 61, front face FL 10, FR 392, FT 101, FB 126, back wall 10 px taller.
 
+#include "ui_ams_slot_layout.h"
+
 #include "ams_tray_projection.h"
 
 #include <cmath>
@@ -206,4 +208,15 @@ TEST_CASE("tray projection: any climate data gets glass", "[ams][tray]") {
     SECTION("no climate data") {
         CHECK(lid_mode(unit, true, false) == LidMode::None);
     }
+}
+
+TEST_CASE("slot layout: a pitch cap holds up to four slots at the left", "[ams][tray]") {
+    const AmsSlotLayout capped = calculate_ams_slot_layout(470, 4, 72);
+    CHECK(capped.slot_width == 72);
+    CHECK(capped.centering_offset == 0);
+    const AmsSlotLayout narrow = calculate_ams_slot_layout(200, 4, 72);
+    CHECK(narrow.slot_width == 50);
+    // Five or more overlap as before; the cap does not apply.
+    CHECK(calculate_ams_slot_layout(470, 8, 72).slot_width ==
+          calculate_ams_slot_layout(470, 8).slot_width);
 }

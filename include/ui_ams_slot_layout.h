@@ -32,12 +32,12 @@ struct AmsSlotLayout {
  *
  * @param available_width  Content width of the slot container (pixels)
  * @param slot_count       Number of slots to fit
- * @param max_slot_width   Caps the slot width for up to four slots (0 = no cap)
- * @param lead_in          Left offset of a capped row, which does not center
+ * @param max_slot_width   Caps the slot width for up to four slots (0 = no cap);
+ *                         a capped row starts at the left instead of centering
  * @return Computed layout with slot_width and overlap
  */
 inline AmsSlotLayout calculate_ams_slot_layout(int32_t available_width, int slot_count,
-                                               int32_t max_slot_width = 0, int32_t lead_in = 0) {
+                                               int32_t max_slot_width = 0) {
     AmsSlotLayout layout;
 
     if (slot_count <= 0 || available_width <= 0)
@@ -53,8 +53,6 @@ inline AmsSlotLayout calculate_ams_slot_layout(int32_t available_width, int slot
         layout.overlap = 0;
         if (max_slot_width > 0 && layout.slot_width > max_slot_width) {
             layout.slot_width = max_slot_width;
-            const int32_t spare = available_width - slot_count * max_slot_width;
-            layout.centering_offset = lead_in < spare ? lead_in : spare;
             return layout;
         }
     }
