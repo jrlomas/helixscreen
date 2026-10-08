@@ -175,6 +175,7 @@ static void register_color_picker_component_constants(const char* component_name
 
     lv_xml_component_scope_t* scope = lv_xml_component_get_scope(component_name);
     if (scope) {
+        keep_xml_component_registered(component_name);
         // set, not register: register_const is first-write-wins, and <consts>
         // are parsed during registration, so the fallback <px> in
         // color_picker.xml already owns the name by the time we get here and
@@ -315,10 +316,21 @@ static void register_on_first_use(const char* name) {
     s_no_file.emplace(name);
 }
 
-/// A scope C++ has extended (a subject registered into it from C++) or lent a
-/// style to another scope cannot be rebuilt from its file alone.
-static bool scope_holds_cpp_state(lv_xml_component_scope_t* scope) {
-    if (scope->styles_borrowed)
+/// Components C++ pushed constants into after they registered.
+static std::unordered_set<std::string> s_cpp_extended;
+
+void keep_xml_component_registered(const char* name) {
+    s_cpp_extended.emplace(name);
+}
+
+bool is_xml_component_cpp_extended(const std::string& name) {
+    return name == "globals" || s_cpp_extended.count(name) > 0;
+}
+
+/// A scope C++ has extended (constants or a subject registered into it from
+/// C++) or lent a style to another scope cannot be rebuilt from its file alone.
+static bool scope_holds_cpp_state(const char* name, lv_xml_component_scope_t* scope) {
+    if (scope->styles_borrowed || is_xml_component_cpp_extended(name))
         return true;
     for (void* node = lv_ll_get_head(&scope->subjects_ll); node != nullptr;
          node = lv_ll_get_next(&scope->subjects_ll, node)) {
@@ -332,7 +344,7 @@ void unregister_idle_xml_components() {
     s_no_file.clear();
     for (auto it = s_loaded.begin(); it != s_loaded.end();) {
         lv_xml_component_scope_t* scope = lv_xml_component_find_scope(it->c_str());
-        if (scope && (scope->instance_cnt > 0 || scope_holds_cpp_state(scope))) {
+        if (scope && (scope->instance_cnt > 0 || scope_holds_cpp_state(it->c_str(), scope))) {
             ++it;
             continue;
         }
@@ -344,6 +356,10 @@ void unregister_idle_xml_components() {
 
 void register_xml_on_first_use() {
     lv_xml_set_component_loader(register_on_first_use);
+}
+
+void stop_xml_on_first_use() {
+    lv_xml_set_component_loader(nullptr);
 }
 
 void register_xml_components() {
@@ -460,9 +476,6 @@ void register_xml_components() {
 }
 
 void deinit_xml_subjects() {
-    // Teardown looks components up to release what it registered; none of
-    // that may load a file.
-    lv_xml_set_component_loader(nullptr);
     if (s_noop_subject_initialized) {
         lv_subject_deinit(&s_noop_subject);
         s_noop_subject_initialized = false;

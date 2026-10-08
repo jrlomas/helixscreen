@@ -11,9 +11,9 @@
 #include "../lvgl_ui_test_fixture.h"
 #include "../test_fixtures.h"
 #include "../test_helpers/layout_manager_test_access.h"
-#include "../test_helpers/scope_exit.h"
 #include "data_root_resolver.h"
 #include "layout_manager.h"
+#include "static_subject_registry.h"
 #include "xml_hot_reloader.h"
 #include "xml_registration.h"
 
@@ -26,6 +26,7 @@
 
 extern "C" {
 #include "helix-xml/src/xml/lv_xml.h"
+#include "helix-xml/src/xml/lv_xml_component_private.h"
 }
 
 namespace fs = std::filesystem;
@@ -253,14 +254,68 @@ TEST_CASE_METHOD(LazyXmlFixture, "a layout change keeps a component with a live 
     CHECK(label_text(live) == "base");
 }
 
-TEST_CASE_METHOD(LazyXmlFixture, "XML teardown removes the loader", "[xml][lazy]") {
-    write("lazy_probe_teardown.xml", component_with_label("x"));
-    helix::test::ScopeExit restore_loader([] { helix::register_xml_on_first_use(); });
+TEST_CASE_METHOD(LazyXmlFixture,
+                 "a component first used after a printer switch's subject teardown registers",
+                 "[xml][lazy]") {
+    write("lazy_probe_after_switch.xml", component_with_label("next printer"));
+    // A switch tears down through StaticSubjectRegistry, whose XmlSubjects entry is
+    // deinit_xml_subjects(); the next session's UI is built through the same loader.
+    StaticSubjectRegistry::instance().register_deinit("XmlSubjects", helix::deinit_xml_subjects);
+    REQUIRE(StaticSubjectRegistry::instance().deinit_one("XmlSubjects"));
 
-    helix::deinit_xml_subjects();
+    auto* obj =
+        static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "lazy_probe_after_switch", nullptr));
 
-    CHECK(lv_xml_component_get_scope("lazy_probe_teardown") == nullptr);
-    CHECK_FALSE(is_registered("lazy_probe_teardown"));
+    REQUIRE(obj != nullptr);
+    CHECK(label_text(obj) == "next printer");
+}
+
+TEST_CASE_METHOD(LazyXmlFixture, "a layout change keeps a component holding a C++ subject",
+                 "[xml][lazy]") {
+    write("lazy_probe_cpp_subject.xml", component_with_label("x"));
+    lv_obj_delete(
+        static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "lazy_probe_cpp_subject", nullptr)));
+    lv_xml_component_scope_t* scope = lv_xml_component_find_scope("lazy_probe_cpp_subject");
+    REQUIRE(scope != nullptr);
+    static lv_subject_t subject;
+    lv_subject_init_int(&subject, 0);
+    REQUIRE(lv_xml_register_subject(scope, "lazy_probe_cpp_value", &subject) == LV_RESULT_OK);
+
+    helix::unregister_idle_xml_components();
+
+    CHECK(lv_xml_component_find_scope("lazy_probe_cpp_subject") == scope);
+    lv_xml_component_unregister("lazy_probe_cpp_subject");
+    lv_subject_deinit(&subject);
+}
+
+TEST_CASE_METHOD(LazyXmlFixture, "a layout change keeps a component whose style was borrowed",
+                 "[xml][lazy]") {
+    write("lazy_probe_lender.xml", "<component><styles><style name=\"lent\" radius=\"7\"/>"
+                                   "</styles><view extends=\"lv_obj\"/></component>");
+    write("lazy_probe_borrower.xml", "<component><view extends=\"lv_obj\">"
+                                     "<style name=\"lazy_probe_lender.lent\"/></view></component>");
+    lv_obj_delete(
+        static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "lazy_probe_borrower", nullptr)));
+    lv_xml_component_scope_t* lender = lv_xml_component_find_scope("lazy_probe_lender");
+    REQUIRE(lender != nullptr);
+    REQUIRE(lender->instance_cnt == 0);
+
+    helix::unregister_idle_xml_components();
+
+    CHECK(lv_xml_component_find_scope("lazy_probe_lender") == lender);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "a layout change keeps color_picker's C++ constants",
+                 "[xml][lazy][ui_integration]") {
+    lv_xml_component_scope_t* scope = lv_xml_component_find_scope("color_picker");
+    REQUIRE(scope != nullptr);
+    REQUIRE(scope->instance_cnt == 0);
+
+    helix::unregister_idle_xml_components();
+
+    lv_xml_component_scope_t* after = lv_xml_component_find_scope("color_picker");
+    REQUIRE(after != nullptr);
+    CHECK(lv_xml_get_const(after, "sv_size") != nullptr);
 }
 
 TEST_CASE_METHOD(LVGLUITestFixture, "the eager components are registered before first use",

@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include <string>
+
 namespace helix {
 
 /**
@@ -34,13 +36,33 @@ void register_xml_components();
 void register_xml_on_first_use();
 
 /**
+ * @brief Remove the first-use loader
+ *
+ * Process exit only: teardown then looks components up without loading any.
+ * A printer switch keeps it, since the next session builds its UI through it.
+ */
+void stop_xml_on_first_use();
+
+/**
+ * @brief Mark a component whose scope C++ extends after it registers
+ *
+ * Call it from code that pushes constants into a component scope. Neither a
+ * resize (unregister_idle_xml_components) nor a hot reload replaces a marked
+ * component with a fresh copy from its file, which would lose them.
+ */
+void keep_xml_component_registered(const char* name);
+
+/// True for a component marked by keep_xml_component_registered(), and for globals.
+bool is_xml_component_cpp_extended(const std::string& name);
+
+/**
  * @brief Drop first-use components no live widget is built from
  *
  * A component's px tokens and its layout variant are fixed when it registers.
  * After a resize or layout change, unregistering the idle ones lets their next
  * use register them again at the new geometry. A component with live
- * instances, a C++-registered subject or a style another scope borrowed keeps
- * its registration.
+ * instances, constants or a subject registered from C++, or a style another
+ * scope borrowed keeps its registration.
  */
 void unregister_idle_xml_components();
 
@@ -48,7 +70,7 @@ void unregister_idle_xml_components();
  * @brief Deinitialize XML-related subjects
  *
  * Must be called during shutdown before lv_deinit().
- * Called by StaticPanelRegistry. Also removes the component loader.
+ * Called by StaticPanelRegistry.
  */
 void deinit_xml_subjects();
 

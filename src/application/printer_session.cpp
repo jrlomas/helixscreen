@@ -82,6 +82,7 @@
 #include "u1_stock_detection_source.h"
 #include "ui/ui_widget_helpers.h"
 #include "upgrade_banner.h"
+#include "xml_registration.h"
 #if HELIX_HAS_PLUGINS
 #include "plugin_dir_watcher.h"
 #include "plugin_host.h"
@@ -849,6 +850,13 @@ void PrinterSession::teardown_printer_scope(TeardownScope scope, DisplayManager*
             helix::ui::destroy_static_panels();
         }
     };
+
+    // Teardown looks components up to release what it registered; on exit none of
+    // that may load a file. A switch keeps the loader: the next session's UI is
+    // built through it.
+    if (exiting) {
+        helix::stop_xml_on_first_use();
+    }
 
     // A callback armed for the old printer's wizard must not fire against the next one.
     set_wizard_cancel_callback(nullptr);

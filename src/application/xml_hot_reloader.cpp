@@ -6,6 +6,7 @@
 
 #include "helix_thread.h"
 #include "layout_manager.h"
+#include "xml_registration.h"
 
 #include <spdlog/spdlog.h>
 
@@ -22,29 +23,6 @@ extern "C" {
 namespace fs = std::filesystem;
 
 namespace {
-
-/// Components whose registered scope is extended from C++ after startup, so
-/// re-registering them from XML alone cannot reproduce the live scope.
-///
-/// - globals: not a UI component at all. It owns every XML subject in the app
-///   (~1000 of them, most backed by C++-owned storage) plus the runtime theme
-///   constants ThemeManager injects. Those constants are pushed in from C++
-///   after registration, so a fresh registration from globals.xml resolves every
-///   theme token to nothing across the entire UI. (Scope teardown itself is now
-///   safe — `lv_xml_component_unregister` skips borrowed subjects instead of
-///   free()ing C++ storage — but the constants are not recoverable.)
-/// - color_picker: register_xml_components() pushes breakpoint-computed
-///   constants into its scope after registration. A fresh registration would
-///   resolve those tokens to nothing.
-constexpr const char* NON_RELOADABLE_COMPONENTS[] = {"globals", "color_picker"};
-
-bool is_non_reloadable(const std::string& component) {
-    for (const auto* name : NON_RELOADABLE_COMPONENTS) {
-        if (component == name)
-            return true;
-    }
-    return false;
-}
 
 /// Read a file into `out`. Returns false on open/read failure (e.g. file is
 /// mid-rename, briefly empty, or permission-denied). Sets `err_out` for logging.
@@ -328,7 +306,9 @@ void XmlHotReloader::scan_and_reload() {
         auto comp_name = component_name_from_path(fs::path(abs_path));
         auto lvgl_path = file_to_lvgl_path_[abs_path];
 
-        if (is_non_reloadable(comp_name)) {
+        // A fresh registration from the file alone would lose what C++ pushed
+        // into the scope (globals: the theme constants).
+        if (helix::is_xml_component_cpp_extended(comp_name)) {
             cached_mtime = current_mtime;
             spdlog::warn("[HotReload] '{}' cannot be hot-reloaded (its scope is extended from "
                          "C++ after registration) — restart to pick up the change",
