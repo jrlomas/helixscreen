@@ -200,21 +200,28 @@ void invalidate_static_parts(lv_display_t* disp, lv_obj_t* obj, const lv_area_t&
 
     if (lv_obj_get_scrollbar_mode(obj) == LV_SCROLLBAR_MODE_OFF)
         return;
-    // The bars' whole tracks, from the scrollbar styles: a bar shown or hidden
-    // by this scroll is covered either way.
-    const int32_t sb_w = lv_obj_get_style_width(obj, LV_PART_SCROLLBAR);
-    const int32_t sb_x2 = c.x2 - lv_obj_get_style_pad_right(obj, LV_PART_SCROLLBAR);
-    const int32_t sb_y2 = c.y2 - lv_obj_get_style_pad_bottom(obj, LV_PART_SCROLLBAR);
-    lv_area_t col = {sb_x2 - sb_w - 1, c.y1, sb_x2 + 1, c.y2};
-    lv_area_t row = {c.x1, sb_y2 - sb_w - 1, c.x2, sb_y2 + 1};
+    // A bar draws over the content, so the shift carried the old one along;
+    // the rest of a track is content the shift already moved right. A vertical
+    // scroll leaves the horizontal thumb where it was: it and its moved copy.
+    // The vertical thumb travels no further than the content does, so the old
+    // one sat within dy of the new one and its copy within 2 * dy: the new
+    // thumb grown that far toward the shift covers both. A bar that comes with
+    // a drag is drawn by its first frame, which renders in full, and LVGL
+    // clears an active-mode bar itself when the drag ends.
     lv_area_t hor, ver;
     lv_obj_get_scrollbar_area(obj, &hor, &ver);
-    if (lv_area_get_width(&ver) > 0)
-        lv_area_join(&col, &col, &ver);
-    if (lv_area_get_width(&hor) > 0)
-        lv_area_join(&row, &row, &hor);
-    invalidate_static(disp, col, r, dy);
-    invalidate_static(disp, row, r, dy);
+    if (lv_area_get_width(&hor) > 0) {
+        lv_area_increase(&hor, 1, 1); // a rounded thumb's antialiased edge
+        invalidate_static(disp, hor, r, dy);
+    }
+    if (lv_area_get_width(&ver) > 0) {
+        lv_area_increase(&ver, 1, 1);
+        if (dy > 0)
+            ver.y2 += 2 * dy;
+        else
+            ver.y1 += 2 * dy;
+        invalidate_clipped(disp, ver, r);
+    }
 }
 
 /// The area `lv_obj_invalidate(obj)` hands to the display.

@@ -384,11 +384,26 @@ TEST_CASE_METHOD(ScrollBlitFixture, "scroll blit handles a scroll that layout ma
 }
 
 namespace {
-std::vector<lv_area_t>* g_invalidated = nullptr;
-void record_invalidated(lv_event_t* e) {
-    if (g_invalidated)
-        g_invalidated->push_back(*static_cast<lv_area_t*>(lv_event_get_param(e)));
-}
+/// Every area the display is asked to redraw while it lives.
+struct InvalidationRecorder {
+    explicit InvalidationRecorder(lv_display_t* disp) : disp_(disp) {
+        lv_display_add_event_cb(disp_, record, LV_EVENT_INVALIDATE_AREA, this);
+    }
+    ~InvalidationRecorder() {
+        lv_display_remove_event_cb_with_user_data(disp_, record, this);
+    }
+    InvalidationRecorder(const InvalidationRecorder&) = delete;
+    InvalidationRecorder& operator=(const InvalidationRecorder&) = delete;
+
+    std::vector<lv_area_t> areas;
+
+  private:
+    static void record(lv_event_t* e) {
+        static_cast<InvalidationRecorder*>(lv_event_get_user_data(e))
+            ->areas.push_back(*static_cast<lv_area_t*>(lv_event_get_param(e)));
+    }
+    lv_display_t* disp_;
+};
 } // namespace
 
 TEST_CASE_METHOD(ScrollBlitFixture,
@@ -410,12 +425,12 @@ TEST_CASE_METHOD(ScrollBlitFixture,
     render();
 
     std::vector<lv_area_t> invalidated;
-    g_invalidated = &invalidated;
-    lv_display_add_event_cb(disp_, record_invalidated, LV_EVENT_INVALIDATE_AREA, nullptr);
-    lv_obj_scroll_by(list_, 0, -40, LV_ANIM_OFF);
-    render();
-    lv_display_remove_event_cb_with_user_data(disp_, record_invalidated, nullptr);
-    g_invalidated = nullptr;
+    {
+        InvalidationRecorder recorder(disp_);
+        lv_obj_scroll_by(list_, 0, -40, LV_ANIM_OFF);
+        render();
+        invalidated = recorder.areas;
+    }
 
     // The radius rows along the top edge, which the upward scroll exposes nothing in.
     const bool top_band =
@@ -425,4 +440,40 @@ TEST_CASE_METHOD(ScrollBlitFixture,
         });
     CHECK(top_band == band_expected);
     REQUIRE(mismatch() == "0 px differ");
+}
+
+TEST_CASE_METHOD(ScrollBlitFixture, "scroll blit redraws a scrollbar's thumbs, not its tracks",
+                 "[scroll_blit]") {
+    lv_area_t c;
+    lv_obj_get_coords(list_, &c);
+    bool horizontal_bar = true;
+    SECTION("bars always on") {}
+    SECTION("bars only where the content overflows") {
+        lv_obj_set_scrollbar_mode(list_, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_scroll_dir(list_, LV_DIR_VER);
+        horizontal_bar = false;
+    }
+    render();
+
+    for (int32_t dy : {-40, -70, 30, 55}) {
+        CAPTURE(dy);
+        std::vector<lv_area_t> invalidated;
+        {
+            InvalidationRecorder recorder(disp_);
+            lv_obj_scroll_by(list_, 0, dy, LV_ANIM_OFF);
+            render();
+            invalidated = recorder.areas;
+        }
+        for (const lv_area_t& a : invalidated) {
+            INFO(a.x1 << "," << a.y1 << "-" << a.x2 << "," << a.y2);
+            const bool narrow = lv_area_get_width(&a) <= 12;
+            CHECK_FALSE((narrow && lv_area_get_height(&a) >= lv_area_get_height(&c) - 2));
+            if (!horizontal_bar) {
+                const bool bottom_row = a.y2 >= c.y2 - 12 && lv_area_get_height(&a) <= 12 &&
+                                        lv_area_get_width(&a) > lv_area_get_width(&c) / 2;
+                CHECK_FALSE(bottom_row);
+            }
+        }
+        REQUIRE(mismatch() == "0 px differ");
+    }
 }
