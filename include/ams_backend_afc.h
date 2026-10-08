@@ -206,10 +206,19 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
         /// Lowercased AFC_OpenAMS unit name -> lowercased `oams` option, the
         /// [AFC_OAMS] controller (and temperature sensor) name.
         std::unordered_map<std::string, std::string> oams_names;
-        /// Any AFC_extruder section wires a physical tool_start/tool_end pin;
-        /// nullopt when the config has no AFC_extruder section at all.
-        std::optional<bool> toolhead_sensor_fitted;
+        /// Lowercased AFC_extruder suffix -> whether that section wires a
+        /// physical tool_start/tool_end pin.
+        std::unordered_map<std::string, bool> extruder_sensor_fitted;
     };
+
+    /// Whether a unit's toolhead has a sensor. @p unit_extruders are the
+    /// lowercased AFC_extruder suffixes the unit feeds, empty when unknown;
+    /// @p fitted is ConfigfileTopology::extruder_sensor_fitted. True when one
+    /// of the unit's extruders is fitted, false when all are known and none
+    /// is. A unit with an unknown extruder takes the answer every section
+    /// agrees on, and true when they disagree or the config has none.
+    static bool unit_toolhead_sensor_fitted(const std::vector<std::string>& unit_extruders,
+                                            const std::unordered_map<std::string, bool>& fitted);
 
     /// Reduces a printer.objects.query(configfile=settings) response to the
     /// few names AFC needs. Runs on the WebSocket thread so only this small
@@ -1108,6 +1117,11 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
      */
     void reorganize_slots();
 
+    /// Re-derive each unit's has_toolhead_sensor from extruder_sensor_fitted_
+    /// and the extruders its unit status and lanes name. Returns true when any
+    /// unit's flag changed. @pre mutex_ held.
+    bool refresh_unit_toolhead_sensors_unlocked();
+
     /**
      * @brief Compute filament segment from sensor states (no locking)
      *
@@ -1446,9 +1460,10 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     /// looked yet" — an empty extruder_klipper_names_ means both, and only the
     /// first justifies telling the user their config is missing something.
     bool configfile_answered_{false};
-    /// From the AFC_extruder pins in configfile; unknown until it answers,
-    /// and units report a toolhead sensor meanwhile.
-    std::optional<bool> toolhead_sensor_fitted_;
+    /// From the AFC_extruder pins in configfile, keyed by lowercased section
+    /// suffix; empty until it answers, and units report a toolhead sensor
+    /// meanwhile.
+    std::unordered_map<std::string, bool> extruder_sensor_fitted_;
 
     /// True once an `[AFC_Toolchanger …]` section has been seen in
     /// configfile.settings. Never cleared by a config that lacks one — absence

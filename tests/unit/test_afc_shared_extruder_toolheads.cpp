@@ -296,3 +296,84 @@ TEST_CASE("AFC extruder warning: an unparseable extruder_name names the value it
 
     CHECK(log.count_containing("its extruder_name is 'my_extruder_left'") > 0);
 }
+
+TEST_CASE("AFC toolhead sensor: each unit reads its own extruders' pins",
+          "[ams][afc][configfile][toolhead_sensor]") {
+    auto fixture = load_fixture("afc_u1_shared_extruders.json");
+    const auto& status = fixture["status"];
+
+    AfcSharedExtruderHelper afc;
+    afc.discover_from(status);
+    afc.feed_until_settled(status);
+    int state_events = 0;
+    afc.set_event_callback([&](const std::string& event, const std::string&) {
+        state_events += event == AmsBackend::EVENT_STATE_CHANGED;
+    });
+
+    auto sensor_of = [&](const std::string& unit_name) {
+        for (const auto& unit : afc.get_system_info().units) {
+            if (unit.display_name == unit_name)
+                return unit.has_toolhead_sensor;
+        }
+        FAIL("no unit " << unit_name);
+        return false;
+    };
+    const std::vector<std::string> units = {"Turtle_1", "HTLF_claymore_1", "Vivid_1", "EMU_1",
+                                            "Tools"};
+    // Unknown until configfile answers.
+    for (const auto& name : units) {
+        CAPTURE(name);
+        REQUIRE(sensor_of(name));
+    }
+
+    auto section = [](const char* klipper_name, nlohmann::json pins) {
+        pins["extruder_name"] = klipper_name;
+        return pins;
+    };
+    nlohmann::json settings = {
+        {"afc_extruder e0", section("extruder", {{"pin_tool_start", "Turtle_1:PA1"}})},
+        {"afc_extruder e1", section("extruder1", {{"pin_tool_start", "buffer"}})},
+        {"afc_extruder e2", section("extruder2", {{"pin_tool_end", "PB2"}})},
+    };
+
+    SECTION("units on an unfitted extruder report none, the rest keep theirs") {
+        settings["afc_extruder e3"] =
+            section("extruder3", {{"pin_tool_start", "none"}, {"pin_tool_end", ""}});
+        AfcTestAccess::apply_configfile_topology(
+            afc, AmsBackendAfc::parse_configfile_topology(
+                     {{"result", {{"status", {{"configfile", {{"settings", settings}}}}}}}}));
+        CHECK(sensor_of("Turtle_1"));
+        CHECK(sensor_of("HTLF_claymore_1"));
+        CHECK_FALSE(sensor_of("Vivid_1"));
+        CHECK_FALSE(sensor_of("EMU_1"));
+        // Tools feeds e1 (borrowed from the buffer) and e2 (fitted).
+        CHECK(sensor_of("Tools"));
+        CHECK(state_events == 1);
+    }
+    SECTION("a unit whose extruders the config does not describe keeps the default") {
+        // e3 has no section, and the sections that exist disagree.
+        AfcTestAccess::apply_configfile_topology(
+            afc, AmsBackendAfc::parse_configfile_topology(
+                     {{"result", {{"status", {{"configfile", {{"settings", settings}}}}}}}}));
+        CHECK(sensor_of("Vivid_1"));
+        CHECK(sensor_of("EMU_1"));
+        CHECK(state_events == 0);
+    }
+}
+
+TEST_CASE("AFC toolhead sensor: the per-unit rule", "[ams][afc][toolhead_sensor]") {
+    const std::unordered_map<std::string, bool> mixed = {{"e0", true}, {"e1", false}};
+    const std::unordered_map<std::string, bool> none = {{"e0", false}, {"e1", false}};
+    const std::unordered_map<std::string, bool> all = {{"e0", true}, {"e1", true}};
+
+    CHECK(AmsBackendAfc::unit_toolhead_sensor_fitted({"e0"}, mixed));
+    CHECK_FALSE(AmsBackendAfc::unit_toolhead_sensor_fitted({"e1"}, mixed));
+    CHECK(AmsBackendAfc::unit_toolhead_sensor_fitted({"e1", "e0"}, mixed));
+    // Unknown extruders: the sections' common answer, else the default.
+    CHECK(AmsBackendAfc::unit_toolhead_sensor_fitted({}, mixed));
+    CHECK(AmsBackendAfc::unit_toolhead_sensor_fitted({"e9"}, mixed));
+    CHECK_FALSE(AmsBackendAfc::unit_toolhead_sensor_fitted({}, none));
+    CHECK_FALSE(AmsBackendAfc::unit_toolhead_sensor_fitted({"e1", "e9"}, none));
+    CHECK(AmsBackendAfc::unit_toolhead_sensor_fitted({"e9"}, all));
+    CHECK(AmsBackendAfc::unit_toolhead_sensor_fitted({}, {}));
+}

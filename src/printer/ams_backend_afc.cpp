@@ -4022,11 +4022,8 @@ AmsBackendAfc::parse_configfile_topology(const nlohmann::json& response) {
             const std::string v = helix::text_io::to_lower(pin->get<std::string>());
             return !v.empty() && v != "buffer" && v != "none" && v != "unknown";
         };
-        // One flag ORed across every AFC_extruder section, so on a
-        // multi-extruder setup one fitted sensor marks every unit. Per-unit needs
-        // the extruder-to-unit mapping rebuild_unit_map_from_klipper() derives.
-        topo.toolhead_sensor_fitted = topo.toolhead_sensor_fitted.value_or(false) ||
-                                      wired("pin_tool_start") || wired("pin_tool_end");
+        topo.extruder_sensor_fitted[key.substr(std::strlen(EXTRUDER_PREFIX))] =
+            wired("pin_tool_start") || wired("pin_tool_end");
         const auto name = it.value().find("extruder_name");
         if (name == it.value().end() || !name->is_string()) {
             continue;
@@ -4047,12 +4044,9 @@ void AmsBackendAfc::apply_configfile_topology(ConfigfileTopology topo) {
         std::lock_guard<std::mutex> lock(mutex_);
         extruder_klipper_names_ = std::move(topo.extruder_names);
         unit_oams_names_ = std::move(topo.oams_names);
-        if (topo.toolhead_sensor_fitted) {
-            toolhead_sensor_fitted_ = topo.toolhead_sensor_fitted;
-            for (auto& unit : system_info_.units) {
-                sensor_changed |= unit.has_toolhead_sensor != *toolhead_sensor_fitted_;
-                unit.has_toolhead_sensor = *toolhead_sensor_fitted_;
-            }
+        if (!topo.extruder_sensor_fitted.empty()) {
+            extruder_sensor_fitted_ = std::move(topo.extruder_sensor_fitted);
+            sensor_changed = refresh_unit_toolhead_sensors_unlocked();
         }
         apply_unit_environment();
         // Settings were read. Only now does an absent extruder_name
@@ -4084,6 +4078,69 @@ void AmsBackendAfc::apply_configfile_topology(ConfigfileTopology topo) {
     // the next status frame.
     if (sensor_changed)
         emit_event(EVENT_STATE_CHANGED);
+}
+
+bool AmsBackendAfc::unit_toolhead_sensor_fitted(
+    const std::vector<std::string>& unit_extruders,
+    const std::unordered_map<std::string, bool>& fitted) {
+    bool any_unknown = unit_extruders.empty();
+    for (const auto& name : unit_extruders) {
+        const auto it = fitted.find(name);
+        if (it == fitted.end())
+            any_unknown = true;
+        else if (it->second)
+            return true;
+    }
+    if (!any_unknown)
+        return false;
+    if (fitted.empty())
+        return true;
+    const bool first = fitted.begin()->second;
+    const bool agree = std::all_of(fitted.begin(), fitted.end(),
+                                   [first](const auto& entry) { return entry.second == first; });
+    return agree ? first : true;
+}
+
+bool AmsBackendAfc::refresh_unit_toolhead_sensors_unlocked() {
+    // A unit status names AFC_extruder sections; a lane names its extruder by
+    // Klipper name once configfile has answered, so map those back to sections.
+    auto section_of = [this](const std::string& extruder) {
+        std::string name = helix::text_io::to_lower(extruder);
+        if (extruder_sensor_fitted_.count(name))
+            return name;
+        for (const auto& [section, klipper_name] : extruder_klipper_names_) {
+            if (helix::text_io::to_lower(klipper_name) == name)
+                return section;
+        }
+        return name;
+    };
+
+    bool changed = false;
+    for (auto& unit : system_info_.units) {
+        std::vector<std::string> extruders;
+        auto add = [&](const std::string& extruder) {
+            if (extruder.empty())
+                return;
+            std::string section = section_of(extruder);
+            if (std::find(extruders.begin(), extruders.end(), section) == extruders.end())
+                extruders.push_back(std::move(section));
+        };
+        for (const auto& info : unit_infos_) {
+            if (info.type + " " + info.name == unit.name || info.name == unit.name) {
+                for (const auto& extruder : info.extruders)
+                    add(extruder);
+                break;
+            }
+        }
+        for (int i = 0; i < unit.slot_count; ++i) {
+            if (const auto* entry = slots_.get(unit.first_slot_global_index + i))
+                add(entry->info.extruder_name);
+        }
+        const bool fitted = unit_toolhead_sensor_fitted(extruders, extruder_sensor_fitted_);
+        changed |= unit.has_toolhead_sensor != fitted;
+        unit.has_toolhead_sensor = fitted;
+    }
+    return changed;
 }
 
 void AmsBackendAfc::query_afc_configfile_topology() {
@@ -4763,8 +4820,7 @@ void AmsBackendAfc::initialize_slots(const std::vector<std::string>& lane_names)
     unit.slot_count = lane_count;
     unit.first_slot_global_index = 0;
     unit.connected = true;
-    unit.has_encoder = false; // AFC typically uses optical sensors, not encoders
-    unit.has_toolhead_sensor = toolhead_sensor_fitted_.value_or(true);
+    unit.has_encoder = false;     // AFC typically uses optical sensors, not encoders
     unit.has_slot_sensors = true; // AFC has per-lane sensors
     unit.has_hub_sensor = true;   // AFC hubs have filament sensors
 
@@ -4782,6 +4838,7 @@ void AmsBackendAfc::initialize_slots(const std::vector<std::string>& lane_names)
     system_info_.units.clear();
     system_info_.units.push_back(unit);
     system_info_.total_slots = lane_count;
+    refresh_unit_toolhead_sensors_unlocked();
 
     // Initialize tool-to-lane mapping (1:1 default) in the registry.
     // The registry is the single source of truth for tool mappings — lane
@@ -4825,6 +4882,7 @@ void AmsBackendAfc::reorganize_slots() {
                 }
             }
         }
+        refresh_unit_toolhead_sensors_unlocked();
         apply_unit_environment();
         return;
     }
@@ -4874,7 +4932,6 @@ void AmsBackendAfc::reorganize_slots() {
         unit.slot_count = static_cast<int>(lanes.size());
         unit.first_slot_global_index = global_slot_offset;
         unit.connected = true;
-        unit.has_toolhead_sensor = toolhead_sensor_fitted_.value_or(true);
         unit.has_slot_sensors = true;
 
         // Set hub sensor state — two strategies:
@@ -4936,6 +4993,7 @@ void AmsBackendAfc::reorganize_slots() {
     // on every one of them. Re-derive it from what AFC last reported — the buffer
     // parser will not run again until a buffer field actually changes.
     apply_buffer_health_to_units();
+    refresh_unit_toolhead_sensors_unlocked();
     apply_unit_environment();
 
     spdlog::info("[AMS AFC] Reorganized into {} units, {} total slots", system_info_.units.size(),
