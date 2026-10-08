@@ -114,14 +114,16 @@ bool PrinterProfileState::clear_firmware_option_defaults() {
     return true;
 }
 
-void PrinterProfileState::apply_dynamic_options(bool exclude_object_known,
-                                                bool timelapse_available) {
+void PrinterProfileState::apply_dynamic_options(bool exclude_object_known, bool timelapse_available,
+                                                const std::vector<skip_wrappers::Op>& skip_ops) {
     // Strip any previously synthesized dynamic options before re-adding so
     // this method is idempotent and handles capability changes (e.g.
     // moonraker-timelapse plugin going from absent to present).
     pre_print_option_set_.options.erase(
         std::remove_if(pre_print_option_set_.options.begin(), pre_print_option_set_.options.end(),
-                       [](const PrePrintOption& opt) { return opt.id == "timelapse"; }),
+                       [](const PrePrintOption& opt) {
+                           return opt.id == "timelapse" || skip_wrappers::is_wrapper_option(opt);
+                       }),
         pre_print_option_set_.options.end());
 
     // Adaptive bed mesh: a property of the SINGLE bed_mesh toggle, not a separate
@@ -194,6 +196,15 @@ void PrinterProfileState::apply_dynamic_options(bool exclude_object_known,
         cmd.command_disabled = "timelapse:off";
         tl.strategy = cmd;
         pre_print_option_set_.options.push_back(std::move(tl));
+    }
+
+    // Skip toggles for the leveling steps helix_skips.cfg wraps. A database
+    // option for the step is the printer's own way to skip it and wins.
+    for (auto op : skip_ops) {
+        PrePrintOption opt = skip_wrappers::option_for(op);
+        if (!pre_print_option_set_.declares_capability(opt.capability_key())) {
+            pre_print_option_set_.options.push_back(std::move(opt));
+        }
     }
 
     // Maintain the (category, order) sort guarantee from

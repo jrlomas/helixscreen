@@ -16,6 +16,9 @@
 //
 // No I/O and no LVGL: callers fetch configfile.settings and do the uploads.
 
+#include "pre_print_option.h"
+
+#include <array>
 #include <string>
 #include <vector>
 
@@ -51,6 +54,36 @@ std::vector<Op> active(const nlohmann::json& configfile_settings);
 
 /// The helix_skips.cfg text for these Ops; empty string for no Ops.
 std::string generate(const std::vector<Op>& ops);
+
+/// What decides whether a skip toggle is offered, folded from status frames.
+struct Gates {
+    bool mesh_loaded = false;           ///< bed_mesh.probed_matrix non-empty
+    bool qgl_applied = false;           ///< quad_gantry_level.applied
+    bool z_tilt_applied = false;        ///< z_tilt.applied or z_tilt_ng.applied
+    std::array<bool, 3> skip_pending{}; ///< `_HELIX_PREP` run_* reads 0, by Op
+};
+
+/// Fold one status frame into the gates. A field the frame omits keeps its
+/// value, so delta frames work. True when anything changed.
+bool update_gates(Gates& gates, const nlohmann::json& status);
+
+/// The active Ops whose toggle is offered now: a loaded mesh for BedMesh (the
+/// skip keeps it), the level applied since the last motors-off for Qgl/ZTilt.
+std::vector<Op> offerable(const std::vector<Op>& active, const Gates& gates);
+
+/// Some `_HELIX_PREP` flag reads 0: a skip was set and never consumed.
+bool any_skip_pending(const Gates& gates);
+
+/// Status subscriptions update_gates() reads beyond bed_mesh, as
+/// {object: [fields]}. has_z_tilt picks z_tilt over Kalico's z_tilt_ng.
+nlohmann::json status_fields(const std::vector<Op>& active, bool has_z_tilt);
+
+/// The print-detail toggle for an Op: a PreStartGcode line setting its flag,
+/// ON by default. Its id is the step's usual option id (bed_mesh, qgl, z_tilt).
+PrePrintOption option_for(Op op);
+
+/// True for an option built by option_for().
+bool is_wrapper_option(const PrePrintOption& opt);
 
 /// Follows Klipper across the restart that loads a newly staged helix_skips.cfg.
 /// A config error there is most likely ours, and removing the file is the way

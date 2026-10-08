@@ -332,6 +332,12 @@ void PrinterState::update_from_status(const json& state, double eventtime,
     // Delegate print updates to print state component
     print_domain_.update_from_status(state);
 
+    // A loaded mesh and an applied level are what offer the skip toggles.
+    if (helix::skip_wrappers::update_gates(skip_gates_, state)) {
+        apply_dynamic_options();
+        update_gcode_modification_visibility();
+    }
+
     // Extract kinematics type (determines if bed moves on Z or gantry moves)
     // This is not part of motion_state_ as it affects printer_bed_moves_ subject
     if (state.contains("toolhead")) {
@@ -844,7 +850,9 @@ void PrinterState::set_printer_type_internal(const std::string& type) {
 }
 
 void PrinterState::apply_dynamic_options() {
-    profile_state_.apply_dynamic_options(discovery_.has_exclude_object(), timelapse_available());
+    profile_state_.apply_dynamic_options(
+        discovery_.has_exclude_object(), timelapse_available(),
+        helix::skip_wrappers::offerable(discovery_.skip_active(), skip_gates_));
 }
 
 bool PrinterState::timelapse_available() {

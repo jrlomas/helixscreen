@@ -1317,6 +1317,12 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
     subscription_objects["bed_mesh"] = json::array(
         {"profile_name", "probed_matrix", "mesh_min", "mesh_max", "mesh_params", "profiles"});
 
+    // Leveling-skip gates and flags (include/preprint_skip_wrappers.h).
+    const json skip_fields = helix::skip_wrappers::status_fields(hw.skip_active(), hw.has_z_tilt());
+    for (auto it = skip_fields.begin(); it != skip_fields.end(); ++it) {
+        subscription_objects[it.key()] = it.value();
+    }
+
     // Exclude object (for mid-print object exclusion). PrinterState reads
     // excluded_objects + objects (with name/center/polygon) + current_object.
     subscription_objects["exclude_object"] =

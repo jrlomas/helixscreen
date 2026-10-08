@@ -166,6 +166,131 @@ std::vector<Op> active(const nlohmann::json& configfile_settings) {
     return ops;
 }
 
+namespace {
+
+constexpr Op ALL_OPS[] = {Op::BedMesh, Op::Qgl, Op::ZTilt};
+
+bool fold_bool(bool& slot, bool value) {
+    const bool changed = slot != value;
+    slot = value;
+    return changed;
+}
+
+/// `<object>.applied` from a frame, when the frame carries it.
+const nlohmann::json* applied_field(const nlohmann::json& status, const char* object) {
+    auto obj = status.find(object);
+    if (obj == status.end() || !obj->is_object()) {
+        return nullptr;
+    }
+    auto it = obj->find("applied");
+    return it != obj->end() && it->is_boolean() ? &*it : nullptr;
+}
+
+const char* option_id(Op op) {
+    switch (op) {
+    case Op::BedMesh:
+        return "bed_mesh";
+    case Op::Qgl:
+        return "qgl";
+    case Op::ZTilt:
+        return "z_tilt";
+    }
+    return "";
+}
+
+} // namespace
+
+bool update_gates(Gates& gates, const nlohmann::json& status) {
+    if (!status.is_object()) {
+        return false;
+    }
+    bool changed = false;
+    if (auto mesh = status.find("bed_mesh"); mesh != status.end() && mesh->is_object()) {
+        if (auto m = mesh->find("probed_matrix"); m != mesh->end()) {
+            changed |= fold_bool(gates.mesh_loaded, m->is_array() && !m->empty());
+        }
+    }
+    if (const auto* a = applied_field(status, "quad_gantry_level")) {
+        changed |= fold_bool(gates.qgl_applied, a->get<bool>());
+    }
+    for (const char* object : {"z_tilt", "z_tilt_ng"}) {
+        if (const auto* a = applied_field(status, object)) {
+            changed |= fold_bool(gates.z_tilt_applied, a->get<bool>());
+        }
+    }
+    auto prep = status.find(std::string("gcode_macro ") + PREP_MACRO);
+    if (prep != status.end() && prep->is_object()) {
+        for (Op op : ALL_OPS) {
+            auto v = prep->find(flag_for(op));
+            if (v != prep->end() && v->is_number()) {
+                changed |=
+                    fold_bool(gates.skip_pending[static_cast<size_t>(op)], v->get<int>() == 0);
+            }
+        }
+    }
+    return changed;
+}
+
+std::vector<Op> offerable(const std::vector<Op>& active, const Gates& gates) {
+    std::vector<Op> ops;
+    for (Op op : active) {
+        const bool open = op == Op::BedMesh ? gates.mesh_loaded
+                          : op == Op::Qgl   ? gates.qgl_applied
+                                            : gates.z_tilt_applied;
+        if (open) {
+            ops.push_back(op);
+        }
+    }
+    return ops;
+}
+
+bool any_skip_pending(const Gates& gates) {
+    for (bool pending : gates.skip_pending) {
+        if (pending) {
+            return true;
+        }
+    }
+    return false;
+}
+
+nlohmann::json status_fields(const std::vector<Op>& active, bool has_z_tilt) {
+    nlohmann::json fields = nlohmann::json::object();
+    if (active.empty()) {
+        return fields;
+    }
+    nlohmann::json flags = nlohmann::json::array();
+    for (Op op : active) {
+        flags.push_back(flag_for(op));
+        if (op == Op::Qgl) {
+            fields["quad_gantry_level"] = nlohmann::json::array({"applied"});
+        } else if (op == Op::ZTilt) {
+            fields[has_z_tilt ? "z_tilt" : "z_tilt_ng"] = nlohmann::json::array({"applied"});
+        }
+    }
+    fields[std::string("gcode_macro ") + PREP_MACRO] = std::move(flags);
+    return fields;
+}
+
+PrePrintOption option_for(Op op) {
+    PrePrintOption opt;
+    opt.id = option_id(op);
+    opt.category = PrePrintCategory::Mechanical;
+    opt.order = static_cast<int>(op);
+    opt.default_enabled = true; // PRINT_START runs the step unless told to skip it
+    opt.requires_macro = PREP_MACRO;
+    opt.strategy_kind = PrePrintStrategyKind::PreStartGcode;
+    PrePrintStrategyPreStartGcode line;
+    line.gcode_template = std::string("SET_GCODE_VARIABLE MACRO=") + PREP_MACRO +
+                          " VARIABLE=" + flag_for(op) + " VALUE={value}";
+    line.emit_when_disabled = true;
+    opt.strategy = std::move(line);
+    return opt;
+}
+
+bool is_wrapper_option(const PrePrintOption& opt) {
+    return opt.requires_macro == PREP_MACRO;
+}
+
 LoadWatch::Verdict LoadWatch::feed(bool ready, bool error) {
     if (error) {
         return Verdict::Failed;

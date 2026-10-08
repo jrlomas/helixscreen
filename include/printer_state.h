@@ -629,6 +629,11 @@ class PrinterState {
      */
     void set_macro_option_count(size_t count);
 
+    /// A `_HELIX_PREP` skip was set and never consumed (main thread only).
+    [[nodiscard]] bool skip_pending() const {
+        return helix::skip_wrappers::any_skip_pending(skip_gates_);
+    }
+
     /**
      * @brief Set printer kinematics type and update has_individual_xyz_homing and
      *        bed_moves subjects.
@@ -929,6 +934,9 @@ class PrinterState {
 
     /// The moonraker-timelapse plugin is available (main thread only).
     bool timelapse_available();
+
+    /// What offers the leveling skip toggles, folded from status frames.
+    helix::skip_wrappers::Gates skip_gates_;
 
     /**
      * @brief Update combined nav_buttons_enabled subject

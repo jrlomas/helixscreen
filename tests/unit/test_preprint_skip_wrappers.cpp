@@ -231,3 +231,79 @@ TEST_CASE("LoadWatch judges the restart that loads helix_skips.cfg", "[skip_wrap
         CHECK(watch.feed(false, true) == V::Failed);
     }
 }
+
+TEST_CASE("update_gates folds full and delta status frames", "[skip_wrappers]") {
+    sw::Gates g;
+
+    SECTION("a probed mesh opens the bed mesh gate and an empty one closes it") {
+        CHECK(sw::update_gates(g, {{"bed_mesh", {{"probed_matrix", {{0.1, 0.2}}}}}}));
+        CHECK(g.mesh_loaded);
+        CHECK(sw::update_gates(g, {{"bed_mesh", {{"probed_matrix", json::array()}}}}));
+        CHECK_FALSE(g.mesh_loaded);
+    }
+    SECTION("a frame without the field keeps the value") {
+        sw::update_gates(g, {{"bed_mesh", {{"probed_matrix", {{0.1}}}}}});
+        CHECK_FALSE(sw::update_gates(g, {{"bed_mesh", {{"profile_name", "default"}}}}));
+        CHECK(g.mesh_loaded);
+    }
+    SECTION("applied comes from quad_gantry_level, z_tilt or z_tilt_ng") {
+        CHECK(sw::update_gates(g, {{"quad_gantry_level", {{"applied", true}}}}));
+        CHECK(g.qgl_applied);
+        CHECK(sw::update_gates(g, {{"z_tilt_ng", {{"applied", true}}}}));
+        CHECK(g.z_tilt_applied);
+        CHECK(sw::update_gates(g, {{"z_tilt", {{"applied", false}}}}));
+        CHECK_FALSE(g.z_tilt_applied);
+    }
+    SECTION("a run flag of 0 is a pending skip until it reads 1 again") {
+        CHECK(sw::update_gates(g, {{"gcode_macro _HELIX_PREP", {{"run_qgl", 0}}}}));
+        CHECK(sw::any_skip_pending(g));
+        CHECK_FALSE(sw::update_gates(g, {{"gcode_macro _HELIX_PREP", {{"run_bed_mesh", 1}}}}));
+        CHECK(sw::any_skip_pending(g));
+        CHECK(sw::update_gates(g, {{"gcode_macro _HELIX_PREP", {{"run_qgl", 1}}}}));
+        CHECK_FALSE(sw::any_skip_pending(g));
+    }
+    SECTION("a non-object frame changes nothing") {
+        CHECK_FALSE(sw::update_gates(g, json::array()));
+    }
+}
+
+TEST_CASE("offerable opens each toggle on its own gate", "[skip_wrappers]") {
+    const std::vector<Op> all = {Op::BedMesh, Op::Qgl, Op::ZTilt};
+    sw::Gates g;
+    CHECK(sw::offerable(all, g).empty());
+    g.mesh_loaded = true;
+    CHECK(sw::offerable(all, g) == std::vector<Op>{Op::BedMesh});
+    g.qgl_applied = true;
+    g.z_tilt_applied = true;
+    CHECK(sw::offerable(all, g) == all);
+    CHECK(sw::offerable({Op::Qgl}, g) == std::vector<Op>{Op::Qgl});
+}
+
+TEST_CASE("status_fields subscribes what the gates read", "[skip_wrappers]") {
+    CHECK(sw::status_fields({}, false).empty());
+
+    const json f = sw::status_fields({Op::BedMesh, Op::Qgl, Op::ZTilt}, false);
+    CHECK(f["quad_gantry_level"] == json::array({"applied"}));
+    CHECK(f["z_tilt_ng"] == json::array({"applied"}));
+    CHECK_FALSE(f.contains("z_tilt"));
+    CHECK(f["gcode_macro _HELIX_PREP"] == json::array({"run_bed_mesh", "run_qgl", "run_z_tilt"}));
+
+    CHECK(sw::status_fields({Op::ZTilt}, true).contains("z_tilt"));
+}
+
+TEST_CASE("option_for renders the flag line for both toggle states", "[skip_wrappers]") {
+    const PrePrintOption opt = sw::option_for(Op::Qgl);
+    CHECK(opt.id == "qgl");
+    CHECK(opt.default_enabled);
+    CHECK(sw::is_wrapper_option(opt));
+    CHECK(render_pre_start_gcode(opt, false) ==
+          "SET_GCODE_VARIABLE MACRO=_HELIX_PREP VARIABLE=run_qgl VALUE=0");
+    CHECK(render_pre_start_gcode(opt, true) ==
+          "SET_GCODE_VARIABLE MACRO=_HELIX_PREP VARIABLE=run_qgl VALUE=1");
+    CHECK(sw::option_for(Op::BedMesh).id == "bed_mesh");
+    CHECK(sw::option_for(Op::ZTilt).id == "z_tilt");
+
+    PrePrintOption plain;
+    plain.id = "qgl";
+    CHECK_FALSE(sw::is_wrapper_option(plain));
+}
