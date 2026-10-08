@@ -4014,6 +4014,16 @@ AmsBackendAfc::parse_configfile_topology(const nlohmann::json& response) {
         if (key.rfind(EXTRUDER_PREFIX, 0) != 0 || !it.value().is_object()) {
             continue;
         }
+        // `buffer` borrows the buffer's ram sensor: no sensor at the toolhead.
+        auto wired = [&](const char* option) {
+            const auto pin = it.value().find(option);
+            if (pin == it.value().end() || !pin->is_string())
+                return false;
+            const std::string v = helix::text_io::to_lower(pin->get<std::string>());
+            return !v.empty() && v != "buffer" && v != "none" && v != "unknown";
+        };
+        topo.toolhead_sensor_fitted = topo.toolhead_sensor_fitted.value_or(false) ||
+                                      wired("pin_tool_start") || wired("pin_tool_end");
         const auto name = it.value().find("extruder_name");
         if (name == it.value().end() || !name->is_string()) {
             continue;
@@ -4021,6 +4031,47 @@ AmsBackendAfc::parse_configfile_topology(const nlohmann::json& response) {
         topo.extruder_names[key.substr(std::strlen(EXTRUDER_PREFIX))] = name->get<std::string>();
     }
     return topo;
+}
+
+void AmsBackendAfc::apply_configfile_topology(ConfigfileTopology topo) {
+    if (!topo.answered) {
+        spdlog::debug("[AMS AFC] configfile.settings absent — AFC_extruder tool "
+                      "indices stay derived from section names");
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    extruder_klipper_names_ = std::move(topo.extruder_names);
+    unit_oams_names_ = std::move(topo.oams_names);
+    if (topo.toolhead_sensor_fitted) {
+        toolhead_sensor_fitted_ = topo.toolhead_sensor_fitted;
+        for (auto& unit : system_info_.units)
+            unit.has_toolhead_sensor = *toolhead_sensor_fitted_;
+    }
+    apply_unit_environment();
+    // Settings were read. Only now does an absent extruder_name
+    // mean the config lacks one rather than that we have not asked.
+    configfile_answered_ = true;
+    // A newly-arrived mapping can resolve a name that already
+    // warned; let it warn again if it still cannot be resolved.
+    extruder_tool_index_warned_.clear();
+    // Latch only on presence. A config we could not read, or one
+    // read before a section was added, must not be taken as proof
+    // that no toolchanger exists.
+    if (topo.saw_toolchanger) {
+        configfile_has_toolchanger_ = true;
+    }
+    spdlog::debug("[AMS AFC] configfile: {} AFC_extruder -> Klipper extruder names, "
+                  "toolchanger section {}",
+                  extruder_klipper_names_.size(), topo.saw_toolchanger ? "present" : "absent");
+
+    // This query races the first status frames — on the reporter's
+    // machine it landed 17ms after the units were first mapped, so
+    // every toolhead label was derived from names it could not yet
+    // resolve. Redo that derivation now rather than carrying wrong
+    // labels until AFC happens to push another unit frame.
+    if (!extruder_klipper_names_.empty() && !unit_infos_.empty()) {
+        rebuild_unit_map_from_klipper();
+    }
 }
 
 void AmsBackendAfc::query_afc_configfile_topology() {
@@ -4043,42 +4094,7 @@ void AmsBackendAfc::query_afc_configfile_topology() {
             // L081 Mechanism C: the body mutates members under mutex_.
             token.defer("AmsBackendAfc::query_afc_configfile_topology_success",
                         [this, topo = parse_configfile_topology(response)]() mutable {
-                            if (!topo.answered) {
-                                spdlog::debug(
-                                    "[AMS AFC] configfile.settings absent — AFC_extruder tool "
-                                    "indices stay derived from section names");
-                                return;
-                            }
-                            std::lock_guard<std::mutex> lock(mutex_);
-                            extruder_klipper_names_ = std::move(topo.extruder_names);
-                            unit_oams_names_ = std::move(topo.oams_names);
-                            apply_unit_environment();
-                            // Settings were read. Only now does an absent extruder_name
-                            // mean the config lacks one rather than that we have not asked.
-                            configfile_answered_ = true;
-                            // A newly-arrived mapping can resolve a name that already
-                            // warned; let it warn again if it still cannot be resolved.
-                            extruder_tool_index_warned_.clear();
-                            // Latch only on presence. A config we could not read, or one
-                            // read before a section was added, must not be taken as proof
-                            // that no toolchanger exists.
-                            if (topo.saw_toolchanger) {
-                                configfile_has_toolchanger_ = true;
-                            }
-                            spdlog::debug(
-                                "[AMS AFC] configfile: {} AFC_extruder -> Klipper extruder names, "
-                                "toolchanger section {}",
-                                extruder_klipper_names_.size(),
-                                topo.saw_toolchanger ? "present" : "absent");
-
-                            // This query races the first status frames — on the reporter's
-                            // machine it landed 17ms after the units were first mapped, so
-                            // every toolhead label was derived from names it could not yet
-                            // resolve. Redo that derivation now rather than carrying wrong
-                            // labels until AFC happens to push another unit frame.
-                            if (!extruder_klipper_names_.empty() && !unit_infos_.empty()) {
-                                rebuild_unit_map_from_klipper();
-                            }
+                            apply_configfile_topology(std::move(topo));
                         });
         },
         [](const MoonrakerError& err) {
@@ -4735,10 +4751,10 @@ void AmsBackendAfc::initialize_slots(const std::vector<std::string>& lane_names)
     unit.slot_count = lane_count;
     unit.first_slot_global_index = 0;
     unit.connected = true;
-    unit.has_encoder = false;        // AFC typically uses optical sensors, not encoders
-    unit.has_toolhead_sensor = true; // Most AFC setups have toolhead sensor
-    unit.has_slot_sensors = true;    // AFC has per-lane sensors
-    unit.has_hub_sensor = true;      // AFC hubs have filament sensors
+    unit.has_encoder = false; // AFC typically uses optical sensors, not encoders
+    unit.has_toolhead_sensor = toolhead_sensor_fitted_.value_or(true);
+    unit.has_slot_sensors = true; // AFC has per-lane sensors
+    unit.has_hub_sensor = true;   // AFC hubs have filament sensors
 
     // Initialize slots with defaults
     for (int i = 0; i < lane_count; ++i) {
@@ -4846,7 +4862,7 @@ void AmsBackendAfc::reorganize_slots() {
         unit.slot_count = static_cast<int>(lanes.size());
         unit.first_slot_global_index = global_slot_offset;
         unit.connected = true;
-        unit.has_toolhead_sensor = true;
+        unit.has_toolhead_sensor = toolhead_sensor_fitted_.value_or(true);
         unit.has_slot_sensors = true;
 
         // Set hub sensor state — two strategies:

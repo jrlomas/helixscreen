@@ -8297,3 +8297,41 @@ TEST_CASE("AFC configfile topology parses to a small result", "[ams][afc][config
         CHECK(AmsBackendAfc::parse_configfile_topology(response).extruder_names.empty());
     }
 }
+
+TEST_CASE("AFC units report a toolhead sensor only when an AFC_extruder pin wires one",
+          "[ams][afc][configfile][toolhead_sensor]") {
+    auto settings = [](nlohmann::json extruder) {
+        return nlohmann::json{
+            {"result",
+             {{"status",
+               {{"configfile", {{"settings", {{"afc_extruder extruder", extruder}}}}}}}}}};
+    };
+    AmsBackendAfcTestHelper helper;
+    helper.initialize_test_lanes(4);
+    // Unknown until configfile answers.
+    REQUIRE(helper.get_system_info().units[0].has_toolhead_sensor);
+
+    SECTION("pin_tool_start wired") {
+        AfcTestAccess::apply_configfile_topology(
+            helper, AmsBackendAfc::parse_configfile_topology(
+                        settings({{"pin_tool_start", "Turtle_1:PA1"}, {"pin_tool_end", ""}})));
+        CHECK(helper.get_system_info().units[0].has_toolhead_sensor);
+    }
+    SECTION("only pin_tool_end wired") {
+        AfcTestAccess::apply_configfile_topology(
+            helper, AmsBackendAfc::parse_configfile_topology(settings({{"pin_tool_end", "PB2"}})));
+        CHECK(helper.get_system_info().units[0].has_toolhead_sensor);
+    }
+    SECTION("tool_start borrowed from the buffer, no tool_end") {
+        AfcTestAccess::apply_configfile_topology(
+            helper,
+            AmsBackendAfc::parse_configfile_topology(settings({{"pin_tool_start", "buffer"}})));
+        CHECK_FALSE(helper.get_system_info().units[0].has_toolhead_sensor);
+    }
+    SECTION("no pins at all") {
+        AfcTestAccess::apply_configfile_topology(
+            helper,
+            AmsBackendAfc::parse_configfile_topology(settings({{"extruder_name", "extruder"}})));
+        CHECK_FALSE(helper.get_system_info().units[0].has_toolhead_sensor);
+    }
+}
