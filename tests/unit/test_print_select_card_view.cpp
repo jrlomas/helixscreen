@@ -426,3 +426,98 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     view.cleanup();
     lv_obj_delete(container);
 }
+
+TEST_CASE_METHOD(
+    LVGLUITestFixture,
+    "CardView: a prebuild builds the first screen a card per tick, so the fill builds none",
+    "[ui][card_view][print_select]") {
+    lv_obj_t* container = lv_obj_create(test_screen());
+    lv_obj_set_size(container, 700, 400);
+    lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW_WRAP);
+
+    PrintSelectCardView view;
+    REQUIRE(view.setup(container, [](size_t) {}, nullptr));
+    const CardDimensions dims{4, 2, 160, 200};
+    const auto files = make_files(20);
+    lv_obj_update_layout(container);
+    const size_t window = window_cards(container, dims, 20);
+    REQUIRE(window > 2);
+
+    view.prebuild(dims, files.size());
+    CHECK(view.is_prebuilding());
+    CHECK(view.pool_size() == 0); // nothing is built in the caller's frame
+    process_lvgl(50);
+    CHECK(view.pool_size() == 1);
+    for (int i = 0; i < 100 && view.is_prebuilding(); ++i) {
+        process_lvgl(50);
+    }
+    CHECK_FALSE(view.is_prebuilding());
+    CHECK(view.pool_size() == window);
+
+    view.populate(files, dims);
+    CHECK(view.pool_size() == window);
+
+    view.cleanup();
+    lv_obj_delete(container);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "CardView: a listing that lands mid-prebuild fills the window and ends it",
+                 "[ui][card_view][print_select]") {
+    lv_obj_t* container = lv_obj_create(test_screen());
+    lv_obj_set_size(container, 700, 400);
+    lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW_WRAP);
+
+    PrintSelectCardView view;
+    REQUIRE(view.setup(container, [](size_t) {}, nullptr));
+    const CardDimensions dims{4, 2, 160, 200};
+    const auto files = make_files(20);
+    lv_obj_update_layout(container);
+    const size_t window = window_cards(container, dims, 20);
+
+    view.prebuild(dims, files.size());
+    process_lvgl(50);
+    REQUIRE(view.pool_size() == 1);
+
+    view.populate(files, dims);
+    CHECK(view.pool_size() == window);
+    for (int i = 0; i < 5; ++i) {
+        process_lvgl(50);
+    }
+    CHECK_FALSE(view.is_prebuilding());
+    CHECK(view.pool_size() == window);
+
+    view.cleanup();
+    lv_obj_delete(container);
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture, "CardView: a stopped prebuild builds no more cards",
+                 "[ui][card_view][print_select]") {
+    lv_obj_t* container = lv_obj_create(test_screen());
+    lv_obj_set_size(container, 700, 400);
+    lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW_WRAP);
+
+    PrintSelectCardView view;
+    REQUIRE(view.setup(container, [](size_t) {}, nullptr));
+    const CardDimensions dims{4, 2, 160, 200};
+    view.prebuild(dims, 20);
+    process_lvgl(50);
+    REQUIRE(view.pool_size() == 1);
+
+    view.stop_prebuild();
+    CHECK_FALSE(view.is_prebuilding());
+    for (int i = 0; i < 10; ++i) {
+        process_lvgl(50);
+    }
+    CHECK(view.pool_size() == 1);
+
+    // Cleanup mid-prebuild leaves no tick behind to reach the freed pool.
+    view.prebuild(dims, 20);
+    REQUIRE(view.is_prebuilding());
+    view.cleanup();
+    for (int i = 0; i < 5; ++i) {
+        process_lvgl(50);
+    }
+    CHECK(view.pool_size() == 0);
+    lv_obj_delete(container);
+}

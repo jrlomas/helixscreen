@@ -5,6 +5,8 @@
 
 #include "ui_container_delete_net.h"
 #include "ui_observer_guard.h"
+#include "ui_timer_guard.h"
+#include "ui_virtual_list.h"
 
 #if defined(HELIX_PLATFORM_ESP32)
 #include "esp_psram_thumbnail.h"
@@ -228,6 +230,25 @@ class PrintSelectCardView : public ContainerDeleteNet {
     void refresh_content(const std::vector<PrintFileData>& file_list, const CardDimensions& dims);
 
     /**
+     * @brief Build the cards the first screen needs, one per timer tick
+     *
+     * Building a card costs tens of ms on slow hardware, so building a whole
+     * window inside the listing's fill blocks the UI for all of them at once.
+     * Started while the listing is still on its way, the pool is ready when it
+     * lands; a populate() that comes first builds whatever is still missing.
+     *
+     * @param expected_files File count the window is sized for
+     */
+    void prebuild(const CardDimensions& dims, size_t expected_files);
+
+    /// Stops a prebuild in progress. Cards already built stay in the pool.
+    void stop_prebuild();
+
+    [[nodiscard]] bool is_prebuilding() const {
+        return static_cast<bool>(prebuild_timer_);
+    }
+
+    /**
      * @brief Shows @p file's thumbnail on the one card bound to @p file_index
      *
      * A thumbnail arriving changes one card; rebinding the whole window for it
@@ -325,6 +346,15 @@ class PrintSelectCardView : public ContainerDeleteNet {
 
     /// Build cards until the pool holds @p count.
     void grow_pool(size_t count, const CardDimensions& dims);
+
+    /// The rows a window at @p scroll_y shows for @p file_count files
+    [[nodiscard]] VirtualWindow window_at(int32_t scroll_y, size_t file_count,
+                                          const CardDimensions& dims) const;
+
+    LvglTimerGuard prebuild_timer_;
+    std::unique_ptr<CardDimensions> prebuild_dims_;
+    size_t prebuild_target_ = 0;
+    static void on_prebuild_tick(lv_timer_t* timer);
 
     /**
      * @brief Configure a pool card to display a specific file

@@ -85,6 +85,10 @@ struct PrintSelectPanelTestAccess {
         return panel.detail_view_built_;
     }
 
+    static const helix::ui::PrintSelectCardView* card_view(const PrintSelectPanel& panel) {
+        return panel.card_view_.get();
+    }
+
     /// Whether the panel's USB source has a walk in flight.
     static bool usb_scanning(const PrintSelectPanel& panel) {
         return panel.usb_source_ && panel.usb_source_->is_scanning();
