@@ -12,10 +12,9 @@
  * lv_draw_line (float coords — we build with LV_USE_FLOAT) and corners as a fan
  * of short straight chords sampled from the arc's exact float parametrization
  * (also lv_draw_line, NOT lv_draw_arc, whose integer center / outer radius would
- * round the band ~0.5px out of alignment with the adjoining lines). Round caps
- * live only on the very first seg-start and last seg-end of the path; interior
- * joints (including chord-to-chord) use butt caps (segments join tangentially,
- * so butt joints are seamless and translucent passes don't double-blend).
+ * round the band ~0.5px out of alignment with the adjoining lines). Opaque
+ * passes round-cap every joint, chord to chord included, so angled joints leave
+ * no wedge notches.
  *
  * This layer is shared by both AMS path canvases:
  *   - ui_filament_path_canvas (single-unit detail panel)
@@ -87,9 +86,17 @@ int build_passes(const LaneStyle& style, TubeLayer layer, TubePass* out,
 LaneStyle lane_style(bool has_filament, bool active, lv_color_t fill, lv_color_t idle_wall,
                      lv_color_t accent, lv_color_t bg, int32_t gauge);
 
-/// Draw a path with a style, painting Halo, Wall, Bore in order; optionally record (append) the
-/// path's segments into
-/// @p record so a flow-dot / tip animation walks exactly what was drawn.
+/// A lane's passes for every layer, in paint order (Halo, Wall, Bore). Returns
+/// the count; @p out holds at least 4.
+int lane_passes(const LaneStyle& style, TubePass* out, bool simple = reduced_effects());
+
+/// Active-route wall color: the theme's "primary", lightened in light theme so
+/// it reads blue rather than navy against the card.
+lv_color_t tube_accent();
+
+/// Draw a path with a style, painting Halo, Wall, Bore in order. Optionally
+/// append the path's segments to @p record so a flow-dot / tip animation walks
+/// exactly what was drawn.
 void draw_lane(lv_layer_t* layer, const pg::FilamentPath& path, const LaneStyle& style,
                pg::FilamentPath* record = nullptr);
 

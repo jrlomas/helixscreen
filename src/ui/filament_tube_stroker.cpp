@@ -4,6 +4,7 @@
 #include "filament_tube_stroker.h"
 
 #include "memory_utils.h"
+#include "theme_manager.h"
 #include "ui/ams_drawing_utils.h"
 
 #include <cmath>
@@ -51,8 +52,7 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
         // Opaque passes use round caps at EVERY joint: same-color opaque
         // overdraw is invisible, and round ends close the wedge notches that
         // butt caps leave wherever adjacent segments/chords meet at an angle
-        // (~13° between chords). Translucent passes keep butt caps at
-        // interior joints — round caps would double-blend at the overlap.
+        // (~13° between chords).
         const bool round_joints = (pass.opa >= LV_OPA_COVER);
 
         for (int i = 0; i < path.count; i++) {
@@ -137,8 +137,7 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
                     dsc.p2.x = cur_x;
                     dsc.p2.y = cur_y;
                     // Opaque passes: round caps at every chord joint (see
-                    // round_joints above). Translucent passes: butt interior
-                    // joints, terminal round caps only at true path ends.
+                    // round_joints above).
                     dsc.round_start = (first && (c == 0)) || round_joints;
                     dsc.round_end = (last && (c == n_chords - 1)) || round_joints;
                     lv_draw_line(layer, &dsc);
@@ -180,12 +179,16 @@ LaneStyle lane_style(bool has_filament, bool active, lv_color_t fill, lv_color_t
     return {on_route ? accent : idle_wall, has_filament ? fill : bg, bg, gauge, on_route};
 }
 
-// Halo, Wall, Bore passes for one lane, in paint order. Returns the count.
-static int lane_passes(const LaneStyle& style, TubePass* out) {
-    int n = build_passes(style, TubeLayer::Halo, out);
-    n += build_passes(style, TubeLayer::Wall, out + n);
-    n += build_passes(style, TubeLayer::Bore, out + n);
+int lane_passes(const LaneStyle& style, TubePass* out, bool simple) {
+    int n = build_passes(style, TubeLayer::Halo, out, simple);
+    n += build_passes(style, TubeLayer::Wall, out + n, simple);
+    n += build_passes(style, TubeLayer::Bore, out + n, simple);
     return n;
+}
+
+lv_color_t tube_accent() {
+    lv_color_t primary = theme_manager_get_color("primary");
+    return theme_manager_is_dark_mode() ? primary : tube_lighten(primary, 90);
 }
 
 // Draw a path with a style; optionally record (append) the path's segments into

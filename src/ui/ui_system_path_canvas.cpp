@@ -200,11 +200,6 @@ static BypassGeometry compute_bypass_geometry(const SystemPathData* data,
     return {bypass_x, merge_y, center_x};
 }
 
-// Tube halo background and active-route accent, cached by load_theme_colors,
-// which runs before every draw.
-static lv_color_t s_tube_bg;
-static lv_color_t s_tube_accent;
-
 // Load theme-aware colors, fonts, and sizes
 static void load_theme_colors(SystemPathData* data) {
     bool dark_mode = theme_manager_is_dark_mode();
@@ -231,8 +226,6 @@ static void load_theme_colors(SystemPathData* data) {
     }
 
     data->color_text = theme_manager_get_color("text");
-    s_tube_bg = theme_manager_get_color("card_bg");
-    s_tube_accent = theme_manager_get_color("primary");
 
     int32_t space_xs = theme_manager_get_spacing("space_xs");
     int32_t space_md = theme_manager_get_spacing("space_md");
@@ -271,7 +264,8 @@ namespace pg = helix::ui::pathgeo;
 // Overview tubes are solid: the bore takes the lane color whatever its load
 // state, and the active route adds accent walls and the halo.
 static helix::ui::LaneStyle sp_lane_style(lv_color_t color, int32_t width, bool active) {
-    return {active ? s_tube_accent : color, color, s_tube_bg, width, active};
+    return {active ? helix::ui::tube_accent() : color, color, theme_manager_get_color("card_bg"),
+            width, active};
 }
 
 // Straight tube between two arbitrary points.

@@ -1,7 +1,9 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../lvgl_test_fixture.h"
 #include "filament_tube_stroker.h"
+#include "theme_manager.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -92,4 +94,38 @@ TEST_CASE("lane_style maps load and route state to walls, bore and halo",
         CHECK(same(st.bore, BG));
         CHECK_FALSE(st.halo);
     }
+}
+
+TEST_CASE("A lane paints halo, then wall, then bore", "[filament-path][stroker]") {
+    TubePass out[4];
+    REQUIRE(lane_passes(style(true), out, false) == 4);
+    CHECK(out[0].width == 11);
+    CHECK(out[1].width == 8);
+    CHECK(same(out[2].color, WALL));
+    CHECK(out[2].width == 5);
+    CHECK(same(out[3].color, BORE));
+    CHECK(out[3].width == 3);
+
+    REQUIRE(lane_passes(style(true), out, true) == 2);
+    CHECK(same(out[0].color, WALL));
+    CHECK(same(out[1].color, BORE));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "tube_accent lightens primary in light theme only",
+                 "[filament-path][stroker]") {
+    const bool original_dark = theme_manager_is_dark_mode();
+    auto brightness = [](lv_color_t c) { return c.red + c.green + c.blue; };
+
+    theme_manager_init(lv_display_get_default(), true);
+    REQUIRE(theme_manager_is_dark_mode());
+    CHECK(same(tube_accent(), theme_manager_get_color("primary")));
+
+    theme_manager_init(lv_display_get_default(), false);
+    REQUIRE_FALSE(theme_manager_is_dark_mode());
+    const lv_color_t primary = theme_manager_get_color("primary");
+    const lv_color_t accent = tube_accent();
+    CHECK_FALSE(same(accent, primary));
+    CHECK(brightness(accent) > brightness(primary));
+
+    theme_manager_init(lv_display_get_default(), original_dark);
 }

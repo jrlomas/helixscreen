@@ -63,7 +63,7 @@ static void load_theme_colors(FilamentPathData* data) {
     theme.color_text = theme_manager_get_color("text");
     theme.color_bg = theme_manager_get_color("card_bg");
     theme.color_success = theme_manager_get_color("success");
-    theme.color_accent = theme_manager_get_color("primary");
+    theme.color_accent = helix::ui::tube_accent();
     for (int s = 0; s < 3; ++s) {
         theme.color_buffer[s] = theme_manager_get_color(
             helix::ui::buffer_status_token(static_cast<helix::ui::ClogMeterStatus>(s)));
