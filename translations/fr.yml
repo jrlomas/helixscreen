@@ -1417,6 +1417,7 @@ translations:
   Forward Multiplier: 'Multiplicateur avant'
   Found %zu printers: '%zu imprimantes trouvées'
   Found 1 printer: 1 imprimante trouvée
+  Found {} at {}.: '{} trouvée à {}.'
   Framerate: Fréquence d'images
   From Buffer: Depuis tampon
   From SpoolmanDB: 'Depuis SpoolmanDB'
@@ -1794,6 +1795,7 @@ translations:
     capture une image par changement de couche. Idéal pour la plupart des impressions.
   Layers: Couches
   Layout: Disposition
+  Layout changes are off in safe mode. Restart to edit.: 'Les modifications de disposition sont désactivées en mode sans échec. Redémarrez pour modifier.'
   Learn More: En savoir plus
   LedSelect: Sélection de la LED
   Left: 'Gauche'
@@ -2863,6 +2865,8 @@ translations:
     on startup. Open Settings to fix the issue, then reboot.
   : Mode sans échec actif. La connexion à l'imprimante est désactivée car l'application
     plantait au démarrage. Ouvrez les Paramètres pour résoudre le problème, puis redémarrez.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Mode sans échec : l''application plantait au démarrage, les plugins sont donc désactivés et les dispositions des widgets affichent leurs valeurs par défaut. Redémarrez pour revenir à la normale.'
   Safety & Alerts: Sécurité et alertes
   Same spool in {}? Tap Clear if it is a new one.: 'Même bobine dans {} ? Touchez Effacer s''il s''agit d''une nouvelle.'
   Sample: Échantillon
@@ -3709,6 +3713,7 @@ translations:
   Use Android native keyboard for text input: Utiliser le clavier natif Android pour
     la saisie de texte
   Use G10/G11 firmware retraction: Utiliser la rétraction firmware G10/G11
+  Use New Address: 'Utiliser la nouvelle adresse'
   Use Unload before Eject: 'Utilisez Décharger avant Éjecter'
   Use first HID scanner found: 'Utiliser le premier scanner HID trouvé'
   Use printer type to select image: Utiliser le type d'imprimante pour sélectionner

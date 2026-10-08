@@ -57,6 +57,7 @@
 #include "src/ui/panel_widgets/print_status_widget.h"
 #include "theme_manager.h"
 #include "tool_state.h"
+#include "xml_registration.h"
 
 #include <spdlog/spdlog.h>
 
@@ -619,6 +620,9 @@ TEST_CASE_METHOD(ContentFitsFixture,
     for (const auto& g : kShipping) {
         ScopedResolution res(disp, g.panel_w, g.panel_h);
         theme_manager_refresh_layout_constants(disp);
+        // What the app's resize handler does: idle components register again
+        // at the new geometry, as they would on a panel that booted at it.
+        helix::unregister_idle_xml_components();
 
         const UiBreakpoint bp = breakpoint_for(std::min(g.panel_w, g.panel_h));
         const GridDimensions dims = GridLayout::get_dimensions(bp, g.content_w, g.content_h);
@@ -774,6 +778,7 @@ TEST_CASE_METHOD(ContentFitsFixture, "every icon tile renders its content grown 
     for (const auto& g : kShipping) {
         ScopedResolution res(disp, g.panel_w, g.panel_h);
         theme_manager_refresh_layout_constants(disp);
+        helix::unregister_idle_xml_components();
         const UiBreakpoint bp = breakpoint_for(std::min(g.panel_w, g.panel_h));
         const GridDimensions dims = GridLayout::get_dimensions(bp, g.content_w, g.content_h);
         const CellMetrics m =
@@ -831,6 +836,7 @@ TEST_CASE_METHOD(ContentFitsFixture,
         REQUIRE(g != kShipping.end());
         ScopedResolution res(disp, g->panel_w, g->panel_h);
         theme_manager_refresh_layout_constants(disp);
+        helix::unregister_idle_xml_components();
         const UiBreakpoint bp = breakpoint_for(std::min(g->panel_w, g->panel_h));
         const GridDimensions dims = GridLayout::get_dimensions(bp, g->content_w, g->content_h);
         const CellMetrics m =

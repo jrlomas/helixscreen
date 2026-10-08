@@ -29,6 +29,8 @@ setup() {
     run bash -c 'echo "{}" | scripts/subagent-brief.sh | jq -r .hookSpecificOutput.additionalContext'
     contains "helix-claim check build:" "$output"
     contains "Never release a claim you did not take" "$output"
+    contains 'Plain `make`, never a fixed -j' "$output"
+    contains "jobpool status" "$output"
     contains '-j$(scripts/helix-claim jobs)' "$output"
     contains "zeus-run.sh" "$output"
     contains "foreground" "$output"
@@ -60,4 +62,15 @@ setup() {
     rm -rf "$bin"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
+}
+
+@test "the block is the same on a box without jobpool" {
+    # sandbox-gap-reviewed: the brief runs hostname and jq, nothing sandboxed.
+    local d p=""
+    local IFS=:
+    for d in $PATH; do [ -e "$d/jobpool" ] || p=${p:+$p:}$d; done
+    unset IFS
+    run env PATH="$p" bash -c 'echo "{}" | scripts/subagent-brief.sh | jq -r .hookSpecificOutput.additionalContext'
+    [ "$status" -eq 0 ]
+    contains "Plain \`make\`" "$output"
 }

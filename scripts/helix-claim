@@ -188,6 +188,48 @@ describe() {
     return 0
 }
 
+# The live jobpool's target, or exit 1 when there is none. `jobpool target`
+# takes no lock and moves no tokens, so this is safe on every make and under a
+# timeout. JOBPOOL=0 is jobpool's own bypass, so it bypasses here too.
+# HELIX_JOBPOOL names the jobpool binary (tests point it at a fake).
+pool_target() {
+    local t
+    [ "${JOBPOOL:-}" != 0 ] || return 1
+    t=$("${HELIX_JOBPOOL:-jobpool}" target 2>/dev/null) && [ "$t" -gt 0 ] 2>/dev/null || return 1
+    printf '%s\n' "$t"
+}
+
+# Heavy runners outside the pool: a bats, GNU parallel or ninja, or a docker
+# run, with neither JOBPOOL_SLOTS (`jobpool hold`) nor a jobserver in its own
+# environment or any ancestor's. bats and parallel are scripts, so their comm
+# is the interpreter's and they are matched by argv. A container's processes
+# descend from containerd, not the docker client, so they are judged by the
+# environment the run gave them. Prints "pid etime args" for the outermost of
+# each tree.
+unpooled_runners() {
+    ps -eo pid=,ppid=,etime=,comm=,args= 2>/dev/null | awk '
+        function base(w) { sub(/.*\//, "", w); return w }
+        $4 == "ninja" || ($4 == "docker" && $6 == "run") ||
+            base($5) ~ /^(bats|parallel)$/ ||
+            ($4 ~ /^(bash|sh|perl)$/ && base($6) ~ /^(bats|parallel)$/) { heavy[$1] = 1 }
+        { parent[$1] = $2; line[$1] = $1 " " $3; for (i = 5; i <= NF; i++) line[$1] = line[$1] " " $i }
+        END {
+            for (p in heavy) {
+                for (q = parent[p]; q > 1 && !(q in heavy); q = parent[q]) ;
+                if (!(q in heavy)) print line[p]
+            }
+        }' | while read -r pid rest; do
+        p=$pid
+        while [ "${p:-0}" -gt 1 ]; do
+            tr '\0' '\n' 2>/dev/null < "/proc/$p/environ" |
+                grep -qE '^(JOBPOOL_SLOTS=|MAKEFLAGS=.*--jobserver-(auth|fds)=)' && continue 2
+            st=$(cat "/proc/$p/stat" 2>/dev/null) || break
+            st=${st##*) }; st=${st#* }; p=${st%% *}
+        done
+        printf '%s %s\n' "$pid" "$rest"
+    done
+}
+
 cmd=${1:-}; shift 2>/dev/null || true
 case "$cmd" in
 take)
@@ -256,48 +298,63 @@ list)
     for f in "$CLAIM_DIR"/*.json; do describe "$f"; n=$((n+1)); done
     [ "$n" = 0 ] && printf 'no claims\n'
     ;;
+pool)
+    pool_target
+    ;;
+hold)
+    # Run a command that sizes its own parallelism (bats -j, ninja -j, a
+    # container build) from JOBPOOL_SLOTS. With jobpool installed it holds
+    # that many pool tokens for the command's life (`jobpool hold`, which
+    # starts the daemon and has its own unpooled fallback); without it
+    # (CI, a Mac, a fresh clone) JOBPOOL_SLOTS is -n, or the cores.
+    # --min/--min-wait pass through to jobpool; with no pool they mean nothing.
+    usage="usage: helix-claim hold [-n N] [--min M] [--min-wait SECS] -- <cmd...>"
+    n="" pass=()
+    while :; do
+        case ${1:-} in
+            -n) [ $# -ge 2 ] || die "$usage"; n=$2; pass+=(-n "$2"); shift 2 ;;
+            --min|--min-wait) [ $# -ge 2 ] || die "$usage"; pass+=("$1" "$2"); shift 2 ;;
+            *) break ;;
+        esac
+    done
+    [ "${1:-}" = -- ] && shift
+    [ $# -gt 0 ] || die "$usage"
+    jp=${HELIX_JOBPOOL:-jobpool}
+    if [ "${JOBPOOL:-}" != 0 ] && command -v "$jp" >/dev/null 2>&1; then
+        exec "$jp" hold "${pass[@]}" -- "$@"
+    fi
+    JOBPOOL_SLOTS=${n:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}
+    export JOBPOOL_SLOTS
+    exec "$@"
+    ;;
 jobs)
-    # A fair -j, derived rather than guessed. Peers are counted from LIVE
-    # build: claims, and cross-checked against compilers actually running, so
-    # a session that never claimed is still counted.
-    ncpu=$(nproc)
-    shopt -s nullglob
-    peers=0
-    for f in "$CLAIM_DIR"/build_*.json; do
-        [ "$(state_of "$f")" = "LIVE" ] || continue
-        body=$(tr -d '\n' < "$f"); pid=$(json_get "$body" pid)
-        [ "$pid" = "$(session_pid)" ] || peers=$((peers+1))
-    done
-    # Claims undercount: a session that never claimed still burns cores. Count
-    # DISTINCT trees with live compilers - that is the real number of competing
-    # builds, where a raw cc1plus count would just be one build's -j.
-    # The caller's own makes are not peers: called from a Makefile's $(shell),
-    # the make asking would otherwise count itself and halve its own share.
-    self=" "; p=$$
-    while [ "$p" -gt 1 ] 2>/dev/null && read -r st < "/proc/$p/stat" 2>/dev/null; do
-        self="$self$p "
-        st=${st##*) }; st=${st#* }; p=${st%% *}   # fields after comm: state ppid ...
-    done
-    trees=$(for q in $(pgrep -x cc1plus 2>/dev/null; pgrep -x make 2>/dev/null); do
-                case "$self" in *" $q "*) continue;; esac
-                readlink "/proc/$q/cwd" 2>/dev/null
-            done | sed 's#\(/\.worktrees/[^/]*\).*#\1#; s#^\(/[^/]*/[^/]*/[^/]*/[^/]*\)$#\1#' \
-              | sort -u | grep -c . )
-    running=$(pgrep -x cc1plus 2>/dev/null | wc -l)
-    [ "$trees" -gt "$peers" ] && peers=$trees
-    avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)
-    j=$(( ncpu / (peers + 1) ))
-    # Each cc1plus peaks around 1GB on this tree; never promise more parallel
-    # compiles than memory can hold.
-    mem_cap=$(( avail_kb / 1048576 ))
-    [ "$mem_cap" -lt 1 ] && mem_cap=1
-    [ "$j" -gt "$mem_cap" ] && j=$mem_cap
+    # The -j a build should take. With jobpool installed, every make on the box
+    # draws from one machine pool, so the answer is the pool's size and the
+    # pool divides it between builds as they run. Without it (CI, a Mac, a
+    # contributor's box) it is the cores, capped by memory at ~1GB per
+    # compile.
+    avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo 2>/dev/null)
+    mem_gb=$(( ${avail_kb:-0} / 1048576 ))
+    if target=$(pool_target); then
+        if [ "${1:-}" = "-v" ]; then
+            # status drains the FIFO and writes the tokens back, so a signal
+            # between the two loses them; the advisor runs this under timeout.
+            free=$( (trap '' INT TERM HUP PIPE; "${HELIX_JOBPOOL:-jobpool}" status --json 2>/dev/null) |
+                sed -n 's/.*"available":\([0-9][0-9]*\).*/\1/p')
+            printf 'pool target=%s available=%s availGB=%s -> -j%s\n' \
+                "$target" "${free:-0}" "$mem_gb" "$target" >&2
+        fi
+        printf '%s\n' "$target"
+        exit 0
+    fi
+    ncpu=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+    j=$ncpu
+    # No /proc/meminfo (a Mac): cores alone.
+    [ -n "$avail_kb" ] && [ "$j" -gt "$mem_gb" ] && j=$mem_gb
     [ "$j" -lt 2 ] && j=2
     [ "$j" -gt "$ncpu" ] && j=$ncpu
-    if [ "${1:-}" = "-v" ]; then
-        printf 'ncpu=%s peers=%s(claimed+inferred) cc1plus=%s availGB=%s -> -j%s\n' \
-            "$ncpu" "$peers" "$running" "$mem_cap" "$j" >&2
-    fi
+    [ "${1:-}" = "-v" ] &&
+        printf 'ncpu=%s availGB=%s -> -j%s\n' "$ncpu" "$mem_gb" "$j" >&2
     printf '%s\n' "$j"
     ;;
 run)
@@ -353,9 +410,10 @@ resources)
     [ "${1:-}" = "--no-zeus" ] && zeus=0
     avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)
     read -r l1 l5 l15 _ < /proc/loadavg
-    printf '%s: %.1fGB available, load %s %s %s on %s cpus, fair share -j%s\n' \
+    if j=$(pool_target); then jl="jobpool target $j"; else jl="build -j$("${BASH_SOURCE[0]}" jobs)"; fi
+    printf '%s: %.1fGB available, load %s %s %s on %s cpus, %s\n' \
         "$(hostname -s)" "$(awk -v kb="$avail_kb" 'BEGIN{print kb/1048576}')" \
-        "$l1" "$l5" "$l15" "$(nproc)" "$("${BASH_SOURCE[0]}" jobs)"
+        "$l1" "$l5" "$l15" "$(nproc)" "$jl"
     shopt -s nullglob
     live=0
     for f in "$CLAIM_DIR"/*.json; do
@@ -369,6 +427,15 @@ resources)
             "$(json_get "$body" session)" "$age" "$rss" "$(json_get "$body" note)"
     done
     [ "$live" = 0 ] && printf 'live claims: none\n'
+    if pool_target >/dev/null; then
+        runners=$(unpooled_runners)
+        if [ -n "$runners" ]; then
+            printf "unpooled heavy runners (outside the jobpool budget; wrap in \`helix-claim hold\`):\n"
+            printf '%s\n' "$runners" | cut -c1-160 | sed 's/^/  pid /'
+        else
+            printf 'unpooled heavy runners: none\n'
+        fi
+    fi
     # The named groups always show when present; clangd in particular grows
     # without bound per session. The rest fill in by size.
     printf 'memory by command (count, total RSS, largest):\n'
@@ -486,8 +553,16 @@ helix-claim - advisory claims on resources shared between agent sessions
   run heavy:<what> [--note X] -- <cmd...>     hold heavy:<what> while cmd runs and
                                               exit with its status; exits 75 with
                                               cmd unrun if the claim is held
-  resources [--no-zeus]                       memory, load, fair -j, live claims,
-                                              top memory users, and zeus
+  jobs [-v]                                   the -j a build takes: the jobpool's
+                                              target, else cores capped by memory
+  pool                                        the live jobpool's target; exit 1 if none
+  hold [-n N] [--min M] [--min-wait S] -- <cmd...>
+                                              run cmd with JOBPOOL_SLOTS set: up to N
+                                              pool tokens (waiting up to S seconds
+                                              for M) under jobpool, else N or cores
+  resources [--no-zeus]                       memory, load, build -j, live claims,
+                                              unpooled heavy runners, top memory
+                                              users, and zeus
 
 worktree: and build: names are resolved (basename, branch, or bare = the tree
 you are in), so two spellings cannot claim one resource twice.

@@ -39,7 +39,9 @@
 #include "../test_helpers/grid_edit_mode_test_access.h"
 #include "../test_helpers/home_panel_test_access.h"
 #include "../test_helpers/mock_config_storage.h"
+#include "../test_helpers/scope_exit.h"
 #include "../test_helpers/scoped_animations_enabled.h"
+#include "../test_helpers/scoped_config_write_counter.h"
 #include "../test_helpers/scoped_pointer_indev.h"
 #include "../test_helpers/scoped_widget_factory.h"
 #include "app_globals.h"
@@ -189,42 +191,6 @@ class ConfigurableTestWidget : public helix::PanelWidget {
     const char* id() const override {
         return "temperature";
     }
-};
-
-/// Counts the config writes made while it lives: the Config singleton writes to
-/// an in-memory store in place of its file, and gets its own store back on exit.
-class ScopedConfigWriteCounter {
-  public:
-    ScopedConfigWriteCounter() {
-        helix::Config& cfg = *helix::Config::get_instance();
-        // save() writes nothing without a path, or on a read-only filesystem.
-        REQUIRE_FALSE(helix::ConfigTestAccess::path(cfg).empty());
-        REQUIRE_FALSE(helix::ConfigTestAccess::read_only_mode(cfg));
-        original_ = std::move(helix::ConfigTestAccess::storage(cfg));
-        original_is_default_ = helix::ConfigTestAccess::storage_is_default(cfg);
-        auto store = std::make_unique<helix::test::MockConfigStorage>();
-        store_ = store.get();
-        helix::ConfigTestAccess::storage(cfg) = std::move(store);
-        helix::ConfigTestAccess::storage_is_default(cfg) = false;
-    }
-
-    ~ScopedConfigWriteCounter() {
-        helix::Config& cfg = *helix::Config::get_instance();
-        helix::ConfigTestAccess::storage(cfg) = std::move(original_);
-        helix::ConfigTestAccess::storage_is_default(cfg) = original_is_default_;
-    }
-
-    ScopedConfigWriteCounter(const ScopedConfigWriteCounter&) = delete;
-    ScopedConfigWriteCounter& operator=(const ScopedConfigWriteCounter&) = delete;
-
-    int writes() const {
-        return store_->store_calls;
-    }
-
-  private:
-    std::unique_ptr<helix::ConfigStorage> original_;
-    bool original_is_default_ = false;
-    helix::test::MockConfigStorage* store_ = nullptr;
 };
 
 /// The real widget catalog, for a case in which edit mode opens it: its XML
@@ -4589,9 +4555,13 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "[1638][edit-swipe][home]") {
     // build_carousel() creates every page and the next-page slot from these
     // components by name. EditHomeFixture registers them from file itself and
-    // the registry is process-wide, so the case starts from neither.
+    // the registry and component loader are process-wide, so the case starts
+    // from neither: the lookups below resolve only through what
+    // register_xml_components() installs.
     static constexpr std::array<const char*, 2> PAGE_COMPONENTS = {"home_page_container",
                                                                    "home_next_page_slot"};
+    lv_xml_set_component_loader(nullptr);
+    helix::test::ScopeExit restore_loader([] { helix::register_xml_on_first_use(); });
     for (const char* name : PAGE_COMPONENTS) {
         INFO(name);
         lv_xml_component_unregister(name);

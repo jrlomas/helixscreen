@@ -13,6 +13,7 @@
 #include "layout_manager.h"
 #include "layout_port.h"
 #include "panel_widget_registry.h"
+#include "runtime_config.h"
 #include "text_io.h"
 #include "theme_manager.h"
 
@@ -208,6 +209,18 @@ void PanelWidgetConfig::load() {
     parked_grids_ = json::object();
     legacy_units_ = false;
     legacy_rows_ = 0;
+
+    // Crash-loop safe mode: the saved layout may be what crashes, so this run
+    // shows the shipped defaults and write_to() leaves the saved node alone.
+    if (get_runtime_config()->crash_loop_safe_mode) {
+        PageConfig page;
+        page.id = "main";
+        page.widgets = build_defaults();
+        pending_anchors_ = true;
+        pages_.push_back(std::move(page));
+        loaded_ = true;
+        return;
+    }
 
     // Per-panel path: /printers/{active}/panel_widgets/<panel_id>
     std::string panel_path = config_.df() + "panel_widgets/" + panel_id_;
@@ -541,6 +554,9 @@ void PanelWidgetConfig::save() {
 }
 
 void PanelWidgetConfig::write_to(const std::string& panel_path) {
+    if (get_runtime_config()->crash_loop_safe_mode) {
+        return;
+    }
     // This node also carries layout state written by builds newer than this
     // one, which arrives whenever an update channel is rolled back. Those keys
     // are unreadable here but must survive the trip, so the node is edited

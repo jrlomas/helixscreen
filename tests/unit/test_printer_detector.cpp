@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../test_helpers/config_test_access.h"
+#include "../test_helpers/printer_capture.h"
 #include "app_globals.h"
 #include "config.h"
 #include "data_root_resolver.h"
@@ -24,6 +25,7 @@
 #include "hv/json.hpp"
 
 using namespace helix;
+using namespace helix::test;
 // ============================================================================
 // Machine captures (prestonbrown/helixscreen#1603)
 // ============================================================================
@@ -41,93 +43,12 @@ namespace {
 // production autosave bar AUTOSAVE_MIN_CONFIDENCE = 85 (#1284).
 constexpr int kHeuristicClassCeiling = 70;
 
-std::string printers_fixture_path(const std::string& slug) {
-    std::string src = __FILE__;
-    auto pos = src.rfind("/tests/unit/");
-    if (pos != std::string::npos) {
-        return src.substr(0, pos) + "/tests/fixtures/printers/" + slug + ".json";
-    }
-    return "tests/fixtures/printers/" + slug + ".json";
-}
-
-nlohmann::json load_printer_capture(const std::string& slug) {
-    const std::string path = printers_fixture_path(slug);
-    std::ifstream f(path);
-    INFO("capture fixture missing or unreadable: " << path);
-    REQUIRE(f.is_open());
-    nlohmann::json j;
-    f >> j;
-    return j;
-}
-
 /// The hardware -> expected model rows in tests/fixtures/printers/detection_cases.json,
 /// read once: each DYNAMIC_SECTION re-enters its test case, and a re-read would
 /// repeat the load's assertions once per row.
 const nlohmann::json& load_detection_corpus() {
     static const nlohmann::json corpus = load_printer_capture("detection_cases");
     return corpus;
-}
-
-/// PrinterHardwareData from one hardware JSON object: the shape of a machine
-/// capture and of a corpus row's "hardware". Fields it does not carry keep
-/// their defaults, exactly as a discovery that never fetched them would leave
-/// them.
-PrinterHardwareData hardware_from_json(const nlohmann::json& j, const std::string& label) {
-    // Every key must be one this loader reads, so a misspelled or unread key
-    // fails here instead of leaving the capture silently weaker.
-    static const std::set<std::string> kKnownKeys = {
-        "provenance", "notes",    "heaters",         "sensors",      "fans",
-        "leds",       "hostname", "printer_objects", "steppers",     "kinematics",
-        "mcu",        "mcu_list", "cpu_arch",        "build_volume", "configfile_settings"};
-    for (const auto& item : j.items()) {
-        INFO("'" << label << "' has a key the loader does not read: " << item.key());
-        CHECK(kKnownKeys.count(item.key()) == 1);
-    }
-
-    auto strings = [&j](const char* key) {
-        std::vector<std::string> out;
-        if (j.contains(key)) {
-            for (const auto& item : j.at(key)) {
-                out.push_back(item.get<std::string>());
-            }
-        }
-        return out;
-    };
-
-    PrinterHardwareData hardware;
-    hardware.heaters = strings("heaters");
-    hardware.sensors = strings("sensors");
-    hardware.fans = strings("fans");
-    hardware.leds = strings("leds");
-    hardware.hostname = j.value("hostname", std::string{});
-    hardware.printer_objects = strings("printer_objects");
-    hardware.steppers = strings("steppers");
-    hardware.kinematics = j.value("kinematics", std::string{});
-    hardware.mcu = j.value("mcu", std::string{});
-    hardware.mcu_list = strings("mcu_list");
-    hardware.cpu_arch = j.value("cpu_arch", std::string{});
-    if (j.contains("build_volume")) {
-        const auto& v = j.at("build_volume");
-        hardware.build_volume =
-            BuildVolume{v.value("x_min", 0.0f), v.value("x_max", 0.0f), v.value("y_min", 0.0f),
-                        v.value("y_max", 0.0f), v.value("z_max", 0.0f)};
-    }
-    // A configfile.settings subset goes through discovery's own parse, so the
-    // capture takes the same reading a live connection does.
-    if (j.contains("configfile_settings")) {
-        helix::PrinterDiscovery discovery;
-        INFO("'" << label << "' configfile_settings carries no stepper extent");
-        REQUIRE(discovery.parse_build_volume(j.at("configfile_settings")));
-        hardware.build_volume = discovery.build_volume();
-    }
-    return hardware;
-}
-
-/// PrinterHardwareData aggregated from a real machine's captures: the object
-/// list, /printer/info hostname, and whatever other endpoints the snapshot
-/// recorded.
-PrinterHardwareData printer_capture(const std::string& slug) {
-    return hardware_from_json(load_printer_capture(slug), "capture " + slug);
 }
 
 } // namespace
@@ -4574,6 +4495,40 @@ TEST_CASE_METHOD(
 
     REQUIRE(applied == "ad5m_pro_zmod");
     REQUIRE(config.get<std::string>(config.df() + "fans/part", "") == "fan_generic fanM106");
+
+    TearDown();
+}
+
+TEST_CASE_METHOD(helix::VariantPresetFixture,
+                 "apply_preset_with_variants: stock Creator 5 fanM106 does not pick _zmod",
+                 "[printer_detector][variant]") {
+    // Stock Creator 5 firmware reports fan_generic fanM106 as its part fan
+    // (prestonbrown/helixscreen#1754); only the zmod object marks Z-Mod there.
+    SetUp();
+    write_seed_preset("creator5_pro", "fan_generic fanM106");
+    write_seed_preset("creator5_pro_zmod", "WRONG_SHOULD_NOT_BE_PICKED");
+
+    helix::PrinterDiscovery hw;
+    hw.set_printer_objects({"fan_generic fanM106", "heater_generic chamber_heater", "extruder"});
+
+    REQUIRE(PrinterDetector::apply_preset_with_variants(&config, "creator5_pro", hw) ==
+            "creator5_pro");
+
+    TearDown();
+}
+
+TEST_CASE_METHOD(helix::VariantPresetFixture,
+                 "apply_preset_with_variants: Z-Mod Creator 5 picks _zmod via the zmod object",
+                 "[printer_detector][variant]") {
+    SetUp();
+    write_seed_preset("creator5_pro", "fan_generic fanM106");
+    write_seed_preset("creator5_pro_zmod", "fan_generic fanM106");
+
+    helix::PrinterDiscovery hw;
+    hw.set_printer_objects({"zmod", "zmod_color", "fan_generic fanM106", "extruder"});
+
+    REQUIRE(PrinterDetector::apply_preset_with_variants(&config, "creator5_pro", hw) ==
+            "creator5_pro_zmod");
 
     TearDown();
 }

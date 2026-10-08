@@ -1401,6 +1401,7 @@ translations:
   Forward Multiplier: 'Moltiplicatore in avanti'
   Found %zu printers: '%zu stampanti trovate'
   Found 1 printer: 1 stampante trovata
+  Found {} at {}.: '{} trovata su {}.'
   Framerate: Frequenza fotogrammi
   From Buffer: Dal buffer
   From SpoolmanDB: 'Da SpoolmanDB'
@@ -1780,6 +1781,7 @@ translations:
     stampe.
   Layers: Layer
   Layout: Layout
+  Layout changes are off in safe mode. Restart to edit.: 'Le modifiche al layout sono disattivate in modalità provvisoria. Riavvia per modificare.'
   Learn More: Scopri di più
   LedSelect: Seleziona LED
   Left: 'Sinistra'
@@ -2843,6 +2845,8 @@ translations:
   : Modalità provvisoria attiva. La connessione alla stampante è disabilitata perché
     l'app continuava a bloccarsi all'avvio. Apri Impostazioni per risolvere il problema,
     quindi riavvia.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Modalità provvisoria: l''app continuava a bloccarsi all''avvio, quindi i plugin sono disattivati e i layout dei widget mostrano quelli predefiniti. Riavvia per tornare alla normalità.'
   Safety & Alerts: Sicurezza e avvisi
   Same spool in {}? Tap Clear if it is a new one.: 'Stessa bobina in {}? Tocca Cancella se è una nuova.'
   Sample: Campione
@@ -3678,6 +3682,7 @@ translations:
   Use Android native keyboard for text input: Usa la tastiera nativa di Android per
     l'inserimento testo
   Use G10/G11 firmware retraction: Usa retrazione firmware G10/G11
+  Use New Address: 'Usa nuovo indirizzo'
   Use Unload before Eject: 'Usa Scarica prima di Espelli'
   Use first HID scanner found: 'Usa il primo scanner HID trovato'
   Use printer type to select image: Usa il tipo di stampante per selezionare l'immagine

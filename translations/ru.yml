@@ -1387,6 +1387,7 @@ translations:
   Forward Multiplier: 'Множитель прямого хода'
   Found %zu printers: Найдено %zu принтеров
   Found 1 printer: Найден 1 принтер
+  Found {} at {}.: '{} найден по адресу {}.'
   Framerate: Частота кадров
   From Buffer: Из буфера
   From SpoolmanDB: 'Из SpoolmanDB'
@@ -1762,6 +1763,7 @@ translations:
     печатей.
   Layers: Слои
   Layout: Раскладка
+  Layout changes are off in safe mode. Restart to edit.: 'Изменение раскладки отключено в безопасном режиме. Перезапустите, чтобы редактировать.'
   Learn More: Подробнее
   LedSelect: Выбрать LED
   Left: 'Слева'
@@ -2820,6 +2822,8 @@ translations:
   : Активен безопасный режим. Подключение к принтеру отключено, так как приложение
     постоянно аварийно завершалось при запуске. Откройте настройки, чтобы устранить
     проблему, затем перезагрузите.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Безопасный режим: приложение постоянно аварийно завершалось при запуске, поэтому плагины отключены, а раскладки виджетов показаны по умолчанию. Перезапустите, чтобы вернуться к обычному режиму.'
   Safety & Alerts: Безопасность и оповещения
   Same spool in {}? Tap Clear if it is a new one.: 'Та же катушка в {}? Нажмите «Очистить», если это новая.'
   Sample: Образец
@@ -3638,6 +3642,7 @@ translations:
   Use Android native keyboard for text input: Использовать нативную клавиатуру Android
     для ввода текста
   Use G10/G11 firmware retraction: Использовать аппаратный ретракт G10/G11
+  Use New Address: 'Использовать новый адрес'
   Use Unload before Eject: 'Используйте «Выгрузить» перед «Извлечь»'
   Use first HID scanner found: 'Использовать первый найденный HID-сканер'
   Use printer type to select image: Использовать тип принтера для выбора изображения

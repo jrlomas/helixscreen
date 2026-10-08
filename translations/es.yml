@@ -1404,6 +1404,7 @@ translations:
   Forward Multiplier: 'Multiplicador de avance'
   Found %zu printers: '%zu impresoras encontradas'
   Found 1 printer: 1 impresora encontrada
+  Found {} at {}.: '{} encontrada en {}.'
   Framerate: Cuadros por segundo
   From Buffer: Desde búfer
   From SpoolmanDB: 'De SpoolmanDB'
@@ -1779,6 +1780,7 @@ translations:
     capa captura un cuadro por cambio de capa. Mejor para la mayoría de las impresiones.
   Layers: Capas
   Layout: Distribución
+  Layout changes are off in safe mode. Restart to edit.: 'Los cambios de diseño están desactivados en modo seguro. Reinicie para editar.'
   Learn More: Más información
   LedSelect: Seleccionar LED
   Left: 'Izquierda'
@@ -2846,6 +2848,8 @@ translations:
   : Modo seguro activo. La conexión con la impresora está deshabilitada porque la
     aplicación seguía fallando al iniciar. Abra Ajustes para solucionar el problema
     y luego reinicie.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Modo seguro: la aplicación seguía fallando al iniciar, así que los plugins están desactivados y los diseños de widgets muestran sus valores predeterminados. Reinicie para volver a la normalidad.'
   Safety & Alerts: Seguridad y alertas
   Same spool in {}? Tap Clear if it is a new one.: '¿La misma bobina en {}? Toca Borrar si es una nueva.'
   Sample: Muestra
@@ -3678,6 +3682,7 @@ translations:
   Use Android native keyboard for text input: Usar el teclado nativo de Android para
     entrada de texto
   Use G10/G11 firmware retraction: Usar retracción de firmware G10/G11
+  Use New Address: 'Usar nueva dirección'
   Use Unload before Eject: 'Use Descargar antes de Expulsar'
   Use first HID scanner found: 'Usar el primer escáner HID encontrado'
   Use printer type to select image: Usar tipo de impresora para seleccionar imagen

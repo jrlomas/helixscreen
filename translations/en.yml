@@ -1355,6 +1355,7 @@ translations:
   Forward Multiplier: Forward Multiplier
   Found %zu printers: Found %zu printers
   Found 1 printer: Found 1 printer
+  Found {} at {}.: Found {} at {}.
   Framerate: Framerate
   From Buffer: From Buffer
   From SpoolmanDB: From SpoolmanDB
@@ -1722,6 +1723,7 @@ translations:
     captures one frame per layer change. Best for most prints.
   Layers: Layers
   Layout: Layout
+  Layout changes are off in safe mode. Restart to edit.: Layout changes are off in safe mode. Restart to edit.
   Learn More: Learn More
   LedSelect: LedSelect
   Left: Left
@@ -2763,6 +2765,8 @@ translations:
     on startup. Open Settings to fix the issue, then reboot.
   : Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
   Safety & Alerts: Safety & Alerts
   Same spool in {}? Tap Clear if it is a new one.: Same spool in {}? Tap Clear if it is a new one.
   Sample: Sample
@@ -3566,6 +3570,7 @@ translations:
   Use Android native keyboard for text input: Use Android native keyboard for text
     input
   Use G10/G11 firmware retraction: Use G10/G11 firmware retraction
+  Use New Address: Use New Address
   Use Unload before Eject: Use Unload before Eject
   Use first HID scanner found: Use first HID scanner found
   Use printer type to select image: Use printer type to select image

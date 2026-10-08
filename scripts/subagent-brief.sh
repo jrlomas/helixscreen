@@ -16,7 +16,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 block=$(cat <<'EOF'
 Shared machine: thelio (32 threads) is used by several sessions at once; zeus has 2x the RAM and is usually idle.
 - Claims: you run inside your lead's session, so its claims are yours too. Before building, `scripts/helix-claim check build:<tree>`: FREE means take it (`take build:<tree> "<why>"`) and release it when done; LIVE means build under it only if your brief says your lead holds it, otherwise stop and report. Never release a claim you did not take.
-- `-j$(scripts/helix-claim jobs)`, never a fixed -j. `scripts/helix-claim jobs -v` shows how busy thelio is.
+- Plain `make`, never a fixed -j: `make` here is the jobpool shim (one machine pool; a -j is stripped). `jobpool status` shows how full it is. Without jobpool: `-j$(scripts/helix-claim jobs)`.
 - Mutation, ASAN and symbolizing go to zeus via `scripts/zeus-run.sh` (it runs pushed SHAs: push your branch, never main). Never addr2line or gdb against helix-tests on thelio.
 - Run builds and tests in the foreground. You are not woken when a background job ends, so never go idle waiting on one. If a command times out into the background, kill its PID before moving on.
 - Kill only PIDs you started; never pkill or pgrep -f by name.

@@ -136,4 +136,8 @@ void flash_object(lv_obj_t* obj, int32_t duration_ms = 200, bool force = false);
  */
 void defocus_tree(lv_obj_t* obj);
 
+/// helix::full_style_effects_allowed() for the running tier, read from the
+/// "platform_tier" subject; true until that subject is registered.
+bool full_style_effects_active();
+
 } // namespace helix::ui

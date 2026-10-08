@@ -7,6 +7,10 @@ set -e
 
 # Show help
 show_help() {
+    local ids
+    ids=$(sed -n 's/^ *{"\([a-z0-9_]*\)", PrinterType::.*/\1/p' \
+        "$(dirname "${BASH_SOURCE[0]}")/../include/mock_persona.h" | paste -sd, - |
+        sed 's/,/, /g' | fold -s -w 60 | sed 's/ *$//; s/^/            /')
     cat << 'EOF'
 Usage: screenshot.sh [BINARY] [NAME] [TOKEN] [FLAGS...]
 
@@ -41,12 +45,16 @@ Arguments:
             steps (semicolon-separated) instead of a recipe-table lookup —
             for a screen with no table entry yet. Overrides TOKEN's recipe.
 
-            --printer <id>      Which printer the mock impersonates
-            (voron_24, voron_trident, k1, ad5m, generic_corexy,
-            generic_bedslinger, multi_extruder). Sets HELIX_MOCK_PRINTER.
+EOF
+    cat << EOF
+            --printer <id>      Which printer the mock impersonates. Sets
+            HELIX_MOCK_PRINTER to one of:
+${ids}
             Default: unset, which is the mock's own default of Voron 2.4.
             Ignored (with a warning) under --real.
 
+EOF
+    cat << 'EOF'
             --binary-path PATH  Drive this binary instead of
             build/bin/<BINARY> (sanitizer builds live in their own BIN_DIR).
             The same binary also acts as the ctl client.

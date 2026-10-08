@@ -737,11 +737,6 @@ class PrinterDiscovery {
         return macros_.size();
     }
 
-    /**
-     * @brief Get summary string for logging
-     */
-    [[nodiscard]] std::string summary() const;
-
     // ========================================================================
     // Printer Info (populated from server.info / printer.info)
     // ========================================================================
@@ -1024,6 +1019,10 @@ namespace helix {
  */
 void init_subsystems_from_hardware(const PrinterDiscovery& hardware, IMoonrakerAPI* api,
                                    IMoonrakerClient* client);
+
+/// Saves Klipper's hostname for the active printer, writing only when it changed. The
+/// connection-failed prompt re-finds the printer over mDNS by it (#1217).
+void remember_printer_hostname(const std::string& hostname);
 
 /**
  * @brief The objects TemperatureSensorManager tracks: temperature_sensor /

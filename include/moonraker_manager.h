@@ -35,6 +35,15 @@ class MoonrakerManagerTestAccess;
 // Need full enum definition for inline helper function
 #include "printer_state.h"
 
+namespace helix {
+/// Settle the saved printer type for a launch with HELIX_MOCK_PRINTER set.
+/// A persona that declares a type (PersonaEntry::saved_type) writes it; any
+/// other value, recognised or not, clears a stale saved type so detection
+/// re-resolves. nullptr or "" leaves config alone. Does not save: returns true
+/// when it changed config, and the caller saves.
+bool apply_mock_printer_identity(Config& config, const char* mock_printer_env);
+} // namespace helix
+
 /**
  * @brief Manages Moonraker client and API lifecycle
  *
@@ -137,12 +146,16 @@ class MoonrakerManager {
     size_t pending_notification_count() const;
 
     /**
-     * @brief Initialize print start collector after connection
+     * @brief Create the print start collector for the printer about to connect
      *
-     * Sets up observers to monitor print startup phases.
-     * Call after successful connect().
+     * Sets up observers to monitor print startup phases. Call before connect(), so the
+     * observers it installs on the API are in place before the WebSocket task can call
+     * them. Replaces (detaches) any previous collector.
      */
     void init_print_start_collector();
+
+    /// Detach and drop the print start collector, if there is one.
+    void release_print_start_collector();
 
     /**
      * @brief The pre-print detection collector, if one exists yet

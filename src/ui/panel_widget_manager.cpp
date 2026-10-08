@@ -5,6 +5,7 @@
 
 #include "ui_ams_mini_status.h"
 #include "ui_notification.h"
+#include "ui_toast_manager.h"
 #include "ui_utils.h"
 
 #include "ams_state.h"
@@ -23,6 +24,7 @@
 #include "panel_widget_registry.h"
 #include "printer_cache_registry.h"
 #include "printer_state.h"
+#include "runtime_config.h"
 #include "src/ui/panel_widgets/tile_sizing.h"
 #include "system/crash_handler.h"
 #include "system/telemetry_manager.h"
@@ -376,6 +378,16 @@ void PanelWidgetManager::unregister_rebuild_callback(const std::string& panel_id
         return;
     }
     instance().rebuild_callbacks_.erase(panel_id);
+}
+
+bool PanelWidgetManager::refuse_layout_edit() {
+    if (!get_runtime_config()->crash_loop_safe_mode) {
+        return false;
+    }
+    spdlog::warn("[PanelWidgetManager] Layout edit refused: crash-loop safe mode");
+    ToastManager::instance().show(ToastSeverity::WARNING,
+                                  lv_tr("Layout changes are off in safe mode. Restart to edit."));
+    return true;
 }
 
 void PanelWidgetManager::notify_config_changed(const std::string& panel_id) {

@@ -14,6 +14,7 @@
 #include "i_moonraker_api.h"
 #include "i_moonraker_client.h"
 #include "lvgl/lvgl.h"
+#include "moonraker_events.h"
 #include "moonraker_manager.h"
 #include "printer_retarget.h"
 #include "printer_state.h"
@@ -21,13 +22,32 @@
 #include "theme_manager.h"
 #include "ui/ui_widget_helpers.h"
 #include "utils/network_validation.h"
+#include "wizard_config_paths.h"
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <arpa/inet.h>
+#include <cctype>
 #include <string>
 #include <utility>
 
 using namespace helix;
+
+namespace {
+
+void store_active_printer_address(const std::string& host, int port) {
+    Config* config = Config::get_instance();
+    config->set(config->df() + "moonraker_host", host);
+    config->set(config->df() + "moonraker_port", port);
+    config->save();
+    spdlog::info("[ChangeHostModal] Saved new host: {}:{}", host, port);
+    // moonraker_host changed — flush the same-host detection cache so the
+    // shutdown widget picks up the new value on next open.
+    helix::invalidate_host_identity_cache();
+}
+
+} // namespace
 
 // Static member initialization
 bool ChangeHostModal::callbacks_registered_ = false;
@@ -324,14 +344,7 @@ void ChangeHostModal::handle_save() {
 
     // Save to config. The client reconnects to the new host, so there is nothing to restore.
     client_borrowed_ = false;
-    Config* config = Config::get_instance();
-    config->set(config->df() + "moonraker_host", host);
-    config->set(config->df() + "moonraker_port", port);
-    config->save();
-    spdlog::info("[ChangeHostModal] Saved new host: {}:{}", host, port);
-    // moonraker_host changed — flush the same-host detection cache so the
-    // shutdown widget picks up the new value on next open.
-    helix::invalidate_host_identity_cache();
+    store_active_printer_address(host, port);
 
     // Close modal first — on_hide() removes observers and clears state
     hide();
@@ -505,7 +518,16 @@ void show_change_host_modal(std::function<void(bool changed)> extra_on_complete)
 
 namespace {
 
-void present_connection_failed(const std::string& title, const std::string& message) {
+/// The prompt still describes the connection: the user did not switch printers and it did
+/// not come up meanwhile.
+bool failure_still_current(const std::string& printer_id) {
+    IMoonrakerClient* client = get_moonraker_client();
+    return Config::get_instance()->get_active_printer_id() == printer_id &&
+           !(client && client->get_connection_state() == ConnectionState::CONNECTED);
+}
+
+void present_connection_failed(const std::string& title, const std::string& message,
+                               const std::optional<DiscoveredPrinter>& moved) {
     // Reconnect first: a wedged transport (reported on Android, where the
     // process outlives its sockets) cannot be revived from outside the app,
     // and a full teardown/rebuild re-resolves the host — the one thing the
@@ -557,6 +579,31 @@ void present_connection_failed(const std::string& title, const std::string& mess
     };
     opts.cancel_text = lv_tr("Change Address");
 
+    // Offered, never adopted silently: a hostname is not unique, and a lookalike printer
+    // answering while this one is off would otherwise take its jobs.
+    if (moved) {
+        const std::string address = fmt::format("{}:{}", moved->ip_address, moved->port);
+        const std::string body =
+            message + "\n\n" + fill_placeholders(lv_tr("Found {} at {}."), {moved->name, address});
+        auto use_new = [host = moved->ip_address, port = static_cast<int>(moved->port),
+                        printer_id = Config::get_instance()->get_active_printer_id()] {
+            // The prompt can outlive a printer switch; the address belongs to this one only.
+            if (!failure_still_current(printer_id)) {
+                spdlog::info("[ChangeHost] Not applying {}:{}: the printer changed or "
+                             "reconnected while the prompt was open",
+                             host, port);
+                return;
+            }
+            store_active_printer_address(host, port);
+            // Past the prompt's exit animation, like the host modal's Save.
+            helix::ui::queue_update("ChangeHost::use_rediscovered",
+                                    [] { retarget_printer_connection(); });
+        };
+        helix::ui::modal_confirm(title.c_str(), body.c_str(), ModalSeverity::Error,
+                                 lv_tr("Use New Address"), use_new, opts);
+        return;
+    }
+
     helix::ui::modal_confirm(title.c_str(), message.c_str(), ModalSeverity::Error,
                              lv_tr("Reconnect"), reconnect, opts);
 }
@@ -574,6 +621,7 @@ struct DeferredFailure {
     std::string title;
     std::string message;
     std::string printer_id;
+    std::optional<DiscoveredPrinter> moved;
     bool held = false;
     lv_timer_t* timer = nullptr;
 };
@@ -585,10 +633,12 @@ DeferredFailure& deferred_failure() {
 
 constexpr uint32_t CHOOSER_POLL_MS = 300;
 
-void defer_connection_failed(const std::string& title, const std::string& message) {
+void defer_connection_failed(const std::string& title, const std::string& message,
+                             const std::optional<DiscoveredPrinter>& moved) {
     DeferredFailure& d = deferred_failure();
     d.title = title;
     d.message = message;
+    d.moved = moved;
     d.printer_id = Config::get_instance()->get_active_printer_id();
     d.held = true;
     if (d.timer) {
@@ -609,22 +659,160 @@ void defer_connection_failed(const std::string& title, const std::string& messag
                 return; // dropped when the chooser closed on a selection
             }
             pending.held = false;
-            IMoonrakerClient* client = get_moonraker_client();
-            const bool same_printer =
-                Config::get_instance()->get_active_printer_id() == pending.printer_id;
-            if (!same_printer ||
-                (client && client->get_connection_state() == ConnectionState::CONNECTED)) {
+            if (!failure_still_current(pending.printer_id)) {
                 spdlog::debug(
                     "[ChangeHost] Dropping a connection-failed prompt the user moved past");
                 return;
             }
-            present_connection_failed(pending.title, pending.message);
+            present_connection_failed(pending.title, pending.message, pending.moved);
         },
         CHOOSER_POLL_MS, nullptr);
     lv_timer_set_repeat_count(d.timer, 1);
 }
 
+void route_connection_failed(const std::string& title, const std::string& message,
+                             const std::optional<DiscoveredPrinter>& moved) {
+    if (printer_chooser_open()) {
+        defer_connection_failed(title, message, moved);
+        return;
+    }
+    present_connection_failed(title, message, moved);
+}
+
+std::string normalized_hostname(std::string name) {
+    std::transform(name.begin(), name.end(), name.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (!name.empty() && name.back() == '.') {
+        name.pop_back();
+    }
+    const std::string suffix = ".local";
+    if (name.size() > suffix.size() &&
+        name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        name.resize(name.size() - suffix.size());
+    }
+    return name;
+}
+
+/// The one browse a failure escalation runs; `mdns` is set while it is in flight.
+struct Rediscovery {
+    std::function<std::unique_ptr<IMdnsDiscovery>()> source;
+    std::unique_ptr<IMdnsDiscovery> mdns;
+    std::string title;
+    std::string message;
+    std::string printer_id;
+};
+
+Rediscovery& rediscovery() {
+    static Rediscovery r;
+    return r;
+}
+
+void finish_rediscovery() {
+    Rediscovery& r = rediscovery();
+    const std::vector<DiscoveredPrinter> found = r.mdns->get_discovered_printers();
+    r.mdns->stop_discovery();
+    r.mdns.reset();
+    if (!failure_still_current(r.printer_id)) {
+        spdlog::debug("[ChangeHost] Dropping a connection-failed prompt the user moved past");
+        return;
+    }
+
+    Config* cfg = Config::get_instance();
+    const std::string host = cfg->get<std::string>(cfg->df() + "moonraker_host", "");
+    const int port = cfg->get<int>(cfg->df() + "moonraker_port", 7125);
+    const auto moved =
+        find_moved_printer(found, host, port,
+                           {cfg->get<std::string>(cfg->df() + wizard::HOSTNAME, ""),
+                            cfg->get<std::string>(cfg->df() + wizard::PRINTER_NAME, "")});
+    if (moved) {
+        spdlog::info("[ChangeHost] {}:{} unreachable; mDNS finds '{}' at {}:{}", host, port,
+                     moved->hostname, moved->ip_address, moved->port);
+    } else {
+        spdlog::info("[ChangeHost] mDNS browse found {} Moonraker(s), none of them this printer "
+                     "at a new address",
+                     found.size());
+    }
+    route_connection_failed(r.title, r.message, moved);
+}
+
+/// Browses once before the prompt shows, so it can offer the printer's new address.
+void begin_connection_failed(const std::string& title, const std::string& message) {
+    Rediscovery& r = rediscovery();
+    Config* cfg = Config::get_instance();
+    const std::string host = cfg->get<std::string>(cfg->df() + "moonraker_host", "");
+    if (!r.source || host.empty() || helix::is_moonraker_on_same_host(host)) {
+        route_connection_failed(title, message, std::nullopt);
+        return;
+    }
+    if (r.mdns) {
+        spdlog::debug("[ChangeHost] A browse is already in flight for this failure");
+        return;
+    }
+    r.mdns = r.source();
+    if (!r.mdns) {
+        route_connection_failed(title, message, std::nullopt);
+        return;
+    }
+    r.title = title;
+    r.message = message;
+    r.printer_id = cfg->get_active_printer_id();
+    spdlog::info("[ChangeHost] Browsing mDNS for {} before the connection-failed prompt", host);
+    r.mdns->start_discovery({});
+    // TIMER_DTOR_OK: process-lifetime state with no owner object; a one-shot LVGL deletes.
+    lv_timer_t* t =
+        lv_timer_create([](lv_timer_t*) { finish_rediscovery(); }, REDISCOVERY_WINDOW_MS, nullptr);
+    lv_timer_set_repeat_count(t, 1);
+}
+
 } // namespace
+
+std::optional<DiscoveredPrinter> find_moved_printer(const std::vector<DiscoveredPrinter>& found,
+                                                    const std::string& saved_host, int saved_port,
+                                                    const std::vector<std::string>& identities) {
+#if defined(HELIX_PLATFORM_ESP32)
+    // The firmware never browses for a moved printer, and its libc has no inet_pton.
+    (void)found;
+    (void)saved_host;
+    (void)saved_port;
+    (void)identities;
+    return std::nullopt;
+#else
+    // A saved name re-resolves to wherever the printer went; swapping it for the literal IP
+    // mDNS reports would trade an address that heals for one that cannot.
+    in_addr v4{};
+    in6_addr v6{};
+    if (inet_pton(AF_INET, saved_host.c_str(), &v4) != 1 &&
+        inet_pton(AF_INET6, saved_host.c_str(), &v6) != 1) {
+        return std::nullopt;
+    }
+    std::vector<std::string> names;
+    for (const auto& id : identities) {
+        if (!id.empty()) {
+            names.push_back(normalized_hostname(id));
+        }
+    }
+    const DiscoveredPrinter* moved = nullptr;
+    int matches = 0;
+    for (const auto& p : found) {
+        if (std::find(names.begin(), names.end(), normalized_hostname(p.hostname)) == names.end()) {
+            continue;
+        }
+        if (p.ip_address == saved_host && p.port == saved_port) {
+            return std::nullopt;
+        }
+        moved = &p;
+        ++matches;
+    }
+    if (matches != 1) {
+        return std::nullopt;
+    }
+    return *moved;
+#endif
+}
+
+void set_printer_rediscovery_source(std::function<std::unique_ptr<IMdnsDiscovery>()> source) {
+    rediscovery().source = std::move(source);
+}
 
 void drop_held_connection_failed() {
     DeferredFailure& d = deferred_failure();
@@ -639,13 +827,7 @@ void show_connection_failed_modal(const std::string& title, const std::string& m
     // Callers include MoonrakerClient::on_ws_close on the libhv event-loop
     // thread. Everything below touches LVGL, so hop to the main thread first.
     helix::ui::queue_update("ui_change_host_modal::show_connection_failed_modal",
-                            [title, message]() {
-                                if (printer_chooser_open()) {
-                                    defer_connection_failed(title, message);
-                                    return;
-                                }
-                                present_connection_failed(title, message);
-                            });
+                            [title, message]() { begin_connection_failed(title, message); });
 }
 
 } // namespace helix::ui

@@ -1905,8 +1905,7 @@ Wording rules, all pinned by tests in `test_ams_endless_spool.cpp`:
   noun needs no translation, so this costs no string.
 
 **Where it renders, and where it deliberately does not.** Two homes, one component
-(`ui_xml/components/ams_endless_status.xml`, registered in `src/xml_registration.cpp` ahead of
-`filament_panel.xml` because the AMS panel registers itself lazily). The component is entirely
+(`ui_xml/components/ams_endless_status.xml`, which registers on first use, wherever it is nested). The component is entirely
 subject-driven and needs no C++ of its own.
 
 | Surface | Why |

@@ -180,6 +180,36 @@ TEST_CASE_METHOD(RootFixture, "settings root: Plugins shows only once a plugin e
     CHECK(lv_obj_has_flag(find("row_plugins"), LV_OBJ_FLAG_HIDDEN));
 }
 
+TEST_CASE_METHOD(RootFixture, "settings root: crash-loop safe mode loads no plugins",
+                 "[settings][settings_root][crash_loop]") {
+    helix::ConfigDirGuard guard("plugins-safe-mode");
+    helix::plugin::test::TempDir cache_root;
+    helix::ScopedEnv cache_dir("HELIX_CACHE_DIR", cache_root.path.string().c_str());
+    helix::ScopedEnv no_plugin_dir("HELIX_PLUGIN_DIR", nullptr);
+    ScopedRuntimeConfig scoped_config;
+    helix::Config config;
+    Application app;
+    ApplicationTestAccess::neutralize_destructor(app);
+    ApplicationTestAccess::set_config(app, &config);
+
+    const std::filesystem::path plugins =
+        cache_root.path / "plugins" /
+        (config.get_active_printer_id().empty() ? "default" : config.get_active_printer_id());
+    std::filesystem::create_directories(plugins);
+    std::filesystem::copy("tests/fixtures/plugins/hello", plugins / "hello",
+                          std::filesystem::copy_options::recursive);
+
+    get_runtime_config()->crash_loop_safe_mode = true;
+    ApplicationTestAccess::init_plugins(app);
+    process_lvgl(5);
+    CHECK(lv_obj_has_flag(find("row_plugins"), LV_OBJ_FLAG_HIDDEN));
+
+    get_runtime_config()->crash_loop_safe_mode = false;
+    ApplicationTestAccess::init_plugins(app);
+    process_lvgl(5);
+    CHECK_FALSE(lv_obj_has_flag(find("row_plugins"), LV_OBJ_FLAG_HIDDEN));
+}
+
 TEST_CASE_METHOD(RootFixture, "settings root: tapping Plugins opens the plugins overlay",
                  "[settings][settings_root]") {
     DisplaySettingsManager::instance().set_animations_enabled(false);

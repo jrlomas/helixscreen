@@ -1403,6 +1403,7 @@ translations:
   Forward Multiplier: 'Multiplicador de avanço'
   Found %zu printers: '%zu impressoras encontradas'
   Found 1 printer: 1 impressora encontrada
+  Found {} at {}.: '{} encontrada em {}.'
   Framerate: Taxa de Quadros
   From Buffer: Do buffer
   From SpoolmanDB: 'Do SpoolmanDB'
@@ -1782,6 +1783,7 @@ translations:
     camada captura um quadro por mudança de camada. Melhor para a maioria das impressões.
   Layers: Camadas
   Layout: Disposição
+  Layout changes are off in safe mode. Restart to edit.: 'As alterações de layout estão desativadas no Modo Seguro. Reinicie para editar.'
   Learn More: Saiba Mais
   LedSelect: Selecionar LED
   Left: 'Esquerda'
@@ -2847,6 +2849,8 @@ translations:
   : Modo Seguro ativo. A conexão com a impressora está desativada porque o aplicativo
     continuou travando na inicialização. Abra as Configurações para corrigir o problema
     e reinicie.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Modo Seguro: o aplicativo continuou travando na inicialização, então os plugins estão desativados e os layouts de widgets mostram seus padrões. Reinicie para voltar ao normal.'
   Safety & Alerts: Segurança e alertas
   Same spool in {}? Tap Clear if it is a new one.: 'Mesmo carretel em {}? Toque em Limpar se for um novo.'
   Sample: Amostra
@@ -3682,6 +3686,7 @@ translations:
   Use Android native keyboard for text input: Usar teclado nativo do Android para
     entrada de texto
   Use G10/G11 firmware retraction: Usar retração de firmware G10/G11
+  Use New Address: 'Usar novo endereço'
   Use Unload before Eject: 'Use Descarregar antes de Ejetar'
   Use first HID scanner found: 'Usar o primeiro leitor HID encontrado'
   Use printer type to select image: Usar tipo de impressora para selecionar imagem

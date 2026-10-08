@@ -29,6 +29,7 @@
 #include "host_identity.h"
 #include "i_moonraker_client.h"
 #include "json_utils.h"
+#include "mock_persona.h"
 #include "moonraker_api.h"
 #include "moonraker_client.h"
 #include "moonraker_event_routing.h"
@@ -61,6 +62,29 @@
 
 using namespace helix;
 
+bool helix::apply_mock_printer_identity(Config& config, const char* mock_printer_env) {
+    if (!mock_printer_env || !mock_printer_env[0]) {
+        return false;
+    }
+    const std::string type_path = config.df() + helix::wizard::PRINTER_TYPE;
+    const std::string prev = config.get<std::string>(type_path, "");
+    const std::string next(helix::mock::resolve_persona(mock_printer_env).saved_type);
+    if (prev == next) {
+        return false;
+    }
+    config.set<std::string>(type_path, next);
+    if (next.empty()) {
+        spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER={} cleared saved printer type '{}' "
+                     "so mock identity re-detects this launch",
+                     mock_printer_env, prev);
+    } else {
+        spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER={} saved printer type '{}' "
+                     "(persona identity doesn't clear the detection bar)",
+                     mock_printer_env, next);
+    }
+    return true;
+}
+
 MoonrakerManager::MoonrakerManager() {}
 
 MoonrakerManager::~MoonrakerManager() {
@@ -78,45 +102,26 @@ bool MoonrakerManager::init(const RuntimeConfig& runtime_config, Config* config)
     // Create client (mock or real)
     create_client(runtime_config);
 
-    // HELIX_MOCK_PRINTER is authoritative over any persisted printer type.
-    // PrinterDetector::auto_detect_and_save() (which runs later, after the
-    // discovery handshake) short-circuits when a printer type is already
-    // saved in config — so a stale "Voron 2.4" from a previous run would
-    // silently win over the env var. Clearing the saved type here (before
-    // detection runs) forces auto-detection to re-resolve from the mock's
-    // reported identity on every launch. Strictly env-gated: zero behavior
-    // change when HELIX_MOCK_PRINTER is unset.
-    if (config && std::getenv("HELIX_MOCK_PRINTER")) {
-        const std::string mock_printer = std::getenv("HELIX_MOCK_PRINTER");
-        const std::string type_path = config->df() + helix::wizard::PRINTER_TYPE;
-        // Auto-detection cannot name these personas from the mock's reported
-        // identity, so the persona's printer type is part of what the env
-        // var declares.
-        if (mock_printer == "k1" || mock_printer == "k1max" || mock_printer == "snapmaker_u1") {
-            const std::string named = mock_printer == "k1max"          ? "Creality K1 Max"
-                                      : mock_printer == "snapmaker_u1" ? "Snapmaker U1"
-                                                                       : "Creality K1C";
-            config->set<std::string>(type_path, named);
-            config->save();
-            spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER={} saved printer type "
-                         "'{}' (persona identity doesn't clear the detection bar)",
-                         mock_printer, named);
-        } else {
-            const std::string prev = config->get<std::string>(type_path, "");
-            if (!prev.empty()) {
-                config->set<std::string>(type_path, "");
-                config->save();
-                spdlog::info("[MoonrakerManager] HELIX_MOCK_PRINTER set — cleared saved "
-                             "printer type '{}' so mock identity re-detects this launch",
-                             prev);
-            }
-        }
+    // HELIX_MOCK_PRINTER is authoritative over any persisted printer type:
+    // PrinterDetector::auto_detect_and_save() short-circuits when a type is
+    // already saved, so settle it here, before detection runs.
+    if (config && helix::apply_mock_printer_identity(*config, std::getenv("HELIX_MOCK_PRINTER"))) {
+        config->save();
     }
 
     // Configure timeouts from config file
     if (config) {
         configure_timeouts(config);
     }
+
+    // The connection-failed prompt browses for the printer at a new address. A mock printer
+    // has no network presence to find, and the firmware's MdnsDiscovery is a stub.
+#if !defined(ESP_PLATFORM)
+    if (!runtime_config.should_mock_mdns()) {
+        helix::ui::set_printer_rediscovery_source(
+            [] { return std::make_unique<helix::MdnsDiscovery>(); });
+    }
+#endif
 
     // Register callbacks for notifications and state changes
     register_callbacks();
@@ -146,10 +151,7 @@ void MoonrakerManager::shutdown() {
     spdlog::debug("[MoonrakerManager] Shutting down...");
 
     // Stop print start collector first (before client is destroyed)
-    if (m_print_start_collector) {
-        m_print_start_collector->stop();
-        m_print_start_collector.reset();
-    }
+    release_print_start_collector();
 
     // Release observer guards without calling lv_observer_remove().
     // During shutdown, subjects may already be deinitialized (which frees observers).
@@ -363,59 +365,17 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
         // Through the shared accessor so the logged figure is the one the mock
         // will actually run at, clamp included.
         double speedup = helix::sim::SimSpeed::global().factor();
-        // HELIX_MOCK_PRINTER=voron_24|voron_trident|k1|k1max|snapmaker_u1|
-        // ad5m|creator5|creator5_zmod|generic_corexy|generic_bedslinger|
-        // multi_extruder|delta defaults to Voron 2.4. K2 and CC1 don't have
-        // dedicated mock types yet; they fall through to the default with a
-        // warning.
         const char* type_env = std::getenv("HELIX_MOCK_PRINTER");
-        auto type = MoonrakerClientMock::PrinterType::VORON_24;
-        const char* type_name = "Voron 2.4";
-        if (type_env) {
-            std::string t(type_env);
-            if (t == "multi_extruder") {
-                type = MoonrakerClientMock::PrinterType::MULTI_EXTRUDER;
-                type_name = "Multi-Extruder";
-            } else if (t == "voron_trident") {
-                type = MoonrakerClientMock::PrinterType::VORON_TRIDENT;
-                type_name = "Voron Trident";
-            } else if (t == "k1") {
-                type = MoonrakerClientMock::PrinterType::CREALITY_K1;
-                type_name = "Creality K1";
-            } else if (t == "k1max") {
-                type = MoonrakerClientMock::PrinterType::CREALITY_K1_MAX;
-                type_name = "Creality K1 Max";
-            } else if (t == "ad5m") {
-                type = MoonrakerClientMock::PrinterType::FLASHFORGE_AD5M;
-                type_name = "Flashforge AD5M";
-            } else if (t == "creator5") {
-                type = MoonrakerClientMock::PrinterType::FLASHFORGE_CREATOR5;
-                type_name = "FlashForge Creator 5 Pro";
-            } else if (t == "creator5_zmod") {
-                type = MoonrakerClientMock::PrinterType::FLASHFORGE_CREATOR5_ZMOD;
-                type_name = "FlashForge Creator 5 Pro (Z-Mod)";
-            } else if (t == "generic_corexy") {
-                type = MoonrakerClientMock::PrinterType::GENERIC_COREXY;
-                type_name = "Generic CoreXY";
-            } else if (t == "generic_bedslinger") {
-                type = MoonrakerClientMock::PrinterType::GENERIC_BEDSLINGER;
-                type_name = "Generic Bedslinger";
-            } else if (t == "delta") {
-                type = MoonrakerClientMock::PrinterType::DELTA;
-                type_name = "Generic Delta";
-            } else if (t == "snapmaker_u1") {
-                type = MoonrakerClientMock::PrinterType::MULTI_EXTRUDER;
-                type_name = "Snapmaker U1 (multi-extruder mock)";
-            } else if (t != "voron_24") {
-                spdlog::warn("[MoonrakerManager] HELIX_MOCK_PRINTER='{}' not recognised "
-                             "— falling back to Voron 2.4. Valid: voron_24, voron_trident, "
-                             "k1, k1max, snapmaker_u1, ad5m, creator5, creator5_zmod, "
-                             "generic_corexy, generic_bedslinger, multi_extruder, delta.",
-                             t);
-            }
+        bool recognised = true;
+        const auto& persona = helix::mock::resolve_persona(type_env, &recognised);
+        if (!recognised) {
+            spdlog::warn("[MoonrakerManager] HELIX_MOCK_PRINTER='{}' not recognised — falling "
+                         "back to {}. Valid: {}.",
+                         type_env, persona.display_name, helix::mock::persona_ids());
         }
-        spdlog::info("[MoonrakerManager] Creating MOCK client ({}, {}x speed)", type_name, speedup);
-        auto mock = std::make_unique<MoonrakerClientMock>(type, speedup);
+        spdlog::info("[MoonrakerManager] Creating MOCK client ({}, {}x speed)",
+                     persona.display_name, speedup);
+        auto mock = std::make_unique<MoonrakerClientMock>(persona.type, speedup);
 
         // HELIX_MOCK_AUTO_PRINT=1 — boot straight into an active mock print so
         // print-gated features (e.g. adaptive bed mesh) are exercisable under
@@ -445,9 +405,9 @@ void MoonrakerManager::create_client(const RuntimeConfig& runtime_config) {
         }
 
         // Disable MMU if AMS is explicitly disabled via CLI or env var
-        const char* mock_ams_env = std::getenv("HELIX_MOCK_AMS");
-        bool ams_disabled = runtime_config.disable_mock_ams ||
-                            (mock_ams_env && std::string(mock_ams_env) == "none");
+        bool ams_disabled =
+            runtime_config.disable_mock_ams ||
+            helix::mock::effective_mock_ams(std::getenv("HELIX_MOCK_AMS"), type_env) == "none";
         if (ams_disabled) {
             mock->set_mmu_enabled(false);
         }
@@ -695,13 +655,22 @@ void MoonrakerManager::create_api(const RuntimeConfig& runtime_config) {
     // after both MoonrakerManager and SubjectInitializer are ready
 }
 
+void MoonrakerManager::release_print_start_collector() {
+    if (m_print_start_collector) {
+        m_print_start_collector->detach();
+        m_print_start_collector.reset();
+    }
+}
+
 void MoonrakerManager::init_print_start_collector() {
     if (!m_client) {
         spdlog::warn("[MoonrakerManager] Cannot init print_start_collector - no client");
         return;
     }
 
-    // Create collector
+    // A retarget keeps the client: the previous printer's collector must not stay hooked
+    // to it.
+    release_print_start_collector();
     m_print_start_collector = std::make_shared<PrintStartCollector>(*m_client, get_printer_state());
 
     // Load print start profile based on detected printer type

@@ -14,7 +14,8 @@ setup() {
     git -C "$MAIN" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
     git -C "$MAIN" worktree add -q "$WT" 2>/dev/null
     mkdir -p "$WT/scripts" "$WT/firmware/helixscreen-esp32/build"
-    cp "$REPO_ROOT/scripts/esp32_build_debug_heap.sh" "$WT/scripts/"
+    cp "$REPO_ROOT/scripts/esp32_build_debug_heap.sh" "$REPO_ROOT/scripts/pool-docker.sh" \
+        "$REPO_ROOT/scripts/helix-claim" "$WT/scripts/"
     FW="$WT/firmware/helixscreen-esp32"
 
     export HELIX_CRASH_ELF_DIR="$BATS_TEST_TMPDIR/elves"
@@ -57,4 +58,16 @@ FAKE
     [ "$status" -ne 0 ] || fail "built without an asset image: $output"
     [[ "$output" == *"esp32_pack_assets.py"* ]] || fail "$output"
     [ ! -f "$DOCKER_ARGS_FILE" ] || fail "docker ran without an asset image"
+}
+
+@test "with a jobpool the idf.py build's ninja -j is the pool's share" {
+    echo image > "$FW/build/storage_frogfs.bin"
+    export HELIX_JOBPOOL="$BATS_TEST_TMPDIR/fake-jobpool"
+    printf '#!/bin/sh\n[ "$1" = hold ] || exit 2\nshift; [ "$1" = -- ] && shift\nJOBPOOL_SLOTS=6 exec "$@"\n' > "$HELIX_JOBPOOL"
+    chmod +x "$HELIX_JOBPOOL"
+    unset JOBPOOL
+    cd "$WT"
+    run bash scripts/esp32_build_debug_heap.sh
+    [ "$status" -eq 0 ] || fail "$output"
+    grep -qx "IDF_PY_BUILD_JOBS=6" "$DOCKER_ARGS_FILE" || fail "no pool share: $(cat "$DOCKER_ARGS_FILE")"
 }

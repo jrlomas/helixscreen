@@ -1271,6 +1271,7 @@
   <translation tag="Forward Multiplier" pt="Multiplicador de avanço"/>
   <translation tag="Found %zu printers" pt="%zu impressoras encontradas"/>
   <translation tag="Found 1 printer" pt="1 impressora encontrada"/>
+  <translation tag="Found {} at {}." pt="{} encontrada em {}."/>
   <translation tag="Framerate" pt="Taxa de Quadros"/>
   <translation tag="From Buffer" pt="Do buffer"/>
   <translation tag="From SpoolmanDB" pt="Do SpoolmanDB"/>
@@ -1596,6 +1597,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." pt="O modo por camada captura um quadro por mudança de camada. Melhor para a maioria das impressões."/>
   <translation tag="Layers" pt="Camadas"/>
   <translation tag="Layout" pt="Disposição"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." pt="As alterações de layout estão desativadas no Modo Seguro. Reinicie para editar."/>
   <translation tag="Learn More" pt="Saiba Mais"/>
   <translation tag="LedSelect" pt="Selecionar LED"/>
   <translation tag="Left" pt="Esquerda"/>
@@ -2572,6 +2574,7 @@
   <translation tag="STYLE PROPERTIES" pt="PROPRIEDADES DE ESTILO"/>
   <translation tag="SWITCH SENSORS" pt="SENSORES DE CHAVE"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." pt="Modo Seguro ativo. A conexão com a impressora está desativada porque o aplicativo continuou travando na inicialização. Abra as Configurações para corrigir o problema e reinicie."/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." pt="Modo Seguro: o aplicativo continuou travando na inicialização, então os plugins estão desativados e os layouts de widgets mostram seus padrões. Reinicie para voltar ao normal."/>
   <translation tag="Safety &amp; Alerts" pt="Segurança e alertas"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." pt="Mesmo carretel em {}? Toque em Limpar se for um novo."/>
   <translation tag="Sample" pt="Amostra"/>
@@ -3273,6 +3276,7 @@
   <translation tag="Uptime" pt="Tempo Ativo"/>
   <translation tag="Use Android native keyboard for text input" pt="Usar teclado nativo do Android para entrada de texto"/>
   <translation tag="Use G10/G11 firmware retraction" pt="Usar retração de firmware G10/G11"/>
+  <translation tag="Use New Address" pt="Usar novo endereço"/>
   <translation tag="Use Unload before Eject" pt="Use Descarregar antes de Ejetar"/>
   <translation tag="Use first HID scanner found" pt="Usar o primeiro leitor HID encontrado"/>
   <translation tag="Use printer type to select image" pt="Usar tipo de impressora para selecionar imagem"/>

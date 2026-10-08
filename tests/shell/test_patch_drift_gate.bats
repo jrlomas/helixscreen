@@ -634,6 +634,12 @@ edit_an_applied_patch() {
     grep -q 'cd "$REPO_ROOT" && python3 scripts/check_clang_diagnostics.py' .githooks/pre-push
 }
 
+@test "pre-push lends build/bin only to a commit that descends from this tree" {
+    # Another line's commit validated by this branch's binaries reports this
+    # branch's constants as missing from that line's XML.
+    grep -q 'build/bin" \] && git merge-base --is-ancestor HEAD "\$TARGET"' .githooks/pre-push
+}
+
 @test "a branch whose quality-checks.sh predates the deferral is still pushable" {
     # The hook only exports the flag; a script that has never heard of it must
     # ignore it rather than fail, so an older branch stays pushable.

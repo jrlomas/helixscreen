@@ -1271,6 +1271,7 @@
   <translation tag="Forward Multiplier" ru="Множитель прямого хода"/>
   <translation tag="Found %zu printers" ru="Найдено %zu принтеров"/>
   <translation tag="Found 1 printer" ru="Найден 1 принтер"/>
+  <translation tag="Found {} at {}." ru="{} найден по адресу {}."/>
   <translation tag="Framerate" ru="Частота кадров"/>
   <translation tag="From Buffer" ru="Из буфера"/>
   <translation tag="From SpoolmanDB" ru="Из SpoolmanDB"/>
@@ -1596,6 +1597,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." ru="Послойный режим захватывает один кадр на каждую смену слоя. Лучший выбор для большинства печатей."/>
   <translation tag="Layers" ru="Слои"/>
   <translation tag="Layout" ru="Раскладка"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." ru="Изменение раскладки отключено в безопасном режиме. Перезапустите, чтобы редактировать."/>
   <translation tag="Learn More" ru="Подробнее"/>
   <translation tag="LedSelect" ru="Выбрать LED"/>
   <translation tag="Left" ru="Слева"/>
@@ -2572,6 +2574,7 @@
   <translation tag="STYLE PROPERTIES" ru="СВОЙСТВА СТИЛЯ"/>
   <translation tag="SWITCH SENSORS" ru="КОНЦЕВЫЕ ДАТЧИКИ"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." ru="Активен безопасный режим. Подключение к принтеру отключено, так как приложение постоянно аварийно завершалось при запуске. Откройте настройки, чтобы устранить проблему, затем перезагрузите."/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." ru="Безопасный режим: приложение постоянно аварийно завершалось при запуске, поэтому плагины отключены, а раскладки виджетов показаны по умолчанию. Перезапустите, чтобы вернуться к обычному режиму."/>
   <translation tag="Safety &amp; Alerts" ru="Безопасность и оповещения"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." ru="Та же катушка в {}? Нажмите «Очистить», если это новая."/>
   <translation tag="Sample" ru="Образец"/>
@@ -3273,6 +3276,7 @@
   <translation tag="Uptime" ru="Время работы"/>
   <translation tag="Use Android native keyboard for text input" ru="Использовать нативную клавиатуру Android для ввода текста"/>
   <translation tag="Use G10/G11 firmware retraction" ru="Использовать аппаратный ретракт G10/G11"/>
+  <translation tag="Use New Address" ru="Использовать новый адрес"/>
   <translation tag="Use Unload before Eject" ru="Используйте «Выгрузить» перед «Извлечь»"/>
   <translation tag="Use first HID scanner found" ru="Использовать первый найденный HID-сканер"/>
   <translation tag="Use printer type to select image" ru="Использовать тип принтера для выбора изображения"/>

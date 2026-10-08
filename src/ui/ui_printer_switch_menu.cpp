@@ -77,7 +77,7 @@ void PrinterSwitchMenu::populate_printer_list() {
 
     for (const auto& id : printer_ids) {
         bool is_active = (id == active_id);
-        std::string name = cfg->get<std::string>("/printers/" + id + "/printer_name", id);
+        std::string name = cfg->get_printer_display_name(id, id);
 
         const char* attrs[] = {
             "check_text",

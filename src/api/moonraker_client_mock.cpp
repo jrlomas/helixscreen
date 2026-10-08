@@ -42,16 +42,13 @@
 using namespace helix;
 
 // Generate mock geometry for exclude_object status updates.
-// Spreads objects in a grid inset from the edges of the mock bed, matching the
-// `center` + `polygon` shape Moonraker reports for EXCLUDE_OBJECT_DEFINE.
-static json mock_object_entry(const std::string& name, int index, int total) {
+// Spreads objects in a grid inset from the edges of the persona's bed, matching
+// the `center` + `polygon` shape Moonraker reports for EXCLUDE_OBJECT_DEFINE.
+static json mock_object_entry(const std::string& name, int index, int total,
+                              const helix::mock::AxisMax& bed) {
     constexpr float INSET = 20.0f; // keep the plate margin visible in the map
-    const float bed_w =
-        static_cast<float>(mock_internal::MOCK_BED_X_MAX - mock_internal::MOCK_BED_X_MIN) -
-        2.0f * INSET;
-    const float bed_h =
-        static_cast<float>(mock_internal::MOCK_BED_Y_MAX - mock_internal::MOCK_BED_Y_MIN) -
-        2.0f * INSET;
+    const float bed_w = static_cast<float>(bed.x - mock_internal::MOCK_BED_X_MIN) - 2.0f * INSET;
+    const float bed_h = static_cast<float>(bed.y - mock_internal::MOCK_BED_Y_MIN) - 2.0f * INSET;
     int cols = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(std::max(1, total)))));
     int rows = std::max(1, (total + cols - 1) / cols);
     int row = index / cols, col = index % cols;
@@ -158,6 +155,12 @@ MoonrakerClientMock::MoonrakerClientMock(PrinterType type, double speedup_factor
     : printer_type_(type) {
     if (const char* kin_env = std::getenv("HELIX_MOCK_KINEMATICS"); kin_env && kin_env[0]) {
         kinematics_override_ = kin_env;
+    }
+    // Creality firmware declares the bed in a macro's variables; detection reads
+    // it to tell the K2 Plus from the K2 Pro, whose stepper travel overshoots alike.
+    if (type == PrinterType::CREALITY_K2_PLUS) {
+        set_config_settings_section("gcode_macro product_param", {{"variable_bed_size_x", "350"},
+                                                                  {"variable_bed_size_y", "350"}});
     }
     dragonbreath_fault_ = helix::env_flag("HELIX_MOCK_DRAGONBREATH_FAULT");
     dragonbreath_offline_ = helix::env_flag("HELIX_MOCK_DRAGONBREATH_OFFLINE");
@@ -391,25 +394,6 @@ bool MoonrakerClientMock::arm_event_replay(const std::string& json_path) {
     return true;
 }
 
-namespace {
-/// Per-persona travel bounds reported as toolhead axis_maximum. The K1
-/// persona carries the real values from a K1C capture (printer.cfg
-/// position_max 229/227/255) and the K1 Max persona the values from the
-/// #1282 klippy.log (300/307.5/300), so printer detection scores each as the
-/// Creality it is; every other persona keeps the long-standing generic
-/// volume and detects exactly as before.
-std::array<double, 3> persona_axis_maximum(MoonrakerClientMock::PrinterType type) {
-    switch (type) {
-    case MoonrakerClientMock::PrinterType::CREALITY_K1:
-        return {229.0, 227.0, 255.0};
-    case MoonrakerClientMock::PrinterType::CREALITY_K1_MAX:
-        return {300.0, 307.5, 300.0};
-    default:
-        return {235.0, 235.0, 250.0};
-    }
-}
-} // namespace
-
 void MoonrakerClientMock::start_replay_timer() {
     if (replay_events_.empty() || replay_timer_ != nullptr) {
         return;
@@ -534,6 +518,18 @@ bool MoonrakerClientMock::has_chamber_sensor() const {
         }
     }
     return false;
+}
+
+bool MoonrakerClientMock::simulates_chamber_temp() const {
+    {
+        std::lock_guard<std::mutex> discovery_lock(discovery_mutex_);
+        for (const auto& s : discovery_.sensors()) {
+            if (s == "temperature_sensor chamber_temp") {
+                return true;
+            }
+        }
+    }
+    return has_chamber_sensor();
 }
 
 std::string MoonrakerClientMock::chamber_heater_status_key() const {
@@ -787,6 +783,7 @@ MoonrakerClientMock::~MoonrakerClientMock() {
 
     // Pass true to skip logging during destruction - spdlog may already be destroyed
     stop_temperature_simulation(true);
+    fail_pending_script_acks();
 
     // Clean up any outstanding calibration timers (PID, MPC, shaper) to prevent
     // use-after-free when a subsequent test calls process_lvgl().
@@ -893,31 +890,10 @@ int MoonrakerClientMock::connect(const char* url, std::function<void()> on_conne
     return 0; // Success
 }
 
-namespace mock_internal {
-
-// NAMESPACE_OK: mock_internal sits at global scope with the mock's other helpers
-std::string mock_kinematics(MoonrakerClientMock::PrinterType type) {
-    switch (type) {
-    case MoonrakerClientMock::PrinterType::VORON_24:
-    case MoonrakerClientMock::PrinterType::VORON_TRIDENT:
-    case MoonrakerClientMock::PrinterType::CREALITY_K1:
-    case MoonrakerClientMock::PrinterType::CREALITY_K1_MAX:
-    case MoonrakerClientMock::PrinterType::FLASHFORGE_CREATOR5:
-    case MoonrakerClientMock::PrinterType::FLASHFORGE_CREATOR5_ZMOD:
-    case MoonrakerClientMock::PrinterType::GENERIC_COREXY:
-        return "corexy";
-    case MoonrakerClientMock::PrinterType::DELTA:
-        return "delta";
-    default:
-        return "cartesian";
-    }
-}
-
-} // namespace mock_internal
-
 std::string MoonrakerClientMock::kinematics() const {
-    return kinematics_override_.empty() ? mock_internal::mock_kinematics(printer_type_)
-                                        : kinematics_override_;
+    return kinematics_override_.empty()
+               ? std::string(helix::mock::descriptor(printer_type_).kinematics)
+               : kinematics_override_;
 }
 
 void MoonrakerClientMock::populate_capabilities() {
@@ -927,6 +903,13 @@ void MoonrakerClientMock::populate_capabilities() {
 
     // Create mock Klipper object list for capabilities parsing
     json mock_objects = json::array();
+
+    // Every persona inherits the default objects below unless its descriptor omits them.
+    const auto persona = helix::mock::descriptor(printer_type_);
+    auto inherits = [&persona](helix::mock::DefaultObjects object) {
+        return (persona.omit & object) == 0;
+    };
+    using namespace helix::mock::default_object;
 
     // Add common objects
     mock_objects.push_back("heater_bed");
@@ -938,7 +921,9 @@ void MoonrakerClientMock::populate_capabilities() {
     mock_objects.push_back("firmware_retraction"); // Triggers has_firmware_retraction_ capability
 
     // Chamber temperature sensor for UI testing
-    mock_objects.push_back("temperature_sensor chamber");
+    if (inherits(CHAMBER_SENSOR)) {
+        mock_objects.push_back("temperature_sensor chamber");
+    }
 
     // HELIX_MOCK_OBJECTS: space-separated list of additional Klipper objects to add
     // e.g., HELIX_MOCK_OBJECTS="temperature_fan chamber" to test temperature_fan chamber
@@ -1064,16 +1049,73 @@ void MoonrakerClientMock::populate_capabilities() {
         // Same Pro-separating chamber heater as the Reforge persona above.
         mock_objects.push_back("heater_generic chamber_heater");
         break;
+    case PrinterType::ELEGOO_CC1:
+        // The CC1 capture's own objects. _COSMOS_SETTINGS and ELEGOO_PURGE are
+        // what name the machine; its hostname and M191 match an enclosed QIDI too.
+        for (const char* obj : {"configfile",
+                                "print_stats",
+                                "virtual_sdcard",
+                                "pause_resume",
+                                "display_status",
+                                "screws_tilt_adjust",
+                                "gcode_macro _COSMOS_SETTINGS",
+                                "gcode_macro SAVE_CONFIG",
+                                "gcode_macro _KAMP_Settings",
+                                "gcode_macro LINE_PURGE",
+                                "gcode_macro ELEGOO_PURGE",
+                                "gcode_macro SMART_PARK",
+                                "gcode_macro PRINT_START",
+                                "gcode_macro M191",
+                                "gcode_macro PRINT_END",
+                                "gcode_macro CLEAN_NOZZLE",
+                                "gcode_macro MOVE_TO_TRAY",
+                                "gcode_macro CUT_FILAMENT",
+                                "gcode_macro LOADCELL_Z_HOME",
+                                "gcode_macro CALIBRATE_Z_OFFSET",
+                                "gcode_macro _UPDATE_COSMOS"}) {
+            mock_objects.push_back(obj);
+        }
+        break;
+    case PrinterType::FLASHFORGE_AD5X:
+        // The stock AD5X's public IFS macro, which names the machine. None of
+        // the IFS module's own objects: those make discovery stand up the
+        // production AD5X IFS backend, and this persona runs the mock IFS.
+        mock_objects.push_back("gcode_macro SET_EXTRUDER_SLOT");
+        break;
+    case PrinterType::CREALITY_K2_PLUS:
+        // The K2 Plus capture's identifying objects. `box` rides on is_mock_cfs().
+        for (const char* obj :
+             {"motor_control", "fan_feedback", "load_ai", "filament_rack",
+              "output_pin extruder_fan", "output_pin power", "output_pin ptc_power",
+              "temperature_sensor mcu_temp", "heater_fan chamber_heater_fan"}) {
+            mock_objects.push_back(obj);
+        }
+        break;
+    case PrinterType::SNAPMAKER_U1:
+        // The U1 capture's identifying objects. Not `filament_detect`, which would
+        // make discovery stand up the production Snapmaker backend; this persona
+        // runs the mock one.
+        for (const char* obj : {"tool", "fm175xx_reader", "tmc2240 stepper_x", "purifier", "camera",
+                                "gcode_macro FILAMENT_DT_UPDATE", "gcode_macro FILAMENT_DT_QUERY",
+                                "gcode_macro EXTRUDER_OFFSET_ACTION_PROBE_CALIBRATE_ALL"}) {
+            mock_objects.push_back(obj);
+        }
+        for (int i = 0; i < 4; ++i) {
+            mock_objects.push_back("filament_motion_sensor e" + std::to_string(i) + "_filament");
+        }
+        break;
     default:
         // Other printers may not have these features
         break;
     }
 
     // Add LED effects (klipper-led_effect plugin objects)
-    mock_objects.push_back("led_effect breathing");
-    mock_objects.push_back("led_effect fire_comet");
-    mock_objects.push_back("led_effect rainbow");
-    mock_objects.push_back("led_effect static_white");
+    if (inherits(LED_EFFECTS)) {
+        mock_objects.push_back("led_effect breathing");
+        mock_objects.push_back("led_effect fire_comet");
+        mock_objects.push_back("led_effect rainbow");
+        mock_objects.push_back("led_effect static_white");
+    }
 
     // [exclude_object] — present on modern Klipper/Kalico configs. Trips
     // has_exclude_object_ in PrinterDiscovery so capability-gated features
@@ -1097,50 +1139,52 @@ void MoonrakerClientMock::populate_capabilities() {
     }
 
     // Add LED-related macros (auto-detected by printer_discovery via LED keywords)
-    mock_objects.push_back("gcode_macro LIGHTS_ON");
-    mock_objects.push_back("gcode_macro LIGHTS_OFF");
-    mock_objects.push_back("gcode_macro LIGHTS_TOGGLE");
-    mock_objects.push_back("gcode_macro LED_PARTY");
-    mock_objects.push_back("gcode_macro LED_NIGHTLIGHT");
+    if (inherits(LED_EFFECTS)) {
+        mock_objects.push_back("gcode_macro LIGHTS_ON");
+        mock_objects.push_back("gcode_macro LIGHTS_OFF");
+        mock_objects.push_back("gcode_macro LIGHTS_TOGGLE");
+        mock_objects.push_back("gcode_macro LED_PARTY");
+        mock_objects.push_back("gcode_macro LED_NIGHTLIGHT");
+    }
 
     // MCU objects for discovery
     mock_objects.push_back("mcu");
-    mock_objects.push_back("mcu EBBCan");
+    if (inherits(EBB_CAN_MCU)) {
+        mock_objects.push_back("mcu EBBCan");
+    }
 
     // Humidity sensors (BME280/HTU21D for enclosure monitoring)
-    mock_objects.push_back("bme280 chamber");
-    mock_objects.push_back("htu21d dryer");
-    spdlog::debug("[MoonrakerClientMock] Mock humidity sensors: bme280 chamber, htu21d dryer");
+    if (inherits(BME280_CHAMBER)) {
+        mock_objects.push_back("bme280 chamber");
+    }
+    if (inherits(HTU21D_DRYER)) {
+        mock_objects.push_back("htu21d dryer");
+    }
 
     // Width sensor (filament diameter measurement via Hall effect sensor)
-    mock_objects.push_back("hall_filament_width_sensor");
+    if (inherits(WIDTH_SENSOR)) {
+        mock_objects.push_back("hall_filament_width_sensor");
+    }
 
     // Moonraker plugins
     mock_objects.push_back("timelapse"); // Moonraker-Timelapse plugin
 
     // MMU/AMS system - Happy Hare uses "mmu" object name.
-    // Suppressed in the MedusaHC modes, the standalone IFS module mode and the
-    // creator5_zmod persona: the default mock ships "mmu", which detects Happy
-    // Hare (priority over every other filament system) and stands the wrong
-    // backend up.
-    if (mmu_enabled_ && !is_mock_medusahc() && !is_mock_ifs_module() &&
-        printer_type_ != PrinterType::FLASHFORGE_CREATOR5_ZMOD) {
+    // Suppressed in the MedusaHC modes, the standalone IFS module mode and any
+    // persona that omits it: "mmu" detects Happy Hare (priority over every
+    // other filament system) and would stand the wrong backend up.
+    if (mmu_enabled_ && !is_mock_medusahc() && !is_mock_ifs_module() && inherits(HAPPY_HARE_MMU)) {
         mock_objects.push_back("mmu");
     }
 
-    // Probe sensor (HELIX_MOCK_PROBE_TYPE: cartographer, tap, bltouch, beacon, klicky, standard,
-    // none)
-    const char* probe_env = std::getenv("HELIX_MOCK_PROBE_TYPE");
-    std::string mock_probe_type = (probe_env && probe_env[0]) ? probe_env : "cartographer";
-    if (mock_probe_type == "none") {
-        spdlog::debug("[MoonrakerClientMock] Probe disabled via env var");
-    } else {
-        const json probe_status = helix::sim::mock_probe_status();
-        for (auto it = probe_status.begin(); it != probe_status.end(); ++it) {
-            mock_objects.push_back(it.key());
-        }
-        spdlog::debug("[MoonrakerClientMock] Mock probe: {}", mock_probe_type);
+    // Probe objects: HELIX_MOCK_PROBE_TYPE, else the persona's own probe
+    // (mock_internal::mock_probe_type).
+    const json probe_status = helix::sim::mock_probe_status(printer_type_);
+    for (auto it = probe_status.begin(); it != probe_status.end(); ++it) {
+        mock_objects.push_back(it.key());
     }
+    spdlog::debug("[MoonrakerClientMock] Mock probe: {}",
+                  mock_internal::mock_probe_type(printer_type_));
 
     // Filament sensors (common setup: runout sensor at spool holder)
     // Check HELIX_MOCK_FILAMENT_SENSORS env var for custom sensor names
@@ -1184,7 +1228,16 @@ void MoonrakerClientMock::populate_capabilities() {
             }
         }
         spdlog::debug("[MoonrakerClientMock] Creator 5 filament sensors: fd_ex0..fd_ex3");
-    } else {
+    } else if (printer_type_ == PrinterType::ELEGOO_CC1) {
+        // The chassis runout switch, named as in assets/config/presets/cc1.json.
+        mock_objects.push_back("filament_switch_sensor filament_sensor");
+    } else if (printer_type_ == PrinterType::FLASHFORGE_AD5X) {
+        // The toolhead switch, named as in assets/config/presets/ad5x.json.
+        mock_objects.push_back("filament_switch_sensor head_switch_sensor");
+    } else if (printer_type_ == PrinterType::CREALITY_K2_PLUS) {
+        // The toolhead switch, named as in assets/config/presets/k2.json.
+        mock_objects.push_back("filament_switch_sensor filament_sensor");
+    } else if (inherits(RUNOUT_SENSOR)) {
         // Default: one switch sensor (typical Voron setup)
         mock_objects.push_back("filament_switch_sensor runout_sensor");
         spdlog::debug(
@@ -1305,17 +1358,20 @@ void MoonrakerClientMock::populate_capabilities() {
     mock_config.merge_patch(mock_internal::get_mock_gcode_macro_config());
     // Probe section — shared with the configfile.config query/subscribe responses
     // so all three payloads describe the same probe.
-    mock_config.merge_patch(mock_internal::get_mock_probe_config());
+    mock_config.merge_patch(mock_internal::get_mock_probe_config(printer_type_));
     // Stepper travel limits, matching the configfile.settings the query and
     // subscribe handlers report. The real discovery sequence derives the build
     // volume from these before detection runs, so the mock has to carry them or
     // --test detects against an empty volume the live path no longer sees.
+    const auto axis_max = persona.axis_max;
     mock_config["stepper_x"] = {{"position_min", mock_internal::MOCK_BED_X_MIN},
-                                {"position_max", mock_internal::MOCK_BED_X_MAX}};
+                                {"position_max", axis_max.x}};
     mock_config["stepper_y"] = {{"position_min", mock_internal::MOCK_BED_Y_MIN},
-                                {"position_max", mock_internal::MOCK_BED_Y_MAX}};
-    mock_config["stepper_z"] = {{"position_min", 0.0},
-                                {"position_max", mock_internal::MOCK_BED_Z_MAX}};
+                                {"position_max", axis_max.y}};
+    mock_config["stepper_z"] = {{"position_min", 0.0}, {"position_max", axis_max.z}};
+    for (const auto& [name, settings] : extra_config_settings_.items()) {
+        mock_config[name] = settings;
+    }
 
     std::unordered_set<std::string> macros_snapshot;
     discovery_.modify_hardware([&](PrinterDiscovery& hw) {
@@ -1330,21 +1386,32 @@ void MoonrakerClientMock::populate_capabilities() {
     spdlog::debug("[MoonrakerClientMock] Mock config: adxl345, resonance_tester, kinematics={}",
                   kinematics());
 
-    // Populate printer objects for hardware discovery
+    // Populate printer objects for hardware discovery. Klipper lists each object
+    // once; a persona's own lists can repeat an inherited default (a chamber
+    // sensor, a chamber heater, a macro), so keep only the first.
     std::vector<std::string> all_objects;
+    std::unordered_set<std::string> listed;
     for (const auto& obj : mock_objects) {
         std::string name = obj.get<std::string>();
-        all_objects.push_back(name);
+        if (listed.insert(name).second) {
+            all_objects.push_back(std::move(name));
+        }
     }
     discovery_.modify_hardware([&](PrinterDiscovery& hw) { hw.set_printer_objects(all_objects); });
     update_cached_chamber_key();
 
     // Set mock MCU version data (after parse_objects which clears everything)
-    discovery_.modify_hardware([](PrinterDiscovery& hw) {
+    const bool ebb_can = inherits(EBB_CAN_MCU);
+    discovery_.modify_hardware([ebb_can](PrinterDiscovery& hw) {
         hw.set_mcu("stm32f446xx");
-        hw.set_mcu_list({"stm32f446xx", "stm32g0b1xx"});
-        hw.set_mcu_versions(
-            {{"mcu", "v0.12.0-155-g4cfa273e"}, {"mcu EBBCan", "v0.12.0-155-g4cfa273e"}});
+        if (ebb_can) {
+            hw.set_mcu_list({"stm32f446xx", "stm32g0b1xx"});
+            hw.set_mcu_versions(
+                {{"mcu", "v0.12.0-155-g4cfa273e"}, {"mcu EBBCan", "v0.12.0-155-g4cfa273e"}});
+        } else {
+            hw.set_mcu_list({"stm32f446xx"});
+            hw.set_mcu_versions({{"mcu", "v0.12.0-155-g4cfa273e"}});
+        }
     });
 
     // Also populate filament_sensors vector for subscription (same as real parse_objects)
@@ -1483,24 +1550,16 @@ void MoonrakerClientMock::discover_printer(
     }
 }
 
-bool MoonrakerClientMock::mock_toolchanger_selected() {
-    // Toolchanger mode is selected by "toolchanger", "tool_changer", or "tc"
-    // (case-insensitive), matching the HELIX_MOCK_AMS parsing in ams_backend.cpp.
-    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (ams_env && ams_env[0]) {
-        std::string ams_type(ams_env);
-        ams_type = helix::text_io::to_lower(ams_type);
-        return ams_type == "toolchanger" || ams_type == "tool_changer" || ams_type == "tc";
-    }
-    // No explicit topology: fall back to the persona. A Creator 5 Pro is a
-    // 4-head changer, so the generic Happy Hare default would misrepresent it.
-    const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
-    return printer_env && std::string(printer_env) == "creator5";
+namespace {
+std::string effective_mock_ams_env() {
+    return helix::mock::effective_mock_ams(std::getenv("HELIX_MOCK_AMS"),
+                                           std::getenv("HELIX_MOCK_PRINTER"));
 }
+} // namespace
 
-bool MoonrakerClientMock::mock_hardware_persona() {
-    const char* printer_env = std::getenv("HELIX_MOCK_PRINTER");
-    return printer_env && helix::mock::is_hardware_persona(printer_env);
+bool MoonrakerClientMock::mock_toolchanger_selected() {
+    const std::string ams_type = effective_mock_ams_env();
+    return ams_type == "toolchanger" || ams_type == "tool_changer" || ams_type == "tc";
 }
 
 bool MoonrakerClientMock::is_mock_toolchanger() const {
@@ -1508,12 +1567,7 @@ bool MoonrakerClientMock::is_mock_toolchanger() const {
 }
 
 MoonrakerClientMock::MedusaVariant MoonrakerClientMock::mock_medusa_variant() {
-    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (!ams_env || !ams_env[0]) {
-        return MedusaVariant::NONE;
-    }
-    std::string ams_type(ams_env);
-    ams_type = helix::text_io::to_lower(ams_type);
+    const std::string ams_type = effective_mock_ams_env();
     if (ams_type == "medusahc-fork" || ams_type == "medusa-fork") {
         return MedusaVariant::FORK;
     }
@@ -1527,16 +1581,18 @@ bool MoonrakerClientMock::is_mock_medusahc() const {
     return mock_medusa_variant() != MedusaVariant::NONE;
 }
 
+void MoonrakerClientMock::append_k2_status(json& status) const {
+    // Creality's motor controller and fan tachometer modules, in the fields
+    // cfs::parse_motor_control and PrinterFanState read.
+    status["motor_control"] = {{"motor_ready", true}};
+    status["fan_feedback"] = {{"fan0_speed", 0}, {"fan1_speed", 0}, {"fan2_speed", 0}};
+}
+
 bool MoonrakerClientMock::is_mock_cfs() const {
     // "cfs"/"cfs-k1": the K1 stock dialect. try_create_mock() declines these
     // values so the production AmsBackendCfs runs (pair with
     // HELIX_MOCK_PRINTER=k1 to latch the dialect).
-    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (!ams_env || !ams_env[0]) {
-        return false;
-    }
-    std::string ams_type(ams_env);
-    ams_type = helix::text_io::to_lower(ams_type);
+    const std::string ams_type = effective_mock_ams_env();
     return ams_type == "cfs" || ams_type == "cfs-k1";
 }
 
@@ -1572,6 +1628,15 @@ nlohmann::json MoonrakerClientMock::cfs_box_status_json() const {
             box["map"][unit + bay] = unit + bay;
         }
     }
+    // The loaded bay: its unit's `filament` carries the bay letter, "None" elsewhere.
+    if (const int loaded = cfs_loaded_slot_.load(); loaded >= 0) {
+        // The box frame's wire key for a unit, not a display label.
+        const std::string unit =
+            "T" + std::to_string(loaded / 4 + 1); // DISPLAY_NUMBERING_OK: box frame wire key
+        if (box.contains(unit)) {
+            box[unit]["filament"] = std::string(1, static_cast<char>('A' + loaded % 4));
+        }
+    }
     return box;
 }
 
@@ -1584,7 +1649,7 @@ void MoonrakerClientMock::simulate_cfs_find_cut_pos() {
     // registered before the send sees them, and the RPC's completion fires
     // after. The cut position scales off the persona envelope (a K1 Max
     // envelope reproduces the verified 304.0 reading).
-    const double cut_y = persona_axis_maximum(printer_type_)[1] - 3.5;
+    const double cut_y = helix::mock::descriptor(printer_type_).axis_max.y - 3.5;
     char buf[96];
     snprintf(buf, sizeof(buf), "Found cut position y: %.1f", cut_y);
     dispatch_gcode_response(buf);
@@ -1592,6 +1657,40 @@ void MoonrakerClientMock::simulate_cfs_find_cut_pos() {
     dispatch_gcode_response(buf);
     snprintf(buf, sizeof(buf), "SAVE_BOX_CFG ok: cut_pos_y=%.1f", cut_y);
     dispatch_gcode_response(buf);
+}
+
+// Gated only by is_mock_cfs() at the call site: CR_BOX_* is the K2 dialect's
+// vocabulary, and a K1-dialect script never contains it, so no persona check is needed.
+bool MoonrakerClientMock::apply_cfs_cr_box_script(const std::string& gcode) {
+    bool touched = false;
+    std::istringstream lines(gcode);
+    for (std::string line; std::getline(lines, line);) {
+        if (line.rfind("CR_BOX_EXTRUDE", 0) == 0) {
+            // CR_BOX_EXTRUDE TNN=T<unit><bay>
+            const size_t t = line.find("TNN=T");
+            if (t == std::string::npos || t + 6 >= line.size()) {
+                continue;
+            }
+            const int unit = line[t + 5] - '0';
+            const int bay = line[t + 6] - 'A';
+            if (unit < 1 || unit > 4 || bay < 0 || bay > 3) {
+                continue;
+            }
+            cfs_loaded_slot_.store((unit - 1) * 4 + bay);
+            touched = true;
+        } else if (line.rfind("CR_BOX_RETRUDE", 0) == 0) {
+            cfs_loaded_slot_.store(-1);
+            touched = true;
+        }
+    }
+    if (touched) {
+        // The toolhead switch sees filament exactly while a bay is loaded.
+        dispatch_status_update(
+            {{"box", cfs_box_status_json()},
+             {"filament_switch_sensor filament_sensor",
+              {{"filament_detected", cfs_toolhead_filament_detected()}, {"enabled", true}}}});
+    }
+    return touched;
 }
 
 bool MoonrakerClientMock::apply_cfs_box_custom_command(const std::string& gcode) {
@@ -1608,9 +1707,9 @@ bool MoonrakerClientMock::apply_cfs_box_custom_command(const std::string& gcode)
     // values scale off its 307.5: safe_pos_y = y_max - 16 (291.5 on a Max).
     // The Max parks at the captured box.cfg extrude_pos_x (184.5); smaller
     // K1s were never captured, so they scale the X envelope.
-    const auto max = persona_axis_maximum(printer_type_);
-    const double safe_y = max[1] - 16.0;
-    const double extrude_x = printer_type_ == PrinterType::CREALITY_K1_MAX ? 184.5 : max[0] * 0.8;
+    const auto max = helix::mock::descriptor(printer_type_).axis_max;
+    const double safe_y = max.y - 16.0;
+    const double extrude_x = printer_type_ == PrinterType::CREALITY_K1_MAX ? 184.5 : max.x * 0.8;
 
     // Move to a parked position: homed, motors on, snapshot-dispatched as one
     // frame (same shape the G0 handler emits).
@@ -1673,12 +1772,7 @@ bool MoonrakerClientMock::is_mock_ifs_module() const {
     // "ifs-module", not "ifs": the bare value (and "ad5x") selects the
     // AmsBackendMock simulation in try_create_mock(); this mode runs the real
     // backend, so the two must not collide.
-    const char* ams_env = std::getenv("HELIX_MOCK_AMS");
-    if (!ams_env || !ams_env[0]) {
-        return false;
-    }
-    std::string ams_type(ams_env);
-    ams_type = helix::text_io::to_lower(ams_type);
+    const std::string ams_type = effective_mock_ams_env();
     return ams_type == "ifs-module" || ams_type == "ifs_module" || ams_type == "ad5x-module";
 }
 
@@ -2211,8 +2305,10 @@ void MoonrakerClientMock::populate_hardware() {
         discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
                                 "extruder", // Hotend thermistor (Klipper naming: bare heater name)
                                 "temperature_sensor chamber", "temperature_sensor mcu_temp"};
-        discovery_.fans() = {"heater_fan hotend_fan", "fan", "fan_generic chamber_fan"};
-        discovery_.leds() = {"led chamber_led"};
+        // Fans mirror assets/config/presets/ad5m.json hardware/expected. No chamber
+        // light: a chamber_l* LED is what tells the 5M Pro apart.
+        discovery_.fans() = {"fan", "heater_fan hotend_fan", "controller_fan stepper_driver_fan"};
+        discovery_.leds() = {};
         break;
 
     case PrinterType::FLASHFORGE_CREATOR5_ZMOD: // Z-Mod: same machine, same hardware
@@ -2264,6 +2360,63 @@ void MoonrakerClientMock::populate_hardware() {
         };
         discovery_.fans() = {"heater_fan hotend_fan", "fan"};
         discovery_.leds() = {};
+        break;
+
+    case PrinterType::ELEGOO_CC1:
+        // Elegoo Centauri Carbon on COSMOS. Names mirror
+        // tests/fixtures/printers/elegoo_centauri_carbon.json and
+        // assets/config/presets/cc1.json hardware/expected.
+        discovery_.heaters() = {"heater_bed", "extruder"};
+        discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
+                                "extruder", // Hotend thermistor (Klipper naming: bare heater name)
+                                "temperature_sensor chamber", "temperature_sensor mcu_toolhead",
+                                "temperature_sensor mcu_bed"};
+        discovery_.fans() = {"heater_fan extruder", "fan", "fan_generic aux_fan",
+                             "fan_generic case_fan", "temperature_fan mainboard"};
+        discovery_.leds() = {"led case", "led hotend"};
+        break;
+
+    case PrinterType::FLASHFORGE_AD5X:
+        // FlashForge Adventurer 5X. Fans mirror assets/config/presets/ad5x.json
+        // hardware/expected.
+        discovery_.heaters() = {"heater_bed", "extruder"};
+        discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
+                                "extruder", // Hotend thermistor (Klipper naming: bare heater name)
+                                "temperature_sensor chamber"};
+        discovery_.fans() = {"fan_generic fanM106", "heater_fan heat_fan",
+                             "fan_generic chamber_fan", "fan_generic pcb_fan"};
+        discovery_.leds() = {};
+        break;
+
+    case PrinterType::CREALITY_K2_PLUS:
+        // Creality K2 Plus. Names mirror tests/fixtures/printers/creality_k2_plus.json
+        // and assets/config/presets/k2.json hardware/expected.
+        discovery_.heaters() = {"heater_bed", "extruder", "heater_generic chamber_heater"};
+        discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
+                                "extruder", // Hotend thermistor (Klipper naming: bare heater name)
+                                "temperature_sensor chamber_temp"};
+        discovery_.fans() = {"fan", "heater_fan chamber_fan", "output_pin fan0", "output_pin fan1",
+                             "output_pin fan2"};
+        discovery_.leds() = {"output_pin LED"};
+        break;
+
+    case PrinterType::SNAPMAKER_U1:
+        // Snapmaker U1: four independent extruders. Names mirror
+        // tests/fixtures/printers/snapmaker_u1.json and assets/config/presets/snapmaker_u1.json.
+        discovery_.heaters() = {"heater_bed", "extruder", "extruder1", "extruder2", "extruder3"};
+        discovery_.sensors() = {"heater_bed", "extruder",  "extruder1",
+                                "extruder2",  "extruder3", "temperature_sensor cavity"};
+        discovery_.fans() = {"fan",
+                             "heater_fan power_fan",
+                             "fan_generic cavity_fan",
+                             "heater_fan e0_nozzle_fan",
+                             "fan_generic e1_fan",
+                             "heater_fan e1_nozzle_fan",
+                             "fan_generic e2_fan",
+                             "heater_fan e2_nozzle_fan",
+                             "fan_generic e3_fan",
+                             "heater_fan e3_nozzle_fan"};
+        discovery_.leds() = {"led cavity_led"};
         break;
 
     case PrinterType::MULTI_EXTRUDER:
@@ -2415,14 +2568,15 @@ void MoonrakerClientMock::parse_incoming_bed_mesh(const json& bed_mesh) {
 
 void MoonrakerClientMock::generate_mock_bed_mesh() {
     // Helper lambda to generate a mesh with given shape parameters
-    auto generate_mesh = [](const std::string& name, float amplitude, float x_tilt,
-                            float y_tilt) -> BedMeshProfile {
+    const auto bounds = mock_internal::mesh_bounds(printer_type_);
+    auto generate_mesh = [bounds](const std::string& name, float amplitude, float x_tilt,
+                                  float y_tilt) -> BedMeshProfile {
         BedMeshProfile mesh;
         mesh.name = name;
-        mesh.mesh_min[0] = static_cast<float>(mock_internal::MOCK_MESH_X_MIN);
-        mesh.mesh_min[1] = static_cast<float>(mock_internal::MOCK_MESH_Y_MIN);
-        mesh.mesh_max[0] = static_cast<float>(mock_internal::MOCK_MESH_X_MAX);
-        mesh.mesh_max[1] = static_cast<float>(mock_internal::MOCK_MESH_Y_MAX);
+        mesh.mesh_min[0] = static_cast<float>(bounds.x_min);
+        mesh.mesh_min[1] = static_cast<float>(bounds.y_min);
+        mesh.mesh_max[0] = static_cast<float>(bounds.x_max);
+        mesh.mesh_max[1] = static_cast<float>(bounds.y_max);
         mesh.x_count = 7;
         mesh.y_count = 7;
         mesh.algo = "lagrange";
@@ -2471,11 +2625,12 @@ void MoonrakerClientMock::generate_mock_bed_mesh_with_variation() {
     // Generate a realistic bed mesh with true randomness
     // Simulates re-probing with measurement noise and slight bed changes
 
-    // Keep existing configuration using centralized mock printer constants
-    active_bed_mesh_.mesh_min[0] = static_cast<float>(mock_internal::MOCK_MESH_X_MIN);
-    active_bed_mesh_.mesh_min[1] = static_cast<float>(mock_internal::MOCK_MESH_Y_MIN);
-    active_bed_mesh_.mesh_max[0] = static_cast<float>(mock_internal::MOCK_MESH_X_MAX);
-    active_bed_mesh_.mesh_max[1] = static_cast<float>(mock_internal::MOCK_MESH_Y_MAX);
+    // Probed area of the persona's bed
+    const auto bounds = mock_internal::mesh_bounds(printer_type_);
+    active_bed_mesh_.mesh_min[0] = static_cast<float>(bounds.x_min);
+    active_bed_mesh_.mesh_min[1] = static_cast<float>(bounds.y_min);
+    active_bed_mesh_.mesh_max[0] = static_cast<float>(bounds.x_max);
+    active_bed_mesh_.mesh_max[1] = static_cast<float>(bounds.y_max);
     active_bed_mesh_.x_count = 7;
     active_bed_mesh_.y_count = 7;
     active_bed_mesh_.algo = "lagrange";
@@ -2591,6 +2746,7 @@ void MoonrakerClientMock::dispatch_bed_mesh_update() {
 void MoonrakerClientMock::disconnect() {
     spdlog::info("[MoonrakerClientMock] Simulating disconnection");
     stop_temperature_simulation(false);
+    fail_pending_script_acks();
     set_connection_state(ConnectionState::DISCONNECTED);
     sim_link_down_ = true;
 }
@@ -3063,7 +3219,8 @@ bool MoonrakerClientMock::start_print_internal(const std::string& filename) {
         json objects_array = json::array();
         for (int i = 0; i < total; ++i) {
             names.emplace_back(MOCK_EXCLUDE_OBJECT_NAMES[i]);
-            objects_array.push_back(mock_object_entry(names.back(), i, total));
+            objects_array.push_back(mock_object_entry(
+                names.back(), i, total, helix::mock::descriptor(printer_type_).axis_max));
         }
 
         {
@@ -3476,21 +3633,14 @@ void MoonrakerClientMock::dispatch_initial_state() {
          {{"temperature", bed_temp_val},
           {"target", bed_target_val},
           {"power", mock_heater_duty(bed_temp_val, bed_target_val)}}},
-        {[this]() {
-             auto key = chamber_heater_status_key();
-             return key.empty() ? "heater_generic chamber" : key;
-         }(),
-         {{"temperature", 42.3},
-          {"target", chamber_target_.load()},
-          {"power", mock_heater_duty(42.3, chamber_target_.load())}}},
-        {"temperature_sensor chamber", {{"temperature", 42.3}}},
         {"toolhead",
          {{"position", {x, y, z, 0.0}},
           {"homed_axes", homed},
           {"axis_minimum", {0.0, 0.0, 0.0, 0.0}},
           {"axis_maximum",
-           {persona_axis_maximum(printer_type_)[0], persona_axis_maximum(printer_type_)[1],
-            persona_axis_maximum(printer_type_)[2], 0.0}},
+           {helix::mock::descriptor(printer_type_).axis_max.x,
+            helix::mock::descriptor(printer_type_).axis_max.y,
+            helix::mock::descriptor(printer_type_).axis_max.z, 0.0}},
           {"kinematics", kinematics()}}},
         {"gcode_move",
          {{"gcode_position", {x, y, z, 0.0}}, // Commanded position (same as toolhead in mock)
@@ -3605,13 +3755,39 @@ void MoonrakerClientMock::dispatch_initial_state() {
         initial_status[sensor] = {{"filament_detected", detected}, {"enabled", true}};
     }
 
-    // Add width sensor data (Hall-effect filament diameter measurement)
-    initial_status["hall_filament_width_sensor"] = {
-        {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+    // The chamber and width sensors carry status only where the persona reports them.
+    using helix::mock::inherits_default;
+    namespace default_object = helix::mock::default_object;
+    if (inherits_default(printer_type_, default_object::CHAMBER_SENSOR) || has_chamber_sensor()) {
+        initial_status["temperature_sensor chamber"] = {{"temperature", 42.3}};
+    }
+    // The chamber heater: the persona's own, else the inherited default one
+    // (which rides with the chamber sensor).
+    {
+        const auto heater_key = chamber_heater_status_key();
+        if (!heater_key.empty() ||
+            inherits_default(printer_type_, default_object::CHAMBER_SENSOR)) {
+            initial_status[heater_key.empty() ? "heater_generic chamber" : heater_key] = {
+                {"temperature", 42.3},
+                {"target", chamber_target_.load()},
+                {"power", mock_heater_duty(42.3, chamber_target_.load())}};
+        }
+    }
+    if (inherits_default(printer_type_, default_object::WIDTH_SENSOR)) {
+        // Hall-effect filament diameter measurement
+        initial_status["hall_filament_width_sensor"] = {
+            {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+    }
+    if (printer_type_ == PrinterType::CREALITY_K2_PLUS) {
+        append_k2_status(initial_status);
+        // The box starts with nothing loaded, so the toolhead switch sees none.
+        initial_status["filament_switch_sensor filament_sensor"] = {
+            {"filament_detected", cfs_toolhead_filament_detected()}, {"enabled", true}};
+    }
 
     // Probe objects (the same ones populate_capabilities() lists)
     // (assigned, not merge_patch'd: a patch drops the null fields they carry).
-    initial_status.update(helix::sim::mock_probe_status());
+    initial_status.update(helix::sim::mock_probe_status(printer_type_));
 
     // Chamber backend diagnostics + filter pin (e.g. dragonbreath trio via
     // HELIX_MOCK_OBJECTS). Tail of the builder; keys are distinct from every
@@ -3824,10 +4000,13 @@ void MoonrakerClientMock::dispatch_historical_temperatures() {
         json status_obj = {{"extruder", {{"temperature", ext_with_noise}, {"target", 0.0}}},
                            {"heater_bed", {{"temperature", bed_with_noise}, {"target", 0.0}}}};
 
-        // Add width sensor data (Hall-effect filament diameter measurement)
-        // Always include to ensure WidthSensorManager receives updates
-        status_obj["hall_filament_width_sensor"] = {
-            {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+        // Add width sensor data (Hall-effect filament diameter measurement) on
+        // every frame of a persona that has one, so WidthSensorManager receives updates
+        if (helix::mock::inherits_default(printer_type_,
+                                          helix::mock::default_object::WIDTH_SENSOR)) {
+            status_obj["hall_filament_width_sensor"] = {
+                {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+        }
 
         // Add historical temperature data for all temperature sensors
         for (const auto& s : discovery_.sensors()) {
@@ -3870,7 +4049,7 @@ void MoonrakerClientMock::dispatch_historical_temperatures() {
     extruder_temp_.store(ext_temp_hist);
     bed_temp_.store(bed_temp_hist);
     // Store chamber temp at midpoint for initial state
-    if (has_chamber_sensor()) {
+    if (simulates_chamber_temp()) {
         chamber_temp_.store(35.0);
     }
 
@@ -3970,6 +4149,9 @@ void MoonrakerClientMock::temperature_simulation_loop() {
         // value a caller wrote into a subject by hand stays written. The wait is
         // bounded like the one at the bottom of the loop, so a notify that races
         // the predicate costs one interval rather than wedging shutdown.
+        // Parked or not, an owed RPC answer still goes out: a caller waiting on
+        // it holds an in-flight request that nothing else would release.
+        service_pending_script_acks();
         if (simulation_paused_.load()) {
             std::unique_lock<std::mutex> lock(sim_mutex_);
             sim_cv_.wait_for(lock, std::chrono::milliseconds(SIMULATION_INTERVAL_MS), [this] {
@@ -4053,7 +4235,7 @@ void MoonrakerClientMock::temperature_simulation_loop() {
 
         // Simulate chamber temperature change (scaled by speedup)
         // Chamber responds to target temperature like bed/extruder, but slower
-        if (has_chamber_sensor()) {
+        if (simulates_chamber_temp()) {
             constexpr double CHAMBER_IDLE_VARIATION_AMPLITUDE = 1.5;
             constexpr double CHAMBER_WAVE_PERIOD = 90.0; // 90 second period for idle variation
 
@@ -4316,8 +4498,9 @@ void MoonrakerClientMock::temperature_simulation_loop() {
               {"homed_axes", homed},
               {"axis_minimum", {0.0, 0.0, 0.0, 0.0}},
               {"axis_maximum",
-               {persona_axis_maximum(printer_type_)[0], persona_axis_maximum(printer_type_)[1],
-                persona_axis_maximum(printer_type_)[2], 0.0}},
+               {helix::mock::descriptor(printer_type_).axis_max.x,
+                helix::mock::descriptor(printer_type_).axis_max.y,
+                helix::mock::descriptor(printer_type_).axis_max.z, 0.0}},
               {"kinematics", kinematics()}}},
             {"gcode_move",
              {{"gcode_position", {x, y, z, 0.0}}, // Commanded position (same as toolhead in mock)
@@ -4384,10 +4567,13 @@ void MoonrakerClientMock::temperature_simulation_loop() {
                                    }
                                }()}}}};
 
-        // Add width sensor data (Hall-effect filament diameter measurement)
-        // Always include to ensure WidthSensorManager receives updates
-        status_obj["hall_filament_width_sensor"] = {
-            {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+        // Add width sensor data (Hall-effect filament diameter measurement) on
+        // every frame of a persona that has one, so WidthSensorManager receives updates
+        if (helix::mock::inherits_default(printer_type_,
+                                          helix::mock::default_object::WIDTH_SENSOR)) {
+            status_obj["hall_filament_width_sensor"] = {
+                {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
+        }
 
         // Toolchanger mock mode: keep the 3 extra extruder temps on the live
         // subscription stream so they don't go stale. Static values (matching the
@@ -4434,6 +4620,9 @@ void MoonrakerClientMock::temperature_simulation_loop() {
         // map, and the vendor/color/material arrays).
         if (is_mock_cfs()) {
             status_obj["box"] = cfs_box_status_json();
+        }
+        if (printer_type_ == PrinterType::CREALITY_K2_PLUS) {
+            append_k2_status(status_obj);
         }
 
         // Add klippy state if not ready (only send when abnormal)
@@ -5059,6 +5248,52 @@ bool MoonrakerClientMock::simulate_pa_calibration(
     spdlog::info("[MoonrakerClientMock] FLOW_CALIBRATE: simulating {} candidates (~{}s)",
                  CANDIDATES, ((CANDIDATES + 1) * STEP_MS) / 1000);
     return true;
+}
+
+bool MoonrakerClientMock::defer_cfs_script_ack(
+    const std::string& script, std::function<void(const nlohmann::json&)> success_cb,
+    std::function<void(const MoonrakerError&)> error_cb) {
+    if (!is_mock_cfs() || script.find("CR_BOX_") == std::string::npos || !success_cb) {
+        return false;
+    }
+    constexpr auto ACK_DELAY = std::chrono::milliseconds(1500);
+    std::lock_guard<std::mutex> lock(pa_cal_mutex_);
+    pending_script_acks_.push_back(
+        {std::chrono::steady_clock::now() + ACK_DELAY, std::move(success_cb), std::move(error_cb)});
+    return true;
+}
+
+void MoonrakerClientMock::fail_pending_script_acks() {
+    std::vector<PendingScriptAck> owed;
+    {
+        std::lock_guard<std::mutex> lock(pa_cal_mutex_);
+        owed.swap(pending_script_acks_);
+    }
+    for (auto& ack : owed) {
+        if (ack.error_cb) {
+            ack.error_cb(MoonrakerError::json_rpc_error("printer.gcode.script",
+                                                        "Connection to the mock was closed"));
+        }
+    }
+}
+
+void MoonrakerClientMock::service_pending_script_acks() {
+    std::vector<PendingScriptAck> due;
+    {
+        std::lock_guard<std::mutex> lock(pa_cal_mutex_);
+        const auto now = std::chrono::steady_clock::now();
+        for (auto it = pending_script_acks_.begin(); it != pending_script_acks_.end();) {
+            if (it->due <= now) {
+                due.push_back(std::move(*it));
+                it = pending_script_acks_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (auto& ack : due) {
+        ack.success_cb(json::object());
+    }
 }
 
 void MoonrakerClientMock::service_pending_pa_lines() {

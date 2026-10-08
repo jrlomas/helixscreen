@@ -1413,6 +1413,7 @@ translations:
   Forward Multiplier: 'Vorwärtsmultiplikator'
   Found %zu printers: '%zu Drucker gefunden'
   Found 1 printer: 1 Drucker gefunden
+  Found {} at {}.: '{} unter {} gefunden.'
   Framerate: Bildrate
   From Buffer: Aus Puffer
   From SpoolmanDB: 'Aus SpoolmanDB'
@@ -1790,6 +1791,7 @@ translations:
     nimmt ein Bild pro Schichtwechsel auf. Am besten für die meisten Drucke.
   Layers: Schichten
   Layout: Layout
+  Layout changes are off in safe mode. Restart to edit.: 'Layout-Änderungen sind im abgesicherten Modus deaktiviert. Starten Sie neu, um zu bearbeiten.'
   Learn More: Mehr erfahren
   LedSelect: LED auswählen
   Left: 'Links'
@@ -2853,6 +2855,8 @@ translations:
   : Abgesicherter Modus aktiv. Die Druckerverbindung ist deaktiviert, weil die App
     beim Start wiederholt abgestürzt ist. Öffnen Sie die Einstellungen, um das Problem
     zu beheben, und starten Sie dann neu.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Abgesicherter Modus: Die App ist beim Start wiederholt abgestürzt, daher sind Plugins deaktiviert und die Widget-Layouts zeigen ihre Standardwerte. Starten Sie neu, um zum Normalbetrieb zurückzukehren.'
   Safety & Alerts: Sicherheit & Alarme
   Same spool in {}? Tap Clear if it is a new one.: 'Dieselbe Spule in {}? Tippen Sie auf Löschen, wenn es eine neue ist.'
   Sample: Messung
@@ -3687,6 +3691,7 @@ translations:
   Use Android native keyboard for text input: Native Android-Tastatur für Texteingabe
     verwenden
   Use G10/G11 firmware retraction: G10/G11-Firmware-Retraktion verwenden
+  Use New Address: 'Neue Adresse verwenden'
   Use Unload before Eject: 'Verwenden Sie Entladen vor Auswerfen'
   Use first HID scanner found: 'Ersten gefundenen HID-Scanner verwenden'
   Use printer type to select image: Druckertyp zur Bildauswahl verwenden

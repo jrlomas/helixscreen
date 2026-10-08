@@ -1271,6 +1271,7 @@
   <translation tag="Forward Multiplier" es="Multiplicador de avance"/>
   <translation tag="Found %zu printers" es="%zu impresoras encontradas"/>
   <translation tag="Found 1 printer" es="1 impresora encontrada"/>
+  <translation tag="Found {} at {}." es="{} encontrada en {}."/>
   <translation tag="Framerate" es="Cuadros por segundo"/>
   <translation tag="From Buffer" es="Desde búfer"/>
   <translation tag="From SpoolmanDB" es="De SpoolmanDB"/>
@@ -1596,6 +1597,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." es="El modo de capa captura un cuadro por cambio de capa. Mejor para la mayoría de las impresiones."/>
   <translation tag="Layers" es="Capas"/>
   <translation tag="Layout" es="Distribución"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." es="Los cambios de diseño están desactivados en modo seguro. Reinicie para editar."/>
   <translation tag="Learn More" es="Más información"/>
   <translation tag="LedSelect" es="Seleccionar LED"/>
   <translation tag="Left" es="Izquierda"/>
@@ -2572,6 +2574,7 @@
   <translation tag="STYLE PROPERTIES" es="PROPIEDADES DE ESTILO"/>
   <translation tag="SWITCH SENSORS" es="SENSORES DE INTERRUPTOR"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." es="Modo seguro activo. La conexión con la impresora está deshabilitada porque la aplicación seguía fallando al iniciar. Abra Ajustes para solucionar el problema y luego reinicie."/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." es="Modo seguro: la aplicación seguía fallando al iniciar, así que los plugins están desactivados y los diseños de widgets muestran sus valores predeterminados. Reinicie para volver a la normalidad."/>
   <translation tag="Safety &amp; Alerts" es="Seguridad y alertas"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." es="¿La misma bobina en {}? Toca Borrar si es una nueva."/>
   <translation tag="Sample" es="Muestra"/>
@@ -3273,6 +3276,7 @@
   <translation tag="Uptime" es="Tiempo de actividad"/>
   <translation tag="Use Android native keyboard for text input" es="Usar el teclado nativo de Android para entrada de texto"/>
   <translation tag="Use G10/G11 firmware retraction" es="Usar retracción de firmware G10/G11"/>
+  <translation tag="Use New Address" es="Usar nueva dirección"/>
   <translation tag="Use Unload before Eject" es="Use Descargar antes de Expulsar"/>
   <translation tag="Use first HID scanner found" es="Usar el primer escáner HID encontrado"/>
   <translation tag="Use printer type to select image" es="Usar tipo de impresora para seleccionar imagen"/>

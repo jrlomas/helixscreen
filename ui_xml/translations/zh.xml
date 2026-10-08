@@ -1271,6 +1271,7 @@
   <translation tag="Forward Multiplier" zh="正向倍率"/>
   <translation tag="Found %zu printers" zh="找到 %zu 台打印机"/>
   <translation tag="Found 1 printer" zh="找到 1 台打印机"/>
+  <translation tag="Found {} at {}." zh="已发现 {}，地址为 {}。"/>
   <translation tag="Framerate" zh="帧率"/>
   <translation tag="From Buffer" zh="来自缓冲区"/>
   <translation tag="From SpoolmanDB" zh="来自 SpoolmanDB"/>
@@ -1596,6 +1597,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." zh="层模式在每次换层时捕获一帧。适用于大多数打印。"/>
   <translation tag="Layers" zh="层"/>
   <translation tag="Layout" zh="布局"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." zh="安全模式下无法更改布局。请重启后再编辑。"/>
   <translation tag="Learn More" zh="了解更多"/>
   <translation tag="LedSelect" zh="选择 LED"/>
   <translation tag="Left" zh="左"/>
@@ -2572,6 +2574,7 @@
   <translation tag="STYLE PROPERTIES" zh="样式属性"/>
   <translation tag="SWITCH SENSORS" zh="开关传感器"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." zh="安全模式已激活。由于应用程序在启动时反复崩溃，打印机连接已被禁用。请打开设置以解决问题，然后重启。"/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." zh="安全模式：由于应用程序在启动时反复崩溃，插件已禁用，小部件布局显示为默认设置。重启即可恢复正常。"/>
   <translation tag="Safety &amp; Alerts" zh="安全与警报"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." zh="{} 是同一个料盘吗？如果是新料盘，请点击清除。"/>
   <translation tag="Sample" zh="样本"/>
@@ -3273,6 +3276,7 @@
   <translation tag="Uptime" zh="运行时长"/>
   <translation tag="Use Android native keyboard for text input" zh="使用 Android 原生键盘进行文本输入"/>
   <translation tag="Use G10/G11 firmware retraction" zh="使用 G10/G11 固件回抽"/>
+  <translation tag="Use New Address" zh="使用新地址"/>
   <translation tag="Use Unload before Eject" zh="请先使用“卸载”，再使用“弹出”"/>
   <translation tag="Use first HID scanner found" zh="使用找到的第一个 HID 扫描器"/>
   <translation tag="Use printer type to select image" zh="使用打印机类型选择图片"/>

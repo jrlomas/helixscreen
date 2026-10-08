@@ -24,13 +24,13 @@ const std::string& crash_marker_path();
 
 /// Record a start at @p now_epoch (seconds) in the marker file at @p marker_path and
 /// report whether enough recent starts accumulated to be a crash loop. A loop
-/// removes the marker and returns true; otherwise the start is appended.
+/// removes the marker, sets RuntimeConfig::crash_loop_safe_mode for this run and
+/// returns true; otherwise the start is appended.
 bool record_start_and_check_crash_loop(const std::string& marker_path, long long now_epoch);
 
-/// record_start_and_check_crash_loop() against the real marker and clock; the
-/// caller halts on true. Always false in test mode, where automation relaunches
-/// the binary rapidly by design.
-bool crash_loop_detected_and_record();
+/// record_start_and_check_crash_loop() against the real marker and clock. A no-op
+/// in test mode, where automation relaunches the binary rapidly by design.
+void crash_loop_detected_and_record();
 
 /// Promote any surviving GPU 3D / GPU blur crash-loop guard file to a persistent
 /// block in config, then remove the guard so a later clean run can re-arm it.

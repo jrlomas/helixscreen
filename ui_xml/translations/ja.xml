@@ -1271,6 +1271,7 @@
   <translation tag="Forward Multiplier" ja="順方向倍率"/>
   <translation tag="Found %zu printers" ja="%zu台のプリンターを検出"/>
   <translation tag="Found 1 printer" ja="プリンター1台を検出"/>
+  <translation tag="Found {} at {}." ja="{} を {} で検出しました。"/>
   <translation tag="Framerate" ja="フレームレート"/>
   <translation tag="From Buffer" ja="バッファから"/>
   <translation tag="From SpoolmanDB" ja="SpoolmanDB から"/>
@@ -1596,6 +1597,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." ja="レイヤーモードはレイヤー変更ごとに1フレームをキャプチャします。ほとんどの印刷に最適です。"/>
   <translation tag="Layers" ja="レイヤー"/>
   <translation tag="Layout" ja="レイアウト"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." ja="セーフモードではレイアウトを変更できません。編集するには再起動してください。"/>
   <translation tag="Learn More" ja="詳細を見る"/>
   <translation tag="LedSelect" ja="LEDを選択"/>
   <translation tag="Left" ja="左"/>
@@ -2572,6 +2574,7 @@
   <translation tag="STYLE PROPERTIES" ja="スタイルプロパティ"/>
   <translation tag="SWITCH SENSORS" ja="スイッチセンサー"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." ja="セーフモードが有効です。起動時にアプリがクラッシュし続けたため、プリンター接続は無効になっています。設定を開いて問題を解決してから再起動してください。"/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." ja="セーフモード: 起動時にアプリがクラッシュし続けたため、プラグインは無効になり、ウィジェットのレイアウトはデフォルトで表示されています。再起動すると通常に戻ります。"/>
   <translation tag="Safety &amp; Alerts" ja="安全とアラート"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." ja="{} は同じスプールですか？新しいスプールならクリアをタップしてください。"/>
   <translation tag="Sample" ja="サンプル"/>
@@ -3273,6 +3276,7 @@
   <translation tag="Uptime" ja="稼働時間"/>
   <translation tag="Use Android native keyboard for text input" ja="テキスト入力に Android ネイティブキーボードを使用"/>
   <translation tag="Use G10/G11 firmware retraction" ja="G10/G11 ファームウェアリトラクションを使用"/>
+  <translation tag="Use New Address" ja="新しいアドレスを使用"/>
   <translation tag="Use Unload before Eject" ja="先に「アンロード」してから「排出」してください"/>
   <translation tag="Use first HID scanner found" ja="最初に見つかった HID スキャナーを使用"/>
   <translation tag="Use printer type to select image" ja="プリンタータイプで画像を選択"/>
