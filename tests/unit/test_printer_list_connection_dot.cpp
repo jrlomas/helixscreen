@@ -92,3 +92,20 @@ TEST_CASE_METHOD(ConnectionDotFixture,
     CHECK(lv_color_eq(lv_obj_get_style_bg_color(alpha_dot, LV_PART_MAIN),
                       helix::ui::connection_dot_color(2)));
 }
+
+TEST_CASE_METHOD(ConnectionDotFixture,
+                 "Printers list: a printer not yet identified shows its host, not its id",
+                 "[multi-printer][printer_list]") {
+    helix::ConfigTestAccess::data(*cfg_)["printers"]["printer-2"]["moonraker_host"] = "10.0.0.9";
+    helix::ui::PrinterListOverlay overlay;
+    lv_obj_t* root = overlay.create(test_screen());
+    REQUIRE(root != nullptr);
+    overlay.on_activate();
+    helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+
+    lv_obj_t* row = lv_obj_find_by_name(root, "printer-2");
+    REQUIRE(row != nullptr);
+    lv_obj_t* name = lv_obj_find_by_name(row, "printer_name");
+    REQUIRE(name != nullptr);
+    CHECK(std::string(lv_label_get_text(name)) == "10.0.0.9");
+}
