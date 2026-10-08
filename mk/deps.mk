@@ -375,7 +375,6 @@ ifneq ($(CROSS_COMPILE),)
 	$(Q)OPENSSL_PREFIX=""; \
 	OPENSSL_INC=""; \
 	OPENSSL_LIB_DIR=""; \
-	OPENSSL_ARCHIVES=""; \
 	if [ "$(ENABLE_SSL)" = "yes" ]; then \
 		case "$(PLATFORM_TARGET)" in \
 			ad5m|cc1) OPENSSL_PREFIX="/opt/arm-toolchain/arm-none-linux-gnueabihf" ;; \
@@ -385,9 +384,6 @@ ifneq ($(CROSS_COMPILE),)
 		if [ -n "$$OPENSSL_PREFIX" ]; then \
 			OPENSSL_INC=" -I$$OPENSSL_PREFIX/include"; \
 			OPENSSL_LIB_DIR="-L$$OPENSSL_PREFIX/lib"; \
-			if [ -f "$$OPENSSL_PREFIX/lib/libssl.a" ] && [ -f "$$OPENSSL_PREFIX/lib/libcrypto.a" ]; then \
-				OPENSSL_ARCHIVES="$$OPENSSL_PREFIX/lib/libssl.a $$OPENSSL_PREFIX/lib/libcrypto.a"; \
-			fi; \
 		fi; \
 	fi; \
 	(cd $(LIBHV_DIR) && \
@@ -395,7 +391,7 @@ ifneq ($(CROSS_COMPILE),)
 		CFLAGS="$(TARGET_CFLAGS) $(SANITIZE_FLAGS)$$OPENSSL_INC" \
 		CXXFLAGS="$(TARGET_CFLAGS) $(SANITIZE_FLAGS)$$OPENSSL_INC" \
 		LDFLAGS="$$OPENSSL_LIB_DIR $(SANITIZE_FLAGS)" \
-		./configure --with-http-client $(if $(filter yes,$(ENABLE_SSL)),--with-openssl)); \
+		./configure --with-http-client $(if $(filter yes,$(ENABLE_SSL)),--with-openssl))
 	# libhv's nested make has been flaky under cross toolchains when run with
 	# inherited/parallel jobserver flags; keep only this sub-build serialized.
 	# LDFLAGS= override prevents the parent's link flags (which on this project
@@ -403,11 +399,9 @@ ifneq ($(CROSS_COMPILE),)
 	# `build/lib/libwpa_client.a`) from leaking in via the environment — those
 	# paths resolve relative to libhv's own working directory, where they don't
 	# exist, breaking libhv's internal example/test links under test-asan/tsan.
-	if [ -n "$$OPENSSL_ARCHIVES" ]; then \
-		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(LIBHV_KEEP_MTIMES) $(MAKE) -j1 $(LIBHV_DRY_RUN) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC OPENSSL_LIBS="$$OPENSSL_ARCHIVES" libhv; \
-	else \
-		CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(LIBHV_KEEP_MTIMES) $(MAKE) -j1 $(LIBHV_DRY_RUN) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv; \
-	fi
+	# OpenSSL reaches the binary at the app link (-lssl -lcrypto in the
+	# Makefile); a STATIC libhv is an `ar` of objects and links nothing.
+	$(Q)CC="$(CC)" CXX="$(CXX)" AR="$(AR)" MAKEFLAGS= $(LIBHV_KEEP_MTIMES) $(MAKE) -j1 $(LIBHV_DRY_RUN) -C $(LIBHV_DIR) OBJDIR="$(LIBHV_OBJDIR)" LIBDIR="$(LIBHV_OBJDIR)/lib" LDFLAGS= LIBHV_TARGET_TYPE=STATIC libhv
 else ifeq ($(UNAME_S),Darwin)
 	$(Q)cd $(LIBHV_DIR) && \
 		MACOSX_DEPLOYMENT_TARGET=$(MACOS_MIN_VERSION) \

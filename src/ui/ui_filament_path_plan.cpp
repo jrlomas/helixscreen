@@ -14,6 +14,20 @@ namespace helix::ui::fpath {
 // Frame
 // ============================================================================
 
+lv_color_t pulsed_error_color(const FilamentPathData& data) {
+    const lv_color_t error = data.theme.color_error;
+    if (!data.anim.error_pulse_active || data.anim.error_pulse_opa >= LV_OPA_COVER)
+        return error;
+    const float blend = (float)(LV_OPA_COVER - data.anim.error_pulse_opa) /
+                        (float)(LV_OPA_COVER - ERROR_PULSE_OPA_MIN);
+    return ph_blend(error, ph_darken(error, 80), blend);
+}
+
+TubePalette tube_palette(const FilamentPathData& data) {
+    const ThemeCache& t = data.theme;
+    return {t.color_idle, t.color_accent, pulsed_error_color(data), t.color_bg, t.tube_gauge};
+}
+
 // Layout mirrors the ratios at the top of ui_filament_path_internal.h; LINEAR
 // butts the selector against the prep sensors and slides the output exit under
 // the active slot.
@@ -54,12 +68,7 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
     f.active_color = lv_color_hex(data.filament_color);
     f.hub_bg = theme.color_hub_bg;
     f.hub_border = theme.color_hub_border;
-    f.error_color = theme.color_error;
-    if (data.anim.error_pulse_active && data.anim.error_pulse_opa < LV_OPA_COVER) {
-        float blend = (float)(LV_OPA_COVER - data.anim.error_pulse_opa) /
-                      (float)(LV_OPA_COVER - ERROR_PULSE_OPA_MIN);
-        f.error_color = ph_blend(theme.color_error, ph_darken(theme.color_error, 80), blend);
-    }
+    f.error_color = pulsed_error_color(data);
 
     f.output_x = f.center_x;
     if (linear && data.active_slot >= 0 && data.active_slot < g.slot_count) {
@@ -97,6 +106,64 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
     f.hub_box_w = LV_CLAMP(want_w, theme.hub_width, LV_MAX(theme.hub_width, slot_span));
     pg::build_merge_fan(fan_in, fan_n, (float)f.center_x, (float)hub_top, (float)f.hub_box_w,
                         (float)ENTRY_MARGIN, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, f.hub_fan);
+    return f;
+}
+
+// MIXED layout ratios: more vertical spread than PARALLEL to fit hub + nozzles.
+MixedFrame compute_mixed_frame(const FilamentPathData& data, const BaseGeometry& g) {
+    MixedFrame f;
+    constexpr float SENSOR_Y = 0.15f;
+    constexpr float HUB_Y = 0.32f;
+    constexpr float HUB_H = 0.08f;
+    constexpr float TOOLHEAD_Y = 0.62f;
+
+    f.entry_y = g.y_off + (int32_t)(g.height * ENTRY_Y_RATIO);
+    f.sensor_y = g.y_off + (int32_t)(g.height * SENSOR_Y);
+    f.hub_h = LV_MAX(16, (int32_t)(g.height * HUB_H));
+    f.toolhead_y = g.y_off + (int32_t)(g.height * TOOLHEAD_Y);
+    f.tool_scale = LV_MAX(6, data.theme.extruder_scale * 2 / 3);
+    if (data.hub_on_toolhead) {
+        // Combiner on the print head: the box hugs the toolhead over a short
+        // stub of shared tube, measured from the nozzle glyph's top so the two
+        // never overlap.
+        const int32_t nozzle_top = f.toolhead_y - f.tool_scale * 2;
+        const int32_t stub = LV_MAX(10, (int32_t)(g.height * 0.03f));
+        f.hub_bottom = nozzle_top - stub;
+        f.hub_cy = f.hub_bottom - f.hub_h / 2;
+    } else {
+        f.hub_cy = g.y_off + (int32_t)(g.height * HUB_Y);
+        f.hub_bottom = f.hub_cy + f.hub_h / 2;
+    }
+
+    f.states = compute_slot_render_states(&data);
+
+    const int n = LV_MIN(data.slot_count, FilamentPathData::MAX_SLOTS);
+    int32_t hub_x_sum = 0;
+    for (int i = 0; i < n; i++) {
+        if (data.slot_is_hub_routed[i]) {
+            hub_x_sum += g.slot_x[i];
+            f.hub_count++;
+            if (f.first_hub_lane < 0)
+                f.first_hub_lane = i;
+        }
+    }
+    f.hub_cx = (f.hub_count > 0) ? (hub_x_sum / f.hub_count) : (g.x_off + 150);
+    // ~60% of the full hub topology width, enough for the hub lanes
+    f.hub_w = LV_MAX(40, data.theme.hub_width * 3 / 5);
+
+    for (int i = 0; i < FilamentPathData::MAX_SLOTS; i++)
+        f.slot_to_fan[i] = -1;
+    const int32_t hub_top = f.hub_cy - f.hub_h / 2;
+    pg::MergeLaneIn fan_in[FilamentPathData::MAX_SLOTS];
+    int fan_n = 0;
+    for (int i = 0; i < n; i++) {
+        if (!data.slot_is_hub_routed[i])
+            continue;
+        fan_in[fan_n] = {(float)g.slot_x[i], (float)f.sensor_y};
+        f.slot_to_fan[i] = fan_n++;
+    }
+    pg::build_merge_fan(fan_in, fan_n, (float)f.hub_cx, (float)hub_top, (float)f.hub_w,
+                        /*entry_margin=*/8.0f, /*fillet_r=*/8.0f, /*max_slope=*/1.2f, f.hub_fan);
     return f;
 }
 
@@ -298,8 +365,9 @@ void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFra
 // Plan
 // ============================================================================
 
-void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, const BaseGeometry& g,
-                     PathPlan& out) {
+namespace {
+
+void reset_plan(PathPlan& out) {
     out.route_count = 0;
     out.band_count = 0;
     out.trunk_band_count = 0;
@@ -307,6 +375,100 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
     out.active_route = -1;
     out.trunk_route = -1;
     out.bypass_route = -1;
+    out.buffer_has_filament = false;
+}
+
+void total_dropped(PathPlan& out) {
+    for (int i = 0; i < out.route_count; i++)
+        out.dropped += out.routes[i].dropped;
+}
+
+// A lane's own state: how far its filament reached, mounted or not.
+Lane lane_of(const SlotRenderState& s, PathSegment error, lv_color_t bg) {
+    return {s.has_filament ? s.segment : PathSegment::NONE, s.is_mounted, error, s.color, bg};
+}
+
+// Spool entry down to the lane's sensor, with its band. The sensor reads
+// filament once it has reached the toolhead segment.
+Route& start_lane(PathPlan& out, const Lane& lane, float x, int32_t entry_y, int32_t sensor_y) {
+    Route& r = new_route(out);
+    append_line(r, x, (float)entry_y, x, (float)sensor_y, lane.style(PathSegment::SPOOL));
+    add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::TOOLHEAD), lane.color);
+    return r;
+}
+
+} // namespace
+
+void plan_parallel(const FilamentPathData& data, const BaseGeometry& g, PathPlan& out) {
+    reset_plan(out);
+    const int32_t entry_y = g.y_off + (int32_t)(g.height * ENTRY_Y_RATIO);
+    const int32_t sensor_y = g.y_off + (int32_t)(g.height * PARALLEL_SENSOR_Y_RATIO);
+    const int32_t toolhead_y = g.y_off + (int32_t)(g.height * PARALLEL_TOOLHEAD_Y_RATIO);
+    const int32_t tool_scale = LV_MAX(6, data.theme.extruder_scale * 2 / 3);
+    const float nozzle_top = (float)(toolhead_y - tool_scale * 2);
+    const PathSegment error = static_cast<PathSegment>(data.error_segment);
+    const SlotRenderStates states = compute_slot_render_states(&data);
+
+    const int n = LV_MIN(data.slot_count, FilamentPathData::MAX_SLOTS);
+    for (int i = 0; i < n; i++) {
+        const Lane lane = lane_of(states[i], error, data.theme.color_bg);
+        const float x = (float)g.slot_x[i];
+        Route& r = start_lane(out, lane, x, entry_y, sensor_y);
+        append_line(r, x, (float)sensor_y, x, nozzle_top, lane.style(PathSegment::NOZZLE));
+        if (lane.on)
+            out.active_route = i;
+    }
+    total_dropped(out);
+}
+
+void plan_mixed(const MixedFrame& f, const FilamentPathData& data, const BaseGeometry& g,
+                PathPlan& out) {
+    reset_plan(out);
+    const lv_color_t bg = data.theme.color_bg;
+    const float nozzle_top = (float)(f.toolhead_y - f.tool_scale * 2);
+    const PathSegment error = static_cast<PathSegment>(data.error_segment);
+
+    const int n = LV_MIN(data.slot_count, FilamentPathData::MAX_SLOTS);
+    for (int i = 0; i < n; i++) {
+        const Lane lane = lane_of(f.states[i], error, bg);
+        const float x = (float)g.slot_x[i];
+        Route& r = start_lane(out, lane, x, f.entry_y, f.sensor_y);
+        const int fi = f.slot_to_fan[i];
+        if (fi >= 0) {
+            pg::FilamentPath fan;
+            pg::route_polyline_filleted(fan, f.hub_fan[fi].pts, 4, 8.0f);
+            route_append(r, fan, lane.style(PathSegment::SPOOL));
+        } else {
+            append_line(r, x, (float)f.sensor_y, x, nozzle_top, lane.style(PathSegment::NOZZLE));
+        }
+        if (lane.on)
+            out.active_route = i;
+    }
+
+    if (f.hub_count > 0) {
+        // The shared trunk shows the first hub lane that reached the nozzle.
+        // With none there it is idle, and still shows an error unless a direct
+        // lane is the mounted one.
+        const bool direct_mounted = data.active_slot >= 0 && data.active_slot < n &&
+                                    !data.slot_is_hub_routed[data.active_slot];
+        Lane trunk{PathSegment::NONE, !direct_mounted, error, f.states[f.first_hub_lane].color, bg};
+        for (int j = 0; j < n; j++) {
+            if (data.slot_is_hub_routed[j] && f.states[j].segment >= PathSegment::NOZZLE) {
+                trunk = lane_of(f.states[j], error, bg);
+                break;
+            }
+        }
+        out.trunk_route = out.route_count;
+        Route& r = new_route(out);
+        append_line(r, (float)f.hub_cx, (float)f.hub_bottom, (float)f.hub_cx, nozzle_top,
+                    trunk.style(PathSegment::NOZZLE));
+    }
+    total_dropped(out);
+}
+
+void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, const BaseGeometry& g,
+                     PathPlan& out) {
+    reset_plan(out);
 
     const lv_color_t bg = data.theme.color_bg;
     const bool linear = data.topology == static_cast<int>(PathTopology::LINEAR);
@@ -404,8 +566,7 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
         }
     }
 
-    for (int i = 0; i < out.route_count; i++)
-        out.dropped += out.routes[i].dropped;
+    total_dropped(out);
 }
 
 // ============================================================================
