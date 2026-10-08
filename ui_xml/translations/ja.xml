@@ -2116,6 +2116,7 @@
   <translation tag="Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there" ja="電話は上段が 1 2 3、計算機は上段が 7 8 9"/>
   <translation tag="Pick" ja="選択"/>
   <translation tag="Pick Color" ja="色を選択"/>
+  <translation tag="Pick how HelixScreen behaves. You can change any of these later in Settings." ja="HelixScreen の動作を選択します。すべて後で「設定」から変更できます。"/>
   <translation tag="Pick up tool" ja="ツールを取得"/>
   <translation tag="Picking up tool" ja="ツールを取得中"/>
   <translation tag="Pill" ja="ピル"/>
@@ -2156,6 +2157,7 @@
   <translation tag="Pre-heat the extruder first" ja="先にエクストルーダーを予熱してください"/>
   <translation tag="Pre-print command failed: {}" ja="印刷前コマンドに失敗しました: {}"/>
   <translation tag="Pre-print homing..." ja="印刷前ホーミング中..."/>
+  <translation tag="Preferences" ja="好みの設定"/>
   <translation tag="Preheat" ja="予熱"/>
   <translation tag="Preheat %s" ja="予熱 %s"/>
   <translation tag="Preheat %s (%d/%d)" ja="予熱 %s (%d/%d)"/>
