@@ -94,3 +94,39 @@ CPP
     run python3 "$GATE" --baseline scripts/esp32_xml_binding_baseline.txt
     [ "$status" -eq 0 ]
 }
+
+# Runs qc_esp32_bindings_touched against what is staged in $1.
+bindings_touched() {
+    local qc="$PWD/scripts/qc/esp32_xml_bindings.sh"
+    (cd "$1" && STAGED_ONLY=true QC_STAGED_ALL="$(git diff --cached --name-only)" \
+        bash -c '. "$0" && qc_esp32_bindings_touched' "$qc")
+}
+
+staging_repo() {
+    REPO="$BATS_TEST_TMPDIR/repo"
+    rm -rf "$REPO"
+    mkdir -p "$REPO/src" "$REPO/ui_xml"
+    git -C "$REPO" init -q
+    printf 'int a;\nvoid reg() { lv_xml_register_event_cb(nullptr, "on_x", cb); }\n' > "$REPO/src/a.cpp"
+    git -C "$REPO" add -A && git -C "$REPO" -c user.email=t@t -c user.name=t commit -qm init
+}
+
+@test "the hook runs the gate, and skips it for a src change that moves no binding" {
+    run grep -q 'QC_ALL=.*qc_esp32_xml_bindings' scripts/quality-checks.sh
+    [ "$status" -eq 0 ]
+    staging_repo
+    sed -i 's/int a;/int a; \/\/ comment/' "$REPO/src/a.cpp" && git -C "$REPO" add src/a.cpp
+    refute bindings_touched "$REPO"
+}
+
+@test "a staged registration, #if or XML change runs the gate" {
+    staging_repo
+    sed -i 's/"on_x"/"on_y"/' "$REPO/src/a.cpp" && git -C "$REPO" add src/a.cpp
+    bindings_touched "$REPO"
+    staging_repo
+    printf '#if HELIX_HAS_PLUGINS\n#endif\n' >> "$REPO/src/a.cpp" && git -C "$REPO" add src/a.cpp
+    bindings_touched "$REPO"
+    staging_repo
+    echo '<component/>' > "$REPO/ui_xml/x.xml" && git -C "$REPO" add ui_xml/x.xml
+    bindings_touched "$REPO"
+}

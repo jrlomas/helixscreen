@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (C) 2025-2026 356C LLC
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Gate: every XML subject and callback the desktop registers, the firmware registers too.
+"""Gate: an XML binding is registered in a file and branch the firmware compiles.
 
 The ESP32 firmware ships all of ui_xml/ but compiles only the sources in
 app_srcs.txt, with its own HELIX_HAS_* set. A binding whose only registration
@@ -16,6 +16,11 @@ no file the firmware compiles registers in a branch the firmware compiles.
 with #if branches evaluated against the helixapp CMake definitions. A name
 nothing registers anywhere is check_orphan_callbacks.py's business (or is built
 at runtime) and is not counted here.
+
+Outside the gate: a registration that is compiled but never called. This reads
+where registrations are written, not whether the firmware's boot path reaches
+them, so an init_subjects() that app_boot.cpp never calls passes here and
+binds to nothing on the device.
 
 Fix a finding by registering the name on the firmware: a stub with the
 platform's real value (0 hides a row bound hidden-if-0), or a callback that
