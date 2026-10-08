@@ -47,8 +47,10 @@ struct LinkSample {
 
 enum class LinkEvent { None, Disconnected, Reconnected, FrequencyChanged, RssiDrop };
 
-/// First interface row of /proc/net/wireless; nullopt when there is none.
-std::optional<WirelessProcStats> parse_proc_net_wireless(std::string_view text);
+/// The row for @p iface in /proc/net/wireless; with an empty @p iface, the first row.
+/// nullopt when there is no such row: another interface's numbers are never substituted.
+std::optional<WirelessProcStats> parse_proc_net_wireless(std::string_view text,
+                                                         std::string_view iface = {});
 
 /// 802.11 channel number for a center frequency, 0 when not a WiFi channel.
 int wifi_channel_from_frequency(int frequency_mhz);
@@ -61,8 +63,9 @@ inline constexpr int64_t LINK_INFO_MIN_INTERVAL_S = 60;
 /// What changed from @p prev to @p cur (None for the first sample).
 LinkEvent classify_link_change(const LinkSample* prev, const LinkSample& cur);
 
-/// True when an event at @p now_s may be logged at INFO given the last INFO time.
-bool link_info_allowed(int64_t now_s, std::optional<int64_t> last_info_s);
+/// True when @p ev at @p now_s may be logged at INFO given the last INFO time.
+/// A restore always may: a logged drop must never lack its recovery.
+bool link_info_allowed(LinkEvent ev, int64_t now_s, std::optional<int64_t> last_info_s);
 
 /// Bounded FIFO of samples; the oldest is dropped past capacity.
 class LinkHistory {
@@ -82,7 +85,9 @@ class LinkHistory {
 };
 
 /// Debug-bundle `network` section for a history (empty history: no samples).
-nlohmann::json link_history_to_json(const LinkHistory& history);
+/// `frequency_available` says whether the backend can report frequency at all, so an
+/// absent band reads as "unknown" rather than "unchanged".
+nlohmann::json link_history_to_json(const LinkHistory& history, bool frequency_available);
 
 /**
  * @brief Polls the WiFi manager every 30s regardless of which UI is on screen.
@@ -116,6 +121,7 @@ class WifiLinkMonitor {
     mutable std::mutex mutex_;
     LinkHistory history_;
     std::optional<int64_t> last_info_s_;
+    bool frequency_available_ = false;
 };
 
 } // namespace helix

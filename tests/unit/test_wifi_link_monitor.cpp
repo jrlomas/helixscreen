@@ -78,9 +78,12 @@ TEST_CASE("link change classification", "[wifi][link]") {
 }
 
 TEST_CASE("INFO rate limit", "[wifi][link]") {
-    CHECK(link_info_allowed(100, std::nullopt));
-    CHECK_FALSE(link_info_allowed(100 + LINK_INFO_MIN_INTERVAL_S - 1, 100));
-    CHECK(link_info_allowed(100 + LINK_INFO_MIN_INTERVAL_S, 100));
+    CHECK(link_info_allowed(LinkEvent::Disconnected, 100, std::nullopt));
+    CHECK_FALSE(
+        link_info_allowed(LinkEvent::Disconnected, 100 + LINK_INFO_MIN_INTERVAL_S - 1, 100));
+    CHECK(link_info_allowed(LinkEvent::Disconnected, 100 + LINK_INFO_MIN_INTERVAL_S, 100));
+    // A restore is exempt so a logged drop always has its recovery.
+    CHECK(link_info_allowed(LinkEvent::Reconnected, 101, 100));
 }
 
 TEST_CASE("link history is bounded and drops the oldest", "[wifi][link]") {
@@ -102,7 +105,7 @@ TEST_CASE("network bundle section carries link fields and no identifiers",
     h.push(s);
     h.push(sample(35, false, 0, std::nullopt));
 
-    auto j = link_history_to_json(h);
+    auto j = link_history_to_json(h, true);
     auto cur = j["current"];
     CHECK(cur["connected"] == false);
     CHECK_FALSE(cur.contains("frequency_mhz")); // omitted, not zero-filled
@@ -119,4 +122,24 @@ TEST_CASE("network bundle section carries link fields and no identifiers",
     for (const char* banned : {"ssid", "bssid", "mac", "address"}) {
         CHECK(dump.find(banned) == std::string::npos);
     }
+}
+
+TEST_CASE("/proc/net/wireless picks the managed interface row", "[wifi][link]") {
+    const char* two = " p2p0: 0000 10. -80. -256 0 0 0 99 0 9\n"
+                      " wlan0: 0000 58. -52. -256 0 0 0 17 3 4\n";
+    auto st = parse_proc_net_wireless(two, "wlan0");
+    REQUIRE(st);
+    CHECK(*st->rssi_dbm == -52);
+    CHECK(*st->tx_retries == 17);
+    // Named interface absent: no substitute from another row.
+    CHECK_FALSE(parse_proc_net_wireless(two, "wlan1"));
+    // No name known: first row.
+    CHECK(*parse_proc_net_wireless(two)->tx_retries == 99);
+}
+
+TEST_CASE("network section states when frequency is unavailable", "[wifi][link]") {
+    LinkHistory h(3);
+    h.push(sample(1, true, 0, -50));
+    CHECK(link_history_to_json(h, false)["frequency_available"] == false);
+    CHECK(link_history_to_json(h, true)["frequency_available"] == true);
 }

@@ -76,11 +76,15 @@ nlohmann::json sample_to_json(const LinkSample& s) {
 
 } // namespace
 
-std::optional<WirelessProcStats> parse_proc_net_wireless(std::string_view text) {
+std::optional<WirelessProcStats> parse_proc_net_wireless(std::string_view text,
+                                                         std::string_view iface) {
     for (std::string_view line : text_io::lines(text)) {
         const auto colon = line.find(':');
         if (colon == std::string_view::npos) {
             continue; // the two header rows carry no interface name
+        }
+        if (!iface.empty() && text_io::trim(line.substr(0, colon)) != iface) {
+            continue;
         }
         // Columns after "iface:": status link level noise nwid crypt frag retry misc beacon
         const auto cols = text_io::split_ws(line.substr(colon + 1));
@@ -144,8 +148,9 @@ LinkEvent classify_link_change(const LinkSample* prev, const LinkSample& cur) {
     return LinkEvent::None;
 }
 
-bool link_info_allowed(int64_t now_s, std::optional<int64_t> last_info_s) {
-    return !last_info_s || now_s - *last_info_s >= LINK_INFO_MIN_INTERVAL_S;
+bool link_info_allowed(LinkEvent ev, int64_t now_s, std::optional<int64_t> last_info_s) {
+    return ev == LinkEvent::Reconnected || !last_info_s ||
+           now_s - *last_info_s >= LINK_INFO_MIN_INTERVAL_S;
 }
 
 void LinkHistory::push(const LinkSample& s) {
@@ -155,8 +160,9 @@ void LinkHistory::push(const LinkSample& s) {
     }
 }
 
-nlohmann::json link_history_to_json(const LinkHistory& history) {
-    nlohmann::json out = {{"history", nlohmann::json::array()}};
+nlohmann::json link_history_to_json(const LinkHistory& history, bool frequency_available) {
+    nlohmann::json out = {{"frequency_available", frequency_available},
+                          {"history", nlohmann::json::array()}};
     for (const auto& s : history.samples()) {
         out["history"].push_back(sample_to_json(s));
     }
@@ -193,22 +199,30 @@ void WifiLinkMonitor::poll() {
     if (!wifi) {
         return;
     }
-    wifi->get_status_async(lifetime_.token(), [this](const WifiBackend::ConnectionStatus& st) {
-        LinkSample s;
-        s.uptime_s = uptime_seconds();
-        s.connected = st.connected;
-        if (st.connected) {
-            s.frequency_mhz = st.frequency_mhz;
-            // /proc is a kernel table read, not a device round trip; absent off Linux.
-            std::ifstream f("/proc/net/wireless");
-            std::stringstream buf;
-            buf << f.rdbuf();
-            if (auto radio = parse_proc_net_wireless(buf.str())) {
-                s.radio = *radio;
-            }
-        }
-        record(s);
-    });
+    const std::string netdev = wifi->netdev_name();
+    const bool freq_ok = wifi->reports_frequency();
+    wifi->get_status_async(lifetime_.token(),
+                           [this, netdev, freq_ok](const WifiBackend::ConnectionStatus& st) {
+                               LinkSample s;
+                               s.uptime_s = uptime_seconds();
+                               s.connected = st.connected;
+                               if (st.connected) {
+                                   s.frequency_mhz = st.frequency_mhz;
+                                   // /proc is a kernel table read, not a device round trip; absent
+                                   // off Linux.
+                                   std::ifstream f("/proc/net/wireless");
+                                   std::stringstream buf;
+                                   buf << f.rdbuf();
+                                   if (auto radio = parse_proc_net_wireless(buf.str(), netdev)) {
+                                       s.radio = *radio;
+                                   }
+                               }
+                               {
+                                   std::lock_guard<std::mutex> lock(mutex_);
+                                   frequency_available_ = freq_ok;
+                               }
+                               record(s);
+                           });
 }
 
 void WifiLinkMonitor::record(const LinkSample& s) {
@@ -217,7 +231,7 @@ void WifiLinkMonitor::record(const LinkSample& s) {
     const LinkEvent ev = classify_link_change(prev, s);
 
     if (ev != LinkEvent::None) {
-        const bool info = link_info_allowed(s.uptime_s, last_info_s_);
+        const bool info = link_info_allowed(ev, s.uptime_s, last_info_s_);
         const auto lvl = info ? spdlog::level::info : spdlog::level::debug;
         if (info) {
             last_info_s_ = s.uptime_s;
@@ -251,7 +265,7 @@ void WifiLinkMonitor::record(const LinkSample& s) {
 
 nlohmann::json WifiLinkMonitor::to_json() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return link_history_to_json(history_);
+    return link_history_to_json(history_, frequency_available_);
 }
 
 } // namespace helix
