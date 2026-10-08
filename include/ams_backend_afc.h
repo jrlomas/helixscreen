@@ -1332,6 +1332,16 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     /// maybe_reassert_retained_spool_link() (#1289).
     std::unordered_map<std::string, int> lane_firmware_spool_id_;
 
+    /// Slot -> the firmware spool id HelixScreen just unlinked. AFC keeps the
+    /// id on a lane with remember_spool, so every later frame restates it; a
+    /// frame naming this id is stale for the lane. Ends when the lane reports
+    /// any other id or null, when its filament leaves, and on start.
+    std::unordered_map<int, int> unlinked_spool_ids_;
+
+    /// True when @p firmware_id is the id unlinked on @p slot_index. Any other
+    /// id ends the guard. @pre mutex_ held.
+    bool restates_unlinked_spool(int slot_index, int firmware_id);
+
     /// What AFC itself has said about a lane, per observation source, built up
     /// field by field across status frames and keyed by lane name the way the
     /// two maps above are - a lane keeps its name when reorganize_slots()

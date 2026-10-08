@@ -300,6 +300,10 @@ bool AmsBackendAfc::auto_unloads_after_print() const {
 // ============================================================================
 
 void AmsBackendAfc::on_started() {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        unlinked_spool_ids_.clear();
+    }
     // Version is informational only (see apply_afc_version_response) — nothing
     // below depends on the result, so this does not need to complete first.
     // Load persisted per-slot overrides BEFORE any status callback can parse a
@@ -2321,6 +2325,18 @@ void AmsBackendAfc::parse_afc_state(const nlohmann::json& afc_data,
 // AFC Object Parsing (AFC_stepper, AFC_hub, AFC_extruder)
 // ============================================================================
 
+bool AmsBackendAfc::restates_unlinked_spool(int slot_index, int firmware_id) {
+    const auto it = unlinked_spool_ids_.find(slot_index);
+    if (it == unlinked_spool_ids_.end()) {
+        return false;
+    }
+    if (it->second == firmware_id) {
+        return true;
+    }
+    unlinked_spool_ids_.erase(it);
+    return false;
+}
+
 void AmsBackendAfc::invalidate_broken_binding(int slot_index, int firmware_spool_id) {
     if (reconcile_lane_binding(slot_index, firmware_spool_id) == ams::BindingVerdict::Holds) {
         return;
@@ -2545,14 +2561,17 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
     if (data.contains("spool_id")) {
         if (data["spool_id"].is_number_integer()) {
             const int firmware_id = data["spool_id"].get<int>();
-            slot.spoolman_id = firmware_id;
-            lane_firmware_spool_id_[lane_name] = firmware_id;
-            if (firmware_id > 0) {
-                firmware.cache.spoolman_id = firmware_id;
-            } else {
-                firmware.cache.spoolman_id.reset();
+            if (!restates_unlinked_spool(slot_index, firmware_id)) {
+                slot.spoolman_id = firmware_id;
+                lane_firmware_spool_id_[lane_name] = firmware_id;
+                if (firmware_id > 0) {
+                    firmware.cache.spoolman_id = firmware_id;
+                } else {
+                    firmware.cache.spoolman_id.reset();
+                }
             }
         } else if (data["spool_id"].is_null()) {
+            unlinked_spool_ids_.erase(slot_index);
             slot.spoolman_id = 0;
             lane_firmware_spool_id_[lane_name] = 0;
             firmware.cache.spoolman_id.reset();
@@ -2691,6 +2710,9 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
         slot.status == SlotStatus::LOADED || slot.status == SlotStatus::AVAILABLE;
     const bool filament_present_before = status_at_frame_start == SlotStatus::LOADED ||
                                          status_at_frame_start == SlotStatus::AVAILABLE;
+    if (filament_present_before && !filament_present_now) {
+        unlinked_spool_ids_.erase(slot_index);
+    }
     if (filament_present_now && !filament_present_before) {
         maybe_reassert_retained_spool_link(slot_index, lane_name);
         // The same edge is also an insert, and the spool_id binding is AFC's
@@ -4295,13 +4317,16 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
         if (lane.contains("spool_id")) {
             if (lane["spool_id"].is_number_integer()) {
                 const int firmware_id = lane["spool_id"].get<int>();
-                slot.spoolman_id = firmware_id;
-                if (firmware_id > 0) {
-                    firmware.cache.spoolman_id = firmware_id;
-                } else {
-                    firmware.cache.spoolman_id.reset();
+                if (!restates_unlinked_spool(i, firmware_id)) {
+                    slot.spoolman_id = firmware_id;
+                    if (firmware_id > 0) {
+                        firmware.cache.spoolman_id = firmware_id;
+                    } else {
+                        firmware.cache.spoolman_id.reset();
+                    }
                 }
             } else if (lane["spool_id"].is_null()) {
+                unlinked_spool_ids_.erase(i);
                 slot.spoolman_id = 0;
                 firmware.cache.spoolman_id.reset();
             }
@@ -5605,6 +5630,19 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
             // Rule 1 must not read those as an external re-bind. An
             // unlink (id 0) erases the pending expectation instead.
             record_own_spool_write(slot_index, info.spoolman_id, old_spoolman_id);
+            if (info.spoolman_id <= 0) {
+                // AFC keeps the id on a lane with remember_spool and restates
+                // it in every frame; hold that id as stale until the lane
+                // reports something else.
+                const auto fw = lane_firmware_spool_id_.find(lane_name);
+                if (fw != lane_firmware_spool_id_.end() && fw->second > 0) {
+                    unlinked_spool_ids_[slot_index] = fw->second;
+                    fw->second = 0;
+                    lane_firmware_readings_[lane_name].cache.spoolman_id.reset();
+                }
+            } else {
+                unlinked_spool_ids_.erase(slot_index);
+            }
             if (info.spoolman_id > 0) {
                 execute_gcode(
                     fmt::format("SET_SPOOL_ID LANE={} SPOOL_ID={}", lane_name, info.spoolman_id));
