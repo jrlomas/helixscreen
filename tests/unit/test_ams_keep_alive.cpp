@@ -131,7 +131,10 @@ TEST_CASE_METHOD(AmsKeepAliveFixture, "AmsPanel: a second open reuses the built 
     REQUIRE(root != nullptr);
     lv_obj_t* slot = first_slot();
     REQUIRE(slot != nullptr);
-    bool slot_deleted = false;
+    // Static: the slot's delete hook can fire in the fixture teardown, after the test frame is
+    // gone.
+    static bool slot_deleted;
+    slot_deleted = false;
     flag_on_delete(slot, &slot_deleted);
 
     close();
@@ -192,7 +195,10 @@ TEST_CASE_METHOD(AmsKeepAliveFixture,
     open();
     lv_obj_t* slot = first_slot();
     REQUIRE(slot != nullptr);
-    bool slot_deleted = false;
+    // Static: the slot's delete hook can fire in the fixture teardown, after the test frame is
+    // gone.
+    static bool slot_deleted;
+    slot_deleted = false;
     flag_on_delete(slot, &slot_deleted);
     close();
 
