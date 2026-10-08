@@ -20,12 +20,14 @@ enum class HumiditySensorRole {
 
 /// @brief Type of humidity sensor hardware
 enum class HumiditySensorType {
-    BME280 = 1,  ///< BME280 sensor (humidity, pressure, temperature)
-    HTU21D = 2,  ///< HTU21D sensor (humidity, temperature)
-    SHT3X = 3,   ///< SHT3X sensor (humidity, temperature)
-    AHT10 = 4,   ///< AHT10 sensor (humidity, temperature)
-    AHT20 = 5,   ///< AHT20 sensor (humidity, temperature)
-    AHT20_F = 6, ///< AHT20-F sensor (humidity, temperature)
+    BME280 = 1,           ///< BME280 sensor (humidity, pressure, temperature)
+    HTU21D = 2,           ///< HTU21D sensor (humidity, temperature)
+    SHT3X = 3,            ///< SHT3X sensor (humidity, temperature)
+    AHT10 = 4,            ///< AHT10 sensor (humidity, temperature)
+    AHT20 = 5,            ///< AHT20 sensor (humidity, temperature)
+    AHT20_F = 6,          ///< AHT20-F sensor (humidity, temperature)
+    AHT3X = 7,            ///< AHT3x object (humidity, temperature)
+    TEMPERATURE_OAMS = 8, ///< temperature_oams object (humidity, temperature)
 };
 
 /// @brief Descriptor for one humidity-capable Klipper sensor chip.
@@ -50,6 +52,9 @@ struct HumiditySensorChip {
         {HumiditySensorType::AHT10, "aht10 ", "aht10", "AHT10", false},
         {HumiditySensorType::AHT20, "aht20 ", "aht20", "AHT20", false},
         {HumiditySensorType::AHT20_F, "aht20_f ", "aht20_f", "AHT20-F", false},
+        {HumiditySensorType::AHT3X, "aht3x ", "aht3x", "AHT3x", false},
+        {HumiditySensorType::TEMPERATURE_OAMS, "temperature_oams ", "temperature_oams",
+         "temperature_oams", false},
     };
     return chips;
 }
