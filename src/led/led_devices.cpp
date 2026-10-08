@@ -25,6 +25,15 @@ std::string object_name(const std::string& id) {
     return space == std::string::npos ? id : id.substr(space + 1);
 }
 
+/// Lower-cased, with one trailing 's' dropped: "case_lights" and "case_light" name one light.
+std::string light_name_key(const std::string& name) {
+    std::string key = helix::text_io::to_lower(name);
+    if (key.size() > 1 && key.back() == 's') {
+        key.pop_back();
+    }
+    return key;
+}
+
 bool contains(const std::vector<std::string>& v, const std::string& s) {
     return std::find(v.begin(), v.end(), s) != v.end();
 }
@@ -34,12 +43,12 @@ bool contains(const std::vector<std::string>& v, const std::string& s) {
 std::string resolve_chamber_light(const std::vector<LedStripInfo>& devices,
                                   const std::string& fallback) {
     for (const char* wanted : CHAMBER_LIGHT_NAMES) {
-        const std::string want = helix::text_io::to_lower(wanted);
+        const std::string want = light_name_key(wanted);
         for (const auto& d : devices) {
             if (d.backend != LedBackendType::NATIVE && d.backend != LedBackendType::OUTPUT_PIN) {
                 continue;
             }
-            if (helix::text_io::to_lower(object_name(d.id)) == want) {
+            if (light_name_key(object_name(d.id)) == want) {
                 return d.id;
             }
         }

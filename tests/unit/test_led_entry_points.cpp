@@ -6,7 +6,9 @@
 #include "ui_utils.h"
 
 #include "../lvgl_ui_test_fixture.h"
+#include "../test_helpers/scoped_home_layout.h"
 #include "../test_helpers/update_queue_test_access.h"
+#include "config.h"
 #include "led/led_controller.h"
 #include "led/ui_led_control_overlay.h"
 #include "moonraker_api_mock.h"
@@ -126,8 +128,10 @@ TEST_CASE_METHOD(EntryFixture, "a light button's › opens the overlay on that b
     w.detach_tile();
 }
 
-TEST_CASE_METHOD(EntryFixture, "the print-status light toggles only the chamber light",
+TEST_CASE_METHOD(EntryFixture,
+                 "with no home light button, the print-status light toggles only the chamber light",
                  "[led][entry]") {
+    helix::test::ScopedHomeLayout layout(nlohmann::json::array());
     auto& ctrl = LedController::instance();
     PrintLightTimelapseControls controls;
     controls.handle_light_button();
@@ -136,8 +140,51 @@ TEST_CASE_METHOD(EntryFixture, "the print-status light toggles only the chamber 
     CHECK_FALSE(ctrl.native().has_strip_color("neopixel sb_leds"));
 }
 
-TEST_CASE_METHOD(EntryFixture, "the print-status light button shows the chamber light's state",
-                 "[led][entry]") {
+TEST_CASE_METHOD(EntryFixture,
+                 "the print-status light drives the light the home light button drives",
+                 "[led][entry][light_button]") {
+    helix::test::ScopedHomeLayout layout(
+        nlohmann::json::array({helix::test::placed_light("led", 0)}));
+    auto* cfg = Config::get_instance();
+    cfg->set(cfg->df() + LIGHT_BUTTON_PENDING_PATH, std::string("neopixel sb_leds"));
+    auto& ctrl = LedController::instance();
+    PrintLightTimelapseControls controls;
+    controls.handle_light_button();
+    drain();
+    CHECK(ctrl.native().has_strip_color("neopixel sb_leds"));
+    CHECK_FALSE(ctrl.native().has_strip_color("neopixel chamber_light"));
+}
+
+TEST_CASE_METHOD(EntryFixture, "the print-status light icon shows the home light button's light",
+                 "[led][entry][light_button]") {
+    constexpr const char* BULB_OFF = "\xF3\xB0\x8C\xB6";
+    constexpr const char* BULB_ON = "\xF3\xB0\x9B\xA8";
+    helix::test::ScopedHomeLayout layout(
+        nlohmann::json::array({helix::test::placed_light("led", 0)}));
+    auto* cfg = Config::get_instance();
+    cfg->set(cfg->df() + LIGHT_BUTTON_PENDING_PATH, std::string("neopixel sb_leds"));
+    auto& ctrl = LedController::instance();
+    PrintLightTimelapseControls controls;
+    controls.init_subjects();
+    lv_subject_t* icon = lv_xml_get_subject(nullptr, "light_button_icon");
+    REQUIRE(icon != nullptr);
+    drain();
+    REQUIRE(std::string(lv_subject_get_string(icon)) == BULB_OFF);
+
+    ctrl.update_from_status({{"neopixel chamber_light", {{"color_data", {{1.0, 1.0, 1.0, 0.0}}}}}});
+    drain();
+    CHECK(std::string(lv_subject_get_string(icon)) == BULB_OFF);
+
+    ctrl.update_from_status({{"neopixel sb_leds", {{"color_data", {{1.0, 1.0, 1.0, 0.0}}}}}});
+    drain();
+    CHECK(std::string(lv_subject_get_string(icon)) == BULB_ON);
+}
+
+TEST_CASE_METHOD(
+    EntryFixture,
+    "with no home light button, the print-status light button shows the chamber light's state",
+    "[led][entry]") {
+    helix::test::ScopedHomeLayout layout(nlohmann::json::array());
     constexpr const char* BULB_OFF = "\xF3\xB0\x8C\xB6";
     constexpr const char* BULB_ON = "\xF3\xB0\x9B\xA8";
     auto& ctrl = LedController::instance();

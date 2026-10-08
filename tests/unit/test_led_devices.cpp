@@ -34,6 +34,18 @@ TEST_CASE("resolve_chamber_light: every spelling matches", "[led][devices]") {
                                 "fb") == "output_pin caselight");
 }
 
+TEST_CASE("resolve_chamber_light: a plural name is the same light", "[led][devices]") {
+    const LedStripInfo corners = dev("neopixel Turtle_Corner_Indicators", LedBackendType::NATIVE);
+    CHECK(resolve_chamber_light({corners, SB, dev("neopixel case_lights", LedBackendType::NATIVE)},
+                                "fb") == "neopixel case_lights");
+    CHECK(resolve_chamber_light({dev("neopixel chamber_lights", LedBackendType::NATIVE)}, "fb") ==
+          "neopixel chamber_lights");
+    CHECK(resolve_chamber_light({dev("led chamber_LEDs", LedBackendType::NATIVE)}, "fb") ==
+          "led chamber_LEDs");
+    CHECK(resolve_chamber_light({dev("output_pin caselights", LedBackendType::OUTPUT_PIN)}, "fb") ==
+          "output_pin caselights");
+}
+
 TEST_CASE("resolve_chamber_light: case does not matter", "[led][devices]") {
     CHECK(resolve_chamber_light({dev("neopixel Chamber_Light", LedBackendType::NATIVE)}, "fb") ==
           "neopixel Chamber_Light");
