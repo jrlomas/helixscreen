@@ -941,9 +941,16 @@ void Config::init(const std::string& config_path) {
             const bool below_floor =
                 version_before > 0 && version_before < MIN_MIGRATABLE_CONFIG_VERSION;
             const bool copy_from_file = data_is_on_disk_doc && storage_->describe() == path;
+            // A small partition cannot spare a second copy of settings.json for
+            // a manual recovery nobody can perform there. A below-floor document
+            // still gets one: it is about to be replaced and has no other copy.
+            const bool small = storage_->small_footprint();
+            if (small && !below_floor) {
+                std::remove(snapshot.c_str());
+            }
             bool snapshot_kept = false;
             if (version_before > 0 && version_before < CURRENT_CONFIG_VERSION &&
-                (copy_from_file || below_floor) && !read_only_mode_) {
+                ((copy_from_file && !small) || below_floor) && !read_only_mode_) {
                 // Absent or unreadable parses as discarded, which reads as 0:
                 // nothing worth keeping.
                 const int snapshot_version = helix::json_util::safe_int(
@@ -1549,7 +1556,8 @@ bool Config::save() {
 #if defined(__cpp_exceptions)
     try {
 #endif
-        if (!storage_->store(helix::json_util::safe_dump(data, storage_->json_indent()) + "\n")) {
+        if (!storage_->store(
+                helix::json_util::safe_dump(data, storage_->small_footprint() ? -1 : 2) + "\n")) {
             // FileConfigStorage (the default backend) already reports the specific
             // failure via NOTIFY_ERROR + CONFIG_RECORD_ERROR at the failing phase
             // (open/write/rename/exception) — don't double-toast here. Non-file

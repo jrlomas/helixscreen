@@ -8,6 +8,7 @@
 #include "config_storage.h"
 #include "panel_widget_config.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -143,28 +144,28 @@ TEST_CASE("Config::init() end-to-end: chmod-000 config routes into corrupt-prese
 
 // The K-Touch keeps settings.json on a 128 KB LittleFS partition of 4 KB
 // blocks, and an atomic save needs room for the old and new copies at once.
-// Four printers, each with its seeded home dashboard, must fit in 16 KB, so a
-// save never needs more than 8 of the 32 blocks.
-TEST_CASE("compact file storage keeps a 4-printer settings.json inside the K-Touch budget",
+// The fixture is a real 3-printer K-Touch settings.json (hosts and macro names
+// redacted), written pretty-printed at 31.5 KB. With a fourth printer it must
+// save under 16 KB, so a save never needs more than 8 of the 32 blocks.
+TEST_CASE("small-footprint storage keeps a 4-printer K-Touch settings.json inside budget",
           "[config][storage]") {
     ScopedRuntimeConfig scoped_config;
     get_runtime_config()->test_mode = true;
-    ConfigDirGuard guard("compact4");
+    ConfigDirGuard guard("small4");
     const std::string path = (guard.dir / "settings.json").string();
+    fs::copy_file("tests/fixtures/config/ktouch_3_printers.json", path);
 
     helix::Config cfg;
-    cfg.set_storage(helix::make_file_config_storage(path, helix::ConfigLayout::Compact));
+    cfg.set_storage(helix::make_file_config_storage(path, helix::ConfigFootprint::Small));
     cfg.init(path);
-    const nlohmann::json printer = cfg.get<nlohmann::json>("/printers/default", {});
-    REQUIRE(printer.is_object());
-    for (const char* id : {"p1", "p2", "p3"}) {
-        cfg.add_printer(id, printer);
-    }
-    REQUIRE(cfg.get_printer_ids().size() == 4);
+    REQUIRE(cfg.get_printer_ids().size() == 3);
+    cfg.add_printer("printer-4", cfg.get<nlohmann::json>("/printers/printer-3", {}));
+
     for (const auto& id : cfg.get_printer_ids()) {
         REQUIRE(cfg.set_active_printer(id));
         helix::PanelWidgetConfig home("home", cfg);
         home.load();
+        home.save();
         REQUIRE(cfg.get<nlohmann::json>(cfg.df() + "panel_widgets/home", {}).is_object());
     }
     REQUIRE(cfg.save());
@@ -173,5 +174,68 @@ TEST_CASE("compact file storage keeps a 4-printer settings.json inside the K-Tou
     INFO("settings.json with 4 printers: " << bytes << " bytes");
     REQUIRE(bytes < 16 * 1024);
 
+    // Every printer's dashboard comes back as it was saved.
+    helix::Config reread;
+    reread.set_storage(helix::make_file_config_storage(path, helix::ConfigFootprint::Small));
+    reread.init(path);
+    for (const auto& id : cfg.get_printer_ids()) {
+        REQUIRE(cfg.set_active_printer(id));
+        REQUIRE(reread.set_active_printer(id));
+        helix::PanelWidgetConfig before("home", cfg);
+        helix::PanelWidgetConfig after("home", reread);
+        before.load();
+        after.load();
+        CAPTURE(id);
+        REQUIRE(before.entries().size() == after.entries().size());
+        for (const auto& e : before.entries()) {
+            CAPTURE(e.id);
+            auto it = std::find_if(after.entries().begin(), after.entries().end(),
+                                   [&](const auto& a) { return a.id == e.id; });
+            REQUIRE(it != after.entries().end());
+            REQUIRE(it->enabled == e.enabled);
+            REQUIRE(it->col == e.col);
+            REQUIRE(it->row == e.row);
+            REQUIRE(it->colspan == e.colspan);
+            REQUIRE(it->rowspan == e.rowspan);
+        }
+    }
+
+    reread.clear_path();
     cfg.clear_path();
+}
+
+namespace {
+/// Boots a config stamped @p version and reports whether a .pre-migration copy
+/// is left beside it.
+bool boot_leaves_pre_migration_copy(helix::ConfigFootprint footprint, int version,
+                                    bool stale_copy_present) {
+    ScopedRuntimeConfig scoped_config;
+    get_runtime_config()->test_mode = true;
+    ConfigDirGuard guard("premig");
+    const std::string path = (guard.dir / "settings.json").string();
+    {
+        std::ofstream f(path);
+        f << nlohmann::json{{"config_version", version}, {"wizard_completed", true}}.dump();
+    }
+    if (stale_copy_present) {
+        std::ofstream(path + ".pre-migration") << R"({"config_version": 3})";
+    }
+    helix::Config cfg;
+    cfg.set_storage(helix::make_file_config_storage(path, footprint));
+    cfg.init(path);
+    REQUIRE(cfg.get<int>("/config_version", 0) == helix::CURRENT_CONFIG_VERSION);
+    const bool exists = fs::exists(path + ".pre-migration");
+    cfg.clear_path();
+    return exists;
+}
+} // namespace
+
+TEST_CASE("small-footprint storage keeps no .pre-migration copy", "[config][storage]") {
+    constexpr int migrating = helix::CURRENT_CONFIG_VERSION - 1;
+    REQUIRE(boot_leaves_pre_migration_copy(helix::ConfigFootprint::Standard, migrating, false));
+    REQUIRE_FALSE(boot_leaves_pre_migration_copy(helix::ConfigFootprint::Small, migrating, false));
+    // One an earlier build left behind goes on the next boot, migrating or not.
+    REQUIRE_FALSE(boot_leaves_pre_migration_copy(helix::ConfigFootprint::Small, migrating, true));
+    REQUIRE_FALSE(boot_leaves_pre_migration_copy(helix::ConfigFootprint::Small,
+                                                 helix::CURRENT_CONFIG_VERSION, true));
 }

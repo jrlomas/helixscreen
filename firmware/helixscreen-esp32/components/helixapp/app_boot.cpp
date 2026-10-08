@@ -826,10 +826,10 @@ extern "C" void app_boot_ui(void) {
     // loader, env backups). Must point at the writable partition.
     setenv("HELIX_CONFIG_DIR", "/config", 1);
     helix::Config* config = helix::Config::get_instance();
-    // Compact: the cfg partition is 128 KB and a save holds the old and new
-    // copies at once, so pretty-printing costs printers the K-Touch can keep.
+    // The cfg partition is 128 KB and a save holds the old and new copies at
+    // once, so the document is kept as small as it can be.
     config->set_storage(
-        helix::make_file_config_storage("/config/settings.json", helix::ConfigLayout::Compact));
+        helix::make_file_config_storage("/config/settings.json", helix::ConfigFootprint::Small));
     config->init("/config/settings.json");
     // Remembers which AFC message each printer has already shown, so one AFC
     // latched hours ago toasts once rather than at every boot.
