@@ -6,7 +6,9 @@
  * @brief A run of crash resets stops boot from reconnecting to the printer behind them.
  */
 
+#include "../test_helpers/config_test_access.h"
 #include "boot_crash_guard.h"
+#include "config.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -109,4 +111,31 @@ TEST_CASE("Falling back to the previous printer releases a held connection", "[b
                                             "voron", kPrinters);
     CHECK(choice.fallback_id == "voron");
     CHECK(choice.auto_connect);
+}
+
+TEST_CASE("A healthy session ends the crash run and the connection hold", "[boot_crash_guard]") {
+    helix::Config* cfg = helix::Config::get_instance();
+    const nlohmann::json saved = helix::ConfigTestAccess::data(*cfg);
+    helix::ConfigTestAccess::data(*cfg) = nlohmann::json{{"config_version", 3}};
+
+    SECTION("a held connection made outside a pick") {
+        cfg->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, true);
+        cfg->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
+        cfg->set<int>(helix::SWITCH_RESTART_STREAK_KEY, 1);
+
+        CHECK(helix::end_boot_crash_run(*cfg));
+        CHECK_FALSE(cfg->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, true));
+        CHECK(cfg->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 0);
+        CHECK(cfg->get<int>(helix::SWITCH_RESTART_STREAK_KEY, -1) == 0);
+    }
+    SECTION("only the hold is set") {
+        cfg->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, true);
+        CHECK(helix::end_boot_crash_run(*cfg));
+        CHECK_FALSE(cfg->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, true));
+    }
+    SECTION("nothing to clear asks for no save") {
+        CHECK_FALSE(helix::end_boot_crash_run(*cfg));
+    }
+
+    helix::ConfigTestAccess::data(*cfg) = saved;
 }

@@ -61,9 +61,9 @@ bool active_printer_is_printing() {
 } // namespace
 
 bool printer_connection_live() {
-    return lv_subject_get_int(
-               get_printer_state().network_state().get_printer_connection_state_subject()) ==
-           static_cast<int>(ConnectionState::CONNECTED);
+    const auto state = static_cast<ConnectionState>(lv_subject_get_int(
+        get_printer_state().network_state().get_printer_connection_state_subject()));
+    return state != ConnectionState::DISCONNECTED && state != ConnectionState::FAILED;
 }
 
 PrinterSwitchFlow::PrinterSwitchFlow(Config*& config, AsyncLifetimeGuard& async, Restart restart)
@@ -74,11 +74,6 @@ bool PrinterSwitchFlow::request_switch(const std::string& printer_id) {
         spdlog::warn("[PrinterSwitchFlow] Ignoring switch to '{}': a switch is already running",
                      printer_id);
         return false;
-    }
-    // A user pick, of any printer, ends a connection hold left by a run of boot crashes.
-    if (m_config->get<bool>(BOOT_CONNECT_HOLD_KEY, false)) {
-        m_config->set<bool>(BOOT_CONNECT_HOLD_KEY, false);
-        save_or_report();
     }
     if (printer_id == m_connected_printer_id) {
         // Picking the printer the panel is not connected to connects it; nothing is left
@@ -133,6 +128,14 @@ bool PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
     if (!m_config->set_active_printer(printer_id)) {
         spdlog::error("[PrinterSwitchFlow] Failed to switch — unknown printer '{}'", printer_id);
         return false;
+    }
+    // A user pick, of any printer, ends a connection hold left by a run of boot crashes
+    // (boot_crash_guard.h). Moving to another printer also starts a new crash run whose
+    // fallback is the printer left behind; re-picking the same one keeps both as they are.
+    m_config->set<bool>(BOOT_CONNECT_HOLD_KEY, false);
+    if (m_connected_printer_id != printer_id) {
+        m_config->set<std::string>(SWITCH_PREVIOUS_PRINTER_KEY, m_connected_printer_id);
+        m_config->set<int>(BOOT_CRASH_STREAK_KEY, 0);
     }
     // A switch the config does not remember would come back as the old printer after a
     // restart, so an unsaved switch does not happen.

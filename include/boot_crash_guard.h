@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "config.h"
+
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -15,6 +17,12 @@ constexpr int BOOT_CRASH_FALLBACK_THRESHOLD = 3;
 
 /// Config key: boot does not connect to the active printer until the user picks one.
 inline constexpr const char* BOOT_CONNECT_HOLD_KEY = "/boot_connect_hold";
+/// Config key: crash resets since the last healthy session.
+inline constexpr const char* BOOT_CRASH_STREAK_KEY = "/boot_crash_streak";
+/// Config key: the printer a switch left, where a crash run on the new one falls back to.
+inline constexpr const char* SWITCH_PREVIOUS_PRINTER_KEY = "/switch_previous_printer_id";
+/// Config key: restart fallbacks since the last healthy session.
+inline constexpr const char* SWITCH_RESTART_STREAK_KEY = "/switch_restart_streak";
 
 struct BootPrinterChoice {
     int crash_streak = 0;     ///< The streak to persist for the next boot.
@@ -45,6 +53,24 @@ inline BootPrinterChoice choose_boot_printer(bool crash_reset, int crash_streak,
         return {0, previous_id, true, true};
     }
     return {0, {}, false, true};
+}
+
+/// A session stayed connected long enough to count as healthy: no crash or restart before it
+/// is part of a loop, and a connection made outside a pick (Change Host) ends the hold.
+/// Returns whether anything changed, so the caller saves only then.
+inline bool end_boot_crash_run(Config& config) {
+    bool changed = false;
+    for (const char* key : {BOOT_CRASH_STREAK_KEY, SWITCH_RESTART_STREAK_KEY}) {
+        if (config.get<int>(key, 0) != 0) {
+            config.set<int>(key, 0);
+            changed = true;
+        }
+    }
+    if (config.get<bool>(BOOT_CONNECT_HOLD_KEY, false)) {
+        config.set<bool>(BOOT_CONNECT_HOLD_KEY, false);
+        changed = true;
+    }
+    return changed;
 }
 
 } // namespace helix

@@ -239,7 +239,7 @@ constexpr int64_t HEALTHY_UPTIME_US = 10LL * 60 * 1000 * 1000;
 
 void restart_into_active_printer() {
     helix::Config* config = helix::Config::get_instance();
-    const int streak = config->get<int>("/switch_restart_streak", 0);
+    const int streak = config->get<int>(helix::SWITCH_RESTART_STREAK_KEY, 0);
     if (streak >= MAX_FALLBACK_RESTARTS) {
         ESP_LOGE(TAG, "app_boot: %d fallback restarts without a connection; staying up", streak);
         return;
@@ -254,7 +254,7 @@ void restart_into_active_printer() {
     // Counted across restarts: how often a switch fell back, and how many in a row.
     const int fallbacks = config->get<int>("/switch_restart_fallbacks", 0) + 1;
     config->set<int>("/switch_restart_fallbacks", fallbacks);
-    config->set<int>("/switch_restart_streak", streak + 1);
+    config->set<int>(helix::SWITCH_RESTART_STREAK_KEY, streak + 1);
     config->save();
     ESP_LOGW(TAG, "app_boot: restarting into printer '%s' (switch fallback #%d, %d in a row)",
              config->get_active_printer_id().c_str(), fallbacks, streak + 1);
@@ -285,9 +285,10 @@ bool g_boot_auto_connect = true;
 void apply_boot_crash_guard(helix::Config* config) {
     const bool crash = reset_was_crash();
     const helix::BootPrinterChoice choice = helix::choose_boot_printer(
-        crash, config->get<int>("/boot_crash_streak", 0),
+        crash, config->get<int>(helix::BOOT_CRASH_STREAK_KEY, 0),
         config->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, false), config->get_active_printer_id(),
-        config->get<std::string>("/switch_previous_printer_id", ""), config->get_printer_ids());
+        config->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, ""),
+        config->get_printer_ids());
     g_boot_auto_connect = choice.auto_connect;
     if (!g_boot_auto_connect) {
         ESP_LOGW(TAG, "app_boot: connection held after repeated crashes; pick a printer");
@@ -295,7 +296,7 @@ void apply_boot_crash_guard(helix::Config* config) {
     if (!crash) {
         return;
     }
-    config->set<int>("/boot_crash_streak", choice.crash_streak);
+    config->set<int>(helix::BOOT_CRASH_STREAK_KEY, choice.crash_streak);
     config->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, !choice.auto_connect);
     if (!choice.tripped) {
         ESP_LOGW(TAG, "app_boot: crash reset %d of %d before falling back", choice.crash_streak,
@@ -308,7 +309,7 @@ void apply_boot_crash_guard(helix::Config* config) {
             g_boot_crashed_printer_name = config->get_active_printer_name();
             config->set_active_printer(choice.fallback_id);
         }
-        config->set<std::string>("/switch_previous_printer_id", "");
+        config->set<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "");
     }
     config->save();
 }
@@ -369,14 +370,7 @@ helix::PrinterSwitchFlow& switch_flow() {
     static helix::AsyncLifetimeGuard lifetime;
     static helix::PrinterSwitchFlow flow(
         config, lifetime,
-        {[] {
-             g_switch_started_us = esp_timer_get_time();
-             // Where a crash loop on the new printer sends the next boot.
-             config->set<std::string>("/switch_previous_printer_id",
-                                      switch_flow().connected_printer_id());
-             config->set<int>("/boot_crash_streak", 0);
-             config->save();
-         },
+        {[] { g_switch_started_us = esp_timer_get_time(); },
          [] {
              helix::LapLog laps("switch rebuild");
              if (!helix::retarget_printer_connection()) {
@@ -1288,10 +1282,7 @@ extern "C" void app_boot_tick(void) {
         g_manager->client()->get_connection_state() == helix::ConnectionState::CONNECTED) {
         restart_streak_cleared = true;
         helix::Config* cfg = helix::Config::get_instance();
-        if (cfg->get<int>("/switch_restart_streak", 0) != 0 ||
-            cfg->get<int>("/boot_crash_streak", 0) != 0) {
-            cfg->set<int>("/switch_restart_streak", 0);
-            cfg->set<int>("/boot_crash_streak", 0);
+        if (helix::end_boot_crash_run(*cfg)) {
             cfg->save();
         }
     }

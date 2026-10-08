@@ -140,8 +140,7 @@ TEST_CASE_METHOD(SwitchFlowFixture,
                  "Switch flow: picking the active printer while disconnected connects it",
                  "[multi-printer][switch_flow]") {
     const auto state =
-        GENERATE(helix::ConnectionState::DISCONNECTED, helix::ConnectionState::RECONNECTING,
-                 helix::ConnectionState::FAILED);
+        GENERATE(helix::ConnectionState::DISCONNECTED, helix::ConnectionState::FAILED);
     set_connection(state);
     // A job the disconnected printer last reported does not make the pick ask.
     set_job(PrintJobState::PRINTING);
@@ -152,6 +151,41 @@ TEST_CASE_METHOD(SwitchFlowFixture,
     CHECK(events_ == kFullRestart);
     CHECK(cfg_->get_active_printer_id() == "alpha");
     CHECK(flow_.connected_printer_id() == "alpha");
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: picking the active printer while it connects does nothing",
+                 "[multi-printer][switch_flow]") {
+    const auto state =
+        GENERATE(helix::ConnectionState::CONNECTING, helix::ConnectionState::RECONNECTING);
+    set_connection(state);
+
+    CHECK_FALSE(flow_.request_switch("alpha"));
+    CHECK(events_.empty());
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: moving to another printer records the one left as the fallback",
+                 "[multi-printer][switch_flow]") {
+    cfg_->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
+
+    flow_.request_switch("beta");
+
+    CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == "alpha");
+    CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 0);
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: re-picking the same printer keeps its fallback and crash run",
+                 "[multi-printer][switch_flow]") {
+    cfg_->set<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "beta");
+    cfg_->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
+    set_connection(helix::ConnectionState::DISCONNECTED);
+
+    REQUIRE(flow_.request_switch("alpha"));
+
+    CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == "beta");
+    CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 2);
 }
 
 TEST_CASE_METHOD(SwitchFlowFixture, "Switch flow: a pick clears the boot-crash connection hold",
