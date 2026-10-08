@@ -760,7 +760,7 @@ MOCK_EMPTY_POWER=1 ./build/bin/helix-screen --test
 
 ### `HELIX_MOCK_PRINTER`
 
-Select which printer the mock Moonraker client impersonates. Drives the mock's reported identity, kinematics defaults, bed dimensions, and (for AD5M) the `pre_print_options` set that gates print-option UI.
+Select which printer the mock Moonraker client impersonates. Drives the mock's reported identity, kinematics defaults, bed dimensions, hardware objects, and the printer type detection resolves. Each named persona is asserted to auto-detect as its printer by `tests/unit/test_mock_persona_detection.cpp`.
 
 | Property | Value |
 |----------|-------|
@@ -776,7 +776,7 @@ HELIX_MOCK_PRINTER=ad5m ./build/bin/helix-screen --test -vv
 HELIX_MOCK_PRINTER=multi_extruder ./build/bin/helix-screen --test -vv
 
 # Snapmaker U1: four extruders, auto-detected, with the mock Snapmaker AMS
-HELIX_MOCK_PRINTER=snapmaker_u1 ./build/bin/helix-screen --test -vv
+HELIX_MOCK_PRINTER=snapmaker_u1 ./build/bin/helix-screen --test -s tiny -vv
 
 # Linear delta: reports kinematics=delta, so per-axis homing is hidden
 HELIX_MOCK_PRINTER=delta ./build/bin/helix-screen --test -vv
@@ -794,7 +794,7 @@ HELIX_MOCK_PRINTER=cc1 ./build/bin/helix-screen --test -s micro -vv
 HELIX_MOCK_PRINTER=ad5x ./build/bin/helix-screen --test -vv
 
 # Creality K2 Plus with the CFS box
-HELIX_MOCK_PRINTER=k2 ./build/bin/helix-screen --test -vv
+HELIX_MOCK_PRINTER=k2 ./build/bin/helix-screen --test -s 800x480 -vv
 ```
 
 `cc1`: run with `-s micro`, the CC1's 480x272 screen. The persona mirrors the
