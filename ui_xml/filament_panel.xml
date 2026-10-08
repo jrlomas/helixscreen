@@ -263,7 +263,7 @@
                     style_flex_cross_place="center" style_pad_gap="#space_xs">
               <bind_flag_if_lt subject="ui_breakpoint" flag="hidden" ref_value="2"/>
               <icon name="status_icon" src="info" size="xs" variant="secondary"/>
-              <text_small name="status_text" bind_text="filament_status"/>
+              <text_small name="status_text" width="0" flex_grow="1" long_mode="wrap" bind_text="filament_status"/>
             </lv_obj>
           </ui_card>
           <!-- temp card -->
