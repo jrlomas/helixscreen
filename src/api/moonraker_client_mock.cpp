@@ -1632,7 +1632,9 @@ nlohmann::json MoonrakerClientMock::cfs_box_status_json() const {
     }
     // The loaded bay: its unit's `filament` carries the bay letter, "None" elsewhere.
     if (const int loaded = cfs_loaded_slot_.load(); loaded >= 0) {
-        const std::string unit = "T" + std::to_string(loaded / 4 + 1);
+        // The box frame's wire key for a unit, not a display label.
+        const std::string unit =
+            "T" + std::to_string(loaded / 4 + 1); // DISPLAY_NUMBERING_OK: box frame wire key
         if (box.contains(unit)) {
             box[unit]["filament"] = std::string(1, static_cast<char>('A' + loaded % 4));
         }
