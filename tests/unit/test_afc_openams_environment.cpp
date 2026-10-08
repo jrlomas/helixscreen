@@ -116,3 +116,26 @@ TEST_CASE_METHOD(LVGLTestFixture, "A backend with no OpenAMS sensor offers no en
     CHECK_FALSE(afc.traits().has_environment_sensors);
     CHECK_FALSE(afc.env(0).has_value());
 }
+
+TEST_CASE_METHOD(LVGLTestFixture, "Sensor frames with no OpenAMS unit offer no environment (#1150)",
+                 "[1150][ams][afc]") {
+    helix::test::RegisteredBackend<AfcOamsHelper> reg{std::vector<std::string>{"lane1", "lane2"}};
+    AfcOamsHelper& afc = *reg;
+    afc.feed({{"AFC", {{"units", {"Box_Turtle Turtle_1"}}}},
+              {"AFC_BoxTurtle Turtle_1", {{"lanes", {"lane1", "lane2"}}}}});
+    afc.feed({{"aht3x oams1", {{"temperature", 24.0}, {"humidity", 44.0}}}});
+    CHECK_FALSE(afc.traits().has_environment_sensors);
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "A lone OpenAMS unit gets its reading (#1150)",
+                 "[1150][ams][afc]") {
+    helix::test::RegisteredBackend<AfcOamsHelper> reg{std::vector<std::string>{"lane1", "lane2"}};
+    AfcOamsHelper& afc = *reg;
+    afc.feed({{"AFC", {{"units", {"OpenAMS AMS_1"}}}},
+              {"AFC_OpenAMS AMS_1", {{"lanes", {"lane1", "lane2"}}, {"hubs", {"Hub_1"}}}}});
+    afc.feed({{"temperature_oams oamsX", {{"temperature", 24.0}, {"humidity", 44.0}}}});
+    afc.feed({{"AFC_OpenAMS AMS_1", {{"lanes", {"lane1", "lane2"}}}}});
+    REQUIRE(afc.env(0).has_value());
+    CHECK(afc.env(0)->humidity_pct == Catch::Approx(44.0f));
+    CHECK(afc.traits().has_environment_sensors);
+}

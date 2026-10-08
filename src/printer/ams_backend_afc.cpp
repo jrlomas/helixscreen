@@ -3236,7 +3236,7 @@ bool AmsBackendAfc::parse_oams_environment(const nlohmann::json& params) {
         // "temperature_oams <name>" when the alias is switched off.
         const auto* chip = helix::sensors::humidity_chip_for_object(it.key());
         if (!chip || (chip->type != helix::sensors::HumiditySensorType::AHT3X &&
-                      chip->type != helix::sensors::HumiditySensorType::OPENAMS)) {
+                      chip->type != helix::sensors::HumiditySensorType::TEMPERATURE_OAMS)) {
             continue;
         }
         auto& env =
@@ -3253,7 +3253,6 @@ bool AmsBackendAfc::parse_oams_environment(const nlohmann::json& params) {
         any = true;
     }
     if (any) {
-        has_unit_environment_ = true;
         apply_unit_environment();
     }
     return any;
@@ -3291,6 +3290,7 @@ void AmsBackendAfc::apply_unit_environment() {
         }
         if (env != oams_env_.end()) {
             unit.environment = env->second;
+            has_unit_environment_ = true;
         }
     }
 }
@@ -4780,6 +4780,7 @@ void AmsBackendAfc::reorganize_slots() {
                 }
             }
         }
+        apply_unit_environment();
         return;
     }
 
@@ -5716,23 +5717,22 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
             // Rule 1 must not read those as an external re-bind. An
             // unlink (id 0) erases the pending expectation instead.
             record_own_spool_write(slot_index, info.spoolman_id, old_spoolman_id);
-            if (info.spoolman_id <= 0) {
-                // AFC keeps the id on a lane with remember_spool and restates
-                // it in every frame; hold that id as stale until the lane
-                // reports something else.
-                const auto fw = lane_firmware_spool_id_.find(lane_name);
-                if (fw != lane_firmware_spool_id_.end() && fw->second > 0) {
-                    unlinked_spool_ids_[slot_index] = fw->second;
-                    fw->second = 0;
-                    lane_firmware_readings_[lane_name].cache.spoolman_id.reset();
-                }
-            } else {
+            if (info.spoolman_id > 0) {
                 unlinked_spool_ids_.erase(slot_index);
             }
             if (info.spoolman_id > 0) {
                 execute_gcode(
                     fmt::format("SET_SPOOL_ID LANE={} SPOOL_ID={}", lane_name, info.spoolman_id));
             } else if (info.spoolman_id == 0 && old_spoolman_id > 0) {
+                // AFC keeps the id on a lane with remember_spool and restates
+                // it in every frame; hold that id as stale until the lane
+                // reports something else. Armed only when the clear is sent.
+                const auto fw = lane_firmware_spool_id_.find(lane_name);
+                if (fw != lane_firmware_spool_id_.end() && fw->second > 0) {
+                    unlinked_spool_ids_[slot_index] = fw->second;
+                    fw->second = 0;
+                    lane_firmware_readings_[lane_name].cache.spoolman_id.reset();
+                }
                 // Clear Spoolman link with empty string (not -1)
                 execute_gcode(fmt::format("SET_SPOOL_ID LANE={} SPOOL_ID=", lane_name));
             }

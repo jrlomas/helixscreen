@@ -42,6 +42,19 @@ class AfcUnlinkHelper : public AmsBackendAfc {
         return AmsErrorHelper::success();
     }
 
+    void forget_displayed_id() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        AfcTestAccess::slots(*this).get_mut(0)->info.spoolman_id = 0;
+    }
+
+    [[nodiscard]] bool sent_spool_id_write() const {
+        for (const auto& g : captured_gcodes) {
+            if (g.rfind("SET_SPOOL_ID", 0) == 0)
+                return true;
+        }
+        return false;
+    }
+
     void restart() {
         on_started();
     }
@@ -135,4 +148,19 @@ TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: guard ends on lane unload and on 
         afc.feed_stepper(loaded(42));
         CHECK(afc.spool_id() == 42);
     }
+}
+
+TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: no clear sent means no guard (#1717)",
+                 "[1717][ams][afc]") {
+    helix::test::RegisteredBackend<AfcUnlinkHelper> reg;
+    AfcUnlinkHelper& afc = *reg;
+    afc.feed_stepper(loaded(42));
+    // The slot shows no id although firmware holds one, so the edit has no
+    // link to clear and sends no SET_SPOOL_ID.
+    afc.forget_displayed_id();
+    SlotInfo info = afc.get_slot_info(0);
+    helix::test::apply_edit(afc, 0, info);
+    CHECK_FALSE(afc.sent_spool_id_write());
+    afc.feed_stepper(loaded(42));
+    CHECK(afc.spool_id() == 42);
 }
