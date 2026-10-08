@@ -34,6 +34,10 @@ enum class Op { BedMesh, Qgl, ZTilt };
 /// The command the Op's wrapper replaces: "BED_MESH_CALIBRATE", ...
 const char* command_for(Op op);
 
+/// Every command the Ops' wrappers define, BED_MESH_CLEAR included. They are
+/// gcode_macros only because HelixScreen wraps them.
+std::vector<std::string> wrapped_commands(const std::vector<Op>& ops);
+
 /// The `_HELIX_PREP` variable gating the Op: "run_bed_mesh", "run_qgl", "run_z_tilt".
 const char* flag_for(Op op);
 

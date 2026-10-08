@@ -200,6 +200,44 @@ An option with `emit_when_disabled: false` has no "off" gcode at all: unchecking
 
 Only the K1C entries use this. The K1, K1 Max, and K1 SE entries still map `bed_mesh` to the legacy `PREPARE` macro-param, deliberately: their stock firmware ships a different `START_PRINT` (the older K1 macro branches on `custom_macro.leveling_calibration` instead of `prepare`), so the same front-run sequence is unverified there. Convert them only after capturing a real print start from each model.
 
+### Skipping steps PRINT_START always runs (helix_skips.cfg)
+
+A `PRINT_START` that runs `BED_MESH_CALIBRATE`, `QUAD_GANTRY_LEVEL` or `Z_TILT_ADJUST`
+with no parameter to turn it off can still be skipped for one print, without editing
+it. Installing or updating the helper macros also writes `helix_skips.cfg`
+(`src/printer/preprint_skip_wrappers.cpp#generate`) and puts its include on the first
+line of `printer.cfg`:
+
+- `[gcode_macro _HELIX_PREP]` holds one flag per step, `run_bed_mesh`, `run_qgl` and
+  `run_z_tilt`, each 1 (run) unless a skip is set. Calling it resets them all.
+- Each wrapped command is a `gcode_macro` that renames the built-in
+  (`rename_existing: _HELIX_BASE_<COMMAND>`) and runs it with `{rawparams}` unless its
+  flag is 0. A skip is one-shot: the wrapper sets the flag back to 1 as it skips, and
+  says so on the console.
+- `BED_MESH_CLEAR` is wrapped with the mesh calibration and does nothing while a mesh
+  skip is pending: `PRINT_START` commonly clears right before it calibrates, which
+  would throw away the mesh the skip keeps.
+
+The print-detail panel offers a step's toggle only while skipping it is safe: a mesh
+is loaded (`bed_mesh.probed_matrix`), or the gantry or bed has been leveled since the
+last motors-off (`quad_gantry_level.applied`, `z_tilt.applied`, Kalico's
+`z_tilt_ng.applied`). Turning one off sends
+`SET_GCODE_VARIABLE MACRO=_HELIX_PREP VARIABLE=run_<step> VALUE=0` in the pre-start
+block, which always opens with `_HELIX_PREP`. No HelixPrint plugin is involved. A
+database option or a `PRINT_START` skip parameter for the same step wins over the
+toggle, and a job that ends with a skip unconsumed resets it, so a later print started
+from anywhere runs every step.
+
+What keeps it safe to install:
+
+| Case | What happens |
+|------|--------------|
+| A user `[gcode_macro BED_MESH_CALIBRATE]` (KAMP, Beacon helpers, vendor macros) already exists | That step is not wrapped (`wrappable()` reads `configfile.settings`) |
+| The user adds one later | Klipper merges same-named macro sections, later file winning per option. `helix_skips.cfg` loads first, so the user's macro wins, `ours_intact()` reads false, and the toggle hides. The leftover section in `helix_skips.cfg` is inert, and the next regeneration leaves the step out |
+| Klipper reports an error after the restart that loads the file | The Advanced panel removes the file and its include and restarts once (`skip_wrappers::LoadWatch`) |
+| Beacon, Cartographer or Creality prtouch replace the command in Python | They do it at config load; `rename_existing` runs later at connect, so the wrapper layers over them |
+| A wrappable step is not yet wrapped (an install from before this, or a printer that gained `[z_tilt]`) | The helper macros read as Outdated, and Update stages the file |
+
 ### Parameter Semantics
 
 HelixScreen recognizes two styles of parameter control:

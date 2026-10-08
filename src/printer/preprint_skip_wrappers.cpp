@@ -132,6 +132,16 @@ const char* command_for(Op op) {
     return wrappers_for(op).front().command;
 }
 
+std::vector<std::string> wrapped_commands(const std::vector<Op>& ops) {
+    std::vector<std::string> out;
+    for (Op op : ops) {
+        for (const auto& w : wrappers_for(op)) {
+            out.emplace_back(w.command);
+        }
+    }
+    return out;
+}
+
 const char* flag_for(Op op) {
     switch (op) {
     case Op::BedMesh:

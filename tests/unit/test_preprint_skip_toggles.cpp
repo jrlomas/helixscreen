@@ -17,6 +17,7 @@
 
 #include "../test_helpers/print_preparation_manager_test_access.h"
 #include "../test_helpers/printer_state_test_access.h"
+#include "../test_helpers/scoped_env.h"
 #include "gcode_ops_detector.h"
 #include "lvgl_test_fixture.h"
 #include "macro_param_cache.h"
@@ -250,4 +251,46 @@ TEST_CASE_METHOD(SkipToggleFixture, "a job ending with a skip unconsumed resets 
         set_job_holds(0);
         CHECK(api->sent.empty());
     }
+}
+
+// ============================================================================
+// HELIX_MOCK_SKIP_WRAPPERS
+// ============================================================================
+
+TEST_CASE("the mock with HELIX_MOCK_SKIP_WRAPPERS has the wrappers loaded",
+          "[skip_wrappers][mock]") {
+    helix::ScopedEnv env("HELIX_MOCK_SKIP_WRAPPERS", "1");
+    MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::VORON_24);
+
+    SECTION("its configfile reads back as the loaded file") {
+        CHECK(helix::skip_wrappers::active(mock.skip_wrapper_sections()) ==
+              std::vector<Op>{Op::BedMesh, Op::Qgl});
+    }
+    SECTION("its objects list carries the wrapper macros") {
+        const auto hw = mock.hardware();
+        const auto& objects = hw.printer_objects();
+        for (const char* name : {"gcode_macro _HELIX_PREP", "gcode_macro BED_MESH_CLEAR",
+                                 "gcode_macro QUAD_GANTRY_LEVEL"}) {
+            CHECK(std::find(objects.begin(), objects.end(), name) != objects.end());
+        }
+    }
+    SECTION("the pre-start block sets a flag and a wrapped step consumes it") {
+        mock.gcode_script("_HELIX_PREP\n"
+                          "SET_GCODE_VARIABLE MACRO=_HELIX_PREP VARIABLE=run_qgl VALUE=0\n"
+                          "SET_GCODE_VARIABLE MACRO=_HELIX_PREP VARIABLE=run_bed_mesh VALUE=1");
+        CHECK(mock.skip_wrapper_status()["gcode_macro _HELIX_PREP"]["run_qgl"] == 0);
+        CHECK(mock.skip_wrapper_status()["gcode_macro _HELIX_PREP"]["run_bed_mesh"] == 1);
+        CHECK_FALSE(mock.consume_skip(Op::BedMesh));
+        CHECK(mock.consume_skip(Op::Qgl));
+        CHECK_FALSE(mock.consume_skip(Op::Qgl));
+        CHECK(mock.skip_wrapper_status()["gcode_macro _HELIX_PREP"]["run_qgl"] == 1);
+    }
+}
+
+TEST_CASE("the mock without the knob has no wrappers", "[skip_wrappers][mock]") {
+    helix::ScopedEnv env("HELIX_MOCK_SKIP_WRAPPERS", nullptr);
+    MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::VORON_24);
+    CHECK(mock.skip_wrapper_sections().empty());
+    CHECK(mock.skip_wrapper_status().empty());
+    CHECK_FALSE(mock.consume_skip(Op::Qgl));
 }

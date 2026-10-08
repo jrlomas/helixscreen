@@ -7,6 +7,7 @@
 #include "moonraker_client.h"
 #include "moonraker_client_mock_spoolman.h"
 #include "moonraker_types.h"
+#include "preprint_skip_wrappers.h"
 
 #include <array>
 #include <atomic>
@@ -897,6 +898,28 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     [[nodiscard]] const json& extra_config_settings() const {
         return extra_config_settings_;
     }
+
+    // --- HELIX_MOCK_SKIP_WRAPPERS: helix_skips.cfg is loaded (moonraker_client_mock_skips.cpp)
+
+    /// The env knob is set.
+    [[nodiscard]] static bool skip_wrappers_loaded();
+
+    /// configfile sections the loaded file and the leveling objects it wraps
+    /// contribute, as Klipper reports them in both settings and config.
+    /// Empty when the file is not loaded.
+    [[nodiscard]] json skip_wrapper_sections() const;
+
+    /// Status of `_HELIX_PREP` and of the leveling objects' `applied`, keyed by
+    /// object. Empty when the file is not loaded.
+    [[nodiscard]] json skip_wrapper_status() const;
+
+    /// A print-start step reaching its wrapper: true, and the flag restored,
+    /// when a skip was set for it.
+    bool consume_skip(helix::skip_wrappers::Op op);
+
+    /// Add the `gcode_macro` objects the loaded file defines to an objects
+    /// list (a JSON array of names), from the leveling objects already in it.
+    static void append_skip_wrapper_objects(json& objects);
 
     /**
      * @brief Report a status object from printer.objects.query, replacing any
@@ -2143,6 +2166,7 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     double extruder_min_temp_{0.0};      ///< Extruder min_temp reported in configfile.settings
     double extruder_min_extrude_temp_{170.0}; ///< Extruder min_extrude_temp in configfile.settings
     json extra_config_settings_ = json::object();   ///< set_config_settings_section() sections
+    std::atomic<int> skip_flags_[3] = {1, 1, 1};    ///< `_HELIX_PREP` run_* by skip_wrappers::Op
     json object_status_overrides_ = json::object(); ///< set_object_status() statuses
     double resonance_min_freq_{5.0};   ///< [resonance_tester] min_freq the mock reports/sweeps
     double resonance_max_freq_{135.0}; ///< [resonance_tester] max_freq the mock reports/sweeps
@@ -2254,6 +2278,7 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     // One handler per command family. A handler returns a code to end the
     // script, or std::nullopt to let the checks after it see the same line.
     using GcodeResult = std::optional<int>;
+    GcodeResult gcode_skip_wrappers(const std::string& gcode);
     GcodeResult gcode_ifs_module(const std::string& gcode);
     GcodeResult gcode_medusa(const std::string& gcode);
     GcodeResult gcode_zmod(const std::string& gcode);

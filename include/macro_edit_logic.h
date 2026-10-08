@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <set>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 // Pure decision logic for the Macros panel edit mode, extracted from
@@ -35,6 +37,21 @@ compute_effective_hidden(const std::vector<std::string>& all_macros, bool key_ex
         return seeded;
     }
     return std::set<std::string>(saved_hidden.begin(), saved_hidden.end());
+}
+
+// Every macro the panel lists: the printer's gcode_macros, sorted, less the
+// built-in commands HelixScreen's leveling-skip wrappers turned into macros
+// (skip_wrappers::wrapped_commands()), which are not the user's.
+inline std::vector<std::string> panel_macros(const std::unordered_set<std::string>& macros,
+                                             const std::vector<std::string>& wrapped) {
+    std::vector<std::string> out;
+    for (const auto& m : macros) {
+        if (std::find(wrapped.begin(), wrapped.end(), m) == wrapped.end()) {
+            out.push_back(m);
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 // Normal-mode (non-edit) visible list: every macro not in the hidden set,
