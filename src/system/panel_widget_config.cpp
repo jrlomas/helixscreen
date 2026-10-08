@@ -470,14 +470,33 @@ bool PanelWidgetConfig::try_populate_from_preset_seed() {
     return true;
 }
 
+/// True when @p entry is exactly what parse_widget_array() appends for a
+/// registry widget the saved page does not mention: off by default, unplaced,
+/// unconfigured, at the registry spans. Only the disabled kind qualifies: an
+/// enabled unplaced entry's position in the list is its auto-placement order.
+static bool is_appended_registry_default(const PanelWidgetEntry& entry) {
+    const auto* def = find_widget_def(entry.id);
+    return def != nullptr && def->id == entry.id && !def->default_enabled && !entry.enabled &&
+           entry.col < 0 && entry.row < 0 && entry.config.empty() &&
+           entry.colspan == def->colspan && entry.rowspan == def->rowspan;
+}
+
 nlohmann::json PanelWidgetConfig::serialize_pages() const {
     json pages_json = json::array();
     for (const auto& page : pages_) {
         json page_obj;
         page_obj["id"] = page.id;
 
+        // The first page is read back with the registry defaults appended, so
+        // writing those defaults out would cost every printer's settings.json
+        // a copy of the registry: about 2.4 KB, on a K-Touch whose whole
+        // settings partition is 128 KB.
+        const bool registry_appended_on_read = pages_json.empty();
         json widgets_array = json::array();
         for (const auto& entry : page.widgets) {
+            if (registry_appended_on_read && is_appended_registry_default(entry)) {
+                continue;
+            }
             json item = {{"id", entry.id}, {"enabled", entry.enabled}};
             if (!entry.config.empty()) {
                 item["config"] = entry.config;

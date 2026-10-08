@@ -39,10 +39,20 @@ class ConfigStorage {
 
     /// Human-readable location for logs ("config/settings.json", "nvs://…").
     virtual std::string describe() const = 0;
+
+    /// JSON indent Config::save() serializes with; -1 = no whitespace at all.
+    virtual int json_indent() const {
+        return 2;
+    }
 };
+
+/// Pretty is hand-editable. Compact roughly halves the document, which is what
+/// lets several printers fit a small flash partition (the K-Touch's 128 KB cfg).
+enum class ConfigLayout { Pretty, Compact };
 
 /// Atomic-rename file implementation; behavior extracted verbatim from the
 /// pre-seam Config::save() / Config::init().
-std::unique_ptr<ConfigStorage> make_file_config_storage(const std::string& path);
+std::unique_ptr<ConfigStorage> make_file_config_storage(const std::string& path,
+                                                        ConfigLayout layout = ConfigLayout::Pretty);
 
 } // namespace helix

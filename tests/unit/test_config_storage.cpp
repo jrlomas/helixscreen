@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "../test_helpers/config_dir_guard.h"
 #include "../test_helpers/mock_config_storage.h"
+#include "../test_helpers/scoped_runtime_config.h"
 #include "../test_helpers/unique_temp_dir.h"
 #include "config.h"
 #include "config_storage.h"
+#include "panel_widget_config.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -137,4 +139,39 @@ TEST_CASE("Config::init() end-to-end: chmod-000 config routes into corrupt-prese
 
     cfg.clear_path();
     ::chmod(config_path.c_str(), 0644);
+}
+
+// The K-Touch keeps settings.json on a 128 KB LittleFS partition of 4 KB
+// blocks, and an atomic save needs room for the old and new copies at once.
+// Four printers, each with its seeded home dashboard, must fit in 16 KB, so a
+// save never needs more than 8 of the 32 blocks.
+TEST_CASE("compact file storage keeps a 4-printer settings.json inside the K-Touch budget",
+          "[config][storage]") {
+    ScopedRuntimeConfig scoped_config;
+    get_runtime_config()->test_mode = true;
+    ConfigDirGuard guard("compact4");
+    const std::string path = (guard.dir / "settings.json").string();
+
+    helix::Config cfg;
+    cfg.set_storage(helix::make_file_config_storage(path, helix::ConfigLayout::Compact));
+    cfg.init(path);
+    const nlohmann::json printer = cfg.get<nlohmann::json>("/printers/default", {});
+    REQUIRE(printer.is_object());
+    for (const char* id : {"p1", "p2", "p3"}) {
+        cfg.add_printer(id, printer);
+    }
+    REQUIRE(cfg.get_printer_ids().size() == 4);
+    for (const auto& id : cfg.get_printer_ids()) {
+        REQUIRE(cfg.set_active_printer(id));
+        helix::PanelWidgetConfig home("home", cfg);
+        home.load();
+        REQUIRE(cfg.get<nlohmann::json>(cfg.df() + "panel_widgets/home", {}).is_object());
+    }
+    REQUIRE(cfg.save());
+
+    const auto bytes = fs::file_size(path);
+    INFO("settings.json with 4 printers: " << bytes << " bytes");
+    REQUIRE(bytes < 16 * 1024);
+
+    cfg.clear_path();
 }

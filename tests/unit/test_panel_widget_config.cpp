@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <map>
 #include <set>
 #include <utility>
 
@@ -43,6 +44,28 @@ static bool default_enabled_for(const std::string& id) {
         }
     }
     return false;
+}
+
+/// What a save-and-reload must preserve: every widget's enabled state, and the
+/// order of the enabled ones. Disabled unplaced widgets may come back in
+/// registry order, since nothing reads their position.
+static void require_same_widget_state(const std::vector<PanelWidgetEntry>& a,
+                                      const std::vector<PanelWidgetEntry>& b) {
+    REQUIRE(a.size() == b.size());
+    std::map<std::string, bool> state_a, state_b;
+    std::vector<std::string> enabled_a, enabled_b;
+    for (const auto& e : a) {
+        state_a[e.id] = e.enabled;
+        if (e.enabled)
+            enabled_a.push_back(e.id);
+    }
+    for (const auto& e : b) {
+        state_b[e.id] = e.enabled;
+        if (e.enabled)
+            enabled_b.push_back(e.id);
+    }
+    REQUIRE(state_a == state_b);
+    REQUIRE(enabled_a == enabled_b);
 }
 
 // ============================================================================
@@ -251,7 +274,16 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
 
     auto& saved = root["pages"][0]["widgets"];
     REQUIRE(saved.is_array());
-    REQUIRE(saved.size() == default_grid_widget_count());
+    // A widget that is off by default and unplaced is left out: the reader
+    // appends it from the registry, so writing it costs bytes and says nothing.
+    REQUIRE(saved.size() < default_grid_widget_count());
+    for (const auto& item : saved) {
+        const auto* def = find_widget_def(item["id"].get<std::string>());
+        REQUIRE(def != nullptr);
+        CAPTURE(def->id);
+        REQUIRE_FALSE(
+            (!def->default_enabled && !item["enabled"].get<bool>() && item["col"].get<int>() < 0));
+    }
 
     // Each entry should have id and enabled
     for (const auto& item : saved) {
@@ -262,7 +294,11 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
     }
 
     // The third entry should be disabled
-    REQUIRE(saved[2]["enabled"].get<bool>() == false);
+    const std::string third = wc.entries()[2].id;
+    auto it = std::find_if(saved.begin(), saved.end(),
+                           [&](const json& item) { return item["id"] == third; });
+    REQUIRE(it != saved.end());
+    REQUIRE((*it)["enabled"].get<bool>() == false);
 }
 
 TEST_CASE_METHOD(
@@ -325,14 +361,7 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
     PanelWidgetConfig wc2("home", config);
     wc2.load();
 
-    const auto& e1 = wc1.entries();
-    const auto& e2 = wc2.entries();
-    REQUIRE(e1.size() == e2.size());
-
-    for (size_t i = 0; i < e1.size(); ++i) {
-        REQUIRE(e1[i].id == e2[i].id);
-        REQUIRE(e1[i].enabled == e2[i].enabled);
-    }
+    require_same_widget_state(wc1.entries(), wc2.entries());
 }
 
 // ============================================================================
@@ -983,12 +1012,7 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
     PanelWidgetConfig wc2("home", config);
     wc2.load();
 
-    REQUIRE(wc1.entries().size() == wc2.entries().size());
-    for (size_t i = 0; i < wc1.entries().size(); ++i) {
-        CAPTURE(i);
-        REQUIRE(wc1.entries()[i].id == wc2.entries()[i].id);
-        REQUIRE(wc1.entries()[i].enabled == wc2.entries()[i].enabled);
-    }
+    require_same_widget_state(wc1.entries(), wc2.entries());
 }
 
 // ============================================================================

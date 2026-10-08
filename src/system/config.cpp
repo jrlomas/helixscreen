@@ -1549,7 +1549,7 @@ bool Config::save() {
 #if defined(__cpp_exceptions)
     try {
 #endif
-        if (!storage_->store(helix::json_util::safe_dump(data, 2) + "\n")) {
+        if (!storage_->store(helix::json_util::safe_dump(data, storage_->json_indent()) + "\n")) {
             // FileConfigStorage (the default backend) already reports the specific
             // failure via NOTIFY_ERROR + CONFIG_RECORD_ERROR at the failing phase
             // (open/write/rename/exception) — don't double-toast here. Non-file
