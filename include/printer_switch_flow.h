@@ -94,7 +94,16 @@ class PrinterSwitchFlow {
     /// A "the printer is printing" confirmation is on screen.
     bool m_confirm_pending = false;
 
+    /// The boot-crash bookkeeping (boot_crash_guard.h) as a move found it.
+    struct BootCrashRecord {
+        bool connect_held = false;
+        std::string previous_printer_id;
+        int crash_streak = 0;
+    };
+
     std::string m_wizard_previous_printer_id;
+    /// The record the add-printer wizard's move replaced; cancelling the wizard puts it back.
+    BootCrashRecord m_wizard_replaced_record;
     std::string m_connected_printer_id;
 
     /// Saves the config, telling the user when it could not.
@@ -103,7 +112,11 @@ class PrinterSwitchFlow {
     /// The boot-crash bookkeeping (boot_crash_guard.h) of a user's move to `to_id`, unsaved:
     /// any move ends a connection hold, and a move to another printer starts a new crash run
     /// whose fallback is `from_id`. Re-picking the same printer keeps both as they are.
-    void record_switch_away(const std::string& from_id, const std::string& to_id);
+    /// Returns the record as it was, for restore_boot_crash_record() to undo the move.
+    BootCrashRecord record_switch_away(const std::string& from_id, const std::string& to_id);
+
+    /// Puts back a record that record_switch_away() returned, unsaved.
+    void restore_boot_crash_record(const BootCrashRecord& record);
 };
 
 } // namespace helix

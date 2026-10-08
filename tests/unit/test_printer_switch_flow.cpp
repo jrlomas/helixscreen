@@ -188,6 +188,23 @@ TEST_CASE_METHOD(SwitchFlowFixture,
     CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 2);
 }
 
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: a switch whose save fails keeps the boot-crash record",
+                 "[multi-printer][switch_flow]") {
+    cfg_->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, true);
+    cfg_->set<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "gamma");
+    cfg_->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
+    helix::ConfigTestAccess::read_only_mode(*cfg_) = true;
+
+    CHECK_FALSE(flow_.request_switch("beta"));
+
+    CHECK(cfg_->get_active_printer_id() == "alpha");
+    CHECK(cfg_->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, false));
+    CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == "gamma");
+    CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 2);
+    CHECK(events_.empty());
+}
+
 TEST_CASE_METHOD(SwitchFlowFixture, "Switch flow: a pick clears the boot-crash connection hold",
                  "[multi-printer][switch_flow]") {
     const std::string pick = GENERATE(std::string("alpha"), std::string("beta"));
@@ -356,19 +373,20 @@ TEST_CASE_METHOD(SwitchFlowFixture,
 }
 
 TEST_CASE_METHOD(SwitchFlowFixture,
-                 "Switch flow: cancelling the add-printer wizard records the abandoned entry",
+                 "Switch flow: cancelling the add-printer wizard puts back the fallback and crash "
+                 "run",
                  "[multi-printer][switch_flow]") {
+    cfg_->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, true);
+    cfg_->set<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "beta");
+    cfg_->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
     flow_.add_printer_via_wizard();
     set_wizard_cancel_callback(nullptr);
-    const std::string abandoned = cfg_->get_active_printer_id();
-    REQUIRE(abandoned != "alpha");
-    cfg_->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, true);
-    cfg_->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
+    REQUIRE(cfg_->get_active_printer_id() != "alpha");
 
     flow_.cancel_add_printer_wizard();
 
     CHECK(cfg_->get_active_printer_id() == "alpha");
     CHECK_FALSE(cfg_->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, true));
-    CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == abandoned);
-    CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 0);
+    CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == "beta");
+    CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 2);
 }
