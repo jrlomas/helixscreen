@@ -25,6 +25,20 @@ TIMEOUT_CMD := $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/
 # Must be generous: some shards with threading tests take 60-90s under load.
 SHARD_TIMEOUT := 300
 
+# Timeout for a single-process run of the binary on a tag or filter (`make t`),
+# which can be a whole tag rather than one shard's slice of the suite.
+TEST_TIMEOUT ?= 900
+# Timeout for a single-process run of the whole suite (test-serial, test-verbose).
+SUITE_TIMEOUT ?= 3600
+
+# Runs the rest of the line under a $(1)-second timeout. SIGTERM first, so
+# Catch2 can name the test that hung; SIGKILL $(TIMEOUT_KILL_AFTER)s later,
+# because a binary whose heap is corrupt can deadlock in Catch2's own signal
+# handler on the malloc lock and never act on SIGTERM. Exits 124 after SIGTERM,
+# 137 after SIGKILL.
+TIMEOUT_KILL_AFTER ?= 30
+timeout_run = $(if $(TIMEOUT_CMD),$(TIMEOUT_CMD) -k $(TIMEOUT_KILL_AFTER) $(1))
+
 # Where per-shard logs land. Kept (not deleted) whenever a shard fails, crashes,
 # or times out, so there is something to read afterwards — see diagnose_shards.
 # Override to collect artifacts elsewhere, e.g. SHARD_ARTIFACT_ROOT=$(PWD)/build
@@ -74,7 +88,7 @@ define run_tests_parallel
 	shard_dir=$$(mktemp -d "$(SHARD_ARTIFACT_ROOT)/helix-shards-XXXXXX"); \
 	export shard_dir; \
 	run_shard() { \
-		(echo "=== shard $$1/$(or $(2),$(NPROCS)) host=$$(hostname) nproc=$$(nproc 2>/dev/null || echo '?') git=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) ts=$$(date -Iseconds) order=$(or $(3),decl seed=0)"; $(if $(TIMEOUT_CMD),$(TIMEOUT_CMD) $(SHARD_TIMEOUT)) $(TEST_BIN) $(1) $(3) --shard-count $(or $(2),$(NPROCS)) --shard-index $$1 2>&1; echo $$? > "$$shard_dir/$$1.exit") | \
+		(echo "=== shard $$1/$(or $(2),$(NPROCS)) host=$$(hostname) nproc=$$(nproc 2>/dev/null || echo '?') git=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) ts=$$(date -Iseconds) order=$(or $(3),decl seed=0)"; $(call timeout_run,$(SHARD_TIMEOUT)) $(TEST_BIN) $(1) $(3) --shard-count $(or $(2),$(NPROCS)) --shard-index $$1 2>&1; echo $$? > "$$shard_dir/$$1.exit") | \
 			tee "$$shard_dir/$$1.log" | sed "s/^/[shard $$1] /"; \
 	}; \
 	run_batch() { for s in "$$@"; do run_shard "$$s" & done; wait; }; \
@@ -173,7 +187,7 @@ define diagnose_shards
 		echo "  $(CYAN)re-running this shard sequentially x$(SHARD_RETRIES)…$(RESET)"; \
 		hits=0; last_rc=0; \
 		for attempt in $$(seq 1 $(SHARD_RETRIES)); do \
-			if $(if $(TIMEOUT_CMD),$(TIMEOUT_CMD) $(SHARD_TIMEOUT)) $(TEST_BIN) $(3) $(5) \
+			if $(call timeout_run,$(SHARD_TIMEOUT)) $(TEST_BIN) $(3) $(5) \
 					--shard-count $(4) --shard-index $$s > "$(1)/$$s.retry.log" 2>&1; then \
 				: ; \
 			else \
@@ -479,7 +493,11 @@ t:
 	exit 2
 else
 t: test-build
-	$(Q)$(TEST_BIN) "$(F)"
+	$(Q)rc=0; $(call timeout_run,$(TEST_TIMEOUT)) $(TEST_BIN) "$(F)" || rc=$$?; \
+	if [ $$rc -eq 124 ] || [ $$rc -eq 137 ]; then \
+		echo "$(RED)$(BOLD)✗ $(TEST_BIN) '$(F)' was killed after $(TEST_TIMEOUT)s: a hung test, or a deadlocked crash handler. TEST_TIMEOUT=<seconds> changes the limit.$(RESET)"; \
+	fi; \
+	exit $$rc
 endif
 
 # unit-sweep: every fast unit test, sharded across cores. Answers "did I break
@@ -560,7 +578,7 @@ dev-timing:
 test-serial: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running unit tests sequentially (excluding slow)...$(RESET)"
 	@START_TIME=$$(date +%s); \
-	$(TEST_BIN) "~[.] ~[slow]"; \
+	$(call timeout_run,$(SUITE_TIMEOUT)) $(TEST_BIN) "~[.] ~[slow]"; \
 	$(call report_test_result,Unit tests)
 
 # Run ALL tests including slow ones (for thorough validation)
@@ -608,7 +626,7 @@ HIDDEN_FILTER ?= [.]
 test-hidden: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running HIDDEN tests ($(HIDDEN_FILTER)) sequentially from $(CURDIR)...$(RESET)"
 	@START_TIME=$$(date +%s); \
-	cd $(CURDIR) && $(TEST_BIN) "$(HIDDEN_FILTER)"; \
+	cd $(CURDIR) && $(call timeout_run,$(TEST_TIMEOUT)) $(TEST_BIN) "$(HIDDEN_FILTER)"; \
 	$(call report_test_result,Hidden tests)
 
 # List the hidden set without running it — the inventory behind the tracker doc.
@@ -782,13 +800,13 @@ test-plugin:
 # Run tests with per-test timing (shows slow tests)
 test-verbose: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running tests with timing...$(RESET)"
-	$(Q)$(TEST_BIN) --durations yes --use-colour yes
+	$(Q)$(call timeout_run,$(SUITE_TIMEOUT)) $(TEST_BIN) --durations yes --use-colour yes
 
 # Run UI-related tests
 test-ui: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running UI tests...$(RESET)"
 	@START_TIME=$$(date +%s); \
-	$(TEST_BIN) "[navigation],[theme],[wizard]"; \
+	$(call timeout_run,$(TEST_TIMEOUT)) $(TEST_BIN) "[navigation],[theme],[wizard]"; \
 	$(call report_test_result,UI tests)
 
 # List all available test tags
