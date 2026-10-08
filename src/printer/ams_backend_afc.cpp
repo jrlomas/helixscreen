@@ -392,9 +392,10 @@ nlohmann::json AmsBackendAfc::required_status_objects(const std::vector<std::str
     // what an object does not have, so asking for it is safe against every
     // version.
     static const json stepper_fields =
-        json::array({"buffer_status", "color", "current_map", "dist_hub", "extruder",
-                     "filament_status", "hub", "load", "loaded_to_hub", "map", "material", "prep",
-                     "runout_lane", "spool_id", "status", "tool_loaded", "weight"});
+        json::array({"buffer_status",   "color",         "current_map", "dist_hub",      "extruder",
+                     "filament_status", "hub",           "load",        "loaded_to_hub", "map",
+                     "material",        "prep",          "runout_lane", "spool_id",      "status",
+                     "td1_color",       "td1_scan_time", "td1_td",      "tool_loaded",   "weight"});
     static const json hub_fields = json::array({"state", "afc_bowden_length"});
     static const json buffer_fields = json::array(
         {"state", "distance_to_fault", "error_sensitivity", "fault_detection_enabled", "lanes"});
@@ -2436,6 +2437,22 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
             cleared.color_rgb = 0u;
         }
         stated.color_rgb = firmware.cache.color_rgb;
+    }
+
+    // TD-1 scanner reading. Empty strings mean no scan; the colour is a bare hex.
+    if (data.contains("td1_color") && data["td1_color"].is_string()) {
+        const auto scan = ams::read_lane_color(data["td1_color"].get<std::string>());
+        if (scan.kind == ams::ColorReadingKind::Observed) {
+            slot.scanned_color_rgb = scan.rgb;
+        } else if (scan.kind == ams::ColorReadingKind::Cleared) {
+            slot.scanned_color_rgb.reset();
+        }
+    }
+    if (data.contains("td1_td")) {
+        slot.scanned_td = data["td1_td"].is_number() ? data["td1_td"].get<float>() : -1.0f;
+    }
+    if (data.contains("td1_scan_time") && data["td1_scan_time"].is_string()) {
+        slot.scanned_time = data["td1_scan_time"].get<std::string>();
     }
 
     // Parse material

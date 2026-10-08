@@ -183,10 +183,13 @@ class AmsEditOverlay : public OverlayBase {
     lv_subject_t identity_is_spoolmans_subject_{};
     lv_subject_t identity_text_subject_{}; ///< "Brand · Material" for the read-only row
     lv_subject_t chip_text_subject_{};     ///< card identity label text
+    lv_subject_t has_scan_subject_{};      ///< 1=slot has a scanner reading ("ams_edit_has_scan")
+    lv_subject_t scan_text_subject_{};     ///< "TD 1.4" beside the scan swatch
     lv_subject_t spoolman_id_subject_{};   ///< "#19" beside the Spoolman mark, "" when untracked
     char identity_text_buf_[96] = {0};
     char chip_text_buf_[96] = {0};
     char spoolman_id_buf_[16] = {0};
+    char scan_text_buf_[24] = {0};
 
     /// Holds a translated position label nested inside a translated sentence,
     /// so it is sized for the longest locale rather than for the English. A
@@ -232,6 +235,7 @@ class AmsEditOverlay : public OverlayBase {
     // apply; finish=false returns to the overview (tests / non-terminal calls).
     void handle_spool_edit_save(bool finish = false);
     void handle_quick_swatch(lv_obj_t* swatch);
+    void handle_use_scanned_color(); ///< Apply the slot's scanned colour as a manual pick
     void handle_picker_search(const char* text);
     void update_spoolman_button_state();
 

@@ -3280,6 +3280,7 @@
   <translation tag="Use Unload before Eject" zh="请先使用“卸载”，再使用“弹出”"/>
   <translation tag="Use first HID scanner found" zh="使用找到的第一个 HID 扫描器"/>
   <translation tag="Use printer type to select image" zh="使用打印机类型选择图片"/>
+  <translation tag="Use scan" zh="使用扫描"/>
   <translation tag="User intervention required" zh="需要手动干预"/>
   <translation tag="VM Peak" zh="虚拟内存峰值"/>
   <translation tag="VM Size" zh="虚拟内存大小"/>

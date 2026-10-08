@@ -3431,6 +3431,7 @@ translations:
   Use Unload before Eject: '请先使用“卸载”，再使用“弹出”'
   Use first HID scanner found: '使用找到的第一个 HID 扫描器'
   Use printer type to select image: 使用打印机类型选择图片
+  Use scan: 使用扫描
   User intervention required: '需要手动干预'
   VM Peak: 虚拟内存峰值
   VM Size: 虚拟内存大小

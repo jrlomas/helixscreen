@@ -1012,6 +1012,16 @@ struct SlotInfo {
     // Length-based remaining filament (CFS measuring wheel, etc.)
     float remaining_length_m = 0.0f; ///< Remaining filament in meters (0 = unknown)
 
+    // Inline filament scanner reading (e.g. a TD-1). Advisory only: nothing
+    // writes it into color_rgb on its own.
+    std::optional<uint32_t> scanned_color_rgb; ///< Measured colour (0xRRGGBB), nullopt = no scan
+    float scanned_td = -1.0f;                  ///< Measured transmission distance (<0 = unknown)
+    std::string scanned_time;                  ///< Scan timestamp as the producer states it
+
+    [[nodiscard]] bool has_scan() const {
+        return scanned_color_rgb.has_value();
+    }
+
     // Per-slot environment sensors (optional — most backends don't have these)
     std::optional<EnvironmentData> environment; ///< nullopt = no per-slot sensors
 

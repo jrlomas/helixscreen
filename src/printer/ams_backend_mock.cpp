@@ -2128,6 +2128,14 @@ void AmsBackendMock::set_afc_mode(bool enabled) {
             }
         }
 
+        // Lane 1 carries a TD-1 scan whose colour differs from the lane's own, so the
+        // slot editor's scan row shows under --test.
+        if (auto* scanned = slots_.get_mut(1)) {
+            scanned->info.scanned_color_rgb = 0xE0301E;
+            scanned->info.scanned_td = 1.4f;
+            scanned->info.scanned_time = "2026-10-08T09:30:00";
+        }
+
         // Tool-to-slot mapping: 1:1
         std::vector<int> tool_map(lane_count);
         for (int i = 0; i < lane_count; ++i) {
