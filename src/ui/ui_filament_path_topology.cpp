@@ -103,16 +103,12 @@ bool is_segment_active(PathSegment segment, PathSegment filament_segment) {
            filament_segment != PathSegment::NONE;
 }
 
-namespace {
-
-// One plan for whichever topology is rendering. About 14 KB: kept off the
-// stack, which on the ESP32 is the LVGL task's, and out of internal DRAM,
-// which the WiFi driver needs for its RX buffers. Rendering is single-threaded
-// and not re-entrant, and nothing DMA- or ISR-side touches it.
 PathPlan& plan_scratch() {
     static HELIX_PSRAM_BSS PathPlan plan;
     return plan;
 }
+
+namespace {
 
 void warn_if_dropped(const PathPlan& plan) {
     if (plan.dropped <= 0)

@@ -708,6 +708,23 @@ void AmsOverviewPanel::refresh_system_path(const AmsSystemInfo& info, int curren
         ui_system_path_canvas_set_unit_hub_sensor(system_path_, i, unit.has_hub_sensor,
                                                   unit.hub_sensor_triggered);
 
+        // The unit's furthest-loaded lane colors its route when it is not the
+        // active unit.
+        PathSegment lane_seg = PathSegment::NONE;
+        uint32_t lane_color = 0;
+        if (backend) {
+            for (int s = 0; s < unit.slot_count; ++s) {
+                const int global = unit.first_slot_global_index + s;
+                const PathSegment seg = backend->get_slot_filament_segment(global);
+                if (seg > lane_seg) {
+                    lane_seg = seg;
+                    lane_color = backend->get_slot_info(global).color_rgb;
+                }
+            }
+        }
+        ui_system_path_canvas_set_unit_lane(system_path_, i, static_cast<int>(lane_seg),
+                                            lane_color);
+
         PathTopology topo = unit.topology;
         if (backend) {
             topo = backend->get_unit_topology(i);
@@ -751,15 +768,17 @@ void AmsOverviewPanel::refresh_system_path(const AmsSystemInfo& info, int curren
         }
     }
 
-    // Set toolhead sensor state
+    // Filament reach, error and the toolhead sensor
     {
-        auto segment = static_cast<PathSegment>(
+        ui_system_path_canvas_set_filament_segment(
+            system_path_,
             lv_subject_get_int(AmsState::instance().get_path_filament_segment_subject()));
-        bool toolhead_triggered = (segment >= PathSegment::TOOLHEAD);
+        ui_system_path_canvas_set_error_segment(
+            system_path_, backend ? static_cast<int>(backend->infer_error_segment()) : 0);
 
         bool has_toolhead = std::any_of(info.units.begin(), info.units.end(),
                                         [](const AmsUnit& u) { return u.has_toolhead_sensor; });
-        ui_system_path_canvas_set_toolhead_sensor(system_path_, has_toolhead, toolhead_triggered);
+        ui_system_path_canvas_set_toolhead_sensor(system_path_, has_toolhead);
     }
 
     // Status text now shown in shared sidebar component (ams_sidebar.xml)

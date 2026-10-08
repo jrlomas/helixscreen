@@ -12,6 +12,7 @@
 #include "ui_filament_path_canvas.h"
 
 #include "ui_filament_path_internal.h"
+#include "ui_filament_path_plan.h"
 #include "ui_fonts.h"
 
 #include "clog_meter_geometry.h"
@@ -92,7 +93,7 @@ static void load_theme_sizes(FilamentPathData* data) {
     // Scale line widths based on spacing (responsive)
     theme.line_width_idle = LV_MAX(2, space_xs / 2);
     theme.line_width_active = LV_MAX(3, space_xs - 3);
-    theme.tube_gauge = theme.line_width_active + 2;
+    theme.tube_gauge = tube_gauge_for_spacing(space_xs);
     theme.sensor_radius = LV_MAX(4, space_xs);
     theme.hub_width = LV_MAX(50, space_md * 5);
     theme.border_radius = LV_MAX(4, space_xs);

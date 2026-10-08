@@ -24,6 +24,10 @@ lv_color_t pulsed_error_color(const FilamentPathData& data) {
     return ph_blend(error, ph_darken(error, 80), blend);
 }
 
+int32_t tube_gauge_for_spacing(int32_t space_xs) {
+    return LV_MAX(3, space_xs - 3) + 2;
+}
+
 TubePalette tube_palette(const FilamentPathData& data) {
     const ThemeCache& t = data.theme;
     return {t.color_idle, t.color_accent, pulsed_error_color(data), t.color_bg, t.tube_gauge};
@@ -310,22 +314,14 @@ void draw_sensor_band(lv_layer_t* layer, const SensorBand& band, int32_t gauge, 
     lv_draw_line(layer, &dsc);
 }
 
-namespace {
-
 void append_line(Route& r, float x0, float y0, float x1, float y1, SpanStyle s) {
     pg::FilamentPath piece;
     piece.add_line(x0, y0, x1, y1);
     route_append(r, piece, s);
 }
 
-// Lane bands (prep, hub entry) stop short of the last few slots, so a full
-// band table drops a lane band and never the trunk's output, merge or
-// toolhead band.
-inline constexpr int TRUNK_BANDS = 3;
-enum class BandKind : uint8_t { Lane, Trunk };
-
 void add_band(PathPlan& plan, BandKind kind, pg::PathPoint at, pg::PathPoint tangent,
-              BandState state, lv_color_t fill, bool on_box_edge = false) {
+              BandState state, lv_color_t fill, bool on_box_edge) {
     const bool full = (kind == BandKind::Lane)
                           ? plan.band_count - plan.trunk_band_count >= MAX_BANDS - TRUNK_BANDS
                           : plan.band_count >= MAX_BANDS;
@@ -339,7 +335,7 @@ void add_band(PathPlan& plan, BandKind kind, pg::PathPoint at, pg::PathPoint tan
 
 // A band where the route currently ends, across its last segment.
 void add_band_at_end(PathPlan& plan, BandKind kind, const Route& r, BandState state,
-                     lv_color_t fill, bool on_box_edge = false) {
+                     lv_color_t fill, bool on_box_edge) {
     if (r.path.count == 0)
         return;
     pg::PathPoint tangent;
@@ -359,21 +355,7 @@ SpanStyle unpainted(SpanStyle s) {
     return s;
 }
 
-// What one route carries: how far its filament reached, whether it is the
-// active route (or the idle trunk, which shows errors like one), its color.
-struct Lane {
-    PathSegment reached;
-    bool on;
-    PathSegment error;
-    lv_color_t color;
-    lv_color_t bg;
-    SpanStyle style(PathSegment tag) const {
-        return span_style(tag, reached, on, error, color, bg);
-    }
-    BandState band(PathSegment tag) const {
-        return band_state(tag, reached, on, error);
-    }
-};
+namespace {
 
 // Hub bottom → inlet, appended to the route that owns the trunk. Ends at the
 // merge when an active bypass (@p bypass_owner) owns everything below it.
@@ -415,8 +397,6 @@ void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFra
 // Plan
 // ============================================================================
 
-namespace {
-
 void reset_plan(PathPlan& out) {
     out.route_count = 0;
     out.band_count = 0;
@@ -432,6 +412,8 @@ void total_dropped(PathPlan& out) {
     for (int i = 0; i < out.route_count; i++)
         out.dropped += out.routes[i].dropped;
 }
+
+namespace {
 
 // A lane's own state: how far its filament reached, mounted or not.
 Lane lane_of(const SlotRenderState& s, PathSegment error, lv_color_t bg) {

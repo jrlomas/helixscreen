@@ -14,6 +14,7 @@
 
 #include "../lvgl_test_fixture.h"
 #include "ams_types.h"
+#include "filament_path_test_helpers.h"
 #include "lvgl/lvgl.h"
 #include "src/ui/ui_filament_path_internal.h"
 #include "src/ui/ui_filament_path_plan.h"
@@ -27,6 +28,7 @@
 #include "../catch_amalgamated.hpp"
 
 using namespace helix::ui::fpath;
+using namespace fpath_test;
 
 namespace {
 
@@ -198,33 +200,6 @@ PathPlan& plan_for(const FilamentPathData& d) {
     const BaseGeometry g = geometry();
     plan_linear_hub(compute_linear_hub_frame(d, g, GLYPH_TOP), d, g, plan);
     return plan;
-}
-
-pg::PathPoint seg_start(const pg::PathSeg& s) {
-    if (s.type == pg::PathSeg::LINE)
-        return s.p0;
-    return {s.center.x + s.radius * std::cos(s.start_angle),
-            s.center.y + s.radius * std::sin(s.start_angle)};
-}
-
-pg::PathPoint seg_end(const pg::PathSeg& s) {
-    if (s.type == pg::PathSeg::LINE)
-        return s.p1;
-    const float a = s.start_angle + s.sweep;
-    return {s.center.x + s.radius * std::cos(a), s.center.y + s.radius * std::sin(a)};
-}
-
-bool near(pg::PathPoint p, float x, float y, float eps = 0.01f) {
-    return std::fabs(p.x - x) <= eps && std::fabs(p.y - y) <= eps;
-}
-
-bool contiguous(const pg::FilamentPath& p) {
-    for (int i = 1; i < p.count; i++) {
-        const pg::PathPoint a = seg_end(p.segs[i - 1]);
-        if (!near(seg_start(p.segs[i]), a.x, a.y))
-            return false;
-    }
-    return true;
 }
 
 // A segment of the route ends exactly at (x, y).

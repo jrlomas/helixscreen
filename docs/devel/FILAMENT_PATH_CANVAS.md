@@ -35,8 +35,8 @@ The redesign replaced a ~3500-line monolithic draw callback with a layered,
 phase-decomposed renderer built on two new reusable modules: a **pure geometry
 library** (`pathgeo`) that produces arc-filleted filament paths with no LVGL
 dependency, and a **tube stroker** that renders those paths as concentric tube
-strokes. The same tube stroker drives both this detail canvas and the AMS
-overview canvas.
+strokes. The same route plan and painter drive both this detail canvas and the
+AMS overview canvas.
 
 ### Key Design Goals
 
@@ -46,8 +46,10 @@ overview canvas.
 2. **Geometry is pure and testable.** All path math lives in
    `helix::ui::pathgeo`, float-based, LVGL-free, exercised by headless unit
    tests.
-3. **One stroker, two canvases.** The detail canvas and the system overview
-   canvas share the tube-rendering implementation — no duplicated lane drawing.
+3. **One plan and painter, two canvases.** The detail canvas and the system
+   overview canvas each plan their routes into a `PathPlan` (span styles from
+   `span_style()`, clamp bands from `band_state()`) and paint it with
+   `paint_tubes()` / `paint_box_bands()` — no duplicated lane drawing.
 4. **Hit-testing reads what was drawn.** The render pass records the exact
    boxes it draws for the hub, buffer, and bypass; the click handler tests
    against those rects rather than re-deriving geometry.
@@ -224,9 +226,9 @@ giving every lane on a side the same diagonal slope.
 ## The Shared Tube Stroker
 
 `include/filament_tube_stroker.h` / `src/ui/filament_tube_stroker.cpp` — renders
-a `pathgeo::FilamentPath` as a tube. **Used by both** the detail canvas
-(`ui_filament_path_topology.cpp`) and the AMS overview canvas
-(`ui_system_path_canvas.cpp`) — the single source of truth for lane rendering.
+a `pathgeo::FilamentPath` as a tube. `paint_tubes()` (`ui_filament_path_plan.cpp`)
+strokes every route of a plan through it, for the detail canvas and the AMS
+overview canvas alike — the single source of truth for lane rendering.
 
 ### Stroking model
 
@@ -267,25 +269,6 @@ int       build_passes(const LaneStyle& style, TubeLayer layer, TubePass* out,
 LaneStyle lane_style(bool has_filament, bool active, lv_color_t fill,
                      lv_color_t idle_wall, lv_color_t accent, lv_color_t bg,
                      int32_t gauge);
-
-// High-level lane drawing (Halo, Wall, Bore in order). The optional `record` out-param captures the
-// centerline into a FilamentPath for the animation overlay to replay.
-void draw_lane(lv_layer_t*, const pg::FilamentPath&, const LaneStyle&,
-               pg::FilamentPath* record = nullptr);
-void draw_lane_vline (lv_layer_t*, int32_t x, int32_t y0, int32_t y1,
-                      const LaneStyle&, pg::FilamentPath* record = nullptr);
-void draw_lane_route (lv_layer_t*, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
-                      float fillet_r, const LaneStyle&, pg::FilamentPath* record = nullptr);
-void draw_lane_hline (lv_layer_t*, int32_t x0, int32_t x1, int32_t y,
-                      const LaneStyle&, pg::FilamentPath* record = nullptr);
-
-struct MergeFanLane {
-    int32_t slot_x; int32_t start_y; LaneStyle style;
-    pg::FilamentPath* record = nullptr;
-};
-void draw_merge_fan(lv_layer_t*, const MergeFanLane* lanes, int n,
-                    int32_t hub_cx, int32_t hub_top, int32_t hub_w,
-                    float fillet_r, int32_t* entry_x_out = nullptr);
 
 // Color helpers
 lv_color_t tube_darken(lv_color_t, uint8_t);
@@ -526,10 +509,10 @@ it's clickable, record its box into `data->hits` and add a `_valid` flag, then
 test it in `filament_path_click_cb()`.
 
 **Add a new lane route.** Build the centerline with `pathgeo`
-(`route_orthogonal` / `route_polyline_filleted` / `build_merge_fan`), then hand
-it to `filament_tube_stroker::draw_lane()` (or `stroke_path()` for a custom pass
-set). Pass a `record` `FilamentPath*` if the lane should support flow animation.
-Keep all coordinate math in `pathgeo` so it stays unit-testable.
+(`route_orthogonal` / `route_polyline_filleted` / `build_merge_fan`), append it
+to a `Route` in the topology's plan with the span's `SpanStyle`, and let
+`paint_tubes()` stroke it. Keep all coordinate math in `pathgeo` so it stays
+unit-testable.
 
 **Add a new topology.** Extend `PathTopology` in `include/ams_types.h`, add a
 `render_<name>()` with its own phase sequence and a `<Name>Frame` struct (mirror
@@ -537,9 +520,11 @@ Keep all coordinate math in `pathgeo` so it stays unit-testable.
 `render_overlay_content()`. Derive per-slot state once via
 `compute_slot_render_states()`.
 
-**Reuse on a new canvas.** The tube stroker has no detail-canvas coupling —
-`ui_system_path_canvas.cpp` already uses it standalone. Build paths with
-`pathgeo`, style with `lane_style()`, stroke with `draw_lane*()`.
+**Reuse on a new canvas.** The plan and painter have no detail-canvas coupling —
+`ui_system_path_plan.cpp` plans the overview with them. Fill the shared
+`plan_scratch()` with `new_route()` / `append_line()` / `add_band_at_end()`,
+style spans with `Lane::style()` and bands with `Lane::band()`, then call
+`paint_tubes()`, draw the boxes, and `paint_box_bands()`.
 
 ---
 
@@ -553,6 +538,7 @@ use the LVGL test fixture.
 | `tests/unit/test_filament_path_geometry.cpp` | `[filament-path][geometry]` | `seg_length`, `path_length`, `path_point_at`, `route_orthogonal`, `route_polyline_filleted`, `build_merge_fan` — pure math, no LVGL |
 | `tests/unit/test_filament_path_mixed_render.cpp` | `[filament-path][mixed][topology]`, `[filament-path][parallel][topology]` | MIXED/PARALLEL produce opaque overlay pixels once laid out; `SIZE_CHANGED` reschedules the async refresh post-layout |
 | `tests/unit/test_filament_path_plan.cpp` | `[filament-path][plan]`, `[filament-path][plan][hits]` | LINEAR/HUB frame, route plan (contiguity, ownership, span styles, bands, coalesce), and the hub/buffer/bypass hit rects of a rendered canvas |
+| `tests/unit/test_system_path_plan.cpp` | `[system_path]` | The overview's plan: continuous unit routes, hub bands in all four states, dumb hubs, idle trunk, bypass merge, toolchanger routes |
 | `tests/unit/test_filament_path_canvas.cpp` | `[canvas][hit_test]`, `[filament-path][canvas]` | Hit-rect tests (hub box dead-center / argument order), SIZE_CHANGED handler |
 
 ```bash
@@ -570,7 +556,7 @@ run without a display and assert exact arc tangents and lane separation.
 | File | Contents |
 |------|----------|
 | `include/filament_path_geometry.h`, `src/ui/filament_path_geometry.cpp` | `helix::ui::pathgeo` — pure path math, arc-fillet routing, merge fan |
-| `include/filament_tube_stroker.h`, `src/ui/filament_tube_stroker.cpp` | Concentric tube stroking; `draw_lane*`, `draw_merge_fan`, color helpers; shared by detail + overview canvases |
+| `include/filament_tube_stroker.h`, `src/ui/filament_tube_stroker.cpp` | Concentric tube stroking passes and color helpers |
 | `include/ui_filament_path_canvas.h` | Public widget API: create/register + the C state setters |
 | `src/ui/ui_filament_path_internal.h` | `FilamentPathData`, `LayerState`, `PathCache`, `HitRects`, `RenderCtx`, `BaseGeometry`, `ThemeCache`, `AnimState` |
 | `src/ui/ui_filament_path_canvas.cpp` | Widget lifecycle, theme, click dispatch, DRAW_POST callback, C API, XML registration |
@@ -579,7 +565,8 @@ run without a display and assert exact arc tangents and lane separation.
 | `src/ui/ui_filament_path_plan.h`, `.cpp` | LINEAR/HUB and MIXED frames, route plans for all three topologies, span styles, sensor bands, layered `paint_tubes()` |
 | `src/ui/ui_filament_path_glyphs.cpp` | Hub box, buffer coil, filament tip, nozzle, toolhead, badges |
 | `src/ui/ui_filament_path_anim.cpp` | The five `lv_anim`-driven animation systems |
-| `src/ui/ui_system_path_canvas.cpp` | AMS overview canvas — second consumer of the tube stroker |
+| `src/ui/ui_system_path_plan.h`, `.cpp` | AMS overview state, layout and `plan_overview()` onto the shared route plan |
+| `src/ui/ui_system_path_canvas.cpp` | AMS overview canvas: widget, setters, boxes and toolheads over the painted plan |
 
 ---
 
