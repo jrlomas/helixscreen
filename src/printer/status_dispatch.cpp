@@ -13,7 +13,7 @@ namespace helix {
 void dispatch_status_frame(const StatusFrame& frame, std::optional<uint64_t> klippy_epoch) {
     const json& status = *frame.status;
     get_printer_state().update_from_status(status, frame.eventtime, frame.from_cached_snapshot,
-                                           klippy_epoch);
+                                           klippy_epoch, frame.whole_objects);
     ToolState::instance().update_from_status(status);
 
     auto& led_ctrl = led::LedController::instance();

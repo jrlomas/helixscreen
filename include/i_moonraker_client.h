@@ -48,6 +48,19 @@ inline constexpr SubscriptionId INVALID_SUBSCRIPTION_ID = 0;
 inline constexpr const char* CACHED_SNAPSHOT_MARKER = "_helix_cached_snapshot";
 
 /**
+ * @brief Marker key stamped onto a synthetic notify_status_update whose payload
+ * holds every field of each object it names, as a printer.objects.subscribe
+ * response does, rather than only the fields that changed.
+ *
+ * A live frame names a field only when its value changed, so a field it carries
+ * is news. A whole-object payload repeats values the printer has held all along,
+ * which is what consumers that act on a value's arrival need to know. Set by the
+ * discovery subscription replay (also a cached snapshot) and by a subscription
+ * refresh (current, so not a cached snapshot).
+ */
+inline constexpr const char* WHOLE_OBJECTS_MARKER = "_helix_whole_objects";
+
+/**
  * @brief Abstract interface for the Moonraker WebSocket + JSON-RPC transport layer.
  *
  * Production and test consumers that only need polymorphic access to the Moonraker
@@ -186,7 +199,11 @@ class IMoonrakerClient {
     ///        sensitive consumers can refuse to regress on it. Defaults to false:
     ///        a dispatch that reflects the caller's current view — including every
     ///        mock-driven state change — is live.
-    virtual void dispatch_status_update(const json& status, bool from_cached_snapshot = false) = 0;
+    /// @param whole_objects true when `status` is a subscription response, carrying
+    ///        every field of each object instead of only the changed ones. Stamps
+    ///        WHOLE_OBJECTS_MARKER.
+    virtual void dispatch_status_update(const json& status, bool from_cached_snapshot = false,
+                                        bool whole_objects = false) = 0;
 
     /// @brief Objects merged into every printer.objects.subscribe the discovery sequence sends
     ///

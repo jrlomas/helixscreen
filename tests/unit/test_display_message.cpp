@@ -12,6 +12,8 @@
 #include "../test_helpers/printer_state_test_access.h"
 #include "../ui_test_utils.h"
 #include "app_globals.h"
+#include "i_moonraker_client.h"
+#include "printer_state.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -241,7 +243,7 @@ TEST_CASE("Display message: normal end-of-print sequence leaves the END_PRINT "
 }
 
 // ============================================================================
-// Snapshots of an ended job
+// Subscription responses for an ended job
 // ============================================================================
 
 namespace {
@@ -255,43 +257,82 @@ json ended_frame(const char* end_state, const char* message) {
     return {{"print_stats", {{"state", end_state}, {"filename", "cover_ASA_7h44m.gcode"}}},
             {"display_status", {{"progress", 0.0}, {"message", message}}}};
 }
+
+enum class Subscription { DiscoveryReplay, Refresh };
+
+/// Delivers @p status the way a dispatched printer.objects.subscribe response
+/// reaches PrinterState: as a notification carrying the provenance markers.
+void apply_subscription(PrinterState& state, const json& status, Subscription kind) {
+    json notification = {{"method", "notify_status_update"},
+                         {"params", json::array({status, 0.0})},
+                         {WHOLE_OBJECTS_MARKER, true}};
+    if (kind == Subscription::DiscoveryReplay) {
+        notification[CACHED_SNAPSHOT_MARKER] = true;
+    }
+    auto frame = parse_status_notification(notification);
+    REQUIRE(frame);
+    state.update_from_status(*frame->status, frame->eventtime, frame->from_cached_snapshot,
+                             std::nullopt, frame->whole_objects);
+}
 } // namespace
 
-TEST_CASE("Display message: a snapshot of an ended job does not show its leftover M117",
+TEST_CASE("Display message: a subscription response for an ended job does not show its "
+          "leftover M117",
           "[print][display_message]") {
     lv_init_safe();
 
-    auto run = [](const char* end_state) {
+    auto run = [](const char* end_state, Subscription kind) {
         PrinterState& state = get_printer_state();
         PrinterStateTestAccess::reset(state);
         state.init_subjects(false);
 
-        // Klipper still holds PRINT_START's M117 after the job was cancelled; this
-        // is the subscription snapshot the app receives when it connects.
-        state.update_from_status(ended_frame(end_state, "Print starting..."), 0.0,
-                                 /*from_cached_snapshot=*/true);
+        // Klipper still holds PRINT_START's M117 after the job ended.
+        apply_subscription(state, ended_frame(end_state, "Print starting..."), kind);
 
         REQUIRE(shown_message(state).empty());
         REQUIRE(message_visible(state) == 0);
 
-        // A message the printer sets after connecting is live and shows.
+        // A message the printer sets afterwards is live and shows.
         state.update_from_status({{"display_status", {{"message", "Bed cooled"}}}});
         REQUIRE(shown_message(state) == "Bed cooled");
         REQUIRE(message_visible(state) == 1);
     };
 
-    SECTION("cancelled") {
-        run("cancelled");
+    SECTION("cancelled, discovery replay") {
+        run("cancelled", Subscription::DiscoveryReplay);
     }
-    SECTION("complete") {
-        run("complete");
+    SECTION("complete, discovery replay") {
+        run("complete", Subscription::DiscoveryReplay);
     }
-    SECTION("error") {
-        run("error");
+    SECTION("error, discovery replay") {
+        run("error", Subscription::DiscoveryReplay);
+    }
+    SECTION("cancelled, subscription refresh") {
+        run("cancelled", Subscription::Refresh);
     }
 }
 
-TEST_CASE("Display message: a reconnect snapshot keeps the message shown live",
+TEST_CASE("Display message: a subscription refresh after connect keeps the leftover hidden",
+          "[print][display_message]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    apply_subscription(state, ended_frame("cancelled", "Print starting..."),
+                       Subscription::DiscoveryReplay);
+    REQUIRE(shown_message(state).empty());
+
+    // A plugin subscribing an extra object re-sends every app object in full.
+    json refresh = ended_frame("cancelled", "Print starting...");
+    refresh["temperature_sensor plugin_x"] = {{"temperature", 24.0}};
+    apply_subscription(state, refresh, Subscription::Refresh);
+
+    REQUIRE(shown_message(state).empty());
+    REQUIRE(message_visible(state) == 0);
+}
+
+TEST_CASE("Display message: a reconnect replay keeps the message shown live",
           "[print][display_message]") {
     lv_init_safe();
     PrinterState& state = get_printer_state();
@@ -303,18 +344,20 @@ TEST_CASE("Display message: a reconnect snapshot keeps the message shown live",
     state.update_from_status({{"display_status", {{"message", "Print cancelled"}}}});
     REQUIRE(shown_message(state) == "Print cancelled");
 
-    SECTION("snapshot carrying the same message") {
-        state.update_from_status(ended_frame("cancelled", "Print cancelled"), 0.0, true);
+    SECTION("replay carrying the same message") {
+        apply_subscription(state, ended_frame("cancelled", "Print cancelled"),
+                           Subscription::DiscoveryReplay);
     }
-    SECTION("snapshot captured before the live message landed") {
-        state.update_from_status(ended_frame("cancelled", "Print starting..."), 0.0, true);
+    SECTION("replay captured before the live message landed") {
+        apply_subscription(state, ended_frame("cancelled", "Print starting..."),
+                           Subscription::DiscoveryReplay);
     }
 
     REQUIRE(shown_message(state) == "Print cancelled");
     REQUIRE(message_visible(state) == 1);
 }
 
-TEST_CASE("Display message: snapshot rule is limited to snapshots of ended jobs",
+TEST_CASE("Display message: the subscription rule is limited to ended jobs",
           "[print][display_message]") {
     lv_init_safe();
     PrinterState& state = get_printer_state();
@@ -327,17 +370,19 @@ TEST_CASE("Display message: snapshot rule is limited to snapshots of ended jobs"
         REQUIRE(shown_message(state) == "Print cancelled");
         REQUIRE(message_visible(state) == 1);
     }
-    SECTION("snapshot of an idle printer") {
-        state.update_from_status(
+    SECTION("subscription response for an idle printer") {
+        apply_subscription(
+            state,
             {{"print_stats", {{"state", "standby"}}}, {"display_status", {{"message", "Ready"}}}},
-            0.0, true);
+            Subscription::DiscoveryReplay);
         REQUIRE(shown_message(state) == "Ready");
         REQUIRE(message_visible(state) == 1);
     }
-    SECTION("snapshot of a running print") {
-        state.update_from_status({{"print_stats", {{"state", "printing"}}},
-                                  {"display_status", {{"message", "Layer 3/120"}}}},
-                                 0.0, true);
+    SECTION("subscription response for a running print") {
+        apply_subscription(state,
+                           {{"print_stats", {{"state", "printing"}}},
+                            {"display_status", {{"message", "Layer 3/120"}}}},
+                           Subscription::Refresh);
         REQUIRE(shown_message(state) == "Layer 3/120");
         REQUIRE(message_visible(state) == 1);
     }

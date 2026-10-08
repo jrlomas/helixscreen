@@ -1936,7 +1936,9 @@ void MoonrakerDiscoverySequence::refresh_subscription() {
                 refresh_in_flight_ = false;
             }
             if (response.contains("result") && response["result"].contains("status")) {
-                client_.dispatch_status_update(response["result"]["status"]);
+                client_.dispatch_status_update(response["result"]["status"],
+                                               /*from_cached_snapshot=*/false,
+                                               /*whole_objects=*/true);
             }
             drain_pending_refresh();
         },

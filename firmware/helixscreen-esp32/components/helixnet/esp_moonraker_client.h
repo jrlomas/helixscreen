@@ -99,7 +99,8 @@ class EspMoonrakerClient final : public IMoonrakerClient {
                                   std::function<void(const json&)> cb) override;
     bool unregister_method_callback(const std::string& method,
                                     const std::string& handler_name) override;
-    void dispatch_status_update(const json& status, bool from_cached_snapshot = false) override;
+    void dispatch_status_update(const json& status, bool from_cached_snapshot = false,
+                                bool whole_objects = false) override;
     // No plugin host runs on this target, so the union subscription never carries extras.
     void set_subscription_extras_provider(std::function<json()>) override {}
     void refresh_subscription() override {}

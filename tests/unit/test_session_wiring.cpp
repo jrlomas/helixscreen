@@ -34,8 +34,13 @@ namespace {
 
 struct CountingClient : helix::test::FakeMoonrakerClient {
     int dispatches = 0;
-    void dispatch_status_update(const nlohmann::json&, bool) override {
+    bool last_cached = false;
+    bool last_whole_objects = false;
+    void dispatch_status_update(const nlohmann::json&, bool from_cached_snapshot,
+                                bool whole_objects) override {
         ++dispatches;
+        last_cached = from_cached_snapshot;
+        last_whole_objects = whole_objects;
     }
 };
 
@@ -114,6 +119,17 @@ TEST_CASE_METHOD(SessionWiringFixture,
     CHECK(client.dispatches == 1);
     CHECK(cycles == 1);
     CHECK(passes == std::vector<bool>{true});
+}
+
+TEST_CASE_METHOD(SessionWiringFixture,
+                 "the discovery status is dispatched as a replayed whole-object subscription",
+                 "[session_wiring]") {
+    fire(discovery_of({"extruder"}));
+    drain();
+
+    REQUIRE(client.dispatches == 1);
+    CHECK(client.last_cached);
+    CHECK(client.last_whole_objects);
 }
 
 TEST_CASE_METHOD(SessionWiringFixture,

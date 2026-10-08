@@ -376,7 +376,7 @@ bool PrinterPrintState::status_indicates_active_print(const nlohmann::json& stat
     return printer_has_job(parse_print_job_state(st.c_str()));
 }
 
-void PrinterPrintState::update_from_status(const nlohmann::json& status, bool from_snapshot) {
+void PrinterPrintState::update_from_status(const nlohmann::json& status, bool whole_objects) {
     // Layer tracking has two sources within a single status update:
     //   primary  — print_stats.info.{current_layer,total_layer} (slicer
     //              SET_PRINT_STATS_INFO; authoritative when present)
@@ -720,16 +720,17 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status, bool fr
                 spdlog::info("[PrinterPrintState] Slicer progress active (M73 detected)");
             }
         }
-        // Klipper keeps the last M117 after a job ends, so a snapshot of an ended job
-        // usually carries a PRINT_START message that the live path cleared at the end
-        // edge. A snapshot cannot say whether its text came before or after the end,
-        // and live frames may have moved past it, so it leaves the shown message
-        // alone. print_stats is parsed above, so this is the state the frame reports.
+        // Klipper keeps the last M117 after a job ends, so a subscription response for
+        // an ended job usually carries a PRINT_START message that the live path
+        // cleared at the end edge. A whole-object payload cannot say whether its text
+        // came before or after the end, and a replayed one may be older than the live
+        // frames, so it leaves the shown message alone. print_stats is parsed above,
+        // so this is the state the frame reports.
         const bool job_ended =
             job_has_ended(static_cast<PrintJobState>(lv_subject_get_int(&print_state_enum_)));
-        if (display.contains("message") && from_snapshot && job_ended) {
-            spdlog::debug("[PrinterPrintState] Snapshot of an ended job: display message "
-                          "left as shown");
+        if (display.contains("message") && whole_objects && job_ended) {
+            spdlog::debug("[PrinterPrintState] Subscription response for an ended job: "
+                          "display message left as shown");
         } else if (display.contains("message")) {
             const char* msg = display["message"].is_string()
                                   ? display["message"].get_ref<const std::string&>().c_str()

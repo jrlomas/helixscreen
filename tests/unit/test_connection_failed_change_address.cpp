@@ -108,7 +108,7 @@ class ReconnectCountingClient : public helix::IMoonrakerClient {
     bool unregister_method_callback(const std::string&, const std::string&) override {
         return false;
     }
-    void dispatch_status_update(const json&, bool) override {}
+    void dispatch_status_update(const json&, bool, bool) override {}
     void set_subscription_extras_provider(std::function<json()>) override {}
     void refresh_subscription() override {}
     helix::ConnectionState get_connection_state() const override {

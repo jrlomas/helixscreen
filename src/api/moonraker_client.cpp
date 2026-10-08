@@ -999,7 +999,8 @@ void MoonrakerClient::emit_event(const MoonrakerEvent& evt) {
     }
 }
 
-void MoonrakerClient::dispatch_status_update(const json& status, bool from_cached_snapshot) {
+void MoonrakerClient::dispatch_status_update(const json& status, bool from_cached_snapshot,
+                                             bool whole_objects) {
     // Parse bed mesh data before dispatching (mirrors WebSocket handler behavior)
     // This ensures bed mesh is populated on initial subscription response,
     // not just on subsequent notify_status_update messages
@@ -1031,6 +1032,9 @@ void MoonrakerClient::dispatch_status_update(const json& status, bool from_cache
     };
     if (from_cached_snapshot) {
         notification[CACHED_SNAPSHOT_MARKER] = true;
+    }
+    if (whole_objects) {
+        notification[WHOLE_OBJECTS_MARKER] = true;
     }
 
     // Dispatch to all registered callbacks

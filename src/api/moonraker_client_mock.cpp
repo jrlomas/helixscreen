@@ -4172,14 +4172,18 @@ void MoonrakerClientMock::dispatch_method_callback(const std::string& method, co
     }
 }
 
-void MoonrakerClientMock::dispatch_status_update(const json& status, bool from_cached_snapshot) {
-    MoonrakerClient::dispatch_status_update(status, from_cached_snapshot);
+void MoonrakerClientMock::dispatch_status_update(const json& status, bool from_cached_snapshot,
+                                                 bool whole_objects) {
+    MoonrakerClient::dispatch_status_update(status, from_cached_snapshot, whole_objects);
 
     // The wrapping matches MoonrakerClient::dispatch_status_update exactly, so
     // a method-callback registrant sees the same frame a live one would.
     json msg = {{"method", "notify_status_update"}, {"params", json::array({status, 0.0})}};
     if (from_cached_snapshot) {
         msg[helix::CACHED_SNAPSHOT_MARKER] = true;
+    }
+    if (whole_objects) {
+        msg[helix::WHOLE_OBJECTS_MARKER] = true;
     }
     dispatch_method_callback("notify_status_update", msg);
 }
