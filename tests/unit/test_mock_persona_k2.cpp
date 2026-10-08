@@ -179,3 +179,35 @@ TEST_CASE("The k2 persona's motor_control and fan_feedback frames parse",
         CHECK(fan.rpm.has_value());
     }
 }
+
+TEST_CASE("The k2 persona reports the declared 350 bed through discovery", "[mock][persona][k2]") {
+    helix::test::PersonaEnv env("k2");
+    MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::CREALITY_K2_PLUS);
+    mock.connect("ws://mock/websocket", [] {}, [] {});
+    bool done = false;
+    mock.discover_printer([&done] { done = true; });
+    REQUIRE(done);
+
+    const auto volume = mock.hardware().build_volume();
+    CHECK(volume.declared_bed_x == Catch::Approx(350.0f));
+    CHECK(volume.declared_bed_y == Catch::Approx(350.0f));
+}
+
+TEST_CASE("Destroying the k2 mock answers an owed box script with an error",
+          "[mock][persona][k2][cfs]") {
+    helix::test::PersonaEnv env("k2");
+    bool succeeded = false;
+    bool failed = false;
+    {
+        MoonrakerClientMock mock(MoonrakerClientMock::PrinterType::CREALITY_K2_PLUS);
+        mock.connect("ws://mock/websocket", [] {}, [] {});
+        mock.send_jsonrpc(
+            "printer.gcode.script",
+            {{"script",
+              helix::printer::AmsBackendCfs::unload_gcode(helix::printer::CfsMacroVariant::K2)}},
+            [&succeeded](const json&) { succeeded = true; },
+            [&failed](const MoonrakerError&) { failed = true; });
+    }
+    CHECK(failed);
+    CHECK_FALSE(succeeded);
+}
