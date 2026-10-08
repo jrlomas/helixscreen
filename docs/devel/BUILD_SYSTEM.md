@@ -1249,8 +1249,9 @@ Where it is installed:
   jobpool conf puts the state dir under the directory the `helix-tsan` container
   already mounts, the host runs `docker exec` under `jobpool exec`, and the
   container opens the FIFO and exports `MAKEFLAGS` (`jobpool container-env`)
-  with no `-j` on make. Without a pool there it sizes `-j` from the memory free
-  after its ARC cap.
+  with no `-j` on make. Without a pool there it sizes `-j` from `MemAvailable`.
+  zeus keeps 64 GiB free for builds with the `zfs_arc_sys_free` ZFS tunable,
+  and the ARC self-adjusts above that.
 
 ## Font Generation
 

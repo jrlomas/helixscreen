@@ -31,9 +31,8 @@ setup() {
     export ZEUS_JOBPOOL="$BATS_TEST_TMPDIR/no-jobpool"
     # No ZFS on "zeus" unless a test installs the fake below.
     export ZEUS_ARC_PARAM="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_max"
-    export ZEUS_ARCSTATS="$BATS_TEST_TMPDIR/arcstats"
+    export ZEUS_ARC_SYS_FREE="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_sys_free"
     export ZEUS_ARC_MARK="$BATS_TEST_TMPDIR/arc-mark"
-    export ZEUS_ARC_SETTLE_SECS=0
 
     # ssh <host> bash -se: drop the host argument and run the heredoc locally.
     mock_command_script ssh 'shift; exec "$@"'
@@ -359,91 +358,72 @@ exit 0'
     contains "using -j" "$output"
 }
 
-# --- ZFS ARC cap ---------------------------------------------------------------
+# --- ZFS: leftover cap marker, zfs_arc_sys_free check ----------------------
 
-CAP=$((64 * 1024 * 1024 * 1024))
-
-# fake_zfs <zfs_arc_max> <arcstats c_max>: a ZFS module the run can cap. The
-# docker stub records the parameter while the job runs, and JOB_RC/JOB_TERM
-# make the job fail or signal the remote shell.
-fake_zfs() {
-    export ZEUS_ARC_PARAM="$BATS_TEST_TMPDIR/zfs_arc_max"
+fake_zfs() { # <zfs_arc_max> <zfs_arc_sys_free>
+    mkdir -p "$BATS_TEST_TMPDIR/zfs"
+    export ZEUS_ARC_PARAM="$BATS_TEST_TMPDIR/zfs/zfs_arc_max"
+    export ZEUS_ARC_SYS_FREE="$BATS_TEST_TMPDIR/zfs/zfs_arc_sys_free"
     echo "$1" > "$ZEUS_ARC_PARAM"
-    printf '13 1 0x01 147 39984 0 0\nname type data\nc_min 4 1000\nc_max 4 %s\nsize 4 5\n' "$2" > "$ZEUS_ARCSTATS"
-    export ARC_DURING="$BATS_TEST_TMPDIR/arc-during"
-    mock_command_script docker '
-case "$1" in
-    ps) echo helix-tsan ;;
-    exec)
-        case "$*" in
-            *pgrep*) exit 1 ;;
-            *"make test"*)
-                cat "$ZEUS_ARC_PARAM" > "$ARC_DURING"
-                [ -n "${JOB_TERM:-}" ] && { kill -TERM "$PPID"; sleep 1; }
-                exit "${JOB_RC:-0}" ;;
-        esac ;;
-esac
-exit 0'
+    echo "$2" > "$ZEUS_ARC_SYS_FREE"
 }
 
-@test "an ARC left at the default is restored as the c_max it ran with" {
-    fake_zfs 0 200000000000
+SYS_FREE=$((64 * 1024 * 1024 * 1024))
+
+@test "a run leaves zfs_arc_max alone" {
+    fake_zfs 269272276992 "$SYS_FREE"
     run "$SCRIPT" test
     [ "$status" -eq 0 ]
-    [ "$(cat "$ARC_DURING")" = "$CAP" ]
-    [ "$(cat "$ZEUS_ARC_PARAM")" = 200000000000 ]
-    contains "restored to 200000000000" "$output"
-    [ ! -e "$ZEUS_ARC_MARK" ]
+    [ "$(cat "$ZEUS_ARC_PARAM")" = 269272276992 ]
+    lacks "zfs_arc" "$output"
 }
 
-@test "an explicit zfs_arc_max is restored as itself" {
-    fake_zfs 100000000000 200000000000
-    run "$SCRIPT" test
-    [ "$status" -eq 0 ]
-    [ "$(cat "$ARC_DURING")" = "$CAP" ]
-    [ "$(cat "$ZEUS_ARC_PARAM")" = 100000000000 ]
-}
-
-@test "a failed job still restores the ARC" {
-    fake_zfs 0 200000000000
-    JOB_RC=2 run "$SCRIPT" test
-    [ "$status" -ne 0 ]
-    [ "$(cat "$ARC_DURING")" = "$CAP" ]
-    [ "$(cat "$ZEUS_ARC_PARAM")" = 200000000000 ]
-}
-
-@test "a job killed by a signal still restores the ARC" {
-    fake_zfs 0 200000000000
-    JOB_TERM=1 run "$SCRIPT" test
-    [ "$status" -ne 0 ]
-    [ "$(cat "$ARC_DURING")" = "$CAP" ]
-    [ "$(cat "$ZEUS_ARC_PARAM")" = 200000000000 ]
-    [ ! -e "$ZEUS_ARC_MARK" ]
-}
-
-@test "a cap abandoned by a dead run is restored to the bytes it recorded" {
+@test "a cap marker left by a dead run is restored to the bytes it recorded" {
     local dead
     true & dead=$!; wait "$dead"
-    fake_zfs "$CAP" "$CAP"
+    fake_zfs 68719476736 "$SYS_FREE"
     echo "$dead 123456789" > "$ZEUS_ARC_MARK"
     run "$SCRIPT" test
     [ "$status" -eq 0 ]
-    contains "abandoned by dead pid $dead; restoring 123456789" "$output"
-    # The run then caps from the recovered value and hands that back.
-    [ "$(cat "$ARC_DURING")" = "$CAP" ]
+    contains "restored zfs_arc_max to 123456789" "$output"
     [ "$(cat "$ZEUS_ARC_PARAM")" = 123456789 ]
     [ ! -e "$ZEUS_ARC_MARK" ]
 }
 
-@test "a marker with no bytes to restore stays, and the run does not cap" {
+@test "a cap marker whose run is still live is left to that run" {
+    fake_zfs 68719476736 "$SYS_FREE"
+    echo "$$ 123456789" > "$ZEUS_ARC_MARK"
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    [ "$(cat "$ZEUS_ARC_PARAM")" = 68719476736 ]
+    [ -e "$ZEUS_ARC_MARK" ]
+}
+
+@test "a cap marker with no bytes to restore stays and is named" {
     local dead
     true & dead=$!; wait "$dead"
-    fake_zfs "$CAP" "$CAP"
+    fake_zfs 68719476736 "$SYS_FREE"
     echo "$dead 0" > "$ZEUS_ARC_MARK"
     run "$SCRIPT" test
     [ "$status" -eq 0 ]
-    contains "could not restore zfs_arc_max" "$output"
-    lacks "for this run" "$output"
+    contains "holds no bytes to restore" "$output"
     [ -e "$ZEUS_ARC_MARK" ]
-    [ "$(cat "$ZEUS_ARC_PARAM")" = "$CAP" ]
+    [ "$(cat "$ZEUS_ARC_PARAM")" = 68719476736 ]
+}
+
+@test "zfs_arc_sys_free under the floor is warned about" {
+    fake_zfs 269272276992 0
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    contains "zfs_arc_sys_free is 0 bytes" "$output"
+}
+
+@test "zfs_arc_sys_free at 64 GiB, or no ZFS at all, is not warned about" {
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    lacks "zfs_arc_sys_free" "$output"
+    fake_zfs 269272276992 "$SYS_FREE"
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    lacks "zfs_arc_sys_free" "$output"
 }
