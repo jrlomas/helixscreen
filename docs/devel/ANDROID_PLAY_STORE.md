@@ -7,7 +7,7 @@ How the CI pipeline ships `helix-screen` to Google Play, and the one-time manual
 **The API 36 deadline has passed, and it now gates everything below.** Google has required
 `targetSdkVersion 36` for new submissions *and* for updates since **2026-08-31**. `v1.0.0`
 ships `compileSdkVersion 35` / `targetSdkVersion 35`, so the AAB on that release would be
-**rejected on upload**. Nothing in the manual bring-up sequence is worth starting until this is
+**rejected on upload**; main targets 36 (see "Target API level"). Nothing in the manual bring-up sequence is worth starting until this is
 resolved, because step 4 is a manual AAB upload and that is the step that would bounce.
 
 Two ways forward, and they are not exclusive:
@@ -64,18 +64,20 @@ Steps 1-3 are unaffected by the target-API question and can be done now.
 
 ### Target API level
 
-`android/app/build.gradle` sets `compileSdkVersion 35` / `targetSdkVersion 35`. Google's annual
-requirement moves to **API 36 on 2026-08-31**, for new submissions *and* for updates to existing
-apps. Two consequences:
+`android/app/build.gradle` sets `compileSdkVersion 36` / `targetSdkVersion 36` (AGP 8.9.1,
+Gradle 8.11.1), which Play has required for new submissions and updates since 2026-08-31.
+`minSdkVersion` stays 28. API 36 behaviour changes that touch this app:
 
-- Uploading on or before 2026-08-30 would have been accepted as-is. That window closed; any AAB targeting API 35 is now rejected.
-- Either way, **every update published after 2026-08-31 needs API 36**, so the bump is required soon regardless of when the first upload happens.
+- **Predictive back.** Targeting 36 stops `KEYCODE_BACK` reaching SDL by default, so the
+  activity sets `android:enableOnBackInvokedCallback="false"` to keep the back key popping
+  the nav stack.
+- **Large screens (sw >= 600dp) ignore `screenOrientation`.** A tablet can run the app in
+  portrait despite `sensorLandscape`; needs a check on a real tablet.
+- **Edge-to-edge** is already enforced from 35 and handled by `HelixActivity`'s inset listener.
 
-The lower-risk sequence is to get the first manual upload in on 35 — its only job is to enroll
-Play App Signing and unblock steps 5-7 — and treat the SDK bump as its own change, so a
-first-submission milestone is not coupled to an untested SDK jump. Android 16 enforces
-edge-to-edge display for apps targeting API 36, which a fullscreen SDL surface needs testing
-against on a real device before it ships.
+Native libraries must be 16 KB page aligned. Everything bundled is built from source with NDK
+r29, which links with 16 KB max-page-size by default; check a built APK with
+`zipalign -c -P 16 -v 4 <apk>` and `llvm-readelf -l <lib>.so` (every `LOAD` `Align` 0x4000).
 
 ### Review risk: the app needs hardware a reviewer does not have
 
