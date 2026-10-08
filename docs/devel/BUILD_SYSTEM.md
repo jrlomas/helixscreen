@@ -1250,13 +1250,23 @@ Where it is installed:
   three shards per token.
 - Runners that size themselves rather than join a jobserver hold their share
   through `scripts/helix-claim hold [-n N] -- CMD`, which exports
-  `JOBPOOL_SLOTS` (`jobpool hold`; without jobpool, `-n` or the cores):
-  `make test-shell` runs `bats --jobs "$JOBPOOL_SLOTS"`, and the helix-xml test
-  build its `cmake --build -j`.
+  `JOBPOOL_SLOTS` (`jobpool hold`; without jobpool, `-n` or the cores). The
+  helix-xml test build runs its `cmake --build -j` from it. `make test-shell`
+  asks for `--grow FILE` too, which a jobpool that has it keeps at the live slot
+  count while the suite runs; bats is handed `scripts/parallel-jobs-file.sh` as
+  its parallel, which gives GNU parallel that file (re-read about once a second)
+  in place of the number bats insists on. Without it the suite runs at the
+  start-time `JOBPOOL_SLOTS`.
 - Container builds go through `scripts/pool-docker.sh`: a container's make
   joins the pool (state dir mounted, FIFO opened inside, `-j` dropped, kept as
-  the fallback when the container cannot open the FIFO), and any other
-  container command (idf.py, the ustreamer script) holds tokens and gets
+  the fallback when the container cannot open the FIFO). An idf.py or ninja
+  command joins too: ninja 1.13 is a jobserver client in the FIFO form, so
+  `scripts/ninja-jobserver.sh` fetches the pinned upstream release once into
+  `~/.cache/helixscreen/` (sha256-checked; offline after that), pool-docker.sh
+  mounts it over the image's `/usr/bin/ninja`, names the FIFO in `MAKEFLAGS`
+  and empties `IDF_PY_BUILD_JOBS`, since idf.py passes it as `-j` and any `-j`
+  turns ninja's jobserver off. Any other container command (the ustreamer
+  script), or idf.py with no ninja 1.13 to be had, holds tokens and gets
   `JOBPOOL_SLOTS` and `IDF_PY_BUILD_JOBS`. The native cross targets (`make pi`
   and siblings) give their sub-make no `-j` while a pool is live.
 - `helix-claim resources` lists heavy runners (bats, GNU parallel, ninja,

@@ -313,11 +313,16 @@ hold)
     # starts and never grows, so on a busy pool a runner without a floor gets
     # one slot for its whole life. A third keeps it within about 3x its
     # full-pool time and leaves two thirds to compiles.
-    usage="usage: helix-claim hold [-n N] [--min M] [--min-wait SECS] -- <cmd...>"
-    n="" min_given="" pass=()
+    # --grow FILE: a jobpool that has it keeps the live slot count in FILE,
+    # growing and shrinking it with the pool, for a command that re-reads it
+    # (GNU parallel --jobs FILE). Otherwise FILE is never written, which is
+    # the caller's cue to size from JOBPOOL_SLOTS.
+    usage="usage: helix-claim hold [-n N] [--min M] [--min-wait SECS] [--grow FILE] -- <cmd...>"
+    n="" min_given="" grow="" pass=()
     while :; do
         case ${1:-} in
             -n) [ $# -ge 2 ] || die "$usage"; n=$2; pass+=(-n "$2"); shift 2 ;;
+            --grow) [ $# -ge 2 ] || die "$usage"; grow=$2; shift 2 ;;
             --min) [ $# -ge 2 ] || die "$usage"; min_given=1; pass+=("$1" "$2"); shift 2 ;;
             --min-wait) [ $# -ge 2 ] || die "$usage"; pass+=("$1" "$2"); shift 2 ;;
             *) break ;;
@@ -331,6 +336,10 @@ hold)
             floor=$(( target / 3 > 0 ? target / 3 : 1 ))
             [ -n "$n" ] && [ "$floor" -gt "$n" ] && floor=$n
             pass+=(--min "$floor")
+        fi
+        if [ -n "$grow" ]; then
+            jp_usage=$("$jp" 2>&1) || true
+            case $jp_usage in *"--grow FILE"*) pass+=(--grow "$grow") ;; esac
         fi
         exec "$jp" hold "${pass[@]}" -- "$@"
     fi
@@ -576,10 +585,11 @@ helix-claim - advisory claims on resources shared between agent sessions
   jobs [-v]                                   the -j a build takes: the jobpool's
                                               target, else cores capped by memory
   pool                                        the live jobpool's target; exit 1 if none
-  hold [-n N] [--min M] [--min-wait S] -- <cmd...>
+  hold [-n N] [--min M] [--min-wait S] [--grow FILE] -- <cmd...>
                                               run cmd with JOBPOOL_SLOTS set: up to N
                                               pool tokens (waiting up to S seconds
-                                              for M) under jobpool, else N or cores
+                                              for M) under jobpool, else N or cores;
+                                              --grow keeps the live count in FILE
   resources [--no-zeus]                       memory, load, build -j, live claims,
                                               unpooled heavy runners, top memory
                                               users, and zeus
