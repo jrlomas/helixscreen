@@ -497,8 +497,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status, bool fr
                 // RAW_PRINT_STATE_OK: same handler, same reason as above. The
                 // previous-state arm asks the wire question - printer_has_job() -
                 // because a preparing job the printer never took set no M117.
-                if (new_state == PrintJobState::COMPLETE || new_state == PrintJobState::CANCELLED ||
-                    new_state == PrintJobState::ERROR ||
+                if (job_has_ended(new_state) ||
                     (new_state == PrintJobState::STANDBY && printer_has_job(current_state))) {
                     lv_subject_copy_string(&display_message_, "");
                     update_display_message_visible();
@@ -904,9 +903,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status, bool fr
                 lv_subject_get_int(&print_duration_) > 0) {
                 auto current_state =
                     static_cast<PrintJobState>(lv_subject_get_int(&print_state_enum_));
-                bool is_terminal_state = (current_state == PrintJobState::COMPLETE ||
-                                          current_state == PrintJobState::CANCELLED ||
-                                          current_state == PrintJobState::ERROR);
+                bool is_terminal_state = job_has_ended(current_state);
                 if (!is_terminal_state && file_progress_pct > 0) {
                     int total = lv_subject_get_int(&print_layer_total_);
                     if (total > 0) {
@@ -971,9 +968,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status, bool fr
     if (!printer_reports_layers_ && layer_height_ > 0.0 && have_gcode_z_ &&
         lv_subject_get_int(&print_duration_) > 0) {
         auto current_state = static_cast<PrintJobState>(lv_subject_get_int(&print_state_enum_));
-        bool is_terminal_state =
-            (current_state == PrintJobState::COMPLETE ||
-             current_state == PrintJobState::CANCELLED || current_state == PrintJobState::ERROR);
+        bool is_terminal_state = job_has_ended(current_state);
         int total = lv_subject_get_int(&print_layer_total_);
         if (!is_terminal_state && total > 0) {
             int derived = static_cast<int>(std::lround((last_gcode_z_mm_ - first_layer_height_) /
