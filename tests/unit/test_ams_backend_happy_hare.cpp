@@ -3291,6 +3291,49 @@ TEST_CASE("Happy Hare: parse flowguard object", "[ams][happy_hare][clog]") {
     REQUIRE(info.flowguard_info.max_tangle == Catch::Approx(-0.6f));
 }
 
+TEST_CASE("Happy Hare: v4 flowguard reason and tangle_prevention parse",
+          "[ams][happy_hare][clog]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+
+    nlohmann::json mmu_data;
+    mmu_data["flowguard"] = {{"enabled", true},
+                             {"active", true},
+                             {"trigger", "TANGLE"},
+                             {"reason", "no movement"},
+                             {"level", -1.0}};
+    mmu_data["tangle_prevention"] = {{"enabled", true},
+                                     {"active", true},
+                                     {"boosted", true},
+                                     {"threshold", 0.6},
+                                     {"release", 0.3}};
+    helper.test_parse_mmu_state(mmu_data);
+
+    auto info = helper.get_system_info();
+    CHECK(info.flowguard_info.reason == "no movement");
+    CHECK(info.tangle_prevention.present);
+    CHECK(info.tangle_prevention.enabled);
+    CHECK(info.tangle_prevention.active);
+    CHECK(info.tangle_prevention.boosted);
+    CHECK(info.tangle_prevention.threshold == Catch::Approx(0.6f));
+    CHECK(info.tangle_prevention.release == Catch::Approx(0.3f));
+
+    // A unit without a buffer publishes null: the state clears.
+    helper.test_parse_mmu_state(nlohmann::json{{"tangle_prevention", nullptr}});
+    CHECK_FALSE(helper.get_system_info().tangle_prevention.present);
+}
+
+TEST_CASE("Happy Hare: v3 frame leaves tangle_prevention absent", "[ams][happy_hare][clog]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+    helper.test_parse_mmu_state(nlohmann::json{{"action", "Idle"}});
+    auto info = helper.get_system_info();
+    CHECK_FALSE(info.tangle_prevention.present);
+    CHECK(info.flowguard_info.reason.empty());
+}
+
 TEST_CASE("Happy Hare: missing flowguard object leaves defaults", "[ams][happy_hare][clog]") {
     helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
     AmsBackendHappyHareTestHelper& helper = *helper_reg;

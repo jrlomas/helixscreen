@@ -123,6 +123,24 @@ TEST_CASE("Happy Hare status parse gate arrays keep the frame's length and skip 
     CHECK_FALSE(id.name);
 }
 
+TEST_CASE("Happy Hare status parse reads v4 flowguard reason and tangle_prevention",
+          "[happy_hare][status_parse]") {
+    const auto t = happy_hare::parse_telemetry(json{
+        {"flowguard", json{{"trigger", "CLOG"}, {"reason", "stalled"}}},
+        {"tangle_prevention", json{{"enabled", true}, {"boosted", false}, {"threshold", 0.5}}}});
+    REQUIRE(t.flowguard);
+    CHECK(t.flowguard->reason == "stalled");
+    REQUIRE(t.tangle_prevention);
+    CHECK(t.tangle_prevention->enabled == true);
+    CHECK(t.tangle_prevention->boosted == false);
+    CHECK_FALSE(t.tangle_prevention->active);
+    CHECK(t.tangle_prevention->threshold == Catch::Approx(0.5f));
+
+    const auto none = happy_hare::parse_telemetry(json{{"tangle_prevention", nullptr}});
+    CHECK_FALSE(none.tangle_prevention);
+    CHECK(none.v4_marker);
+}
+
 TEST_CASE("Happy Hare status parse telemetry reads nested objects field by field",
           "[happy_hare][status_parse]") {
     const auto t = happy_hare::parse_telemetry(

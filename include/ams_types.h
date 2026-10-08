@@ -1390,6 +1390,18 @@ struct FlowguardInfo {
     float level = 0;     // -1.0 (tangle) to +1.0 (clog)
     float max_clog = 0;
     float max_tangle = 0; // negative value
+    std::string reason;   ///< Why the last trip fired (v4 `flowguard.reason`); "" when none
+};
+
+/// Happy Hare v4 tangle prevention (`tangle_prevention`): the proportional
+/// sensor boosts the gate stepper to untangle before FlowGuard trips.
+struct TanglePreventionInfo {
+    bool present = false; ///< The selected unit published the object (it has a buffer)
+    bool enabled = false;
+    bool active = false;  ///< Armed: filament monitoring is on
+    bool boosted = false; ///< The gate stepper is currently boosted
+    float threshold = 0;
+    float release = 0;
 };
 
 /**
@@ -1545,7 +1557,8 @@ struct AmsSystemInfo {
     int clog_detection = 0;          ///< Clog detection: 0=off, 1=manual, 2=auto
     int encoder_flow_rate = -1;      ///< Encoder flow rate (-1=unavailable)
     EncoderClogInfo encoder_info;    ///< Encoder-based clog detection state
-    FlowguardInfo flowguard_info;    ///< Flowguard clog/tangle detection state
+    TanglePreventionInfo tangle_prevention;
+    FlowguardInfo flowguard_info;       ///< Flowguard clog/tangle detection state
     float sync_feedback_flow_rate = -1; ///< Sync feedback flow rate
     float sync_feedback_bias = -2;      ///< Modelled bias [-1.0,1.0], -2=unavailable
     float sync_feedback_bias_raw = -2;  ///< Raw sensor bias [-1.0,1.0], -2=unavailable

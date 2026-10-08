@@ -939,11 +939,28 @@ void AmsBackendHappyHare::apply_mmu_telemetry_locked(const happy_hare::MmuTeleme
         if (fg.max_tangle) {
             info.max_tangle = *fg.max_tangle;
         }
+        if (fg.reason) {
+            info.reason = *fg.reason;
+        }
         if (fg.encoder_mode) {
             flowguard_encoder_mode_ = *fg.encoder_mode;
         }
         spdlog::trace("[AMS HappyHare] Flowguard: enabled={} active={} trigger={} level={:.2f}",
                       info.enabled, info.active, info.trigger, info.level);
+    }
+
+    if (t.tangle_prevention) {
+        auto& tp = system_info_.tangle_prevention;
+        const auto& d = *t.tangle_prevention;
+        tp.present = true;
+        tp.enabled = d.enabled.value_or(tp.enabled);
+        tp.active = d.active.value_or(tp.active);
+        tp.boosted = d.boosted.value_or(tp.boosted);
+        tp.threshold = d.threshold.value_or(tp.threshold);
+        tp.release = d.release.value_or(tp.release);
+    } else if (t.v4_marker) {
+        // null: the selected unit has no buffer
+        system_info_.tangle_prevention = {};
     }
 
     // A null flowguard or encoder is a selected unit without that hardware; the
