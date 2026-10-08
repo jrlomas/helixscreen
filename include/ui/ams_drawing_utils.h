@@ -201,6 +201,9 @@ struct UnitToolLayout {
     /// units naming the same extruder feed one nozzle — that is string
     /// identity, so it holds for names no numbering scheme can parse.
     std::string extruder_identity;
+    /// The unit's AmsUnit::hub_id. Units naming the same non-empty hub share
+    /// one nozzle.
+    std::string hub_id;
 };
 
 /**

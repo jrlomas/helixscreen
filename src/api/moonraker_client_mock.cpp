@@ -229,7 +229,23 @@ MoonrakerClientMock::MoonrakerClientMock(PrinterType type, double speedup_factor
     // OpenAMS reads no identity off its spools: color and material come from the
     // override store, which reads the shared lane_data namespace (laneN keys,
     // N = 1-based global slot; inner "lane" is 0-based).
-    if (is_mock_openams()) {
+    if (is_mock_openams() && openams_shared_lane_units()) {
+        openams_loaded_slot_ = 0;
+        // Every spool is known to the override store as it would be on a real
+        // printer; the shared-lane shape seeds the first three.
+        static const char* const COLORS[] = {"#E8E8E8", "#3CE05A", "#303030"};
+        static const char* const NAMES[] = {"White", "Green", "Dark Gray"};
+        for (int i = 0; i < 3; ++i) {
+            mock_db_set("lane_data", "lane" + std::to_string(i + 1),
+                        json{{"lane", std::to_string(i)},
+                             {"color", COLORS[i]},
+                             {"color_name", NAMES[i]},
+                             {"material", "ASA"},
+                             {"helix_material", "ASA"},
+                             {"helix_locked_color", true},
+                             {"helix_locked_material", true}});
+        }
+    } else if (is_mock_openams()) {
         mock_db_set("lane_data", "lane3",
                     json{{"lane", "2"},
                          {"color", "#3CE05A"},
@@ -1635,7 +1651,91 @@ bool MoonrakerClientMock::is_mock_openams() const {
     return effective_mock_ams_env() == "openams";
 }
 
+bool MoonrakerClientMock::openams_shared_lane_units() {
+    const char* units = std::getenv("HELIX_MOCK_OPENAMS_UNITS");
+    return units && std::string(units) == "shared";
+}
+
+nlohmann::json MoonrakerClientMock::openams_shared_status_json() const {
+    // A 1-bay AMS HT (slot 0) and a 4-bay AMS 2 Pro (slots 1-4) on ONE lane:
+    // one hub, one FPS, one extruder. Groups T0-T4 name a slot each; they are
+    // filament groups, not toolheads.
+    const int loaded = openams_loaded_slot_.load();
+    auto bay = [loaded](int id, int bay_index) {
+        return nlohmann::json{
+            {"id", id}, {"bay", bay_index}, {"ready", true}, {"loaded", id == loaded}};
+    };
+    nlohmann::json lane = {{"id", "fps"},
+                           {"state", loaded >= 0 ? "loaded" : "unloaded"},
+                           {"following", loaded >= 0},
+                           {"direction", 1},
+                           {"pressure", 0.79},
+                           {"set_point", 0.5}};
+    if (loaded >= 0) {
+        lane["current_group"] = "T" + std::to_string(loaded);
+        lane["current_slot"] = loaded;
+    } else {
+        lane["current_group"] = nullptr;
+        lane["current_slot"] = -1;
+    }
+    nlohmann::json groups = nlohmann::json::array();
+    for (int i = 0; i < 5; ++i) {
+        groups.push_back({{"name", "T" + std::to_string(i)}, {"lane", "fps"}, {"slots", {i}}});
+    }
+    nlohmann::json status = {
+        {"api_version", 1},
+        {"schema", "openams.manager"},
+        {"ready", true},
+        {"lanes", nlohmann::json::array({lane})},
+        {"units",
+         nlohmann::json::array(
+             {{{"id", "1"},
+               {"name", "ams_ht"},
+               {"kind", "oams"},
+               {"topology", "hub"},
+               {"lane", "fps"},
+               {"connected", true},
+               {"slots", nlohmann::json::array({bay(0, 0)})}},
+              {{"id", "2"},
+               {"name", "ams2"},
+               {"kind", "oams"},
+               {"topology", "hub"},
+               {"lane", "fps"},
+               {"connected", true},
+               {"slots", nlohmann::json::array({bay(1, 0), bay(2, 1), bay(3, 2), bay(4, 3)})}}})},
+        {"groups", groups}};
+    // klipper_openams publishes nothing beyond the versioned core above and
+    // advertises its macros; the openams plugin adds per-lane and topology views
+    // and advertises the manager commands the Mainsail panel runs.
+    const char* api = std::getenv("HELIX_MOCK_OPENAMS_API");
+    if (api && std::string(api) == "legacy") {
+        status["commands"] = {{"load", "OPENAMS_LOAD"},
+                              {"unload", "OPENAMS_UNLOAD"},
+                              {"cancel", "OAMSM_LOAD_FILAMENT_CANCEL"},
+                              {"reset", "OAMSM_CLEAR_ERRORS"}};
+    } else {
+        status["commands"] = {{"load", "OAMSM_LOAD_TO_TOOLHEAD"},
+                              {"unload", "OAMSM_UNLOAD_FROM_TOOLHEAD"},
+                              {"cancel", "OAMSM_LOAD_FILAMENT_CANCEL"},
+                              {"reset", "OAMSM_CLEAR_ERRORS"}};
+        status["lanes_by_fps"] = {{"fps",
+                                   {{"op", loaded >= 0 ? "loaded" : "idle"},
+                                    {"pressure", 0.79},
+                                    {"set_point", 0.5},
+                                    {"extruder", "extruder"}}}};
+        status["topology"] = {{"schema_version", 1},
+                              {"fps", {"fps"}},
+                              {"oams",
+                               {{"ams_ht", {{"idx", 1}, {"lane", "fps"}, {"bays", 1}}},
+                                {"ams2", {{"idx", 2}, {"lane", "fps"}, {"bays", 4}}}}}};
+    }
+    return status;
+}
+
 nlohmann::json MoonrakerClientMock::openams_status_json() const {
+    if (openams_shared_lane_units()) {
+        return openams_shared_status_json();
+    }
     // One hub unit, four bays, one FPS lane. Only bays 2 and 3 hold spools;
     // the lane's current slot follows openams_loaded_slot_.
     static const char* const GROUP_OF_SLOT[] = {"T0", "T1", "T2", "T0"};
@@ -4220,6 +4320,29 @@ void MoonrakerClientMock::stop_temperature_simulation(bool during_destruction) {
     }
 }
 
+void MoonrakerClientMock::service_openams_late_links(uint32_t tick) {
+    // HELIX_MOCK_OPENAMS_LATE_LINKS=1: the spool links of slots 3 and 4 arrive
+    // ~10s after start, the way openams_spoolman writes lane_data and announces
+    // it once a Spoolman lookup finishes.
+    static constexpr uint32_t kLateTick = 20;
+    if (tick != kLateTick || !is_mock_openams() || !openams_shared_lane_units() ||
+        !std::getenv("HELIX_MOCK_OPENAMS_LATE_LINKS")) {
+        return;
+    }
+    static const char* const COLORS[] = {"#1F3A93", "#F5F5F5"};
+    for (int i = 0; i < 2; ++i) {
+        mock_db_set("lane_data", "lane" + std::to_string(i + 4),
+                    json{{"lane", std::to_string(i + 3)},
+                         {"color", COLORS[i]},
+                         {"material", "PETG"},
+                         {"spool_id", 40 + i},
+                         {"name", "Late spool"}});
+    }
+    dispatch_method_callback("notify_openams_spoolman_status",
+                             json{{"method", "notify_openams_spoolman_status"},
+                                  {"params", json::array({json{{"state", "ready"}}})}});
+}
+
 void MoonrakerClientMock::temperature_simulation_loop() {
     spdlog::debug("[MoonrakerClientMock] temperature_simulation_loop ENTERED");
     const double base_dt = SIMULATION_INTERVAL_MS / 1000.0; // Base time step (0.5s)
@@ -4241,6 +4364,7 @@ void MoonrakerClientMock::temperature_simulation_loop() {
 
         // Fire any due mock pressure-advance console lines
         service_pending_pa_lines();
+        service_openams_late_links(tick);
 
         // Simulated time step covered by one real tick
         double effective_dt = sim_speed().accelerate_progress(base_dt);

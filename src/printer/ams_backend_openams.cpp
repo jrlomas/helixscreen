@@ -10,6 +10,7 @@
 #include "lane_apply.h"
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
+#include "lane_translation.h"
 #include "openams_api.h"
 #include "printer_discovery.h"
 
@@ -27,6 +28,8 @@ namespace {
 
 using json = nlohmann::json;
 
+constexpr const char* kSpoolmanStatusMethod = "notify_openams_spoolman_status";
+constexpr const char* kSpoolmanStatusHandler = "helix_openams_spoolman_status";
 constexpr const char* kLoad = "load";
 constexpr const char* kUnload = "unload";
 constexpr const char* kCancel = "cancel";
@@ -143,6 +146,62 @@ void AmsBackendOpenAms::on_started() {
         parse_snapshot_locked();
     }
     emit_event(EVENT_STATE_CHANGED);
+
+    // The openams_spoolman component rewrites lane_data whenever a spool link
+    // changes and announces it with this notification. A manager without the
+    // component never sends it, and its links live in the override store.
+    if (client_) {
+        client_->register_method_callback(kSpoolmanStatusMethod, kSpoolmanStatusHandler,
+                                          [this, token = lifetime_.token()](const json&) {
+                                              token.defer("AmsBackendOpenAms::spoolman_status",
+                                                          [this]() { refresh_lane_records(); });
+                                          });
+    }
+}
+
+void AmsBackendOpenAms::on_stopping() {
+    if (client_) {
+        client_->unregister_method_callback(kSpoolmanStatusMethod, kSpoolmanStatusHandler);
+    }
+}
+
+void AmsBackendOpenAms::refresh_lane_records() {
+    helix::ams::FilamentSlotOverrideStore* store = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        store = override_store_.get();
+    }
+    if (!store) {
+        return;
+    }
+    const int block = backend_index();
+    store->reload_async([this, block, token = lifetime_.token()](
+                            std::unordered_map<int, helix::ams::LaneDataRecord> records) {
+        token.defer(
+            "AmsBackendOpenAms::apply_lane_records",
+            [this, block, records = std::move(records)]() { apply_lane_records(block, records); });
+    });
+}
+
+void AmsBackendOpenAms::apply_lane_records(
+    int backend_block, const std::unordered_map<int, helix::ams::LaneDataRecord>& records) {
+    for (const auto& [slot_index, entry] : records) {
+        helix::ams::LaneSources sources = helix::ams::sources_from_record(
+            entry.record, entry.wire, helix::ams::LegacyLockKeys::LaneData);
+        // What a person set here stands: a re-read files what the namespace and
+        // the server say, never over an edit made in this app.
+        sources.local_user.reset();
+        helix::ams::file_lane_sources(helix::ams::lane_id_for(backend_block, slot_index), sources);
+    }
+    int total = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        total = system_info_.total_slots;
+    }
+    for (int slot = 0; slot < total; ++slot) {
+        repaint_slot_from_lane(slot);
+    }
+    emit_event(EVENT_STATE_CHANGED);
 }
 
 void AmsBackendOpenAms::handle_status(const json& status) {
@@ -166,6 +225,9 @@ void AmsBackendOpenAms::present_nothing_locked() {
     manager_ready_ = false;
     reported_action_ = AmsAction::IDLE;
     lane_states_.clear();
+    lane_ids_.clear();
+    lane_loaded_slots_.clear();
+    slot_lanes_.clear();
     present_by_slot_id_.clear();
     remote_slot_ids_.clear();
     slot_groups_.clear();
@@ -270,8 +332,14 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
             unit.slots.push_back(std::move(slot));
         }
         unit.slot_count = static_cast<int>(unit.slots.size());
-        unit_lanes.push_back(string_member(unit_json, "lane"));
+        unit.hub_id = string_member(unit_json, "lane");
+        unit_lanes.push_back(unit.hub_id);
         next.units.push_back(std::move(unit));
+    }
+
+    std::vector<std::string> next_slot_lanes;
+    for (std::size_t u = 0; u < next.units.size(); ++u) {
+        next_slot_lanes.insert(next_slot_lanes.end(), next.units[u].slots.size(), unit_lanes[u]);
     }
 
     std::vector<std::string> next_slot_groups(next_remote_ids.size());
@@ -306,6 +374,8 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
 
     reported_action_ = AmsAction::IDLE;
     lane_states_.clear();
+    lane_ids_.clear();
+    lane_loaded_slots_.clear();
     std::set<int> current_slots;
     std::string current_group;
     std::unordered_map<std::string, BufferHealth> lane_fps;
@@ -335,7 +405,9 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
             (reported_action_ != AmsAction::ERROR && action != AmsAction::IDLE)) {
             reported_action_ = action;
         }
+        lane_ids_.push_back(string_member(lane_json, "id"));
         auto global = remote_to_global.find(int_member(lane_json, "current_slot", -1));
+        lane_loaded_slots_.push_back(global != remote_to_global.end() ? global->second : -1);
         if (global != remote_to_global.end()) {
             current_slots.insert(global->second);
             if (SlotInfo* slot = next.get_slot_global(global->second)) {
@@ -360,6 +432,7 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
 
     remote_slot_ids_ = std::move(next_remote_ids);
     slot_groups_ = std::move(next_slot_groups);
+    slot_lanes_ = std::move(next_slot_lanes);
     groups_ = std::move(next_groups);
     commands_ = std::move(next_commands);
     manager_ready_ = bool_member(snapshot_, "ready", false);
@@ -565,14 +638,46 @@ int AmsBackendOpenAms::loaded_lane_count_locked() const {
     return static_cast<int>(std::count(lane_states_.begin(), lane_states_.end(), "loaded"));
 }
 
+std::string AmsBackendOpenAms::loaded_lane_of_slot_locked(int slot_index) const {
+    if (slot_index < 0) {
+        return {};
+    }
+    for (std::size_t i = 0; i < lane_loaded_slots_.size(); ++i) {
+        if (lane_loaded_slots_[i] == slot_index) {
+            return lane_ids_[i];
+        }
+    }
+    return {};
+}
+
+int AmsBackendOpenAms::loaded_slot_on_lane_locked(const std::string& lane) const {
+    for (std::size_t i = 0; i < lane_ids_.size(); ++i) {
+        if (lane_ids_[i] == lane) {
+            return lane_loaded_slots_[i];
+        }
+    }
+    return -1;
+}
+
+bool AmsBackendOpenAms::needs_unload_before_load(const AmsSystemInfo& info, int target_slot) const {
+    (void)info;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (target_slot < 0 || static_cast<std::size_t>(target_slot) >= slot_lanes_.size()) {
+        return false;
+    }
+    const int loaded =
+        loaded_slot_on_lane_locked(slot_lanes_[static_cast<std::size_t>(target_slot)]);
+    return loaded >= 0 && loaded != target_slot;
+}
+
 AmsError AmsBackendOpenAms::load_gcode_locked(int slot_index, std::string& gcode) const {
     if (AmsError accepts = manager_accepts_locked(); !accepts.success()) {
         return accepts;
     }
     const std::string command = command_locked(kLoad);
     if (command.empty()) {
-        return AmsErrorHelper::not_supported("OpenAMS load (install OPENAMS_LOAD from "
-                                             "oams_macros.cfg)");
+        return AmsErrorHelper::not_supported("OpenAMS load: this manager advertises no load "
+                                             "command");
     }
     if (AmsError valid = validate_slot_index_locked(slot_index); !valid.success()) {
         return valid;
@@ -587,6 +692,23 @@ AmsError AmsBackendOpenAms::load_gcode_locked(int slot_index, std::string& gcode
     }
     gcode = command + " GROUP=" + IMoonrakerAPI::gcode_param_value(group) +
             " SLOT=" + std::to_string(remote_slot_ids_[static_cast<std::size_t>(slot_index)]);
+
+    // The manager's load does not clear a lane that already holds another
+    // slot, so that lane is unloaded first, in the same script.
+    const std::string& lane = slot_lanes_[static_cast<std::size_t>(slot_index)];
+    const int loaded = lane.empty() ? -1 : loaded_slot_on_lane_locked(lane);
+    if (loaded >= 0 && loaded != slot_index) {
+        const std::string unload = command_locked(kUnload);
+        if (unload.empty()) {
+            return AmsErrorHelper::not_supported(
+                "OpenAMS swap: this manager advertises no unload command");
+        }
+        if (!IMoonrakerAPI::is_safe_gcode_param(lane)) {
+            return AmsErrorHelper::invalid_parameter("OpenAMS lane '" + lane +
+                                                     "' is not a usable gcode parameter");
+        }
+        gcode = unload + " FPS=" + IMoonrakerAPI::gcode_param_value(lane) + "\n" + gcode;
+    }
     return AmsErrorHelper::success();
 }
 
@@ -692,9 +814,8 @@ AmsError AmsBackendOpenAms::do_load_filament(int slot_index) {
 }
 
 AmsError AmsBackendOpenAms::do_unload_filament(int slot_index) {
-    (void)slot_index;
     std::string command;
-    int current_slot = -1;
+    int unload_slot = -1;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (AmsError accepts = manager_accepts_locked(); !accepts.success()) {
@@ -702,17 +823,33 @@ AmsError AmsBackendOpenAms::do_unload_filament(int slot_index) {
         }
         command = command_locked(kUnload);
         if (command.empty()) {
-            return AmsErrorHelper::not_supported("OpenAMS unload (install OPENAMS_UNLOAD from "
-                                                 "oams_macros.cfg)");
+            return AmsErrorHelper::not_supported("OpenAMS unload: this manager advertises no "
+                                                 "unload command");
         }
-        // The v1 unload takes no lane, so with two lanes loaded it cannot say
-        // which one it empties.
-        if (loaded_lane_count_locked() > 1) {
-            return AmsErrorHelper::not_supported("OpenAMS unload with several lanes loaded");
+        // The unload names the lane the loaded slot sits on, so it empties
+        // that lane even when several are loaded. A caller that names no
+        // loaded slot gets the one lane that is loaded, if there is only one.
+        unload_slot = slot_index;
+        std::string lane = loaded_lane_of_slot_locked(unload_slot);
+        if (lane.empty()) {
+            unload_slot = system_info_.current_slot;
+            lane = loaded_lane_of_slot_locked(unload_slot);
         }
-        current_slot = system_info_.current_slot;
+        if (lane.empty() && loaded_lane_count_locked() == 1) {
+            auto loaded = std::find_if(lane_loaded_slots_.begin(), lane_loaded_slots_.end(),
+                                       [](int s) { return s >= 0; });
+            if (loaded != lane_loaded_slots_.end()) {
+                unload_slot = *loaded;
+                lane = loaded_lane_of_slot_locked(unload_slot);
+            }
+        }
+        if (lane.empty() || !IMoonrakerAPI::is_safe_gcode_param(lane)) {
+            return AmsErrorHelper::invalid_parameter(
+                "OpenAMS unload: no loaded slot names a usable lane");
+        }
+        command += " FPS=" + IMoonrakerAPI::gcode_param_value(lane);
     }
-    return begin_operation(AmsAction::UNLOADING, current_slot, command, EVENT_UNLOAD_COMPLETE);
+    return begin_operation(AmsAction::UNLOADING, unload_slot, command, EVENT_UNLOAD_COMPLETE);
 }
 
 AmsError AmsBackendOpenAms::do_select_slot(int slot_index) {

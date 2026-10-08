@@ -1257,6 +1257,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     /// the printer.objects.query / subscribe handlers read it).
     bool is_mock_openams() const;
     [[nodiscard]] nlohmann::json openams_status_json() const;
+    /// HELIX_MOCK_OPENAMS_UNITS=shared: an AMS HT and an AMS 2 Pro on one lane.
+    [[nodiscard]] static bool openams_shared_lane_units();
 
     /**
      * @brief The `zmod_color` object as Z-Mod's firmware reports it.
@@ -2261,6 +2263,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     // backend). Slot identity is seeded into the lane_data namespace.
     /// Slot loaded onto the FPS lane, -1 when unloaded.
     std::atomic<int> openams_loaded_slot_{3};
+    [[nodiscard]] nlohmann::json openams_shared_status_json() const;
+    void service_openams_late_links(uint32_t tick);
 
     /// The `box` object frame, stock K1 shape (T1 unit, four bays).
     [[nodiscard]] nlohmann::json cfs_box_status_json() const;
@@ -2293,7 +2297,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     GcodeResult gcode_medusa(const std::string& gcode);
     GcodeResult gcode_zmod(const std::string& gcode);
     GcodeResult gcode_cfs(const std::string& gcode);
-    GcodeResult gcode_openams(const std::string& gcode);
+    GcodeResult gcode_openams(const std::string& script);
+    GcodeResult gcode_openams_line(const std::string& gcode);
     GcodeResult gcode_u1_feeding(const std::string& gcode);
     GcodeResult gcode_heater_temperature(const std::string& gcode);
     GcodeResult gcode_temperature_fan_target(const std::string& gcode);

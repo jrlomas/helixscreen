@@ -57,6 +57,10 @@ struct SystemPathData {
     // Toolhead sensor state
     bool has_toolhead_sensor = false; // System has a toolhead entry sensor
 
+    // Filament pressure sensor between the hub and the nozzle (single-toolhead layout)
+    bool has_fps = false;
+    int fps_fault = 0; // buffer severity: 0 neutral, 1 warning, 2 danger
+
     // Per-unit tool routing (mixed topology support)
     int unit_tool_count[MAX_UNITS] = {};     // Tools per unit (BT=4, OpenAMS=1)
     int unit_first_tool[MAX_UNITS] = {};     // First tool index for this unit

@@ -47,6 +47,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -769,6 +770,13 @@ void AmsOverviewPanel::refresh_system_path(const AmsSystemInfo& info, int curren
             ui_system_path_canvas_set_tool_virtual_numbers(system_path_, badges.numbers.data(),
                                                            static_cast<int>(badges.numbers.size()));
         }
+    }
+
+    // The feeding lane's pressure sensor, on the output line (single toolhead).
+    {
+        const helix::ui::BufferBoxState fps_box = helix::ui::ams_detail_buffer_box(info, -1);
+        helix::ui::ui_system_path_canvas_set_fps(
+            system_path_, fps_box.present && std::strcmp(fps_box.label, "FPS") == 0, fps_box.fault);
     }
 
     // Filament reach, error and the toolhead sensor

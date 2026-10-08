@@ -381,6 +381,7 @@ SystemToolLayout compute_system_tool_layout(const helix::AmsSystemInfo& info,
         UnitToolLayout utl;
         utl.min_virtual_tool = min_tool;
         utl.hub_tool_label = unit.hub_tool_label;
+        utl.hub_id = unit.hub_id;
 
         if (unit.absent) {
             // A box that is not on the bus feeds no nozzle, so the units around
@@ -474,7 +475,8 @@ SystemToolLayout compute_system_tool_layout(const helix::AmsSystemInfo& info,
                     !unit_extruder.empty() && prev.extruder_identity == unit_extruder;
                 const bool same_label =
                     unit.hub_tool_label >= 0 && prev.hub_tool_label == unit.hub_tool_label;
-                if (same_extruder || same_label) {
+                const bool same_hub = !unit.hub_id.empty() && prev.hub_id == unit.hub_id;
+                if (same_extruder || same_label || same_hub) {
                     shared_phys = prev.first_physical_tool;
                     break;
                 }

@@ -181,6 +181,21 @@ void ui_system_path_canvas_set_unit_lane(lv_obj_t* obj, int unit_index, int segm
                                          uint32_t color);
 
 /**
+ * @brief Set the filament pressure sensor (FPS) on the output line
+ *
+ * Single-toolhead layout only: a box labeled FPS sits between the hub and the
+ * nozzle. @p fault tints it like the detail view's buffer box (0 or -1 neutral,
+ * 1 warning, 2 danger).
+ *
+ * @param obj The system_path_canvas widget
+ * @param present Whether the system's feeding lane has a pressure sensor
+ * @param fault Buffer severity, see ams_detail_buffer_box()
+ */
+namespace helix::ui {
+void ui_system_path_canvas_set_fps(lv_obj_t* obj, bool present, int fault);
+} // namespace helix::ui
+
+/**
  * @brief Set per-unit tool routing info
  *
  * For mixed topology systems, each unit can route to different tools:

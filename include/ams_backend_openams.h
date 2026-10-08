@@ -63,6 +63,10 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
 
     /// Unload is offered only where the manager advertises a command for it.
     [[nodiscard]] bool can_unload_from_toolhead(int slot_index) const override;
+    /// A load needs the lane cleared only when another slot on the TARGET's
+    /// lane is loaded; slots on other lanes share nothing with it.
+    [[nodiscard]] bool needs_unload_before_load(const AmsSystemInfo& info,
+                                                int target_slot) const override;
 
     AmsError recover() override;
     AmsError reset() override;
@@ -109,6 +113,7 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
     AmsError do_change_tool(int tool_number) override;
 
     void on_started() override;
+    void on_stopping() override;
     void handle_status(const nlohmann::json& status) override;
     const char* backend_log_tag() const override {
         return "[AMS OpenAMS]";
@@ -143,6 +148,14 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
         std::vector<int> slots;
     };
 
+    /// Re-read the lane_data records and file what they say onto the lanes.
+    /// The read never blocks and never holds the backend mutex; the filing
+    /// runs on the main thread. A spool link written after start (by the
+    /// openams_spoolman component, or by another tool) shows up through this.
+    void refresh_lane_records();
+    void apply_lane_records(int backend_block,
+                            const std::unordered_map<int, helix::ams::LaneDataRecord>& records);
+
     void parse_snapshot_locked();
     void present_nothing_locked();
     AmsError begin_operation(AmsAction action, int slot_index, const std::string& gcode,
@@ -155,9 +168,17 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
     /// The advertised command for @p action ("load", "unload", "cancel",
     /// "reset"), or empty when the manager does not offer it.
     [[nodiscard]] std::string command_locked(const char* action) const;
+    /// The slot loaded on @p lane, or -1.
+    [[nodiscard]] int loaded_slot_on_lane_locked(const std::string& lane) const;
+    /// The load for @p slot_index. When another slot on the same lane is
+    /// loaded, the lane is unloaded first in the same script, so the manager
+    /// sees one operation.
     [[nodiscard]] AmsError load_gcode_locked(int slot_index, std::string& gcode) const;
     [[nodiscard]] bool slot_loadable_locked(int slot_index) const;
     [[nodiscard]] int loaded_lane_count_locked() const;
+    /// The lane id the unload command names for @p slot_index, or empty when
+    /// that slot is not the one loaded on any lane.
+    [[nodiscard]] std::string loaded_lane_of_slot_locked(int slot_index) const;
     [[nodiscard]] static AmsAction action_from_lane_state(const std::string& state);
 
     /// Last full view of oams_manager: status updates carry only the fields
@@ -168,6 +189,11 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
     PathTopology topology_ = PathTopology::HUB;
     AmsAction reported_action_ = AmsAction::IDLE;
     std::vector<std::string> lane_states_;
+    /// Per lane (parallel to lane_states_): its id and the global slot it holds.
+    std::vector<std::string> lane_ids_;
+    std::vector<int> lane_loaded_slots_;
+    /// The lane each global slot's unit feeds; empty when the unit names none.
+    std::vector<std::string> slot_lanes_;
     /// Whether each manager slot id held a spool on the last frame; the
     /// baseline an insert is judged against.
     std::unordered_map<int, bool> present_by_slot_id_;

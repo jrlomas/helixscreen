@@ -133,18 +133,40 @@ MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_cfs(const std::strin
 // OPENAMS_UNLOAD / OPENAMS_LOAD GROUP=<name>: flip the lane to the requested
 // group's first ready bay (bays 2 and 3 hold spools; T0 = {0,3}, T1 = {1},
 // T2 = {2}).
-MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_openams(const std::string& gcode) {
+MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_openams(const std::string& script) {
+    // A script runs its lines in order, as Klipper does.
+    GcodeResult result = std::nullopt;
+    size_t start = 0;
+    while (start <= script.size()) {
+        size_t end = script.find('\n', start);
+        if (end == std::string::npos) {
+            end = script.size();
+        }
+        if (auto r = gcode_openams_line(script.substr(start, end - start))) {
+            result = r;
+        }
+        start = end + 1;
+    }
+    return result;
+}
+
+MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_openams_line(const std::string& gcode) {
     const size_t token_end = gcode.find_first_of(" \t");
     const std::string cmd = gcode.substr(0, token_end);
-    if (cmd == "OPENAMS_UNLOAD") {
+    if (cmd == "OPENAMS_UNLOAD" || cmd == "OAMSM_UNLOAD_FROM_TOOLHEAD") {
         openams_loaded_slot_ = -1;
         return 0;
     }
-    if (cmd == "OPENAMS_LOAD") {
+    if (cmd == "OPENAMS_LOAD" || cmd == "OAMSM_LOAD_TO_TOOLHEAD") {
         const size_t pos = gcode.find("GROUP=");
         const std::string group =
             pos == std::string::npos ? "" : gcode.substr(pos + 6, gcode.find(' ', pos) - pos - 6);
-        if (group == "T0") {
+        if (openams_shared_lane_units()) {
+            // Group Tn is slot n on the shared-lane shape.
+            if (group.size() == 2 && group[0] == 'T' && group[1] >= '0' && group[1] <= '4') {
+                openams_loaded_slot_ = group[1] - '0';
+            }
+        } else if (group == "T0") {
             openams_loaded_slot_ = 3;
         } else if (group == "T2") {
             openams_loaded_slot_ = 2;

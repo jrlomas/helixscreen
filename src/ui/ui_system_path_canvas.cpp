@@ -8,6 +8,7 @@
 #include "ui_system_path_plan.h"
 #include "ui_toolhead_badge.h"
 
+#include "clog_meter_geometry.h"
 #include "display_numbering.h"
 #include "filament_tube_stroker.h"
 #include "helix-xml/src/xml/lv_xml.h"
@@ -132,6 +133,24 @@ static void draw_hub_box(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t widt
         lv_area_t label_area = {cx - width / 2, cy - font_h / 2, cx + width / 2, cy + font_h / 2};
         lv_draw_label(layer, &label_dsc, &label_area);
     }
+}
+
+// The lane's filament pressure sensor, a labeled box on the output line
+// between the hub and the nozzle, tinted by the buffer severity.
+static void draw_fps_box(lv_layer_t* layer, const SystemPathData* data, const SysLayout& L) {
+    const int32_t hub_bottom = L.hub_y + L.hub_h / 2;
+    const int32_t nozzle_top = L.nozzle_y - data->extruder_scale * 2;
+    const int32_t box_w = data->hub_width * 2 / 3;
+    const int32_t box_h = L.hub_h * 2 / 3;
+    const int32_t box_y = hub_bottom + (nozzle_top - hub_bottom) / 2;
+    lv_color_t bg = data->color_hub_bg;
+    if (data->fps_fault > 0) {
+        const auto status = static_cast<helix::ui::ClogMeterStatus>(std::min(data->fps_fault, 2));
+        bg = lv_color_mix(theme_manager_get_color(helix::ui::buffer_status_token(status)), bg, 85);
+    }
+    draw_hub_box(layer, L.center_x, box_y, box_w, box_h, bg, data->color_hub_border,
+                 data->color_text, data->label_font, data->border_radius,
+                 "FPS"); // i18n: do not translate - hardware abbreviation
 }
 
 // ============================================================================
@@ -263,6 +282,8 @@ static void system_path_draw_cb(lv_event_t* e) {
         draw_hub_box(layer, L.center_x, L.hub_y, data->hub_width, L.hub_h, boxes.combiner_bg,
                      data->color_hub_border, data->color_text, data->label_font,
                      data->border_radius, "Hub");
+        if (data->has_fps)
+            draw_fps_box(layer, data, L);
         fpath::paint_box_bands(layer, plan, pal);
         draw_single_nozzle(layer, data, L);
         draw_status_beside_nozzle(layer, data, L);
@@ -495,6 +516,19 @@ void ui_system_path_canvas_set_unit_hub_sensor(lv_obj_t* obj, int unit_index, bo
     data->unit_hub_triggered[unit_index] = triggered;
     lv_obj_invalidate(obj);
 }
+
+namespace helix::ui {
+void ui_system_path_canvas_set_fps(lv_obj_t* obj, bool present, int fault) {
+    auto* data = get_data(obj);
+    if (!data)
+        return;
+    if (data->has_fps == present && data->fps_fault == fault)
+        return;
+    data->has_fps = present;
+    data->fps_fault = fault;
+    lv_obj_invalidate(obj);
+}
+} // namespace helix::ui
 
 void ui_system_path_canvas_set_toolhead_sensor(lv_obj_t* obj, bool has_toolhead_sensor) {
     auto* data = get_data(obj);
