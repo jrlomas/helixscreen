@@ -248,6 +248,12 @@ class PrintSelectCardView : public ContainerDeleteNet {
         return static_cast<bool>(prebuild_timer_);
     }
 
+    /// The prebuild's periodic timer, which the unit-test harness does not run
+    /// unless a test gives it a finite repeat count.
+    [[nodiscard]] lv_timer_t* prebuild_timer_for_test() const {
+        return prebuild_timer_.get();
+    }
+
     /**
      * @brief Shows @p file's thumbnail on the one card bound to @p file_index
      *

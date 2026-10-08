@@ -407,14 +407,12 @@ void PrintSelectCardView::prebuild(const CardDimensions& dims, size_t expected_f
     }
     prebuild_dims_ = std::make_unique<CardDimensions>(dims);
 
-    // One card per tick, at a period that leaves the frames between them to
-    // the display. Finite, so it cannot outlive its work: every tick builds a
-    // card or ends the prebuild.
-    constexpr uint32_t PREBUILD_TICK_MS = 30;
-    lv_timer_t* timer = lv_timer_create(on_prebuild_tick, PREBUILD_TICK_MS, this);
-    lv_timer_set_repeat_count(timer,
-                              static_cast<int32_t>(prebuild_target_ - card_pool_.size() + 1));
-    prebuild_timer_.reset(timer);
+    // One card per tick. LVGL measures the period from the start of a tick and
+    // a card takes tens of ms to build, so the period has to be well past that
+    // for the display refresh and input to run between cards. The tick ends the
+    // timer itself; it never runs out on its own.
+    constexpr uint32_t PREBUILD_TICK_MS = 100;
+    prebuild_timer_.reset(lv_timer_create(on_prebuild_tick, PREBUILD_TICK_MS, this));
     spdlog::debug("[PrintSelectCardView] Prebuilding pool {} -> {}", card_pool_.size(),
                   prebuild_target_);
 }

@@ -89,3 +89,15 @@ TEST_CASE_METHOD(UnvisitedPrintSelectFixture,
     NavigationManager::instance().set_active(PanelId::Home);
     CHECK_FALSE(cards->is_prebuilding());
 }
+
+TEST_CASE_METHOD(UnvisitedPrintSelectFixture,
+                 "Switching print-select to the list view stops building cards",
+                 "[print_select][lazy]") {
+    const auto* cards = PrintSelectPanelTestAccess::card_view(*panel_);
+    REQUIRE(cards != nullptr);
+    NavigationManager::instance().set_active(PanelId::PrintSelect);
+    REQUIRE(cards->is_prebuilding());
+
+    panel_->toggle_view();
+    CHECK_FALSE(cards->is_prebuilding());
+}

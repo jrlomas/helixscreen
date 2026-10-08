@@ -860,6 +860,9 @@ void PrintSelectPanel::toggle_view() {
     if (current_view_mode_ == PrintSelectViewMode::CARD) {
         // Switch to list view
         current_view_mode_ = PrintSelectViewMode::LIST;
+        if (card_view_) {
+            card_view_->stop_prebuild();
+        }
 
         // Update reactive subject - XML bindings handle container visibility
         lv_subject_set_int(&view_mode_subject_, 1);

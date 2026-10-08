@@ -296,6 +296,14 @@ std::vector<lv_area_t> invalid_areas() {
     return {disp->inv_areas, disp->inv_areas + disp->inv_p};
 }
 
+/// The prebuild timer is periodic, which the test harness only runs with a
+/// finite repeat count; the tick still ends it once the pool is full.
+void lend_prebuild_ticks(const PrintSelectCardView& view) {
+    if (lv_timer_t* t = view.prebuild_timer_for_test()) {
+        lv_timer_set_repeat_count(t, 1000);
+    }
+}
+
 /// The shown card for `file_index`.
 lv_obj_t* card_for(lv_obj_t* container, size_t file_index) {
     for (uint32_t i = 0; i < lv_obj_get_child_count(container); ++i) {
@@ -444,12 +452,13 @@ TEST_CASE_METHOD(
     REQUIRE(window > 2);
 
     view.prebuild(dims, files.size());
+    lend_prebuild_ticks(view);
     CHECK(view.is_prebuilding());
     CHECK(view.pool_size() == 0); // nothing is built in the caller's frame
-    process_lvgl(50);
+    process_lvgl(120);
     CHECK(view.pool_size() == 1);
     for (int i = 0; i < 100 && view.is_prebuilding(); ++i) {
-        process_lvgl(50);
+        process_lvgl(120);
     }
     CHECK_FALSE(view.is_prebuilding());
     CHECK(view.pool_size() == window);
@@ -476,13 +485,14 @@ TEST_CASE_METHOD(LVGLUITestFixture,
     const size_t window = window_cards(container, dims, 20);
 
     view.prebuild(dims, files.size());
-    process_lvgl(50);
+    lend_prebuild_ticks(view);
+    process_lvgl(120);
     REQUIRE(view.pool_size() == 1);
 
     view.populate(files, dims);
     CHECK(view.pool_size() == window);
     for (int i = 0; i < 5; ++i) {
-        process_lvgl(50);
+        process_lvgl(120);
     }
     CHECK_FALSE(view.is_prebuilding());
     CHECK(view.pool_size() == window);
@@ -501,22 +511,24 @@ TEST_CASE_METHOD(LVGLUITestFixture, "CardView: a stopped prebuild builds no more
     REQUIRE(view.setup(container, [](size_t) {}, nullptr));
     const CardDimensions dims{4, 2, 160, 200};
     view.prebuild(dims, 20);
-    process_lvgl(50);
+    lend_prebuild_ticks(view);
+    process_lvgl(120);
     REQUIRE(view.pool_size() == 1);
 
     view.stop_prebuild();
     CHECK_FALSE(view.is_prebuilding());
     for (int i = 0; i < 10; ++i) {
-        process_lvgl(50);
+        process_lvgl(120);
     }
     CHECK(view.pool_size() == 1);
 
     // Cleanup mid-prebuild leaves no tick behind to reach the freed pool.
     view.prebuild(dims, 20);
+    lend_prebuild_ticks(view);
     REQUIRE(view.is_prebuilding());
     view.cleanup();
     for (int i = 0; i < 5; ++i) {
-        process_lvgl(50);
+        process_lvgl(120);
     }
     CHECK(view.pool_size() == 0);
     lv_obj_delete(container);
