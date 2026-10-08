@@ -12,6 +12,8 @@
 #include "../lvgl_ui_test_fixture.h"
 #include "../ui_test_utils.h"
 #include "app_globals.h"
+#include "camera_frame.h"
+#include "camera_stream.h"
 #include "moonraker_api.h"
 #include "moonraker_client_mock.h"
 #include "settings_manager.h"
@@ -183,7 +185,12 @@ TEST_CASE_METHOD(LVGLUITestFixture, "SpaghettiDetectionModal preview follows the
         std::function<void(std::string)> pending;
         helix::CameraFrameSources src;
         src.stream_frame = [](int, int) { return helix::CameraFrame{}; };
-        src.snapshot = [] { return helix::SnapshotTarget{"http://cam/snapshot", nullptr}; };
+        src.snapshot = [] {
+            return helix::SnapshotTarget{
+                "http://cam/snapshot", [](const std::string& j, int w, int h) {
+                    return helix::CameraStream::decode_snapshot(j, w, h, {});
+                }};
+        };
         src.fetch = [&](const std::string&, std::function<void(std::string)> done) {
             pending = std::move(done);
         };

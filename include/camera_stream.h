@@ -179,8 +179,11 @@ class CameraStream {
     /// toggling a flip Moonraker already applies undoes it.
     static Transform transform_from_config(const nlohmann::json& config, const WebcamInfo& feed);
 
-    /// Apply @p t to a decoded frame, by the same pixel code the stream uses.
-    static CameraFrame transform_frame(const CameraFrame& frame, const Transform& t);
+    /// Decode one JPEG through the stream's own decoder (turbojpeg with
+    /// decode-time scaling when available), apply @p t, and fit the result to
+    /// max_w x max_h as displayed. Empty when it does not decode.
+    static CameraFrame decode_snapshot(const std::string& jpeg, int max_w, int max_h,
+                                       const Transform& t);
 
     /// Rotation + flip resolved to output dimensions and the effective pixel transform.
     struct TransformParams {
@@ -201,12 +204,12 @@ class CameraStream {
                                  size_t& scratch_size);
 
     /**
-     * @brief Downscaled copy of the newest frame of any running stream.
+     * @brief Downscaled copy of the newest frame of the running stream showing @p feed.
      *
      * The copy is owned by the caller; nothing points into a stream's buffers.
-     * Empty when no stream is running or none has delivered a frame yet.
+     * Empty when that stream is not running or has not decoded a frame yet.
      */
-    static CameraFrame latest_running_frame(int max_w, int max_h);
+    static CameraFrame latest_running_frame(const WebcamInfo& feed, int max_w, int max_h);
 
     void start(const std::string& stream_url, const std::string& snapshot_url,
                FrameCallback on_frame, ErrorCallback on_error = nullptr);
@@ -274,6 +277,7 @@ class CameraStream {
     // Double buffer — decode into back, swap to front on delivery
     lv_draw_buf_t* front_buf_ = nullptr;
     lv_draw_buf_t* back_buf_ = nullptr;
+    bool has_frame_ = false; // a decoded frame has swapped into front_buf_ (guarded by buf_mutex_)
     int frame_width_ = 0;
     int frame_height_ = 0;
     std::mutex buf_mutex_;

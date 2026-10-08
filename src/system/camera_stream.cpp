@@ -97,11 +97,12 @@ std::mutex g_streams_mutex;
 std::vector<CameraStream*> g_streams;
 } // namespace
 
-CameraFrame CameraStream::latest_running_frame(int max_w, int max_h) {
+CameraFrame CameraStream::latest_running_frame(const WebcamInfo& feed, int max_w, int max_h) {
     std::lock_guard<std::mutex> reg(g_streams_mutex);
     for (CameraStream* s : g_streams) {
         std::lock_guard<std::mutex> lock(s->buf_mutex_);
-        if (!s->running_.load() || !s->front_buf_)
+        if (!s->running_.load() || !s->has_frame_ || s->stream_url_ != feed.stream_url ||
+            s->snapshot_url_ != feed.snapshot_url)
             continue;
         return downscale_bgr(static_cast<const uint8_t*>(s->front_buf_->data), s->frame_width_,
                              s->frame_height_, static_cast<int>(s->front_buf_->header.stride),
@@ -814,19 +815,20 @@ CameraStream::Transform CameraStream::transform_from_config(const nlohmann::json
     return t;
 }
 
-CameraFrame CameraStream::transform_frame(const CameraFrame& frame, const Transform& t) {
-    if (frame.empty())
+CameraFrame CameraStream::decode_snapshot(const std::string& jpeg, int max_w, int max_h,
+                                          const Transform& t) {
+    // A throwaway decoder: same turbojpeg path, header check and decode-time
+    // scaling as a stream, aimed at the preview box instead of a widget.
+    CameraStream decoder;
+    decoder.set_target_size(max_w, max_h);
+    decoder.set_rotation(t.rotation);
+    decoder.set_flip(t.flip_h, t.flip_v);
+    if (!decoder.decode_jpeg(reinterpret_cast<const uint8_t*>(jpeg.data()), jpeg.size()) ||
+        !decoder.back_buf_)
         return {};
-    auto params = resolve_transform(t, frame.w, frame.h);
-    CameraFrame out;
-    out.w = params.out_w;
-    out.h = params.out_h;
-    out.bgr.resize(static_cast<size_t>(out.w) * out.h * 3);
-    std::unique_ptr<uint8_t[]> scratch;
-    size_t scratch_size = 0;
-    transform_pixels(frame.bgr.data(), frame.w, frame.h, frame.w * 3, false, params, out.bgr.data(),
-                     out.w * 3, scratch, scratch_size);
-    return out;
+    return downscale_bgr(static_cast<const uint8_t*>(decoder.back_buf_->data), decoder.frame_width_,
+                         decoder.frame_height_, static_cast<int>(decoder.back_buf_->header.stride),
+                         max_w, max_h);
 }
 
 void CameraStream::apply_pixel_transform(const uint8_t* src, int src_w, int src_h, int src_stride,
@@ -1104,6 +1106,7 @@ void CameraStream::deliver_frame() {
     {
         std::lock_guard<std::mutex> lock(buf_mutex_);
         std::swap(front_buf_, back_buf_);
+        has_frame_ = true;
     }
 
     // No frame_pending_ gate — camera continues decoding immediately.
@@ -1157,6 +1160,7 @@ void CameraStream::ensure_buffers(int width, int height) {
     }
 
     spdlog::debug("[CameraStream] Allocating buffers for {}x{}", width, height);
+    has_frame_ = false;
 
     // Retire old front buffer — LVGL may still reference it via lv_image_set_src
     // until the widget processes the next frame and updates the source pointer.
@@ -1202,6 +1206,7 @@ void CameraStream::free_buffers() {
     transpose_buf_size_ = 0;
     frame_width_ = 0;
     frame_height_ = 0;
+    has_frame_ = false;
 }
 
 } // namespace helix

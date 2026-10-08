@@ -27,6 +27,7 @@
 #include "ams_types.h"
 #include "app_globals.h"
 #include "camera_frame.h"
+#include "camera_stream.h"
 #include "color_utils.h"
 #include "data_root_resolver.h"
 #include "helix-xml/src/xml/lv_xml.h"
@@ -240,7 +241,12 @@ bool show_demo_overlay(const std::string& name) {
         auto sources = helix::live_camera_sources();
         if (const char* url = std::getenv("HELIX_DEMO_SNAPSHOT_URL"); url && *url) {
             sources.stream_frame = nullptr;
-            sources.snapshot = [u = std::string(url)] { return helix::SnapshotTarget{u, nullptr}; };
+            sources.snapshot = [u = std::string(url)] {
+                return helix::SnapshotTarget{u, [](const std::string& j, int w, int h) {
+                                                 return helix::CameraStream::decode_snapshot(j, w,
+                                                                                             h, {});
+                                             }};
+            };
         }
         auto modal = std::make_unique<SpaghettiDetectionModal>();
         modal->set_detection("Spaghetti detected (78%)");

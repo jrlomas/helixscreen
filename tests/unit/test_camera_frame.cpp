@@ -40,7 +40,10 @@ std::string benchy_jpeg() {
 struct FakeCamera {
     CameraFrame stream;
     std::string url;
-    std::function<CameraFrame(CameraFrame)> adjust;
+    std::function<CameraFrame(const std::string&, int, int)> decode = [](const std::string& j,
+                                                                         int w, int h) {
+        return CameraStream::decode_snapshot(j, w, h, {});
+    };
     int fetches = 0;
     std::function<void(std::string)> pending;
 
@@ -50,7 +53,7 @@ struct FakeCamera {
         s.snapshot = [this] {
             SnapshotTarget t;
             t.url = url;
-            t.adjust = adjust;
+            t.decode = decode;
             return t;
         };
         s.fetch = [this](const std::string&, std::function<void(std::string)> done) {
@@ -108,23 +111,24 @@ TEST_CASE_METHOD(LVGLTestFixture, "acquire_camera_frame picks stream, snapshot, 
         CHECK(late == 1);
     }
 
-    SECTION("the snapshot's rotation/flip is applied before it is shown") {
-        auto jpeg = benchy_jpeg();
+    SECTION("rotation 90 fits the box as displayed, not as decoded") {
+        auto jpeg = benchy_jpeg(); // 175x182, near square: use a tall box to tell axes apart
         FakeCamera cam;
         cam.url = "http://cam/snapshot";
-        cam.adjust = [](CameraFrame f) {
-            return CameraStream::transform_frame(f, {CameraRotation::Rotate90, false, false});
+        cam.decode = [](const std::string& j, int w, int h) {
+            return CameraStream::decode_snapshot(j, w, h, {CameraRotation::Rotate90, false, false});
         };
         int w = 0, h = 0;
-        acquire_camera_frame(cam.sources(), 100, 100, owner.token(), [&](CameraFrame f) {
+        acquire_camera_frame(cam.sources(), 200, 40, owner.token(), [&](CameraFrame f) {
             w = f.w;
             h = f.h;
         });
         cam.pending(jpeg);
         helix::ui::UpdateQueue::instance().drain();
-        auto plain = decode_jpeg_frame(jpeg, 100, 100);
-        CHECK(w == plain.h);
-        CHECK(h == plain.w);
+        CHECK(w > 0);
+        CHECK(w <= 200);
+        CHECK(h <= 40);
+        CHECK(w >= h); // the source is taller than wide; rotated it is not
     }
 
     SECTION("a failed fetch delivers nothing") {
@@ -163,15 +167,4 @@ TEST_CASE("transform_from_config XORs the user's flip with Moonraker's", "[camer
     CHECK(t.rotation == CameraRotation::Rotate270);
     CHECK_FALSE(t.flip_h); // Moonraker flips, user flips: net none
     CHECK(t.flip_v);
-}
-
-TEST_CASE("transform_frame matches the pixel rule: 180 flips both axes", "[camera_frame]") {
-    CameraFrame f;
-    f.w = 2;
-    f.h = 1;
-    f.bgr = {1, 1, 1, 2, 2, 2};
-    auto g = CameraStream::transform_frame(f, {CameraRotation::Rotate180, false, false});
-    REQUIRE(g.w == 2);
-    CHECK(g.bgr[0] == 2);
-    CHECK(g.bgr[3] == 1);
 }

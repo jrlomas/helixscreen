@@ -31,9 +31,6 @@ struct CameraFrame {
 /// aspect preserved, never enlarged. Empty for degenerate input.
 CameraFrame downscale_bgr(const uint8_t* src, int w, int h, int stride, int max_w, int max_h);
 
-/// Decode a JPEG and downscale it to fit max_w x max_h. Empty when it does not decode.
-CameraFrame decode_jpeg_frame(const std::string& jpeg, int max_w, int max_h);
-
 /// LVGL draw buffer holding a copy of @p f (caller frees with lv_draw_buf_destroy).
 /// Main thread only. Null for an empty frame.
 lv_draw_buf_t* to_draw_buf(const CameraFrame& f);
@@ -41,8 +38,9 @@ lv_draw_buf_t* to_draw_buf(const CameraFrame& f);
 /// One snapshot to fetch and how to present it.
 struct SnapshotTarget {
     std::string url; ///< empty when no camera is configured
-    /// Applied to the decoded frame on the worker (rotation/flip); empty = as decoded.
-    std::function<CameraFrame(CameraFrame)> adjust;
+    /// Turns the fetched JPEG into a frame fitting max_w x max_h, rotation and
+    /// flips applied. Runs on the worker.
+    std::function<CameraFrame(const std::string& jpeg, int max_w, int max_h)> decode;
 };
 
 /// Where a still of the camera comes from. Injectable so the choice between
