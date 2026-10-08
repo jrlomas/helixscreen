@@ -5,6 +5,7 @@
 
 #include "ui_update_queue.h"
 
+#include "bed_mesh_presence.h"
 #include "json_utils.h"
 #include "moonraker_api_internal.h"
 #include "runtime_config.h"
@@ -43,19 +44,17 @@ MoonrakerAPI::MoonrakerAPI(IMoonrakerClient& client, PrinterState& state)
     client_.set_bed_mesh_callback([this](const json& bed_mesh) {
         this->advanced_api_->update_bed_mesh(bed_mesh);
         // Presence verdicts only when the update actually speaks about
-        // probed_matrix (klippy sends it as null on clear); partial updates
-        // carry no information about presence. Copy the observer under the
-        // mutex: it is set on the main thread and read here on the
-        // WebSocket thread, and on weakly-ordered targets an unsynchronized
-        // read can stay stale-null for the process lifetime.
+        // probed_matrix; partial updates carry no information about presence. Copy the observer
+        // under the mutex: it is set on the main thread and read here on the WebSocket thread, and
+        // on weakly-ordered targets an unsynchronized read can stay stale-null for the process
+        // lifetime.
         std::function<void(bool)> observer;
         {
             std::lock_guard<std::mutex> lock(bed_mesh_presence_mutex_);
             observer = bed_mesh_presence_observer_;
         }
         if (bed_mesh.contains("probed_matrix")) {
-            const auto& matrix = bed_mesh["probed_matrix"];
-            const bool present = matrix.is_array() && !matrix.empty();
+            const bool present = helix::probed_matrix_has_mesh(bed_mesh["probed_matrix"]);
             if (observer) {
                 observer(present);
             } else {
