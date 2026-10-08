@@ -109,6 +109,8 @@ class PrinterManagerOverlay : public OverlayBase {
     }
 
   private:
+    friend struct PrinterManagerOverlayTestAccess;
+
     void on_ui_destroyed() override;
 
     //

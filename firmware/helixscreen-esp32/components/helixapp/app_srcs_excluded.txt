@@ -85,7 +85,7 @@ src/application/application_sdl_shortcuts.cpp  # not in the v1 Core+AMS cut
 src/application/color_transform.cpp  # not in the v1 Core+AMS cut
 src/application/demo_overlays.cpp  # not in the v1 Core+AMS cut
 src/application/detect_printer_cmd.cpp  # not in the v1 Core+AMS cut
-src/application/discovery_steps.cpp  # not in the v1 Core+AMS cut
+src/application/discovery_steps.cpp  # desktop tail: update checker, telemetry, wizard prompts, timelapse; the firmware runs discovery_steps_core.cpp
 src/application/display_manager.cpp  # not in the v1 Core+AMS cut
 src/application/display_sleep_controller.cpp  # not in the v1 Core+AMS cut
 src/application/refresh_period_hold.cpp  # not in the v1 Core+AMS cut
@@ -99,7 +99,6 @@ src/application/fault_surface_correlation.cpp  # not in the v1 Core+AMS cut
 src/application/gcode_error_router.cpp  # not in the v1 Core+AMS cut
 src/application/gcode_narration_router.cpp  # not in the v1 Core+AMS cut
 src/application/gcode_response_routing.cpp  # not in the v1 Core+AMS cut
-src/application/hardware_fingerprint.cpp  # not in the v1 Core+AMS cut
 src/application/hardware_setup_prompter.cpp  # not in the v1 Core+AMS cut
 src/application/lan_client_auth_router.cpp  # not in the v1 Core+AMS cut
 src/application/main_loop_handler.cpp  # not in the v1 Core+AMS cut
@@ -132,7 +131,6 @@ src/printer/detection_manager.cpp  # not in the v1 Core+AMS cut
 src/printer/lan_client_authorization.cpp  # not in the v1 Core+AMS cut
 src/printer/macro_fan_analyzer.cpp  # not in the v1 Core+AMS cut
 src/printer/macro_manager.cpp  # not in the v1 Core+AMS cut
-src/printer/printer_discovery.cpp  # not in the v1 Core+AMS cut
 src/printer/screws_tilt_share_text.cpp  # not in the v1 Core+AMS cut
 src/printer/spoolman_active_spool_sync.cpp  # scope decision 2026-08-12: unreachable while ESP discovery omits server.info#2; re-adding requires restoring these TUs + verifying flash budget
 src/printer/spoolman_manager.cpp  # scope decision 2026-08-12: unreachable while ESP discovery omits server.info#2; re-adding requires restoring these TUs + verifying flash budget; until then the UI entry points fail with an error toast

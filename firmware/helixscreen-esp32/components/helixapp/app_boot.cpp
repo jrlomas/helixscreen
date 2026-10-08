@@ -38,11 +38,9 @@
 #include "ui_change_host_modal.h"
 #include "ui_component_header_bar.h"
 #include "ui_dialog.h"
-#include "ui_emergency_stop.h"
 #include "ui_gcode_viewer.h"
 #include "ui_gradient_canvas.h"
 #include "ui_icon.h"
-#include "ui_keyboard_manager.h"
 #include "ui_nav_manager.h"
 #include "ui_notification_history.h"
 #include "ui_notification_manager.h"
@@ -52,10 +50,8 @@
 #include "ui_switch.h"
 #include "ui_temp_display.h"
 #include "ui_tile_rung.h"
-#include "ui_toast_manager.h"
 #include "ui_update_queue.h"
 
-#include "abort_manager.h"
 #include "ams_state.h"
 #include "app_globals.h"
 #include "asset_manager.h"
@@ -65,18 +61,18 @@
 #include "config_storage.h"
 #include "connection_state.h"
 #include "data_root_resolver.h"
+#include "discovery_steps.h"
 #include "esp_heap_caps.h"
 #include "esp_http_lane.h"
 #include "esp_log.h"
 #include "esp_moonraker_client.h"
 #include "esp_system.h"
 #include "esp_timer.h"
-#include "filament_sensor_manager.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hardware_fingerprint.h"
 #include "helix_fs.h"
 #include "helix_sparkline.h"
-#include "http_request_epoch.h"
 #include "i_moonraker_client.h"
 #include "job_queue_state.h"
 #include "lap_log.h"
@@ -88,28 +84,22 @@
 #include "panel_widget_manager.h"
 #include "pending_startup_warnings.h"
 #include "print_history_manager.h"
-#include "printer_discovery.h" // helix::PrinterDiscovery + init_subsystems (discovery callback args)
-#include "printer_fan_state.h" // helix::FanRoleConfig for the non-mock fan-role resolve
-#include "printer_name_sync.h"
 #include "printer_retarget.h"
 #include "printer_state.h"
 #include "printer_switch_flow.h"
 #include "runtime_config.h"
-#include "safety_settings_manager.h"
 #include "scroll_blit.h"
 #include "sdkconfig.h"
+#include "session_wiring.h"
 #include "setting_group.h"
 #include "src/xml/lv_xml.h"
 #include "status_dispatch.h"
 #include "subject_initializer.h"
 #include "system/afc_message_dedup.h"
-#include "temp_graph_controller.h"
-#include "temperature_sensor_manager.h"
 #include "text_io.h"
 #include "theme_manager.h"
 #include "thumbnail_cache.h"
 #include "tips_manager.h"
-#include "tool_state.h"
 #include "translation_loader.h"
 #include "wizard_config_paths.h"
 #include "xml_registration.h"
@@ -159,16 +149,24 @@ MoonrakerManager* g_manager = nullptr;
 // When the current live switch started, for the tap-to-connected log; 0 when none is running.
 int64_t g_switch_started_us = 0;
 
-// One-shot boot heap milestone. heap_caps_get_largest_free_block() walks the
-// heap in a critical section, so this is called only at discrete boot
-// milestones — never from the steady-state render loop (see the audit's
-// log_heap vs log_heap_fast note).
+// The active printer's discoveries. auto-detect and the heater-role heal write the active
+// printer's config section, so a switch starts a new record even when the next printer has
+// the same hardware shape (two stock machines on one hostname, a printer re-added under a
+// new id).
+helix::HardwareChangeTracker g_hw_changes;
+
+// One-shot heap milestone. heap_caps_get_largest_free_block() walks the heap
+// in a critical section, so this is called only at discrete milestones, never
+// from the steady-state render loop (see the audit's log_heap vs log_heap_fast
+// note). Every milestone runs after board_display_init() has started the RGB
+// scan-out, and a PSRAM walk there masks the frame buffer's reads for 21-33 ms,
+// a visible glitch; so PSRAM reports only its free total, which is a counter
+// read. The internal walk is short and stays.
 void log_heap_milestone(const char* stage) {
-    ESP_LOGI(TAG, "[heap:%s] internal free=%u largest=%u | psram free=%u largest=%u", stage,
+    ESP_LOGI(TAG, "[heap:%s] internal free=%u largest=%u | psram free=%u", stage,
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
-             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
-             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
 
 // Task 12 R2: Config (settings.json, the `cfg` partition) is the source of
@@ -177,8 +175,8 @@ void log_heap_milestone(const char* stage) {
 // and src/ui/ui_change_host_modal.cpp). CONFIG_HELIX_HIL_MOONRAKER_URL is only
 // the FIRST-BOOT seed for that schema: a full "ws://host:port/path" string
 // (Kconfig's format), parsed once when Config has no value yet. Split out as
-// its own struct/function (rather than reusing ws_to_http_base, which is
-// scheme+path only) because Config's two keys need host and port separated.
+// its own struct/function because Config's two keys need host and port
+// separated.
 struct HostPort {
     std::string host;
     int port;
@@ -365,6 +363,7 @@ helix::PrinterSwitchFlow& switch_flow() {
         config, lifetime,
         {[] {
              g_switch_started_us = esp_timer_get_time();
+             g_hw_changes.reset();
              // Where a crash loop on the new printer sends the next boot.
              config->set<std::string>("/switch_previous_printer_id",
                                       switch_flow().connected_printer_id());
@@ -404,51 +403,25 @@ void wire_printer_callbacks() {
     // Unconnected, the active printer can be picked again to retry it.
     switch_flow().set_connected_printer_id(
         g_boot_auto_connect ? helix::Config::get_instance()->get_active_printer_id() : "");
-    NavigationManager::instance().set_printer_callbacks(
-        [](const std::string& printer_id) { switch_flow().request_switch(printer_id); },
+}
+
+// Build the app shell (the navbar and all six panels resident-and-hidden, the desktop memory
+// model) through the shared builder, with the navbar's printer menu driving this device's
+// switch flow. Returns false on any structural failure (logged).
+bool build_shell() {
+    wire_printer_callbacks();
+    lv_obj_t* screen = lv_screen_active();
+    lv_obj_t* app_layout = helix::create_app_layout(
+        screen, [](const std::string& printer_id) { switch_flow().request_switch(printer_id); },
         [] {
             helix::ui::show_add_printer_modal([](const std::string& host, int port) {
                 return switch_flow().add_printer(host, port);
             });
         });
-}
-
-// Build the app shell: app_layout.xml instantiates the navbar and all six
-// panels resident-and-hidden (the desktop memory model), then PanelFactory
-// finds + wires them. Mirrors Application::init_ui() (application.cpp:1721).
-// Returns false on any structural failure (logged).
-bool build_shell() {
-    lv_obj_t* screen = lv_screen_active();
-    lv_obj_t* app_layout = static_cast<lv_obj_t*>(lv_xml_create(screen, "app_layout", nullptr));
-    if (!app_layout) {
-        spdlog::error("app_boot: app_layout XML create FAILED");
-        return false;
-    }
-    lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(screen, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_update_layout(screen);
-    NavigationManager::instance().set_app_layout(app_layout);
-
-    lv_obj_t* navbar = lv_obj_find_by_name(app_layout, "navbar");
-    lv_obj_t* content_area = lv_obj_find_by_name(app_layout, "content_area");
-    if (!navbar || !content_area) {
-        spdlog::error("app_boot: navbar/content_area not found in app_layout");
-        return false;
-    }
-    NavigationManager::instance().wire_events(navbar);
-    wire_printer_callbacks();
-
-    lv_obj_t* panel_container = lv_obj_find_by_name(content_area, "panel_container");
-    if (!panel_container) {
-        spdlog::error("app_boot: panel_container not found");
-        return false;
-    }
     static helix::PanelFactory panels;
-    if (!panels.find_panels(panel_container)) {
-        spdlog::error("app_boot: find_panels FAILED");
+    if (!app_layout || !helix::setup_app_panels(app_layout, screen, panels)) {
         return false;
     }
-    panels.setup_panels(screen);
     get_global_home_panel().finalize_setup();
     return true;
 }
@@ -601,175 +574,35 @@ void run_http_hil_probe(MoonrakerManager* mgr) {
 }
 #endif // CONFIG_HELIX_HTTP_HIL
 
-// Mirror Application::setup_discovery_callbacks() (src/application/application.cpp:2478),
-// TRIMMED to the v1 Core+AMS cut. Both callbacks fire on the WebSocket task, so
-// every subject write is marshalled to the UI thread via ui_queue_update().
-//
-// Trimmed vs the desktop handler:
-//   * on_hardware_discovered does NOT call init_subsystems_from_hardware()
-//     (src/printer/printer_discovery.cpp is excluded from the ESP image — see
-//     app_srcs.txt), which on desktop wires AMS backends, LED/probe/width/tool-
-//     changer state, Spoolman, printer-name sync and standard macros. None of
-//     that is in the Task 8 cut. We init only the temperature-sensor subjects so
-//     sensor cards populate.
-//   * on_discovery_complete drops: splash exit, self-restart sentinel cleanup,
-//     temperature-store history seed, LED-chip population, print-hours /
-//     timelapse / external-update method callbacks, PrinterDetector auto-detect,
-//     heater-role autoheal, HardwareValidator, power/sensor REST subscribe.
-//     Kept: hardware into PrinterState, fan + extruder subject init, klipper /
-//     moonraker version, and the initial-status dispatch — the load-bearing
-//     "live temps on the home panel" path.
+// The firmware's discovery callbacks: the shared wiring (session_wiring.h) plus what only
+// the device does after the core steps. No tail steps run here: no splash, update checker,
+// timelapse, power/sensor subscribe, hardware validation, setup prompts, telemetry or
+// Spoolman.
 void setup_discovery_callbacks_esp(MoonrakerManager& manager) {
     helix::IMoonrakerClient* client = manager.client();
-    if (!client) {
-        spdlog::error("app_boot: no Moonraker client — discovery callbacks not registered");
+    IMoonrakerAPI* api = manager.api();
+    if (!client || !api) {
+        spdlog::error("app_boot: no Moonraker client or API — discovery callbacks not registered");
         return;
     }
 
-    client->set_on_hardware_discovered([](const helix::PrinterDiscovery& hardware) {
-        // Copy on the BG thread so the queued main-thread callback owns a stable,
-        // non-aliased snapshot (desktop #761/#789 lesson).
-        auto snapshot = std::make_shared<helix::PrinterDiscovery>(hardware);
-        // Read on the WebSocket task. A switch stops the previous printer's task before
-        // connect() moves the epoch, so the previous printer's work carries the old value
-        // and is dropped when it reaches the UI thread.
-        const uint64_t epoch = helix::http_epoch::current();
-        helix::ui::queue_update("app_boot::on_hardware_discovered", [snapshot, epoch]() {
-            if (epoch != helix::http_epoch::current()) {
-                return;
-            }
-            helix::sensors::TemperatureSensorManager::instance().discover(snapshot->sensors());
-        });
-    });
-
     MoonrakerManager* mgr = &manager;
-    client->set_on_discovery_complete(
-        [mgr](const helix::PrinterDiscovery& hardware, const nlohmann::json& initial_status) {
-            spdlog::debug("[app_boot] on_discovery_complete BG entry (status keys: {})",
-                          initial_status.is_object() ? initial_status.size() : 0);
-            auto snapshot = std::make_shared<helix::PrinterDiscovery>(hardware);
-            auto status_snapshot = std::make_shared<const nlohmann::json>(initial_status);
-            const uint64_t epoch = helix::http_epoch::current();
-            helix::ui::queue_update("app_boot::on_discovery_complete", [mgr, snapshot,
-                                                                        status_snapshot, epoch]() {
-                if (epoch != helix::http_epoch::current()) {
-                    spdlog::info("[app_boot] dropping discovery queued for the previous printer");
-                    return;
-                }
-                helix::PrinterState& ps = get_printer_state();
-                helix::LapLog laps("app_boot discovery");
-
-                // Hardware into PrinterState first — init_fans / init_extruders
-                // build their subjects from it, and set_hardware seeds the
-                // capability flags the home/motion panels read.
-                // Macros, the probe's bed centre and delta detection read the API's copy.
-                // A copy: the lines below still read *snapshot.
-                if (IMoonrakerAPI* a = mgr->api()) {
-                    a->hardware() = *snapshot;
-                }
-                ps.set_hardware(*snapshot);
-                laps.lap("set hardware");
-
-                const auto& fans = snapshot->fans();
-                ps.fan_state().init_fans(
-                    fans, helix::FanRoleConfig::from_config(helix::Config::get_instance(), fans),
-                    snapshot->fan_max_power());
-                ps.temperature_state().init_extruders(snapshot->heaters());
-
-                ps.set_klipper_version(snapshot->software_version());
-                ps.set_moonraker_version(snapshot->moonraker_version());
-                laps.lap("fans, extruders, versions");
-
-                IMoonrakerAPI* api = mgr->api();
-                helix::IMoonrakerClient* c = mgr->client();
-
-                if (api) {
-                    helix::wall_clock_esp::request_date(api->get_http_base_url());
-                }
-
-                // Task 15 R1: AMS-relevant subset of desktop's
-                // init_subsystems_from_hardware() (src/printer/printer_discovery.cpp,
-                // excluded from the ESP image) — backend construction, filament
-                // sensors, tool state. Runs here (after the fan/extruder subjects
-                // above, before the dispatch below) to keep the same "subjects
-                // before dispatch" invariant Task 8 established. LED, standard
-                // macros, probe/humidity/width sensors, and camera-adjacent
-                // subsystems stay deferred (Task 8 review's enumeration).
-                helix::AmsState::instance().init_backend_from_hardware(*snapshot, api, c);
-                laps.lap("filament backends");
-                if (snapshot->has_filament_sensors()) {
-                    auto& fsm = helix::FilamentSensorManager::instance();
-                    fsm.discover_sensors(snapshot->filament_sensor_names());
-                    fsm.load_config_from_file();
-                }
-                helix::ToolState::instance().init_tools(*snapshot);
-                helix::ToolState::instance().load_spool_assignments(api);
-                laps.lap("sensors, tools, spools");
-                // Names a printer added from the K-Touch after its Mainsail/Fluidd name.
-                helix::PrinterNameSync::resolve(api, snapshot->hostname());
-                if (c) {
-                    // Graphs start from Moonraker's cached history, as on desktop.
-                    helix::TempGraphController::seed_from_moonraker(*c);
-                }
-                laps.lap("name sync, graph seed");
-
-                // Dispatch the initial subscription status LAST, after the
-                // fan/sensor/extruder/AMS subjects exist. dispatch_status_update
-                // wraps it in a notify_status_update envelope and fans out to
-                // MoonrakerManager's notify handler → notification queue →
-                // process_notifications() (pumped from app_boot_tick) →
-                // update_from_status() + ToolState — exactly the path an
-                // inbound live notification takes. Same call the desktop
-                // handler makes (application.cpp:2593).
-                // Flagged as a cached snapshot: it was captured when the subscribe
-                // response landed, and live WebSocket frames have been flowing ever
-                // since, so it must not regress a liveness signal it predates.
-                if (c && status_snapshot->is_object() && !status_snapshot->empty()) {
-                    c->dispatch_status_update(*status_snapshot, /*from_cached_snapshot=*/true);
-                }
-                laps.lap("initial status");
-
-                if (g_switch_started_us != 0) {
-                    spdlog::info("[app_boot] printer switch connected in {} ms",
-                                 (esp_timer_get_time() - g_switch_started_us) / 1000);
-                    g_switch_started_us = 0;
-                }
-                spdlog::info("[app_boot] discovery applied: {} heaters, {} fans, {} sensors, "
-                             "{} initial-status keys",
-                             snapshot->heaters().size(), snapshot->fans().size(),
-                             snapshot->sensors().size(),
-                             status_snapshot->is_object() ? status_snapshot->size() : 0);
-                if (auto* hm = get_print_history_manager()) {
-                    hm->on_discovery_complete();
-                }
-
+    helix::wire_discovery(
+        *api, *client, {g_hw_changes, nullptr, nullptr, [mgr](helix::DiscoveryContext& ctx) {
+                            helix::wall_clock_esp::request_date(ctx.api.get_http_base_url());
+                            if (g_switch_started_us != 0) {
+                                spdlog::info("[app_boot] printer switch connected in {} ms",
+                                             (esp_timer_get_time() - g_switch_started_us) / 1000);
+                                g_switch_started_us = 0;
+                            }
 #if CONFIG_HELIX_HTTP_HIL
-                run_http_hil_probe(mgr);
+                            run_http_hil_probe(mgr);
+#else
+                               (void)mgr;
 #endif
-            });
-        });
+                        }});
 
     spdlog::info("[app_boot] discovery callbacks registered (real connect path)");
-}
-
-// ws://host:port/path -> http://host:port  (best-effort HTTP base for the API;
-// Task 10's HTTP lane exercises this for print-select thumbnail/gcode-header
-// fetches via download_file_partial — jog and macros still round-trip over
-// the WebSocket JSON-RPC channel and never touch this base URL).
-std::string ws_to_http_base(const std::string& ws_url) {
-    std::string url = ws_url;
-    if (url.rfind("ws://", 0) == 0) {
-        url = "http://" + url.substr(5);
-    } else if (url.rfind("wss://", 0) == 0) {
-        url = "https://" + url.substr(6);
-    }
-    // Strip a trailing "/websocket" (or any path) — the HTTP base is scheme+host.
-    size_t scheme_end = url.find("://");
-    size_t path = url.find('/', scheme_end == std::string::npos ? 0 : scheme_end + 3);
-    if (path != std::string::npos) {
-        url = url.substr(0, path);
-    }
-    return url;
 }
 
 // Task 13: process-lifetime guard for the state-observer callback below.
@@ -797,34 +630,31 @@ void kick_moonraker_connect_once() {
         ESP_LOGW(TAG, "app_net: not connecting after repeated crashes; pick a printer");
         return;
     }
-    MoonrakerManager* mgr = g_manager;
-    if (!mgr) {
-        ESP_LOGE(TAG, "app_net: no MoonrakerManager — cannot connect");
-        return;
-    }
-    // Task 12 R2: read the effective host/port from Config, not Kconfig
-    // directly — app_boot_ui()'s Phase 1 seed guarantees a value is present
-    // (either the user's saved Host or the first-boot Kconfig default) by the
-    // time this runs (app_net_start() is called last, after Phase 1).
-    helix::Config* config = helix::Config::get_instance();
-    std::string host = config->get<std::string>(config->df() + "moonraker_host", "");
-    int port = config->get<int>(config->df() + "moonraker_port", 7125);
-    // No host yet (empty Kconfig seed, nothing saved in Settings): connecting to
-    // "ws://:7125/websocket" would hand the websocket client an unresolvable URL
-    // and spin the auto-reconnect loop forever. Leave the not-ready UI up
-    // instead; ChangeHostModal connects directly once a host is entered, so no
-    // reboot is needed. Logged once — the one-shot latch above is already taken.
-    if (host.empty()) {
-        ESP_LOGI(TAG, "app_net: no Moonraker host configured — set it in Settings");
-        return;
-    }
-    std::string ws_url = "ws://" + host + ":" + std::to_string(port) + "/websocket";
-    std::string http_base = ws_to_http_base(ws_url);
-    ESP_LOGI(TAG, "app: connecting Moonraker (%s)", ws_url.c_str());
-    // Async: connect() starts the WebSocket client task and returns. on_connected
-    // → MoonrakerManager::connect()'s discover_printer() → the callbacks
-    // registered in setup_discovery_callbacks_esp(), all on the WS task.
-    mgr->connect(ws_url, http_base);
+    // This runs on the app_net thread or the WiFi observer. The connect creates the
+    // print-start collector, whose observers and API hooks belong to the UI thread, so the
+    // whole connect runs there; it only starts the WebSocket task, so the hop costs one
+    // UI tick.
+    helix::ui::queue_update("app_net::connect", [] {
+        // Task 12 R2: read the effective host from Config, not Kconfig directly —
+        // app_boot_ui()'s Phase 1 seed guarantees a value is present (either the
+        // user's saved Host or the first-boot Kconfig default) by the time this runs
+        // (app_net_start() is called last, after Phase 1).
+        helix::Config* config = helix::Config::get_instance();
+        std::string host = config->get<std::string>(config->df() + "moonraker_host", "");
+        // No host yet (empty Kconfig seed, nothing saved in Settings): connecting to
+        // "ws://:7125/websocket" would hand the websocket client an unresolvable URL
+        // and spin the auto-reconnect loop forever. Leave the not-ready UI up
+        // instead; ChangeHostModal connects directly once a host is entered, so no
+        // reboot is needed. Logged once — the one-shot latch above is already taken.
+        if (host.empty()) {
+            ESP_LOGI(TAG, "app_net: no Moonraker host configured — set it in Settings");
+            return;
+        }
+        // Async: connect() starts the WebSocket client task and returns. on_connected
+        // → MoonrakerManager::connect()'s discover_printer() → the callbacks
+        // registered in setup_discovery_callbacks_esp(), all on the WS task.
+        helix::connect_active_printer();
+    });
 }
 
 // R4: bounded wait for the FIRST post-boot association, replacing the old
@@ -1083,11 +913,8 @@ extern "C" void app_boot_ui(void) {
     // home/print-status panels instantiate in build_shell() — print_status_panel
     // and panel_widget_led bind both. Registration is scope-sensitive, so this
     // has to sit exactly here, matching desktop (application.cpp, same call and
-    // same phase). This is the only LedController::init() the ESP image ever
-    // makes: the re-init that binds a real API lives in printer_discovery.cpp,
-    // which is excluded from the image, and setup_discovery_callbacks_esp()
-    // below does not wire LED. api_/client_ therefore stay null for the life of
-    // the process — the call registers subjects, it does not enable LED control.
+    // same phase). Discovery re-runs init() with the real API and client
+    // (init_subsystems_from_hardware); this call only registers subjects.
     helix::led::LedController::instance().init(nullptr, nullptr);
 
     // Phase 9: MoonrakerManager — ESP factory arm builds EspMoonrakerClient +
@@ -1110,23 +937,6 @@ extern "C" void app_boot_ui(void) {
     subjects.init_panels(manager.api(), rc);
     subjects.init_post(rc);
 
-    // E-STOP and smart print cancellation. Mirrors desktop's
-    // Application::init_panel_subjects() (application.cpp, same order). Both
-    // singletons had their subjects registered by init_panels() above but their
-    // API/PrinterState pointers left null, because the desktop-only
-    // application.cpp is the tree's sole init() call site — so every
-    // emergency_stop() bailed out at the `!api_` guard and the estop_visible
-    // subject, which nine XML files bind as a visibility flag, never left 0.
-    // create() installs observers on print/klippy state and early-returns unless
-    // init() has run and subjects exist, so this ordering is required, and all of
-    // it must precede build_shell() below.
-    EmergencyStopOverlay::instance().init(get_printer_state(), manager.api());
-    EmergencyStopOverlay::instance().create();
-    EmergencyStopOverlay::instance().set_require_confirmation(
-        helix::SafetySettingsManager::instance().get_estop_require_confirmation());
-
-    helix::AbortManager::instance().init(manager.api(), &get_printer_state());
-
     // Job queue state — owns `job_queue_count` (plus the two queue text
     // subjects). The home panel's queue widget, the print-status widget's queue
     // row, and the job-queue modal each look that subject up from C++ when they
@@ -1147,30 +957,10 @@ extern "C" void app_boot_ui(void) {
     set_print_history_manager(&print_history);
     log_heap_milestone("subjects-up");
 
-    // Global software keyboard — one shared lv_keyboard, hidden until a
-    // registered textarea gains focus. Mirrors desktop's
-    // Application::init_moonraker() call (application.cpp:1875). Without this,
-    // KeyboardManager::register_textarea() is a silent no-op (keyboard_ ==
-    // nullptr guard) and no textarea on the device ever raises the keyboard —
-    // Change Printer Host, WiFi join password, and provisioning fallback all
-    // depend on it. show() move-foregrounds itself, so creating it before
-    // build_shell() below is z-order safe.
-    KeyboardManager::instance().init(lv_screen_active());
-
-    // Notification + toast systems. Mirrors desktop's Application::init_ui()
-    // (application.cpp: notification_manager_init(), ToastManager::init(), then
-    // the startup-warning drain). Neither needs a parent widget — the toast
-    // stack is created lazily on first show() — but both must run before any
-    // panel can raise a message, i.e. before build_shell() below. Without them
-    // every ToastManager::show() on the device is silently dropped, which is
-    // how error feedback (failed gcode, connection loss, E-STOP) went missing.
-    helix::ui::notification_manager_init();
-    ToastManager::instance().init();
-
     // A touch controller that failed to probe no longer aborts boot, so the
     // only thing telling the user why the panel is unresponsive is this
-    // warning. Enqueued immediately before the drain below so it goes out
-    // through the same toast path as the pre-UI backend warnings.
+    // warning. Enqueued before init_session_services() drains the queue, so it
+    // goes out through the same toast path as the pre-UI backend warnings.
     if (!s_touch_available) {
         helix::PendingStartupWarnings::instance().enqueue(
             helix::PendingStartupWarnings::Severity::ERROR,
@@ -1190,28 +980,12 @@ extern "C" void app_boot_ui(void) {
             helix::PendingStartupWarnings::Severity::WARNING, text, 15000);
     }
 
-    // init() does NOT drain the queue: warnings enqueued during pre-UI boot
-    // (display/asset backends) stay stranded unless drained explicitly.
-    helix::PendingStartupWarnings::instance().drain([](helix::PendingStartupWarnings::Severity sev,
-                                                       const std::string& msg,
-                                                       uint32_t duration_ms) {
-        ToastSeverity toast_sev = ToastSeverity::INFO;
-        switch (sev) {
-        case helix::PendingStartupWarnings::Severity::INFO:
-            toast_sev = ToastSeverity::INFO;
-            break;
-        case helix::PendingStartupWarnings::Severity::SUCCESS:
-            toast_sev = ToastSeverity::SUCCESS;
-            break;
-        case helix::PendingStartupWarnings::Severity::WARNING:
-            toast_sev = ToastSeverity::WARNING;
-            break;
-        case helix::PendingStartupWarnings::Severity::ERROR:
-            toast_sev = ToastSeverity::ERROR;
-            break;
-        }
-        ToastManager::instance().show(toast_sev, msg.c_str(), duration_ms);
-    });
+    // E-stop, abort, the keyboard, notifications and toasts (draining the warnings above
+    // with the pre-UI backend ones), custom printer images, the theme's light/dark
+    // availability, post-op cooldown and filament-consumption tracking. Before
+    // build_shell(): panels raise toasts and bind the E-stop subjects while they build.
+    helix::init_session_services(manager.api(), lv_screen_active());
+    log_heap_milestone("services-up");
 
 #if CONFIG_HELIX_MOCK_PRINTER
     // Before the shell builds: seed READY/CONNECTED + the printer identity so the
