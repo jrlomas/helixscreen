@@ -422,7 +422,9 @@ static void evaluate_pulse_state(AmsSlotData* data) {
  * @brief Update tool badge based on slot's mapped_tool value
  *
  * Shows "T0", "T1", etc. when a tool is mapped to this slot.
- * Hidden when mapped_tool == -1 (no tool assigned).
+ * Hidden when mapped_tool == -1 (no tool assigned). The hide policy is the
+ * slot's own backend's: a mixed rig can pair a tool changer with a lane-based
+ * system, and only the changer's slots get the redundant badge.
  */
 static void apply_tool_badge(AmsSlotData* data, int mapped_tool, bool is_override) {
     if (!data || !data->tool_badge_bg) {
@@ -430,7 +432,7 @@ static void apply_tool_badge(AmsSlotData* data, int mapped_tool, bool is_overrid
     }
 
     // Tool changers: badge is redundant with toolhead label below
-    auto* backend = AmsState::instance().get_backend(0);
+    auto* backend = AmsState::instance().get_backend(data->backend_index);
     if (backend && backend->should_hide_slot_tool_badge()) {
         lv_obj_add_flag(data->tool_badge_bg, LV_OBJ_FLAG_HIDDEN);
         return;
@@ -660,11 +662,11 @@ static void setup_slot_observers(AmsSlotData* data) {
         apply_material_label(data, lv_subject_get_string(material_subject));
     }
 
-    // Update tool badge from backend. Material and the error dot are NOT read
+    // Update tool badge from the slot's own backend. Material and the error dot are NOT read
     // here - material flows from the per-slot material subject via the observer
     // above, and the error dot is the embedded ams_lane_spool's, driven by the
     // has_error/severity subjects.
-    AmsBackend* backend = state.get_backend();
+    AmsBackend* backend = state.get_backend(backend_idx);
     if (backend) {
         SlotInfo slot = backend->get_slot_info(data->slot_index);
         apply_tool_badge(data, slot.mapped_tool, slot.tool_mapping_override);
@@ -886,7 +888,7 @@ void ui_ams_slot_refresh(lv_obj_t* obj) {
     // Only update non-observer properties here. Color, fill, status, lane
     // state, current-slot highlight, material and the error dot are all driven
     // by observers (this widget's or the embedded ams_lane_spool's).
-    AmsBackend* backend = AmsState::instance().get_backend();
+    AmsBackend* backend = AmsState::instance().get_backend(data->backend_index);
     if (backend) {
         SlotInfo slot = backend->get_slot_info(data->slot_index);
         apply_tool_badge(data, slot.mapped_tool, slot.tool_mapping_override);

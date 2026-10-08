@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include "ui_observer_guard.h"
+#include "ui_timer_guard.h"
+
 #include "async_lifetime_guard.h"
 
 #include <functional>
@@ -24,17 +27,25 @@ class Config;
 /// whole UI while the K-Touch retargets its one connection.
 class PrinterSwitchFlow {
   public:
-    /// Teardown releases the current printer, rebuild brings up the active one, land_home
-    /// shows the home panel.
+    /// Teardown releases the current printer, rebuild brings up the active one and reports
+    /// whether it started connecting, land_home shows the home panel.
     struct Restart {
         std::function<void()> teardown;
-        std::function<void()> rebuild;
+        /// Returns whether a connection to the new printer was started.
+        std::function<bool()> rebuild;
         std::function<void()> land_home;
     };
 
     /// `config` is read through the reference because its owner assigns it after
     /// construction.
     PrinterSwitchFlow(Config*& config, AsyncLifetimeGuard& async, Restart restart);
+    ~PrinterSwitchFlow();
+
+    PrinterSwitchFlow(const PrinterSwitchFlow&) = delete;
+    PrinterSwitchFlow& operator=(const PrinterSwitchFlow&) = delete;
+
+    /// How long the switch card waits for the new printer to connect before it steps aside.
+    static constexpr uint32_t CONNECT_WAIT_MS = 30000;
 
     /// Switches to `printer_id`, asking first when the current printer is printing.
     /// Picking the connected printer does nothing while its connection is up, and connects it
@@ -111,6 +122,21 @@ class PrinterSwitchFlow {
     /// The record the add-printer wizard's move replaced; cancelling the wizard puts it back.
     BootCrashRecord m_wizard_replaced_record;
     std::string m_connected_printer_id;
+
+    /// The card on the top layer that covers a restart; null when none is up.
+    lv_obj_t* m_interstitial = nullptr;
+    ObserverGuard m_connect_observer;
+    ui::LvglTimerGuard m_connect_timeout;
+
+    /// Puts up the switch card reading `title` and `phase`, replacing any card already up.
+    void show_interstitial(const std::string& title, const char* phase);
+    /// Puts up the switch card reading "Loading..." and paints it before the restart blocks.
+    void paint_loading_card(const std::string& title);
+    /// The restart is done: the card reads "Connecting..." until the new printer connects,
+    /// fails, or CONNECT_WAIT_MS passes. A setup wizard on screen, or a rebuild that never
+    /// started connecting (`connecting` false), takes the card down at once.
+    void await_connection(const std::string& title, bool connecting);
+    void dismiss_interstitial();
 
     /// Saves the config, telling the user when it could not.
     bool save_or_report();

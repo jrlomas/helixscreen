@@ -186,6 +186,7 @@
   <translation tag="Added to Spoolman" pt="Adicionado ao Spoolman"/>
   <translation tag="Added to queue (position {})" pt="Adicionado à fila (posição {})"/>
   <translation tag="Added to queue (position {}) - queue is paused" pt="Adicionado à fila (posição {}) – a fila está pausada"/>
+  <translation tag="Adding printer" pt="Adicionando impressora"/>
   <translation tag="Adding to queue..." pt="Adicionando à fila..."/>
   <translation tag="Address" pt="Endereço"/>
   <translation tag="Adjust screen brightness level" pt="Ajustar nível de brilho da tela"/>

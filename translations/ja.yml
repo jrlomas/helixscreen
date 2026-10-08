@@ -187,6 +187,7 @@ translations:
   Added to Spoolman: Spoolman に追加しました
   Added to queue (position {}): キューに追加しました（{} 番目）
   Added to queue (position {}) - queue is paused: キューに追加しました（{} 番目）– キューは一時停止中です
+  Adding printer: プリンターを追加中
   Adding to queue...: キューに追加中...
   Address: アドレス
   Adjust screen brightness level: 画面の明るさを調整します
