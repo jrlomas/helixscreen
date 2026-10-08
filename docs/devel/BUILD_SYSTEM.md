@@ -553,32 +553,26 @@ The script optimizes for **fast builds** by sharing artifacts from the main tree
    this branch's pin, and refuses to build when a private one does not.
 2. **Adopts the main tree's mtimes** for every byte-identical file — without this, nothing below actually saves you anything (see next section)
 3. **Clones compiled libraries** — `libhv.a`, `libwpa_client.a` from main tree
-4. **Clones the precompiled header** — `lvgl_pch.h.gch` (27MB)
-5. **Symlinks tools** — `node_modules/`, `.venv/`
-6. **Clones build objects** — copies `build/obj/` and `build/generated/` from the main tree (APFS clonefile on macOS; plain copy on Linux)
-7. **Configures ccache for cross-worktree reuse** — so the worktree builds against the *same* ccache the main tree populated, when ccache is installed (see below)
-8. **Validates architecture** — wrong-arch `.o`/`.a` files (left by a prior cross-compile) are detected and cleared so `make` rebuilds them correctly
-9. **Configures git** — `.git/info/exclude` + `--skip-worktree` keep `git status` clean despite the symlinks. `--skip-worktree` covers the symlinked submodules only: on a private checkout it would hide a real change of pinned revision from `git status`, `git add` and the revision check.
-10. **Reconciles patches** — `make reapply-patches` runs in the new worktree when this branch's `patches/` differs from the main tree's, or when a private submodule landed somewhere the main tree's patches do not describe. Otherwise the copy already carries them, and reapplying is not free: `build/.patches-applied` is a prerequisite of the PCH and therefore of every object.
+4. **Symlinks tools** — `node_modules/`, `.venv/`
+5. **Clones build objects** — copies `build/obj/` and `build/generated/` from the main tree (APFS clonefile on macOS; plain copy on Linux)
+6. **Configures ccache for cross-worktree reuse** — so the worktree builds against the *same* ccache the main tree populated, when ccache is installed (see below)
+7. **Validates architecture** — wrong-arch `.o`/`.a` files (left by a prior cross-compile) are detected and cleared so `make` rebuilds them correctly
+8. **Configures git** — `.git/info/exclude` + `--skip-worktree` keep `git status` clean despite the symlinks. `--skip-worktree` covers the symlinked submodules only: on a private checkout it would hide a real change of pinned revision from `git status`, `git add` and the revision check.
+9. **Reconciles patches** — `make reapply-patches` runs in the new worktree when this branch's `patches/` differs from the main tree's, or when a private submodule landed somewhere the main tree's patches do not describe. Otherwise the copy already carries them, and reapplying is not free: `build/.patches-applied` is a prerequisite of every object.
 
 **Trade-off**: `lib/lvgl`, `lib/libhv`, `lib/lua` and `lib/helix-xml` are yours to modify in place. For any other `lib/` entry, un-symlink that specific directory first (`rm lib/<name> && cp -a $MAIN/lib/<name> lib/`) or you are editing the main tree's copy.
 
-> **Build outputs are cloned, never symlinked.** `libhv.a` and `lvgl_pch.h.gch` used to be
-> symlinks into the main tree. They are build *outputs*, so make rewrites them — and both `cp`
-> (the tail of `make libhv-build`) and `clang -o` follow a symlink, writing straight into the
-> main tree. Measured: one fresh-worktree build moved the main tree's `libhv.a` mtime forward
-> five days, which left the main tree's own PCH older than it and put ~1900 objects back on the
-> main tree's next build. On APFS `cp -c` is a clonefile, so a private copy costs nothing.
+> **Build outputs are cloned, never symlinked.** `libhv.a` is a build *output*, so make
+> rewrites it, and `cp` (the tail of `make libhv-build`) follows a symlink, writing straight into
+> the main tree. A worktree build that moves the main tree's `libhv.a` mtime forward puts every
+> main-tree object back on its next build. On APFS `cp -c` is a clonefile, so a private copy
+> costs nothing.
 
 ### Why worktree builds are fast
 
 A fresh `git worktree add` stamps **every** file with the checkout mtime, so make sees the whole
-tree as newer than the cloned objects. It bites twice over:
-
-- `$(PCH)` lists `include/lvgl_pch.h` and `lv_conf.h` as prerequisites, and *every* C++ object
-  lists `$(PCH)` — one fresh header invalidates all ~1970 objects;
-- the `.d` files list `include/*.h` per object, and those are fresh too — so fixing only the PCH
-  would still leave every object out of date.
+tree as newer than the cloned objects: the `.d` files list `include/*.h` per object, and every
+C++ object force-includes `include/lvgl_pch.h`, so one fresh header invalidates all ~1970.
 
 Measured on a fresh worktree of an up-to-date main tree: **1945 of 1967 cloned objects
 recompiled**, 396s of wall clock, for a tree where nothing had changed.
@@ -587,7 +581,7 @@ recompiled**, 396s of wall clock, for a tree where nothing had changed.
 byte-identical to the main tree's file at the same path**, adopting that file's mtime
 (`scripts/sync-worktree-mtimes.py`, ~1s for the 3900-file tree). The build markers
 `build/.patches-applied` and `.fonts.stamp` get the same treatment — they are prerequisites of
-the PCH, libhv, and all 46 font objects, so stamping them `now` was on its own worth ~560
+every object, libhv, and all 46 font objects, so stamping them `now` was on its own worth ~560
 recompiles *and* was what made every fresh worktree rebuild libhv over the main tree's copy.
 
 This is deliberately **not** blanket mtime back-dating, which is how you ship a stale build. The
@@ -601,7 +595,7 @@ edit made after setup — keeps its fresh mtime and rebuilds normally:
 | Worktree at the same commit, clean | 0 (`make test -j` = 3.2s, link only) |
 | Worktree at an older commit (1 source differs) | 1 — and the binary carries the *old* code |
 | Source edited after setup | 1 |
-| `lv_conf.h` edited | PCH + 1888 |
+| `lv_conf.h` edited | ~1888 |
 
 What it inherits rather than fixes: if the main tree's own build is stale, the worktree
 reproduces that staleness. The object clone always had that property.
@@ -609,7 +603,7 @@ reproduces that staleness. The object clone always had that property.
 > **If a fresh worktree still takes minutes, this is almost always inherited staleness.**
 > A worktree copies the main tree's objects and mtimes, so it starts as up to date as the main
 > tree is and no more. When the main tree's `build/.patches-applied` is newer than its objects —
-> which any `make reapply-patches` there makes true — the PCH and with it all ~2400 objects are
+> which any `make reapply-patches` there makes true — all ~2400 objects are
 > already out of date at the moment they are cloned, and the new worktree recompiles them. The
 > fix is to let one tree rebuild once. Measured on one such main tree, two worktrees off the
 > same commit both recompiled ~1280 objects, the symlinked one and the private-checkout one
@@ -617,19 +611,19 @@ reproduces that staleness. The object clone always had that property.
 >
 > `lib/libhv` and `lib/lvgl` no longer add to this. They are a private checkout per worktree,
 > so rebuilding libhv in one tree regenerates only that tree's `lib/libhv/include/hv/json.hpp`
-> — a `$(PCH)` prerequisite — instead of putting every tree's PCH out of date at once.
+> — a prerequisite of every object — instead of putting every tree's objects out of date at once.
 
 ### The ccache config the script sets
 
 ccache is optional (it is not installed on every dev box — check with `command -v ccache`), and
 with the mtime sync in place it is no longer what makes a *clean* worktree fast. Where it matters
 is every build that genuinely has to recompile — after touching `lv_conf.h`, or after another tree
-rebuilds libhv and re-invalidates the shared PCH (see the box above). That is the difference
+rebuilds libhv and re-invalidates every object (see the box above). That is the difference
 between ~400s and a few tens of seconds.
 
 > **`sloppiness` is not optional — without it ccache caches nothing here.** Every native build
-> compiles with `-include $(PCH)`, and ccache refuses to cache *any* compilation that uses a
-> precompiled header unless `sloppiness` permits it. Measured on a single `-include` compile:
+> compiles with `-include include/lvgl_pch.h`, and ccache refuses to cache *any* such
+> compilation unless `sloppiness` permits it. Measured on a single `-include` compile:
 > `Uncacheable calls: 1/1 (100%)` before, `Cacheable calls: 1/1 (100%)` after, with the repeat
 > compile hitting. This was silently true for a long time — `base_dir` and `hash_dir` were being
 > set while the cache stayed empty, which is why this doc used to credit ccache for a speedup it
@@ -650,7 +644,7 @@ But it only helps across worktrees if it is configured for it. The native build 
 |----------------|--------|-----|
 | `base_dir` | `$HOME` | Rewrites absolute paths under `$HOME` to relative before hashing, so main-tree and worktree paths collapse to the same key |
 | `hash_dir` | `false` | Stops folding the cwd (the `-g` debug-path component) into the key |
-| `sloppiness` | `pch_defines,time_macros` | Without it ccache refuses to cache any `-include $(PCH)` compile — i.e. all of them. See the box above for the `__DATE__` tradeoff |
+| `sloppiness` | `pch_defines,time_macros` | Without it ccache refuses to cache any `-include include/lvgl_pch.h` compile — i.e. all of them. See the box above for the `__DATE__` tradeoff |
 | `max_size` | `25G` (raised, never lowered) | The default 5 GiB thrashes once several worktrees + cross-compile caches share it, re-causing cold misses |
 
 For the script's own initial build it also exports `CCACHE_BASEDIR` (the longest common ancestor of the main tree and the worktree, so it works even for out-of-tree paths like `/tmp/foo`), `CCACHE_NOHASHDIR=1`, and `CCACHE_SLOPPINESS`.
@@ -1815,7 +1809,7 @@ The build compiles ~566 app source files. The dominant cost is **template instan
 
 With ccache installed, touching these headers without content changes costs ~8s (direct cache hit). Actual content changes recompile all dependents (~2 min at `-O2`, ~1 min at `-O0`).
 
-**Precompiled header** (`include/lvgl_pch.h`): Covers LVGL, helix-xml, spdlog, nlohmann JSON, and common STL headers. These are precompiled once and reused across all translation units. Don't add project headers to the PCH — only stable external libraries.
+**Forced include** (`include/lvgl_pch.h`, `$(FORCED_INCLUDE)` in the Makefile): covers LVGL, helix-xml, spdlog, nlohmann JSON, and common STL headers, and is passed as `-include` to every app and test C++ source, so many sources compile only because of it. It is an ordinary header, not precompiled: every TU parses it and tracks it through its `.d` file, so editing it rebuilds every C++ object. Don't add project headers to it — only stable external libraries. LVGL's own C++ sources (ThorVG, compiled out by `lv_conf.h`) do not get it.
 
 #### ccache across worktrees and Docker cross-builds
 

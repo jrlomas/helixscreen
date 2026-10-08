@@ -395,25 +395,21 @@ TEST_APP_OBJS := $(sort $(TEST_APP_OBJS) $(OBJ_DIR)/system/jz_pwm_sound_backend.
 # Test Targets
 # ============================================================================
 
-# Clean test artifacts (test objects, PCH, all test binary variants).
+# Clean test artifacts (test objects, all test binary variants).
 #
 # Wipes $(OBJ_DIR)/tests/ recursively so stale .o/.ccj/.d files from
 # prior sanitizer runs, reordered test sources, or removed test files
 # don't linger and pollute the link.
 #
-# Also removes the PCH ($(PCH)).
-#
 # Sanitizer cross-contamination is no longer a concern here: test-asan
-# and test-tsan build into $(ASAN_OBJ_DIR)/$(TSAN_OBJ_DIR) with their
-# own PCH, so they cannot leave instrumented objects or a tainted PCH
-# in this build's paths. Use `make clean-sanitizers` to drop those
+# and test-tsan build into $(ASAN_OBJ_DIR)/$(TSAN_OBJ_DIR), so they
+# cannot leave instrumented objects in this build's paths. Use `make clean-sanitizers` to drop those
 # trees. (Historically they shared $(OBJ_DIR) and a plain `make test`
 # would then fail to link with "undefined reference to __asan_init".)
 clean-tests:
 	$(ECHO) "$(YELLOW)Cleaning test artifacts...$(RESET)"
 	$(Q)rm -rf $(OBJ_DIR)/tests
 	$(Q)rm -f $(TEST_BIN) $(TEST_ASAN_BIN) $(TEST_TSAN_BIN)
-	$(Q)rm -f $(PCH)
 	$(ECHO) "$(GREEN)✓ Test artifacts cleaned$(RESET)"
 
 # Build tests — delegates to $(TEST_BIN) which handles -j detection via Phase 1
@@ -978,49 +974,49 @@ $(CATCH2_OBJ): $(TEST_DIR)/catch_amalgamated.cpp
 	$(Q)$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Test compile rules depend on libhv-generated headers ($(LIBHV_JSON_HEADER))
-# and the PCH so a fresh `make test-asan` / `make test-tsan` (without a prior
+# and the LVGL patch stamp so a fresh `make test-asan` / `make test-tsan` (without a prior
 # `make`) triggers libhv-build before any .cpp that includes hv/json.hpp.
 #
 # Compile UI test utilities
 # Uses DEPFLAGS to track header dependencies
-$(UI_TEST_UTILS_OBJ): $(TEST_DIR)/ui_test_utils.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(UI_TEST_UTILS_OBJ): $(TEST_DIR)/ui_test_utils.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[UI-TEST]$(RESET) $<"
-	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Compile LVGL test fixture (shared base class for UI tests)
 # Uses DEPFLAGS to track header dependencies
-$(LVGL_TEST_FIXTURE_OBJ): $(TEST_DIR)/lvgl_test_fixture.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(LVGL_TEST_FIXTURE_OBJ): $(TEST_DIR)/lvgl_test_fixture.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[LVGL-FIXTURE]$(RESET) $<"
-	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Compile HelixScreen test fixture (base class that resets process singletons)
 # Uses DEPFLAGS to track header dependencies
-$(HELIX_TEST_FIXTURE_OBJ): $(TEST_DIR)/helix_test_fixture.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(HELIX_TEST_FIXTURE_OBJ): $(TEST_DIR)/helix_test_fixture.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[HELIX-FIXTURE]$(RESET) $<"
-	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Compile test fixtures (reusable fixtures with mock initialization helpers)
 # Uses DEPFLAGS to track header dependencies
-$(TEST_FIXTURES_OBJ): $(TEST_DIR)/test_fixtures.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(TEST_FIXTURES_OBJ): $(TEST_DIR)/test_fixtures.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[TEST-FIXTURE]$(RESET) $<"
-	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Compile LVGL UI test fixture (full UI integration test fixture)
 # Uses DEPFLAGS to track header dependencies
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(LVGL_UI_TEST_FIXTURE_OBJ): $(TEST_DIR)/lvgl_ui_test_fixture.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP)
+$(LVGL_UI_TEST_FIXTURE_OBJ): $(TEST_DIR)/lvgl_ui_test_fixture.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[UI-FIXTURE]$(RESET) $<"
-	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Warnings promoted to errors for TEST code only.
 #
@@ -1039,19 +1035,19 @@ TEST_WARN_FLAGS := -Werror=type-limits
 # Compile test sources
 # Uses DEPFLAGS to track header dependencies for incremental rebuilds
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/tests/%.o: $(TEST_UNIT_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
+$(OBJ_DIR)/tests/%.o: $(TEST_UNIT_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[TEST]$(RESET) $<"
-	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Compile application subdirectory test sources
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/tests/application/%.o: $(TEST_UNIT_DIR)/application/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
+$(OBJ_DIR)/tests/application/%.o: $(TEST_UNIT_DIR)/application/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[TEST-APP]$(RESET) $<"
-	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) -I$(TEST_UNIT_DIR)/application $(INCLUDES) $(LV_CONF) -c $< -o $@
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) -I$(TEST_DIR) -I$(TEST_UNIT_DIR)/application $(INCLUDES) $(LV_CONF),$<,$@)
+	$(Q)$(CXX) $(CXXFLAGS) $(TEST_WARN_FLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) -I$(TEST_UNIT_DIR)/application $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) -I$(TEST_DIR) -I$(TEST_UNIT_DIR)/application $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Compile libhv dns_resolv.c for test_dns_resolver
 # rules.mk makes dns_resolv.c depend on PATCHES_STAMP, which creates it.
@@ -1066,11 +1062,11 @@ $(DNS_RESOLV_OBJ): $(LIBHV_DIR)/base/dns_resolv.c $(LIBHV_LIB)
 # Compile mock sources
 # Uses DEPFLAGS to track header dependencies
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/tests/mocks/%.o: $(TEST_MOCK_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
+$(OBJ_DIR)/tests/mocks/%.o: $(TEST_MOCK_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(YELLOW)[MOCK]$(RESET) $<"
-	$(Q)$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) -I$(TEST_MOCK_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) -I$(TEST_MOCK_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(Q)$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) -I$(TEST_MOCK_DIR) $(INCLUDES) $(LV_CONF) -c $< -o $@
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) -I$(TEST_MOCK_DIR) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # ============================================================================
 # Sanitizer Targets (Memory Safety Testing)
@@ -1086,7 +1082,7 @@ $(OBJ_DIR)/tests/mocks/%.o: $(TEST_MOCK_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEA
 ASAN_FLAGS := -fsanitize=address -fno-omit-frame-pointer -g
 TSAN_FLAGS := -fsanitize=thread -fno-omit-frame-pointer -g
 
-# Sanitizer builds get their own object tree and PCH.
+# Sanitizer builds get their own object tree.
 #
 # They used to compile into $(OBJ_DIR) alongside the normal build, which made
 # `make test-asan` a trap: instrumented .o files landed on top of the ordinary
@@ -1100,16 +1096,14 @@ TSAN_FLAGS := -fsanitize=thread -fno-omit-frame-pointer -g
 # incremental rather than a full rebuild each way.
 ASAN_OBJ_DIR := $(BUILD_DIR)/obj-asan
 TSAN_OBJ_DIR := $(BUILD_DIR)/obj-tsan
-ASAN_PCH := $(BUILD_DIR)/asan-lvgl_pch.h.gch
-TSAN_PCH := $(BUILD_DIR)/tsan-lvgl_pch.h.gch
 
 # Overrides handed to the sanitizer sub-makes. Passed as command-line variables
 # so they beat the `:=` assignments in the top-level Makefile. BIN_DIR is left
 # shared deliberately — the binaries already have distinct names, and keeping it
 # stable means $(TEST_ASAN_BIN) resolves to the same path in both makes.
-ASAN_MAKE_OVERRIDES := OBJ_DIR=$(ASAN_OBJ_DIR) PCH=$(ASAN_PCH) \
+ASAN_MAKE_OVERRIDES := OBJ_DIR=$(ASAN_OBJ_DIR) \
 	CXXFLAGS='$(CXXFLAGS) $(ASAN_FLAGS)' LDFLAGS='$(LDFLAGS) $(ASAN_FLAGS)'
-TSAN_MAKE_OVERRIDES := OBJ_DIR=$(TSAN_OBJ_DIR) PCH=$(TSAN_PCH) \
+TSAN_MAKE_OVERRIDES := OBJ_DIR=$(TSAN_OBJ_DIR) \
 	CXXFLAGS='$(CXXFLAGS) $(TSAN_FLAGS)' LDFLAGS='$(LDFLAGS) $(TSAN_FLAGS)'
 
 # Patterns that mean "the sanitizer reported something". Kept as variables so
@@ -1353,11 +1347,9 @@ test-tsan-one: test-tsan-build
 clean-sanitizers:
 	$(ECHO) "$(YELLOW)Cleaning sanitizer binaries and object trees...$(RESET)"
 	$(Q)rm -f $(TEST_ASAN_BIN) $(TEST_TSAN_BIN)
-	$(Q)rm -f $(ASAN_PCH) $(TSAN_PCH)
 	$(Q)rm -rf $(ASAN_OBJ_DIR) $(TSAN_OBJ_DIR)
 	$(Q)rm -rf $(APP_ASAN_BIN_DIR) $(APP_TSAN_BIN_DIR)
 	$(Q)rm -rf $(APP_ASAN_OBJ_DIR) $(APP_TSAN_OBJ_DIR)
-	$(Q)rm -f $(APP_ASAN_PCH) $(APP_TSAN_PCH)
 	$(ECHO) "$(GREEN)✓ Sanitizer artifacts cleaned (normal build untouched)$(RESET)"
 
 # ============================================================================
@@ -1380,7 +1372,7 @@ clean-sanitizers:
 #   make tsan-app RECIPE=help-qr REPEAT=50
 
 # The app binary gets its own BIN_DIR so a sanitizer build never replaces
-# build/bin/helix-screen in place. OBJ_DIR and PCH are passed explicitly as
+# build/bin/helix-screen in place. OBJ_DIR is passed explicitly as
 # well: BIN_DIR alone would relink whatever objects are already up to date,
 # and those are uninstrumented (see the Makefile's SANITIZE block for the
 # exact trap).
@@ -1397,8 +1389,6 @@ clean-sanitizers:
 # carry the symbols it greps for.
 APP_ASAN_OBJ_DIR := $(BUILD_DIR)/obj-asan-app
 APP_TSAN_OBJ_DIR := $(BUILD_DIR)/obj-tsan-app
-APP_ASAN_PCH := $(BUILD_DIR)/asan-app-lvgl_pch.h.gch
-APP_TSAN_PCH := $(BUILD_DIR)/tsan-app-lvgl_pch.h.gch
 APP_ASAN_BIN_DIR := $(BUILD_DIR)/bin-asan
 APP_TSAN_BIN_DIR := $(BUILD_DIR)/bin-tsan
 APP_ASAN_BIN := $(APP_ASAN_BIN_DIR)/helix-screen
@@ -1453,7 +1443,7 @@ endef
 .PHONY: asan-app tsan-app
 asan-app:
 	$(ECHO) "$(CYAN)$(BOLD)Building the app with AddressSanitizer ($(APP_ASAN_BIN_DIR))...$(RESET)"
-	@$(MAKE) SANITIZE=address BIN_DIR=$(APP_ASAN_BIN_DIR) OBJ_DIR=$(APP_ASAN_OBJ_DIR) PCH=$(APP_ASAN_PCH) $(APP_ASAN_BIN)
+	@$(MAKE) SANITIZE=address BIN_DIR=$(APP_ASAN_BIN_DIR) OBJ_DIR=$(APP_ASAN_OBJ_DIR) $(APP_ASAN_BIN)
 	@$(call app_instrumentation_check,asan-app,$(APP_ASAN_BIN),__asan)
 	$(ECHO) "$(CYAN)$(BOLD)Driving the app under AddressSanitizer (recipe '$(RECIPE)', $(REPEAT) passes)...$(RESET)"
 	@set -o pipefail; \
@@ -1466,7 +1456,7 @@ asan-app:
 
 tsan-app:
 	$(ECHO) "$(CYAN)$(BOLD)Building the app with ThreadSanitizer ($(APP_TSAN_BIN_DIR))...$(RESET)"
-	@$(MAKE) SANITIZE=thread BIN_DIR=$(APP_TSAN_BIN_DIR) OBJ_DIR=$(APP_TSAN_OBJ_DIR) PCH=$(APP_TSAN_PCH) $(APP_TSAN_BIN)
+	@$(MAKE) SANITIZE=thread BIN_DIR=$(APP_TSAN_BIN_DIR) OBJ_DIR=$(APP_TSAN_OBJ_DIR) $(APP_TSAN_BIN)
 	@$(call app_instrumentation_check,tsan-app,$(APP_TSAN_BIN),__tsan)
 	$(ECHO) "$(CYAN)$(BOLD)Driving the app under ThreadSanitizer (recipe '$(RECIPE)', $(REPEAT) passes)...$(RESET)"
 	@set -o pipefail; \
