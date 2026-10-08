@@ -2571,6 +2571,7 @@
   <translation tag="STYLE PROPERTIES" pt="PROPRIEDADES DE ESTILO"/>
   <translation tag="SWITCH SENSORS" pt="SENSORES DE CHAVE"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." pt="Modo Seguro ativo. A conexão com a impressora está desativada porque o aplicativo continuou travando na inicialização. Abra as Configurações para corrigir o problema e reinicie."/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal." pt="Modo Seguro: o aplicativo continuou travando na inicialização, então os plugins estão desativados e a tela inicial mostra o layout padrão. Reinicie para voltar ao normal."/>
   <translation tag="Safety &amp; Alerts" pt="Segurança e alertas"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." pt="Mesmo carretel em {}? Toque em Limpar se for um novo."/>
   <translation tag="Sample" pt="Amostra"/>

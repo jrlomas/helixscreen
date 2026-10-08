@@ -120,10 +120,11 @@ bool record_start_and_check_crash_loop(const std::string& marker_path, long long
     }
 
     if (recent_timestamps.size() >= MAX_CRASH_RESTARTS) {
-        spdlog::error("[Application] Crash loop detected: {} restarts within {}s — "
-                      "halting to prevent infinite restart loop",
+        spdlog::error("[Application] Crash loop detected: {} restarts within {}s - "
+                      "booting in safe mode (no plugins, default home layout)",
                       recent_timestamps.size(), CRASH_WINDOW_SEC);
         std::filesystem::remove(marker_path);
+        get_runtime_config()->crash_loop_safe_mode = true;
         return true;
     }
     // Write filtered timestamps plus current restart

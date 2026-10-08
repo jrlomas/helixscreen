@@ -2846,6 +2846,8 @@ translations:
   : Modo Seguro ativo. A conexão com a impressora está desativada porque o aplicativo
     continuou travando na inicialização. Abra as Configurações para corrigir o problema
     e reinicie.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal.'
+  : 'Modo Seguro: o aplicativo continuou travando na inicialização, então os plugins estão desativados e a tela inicial mostra o layout padrão. Reinicie para voltar ao normal.'
   Safety & Alerts: Segurança e alertas
   Same spool in {}? Tap Clear if it is a new one.: 'Mesmo carretel em {}? Toque em Limpar se for um novo.'
   Sample: Amostra

@@ -2571,6 +2571,7 @@
   <translation tag="STYLE PROPERTIES" ru="СВОЙСТВА СТИЛЯ"/>
   <translation tag="SWITCH SENSORS" ru="КОНЦЕВЫЕ ДАТЧИКИ"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." ru="Активен безопасный режим. Подключение к принтеру отключено, так как приложение постоянно аварийно завершалось при запуске. Откройте настройки, чтобы устранить проблему, затем перезагрузите."/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal." ru="Безопасный режим: приложение постоянно аварийно завершалось при запуске, поэтому плагины отключены, а главный экран показывает стандартную раскладку. Перезапустите, чтобы вернуться к обычному режиму."/>
   <translation tag="Safety &amp; Alerts" ru="Безопасность и оповещения"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." ru="Та же катушка в {}? Нажмите «Очистить», если это новая."/>
   <translation tag="Sample" ru="Образец"/>

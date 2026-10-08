@@ -2762,6 +2762,8 @@ translations:
     on startup. Open Settings to fix the issue, then reboot.
   : Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal.'
+  : 'Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal.'
   Safety & Alerts: Safety & Alerts
   Same spool in {}? Tap Clear if it is a new one.: Same spool in {}? Tap Clear if it is a new one.
   Sample: Sample

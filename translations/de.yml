@@ -2852,6 +2852,8 @@ translations:
   : Abgesicherter Modus aktiv. Die Druckerverbindung ist deaktiviert, weil die App
     beim Start wiederholt abgestürzt ist. Öffnen Sie die Einstellungen, um das Problem
     zu beheben, und starten Sie dann neu.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal.'
+  : 'Abgesicherter Modus: Die App ist beim Start wiederholt abgestürzt, daher sind Plugins deaktiviert und der Startbildschirm zeigt das Standardlayout. Starten Sie neu, um zum Normalbetrieb zurückzukehren.'
   Safety & Alerts: Sicherheit & Alarme
   Same spool in {}? Tap Clear if it is a new one.: 'Dieselbe Spule in {}? Tippen Sie auf Löschen, wenn es eine neue ist.'
   Sample: Messung

@@ -2674,6 +2674,8 @@ translations:
   ? Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
   : セーフモードが有効です。起動時にアプリがクラッシュし続けたため、プリンター接続は無効になっています。設定を開いて問題を解決してから再起動してください。
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal.'
+  : 'セーフモード: 起動時にアプリがクラッシュし続けたため、プラグインは無効になり、ホーム画面はデフォルトのレイアウトを表示しています。再起動すると通常に戻ります。'
   Safety & Alerts: 安全とアラート
   Same spool in {}? Tap Clear if it is a new one.: '{} は同じスプールですか？新しいスプールならクリアをタップしてください。'
   Sample: サンプル

@@ -421,6 +421,12 @@ void PrinterSession::init_plugins() {
         m_plugin_host->unload_all();
         m_plugin_host.reset();
     }
+    if (get_runtime_config()->crash_loop_safe_mode) {
+        spdlog::warn("[Application] Crash-loop safe mode: plugins not loaded");
+        m_known_plugin_ids.clear();
+        update_plugins_row_visibility();
+        return;
+    }
     helix::plugin::PluginHost::Deps deps;
     deps.backend = helix::plugin::make_app_backend();
     deps.read_block = [this] { return m_config->get<json>("/plugins", json::object()); };

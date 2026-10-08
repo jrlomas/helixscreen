@@ -2842,6 +2842,8 @@ translations:
   : Modalità provvisoria attiva. La connessione alla stampante è disabilitata perché
     l'app continuava a bloccarsi all'avvio. Apri Impostazioni per risolvere il problema,
     quindi riavvia.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and the home screen shows the default layout. Restart to return to normal.'
+  : 'Modalità provvisoria: l''app continuava a bloccarsi all''avvio, quindi i plugin sono disattivati e la schermata Home mostra il layout predefinito. Riavvia per tornare alla normalità.'
   Safety & Alerts: Sicurezza e avvisi
   Same spool in {}? Tap Clear if it is a new one.: 'Stessa bobina in {}? Tocca Cancella se è una nuova.'
   Sample: Campione
