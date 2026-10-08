@@ -12,6 +12,7 @@
 
 #include "bed_mesh_presence.h"
 #include "preprint_skip_wrappers.h"
+#include "printer_discovery.h"
 #include "text_io.h"
 
 #include <sstream>
@@ -316,4 +317,12 @@ TEST_CASE("probed_matrix_has_mesh reads Klipper's empty mesh as absent",
     CHECK_FALSE(helix::probed_matrix_has_mesh(json::array()));
     CHECK_FALSE(helix::probed_matrix_has_mesh(json()));
     CHECK(helix::probed_matrix_has_mesh(json::array({json::array({0.1, 0.2})})));
+}
+
+TEST_CASE("a cleared discovery forgets the skip wrappers", "[skip_wrappers]") {
+    helix::PrinterDiscovery hw;
+    hw.set_skip_wrappers({Op::Qgl}, {Op::Qgl});
+    hw.clear();
+    CHECK(hw.skip_wrappable().empty());
+    CHECK(hw.skip_active().empty());
 }

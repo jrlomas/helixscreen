@@ -904,3 +904,25 @@ TEST_CASE("Subscription: a firmware that stores pre-print settings gets its stor
         CHECK_FALSE(subs.contains("print_task_config"));
     }
 }
+
+TEST_CASE("Subscription: loaded leveling-skip wrappers subscribe their gates and flags",
+          "[moonraker][subscription][skip_wrappers]") {
+    using helix::skip_wrappers::Op;
+    DiscoveryFixture fx;
+    PrinterDiscovery hw;
+    hw.parse_objects(json::array({"bed_mesh", "quad_gantry_level"}));
+
+    SECTION("active wrappers") {
+        hw.set_skip_wrappers({Op::BedMesh, Op::Qgl}, {Op::BedMesh, Op::Qgl});
+        const json subs = fx.build(hw);
+        CHECK(has_field(subs, "quad_gantry_level", "applied"));
+        CHECK(has_field(subs, "gcode_macro _HELIX_PREP", "run_qgl"));
+        CHECK(has_field(subs, "gcode_macro _HELIX_PREP", "run_bed_mesh"));
+    }
+    SECTION("wrappable but not loaded") {
+        hw.set_skip_wrappers({Op::BedMesh, Op::Qgl}, {});
+        const json subs = fx.build(hw);
+        CHECK_FALSE(subs.contains("gcode_macro _HELIX_PREP"));
+        CHECK_FALSE(subs.contains("quad_gantry_level"));
+    }
+}
