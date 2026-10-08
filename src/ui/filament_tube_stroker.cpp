@@ -37,16 +37,6 @@ lv_color_t tube_blend(lv_color_t c1, lv_color_t c2, float factor) {
     return ams_draw::blend_color(c1, c2, factor);
 }
 
-// Get a suitable glow color from a filament color.
-lv_color_t get_glow_color(lv_color_t color) {
-    // If the filament is very dark, use a contrasting blue tint
-    int brightness = color.red + color.green + color.blue;
-    if (brightness < 120) {
-        return lv_color_hex(0x4466AA); // Dark blue glow for black/dark filaments
-    }
-    return tube_lighten(color, 60);
-}
-
 // Stroke a path with N concentric passes.
 void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass* passes,
                  int n_passes) {
@@ -61,7 +51,7 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
         // Opaque passes use round caps at EVERY joint: same-color opaque
         // overdraw is invisible, and round ends close the wedge notches that
         // butt caps leave wherever adjacent segments/chords meet at an angle
-        // (~13° between chords). Translucent passes (glow) keep butt caps at
+        // (~13° between chords). Translucent passes keep butt caps at
         // interior joints — round caps would double-blend at the overlap.
         const bool round_joints = (pass.opa >= LV_OPA_COVER);
 
@@ -162,50 +152,40 @@ void stroke_path(lv_layer_t* layer, const pg::FilamentPath& path, const TubePass
     }
 }
 
-// Build the concentric pass list for a LaneStyle. Keeps the darken/lighten
-// numbers consistent with the legacy tube look. Returns the number of passes
-// written into `out` (caller sizes out for at least 4).
-int build_passes(const LaneStyle& style, TubePass* out) {
-    const bool simple = reduced_effects();
-    int n = 0;
-    if (style.solid) {
-        // Solid (loaded) lanes read the SAME outer gauge as the idle hollow
-        // tubes: the body is drawn at style.width with NO darker +2 outline
-        // pass. The hollow tube's visible wall spans width-2..width+2 (≈ width
-        // gauge), so dropping the outline here matches the two. The "loaded"
-        // emphasis is carried by the fill color, the bright centered core, and
-        // the wide glow backdrop — not by bulk.
-        if (style.glow && !simple) {
-            out[n++] = {get_glow_color(style.color), style.width + GLOW_WIDTH_EXTRA, GLOW_OPA};
-        }
-        // Body (always).
-        out[n++] = {style.color, style.width, LV_OPA_COVER};
-        if (!simple) {
-            // Core highlight (lighter, narrower) — concentric, no offset.
-            out[n++] = {tube_lighten(style.color, 44), LV_MAX(1, style.width / 2), LV_OPA_COVER};
-        }
-    } else {
-        if (!simple) {
-            out[n++] = {tube_darken(style.color, 25), style.width + 2, LV_OPA_COVER};
-        }
-        // Wall.
-        out[n++] = {style.color, style.width, LV_OPA_COVER};
-        // Bore (background show-through).
-        out[n++] = {style.bg, LV_MAX(1, style.width - 2), LV_OPA_COVER};
+// One layer's passes. The halo bands are opaque, pre-blended against the
+// background, so stroke_path round-joins every chord without double-blending.
+int build_passes(const LaneStyle& style, TubeLayer layer, TubePass* out, bool simple) {
+    switch (layer) {
+    case TubeLayer::Halo:
+        if (!style.halo || simple)
+            return 0;
+        out[0] = {tube_blend(style.bg, style.wall, HALO_OUTER_MIX), style.width + HALO_WIDTH_EXTRA,
+                  LV_OPA_COVER};
+        out[1] = {tube_blend(style.bg, style.wall, HALO_INNER_MIX), style.width + HALO_INNER_EXTRA,
+                  LV_OPA_COVER};
+        return 2;
+    case TubeLayer::Wall:
+        out[0] = {style.wall, style.width, LV_OPA_COVER};
+        return 1;
+    case TubeLayer::Bore:
+        out[0] = {style.bore, LV_MAX(1, style.width - 2), LV_OPA_COVER};
+        return 1;
     }
-    return n;
+    return 0;
 }
 
-// Build a LaneStyle from slot state in ONE place.
-LaneStyle lane_style(bool has_filament, lv_color_t tool_color, lv_color_t idle_color, lv_color_t bg,
-                     int32_t active_w) {
-    LaneStyle st{};
-    st.solid = has_filament;
-    st.color = has_filament ? tool_color : idle_color;
-    st.bg = bg;
-    st.width = active_w;
-    st.glow = has_filament; // active lanes get the glow backdrop
-    return st;
+LaneStyle lane_style(bool has_filament, bool active, lv_color_t fill, lv_color_t idle_wall,
+                     lv_color_t accent, lv_color_t bg, int32_t gauge) {
+    const bool on_route = has_filament && active;
+    return {on_route ? accent : idle_wall, has_filament ? fill : bg, bg, gauge, on_route};
+}
+
+// Halo, Wall, Bore passes for one lane, in paint order. Returns the count.
+static int lane_passes(const LaneStyle& style, TubePass* out) {
+    int n = build_passes(style, TubeLayer::Halo, out);
+    n += build_passes(style, TubeLayer::Wall, out + n);
+    n += build_passes(style, TubeLayer::Bore, out + n);
+    return n;
 }
 
 // Draw a path with a style; optionally record (append) the path's segments into
@@ -214,7 +194,7 @@ LaneStyle lane_style(bool has_filament, lv_color_t tool_color, lv_color_t idle_c
 void draw_lane(lv_layer_t* layer, const pg::FilamentPath& path, const LaneStyle& style,
                pg::FilamentPath* record) {
     TubePass passes[4];
-    int n = build_passes(style, passes);
+    int n = lane_passes(style, passes);
     stroke_path(layer, path, passes, n);
     if (record) {
         for (int i = 0; i < path.count && record->count < pg::FilamentPath::MAX_SEGS; i++) {
@@ -229,7 +209,7 @@ void draw_lane_vline(lv_layer_t* layer, int32_t x, int32_t y0, int32_t y1, const
     pg::FilamentPath path;
     path.add_line((float)x, (float)y0, (float)x, (float)y1);
     TubePass passes[4];
-    int n = build_passes(style, passes);
+    int n = lane_passes(style, passes);
     stroke_path(layer, path, passes, n);
     // Preserve the old guard: only record forward (downward) verticals.
     if (record && y1 > y0) {

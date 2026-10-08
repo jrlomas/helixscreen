@@ -101,6 +101,16 @@ bool is_segment_active(PathSegment segment, PathSegment filament_segment) {
 
 namespace {
 
+// Detail-canvas tube style. Downstream runs carry only the routed filament, so
+// they pass active=true and let has_filament decide. A run painted in the
+// error color takes error walls instead of the accent.
+LaneStyle tube_style(const ThemeCache& theme, bool has_filament, bool active, lv_color_t fill,
+                     lv_color_t error) {
+    lv_color_t walls = lv_color_eq(fill, error) ? error : theme.color_accent;
+    return lane_style(has_filament, active, fill, theme.color_idle, walls, theme.color_bg,
+                      theme.tube_gauge);
+}
+
 // ============================================================================
 // PARALLEL topology (tool changers)
 // ============================================================================
@@ -115,8 +125,6 @@ void draw_parallel_slot(const RenderCtx& ctx, const SlotRenderStates& states, in
     const FilamentPathData* data = ctx.data;
     const ThemeCache& theme = data->theme;
     lv_color_t idle_color = theme.color_idle;
-    lv_color_t bg_color = theme.color_bg;
-    int32_t line_active = theme.line_width_active;
     int32_t sensor_r = theme.sensor_radius;
 
     int32_t slot_x = ctx.geo.slot_x[i];
@@ -128,7 +136,8 @@ void draw_parallel_slot(const RenderCtx& ctx, const SlotRenderStates& states, in
 
     // Entry → sensor line: colored if filament present, hollow if idle
     {
-        LaneStyle st = lane_style(s.has_filament, tool_color, idle_color, bg_color, line_active);
+        LaneStyle st =
+            tube_style(theme, s.has_filament, s.is_mounted, tool_color, theme.color_error);
         draw_lane_vline(ctx.layer, slot_x, entry_y, sensor_y - sensor_r, st);
     }
 
@@ -138,7 +147,7 @@ void draw_parallel_slot(const RenderCtx& ctx, const SlotRenderStates& states, in
 
     // Sensor → nozzle line: colored if filament reaches nozzle, hollow if idle
     {
-        LaneStyle st = lane_style(s.at_nozzle, tool_color, idle_color, bg_color, line_active);
+        LaneStyle st = tube_style(theme, s.at_nozzle, s.is_mounted, tool_color, theme.color_error);
         draw_lane_vline(ctx.layer, slot_x, sensor_y + sensor_r, nozzle_top, st);
     }
 
@@ -312,8 +321,8 @@ void draw_mixed_entry_lanes(const RenderCtx& ctx, const MixedFrame& f) {
 
         // Entry → sensor line
         {
-            LaneStyle st = lane_style(s.has_filament, tool_color, theme.color_idle, theme.color_bg,
-                                      theme.line_width_active);
+            LaneStyle st =
+                tube_style(theme, s.has_filament, s.is_mounted, tool_color, theme.color_error);
             draw_lane_vline(ctx.layer, slot_x, f.entry_y, f.sensor_y - sensor_r, st);
         }
 
@@ -340,6 +349,7 @@ void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f) {
     // lane feeds the same extruder, so any of them answers; the loaded one is
     // preferred only because the legacy T-label follows it.
     int hub_badge_lane = f.first_hub_lane;
+    bool hub_mounted = false;
 
     for (int j = 0; j < data->slot_count; j++) {
         if (!data->slot_is_hub_routed[j])
@@ -350,6 +360,7 @@ void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f) {
             hub_nozzle_color = sj.color;
             hub_tool = (data->mapped_tool[j] >= 0) ? data->mapped_tool[j] : j;
             hub_badge_lane = j;
+            hub_mounted = sj.is_mounted;
             break;
         }
     }
@@ -358,8 +369,8 @@ void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f) {
 
     // Hub bottom → nozzle top line
     {
-        LaneStyle st = lane_style(any_hub_at_nozzle, hub_nozzle_color, theme.color_idle,
-                                  theme.color_bg, theme.line_width_active);
+        LaneStyle st =
+            tube_style(theme, any_hub_at_nozzle, hub_mounted, hub_nozzle_color, theme.color_error);
         draw_lane_vline(ctx.layer, f.hub_cx, f.hub_bottom, nozzle_top, st);
     }
 
@@ -389,8 +400,8 @@ void draw_mixed_direct_lane(const RenderCtx& ctx, const MixedFrame& f, int i) {
     int32_t nozzle_top = f.toolhead_y - f.tool_scale * 2;
 
     {
-        LaneStyle st = lane_style(s.has_filament && s.at_nozzle, tool_color, theme.color_idle,
-                                  theme.color_bg, theme.line_width_active);
+        LaneStyle st = tube_style(theme, s.has_filament && s.at_nozzle, s.is_mounted, tool_color,
+                                  theme.color_error);
         draw_lane_vline(ctx.layer, slot_x, f.sensor_y + theme.sensor_radius, nozzle_top, st);
     }
 
@@ -430,8 +441,8 @@ void draw_mixed_paths(const RenderCtx& ctx, const MixedFrame& f) {
             lv_color_t tool_color = s.has_filament ? s.color : theme.color_idle;
             int fi = (i < FilamentPathData::MAX_SLOTS) ? f.slot_to_fan[i] : -1;
             if (fi >= 0) {
-                LaneStyle st = lane_style(s.has_filament, tool_color, theme.color_idle,
-                                          theme.color_bg, theme.line_width_active);
+                LaneStyle st =
+                    tube_style(theme, s.has_filament, s.is_mounted, tool_color, theme.color_error);
                 pg::FilamentPath path;
                 pg::route_polyline_filleted(path, f.hub_fan[fi].pts, 4, 8.0f);
                 draw_lane(ctx.layer, path, st, nullptr);
@@ -493,11 +504,10 @@ struct LinearHubFrame {
     bool has_buffer = false;
 
     // Resolved colors
-    lv_color_t idle_color, bg_color, active_color, hub_bg, hub_border;
+    lv_color_t idle_color, active_color, hub_bg, hub_border;
     lv_color_t error_color; // error token blended with the pulse phase
 
     // Sizes
-    int32_t line_active = 0;
     int32_t sensor_r = 0;
 
     // Filament / error state
@@ -564,7 +574,6 @@ LinearHubFrame compute_linear_hub_frame(const RenderCtx& ctx) {
 
     // Colors from theme
     f.idle_color = data->theme.color_idle;
-    f.bg_color = data->theme.color_bg;
     f.active_color = lv_color_hex(data->filament_color);
     f.hub_bg = data->theme.color_hub_bg;
     f.hub_border = data->theme.color_hub_border;
@@ -580,7 +589,6 @@ LinearHubFrame compute_linear_hub_frame(const RenderCtx& ctx) {
     }
 
     // Sizes from theme
-    f.line_active = data->theme.line_width_active;
     f.sensor_r = data->theme.sensor_radius;
 
     // LINEAR topology: butt SELECTOR directly against prep sensors (no gap/lines between)
@@ -705,7 +713,6 @@ struct LaneState {
     bool is_active_slot = false;
     bool has_filament = false;
     PathSegment slot_segment = PathSegment::NONE;
-    int32_t lane_width = 0;
     lv_color_t lane_color;       // filament color, with active-slot error override
     lv_color_t merge_line_color; // grayed past the prep sensor for non-active slots
     bool merge_is_idle = false;
@@ -718,7 +725,6 @@ LaneState derive_lane_state(const RenderCtx& ctx, const LinearHubFrame& f, int i
     ls.is_active_slot = s.is_mounted;
     ls.has_filament = s.has_filament;
     ls.slot_segment = s.segment;
-    ls.lane_width = f.line_active;
     ls.lane_color = ls.has_filament ? s.color : f.idle_color;
 
     // Active-slot error overrides for PREP/LANE segments (must run AFTER
@@ -751,8 +757,8 @@ void draw_lane_entry_segment(const RenderCtx& ctx, LinearHubFrame& f, int i, con
     // When no prep sensor exists, draw continuously through the gap.
     int32_t line_end_y = data->slot_has_prep_sensor[i] ? (f.prep_y - f.sensor_r) : f.prep_y;
     {
-        LaneStyle st =
-            lane_style(ls.has_filament, ls.lane_color, f.idle_color, f.bg_color, ls.lane_width);
+        LaneStyle st = tube_style(ctx.data->theme, ls.has_filament, ls.is_active_slot,
+                                  ls.lane_color, f.error_color);
         draw_lane_vline(ctx.layer, ls.slot_x, f.entry_y, line_end_y, st,
                         (ls.has_filament && ls.is_active_slot) ? &f.active_path : nullptr);
     }
@@ -783,8 +789,8 @@ void draw_hub_lane_merge(const RenderCtx& ctx, LinearHubFrame& f, int i, const L
     // fan waypoints (separation by construction). Drop the final hub_top
     // vertex down to the sensor-dot edge so the tube meets the dot, not the box.
     if (i < FilamentPathData::MAX_SLOTS) {
-        LaneStyle st = lane_style(!ls.merge_is_idle, ls.merge_line_color, f.idle_color, f.bg_color,
-                                  ls.lane_width);
+        LaneStyle st = tube_style(ctx.data->theme, !ls.merge_is_idle, ls.is_active_slot,
+                                  ls.merge_line_color, f.error_color);
         pg::PathPoint pts[4] = {f.hub_fan[i].pts[0],
                                 f.hub_fan[i].pts[1],
                                 f.hub_fan[i].pts[2],
@@ -821,8 +827,8 @@ void draw_lane_merge_segment(const RenderCtx& ctx, LinearHubFrame& f, int i, con
         if (ctx.data->hub_on_toolhead) {
             // Each lane drops straight into the selector's top edge at its
             // own x - the passthrough: one tube in, the same tube out.
-            LaneStyle st =
-                lane_style(ls.has_filament, ls.lane_color, f.idle_color, f.bg_color, ls.lane_width);
+            LaneStyle st = tube_style(ctx.data->theme, ls.has_filament, ls.is_active_slot,
+                                      ls.lane_color, f.error_color);
             int32_t start_y =
                 ctx.data->slot_has_prep_sensor[i] ? (f.prep_y + f.sensor_r) : f.prep_y;
             draw_lane_vline(ctx.layer, ls.slot_x, start_y, f.selector_y - f.hub_h / 2, st,
@@ -834,8 +840,8 @@ void draw_lane_merge_segment(const RenderCtx& ctx, LinearHubFrame& f, int i, con
     } else {
         // Other non-hub topologies: converge to center merge point.
         int32_t start_y_other = f.prep_y + f.sensor_r;
-        LaneStyle st = lane_style(!ls.merge_is_idle, ls.merge_line_color, f.idle_color, f.bg_color,
-                                  ls.lane_width);
+        LaneStyle st = tube_style(ctx.data->theme, !ls.merge_is_idle, ls.is_active_slot,
+                                  ls.merge_line_color, f.error_color);
         draw_lane_route(ctx.layer, ls.slot_x, start_y_other, f.center_x, f.merge_y, FILLET_RADIUS,
                         st, (!ls.merge_is_idle && ls.is_active_slot) ? &f.active_path : nullptr);
     }
@@ -893,8 +899,8 @@ void draw_bypass_section(const RenderCtx& ctx, LinearHubFrame& f) {
     // Spool is ~10% of width wide, so stop ~5% before bypass_x.
     int32_t bypass_line_end_x = g.x_off + (int32_t)(g.width * (BYPASS_X_RATIO - 0.05f));
     {
-        LaneStyle st = lane_style(data->bypass_active, bypass_line_color, f.idle_color, f.bg_color,
-                                  f.line_active);
+        LaneStyle st = tube_style(ctx.data->theme, data->bypass_active, true, bypass_line_color,
+                                  f.error_color);
         draw_lane_hline(ctx.layer, f.center_x + f.sensor_r, bypass_line_end_x, f.bypass_merge_y,
                         st);
     }
@@ -935,7 +941,7 @@ bool draw_merge_to_hub_and_check_filament(const RenderCtx& ctx, const LinearHubF
             hub_line_color = f.error_color;
         }
         LaneStyle st =
-            lane_style(hub_line_filled, hub_line_color, f.idle_color, f.bg_color, f.line_active);
+            tube_style(ctx.data->theme, hub_line_filled, true, hub_line_color, f.error_color);
         draw_lane_vline(ctx.layer, f.center_x, f.merge_y, f.hub_y - f.hub_h / 2, st);
         return hub_line_filled;
     }
@@ -1003,7 +1009,7 @@ void draw_selector_tube(const RenderCtx& ctx, LinearHubFrame& f) {
     if (hub_active && f.has_error && f.error_seg == PathSegment::HUB) {
         tube_color = f.error_color;
     }
-    LaneStyle st = lane_style(hub_active, tube_color, f.idle_color, f.bg_color, f.line_active);
+    LaneStyle st = tube_style(ctx.data->theme, hub_active, true, tube_color, f.error_color);
     draw_lane_vline(ctx.layer, f.output_x, sel_top, sel_bot, st,
                     hub_active ? &f.active_path : nullptr);
 }
@@ -1102,7 +1108,7 @@ void draw_buffer_element(const RenderCtx& ctx, LinearHubFrame& f, int32_t output
     // Straight filament through buffer
     {
         LaneStyle st =
-            lane_style(buffer_has_filament, buf_fil_color, f.idle_color, f.bg_color, f.line_active);
+            tube_style(ctx.data->theme, buffer_has_filament, true, buf_fil_color, f.error_color);
         draw_lane_vline(ctx.layer, f.center_x, f.buf_fil_top, f.buf_fil_bot, st,
                         (buffer_has_filament && !data->bypass_active && data->active_slot >= 0)
                             ? &f.active_path
@@ -1128,7 +1134,7 @@ void draw_buffer_element(const RenderCtx& ctx, LinearHubFrame& f, int32_t output
     // Continuation: buffer bottom → merge/toolhead
     {
         LaneStyle st =
-            lane_style(buffer_has_filament, buf_fil_color, f.idle_color, f.bg_color, f.line_active);
+            tube_style(ctx.data->theme, buffer_has_filament, true, buf_fil_color, f.error_color);
         draw_lane_vline(ctx.layer, f.center_x, f.buf_fil_bot, output_end_y - f.sensor_r, st,
                         (buffer_has_filament && !data->bypass_active && data->active_slot >= 0)
                             ? &f.active_path
@@ -1188,13 +1194,13 @@ void draw_output_section(const RenderCtx& ctx, LinearHubFrame& f) {
         // LINEAR with off-center output: orthogonal route from output_x to center_x.
         int32_t oc_start_y = seg_start_y;
         LaneStyle st =
-            lane_style(ams_output_active, seg_color, f.idle_color, f.bg_color, f.line_active);
+            tube_style(ctx.data->theme, ams_output_active, true, seg_color, f.error_color);
         draw_lane_route(ctx.layer, f.output_x, oc_start_y, f.center_x, seg_end_y, FILLET_RADIUS, st,
                         ams_output_active ? &f.active_path : nullptr);
     } else {
         // HUB or LINEAR with output at center: straight vertical.
         LaneStyle st =
-            lane_style(ams_output_active, seg_color, f.idle_color, f.bg_color, f.line_active);
+            tube_style(ctx.data->theme, ams_output_active, true, seg_color, f.error_color);
         draw_lane_vline(ctx.layer, f.center_x, seg_start_y, seg_end_y, st,
                         ams_output_active ? &f.active_path : nullptr);
     }
@@ -1226,7 +1232,7 @@ void draw_toolhead_section(const RenderCtx& ctx, LinearHubFrame& f) {
     // Line from bypass merge point to toolhead sensor
     {
         LaneStyle st =
-            lane_style(toolhead_active, toolhead_color, f.idle_color, f.bg_color, f.line_active);
+            tube_style(ctx.data->theme, toolhead_active, true, toolhead_color, f.error_color);
         draw_lane_vline(ctx.layer, f.center_x, f.bypass_merge_y + f.sensor_r,
                         f.toolhead_y - f.sensor_r, st,
                         (toolhead_active && !data->bypass_active) ? &f.active_path : nullptr);
@@ -1272,7 +1278,7 @@ void draw_nozzle_section(const RenderCtx& ctx, LinearHubFrame& f) {
         (data->active_slot >= 0 && is_segment_active(PathSegment::NOZZLE, f.fil_seg));
     {
         LaneStyle st =
-            lane_style(nozzle_has_filament, noz_color, f.idle_color, f.bg_color, f.line_active);
+            tube_style(ctx.data->theme, nozzle_has_filament, true, noz_color, f.error_color);
         draw_lane_vline(ctx.layer, f.center_x, f.toolhead_y + f.sensor_r,
                         f.nozzle_y - extruder_half_height, st,
                         (nozzle_has_filament && !data->bypass_active) ? &f.active_path : nullptr);
