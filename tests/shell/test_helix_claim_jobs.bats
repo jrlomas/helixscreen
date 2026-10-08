@@ -24,11 +24,15 @@ setup() {
 }
 
 # fake_pool TARGET AVAILABLE: a jobpool whose daemon is up with these numbers.
+# Every call is logged to $FAKE_LOG, so a test can say which commands ran.
 fake_pool() {
+    export FAKE_LOG="$BATS_TEST_TMPDIR/fake-jobpool.log"
     cat > "$FAKE" <<FAKE_EOF
 #!/bin/sh
+echo "\$1" >> "\$FAKE_LOG"
 case "\$1" in
     ensure) echo /fake/fifo ;;
+    target) echo $1 ;;
     status) echo '{"running":true,"pid":1,"target":$1,"available":$2,"consumers":3,"holders":3,"outstanding":5,"last_reset":null}' ;;
     *) exit 2 ;;
 esac
@@ -57,6 +61,46 @@ path_without_jobpool() {
     contains "availGB=" "$stderr"
 }
 
+@test "plain jobs asks only the pool's target, never status or ensure" {
+    # status drains the FIFO to count it, and every make runs jobs.
+    fake_pool 30 4
+    run "$CLAIM" jobs
+    [ "$status" -eq 0 ]
+    [ "$output" = "30" ]
+    [ "$(cat "$FAKE_LOG")" = "target" ]
+}
+
+@test "jobs -v lets status finish when it is killed mid-count" {
+    # A status interrupted between draining and refilling loses the tokens;
+    # the advisor runs jobs -v under timeout 2.
+    cat > "$FAKE" <<'FAKE_EOF'
+#!/bin/sh
+case "$1" in
+    target) echo 30 ;;
+    status) sleep 1; echo '{"available":4}'; touch "$BATS_TEST_TMPDIR/status-done" ;;
+esac
+FAKE_EOF
+    chmod +x "$FAKE"
+    run timeout 0.3 "$CLAIM" jobs -v
+    [ "$status" -eq 124 ]
+    local _
+    for _ in $(seq 30); do [ -e "$BATS_TEST_TMPDIR/status-done" ] && break; sleep 0.1; done
+    [ -e "$BATS_TEST_TMPDIR/status-done" ]
+}
+
+@test "the pool subcommand prints the target, and exits 1 with none" {
+    fake_pool 12 4
+    run "$CLAIM" pool
+    [ "$status" -eq 0 ]
+    [ "$output" = "12" ]
+    JOBPOOL=0 run "$CLAIM" pool
+    [ "$status" -eq 1 ]
+    [ -z "$output" ]
+    printf '#!/bin/sh\nexit 1\n' > "$FAKE"
+    run "$CLAIM" pool
+    [ "$status" -eq 1 ]
+}
+
 @test "JOBPOOL=0 bypasses the pool here as it does in the shim" {
     fake_pool 999 4
     JOBPOOL=0 run --separate-stderr "$CLAIM" jobs -v
@@ -73,8 +117,8 @@ path_without_jobpool() {
     [ "$output" -ge 1 ]
 }
 
-@test "a status it cannot read falls back to the cores" {
-    printf '#!/bin/sh\necho not json\n' > "$FAKE"; chmod +x "$FAKE"
+@test "a target it cannot read falls back to the cores" {
+    printf '#!/bin/sh\necho not a number\n' > "$FAKE"; chmod +x "$FAKE"
     run --separate-stderr "$CLAIM" jobs -v
     [ "$status" -eq 0 ]
     contains "ncpu=" "$stderr"

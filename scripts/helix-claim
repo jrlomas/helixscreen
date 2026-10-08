@@ -188,6 +188,17 @@ describe() {
     return 0
 }
 
+# The live jobpool's target, or exit 1 when there is none. `jobpool target`
+# takes no lock and moves no tokens, so this is safe on every make and under a
+# timeout. JOBPOOL=0 is jobpool's own bypass, so it bypasses here too.
+# HELIX_JOBPOOL names the jobpool binary (tests point it at a fake).
+pool_target() {
+    local t
+    [ "${JOBPOOL:-}" != 0 ] || return 1
+    t=$("${HELIX_JOBPOOL:-jobpool}" target 2>/dev/null) && [ "$t" -gt 0 ] 2>/dev/null || return 1
+    printf '%s\n' "$t"
+}
+
 cmd=${1:-}; shift 2>/dev/null || true
 case "$cmd" in
 take)
@@ -256,27 +267,28 @@ list)
     for f in "$CLAIM_DIR"/*.json; do describe "$f"; n=$((n+1)); done
     [ "$n" = 0 ] && printf 'no claims\n'
     ;;
+pool)
+    pool_target
+    ;;
 jobs)
     # The -j a build should take. With jobpool installed, every make on the box
     # draws from one machine pool, so the answer is the pool's size and the
     # pool divides it between builds as they run. Without it (CI, a Mac, a
     # contributor's box) it is the cores, capped by memory at ~1GB per
-    # compile. JOBPOOL=0 is jobpool's own bypass, so it bypasses here too.
-    # HELIX_JOBPOOL names the jobpool binary (tests point it at a fake).
-    jp=${HELIX_JOBPOOL:-jobpool}
+    # compile.
     avail_kb=$(awk '/^MemAvailable:/{print $2}' /proc/meminfo 2>/dev/null)
     mem_gb=$(( ${avail_kb:-0} / 1048576 ))
-    if [ "${JOBPOOL:-}" != 0 ] && command -v "$jp" >/dev/null 2>&1 &&
-        "$jp" ensure >/dev/null 2>&1 && st=$("$jp" status --json 2>/dev/null); then
-        target=$(printf '%s' "$st" | sed -n 's/.*"target":\([0-9][0-9]*\).*/\1/p')
-        free=$(printf '%s' "$st" | sed -n 's/.*"available":\([0-9][0-9]*\).*/\1/p')
-        if [ "${target:-0}" -gt 0 ] 2>/dev/null; then
-            [ "${1:-}" = "-v" ] &&
-                printf 'pool target=%s available=%s availGB=%s -> -j%s\n' \
-                    "$target" "${free:-0}" "$mem_gb" "$target" >&2
-            printf '%s\n' "$target"
-            exit 0
+    if target=$(pool_target); then
+        if [ "${1:-}" = "-v" ]; then
+            # status drains the FIFO and writes the tokens back, so a signal
+            # between the two loses them; the advisor runs this under timeout.
+            free=$( (trap '' INT TERM HUP PIPE; "${HELIX_JOBPOOL:-jobpool}" status --json 2>/dev/null) |
+                sed -n 's/.*"available":\([0-9][0-9]*\).*/\1/p')
+            printf 'pool target=%s available=%s availGB=%s -> -j%s\n' \
+                "$target" "${free:-0}" "$mem_gb" "$target" >&2
         fi
+        printf '%s\n' "$target"
+        exit 0
     fi
     ncpu=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
     j=$ncpu
@@ -474,6 +486,9 @@ helix-claim - advisory claims on resources shared between agent sessions
   run heavy:<what> [--note X] -- <cmd...>     hold heavy:<what> while cmd runs and
                                               exit with its status; exits 75 with
                                               cmd unrun if the claim is held
+  jobs [-v]                                   the -j a build takes: the jobpool's
+                                              target, else cores capped by memory
+  pool                                        the live jobpool's target; exit 1 if none
   resources [--no-zeus]                       memory, load, fair -j, live claims,
                                               top memory users, and zeus
 
