@@ -83,6 +83,17 @@ float ams_lane_spool_get_fill_level(lv_obj_t* spool);
  */
 void ams_lane_spool_set_fill_level(lv_obj_t* spool, float fill_level);
 
+/// Current-lane mark: a glow around the spool's silhouette (both styles).
+/// Pulse animates the glow's opacity during a load/unload.
+enum class SpoolHighlight { None, Steady, Pulse };
+
+/**
+ * @brief Set the lane's glow. Survives a size or style rebuild; hidden while
+ *        the lane is Empty. The glow overhangs the widget, which passes the
+ *        overhang up as ext draw size (pass_child_overhang).
+ */
+void ams_lane_spool_set_highlight(lv_obj_t* spool, SpoolHighlight highlight);
+
 /**
  * @brief Resize the spool graphic (px; <= 0 is refused)
  *
