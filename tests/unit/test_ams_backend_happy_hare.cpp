@@ -6938,17 +6938,16 @@ TEST_CASE("Happy Hare v3 slot edit never sends VENDOR", "[ams][happy_hare][hh_v4
     CHECK_FALSE(helper.has_gcode_containing("VENDOR"));
 }
 
-TEST_CASE("Happy Hare v4 residual filament is parsed into backend state",
-          "[ams][happy_hare][hh_v4]") {
-    AmsBackendHappyHareTestHelper helper;
+TEST_CASE("Happy Hare empty gate_vendor keeps a user-declared brand", "[ams][happy_hare][hh_v4]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
     helper.initialize_test_gates(4);
-    CHECK(helper.residual_filament_mm() == 0.0F);
 
-    helper.feed_mmu_status({{"filament_remaining", 12.5}, {"filament_remaining_color", "FF0000"}});
-    CHECK(helper.residual_filament_mm() == Catch::Approx(12.5F));
-    CHECK(helper.residual_filament_color() == "FF0000");
+    helix::ams::FilamentSlotOverride o;
+    o.brand = "Polymaker";
+    helper.set_gate_override(0, o);
 
-    // A frame silent about the residual keeps the last reading.
-    helper.feed_mmu_status({{"gate_material", nlohmann::json::array({"PLA"})}});
-    CHECK(helper.residual_filament_mm() == Catch::Approx(12.5F));
+    helper.feed_mmu_status({{"gate_vendor", nlohmann::json::array({"QIDI", ""})}});
+    helper.feed_mmu_status({{"gate_vendor", nlohmann::json::array({"", ""})}});
+    CHECK(helper.get_slot_info(0).brand == "Polymaker");
 }

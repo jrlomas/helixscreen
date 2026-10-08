@@ -869,13 +869,6 @@ void AmsBackendHappyHare::apply_mmu_telemetry_locked(const happy_hare::MmuTeleme
         system_info_.sync_feedback_bias_raw = kBiasUnavailable;
     }
 
-    if (t.filament_remaining) {
-        residual_filament_mm_ = *t.filament_remaining;
-    }
-    if (t.filament_remaining_color) {
-        residual_filament_color_ = *t.filament_remaining_color;
-    }
-
     if (t.sync_drive) {
         system_info_.sync_drive = *t.sync_drive;
         spdlog::trace("[AMS HappyHare] Sync drive: {}", system_info_.sync_drive);

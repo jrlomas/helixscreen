@@ -106,16 +106,6 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     [[nodiscard]] int get_bowden_progress() const override {
         return bowden_progress_;
     }
-    /// v4 residual cut tip in the extruder: length in mm (0 when none or not
-    /// published) and its colour as Happy Hare reports it.
-    [[nodiscard]] float residual_filament_mm() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return residual_filament_mm_;
-    }
-    [[nodiscard]] std::string residual_filament_color() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return residual_filament_color_;
-    }
     [[nodiscard]] PathTopology get_topology() const override;
     [[nodiscard]] PathTopology get_unit_topology(int unit_index) const override;
     [[nodiscard]] PathSegment get_filament_segment() const override;
@@ -720,10 +710,8 @@ class AmsBackendHappyHare : public AmsSubscriptionBackend {
     // empty, the re-bind verdict in the gate_spool_id parse, or a clear.
 
     // Path visualization state
-    int filament_pos_{0};                 ///< Happy Hare filament_pos value
-    float residual_filament_mm_{0.0F};    ///< v4 filament_remaining
-    std::string residual_filament_color_; ///< v4 filament_remaining_color
-    int bowden_progress_{-1};             ///< Bowden loading progress 0-100% (-1=unavailable, v4)
+    int filament_pos_{0};     ///< Happy Hare filament_pos value
+    int bowden_progress_{-1}; ///< Bowden loading progress 0-100% (-1=unavailable, v4)
     PathSegment error_segment_{PathSegment::NONE}; ///< Inferred error location
 
     // Dryer state (v4 - KMS/EMU hardware)

@@ -614,8 +614,6 @@ MmuTelemetryDelta parse_telemetry(const nlohmann::json& mmu) {
     d.sync_feedback_bias = ams::read_field<float>(mmu, "sync_feedback_bias_modelled");
     d.sync_feedback_bias_raw = ams::read_field<float>(mmu, "sync_feedback_bias_raw");
     d.sync_drive = ams::read_field<bool>(mmu, "sync_drive");
-    d.filament_remaining = ams::read_field<float>(mmu, "filament_remaining");
-    d.filament_remaining_color = ams::read_field<std::string>(mmu, "filament_remaining_color");
     d.clog_detection_enabled = ams::read_integer_field(mmu, "clog_detection_enabled");
 
     if (mmu.contains("encoder") && mmu["encoder"].is_object()) {

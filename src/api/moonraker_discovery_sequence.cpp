@@ -1352,8 +1352,6 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
                                                    "gate_material",
                                                    "gate_name",
                                                    "gate_vendor",
-                                                   "filament_remaining",
-                                                   "filament_remaining_color",
                                                    "gate_filament_name",
                                                    "gate_spool_id",
                                                    "gate_temperature",

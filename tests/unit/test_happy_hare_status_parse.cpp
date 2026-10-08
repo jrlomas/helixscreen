@@ -451,22 +451,14 @@ TEST_CASE("Happy Hare units: heaters collapse to one name only when every unit s
     CHECK(collect_unit_objects({a, b}, UnitObjectKind::Heater).per_gate.empty());
 }
 
-TEST_CASE("Happy Hare v4 status parse reads gate_vendor and the residual filament",
-          "[happy_hare][status_parse][hh_v4]") {
-    const json mmu = {{"gate_vendor", json::array({"QIDI", 3, ""})},
-                      {"filament_remaining", 12.5},
-                      {"filament_remaining_color", "FF0000"}};
+TEST_CASE("Happy Hare v4 status parse reads gate_vendor", "[happy_hare][status_parse][hh_v4]") {
+    const json mmu = {{"gate_vendor", json::array({"QIDI", 3, ""})}};
     const auto d = happy_hare::parse_mmu_status(mmu);
     REQUIRE(d.identity.vendor);
     CHECK((*d.identity.vendor)[0] == "QIDI");
     CHECK_FALSE((*d.identity.vendor)[1]);
     CHECK((*d.identity.vendor)[2] == "");
-    REQUIRE(d.telemetry.filament_remaining);
-    CHECK(*d.telemetry.filament_remaining == Catch::Approx(12.5F));
-    CHECK(*d.telemetry.filament_remaining_color == "FF0000");
 
     const auto none = happy_hare::parse_mmu_status(json::object());
     CHECK_FALSE(none.identity.vendor);
-    CHECK_FALSE(none.telemetry.filament_remaining);
-    CHECK_FALSE(none.telemetry.filament_remaining_color);
 }

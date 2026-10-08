@@ -98,9 +98,6 @@ struct MmuTelemetryDelta {
     std::optional<float> sync_feedback_bias; ///< sync_feedback_bias_modelled
     std::optional<float> sync_feedback_bias_raw;
     std::optional<bool> sync_drive;
-    /// v4 filament_remaining: mm of cut tip left in the extruder, and its colour.
-    std::optional<float> filament_remaining;
-    std::optional<std::string> filament_remaining_color;
     std::optional<int> clog_detection_enabled;
     std::optional<EncoderDelta> encoder;
     std::optional<FlowguardDelta> flowguard;
