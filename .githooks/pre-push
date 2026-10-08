@@ -115,7 +115,12 @@ done
 # that the helix-xml submodule-test gate finds no configured build tree and skips
 # itself - which is its designed behaviour, and deliberate here, because its
 # first configure clones LVGL over the network and is far too slow for a hook.
-if [ -d "$REPO_ROOT/build/bin" ]; then
+#
+# The binaries were built from THIS tree, so they only describe a pushed commit
+# that descends from it. Pushing another line from here (release/1.0 from main)
+# would validate that line with this branch's tools; without build/bin the
+# binary-backed gates report "not built - skipping" instead of false errors.
+if [ -d "$REPO_ROOT/build/bin" ] && git merge-base --is-ancestor HEAD "$TARGET" 2>/dev/null; then
     mkdir -p "$ISOLATED/tree/build"
     ln -s "$REPO_ROOT/build/bin" "$ISOLATED/tree/build/bin"
 fi

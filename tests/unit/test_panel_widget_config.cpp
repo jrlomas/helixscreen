@@ -4,6 +4,7 @@
 #include "../test_helpers/config_dir_guard.h"
 #include "../test_helpers/config_test_access.h"
 #include "../test_helpers/scoped_breakpoint.h"
+#include "../test_helpers/scoped_runtime_config.h"
 #include "config.h"
 #include "data_root_resolver.h"
 #include "panel_widget_config.h"
@@ -262,6 +263,46 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
 
     // The third entry should be disabled
     REQUIRE(saved[2]["enabled"].get<bool>() == false);
+}
+
+TEST_CASE_METHOD(
+    PanelWidgetConfigFixture,
+    "PanelWidgetConfig: crash-loop safe mode shows defaults and keeps the saved layout",
+    "[panel_widget][widget_config][crash_loop]") {
+    json widgets = json::array({
+        {{"id", "temperature"}, {"enabled", true}, {"col", 0}, {"row", 0}},
+        {{"id", "led"}, {"enabled", false}, {"col", 1}, {"row", 0}},
+        {{"id", "network"}, {"enabled", true}, {"col", 2}, {"row", 0}},
+    });
+    setup_with_widgets(widgets);
+    const json saved_before = get_saved_root();
+
+    {
+        ScopedRuntimeConfig scoped_config;
+        get_runtime_config()->crash_loop_safe_mode = true;
+
+        PanelWidgetConfig wc("home", config);
+        wc.load();
+        const auto defaults = PanelWidgetConfig::build_default_grid();
+        REQUIRE(wc.entries().size() == defaults.size());
+        for (size_t i = 0; i < defaults.size(); ++i) {
+            CHECK(wc.entries()[i].id == defaults[i].id);
+            CHECK(wc.entries()[i].enabled == defaults[i].enabled);
+        }
+
+        // Edits made in safe mode are not persisted over the user's layout.
+        wc.set_enabled(0, !wc.entries()[0].enabled);
+        wc.save();
+        CHECK(get_saved_root() == saved_before);
+    }
+
+    // Normal mode reads the saved layout again.
+    PanelWidgetConfig wc("home", config);
+    wc.load();
+    REQUIRE_FALSE(wc.entries().empty());
+    CHECK(wc.entries()[0].id == "temperature");
+    CHECK(wc.entries()[1].id == "led");
+    CHECK_FALSE(wc.entries()[1].enabled);
 }
 
 // ============================================================================

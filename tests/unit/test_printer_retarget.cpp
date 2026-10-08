@@ -24,6 +24,7 @@
 #include "m300_sound_backend.h"
 #include "moonraker_manager.h"
 #include "print_history_manager.h"
+#include "print_start_collector.h"
 #include "printer_retarget.h"
 #include "printer_state.h"
 #include "sound_manager.h"
@@ -80,9 +81,9 @@ class RetargetFixture : public LVGLTestFixture {
     }
 
     helix::test::FakeMoonrakerClient* client_ = nullptr;
+    MoonrakerManager manager_;
 
   private:
-    MoonrakerManager manager_;
     std::unique_ptr<ScopedMoonrakerClient> installed_;
     helix::Config* cfg_ = nullptr;
     nlohmann::json saved_data_;
@@ -122,6 +123,51 @@ TEST_CASE_METHOD(RetargetFixture, "Retarget: a transport that cannot start repor
 TEST_CASE_METHOD(RetargetFixture, "Retarget: the active printer's WebSocket URL",
                  "[multi-printer][retarget]") {
     CHECK(helix::active_printer_ws_url() == "ws://10.0.0.2:7126/websocket");
+}
+
+TEST_CASE_METHOD(RetargetFixture, "Retarget: the active printer's HTTP base URL",
+                 "[multi-printer][retarget]") {
+    CHECK(helix::active_printer_http_url() == "http://10.0.0.2:7126");
+}
+
+TEST_CASE_METHOD(RetargetFixture, "Retarget: a printer with no saved host takes the default",
+                 "[multi-printer][retarget]") {
+    helix::ConfigTestAccess::data(*helix::Config::get_instance())["printers"]["beta"].erase(
+        "moonraker_host");
+    CHECK(helix::active_printer_ws_url() == "ws://:7126/websocket");
+    CHECK(helix::active_printer_ws_url("localhost") == "ws://localhost:7126/websocket");
+    CHECK(helix::active_printer_http_url("localhost") == "http://localhost:7126");
+}
+
+TEST_CASE_METHOD(RetargetFixture, "Connect: every connection gets a print-start collector",
+                 "[multi-printer][retarget]") {
+    REQUIRE(manager_.print_start_collector() == nullptr);
+
+    REQUIRE(helix::connect_active_printer());
+    const auto first = manager_.print_start_collector();
+    CHECK(first != nullptr);
+    CHECK(client_->get_last_url() == "ws://10.0.0.2:7126/websocket");
+
+    // A switch's connect replaces it: the collector reads the new printer's profile. The
+    // old one is stopped and unhooked from the client, which a retarget keeps: left
+    // registered, a collector replaced mid-PRINT_START would keep collecting from the
+    // next printer's gcode.
+    first->start();
+    REQUIRE(first->is_active());
+    REQUIRE(client_->method_callbacks["notify_gcode_response"].size() == 1);
+    REQUIRE(helix::retarget_printer_connection());
+    CHECK(manager_.print_start_collector() != nullptr);
+    CHECK(manager_.print_start_collector() != first);
+    CHECK_FALSE(first->is_active());
+    CHECK(client_->method_callbacks["notify_gcode_response"].empty());
+}
+
+TEST_CASE_METHOD(RetargetFixture, "Connect: a transport that cannot start gets no collector",
+                 "[multi-printer][retarget]") {
+    client_->connect_result = -1;
+
+    CHECK_FALSE(helix::connect_active_printer());
+    CHECK(manager_.print_start_collector() == nullptr);
 }
 
 TEST_CASE_METHOD(RetargetFixture,

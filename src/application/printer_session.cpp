@@ -4,11 +4,10 @@
 #include "printer_session.h"
 
 #include "ui_ams_tool_text.h"
-#include "ui_emergency_stop.h"
 #include "ui_keyboard_manager.h"
 #include "ui_language_refresh.h"
 #include "ui_modal.h"
-#include "ui_nav_manager.h"
+#include "ui_nav.h"
 #include "ui_notification.h"
 #include "ui_notification_history.h"
 #include "ui_notification_manager.h"
@@ -18,7 +17,6 @@
 #include "ui_panel_input_shaper.h"
 #include "ui_panel_memory_stats.h"
 #include "ui_panel_screws_tilt.h"
-#include "ui_printer_status_icon.h"
 #include "ui_probe_overlay.h"
 #include "ui_settings_about.h"
 #include "ui_spaghetti_detection_modal.h"
@@ -27,7 +25,6 @@
 #include "ui_utils.h"
 #include "ui_wizard.h"
 
-#include "abort_manager.h"
 #include "active_print_media_manager.h"
 #include "ams_state.h"
 #include "app_globals.h"
@@ -38,7 +35,6 @@
 #include "discovery_steps.h"
 #include "display_manager.h"
 #include "filament_consumption_tracker.h"
-#include "hardware_fingerprint.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix_version.h"
 #include "job_queue_state.h"
@@ -55,16 +51,16 @@
 #include "moonraker_performance_source.h"
 #include "page_scroll_auto_inject.h"
 #include "panel_factory.h"
-#include "pending_startup_warnings.h"
 #include "performance_state.h"
 #include "post_op_cooldown_manager.h"
 #include "power_device_state.h"
 #include "print_history_manager.h"
 #include "printer_cache_registry.h"
 #include "printer_discovery.h"
+#include "printer_retarget.h"
 #include "printer_state.h"
-#include "safety_settings_manager.h"
 #include "sensor_state.h"
+#include "session_wiring.h"
 #include "settings_manager.h"
 #include "sound_manager.h"
 #include "spoolman_active_spool_sync.h"
@@ -110,16 +106,8 @@ PrinterSession::PrinterSession(Config*& config, AsyncLifetimeGuard& async, lv_ob
 
 PrinterSession::~PrinterSession() = default;
 
-bool PrinterSession::note_hardware_fingerprint(size_t fingerprint) {
-    const bool changed = m_first_discovery_complete || fingerprint != m_last_hardware_fingerprint;
-    m_last_hardware_fingerprint = fingerprint;
-    m_first_discovery_complete = false;
-    return changed;
-}
-
 void PrinterSession::reset_discovery_session() {
-    m_first_discovery_complete = true;
-    m_last_hardware_fingerprint = 0;
+    m_hw_changes.reset();
     m_prompter.reset_for_new_connection();
 }
 
@@ -177,16 +165,9 @@ bool PrinterSession::init_panel_subjects() {
     // Phase 5-7: Observers and utility subjects
     m_subjects->init_post(*get_runtime_config());
 
-    // Initialize EmergencyStopOverlay (moved from MoonrakerManager)
-    // Must happen after both API and EmergencyStopOverlay::init_subjects()
-    EmergencyStopOverlay::instance().init(get_printer_state(), m_moonraker->api());
-    EmergencyStopOverlay::instance().create();
-    EmergencyStopOverlay::instance().set_require_confirmation(
-        SafetySettingsManager::instance().get_estop_require_confirmation());
-
-    // Initialize AbortManager for smart print cancellation
-    // Must happen after both API and AbortManager::init_subjects()
-    helix::AbortManager::instance().init(m_moonraker->api(), &get_printer_state());
+    // E-stop, abort, keyboard, notifications and toasts, and the trackers: after the panel
+    // subjects, before the shell.
+    helix::init_session_services(m_moonraker->api(), m_screen);
 
     // Spaghetti / failed-print detection
     // (see docs/devel/printers/SNAPMAKER_U1_SUPPORT.md, defect_detection)
@@ -244,35 +225,13 @@ bool PrinterSession::init_panel_subjects() {
 }
 
 bool PrinterSession::init_ui() {
-    // Create entire UI from XML. Timed because this builds all six panel
-    // subtrees in one call — the other half of what per-panel deferral would
-    // move off boot and onto the first navigation.
-    auto layout_t0 = std::chrono::steady_clock::now();
-    m_app_layout = static_cast<lv_obj_t*>(lv_xml_create(m_screen, "app_layout", nullptr));
-    spdlog::debug(
-        "[Application] app_layout XML create took {:.1f}ms",
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - layout_t0)
-            .count());
-    if (!m_app_layout) {
-        spdlog::error("[Application] Failed to create app_layout from XML");
+    m_app_layout = helix::create_app_layout(
+        m_screen, [this](const std::string& printer_id) { request_switch(printer_id); },
+        [this]() { add_printer_via_wizard(); });
+    m_panels = std::make_unique<PanelFactory>();
+    if (!m_app_layout || !helix::setup_app_panels(m_app_layout, m_screen, *m_panels)) {
         return false;
     }
-
-    // Disable scrollbars on screen
-    lv_obj_clear_flag(m_screen, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(m_screen, LV_SCROLLBAR_MODE_OFF);
-
-    // Force layout calculation
-    lv_obj_update_layout(m_screen);
-
-    // Register app_layout with navigation
-    NavigationManager::instance().set_app_layout(m_app_layout);
-
-    // Initialize printer status icon (sets up observers on PrinterState)
-    PrinterStatusIcon::instance().init();
-
-    // Initialize notification system
-    helix::ui::notification_manager_init();
 
     // Seed test notifications in --test mode for debugging
     if (get_runtime_config()->is_test_mode()) {
@@ -280,76 +239,6 @@ bool PrinterSession::init_ui() {
         // Update notification badge to show unread count and severity color
         helix::ui::notification_refresh_from_history();
     }
-
-    // Initialize toast system
-    ToastManager::instance().init();
-
-    // Drain any warnings that backends enqueued during pre-UI initialization
-    // (e.g. "simpledrm detected", "requested resolution not available").
-    // See prestonbrown/helixscreen#766.
-    helix::PendingStartupWarnings::instance().drain([](helix::PendingStartupWarnings::Severity sev,
-                                                       const std::string& msg,
-                                                       uint32_t duration_ms) {
-        ToastSeverity toast_sev = ToastSeverity::INFO;
-        switch (sev) {
-        case helix::PendingStartupWarnings::Severity::INFO:
-            toast_sev = ToastSeverity::INFO;
-            break;
-        case helix::PendingStartupWarnings::Severity::SUCCESS:
-            toast_sev = ToastSeverity::SUCCESS;
-            break;
-        case helix::PendingStartupWarnings::Severity::WARNING:
-            toast_sev = ToastSeverity::WARNING;
-            break;
-        case helix::PendingStartupWarnings::Severity::ERROR:
-            toast_sev = ToastSeverity::ERROR;
-            break;
-        }
-        ToastManager::instance().show(toast_sev, msg.c_str(), duration_ms);
-    });
-
-    // Initialize overlay backdrop
-    NavigationManager::instance().init_overlay_backdrop(m_screen);
-
-    // Find navbar and content area
-    lv_obj_t* navbar = helix::ui::find_required(m_app_layout, "navbar", "Application");
-    lv_obj_t* content_area = helix::ui::find_required(m_app_layout, "content_area", "Application");
-
-    if (!navbar || !content_area) {
-        return false;
-    }
-
-    // Wire navigation
-    NavigationManager::instance().wire_events(navbar);
-
-    // Register printer switch/add callbacks so navbar badge menu can trigger actions
-    NavigationManager::instance().set_printer_callbacks(
-        [this](const std::string& printer_id) { request_switch(printer_id); },
-        [this]() { add_printer_via_wizard(); });
-
-    // Find panel container
-    lv_obj_t* panel_container =
-        helix::ui::find_required(content_area, "panel_container", "Application");
-    if (!panel_container) {
-        return false;
-    }
-
-    // Initialize panels
-    m_panels = std::make_unique<PanelFactory>();
-    if (!m_panels->find_panels(panel_container)) {
-        return false;
-    }
-    m_panels->setup_panels(m_screen);
-
-    // Create print status overlay
-    if (!m_panels->create_print_status_overlay(m_screen)) {
-        spdlog::error("[Application] Failed to create print status overlay");
-        return false;
-    }
-    // print_status is created lazily by PrintStatusPanel::push_overlay()
-
-    // Initialize keypad
-    m_panels->init_keypad(m_screen);
 
     spdlog::info("[Application] UI created successfully");
     helix::MemoryMonitor::log_now("after_ui_created");
@@ -399,9 +288,6 @@ bool PrinterSession::init_moonraker() {
         m_screen = active_screen;
     }
 
-    // Initialize global keyboard
-    KeyboardManager::instance().init(m_screen);
-
     // Initialize memory stats overlay
     MemoryStatsOverlay::instance().init(m_screen, m_host.args.show_memory);
 
@@ -420,6 +306,12 @@ void PrinterSession::init_plugins() {
     if (m_plugin_host) {
         m_plugin_host->unload_all();
         m_plugin_host.reset();
+    }
+    if (get_runtime_config()->crash_loop_safe_mode) {
+        spdlog::warn("[Application] Crash-loop safe mode: plugins not loaded");
+        m_known_plugin_ids.clear();
+        update_plugins_row_visibility();
+        return;
     }
     helix::plugin::PluginHost::Deps deps;
     deps.backend = helix::plugin::make_app_backend();
@@ -521,10 +413,6 @@ void PrinterSession::setup_discovery_callbacks() {
 
     PrinterSession* app = this;
 
-    // On a WLED-only printer discovery-complete finds nothing to light; WLED's
-    // answer is LED on at Start's next chance, and the latch keeps it to one.
-    helix::led::LedController::instance().set_on_wled_settled(helix::settle_light_buttons);
-
 #if HELIX_HAS_PLUGINS
     // Moonraker pushes notify_filelist_changed for every file operation in
     // every root; only the plugin folder may cost a sync. The predicate is
@@ -550,116 +438,25 @@ void PrinterSession::setup_discovery_callbacks() {
     client->set_subscription_extras_provider(&helix::plugin::plugin_objects_union);
 #endif
 
-    client->set_on_hardware_discovered([api, client, app](const helix::PrinterDiscovery& hardware) {
-        // Copy hardware into a mutable snapshot on the BG thread so the
-        // queued main-thread callback owns a stable, non-aliased copy. Previous
-        // implementations used an aggregate ctx struct which triggered multiple
-        // PrinterDiscovery copies and a crash on main-thread copy-assign (#761).
-        // Use std::move on the main thread to avoid iterating hash table nodes
-        // during copy-assign, which is vulnerable to heap corruption (#789).
-        auto snapshot = std::make_shared<helix::PrinterDiscovery>(hardware);
-        helix::ui::queue_update(
-            "PrinterSession::setup_discovery_callbacks", [api, client, app, snapshot]() {
-                if (app->m_host.shutdown_complete)
-                    return;
-                // A new discovery cycle is starting — re-arm the once-per-connection
-                // targeted hardware-reconfig wizard guard so a reconnect can re-offer it.
-                app->m_prompter.begin_discovery_cycle();
-                api->hardware() = std::move(*snapshot);
-                helix::init_subsystems_from_hardware(api->hardware(), api, client);
-            });
-    });
-
-    client->set_on_discovery_complete([api, client, app](const helix::PrinterDiscovery& hardware,
-                                                         const nlohmann::json& initial_status) {
-        spdlog::debug("[Application] on_discovery_complete BG-thread entry (status keys: {})",
-                      initial_status.is_object() ? initial_status.size() : 0);
-        auto snapshot = std::make_shared<helix::PrinterDiscovery>(hardware);
-        auto status_snapshot = std::make_shared<const nlohmann::json>(initial_status);
-        helix::ui::queue_update("PrinterSession::on_discovery_complete", [api, client, app,
-                                                                          snapshot,
-                                                                          status_snapshot]() {
-            // Count invocations so crash bundles reveal whether we crashed on
-            // the first discovery or on a reconnect-triggered re-run.
-            static int s_discovery_complete_n = 0;
-            long n = static_cast<long>(++s_discovery_complete_n);
-            crash_handler::breadcrumb::note("disc", "cb_begin", n);
-
-            spdlog::debug("[Application] on_discovery_complete UI-thread entry (shutdown={})",
-                          app->m_host.shutdown_complete);
-            // Safety check: if the process is shutting down, skip all processing
-            // This prevents use-after-free if shutdown races with callback delivery
-            if (app->m_host.shutdown_complete) {
-                return;
-            }
-
+    helix::wire_discovery(*api, *client,
+                          {m_hw_changes, [app] { return !app->m_host.shutdown_complete; },
+                           // A new discovery cycle re-arms the once-per-connection targeted
+                           // hardware-reconfig wizard guard, so a reconnect can re-offer it.
+                           [app] { app->m_prompter.begin_discovery_cycle(); },
+                           [app](helix::DiscoveryContext& ctx) {
 #if HELIX_HAS_PLUGINS
-            // Every connect and reconnect re-syncs the plugin folder: it may
-            // have changed while the connection was down.
-            if (app->m_plugin_sync)
-                app->m_plugin_sync->sync_now();
+                               // Every connect and reconnect re-syncs the plugin folder: it may
+                               // have changed while the connection was down.
+                               if (app->m_plugin_sync)
+                                   app->m_plugin_sync->sync_now();
 #endif
-
-            // Copy snapshot into API's hardware data. Copy (not move) so we can
-            // move the snapshot into set_hardware below — the snapshot is the
-            // only reference we own and nobody else aliases it, so this copy is
-            // race-free (#789, #799).
-            crash_handler::breadcrumb::note("disc", "pre_api_hw",
-                                            static_cast<long>(snapshot->macros().size()));
-            api->hardware() = *snapshot;
-            crash_handler::breadcrumb::note("disc", "post_api_hw", n);
-
-            // Hardware-shape fingerprint: detect "reconnect with same hardware"
-            // so user-facing side-effects (LED chip population, hardware
-            // validation toasts, targeted reconfig wizard, telemetry snapshots)
-            // can skip. See compute_hardware_fingerprint() in
-            // hardware_fingerprint.h for rationale.
-            // Computed from api->hardware() (post-copy) — *snapshot is moved
-            // into set_hardware below and is empty after that point.
-            const size_t new_fingerprint = helix::compute_hardware_fingerprint(api->hardware());
-            const bool hw_changed = app->note_hardware_fingerprint(new_fingerprint);
-            crash_handler::breadcrumb::note("disc", "hw_changed", hw_changed ? 1L : 0L);
-            if (hw_changed) {
-                spdlog::info("[Application] on_discovery_complete #{} — hardware shape changed "
-                             "(fingerprint=0x{:x}), running full pipeline",
-                             n, new_fingerprint);
-            } else {
-                spdlog::info("[Application] on_discovery_complete #{} — hardware shape unchanged "
-                             "(fingerprint=0x{:x}), skipping user-facing side-effects",
-                             n, new_fingerprint);
-            }
-
-            // Mark discovery complete so splash can exit
-            app->m_host.discovery_complete();
-            spdlog::info("[Application] Moonraker discovery complete, splash can exit");
-
-            // Everything below reads the hardware from api->hardware(): the snapshot is
-            // moved into PrinterState by the set_hardware step and is empty afterwards.
-            // The print_active subject is not yet updated from this discovery's initial
-            // status (dispatch_status_update only queues it), so the status itself decides
-            // whether a print is running: a wizard or a gcode send must never land over a
-            // live print on a mid-print reconnect.
-            helix::DiscoveryContext ctx{
-                *api,
-                *client,
-                api->hardware(),
-                *snapshot,
-                *status_snapshot,
-                app->m_prompter,
-                app->m_job_queue_state.get(),
-                app->m_screen,
-                n,
-                hw_changed,
-                helix::discovery_print_active(
-                    lv_subject_get_int(
-                        get_printer_state().print_state().get_print_active_subject()) != 0,
-                    *status_snapshot)};
-            helix::run_discovery_steps(ctx);
-            if (auto* hm = get_print_history_manager()) {
-                hm->on_discovery_complete();
-            }
-        });
-    });
+                               app->m_host.discovery_complete();
+                               spdlog::info(
+                                   "[Application] Moonraker discovery complete, splash can exit");
+                               ctx.prompter = &app->m_prompter;
+                               ctx.screen = app->m_screen;
+                               helix::run_discovery_steps(helix::discovery_tail_steps(), ctx);
+                           }});
 }
 
 bool PrinterSession::connect_moonraker() {
@@ -698,10 +495,12 @@ bool PrinterSession::connect_moonraker() {
         }
         http_base_url = "http://" + host_port;
     } else {
-        auto host = m_config->get<std::string>(m_config->df() + "moonraker_host", "localhost");
-        auto port = m_config->get<int>(m_config->df() + "moonraker_port", 7125);
-        moonraker_url = "ws://" + host + ":" + std::to_string(port) + "/websocket";
-        http_base_url = "http://" + host + ":" + std::to_string(port);
+        // With no saved host only the mock ignores the address; a real client gets the
+        // local Moonraker.
+        const std::string default_host =
+            get_runtime_config()->should_mock_moonraker() ? "" : "localhost";
+        moonraker_url = helix::active_printer_ws_url(default_host);
+        http_base_url = helix::active_printer_http_url(default_host);
     }
 
     // Discovery callbacks are already registered (setup_discovery_callbacks in init_moonraker).
@@ -709,23 +508,11 @@ bool PrinterSession::connect_moonraker() {
     // connect_moonraker() re-runs on every printer switch and DisplayManager has no
     // unregister path.
 
-    // Set HTTP base URL for API
-    IMoonrakerAPI* api = m_moonraker->api();
-    api->set_http_base_url(http_base_url);
-
-    // Connect
-    spdlog::debug("[Application] Connecting to {}", moonraker_url);
-    int result = m_moonraker->connect(moonraker_url, http_base_url);
-
-    if (result != 0) {
-        spdlog::error("[Application] Failed to initiate connection (code {})", result);
+    // The manager's connect sets the API's HTTP base URL; discovery starts on its own once
+    // the socket is up.
+    if (!helix::connect_printer(*m_moonraker, moonraker_url, http_base_url)) {
         return false;
     }
-
-    // Start auto-discovery (client handles this internally after connect)
-
-    // Initialize print start collector (monitors PRINT_START macro progress)
-    m_moonraker->init_print_start_collector();
 
     // G-code response routing: action prompts, error and narration routers, layer tracking
     if (m_moonraker->client()) {
@@ -890,7 +677,7 @@ void PrinterSession::teardown_printer_scope(TeardownScope scope, DisplayManager*
     set_temperature_history_manager(nullptr);
 
     // Deactivate overlays and clear navigation registries
-    NavigationManager::instance().shutdown();
+    helix::nav::shutdown();
 
     // Detach page-scroll-buttons controllers (gutters + observers) while panel widgets are
     // still alive, before m_panels.reset() / destroy_all() tear down the containers they

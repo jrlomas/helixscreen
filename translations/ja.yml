@@ -1661,6 +1661,7 @@ translations:
   Layer mode captures one frame per layer change. Best for most prints.: レイヤーモードはレイヤー変更ごとに1フレームをキャプチャします。ほとんどの印刷に最適です。
   Layers: レイヤー
   Layout: レイアウト
+  Layout changes are off in safe mode. Restart to edit.: 'セーフモードではレイアウトを変更できません。編集するには再起動してください。'
   Learn More: 詳細を見る
   LedSelect: LEDを選択
   Left: '左'
@@ -2581,6 +2582,7 @@ translations:
   Restart Klipper without rebooting: ホストを再起動せずに Klipper を再起動
   Restart Klipper?: 'Klipper を再起動しますか？'
   Restart Moonraker: Moonraker を再起動
+  Restart Moonraker to finish the plugin change: プラグインの変更を完了するには Moonraker を再起動してください
   Restart Now: 今すぐ再起動
   Restart Required: 再起動が必要です
   'Restart failed: not connected': '再起動に失敗: 未接続'
@@ -2674,6 +2676,8 @@ translations:
   ? Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
   : セーフモードが有効です。起動時にアプリがクラッシュし続けたため、プリンター接続は無効になっています。設定を開いて問題を解決してから再起動してください。
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'セーフモード: 起動時にアプリがクラッシュし続けたため、プラグインは無効になり、ウィジェットのレイアウトはデフォルトで表示されています。再起動すると通常に戻ります。'
   Safety & Alerts: 安全とアラート
   Same spool in {}? Tap Clear if it is a new one.: '{} は同じスプールですか？新しいスプールならクリアをタップしてください。'
   Sample: サンプル

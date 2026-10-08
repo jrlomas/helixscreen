@@ -50,7 +50,6 @@
 #include "panel_factory.h"
 #include "panel_widget_manager.h"
 #include "pending_startup_warnings.h"
-#include "post_op_cooldown_manager.h"
 #include "power_device_state.h"
 #include "print_history_manager.h"
 #include "printer_cache_registry.h"
@@ -182,7 +181,6 @@
 #include "led/ui_led_control_overlay.h"
 #include "platform_info.h"
 #include "printer_detector.h"
-#include "printer_image_manager.h"
 #include "safety_settings_manager.h"
 #include "settings_manager.h"
 #include "system/afc_message_dedup.h"
@@ -207,7 +205,6 @@
 #include "action_prompt_modal.h"
 #include "app_globals.h"
 #include "detection_manager.h"
-#include "filament_consumption_tracker.h"
 #include "filament_sensor_manager.h"
 #include "gcode_file_modifier.h"
 #include "helix-xml/src/xml/lv_xml.h"
@@ -477,9 +474,8 @@ int Application::run(int argc, char** argv) {
     // test mode — automation (screenshot pipeline, helixctl-driven runs) relaunches
     // the binary rapidly by design, and this guard exists to protect users on a
     // real device from an infinite restart loop, never a dev running --test.
-    if (helix::crash_loop_detected_and_record()) {
-        return 1;
-    }
+    // A loop boots this run in crash-loop safe mode.
+    helix::crash_loop_detected_and_record();
 
     helix::promote_surviving_gpu_guards();
 
@@ -644,9 +640,6 @@ int Application::run(int argc, char** argv) {
     // burns allocator arena on small-RAM devices.
     TelemetryManager::instance().record_memory_snapshot("post_telemetry_init");
 
-    // Initialize PrinterImageManager (custom image import/resolution)
-    helix::PrinterImageManager::instance().init(helix::get_user_config_dir());
-
     // Phase 9c: Initialize panel subjects with API injection
     // Panels receive API at construction - no deferred set_api() needed
     if (!m_session.init_panel_subjects()) {
@@ -694,16 +687,6 @@ int Application::run(int argc, char** argv) {
     if (SoundManager::instance().has_backend()) {
         get_printer_state().capabilities_state().set_sound_backend_available(true);
     }
-
-    // Initialize PostOpCooldownManager (unified filament operation cooldown)
-    PostOpCooldownManager::instance().init();
-
-    // Begin tracking external-spool consumption across prints.
-    helix::FilamentConsumptionTracker::instance().start();
-
-    // Update DisplaySettingsManager with theme mode support (must be after both theme and settings
-    // init)
-    DisplaySettingsManager::instance().on_theme_changed();
 
     // --test fails loudly where the XML and the C++ disagree (a required
     // widget missing from its component), as the unit tests do.
@@ -845,6 +828,13 @@ int Application::run(int argc, char** argv) {
                 ToastSeverity::WARNING,
                 lv_tr("Safe Mode active. The printer connection is disabled because the app "
                       "kept crashing on startup. Open Settings to fix the issue, then reboot."),
+                0 /* sticky */);
+        }
+        if (get_runtime_config()->crash_loop_safe_mode) {
+            ToastManager::instance().show(
+                ToastSeverity::WARNING,
+                lv_tr("Safe mode: the app kept crashing on startup, so plugins are off and "
+                      "widget layouts show their defaults. Restart to return to normal."),
                 0 /* sticky */);
         }
 

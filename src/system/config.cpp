@@ -1253,8 +1253,20 @@ std::string Config::find_printer_by_host(const std::string& host, int port) cons
     return {};
 }
 
+std::string Config::get_printer_display_name(const std::string& printer_id,
+                                             const std::string& fallback) const {
+    const std::string base = "/printers/" + printer_id + "/";
+    for (const char* key : {"printer_name", "type", "moonraker_host"}) {
+        std::string value = get<std::string>(base + key, "");
+        if (!value.empty()) {
+            return value;
+        }
+    }
+    return fallback;
+}
+
 std::string Config::get_active_printer_name() const {
-    return get<std::string>(df() + "printer_name", active_printer_id_);
+    return get_printer_display_name(active_printer_id_, active_printer_id_);
 }
 
 void Config::add_printer(const std::string& printer_id, const json& printer_data) {
@@ -1295,6 +1307,9 @@ void Config::remove_printer(const std::string& printer_id) {
 
     data["printers"].erase(printer_id);
     spdlog::info("[Config] Removed printer '{}'", printer_id);
+    if (printer_removed_hook_) {
+        printer_removed_hook_(printer_id);
+    }
 
     // If we just removed the active printer, switch to the first remaining one.
     // find_active_printer_key() skips the non-printer keys; taking

@@ -12,6 +12,7 @@
 #include "ui_manual_pull_prompt.h"
 #include "ui_step_progress.h"
 #include "ui_temperature_utils.h"
+#include "ui_utils.h"
 
 #include "active_material_provider.h"
 #include "ams_backend.h"
@@ -100,6 +101,14 @@ void init_button_gating_subjects() {
 
 AmsOperationSidebar::AmsOperationSidebar(PrinterState& ps) : printer_state_(ps) {
     spdlog::debug("[AmsSidebar] Constructed");
+}
+
+std::unique_ptr<AmsOperationSidebar> AmsOperationSidebar::attach(PrinterState& ps,
+                                                                 lv_obj_t* panel) {
+    auto sidebar = std::make_unique<AmsOperationSidebar>(ps);
+    sidebar->setup(panel);
+    sidebar->init_observers();
+    return sidebar;
 }
 
 AmsOperationSidebar::~AmsOperationSidebar() {
@@ -286,6 +295,10 @@ void AmsOperationSidebar::setup_step_progress() {
         spdlog::warn("[AmsSidebar] progress_stepper_container not found");
         return;
     }
+
+    // The container outlives a sidebar (the AMS panel keeps its tree between
+    // opens), so a stepper an earlier sidebar created is still in it.
+    helix::ui::safe_clean_children(step_progress_container_);
 
     // Create initial step progress widget (fresh load by default)
     recreate_step_progress_for_operation(StepOperationType::LOAD_FRESH);

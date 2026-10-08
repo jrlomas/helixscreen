@@ -1596,6 +1596,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." es="El modo de capa captura un cuadro por cambio de capa. Mejor para la mayoría de las impresiones."/>
   <translation tag="Layers" es="Capas"/>
   <translation tag="Layout" es="Distribución"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." es="Los cambios de diseño están desactivados en modo seguro. Reinicie para editar."/>
   <translation tag="Learn More" es="Más información"/>
   <translation tag="LedSelect" es="Seleccionar LED"/>
   <translation tag="Left" es="Izquierda"/>
@@ -2483,6 +2484,7 @@
   <translation tag="Restart Klipper without rebooting" es="Reiniciar Klipper sin reiniciar el host"/>
   <translation tag="Restart Klipper?" es="¿Reiniciar Klipper?"/>
   <translation tag="Restart Moonraker" es="Reiniciar Moonraker"/>
+  <translation tag="Restart Moonraker to finish the plugin change" es="Reinicia Moonraker para completar el cambio del plugin"/>
   <translation tag="Restart Now" es="Reiniciar Ahora"/>
   <translation tag="Restart Required" es="Reinicio Requerido"/>
   <translation tag="Restart failed: not connected" es="Reinicio fallido: no conectado"/>
@@ -2571,6 +2573,7 @@
   <translation tag="STYLE PROPERTIES" es="PROPIEDADES DE ESTILO"/>
   <translation tag="SWITCH SENSORS" es="SENSORES DE INTERRUPTOR"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." es="Modo seguro activo. La conexión con la impresora está deshabilitada porque la aplicación seguía fallando al iniciar. Abra Ajustes para solucionar el problema y luego reinicie."/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." es="Modo seguro: la aplicación seguía fallando al iniciar, así que los plugins están desactivados y los diseños de widgets muestran sus valores predeterminados. Reinicie para volver a la normalidad."/>
   <translation tag="Safety &amp; Alerts" es="Seguridad y alertas"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." es="¿La misma bobina en {}? Toca Borrar si es una nueva."/>
   <translation tag="Sample" es="Muestra"/>

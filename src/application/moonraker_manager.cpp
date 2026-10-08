@@ -146,10 +146,7 @@ void MoonrakerManager::shutdown() {
     spdlog::debug("[MoonrakerManager] Shutting down...");
 
     // Stop print start collector first (before client is destroyed)
-    if (m_print_start_collector) {
-        m_print_start_collector->stop();
-        m_print_start_collector.reset();
-    }
+    release_print_start_collector();
 
     // Release observer guards without calling lv_observer_remove().
     // During shutdown, subjects may already be deinitialized (which frees observers).
@@ -164,6 +161,8 @@ void MoonrakerManager::shutdown() {
     for (auto& guard : m_print_position_observers) {
         guard.release();
     }
+    m_print_extruder_velocity_observer.release();
+    m_print_ams_action_observer.release();
     m_print_layer_observer.release();
     m_print_duration_observer.release();
 
@@ -693,13 +692,22 @@ void MoonrakerManager::create_api(const RuntimeConfig& runtime_config) {
     // after both MoonrakerManager and SubjectInitializer are ready
 }
 
+void MoonrakerManager::release_print_start_collector() {
+    if (m_print_start_collector) {
+        m_print_start_collector->detach();
+        m_print_start_collector.reset();
+    }
+}
+
 void MoonrakerManager::init_print_start_collector() {
     if (!m_client) {
         spdlog::warn("[MoonrakerManager] Cannot init print_start_collector - no client");
         return;
     }
 
-    // Create collector
+    // A retarget keeps the client: the previous printer's collector must not stay hooked
+    // to it.
+    release_print_start_collector();
     m_print_start_collector = std::make_shared<PrintStartCollector>(*m_client, get_printer_state());
 
     // Load print start profile based on detected printer type
@@ -1053,6 +1061,19 @@ void MoonrakerManager::init_print_start_collector() {
         get_printer_state().motion_state().get_position_y_subject(), position_cb, nullptr);
     m_print_position_observers[2] = ObserverGuard(
         get_printer_state().motion_state().get_position_z_subject(), position_cb, nullptr);
+
+    // A purge that holds the head still moves no position subject, so the
+    // extruder velocity and the filament system's action sample it too.
+    auto purge_cb = [](lv_observer_t*, lv_subject_t*) {
+        auto collector = s_collector.lock();
+        if (collector && collector->is_active()) {
+            collector->check_purge_shape();
+        }
+    };
+    m_print_extruder_velocity_observer = ObserverGuard(
+        get_printer_state().motion_state().get_live_extruder_velocity_subject(), purge_cb, nullptr);
+    m_print_ams_action_observer =
+        ObserverGuard(AmsState::instance().get_ams_action_subject(), purge_cb, nullptr);
 
     spdlog::debug("[MoonrakerManager] Print start collector initialized");
 }

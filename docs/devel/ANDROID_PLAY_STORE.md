@@ -2,22 +2,17 @@
 
 How the CI pipeline ships `helix-screen` to Google Play, and the one-time manual setup required before the automated upload can work.
 
-## Where to pick up — 2026-09-09
+## Where to pick up - 2026-10-08
 
-**The API 36 deadline has passed, and it now gates everything below.** Google has required
-`targetSdkVersion 36` for new submissions *and* for updates since **2026-08-31**. `v1.0.0`
-ships `compileSdkVersion 35` / `targetSdkVersion 35`, so the AAB on that release would be
-**rejected on upload**. Nothing in the manual bring-up sequence is worth starting until this is
-resolved, because step 4 is a manual AAB upload and that is the step that would bounce.
+**Target API 36 is done on main** (see "Target API level"). Play has required
+`targetSdkVersion 36` for new submissions and updates since 2026-08-31; `v1.0.0` ships 35, so
+its AAB would be rejected, and the first upload has to come from a 1.1 build.
 
-Two ways forward, and they are not exclusive:
+Left before the first Play submission:
 
-- **Bump to API 36.** Required eventually regardless, since every update published from here
-  needs it. Not purely mechanical: `compileSdk`/`targetSdk` move together and API 36 forces
-  behavioural changes that need checking on a real device, so this is 1.1 work rather than a
-  1.0 patch.
-- **Request the extension to 2026-11-01.** Play Console offers it; it buys time for the bump
-  without blocking the Console bring-up (steps 1-3, which do not involve an artifact).
+- Check the app on a real tablet in portrait (API 36 lets sw >= 600dp screens rotate it).
+- Build the signed release APKs and AAB on API 36 and confirm they pass the pre-flight below.
+- Get a green CI run of `build-android` on the API 36 tree.
 
 **Also confirmed unset as of 2026-09-09:** `PLAY_SERVICE_ACCOUNT_JSON` is not in the repository
 secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and
@@ -64,18 +59,21 @@ Steps 1-3 are unaffected by the target-API question and can be done now.
 
 ### Target API level
 
-`android/app/build.gradle` sets `compileSdkVersion 35` / `targetSdkVersion 35`. Google's annual
-requirement moves to **API 36 on 2026-08-31**, for new submissions *and* for updates to existing
-apps. Two consequences:
+`android/app/build.gradle` sets `compileSdkVersion 36` / `targetSdkVersion 36` (AGP 8.9.1,
+Gradle 8.11.1), which Play has required for new submissions and updates since 2026-08-31.
+`minSdkVersion` stays 28. API 36 behaviour changes that touch this app:
 
-- Uploading on or before 2026-08-30 would have been accepted as-is. That window closed; any AAB targeting API 35 is now rejected.
-- Either way, **every update published after 2026-08-31 needs API 36**, so the bump is required soon regardless of when the first upload happens.
+- **Predictive back.** Targeting 36 stops `KEYCODE_BACK` reaching SDL by default, so the
+  activity sets `android:enableOnBackInvokedCallback="false"` to keep the back key popping
+  the nav stack.
+- **Large screens (sw >= 600dp) ignore `screenOrientation`.** A tablet can run the app in
+  portrait despite `sensorLandscape`. That is accepted: portrait is allowed there, and the
+  temporary `PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY` opt-out is deliberately not used.
+- **Edge-to-edge** is already enforced from 35 and handled by `HelixActivity`'s inset listener.
 
-The lower-risk sequence is to get the first manual upload in on 35 — its only job is to enroll
-Play App Signing and unblock steps 5-7 — and treat the SDK bump as its own change, so a
-first-submission milestone is not coupled to an untested SDK jump. Android 16 enforces
-edge-to-edge display for apps targeting API 36, which a fullscreen SDL surface needs testing
-against on a real device before it ships.
+Native libraries must be 16 KB page aligned. Everything bundled is built from source with NDK
+r29, which links with 16 KB max-page-size by default; check a built APK with
+`zipalign -c -P 16 -v 4 <apk>` and `llvm-readelf -l <lib>.so` (every `LOAD` `Align` 0x4000).
 
 ### Review risk: the app needs hardware a reviewer does not have
 
