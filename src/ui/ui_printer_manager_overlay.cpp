@@ -273,8 +273,12 @@ void PrinterManagerOverlay::start_name_edit() {
     if (lv_subject_get_int(&name_editing_) != 0 || !name_input_)
         return;
 
-    // Pre-fill input with current name
-    lv_textarea_set_text(name_input_, name_buf_);
+    // The printer's own name only: the host or type shown in its place is not one, and
+    // confirming it would save it as the name and push it to Mainsail/Fluidd.
+    Config* config = Config::get_instance();
+    const std::string saved =
+        config->get<std::string>(config->df() + helix::wizard::PRINTER_NAME, "");
+    lv_textarea_set_text(name_input_, saved.c_str());
 
     // Toggle editing state — XML bind_flag_if_eq handles visibility
     lv_subject_set_int(&name_editing_, 1);
@@ -289,12 +293,16 @@ void PrinterManagerOverlay::finish_name_edit() {
     if (lv_subject_get_int(&name_editing_) == 0 || !name_input_)
         return;
 
-    // Get the new name from the textarea
+    // An empty or unchanged box leaves the name as it is.
     const char* new_name = lv_textarea_get_text(name_input_);
-    std::string name_str = (new_name && new_name[0] != '\0') ? new_name : "My Printer";
-
-    // Save to config
+    const std::string name_str = new_name ? new_name : "";
     Config* config = Config::get_instance();
+    if (name_str.empty() ||
+        name_str == config->get<std::string>(config->df() + helix::wizard::PRINTER_NAME, "")) {
+        cancel_name_edit();
+        return;
+    }
+
     config->set<std::string>(config->df() + helix::wizard::PRINTER_NAME, name_str);
     config->save();
     spdlog::info("[{}] Printer name changed to: '{}'", get_name(), name_str);
