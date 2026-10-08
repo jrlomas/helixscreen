@@ -11,6 +11,7 @@
 #include "test_helpers/screen_hide_hold_test_access.h"
 #include "test_helpers/update_queue_test_access.h"
 #include "theme_manager.h"
+#include "xml_registration.h"
 
 #include <spdlog/spdlog.h>
 
@@ -130,6 +131,10 @@ LVGLTestFixture::LVGLTestFixture() : m_test_screen(nullptr) {
         helix::ui::update_queue_init();
         s_queue_initialized = true;
     }
+
+    // Components register on first use, as in production. Installed per case:
+    // XML teardown (deinit_xml_subjects) removes the loader.
+    helix::register_xml_on_first_use();
 
     m_test_screen = create_test_screen();
 }

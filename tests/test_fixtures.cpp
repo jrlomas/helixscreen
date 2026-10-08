@@ -120,10 +120,6 @@ XMLTestFixture::XMLTestFixture() : LVGLTestFixture() {
         m_test_screen = nullptr;
     }
 
-    // Every component the one-time setup does not register registers on first
-    // use, as in production. Installed per case: LVGLUITestFixture's teardown
-    // removes the loader with the rest of the XML state.
-    helix::register_xml_on_first_use();
     setup_global_xml_registrations_once();
 
     // Fresh per-instance state. init_subjects(true) registers subjects into the
