@@ -31,11 +31,11 @@ TEST_CASE("Preference rows: AMS rows follow what the backend does", "[wizard][pr
     CHECK_FALSE(preference_rows(false, false, true, true, false).keep_spool_info);
 }
 
-TEST_CASE("Preference rows: UI sounds need a sound backend on the first printer",
+TEST_CASE("Preference rows: Sounds need a sound backend on the first printer",
           "[wizard][preferences]") {
-    CHECK_FALSE(preference_rows(false, false, false, false, false).ui_sounds);
-    CHECK(preference_rows(false, false, false, false, true).ui_sounds);
-    CHECK_FALSE(preference_rows(true, false, false, false, true).ui_sounds);
+    CHECK_FALSE(preference_rows(false, false, false, false, false).sounds);
+    CHECK(preference_rows(false, false, false, false, true).sounds);
+    CHECK_FALSE(preference_rows(true, false, false, false, true).sounds);
 }
 
 TEST_CASE("Preferences step sits between InputShaper and Summary", "[wizard][preferences]") {
@@ -96,21 +96,10 @@ TEST_CASE_METHOD(LVGLUITestFixture, "Preference rows write the same setting as t
         "row_sleep_while_printing", [&](bool v) { display.set_sleep_while_printing(v); },
         [&] { return display.get_sleep_while_printing(); });
 
-    // The sounds row follows its twin: hidden while master sounds are off.
-    lv_obj_t* sounds_row = lv_obj_find_by_name(root, "row_ui_sounds");
-    REQUIRE(sounds_row != nullptr);
     auto& audio = helix::AudioSettingsManager::instance();
-    audio.set_sounds_enabled(false);
-    lv_subject_set_int(lv_xml_get_subject(nullptr, "wizard_prefs_show_ui_sounds"), 1);
-    CHECK(lv_obj_has_flag(sounds_row, LV_OBJ_FLAG_HIDDEN));
-    audio.set_sounds_enabled(true);
-    CHECK_FALSE(lv_obj_has_flag(sounds_row, LV_OBJ_FLAG_HIDDEN));
-    lv_subject_set_int(lv_xml_get_subject(nullptr, "wizard_prefs_show_ui_sounds"), 0);
-    CHECK(lv_obj_has_flag(sounds_row, LV_OBJ_FLAG_HIDDEN));
-    lv_subject_set_int(lv_xml_get_subject(nullptr, "wizard_prefs_show_ui_sounds"), 1);
     flip_on(
-        "row_ui_sounds", [&](bool v) { audio.set_ui_sounds_enabled(v); },
-        [&] { return audio.get_ui_sounds_enabled(); });
+        "row_sounds", [&](bool v) { audio.set_sounds_enabled(v); },
+        [&] { return audio.get_sounds_enabled(); });
 
     step->cleanup();
 }

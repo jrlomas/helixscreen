@@ -17,7 +17,7 @@ struct PreferenceRows {
     bool global = false;
     bool bypass_spool = false;
     bool keep_spool_info = false;
-    bool ui_sounds = false;
+    bool sounds = false;
 };
 
 PreferenceRows preference_rows(bool is_subsequent_printer, bool bypass_is_virtual,
@@ -58,7 +58,7 @@ class WizardPreferencesStep : public Step {
     lv_subject_t show_global_{};
     lv_subject_t show_bypass_spool_{};
     lv_subject_t show_keep_spool_info_{};
-    lv_subject_t show_ui_sounds_{};
+    lv_subject_t show_sounds_{};
 };
 
 WizardPreferencesStep* get_wizard_preferences_step();

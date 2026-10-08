@@ -28,7 +28,7 @@ PreferenceRows preference_rows(bool is_subsequent_printer, bool bypass_is_virtua
     r.bypass_spool = bypass_is_virtual;
     // Firmware that keeps the spool itself leaves the toggle with nothing to do.
     r.keep_spool_info = reports_spool_ids && !retains_spool_info;
-    r.ui_sounds = !is_subsequent_printer && has_sound_backend;
+    r.sounds = !is_subsequent_printer && has_sound_backend;
     return r;
 }
 
@@ -44,8 +44,7 @@ void WizardPreferencesStep::init_subjects() {
                                         "wizard_prefs_show_bypass_spool");
     helix::ui::wizard::init_int_subject(subjects_, &show_keep_spool_info_, 0,
                                         "wizard_prefs_show_keep_spool_info");
-    helix::ui::wizard::init_int_subject(subjects_, &show_ui_sounds_, 0,
-                                        "wizard_prefs_show_ui_sounds");
+    helix::ui::wizard::init_int_subject(subjects_, &show_sounds_, 0, "wizard_prefs_show_sounds");
     update_rows();
 }
 
@@ -59,7 +58,7 @@ void WizardPreferencesStep::update_rows() {
     lv_subject_set_int(&show_global_, rows.global ? 1 : 0);
     lv_subject_set_int(&show_bypass_spool_, rows.bypass_spool ? 1 : 0);
     lv_subject_set_int(&show_keep_spool_info_, rows.keep_spool_info ? 1 : 0);
-    lv_subject_set_int(&show_ui_sounds_, rows.ui_sounds ? 1 : 0);
+    lv_subject_set_int(&show_sounds_, rows.sounds ? 1 : 0);
 }
 
 void WizardPreferencesStep::register_callbacks() {
