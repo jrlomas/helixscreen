@@ -1596,6 +1596,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." en="Layer mode captures one frame per layer change. Best for most prints."/>
   <translation tag="Layers" en="Layers"/>
   <translation tag="Layout" en="Layout"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." en="Layout changes are off in safe mode. Restart to edit."/>
   <translation tag="Learn More" en="Learn More"/>
   <translation tag="LedSelect" en="LedSelect"/>
   <translation tag="Left" en="Left"/>
@@ -2572,6 +2573,7 @@
   <translation tag="STYLE PROPERTIES" en="STYLE PROPERTIES"/>
   <translation tag="SWITCH SENSORS" en="SWITCH SENSORS"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." en="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot."/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." en="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal."/>
   <translation tag="Safety &amp; Alerts" en="Safety &amp; Alerts"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." en="Same spool in {}? Tap Clear if it is a new one."/>
   <translation tag="Sample" en="Sample"/>

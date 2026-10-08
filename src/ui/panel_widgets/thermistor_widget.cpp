@@ -774,6 +774,9 @@ void ThermistorWidget::show_configure_picker() {
     if (configure_picker_.is_visible() || !parent_screen_ || !widget_obj_) {
         return;
     }
+    if (helix::PanelWidgetManager::refuse_layout_edit()) {
+        return;
+    }
 
     auto& tsm = helix::sensors::TemperatureSensorManager::instance();
     if (tsm.get_sensors_sorted().empty()) {

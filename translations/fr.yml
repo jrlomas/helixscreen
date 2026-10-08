@@ -1794,6 +1794,7 @@ translations:
     capture une image par changement de couche. Idéal pour la plupart des impressions.
   Layers: Couches
   Layout: Disposition
+  Layout changes are off in safe mode. Restart to edit.: 'Les modifications de disposition sont désactivées en mode sans échec. Redémarrez pour modifier.'
   Learn More: En savoir plus
   LedSelect: Sélection de la LED
   Left: 'Gauche'
@@ -2863,6 +2864,8 @@ translations:
     on startup. Open Settings to fix the issue, then reboot.
   : Mode sans échec actif. La connexion à l'imprimante est désactivée car l'application
     plantait au démarrage. Ouvrez les Paramètres pour résoudre le problème, puis redémarrez.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Mode sans échec : l''application plantait au démarrage, les plugins sont donc désactivés et les dispositions des widgets affichent leurs valeurs par défaut. Redémarrez pour revenir à la normale.'
   Safety & Alerts: Sécurité et alertes
   Same spool in {}? Tap Clear if it is a new one.: 'Même bobine dans {} ? Touchez Effacer s''il s''agit d''une nouvelle.'
   Sample: Échantillon

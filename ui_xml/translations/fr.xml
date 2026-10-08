@@ -1596,6 +1596,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." fr="Le mode couche capture une image par changement de couche. Idéal pour la plupart des impressions."/>
   <translation tag="Layers" fr="Couches"/>
   <translation tag="Layout" fr="Disposition"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." fr="Les modifications de disposition sont désactivées en mode sans échec. Redémarrez pour modifier."/>
   <translation tag="Learn More" fr="En savoir plus"/>
   <translation tag="LedSelect" fr="Sélection de la LED"/>
   <translation tag="Left" fr="Gauche"/>
@@ -2572,6 +2573,7 @@
   <translation tag="STYLE PROPERTIES" fr="PROPRIÉTÉS DE STYLE"/>
   <translation tag="SWITCH SENSORS" fr="CAPTEURS DE COMMUTATION"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." fr="Mode sans échec actif. La connexion à l&apos;imprimante est désactivée car l&apos;application plantait au démarrage. Ouvrez les Paramètres pour résoudre le problème, puis redémarrez."/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." fr="Mode sans échec : l&apos;application plantait au démarrage, les plugins sont donc désactivés et les dispositions des widgets affichent leurs valeurs par défaut. Redémarrez pour revenir à la normale."/>
   <translation tag="Safety &amp; Alerts" fr="Sécurité et alertes"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." fr="Même bobine dans {} ? Touchez Effacer s&apos;il s&apos;agit d&apos;une nouvelle."/>
   <translation tag="Sample" fr="Échantillon"/>

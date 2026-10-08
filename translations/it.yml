@@ -1780,6 +1780,7 @@ translations:
     stampe.
   Layers: Layer
   Layout: Layout
+  Layout changes are off in safe mode. Restart to edit.: 'Le modifiche al layout sono disattivate in modalità provvisoria. Riavvia per modificare.'
   Learn More: Scopri di più
   LedSelect: Seleziona LED
   Left: 'Sinistra'
@@ -2843,6 +2844,8 @@ translations:
   : Modalità provvisoria attiva. La connessione alla stampante è disabilitata perché
     l'app continuava a bloccarsi all'avvio. Apri Impostazioni per risolvere il problema,
     quindi riavvia.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Modalità provvisoria: l''app continuava a bloccarsi all''avvio, quindi i plugin sono disattivati e i layout dei widget mostrano quelli predefiniti. Riavvia per tornare alla normalità.'
   Safety & Alerts: Sicurezza e avvisi
   Same spool in {}? Tap Clear if it is a new one.: 'Stessa bobina in {}? Tocca Cancella se è una nuova.'
   Sample: Campione
