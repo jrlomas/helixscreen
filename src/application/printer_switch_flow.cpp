@@ -61,14 +61,36 @@ bool active_printer_is_printing() {
 PrinterSwitchFlow::PrinterSwitchFlow(Config*& config, AsyncLifetimeGuard& async, Restart restart)
     : m_config(config), m_async(async), m_restart(std::move(restart)) {}
 
-void PrinterSwitchFlow::request_switch(const std::string& printer_id) {
-    if (m_soft_restart_in_progress || m_confirm_pending) {
+bool PrinterSwitchFlow::confirm_pending() {
+    if (!m_confirm_dialog) {
+        return false;
+    }
+    // Read from the dialog itself, not a flag its callbacks clear: a dismissal reaches the
+    // caller a tick late, after a newer confirmation may already be up, and some closes never
+    // reach the callbacks at all.
+    auto& stack = ModalStack::instance();
+    lv_obj_t* backdrop = stack.backdrop_for(m_confirm_dialog);
+    if (backdrop && !stack.is_exiting(backdrop)) {
+        if (!lv_obj_has_flag(backdrop, LV_OBJ_FLAG_HIDDEN)) {
+            return true;
+        }
+        // Hidden but still stacked, it would keep ModalStack non-empty and hold back
+        // everything that waits for no modal to be open.
+        spdlog::warn("[PrinterSwitchFlow] The switch confirmation was hidden; closing it");
+        Modal::hide(m_confirm_dialog);
+    }
+    m_confirm_dialog = nullptr;
+    return false;
+}
+
+bool PrinterSwitchFlow::request_switch(const std::string& printer_id) {
+    if (m_soft_restart_in_progress || confirm_pending()) {
         spdlog::warn("[PrinterSwitchFlow] Ignoring switch to '{}': a switch is already running",
                      printer_id);
-        return;
+        return false;
     }
     if (printer_id == m_connected_printer_id) {
-        return;
+        return false;
     }
     // A connected printer that is no longer in the list was removed, and its removal was
     // already confirmed; nothing is left to ask about.
@@ -76,39 +98,36 @@ void PrinterSwitchFlow::request_switch(const std::string& printer_id) {
     const bool connected_removed =
         std::find(ids.begin(), ids.end(), m_connected_printer_id) == ids.end();
     if (connected_removed || !active_printer_is_printing()) {
-        switch_printer(printer_id);
-        return;
+        return switch_printer(printer_id);
     }
 
-    m_confirm_pending = true;
     const std::string message = fmt::format(
         fmt::runtime(lv_tr("{} is still printing. The print keeps running after you switch.")),
         m_config->get_active_printer_name());
     ui::ConfirmOptions options;
-    options.on_cancel = [this] { m_confirm_pending = false; };
-    options.on_dismiss = [this] { m_confirm_pending = false; };
     options.owner_token = m_async.token();
-    ui::modal_confirm(
+    m_confirm_dialog = ui::modal_confirm(
         lv_tr("Switch Printer"), message.c_str(), ModalSeverity::Warning, lv_tr("Switch Printer"),
         [this, printer_id] {
-            m_confirm_pending = false;
+            m_confirm_dialog = nullptr;
             // Out of the dialog's click handler: the restart tears down the
             // screen the dialog sits on.
             m_async.defer("PrinterSwitchFlow::confirmed_switch",
                           [this, printer_id] { switch_printer(printer_id); });
         },
         options);
+    return false;
 }
 
-void PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
-    if (m_confirm_pending) {
+bool PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
+    if (confirm_pending()) {
         spdlog::warn(
             "[PrinterSwitchFlow] Ignoring switch_printer while a switch is being confirmed");
-        return;
+        return false;
     }
     if (m_soft_restart_in_progress) {
         spdlog::warn("[PrinterSwitchFlow] Ignoring switch_printer during active soft restart");
-        return;
+        return false;
     }
     SoftRestartLatch soft_restart(m_soft_restart_in_progress);
 
@@ -117,13 +136,13 @@ void PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
     const std::string previous_id = m_config->get_active_printer_id();
     if (!m_config->set_active_printer(printer_id)) {
         spdlog::error("[PrinterSwitchFlow] Failed to switch — unknown printer '{}'", printer_id);
-        return;
+        return false;
     }
     // A switch the config does not remember would come back as the old printer after a
     // restart, so an unsaved switch does not happen.
     if (!save_or_report()) {
         m_config->set_active_printer(previous_id);
-        return;
+        return false;
     }
 
     // Per-printer state lives at /printers/<active>/… and is reached via Config::df().
@@ -144,6 +163,7 @@ void PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
     ToastManager::instance().show(ToastSeverity::INFO, toast_msg.c_str());
 
     spdlog::info("[PrinterSwitchFlow] Switched to printer '{}'", printer_id);
+    return true;
 }
 
 void PrinterSwitchFlow::add_printer_via_wizard() {
@@ -233,12 +253,11 @@ void PrinterSwitchFlow::cancel_add_printer_wizard() {
     });
 }
 
-void PrinterSwitchFlow::add_printer(const std::string& host, int port) {
+bool PrinterSwitchFlow::add_printer(const std::string& host, int port) {
     const std::string existing = m_config->find_printer_by_host(host, port);
     if (!existing.empty()) {
         spdlog::info("[PrinterSwitchFlow] {}:{} is already printer '{}'", host, port, existing);
-        request_switch(existing);
-        return;
+        return request_switch(existing);
     }
 
     const std::string id = m_config->next_printer_id();
@@ -246,9 +265,9 @@ void PrinterSwitchFlow::add_printer(const std::string& host, int port) {
     spdlog::info("[PrinterSwitchFlow] Added printer '{}' at {}:{}", id, host, port);
     // Kept in the list unsaved rather than dropped, and not switched to.
     if (!save_or_report()) {
-        return;
+        return false;
     }
-    request_switch(id);
+    return request_switch(id);
 }
 
 bool PrinterSwitchFlow::save_or_report() {

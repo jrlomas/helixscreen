@@ -322,15 +322,24 @@ void AmsPanel::init_subjects() {
     // Deferred via object_lifetime_ to avoid deleting children during LVGL layout refresh (#563).
     slot_count_observer_ = observe<int>(
         AmsState::instance().get_slot_count_subject(), this,
-        [](AmsPanel* self, int new_count) {
+        [](AmsPanel* self, int) {
             if (!self->panel_)
                 return;
             if (!self->slot_creation_pending_) {
                 self->slot_creation_pending_ = true;
-                self->object_lifetime_.defer("AmsPanel::create_slots", [self, new_count]() {
+                self->object_lifetime_.defer("AmsPanel::create_slots", [self]() {
                     self->slot_creation_pending_ = false;
-                    spdlog::debug("[AmsPanel] Slot count changed to {}", new_count);
-                    self->create_slots(new_count);
+                    // Read when the rebuild runs, not when it was queued: this
+                    // observer is re-added on every open, and its first, queued
+                    // notification lands after on_activate() has already built
+                    // the slots for the current count.
+                    const int count =
+                        lv_subject_get_int(AmsState::instance().get_slot_count_subject());
+                    if (count == self->current_slot_count_) {
+                        return;
+                    }
+                    spdlog::debug("[AmsPanel] Slot count changed to {}", count);
+                    self->create_slots(count);
                 });
             }
         },
@@ -769,7 +778,7 @@ void AmsPanel::setup_slot_path_observers(int slot_count) {
 
     // Coalesced redraw handler (same pattern as path_segment_observer_): re-runs
     // the full path setup (which re-reads every slot's live segment + color and
-    // calls ui_filament_path_canvas_refresh) on the next deferred tick.
+    // repaints when any of them changed) on the next deferred tick.
     auto on_slot_path_change = [](AmsPanel* self, int) {
         if (!self->subjects_initialized_ || !self->panel_)
             return;
