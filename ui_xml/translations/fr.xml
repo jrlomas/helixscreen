@@ -273,6 +273,7 @@
   <translation tag="Automatic Heater Control Calibration" fr="Calibration automatique du chauffage"/>
   <translation tag="Automatic LED Control" fr="Contrôle LED automatique"/>
   <translation tag="Automatic calibration" fr="Calibration automatique"/>
+  <translation tag="Automatic slot swap on runout" fr="Changement de slot automatique en fin de filament"/>
   <translation tag="Aux" fr="Aux"/>
   <translation tag="Available" fr="Disponible"/>
   <translation tag="Available Networks" fr="Réseaux disponibles"/>
@@ -951,6 +952,7 @@
   <translation tag="Encoder" fr="Encodeur"/>
   <translation tag="Encoder Error" fr="Erreur de l&apos;encodeur"/>
   <translation tag="Ended" fr="Terminé"/>
+  <translation tag="Endless Spool" fr="Bobine infinie"/>
   <translation tag="Endless spool failover cleared for every slot" fr="Bobine de secours effacée pour tous les slots"/>
   <translation tag="Endless spool is turned off on this MMU" fr="La bobine infinie est désactivée sur ce MMU"/>
   <translation tag="Ensure Happy Hare or AFC is installed and configured" fr="Vérifiez que Happy Hare ou AFC est installé et configuré"/>
@@ -1736,6 +1738,7 @@
   <translation tag="Marginal" fr="Marginal"/>
   <translation tag="Mark a printer you enclosed yourself" fr="Indiquer une imprimante que vous avez fermée vous-même"/>
   <translation tag="Master volume level" fr="Niveau de volume principal"/>
+  <translation tag="Match Mode" fr="Mode de correspondance"/>
   <translation tag="Match your typical print fan speed" fr="Correspondre à votre vitesse de ventilateur habituelle"/>
   <translation tag="Matching printers" fr="Imprimantes correspondantes"/>
   <translation tag="Material" fr="Matériau"/>
@@ -2895,6 +2898,7 @@
   <translation tag="Suppress periodic temperature status lines" fr="Supprimer les lignes d&apos;état périodiques de température"/>
   <translation tag="Suppress raw debug output from printer firmware modules" fr="Supprimer la sortie de débogage brute des modules du firmware de l&apos;imprimante"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." fr="Les surfaces héritent des jetons d&apos;arrière-plan de l&apos;application pour les modes clair et sombre."/>
+  <translation tag="Swap to another slot automatically when one runs out" fr="Passer automatiquement à un autre slot quand l&apos;un est épuisé"/>
   <translation tag="Sweep" fr="Balayage"/>
   <translation tag="Switch Printer" fr="Changer d&apos;imprimante"/>
   <translation tag="Switch Sensors" fr="Capteurs à interrupteur"/>
@@ -3473,6 +3477,7 @@
   <translation tag="enable" fr="activer"/>
   <translation tag="enabled" fr="activé"/>
   <translation tag="error" fr="erreur"/>
+  <translation tag="exact: same material and color. material: same material. next: any ready slot, even a different material" fr="exact : même matière et même couleur. material : même matière. next : n&apos;importe quel slot prêt, même d&apos;une autre matière"/>
   <translation tag="extruder" fr="extrudeur"/>
   <translation tag="extruder(s)" fr="extrudeur(s)"/>
   <translation tag="extruders" fr="extrudeurs"/>

@@ -290,6 +290,7 @@ translations:
   Automatic Heater Control Calibration: Automatic Heater Control Calibration
   Automatic LED Control: Automatic LED Control
   Automatic calibration: Automatic calibration
+  Automatic slot swap on runout: Automatic slot swap on runout
   Aux: Aux
   Available: Available
   Available Networks: Available Networks
@@ -1016,6 +1017,7 @@ translations:
   Encoder: Encoder
   Encoder Error: Encoder Error
   Ended: Ended
+  Endless Spool: Endless Spool
   Endless spool failover cleared for every slot: Endless spool failover cleared for every slot
   Endless spool is turned off on this MMU: Endless spool is turned off on this MMU
   Ensure Happy Hare or AFC is installed and configured: Ensure Happy Hare or AFC is installed and configured
@@ -1867,6 +1869,7 @@ translations:
   Marginal: Marginal
   Mark a printer you enclosed yourself: Mark a printer you enclosed yourself
   Master volume level: Master volume level
+  Match Mode: Match Mode
   Match your typical print fan speed: Match your typical print fan speed
   Matching printers: Matching printers
   Material: Material
@@ -3122,6 +3125,7 @@ translations:
     from printer firmware modules
   Surfaces inherit app background tokens for light and dark modes.: Surfaces inherit
     app background tokens for light and dark modes.
+  Swap to another slot automatically when one runs out: Swap to another slot automatically when one runs out
   Sweep: Sweep
   Switch Printer: Switch Printer
   Switch a power device on or off: Switch a power device on or off
@@ -3782,6 +3786,7 @@ translations:
   enable: enable
   enabled: enabled
   error: error
+  'exact: same material and color. material: same material. next: any ready slot, even a different material': 'exact: same material and color. material: same material. next: any ready slot, even a different material'
   extruder: extruder
   extruder(s): extruder(s)
   extruders: extruders

@@ -273,6 +273,7 @@
   <translation tag="Automatic Heater Control Calibration" en="Automatic Heater Control Calibration"/>
   <translation tag="Automatic LED Control" en="Automatic LED Control"/>
   <translation tag="Automatic calibration" en="Automatic calibration"/>
+  <translation tag="Automatic slot swap on runout" en="Automatic slot swap on runout"/>
   <translation tag="Aux" en="Aux"/>
   <translation tag="Available" en="Available"/>
   <translation tag="Available Networks" en="Available Networks"/>
@@ -951,6 +952,7 @@
   <translation tag="Encoder" en="Encoder"/>
   <translation tag="Encoder Error" en="Encoder Error"/>
   <translation tag="Ended" en="Ended"/>
+  <translation tag="Endless Spool" en="Endless Spool"/>
   <translation tag="Endless spool failover cleared for every slot" en="Endless spool failover cleared for every slot"/>
   <translation tag="Endless spool is turned off on this MMU" en="Endless spool is turned off on this MMU"/>
   <translation tag="Ensure Happy Hare or AFC is installed and configured" en="Ensure Happy Hare or AFC is installed and configured"/>
@@ -1736,6 +1738,7 @@
   <translation tag="Marginal" en="Marginal"/>
   <translation tag="Mark a printer you enclosed yourself" en="Mark a printer you enclosed yourself"/>
   <translation tag="Master volume level" en="Master volume level"/>
+  <translation tag="Match Mode" en="Match Mode"/>
   <translation tag="Match your typical print fan speed" en="Match your typical print fan speed"/>
   <translation tag="Matching printers" en="Matching printers"/>
   <translation tag="Material" en="Material"/>
@@ -2895,6 +2898,7 @@
   <translation tag="Suppress periodic temperature status lines" en="Suppress periodic temperature status lines"/>
   <translation tag="Suppress raw debug output from printer firmware modules" en="Suppress raw debug output from printer firmware modules"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." en="Surfaces inherit app background tokens for light and dark modes."/>
+  <translation tag="Swap to another slot automatically when one runs out" en="Swap to another slot automatically when one runs out"/>
   <translation tag="Sweep" en="Sweep"/>
   <translation tag="Switch Printer" en="Switch Printer"/>
   <translation tag="Switch Sensors" en="Switch Sensors"/>
@@ -3473,6 +3477,7 @@
   <translation tag="enable" en="enable"/>
   <translation tag="enabled" en="enabled"/>
   <translation tag="error" en="error"/>
+  <translation tag="exact: same material and color. material: same material. next: any ready slot, even a different material" en="exact: same material and color. material: same material. next: any ready slot, even a different material"/>
   <translation tag="extruder" en="extruder"/>
   <translation tag="extruder(s)" en="extruder(s)"/>
   <translation tag="extruders" en="extruders"/>
