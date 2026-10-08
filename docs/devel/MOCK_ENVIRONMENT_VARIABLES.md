@@ -340,12 +340,12 @@ Select the mock AMS topology/type.
 | Property | Value |
 |----------|-------|
 | **Values** | `none`, `afc`, `toolchanger` / `tc`, `mixed`, `multi`, `torture`, `vivid`, `ifs`, `htlf`, `snapmaker`, `medusahc` / `medusahc-fork`, `ifs-module`, `cfs` |
-| **Default** | Happy Hare, LINEAR, 4 slots |
+| **Default** | The persona's own (`helix::mock::effective_mock_ams`): `toolchanger` on `creator5`, `ifs` on `ad5x`, `cfs` on `k2`, `snapmaker` on `snapmaker_u1`; Happy Hare, LINEAR, 4 slots on every other persona |
 | **File** | `src/printer/ams_backend.cpp` |
 
 | Value | Units | What it simulates |
 |-------|-------|-------------------|
-| *(unset)* | 1 | Happy Hare, LINEAR, 4 slots (default constructor) |
+| *(unset)* | 1 | The persona's default AMS (see **Default**); Happy Hare, LINEAR, 4 slots where the persona has none |
 | `none` | - | No mock AMS at all |
 | `afc` | 1 | AFC Box Turtle, HUB, 4 slots. Aliases: `box_turtle`, `boxturtle` |
 | `toolchanger` / `tc` | 1 | Tool Changer, PARALLEL topology. Alias: `tool_changer` |
@@ -835,7 +835,7 @@ and applies its preset; no printer type is saved for it. Its default `HELIX_MOCK
 `snapmaker`, the mock Snapmaker simulation. It does not publish `filament_detect`, which
 would make discovery stand up the production Snapmaker backend.
 
-The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 235x235x250 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
+The `delta` persona changes the kinematics and hardware only. Its build volume is the same 0-based 250x250x300 box the other generic personas report, not a real delta's centred round bed, so it does not exercise negative coordinates or a round bed mesh.
 
 #### The `creator5` persona
 
@@ -947,7 +947,7 @@ Override the kinematics string the mock reports in `configfile.config.printer.ki
 | Property | Value |
 |----------|-------|
 | **Values** | Any Klipper kinematics name (e.g. `corexy`, `cartesian`, `delta`, `corexz`) |
-| **Default** | Derived from the mock printer type: `corexy` for Voron 2.4, Voron Trident, Creality K1/K1 Max, FlashForge Creator 5 (both variants) and `generic_corexy`; `delta` for `delta`; `cartesian` for everything else |
+| **Default** | The persona descriptor's kinematics (`include/mock_persona.h#descriptor`): `cartesian` for `snapmaker_u1`, `generic_bedslinger` and `multi_extruder`; `delta` for `delta`; `corexy` for every other persona |
 | **File** | `src/api/moonraker_client_mock.cpp` |
 
 ```bash
@@ -990,7 +990,7 @@ HELIX_MOCK_OBJECTS="heater_generic dragonbreath dragonbreath output_pin dragonbr
 
 ### `HELIX_MOCK_DETECTION_CAPABLE`
 
-Force the K2 spaghetti-detection source's capability probe, so the Settings > Safety & Alerts detection rows and the detection loop can be exercised in a mock run. Mock printers are never a K2 and no mock type carries `/usr/bin/detection`, so without this the source reports incapable everywhere off a real printer. Capability normally requires `PrinterDetector::is_creality_k2()` AND `/usr/bin/detection` present and executable; the U1 source is unaffected (its capability comes from the `defect_detection` object probe).
+Force the K2 spaghetti-detection source's capability probe, so the Settings > Safety & Alerts detection rows and the detection loop can be exercised in a mock run. The `k2` persona detects as a K2, but no mock carries `/usr/bin/detection`, so without this the source reports incapable everywhere off a real printer. Capability normally requires `PrinterDetector::is_creality_k2()` AND `/usr/bin/detection` present and executable; the U1 source is unaffected (its capability comes from the `defect_detection` object probe).
 
 | Property | Value |
 |----------|-------|
