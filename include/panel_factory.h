@@ -4,14 +4,39 @@
 #pragma once
 
 #include "ui_nav.h"
+#include "ui_timer_guard.h"
 
 #include <array>
+#include <cstdint>
 
 // Forward declarations
 struct _lv_obj_t;
 typedef struct _lv_obj_t lv_obj_t;
 
 namespace helix {
+
+/**
+ * @brief Decides when an idle moment has come to build a deferred panel ahead of
+ * its first visit.
+ *
+ * Ticked once a second. Opens once the printer has stayed connected for
+ * kSettleTicks ticks, so connect and discovery finish their own UI work first,
+ * and no input has arrived for kQuietMs, so the build does not land under a
+ * finger.
+ */
+class IdlePrebuildGate {
+  public:
+    static constexpr int kSettleTicks = 3;
+    static constexpr uint32_t kQuietMs = 3000;
+
+    bool tick(bool connected, uint32_t inactive_ms) {
+        connected_ticks_ = connected ? connected_ticks_ + 1 : 0;
+        return connected_ticks_ >= kSettleTicks && inactive_ms >= kQuietMs;
+    }
+
+  private:
+    int connected_ticks_ = 0;
+};
 
 /**
  * @brief Factory for creating and wiring UI panels
@@ -102,6 +127,12 @@ class PanelFactory {
     // path and by build_deferred_panel; the desktop setup_panels() body is
     // unchanged and does not call this.
     void setup_one_panel(int panel_id);
+
+    // Builds Print Files at the first idle moment, so its first visit does not
+    // pay the build (ESP32; every panel is resident elsewhere).
+    static void on_idle_prebuild_tick(lv_timer_t* timer);
+    helix::ui::LvglTimerGuard m_idle_prebuild_timer;
+    IdlePrebuildGate m_idle_prebuild_gate;
 
     std::array<lv_obj_t*, UI_PANEL_COUNT> m_panels = {};
     lv_obj_t* m_print_status_panel = nullptr;

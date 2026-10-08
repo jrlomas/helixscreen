@@ -126,6 +126,26 @@ void PanelFactory::build_deferred_panel(int panel_id) {
 #endif
 }
 
+void PanelFactory::on_idle_prebuild_tick(lv_timer_t* timer) {
+    auto* self = static_cast<PanelFactory*>(lv_timer_get_user_data(timer));
+    constexpr int kPanel = static_cast<int>(PanelId::PrintSelect);
+    if (self->m_panels[kPanel]) {
+        self->m_idle_prebuild_timer.reset(); // already visited
+        return;
+    }
+    const bool connected =
+        lv_subject_get_int(
+            get_printer_state().network_state().get_printer_connection_state_subject()) ==
+        static_cast<int>(ConnectionState::CONNECTED);
+    if (!self->m_idle_prebuild_gate.tick(connected, lv_display_get_inactive_time(nullptr))) {
+        return;
+    }
+    spdlog::info("[PanelFactory] Building '{}' while idle, ahead of its first visit",
+                 PANEL_NAMES[kPanel]);
+    self->build_deferred_panel(kPanel);
+    self->m_idle_prebuild_timer.reset();
+}
+
 void PanelFactory::setup_panels(lv_obj_t* screen) {
     m_screen = screen; // setup() target for eager + deferred panels
     // Register panels with navigation system
@@ -141,6 +161,11 @@ void PanelFactory::setup_panels(lv_obj_t* screen) {
     setup_one_panel(static_cast<int>(PanelId::Home));
     NavigationManager::instance().activate_initial_panel();
     spdlog::debug("[PanelFactory] Home panel set up; 5 panels deferred to first navigation");
+    // Print Files is the panel a session visits first and most. Its build is a
+    // fraction of a second, so it is paid at an idle moment instead of on the
+    // tap; the others stay on first navigation.
+    m_idle_prebuild_gate = IdlePrebuildGate{};
+    m_idle_prebuild_timer.reset(lv_timer_create(on_idle_prebuild_tick, 1000, this));
     return;
 #endif
 
