@@ -119,11 +119,13 @@ bool MoonrakerManager::init(const RuntimeConfig& runtime_config, Config* config)
     }
 
     // The connection-failed prompt browses for the printer at a new address. A mock printer
-    // has no network presence to find.
+    // has no network presence to find, and the firmware's MdnsDiscovery is a stub.
+#if !defined(ESP_PLATFORM)
     if (!runtime_config.should_mock_mdns()) {
         helix::ui::set_printer_rediscovery_source(
             [] { return std::make_unique<helix::MdnsDiscovery>(); });
     }
+#endif
 
     // Register callbacks for notifications and state changes
     register_callbacks();

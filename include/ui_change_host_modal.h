@@ -77,14 +77,17 @@ void drop_held_connection_failed();
 void show_connection_failed_modal(const std::string& title, const std::string& message);
 
 /// How long the connection-failed prompt browses mDNS before it shows.
-constexpr uint32_t REDISCOVERY_WINDOW_MS = 4000;
+/// Under MdnsDiscovery's 3.5s query cycle, so the stop lands in its idle wait rather than
+/// a socket read, and the first query's answers are all in.
+constexpr uint32_t REDISCOVERY_WINDOW_MS = 3000;
 
 /**
  * @brief The one discovered Moonraker that is the saved printer at another address
  *
  * A printer is recognised by hostname, compared without case, ".local" or a trailing dot.
- * Empty when no printer carries any of @p identities, when more than one does, or when one
- * still answers at the saved address (the address is not what is wrong).
+ * Empty when no printer carries any of @p identities, when more than one does, when one
+ * still answers at the saved address (the address is not what is wrong), or when the saved
+ * host is a name rather than an IP literal.
  */
 std::optional<DiscoveredPrinter> find_moved_printer(const std::vector<DiscoveredPrinter>& found,
                                                     const std::string& saved_host, int saved_port,

@@ -104,6 +104,18 @@ std::vector<std::string> temperature_sensor_objects(const PrinterDiscovery& hard
     return objects;
 }
 
+void remember_printer_hostname(const std::string& hostname) {
+    if (hostname.empty() || hostname == "unknown") {
+        return;
+    }
+    Config* config = Config::get_instance();
+    const std::string path = config->df() + helix::wizard::HOSTNAME;
+    if (config->get<std::string>(path, "") != hostname) {
+        config->set<std::string>(path, hostname);
+        config->save();
+    }
+}
+
 void init_subsystems_from_hardware(const PrinterDiscovery& hardware, IMoonrakerAPI* api,
                                    IMoonrakerClient* client) {
     spdlog::debug("[PrinterDiscovery] Initializing subsystems from hardware discovery");
@@ -167,15 +179,7 @@ void init_subsystems_from_hardware(const PrinterDiscovery& hardware, IMoonrakerA
     // Sync printer name from Mainsail/Fluidd DB (seeds local config on first connect)
     helix::PrinterNameSync::resolve(api, hardware.hostname());
 
-    // The connection-failed prompt re-finds the printer over mDNS by this name (#1217).
-    if (!hardware.hostname().empty() && hardware.hostname() != "unknown") {
-        Config* config = Config::get_instance();
-        const std::string path = config->df() + helix::wizard::HOSTNAME;
-        if (config->get<std::string>(path, "") != hardware.hostname()) {
-            config->set<std::string>(path, hardware.hostname());
-            config->save();
-        }
-    }
+    remember_printer_hostname(hardware.hostname());
 
     // Initialize standard macros
     // Type from Config, NOT PrinterState: this callback runs before

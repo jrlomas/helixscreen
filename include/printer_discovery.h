@@ -1025,6 +1025,10 @@ namespace helix {
 void init_subsystems_from_hardware(const PrinterDiscovery& hardware, IMoonrakerAPI* api,
                                    IMoonrakerClient* client);
 
+/// Saves Klipper's hostname for the active printer, writing only when it changed. The
+/// connection-failed prompt re-finds the printer over mDNS by it (#1217).
+void remember_printer_hostname(const std::string& hostname);
+
 /**
  * @brief The objects TemperatureSensorManager tracks: temperature_sensor /
  *        temperature_fan / tmc objects plus every heater_generic (filament

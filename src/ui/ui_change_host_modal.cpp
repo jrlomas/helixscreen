@@ -14,6 +14,7 @@
 #include "i_moonraker_api.h"
 #include "i_moonraker_client.h"
 #include "lvgl/lvgl.h"
+#include "moonraker_events.h"
 #include "moonraker_manager.h"
 #include "printer_retarget.h"
 #include "printer_state.h"
@@ -26,6 +27,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <arpa/inet.h>
 #include <cctype>
 #include <string>
 #include <utility>
@@ -516,6 +518,14 @@ void show_change_host_modal(std::function<void(bool changed)> extra_on_complete)
 
 namespace {
 
+/// The prompt still describes the connection: the user did not switch printers and it did
+/// not come up meanwhile.
+bool failure_still_current(const std::string& printer_id) {
+    IMoonrakerClient* client = get_moonraker_client();
+    return Config::get_instance()->get_active_printer_id() == printer_id &&
+           !(client && client->get_connection_state() == ConnectionState::CONNECTED);
+}
+
 void present_connection_failed(const std::string& title, const std::string& message,
                                const std::optional<DiscoveredPrinter>& moved) {
     // Reconnect first: a wedged transport (reported on Android, where the
@@ -574,8 +584,16 @@ void present_connection_failed(const std::string& title, const std::string& mess
     if (moved) {
         const std::string address = fmt::format("{}:{}", moved->ip_address, moved->port);
         const std::string body =
-            message + "\n\n" + fmt::format(lv_tr("Found {} at {}."), moved->name, address);
-        auto use_new = [host = moved->ip_address, port = static_cast<int>(moved->port)] {
+            message + "\n\n" + fill_placeholders(lv_tr("Found {} at {}."), {moved->name, address});
+        auto use_new = [host = moved->ip_address, port = static_cast<int>(moved->port),
+                        printer_id = Config::get_instance()->get_active_printer_id()] {
+            // The prompt can outlive a printer switch; the address belongs to this one only.
+            if (!failure_still_current(printer_id)) {
+                spdlog::info("[ChangeHost] Not applying {}:{}: the printer changed or "
+                             "reconnected while the prompt was open",
+                             host, port);
+                return;
+            }
             store_active_printer_address(host, port);
             // Past the prompt's exit animation, like the host modal's Save.
             helix::ui::queue_update("ChangeHost::use_rediscovered",
@@ -614,14 +632,6 @@ DeferredFailure& deferred_failure() {
 }
 
 constexpr uint32_t CHOOSER_POLL_MS = 300;
-
-/// The prompt still describes the connection: the user did not switch printers and it did
-/// not come up meanwhile.
-bool failure_still_current(const std::string& printer_id) {
-    IMoonrakerClient* client = get_moonraker_client();
-    return Config::get_instance()->get_active_printer_id() == printer_id &&
-           !(client && client->get_connection_state() == ConnectionState::CONNECTED);
-}
 
 void defer_connection_failed(const std::string& title, const std::string& message,
                              const std::optional<DiscoveredPrinter>& moved) {
@@ -700,7 +710,6 @@ Rediscovery& rediscovery() {
 void finish_rediscovery() {
     Rediscovery& r = rediscovery();
     const std::vector<DiscoveredPrinter> found = r.mdns->get_discovered_printers();
-    // ponytail: joins the browse thread on the main thread, up to one 500ms socket read.
     r.mdns->stop_discovery();
     r.mdns.reset();
     if (!failure_still_current(r.printer_id)) {
@@ -714,7 +723,7 @@ void finish_rediscovery() {
     const auto moved =
         find_moved_printer(found, host, port,
                            {cfg->get<std::string>(cfg->df() + wizard::HOSTNAME, ""),
-                            cfg->get<std::string>(cfg->df() + wizard::PRINTER_NAME, ""), host});
+                            cfg->get<std::string>(cfg->df() + wizard::PRINTER_NAME, "")});
     if (moved) {
         spdlog::info("[ChangeHost] {}:{} unreachable; mDNS finds '{}' at {}:{}", host, port,
                      moved->hostname, moved->ip_address, moved->port);
@@ -760,6 +769,14 @@ void begin_connection_failed(const std::string& title, const std::string& messag
 std::optional<DiscoveredPrinter> find_moved_printer(const std::vector<DiscoveredPrinter>& found,
                                                     const std::string& saved_host, int saved_port,
                                                     const std::vector<std::string>& identities) {
+    // A saved name re-resolves to wherever the printer went; swapping it for the literal IP
+    // mDNS reports would trade an address that heals for one that cannot.
+    in_addr v4{};
+    in6_addr v6{};
+    if (inet_pton(AF_INET, saved_host.c_str(), &v4) != 1 &&
+        inet_pton(AF_INET6, saved_host.c_str(), &v6) != 1) {
+        return std::nullopt;
+    }
     std::vector<std::string> names;
     for (const auto& id : identities) {
         if (!id.empty()) {
