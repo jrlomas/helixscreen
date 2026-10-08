@@ -840,11 +840,14 @@ if [[ -d "$MAIN_OBJ" ]]; then
     if [[ "$OBJ_COUNT" -gt 10 ]]; then
         echo -e "  build/obj: ${GREEN}already populated ($OBJ_COUNT objects)${RESET}"
     elif [[ -n "$(git -C "$WORKTREE_PATH" diff --no-renames --diff-filter=AD --name-only \
-            HEAD "$(git -C "$MAIN_TREE" rev-parse HEAD)" -- '*.cpp' '*.c' 2>/dev/null | head -n1)" ]]; then
+            HEAD "$(git -C "$MAIN_TREE" rev-parse HEAD)" -- '*.cpp' '*.c' 2>/dev/null | head -n1)" ||
+            -n "$(git -C "$WORKTREE_PATH" diff --raw HEAD "$(git -C "$MAIN_TREE" rev-parse HEAD)" -- lib 2>/dev/null | head -n1)" ]]; then
         # A source added or removed between this branch and the main tree leaves an
-        # object with no matching source here (or none for a new one). make links
-        # every object it finds, so a stale one lands in the binary. Changed sources
-        # are fine: the mtime sync leaves them fresh and they rebuild.
+        # object with no matching source here (or none for a new one), and a lib/
+        # submodule pinned elsewhere makes its objects describe other code under a
+        # fresh-looking mtime. make links every object it finds, so a stale one lands
+        # in the binary. Changed sources are fine: the mtime sync leaves them fresh
+        # and they rebuild.
         echo -e "  build/obj: ${YELLOW}not cloned: this branch's source set differs from the main tree's (ccache covers the rebuild)${RESET}"
     else
         echo -e "${CYAN}Cloning build objects from main tree...${RESET}"

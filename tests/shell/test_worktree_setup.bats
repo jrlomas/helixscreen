@@ -702,3 +702,24 @@ mark_tree() {
     [ -e "$main/.worktrees/seeded/build/obj/seeded.o" ] || fail "object was not cloned: $output"
     rm -rf "$tmp"
 }
+
+@test "build/obj is not cloned when a lib/ submodule is pinned at another revision" {
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    main="$tmp/main"
+    printf 'reapply-patches:\n\t@true\n' > "$main/Makefile"
+    git -C "$main" add Makefile
+    git -C "$main" commit -qm stub
+    git -C "$main" branch rel
+    git -C "$main/lib/lvgl" -c user.name=t -c user.email=t@t commit -q --allow-empty -m bump
+    git -C "$main" commit -qam "bump lvgl pin"
+    mkdir -p "$main/build/obj"
+    : > "$main/build/obj/lvgl_obj.o"
+
+    run bash "$main/scripts/setup-worktree.sh" --base rel --no-build feat/pin
+    [ "$status" -eq 0 ] || fail "setup failed: $output"
+    [ ! -e "$main/.worktrees/pin/build/obj/lvgl_obj.o" ] \
+        || fail "objects built against another lvgl revision were seeded"
+    rm -rf "$tmp"
+}
