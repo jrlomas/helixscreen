@@ -60,7 +60,8 @@ HOST="${ZEUS_HOST:-zeus.local}"   # bare `zeus` does not resolve from thelio
 CONTAINER="${ZEUS_CONTAINER:-helix-tsan}"
 WORKDIR="${ZEUS_WORKDIR:-/work/helixscreen}"            # the --commit checkout
 TREES_HOST="${ZEUS_TREES_HOST:-/mnt/lagoon/home/pbrown/helix-tsan/trees}"  # on zeus
-TREES=/work/trees                                         # TREES_HOST, in the container
+TREES="${ZEUS_TREES:-/work/trees}"                        # TREES_HOST, in the container
+CCACHE="${ZEUS_CCACHE:-/work/ccache}"                     # in the container
 LOCK_DIR="${ZEUS_LOCK_DIR:-/tmp}"                         # on zeus
 SSH_OPTS=(-o ConnectTimeout=3 -o BatchMode=yes)
 
@@ -462,7 +463,7 @@ if ! sudo -n docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
     }
 fi
 
-D() { sudo -n docker exec -w "$RUNDIR" -e CCACHE_DIR=/work/ccache -e HELIX_J="\$HELIX_J" -e HELIX_JFLAG="\$HELIX_JFLAG" "$CONTAINER" bash -lc "\$1"; }
+D() { sudo -n docker exec -w "$RUNDIR" -e CCACHE_DIR="$CCACHE" -e HELIX_J="\$HELIX_J" -e HELIX_JFLAG="\$HELIX_JFLAG" "$CONTAINER" bash -lc "\$1"; }
 
 # A run whose ssh side died leaves its build running in the container while
 # the lock is already released; resetting the tree under that build is the
@@ -499,7 +500,7 @@ if [ -n "\$POOL_ENV" ]; then
     # build; inside, the container opens the FIFO and exports MAKEFLAGS. The
     # FIFO is mode 600, so a container uid that is not root (or is a remapped
     # root) cannot open it; that run takes its own -j instead.
-    "\$JP" exec -- sudo -n docker exec -w "$RUNDIR" -e CCACHE_DIR=/work/ccache -e HELIX_J="\$HELIX_J" -e HELIX_JFLAG= "$CONTAINER" bash -lc \
+    "\$JP" exec -- sudo -n docker exec -w "$RUNDIR" -e CCACHE_DIR="$CCACHE" -e HELIX_J="\$HELIX_J" -e HELIX_JFLAG= "$CONTAINER" bash -lc \
         "if { \$POOL_ENV; } 2>/dev/null; then :; else "'echo "→ uid \$(id -u) cannot open the jobpool FIFO; using -j\$HELIX_J"; HELIX_JFLAG=-j\$HELIX_J; fi; $CMD 2>&1'
 else
     D '$CMD 2>&1'
