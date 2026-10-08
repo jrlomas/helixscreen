@@ -1404,6 +1404,7 @@ translations:
   Forward Multiplier: 'Multiplicador de avance'
   Found %zu printers: '%zu impresoras encontradas'
   Found 1 printer: 1 impresora encontrada
+  Found {} at {}.: '{} encontrada en {}.'
   Framerate: Cuadros por segundo
   From Buffer: Desde búfer
   From SpoolmanDB: 'De SpoolmanDB'
@@ -1779,6 +1780,7 @@ translations:
     capa captura un cuadro por cambio de capa. Mejor para la mayoría de las impresiones.
   Layers: Capas
   Layout: Distribución
+  Layout changes are off in safe mode. Restart to edit.: 'Los cambios de diseño están desactivados en modo seguro. Reinicie para editar.'
   Learn More: Más información
   LedSelect: Seleccionar LED
   Left: 'Izquierda'
@@ -2744,6 +2746,7 @@ translations:
   Restart Klipper without rebooting: Reiniciar Klipper sin reiniciar el host
   Restart Klipper?: '¿Reiniciar Klipper?'
   Restart Moonraker: Reiniciar Moonraker
+  Restart Moonraker to finish the plugin change: Reinicia Moonraker para completar el cambio del plugin
   Restart Now: Reiniciar Ahora
   Restart Required: Reinicio Requerido
   'Restart failed: not connected': 'Reinicio fallido: no conectado'
@@ -2845,6 +2848,8 @@ translations:
   : Modo seguro activo. La conexión con la impresora está deshabilitada porque la
     aplicación seguía fallando al iniciar. Abra Ajustes para solucionar el problema
     y luego reinicie.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Modo seguro: la aplicación seguía fallando al iniciar, así que los plugins están desactivados y los diseños de widgets muestran sus valores predeterminados. Reinicie para volver a la normalidad.'
   Safety & Alerts: Seguridad y alertas
   Same spool in {}? Tap Clear if it is a new one.: '¿La misma bobina en {}? Toca Borrar si es una nueva.'
   Sample: Muestra
@@ -3677,6 +3682,7 @@ translations:
   Use Android native keyboard for text input: Usar el teclado nativo de Android para
     entrada de texto
   Use G10/G11 firmware retraction: Usar retracción de firmware G10/G11
+  Use New Address: 'Usar nueva dirección'
   Use Unload before Eject: 'Use Descargar antes de Expulsar'
   Use first HID scanner found: 'Usar el primer escáner HID encontrado'
   Use printer type to select image: Usar tipo de impresora para seleccionar imagen
@@ -3821,6 +3827,7 @@ translations:
     más tarde en Ajustes.
   You have unsaved changes. Discard them?: Tiene cambios sin guardar. ¿Descartarlos?
   Your completed prints will appear here: Sus impresiones completadas aparecerán aquí
+  Your print start or end macro also sets LEDs. It and Automatic LED Control may override each other.: 'Tu macro de inicio o fin de impresión también controla los LED. Esta y el control automático de LED pueden anularse mutuamente.'
   Your printer at a glance: Tu impresora de un vistazo
   Your printer has an automatic filament changer: Tu impresora tiene un cambiador
     de filamento automático
@@ -3976,6 +3983,8 @@ translations:
   '{} is still printing. The print keeps running after you switch.': '{} sigue imprimiendo. La impresión continúa después de cambiar.'
   '{} is not set up on this printer': '{} no está configurado en esta impresora'
   '{} lines in helixscreen.env were ignored': '{} líneas de helixscreen.env fueron ignoradas'
+  '{} kept crashing the panel; switched back to {}': '{} bloqueó la pantalla repetidamente; se volvió a {}'
+  '{} kept crashing the panel; pick a printer to connect': '{} bloqueó la pantalla repetidamente; elige una impresora para conectar'
   '{} macro not configured': Macro {} no configurado
   '{} matches.': '{} coincide.'
   '{} may cause unintended changes. Are you sure?': '{} puede causar cambios no deseados.

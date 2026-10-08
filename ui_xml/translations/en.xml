@@ -1271,6 +1271,7 @@
   <translation tag="Forward Multiplier" en="Forward Multiplier"/>
   <translation tag="Found %zu printers" en="Found %zu printers"/>
   <translation tag="Found 1 printer" en="Found 1 printer"/>
+  <translation tag="Found {} at {}." en="Found {} at {}."/>
   <translation tag="Framerate" en="Framerate"/>
   <translation tag="From Buffer" en="From Buffer"/>
   <translation tag="From SpoolmanDB" en="From SpoolmanDB"/>
@@ -1596,6 +1597,7 @@
   <translation tag="Layer mode captures one frame per layer change. Best for most prints." en="Layer mode captures one frame per layer change. Best for most prints."/>
   <translation tag="Layers" en="Layers"/>
   <translation tag="Layout" en="Layout"/>
+  <translation tag="Layout changes are off in safe mode. Restart to edit." en="Layout changes are off in safe mode. Restart to edit."/>
   <translation tag="Learn More" en="Learn More"/>
   <translation tag="LedSelect" en="LedSelect"/>
   <translation tag="Left" en="Left"/>
@@ -2483,6 +2485,7 @@
   <translation tag="Restart Klipper without rebooting" en="Restart Klipper without rebooting"/>
   <translation tag="Restart Klipper?" en="Restart Klipper?"/>
   <translation tag="Restart Moonraker" en="Restart Moonraker"/>
+  <translation tag="Restart Moonraker to finish the plugin change" en="Restart Moonraker to finish the plugin change"/>
   <translation tag="Restart Now" en="Restart Now"/>
   <translation tag="Restart Required" en="Restart Required"/>
   <translation tag="Restart failed: not connected" en="Restart failed: not connected"/>
@@ -2571,6 +2574,7 @@
   <translation tag="STYLE PROPERTIES" en="STYLE PROPERTIES"/>
   <translation tag="SWITCH SENSORS" en="SWITCH SENSORS"/>
   <translation tag="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot." en="Safe Mode active. The printer connection is disabled because the app kept crashing on startup. Open Settings to fix the issue, then reboot."/>
+  <translation tag="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal." en="Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal."/>
   <translation tag="Safety &amp; Alerts" en="Safety &amp; Alerts"/>
   <translation tag="Same spool in {}? Tap Clear if it is a new one." en="Same spool in {}? Tap Clear if it is a new one."/>
   <translation tag="Sample" en="Sample"/>
@@ -3272,6 +3276,7 @@
   <translation tag="Uptime" en="Uptime"/>
   <translation tag="Use Android native keyboard for text input" en="Use Android native keyboard for text input"/>
   <translation tag="Use G10/G11 firmware retraction" en="Use G10/G11 firmware retraction"/>
+  <translation tag="Use New Address" en="Use New Address"/>
   <translation tag="Use Unload before Eject" en="Use Unload before Eject"/>
   <translation tag="Use first HID scanner found" en="Use first HID scanner found"/>
   <translation tag="Use printer type to select image" en="Use printer type to select image"/>
@@ -3405,6 +3410,7 @@
   <translation tag="You can skip this and calibrate later in Settings." en="You can skip this and calibrate later in Settings."/>
   <translation tag="You have unsaved changes. Discard them?" en="You have unsaved changes. Discard them?"/>
   <translation tag="Your completed prints will appear here" en="Your completed prints will appear here"/>
+  <translation tag="Your print start or end macro also sets LEDs. It and Automatic LED Control may override each other." en="Your print start or end macro also sets LEDs. It and Automatic LED Control may override each other."/>
   <translation tag="Your printer at a glance" en="Your printer at a glance"/>
   <translation tag="Your printer has an automatic filament changer" en="Your printer has an automatic filament changer"/>
   <translation tag="Your printer was offline during setup, so hardware options were skipped. Set them up now?" en="Your printer was offline during setup, so hardware options were skipped. Set them up now?"/>
@@ -3548,6 +3554,8 @@
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." en="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap."/>
   <translation tag="{} is not set up on this printer" en="{} is not set up on this printer"/>
   <translation tag="{} is still printing. The print keeps running after you switch." en="{} is still printing. The print keeps running after you switch."/>
+  <translation tag="{} kept crashing the panel; pick a printer to connect" en="{} kept crashing the panel; pick a printer to connect"/>
+  <translation tag="{} kept crashing the panel; switched back to {}" en="{} kept crashing the panel; switched back to {}"/>
   <translation tag="{} lines in helixscreen.env were ignored" en="{} lines in helixscreen.env were ignored"/>
   <translation tag="{} macro not configured" en="{} macro not configured"/>
   <translation tag="{} matches." en="{} matches."/>

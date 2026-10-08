@@ -32,6 +32,27 @@ enum class MoonrakerEventType {
     REQUEST_TIMEOUT      ///< JSON-RPC request timed out
 };
 
+namespace helix {
+
+/// @p tmpl with each `{}` replaced by the next of @p args. Never fails: a translation with
+/// fewer placeholders drops the surplus args, and any other brace is copied as text, so a
+/// translated template is safe where fmt would throw (or abort, without exceptions).
+inline std::string fill_placeholders(const char* tmpl, const std::vector<std::string>& args) {
+    std::string out;
+    size_t next = 0;
+    for (const char* p = tmpl; *p; ++p) {
+        if (p[0] == '{' && p[1] == '}' && next < args.size()) {
+            out += args[next++];
+            ++p;
+        } else {
+            out += *p;
+        }
+    }
+    return out;
+}
+
+} // namespace helix
+
 /**
  * @brief Event structure passed to event handlers
  */
@@ -47,21 +68,10 @@ struct MoonrakerEvent {
     const char* message_tag = nullptr;
     std::vector<std::string> message_args;
 
-    /// @p tmpl with each `{}` replaced by the next of `message_args`. The
-    /// presenter passes lv_tr(message_tag) when it shows the event. A translation
-    /// with fewer placeholders drops the surplus args rather than failing.
+    /// @p tmpl filled from `message_args`. The presenter passes lv_tr(message_tag)
+    /// when it shows the event.
     std::string render(const char* tmpl) const {
-        std::string out;
-        size_t next = 0;
-        for (const char* p = tmpl; *p; ++p) {
-            if (p[0] == '{' && p[1] == '}' && next < message_args.size()) {
-                out += message_args[next++];
-                ++p;
-            } else {
-                out += *p;
-            }
-        }
-        return out;
+        return helix::fill_placeholders(tmpl, message_args);
     }
 
     /// An event whose text the UI translates; `message` holds the English rendering.

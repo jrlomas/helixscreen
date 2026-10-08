@@ -6,8 +6,14 @@
 #include "ui_modal.h"
 #include "ui_observer_guard.h"
 
+#include "mdns_discovery.h"
+
+#include <cstdint>
 #include <functional>
+#include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 /**
  * @file ui_change_host_modal.h
@@ -49,7 +55,7 @@ void show_change_host_modal(std::function<void(bool changed)> extra_on_complete 
  * the tested host and port to `on_add`, deferred past the modal's exit. Leaving any other way
  * reconnects the saved printer if Test Connection moved the client.
  */
-void show_add_printer_modal(std::function<void(const std::string& host, int port)> on_add);
+void show_add_printer_modal(std::function<bool(const std::string& host, int port)> on_add);
 
 /// A printer chooser closed on a selection: the prompt it was holding belongs to the
 /// connection the user just moved away from, so it is dropped rather than shown.
@@ -70,12 +76,34 @@ void drop_held_connection_failed();
  */
 void show_connection_failed_modal(const std::string& title, const std::string& message);
 
+/// How long the connection-failed prompt browses mDNS before it shows.
+/// Under MdnsDiscovery's 3.5s query cycle, so the stop lands in its idle wait rather than
+/// a socket read, and the first query's answers are all in.
+constexpr uint32_t REDISCOVERY_WINDOW_MS = 3000;
+
+/**
+ * @brief The one discovered Moonraker that is the saved printer at another address
+ *
+ * A printer is recognised by hostname, compared without case, ".local" or a trailing dot.
+ * Empty when no printer carries any of @p identities, when more than one does, when one
+ * still answers at the saved address (the address is not what is wrong), or when the saved
+ * host is a name rather than an IP literal.
+ */
+std::optional<DiscoveredPrinter> find_moved_printer(const std::vector<DiscoveredPrinter>& found,
+                                                    const std::string& saved_host, int saved_port,
+                                                    const std::vector<std::string>& identities);
+
+/// Where the connection-failed prompt gets its one-shot mDNS browse. Unset, it does not
+/// browse at all; the app sets it at startup, outside --test.
+void set_printer_rediscovery_source(std::function<std::unique_ptr<IMdnsDiscovery>()> source);
+
 } // namespace helix::ui
 
 class ChangeHostModal : public Modal {
   public:
     using CompletionCallback = std::function<void(bool changed)>;
-    using AddCallback = std::function<void(const std::string& host, int port)>;
+    /// Returns whether it switched to a printer: a switch retargets the client itself.
+    using AddCallback = std::function<bool(const std::string& host, int port)>;
 
     ChangeHostModal();
     ~ChangeHostModal() override;

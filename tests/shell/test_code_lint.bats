@@ -270,7 +270,7 @@ moonraker_concrete_pattern() {
 # Print the body of PrinterSwitchFlow::switch_printer() from the file given in $1.
 switch_printer_body() {
     awk '
-        /^void PrinterSwitchFlow::switch_printer\(/ { inside = 1 }
+        /^bool PrinterSwitchFlow::switch_printer\(/ { inside = 1 }
         inside { print }
         inside && /^\}/ { exit }
     ' "$1"
@@ -337,7 +337,7 @@ check_switch_printer_clears_caches() {
     # Fail-closed: a rename or signature change must break the gate loudly rather
     # than silently pass on an empty body.
     local mutated="${BATS_TEST_TMPDIR}/application_no_fn.cpp"
-    sed -e 's@^void PrinterSwitchFlow::switch_printer(@void PrinterSwitchFlow::switch_printer_renamed(@' \
+    sed -e 's@^bool PrinterSwitchFlow::switch_printer(@bool PrinterSwitchFlow::switch_printer_renamed(@' \
         src/application/printer_switch_flow.cpp > "$mutated"
 
     run check_switch_printer_clears_caches "$mutated"
@@ -628,6 +628,29 @@ SHAPES
     lacks "Plain string" "$output"
     lacks "STD_REGEX_OK" "$output"
     lacks "helix::Regex" "$output"
+}
+
+# Only <spdlog/fmt/fmt.h> is on every build's include path; the standalone
+# <fmt/...> headers are absent on hosts that build against spdlog's bundled fmt.
+bare_fmt_include_files() {
+    git ls-files --cached --others --exclude-standard src include tests firmware |
+        grep -E '\.(cpp|h)$'
+}
+
+check_no_bare_fmt_include() {
+    local offenders
+    # shellcheck disable=SC2046  # paths have no spaces; word splitting is intended
+    offenders=$(code_offenders '#[[:space:]]*include[[:space:]]*<fmt/' FMT_INCLUDE_OK $(bare_fmt_include_files))
+    [ -z "$offenders" ] && return 0
+    echo "bare <fmt/...> include (not on every host's include path):"
+    printf '%s\n' "$offenders"
+    echo "Use <spdlog/fmt/fmt.h>."
+    return 1
+}
+
+@test "no bare <fmt/...> include in src, include, tests or firmware" {
+    run check_no_bare_fmt_include
+    [ "$status" -eq 0 ]
 }
 
 # sigaltstack is per thread, so a thread that never installs its own signal
@@ -978,17 +1001,17 @@ SHAPES
 # and `make test-shell` only runs late in the release. These pin the wiring.
 
 @test "the translation coverage gate is wired into quality-checks.sh" {
-  run grep -c 'qc_translation_coverage' scripts/quality-checks.sh
+  run grep -q 'QC_ALL=.*qc_translation_coverage' scripts/quality-checks.sh
   [ "$status" -eq 0 ]
-  # definition, QC_ALL registration, and the path-gating trigger row
-  [ "$output" -ge 3 ]
+  run grep -q '^qc_translation_coverage() {' scripts/qc/translation_coverage.sh
+  [ "$status" -eq 0 ]
 }
 
 @test "quality-checks.sh runs the coverage gate as a dry run" {
   # A bare `sync` REWRITES all nine catalogs. A gate that edits the tree it is
   # inspecting would stage catalog churn behind the committer's back, and would
   # then report green on the very drift it just introduced.
-  run grep -n 'translation_sync.py sync' scripts/quality-checks.sh
+  run grep -n 'translation_sync.py sync' scripts/qc/translation_coverage.sh
   [ "$status" -eq 0 ]
   while IFS= read -r line; do
     contains "--dry-run" "$line"
@@ -999,7 +1022,7 @@ SHAPES
   # A new lv_tr() in src/ or a label_tag in ui_xml/ is what ADDS an untranslated
   # string; gating the check on ^translations/ alone would sleep through exactly
   # the commit that introduces one.
-  run bash -c "sed -n '/qc_translation_coverage)/,/;;/p' scripts/quality-checks.sh"
+  run qc_trigger translation_coverage
   [ "$status" -eq 0 ]
   contains "^ui_xml/" "$output"
   [[ "$output" == *"^src/"* ]]
@@ -1015,7 +1038,7 @@ SHAPES
   if [ ! -x .venv/bin/python ]; then
     skip "translations venv not set up (run 'make venv-setup')"
   fi
-  run bash -c "sed -n '/^qc_translation_coverage() {/,/^}/p' scripts/quality-checks.sh"
+  run bash -c "sed -n '/^qc_translation_coverage() {/,/^}/p' scripts/qc/translation_coverage.sh"
   [ "$status" -eq 0 ]
   contains "tests/python/test_cpp_translation_coverage.py" "$output"
   contains "-m pytest" "$output"
@@ -1034,7 +1057,7 @@ run_coverage_gate_without_venv() {
     section_time() { :; }
     STAGED_ONLY="$1"
     VENV_PYTHON="/nonexistent/helix-venv/bin/python"
-    eval "$(sed -n "/^qc_translation_coverage() {/,/^}/p" scripts/quality-checks.sh)"
+    . scripts/qc/translation_coverage.sh
     qc_translation_coverage
   ' _ "$1"
 }
@@ -3285,4 +3308,19 @@ own_endpoint_http_offenders() {
         printf '%s\n' "$includers" >&2
     fi
     [ "$count" -le "$limit" ]
+}
+
+# --- Per-event ESP32 paths must not walk the PSRAM heap ---
+# heap_caps_get_largest_free_block() walks every block with interrupts masked
+# for 20-30ms on the K-Touch, and the RGB panel's bounce-buffer refill misses
+# for the whole walk: the screen glitches once per call. These files run it per
+# thumbnail decode, per file-detail open and per print-status build.
+
+@test "per-event ESP32 paths read free PSRAM, never walk the heap" {
+    local files="include/esp_psram_thumbnail.h src/system/memory_utils.cpp src/ui/ui_panel_print_select.cpp src/print/active_print_media_manager.cpp src/ui/ui_panel_print_status.cpp"
+    run bash -c "grep -n 'heap_caps_get_largest_free_block\|heap_caps_get_info' $files | grep -v ':[0-9]*: *//'"
+    [ "$status" -eq 1 ]  # grep returns 1 when no matches found
+
+    run grep -n 'heap_caps_get_free_size(MALLOC_CAP_SPIRAM)' include/esp_psram_thumbnail.h
+    [ "$status" -eq 0 ]
 }

@@ -50,7 +50,6 @@
 #include "panel_factory.h"
 #include "panel_widget_manager.h"
 #include "pending_startup_warnings.h"
-#include "post_op_cooldown_manager.h"
 #include "power_device_state.h"
 #include "print_history_manager.h"
 #include "printer_cache_registry.h"
@@ -182,7 +181,6 @@
 #include "led/ui_led_control_overlay.h"
 #include "platform_info.h"
 #include "printer_detector.h"
-#include "printer_image_manager.h"
 #include "safety_settings_manager.h"
 #include "settings_manager.h"
 #include "system/afc_message_dedup.h"
@@ -207,7 +205,6 @@
 #include "action_prompt_modal.h"
 #include "app_globals.h"
 #include "detection_manager.h"
-#include "filament_consumption_tracker.h"
 #include "filament_sensor_manager.h"
 #include "gcode_file_modifier.h"
 #include "helix-xml/src/xml/lv_xml.h"
@@ -386,8 +383,8 @@ void Application::release_instance_lock() {
 
 Application::Application()
     : m_session(m_config, m_async_lifetime, m_screen,
-                {m_args, m_shutdown_complete, m_wizard_active, [this] { return run_wizard(); },
-                 [this] { apply_startup_cli_actions(); },
+                {m_args, m_shutdown_complete, m_wizard_active, m_upgrade_banner,
+                 [this] { return run_wizard(); }, [this] { apply_startup_cli_actions(); },
                  [this] { m_splash_manager.on_discovery_complete(); }}) {}
 
 Application::~Application() {
@@ -477,9 +474,8 @@ int Application::run(int argc, char** argv) {
     // test mode — automation (screenshot pipeline, helixctl-driven runs) relaunches
     // the binary rapidly by design, and this guard exists to protect users on a
     // real device from an infinite restart loop, never a dev running --test.
-    if (helix::crash_loop_detected_and_record()) {
-        return 1;
-    }
+    // A loop boots this run in crash-loop safe mode.
+    helix::crash_loop_detected_and_record();
 
     helix::promote_surviving_gpu_guards();
 
@@ -619,7 +615,7 @@ int Application::run(int argc, char** argv) {
     // lv_layer_top and observes UpdateChecker state. Ships hidden because the
     // /upgrade_nudge/intensity setting defaults to 'off'; flipped to
     // 'aggressive' for the 1.0 rollout (no code change needed).
-    UpgradeBanner::instance().init();
+    m_upgrade_banner.init();
 
     // Initialize CrashReporter (independent of telemetry)
     // Write mock crash file first if --mock-crash flag is set (requires --test)
@@ -629,7 +625,7 @@ int Application::run(int argc, char** argv) {
         spdlog::info("[Application] Wrote mock crash file for testing");
     }
     helix::CrashHistory::instance().init(user_config_dir);
-    CrashReporter::instance().init(user_config_dir);
+    m_crash_reporter.init(user_config_dir);
     // Cross-session seed for AFC's latched message dedup (uninitialized
     // before this point, which reads as "every message is new").
     AfcMessageDedup::instance().init(user_config_dir);
@@ -643,9 +639,6 @@ int Application::run(int argc, char** argv) {
     // snapshots are diffed against this to narrow down which startup phase
     // burns allocator arena on small-RAM devices.
     TelemetryManager::instance().record_memory_snapshot("post_telemetry_init");
-
-    // Initialize PrinterImageManager (custom image import/resolution)
-    helix::PrinterImageManager::instance().init(helix::get_user_config_dir());
 
     // Phase 9c: Initialize panel subjects with API injection
     // Panels receive API at construction - no deferred set_api() needed
@@ -684,26 +677,16 @@ int Application::run(int argc, char** argv) {
     SoundManager::instance().initialize();
     SoundManager::instance().play("startup", SoundPriority::EVENT);
 
-    // Backend is now picked: seed the audio-device-available subject so the
-    // Display/Sound overlay's device-row binding resolves correctly. Subjects
-    // init before SoundManager, so the value is stale until this refresh.
-    AudioSettingsManager::instance().refresh_audio_device_available();
+    // Backend is now picked: seed the backend subjects so the Sound overlay's
+    // device-row and Test Tracker bindings resolve correctly. Subjects init
+    // before SoundManager, so the values are stale until this refresh.
+    AudioSettingsManager::instance().refresh_backend_subjects();
 
     // Show sound settings immediately if a local backend exists,
     // without waiting for hardware discovery / Klipper connection.
     if (SoundManager::instance().has_backend()) {
         get_printer_state().capabilities_state().set_sound_backend_available(true);
     }
-
-    // Initialize PostOpCooldownManager (unified filament operation cooldown)
-    PostOpCooldownManager::instance().init();
-
-    // Begin tracking external-spool consumption across prints.
-    helix::FilamentConsumptionTracker::instance().start();
-
-    // Update DisplaySettingsManager with theme mode support (must be after both theme and settings
-    // init)
-    DisplaySettingsManager::instance().on_theme_changed();
 
     // --test fails loudly where the XML and the C++ disagree (a required
     // widget missing from its component), as the unit tests do.
@@ -737,13 +720,13 @@ int Application::run(int argc, char** argv) {
         // Exception: --mock-crash explicitly requests the dialog for testing
         bool show_crash_dialog =
             !get_runtime_config()->is_test_mode() || get_runtime_config()->mock_crash;
-        if (show_crash_dialog && CrashReporter::instance().has_crash_report()) {
+        if (show_crash_dialog && m_crash_reporter.has_crash_report()) {
             if (TelemetryManager::instance().had_update_restart()) {
                 spdlog::info(
                     "[Application] Crash from post-update restart, suppressing crash dialog");
-                CrashReporter::instance().consume_crash_file();
+                m_crash_reporter.consume_crash_file();
             } else {
-                auto report = CrashReporter::instance().collect_report();
+                auto report = m_crash_reporter.collect_report();
                 if (report.signal_name.empty()) {
                     // Empty signal_name means read_crash_file() returned null because
                     // the file lacked the required signal/name fields — typically a
@@ -752,15 +735,15 @@ int Application::run(int argc, char** argv) {
                     // useless bundle (see CHUQCNAE 2026-05-05).
                     spdlog::warn(
                         "[Application] Crash file unparseable — consuming and skipping dialog");
-                    CrashReporter::instance().consume_crash_file();
-                } else if (CrashReporter::instance().is_duplicate(report)) {
+                    m_crash_reporter.consume_crash_file();
+                } else if (m_crash_reporter.is_duplicate(report)) {
                     spdlog::info("[Application] Duplicate crash ({}), suppressing dialog",
                                  CrashReporter::fingerprint(report));
-                    CrashReporter::instance().consume_crash_file();
+                    m_crash_reporter.consume_crash_file();
                 } else {
                     spdlog::info(
                         "[Application] Previous crash detected — showing crash report dialog");
-                    CrashReportModal::show_owned(report);
+                    CrashReportModal::show_owned(m_crash_reporter, report);
                 }
             }
         }
@@ -847,6 +830,13 @@ int Application::run(int argc, char** argv) {
                       "kept crashing on startup. Open Settings to fix the issue, then reboot."),
                 0 /* sticky */);
         }
+        if (get_runtime_config()->crash_loop_safe_mode) {
+            ToastManager::instance().show(
+                ToastSeverity::WARNING,
+                lv_tr("Safe mode: the app kept crashing on startup, so plugins are off and "
+                      "widget layouts show their defaults. Restart to return to normal."),
+                0 /* sticky */);
+        }
 
         // Phase 14b: Check WiFi availability if expected
         check_wifi_availability();
@@ -871,7 +861,7 @@ int Application::run(int argc, char** argv) {
                 rc.transport = helix::RemoteConfig::Transport::UnixSocket;
                 rc.socket_path = helix::resolve_socket_path(m_args.remote_socket);
             }
-            if (!helix::RemoteControlServer::instance().start(rc)) {
+            if (!m_remote_control.start(rc)) {
                 // Name the target and say what the user will see instead. A bare
                 // "failed to start" sends people back to the flag they already
                 // set, because `ctl` reports only that it found no instance.
@@ -2470,7 +2460,7 @@ void Application::shutdown() {
 
     // Stop remote control server first (before tearing down UI state)
 #ifdef HELIX_ENABLE_REMOTE_CONTROL
-    helix::RemoteControlServer::instance().stop();
+    m_remote_control.stop();
 #endif
 
     // Stop memory monitor

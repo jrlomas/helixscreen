@@ -10,6 +10,21 @@
 #include <chrono>
 #include <string>
 
+namespace helix::sim {
+
+std::vector<std::string> mock_padded_macro_names() {
+    std::vector<std::string> names;
+    if (const char* v = std::getenv("HELIX_MOCK_MACRO_COUNT"); v && *v) {
+        const int want = atoi(v);
+        for (int i = 0; i < want; i++) {
+            names.push_back(fmt::format("MOCK_MACRO_{:03d}", i));
+        }
+    }
+    return names;
+}
+
+} // namespace helix::sim
+
 namespace mock_internal {
 
 static bool is_mock_kalico() {
@@ -81,6 +96,15 @@ static void append_led_effect_status(json& status_obj, const json& objects,
 
 json get_mock_gcode_macro_config() {
     json cfg;
+    const auto padded = helix::sim::mock_padded_macro_names();
+    for (size_t i = 0; i < padded.size(); i++) {
+        json& entry = cfg["gcode_macro " + padded[i]];
+        entry["gcode"] = "G28";
+        if (i % 3 == 0) {
+            entry["description"] = "Padded mock macro with a description long enough to wrap "
+                                   "onto a second line of its row";
+        }
+    }
     cfg["gcode_macro clean_nozzle"] = {
         {"gcode", "{% set PURGE_LEN = params.PURGE_LEN|default(10)|float %}\n"
                   "{% set PURGE_TEMP = params.PURGE_TEMP|default(240)|int %}\nG1 ..."},
@@ -383,6 +407,9 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
                 // dragonbreath trio's max_temp 75 from HELIX_MOCK_OBJECTS.
                 const json chamber_sections = chamber_heater_configfile_sections(self);
                 status_obj["configfile"]["settings"].merge_patch(chamber_sections);
+                // Klipper lists every gcode_macro in settings too, with its gcode
+                // text; the macro call-graph analyzers read them from there.
+                status_obj["configfile"]["settings"].merge_patch(get_mock_gcode_macro_config());
                 status_obj["configfile"]["config"].merge_patch(chamber_sections);
                 for (const auto& [name, settings] : self->extra_config_settings().items()) {
                     status_obj["configfile"]["settings"][name] = settings;
@@ -918,6 +945,9 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
                 // max_temp 75 from HELIX_MOCK_OBJECTS.
                 const json chamber_sections = chamber_heater_configfile_sections(self);
                 status_obj["configfile"]["settings"].merge_patch(chamber_sections);
+                // Klipper lists every gcode_macro in settings too, with its gcode
+                // text; the macro call-graph analyzers read them from there.
+                status_obj["configfile"]["settings"].merge_patch(get_mock_gcode_macro_config());
                 status_obj["configfile"]["config"].merge_patch(chamber_sections);
                 for (const auto& [name, settings] : self->extra_config_settings().items()) {
                     status_obj["configfile"]["settings"][name] = settings;

@@ -155,7 +155,7 @@ MoonrakerFileTransferAPI::~MoonrakerFileTransferAPI() = default;
 void MoonrakerFileTransferAPI::download_file_partial(const std::string& root,
                                                      const std::string& path, size_t max_bytes,
                                                      StringCallback on_success,
-                                                     ErrorCallback on_error) {
+                                                     ErrorCallback on_error, CancelFlag cancelled) {
     on_success = helix::http_epoch::guard_reply(on_success, on_error, "download_file_partial");
     if (moonraker_internal::reject_invalid_path(path, "download_file_partial", on_error))
         return;
@@ -181,7 +181,8 @@ void MoonrakerFileTransferAPI::download_file_partial(const std::string& root,
         [on_error](const std::string& message) {
             moonraker_internal::report_error(on_error, MoonrakerErrorType::UNKNOWN,
                                              "download_file_partial", message);
-        });
+        },
+        std::move(cancelled));
 
     if (!queued) {
         moonraker_internal::report_error(on_error, MoonrakerErrorType::QUEUE_FULL,
@@ -363,8 +364,16 @@ void MoonrakerRestAPI::call_rest_post(const std::string&, const json&, RestCallb
     }
 }
 
-void MoonrakerRestAPI::wled_get_strips(RestCallback, ErrorCallback on_error) {
-    esp_rest_unimplemented_err("MoonrakerRestAPI::wled_get_strips", on_error);
+// No WLED on this platform: report an empty strip map, so LED discovery settles
+// without an error on every connect.
+void MoonrakerRestAPI::wled_get_strips(RestCallback on_success, ErrorCallback) {
+    if (on_success) {
+        RestResponse resp;
+        resp.success = true;
+        resp.status_code = 200;
+        resp.data = json{{"result", {{"strips", json::object()}}}};
+        on_success(resp);
+    }
 }
 
 void MoonrakerRestAPI::wled_set_strip(const std::string&, const std::string&, int, int,

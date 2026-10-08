@@ -12,6 +12,7 @@
 #include "ui_panel_macros.h"
 #include "ui_panel_spoolman.h"
 #include "ui_toast_manager.h"
+#include "ui_update_queue.h"
 
 #include "app_globals.h"
 #include "config.h"
@@ -23,6 +24,7 @@
 #include "panel_widgets/shutdown_widget.h"
 #include "printer_state.h"
 #include "static_panel_registry.h"
+#include "ui/ui_widget_helpers.h"
 
 #include <spdlog/spdlog.h>
 
@@ -109,7 +111,8 @@ void AdvancedPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     // printer_has_timelapse binding and this helix-xml build has no
     // compound-condition (subject_expr/cond) support. Compiled out on desktop →
     // zero desktop impact.
-    if (auto* timelapse_row = lv_obj_find_by_name(panel_, "row_timelapse_videos")) {
+    if (auto* timelapse_row =
+            helix::ui::find_required(panel_, "row_timelapse_videos", get_name())) {
         // DECLARATIVE_OK: compile-time capability (#if), no runtime subject exists
         lv_obj_add_flag(timelapse_row, LV_OBJ_FLAG_HIDDEN);
     }
@@ -459,14 +462,42 @@ void AdvancedPanel::handle_helix_plugin_install_clicked() {
 
     // Show the install modal
     plugin_install_modal_.set_installer(&plugin_installer_);
-    plugin_install_modal_.set_on_install_complete([this](bool success) {
-        if (success) {
-            printer_state_.set_helix_plugin_installed(true);
-            ToastManager::instance().show(ToastSeverity::SUCCESS,
-                                          lv_tr("Plugin installed successfully"), 2000);
-        }
-    });
+    plugin_install_modal_.set_on_install_complete(
+        [this](bool success) { on_helix_plugin_install_finished(success); });
     plugin_install_modal_.show(lv_screen_active());
+}
+
+void AdvancedPanel::on_helix_plugin_install_finished(bool success) {
+    if (!success) {
+        return;
+    }
+    // Files on disk are not a loaded plugin: installed stays as discovery
+    // last saw it until Moonraker comes back and the plugin check answers.
+    restart_moonraker_for_plugin();
+    ToastManager::instance().show(ToastSeverity::SUCCESS, lv_tr("Plugin installed successfully"),
+                                  2000);
+}
+
+void AdvancedPanel::restart_moonraker_for_plugin() {
+    if (moonraker_restarter_) {
+        moonraker_restarter_();
+        return;
+    }
+    if (!api_) {
+        spdlog::warn("[{}] No Moonraker API - cannot restart Moonraker for the plugin", get_name());
+        return;
+    }
+    api_->restart_moonraker(
+        []() { spdlog::info("[AdvancedPanel] Moonraker restart requested for the plugin"); },
+        [](const MoonrakerError& error) {
+            spdlog::warn("[AdvancedPanel] Moonraker restart for the plugin failed: {}",
+                         error.message);
+            helix::ui::queue_update("AdvancedPanel::plugin_restart_failed", []() {
+                ToastManager::instance().show(
+                    ToastSeverity::WARNING, lv_tr("Restart Moonraker to finish the plugin change"),
+                    5000);
+            });
+        });
 }
 
 void AdvancedPanel::handle_helix_plugin_uninstall_clicked() {
@@ -501,6 +532,7 @@ void AdvancedPanel::run_helix_plugin_uninstall() {
         // a FAILED uninstall leaves it installed.
         if (outcome != UninstallOutcome::FAILED) {
             printer_state_.set_helix_plugin_installed(false);
+            restart_moonraker_for_plugin();
         }
 
         switch (outcome) {

@@ -30,6 +30,7 @@
 #include "printer_state.h"
 #include "remote_client.h"
 #include "remote_pointer.h"
+#include "runtime_config.h"
 #include "screenshot.h"
 #include "subject_debug_registry.h"
 #include "system/diag_upload_gate.h"
@@ -100,11 +101,6 @@ static std::optional<helix::PanelId> name_to_panel_id(const std::string& name) {
 // DisplayManager close an already-active screensaver on its next tick. UI thread.
 static void wake_display() {
     lv_display_trigger_activity(nullptr);
-}
-
-RemoteControlServer& RemoteControlServer::instance() {
-    static RemoteControlServer instance;
-    return instance;
 }
 
 RemoteControlServer::~RemoteControlServer() {
@@ -1894,6 +1890,9 @@ nlohmann::json RemoteControlServer::handle_home(const nlohmann::json& params) {
             return {{"pages", pages}};
         }
 
+        if (get_runtime_config()->crash_loop_safe_mode) {
+            throw std::invalid_argument("Layout changes are off in crash-loop safe mode");
+        }
         const std::string id = params.value("id", "");
         if (id.empty()) {
             throw std::invalid_argument("Missing required parameter: id");

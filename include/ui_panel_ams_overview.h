@@ -51,7 +51,13 @@ inline bool lane_bars_stale(const LaneBarsGeometry& built, const LaneBarsGeometr
  * Only shown for multi-unit setups (2+ units). Single-unit setups
  * skip this and go directly to the AMS detail panel.
  */
+namespace helix {
+class AmsPanelTestAccess;
+}
+
 class AmsOverviewPanel : public PanelBase {
+    friend class helix::AmsPanelTestAccess;
+
   public:
     AmsOverviewPanel(helix::PrinterState& printer_state, IMoonrakerAPI* api);
     ~AmsOverviewPanel() override = default;
@@ -88,6 +94,16 @@ class AmsOverviewPanel : public PanelBase {
      * @brief Clear panel reference before UI destruction
      */
     void clear_panel_reference();
+
+    /// The overlay was closed. Stops the sidebar and frees the detail path canvas
+    /// buffer; the widget tree stays for the next open.
+    void on_closed();
+
+    /// The close callback every open registers: runs on_closed() on the instance.
+    static void run_close();
+
+    /// A hidden cached tree is dropped instead of rebuilt; a shown one is left.
+    bool rebuild() override;
 
     /**
      * @brief Show detail view for a specific unit (inline, no overlay)
@@ -150,6 +166,8 @@ class AmsOverviewPanel : public PanelBase {
     ObserverGuard external_spool_observer_; ///< Reactive updates when external spool color changes
     ObserverGuard bypass_active_observer_;  ///< Active ring follows bypass engage/disengage
     bool units_rebuild_pending_ = false; ///< Coalesces rapid slots_version observer notifications
+    bool open_ = false;       ///< Pushed and not yet closed; a closed panel's card observers wait
+    int units_refreshes_ = 0; ///< refresh_units() runs, for tests
 
     // === Setup Helpers ===
     /// @p noun is the backend's word for one position, so a card reads "4 lanes"
@@ -213,3 +231,13 @@ void destroy_ams_overview_panel_ui();
  * If single-unit: push detail panel directly (unchanged behavior)
  */
 void navigate_to_ams_panel();
+
+/**
+ * @brief Open the single-unit AMS panel: drop a hidden overview, build under the
+ *        loading pill when there is no cached panel, register and push
+ *
+ * Every entry point that shows the AMS panel goes through this.
+ */
+namespace helix::ui {
+void open_ams_detail_panel();
+} // namespace helix::ui

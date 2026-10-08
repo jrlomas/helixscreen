@@ -146,12 +146,16 @@ class MoonrakerManager {
     size_t pending_notification_count() const;
 
     /**
-     * @brief Initialize print start collector after connection
+     * @brief Create the print start collector for the printer about to connect
      *
-     * Sets up observers to monitor print startup phases.
-     * Call after successful connect().
+     * Sets up observers to monitor print startup phases. Call before connect(), so the
+     * observers it installs on the API are in place before the WebSocket task can call
+     * them. Replaces (detaches) any previous collector.
      */
     void init_print_start_collector();
+
+    /// Detach and drop the print start collector, if there is one.
+    void release_print_start_collector();
 
     /**
      * @brief The pre-print detection collector, if one exists yet
@@ -424,6 +428,10 @@ class MoonrakerManager {
     /// silent-window inference (one guard per axis subject; the callback
     /// reads all three coherently).
     ObserverGuard m_print_position_observers[3];
+    /// Extruder velocity and filament-system action, sampled for a purge
+    /// that holds the toolhead still.
+    ObserverGuard m_print_extruder_velocity_observer;
+    ObserverGuard m_print_ams_action_observer;
     // Pre-print completion observers. The hand-off to the printing phase is
     // gated on the REAL first layer (print_stats.info.current_layer >= 1) — see
     // should_complete_preprint(). The layer observer is the primary signal; the

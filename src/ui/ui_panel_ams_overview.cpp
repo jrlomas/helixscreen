@@ -34,6 +34,7 @@
 #include "helix-xml/src/xml/lv_xml.h"
 #include "i_moonraker_api.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "memory_monitor.h"
 #include "observer_factory.h"
 #include "overlay_base.h"
 #include "printer_detector.h"
@@ -41,10 +42,12 @@
 #include "system/crash_handler.h"
 #include "theme_manager.h"
 #include "ui/ams_drawing_utils.h"
+#include "ui/ui_widget_helpers.h"
 
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -124,7 +127,7 @@ void AmsOverviewPanel::init_subjects() {
         slots_version_observer_ = observe<int>(
             AmsState::instance().get_slots_version_subject(), this,
             [](AmsOverviewPanel* self, int) {
-                if (!self->panel_)
+                if (!self->open_ || !self->panel_)
                     return;
                 if (self->detail_unit_index_ >= 0) {
                     // In detail mode — only rebuild slots if
@@ -155,7 +158,7 @@ void AmsOverviewPanel::init_subjects() {
         current_slot_observer_ = observe<int>(
             AmsState::instance().get_current_slot_subject(), this,
             [](AmsOverviewPanel* self, int) {
-                if (!self->panel_)
+                if (!self->open_ || !self->panel_)
                     return;
                 if (self->detail_unit_index_ >= 0) {
                     self->refresh_detail_if_needed();
@@ -207,16 +210,15 @@ void AmsOverviewPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     ui_overlay_panel_setup_standard(panel_, parent_screen_, "overlay_header", "overview_content");
 
     // Find the unit cards row container from XML
-    cards_row_ = lv_obj_find_by_name(panel_, "unit_cards_row");
+    cards_row_ = helix::ui::find_required(panel_, "unit_cards_row", get_name());
     if (!cards_row_) {
-        spdlog::error("[{}] Could not find 'unit_cards_row' in XML", get_name());
         return;
     }
     lv_obj_add_event_cb(cards_row_, &AmsOverviewPanel::on_cards_row_scrolled, LV_EVENT_SCROLL,
                         this);
 
     // Find system path area and create path canvas widget
-    system_path_area_ = lv_obj_find_by_name(panel_, "system_path_area");
+    system_path_area_ = helix::ui::find_required(panel_, "system_path_area", get_name());
     if (system_path_area_) {
         system_path_ = ui_system_path_canvas_create(system_path_area_);
         if (system_path_) {
@@ -240,18 +242,16 @@ void AmsOverviewPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     }
 
     // Find detail view containers
-    detail_container_ = lv_obj_find_by_name(panel_, "unit_detail_container");
-    lv_obj_t* detail_unit = lv_obj_find_by_name(panel_, "detail_unit_detail");
+    detail_container_ = helix::ui::find_required(panel_, "unit_detail_container", get_name());
+    lv_obj_t* detail_unit = helix::ui::find_required(panel_, "detail_unit_detail", get_name());
     detail_widgets_ = ams_detail_find_widgets(detail_unit);
-    detail_path_canvas_ = lv_obj_find_by_name(panel_, "detail_path_canvas");
+    detail_path_canvas_ = helix::ui::find_required(panel_, "detail_path_canvas", get_name());
 
     // Store global instance for callback access (back button + animation callbacks)
     g_overview_panel_instance.store(this);
 
     // Set up the shared sidebar component
-    sidebar_ = std::make_unique<helix::ui::AmsOperationSidebar>(printer_state_);
-    sidebar_->setup(panel_);
-    sidebar_->init_observers();
+    sidebar_ = helix::ui::AmsOperationSidebar::attach(printer_state_, panel_);
 
     // Initial population from backend state
     refresh_units();
@@ -265,7 +265,18 @@ void AmsOverviewPanel::on_activate() {
 
     spdlog::debug("[{}] Activated - syncing from backend", get_name());
 
+    const bool opening = !open_;
+    open_ = true;
+    if (!sidebar_) {
+        sidebar_ = helix::ui::AmsOperationSidebar::attach(printer_state_, panel_);
+    }
+
     AmsState::instance().sync_from_backend();
+
+    // The closed panel's card observers skipped every change; rebuild once.
+    if (opening && cards_row_ && detail_unit_index_ < 0) {
+        refresh_units();
+    }
 
     if (sidebar_)
         sidebar_->sync_from_state();
@@ -274,6 +285,34 @@ void AmsOverviewPanel::on_activate() {
         // Re-entering while in detail mode — refresh the detail slots
         show_unit_detail(detail_unit_index_);
     }
+}
+
+void AmsOverviewPanel::run_close() {
+    if (auto* p = helix::lazy_global_if_exists<AmsOverviewPanel>()) {
+        p->on_closed();
+    }
+}
+
+void AmsOverviewPanel::on_closed() {
+    // A close callback can run after a reopen has already pushed the panel again.
+    // Its own callback was consumed by that run, so arm the next close again.
+    if (panel_ && (helix::nav::is_in_stack(panel_) || helix::nav::is_push_pending(panel_))) {
+        helix::nav::on_close(panel_, &AmsOverviewPanel::run_close);
+        return;
+    }
+    open_ = false;
+    sidebar_.reset();
+    if (detail_path_canvas_) {
+        helix::ui::filament_path_canvas_release_buffer(detail_path_canvas_);
+    }
+}
+
+bool AmsOverviewPanel::rebuild() {
+    if (!panel_ || helix::nav::is_showing(panel_)) {
+        return false;
+    }
+    destroy_ams_overview_panel_ui();
+    return true;
 }
 
 void AmsOverviewPanel::on_deactivating(DeactivateReason) {
@@ -293,6 +332,7 @@ void AmsOverviewPanel::refresh_units() {
     if (!cards_row_) {
         return;
     }
+    ++units_refreshes_;
 
     // Overview shows units from the active backend. Multi-unit support handles
     // backends with multiple physical units (e.g., 2x Box Turtle on one AFC system).
@@ -402,14 +442,14 @@ void AmsOverviewPanel::create_unit_cards(const AmsSystemInfo& info, helix::ui::L
         lv_obj_add_event_cb(uc.card, on_unit_card_clicked, LV_EVENT_CLICKED, this);
 
         // Find child widgets declared in XML
-        uc.logo_image = lv_obj_find_by_name(uc.card, "unit_logo");
-        uc.name_label = lv_obj_find_by_name(uc.card, "unit_name");
-        uc.bars_container = lv_obj_find_by_name(uc.card, "bars_container");
-        uc.slot_count_label = lv_obj_find_by_name(uc.card, "slot_count");
+        uc.logo_image = helix::ui::find_required(uc.card, "unit_logo", get_name());
+        uc.name_label = helix::ui::find_required(uc.card, "unit_name", get_name());
+        uc.bars_container = helix::ui::find_required(uc.card, "bars_container", get_name());
+        uc.slot_count_label = helix::ui::find_required(uc.card, "slot_count", get_name());
 
         // Stamp the unit index on the environment indicator so its click handler
         // knows which unit's overlay to open.
-        if (lv_obj_t* ind = lv_obj_find_by_name(uc.card, "env_indicator")) {
+        if (lv_obj_t* ind = helix::ui::find_required(uc.card, "env_indicator", get_name())) {
             lv_obj_set_user_data(ind, reinterpret_cast<void*>(static_cast<intptr_t>(i)));
         }
 
@@ -926,13 +966,13 @@ void AmsOverviewPanel::show_overview() {
     detail_unit_index_ = -1;
 
     // Restore header to overview mode: show title, hide detail elements
-    lv_obj_t* title = lv_obj_find_by_name(panel_, "header_title");
+    lv_obj_t* title = helix::ui::find_required(panel_, "header_title", get_name());
     if (title)
         lv_obj_remove_flag(title, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_t* logo = lv_obj_find_by_name(panel_, "detail_logo");
+    lv_obj_t* logo = helix::ui::find_required(panel_, "detail_logo", get_name());
     if (logo)
         lv_obj_add_flag(logo, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_t* name_label = lv_obj_find_by_name(panel_, "detail_unit_name");
+    lv_obj_t* name_label = helix::ui::find_required(panel_, "detail_unit_name", get_name());
     if (name_label)
         lv_obj_add_flag(name_label, LV_OBJ_FLAG_HIDDEN);
 
@@ -993,19 +1033,19 @@ void AmsOverviewPanel::show_overview() {
 
 void AmsOverviewPanel::update_detail_header(const AmsUnit& unit, const AmsSystemInfo& info) {
     // Hide overview title, show detail elements in main header
-    lv_obj_t* title = lv_obj_find_by_name(panel_, "header_title");
+    lv_obj_t* title = helix::ui::find_required(panel_, "header_title", get_name());
     if (title)
         lv_obj_add_flag(title, LV_OBJ_FLAG_HIDDEN);
 
     // Update and show logo
-    lv_obj_t* logo = lv_obj_find_by_name(panel_, "detail_logo");
+    lv_obj_t* logo = helix::ui::find_required(panel_, "detail_logo", get_name());
     if (logo) {
         ams_draw::apply_logo(logo, unit, info);
         lv_obj_remove_flag(logo, LV_OBJ_FLAG_HIDDEN);
     }
 
     // Update and show name
-    lv_obj_t* name = lv_obj_find_by_name(panel_, "detail_unit_name");
+    lv_obj_t* name = helix::ui::find_required(panel_, "detail_unit_name", get_name());
     if (name) {
         lv_label_set_text(name, ams_draw::get_unit_display_name(unit, detail_unit_index_).c_str());
         lv_obj_remove_flag(name, LV_OBJ_FLAG_HIDDEN);
@@ -1072,6 +1112,7 @@ void AmsOverviewPanel::setup_detail_path_canvas(const AmsUnit& unit, const AmsSy
 // ============================================================================
 
 void AmsOverviewPanel::clear_panel_reference() {
+    open_ = false;
     // Cancel animations and dismiss menus while widget pointers are still valid
     if (detail_container_) {
         lv_anim_delete(detail_container_, nullptr);
@@ -1124,6 +1165,8 @@ void AmsOverviewPanel::clear_panel_reference() {
 // ============================================================================
 
 static lv_obj_t* s_ams_overview_panel_obj = nullptr;
+// Theme generation the cached tree was built under.
+static int s_ams_overview_theme_gen = 0;
 
 // Lazy registration flag for XML component
 static bool s_overview_registered = false;
@@ -1215,8 +1258,15 @@ AmsOverviewPanel& get_global_ams_overview_panel() {
         "AmsOverviewPanel", destroy_ams_overview_panel_ui, get_printer_state(),
         get_moonraker_api());
 
+    const int theme_gen = lv_subject_get_int(theme_manager_get_changed_subject());
+    if (s_ams_overview_panel_obj && s_ams_overview_theme_gen != theme_gen &&
+        !helix::nav::is_showing(s_ams_overview_panel_obj)) {
+        destroy_ams_overview_panel_ui();
+    }
+
     // Lazy create the panel UI if not yet created
     if (!s_ams_overview_panel_obj) {
+        s_ams_overview_theme_gen = theme_gen;
         ensure_overview_registered();
 
         // Initialize AmsState subjects BEFORE XML creation so bindings work
@@ -1236,14 +1286,11 @@ AmsOverviewPanel& get_global_ams_overview_panel() {
             panel.setup(s_ams_overview_panel_obj, screen);
             lv_obj_add_flag(s_ams_overview_panel_obj, LV_OBJ_FLAG_HIDDEN);
 
-            // Register overlay instance for lifecycle management
+            // Kept alive between opens, like the AMS panel; open_ams_overview_panel()
+            // registers the overlay and its close callback on every open.
             helix::nav::register_overlay(s_ams_overview_panel_obj, &panel);
 
-            // Register close callback to destroy UI when overlay is closed
-            helix::nav::on_close(s_ams_overview_panel_obj,
-                                 []() { destroy_ams_overview_panel_ui(); });
-
-            spdlog::info("[AMS Overview] Lazy-created panel UI with close callback");
+            spdlog::info("[AMS Overview] Lazy-created panel UI");
         } else {
             spdlog::error("[AMS Overview] Failed to create panel from XML");
         }
@@ -1383,6 +1430,85 @@ void AmsOverviewPanel::update_bypass_widgets_position() {
 // Multi-unit Navigation
 // ============================================================================
 
+namespace {
+
+void drop_hidden_ams_panel_ui() {
+    const AmsPanel* detail = get_existing_ams_panel();
+    if (detail && detail->get_panel() && !helix::nav::is_showing(detail->get_panel())) {
+        destroy_ams_panel_ui();
+    }
+}
+
+void drop_hidden_overview_ui() {
+    if (s_ams_overview_panel_obj && !helix::nav::is_showing(s_ams_overview_panel_obj)) {
+        destroy_ams_overview_panel_ui();
+    }
+}
+
+// Critical memory pressure drops the hidden cached AMS trees, which the small-RAM
+// printers (AD5M/AD5X) need back. Linux only in practice: the monitor is never
+// started on the ESP32.
+void ensure_ams_pressure_responder() {
+    static bool registered = false;
+    if (registered) {
+        return;
+    }
+    registered = true;
+    helix::MemoryMonitor::instance().add_pressure_responder([](helix::MemoryPressureLevel level) {
+        if (level < helix::MemoryPressureLevel::critical) {
+            return;
+        }
+        helix::ui::queue_update("AMS::drop_hidden_ui", []() {
+            drop_hidden_ams_panel_ui();
+            drop_hidden_overview_ui();
+        });
+    });
+}
+
+// The panels outlive a close, so a reopen usually has nothing to build; only a
+// first open (or one after the tree was dropped) waits under the loading pill.
+void open_ams_overlay(bool built, const std::function<void()>& open) {
+    ensure_ams_pressure_responder();
+    if (built) {
+        open();
+    } else {
+        helix::nav::build_under_loading_pill(open);
+    }
+}
+
+// Close callbacks fire once, so every open registers its own.
+void push_ams_overlay(lv_obj_t* root, IPanelLifecycle* lifecycle,
+                      helix::OverlayCloseCallback on_closed) {
+    helix::nav::register_overlay(root, lifecycle);
+    helix::nav::on_close(root, std::move(on_closed));
+    helix::nav::push_overlay(root);
+}
+
+void open_ams_overview_panel(int units) {
+    drop_hidden_ams_panel_ui();
+    open_ams_overlay(s_ams_overview_panel_obj != nullptr, [units]() {
+        spdlog::info("[AMS] Multi-unit setup ({} units) - showing overview", units);
+        auto& overview = get_global_ams_overview_panel();
+        if (lv_obj_t* panel = overview.get_panel()) {
+            push_ams_overlay(panel, &overview, &AmsOverviewPanel::run_close);
+        }
+    });
+}
+
+} // namespace
+
+void helix::ui::open_ams_detail_panel() {
+    drop_hidden_overview_ui();
+    const AmsPanel* existing = get_existing_ams_panel();
+    open_ams_overlay(existing && existing->get_panel(), []() {
+        spdlog::info("[AMS] Single-unit setup - showing detail panel directly");
+        auto& detail = get_global_ams_panel();
+        if (lv_obj_t* panel = detail.get_panel()) {
+            push_ams_overlay(panel, &detail, &AmsPanel::run_close);
+        }
+    });
+}
+
 void navigate_to_ams_panel() {
     auto* backend = AmsState::instance().get_backend();
     if (!backend) {
@@ -1390,31 +1516,12 @@ void navigate_to_ams_panel() {
         return;
     }
 
-    AmsSystemInfo info = backend->get_system_info();
-
+    // Only one of the two panels serves a given unit count; opening one drops the
+    // other's hidden tree rather than holding both.
+    const AmsSystemInfo info = backend->get_system_info();
     if (info.is_multi_unit()) {
-        // Multi-unit: show overview panel
-        spdlog::info("[AMS] Multi-unit setup ({} units) - showing overview", info.unit_count());
-        auto& overview = get_global_ams_overview_panel();
-        lv_obj_t* panel = overview.get_panel();
-        if (panel) {
-            // Re-register before push: switch_to_panel_impl() clears
-            // overlay_instances_ on navbar switches (keeping only the
-            // persistent map), so a cached panel re-opened after a navbar tap
-            // loses its lifecycle registration. Idempotent (keyed by widget).
-            helix::nav::register_overlay(panel, &overview);
-            helix::nav::push_overlay(panel);
-        }
+        open_ams_overview_panel(info.unit_count());
     } else {
-        // Single-unit (or no units): go directly to detail panel
-        spdlog::info("[AMS] Single-unit setup - showing detail panel directly");
-        auto& detail = get_global_ams_panel();
-        lv_obj_t* panel = detail.get_panel();
-        if (panel) {
-            // Re-register before push (see multi-unit branch above): cached
-            // panel re-opened after a navbar switch loses its registration.
-            helix::nav::register_overlay(panel, &detail);
-            helix::nav::push_overlay(panel);
-        }
+        helix::ui::open_ams_detail_panel();
     }
 }

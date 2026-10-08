@@ -1355,6 +1355,7 @@ translations:
   Forward Multiplier: Forward Multiplier
   Found %zu printers: Found %zu printers
   Found 1 printer: Found 1 printer
+  Found {} at {}.: Found {} at {}.
   Framerate: Framerate
   From Buffer: From Buffer
   From SpoolmanDB: From SpoolmanDB
@@ -1722,6 +1723,7 @@ translations:
     captures one frame per layer change. Best for most prints.
   Layers: Layers
   Layout: Layout
+  Layout changes are off in safe mode. Restart to edit.: Layout changes are off in safe mode. Restart to edit.
   Learn More: Learn More
   LedSelect: LedSelect
   Left: Left
@@ -2663,6 +2665,7 @@ translations:
   Restart Klipper without rebooting: Restart Klipper without rebooting
   Restart Klipper?: Restart Klipper?
   Restart Moonraker: Restart Moonraker
+  Restart Moonraker to finish the plugin change: Restart Moonraker to finish the plugin change
   Restart Now: Restart Now
   Restart Required: Restart Required
   'Restart failed: not connected': 'Restart failed: not connected'
@@ -2762,6 +2765,8 @@ translations:
     on startup. Open Settings to fix the issue, then reboot.
   : Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
   Safety & Alerts: Safety & Alerts
   Same spool in {}? Tap Clear if it is a new one.: Same spool in {}? Tap Clear if it is a new one.
   Sample: Sample
@@ -3565,6 +3570,7 @@ translations:
   Use Android native keyboard for text input: Use Android native keyboard for text
     input
   Use G10/G11 firmware retraction: Use G10/G11 firmware retraction
+  Use New Address: Use New Address
   Use Unload before Eject: Use Unload before Eject
   Use first HID scanner found: Use first HID scanner found
   Use printer type to select image: Use printer type to select image
@@ -3708,6 +3714,7 @@ translations:
     later in Settings.
   You have unsaved changes. Discard them?: You have unsaved changes. Discard them?
   Your completed prints will appear here: Your completed prints will appear here
+  Your print start or end macro also sets LEDs. It and Automatic LED Control may override each other.: Your print start or end macro also sets LEDs. It and Automatic LED Control may override each other.
   Your printer at a glance: Your printer at a glance
   Your printer has an automatic filament changer: Your printer has an automatic filament
     changer
@@ -3857,6 +3864,8 @@ translations:
   '{} is still printing. The print keeps running after you switch.': '{} is still printing. The print keeps running after you switch.'
   '{} is not set up on this printer': '{} is not set up on this printer'
   '{} lines in helixscreen.env were ignored': '{} lines in helixscreen.env were ignored'
+  '{} kept crashing the panel; switched back to {}': '{} kept crashing the panel; switched back to {}'
+  '{} kept crashing the panel; pick a printer to connect': '{} kept crashing the panel; pick a printer to connect'
   '{} macro not configured': '{} macro not configured'
   '{} matches.': '{} matches.'
   '{} may cause unintended changes. Are you sure?': '{} may cause unintended changes.

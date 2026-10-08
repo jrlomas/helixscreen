@@ -924,8 +924,10 @@ void HistoryListPanel::show_detail_overlay(const PrintHistoryJob& job) {
     }
 
     // Update thumbnail display
-    lv_obj_t* thumbnail_image = lv_obj_find_by_name(detail_overlay_, "thumbnail_image");
-    lv_obj_t* thumbnail_fallback = lv_obj_find_by_name(detail_overlay_, "thumbnail_fallback");
+    lv_obj_t* thumbnail_image =
+        helix::ui::find_required(detail_overlay_, "thumbnail_image", get_name());
+    lv_obj_t* thumbnail_fallback =
+        helix::ui::find_required(detail_overlay_, "thumbnail_fallback", get_name());
 
     // One staleness context per overlay open. Creating it bumps
     // detail_overlay_generation_, exactly as the bare `++` did, so a thumbnail
@@ -936,20 +938,26 @@ void HistoryListPanel::show_detail_overlay(const PrintHistoryJob& job) {
     ThumbnailLoadContext ctx = ThumbnailLoadContext::create(lifetime_, &detail_overlay_generation_);
 
     if (thumbnail_image && thumbnail_fallback) {
-        if (!job.thumbnail_path.empty()) {
+        // Sized for the image box as laid out (inner_align contain).
+        lv_obj_update_layout(detail_overlay_);
+        const std::string thumb_path = helix::select_and_resolve_thumbnail(
+            job.thumbnails, helix::gcode_dir_of(job.filename), lv_obj_get_width(thumbnail_image),
+            lv_obj_get_height(thumbnail_image));
+        if (!thumb_path.empty()) {
             // Show fallback initially while loading
             lv_obj_add_flag(thumbnail_image, LV_OBJ_FLAG_HIDDEN);
             lv_obj_remove_flag(thumbnail_fallback, LV_OBJ_FLAG_HIDDEN);
 
             IMoonrakerAPI* api = get_moonraker_api();
 
-            // The detail overlay has always rendered the full-resolution PNG,
-            // so it asks for FullPng and req.target goes unused. The cache key
-            // is the thumbnail's path from the gcodes root.
+            // The detail overlay renders the full-resolution PNG, so it asks
+            // for FullPng and req.target goes unused; the box size only picks
+            // which of the file's thumbnails to fetch.
             ThumbnailRequest req;
-            req.key = helix::job_thumbnail_path(job, job.thumbnail_path);
+            req.key = thumb_path;
             req.api = api;
             req.format = ThumbnailRequest::ThumbnailFormat::FullPng;
+            req.source_modified = static_cast<time_t>(job.modified);
 
             auto* self = this;
             get_thumbnail_cache().fetch(
@@ -980,10 +988,10 @@ void HistoryListPanel::show_detail_overlay(const PrintHistoryJob& job) {
                             }
 
                             // Look up widgets by name (safe - fresh lookup each time)
-                            lv_obj_t* image =
-                                lv_obj_find_by_name(t->panel->detail_overlay_, "thumbnail_image");
-                            lv_obj_t* fallback = lv_obj_find_by_name(t->panel->detail_overlay_,
-                                                                     "thumbnail_fallback");
+                            lv_obj_t* image = helix::ui::find_required(
+                                t->panel->detail_overlay_, "thumbnail_image", "History List");
+                            lv_obj_t* fallback = helix::ui::find_required(
+                                t->panel->detail_overlay_, "thumbnail_fallback", "History List");
 
                             if (image && fallback) {
                                 lv_image_set_src(image, t->path.c_str());

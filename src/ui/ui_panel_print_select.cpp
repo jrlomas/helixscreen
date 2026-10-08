@@ -63,6 +63,7 @@
 #include "theme_manager.h"
 #include "thumbnail_cache.h"
 #include "try_reserve.h"
+#include "ui/ui_widget_helpers.h"
 #include "usb_manager.h"
 
 #include <spdlog/spdlog.h>
@@ -374,11 +375,11 @@ void PrintSelectPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     list_view_.reset();
 
     // Find widget references
-    card_view_container_ = lv_obj_find_by_name(panel_, "card_view_container");
-    list_view_container_ = lv_obj_find_by_name(panel_, "list_view_container");
-    list_rows_container_ = lv_obj_find_by_name(panel_, "list_rows_container");
-    empty_state_container_ = lv_obj_find_by_name(panel_, "empty_state_container");
-    view_toggle_btn_ = lv_obj_find_by_name(panel_, "view_toggle_btn");
+    card_view_container_ = helix::ui::find_required(panel_, "card_view_container", get_name());
+    list_view_container_ = helix::ui::find_required(panel_, "list_view_container", get_name());
+    list_rows_container_ = helix::ui::find_required(panel_, "list_rows_container", get_name());
+    empty_state_container_ = helix::ui::find_required(panel_, "empty_state_container", get_name());
+    view_toggle_btn_ = helix::ui::find_required(panel_, "view_toggle_btn", get_name());
     view_toggle_icon_ = lv_obj_find_by_name(panel_, "view_toggle_btn_icon");
 
     if (!card_view_container_ || !list_view_container_ || !list_rows_container_ ||
@@ -942,7 +943,7 @@ void PrintSelectPanel::set_sort_recent() {
 
     // Show "Recently Printed" context banner
     if (panel_) {
-        auto* banner = lv_obj_find_by_name(panel_, "context_banner");
+        auto* banner = helix::ui::find_required(panel_, "context_banner", get_name());
         if (banner) {
             lv_obj_remove_flag(banner, LV_OBJ_FLAG_HIDDEN);
         }
@@ -953,7 +954,7 @@ void PrintSelectPanel::set_sort_recent() {
 
 void PrintSelectPanel::hide_context_banner() {
     if (panel_) {
-        auto* banner = lv_obj_find_by_name(panel_, "context_banner");
+        auto* banner = helix::ui::find_required(panel_, "context_banner", get_name());
         if (banner && !lv_obj_has_flag(banner, LV_OBJ_FLAG_HIDDEN)) {
             lv_obj_add_flag(banner, LV_OBJ_FLAG_HIDDEN);
         }
@@ -1220,15 +1221,11 @@ void PrintSelectPanel::process_metadata_result(size_t i, const std::string& file
     double layer_height = metadata.layer_height;
     std::string uuid = metadata.uuid;
 
-    // Smart thumbnail selection: pick smallest that meets display requirements
-    // This reduces download size while ensuring adequate resolution
     helix::ThumbnailTarget target = helix::ThumbnailProcessor::get_target_for_display();
-    const ThumbnailInfo* best_thumb = metadata.get_best_thumbnail(target.width, target.height);
-    std::string thumb_path =
-        resolve_thumbnail_path(best_thumb ? best_thumb->relative_path : "", current_path_);
-    spdlog::debug("[{}] Metadata thumbnails for {}: count={}, selected='{}' -> '{}'", get_name(),
-                  filename, metadata.thumbnails.size(),
-                  best_thumb ? best_thumb->relative_path : "(none)", thumb_path);
+    std::string thumb_path = helix::select_and_resolve_thumbnail(metadata.thumbnails, current_path_,
+                                                                 target.width, target.height);
+    spdlog::debug("[{}] Metadata thumbnails for {}: count={}, selected '{}'", get_name(), filename,
+                  metadata.thumbnails.size(), thumb_path);
 
     // Format strings on background thread (uses standalone helper functions)
     std::string print_time_str = format_print_time(card_total_minutes(print_time_minutes));
@@ -1373,7 +1370,6 @@ void PrintSelectPanel::process_metadata_result(size_t i, const std::string& file
 
                     size_t file_idx = d->index;
                     std::string filename_copy = d->filename;
-                    std::string cache_key = d->thumb_path + "_local";
 
                     // A refresh re-runs this for files that already have their .bin, and
                     // re-reading plus re-staging every PNG to rediscover that is wasted IO.
@@ -1384,8 +1380,10 @@ void PrintSelectPanel::process_metadata_result(size_t i, const std::string& file
                     std::vector<uint8_t> png_data =
                         already_prescaled ? std::vector<uint8_t>{} : read_file_bytes(d->thumb_path);
                     std::string cached_png =
-                        png_data.empty() ? std::string()
-                                         : get_thumbnail_cache().save_raw_png(cache_key, png_data);
+                        png_data.empty()
+                            ? std::string()
+                            : get_thumbnail_cache().save_raw_png(helix::ThumbnailSource::LocalFile,
+                                                                 d->thumb_path, png_data);
 
                     if (already_prescaled) {
                         spdlog::trace("[{}] Keeping prescaled local thumbnail for {}",
@@ -1399,7 +1397,8 @@ void PrintSelectPanel::process_metadata_result(size_t i, const std::string& file
                                       self->file_list_[d->index].thumbnail_path);
                     } else {
                         ThumbnailRequest req;
-                        req.key = cache_key;
+                        req.key = d->thumb_path;
+                        req.source = helix::ThumbnailSource::LocalFile;
                         req.target = helix::ThumbnailProcessor::get_target_for_display();
                         req.api = self->api_;
 
@@ -3737,24 +3736,42 @@ PrintSelectPanel::fetch_esp_thumbnail(size_t index, const std::string& filename,
     spdlog::debug("[{}] Fetching PSRAM thumbnail for {}: {}", get_name(), filename, thumb_path);
     const helix::ThumbnailTarget target = helix::ThumbnailProcessor::get_target_for_display();
 
+    auto cancelled = std::make_shared<std::atomic<bool>>(false);
     api_->transfers().download_file_partial(
         "gcodes", thumb_path, ESP32_THUMBNAIL_MAX_BYTES,
-        [this, tok, index, filename, target, slots = esp_slots_](const std::string& png_bytes) {
+        [this, tok, index, filename, target, slots = esp_slots_,
+         cancelled](const std::string& png_bytes) {
             helix::ThumbnailDecodeFailure failure{};
+            if (cancelled->load()) {
+                // Its card left the screen while this was downloading.
+                tok.defer("PrintSelectPanel::on_psram_thumbnail_cancelled", [this]() {
+                    --esp_thumbnails_in_flight_;
+                    esp_lane_refused_ = false;
+                    sync_esp_thumbnails(esp_window_first_, esp_window_end_);
+                });
+                return;
+            }
             auto thumb = helix::ui::EspPsramThumbnail::create_decoded(
                 png_bytes, target.width, target.height, slots, failure);
             if (!thumb) {
-                spdlog::warn("[PrintSelectPanel] Could not decode thumbnail {}: {}", filename,
+                // Slots in use against the pool's size, and free PSRAM against
+                // the decode floor, say which memory ran out.
+                spdlog::warn("[PrintSelectPanel] Could not decode thumbnail {}: {} (slots {}/{} "
+                             "in use, PSRAM free {})",
+                             filename,
                              failure == helix::ThumbnailDecodeFailure::OutOfMemory
                                  ? "out of memory"
-                                 : "corrupt or too large");
+                                 : "corrupt or too large",
+                             slots ? slots->in_use() : 0, slots ? slots->allocated() : 0,
+                             heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
             }
             tok.defer("PrintSelectPanel::on_psram_thumbnail_fetched",
-                      [this, index, filename, thumb = std::move(thumb)]() mutable {
+                      [this, index, filename, cancelled, thumb = std::move(thumb)]() mutable {
                           --esp_thumbnails_in_flight_;
                           esp_lane_refused_ = false; // this fetch's lane slot is free
-                          // Kept only while its card is still on screen.
-                          if (thumb && index < file_list_.size() &&
+                          // Kept only while its card is still on screen and this is
+                          // still the fetch it wants.
+                          if (thumb && !cancelled->load() && index < file_list_.size() &&
                               file_list_[index].filename == filename &&
                               file_list_[index].esp_thumbnail_tried) {
                               file_list_[index].esp_thumbnail = std::move(thumb);
@@ -3765,7 +3782,8 @@ PrintSelectPanel::fetch_esp_thumbnail(size_t index, const std::string& filename,
                           sync_esp_thumbnails(esp_window_first_, esp_window_end_);
                       });
         },
-        [this, tok, filename, submitting, refused, rejected](const MoonrakerError& error) {
+        [this, tok, index, filename, cancelled, submitting, refused,
+         rejected](const MoonrakerError& error) {
             if (submitting->load()) {
                 if (error.type == MoonrakerErrorType::QUEUE_FULL) {
                     refused->store(true);
@@ -3778,12 +3796,24 @@ PrintSelectPanel::fetch_esp_thumbnail(size_t index, const std::string& filename,
             }
             spdlog::debug("[PrintSelectPanel] PSRAM thumbnail fetch failed for {}: {}", filename,
                           error.message);
-            tok.defer("PrintSelectPanel::on_psram_thumbnail_failed", [this]() {
+            tok.defer("PrintSelectPanel::on_psram_thumbnail_failed", [this, index, filename,
+                                                                      cancelled]() {
                 --esp_thumbnails_in_flight_;
                 esp_lane_refused_ = false;
+                const bool shown = index < file_list_.size() &&
+                                   file_list_[index].filename == filename &&
+                                   file_list_[index].esp_thumbnail_tried;
+                if (helix::card_thumbnail_refetch_after_error(
+                        shown, cancelled->load(), shown && file_list_[index].esp_fetch_retried)) {
+                    // A stalled or failed download: fetched again below,
+                    // not left a placeholder.
+                    file_list_[index].esp_thumbnail_tried = false;
+                    file_list_[index].esp_fetch_retried = true;
+                }
                 sync_esp_thumbnails(esp_window_first_, esp_window_end_);
             });
-        });
+        },
+        cancelled);
     submitting->store(false);
     if (refused->load()) {
         return EspThumbnailFetch::QueueFull;
@@ -3791,16 +3821,26 @@ PrintSelectPanel::fetch_esp_thumbnail(size_t index, const std::string& filename,
     if (rejected->load()) {
         return EspThumbnailFetch::Failed;
     }
+    file_list_[index].esp_fetch_cancel = std::move(cancelled);
     ++esp_thumbnails_in_flight_;
     return EspThumbnailFetch::Started;
+}
+
+void PrintSelectPanel::cancel_esp_fetch(PrintFileData& f) {
+    if (f.esp_fetch_cancel) {
+        f.esp_fetch_cancel->store(true);
+        f.esp_fetch_cancel.reset();
+    }
 }
 
 void PrintSelectPanel::release_esp_card_thumbnails() {
     esp_window_first_ = 0;
     esp_window_end_ = 0;
     for (PrintFileData& f : file_list_) {
+        cancel_esp_fetch(f);
         f.esp_thumbnail.reset();
         f.esp_thumbnail_tried = false;
+        f.esp_fetch_retried = false;
     }
     if (card_view_) {
         card_view_->release_esp_thumbnails();
@@ -3846,8 +3886,10 @@ void PrintSelectPanel::sync_esp_thumbnails(size_t first, size_t end, bool keep_o
 
     // A card the plan drops fetches again when it comes back.
     for (size_t i : plan.drop) {
+        cancel_esp_fetch(file_list_[i]);
         file_list_[i].esp_thumbnail.reset();
         file_list_[i].esp_thumbnail_tried = false;
+        file_list_[i].esp_fetch_retried = false;
     }
     if (!keep_off_screen && esp_slots_) {
         esp_slots_->trim(); // the memory, not just the thumbnails, goes back

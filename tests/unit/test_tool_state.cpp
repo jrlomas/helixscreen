@@ -6,19 +6,26 @@
  * @brief Tests for ToolInfo struct, DetectState enum, and ToolState singleton
  */
 
+#include "../fake_moonraker_client.h"
 #include "../helix_test_fixture.h"
 #include "../test_helpers/backend_user_edit.h"
+#include "../test_helpers/config_test_access.h"
 #include "../test_helpers/tool_state_test_access.h"
 #include "../test_helpers/update_queue_test_access.h"
 #include "../ui_test_utils.h"
 #include "ams_backend_mock.h"
 #include "ams_state.h"
+#include "app_globals.h"
+#include "config.h"
+#include "moonraker_api.h"
+#include "printer_cache_registry.h"
 #include "printer_discovery.h"
 #include "tool_state.h"
 
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sys/stat.h>
 
 #include "../catch_amalgamated.hpp"
@@ -964,6 +971,14 @@ TEST_CASE_METHOD(
 // ============================================================================
 
 namespace {
+/// The assignment set the spool file holds for the printer this test runs as: the sandboxed
+/// Config has no active printer, which the file keys as "default".
+nlohmann::json spools_of_active_printer(const nlohmann::json& file) {
+    REQUIRE(file.contains("printers"));
+    REQUIRE(file["printers"].contains("default"));
+    return file["printers"]["default"];
+}
+
 struct TempDir {
     std::filesystem::path path;
     TempDir() {
@@ -1272,7 +1287,7 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState: save/load JSON round-trip",
 
     // Read and verify JSON structure
     std::ifstream ifs(json_path);
-    auto data = nlohmann::json::parse(ifs);
+    auto data = spools_of_active_printer(nlohmann::json::parse(ifs));
     REQUIRE(data.is_object());
     REQUIRE(data.contains("0"));
     REQUIRE(data["0"]["spoolman_id"] == 42);
@@ -1375,7 +1390,7 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState: save with no assigned spools writ
     REQUIRE(std::filesystem::exists(json_path));
 
     std::ifstream ifs(json_path);
-    auto data = nlohmann::json::parse(ifs);
+    auto data = spools_of_active_printer(nlohmann::json::parse(ifs));
     REQUIRE(data.is_object());
     REQUIRE(data.empty());
 
@@ -1403,7 +1418,7 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState: weight fields omitted from JSON w
 
     auto json_path = std::filesystem::path(tmp.str()) / "tool_spools.json";
     std::ifstream ifs(json_path);
-    auto data = nlohmann::json::parse(ifs);
+    auto data = spools_of_active_printer(nlohmann::json::parse(ifs));
     REQUIRE(data["0"]["spoolman_id"] == 42);
     REQUIRE_FALSE(data["0"].contains("remaining_weight_g"));
     REQUIRE_FALSE(data["0"].contains("total_weight_g"));
@@ -1545,6 +1560,27 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState: spool_assignments_loaded set afte
     ts.load_spool_assignments(nullptr);
 
     REQUIRE(ts.spool_assignments_loaded());
+
+    ts.deinit_subjects();
+}
+
+TEST_CASE_METHOD(ToolStateFixture,
+                 "ToolState: a printer switch lets the next printer load its own spools",
+                 "[tool][tool-state][spool][multi-printer]") {
+    lv_init_safe();
+    auto& ts = ToolState::instance();
+    ts.deinit_subjects();
+    ts.init_subjects(false);
+
+    ts.load_spool_assignments(nullptr);
+    REQUIRE(ts.spool_assignments_loaded());
+
+    // printer_switch_flow fires every registered invalidator on a switch, on desktop and
+    // the firmware alike. Only ToolState's fires here: other tests leave entries that
+    // point at objects they have since destroyed.
+    REQUIRE(helix::PrinterCacheRegistry::instance().invalidate_one("ToolState"));
+
+    CHECK_FALSE(ts.spool_assignments_loaded());
 
     ts.deinit_subjects();
 }
@@ -1814,10 +1850,10 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState: saving through a symlink preserve
     CHECK(std::filesystem::is_symlink(link_path));
 
     // ...and the write must have gone through it to the real file, not beside it.
-    // Shape is a flat object keyed by tool index: {"0": {"spoolman_id": ...}}
     std::ifstream in(real_file);
-    nlohmann::json written;
-    in >> written;
+    nlohmann::json file;
+    in >> file;
+    const auto written = spools_of_active_printer(file);
     REQUIRE(written.contains("0"));
     CHECK(written["0"]["spoolman_id"].get<int>() == 4242);
     CHECK(written["0"]["spool_name"].get<std::string>() == "Symlink PLA");
@@ -2012,4 +2048,249 @@ TEST_CASE_METHOD(ToolStateFixture, "ToolState offsets: a topology rebuild carrie
     CHECK(ts.tool_offset_dirty(1, Axis::Y));
     CHECK_FALSE(ts.tool_offset_dirty(1, Axis::X));
     CHECK(ts.tool_offset_known(1, Axis::Z));
+}
+
+// ============================================================================
+// Spool assignments are kept per printer
+// ============================================================================
+
+namespace {
+
+/// Two configured printers, alpha active, restored on exit.
+struct TwoPrinterSpoolFixture : public ToolStateFixture {
+    helix::Config* cfg = helix::Config::get_instance();
+    nlohmann::json saved_data = helix::ConfigTestAccess::data(*cfg);
+    std::string saved_active = helix::ConfigTestAccess::active_printer_id(*cfg);
+    helix::test::FakeMoonrakerClient client;
+    MoonrakerAPI api{client, get_printer_state()};
+    TempDir tmp;
+    PrinterDiscovery hw;
+
+    TwoPrinterSpoolFixture() {
+        nlohmann::json data;
+        data["config_version"] = 3;
+        data["active_printer_id"] = "alpha";
+        data["printers"]["alpha"]["printer_name"] = "Alpha";
+        data["printers"]["bravo"]["printer_name"] = "Bravo";
+        helix::ConfigTestAccess::data(*cfg) = data;
+        helix::ConfigTestAccess::active_printer_id(*cfg) = "alpha";
+
+        lv_init_safe();
+        auto& ts = ToolState::instance();
+        ts.deinit_subjects();
+        ts.init_subjects(false);
+        ts.set_config_dir(tmp.str());
+        hw.parse_objects(nlohmann::json::array({"extruder", "extruder1", "heater_bed"}));
+        ts.init_tools(hw);
+    }
+
+    ~TwoPrinterSpoolFixture() override {
+        helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+        ToolState::instance().deinit_subjects();
+        helix::ConfigTestAccess::data(*cfg) = saved_data;
+        helix::ConfigTestAccess::active_printer_id(*cfg) = saved_active;
+    }
+
+    /// What a switch does to ToolState: the next printer's scope, fresh tools.
+    void switch_to(const std::string& id) {
+        helix::ConfigTestAccess::active_printer_id(*cfg) = id;
+        REQUIRE(helix::PrinterCacheRegistry::instance().invalidate_one("ToolState"));
+        ToolState::instance().init_tools(hw);
+    }
+
+    /// Load through Moonraker with the printer's DB holding no assignments.
+    void load_with_empty_db() {
+        client.rpc_calls.clear();
+        ToolState::instance().load_spool_assignments(&api);
+        REQUIRE(client.rpc_calls.size() == 1);
+        REQUIRE(client.rpc_calls[0].method == "server.database.get_item");
+        MoonrakerError not_found;
+        not_found.message = "Key 'tool_spool_assignments' in namespace 'helix-screen' not found";
+        not_found.code = 404;
+        client.rpc_calls[0].error_cb(not_found);
+        helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+    }
+
+    /// Issue a load through Moonraker; its reply is still in flight.
+    helix::test::FakeMoonrakerClient::RpcCall& start_load() {
+        client.rpc_calls.clear();
+        ToolState::instance().load_spool_assignments(&api);
+        REQUIRE(client.rpc_calls.size() == 1);
+        REQUIRE(client.rpc_calls[0].method == "server.database.get_item");
+        return client.rpc_calls[0];
+    }
+
+    nlohmann::json spool_file_json() const {
+        std::ifstream in(spool_file());
+        return nlohmann::json::parse(in, nullptr, false);
+    }
+
+    /// Every spool assignment value written to Moonraker's DB since the last load.
+    std::vector<nlohmann::json> db_writes() const {
+        std::vector<nlohmann::json> writes;
+        for (const auto& call : client.rpc_calls) {
+            if (call.method == "server.database.post_item") {
+                writes.push_back(call.params["value"]);
+            }
+        }
+        return writes;
+    }
+
+    std::filesystem::path spool_file() const {
+        return std::filesystem::path(tmp.str()) / "tool_spools.json";
+    }
+};
+
+int assigned_tools() {
+    int n = 0;
+    for (const auto& tool : ToolState::instance().tools()) {
+        n += tool.spoolman_id > 0 ? 1 : 0;
+    }
+    return n;
+}
+
+} // namespace
+
+TEST_CASE_METHOD(TwoPrinterSpoolFixture,
+                 "ToolState: a printer with an empty DB does not inherit the previous printer's "
+                 "local spools",
+                 "[tool][tool-state][spool][multi-printer]") {
+    auto& ts = ToolState::instance();
+    ts.assign_spool(0, 42, "Red PLA", 750.0f, 1000.0f);
+    ts.save_spool_assignments(nullptr);
+    REQUIRE(std::filesystem::exists(spool_file()));
+
+    switch_to("bravo");
+    load_with_empty_db();
+
+    CHECK(assigned_tools() == 0);
+    // A 404 seeds the printer's DB with its own (empty) set, once.
+    REQUIRE(db_writes().size() == 1);
+    CHECK(db_writes()[0].empty());
+
+    // Alpha's own assignments are still there for alpha.
+    switch_to("alpha");
+    load_with_empty_db();
+    CHECK(ts.tools()[0].spoolman_id == 42);
+}
+
+TEST_CASE_METHOD(TwoPrinterSpoolFixture,
+                 "ToolState: a single-printer spool file belongs to the first printer that loads "
+                 "it",
+                 "[tool][tool-state][spool][multi-printer]") {
+    {
+        std::ofstream legacy(spool_file());
+        legacy << R"({"1": {"spoolman_id": 7, "spool_name": "Old PETG"}})";
+    }
+
+    load_with_empty_db();
+    REQUIRE(ToolState::instance().tools()[1].spoolman_id == 7);
+
+    switch_to("bravo");
+    load_with_empty_db();
+    CHECK(assigned_tools() == 0);
+    // A 404 seeds the printer's DB with its own (empty) set, once.
+    REQUIRE(db_writes().size() == 1);
+    CHECK(db_writes()[0].empty());
+
+    switch_to("alpha");
+    load_with_empty_db();
+    CHECK(ToolState::instance().tools()[1].spoolman_id == 7);
+}
+
+TEST_CASE_METHOD(TwoPrinterSpoolFixture,
+                 "ToolState: a load answered after a switch is dropped, not saved as the next "
+                 "printer's",
+                 "[tool][tool-state][spool][multi-printer]") {
+    auto& ts = ToolState::instance();
+    ts.assign_spool(0, 42, "Red PLA", 750.0f, 1000.0f);
+    ts.save_spool_assignments(nullptr);
+
+    auto load = start_load();
+    // The K-Touch retargets in place: the active id moves and the cache is invalidated,
+    // but alpha's tools are still in place when alpha's reply finally fails.
+    helix::ConfigTestAccess::active_printer_id(*cfg) = "bravo";
+    REQUIRE(helix::PrinterCacheRegistry::instance().invalidate_one("ToolState"));
+    MoonrakerError lost;
+    lost.type = MoonrakerErrorType::CONNECTION_LOST;
+    lost.code = 404;
+    client.rpc_calls.clear();
+    load.error_cb(lost);
+    helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+
+    CHECK(db_writes().empty());
+    CHECK_FALSE(spool_file_json()["printers"].contains("bravo"));
+    CHECK_FALSE(ts.spool_assignments_loaded());
+}
+
+TEST_CASE_METHOD(TwoPrinterSpoolFixture,
+                 "ToolState: a DB load that times out does not overwrite the DB",
+                 "[tool][tool-state][spool][multi-printer]") {
+    auto load = start_load();
+    MoonrakerError timeout;
+    timeout.type = MoonrakerErrorType::TIMEOUT;
+    timeout.message = "Request timed out";
+    client.rpc_calls.clear();
+    load.error_cb(timeout);
+    helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+
+    REQUIRE(db_writes().size() == 0);
+}
+
+TEST_CASE_METHOD(TwoPrinterSpoolFixture, "ToolState: a spool file it cannot read is left alone",
+                 "[tool][tool-state][spool][multi-printer]") {
+    {
+        std::ofstream broken(spool_file());
+        broken << R"({"printers": {"bravo": {"0": {"spoolman_id": 9)";
+    }
+    ToolState::instance().assign_spool(0, 42, "Red PLA", 750.0f, 1000.0f);
+    ToolState::instance().save_spool_assignments(nullptr);
+
+    std::ifstream in(spool_file());
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    CHECK(text == R"({"printers": {"bravo": {"0": {"spoolman_id": 9)");
+}
+
+TEST_CASE_METHOD(TwoPrinterSpoolFixture, "ToolState: a removed printer's spools go with it",
+                 "[tool][tool-state][spool][multi-printer]") {
+    ToolState::instance().assign_spool(0, 42, "Red PLA", 750.0f, 1000.0f);
+    ToolState::instance().save_spool_assignments(nullptr);
+    REQUIRE(spool_file_json()["printers"].contains("alpha"));
+
+    cfg->remove_printer("alpha");
+
+    CHECK_FALSE(spool_file_json()["printers"].contains("alpha"));
+}
+
+TEST_CASE_METHOD(TwoPrinterSpoolFixture,
+                 "ToolState: unsaved spool changes do not follow a switch to the next printer",
+                 "[tool][tool-state][spool][multi-printer]") {
+    ToolState::instance().assign_spool(0, 42, "Red PLA", 750.0f, 1000.0f);
+
+    helix::ConfigTestAccess::active_printer_id(*cfg) = "bravo";
+    REQUIRE(helix::PrinterCacheRegistry::instance().invalidate_one("ToolState"));
+    client.rpc_calls.clear();
+    ToolState::instance().save_spool_assignments_if_dirty(&api);
+
+    CHECK(db_writes().empty());
+    CHECK_FALSE(std::filesystem::exists(spool_file()));
+}
+
+TEST_CASE_METHOD(TwoPrinterSpoolFixture,
+                 "ToolState: a failed DB load with a local set restores it into the DB",
+                 "[tool][tool-state][spool][multi-printer]") {
+    ToolState::instance().assign_spool(1, 7, "Blue PETG", 200.0f, 500.0f);
+    ToolState::instance().save_spool_assignments(nullptr);
+    switch_to("alpha");
+
+    auto load = start_load();
+    MoonrakerError timeout;
+    timeout.type = MoonrakerErrorType::TIMEOUT;
+    client.rpc_calls.clear();
+    load.error_cb(timeout);
+    helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
+
+    CHECK(ToolState::instance().tools()[1].spoolman_id == 7);
+    REQUIRE(db_writes().size() == 1);
+    CHECK(db_writes()[0]["1"]["spoolman_id"] == 7);
 }

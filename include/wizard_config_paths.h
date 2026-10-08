@@ -29,6 +29,8 @@ namespace wizard {
 
 // Printer identification
 constexpr const char* PRINTER_NAME = "printer_name";
+// The hostname the printer's Klipper reports; how mDNS re-finds it at a new address
+constexpr const char* HOSTNAME = "hostname";
 constexpr const char* PRINTER_TYPE = "type";
 // Which saved printer type the one-time saved-vs-detected mismatch warning
 // (HardwareSetupPrompter::maybe_warn_type_mismatch) was last shown for. Changing the
@@ -105,19 +107,11 @@ inline std::string get_saved_printer_type() {
     return config->get<std::string>(config->df() + wizard::PRINTER_TYPE, "");
 }
 
+/// The active printer's display name (Config::get_printer_display_name()), or @p fallback.
 /// Used by both the home screen widget and printer manager overlay.
 inline std::string get_printer_display_name(const std::string& fallback = "My Printer") {
     Config* config = Config::get_instance();
-
-    std::string name = config->get<std::string>(config->df() + wizard::PRINTER_NAME, "");
-    if (!name.empty())
-        return name;
-
-    std::string type = get_saved_printer_type();
-    if (!type.empty())
-        return type;
-
-    return fallback;
+    return config->get_printer_display_name(config->get_active_printer_id(), fallback);
 }
 
 } // namespace helix

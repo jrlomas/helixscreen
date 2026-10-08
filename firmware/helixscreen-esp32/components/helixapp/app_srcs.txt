@@ -88,14 +88,17 @@ lib/lv_markdown/src/lv_markdown_style.c
 src/abort/abort_manager.cpp
 src/application/asset_manager.cpp
 src/application/data_root_resolver.cpp
+src/application/discovery_steps_core.cpp
 src/application/display_metrics.cpp
 # clean_error_text only (e-stop recovery dialog) — the full router stays excluded
 src/application/gcode_error_text.cpp
+src/application/hardware_fingerprint.cpp
 src/application/moonraker_event_routing.cpp
 src/application/panel_factory.cpp
 src/application/printer_cache_registry.cpp
 src/application/printer_retarget.cpp
 src/application/printer_switch_flow.cpp
+src/application/session_wiring.cpp
 src/application/static_panel_registry.cpp
 src/application/static_subject_registry.cpp
 src/application/subject_initializer.cpp
@@ -120,6 +123,7 @@ src/print/print_start_navigation.cpp
 src/print/thumbnail_cache.cpp
 src/print/thumbnail_downscale.cpp
 src/print/thumbnail_png_stream.cpp
+src/print/thumbnail_rules.cpp
 src/print/thumbnail_slot_pool.cpp
 src/print/thumbnail_target.cpp
 src/printer/active_material_provider.cpp
@@ -183,6 +187,7 @@ src/printer/macro_param_cache.cpp
 src/printer/macro_param_defaults.cpp
 src/printer/macro_params.cpp
 src/printer/pause_cause.cpp
+src/printer/printer_discovery.cpp
 src/printer/printer_discovery_parse.cpp
 src/printer/power_device_state.cpp
 src/printer/power_loss_sensor.cpp

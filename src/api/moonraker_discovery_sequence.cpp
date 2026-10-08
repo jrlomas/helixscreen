@@ -901,6 +901,7 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                                     std::lock_guard<std::mutex> lock(hardware_mutex_);
                                     hardware_.parse_build_volume(settings);
                                     hardware_.parse_filament_diameter(settings);
+                                    hardware_.parse_leveling_probe_points(settings);
                                 }
 
                                 // Which macros take the host down with them.
@@ -926,6 +927,8 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                                     std::lock_guard<std::mutex> lock(hardware_mutex_);
                                     hardware_.set_host_restarting_macros(std::move(restarting));
                                     hardware_.set_host_halting_macros(std::move(halting));
+                                    hardware_.set_led_driving_macros(
+                                        helix::analyze_led_driving_macros(settings));
                                     hardware_.parse_sensor_toggle_command(settings);
                                 }
 
@@ -1373,6 +1376,8 @@ json MoonrakerDiscoverySequence::build_subscription_objects(
                                                    "spoolman_support",
                                                    "pending_spool_id",
                                                    "espooler_active",
+                                                   "espooler",
+                                                   "tangle_prevention",
                                                    "num_toolchanges",
                                                    "slicer_tool_map",
                                                    "toolchange_purge_volume",

@@ -14,6 +14,7 @@
 #include "ui_update_queue.h"
 
 #include "ams_state.h"
+#include "config.h"
 #include "data_root_resolver.h"
 #include "display_numbering.h"
 #include "helix_fs.h"
@@ -22,6 +23,7 @@
 #include "json_utils.h"
 #include "klipper_extruder_naming.h"
 #include "lvgl/src/others/translation/lv_translation.h"
+#include "printer_cache_registry.h"
 #include "printer_discovery.h"
 #include "state/subject_macros.h"
 #include "static_subject_registry.h"
@@ -109,6 +111,27 @@ void ToolState::init_subjects(bool register_xml) {
     // Self-register cleanup — ensures deinit runs before lv_deinit()
     StaticSubjectRegistry::instance().register_deinit(
         "ToolState", []() { ToolState::instance().deinit_subjects(); });
+
+    // Spool assignments belong to the printer they were loaded from; the next one loads
+    // its own. A reply still in flight (a spool load, a tool-offset query) belongs to the
+    // previous printer: applied now it would land on, and be saved as, the next one's.
+    helix::PrinterCacheRegistry::instance().register_invalidator("ToolState", []() {
+        auto& ts = ToolState::instance();
+        if (!ts.spool_load_printer_.empty()) {
+            spdlog::info("[ToolState] spool load for {} dropped: printer scope ended",
+                         ts.spool_load_printer_);
+            ts.spool_load_printer_.clear();
+        }
+        ts.async_lifetime_.invalidate();
+        ts.spool_assignments_loaded_ = false;
+        // Unsaved changes were the previous printer's; saved now they would land under
+        // the next printer's key and in its DB.
+        ts.spool_dirty_ = false;
+    });
+    if (Config* config = Config::get_instance()) {
+        config->set_printer_removed_hook(
+            [](const std::string& id) { ToolState::instance().forget_printer_spools(id); });
+    }
 
     spdlog::trace("[ToolState] Subjects initialized successfully");
 }
@@ -837,6 +860,26 @@ static constexpr const char* SPOOL_JSON_FILENAME = "tool_spools.json";
 static constexpr const char* MOONRAKER_DB_NAMESPACE = "helix-screen";
 static constexpr const char* MOONRAKER_DB_KEY = "tool_spool_assignments";
 
+namespace {
+
+/// The spool file keeps one assignment set per printer under "printers"; a file without
+/// it is the single-printer layout, a bare set keyed by tool index.
+constexpr const char* SPOOL_JSON_PRINTERS = "printers";
+
+/// The configured printer whose assignments are being read or written.
+std::string spool_printer_key() {
+    const Config* config = Config::get_instance();
+    std::string id = config ? config->get_active_printer_id() : std::string();
+    return id.empty() ? "default" : id;
+}
+
+bool is_per_printer_spool_file(const nlohmann::json& data) {
+    const auto it = data.find(SPOOL_JSON_PRINTERS);
+    return it != data.end() && it->is_object();
+}
+
+} // namespace
+
 /**
  * @brief Whether two spool weights render identically.
  *
@@ -996,7 +1039,6 @@ void ToolState::apply_spool_assignments(const nlohmann::json& data) {
 }
 
 void ToolState::save_spool_json() const {
-    auto json_data = spool_assignments_to_json();
     std::string path = hfs::join_path(config_dir_, SPOOL_JSON_FILENAME);
 
     // Ensure directory exists
@@ -1005,11 +1047,26 @@ void ToolState::save_spool_json() const {
     // The installer links this file out to printer_data; rename onto the target.
     path = helix::paths::write_target(path);
 
+    // The other printers' sets are kept. A single-printer file is replaced: it belongs to
+    // whichever printer loaded it first, and that printer's set is being written now.
+    const auto existing = helix::text_io::read_file(path);
+    nlohmann::json file =
+        existing ? nlohmann::json::parse(*existing, nullptr, false) : nlohmann::json();
+    if (hfs::exists(path) && (!existing || file.is_discarded())) {
+        // Rewriting it would lose every other printer's set.
+        spdlog::warn("[ToolState] {} cannot be read; not overwriting it", path);
+        return;
+    }
+    if (!is_per_printer_spool_file(file)) {
+        file = nlohmann::json{{SPOOL_JSON_PRINTERS, nlohmann::json::object()}};
+    }
+    file[SPOOL_JSON_PRINTERS][spool_printer_key()] = spool_assignments_to_json();
+
     // Every connect reloads the assignments from Moonraker and saves them back,
     // almost always unchanged. Skip the write then: on the ESP32 a flash write
     // stalls the display's scan-out, and elsewhere it is SD-card wear for nothing.
-    const std::string text = helix::json_util::safe_dump(json_data, 2);
-    if (auto existing = helix::text_io::read_file(path); existing && *existing == text) {
+    const std::string text = helix::json_util::safe_dump(file, 2);
+    if (existing && *existing == text) {
         spdlog::trace("[ToolState] Spool assignments unchanged, not rewriting {}", path);
         return;
     }
@@ -1043,9 +1100,46 @@ bool ToolState::load_spool_json() {
         return false;
     }
 
-    apply_spool_assignments(data);
-    spdlog::info("[ToolState] Loaded spool assignments from {}", path);
+    if (!is_per_printer_spool_file(data)) {
+        // A single-printer file goes to the first printer that loads it, and is rewritten
+        // under that printer at once so no other printer can load it.
+        apply_spool_assignments(data);
+        save_spool_json();
+        spdlog::info("[ToolState] Loaded single-printer spool assignments from {} for printer "
+                     "'{}'",
+                     path, spool_printer_key());
+        return true;
+    }
+
+    const auto& printers = data[SPOOL_JSON_PRINTERS];
+    const auto mine = printers.find(spool_printer_key());
+    if (mine == printers.end()) {
+        spdlog::debug("[ToolState] No spool assignments for printer '{}' in {}",
+                      spool_printer_key(), path);
+        return false;
+    }
+    apply_spool_assignments(*mine);
+    spdlog::info("[ToolState] Loaded spool assignments for printer '{}' from {}",
+                 spool_printer_key(), path);
     return true;
+}
+
+void ToolState::forget_printer_spools(const std::string& printer_id) const {
+    const std::string path =
+        helix::paths::write_target(hfs::join_path(config_dir_, SPOOL_JSON_FILENAME));
+    const auto text = helix::text_io::read_file(path);
+    if (!text) {
+        return;
+    }
+    auto data = nlohmann::json::parse(*text, nullptr, false);
+    if (!is_per_printer_spool_file(data) || data[SPOOL_JSON_PRINTERS].erase(printer_id) == 0) {
+        return;
+    }
+    if (!helix::text_io::write_file_atomic(path, helix::json_util::safe_dump(data, 2))) {
+        spdlog::error("[ToolState] Failed to drop printer '{}' from {}", printer_id, path);
+        return;
+    }
+    spdlog::info("[ToolState] Dropped removed printer '{}' from {}", printer_id, path);
 }
 
 void ToolState::save_spool_assignments_if_dirty(IMoonrakerAPI* api) {
@@ -1091,10 +1185,12 @@ void ToolState::load_spool_assignments(IMoonrakerAPI* api) {
     // it both marshals to the main thread and drops the body if the subjects
     // were torn down while the request was in flight (#1165). That subsumes the
     // manual unique_ptr payload copy this used to do by hand.
+    spool_load_printer_ = spool_printer_key();
     api->database_get_item(
         MOONRAKER_DB_NAMESPACE, MOONRAKER_DB_KEY,
         async_lifetime_.bg_cb("ToolState::load_spool_assignments",
                               [this](const nlohmann::json& data) {
+                                  spool_load_printer_.clear();
                                   apply_spool_assignments(data);
                                   save_spool_json();
                                   spool_assignments_loaded_ = true;
@@ -1105,12 +1201,17 @@ void ToolState::load_spool_assignments(IMoonrakerAPI* api) {
                               }),
         async_lifetime_.bg_cb(
             "ToolState::load_spool_assignments_error", [this, api](const MoonrakerError& err) {
+                spool_load_printer_.clear();
                 spdlog::debug("[ToolState] Moonraker DB load failed ({}), trying local JSON",
                               err.message);
-                load_spool_json();
+                const bool had_local = load_spool_json();
                 spool_assignments_loaded_ = true;
-                // Seed Moonraker DB so subsequent connections don't hit 404
-                save_spool_assignments(api);
+                // Seed the DB only when it said the key is absent, or with a local set to
+                // restore: a timeout or a dropped connection says nothing about what the
+                // DB holds, and an empty seed would overwrite real assignments.
+                if (err.code == 404 || had_local) {
+                    save_spool_assignments(api);
+                }
                 // Re-sync AmsState so slot UI subjects reflect loaded assignments
                 AmsState::instance().sync_from_backend();
             }));

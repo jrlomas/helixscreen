@@ -1310,6 +1310,7 @@ translations:
   Forward Multiplier: '正向倍率'
   Found %zu printers: 找到 %zu 台打印机
   Found 1 printer: 找到 1 台打印机
+  Found {} at {}.: '已发现 {}，地址为 {}。'
   Framerate: 帧率
   From Buffer: 来自缓冲区
   From SpoolmanDB: '来自 SpoolmanDB'
@@ -1655,6 +1656,7 @@ translations:
   Layer mode captures one frame per layer change. Best for most prints.: 层模式在每次换层时捕获一帧。适用于大多数打印。
   Layers: 层
   Layout: 布局
+  Layout changes are off in safe mode. Restart to edit.: '安全模式下无法更改布局。请重启后再编辑。'
   Learn More: 了解更多
   LedSelect: 选择 LED
   Left: '左'
@@ -2572,6 +2574,7 @@ translations:
   Restart Klipper without rebooting: 无需重启主机即可重启 Klipper
   Restart Klipper?: '重启 Klipper？'
   Restart Moonraker: 重启 Moonraker
+  Restart Moonraker to finish the plugin change: 重启 Moonraker 以完成插件更改
   Restart Now: 立即重启
   Restart Required: 需要重启
   'Restart failed: not connected': '重启失败: 未连接'
@@ -2665,6 +2668,8 @@ translations:
   ? Safe Mode active. The printer connection is disabled because the app kept crashing
     on startup. Open Settings to fix the issue, then reboot.
   : 安全模式已激活。由于应用程序在启动时反复崩溃，打印机连接已被禁用。请打开设置以解决问题，然后重启。
+  ? 'Safe mode: the app kept crashing on startup, so plugins are off and widget layouts show their defaults. Restart to return to normal.'
+  : '安全模式：由于应用程序在启动时反复崩溃，插件已禁用，小部件布局显示为默认设置。重启即可恢复正常。'
   Safety & Alerts: 安全与警报
   Same spool in {}? Tap Clear if it is a new one.: '{} 是同一个料盘吗？如果是新料盘，请点击清除。'
   Sample: 样本
@@ -3422,6 +3427,7 @@ translations:
   Uptime: 运行时长
   Use Android native keyboard for text input: 使用 Android 原生键盘进行文本输入
   Use G10/G11 firmware retraction: 使用 G10/G11 固件回抽
+  Use New Address: '使用新地址'
   Use Unload before Eject: '请先使用“卸载”，再使用“弹出”'
   Use first HID scanner found: '使用找到的第一个 HID 扫描器'
   Use printer type to select image: 使用打印机类型选择图片
@@ -3559,6 +3565,7 @@ translations:
   You can skip this and calibrate later in Settings.: 您可以跳过此步骤，稍后在设置中进行校准。
   You have unsaved changes. Discard them?: 您有未保存的更改。是否丢弃？
   Your completed prints will appear here: 您完成的打印将显示在此处
+  Your print start or end macro also sets LEDs. It and Automatic LED Control may override each other.: '您的打印开始或结束宏也会设置 LED。它与自动 LED 控制可能会互相覆盖。'
   Your printer at a glance: 一览您的打印机
   Your printer has an automatic filament changer: 您的打印机配有自动换色系统
   Your printer was offline during setup, so hardware options were skipped. Set them up now?: 设置期间打印机离线，硬件选项已跳过。现在设置吗？
@@ -3709,6 +3716,8 @@ translations:
   '{} is still printing. The print keeps running after you switch.': '{} 仍在打印。切换后打印会继续进行。'
   '{} is not set up on this printer': '{} 未在此打印机上设置'
   '{} lines in helixscreen.env were ignored': 'helixscreen.env 中有 {} 行被忽略'
+  '{} kept crashing the panel; switched back to {}': '{} 反复导致屏幕崩溃，已切换回 {}'
+  '{} kept crashing the panel; pick a printer to connect': '{} 反复导致屏幕崩溃，请选择要连接的打印机'
   '{} macro not configured': '{} 宏未配置'
   '{} matches.': '{} 匹配。'
   '{} may cause unintended changes. Are you sure?': '{} 可能导致意外更改。确定吗？'
