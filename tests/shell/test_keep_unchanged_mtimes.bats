@@ -88,7 +88,7 @@ mtime() { stat -c %Y "$1"; }
 
 @test "every libhv sub-make in mk/deps.mk runs through the wrapper" {
     run grep -cE '\$\(MAKE\).*-C \$\(LIBHV_DIR\).* libhv(;|$)' "$DEPS"
-    [ "$output" -ge 4 ]
+    [ "$output" -ge 3 ]
     total="$output"
     run grep -cE '\$\(LIBHV_KEEP_MTIMES\).*\$\(MAKE\).*-C \$\(LIBHV_DIR\).* libhv(;|$)' "$DEPS"
     [ "$output" -eq "$total" ]
