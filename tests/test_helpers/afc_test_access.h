@@ -125,6 +125,12 @@ class AfcTestAccess {
     template <class B> static auto& tool_end_sensor(B& b) {
         return b.tool_end_sensor_;
     }
+    template <class B> static auto& unit_oams_names(B& b) {
+        return b.unit_oams_names_;
+    }
+    template <class B> static void apply_unit_environment(B& b) {
+        b.apply_unit_environment();
+    }
     template <class B> static auto& tool_states(B& b) {
         return b.tool_states_;
     }

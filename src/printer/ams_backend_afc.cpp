@@ -14,6 +14,7 @@
 #include "ams_bypass_policy.h"
 #include "ams_fault_event.h"
 #include "config.h"
+#include "humidity_sensor_types.h"
 #include "i_moonraker_api.h"
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
@@ -1309,6 +1310,10 @@ void AmsBackendAfc::handle_status(const nlohmann::json& params) {
                 parse_afc_hub(hub_name, params[key]);
                 state_changed = true;
             }
+        }
+
+        if (parse_oams_environment(params)) {
+            state_changed = true;
         }
 
         // Parse AFC_extruder for toolhead sensors (multi-extruder support)
@@ -3221,6 +3226,75 @@ void AmsBackendAfc::parse_afc_buffer(const std::string& buffer_name, const nlohm
     apply_buffer_health_to_units();
 }
 
+bool AmsBackendAfc::parse_oams_environment(const nlohmann::json& params) {
+    bool any = false;
+    for (auto it = params.begin(); it != params.end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+        // OpenAMS publishes its HDC1080 as "aht3x <name>" by default and as
+        // "temperature_oams <name>" when the alias is switched off.
+        const auto* chip = helix::sensors::humidity_chip_for_object(it.key());
+        if (!chip || (chip->type != helix::sensors::HumiditySensorType::AHT3X &&
+                      chip->type != helix::sensors::HumiditySensorType::OPENAMS)) {
+            continue;
+        }
+        auto& env =
+            oams_env_[helix::text_io::to_lower(it.key().substr(chip->klipper_prefix.size()))];
+        const auto temp = it.value().find("temperature");
+        if (temp != it.value().end() && temp->is_number()) {
+            env.temperature_c = temp->get<float>();
+        }
+        const auto hum = it.value().find("humidity");
+        if (hum != it.value().end() && hum->is_number()) {
+            env.humidity_pct = hum->get<float>();
+            env.has_humidity = true;
+        }
+        any = true;
+    }
+    if (any) {
+        has_unit_environment_ = true;
+        apply_unit_environment();
+    }
+    return any;
+}
+
+void AmsBackendAfc::apply_unit_environment() {
+    if (oams_env_.empty()) {
+        return;
+    }
+    const auto openams_units =
+        std::count_if(unit_infos_.begin(), unit_infos_.end(),
+                      [](const AfcUnitInfo& u) { return u.type == "OpenAMS"; });
+    for (auto& unit : system_info_.units) {
+        const AfcUnitInfo* info = nullptr;
+        for (const auto& ui : unit_infos_) {
+            if (ui.type == "OpenAMS" &&
+                (ui.type + " " + ui.name == unit.name ||
+                 (unit_infos_.size() == 1 && system_info_.units.size() == 1))) {
+                info = &ui;
+                break;
+            }
+        }
+        if (!info) {
+            continue;
+        }
+        // The sensor is named after the [AFC_OAMS] controller the unit's `oams`
+        // option points at; the unit's own name is the fallback when
+        // configfile has not answered, and a lone unit with a lone sensor needs
+        // no name to pair them.
+        const std::string unit_key = helix::text_io::to_lower(info->name);
+        const auto cfg = unit_oams_names_.find(unit_key);
+        auto env = oams_env_.find(cfg != unit_oams_names_.end() ? cfg->second : unit_key);
+        if (env == oams_env_.end() && openams_units == 1 && oams_env_.size() == 1) {
+            env = oams_env_.begin();
+        }
+        if (env != oams_env_.end()) {
+            unit.environment = env->second;
+        }
+    }
+}
+
 void AmsBackendAfc::apply_buffer_health_to_units() {
     for (const auto& [buffer_name, health] : buffer_health_) {
         auto lanes_it = buffer_lane_names_.find(buffer_name);
@@ -3905,10 +3979,19 @@ AmsBackendAfc::parse_configfile_topology(const nlohmann::json& response) {
     // case-insensitively against the names AFC.extruders publishes.
     static constexpr const char* EXTRUDER_PREFIX = "afc_extruder ";
     static constexpr const char* TOOLCHANGER_PREFIX = "afc_toolchanger ";
+    static constexpr const char* OPENAMS_PREFIX = "afc_openams ";
     for (auto it = settings->begin(); it != settings->end(); ++it) {
         const std::string key = helix::text_io::to_lower(it.key());
         if (key.rfind(TOOLCHANGER_PREFIX, 0) == 0) {
             topo.saw_toolchanger = true;
+            continue;
+        }
+        if (key.rfind(OPENAMS_PREFIX, 0) == 0 && it.value().is_object()) {
+            const auto oams = it.value().find("oams");
+            if (oams != it.value().end() && oams->is_string()) {
+                topo.oams_names[key.substr(std::strlen(OPENAMS_PREFIX))] =
+                    helix::text_io::to_lower(oams->get<std::string>());
+            }
             continue;
         }
         if (key.rfind(EXTRUDER_PREFIX, 0) != 0 || !it.value().is_object()) {
@@ -3951,6 +4034,8 @@ void AmsBackendAfc::query_afc_configfile_topology() {
                             }
                             std::lock_guard<std::mutex> lock(mutex_);
                             extruder_klipper_names_ = std::move(topo.extruder_names);
+                            unit_oams_names_ = std::move(topo.oams_names);
+                            apply_unit_environment();
                             // Settings were read. Only now does an absent extruder_name
                             // mean the config lacks one rather than that we have not asked.
                             configfile_answered_ = true;
@@ -4805,6 +4890,7 @@ void AmsBackendAfc::reorganize_slots() {
     // on every one of them. Re-derive it from what AFC last reported — the buffer
     // parser will not run again until a buffer field actually changes.
     apply_buffer_health_to_units();
+    apply_unit_environment();
 
     spdlog::info("[AMS AFC] Reorganized into {} units, {} total slots", system_info_.units.size(),
                  system_info_.total_slots);

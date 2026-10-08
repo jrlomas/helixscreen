@@ -12,6 +12,7 @@
 #include "lane_observation.h"
 #include "slot_registry.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <deque>
@@ -202,6 +203,9 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
         bool saw_toolchanger = false;
         /// Lowercased AFC_extruder suffix -> Klipper extruder name.
         std::unordered_map<std::string, std::string> extruder_names;
+        /// Lowercased AFC_OpenAMS unit name -> lowercased `oams` option, the
+        /// [AFC_OAMS] controller (and temperature sensor) name.
+        std::unordered_map<std::string, std::string> oams_names;
     };
 
     /// Reduces a printer.objects.query(configfile=settings) response to the
@@ -249,7 +253,10 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
         return t;
     }();
     [[nodiscard]] BackendTraits traits() const override {
-        return kTraits;
+        BackendTraits t = kTraits;
+        // Only OpenAMS units carry a temperature/humidity sensor.
+        t.has_environment_sensors = has_unit_environment_;
+        return t;
     }
 
     [[nodiscard]] const char* get_klipper_object_name() const override {
@@ -1014,6 +1021,16 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
      */
     void apply_buffer_health_to_units();
 
+    /// Record the temperature/humidity an OpenAMS sensor object reports in
+    /// @p params and re-attach it to its unit. Returns true when a frame carried one.
+    /// @pre mutex_ held.
+    bool parse_oams_environment(const nlohmann::json& params);
+
+    /// Attach oams_env_ to the OpenAMS unit each reading belongs to, re-derived
+    /// like buffer health because reorganize_slots() rebuilds every AmsUnit.
+    /// @pre mutex_ held.
+    void apply_unit_environment();
+
     /**
      * @brief Parse AFC_extruder object for toolhead sensor states
      *
@@ -1331,6 +1348,12 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     /// map preserves "does AFC itself still hold a link?" for
     /// maybe_reassert_retained_spool_link() (#1289).
     std::unordered_map<std::string, int> lane_firmware_spool_id_;
+
+    /// Latest reading per OpenAMS sensor, keyed by lowercased sensor name.
+    std::unordered_map<std::string, EnvironmentData> oams_env_;
+    /// Lowercased AFC_OpenAMS unit name -> lowercased [AFC_OAMS] name, from configfile.
+    std::unordered_map<std::string, std::string> unit_oams_names_;
+    std::atomic<bool> has_unit_environment_{false};
 
     /// Slot -> the firmware spool id HelixScreen just unlinked. AFC keeps the
     /// id on a lane with remember_spool, so every later frame restates it; a
