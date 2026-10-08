@@ -58,6 +58,7 @@ struct GateIdentityDelta {
     GateArray<uint32_t> color_rgb;
     GateArray<ams::ColorReading> color; ///< gate_color hex strings
     GateArray<std::string> material;
+    GateArray<std::string> vendor; ///< v4 gate_vendor
     GateArray<int> spool_id;
     GateArray<int> temperature;
     GateArray<std::string> name;          ///< gate_name
@@ -97,6 +98,9 @@ struct MmuTelemetryDelta {
     std::optional<float> sync_feedback_bias; ///< sync_feedback_bias_modelled
     std::optional<float> sync_feedback_bias_raw;
     std::optional<bool> sync_drive;
+    /// v4 filament_remaining: mm of cut tip left in the extruder, and its colour.
+    std::optional<float> filament_remaining;
+    std::optional<std::string> filament_remaining_color;
     std::optional<int> clog_detection_enabled;
     std::optional<EncoderDelta> encoder;
     std::optional<FlowguardDelta> flowguard;

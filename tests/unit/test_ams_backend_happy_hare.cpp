@@ -81,6 +81,15 @@ class AmsBackendHappyHareTestHelper : public AmsBackendHappyHare {
         handle_status_update(notification);
     }
 
+    /// Feed an arbitrary printer.mmu status object.
+    void feed_mmu_status(const nlohmann::json& mmu) {
+        nlohmann::json params;
+        params["mmu"] = mmu;
+        nlohmann::json notification;
+        notification["params"] = nlohmann::json::array({params, 0.0});
+        handle_status_update(notification);
+    }
+
     /// Feed a printer.mmu gate_status array (0 empty, 1 available, 2 loaded),
     /// as a status update would.
     void feed_mmu_gate_status(const std::vector<int>& statuses) {
@@ -6877,4 +6886,69 @@ TEST_CASE("Happy Hare v4 encoder flag holds when the split is unchanged",
     const auto info = helper.get_system_info();
     CHECK(info.units[0].topology == PathTopology::LINEAR);
     CHECK_FALSE(info.units[0].has_encoder); // no [mmu_unit] encoder configured
+}
+
+TEST_CASE("Happy Hare v4 gate_vendor lands as the lane brand", "[ams][happy_hare][hh_v4]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+
+    helper.feed_mmu_status({{"gate_vendor", nlohmann::json::array({"QIDI", ""})}});
+    CHECK(helper.get_slot_info(0).brand == "QIDI");
+    CHECK(helper.get_slot_info(1).brand.empty());
+
+    helper.feed_mmu_status({{"gate_vendor", nlohmann::json::array({"", ""})}});
+    CHECK(helper.get_slot_info(0).brand.empty());
+}
+
+TEST_CASE("Happy Hare without gate_vendor leaves the brand alone", "[ams][happy_hare][hh_v4]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+
+    helper.feed_mmu_status({{"gate_material", nlohmann::json::array({"PLA", "PETG"})}});
+    CHECK(helper.get_slot_info(0).brand.empty());
+}
+
+TEST_CASE("Happy Hare v4 slot edit writes VENDOR to the gate map", "[ams][happy_hare][hh_v4]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+    helper.feed_mmu_status({{"tangle_prevention", {{"enabled", false}}}});
+
+    SlotInfo info;
+    info.color_rgb = 0xFF0000;
+    info.brand = "Prusament";
+    helix::test::apply_edit(helper, 0, info);
+
+    CHECK(helper.has_gcode("MMU_GATE_MAP GATE=0 COLOR=FF0000 VENDOR=Prusament"));
+}
+
+TEST_CASE("Happy Hare v3 slot edit never sends VENDOR", "[ams][happy_hare][hh_v4]") {
+    helix::test::RegisteredBackend<AmsBackendHappyHareTestHelper> helper_reg;
+    AmsBackendHappyHareTestHelper& helper = *helper_reg;
+    helper.initialize_test_gates(4);
+
+    SlotInfo info;
+    info.color_rgb = 0xFF0000;
+    info.brand = "Prusament";
+    helix::test::apply_edit(helper, 0, info);
+
+    CHECK(helper.has_gcode("MMU_GATE_MAP GATE=0 COLOR=FF0000"));
+    CHECK_FALSE(helper.has_gcode_containing("VENDOR"));
+}
+
+TEST_CASE("Happy Hare v4 residual filament is parsed into backend state",
+          "[ams][happy_hare][hh_v4]") {
+    AmsBackendHappyHareTestHelper helper;
+    helper.initialize_test_gates(4);
+    CHECK(helper.residual_filament_mm() == 0.0F);
+
+    helper.feed_mmu_status({{"filament_remaining", 12.5}, {"filament_remaining_color", "FF0000"}});
+    CHECK(helper.residual_filament_mm() == Catch::Approx(12.5F));
+    CHECK(helper.residual_filament_color() == "FF0000");
+
+    // A frame silent about the residual keeps the last reading.
+    helper.feed_mmu_status({{"gate_material", nlohmann::json::array({"PLA"})}});
+    CHECK(helper.residual_filament_mm() == Catch::Approx(12.5F));
 }

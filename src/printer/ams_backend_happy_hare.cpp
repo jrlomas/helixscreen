@@ -658,6 +658,27 @@ void AmsBackendHappyHare::apply_gate_appearance_locked(
             }
         }
     }
+
+    // gate_vendor (v4): the gate map's filament vendor, which lands on the
+    // lane as its brand.
+    if (identity.vendor) {
+        const auto& vendors = *identity.vendor;
+        for (size_t i = 0; i < vendors.size(); ++i) {
+            if (!slots_.get(static_cast<int>(i)) || !vendors[i]) {
+                continue;
+            }
+            const std::string& vendor = *vendors[i];
+            const int gate = static_cast<int>(i);
+            auto& reading = gate_reading_locked(gate);
+            if (vendor.empty()) {
+                reading.brand.reset();
+                frame.cleared_for(gate).brand = std::string{};
+            } else {
+                reading.brand = vendor;
+                frame.stated_for(gate).brand = vendor;
+            }
+        }
+    }
 }
 
 void AmsBackendHappyHare::apply_gate_binding_locked(const happy_hare::MmuStatusDelta& delta,
@@ -846,6 +867,13 @@ void AmsBackendHappyHare::apply_mmu_telemetry_locked(const happy_hare::MmuTeleme
     }
     if (t.sync_feedback_bias_raw_null) {
         system_info_.sync_feedback_bias_raw = kBiasUnavailable;
+    }
+
+    if (t.filament_remaining) {
+        residual_filament_mm_ = *t.filament_remaining;
+    }
+    if (t.filament_remaining_color) {
+        residual_filament_color_ = *t.filament_remaining_color;
     }
 
     if (t.sync_drive) {
@@ -1214,6 +1242,9 @@ void AmsBackendHappyHare::file_gate_readings_locked(MmuFrame& frame) {
         }
         if (judged.material && !stated.material) {
             filed.material.reset();
+        }
+        if (judged.brand && !stated.brand) {
+            filed.brand.reset();
         }
         own_write_echoes_.strip_standing(gate, filed);
         ams::ingest(lane_id(gate), filed);
@@ -2630,6 +2661,8 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
     int old_mapped_tool = -1;
     bool old_had_identity = false;
     std::string old_material;
+    std::string old_brand;
+    bool v4 = false;
     uint32_t old_color_rgb = AMS_DEFAULT_SLOT_COLOR;
     SpoolmanMode spoolman_mode = SpoolmanMode::OFF;
     int current_slot = -1;
@@ -2651,6 +2684,8 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
         old_had_identity = old_spoolman_id > 0 || entry->info.has_filament_info() ||
                            !entry->info.brand.empty() || !entry->info.spool_name.empty();
         old_material = entry->info.material;
+        old_brand = entry->info.brand;
+        v4 = is_v4_locked();
         old_color_rgb = entry->info.color_rgb;
         spoolman_mode = system_info_.spoolman_mode;
         current_slot = system_info_.current_slot;
@@ -2772,6 +2807,21 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
         has_changes = true;
     }
 
+    // Vendor (v4 only; older Happy Hare has no such gate-map field). Carried
+    // as an explicit empty when the user cleared a brand the gate held.
+    bool wrote_vendor = false;
+    if (v4) {
+        if (!info.brand.empty() && IMoonrakerAPI::is_safe_material_param(info.brand)) {
+            cmd += fmt::format(" VENDOR={}", IMoonrakerAPI::gcode_param_value(info.brand));
+            has_changes = wrote_vendor = true;
+        } else if (!info.brand.empty()) {
+            spdlog::warn("[AMS HappyHare] Skipping VENDOR - unsafe characters in: {}", info.brand);
+        } else if (!old_brand.empty()) {
+            cmd += " VENDOR=";
+            has_changes = true;
+        }
+    }
+
     // Spoolman ID (-1 to clear)
     if (info.spoolman_id > 0) {
         cmd += fmt::format(" SPOOLID={}", info.spoolman_id);
@@ -2821,11 +2871,14 @@ AmsError AmsBackendHappyHare::apply_user_edit(int slot_index, const SlotInfo& in
                     !IMoonrakerAPI::is_safe_material_param(info.material)) {
                     staged->material.reset();
                 }
-                // The command carries no name, brand, colour name or product
-                // line, so any value firmware reports for them is its own. An
-                // inert field left declared would keep the entry alive after the
-                // real fields are all released.
-                staged->brand.reset();
+                // The command carries no name, colour name or product line, and
+                // carries a brand only as VENDOR=, so any other value firmware
+                // reports for them is its own. An inert field left declared
+                // would keep the entry alive after the real fields are all
+                // released.
+                if (!wrote_vendor) {
+                    staged->brand.reset();
+                }
                 staged->spool_name.reset();
                 staged->color_name.reset();
                 staged->product_name.reset();

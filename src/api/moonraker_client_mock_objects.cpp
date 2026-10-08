@@ -199,6 +199,9 @@ json get_mock_mmu_status() {
             {"gate_status", {1, 0, 2, 1}},
             {"gate_color_rgb", {0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00}},
             {"gate_material", {"PLA", "PETG", "ABS", "TPU"}},
+            {"gate_vendor", {"Polymaker", "eSUN", "", "Overture"}},
+            {"filament_remaining", 12.5},
+            {"filament_remaining_color", "FF0000"},
             {"ttg_map", {0, 1, 2, 3}},
             {"endless_spool_groups", {0, 0, 1, 1}}};
 }
