@@ -179,7 +179,11 @@ printf 'held by pid %s: %s %s since %s\n' "\$\$" "$WHAT" "$SHORT" "\$(date '+%F 
 # mount covers the pool's state dir; no such mount means no pool.
 JP=$JOBPOOL_BIN
 POOL_ENV=""
-if [ -x "\$JP" ] && _fifo=\$("\$JP" ensure 2>/dev/null); then
+if [ ! -x "\$JP" ]; then
+    :
+elif ! _fifo=\$("\$JP" ensure 2>/dev/null); then
+    echo "→ jobpool ensure failed on \$(hostname); sizing -j from memory"
+else
     _state=\${_fifo%/fifo}
     while read -r _src _dst; do
         [ -n "\$_src" ] || continue
@@ -191,25 +195,50 @@ if [ -x "\$JP" ] && _fifo=\$("\$JP" ensure 2>/dev/null); then
 fi
 
 # --- ZFS ARC: borrow the RAM for the duration, hand it back on any exit -------
-# The marker records "<pid> <value to restore>". Liveness is derived from that
+# The marker records "<pid> <bytes to restore>". Liveness is derived from that
 # pid, never asserted: a run that died without restoring leaves a marker whose
 # pid is gone, and the next run recovers from it. Asserting instead would let one
 # crash cap this NAS permanently, since every later run would read the CAPPED
 # value as the original.
-ARC_PARAM=/sys/module/zfs/parameters/zfs_arc_max
-ARC_MARK=/tmp/.helix-zeus-arc-orig
+#
+# The value restored is always explicit bytes. Writing 0 ("use the default")
+# does not raise c_max again on OpenZFS 2.3, and neither does a value at or
+# above physical memory, so a parameter left at 0 is recorded as the c_max the
+# ARC was running with before the cap.
+ARC_PARAM=${ZEUS_ARC_PARAM:-/sys/module/zfs/parameters/zfs_arc_max}
+ARC_STATS=${ZEUS_ARCSTATS:-/proc/spl/kstat/zfs/arcstats}
+ARC_MARK=${ZEUS_ARC_MARK:-/tmp/.helix-zeus-arc-orig}
 ARC_HELD=no
 
 arc_write() { sudo -n sh -c "echo \$1 > \$ARC_PARAM" 2>/dev/null; }
 
+arc_ceiling() {
+    _v=\$(cat "\$ARC_PARAM" 2>/dev/null) || return 1
+    [ "\${_v:-0}" != 0 ] || _v=\$(awk '\$1 == "c_max" { print \$3 }' "\$ARC_STATS" 2>/dev/null)
+    [ "\${_v:-0}" -gt 0 ] 2>/dev/null || return 1
+    printf '%s' "\$_v"
+}
+
+# The write comes before any output: a run whose ssh side is gone dies of
+# SIGPIPE on its first echo.
+arc_put_back() {
+    if [ "\${1:-0}" -gt 0 ] 2>/dev/null && arc_write "\$1"; then
+        sudo -n rm -f "\$ARC_MARK" 2>/dev/null || true
+        echo "→ zfs_arc_max restored to \$1"
+    else
+        echo "✗ could not restore zfs_arc_max from \$ARC_MARK ('\$(cat "\$ARC_MARK" 2>/dev/null)'); set it by hand, then delete the marker" >&2
+        return 1
+    fi
+}
+
 arc_restore() {
     [ "\$ARC_HELD" = yes ] || return 0
-    _orig=\$(awk '{print \$2}' "\$ARC_MARK" 2>/dev/null || echo 0)
-    arc_write "\${_orig:-0}" || true
-    sudo -n rm -f "\$ARC_MARK" 2>/dev/null || true
-    echo "→ zfs_arc_max restored to \${_orig:-0}"
+    ARC_HELD=no
+    arc_put_back "\$(awk '{print \$2}' "\$ARC_MARK" 2>/dev/null)" || true
 }
-trap arc_restore EXIT INT TERM HUP
+# bash runs the EXIT trap when a signal kills it too. Trapping a signal
+# itself would resume the job after the handler.
+trap arc_restore EXIT
 
 if [ -e "\$ARC_MARK" ]; then
     _mpid=\$(awk '{print \$1}' "\$ARC_MARK" 2>/dev/null)
@@ -218,18 +247,19 @@ if [ -e "\$ARC_MARK" ]; then
         ARC_CAP_GB=0
     else
         _stale=\$(awk '{print \$2}' "\$ARC_MARK" 2>/dev/null)
-        echo "→ recovering ARC cap abandoned by dead pid \${_mpid:-?}; restoring \${_stale:-0}"
-        arc_write "\${_stale:-0}" || true
-        sudo -n rm -f "\$ARC_MARK" 2>/dev/null || true
+        echo "→ recovering ARC cap abandoned by dead pid \${_mpid:-?}; restoring \${_stale:-?}"
+        # A marker that cannot be restored stays, and this run does not cap:
+        # the parameter now holds the dead run's cap, not the original.
+        arc_put_back "\$_stale" || ARC_CAP_GB=0
     fi
 fi
 
 if [ "\${ARC_CAP_GB:-$ARC_CAP_GB}" -gt 0 ] && [ -r "\$ARC_PARAM" ]; then
-    _orig=\$(cat "\$ARC_PARAM")
-    if sudo -n sh -c "echo '\$\$ \$_orig' > \$ARC_MARK" 2>/dev/null &&
+    if _orig=\$(arc_ceiling) &&
+       sudo -n sh -c "echo '\$\$ \$_orig' > \$ARC_MARK" 2>/dev/null &&
        arc_write "\$(( $ARC_CAP_GB * 1024 * 1024 * 1024 ))"; then
         ARC_HELD=yes
-        sleep 10   # ARC evicts to the new ceiling in well under this
+        sleep "${ZEUS_ARC_SETTLE_SECS:-10}"   # ARC evicts to the new ceiling in well under this
         echo "→ zfs_arc_max \$_orig -> ${ARC_CAP_GB}GB for this run"
     else
         echo "→ could not cap zfs_arc_max; sizing jobs for memory as-is" >&2
