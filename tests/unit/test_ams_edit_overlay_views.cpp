@@ -3270,3 +3270,44 @@ TEST_CASE("AmsEditOverlay::save_is_disabled holds Save shut while a save is in f
         CHECK(Access::save_is_disabled(AmsEditOverlay::VIEW_SPOOL_EDIT, true, false));
     }
 }
+
+TEST_CASE_METHOD(LVGLUITestFixture, "scan row shows only for a scanned slot and applies its colour",
+                 "[ams_edit_overlay][td1]") {
+    auto& overlay = get_ams_edit_overlay();
+    AmsEditOverlayViewTestAccess access(overlay);
+
+    SECTION("no scan: row hidden") {
+        show_overlay_for_mock_untracked_slot(*this);
+        access.call_enter_spool_edit();
+        UpdateQueue::instance().drain();
+        process_lvgl(10);
+        lv_obj_t* row = access.widget("details_scan_row");
+        REQUIRE(row != nullptr);
+        CHECK(lv_obj_has_flag(row, LV_OBJ_FLAG_HIDDEN));
+    }
+
+    SECTION("scan: row visible, button sets the pending colour") {
+        SlotInfo info = untracked_slot();
+        info.scanned_color_rgb = 0x112233;
+        info.scanned_td = 1.4f;
+        REQUIRE(overlay.show_for_slot(test_screen(), 0, info, nullptr, nullptr));
+        UpdateQueue::instance().drain();
+        process_lvgl(10);
+        access.call_enter_spool_edit();
+        UpdateQueue::instance().drain();
+        process_lvgl(10);
+
+        lv_obj_t* row = access.widget("details_scan_row");
+        REQUIRE(row != nullptr);
+        CHECK_FALSE(lv_obj_has_flag(row, LV_OBJ_FLAG_HIDDEN));
+        REQUIRE(access.details_color_set() == false);
+
+        lv_obj_t* btn = access.widget("btn_use_scanned_color");
+        REQUIRE(btn != nullptr);
+        lv_obj_send_event(btn, LV_EVENT_CLICKED, nullptr);
+        CHECK(access.details_color() == 0x112233);
+        CHECK(access.details_color_set());
+    }
+
+    close_editor_overlay();
+}

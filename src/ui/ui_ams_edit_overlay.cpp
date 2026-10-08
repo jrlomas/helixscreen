@@ -383,6 +383,10 @@ void AmsEditOverlay::init_subjects() {
                                "");
         subjects_.register_subject(&chip_text_subject_);
 
+        UI_MANAGED_SUBJECT_INT(has_scan_subject_, 0, "ams_edit_has_scan", subjects_);
+        UI_MANAGED_SUBJECT_STRING(scan_text_subject_, scan_text_buf_, "", "ams_edit_scan_text",
+                                  subjects_);
+
         // Spoolman spool number shown beside the tracked mark on the overview
         // card ("#19"). Named so the label binds via bind_text in XML rather than
         // an imperative lv_label_set_text from update_ui().
@@ -714,6 +718,21 @@ bool AmsEditOverlay::populate_spool_edit_view() {
         helix::ui::find_required(overlay_root_, "details_color_preview", get_name());
     if (preview) {
         helix::ui::apply_swatch_color(preview, details_color_, {});
+    }
+
+    const bool scanned = working_info_.has_scan();
+    lv_subject_set_int(&has_scan_subject_, scanned ? 1 : 0);
+    if (scanned) {
+        if (working_info_.scanned_td >= 0.0f) {
+            lv_subject_copy_string(&scan_text_subject_,
+                                   fmt::format("TD {:.1f}", working_info_.scanned_td).c_str());
+        } else {
+            lv_subject_copy_string(&scan_text_subject_, "");
+        }
+        if (lv_obj_t* swatch =
+                helix::ui::find_required(overlay_root_, "details_scan_swatch", get_name())) {
+            helix::ui::apply_swatch_color(swatch, *working_info_.scanned_color_rgb, {});
+        }
     }
 
     populate_detail_fields();
@@ -1141,6 +1160,12 @@ void AmsEditOverlay::handle_quick_swatch(lv_obj_t* swatch) {
         helix::ui::apply_swatch_color(preview, details_color_, {});
     }
     spdlog::debug("[AmsEditOverlay] Quick swatch picked: {:#08x}", details_color_);
+}
+
+void AmsEditOverlay::handle_use_scanned_color() {
+    if (working_info_.has_scan()) {
+        apply_color(*working_info_.scanned_color_rgb);
+    }
 }
 
 void AmsEditOverlay::handle_picker_search(const char* text) {
@@ -2202,6 +2227,8 @@ void AmsEditOverlay::register_callbacks() {
          [](lv_event_t* e) {
              get_ams_edit_overlay().handle_quick_swatch(lv_event_get_target_obj(e));
          }},
+        {"ams_edit_use_scan_cb",
+         [](lv_event_t*) { get_ams_edit_overlay().handle_use_scanned_color(); }},
         {"ams_edit_custom_color_cb", [](lv_event_t*) { get_ams_edit_overlay().open_color_view(); }},
         {"ams_edit_color_swatch_cb",
          [](lv_event_t* e) {

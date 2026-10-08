@@ -276,6 +276,21 @@
               </ui_button>
             </lv_obj>
             <color_swatch_grid swatch_callback="ams_edit_quick_swatch_cb"/>
+            <!-- Inline scanner reading (hint only): shown when the slot has a scan -->
+            <lv_obj name="details_scan_row"
+                    width="100%" height="content" style_pad_all="0" flex_flow="row" style_pad_gap="#space_sm"
+                    style_flex_cross_place="center" scrollable="false">
+              <bind_flag_if cond="ams_edit_has_scan eq 0" flag="hidden"/>
+              <lv_obj name="details_scan_swatch"
+                      width="28" height="28" style_radius="#border_radius_small" style_bg_color="#card_bg"
+                      style_bg_opa="255" style_border_width="2" style_border_color="#text_muted" style_border_opa="80"
+                      scrollable="false"/>
+              <text_small bind_text="ams_edit_scan_text"/>
+              <ui_button name="btn_use_scanned_color"
+                         width="content" height="#button_height_sm" text="Use scan" variant="secondary">
+                <event_cb trigger="clicked" callback="ams_edit_use_scan_cb"/>
+              </ui_button>
+            </lv_obj>
           </lv_obj>
           <!-- RIGHT: Brand / Material / product. Pinned to the color column's exact
                height (#swatch_col_height) so the flex_grow product list has real
