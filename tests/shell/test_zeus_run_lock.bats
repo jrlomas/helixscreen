@@ -27,6 +27,8 @@ setup() {
     export TMPDIR="$BATS_TEST_TMPDIR"
     export ZEUS_WORKDIR="$BATS_TEST_TMPDIR/work/helixscreen"
     export MOCK_DOCKER_LOG="$BATS_TEST_TMPDIR/docker.log"
+    # No jobpool on "zeus" unless a test installs the fake below.
+    export ZEUS_JOBPOOL="$BATS_TEST_TMPDIR/no-jobpool"
 
     # ssh <host> bash -se: drop the host argument and run the heredoc locally.
     mock_command_script ssh 'shift; exec "$@"'
@@ -50,6 +52,7 @@ esac'
 case "$1" in
     ps) echo helix-tsan ;;
     start) exit 0 ;;
+    inspect) [ -n "${MOCK_MOUNTS:-}" ] && echo "$MOCK_MOUNTS" ;;
     exec)
         case "$*" in
             *pgrep*)
@@ -233,7 +236,8 @@ esac
 exit 0'
     run "$SCRIPT" tsan
     [ "$status" -eq 0 ]
-    grep -qF 'make test-tsan -j' "$MOCK_DOCKER_LOG"
+    grep -qF 'make test-tsan $HELIX_JFLAG' "$MOCK_DOCKER_LOG"
+    grep -qE 'HELIX_JFLAG=-j[0-9]+ ' "$MOCK_DOCKER_LOG"
     refute_grep 'test-tsan-one' "$MOCK_DOCKER_LOG"
 }
 
@@ -242,4 +246,52 @@ exit 0'
     run "$SCRIPT" tsan '[ams]'
     [ "$status" -eq 1 ]
     contains "not a clean TSAN result" "$output"
+}
+
+# A jobpool on "zeus" whose state dir is $BATS_TEST_TMPDIR/mnt/.jobpool. It
+# records exec, and container-env prints a marker naming the dir it was given.
+fake_jobpool() {
+    export ZEUS_JOBPOOL="$BATS_TEST_TMPDIR/fake-jobpool"
+    export MOCK_JOBPOOL_LOG="$BATS_TEST_TMPDIR/jobpool.log"
+    cat > "$ZEUS_JOBPOOL" <<'FAKE'
+#!/bin/sh
+case "$1" in
+    ensure) echo "$BATS_TEST_TMPDIR/mnt/.jobpool/fifo" ;;
+    container-env) echo "POOLENV:$2" ;;
+    status) echo '{"running":true,"target":30,"available":30}' ;;
+    exec) echo "jobpool exec" >> "$MOCK_JOBPOOL_LOG"; shift 2; exec "$@" ;;
+    *) exit 2 ;;
+esac
+FAKE
+    chmod +x "$ZEUS_JOBPOOL"
+}
+
+@test "without jobpool on zeus the job sizes -j from memory" {
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    contains "using -j" "$output"
+    grep -qE 'HELIX_JFLAG=-j[0-9]+ helix-tsan bash -lc make test \$HELIX_JFLAG' "$MOCK_DOCKER_LOG"
+}
+
+@test "with jobpool on zeus the container joins it and make gets no -j" {
+    fake_jobpool
+    export MOCK_MOUNTS="/elsewhere /data
+$BATS_TEST_TMPDIR/mnt /work"
+    run "$SCRIPT" test '[ams]'
+    [ "$status" -eq 0 ]
+    contains "joining jobpool: target 30" "$output"
+    grep -qF 'bash -lc POOLENV:/work/.jobpool && make test $HELIX_JFLAG && ./build/bin/helix-tests "[ams]"' "$MOCK_DOCKER_LOG"
+    grep -qF "HELIX_JFLAG= helix-tsan" "$MOCK_DOCKER_LOG"
+    [ "$(cat "$MOCK_JOBPOOL_LOG")" = "jobpool exec" ]
+}
+
+@test "a pool whose state the container cannot see is not joined" {
+    fake_jobpool
+    export MOCK_MOUNTS="/elsewhere /data"
+    run "$SCRIPT" test
+    [ "$status" -eq 0 ]
+    contains "is not mounted in helix-tsan; sizing -j from memory" "$output"
+    contains "using -j" "$output"
+    refute_grep "POOLENV" "$MOCK_DOCKER_LOG"
+    [ ! -e "$MOCK_JOBPOOL_LOG" ]
 }
