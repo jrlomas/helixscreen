@@ -27,11 +27,12 @@ class Config;
 /// whole UI while the K-Touch retargets its one connection.
 class PrinterSwitchFlow {
   public:
-    /// Teardown releases the current printer, rebuild brings up the active one, land_home
-    /// shows the home panel.
+    /// Teardown releases the current printer, rebuild brings up the active one and reports
+    /// whether it started connecting, land_home shows the home panel.
     struct Restart {
         std::function<void()> teardown;
-        std::function<void()> rebuild;
+        /// Returns whether a connection to the new printer was started.
+        std::function<bool()> rebuild;
         std::function<void()> land_home;
     };
 
@@ -132,8 +133,9 @@ class PrinterSwitchFlow {
     /// Puts up the switch card reading "Loading..." and paints it before the restart blocks.
     void paint_loading_card(const std::string& title);
     /// The restart is done: the card reads "Connecting..." until the new printer connects,
-    /// fails, or CONNECT_WAIT_MS passes. A setup wizard on screen takes over at once.
-    void await_connection(const std::string& title);
+    /// fails, or CONNECT_WAIT_MS passes. A setup wizard on screen, or a rebuild that never
+    /// started connecting (`connecting` false), takes the card down at once.
+    void await_connection(const std::string& title, bool connecting);
     void dismiss_interstitial();
 
     /// Saves the config, telling the user when it could not.

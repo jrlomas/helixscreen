@@ -99,7 +99,7 @@ PrinterSession::PrinterSession(Config*& config, AsyncLifetimeGuard& async, lv_ob
                                Host host)
     : m_config(config), m_async(async), m_host(std::move(host)),
       m_flow(config, async,
-             {[this] { tear_down_printer_state(); }, [this] { rebuild(); },
+             {[this] { tear_down_printer_state(); }, [this] { return rebuild(); },
               [] { helix::nav::set_active(PanelId::Home); }}),
       m_screen(screen), m_prompter(
                             async, [this] { return m_screen; },
@@ -534,7 +534,7 @@ void PrinterSession::tear_down_printer_state() {
     spdlog::info("[Application] Printer state torn down");
 }
 
-void PrinterSession::rebuild() {
+bool PrinterSession::rebuild() {
     spdlog::info("[Application] Initializing printer state...");
 
     // Show error on screen so user isn't left with blank display after init failure.
@@ -561,7 +561,7 @@ void PrinterSession::rebuild() {
     if (!init_core_subjects()) {
         spdlog::error("[Application] Failed to reinitialize core subjects");
         show_init_error();
-        return;
+        return false;
     }
 
     // 2b. Seed the active printer's display name from config
@@ -571,21 +571,21 @@ void PrinterSession::rebuild() {
     if (!init_moonraker()) {
         spdlog::error("[Application] Failed to reinitialize Moonraker");
         show_init_error();
-        return;
+        return false;
     }
 
     // 4. Initialize panel subjects with API injection + post-init
     if (!init_panel_subjects()) {
         spdlog::error("[Application] Failed to reinitialize panel subjects");
         show_init_error();
-        return;
+        return false;
     }
 
     // 5. Recreate UI (app_layout from XML, wire navigation)
     if (!init_ui()) {
         spdlog::error("[Application] Failed to reinitialize UI");
         show_init_error();
-        return;
+        return false;
     }
 
     // 6. Run wizard if needed for new printer
@@ -610,7 +610,8 @@ void PrinterSession::rebuild() {
 #endif
 
     // 9. Connect to new printer's Moonraker
-    if (!connect_moonraker()) {
+    const bool connecting = connect_moonraker();
+    if (!connecting) {
         spdlog::warn("[Application] Running without printer connection after switch");
     }
 
@@ -620,6 +621,7 @@ void PrinterSession::rebuild() {
     lv_refr_now(nullptr);
 
     spdlog::info("[Application] Printer state initialized");
+    return connecting;
 }
 
 // The one ordered teardown behind both soft restart (PrinterSwitch: the process and LVGL

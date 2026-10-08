@@ -111,8 +111,9 @@ class PrinterSession {
     /// Tears down the current printer scope for a switch.
     void tear_down_printer_state();
 
-    /// Builds the next printer scope after tear_down_printer_state().
-    void rebuild();
+    /// Builds the next printer scope after tear_down_printer_state(). Returns whether it got
+    /// as far as starting the connection to the new printer.
+    bool rebuild();
 
     /// What survives the teardown: a printer switch keeps the process and LVGL alive,
     /// ProcessExit ends both.

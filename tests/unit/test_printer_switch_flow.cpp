@@ -98,6 +98,7 @@ class SwitchFlowFixture : public XMLTestFixture {
                      if (on_rebuild_) {
                          on_rebuild_();
                      }
+                     return rebuild_connects_;
                  },
                  [this] { events_.push_back("home"); }}) {
         helix::ui::modal_init_subjects();
@@ -166,6 +167,7 @@ class SwitchFlowFixture : public XMLTestFixture {
     static inline int s_flushes = 0;
     std::string card_at_rebuild_;
     std::function<void()> on_rebuild_;
+    bool rebuild_connects_ = true;
     helix::PrinterSwitchFlow flow_;
 
   private:
@@ -669,4 +671,58 @@ TEST_CASE_METHOD(SwitchFlowFixture,
     CHECK((lv_anim_get(spinner, nullptr) != nullptr) == expect_motion);
 
     lv_subject_set_int(tier, saved);
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: the previous printer's FAILED does not end the switch card",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    set_connection(helix::ConnectionState::FAILED);
+    UpdateQueue::instance().drain();
+
+    REQUIRE(flow_.request_switch("beta"));
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "Switching to Beta / Connecting...");
+
+    set_connection(helix::ConnectionState::CONNECTING);
+    set_connection(helix::ConnectionState::FAILED);
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "none");
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: the previous printer's queued states wait for the new attempt",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    // The previous printer was reconnecting when the switch began; its CONNECTED and FAILED
+    // are still queued behind the attach.
+    set_connection(helix::ConnectionState::RECONNECTING);
+    UpdateQueue::instance().drain();
+    REQUIRE(flow_.request_switch("beta"));
+    UpdateQueue::instance().drain();
+
+    set_connection(helix::ConnectionState::CONNECTED);
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "Switching to Beta / Connecting...");
+    set_connection(helix::ConnectionState::FAILED);
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "Switching to Beta / Connecting...");
+
+    set_connection(helix::ConnectionState::DISCONNECTED);
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "Switching to Beta / Connecting...");
+    set_connection(helix::ConnectionState::CONNECTING);
+    set_connection(helix::ConnectionState::CONNECTED);
+    UpdateQueue::instance().drain();
+    CHECK(switch_card() == "none");
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: a rebuild that never starts connecting drops the switch card",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    rebuild_connects_ = false;
+
+    REQUIRE(flow_.request_switch("beta"));
+
+    CHECK(card_at_rebuild_ == "Switching to Beta / Loading...");
+    CHECK(switch_card() == "none");
+    CHECK(helix::PrinterSwitchFlowTestAccess::connect_timeout(flow_) == nullptr);
 }

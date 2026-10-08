@@ -101,22 +101,29 @@ void PrinterSwitchFlow::paint_loading_card(const std::string& title) {
     lv_refr_now(nullptr);
 }
 
-void PrinterSwitchFlow::await_connection(const std::string& title) {
-    if (is_wizard_active()) {
+void PrinterSwitchFlow::await_connection(const std::string& title, bool connecting) {
+    if (!connecting || is_wizard_active()) {
         dismiss_interstitial();
         return;
     }
     show_interstitial(title, lv_tr("Connecting..."));
-    // State changes arrive queued, so the value seen on attach can still be the previous
-    // printer's CONNECTED; only a later CONNECTED belongs to the new printer. FAILED hands
-    // over to the connection-failed UI.
+    // State changes arrive queued, so the value on attach and the first ones after it can
+    // still be the previous printer's, CONNECTED or FAILED alike. The new attempt shows
+    // itself first: a fresh scope goes CONNECTING, a retargeted one DISCONNECTED. Only
+    // after that does CONNECTED or FAILED belong to the new printer; FAILED hands over to
+    // the connection-failed UI.
     m_connect_observer = ui::observe<int>(
         get_printer_state().network_state().get_printer_connection_state_subject(), this,
-        [first = true](PrinterSwitchFlow* self, int value) mutable {
+        [first = true, attempt_seen = false](PrinterSwitchFlow* self, int value) mutable {
             const auto state = static_cast<ConnectionState>(value);
-            const bool on_attach = std::exchange(first, false);
-            if ((state == ConnectionState::CONNECTED && !on_attach) ||
-                state == ConnectionState::FAILED) {
+            if (std::exchange(first, false)) {
+                return;
+            }
+            if (state != ConnectionState::CONNECTED && state != ConnectionState::FAILED) {
+                attempt_seen = true;
+                return;
+            }
+            if (attempt_seen) {
                 spdlog::info("[PrinterSwitchFlow] Connection state {} ends the switch card", value);
                 self->dismiss_interstitial();
             }
@@ -242,11 +249,11 @@ bool PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
         fmt::format(fmt::runtime(lv_tr("Switching to {}")), m_config->get_active_printer_name());
     paint_loading_card(title);
     m_restart.teardown();
-    m_restart.rebuild();
+    const bool connecting = m_restart.rebuild();
 
     m_restart.land_home();
     m_connected_printer_id = printer_id;
-    await_connection(title);
+    await_connection(title, connecting);
 
     spdlog::info("[PrinterSwitchFlow] Switched to printer '{}'", printer_id);
     return true;
@@ -297,9 +304,9 @@ void PrinterSwitchFlow::add_printer_via_wizard() {
     // wizard).
     set_wizard_cancel_callback([this]() { cancel_add_printer_wizard(); });
 
-    m_restart.rebuild();
+    const bool connecting = m_restart.rebuild();
     m_connected_printer_id = new_id;
-    await_connection(title);
+    await_connection(title, connecting);
 }
 
 void PrinterSwitchFlow::cancel_add_printer_wizard() {
@@ -348,10 +355,10 @@ void PrinterSwitchFlow::cancel_add_printer_wizard() {
                                               m_config->get_active_printer_name());
         paint_loading_card(title);
         m_restart.teardown();
-        m_restart.rebuild();
+        const bool connecting = m_restart.rebuild();
         m_restart.land_home();
         m_connected_printer_id = m_config->get_active_printer_id();
-        await_connection(title);
+        await_connection(title, connecting);
     });
 }
 
