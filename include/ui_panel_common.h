@@ -107,6 +107,20 @@ void ui_panel_setup_resize_callback(ui_panel_resize_context_t* context);
  */
 namespace helix::ui {
 lv_obj_t* create_xml_hidden(lv_obj_t* parent, const char* component, const char** attrs = nullptr);
+
+/**
+ * @brief Create an XML component that appears already at its final size
+ *
+ * LVGL sizes children before their parents, so a new tree's first layout sees
+ * width:100% parents still 0 wide: a wrapping label is one glyph a line and
+ * hundreds of px tall, and height:content carries that up the tree. A visible
+ * root invalidates every one of those sizes, most of the screen for a toast.
+ * Laid out while hidden, only the final area is redrawn.
+ *
+ * @return The component root, visible and parented to @p parent, or nullptr
+ */
+lv_obj_t* create_xml_laid_out(lv_obj_t* parent, const char* component,
+                              const char** attrs = nullptr);
 } // namespace helix::ui
 
 /**

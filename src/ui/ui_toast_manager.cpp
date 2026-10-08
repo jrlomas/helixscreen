@@ -7,6 +7,7 @@
 #include "ui_icon_codepoints.h"
 #include "ui_notification_history.h"
 #include "ui_notification_manager.h"
+#include "ui_panel_common.h"
 #include "ui_update_queue.h"
 #include "ui_utils.h"
 
@@ -453,8 +454,7 @@ void ToastManager::create_toast_internal(ToastSeverity severity, const char* mes
                            "hide_action", hide_action_str, "detail",      detail_safe,
                            "hide_detail", hide_detail_str, nullptr};
 
-    lv_obj_t* widget =
-        static_cast<lv_obj_t*>(lv_xml_create(toast_stack_, "toast_notification", attrs));
+    lv_obj_t* widget = helix::ui::create_xml_laid_out(toast_stack_, "toast_notification", attrs);
     if (!widget) {
         spdlog::error("[ToastManager] Failed to create toast notification widget");
         return;
