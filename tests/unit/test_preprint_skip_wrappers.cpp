@@ -122,7 +122,7 @@ TEST_CASE("wrappable leaves a user's own macro alone", "[skip_wrappers]") {
 
 TEST_CASE("ours_intact recognises exactly what generate wrote", "[skip_wrappers]") {
     json s = installed(voron());
-    REQUIRE(sw::prep_installed(s));
+    REQUIRE(sw::active(s) == std::vector<Op>{Op::BedMesh, Op::Qgl});
     CHECK(sw::ours_intact(s, Op::BedMesh));
     CHECK(sw::ours_intact(s, Op::Qgl));
     CHECK_FALSE(sw::ours_intact(s, Op::ZTilt));
@@ -195,4 +195,39 @@ TEST_CASE("command and flag names", "[skip_wrappers]") {
     CHECK(std::string(sw::flag_for(Op::BedMesh)) == "run_bed_mesh");
     CHECK(std::string(sw::flag_for(Op::Qgl)) == "run_qgl");
     CHECK(std::string(sw::flag_for(Op::ZTilt)) == "run_z_tilt");
+}
+
+TEST_CASE("active needs the loaded file and an intact wrapper", "[skip_wrappers]") {
+    SECTION("nothing is active before the file loads") {
+        CHECK(sw::active(voron()).empty());
+    }
+    SECTION("a wrapper without _HELIX_PREP is not active") {
+        json s = installed(voron());
+        s.erase("gcode_macro _helix_prep");
+        CHECK(sw::active(s).empty());
+    }
+    SECTION("a user macro merged over one wrapper leaves the other active") {
+        json s = installed(voron());
+        load(s, KAMP_STYLE);
+        CHECK(sw::active(s) == std::vector<Op>{Op::Qgl});
+    }
+}
+
+TEST_CASE("LoadWatch judges the restart that loads helix_skips.cfg", "[skip_wrappers]") {
+    sw::LoadWatch watch;
+    using V = sw::LoadWatch::Verdict;
+
+    SECTION("the READY the restart starts from is not an answer") {
+        CHECK(watch.feed(true, false) == V::Waiting);
+        CHECK(watch.feed(false, false) == V::Waiting);
+        CHECK(watch.feed(true, false) == V::Loaded);
+    }
+    SECTION("a config error after the restart fails the load") {
+        CHECK(watch.feed(true, false) == V::Waiting);
+        CHECK(watch.feed(false, false) == V::Waiting);
+        CHECK(watch.feed(false, true) == V::Failed);
+    }
+    SECTION("an error reported straight away fails it too") {
+        CHECK(watch.feed(false, true) == V::Failed);
+    }
 }

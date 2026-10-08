@@ -12,6 +12,7 @@
 #include "printer_discovery.h"
 #include "printer_state.h"
 
+#include <algorithm>
 #include <fstream>
 #include <optional>
 #include <thread>
@@ -416,7 +417,7 @@ class MacroStageFixture : public LVGLTestFixture {
 
     // A drained step can queue the next one; pump until quiet.
     void settle() {
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 12; ++i) {
             helix::ui::UpdateQueue::instance().drain();
         }
     }
@@ -631,4 +632,124 @@ TEST_CASE_METHOD(MacroStageFixture,
         settle();
         CHECK(done);
     }
+}
+
+// ============================================================================
+// helix_skips.cfg staging
+// ============================================================================
+
+namespace {
+
+using helix::skip_wrappers::Op;
+
+const std::vector<Op> VORON_OPS = {Op::BedMesh, Op::Qgl};
+
+std::string first_line(const std::string& text) {
+    return text.substr(0, text.find('\n'));
+}
+
+} // namespace
+
+TEST_CASE_METHOD(MacroStageFixture,
+                 "install_files stages helix_skips.cfg with its include on the first line",
+                 "[config][install][skip_wrappers]") {
+    hardware_.parse_objects(json::array({"gcode_macro START_PRINT", "bed_mesh"}));
+    hardware_.set_skip_wrappers(VORON_OPS, {});
+
+    bool staged = false;
+    std::optional<MoonrakerError> error;
+    manager_.install_files([&] { staged = true; }, [&](const MoonrakerError& err) { error = err; });
+    settle();
+
+    REQUIRE_FALSE(error.has_value());
+    REQUIRE(staged);
+    CHECK(api_.get_uploaded_config("helix_skips.cfg").value_or("") ==
+          helix::skip_wrappers::generate(VORON_OPS));
+    const std::string cfg = api_.get_uploaded_config("printer.cfg").value_or("");
+    CHECK(first_line(cfg) == "[include helix_skips.cfg]");
+    CHECK(cfg.find("[include helix_macros.cfg]") != std::string::npos);
+    CHECK(cfg.find("[stepper_x]") != std::string::npos);
+    CHECK(backup_count() == 1); // both includes in one edit, one backup
+}
+
+TEST_CASE_METHOD(MacroStageFixture, "install_files stages no skips file when nothing is wrappable",
+                 "[config][install][skip_wrappers]") {
+    hardware_.parse_objects(json::array({"gcode_macro START_PRINT"}));
+
+    bool staged = false;
+    manager_.install_files([&] { staged = true; }, [](const MoonrakerError&) {});
+    settle();
+
+    REQUIRE(staged);
+    CHECK_FALSE(api_.get_uploaded_config("helix_skips.cfg").has_value());
+    CHECK(api_.get_uploaded_config("printer.cfg").value_or("").find("helix_skips") ==
+          std::string::npos);
+}
+
+TEST_CASE_METHOD(MacroStageFixture, "update_files adds the skips to an install that predates them",
+                 "[config][install][skip_wrappers]") {
+    const std::string with_include = std::string("[include helix_macros.cfg]\n") + PRINTER_CFG;
+    api_.set_config_files({{"printer.cfg", with_include}});
+    hardware_.parse_objects(json::array({"gcode_macro HELIX_READY", "bed_mesh"}));
+    hardware_.set_skip_wrappers(VORON_OPS, {});
+
+    bool staged = false;
+    manager_.update_files([&] { staged = true; }, [](const MoonrakerError&) {});
+    settle();
+
+    REQUIRE(staged);
+    CHECK(api_.get_uploaded_config("helix_skips.cfg").value_or("") ==
+          helix::skip_wrappers::generate(VORON_OPS));
+    const std::string cfg = api_.get_uploaded_config("printer.cfg").value_or("");
+    CHECK(cfg == "[include helix_skips.cfg]\n" + with_include);
+    CHECK(backup_count() == 1);
+}
+
+TEST_CASE_METHOD(MacroStageFixture, "uninstall removes both files and both includes",
+                 "[config][install][skip_wrappers]") {
+    api_.set_config_files(
+        {{"printer.cfg",
+          std::string("[include helix_skips.cfg]\n[include helix_macros.cfg]\n") + PRINTER_CFG}});
+
+    bool done = false;
+    std::optional<MoonrakerError> error;
+    manager_.uninstall([&] { done = true; }, [&](const MoonrakerError& err) { error = err; });
+    settle();
+
+    REQUIRE_FALSE(error.has_value());
+    REQUIRE(done);
+    CHECK(api_.get_uploaded_config("printer.cfg").value_or("") == PRINTER_CFG);
+    const auto& deleted = api_.files_mock().deleted_files();
+    CHECK(std::find(deleted.begin(), deleted.end(), "config/helix_macros.cfg") != deleted.end());
+    CHECK(std::find(deleted.begin(), deleted.end(), "config/helix_skips.cfg") != deleted.end());
+}
+
+TEST_CASE_METHOD(MacroStageFixture, "remove_skips leaves the helper macros installed",
+                 "[config][install][skip_wrappers]") {
+    const std::string macros_only = std::string("[include helix_macros.cfg]\n") + PRINTER_CFG;
+    api_.set_config_files({{"printer.cfg", "[include helix_skips.cfg]\n" + macros_only}});
+
+    bool done = false;
+    manager_.remove_skips([&] { done = true; }, [](const MoonrakerError&) {});
+    settle();
+
+    REQUIRE(done);
+    CHECK(api_.get_uploaded_config("printer.cfg").value_or("") == macros_only);
+    CHECK(api_.files_mock().deleted_files() == std::vector<std::string>{"config/helix_skips.cfg"});
+}
+
+TEST_CASE_METHOD(MacroManagerTestFixture,
+                 "MacroManager - a wrappable step without its wrapper reads as OUTDATED",
+                 "[config][status][skip_wrappers]") {
+    set_helix_macros_installed();
+    REQUIRE(manager_.get_status() == MacroInstallStatus::INSTALLED);
+
+    hardware_.set_skip_wrappers(VORON_OPS, {});
+    CHECK(manager_.get_status() == MacroInstallStatus::OUTDATED);
+
+    hardware_.set_skip_wrappers(VORON_OPS, {Op::BedMesh});
+    CHECK(manager_.get_status() == MacroInstallStatus::OUTDATED);
+
+    hardware_.set_skip_wrappers(VORON_OPS, VORON_OPS);
+    CHECK(manager_.get_status() == MacroInstallStatus::INSTALLED);
 }

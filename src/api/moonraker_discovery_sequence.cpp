@@ -929,6 +929,9 @@ void MoonrakerDiscoverySequence::continue_discovery_objects(uint64_t seq) {
                                     hardware_.set_host_halting_macros(std::move(halting));
                                     hardware_.set_led_driving_macros(
                                         helix::analyze_led_driving_macros(settings));
+                                    hardware_.set_skip_wrappers(
+                                        helix::skip_wrappers::wrappable(settings),
+                                        helix::skip_wrappers::active(settings));
                                     hardware_.parse_sensor_toggle_command(settings);
                                 }
 

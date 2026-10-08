@@ -45,11 +45,25 @@ std::vector<Op> wrappable(const nlohmann::json& configfile_settings);
 /// A same-named user macro merged over ours reads false.
 bool ours_intact(const nlohmann::json& configfile_settings, Op op);
 
-/// True when configfile.settings carries the `_HELIX_PREP` section, i.e.
-/// helix_skips.cfg is loaded.
-bool prep_installed(const nlohmann::json& configfile_settings);
+/// Ops whose skip works on this printer right now: helix_skips.cfg is loaded
+/// (the `_HELIX_PREP` section exists) and the Op is ours_intact(). Enum order.
+std::vector<Op> active(const nlohmann::json& configfile_settings);
 
 /// The helix_skips.cfg text for these Ops; empty string for no Ops.
 std::string generate(const std::vector<Op>& ops);
+
+/// Follows Klipper across the restart that loads a newly staged helix_skips.cfg.
+/// A config error there is most likely ours, and removing the file is the way
+/// back that needs no SSH; the READY the restart starts from is not the answer.
+class LoadWatch {
+  public:
+    enum class Verdict { Waiting, Loaded, Failed };
+
+    /// Feed every klippy state change after the restart was accepted.
+    Verdict feed(bool ready, bool error);
+
+  private:
+    bool left_ready_ = false;
+};
 
 } // namespace helix::skip_wrappers

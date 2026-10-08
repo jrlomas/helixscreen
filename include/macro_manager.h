@@ -185,9 +185,9 @@ class MacroManager {
      * @brief Stage the Helix macros for installation
      *
      * Performs the following steps:
-     * 1. Upload helix_macros.cfg to config directory
+     * 1. Upload helix_macros.cfg, and helix_skips.cfg when stages_skips()
      * 2. Back up the original printer.cfg to a timestamped sibling
-     * 3. Modify printer.cfg to include helix_macros.cfg
+     * 3. Modify printer.cfg to include both
      *
      * Does NOT restart Klipper: the macros load at whatever restart happens
      * next, and restarting is the caller's decision (never during a print).
@@ -203,8 +203,9 @@ class MacroManager {
     /**
      * @brief Update Helix macros to latest version
      *
-     * Overwrites existing helix_macros.cfg with current version.
-     * Does not modify printer.cfg include (assumed already present).
+     * Overwrites helix_macros.cfg with the current version. When
+     * stages_skips(), also writes helix_skips.cfg and adds its include if
+     * missing; otherwise printer.cfg is not touched.
      * Does NOT restart Klipper — same rule as install_files().
      *
      * @param on_success Called when the new file is uploaded
@@ -224,9 +225,26 @@ class MacroManager {
     void request_restart(SuccessCallback on_success, ErrorCallback on_error);
 
     /**
+     * @brief Whether install_files()/update_files() also stage helix_skips.cfg
+     *
+     * True when discovery found a leveling step the skip wrappers can wrap
+     * (PrinterDiscovery::skip_wrappable()).
+     */
+    [[nodiscard]] bool stages_skips() const;
+
+    /**
+     * @brief Remove helix_skips.cfg and its include, leaving the helper macros
+     *
+     * The way back when Klipper will not start with the skip wrappers loaded.
+     * Does not restart Klipper.
+     */
+    void remove_skips(SuccessCallback on_success, ErrorCallback on_error);
+
+    /**
      * @brief Uninstall Helix macros from printer
      *
-     * Removes helix_macros.cfg and the include line from printer.cfg.
+     * Removes helix_macros.cfg, helix_skips.cfg and both include lines from
+     * printer.cfg.
      * Requires Klipper restart to take effect.
      *
      * @param on_success Called when uninstall completes
@@ -270,25 +288,27 @@ class MacroManager {
     /// Async callback safety guard (prevents use-after-free)
     helix::AsyncLifetimeGuard lifetime_;
 
-    /**
-     * @brief Upload macro file to printer config directory
-     */
-    void upload_macro_file(SuccessCallback on_success, ErrorCallback on_error);
+    /// Upload one file to the printer's config root.
+    void upload_macro_file(const std::string& filename, const std::string& content,
+                           SuccessCallback on_success, ErrorCallback on_error);
+
+    /// Upload helix_skips.cfg when stages_skips(); succeed at once otherwise.
+    void upload_skips_file(SuccessCallback on_success, ErrorCallback on_error);
 
     /**
-     * @brief Add include line to printer.cfg, backing up the original first
+     * @brief Add the helix_macros.cfg include (and, with_skips, the
+     *        helix_skips.cfg one) to printer.cfg in one edit, backing up the
+     *        original first. Writes nothing when both are already there.
      */
-    void add_include_to_config(SuccessCallback on_success, ErrorCallback on_error);
+    void add_include_to_config(bool with_skips, SuccessCallback on_success, ErrorCallback on_error);
 
-    /**
-     * @brief Remove include line from printer.cfg
-     */
-    void remove_include_from_config(SuccessCallback on_success, ErrorCallback on_error);
+    /// Remove these include lines from printer.cfg in one edit.
+    void remove_include_from_config(std::vector<std::string> filenames, SuccessCallback on_success,
+                                    ErrorCallback on_error);
 
-    /**
-     * @brief Delete macro file from printer config directory
-     */
-    void delete_macro_file(SuccessCallback on_success, ErrorCallback on_error);
+    /// Delete a file from the config root; a missing file counts as deleted.
+    void delete_macro_file(const std::string& filename, SuccessCallback on_success,
+                           ErrorCallback on_error);
 };
 
 } // namespace helix

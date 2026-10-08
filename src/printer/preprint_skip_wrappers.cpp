@@ -153,8 +153,28 @@ bool ours_intact(const nlohmann::json& configfile_settings, Op op) {
     return true;
 }
 
-bool prep_installed(const nlohmann::json& configfile_settings) {
-    return macro_section(configfile_settings, PREP_MACRO) != nullptr;
+std::vector<Op> active(const nlohmann::json& configfile_settings) {
+    std::vector<Op> ops;
+    if (macro_section(configfile_settings, PREP_MACRO) == nullptr) {
+        return ops;
+    }
+    for (Op op : {Op::BedMesh, Op::Qgl, Op::ZTilt}) {
+        if (ours_intact(configfile_settings, op)) {
+            ops.push_back(op);
+        }
+    }
+    return ops;
+}
+
+LoadWatch::Verdict LoadWatch::feed(bool ready, bool error) {
+    if (error) {
+        return Verdict::Failed;
+    }
+    if (!ready) {
+        left_ready_ = true;
+        return Verdict::Waiting;
+    }
+    return left_ready_ ? Verdict::Loaded : Verdict::Waiting;
 }
 
 std::vector<Op> wrappable(const nlohmann::json& configfile_settings) {
