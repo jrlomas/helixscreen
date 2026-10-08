@@ -2148,9 +2148,10 @@ footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem; }
 </dl>
 </div>
 </details>
-<details class="f" id="TB-6" data-tag="god-class" data-size="later" data-status="open">
-<summary><span class="fid">TB-6</span><span class="chip t-god-class">god-class</span><span class="chip sz">later</span><span class="pill st-open">open</span><span class="ftitle">quality-checks.sh: 3,674 lines, 61 silent-skip branches</span><span class="fimpact">a deleted gate silently skips instead of failing</span></summary>
+<details class="f" id="TB-6" data-tag="god-class" data-size="later" data-status="done">
+<summary><span class="fid">TB-6</span><span class="chip t-god-class">god-class</span><span class="chip sz">later</span><span class="pill st-done">done</span><span class="ftitle">quality-checks.sh: 3,674 lines, 61 silent-skip branches</span><span class="fimpact">a deleted gate silently skips instead of failing</span></summary>
 <div class="fbody">
+<p class="branch">Shipped at <code>91115421a</code> (#1758): <code>scripts/quality-checks.sh</code> is a 245-line driver sourcing 43 per-gate files under <code>scripts/qc/</code>; bats sources gate files directly.</p>
 <p class="branch">1.1 half shipped with <a href="#TB-14">TB-14</a>: the 60 existence guards are gone, so a deleted gate script fails. The one-file-per-gate split is deferred.</p>
 <dl>
 <dt>Locations</dt><dd><code>scripts/quality-checks.sh</code>, 13 <code>tests/shell/*.bats</code> files that awk gate sections out of it</dd>
@@ -2193,9 +2194,10 @@ footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem; }
 </dl>
 </div>
 </details>
-<details class="f" id="TB-9" data-tag="belt-suspenders" data-size="later" data-status="open">
-<summary><span class="fid">TB-9</span><span class="chip t-belt-suspenders">belt-suspenders</span><span class="chip sz">later</span><span class="pill st-open">open</span><span class="ftitle">~41K lines of lint infra standing in for types</span><span class="fimpact">a rename refactor breaks lint, not code</span></summary>
+<details class="f" id="TB-9" data-tag="belt-suspenders" data-size="later" data-status="done">
+<summary><span class="fid">TB-9</span><span class="chip t-belt-suspenders">belt-suspenders</span><span class="chip sz">later</span><span class="pill st-done">done</span><span class="ftitle">~41K lines of lint infra standing in for types</span><span class="fimpact">a rename refactor breaks lint, not code</span></summary>
 <div class="fbody">
+<p class="branch">Typed half shipped at <code>401d1f5fe</code> (#1760): SeriesId retired <code>check_series_meta_indexing.py</code>. <code>print_state_cast</code> and <code>raw_print_job_state</code> stay: no type can forbid an int-to-enum cast or tell a deliberate raw read from a stale one, and both sit at 0. The rest fall per gate with the refactor that touches them.</p>
 <dl>
 <dt>Locations</dt><dd><code>scripts/check_print_state_cast.py</code>, <code>scripts/check_series_meta_indexing.py</code>, <code>scripts/check_rotation_cache_order.py</code>, <code>tests/shell/test_code_lint.bats</code></dd>
 <dt>Evidence</dt><dd>65 <code>scripts/check_*</code> (18,259) + quality-checks.sh (3,674) + 67 gate meta-test bats (16,211) + test_code_lint.bats (2,831; 80 of 123 tests are meta-tests). Single-bug gates a type would retire: print_state_cast 121+200 (typed <code>get_print_job_state()</code> exists); series_meta_indexing 89+142 (<code>SeriesId</code> type; <code>ui_temp_series_meta_t</code>'s comment contradicts the gate); grid_metrics_single_source 59+101; touch_rotation_source 117+117 and rotation_cache_order 390+295 (#1593); raw_print_job_state 140; printer_image_invalidation 109+95. Several bats gates pin one function's text.</dd>

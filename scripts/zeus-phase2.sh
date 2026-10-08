@@ -4,8 +4,8 @@
 #
 # HelixScreen - zeus sanitizer host provisioning (see also scripts/zeus-run.sh)
 #
-# Paths come from $HOME, so there is nothing host-specific to edit; -j12 is zeus's
-# ceiling because ZFS hands almost all its RAM to the ARC (see the comment below).
+# Paths come from $HOME, so there is nothing host-specific to edit; -j12 is
+# conservative because ZFS hands most of zeus's RAM to the ARC (see the comment below).
 #
 # Bootstrapping a fresh box: clone the repo to $HOME/helix-tsan/helixscreen, then
 # run these from it. zeus-setup.sh also clones if the checkout is missing, so a
@@ -36,11 +36,11 @@ echo "--- git safe.directory inside the container ---"
 D 'git config --global --add safe.directory /work/helixscreen
    git config --global --add safe.directory "*"' >/dev/null
 
-# zeus reports 72 cores and 251 GB and both mislead: ZFS hands almost all of that RAM to
-# the ARC, leaving ~13 GB, and there is no swap, so the overshoot goes straight to the
-# OOM killer and a compile dies with no error text. -j12 is the number that fits.
-# scripts/zeus-run.sh caps the ARC for its runs and derives a larger count from what is
-# free afterwards; this one stays conservative because it runs before anything is warm.
+# zeus reports 72 cores and 251 GB and both mislead: ZFS hands most of that RAM to the
+# ARC, and there is no swap, so an overshoot goes straight to the OOM killer and a
+# compile dies with no error text. A fresh box may not have its zfs_arc_sys_free
+# tunable yet, so this first build stays at -j12; scripts/zeus-run.sh sizes later runs
+# from MemAvailable.
 echo "--- first test build ---"
 D 'cd /work/helixscreen
    export CCACHE_DIR=/work/ccache

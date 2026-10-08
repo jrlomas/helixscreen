@@ -469,17 +469,6 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     static bool mock_toolchanger_selected();
 
     /**
-     * @brief Whether the selected persona is mock HARDWARE, not a mock backend.
-     *
-     * True when HELIX_MOCK_PRINTER is creator5_zmod: the persona seeds the
-     * Klipper objects and zmod_color status Z-Mod's firmware publishes, and
-     * the production AmsBackendToolChanger + toolchanger_addon path must run
-     * against them, the same rule as the MedusaHC modes of HELIX_MOCK_AMS.
-     * Static because AmsBackend decides before any client instance exists.
-     */
-    static bool mock_hardware_persona();
-
-    /**
      * @brief Start temperature simulation loop
      *
      * Begins a background thread that simulates temperature changes

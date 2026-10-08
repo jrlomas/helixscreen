@@ -655,14 +655,23 @@ test-kiauh:
 # Shell/Bats Tests
 # ============================================================================
 
-# Run shell/bats tests for platform hooks and installer scripts
+# Run shell/bats tests for platform hooks and installer scripts. The parallel
+# run holds its -j as jobpool tokens (`helix-claim hold`), so it shares the
+# machine budget with compiles; without jobpool the -j is the cores. It waits
+# up to 60s for a third of the pool (`--min`): a third keeps the suite within
+# about 3x its full-pool time while leaving two thirds to compiles, and the
+# bounded wait turns a saturated pool into seconds of delay, never a serial
+# run. One slot runs serially: bats refuses --no-parallelize-within-files
+# below --jobs 2.
 test-shell:
 	$(ECHO) "$(CYAN)$(BOLD)Running shell tests (bats)...$(RESET)"
 	@if command -v bats >/dev/null 2>&1; then \
 		START_TIME=$$(date +%s); \
 		if command -v parallel >/dev/null 2>&1; then \
-			NPROC=$$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4); \
-			bats --jobs "$$NPROC" --no-parallelize-within-files tests/shell/; \
+			j=$$(scripts/helix-claim jobs 2>/dev/null || echo 3); \
+			scripts/helix-claim hold --min $$(( j / 3 > 0 ? j / 3 : 1 )) -- \
+				sh -c '[ "$$JOBPOOL_SLOTS" -gt 1 ] || exec bats "$$@"; \
+				exec bats --jobs "$$JOBPOOL_SLOTS" --no-parallelize-within-files "$$@"' bats tests/shell/; \
 		else \
 			bats tests/shell/; \
 		fi; \
@@ -730,7 +739,7 @@ test-xml:
 		echo "  Log: /tmp/helix_xml_cmake.log"; \
 		exit 1; \
 	}; \
-	cmake --build $(HELIX_XML_TEST_BUILD_DIR) -j $(NPROC) > /tmp/helix_xml_build.log 2>&1 || { \
+	scripts/helix-claim hold -n $(NPROC) -- sh -c 'exec cmake --build "$$0" -j "$$JOBPOOL_SLOTS"' $(HELIX_XML_TEST_BUILD_DIR) > /tmp/helix_xml_build.log 2>&1 || { \
 		cat /tmp/helix_xml_build.log; \
 		echo "$(RED)$(BOLD)✗ helix-xml test build failed$(RESET)"; \
 		echo "  Log: /tmp/helix_xml_build.log"; \
