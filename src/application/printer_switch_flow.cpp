@@ -3,6 +3,7 @@
 
 #include "printer_switch_flow.h"
 
+#include "ui_effects.h"
 #include "ui_modal.h"
 #include "ui_toast_manager.h"
 #include "ui_utils.h"
@@ -80,8 +81,13 @@ void PrinterSwitchFlow::show_interstitial(const std::string& title, const char* 
     dismiss_interstitial();
     // On the top layer, which the restart does not tear down. Recreated per phase rather
     // than updated: the teardown stops every animation, the spinner's included.
-    const char* attrs[] = {
-        "name", "printer_switch_interstitial", "title", title.c_str(), "phase", phase, nullptr};
+    // Limited tiers get a still spinner: a moving one there tears.
+    const char* animated = ui::full_style_effects_active() ? "true" : "false";
+    const char* attrs[] = {"name",     "printer_switch_interstitial",
+                           "title",    title.c_str(),
+                           "phase",    phase,
+                           "animated", animated,
+                           nullptr};
     m_interstitial =
         static_cast<lv_obj_t*>(lv_xml_create(lv_layer_top(), "printer_switch_interstitial", attrs));
     if (!m_interstitial) {
@@ -89,11 +95,9 @@ void PrinterSwitchFlow::show_interstitial(const std::string& title, const char* 
     }
 }
 
-void PrinterSwitchFlow::tear_down_under_interstitial(const std::string& title) {
-    // The restart blocks this thread for seconds, so the card paints before each step.
+void PrinterSwitchFlow::paint_loading_card(const std::string& title) {
+    // The restart that follows blocks this thread for seconds, so the card paints now.
     show_interstitial(title, lv_tr("Loading..."));
-    lv_refr_now(nullptr);
-    m_restart.teardown();
     lv_refr_now(nullptr);
 }
 
@@ -236,7 +240,8 @@ bool PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
 
     const std::string title =
         fmt::format(fmt::runtime(lv_tr("Switching to {}")), m_config->get_active_printer_name());
-    tear_down_under_interstitial(title);
+    paint_loading_card(title);
+    m_restart.teardown();
     m_restart.rebuild();
 
     m_restart.land_home();
@@ -285,7 +290,8 @@ void PrinterSwitchFlow::add_printer_via_wizard() {
     // The rebuild runs the wizard itself when is_wizard_required() returns true (it does for
     // the new empty entry), so the wizard must not be launched again here.
     const std::string title = lv_tr("Adding printer");
-    tear_down_under_interstitial(title);
+    paint_loading_card(title);
+    m_restart.teardown();
 
     // Registered after the teardown (which clears it) and before the rebuild (which runs the
     // wizard).
@@ -340,7 +346,8 @@ void PrinterSwitchFlow::cancel_add_printer_wizard() {
 
         const std::string title = fmt::format(fmt::runtime(lv_tr("Switching to {}")),
                                               m_config->get_active_printer_name());
-        tear_down_under_interstitial(title);
+        paint_loading_card(title);
+        m_restart.teardown();
         m_restart.rebuild();
         m_restart.land_home();
         m_connected_printer_id = m_config->get_active_printer_id();

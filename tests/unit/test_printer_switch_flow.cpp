@@ -24,6 +24,7 @@
 #include "boot_crash_guard.h"
 #include "config.h"
 #include "connection_state.h"
+#include "platform_capabilities.h"
 #include "printer_cache_registry.h"
 #include "printer_state.h"
 #include "printer_switch_flow.h"
@@ -632,4 +633,40 @@ TEST_CASE_METHOD(SwitchFlowFixture, "Switch flow: the switch card is painted bef
 
     lv_display_set_flush_cb(
         display, [](lv_display_t* d, const lv_area_t*, uint8_t*) { lv_display_flush_ready(d); });
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: the switch card spinner moves only on full render tiers",
+                 "[multi-printer][switch_flow][switch_interstitial]") {
+    lv_subject_t* tier = lv_xml_get_subject(nullptr, "platform_tier");
+    static lv_subject_t s_tier;
+    if (!tier) {
+        lv_subject_init_int(&s_tier, static_cast<int>(helix::PlatformTier::STANDARD));
+        lv_xml_register_subject(nullptr, "platform_tier", &s_tier);
+        tier = &s_tier;
+    }
+    const int saved = lv_subject_get_int(tier);
+
+    helix::PlatformTier set_tier = helix::PlatformTier::STANDARD;
+    bool expect_motion = true;
+    SECTION("standard") {}
+    SECTION("basic") {
+        set_tier = helix::PlatformTier::BASIC;
+        expect_motion = false;
+    }
+    SECTION("embedded") {
+        set_tier = helix::PlatformTier::EMBEDDED;
+        expect_motion = false;
+    }
+    lv_subject_set_int(tier, static_cast<int>(set_tier));
+
+    REQUIRE(flow_.request_switch("beta"));
+    const auto cards = visible_switch_cards();
+    REQUIRE(cards.size() == 1);
+    lv_obj_t* spinner = lv_obj_find_by_name(cards.front(), "switch_interstitial_spinner");
+    REQUIRE(spinner != nullptr);
+
+    CHECK((lv_anim_get(spinner, nullptr) != nullptr) == expect_motion);
+
+    lv_subject_set_int(tier, saved);
 }

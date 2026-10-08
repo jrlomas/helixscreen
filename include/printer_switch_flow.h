@@ -129,8 +129,8 @@ class PrinterSwitchFlow {
 
     /// Puts up the switch card reading `title` and `phase`, replacing any card already up.
     void show_interstitial(const std::string& title, const char* phase);
-    /// Puts up the switch card reading "Loading...", paints it, and runs the teardown.
-    void tear_down_under_interstitial(const std::string& title);
+    /// Puts up the switch card reading "Loading..." and paints it before the restart blocks.
+    void paint_loading_card(const std::string& title);
     /// The restart is done: the card reads "Connecting..." until the new printer connects,
     /// fails, or CONNECT_WAIT_MS passes. A setup wizard on screen takes over at once.
     void await_connection(const std::string& title);
