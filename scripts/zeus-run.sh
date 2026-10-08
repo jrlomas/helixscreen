@@ -118,14 +118,16 @@ mirror_file_list() {
     done
 }
 
-# rsync the listed files into this tree's mirror. --copy-links because a
-# worktree's shared lib/ entries are symlinks into the main tree;
+# rsync the listed files into this tree's mirror. A worktree's shared lib/
+# entries are symlinks into the main tree; the listed paths run through them,
+# and rsync creates those leading directories as real directories. Tracked
+# symlinks are relative and inside the tree, so they stay links.
 # --delete-missing-args because a tracked file deleted but not yet committed
 # is still listed. The container writes the mirror as root, so the far side
 # runs under sudo.
 sync_files() { # <list file> [rsync args...]
     local list=$1; shift
-    rsync -a --copy-links --mkpath --from0 --files-from="$list" --delete-missing-args \
+    rsync -a --mkpath --from0 --files-from="$list" --delete-missing-args \
         --rsync-path="sudo -n rsync" "$@" ./ "$HOST:$TREES_HOST/$TREE/"
 }
 
