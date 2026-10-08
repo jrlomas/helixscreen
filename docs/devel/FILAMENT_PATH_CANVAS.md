@@ -328,25 +328,57 @@ void render_overlay_content(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* 
 }
 ```
 
-Each topology renderer is a sequence of named phases. For LINEAR/HUB:
+LINEAR/HUB is frame → plan → paint → boxes and glyphs
+(`src/ui/ui_filament_path_topology.cpp#render_linear_hub`):
 
 ```cpp
 void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
-    RenderCtx ctx{layer, data, compute_base_geometry(obj, data)};
-    data->hits.hub_valid = data->hits.buffer_valid = data->hits.bypass_valid = false;
-
-    LinearHubFrame f = compute_linear_hub_frame(ctx);  // layout + per-slot colors
-    apply_debug_flow_override(obj, ctx, f);
-    build_linear_hub_merge_fan(ctx, f);                // merge-fan geometry
-
-    draw_entry_lanes(ctx, f);      // entry tubes + prep sensors
-    draw_bypass_section(ctx, f);   // bypass path (records bypass hit rect)
-    draw_hub_section(ctx, f);      // hub/selector box (records hub hit rect)
-    draw_output_section(ctx, f);   // output tube + output sensor
-    draw_toolhead_section(ctx, f); // toolhead sensor dot
-    draw_nozzle_section(ctx, f);   // nozzle glyph; records active path into path_cache
+    // hit valid flags reset, debug override, LINEAR output_x snap
+    const LinearHubFrame f = compute_linear_hub_frame(*data, ctx.geo); // pure layout + merge fan
+    static PathPlan plan;                     // ~14 KB, off the (ESP32) LVGL task stack
+    plan_linear_hub(f, *data, ctx.geo, plan); // routes + span styles + sensor bands
+    paint_tubes(layer, plan, palette);        // halo -> walls -> bores -> bands
+    draw_hub_section(ctx, f);                 // hub/selector box (records hits.hub)
+    // then, below the hub: buffer box (hits.buffer), hits.bypass, nozzle glyph,
+    // and path_cache = filled_prefix(plan.routes[plan.active_route])
 }
 ```
+
+PARALLEL and MIXED still draw per-lane tubes and `draw_sensor_dot` glyphs in
+named phases.
+
+### The LINEAR/HUB route plan
+
+`src/ui/ui_filament_path_plan.{h,cpp}`, pure apart from `paint_tubes` and
+`draw_sensor_band`, so `[filament-path][plan]` tests it without a display.
+
+- **Routes.** One route per slot, starting at the slot's entry. Every route is
+  one contiguous centerline: tubes never stop at a sensor. The trunk (hub bottom
+  → nozzle inlet) belongs to exactly one route: the active slot's, or, while the
+  bypass is active, the bypass route from the merge down (the AMS trunk then
+  ends at the merge and is styled from AMS state alone), or a separate idle trunk
+  when nothing is active. Inactive slots end at their hub-top entry (HUB) or the
+  selector top (LINEAR).
+- **Span tags.** Each run is tagged with the `PathSegment` at which it fills:
+  spool entry → prep `SPOOL`; prep → hub entry / selector top `LANE`; hub or
+  selector interior `HUB`; hub bottom → bypass merge (or the toolhead when the
+  bypass is hidden) `OUTPUT`; merge → toolhead sensor `TOOLHEAD`; toolhead →
+  inlet `NOZZLE`. `span_style()` turns a tag, how far the lane's filament
+  reached, whether it is the active route and the error segment into a
+  `SpanStyle` (`Plain`/`Active`/`Error` walls, bore, filled, painted). The hub
+  interior is `painted = false` under the opaque HUB box; the LINEAR selector
+  passage is painted and shows through the 60% selector.
+- **Bands.** Clamp bands replace the sensor dots: prep (per slot with a prep
+  sensor), hub entry (HUB), output (hub bottom, not on-toolhead), bypass merge
+  (bypass shown) and toolhead (whenever the unit reports a toolhead sensor,
+  `FilamentPathData::has_toolhead_sensor`). `band_state()`: Error on the active
+  route at the error segment, Active once triggered on the active route, Loaded
+  (the lane's own filament color) once triggered off it, else Empty.
+- **Paint.** `coalesce()` joins adjacent painted segments with equal styles into
+  one stroke, so a run has caps only at its ends. `paint_tubes()` strokes halo
+  (Active strokes only, dropped by `reduced_effects()`), then every wall, then
+  bores (empty, filled off the active route, the active route last so its fill
+  wins at a T), then the bands.
 
 This mirrors the scratchpad's `compute_geometry / draw_static_topology /
 draw_filament_overlay / draw_animation_overlay` idea, but landed as a finer,
@@ -405,9 +437,9 @@ struct HitRects {            // exact drawn boxes, read by the click handler
 };
 ```
 
-The nozzle/lane phases append the active centerline into `path_cache.path` via
-the stroker's `record` out-param; the DRAW_POST animation replays it without
-re-running the topology phase. Hub/buffer/bypass phases record their drawn boxes
+LINEAR/HUB stores the active route's filled prefix (`filled_prefix()`) in
+`path_cache.path`; the DRAW_POST animation replays it without re-running the
+topology render. Hub/buffer/bypass phases record their drawn boxes
 into `hits`, and `filament_path_click_cb()` tests taps against those rects — the
 single source of truth, no geometry re-derivation.
 
@@ -503,6 +535,7 @@ use the LVGL test fixture.
 |-----------|------|--------|
 | `tests/unit/test_filament_path_geometry.cpp` | `[filament-path][geometry]` | `seg_length`, `path_length`, `path_point_at`, `route_orthogonal`, `route_polyline_filleted`, `build_merge_fan` — pure math, no LVGL |
 | `tests/unit/test_filament_path_mixed_render.cpp` | `[filament-path][mixed][topology]`, `[filament-path][parallel][topology]` | MIXED/PARALLEL produce opaque overlay pixels once laid out; `SIZE_CHANGED` reschedules the async refresh post-layout |
+| `tests/unit/test_filament_path_plan.cpp` | `[filament-path][plan]`, `[filament-path][plan][hits]` | LINEAR/HUB frame, route plan (contiguity, ownership, span styles, bands, coalesce), and the hub/buffer/bypass hit rects of a rendered canvas |
 | `tests/unit/test_filament_path_canvas.cpp` | `[canvas][hit_test]`, `[filament-path][canvas]` | Hit-rect tests (hub box dead-center / argument order), SIZE_CHANGED handler |
 
 ```bash
@@ -526,6 +559,7 @@ run without a display and assert exact arc tangents and lane separation.
 | `src/ui/ui_filament_path_canvas.cpp` | Widget lifecycle, theme, click dispatch, DRAW_POST callback, C API, XML registration |
 | `src/ui/ui_filament_path_layers.cpp` | Canvas/buffer management, dirty flags, async refresh, size-change handling, teardown |
 | `src/ui/ui_filament_path_topology.cpp` | The three topology renderers + phase functions + DRAW_POST `render_animation_overlay()` |
+| `src/ui/ui_filament_path_plan.h`, `.cpp` | LINEAR/HUB frame, route plan, span styles, sensor bands, layered `paint_tubes()` |
 | `src/ui/ui_filament_path_glyphs.cpp` | Sensor dots, hub box, buffer coil, nozzle, toolhead, badges |
 | `src/ui/ui_filament_path_anim.cpp` | The five `lv_anim`-driven animation systems |
 | `src/ui/ui_system_path_canvas.cpp` | AMS overview canvas — second consumer of the tube stroker |

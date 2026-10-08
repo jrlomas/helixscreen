@@ -34,6 +34,7 @@
  * FILE MAP
  *   ui_filament_path_canvas.cpp   widget lifecycle, theme, click dispatch, C API
  *   ui_filament_path_topology.cpp the three topology renderers + DRAW_POST pass
+ *   ui_filament_path_plan.cpp     LINEAR/HUB frame → route plan → layered tube paint
  *   ui_filament_path_glyphs.cpp   sensor dots, hub box, buffer, nozzle, badges
  *   ui_filament_path_anim.cpp     the five lv_anim-driven animation systems
  *   ui_filament_path_layers.cpp   canvas buffer management + async refresh
@@ -292,7 +293,8 @@ struct FilamentPathData {
     // toolhead and the shared hub->nozzle run is a short stub (printers whose
     // combiner mounts on the print head; the per-lane tubes run the whole way).
     bool hub_on_toolhead = false;
-    bool eject_mode = false; // true = allow segment to drop below LANE (past slot sensor)
+    bool eject_mode = false;         // true = allow segment to drop below LANE (past slot sensor)
+    bool has_toolhead_sensor = true; // the unit reports a toolhead filament sensor
 
     // Buffer element (TurtleNeck / eSpooler visualization)
     int buffer_fault_state = 0;  // -1=untinted, 0=healthy, 1=warning/approaching, 2=fault
