@@ -1152,8 +1152,8 @@ void HomePanel::on_home_grid_long_press(lv_event_t* e) {
 
             // Enter edit mode on the active page container
             auto& config = helix::PanelWidgetManager::instance().get_widget_config("home");
-            if (container) {
-                panel.grid_edit_mode_.enter(container, &config, panel.active_page_index_);
+            if (container &&
+                panel.grid_edit_mode_.enter(container, &config, panel.active_page_index_)) {
                 // Enter() disarmed clicks on the entry page only; a swipe can
                 // settle on any other page mid-session, and its widgets must
                 // not fire their real handlers while edit mode is live.

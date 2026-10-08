@@ -101,7 +101,9 @@ class GridEditMode {
     GridEditMode(GridEditMode&&) = delete;
     GridEditMode& operator=(GridEditMode&&) = delete;
 
-    void enter(lv_obj_t* container, PanelWidgetConfig* config, int page_index = 0);
+    /// Start an edit session. Returns whether edit mode is active afterwards:
+    /// false when PanelWidgetManager::refuse_layout_edit() turns it away.
+    bool enter(lv_obj_t* container, PanelWidgetConfig* config, int page_index = 0);
     void exit();
 
     /// Re-scope a live edit session to @p container as page @p page_index.
