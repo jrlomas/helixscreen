@@ -408,6 +408,32 @@ void button_style_changed_cb(lv_event_t* e) {
 }
 
 /**
+ * @brief Event callback for LV_EVENT_SIZE_CHANGED on a fixed-width button
+ *
+ * Caps the label at the button's edge (less the icon beside it) so a translation
+ * longer than the button ellipsizes instead of spilling over it. The cap is the
+ * button's whole width, not its content box: a label may use the button's padding,
+ * which a content-box cap would take away from short labels in narrow buttons.
+ * Content-width buttons grow with their label and need no cap.
+ */
+void button_limit_label_cb(lv_event_t* e) {
+    lv_obj_t* btn = lv_event_get_target_obj(e);
+    auto* data = static_cast<UiButtonData*>(lv_obj_get_user_data(btn));
+    if (!data || data->magic != UiButtonData::MAGIC || !data->label)
+        return;
+    if (lv_obj_get_style_width(btn, LV_PART_MAIN) == LV_SIZE_CONTENT) {
+        lv_obj_set_style_max_width(data->label, LV_COORD_MAX, LV_PART_MAIN);
+        return;
+    }
+    int32_t avail = lv_obj_get_width(btn) - 2;
+    if (data->icon && !data->icon_vertical) {
+        avail -= lv_obj_get_width(data->icon) + lv_obj_get_style_pad_column(btn, LV_PART_MAIN);
+    }
+    lv_label_set_long_mode(data->label, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_style_max_width(data->label, LV_MAX(avail, 0), LV_PART_MAIN);
+}
+
+/**
  * @brief Event callback for LV_EVENT_CLICKED — plays button tap sound
  *
  * Hooked at the component level so ALL <ui_button> instances get audio
@@ -721,6 +747,7 @@ void* ui_button_create(lv_xml_parser_state_t* state, const char** attrs) {
     live_ui_buttons().insert(btn);
 
     // Register event handlers
+    lv_obj_add_event_cb(btn, button_limit_label_cb, LV_EVENT_SIZE_CHANGED, nullptr);
     lv_obj_add_event_cb(btn, button_style_changed_cb, LV_EVENT_STYLE_CHANGED, nullptr);
     lv_obj_add_event_cb(btn, button_style_changed_cb, LV_EVENT_STATE_CHANGED, nullptr);
     lv_obj_add_event_cb(btn, button_clicked_sound_cb, LV_EVENT_CLICKED, nullptr);
