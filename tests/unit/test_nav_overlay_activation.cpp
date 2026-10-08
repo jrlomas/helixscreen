@@ -291,6 +291,22 @@ TEST_CASE_METHOD(OverlayActivationFixture,
     REQUIRE(lv_obj_has_flag(controls_widget_, LV_OBJ_FLAG_HIDDEN));
 }
 
+TEST_CASE_METHOD(OverlayActivationFixture,
+                 "set_active puts the new panel on screen before activating it",
+                 "[navigation][lifecycle]") {
+    auto& nav = NavigationManager::instance();
+    controls_panel_.activates = 0;
+
+    nav.set_active(PanelId::Controls);
+
+    // Nothing drained: a switch that paints before it returns (the ESP32 loading
+    // pill lifts with a forced refresh) must find the new panel already shown,
+    // not wait for the queued active_panel observer to un-hide it.
+    REQUIRE(controls_panel_.activates == 1);
+    REQUIRE(controls_panel_.visible_on_last_activate);
+    REQUIRE(lv_obj_has_flag(home_widget_, LV_OBJ_FLAG_HIDDEN));
+}
+
 // ============================================================================
 // Navbar close path — the other way an overlay goes away
 // ============================================================================

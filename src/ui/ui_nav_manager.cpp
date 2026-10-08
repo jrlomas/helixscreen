@@ -1192,6 +1192,11 @@ void NavigationManager::set_active(PanelId panel_id) {
     // Update state
     lv_subject_set_int(&active_panel_subject_, static_cast<int>(panel_id));
     active_panel_ = panel_id;
+    // The active_panel observer un-hides the panel too, but it runs queued. A
+    // switch that paints before returning (the ESP32 loading pill lifts with a
+    // forced refresh) would paint the old panel and repaint the new one a frame
+    // later, and on_activate() would measure a hidden panel.
+    panels_.show_only(static_cast<int>(panel_id));
     SwitchTrace::mark("show");
     // Publish for off-main memory_warning context (relaxed: telemetry only).
     helix::telemetry_context::active_panel_int.store(static_cast<int>(panel_id),
