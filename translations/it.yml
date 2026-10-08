@@ -2337,6 +2337,7 @@ translations:
   Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there: Telefono mette 1 2 3 nella riga in alto, calcolatrice 7 8 9
   Pick: Scegli
   Pick Color: Scegli colore
+  Pick how HelixScreen behaves. You can change any of these later in Settings.: 'Scegli come si comporta HelixScreen. Puoi cambiare tutto più tardi in Impostazioni.'
   Pick up tool: Preleva utensile
   Picking up tool: Prelievo utensile
   Pill: Pillola
@@ -2385,6 +2386,7 @@ translations:
   Pre-heat the extruder first: Preriscaldare prima l'estrusore
   'Pre-print command failed: {}': 'Comando pre-stampa fallito: {}'
   Pre-print homing...: Homing pre-stampa...
+  Preferences: Preferenze
   Preheat: 'Preriscaldamento'
   Preheat %s: 'Preriscaldamento %s'
   Preheat %s (%d/%d): 'Preriscaldamento %s (%d/%d)'

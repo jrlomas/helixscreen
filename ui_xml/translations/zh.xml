@@ -2116,6 +2116,7 @@
   <translation tag="Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there" zh="电话布局第一行为 1 2 3，计算器布局第一行为 7 8 9"/>
   <translation tag="Pick" zh="选取"/>
   <translation tag="Pick Color" zh="选择颜色"/>
+  <translation tag="Pick how HelixScreen behaves. You can change any of these later in Settings." zh="选择 HelixScreen 的行为方式。以后可在“设置”中更改。"/>
   <translation tag="Pick up tool" zh="取出工具"/>
   <translation tag="Picking up tool" zh="正在取用工具"/>
   <translation tag="Pill" zh="胶囊"/>
@@ -2156,6 +2157,7 @@
   <translation tag="Pre-heat the extruder first" zh="请先预热挤出机"/>
   <translation tag="Pre-print command failed: {}" zh="打印前命令失败: {}"/>
   <translation tag="Pre-print homing..." zh="打印前归位..."/>
+  <translation tag="Preferences" zh="偏好"/>
   <translation tag="Preheat" zh="预热"/>
   <translation tag="Preheat %s" zh="预热 %s"/>
   <translation tag="Preheat %s (%d/%d)" zh="预热 %s (%d/%d)"/>

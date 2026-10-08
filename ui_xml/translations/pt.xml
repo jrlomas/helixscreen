@@ -2116,6 +2116,7 @@
   <translation tag="Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there" pt="Telefone põe 1 2 3 na linha de cima, calculadora põe 7 8 9"/>
   <translation tag="Pick" pt="Escolher"/>
   <translation tag="Pick Color" pt="Escolher Cor"/>
+  <translation tag="Pick how HelixScreen behaves. You can change any of these later in Settings." pt="Escolha como o HelixScreen se comporta. Você pode mudar tudo depois em Configurações."/>
   <translation tag="Pick up tool" pt="Pegar ferramenta"/>
   <translation tag="Picking up tool" pt="Pegando ferramenta"/>
   <translation tag="Pill" pt="Pílula"/>
@@ -2156,6 +2157,7 @@
   <translation tag="Pre-heat the extruder first" pt="Pré-aqueça o extrusor primeiro"/>
   <translation tag="Pre-print command failed: {}" pt="Falha no comando pré-impressão: {}"/>
   <translation tag="Pre-print homing..." pt="Posicionamento pré-impressão..."/>
+  <translation tag="Preferences" pt="Preferências"/>
   <translation tag="Preheat" pt="Pré-aquecer"/>
   <translation tag="Preheat %s" pt="Pré-aquecer %s"/>
   <translation tag="Preheat %s (%d/%d)" pt="Pré-aquecer %s (%d/%d)"/>
