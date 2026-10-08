@@ -176,6 +176,24 @@ void invalidate_static(lv_display_t* disp, lv_area_t a, const lv_area_t& r, int3
 
 /// Everything in `r` that does not move with the content: the scroller's own
 /// rounded corners and border, and its scrollbars.
+/// Both scrollbar tracks along the whole scroller, before and after the shift.
+void invalidate_tracks(lv_display_t* disp, lv_obj_t* obj, const lv_area_t& r, int32_t dy) {
+    const lv_area_t& c = obj->coords;
+    const int32_t sb_w = lv_obj_get_style_width(obj, LV_PART_SCROLLBAR);
+    const int32_t sb_x2 = c.x2 - lv_obj_get_style_pad_right(obj, LV_PART_SCROLLBAR);
+    const int32_t sb_y2 = c.y2 - lv_obj_get_style_pad_bottom(obj, LV_PART_SCROLLBAR);
+    lv_area_t col = {sb_x2 - sb_w - 1, c.y1, sb_x2 + 1, c.y2};
+    lv_area_t row = {c.x1, sb_y2 - sb_w - 1, c.x2, sb_y2 + 1};
+    lv_area_t hor, ver;
+    lv_obj_get_scrollbar_area(obj, &hor, &ver);
+    if (lv_area_get_width(&ver) > 0)
+        lv_area_join(&col, &col, &ver);
+    if (lv_area_get_width(&hor) > 0)
+        lv_area_join(&row, &row, &hor);
+    invalidate_static(disp, col, r, dy);
+    invalidate_static(disp, row, r, dy);
+}
+
 void invalidate_static_parts(lv_display_t* disp, lv_obj_t* obj, const lv_area_t& r, int32_t dy) {
     const lv_area_t& c = obj->coords;
     int32_t bw = 0;
@@ -205,9 +223,13 @@ void invalidate_static_parts(lv_display_t* disp, lv_obj_t* obj, const lv_area_t&
     // scroll leaves the horizontal thumb where it was: it and its moved copy.
     // The vertical thumb travels no further than the content does, so the old
     // one sat within dy of the new one and its copy within 2 * dy: the new
-    // thumb grown that far toward the shift covers both. A bar that comes with
-    // a drag is drawn by its first frame, which renders in full, and LVGL
-    // clears an active-mode bar itself when the drag ends.
+    // thumb grown that far toward the shift covers both, including a new thumb
+    // this scroll shows. A styled thumb length breaks that bound, so a bar
+    // with one is redrawn along its whole track.
+    if (lv_obj_get_style_length(obj, LV_PART_SCROLLBAR) > 0) {
+        invalidate_tracks(disp, obj, r, dy);
+        return;
+    }
     lv_area_t hor, ver;
     lv_obj_get_scrollbar_area(obj, &hor, &ver);
     if (lv_area_get_width(&hor) > 0) {

@@ -6,6 +6,7 @@
 #include "ui_virtual_list.h"
 
 #include "../lvgl_test_fixture.h"
+#include "../test_helpers/scoped_pointer_indev.h"
 #include "lvgl/src/display/lv_display_private.h"
 #include "scroll_blit.h"
 
@@ -474,6 +475,80 @@ TEST_CASE_METHOD(ScrollBlitFixture, "scroll blit redraws a scrollbar's thumbs, n
                 CHECK_FALSE(bottom_row);
             }
         }
+        REQUIRE(mismatch() == "0 px differ");
+    }
+}
+
+TEST_CASE_METHOD(ScrollBlitFixture,
+                 "scroll blit keeps a minimum-length thumb exact at both ends and past them",
+                 "[scroll_blit]") {
+    // 300 rows shrink the thumb below its minimum length, so it is clamped.
+    for (int i = 0; i < 270; i++)
+        plain_box(list_, 0, 0, 360, 40, 0x405060);
+    lv_obj_update_layout(lv_screen_active());
+    render();
+    auto step = [&](int32_t dy) {
+        CAPTURE(dy, lv_obj_get_scroll_y(list_));
+        lv_obj_scroll_by(list_, 0, dy, LV_ANIM_OFF);
+        render();
+        REQUIRE(mismatch() == "0 px differ");
+    };
+    for (int32_t dy : {30, -30, -40, -45}) // past the top and back down
+        step(dy);
+    lv_obj_scroll_to_y(list_, LV_COORD_MAX, LV_ANIM_OFF);
+    render();
+    REQUIRE(mismatch() == "0 px differ");
+    for (int32_t dy : {-40, 40, 60}) // past the bottom and back up
+        step(dy);
+}
+
+TEST_CASE_METHOD(ScrollBlitFixture,
+                 "scroll blit stays exact when a drag shows and hides an active scrollbar",
+                 "[scroll_blit]") {
+    lv_obj_set_scrollbar_mode(list_, LV_SCROLLBAR_MODE_ACTIVE);
+    render();
+    helix_test::ScopedPointerIndev pointer;
+    lv_area_t c;
+    lv_obj_get_coords(list_, &c);
+    const int32_t x = (c.x1 + c.x2) / 2;
+    int32_t y = c.y2 - 40;
+    pointer.press(x, y);
+    render();
+    for (int i = 0; i < 6; i++) {
+        CAPTURE(i);
+        y -= 25;
+        pointer.move(x, y);
+        render();
+        REQUIRE(mismatch() == "0 px differ");
+    }
+    REQUIRE(lv_obj_get_scroll_y(list_) > 0); // the drag scrolled
+    pointer.release(x, y);
+    render();
+    REQUIRE(mismatch() == "0 px differ");
+}
+
+TEST_CASE_METHOD(ScrollBlitFixture,
+                 "scroll blit redraws the whole track of a thumb with a styled length",
+                 "[scroll_blit]") {
+    lv_obj_set_style_length(list_, 60, LV_PART_SCROLLBAR);
+    render();
+    lv_area_t c;
+    lv_obj_get_coords(list_, &c);
+    for (int32_t dy : {-40, 30}) {
+        CAPTURE(dy);
+        std::vector<lv_area_t> invalidated;
+        {
+            InvalidationRecorder recorder(disp_);
+            lv_obj_scroll_by(list_, 0, dy, LV_ANIM_OFF);
+            render();
+            invalidated = recorder.areas;
+        }
+        const bool whole_track =
+            std::any_of(invalidated.begin(), invalidated.end(), [&](const lv_area_t& a) {
+                return lv_area_get_width(&a) <= 12 &&
+                       lv_area_get_height(&a) >= lv_area_get_height(&c) - 2;
+            });
+        CHECK(whole_track);
         REQUIRE(mismatch() == "0 px differ");
     }
 }
