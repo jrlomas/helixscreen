@@ -1252,6 +1252,10 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
      * runs sees the phases advance. Safe to call from either thread.
      */
     nlohmann::json medusa_status_json() const;
+    /// HELIX_MOCK_AMS=openams, and the `oams_manager` frame it serves (public:
+    /// the printer.objects.query / subscribe handlers read it).
+    bool is_mock_openams() const;
+    [[nodiscard]] nlohmann::json openams_status_json() const;
 
     /**
      * @brief The `zmod_color` object as Z-Mod's firmware reports it.
@@ -1288,18 +1292,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     /// message. The refusal path is otherwise unreachable in mock mode, and it
     /// is one of the states the panel handles most visibly.
     std::vector<PendingPaLine> pending_pa_lines_;
-    /// RPC answers defer_cfs_script_ack() still owes, and when.
-    struct PendingScriptAck {
-        std::chrono::steady_clock::time_point due;
-        std::function<void(const nlohmann::json&)> success_cb;
-        std::function<void(const MoonrakerError&)> error_cb;
-    };
-    std::vector<PendingScriptAck> pending_script_acks_;
     mutable std::mutex pa_cal_mutex_;
     void service_pending_pa_lines();
-    void service_pending_script_acks();
-    /// Answer every ack still owed with a connection-lost error.
-    void fail_pending_script_acks();
 
     /**
      * @brief Populate hardware lists based on configured printer type
@@ -2260,6 +2254,13 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     bool is_mock_cfs() const;
     /// The K2 Plus's `motor_control` and `fan_feedback` frames.
     void append_k2_status(json& status) const;
+    // --- OpenAMS mock ---------------------------------------------------------
+    // HELIX_MOCK_AMS=openams: pushes `oams_manager` so real discovery claims
+    // OpenAMS and the PRODUCTION AmsBackendOpenAms runs (mock hardware, real
+    // backend). Slot identity is seeded into the lane_data namespace.
+    /// Slot loaded onto the FPS lane, -1 when unloaded.
+    std::atomic<int> openams_loaded_slot_{3};
+
     /// The `box` object frame, stock K1 shape (T1 unit, four bays).
     [[nodiscard]] nlohmann::json cfs_box_status_json() const;
     /// Emit the BOX_FIND_CUT_POS response lines synchronously inside
@@ -2281,16 +2282,6 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
         return cfs_loaded_slot_.load() >= 0;
     }
 
-    /// Hold the RPC answer of a K2 box script back a moment, as the real macro's
-    /// minutes of motion do, so the status frames it pushed (the loaded bay,
-    /// the toolhead switch) reach their subscribers before the caller checks
-    /// the outcome. Only the K2 dialect emits CR_BOX_* lines, and the K1 dialect's BOX_*
-    /// scripts never contain them, so `is_mock_cfs()` is the whole gate.
-    /// @return true when `script` was one and an answer is now owed.
-    bool defer_cfs_script_ack(const std::string& script,
-                              std::function<void(const nlohmann::json&)> success_cb,
-                              std::function<void(const MoonrakerError&)> error_cb);
-
   private:
     // --- gcode_script() handlers (moonraker_client_mock_gcode*.cpp) -----------
     // One handler per command family. A handler returns a code to end the
@@ -2301,6 +2292,7 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     GcodeResult gcode_medusa(const std::string& gcode);
     GcodeResult gcode_zmod(const std::string& gcode);
     GcodeResult gcode_cfs(const std::string& gcode);
+    GcodeResult gcode_openams(const std::string& gcode);
     GcodeResult gcode_u1_feeding(const std::string& gcode);
     GcodeResult gcode_heater_temperature(const std::string& gcode);
     GcodeResult gcode_temperature_fan_target(const std::string& gcode);

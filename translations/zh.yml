@@ -186,6 +186,7 @@ translations:
   Added to Spoolman: 已添加到 Spoolman
   Added to queue (position {}): 已添加到队列（第 {} 位）
   Added to queue (position {}) - queue is paused: 已添加到队列（第 {} 位）– 队列已暂停
+  Adding printer: 正在添加打印机
   Adding to queue...: 正在添加到队列...
   Address: 地址
   Adjust screen brightness level: 调整屏幕亮度

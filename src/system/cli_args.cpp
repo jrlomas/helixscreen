@@ -758,6 +758,11 @@ bool parse_cli_args(int argc, char** argv, CliArgs& args, int& screen_width, int
             spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
                          "CFS backend)",
                          mode);
+        } else if (mode == "openams") {
+            config.use_real_ams = true;
+            spdlog::info("[CLI] HELIX_MOCK_AMS={} implies --real-ams (mock hardware, real "
+                         "OpenAMS backend)",
+                         mode);
         } else if (mode.empty() && printer_env && helix::mock::is_hardware_persona(printer_env)) {
             config.use_real_ams = true;
             spdlog::info("[CLI] HELIX_MOCK_PRINTER={} implies --real-ams (mock "

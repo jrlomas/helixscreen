@@ -223,7 +223,7 @@ def stage_translations(ui_xml_dir: Path, out_dir: Path,
 
 def stage_config(assets_dir: Path, out_dir: Path) -> int:
     """Copy assets/config/{printer_database.json, printing_tips.json, themes/,
-    print_start_profiles/default.json}. Returns total raw bytes."""
+    presets/*.json, print_start_profiles/default.json}. Returns total raw bytes."""
     total = 0
     config_dir = assets_dir / "config"
     dest_config = out_dir / "assets" / "config"
@@ -245,6 +245,14 @@ def stage_config(assets_dir: Path, out_dir: Path) -> int:
         themes_dest = dest_config / "themes"
         shutil.copytree(themes_src, themes_dest, dirs_exist_ok=True)
         total += sum(f.stat().st_size for f in themes_dest.rglob("*") if f.is_file())
+
+    # Adding a detected printer applies its presets/<id>.json; Config resolves
+    # it from this seed bundle.
+    presets_dest = dest_config / "presets"
+    presets_dest.mkdir(parents=True, exist_ok=True)
+    for src in sorted((config_dir / "presets").glob("*.json")):
+        shutil.copy2(src, presets_dest / src.name)
+        total += src.stat().st_size
 
     return total
 

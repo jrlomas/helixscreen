@@ -186,6 +186,7 @@
   <translation tag="Added to Spoolman" zh="已添加到 Spoolman"/>
   <translation tag="Added to queue (position {})" zh="已添加到队列（第 {} 位）"/>
   <translation tag="Added to queue (position {}) - queue is paused" zh="已添加到队列（第 {} 位）– 队列已暂停"/>
+  <translation tag="Adding printer" zh="正在添加打印机"/>
   <translation tag="Adding to queue..." zh="正在添加到队列..."/>
   <translation tag="Address" zh="地址"/>
   <translation tag="Adjust screen brightness level" zh="调整屏幕亮度"/>

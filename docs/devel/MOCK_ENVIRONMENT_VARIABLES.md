@@ -375,7 +375,7 @@ Select the mock AMS topology/type.
 
 | Property | Value |
 |----------|-------|
-| **Values** | `none`, `afc`, `toolchanger` / `tc`, `mixed`, `multi`, `torture`, `vivid`, `ifs`, `htlf`, `snapmaker`, `medusahc` / `medusahc-fork`, `ifs-module`, `cfs` |
+| **Values** | `none`, `afc`, `toolchanger` / `tc`, `mixed`, `multi`, `torture`, `vivid`, `ifs`, `htlf`, `snapmaker`, `medusahc` / `medusahc-fork`, `ifs-module`, `cfs`, `openams` |
 | **Default** | The persona's own (`helix::mock::effective_mock_ams`): `toolchanger` on `creator5`, `ifs` on `ad5x`, `cfs` on `k2`, `snapmaker` on `snapmaker_u1`; Happy Hare, LINEAR, 4 slots on every other persona |
 | **File** | `src/printer/ams_backend.cpp` |
 
@@ -396,6 +396,7 @@ Select the mock AMS topology/type.
 | `medusahc-fork` | 1 | MedusaHC as driven by topi314's fork. Alias: `medusa-fork` |
 | `ifs-module` | 1 | **Standalone AD5X IFS module - mock HARDWARE, real backend.** The Forge-X drop-in's `ifs`/`ifs_materials` objects + stock-named sensors. Aliases: `ifs_module`, `ad5x-module`. See below |
 | `cfs` | 1 | **Creality CFS, K1 stock dialect - mock HARDWARE, real backend.** The stock `box` status object plus the calibration command surface. Alias: `cfs-k1`. See below |
+| `openams` | 1 | **OpenAMS hub - mock HARDWARE, real backend.** Lists and pushes the `oams_manager` status object (4-bay hub unit, FPS lane, groups T0/T1/T2, slot 4 loaded) so real discovery claims OpenAMS and the production `AmsBackendOpenAms` runs. Slots 3 and 4 get ASA identity seeded into `lane_data`; `OPENAMS_UNLOAD` / `OPENAMS_LOAD GROUP=Tn` flip the loaded slot |
 
 ```bash
 # Simulate AFC Box Turtle
@@ -857,8 +858,8 @@ from the K2 Pro. Its default `HELIX_MOCK_AMS` is `cfs`, so the `box` object is p
 and the production `AmsBackendCfs` latches the K2 `CR_BOX_*` dialect; `HELIX_MOCK_AMS=none`
 removes the box. `CR_BOX_EXTRUDE TNN=T<n><bay>` loads that bay and `CR_BOX_RETRUDE` unloads
 it: the next `box` frame names the bay, and the toolhead `filament_switch_sensor
-filament_sensor` follows it. The RPC answer of a script holding a `CR_BOX_*` line comes about a
-second after the frames, so a caller that checks the outcome on completion finds them applied.
+filament_sensor` follows it. The script's RPC answer follows its frames in the same call, so
+frame and answer arrive back to back, the tightest ordering real hardware can produce.
 
 `snapmaker_u1`: the **Snapmaker U1**. Hostname `snapmaker-u1`, the capture's 270x270x400
 Cartesian volume, heaters `extruder`..`extruder3` and `heater_bed`, the per-head fans and

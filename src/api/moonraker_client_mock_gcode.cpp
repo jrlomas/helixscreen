@@ -130,6 +130,30 @@ MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_cfs(const std::strin
     return std::nullopt;
 }
 
+// OPENAMS_UNLOAD / OPENAMS_LOAD GROUP=<name>: flip the lane to the requested
+// group's first ready bay (bays 2 and 3 hold spools; T0 = {0,3}, T1 = {1},
+// T2 = {2}).
+MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_openams(const std::string& gcode) {
+    const size_t token_end = gcode.find_first_of(" \t");
+    const std::string cmd = gcode.substr(0, token_end);
+    if (cmd == "OPENAMS_UNLOAD") {
+        openams_loaded_slot_ = -1;
+        return 0;
+    }
+    if (cmd == "OPENAMS_LOAD") {
+        const size_t pos = gcode.find("GROUP=");
+        const std::string group =
+            pos == std::string::npos ? "" : gcode.substr(pos + 6, gcode.find(' ', pos) - pos - 6);
+        if (group == "T0") {
+            openams_loaded_slot_ = 3;
+        } else if (group == "T2") {
+            openams_loaded_slot_ = 2;
+        }
+        return 0;
+    }
+    return std::nullopt;
+}
+
 // Snapmaker U1 feeder commands. Unconditional: AUTO_FEEDING is U1-only
 // vocabulary, so no mock printer mode needs to arm it, and no other printer's
 // script can contain the token.
@@ -1052,6 +1076,9 @@ int MoonrakerClientMock::gcode_script(const std::string& raw_gcode) {
         return *r;
     }
     if (is_mock_cfs() && (r = gcode_cfs(g))) {
+        return *r;
+    }
+    if (is_mock_openams() && (r = gcode_openams(g))) {
         return *r;
     }
     if ((r = gcode_u1_feeding(g))) {

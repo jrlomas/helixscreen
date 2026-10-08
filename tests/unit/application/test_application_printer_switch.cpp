@@ -146,6 +146,7 @@ class PrinterSwitchFixture : public ApplicationTestFixture {
             if (rebuild_throws_) {
                 throw std::runtime_error("rebuild failed");
             }
+            return true;
         };
         hooks.land_home = [this]() { events_.push_back("home"); };
         ApplicationTestAccess::set_restart_hooks(app_, std::move(hooks));
