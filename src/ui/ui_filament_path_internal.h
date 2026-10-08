@@ -448,6 +448,9 @@ void draw_toolhead(lv_layer_t* layer, int32_t cx, int32_t cy, std::optional<lv_c
 
 /// Y of the nozzle tip for the configured toolhead style (heat glow anchor).
 int32_t toolhead_tip_y(int32_t nozzle_y, int32_t extruder_scale);
+/// Topmost drawn Y of the toolhead glyph for the configured style (its cap or
+/// shroud, above the nozzle inlet at nozzle_y - extruder_scale * 2).
+int32_t toolhead_top_y(int32_t nozzle_y, int32_t extruder_scale);
 
 /// Tool badge ("T0", "T1", …) beneath a nozzle: rounded rect + centered label.
 void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t badge_top, const char* label,

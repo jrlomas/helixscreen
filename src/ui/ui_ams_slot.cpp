@@ -7,6 +7,7 @@
 #include "ui_fonts.h"
 #include "ui_observer_guard.h"
 #include "ui_update_queue.h"
+#include "ui_utils.h"
 
 #include "ams_lane_state.h"
 #include "ams_state.h"
@@ -28,6 +29,8 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <unordered_map>
@@ -97,6 +100,9 @@ struct AmsSlotData {
     lv_obj_t* tool_badge_bg = nullptr;   // Tool badge background (top-left corner)
     lv_obj_t* tool_badge = nullptr;      // Tool badge label (T0, T1, etc.)
     lv_obj_t* container = nullptr;       // The ams_slot widget itself
+    lv_obj_t* lane_humidity = nullptr;   // Droplet + value row, under a per-lane lid
+    lv_obj_t* lane_humidity_text = nullptr; // The row's value
+    bool show_lane_humidity = false;
 
     // Pulsing state - when true, highlight updates are skipped to preserve animation
     bool is_pulsing = false;
@@ -220,6 +226,20 @@ static void apply_material_label(AmsSlotData* data, const char* material) {
     lv_label_set_text(data->material_label, text);
 }
 
+/// The lane's own humidity reading, or "--" while its sensor has none. Read
+/// from the system info, which is where backends publish per-lane climate.
+static void apply_lane_humidity(AmsSlotData* data, AmsBackend* backend) {
+    if (!data->show_lane_humidity || !data->lane_humidity_text || !backend)
+        return;
+    char text[16] = "--";
+    const AmsSystemInfo info = backend->get_system_info();
+    const SlotInfo* slot = info.get_slot_global(data->slot_index);
+    if (slot && slot->environment && slot->environment->has_humidity)
+        snprintf(text, sizeof(text), "%d%%", (int)std::lround(slot->environment->humidity_pct));
+    // DECLARATIVE_OK: per-slot reading with no per-slot humidity subject
+    lv_label_set_text(data->lane_humidity_text, text);
+}
+
 /// Re-apply the material label from the live per-slot material subject.
 ///
 /// Used by apply_lane_state(), whose outcome changes what the label should
@@ -312,10 +332,15 @@ static void apply_lane_state(AmsSlotData* data, int state_int) {
     refresh_slot_material_label(data);
 }
 
+// The current lane is marked by the spool's own glow, never a box on the slot.
+static void set_spool_glow(AmsSlotData* data, helix::ui::SpoolHighlight highlight) {
+    helix::ui::ams_lane_spool_set_highlight(data->lane_spool, highlight);
+}
+
 /**
  * @brief Apply current slot highlight logic
  *
- * Active slots get a glowing border effect using shadows for visual emphasis.
+ * The active slot's spool glows around its own silhouette.
  * Used by both current_slot and filament_loaded observers.
  */
 static void apply_current_slot_highlight(AmsSlotData* data, int current_slot) {
@@ -341,30 +366,8 @@ static void apply_current_slot_highlight(AmsSlotData* data, int current_slot) {
         active_loaded_subject ? (lv_subject_get_int(active_loaded_subject) != 0) : false;
     (void)current_slot; // retained for the pulse/observer signature only
 
-    // Apply highlight to spool_container (not container) so it doesn't include label padding area
-    lv_obj_t* highlight_target = data->spool_container ? data->spool_container : data->container;
-
-    if (is_active) {
-        // Active slot: glowing border effect
-        lv_color_t primary = theme_manager_get_color("primary");
-
-        // Border highlight on spool area only
-        lv_obj_set_style_border_color(highlight_target, primary, LV_PART_MAIN);
-        lv_obj_set_style_border_opa(highlight_target, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_border_width(highlight_target, 3, LV_PART_MAIN);
-
-        // Outer glow using shadow
-        lv_obj_set_style_shadow_width(highlight_target, 16, LV_PART_MAIN);
-        lv_obj_set_style_shadow_color(highlight_target, primary, LV_PART_MAIN);
-        lv_obj_set_style_shadow_opa(highlight_target, LV_OPA_50, LV_PART_MAIN);
-        lv_obj_set_style_shadow_spread(highlight_target, 2, LV_PART_MAIN);
-    } else {
-        // Inactive: no border or glow
-        lv_obj_set_style_border_opa(highlight_target, LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_border_width(highlight_target, 0, LV_PART_MAIN);
-        lv_obj_set_style_shadow_width(highlight_target, 0, LV_PART_MAIN);
-        lv_obj_set_style_shadow_opa(highlight_target, LV_OPA_TRANSP, LV_PART_MAIN);
-    }
+    set_spool_glow(data,
+                   is_active ? helix::ui::SpoolHighlight::Steady : helix::ui::SpoolHighlight::None);
 
     spdlog::debug("[AmsSlot] Slot {} highlight active={} (from slot_active_loaded subject)",
                   data->slot_index, is_active);
@@ -713,11 +716,17 @@ static void* ams_slot_xml_create(lv_xml_parser_state_t* state, const char** attr
     data->slot_badge = helix::ui::find_required(obj, "slot_badge_label", "AmsSlot");
     data->tool_badge_bg = helix::ui::find_required(obj, "tool_badge", "AmsSlot");
     data->tool_badge = helix::ui::find_required(obj, "tool_badge_label", "AmsSlot");
+    data->lane_humidity = lv_obj_find_by_name(obj, "lane_humidity");
+    data->lane_humidity_text = lv_obj_find_by_name(obj, "lane_humidity_text");
 
     // Validate required children were found
     if (!data->spool_container || !data->lane_spool) {
         return obj; // Return obj anyway so it gets cleaned up properly
     }
+
+    // The current spool's glow spills past the spool container and the slot.
+    helix::ui::pass_child_overhang(data->spool_container);
+    helix::ui::pass_child_overhang(obj);
 
     // Set initial text on labels (direct imperative updates, no subject indirection)
     if (data->material_label) {
@@ -892,9 +901,32 @@ void ui_ams_slot_refresh(lv_obj_t* obj) {
     if (backend) {
         SlotInfo slot = backend->get_slot_info(data->slot_index);
         apply_tool_badge(data, slot.mapped_tool, slot.tool_mapping_override);
+        apply_lane_humidity(data, backend);
     }
 
     spdlog::trace("[AmsSlot] Refreshed slot {}", data->slot_index);
+}
+
+// NAMESPACE_OK: the widget's C API, beside its siblings
+void ui_ams_slot_set_lane_humidity_visible(lv_obj_t* obj, bool visible) {
+    auto* data = get_slot_data(obj);
+    if (!data || !data->lane_humidity)
+        return;
+    data->show_lane_humidity = visible;
+    // DECLARATIVE_OK: shown per slot by the detail view's lid mode, which no subject carries
+    if (visible)
+        lv_obj_remove_flag(data->lane_humidity, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(data->lane_humidity, LV_OBJ_FLAG_HIDDEN);
+    AmsBackend* backend = AmsState::instance().get_backend(data->backend_index);
+    if (visible && data->slot_index >= 0)
+        apply_lane_humidity(data, backend);
+}
+
+// NAMESPACE_OK: the widget's C API, beside its siblings
+lv_obj_t* ui_ams_slot_get_lane_humidity(lv_obj_t* obj) {
+    auto* data = get_slot_data(obj);
+    return data ? data->lane_humidity : nullptr;
 }
 
 float ui_ams_slot_get_fill_level(lv_obj_t* obj) {
@@ -1175,13 +1207,6 @@ void ui_ams_slot_move_badge_to_layer(lv_obj_t* obj, lv_obj_t* badge_layer, int32
 // Pulse Animation for Loading Operations
 // ============================================================================
 
-/**
- * @brief Animation callback for spool border opacity pulse
- */
-static void spool_border_opa_anim_cb(void* obj, int32_t value) {
-    lv_obj_set_style_border_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value), 0);
-}
-
 void ui_ams_slot_set_pulsing(lv_obj_t* obj, bool pulsing) {
     if (!obj) {
         return;
@@ -1192,12 +1217,7 @@ void ui_ams_slot_set_pulsing(lv_obj_t* obj, bool pulsing) {
         return;
     }
 
-    lv_obj_t* target = data->spool_container;
-
-    // Always stop existing animation first
-    lv_anim_delete(target, spool_border_opa_anim_cb);
-
-    // Update pulsing flag BEFORE applying styles
+    // Update pulsing flag BEFORE applying the highlight
     data->is_pulsing = pulsing;
 
     if (!pulsing) {
@@ -1210,28 +1230,8 @@ void ui_ams_slot_set_pulsing(lv_obj_t* obj, bool pulsing) {
         return;
     }
 
-    // Ensure border is visible for pulsing
-    lv_color_t primary = theme_manager_get_color("primary");
-    lv_obj_set_style_border_color(target, primary, LV_PART_MAIN);
-    lv_obj_set_style_border_width(target, 3, LV_PART_MAIN);
-
-    // Start continuous pulsing animation
-    constexpr int32_t PULSE_DIM_OPA = 100;
-    constexpr int32_t PULSE_BRIGHT_OPA = 255;
-    constexpr uint32_t PULSE_DURATION_MS = 600;
-
-    lv_anim_t pulse;
-    lv_anim_init(&pulse);
-    lv_anim_set_var(&pulse, target);
-    lv_anim_set_values(&pulse, PULSE_DIM_OPA, PULSE_BRIGHT_OPA);
-    lv_anim_set_time(&pulse, PULSE_DURATION_MS);
-    lv_anim_set_playback_time(&pulse, PULSE_DURATION_MS); // Oscillate back
-    lv_anim_set_repeat_count(&pulse, LV_ANIM_REPEAT_INFINITE);
-    lv_anim_set_path_cb(&pulse, lv_anim_path_ease_in_out);
-    lv_anim_set_exec_cb(&pulse, spool_border_opa_anim_cb);
-    lv_anim_start(&pulse);
-
-    spdlog::debug("[AmsSlot] Slot {} pulse started on spool_container", data->slot_index);
+    set_spool_glow(data, helix::ui::SpoolHighlight::Pulse);
+    spdlog::debug("[AmsSlot] Slot {} pulse started on the spool glow", data->slot_index);
 }
 
 void ui_ams_slot_clear_highlight(lv_obj_t* obj) {
@@ -1244,19 +1244,10 @@ void ui_ams_slot_clear_highlight(lv_obj_t* obj) {
         return;
     }
 
-    lv_obj_t* target = data->spool_container;
-
-    // Stop any existing animation
-    lv_anim_delete(target, spool_border_opa_anim_cb);
-
     // Set is_pulsing to block automatic highlight restoration from observers
     data->is_pulsing = true;
 
-    // Clear the border completely
-    lv_obj_set_style_border_opa(target, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(target, 0, LV_PART_MAIN);
-    lv_obj_set_style_shadow_width(target, 0, LV_PART_MAIN);
-    lv_obj_set_style_shadow_opa(target, LV_OPA_TRANSP, LV_PART_MAIN);
+    set_spool_glow(data, helix::ui::SpoolHighlight::None);
 
     spdlog::debug("[AmsSlot] Slot {} highlight cleared", data->slot_index);
 }

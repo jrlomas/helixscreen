@@ -53,6 +53,9 @@ struct LinearHubFrame {
     // HUB merge fan: parallel diagonals per side, one 4-point polyline per lane.
     pg::MergeLaneOut hub_fan[FilamentPathData::MAX_SLOTS];
     int32_t hub_box_w = 0; // widened entry-spread width (HUB box drawn at this)
+    // HUB with the bypass hidden: hub and buffer stacked upward from the
+    // toolhead glyph instead of at their ratio positions.
+    bool hub_stacked = false;
     // On-toolhead mode: the passthrough selector keeps the unit's position
     // while the hub box moves down to hug the toolhead.
     int32_t selector_y = 0;
@@ -60,7 +63,10 @@ struct LinearHubFrame {
     SlotRenderStates states;
 };
 
-LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const BaseGeometry& g);
+/// @p glyph_top is the toolhead glyph's topmost drawn Y (toolhead_top_y()):
+/// a HUB with the bypass hidden stacks its hub and buffer above it.
+LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const BaseGeometry& g,
+                                        int32_t glyph_top);
 
 // MIXED (HTLF) layout: some lanes run direct to their own nozzle, the rest fan
 // into a shared hub feeding one nozzle.
