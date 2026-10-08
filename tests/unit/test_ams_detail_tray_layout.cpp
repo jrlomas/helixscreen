@@ -17,9 +17,12 @@
 #include "ams_backend_mock.h"
 #include "ams_state.h"
 #include "ams_tray_projection.h"
+#include "filament_tube_stroker.h"
+#include "helix-xml/src/xml/lv_xml.h"
 #include "theme_manager.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 
@@ -203,4 +206,48 @@ TEST_CASE_METHOD(AmsTrayPanelFixture, "AMS per-lane sensors: each lane's humidit
         lv_obj_get_coords(label, &la);
         CHECK(ra.y2 <= la.y1);
     }
+}
+
+TEST_CASE_METHOD(AmsTrayPanelFixture,
+                 "AMS tray: a dark-mode switch repaints the box in the new colors",
+                 "[ams][tray][theme][ui_integration]") {
+    build("off");
+    REQUIRE(lid_ == tray::LidMode::None);
+    REQUIRE_FALSE(helix::ui::reduced_effects());
+
+    // A point on the back wall just under its top edge, midway along it:
+    // between the two middle spools.
+    const tray::TrayFaces f = tray::tray_faces(box_);
+    const int x = (int)std::lround((f.back_wall[0].x + f.back_wall[1].x) / 2);
+    const int y = (int)std::lround((f.back_wall[0].y + f.back_wall[1].y) / 2) + 4;
+
+    auto back_pixel = [&]() {
+        lv_draw_buf_t* snap = lv_snapshot_take(container_, LV_COLOR_FORMAT_ARGB8888);
+        REQUIRE(snap != nullptr);
+        const uint8_t* px = snap->data + y * snap->header.stride + x * 4;
+        const lv_color_t c = lv_color_make(px[2], px[1], px[0]);
+        lv_draw_buf_destroy(snap);
+        return c;
+    };
+    auto back_token = [](bool dark) {
+        const char* hex = lv_xml_get_const(lv_xml_component_get_scope("ams_unit_detail"),
+                                           dark ? "tray_back_dark" : "tray_back_light");
+        REQUIRE(hex != nullptr);
+        return theme_manager_parse_hex_color(hex);
+    };
+    auto near = [](lv_color_t a, lv_color_t b) {
+        return std::abs(a.red - b.red) <= 2 && std::abs(a.green - b.green) <= 2 &&
+               std::abs(a.blue - b.blue) <= 2;
+    };
+
+    const bool dark = theme_manager_is_dark_mode();
+    REQUIRE_FALSE(near(back_token(dark), back_token(!dark)));
+    REQUIRE(near(back_pixel(), back_token(dark)));
+
+    theme_manager_toggle_dark_mode();
+    process_lvgl(20);
+    CHECK(near(back_pixel(), back_token(!dark)));
+
+    theme_manager_toggle_dark_mode();
+    process_lvgl(20);
 }

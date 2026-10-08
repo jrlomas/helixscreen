@@ -200,7 +200,8 @@ static BypassGeometry compute_bypass_geometry(const SystemPathData* data,
     return {bypass_x, merge_y, center_x};
 }
 
-// Load theme-aware colors, fonts, and sizes
+// Theme colors are read on every draw, so a theme or dark-mode switch repaints
+// the live canvas in the new colors.
 static void load_theme_colors(SystemPathData* data) {
     bool dark_mode = theme_manager_is_dark_mode();
 
@@ -226,7 +227,11 @@ static void load_theme_colors(SystemPathData* data) {
     }
 
     data->color_text = theme_manager_get_color("text");
+}
 
+// Sizes and the label font are bound to the breakpoint, not the theme, so they
+// are read once per widget.
+static void load_theme_sizes(SystemPathData* data) {
     int32_t space_xs = theme_manager_get_spacing("space_xs");
     int32_t space_md = theme_manager_get_spacing("space_md");
     data->line_width_idle = LV_MAX(2, space_xs / 2);
@@ -238,8 +243,6 @@ static void load_theme_colors(SystemPathData* data) {
 
     const char* font_name = lv_xml_get_const(nullptr, "font_small");
     data->label_font = font_name ? lv_xml_get_font(nullptr, font_name) : &noto_sans_12;
-
-    spdlog::trace("[SystemPath] Theme colors loaded (dark={})", dark_mode);
 }
 
 // ============================================================================
@@ -1152,6 +1155,7 @@ static void system_path_draw_cb(lv_event_t* e) {
         spdlog::trace("[SystemPath] No units to draw");
         return;
     }
+    load_theme_colors(data);
 
     lv_area_t obj_coords;
     lv_obj_get_coords(obj, &obj_coords);
@@ -1202,8 +1206,8 @@ static void* system_path_xml_create(lv_xml_parser_state_t* state, const char** a
     s_registry[obj] = data_ptr.get();
     auto* data = data_ptr.release();
 
-    // Load theme-aware colors, fonts, and sizes
     load_theme_colors(data);
+    load_theme_sizes(data);
 
     // Configure object
     lv_obj_set_size(obj, DEFAULT_WIDTH, DEFAULT_HEIGHT);
@@ -1286,8 +1290,8 @@ lv_obj_t* ui_system_path_canvas_create(lv_obj_t* parent) {
     s_registry[obj] = data_ptr.get();
     auto* data = data_ptr.release();
 
-    // Load theme-aware colors, fonts, and sizes
     load_theme_colors(data);
+    load_theme_sizes(data);
 
     // Configure object
     lv_obj_set_size(obj, DEFAULT_WIDTH, DEFAULT_HEIGHT);

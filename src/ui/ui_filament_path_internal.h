@@ -157,6 +157,11 @@ struct ThemeCache {
     int32_t extruder_scale = 10; // Scale unit for extruder (based on space_md)
 
     const lv_font_t* label_font = nullptr;
+
+    // Which theme the colors above were read from (refresh_theme_colors()).
+    bool colors_loaded = false;
+    int generation = 0;
+    bool dark_mode = false;
 };
 
 // State of the five lv_anim-driven animation systems
@@ -474,6 +479,10 @@ void start_output_x_animation(lv_obj_t* obj, FilamentPathData* data, int32_t fro
 /// Delete every lv_anim this widget may have running (widget teardown).
 void delete_all_animations(lv_obj_t* obj);
 
+/// Re-read the theme-derived colors when the theme or dark mode changed since
+/// they were last read. Returns true when they were re-read.
+bool refresh_theme_colors(FilamentPathData* data);
+
 // ============================================================================
 // Layered canvas machinery (ui_filament_path_layers.cpp)
 // ============================================================================
@@ -484,6 +493,10 @@ bool layered_setup_canvases(lv_obj_t* obj, FilamentPathData* data);
 /// Mark which layered surfaces need a repaint and schedule an async refresh.
 /// Use this from setters instead of bare lv_obj_invalidate().
 void layered_mark_dirty(lv_obj_t* obj);
+
+/// Flag the canvas for a repaint and schedule the refresh, without invalidating
+/// the widget: safe to call from inside its draw event.
+void layered_schedule_repaint(lv_obj_t* obj, FilamentPathData* data);
 
 // Called from the widget's draw: runs a refresh that was deferred while the
 // widget could not be seen.

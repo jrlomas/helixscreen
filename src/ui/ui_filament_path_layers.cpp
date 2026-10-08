@@ -125,6 +125,7 @@ void layered_render_overlay(lv_obj_t* obj, FilamentPathData* data) {
     if (!data->layers.overlay_canvas)
         return;
     ++data->layers.render_count;
+    refresh_theme_colors(data);
     lv_canvas_fill_bg(data->layers.overlay_canvas, lv_color_black(), LV_OPA_TRANSP);
 
     int32_t overhang = layered_overhang(lv_obj_get_height(obj));
@@ -215,6 +216,12 @@ void layered_mark_dirty(lv_obj_t* obj) {
             data->layers.refresh_timer.schedule_once([obj]() { layered_refresh(obj); });
     }
     lv_obj_invalidate(obj);
+}
+
+void layered_schedule_repaint(lv_obj_t* obj, FilamentPathData* data) {
+    data->layers.overlay_dirty = true;
+    if (data->layers.overlay_canvas)
+        data->layers.refresh_timer.schedule_once([obj]() { layered_refresh(obj); });
 }
 
 void layered_release_buffer(FilamentPathData* data) {

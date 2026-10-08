@@ -96,6 +96,14 @@ TrayColors load_tray_colors(bool dark) {
             tray_token("tray_glass_edge", dark)};
 }
 
+// Read on every draw, so a theme or dark-mode switch repaints the tray in the
+// new colors.
+void load_tray_look() {
+    const bool dark = theme_manager_is_dark_mode();
+    s_tray.color = load_tray_colors(dark);
+    s_tray.opa = dark ? DARK_OPA : LIGHT_OPA;
+}
+
 lv_point_precise_t to_screen(lv_point_t origin, tray::PointF p) {
     return {static_cast<lv_value_precise_t>(origin.x + p.x),
             static_cast<lv_value_precise_t>(origin.y + p.y)};
@@ -207,6 +215,7 @@ void tray_back_draw_cb(lv_event_t* e) {
     lv_layer_t* layer = lv_event_get_layer(e);
     if (!layer || !s_tray.valid)
         return;
+    load_tray_look();
     const lv_point_t o = container_origin(lv_event_get_target_obj(e));
     const tray::TrayFaces f = tray::tray_faces(s_tray.box);
     const TrayColors& c = s_tray.color;
@@ -264,6 +273,7 @@ void tray_front_draw_cb(lv_event_t* e) {
     lv_layer_t* layer = lv_event_get_layer(e);
     if (!layer || !s_tray.valid)
         return;
+    load_tray_look();
     const lv_point_t o = container_origin(lv_event_get_target_obj(e));
     const tray::TrayFaces f = tray::tray_faces(s_tray.box);
     const TrayColors& c = s_tray.color;
@@ -643,9 +653,6 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
     s_tray.lane_half = half;
     s_tray.lane_count = n;
     s_tray.box = box;
-    const bool dark = theme_manager_is_dark_mode();
-    s_tray.color = load_tray_colors(dark);
-    s_tray.opa = dark ? DARK_OPA : LIGHT_OPA;
     s_tray.valid = true;
 
     // Labels sit space_md above the unit's top, lane humidity above them.

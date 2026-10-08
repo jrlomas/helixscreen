@@ -47,12 +47,19 @@ FilamentPathData* get_data(lv_obj_t* obj) {
 
 } // namespace helix::ui::fpath
 
-// Load theme-aware colors, fonts, and sizes
-static void load_theme_colors(FilamentPathData* data) {
-    bool dark_mode = theme_manager_is_dark_mode();
-    ThemeCache& theme = data->theme;
+namespace helix::ui::fpath {
 
-    // Use theme tokens with dark/light mode awareness
+bool refresh_theme_colors(FilamentPathData* data) {
+    ThemeCache& theme = data->theme;
+    lv_subject_t* changed = theme_manager_get_changed_subject();
+    const int generation = changed ? lv_subject_get_int(changed) : 0;
+    const bool dark_mode = theme_manager_is_dark_mode();
+    if (theme.colors_loaded && theme.generation == generation && theme.dark_mode == dark_mode)
+        return false;
+    theme.colors_loaded = true;
+    theme.generation = generation;
+    theme.dark_mode = dark_mode;
+
     theme.color_idle =
         theme_manager_get_color(dark_mode ? "filament_idle_dark" : "filament_idle_light");
     theme.color_error = theme_manager_get_color("filament_error");
@@ -68,8 +75,17 @@ static void load_theme_colors(FilamentPathData* data) {
         theme.color_buffer[s] = theme_manager_get_color(
             helix::ui::buffer_status_token(static_cast<helix::ui::ClogMeterStatus>(s)));
     }
+    spdlog::trace("[FilamentPath] Theme colors loaded (dark={}, generation={})", dark_mode,
+                  generation);
+    return true;
+}
 
-    // Get responsive sizing from theme
+} // namespace helix::ui::fpath
+
+// Sizes and the label font are bound to the breakpoint, not the theme, so a
+// theme switch leaves them as read at creation.
+static void load_theme_sizes(FilamentPathData* data) {
+    ThemeCache& theme = data->theme;
     int32_t space_xs = theme_manager_get_spacing("space_xs");
     int32_t space_md = theme_manager_get_spacing("space_md");
 
@@ -85,9 +101,6 @@ static void load_theme_colors(FilamentPathData* data) {
     // Get responsive font from globals.xml (font_small → responsive variant)
     const char* font_name = lv_xml_get_const(nullptr, "font_small");
     theme.label_font = font_name ? lv_xml_get_font(nullptr, font_name) : &noto_sans_12;
-
-    spdlog::trace("[FilamentPath] Theme colors loaded (dark={}, font={})", dark_mode,
-                  font_name ? font_name : "fallback");
 }
 
 // ============================================================================
@@ -159,6 +172,10 @@ static void filament_path_draw_cb(lv_event_t* e) {
     if (!data)
         return;
 
+    // A theme or dark-mode switch invalidates the screen; the first draw after
+    // it repaints the canvas, whose tubes still hold the old colors.
+    if (refresh_theme_colors(data))
+        layered_schedule_repaint(obj, data);
     layered_on_draw(obj, data);
     render_animation_overlay(obj, layer, data);
 }
@@ -306,8 +323,8 @@ static lv_obj_t* create_widget(lv_obj_t* parent) {
     s_registry[obj] = data_ptr.get();
     auto* data = data_ptr.release();
 
-    // Load theme-aware colors, fonts, and sizes
-    load_theme_colors(data);
+    refresh_theme_colors(data);
+    load_theme_sizes(data);
 
     // Configure object
     lv_obj_set_size(obj, DEFAULT_WIDTH, DEFAULT_HEIGHT);
