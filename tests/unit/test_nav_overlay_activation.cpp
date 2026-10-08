@@ -725,3 +725,50 @@ TEST_CASE_METHOD(OverlayActivationFixture,
     CHECK_FALSE(lv_obj_has_flag(home_widget_, LV_OBJ_FLAG_HIDDEN));
     CHECK_FALSE(nav.has_open_overlays());
 }
+
+// A near-full-screen slide plus fade costs more per frame than the limited tiers
+// can render, so they open and close overlays in their final state.
+TEST_CASE_METHOD(OverlayActivationFixture, "Overlay slides follow the tier's style-effects rule",
+                 "[navigation][overlay][modal_tier][platform_tier]") {
+    auto& nav = NavigationManager::instance();
+    DisplaySettingsManager::instance().set_animations_enabled(true);
+    lv_subject_t* tier = lv_xml_get_subject(nullptr, "platform_tier");
+    REQUIRE(tier != nullptr);
+    const int saved_tier = lv_subject_get_int(tier);
+    int closes = 0;
+    nav.register_overlay_close_callback(overlay_, [&closes] { ++closes; });
+
+    SECTION("limited tier: no animation, close callback fires once") {
+        lv_subject_set_int(tier, static_cast<int>(helix::PlatformTier::EMBEDDED));
+        open_overlay();
+        CHECK(lv_anim_get(overlay_, nullptr) == nullptr);
+        CHECK(lv_obj_get_style_translate_x(overlay_, LV_PART_MAIN) == 0);
+        CHECK(lv_obj_get_style_opa(overlay_, LV_PART_MAIN) == LV_OPA_COVER);
+
+        nav.go_back();
+        drain();
+        CHECK(lv_anim_get(overlay_, nullptr) == nullptr);
+        CHECK(lv_obj_has_flag(overlay_, LV_OBJ_FLAG_HIDDEN));
+        CHECK_FALSE(nav.has_open_overlays());
+        process_lvgl(50); // the close callback runs on the next tick
+        drain();
+        CHECK(closes == 1);
+        process_lvgl(500);
+        CHECK(closes == 1);
+    }
+
+    SECTION("capable tier: slides in and out") {
+        lv_subject_set_int(tier, static_cast<int>(helix::PlatformTier::STANDARD));
+        open_overlay();
+        CHECK(lv_anim_get(overlay_, nullptr) != nullptr);
+        process_lvgl(500);
+        nav.go_back();
+        drain();
+        CHECK(lv_anim_get(overlay_, nullptr) != nullptr);
+        CHECK(closes == 0);
+        process_lvgl(500);
+        CHECK(closes == 1);
+    }
+
+    lv_subject_set_int(tier, saved_tier);
+}
