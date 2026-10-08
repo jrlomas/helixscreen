@@ -3,6 +3,7 @@
 
 #include "../tests/mocks/mock_printer_state.h"
 #include "moonraker_client_mock.h"
+#include "moonraker_client_mock_internal.h"
 
 #include <spdlog/spdlog.h>
 
@@ -430,11 +431,13 @@ MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_move(const std::stri
     motors_enabled_.store(true);
     bool is_relative = relative_mode_.load();
 
-    // Position limits (typical Voron 2.4 350mm config)
-    // Z allows slight negative for probe calibration
-    constexpr double X_MIN = 0.0, X_MAX = 350.0;
-    constexpr double Y_MIN = 0.0, Y_MAX = 350.0;
-    constexpr double Z_MIN = -0.5, Z_MAX = 340.0;
+    // Position limits: the persona's stepper travel. Z allows slight negative
+    // for probe calibration.
+    const auto axis_max = helix::mock::descriptor(printer_type_).axis_max;
+    constexpr double X_MIN = mock_internal::MOCK_BED_X_MIN;
+    constexpr double Y_MIN = mock_internal::MOCK_BED_Y_MIN;
+    constexpr double Z_MIN = -0.5;
+    const double X_MAX = axis_max.x, Y_MAX = axis_max.y, Z_MAX = axis_max.z;
 
     // Helper lambda to parse axis value from gcode string
     auto parse_axis = [&gcode](char axis) -> std::pair<bool, double> {

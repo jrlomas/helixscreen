@@ -171,12 +171,20 @@ json get_mock_gcode_macro_config();
 json get_mock_accel_config();
 
 /**
+ * @brief The probe profile the mock reports for a persona
+ *
+ * HELIX_MOCK_PROBE_TYPE when set. Otherwise "cartographer" for a persona that
+ * inherits the default probe, else the persona's own probe ("load_cell_probe"
+ * on the CC1), else "none".
+ */
+std::string mock_probe_type(helix::mock::PrinterType type);
+
+/**
  * @brief Get the mock probe's configfile.config section
  *
- * Keyed off HELIX_MOCK_PROBE_TYPE — the same variable that picks the probe
- * object in populate_capabilities() and the probe status in
- * dispatch_initial_state() — so all three stay in step. Returns an empty object
- * for "none".
+ * Keyed off mock_probe_type() — the same profile that picks the probe objects
+ * in populate_capabilities() and the probe status in dispatch_initial_state()
+ * — so all three stay in step. Returns an empty object for "none".
  *
  * Values are STRINGS, matching Klipper: configfile.config is the verbatim
  * printer.cfg text, and ProbeSensorManager::discover_from_config() parses
@@ -187,7 +195,7 @@ json get_mock_accel_config();
  * seeding exists for, and it is the only profile where the seeded value is
  * observably different from what a status update would have produced.
  */
-json get_mock_probe_config();
+json get_mock_probe_config(helix::mock::PrinterType type);
 
 /**
  * @brief Get mock Happy Hare "mmu" status (--real-ams)
@@ -206,11 +214,11 @@ namespace helix::sim {
 /**
  * @brief Get the mock probe's printer objects and their status, keyed by object
  *
- * Keyed off HELIX_MOCK_PROBE_TYPE. The keys are the objects the probe registers
+ * Keyed off mock_internal::mock_probe_type(type). The keys are the objects the probe registers
  * (a module that also claims the generic "probe" object lists both), and each
  * value is the full get_status() payload that module returns, per the per-type
  * table in docs/devel/SENSOR_MANAGEMENT.md. Empty for "none".
  */
-nlohmann::json mock_probe_status();
+nlohmann::json mock_probe_status(helix::mock::PrinterType type);
 
 } // namespace helix::sim

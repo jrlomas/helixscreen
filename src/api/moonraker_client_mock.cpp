@@ -1030,6 +1030,33 @@ void MoonrakerClientMock::populate_capabilities() {
         // Same Pro-separating chamber heater as the Reforge persona above.
         mock_objects.push_back("heater_generic chamber_heater");
         break;
+    case PrinterType::ELEGOO_CC1:
+        // The CC1 capture's own objects. _COSMOS_SETTINGS and ELEGOO_PURGE are
+        // what name the machine; its hostname and M191 match an enclosed QIDI too.
+        for (const char* obj : {"configfile",
+                                "print_stats",
+                                "virtual_sdcard",
+                                "pause_resume",
+                                "display_status",
+                                "screws_tilt_adjust",
+                                "gcode_macro _COSMOS_SETTINGS",
+                                "gcode_macro SAVE_CONFIG",
+                                "gcode_macro _KAMP_Settings",
+                                "gcode_macro LINE_PURGE",
+                                "gcode_macro ELEGOO_PURGE",
+                                "gcode_macro SMART_PARK",
+                                "gcode_macro PRINT_START",
+                                "gcode_macro M191",
+                                "gcode_macro PRINT_END",
+                                "gcode_macro CLEAN_NOZZLE",
+                                "gcode_macro MOVE_TO_TRAY",
+                                "gcode_macro CUT_FILAMENT",
+                                "gcode_macro LOADCELL_Z_HOME",
+                                "gcode_macro CALIBRATE_Z_OFFSET",
+                                "gcode_macro _UPDATE_COSMOS"}) {
+            mock_objects.push_back(obj);
+        }
+        break;
     default:
         // Other printers may not have these features
         break;
@@ -1100,24 +1127,14 @@ void MoonrakerClientMock::populate_capabilities() {
         mock_objects.push_back("mmu");
     }
 
-    // Probe sensor (HELIX_MOCK_PROBE_TYPE: cartographer, tap, bltouch, beacon, klicky, standard,
-    // none)
-    // An explicit HELIX_MOCK_PROBE_TYPE wins over a persona that omits the
-    // default cartographer.
-    const char* probe_env = std::getenv("HELIX_MOCK_PROBE_TYPE");
-    const bool probe_set = probe_env && probe_env[0];
-    std::string mock_probe_type = probe_set ? probe_env : "cartographer";
-    if (mock_probe_type == "none") {
-        spdlog::debug("[MoonrakerClientMock] Probe disabled via env var");
-    } else if (!probe_set && !inherits(CARTOGRAPHER)) {
-        spdlog::debug("[MoonrakerClientMock] Persona has no default probe");
-    } else {
-        const json probe_status = helix::sim::mock_probe_status();
-        for (auto it = probe_status.begin(); it != probe_status.end(); ++it) {
-            mock_objects.push_back(it.key());
-        }
-        spdlog::debug("[MoonrakerClientMock] Mock probe: {}", mock_probe_type);
+    // Probe objects: HELIX_MOCK_PROBE_TYPE, else the persona's own probe
+    // (mock_internal::mock_probe_type).
+    const json probe_status = helix::sim::mock_probe_status(printer_type_);
+    for (auto it = probe_status.begin(); it != probe_status.end(); ++it) {
+        mock_objects.push_back(it.key());
     }
+    spdlog::debug("[MoonrakerClientMock] Mock probe: {}",
+                  mock_internal::mock_probe_type(printer_type_));
 
     // Filament sensors (common setup: runout sensor at spool holder)
     // Check HELIX_MOCK_FILAMENT_SENSORS env var for custom sensor names
@@ -1161,6 +1178,9 @@ void MoonrakerClientMock::populate_capabilities() {
             }
         }
         spdlog::debug("[MoonrakerClientMock] Creator 5 filament sensors: fd_ex0..fd_ex3");
+    } else if (printer_type_ == PrinterType::ELEGOO_CC1) {
+        // The chassis runout switch, named as in assets/config/presets/cc1.json.
+        mock_objects.push_back("filament_switch_sensor filament_sensor");
     } else if (inherits(RUNOUT_SENSOR)) {
         // Default: one switch sensor (typical Voron setup)
         mock_objects.push_back("filament_switch_sensor runout_sensor");
@@ -1282,7 +1302,7 @@ void MoonrakerClientMock::populate_capabilities() {
     mock_config.merge_patch(mock_internal::get_mock_gcode_macro_config());
     // Probe section — shared with the configfile.config query/subscribe responses
     // so all three payloads describe the same probe.
-    mock_config.merge_patch(mock_internal::get_mock_probe_config());
+    mock_config.merge_patch(mock_internal::get_mock_probe_config(printer_type_));
     // Stepper travel limits, matching the configfile.settings the query and
     // subscribe handlers report. The real discovery sequence derives the build
     // volume from these before detection runs, so the mock has to carry them or
@@ -2231,6 +2251,20 @@ void MoonrakerClientMock::populate_hardware() {
         };
         discovery_.fans() = {"heater_fan hotend_fan", "fan"};
         discovery_.leds() = {};
+        break;
+
+    case PrinterType::ELEGOO_CC1:
+        // Elegoo Centauri Carbon on COSMOS. Names mirror
+        // tests/fixtures/printers/elegoo_centauri_carbon.json and
+        // assets/config/presets/cc1.json hardware/expected.
+        discovery_.heaters() = {"heater_bed", "extruder"};
+        discovery_.sensors() = {"heater_bed", // Bed thermistor (Klipper naming: bare heater name)
+                                "extruder", // Hotend thermistor (Klipper naming: bare heater name)
+                                "temperature_sensor chamber", "temperature_sensor mcu_toolhead",
+                                "temperature_sensor mcu_bed"};
+        discovery_.fans() = {"heater_fan extruder", "fan", "fan_generic aux_fan",
+                             "fan_generic case_fan", "temperature_fan mainboard"};
+        discovery_.leds() = {"led case", "led hotend"};
         break;
 
     case PrinterType::MULTI_EXTRUDER:
@@ -3453,7 +3487,6 @@ void MoonrakerClientMock::dispatch_initial_state() {
          {{"temperature", 42.3},
           {"target", chamber_target_.load()},
           {"power", mock_heater_duty(42.3, chamber_target_.load())}}},
-        {"temperature_sensor chamber", {{"temperature", 42.3}}},
         {"toolhead",
          {{"position", {x, y, z, 0.0}},
           {"homed_axes", homed},
@@ -3576,13 +3609,18 @@ void MoonrakerClientMock::dispatch_initial_state() {
         initial_status[sensor] = {{"filament_detected", detected}, {"enabled", true}};
     }
 
+    // The chamber sensor carries status only where the persona reports it.
+    const auto omit = helix::mock::descriptor(printer_type_).omit;
+    if (!(omit & helix::mock::default_object::CHAMBER_SENSOR) || has_chamber_sensor()) {
+        initial_status["temperature_sensor chamber"] = {{"temperature", 42.3}};
+    }
     // Add width sensor data (Hall-effect filament diameter measurement)
     initial_status["hall_filament_width_sensor"] = {
         {"Diameter", 1.75}, {"Raw", 500.0}, {"is_active", true}};
 
     // Probe objects (the same ones populate_capabilities() lists)
     // (assigned, not merge_patch'd: a patch drops the null fields they carry).
-    initial_status.update(helix::sim::mock_probe_status());
+    initial_status.update(helix::sim::mock_probe_status(printer_type_));
 
     // Chamber backend diagnostics + filter pin (e.g. dragonbreath trio via
     // HELIX_MOCK_OBJECTS). Tail of the builder; keys are distinct from every

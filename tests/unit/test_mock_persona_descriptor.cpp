@@ -15,8 +15,10 @@
 #include "moonraker_client_mock.h"
 #include "printer_discovery.h"
 #include "test_helpers/mock_personas.h"
+#include "test_helpers/moonraker_client_mock_test_access.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -40,6 +42,16 @@ bool lists(const std::vector<std::string>& objs, const char* name) {
     return std::find(objs.begin(), objs.end(), name) != objs.end();
 }
 
+/// The status frame the mock pushes when a client subscribes.
+json initial_status(MoonrakerClientMock& mock) {
+    json frame;
+    const auto id =
+        mock.register_notify_update([&frame](const json& n) { frame = n["params"][0]; });
+    helix::MoonrakerClientMockTestAccess::dispatch_initial_state(mock);
+    mock.unsubscribe_notify_update(id);
+    return frame;
+}
+
 } // namespace
 
 TEST_CASE_METHOD(LVGLTestFixture, "Every persona reports its descriptor on every mock path",
@@ -57,11 +69,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "Every persona reports its descriptor on every
 
             for (const char* method : {"printer.objects.query", "printer.objects.subscribe"}) {
                 json r;
-                mock.send_jsonrpc(
-                    method,
-                    {{"objects",
-                      {{"configfile", {"config", "settings"}}, {"toolhead", {"axis_maximum"}}}}},
-                    [&](const json& resp) { r = resp; });
+                mock.send_jsonrpc(method,
+                                  {{"objects",
+                                    {{"configfile", {"config", "settings"}},
+                                     {"toolhead", {"axis_maximum"}},
+                                     {"bed_mesh", nullptr}}}},
+                                  [&](const json& resp) { r = resp; });
                 INFO(method);
                 json st = r["result"]["status"]; // non-const: a missing key reads null
                 CHECK(st["configfile"]["settings"]["stepper_x"]["position_max"] == d.axis_max.x);
@@ -72,7 +85,39 @@ TEST_CASE_METHOD(LVGLTestFixture, "Every persona reports its descriptor on every
                 CHECK(st["toolhead"]["axis_maximum"][2] == d.axis_max.z);
                 CHECK(st["configfile"]["config"]["printer"]["kinematics"] ==
                       std::string(d.kinematics));
+                // A probe reaches 15mm short of each far edge of the bed. Only
+                // the query handler answers bed_mesh.
+                if (std::string(method) == "printer.objects.query") {
+                    CHECK(st["bed_mesh"]["mesh_max"][0] == d.axis_max.x - 15.0);
+                    CHECK(st["bed_mesh"]["mesh_max"][1] == d.axis_max.y - 15.0);
+                }
+
+                const json& config = st["configfile"]["config"];
+                if (d.omit & helix::mock::default_object::CARTOGRAPHER)
+                    CHECK_FALSE(config.contains("cartographer"));
+                if (d.omit & helix::mock::default_object::LED_EFFECTS)
+                    CHECK_FALSE(config.contains("led_effect rainbow"));
             }
+
+            // Moves reach the far corner of the persona's volume and no further.
+            mock.gcode_script("G28");
+            const auto move_error = [&mock](const std::string& gcode) {
+                return mock.gcode_script(gcode) == 0 ? std::string{} : mock.get_last_gcode_error();
+            };
+            char in_range[96];
+            std::snprintf(in_range, sizeof in_range, "G0 X%.2f Y%.2f Z%.2f", d.axis_max.x,
+                          d.axis_max.y, d.axis_max.z);
+            CHECK(move_error(in_range).empty());
+            for (const char* axis : {"X", "Y", "Z"}) {
+                const double max = *axis == 'X'   ? d.axis_max.x
+                                   : *axis == 'Y' ? d.axis_max.y
+                                                  : d.axis_max.z;
+                const std::string past = "G0 " + std::string(axis) + std::to_string(max + 1.0);
+                INFO(past);
+                CHECK(move_error(past).find("out of range") != std::string::npos);
+            }
+
+            const json frame = initial_status(mock);
 
             const auto objs = discovered_objects(mock);
             const auto hw = mock.hardware();
@@ -99,6 +144,12 @@ TEST_CASE_METHOD(LVGLTestFixture, "Every persona reports its descriptor on every
                 CHECK_FALSE(lists(objs, "filament_switch_sensor runout_sensor"));
             if (d.omit & LED_EFFECTS)
                 CHECK_FALSE(lists(objs, "led_effect rainbow"));
+            if (d.omit & CARTOGRAPHER) {
+                CHECK_FALSE(lists(objs, "cartographer"));
+                CHECK_FALSE(frame.contains("cartographer"));
+            }
+            if (d.omit & CHAMBER_SENSOR)
+                CHECK_FALSE(frame.contains("temperature_sensor chamber"));
         }
     }
 }

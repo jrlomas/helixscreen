@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "../../src/api/moonraker_client_mock_internal.h"
 #include "../helix_test_fixture.h"
 #include "mock_persona.h"
 #include "moonraker_client_mock.h"
 #include "printer_detector.h"
 #include "printer_discovery.h"
 #include "test_helpers/mock_personas.h"
+#include "test_helpers/printer_capture.h"
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 
 #include "../catch_amalgamated.hpp"
 
 namespace {
+
+using helix::test::PersonaEnv;
 
 /// What the app does under --test: the real discovery sequence over the mock.
 helix::PrinterDiscovery discover(const helix::mock::PersonaEntry& p) {
@@ -44,8 +49,30 @@ constexpr Expectation EXPECTED[] = {
     {"multi_extruder",     "",                          "",             false},
     {"delta",              "",                          "",             false},
     {"snapmaker_u1",       "",                          "",             false},
+    {"cc1",                "Elegoo Centauri Carbon",    "cc1",          true},
 };
 // clang-format on
+
+/// Every object, heater and fan the real machine reported is one the persona reports.
+void check_mirrors_capture(const helix::PrinterDiscovery& hw, const std::string& slug) {
+    const auto cap = helix::test::load_printer_capture(slug);
+    auto contains = [](const auto& list, const std::string& v) {
+        return std::find(list.begin(), list.end(), v) != list.end();
+    };
+    for (const auto& o : cap.value("printer_objects", nlohmann::json::array())) {
+        INFO(slug << " object " << o);
+        CHECK(contains(hw.printer_objects(), o.get<std::string>()));
+    }
+    for (const auto& h : cap.value("heaters", nlohmann::json::array())) {
+        INFO(slug << " heater " << h);
+        CHECK(contains(hw.heaters(), h.get<std::string>()));
+    }
+    for (const auto& f : cap.value("fans", nlohmann::json::array())) {
+        INFO(slug << " fan " << f);
+        CHECK(contains(hw.fans(), f.get<std::string>()));
+    }
+    CHECK(hw.hostname() == cap.value("hostname", std::string{}));
+}
 
 } // namespace
 
@@ -83,5 +110,31 @@ TEST_CASE_METHOD(HelixTestFixture, "Each mock persona auto-detects as the printe
                 CHECK(p->saved_type == r.type_name);
             }
         }
+    }
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "The cc1 persona mirrors the real CC1 capture",
+                 "[mock][persona][cc1]") {
+    PersonaEnv env("cc1");
+    check_mirrors_capture(discover(*helix::mock::find_persona("cc1")), "elegoo_centauri_carbon");
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "An env override restores an omitted default",
+                 "[mock][persona][cc1]") {
+    PersonaEnv env("cc1");
+    const auto* p = helix::mock::find_persona("cc1");
+    {
+        const auto objs = discover(*p).printer_objects();
+        CHECK(std::find(objs.begin(), objs.end(), "cartographer") == objs.end());
+    }
+    helix::ScopedEnv probe("HELIX_MOCK_PROBE_TYPE", "cartographer");
+    helix::ScopedEnv sensors("HELIX_MOCK_FILAMENT_SENSORS", "switch:extra_runout");
+    const auto objs = discover(*p).printer_objects();
+    CHECK(std::find(objs.begin(), objs.end(), "filament_switch_sensor extra_runout") != objs.end());
+    const auto probe_objects = helix::sim::mock_probe_status(p->type);
+    REQUIRE(probe_objects.contains("cartographer"));
+    for (auto it = probe_objects.begin(); it != probe_objects.end(); ++it) {
+        INFO(it.key());
+        CHECK(std::find(objs.begin(), objs.end(), it.key()) != objs.end());
     }
 }

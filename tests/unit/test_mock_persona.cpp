@@ -23,6 +23,7 @@ constexpr PrinterType ALL_TYPES[] = {
     PrinterType::GENERIC_BEDSLINGER,
     PrinterType::MULTI_EXTRUDER,
     PrinterType::DELTA,
+    PrinterType::ELEGOO_CC1,
 };
 } // namespace
 

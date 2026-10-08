@@ -23,6 +23,7 @@
 #include "../lvgl_test_fixture.h"
 #include "moonraker_client_mock.h"
 #include "probe_sensor_manager.h"
+#include "test_helpers/scoped_env.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -232,7 +233,7 @@ TEST_CASE("Mock probe status carries the keys real firmware publishes",
 
     SECTION("bltouch registers bltouch and the probe alias, same ProbeCommandHelper status") {
         ScopedProbeType probe_type("bltouch");
-        const json st = helix::sim::mock_probe_status();
+        const json st = helix::sim::mock_probe_status(helix::mock::PrinterType::VORON_24);
         REQUIRE(keys_of(st) == Keys{"bltouch", "probe"});
         REQUIRE(keys_of(st["bltouch"]) == helper_keys);
         REQUIRE(st["bltouch"] == st["probe"]);
@@ -241,14 +242,14 @@ TEST_CASE("Mock probe status carries the keys real firmware publishes",
 
     SECTION("generic probe publishes the ProbeCommandHelper status") {
         ScopedProbeType probe_type("tap");
-        const json st = helix::sim::mock_probe_status();
+        const json st = helix::sim::mock_probe_status(helix::mock::PrinterType::VORON_24);
         REQUIRE(keys_of(st) == Keys{"probe"});
         REQUIRE(keys_of(st["probe"]) == helper_keys);
     }
 
     SECTION("beacon: flat status on beacon, a name-only probe alias") {
         ScopedProbeType probe_type("beacon");
-        const json st = helix::sim::mock_probe_status();
+        const json st = helix::sim::mock_probe_status(helix::mock::PrinterType::VORON_24);
         REQUIRE(keys_of(st) == Keys{"beacon", "probe"});
         REQUIRE(keys_of(st["beacon"]) ==
                 Keys{"last_sample", "last_received_sample", "last_z_result", "last_probe_position",
@@ -258,7 +259,7 @@ TEST_CASE("Mock probe status carries the keys real firmware publishes",
 
     SECTION("cartographer: per-mode status on cartographer, flat keys on probe") {
         ScopedProbeType probe_type("cartographer");
-        const json st = helix::sim::mock_probe_status();
+        const json st = helix::sim::mock_probe_status(helix::mock::PrinterType::VORON_24);
         REQUIRE(keys_of(st) == Keys{"cartographer", "probe"});
         REQUIRE(keys_of(st["cartographer"]) == Keys{"scan", "touch", "mcu"});
         REQUIRE(keys_of(st["cartographer"]["scan"]) ==
@@ -269,7 +270,34 @@ TEST_CASE("Mock probe status carries the keys real firmware publishes",
 
     SECTION("none publishes no probe object") {
         ScopedProbeType probe_type("none");
-        REQUIRE(helix::sim::mock_probe_status().empty());
+        REQUIRE(helix::sim::mock_probe_status(helix::mock::PrinterType::VORON_24).empty());
+    }
+}
+
+TEST_CASE("Unset HELIX_MOCK_PROBE_TYPE reports the persona's own probe", "[mock][probe][persona]") {
+    using Keys = std::set<std::string>;
+    helix::ScopedEnv unset("HELIX_MOCK_PROBE_TYPE", nullptr);
+
+    SECTION("a persona that inherits the default reports cartographer") {
+        const auto type = helix::mock::PrinterType::VORON_24;
+        CHECK(keys_of(helix::sim::mock_probe_status(type)) == Keys{"cartographer", "probe"});
+        CHECK(keys_of(mock_internal::get_mock_probe_config(type)) == Keys{"cartographer"});
+    }
+
+    SECTION("cc1 reports its mainline load_cell_probe and nothing of cartographer's") {
+        const auto type = helix::mock::PrinterType::ELEGOO_CC1;
+        const json st = helix::sim::mock_probe_status(type);
+        CHECK(keys_of(st) == Keys{"load_cell_probe", "probe"});
+        CHECK(st["probe"] == st["load_cell_probe"]);
+        CHECK(st["probe"]["name"] == "load_cell_probe");
+        CHECK(keys_of(mock_internal::get_mock_probe_config(type)) == Keys{"load_cell_probe"});
+    }
+
+    SECTION("an explicit type overrides the persona's own probe") {
+        helix::ScopedEnv bltouch("HELIX_MOCK_PROBE_TYPE", "bltouch");
+        const auto type = helix::mock::PrinterType::ELEGOO_CC1;
+        CHECK(keys_of(helix::sim::mock_probe_status(type)) == Keys{"bltouch", "probe"});
+        CHECK(keys_of(mock_internal::get_mock_probe_config(type)) == Keys{"bltouch"});
     }
 }
 
