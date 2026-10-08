@@ -1766,6 +1766,9 @@ AmsSystemInfo AmsBackendAd5xIfs::get_system_info() const {
     const_cast<AmsBackendAd5xIfs*>(this)->check_action_timeout();
 
     auto info = slots_.build_system_info(system_info_);
+    // Motion-only firmware publishes no head switch: no toolhead sensor to show.
+    for (auto& unit : info.units)
+        unit.has_toolhead_sensor = head_switch_seen_;
 
     // Replace registry's tool map with IFS-specific 16-entry mapping
     info.tool_to_slot_map.clear();

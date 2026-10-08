@@ -101,6 +101,9 @@ class AfcTestAccess {
     template <class B> static auto& discovered_lane_names(B& b) {
         return b.discovered_lane_names_;
     }
+    template <class B, class Topo> static void apply_configfile_topology(B& b, Topo topo) {
+        b.apply_configfile_topology(std::move(topo));
+    }
     template <class B> static auto& configfile_answered(B& b) {
         return b.configfile_answered_;
     }

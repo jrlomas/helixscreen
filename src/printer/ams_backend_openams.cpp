@@ -232,6 +232,8 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
         unit.first_slot_global_index = next.total_slots;
         unit.connected = bool_member(unit_json, "connected", true);
         unit.topology = PathTopology::HUB;
+        // The oams_manager contract publishes no toolhead filament sensor.
+        unit.has_toolhead_sensor = false;
         const std::string topology = string_member(unit_json, "topology");
         if (!topology.empty()) {
             if (auto parsed = topology_from_token(topology)) {

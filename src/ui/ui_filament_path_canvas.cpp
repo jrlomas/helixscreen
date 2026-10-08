@@ -786,6 +786,15 @@ void ui_filament_path_canvas_set_eject_mode(lv_obj_t* obj, bool eject) {
     data->eject_mode = eject;
 }
 
+// NAMESPACE_OK: the widget's C setter API, beside its siblings
+void ui_filament_path_canvas_set_toolhead_sensor(lv_obj_t* obj, bool has_sensor) {
+    auto* data = get_data(obj);
+    if (!data || data->has_toolhead_sensor == has_sensor)
+        return;
+    data->has_toolhead_sensor = has_sensor;
+    layered_mark_dirty(obj);
+}
+
 void ui_filament_path_canvas_clear_slot_filaments(lv_obj_t* obj) {
     auto* data = get_data(obj);
     if (!data)

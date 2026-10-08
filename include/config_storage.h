@@ -39,10 +39,23 @@ class ConfigStorage {
 
     /// Human-readable location for logs ("config/settings.json", "nvs://…").
     virtual std::string describe() const = 0;
+
+    /// True on a small flash partition, where Config writes compact JSON and
+    /// keeps no side copies of the document.
+    virtual bool small_footprint() const {
+        return false;
+    }
 };
+
+/// Standard writes hand-editable pretty JSON. Small is for a partition the size
+/// of the K-Touch's 128 KB cfg, where a save must hold the old and new copies at
+/// once: compact JSON, about a third of the size, and no .pre-migration copy.
+enum class ConfigFootprint { Standard, Small };
 
 /// Atomic-rename file implementation; behavior extracted verbatim from the
 /// pre-seam Config::save() / Config::init().
-std::unique_ptr<ConfigStorage> make_file_config_storage(const std::string& path);
+std::unique_ptr<ConfigStorage>
+make_file_config_storage(const std::string& path,
+                         ConfigFootprint footprint = ConfigFootprint::Standard);
 
 } // namespace helix
