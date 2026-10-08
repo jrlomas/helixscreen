@@ -3043,6 +3043,8 @@ translations:
   Tag Parts: 标记部件
   Tag parts: 标记部件
   Takes 3-5 min. Do not interrupt.: 需要 3-5 分钟。请勿中断。
+  Tangle prevention active: 防打结已启用
+  Tangle prevention boosted: 防打结已增强
   'Tangle sensitivity': '打结灵敏度'
   Tap + to add: 点击 + 添加
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: 点按“重启固件”以恢复。在 K2 上这也会重启 rpi MCU 桥接

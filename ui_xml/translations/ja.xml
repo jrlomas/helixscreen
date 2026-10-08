@@ -2931,6 +2931,8 @@
   <translation tag="Tag Parts" ja="部位をタグ付け"/>
   <translation tag="Tag parts" ja="部位をタグ付け"/>
   <translation tag="Takes 3-5 min. Do not interrupt." ja="3〜5分かかります。中断しないでください。"/>
+  <translation tag="Tangle prevention active" ja="絡み防止 動作中"/>
+  <translation tag="Tangle prevention boosted" ja="絡み防止 強化中"/>
   <translation tag="Tangle sensitivity" ja="絡み検出の感度"/>
   <translation tag="Tap + to add" ja="+ をタップして追加"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" ja="「ファームウェア再起動」をタップして復旧してください。K2 では rpi MCU ブリッジも再起動されます"/>

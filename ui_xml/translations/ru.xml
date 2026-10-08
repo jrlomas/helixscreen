@@ -2931,6 +2931,8 @@
   <translation tag="Tag Parts" ru="Отметить узлы"/>
   <translation tag="Tag parts" ru="Отметить узлы"/>
   <translation tag="Takes 3-5 min. Do not interrupt." ru="Занимает 3-5 мин. Не прерывайте."/>
+  <translation tag="Tangle prevention active" ru="Защита от спутывания активна"/>
+  <translation tag="Tangle prevention boosted" ru="Защита от спутывания усилена"/>
   <translation tag="Tangle sensitivity" ru="Чувствительность к спутыванию"/>
   <translation tag="Tap + to add" ru="Нажмите +, чтобы добавить"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" ru="Нажмите «Перезапуск прошивки» для восстановления. На K2 это также перезапускает мост MCU rpi"/>

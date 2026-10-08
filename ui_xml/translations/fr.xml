@@ -2931,6 +2931,8 @@
   <translation tag="Tag Parts" fr="Repérer les éléments"/>
   <translation tag="Tag parts" fr="Repérer les éléments"/>
   <translation tag="Takes 3-5 min. Do not interrupt." fr="Prend 3-5 min. Ne pas interrompre."/>
+  <translation tag="Tangle prevention active" fr="Anti-nœud actif"/>
+  <translation tag="Tangle prevention boosted" fr="Anti-nœud renforcé"/>
   <translation tag="Tangle sensitivity" fr="Sensibilité aux nœuds"/>
   <translation tag="Tap + to add" fr="Touchez + pour ajouter"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" fr="Appuyez sur Redémarrer le firmware pour récupérer. Sur la K2, cela redémarre aussi le pont MCU rpi"/>

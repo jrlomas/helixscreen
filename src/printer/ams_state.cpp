@@ -221,6 +221,7 @@ AmsState::AmsState() {
     std::memset(clog_meter_center_text_buf_, 0, sizeof(clog_meter_center_text_buf_));
     std::memset(clog_meter_label_left_buf_, 0, sizeof(clog_meter_label_left_buf_));
     std::memset(clog_meter_label_right_buf_, 0, sizeof(clog_meter_label_right_buf_));
+    std::memset(clog_meter_note_text_buf_, 0, sizeof(clog_meter_note_text_buf_));
 }
 
 AmsState::~AmsState() {

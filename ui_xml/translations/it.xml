@@ -2931,6 +2931,8 @@
   <translation tag="Tag Parts" it="Contrassegna componenti"/>
   <translation tag="Tag parts" it="Contrassegna componenti"/>
   <translation tag="Takes 3-5 min. Do not interrupt." it="Richiede 3-5 min. Non interrompere."/>
+  <translation tag="Tangle prevention active" it="Prevenzione grovigli attiva"/>
+  <translation tag="Tangle prevention boosted" it="Prevenzione grovigli potenziata"/>
   <translation tag="Tangle sensitivity" it="Sensibilità ai grovigli"/>
   <translation tag="Tap + to add" it="Tocca + per aggiungere"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" it="Toccare Riavvia firmware per ripristinare. Sulla K2 questo riavvia anche il bridge MCU rpi"/>

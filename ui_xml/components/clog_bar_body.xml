@@ -127,6 +127,13 @@
            check down here would just be the first one twice. -->
       <text_small name="clog_bar_center_text"
                   bind_text="clog_meter_center_text" style_text_align="center" clickable="false" event_bubble="true"/>
+      <!-- Why the detector tripped, or that tangle prevention is working;
+           hidden when the backend has nothing to add. -->
+      <text_tiny name="clog_bar_note"
+                 width="100%" bind_text="clog_meter_note_text" style_text_color="#text_muted" style_text_align="center"
+                 long_mode="wrap" clickable="false" event_bubble="true">
+        <bind_flag_if_eq subject="clog_meter_note_kind" flag="hidden" ref_value="0"/>
+      </text_tiny>
     </lv_obj>
   </view>
 </component>

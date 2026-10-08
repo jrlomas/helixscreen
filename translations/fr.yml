@@ -3281,6 +3281,8 @@ translations:
   Tag Parts: Repérer les éléments
   Tag parts: Repérer les éléments
   Takes 3-5 min. Do not interrupt.: Prend 3-5 min. Ne pas interrompre.
+  Tangle prevention active: Anti-nœud actif
+  Tangle prevention boosted: Anti-nœud renforcé
   'Tangle sensitivity': 'Sensibilité aux nœuds'
   Tap + to add: Touchez + pour ajouter
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Appuyez sur Redémarrer le firmware pour récupérer. Sur la K2, cela redémarre aussi le pont MCU rpi

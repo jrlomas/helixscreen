@@ -2931,6 +2931,8 @@
   <translation tag="Tag Parts" de="Bauteile markieren"/>
   <translation tag="Tag parts" de="Bauteile markieren"/>
   <translation tag="Takes 3-5 min. Do not interrupt." de="Dauert 3-5 Min. Nicht unterbrechen."/>
+  <translation tag="Tangle prevention active" de="Verwicklungsschutz aktiv"/>
+  <translation tag="Tangle prevention boosted" de="Verwicklungsschutz verstärkt"/>
   <translation tag="Tangle sensitivity" de="Verwicklungsempfindlichkeit"/>
   <translation tag="Tap + to add" de="Zum Hinzufügen + tippen"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" de="Zum Wiederherstellen auf Firmware-Neustart tippen. Beim K2 wird dabei auch die rpi-MCU-Bridge neu gestartet"/>

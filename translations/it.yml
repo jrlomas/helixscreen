@@ -3257,6 +3257,8 @@ translations:
   Tag Parts: Contrassegna componenti
   Tag parts: Contrassegna componenti
   Takes 3-5 min. Do not interrupt.: Richiede 3-5 min. Non interrompere.
+  Tangle prevention active: Prevenzione grovigli attiva
+  Tangle prevention boosted: Prevenzione grovigli potenziata
   'Tangle sensitivity': 'Sensibilità ai grovigli'
   Tap + to add: Tocca + per aggiungere
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Toccare Riavvia firmware per ripristinare. Sulla K2 questo riavvia anche il bridge MCU rpi

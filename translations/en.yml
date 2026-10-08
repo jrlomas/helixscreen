@@ -3161,6 +3161,8 @@ translations:
   Tag Parts: Tag Parts
   Tag parts: Tag parts
   Takes 3-5 min. Do not interrupt.: Takes 3-5 min. Do not interrupt.
+  Tangle prevention active: Tangle prevention active
+  Tangle prevention boosted: Tangle prevention boosted
   'Tangle sensitivity': 'Tangle sensitivity'
   Tap + to add: Tap + to add
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge

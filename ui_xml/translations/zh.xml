@@ -2931,6 +2931,8 @@
   <translation tag="Tag Parts" zh="标记部件"/>
   <translation tag="Tag parts" zh="标记部件"/>
   <translation tag="Takes 3-5 min. Do not interrupt." zh="需要 3-5 分钟。请勿中断。"/>
+  <translation tag="Tangle prevention active" zh="防打结已启用"/>
+  <translation tag="Tangle prevention boosted" zh="防打结已增强"/>
   <translation tag="Tangle sensitivity" zh="打结灵敏度"/>
   <translation tag="Tap + to add" zh="点击 + 添加"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" zh="点按“重启固件”以恢复。在 K2 上这也会重启 rpi MCU 桥接"/>
