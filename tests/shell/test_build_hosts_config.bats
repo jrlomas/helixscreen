@@ -1,28 +1,135 @@
 #!/usr/bin/env bats
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# The build-hosts file (scripts/lib/build_hosts.sh) as make and the remote build
-# script read it: the file names the hosts, the environment beats the file, and
-# a command whose host is unset refuses in one line instead of guessing one.
+# The build-hosts file (scripts/lib/build_hosts.sh): one parser, which the
+# scripts source and make asks through $(shell). The file names the hosts, the
+# environment beats the file on both sides, a line the parser cannot take is
+# named and skipped, and a make that uses no remote host never runs the parser,
+# so a broken file cannot break an ordinary build.
 
 ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+LIB="$ROOT/scripts/lib/build_hosts.sh"
 
 setup() {
     load helpers
     cd "$ROOT"
     mock_command_script ssh 'touch "$BATS_TEST_TMPDIR/ssh-called"; exit 255'
+    # A makefile that prints what a recipe under mk/remote.mk sees.
+    SHOW="$BATS_TEST_TMPDIR/show.mk"
+    cat > "$SHOW" <<'MK'
+show-remote:
+	@echo 'host=[$(REMOTE_HOST)] dir=[$(REMOTE_DIR)] user=[$(REMOTE_USER)]'
+show-env:
+	@echo "env-test-host=[$$HELIX_TEST_HOST] env-build-dir=[$$REMOTE_BUILD_DIR]"
+MK
 }
 
-@test "mk/remote.mk takes the remote host from the build-hosts file, and the environment beats it" {
-    printf 'REMOTE_HOST=fromfile.invalid\nREMOTE_DIR=/srv/fromfile\n' > "$HELIX_BUILD_HOSTS_FILE"
-    run make -s -n -f mk/remote.mk remote-ssh
+hosts() { printf '%s\n' "$@" > "$HELIX_BUILD_HOSTS_FILE"; }
+via_make() { run make -s -f mk/remote.mk -f "$SHOW" "$@"; }
+via_shell() { run bash -c '. "$1"; echo "host=[${REMOTE_HOST:-}] dir=[${REMOTE_DIR:-}] user=[${REMOTE_USER:-}]"' _ "$LIB"; }
+
+@test "make and the shell read the same values from the file" {
+    hosts REMOTE_HOST=fromfile.invalid REMOTE_DIR=/srv/fromfile
+    via_make show-remote
     [ "$status" -eq 0 ]
-    contains "ssh -t fromfile.invalid" "$output"
-    contains "cd /srv/fromfile" "$output"
-    REMOTE_HOST=fromenv.invalid run make -s -n -f mk/remote.mk remote-ssh
+    contains "host=[fromfile.invalid] dir=[/srv/fromfile]" "$output"
+    via_shell
+    contains "host=[fromfile.invalid] dir=[/srv/fromfile]" "$output"
+}
+
+@test "the environment beats the file, through make and in the shell" {
+    hosts REMOTE_HOST=fromfile.invalid REMOTE_DIR=/srv/fromfile
+    REMOTE_HOST=fromenv.invalid via_make show-remote
+    contains "host=[fromenv.invalid] dir=[/srv/fromfile]" "$output"
+    REMOTE_HOST=fromenv.invalid via_shell
+    contains "host=[fromenv.invalid] dir=[/srv/fromfile]" "$output"
+    # The make command line beats both.
+    REMOTE_HOST=fromenv.invalid via_make show-remote REMOTE_HOST=cmdline.invalid
+    contains "host=[cmdline.invalid]" "$output"
+}
+
+@test "make hands recipes the developer's environment, never the file's value for it" {
+    hosts HELIX_TEST_HOST=filehost.invalid REMOTE_BUILD_DIR=/file
+    HELIX_TEST_HOST=envhost.invalid REMOTE_BUILD_DIR=/env via_make show-env
     [ "$status" -eq 0 ]
-    contains "ssh -t fromenv.invalid" "$output"
-    contains "cd /srv/fromfile" "$output"
+    contains "env-test-host=[envhost.invalid] env-build-dir=[/env]" "$output"
+}
+
+@test "a make that uses no remote host never runs the parser, so a broken file cannot stop it" {
+    hosts 'HELIX_TEST_HOST zeus' 'export REMOTE_HOST=x' '  REMOTE_DIR=/x'
+    run make -s -f mk/remote.mk -f "$SHOW" show-env
+    [ "$status" -eq 0 ]
+    lacks "build-hosts" "$output"
+    lacks "missing separator" "$output"
+}
+
+@test "a line the parser cannot take is named and skipped; the good lines still apply" {
+    hosts 'HELIX_TEST_HOST zeus' 'REMOTE_HOST=good.invalid' 'export REMOTE_USER=x' '  REMOTE_DIR=/indented'
+    via_shell
+    contains "host=[good.invalid] dir=[] user=[]" "$output"
+    contains ":1: not KEY=VALUE" "$output"
+    contains ":3: not KEY=VALUE" "$output"
+    contains ":4: not KEY=VALUE" "$output"
+    via_make show-remote
+    contains "host=[good.invalid] dir=[] user=[]" "$output"
+}
+
+@test "values are literal: no \$ expansion, and nothing in the file runs" {
+    hosts 'REMOTE_DIR=$HOME/src' 'REMOTE_HOST=$(id)' 'REMOTE_USER=`id`'
+    via_shell
+    contains 'host=[$(id)] dir=[$HOME/src] user=[`id`]' "$output"
+    via_make show-remote
+    contains 'host=[$(id)] dir=[$HOME/src] user=[`id`]' "$output"
+}
+
+@test "a trailing comment or a quoted value is refused, not half-read" {
+    hosts 'REMOTE_HOST=zeus.invalid # the big box' 'REMOTE_DIR="/srv/quoted"'
+    via_shell
+    contains "host=[] dir=[]" "$output"
+    contains ":1: REMOTE_HOST: whitespace in the value" "$output"
+    contains ":2: REMOTE_DIR: quotes in the value" "$output"
+    via_make show-remote
+    contains "host=[] dir=[]" "$output"
+}
+
+@test "the last of two lines for one key wins, on both sides" {
+    hosts REMOTE_HOST=first.invalid REMOTE_HOST=last.invalid
+    via_shell
+    contains "host=[last.invalid]" "$output"
+    via_make show-remote
+    contains "host=[last.invalid]" "$output"
+}
+
+@test "a CRLF file reads the same as an LF one" {
+    printf 'REMOTE_HOST=crlf.invalid\r\nREMOTE_DIR=/srv/crlf\r\n' > "$HELIX_BUILD_HOSTS_FILE"
+    via_shell
+    contains "host=[crlf.invalid] dir=[/srv/crlf]" "$output"
+    via_make show-remote
+    contains "host=[crlf.invalid] dir=[/srv/crlf]" "$output"
+}
+
+@test "only the documented keys are ever set" {
+    hosts "BASH_ENV=$BATS_TEST_TMPDIR/evil" LD_PRELOAD=/evil.so REMOTE_HOST=ok.invalid
+    run bash -c '. "$1"; echo "bash_env=[${BASH_ENV:-}] preload=[${LD_PRELOAD:-}] host=[$REMOTE_HOST]"' _ "$LIB"
+    contains "bash_env=[] preload=[] host=[ok.invalid]" "$output"
+    contains ":1: BASH_ENV is not a build-hosts key" "$output"
+    # The allowlist is the parser's own, and it lists what the docs list.
+    run "$LIB" --keys
+    [ "$status" -eq 0 ]
+    for k in HELIX_TEST_HOST HELIX_TEST_CONTAINER HELIX_TEST_WORKDIR HELIX_TEST_TREES_HOST \
+             HELIX_TEST_TREES HELIX_TEST_CCACHE HELIX_TEST_LOCK_DIR HELIX_TEST_HOST_AUTO \
+             REMOTE_HOST REMOTE_USER REMOTE_DIR REMOTE_BUILD_DIR; do
+        contains "$k" "$output"
+    done
+}
+
+@test "a file that exists but cannot be read says so" {
+    [ "$(id -u)" != 0 ] || skip "root reads a mode-000 file anyway"
+    hosts REMOTE_HOST=hidden.invalid
+    chmod 000 "$HELIX_BUILD_HOSTS_FILE"
+    run scripts/remote-build.sh test
+    [ "$status" -ne 0 ]
+    contains "cannot read $HELIX_BUILD_HOSTS_FILE" "$output"
 }
 
 @test "a remote make target with no host refuses in one line, naming the file" {
@@ -46,15 +153,4 @@ setup() {
     contains "REMOTE_HOST is not set" "$output"
     contains "$HELIX_BUILD_HOSTS_FILE" "$output"
     [ ! -e "$BATS_TEST_TMPDIR/ssh-called" ]
-}
-
-@test "a malformed or quoted line in the build-hosts file is ignored, not run" {
-    printf 'HELIX_TEST_HOST = spaced\nHELIX_TEST_CONTAINER=$(touch %s/ran)\n# HELIX_TEST_WORKDIR=commented\n' \
-        "$BATS_TEST_TMPDIR" > "$HELIX_BUILD_HOSTS_FILE"
-    run bash -c '. scripts/lib/build_hosts.sh; echo "host=${HELIX_TEST_HOST:-} c=${HELIX_TEST_CONTAINER:-} w=${HELIX_TEST_WORKDIR:-}"'
-    [ "$status" -eq 0 ]
-    contains "host= " "$output"
-    contains "w=" "$output"
-    lacks "commented" "$output"
-    [ ! -e "$BATS_TEST_TMPDIR/ran" ]
 }
