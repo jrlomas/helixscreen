@@ -92,6 +92,24 @@ CameraStream::CameraStream() {
     }
 }
 
+namespace {
+std::mutex g_streams_mutex;
+std::vector<CameraStream*> g_streams;
+} // namespace
+
+CameraFrame CameraStream::latest_running_frame(int max_w, int max_h) {
+    std::lock_guard<std::mutex> reg(g_streams_mutex);
+    for (CameraStream* s : g_streams) {
+        std::lock_guard<std::mutex> lock(s->buf_mutex_);
+        if (!s->running_.load() || !s->front_buf_)
+            continue;
+        return downscale_bgr(static_cast<const uint8_t*>(s->front_buf_->data), s->frame_width_,
+                             s->frame_height_, static_cast<int>(s->front_buf_->header.stride),
+                             max_w, max_h);
+    }
+    return {};
+}
+
 CameraStream::~CameraStream() {
     stop();
     // Only clean up turbojpeg if stop() successfully joined the thread.
@@ -167,6 +185,10 @@ void CameraStream::start(const std::string& stream_url, const std::string& snaps
     on_error_ = std::move(on_error);
     stream_fail_count_ = 0;
     running_.store(true);
+    {
+        std::lock_guard<std::mutex> reg(g_streams_mutex);
+        g_streams.push_back(this);
+    }
 
     spdlog::info("[CameraStream] Starting — stream={}, snapshot={}", stream_url_, snapshot_url_);
 
@@ -183,6 +205,10 @@ void CameraStream::start(const std::string& stream_url, const std::string& snaps
 }
 
 void CameraStream::stop() {
+    {
+        std::lock_guard<std::mutex> reg(g_streams_mutex);
+        g_streams.erase(std::remove(g_streams.begin(), g_streams.end(), this), g_streams.end());
+    }
     // Invalidate lifetime guard FIRST — http_cb closures capture a token
     // and bail out before accessing any member state
     lifetime_.invalidate();

@@ -8,6 +8,7 @@
 #if HELIX_HAS_CAMERA
 
 #include "async_lifetime_guard.h"
+#include "camera_frame.h"
 #include "moonraker_types.h"
 
 #include <atomic>
@@ -165,6 +166,14 @@ class CameraStream {
      * needed. Returns empty string if no boundary found. Exposed for testing.
      */
     static std::string parse_boundary(const std::string& content_type);
+
+    /**
+     * @brief Downscaled copy of the newest frame of any running stream.
+     *
+     * The copy is owned by the caller; nothing points into a stream's buffers.
+     * Empty when no stream is running or none has delivered a frame yet.
+     */
+    static CameraFrame latest_running_frame(int max_w, int max_h);
 
     void start(const std::string& stream_url, const std::string& snapshot_url,
                FrameCallback on_frame, ErrorCallback on_error = nullptr);
