@@ -180,6 +180,14 @@ REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platfo
     sh -n "$HOOKS_DIR/hooks-k2.sh"
 }
 
+# A mock server left running by a failed assertion would never exit.
+MOCK_SERVER_PID=""
+teardown() {
+    [ -n "$MOCK_SERVER_PID" ] && kill "$MOCK_SERVER_PID" 2>/dev/null
+    MOCK_SERVER_PID=""
+    return 0
+}
+
 @test "k2 gate writes splash heartbeat and detects a ready Moonraker fast" {
     # Behavioral check of the Moonraker gate: against an already-ready endpoint
     # it must return 0 quickly and leave the splash status file in the
@@ -187,16 +195,15 @@ REQUIRED_FUNCTIONS="platform_stop_competing_uis platform_enable_backlight platfo
     # never touches a real printer.
     command -v python3 >/dev/null 2>&1 || skip "python3 not available"
 
-    local tmp port status_file port_file
-    tmp="$(mktemp -d)"
-    status_file="$tmp/splash-status"
-    port_file="$tmp/port"
+    local port status_file port_file
+    status_file="$BATS_TEST_TMPDIR/splash-status"
+    port_file="$BATS_TEST_TMPDIR/port"
 
     # Mock Moonraker /server/info on an ephemeral port: a fixed port collides
     # with a concurrent run of this test, whose teardown kills the server this
     # one is polling. The port file appears only once the socket is listening.
     python3 -c "
-import http.server, os, sys
+import http.server, os
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self): self.send_response(200); self.end_headers(); self.wfile.write(b'{}')
     def log_message(self, *a): pass
@@ -205,24 +212,26 @@ open('$port_file.tmp', 'w').write(str(s.server_address[1]))
 os.rename('$port_file.tmp', '$port_file')
 s.serve_forever()
 " &
-    local server_pid=$!
+    MOCK_SERVER_PID=$!
     local i
     for i in $(seq 1 600); do
         [ -s "$port_file" ] && break
         sleep 0.1
     done
+    [ -s "$port_file" ]
     port="$(cat "$port_file")"
 
+    # The generous timeout only absorbs a loaded box; the elapsed bound is
+    # what proves a ready server is detected on the first poll.
+    local start=$SECONDS
     HELIX_MOONRAKER_READY_URL="http://127.0.0.1:$port/server/info" \
         HELIX_MOONRAKER_WAIT_TIMEOUT=60 \
         HELIX_SPLASH_STATUS_FILE="$status_file" \
         bash -c ". '$HOOKS_DIR/hooks-k2.sh'; platform_wait_for_services"
-    local rc=$?
+    local elapsed=$((SECONDS - start))
 
-    kill "$server_pid" 2>/dev/null || true
-    [ "$rc" -eq 0 ]
+    [ "$elapsed" -le 5 ]
     grep -q "HelixScreen" "$status_file"
-    rm -rf "$tmp"
 }
 
 @test "k2 gate times out cleanly and marks splash 'no printer'" {
