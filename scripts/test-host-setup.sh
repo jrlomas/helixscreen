@@ -39,7 +39,9 @@ HOST=$HELIX_TEST_HOST
 CONTAINER="${HELIX_TEST_CONTAINER:-helix-test}"
 TREES_HOST="${HELIX_TEST_TREES_HOST:-helix-test/trees}"
 TREES="${HELIX_TEST_TREES:-/work/trees}"
+CCACHE="${HELIX_TEST_CCACHE:-/work/ccache}"
 WORKDIR="${HELIX_TEST_WORKDIR:-/work/helixscreen}"
+LOCK_DIR="${HELIX_TEST_LOCK_DIR:-/tmp}"
 IMAGE=helixscreen/sanitizer
 WORK_HOST=$(dirname "$TREES_HOST")
 WORK=$(dirname "$TREES")
@@ -48,9 +50,27 @@ step() { printf '\033[36m→\033[0m %s\n' "$*"; }
 die()  { printf '\033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 on_host() { ssh -o BatchMode=yes -o ConnectTimeout=5 "$HOST" "$@"; }
 
-step "$HOST: docker, and sudo -n for it"
+# One host directory is the container's one work directory, so the mirror root
+# has the same name on both sides and everything the container keeps sits under
+# it. A mirror root with no parent of its own would mount the whole home.
+if [ "$WORK_HOST" = . ] || [ "$WORK_HOST" = / ]; then
+    die "HELIX_TEST_TREES_HOST=$TREES_HOST needs a parent directory of its own (e.g. helix-test/trees)"
+fi
+[ "$(basename "$TREES_HOST")" = "$(basename "$TREES")" ] ||
+    die "HELIX_TEST_TREES_HOST ($TREES_HOST) and HELIX_TEST_TREES ($TREES) must end in the same directory name"
+for p in "$CCACHE" "$WORKDIR"; do
+    case "$p" in "$WORK"/*) ;; *) die "$p is not under $WORK, the container's mounted directory" ;; esac
+done
+
+# Everything a run does on the host: docker and rsync under sudo -n (mirrors
+# are root's), flock for the locks, comm and sort with -z for the stale-file pass.
+step "$HOST: docker, sudo -n for it and for rsync, flock, comm -z"
 on_host 'sudo -n docker info >/dev/null' ||
     die "$HOST needs Docker and passwordless sudo for docker (sudo -n docker info failed)"
+on_host 'sudo -n rsync --version >/dev/null && sudo -n true' ||
+    die "$HOST needs rsync and passwordless sudo for it, mv and rm (a run writes mirrors as root)"
+on_host 'command -v flock >/dev/null && printf "a\0" | sort -z | comm -z -23 - /dev/null >/dev/null' ||
+    die "$HOST needs flock and GNU sort/comm with -z"
 
 # The build context goes over the ssh connection as a tar, so the host builds
 # exactly this tree's Dockerfile.
@@ -63,9 +83,21 @@ step "container $CONTAINER: $HOST:$WORK_HOST mounted at $WORK"
 on_host bash -se <<REMOTE || die "could not start container $CONTAINER on $HOST"
 set -euo pipefail
 mkdir -p "$TREES_HOST"
-abs=\$(cd "$WORK_HOST" && pwd)
-if [ "$RECREATE" = 1 ]; then sudo -n docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; fi
-if ! sudo -n docker inspect "$CONTAINER" >/dev/null 2>&1; then
+abs=\$(cd "$WORK_HOST" && pwd -P)
+if [ "$RECREATE" = 1 ]; then
+    # A held run lock is a job in that container; removing it kills the job.
+    for lock in "$LOCK_DIR"/helix-test-host-run*.lock "$LOCK_DIR"/helix-zeus-run-*.lock; do
+        [ -e "\$lock" ] || continue
+        flock -n "\$lock" true || { echo "✗ a run holds \$lock: \$(tail -n 1 "\$lock")" >&2; exit 1; }
+    done
+    sudo -n docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+fi
+if sudo -n docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    # A container made for another layout would take mirrors it cannot see.
+    sudo -n docker inspect -f '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' "$CONTAINER" |
+        grep -qF "\$abs:$WORK" || {
+            echo "✗ $CONTAINER does not mount \$abs at $WORK; --recreate replaces it" >&2; exit 1; }
+else
     # CMD in the image is sleep infinity.
     sudo -n docker run -d --name "$CONTAINER" -v "\$abs:$WORK" -w "$WORK" "$IMAGE" >/dev/null
 fi

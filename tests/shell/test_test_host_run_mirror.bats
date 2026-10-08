@@ -56,6 +56,9 @@ case "$1" in
                     n=$((n + 1)); echo "$n" > "$MOCK_PGREP_HITS"
                     if [ "$n" -eq 1 ]; then
                         cat "$MOCK_MIRROR_PROBE" > "$MOCK_PGREP_SAW" 2>/dev/null || echo absent > "$MOCK_PGREP_SAW"
+                        if [ -n "${MOCK_MIRROR_STALE:-}" ] && [ -e "$MOCK_MIRROR_STALE" ]; then
+                            echo stale-present >> "$MOCK_PGREP_SAW"
+                        fi
                         exit 0
                     fi
                 fi
@@ -377,12 +380,13 @@ make_mirror() { # <name> <age in days>
     echo second-sync > tracked.txt
     rm doomed.txt
     export MOCK_PGREP_HITS="$BATS_TEST_TMPDIR/hits" MOCK_PGREP_SAW="$BATS_TEST_TMPDIR/saw"
-    export MOCK_MIRROR_PROBE="$m/tracked.txt"
+    export MOCK_MIRROR_PROBE="$m/tracked.txt" MOCK_MIRROR_STALE="$m/doomed.txt"
     run "$TEST_HOST_RUN" test
     [ "$status" -eq 0 ]
     contains "orphaned build still running" "$output"
-    # At the first poll the mirror still held the previous sync, untouched.
-    [ "$(cat "$MOCK_PGREP_SAW")" = one ]
+    # At the first poll the mirror still held the previous sync: neither the
+    # new content nor the stale-file delete had happened yet.
+    [ "$(cat "$MOCK_PGREP_SAW")" = "$(printf 'one\nstale-present')" ]
     [ "$(cat "$m/tracked.txt")" = second-sync ]
     [ ! -e "$m/doomed.txt" ]
 }
