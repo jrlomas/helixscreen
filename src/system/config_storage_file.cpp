@@ -42,7 +42,8 @@ std::string errno_reason(int err) {
 
 class FileConfigStorage : public ConfigStorage {
   public:
-    explicit FileConfigStorage(std::string path) : path_(std::move(path)) {}
+    FileConfigStorage(std::string path, ConfigFootprint footprint)
+        : path_(std::move(path)), footprint_(footprint) {}
 
     std::optional<std::string> load(std::string& read_error) override {
         struct stat st;
@@ -109,14 +110,20 @@ class FileConfigStorage : public ConfigStorage {
         return path_;
     }
 
+    bool small_footprint() const override {
+        return footprint_ == ConfigFootprint::Small;
+    }
+
   private:
     std::string path_;
+    ConfigFootprint footprint_;
 };
 
 } // namespace
 
-std::unique_ptr<ConfigStorage> make_file_config_storage(const std::string& path) {
-    return std::make_unique<FileConfigStorage>(path);
+std::unique_ptr<ConfigStorage> make_file_config_storage(const std::string& path,
+                                                        ConfigFootprint footprint) {
+    return std::make_unique<FileConfigStorage>(path, footprint);
 }
 
 } // namespace helix
