@@ -266,3 +266,24 @@ TEST_CASE_METHOD(LVGLTestFixture, "AFC unlink: emptying the lane ends the unlink
             CHECK(afc.spool_id() == 127);
         });
 }
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "AFC unlink: a remember_spool lane keeps the unlink through a spool swap (#1717)",
+                 "[1717][ams][afc]") {
+    // AFC skips clear_values() on eject for these lanes, so the spool inserted
+    // next is reported under the old id.
+    const nlohmann::json remembering = {{"remember_spool", true}};
+    across_restart(
+        [&](AfcUnlinkHelper& afc) {
+            afc.feed_stepper(remembering);
+            afc.feed_stepper({{"prep", false}, {"load", false}});
+            afc.feed_stepper(loaded(127));
+            CHECK(afc.spool_id() == 0);
+            CHECK(afc.persisted_unlink() == 127);
+        },
+        [&](AfcUnlinkHelper& afc) {
+            afc.feed_stepper(remembering);
+            afc.feed_stepper(loaded(127));
+            CHECK(afc.spool_id() == 0);
+        });
+}

@@ -2741,8 +2741,14 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
         slot.status == SlotStatus::LOADED || slot.status == SlotStatus::AVAILABLE;
     const bool filament_present_before = status_at_frame_start == SlotStatus::LOADED ||
                                          status_at_frame_start == SlotStatus::AVAILABLE;
+    // A remember_spool lane keeps its spool_id through an eject too, so the
+    // next spool inserted would inherit the unlinked id; only a lane AFC
+    // clears on eject ends the unlink here.
     if (filament_present_before && !filament_present_now) {
-        set_unlinked_spool(slot_index, 0);
+        const auto remembers = lane_remember_spool_.find(lane_name);
+        if (remembers == lane_remember_spool_.end() || !remembers->second) {
+            set_unlinked_spool(slot_index, 0);
+        }
     }
     if (filament_present_now && !filament_present_before) {
         maybe_reassert_retained_spool_link(slot_index, lane_name);
