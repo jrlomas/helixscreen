@@ -324,8 +324,9 @@ void ui_filament_path_canvas_set_buffer_callback(lv_obj_t* obj, filament_path_bu
 /**
  * @brief Set hub-only rendering mode
  *
- * When enabled, only draws slots → prep sensors → hub. Skips everything
- * downstream: bypass, output sensor, toolhead sensor, nozzle. Used in the
+ * When enabled, draws slots → prep sensors → hub and a short output stub
+ * leaving the hub that fades out. Skips everything further downstream:
+ * bypass, toolhead sensor, nozzle. Used in the
  * overview panel's inline detail view where system-level routing is shown
  * separately by the system_path_canvas.
  *
@@ -333,6 +334,18 @@ void ui_filament_path_canvas_set_buffer_callback(lv_obj_t* obj, filament_path_bu
  * @param hub_only true to stop rendering at the hub
  */
 void ui_filament_path_canvas_set_hub_only(lv_obj_t* obj, bool hub_only);
+
+/**
+ * @brief Set the unit's hub (or selector) output sensor
+ *
+ * In hub-only mode the hub's output stub carries a clamp band when the unit
+ * has the sensor, and carries filament when it reads triggered.
+ *
+ * @param obj The filament_path_canvas widget
+ * @param has_sensor Whether the unit reports a hub/output sensor
+ * @param triggered Whether that sensor reads filament
+ */
+void ui_filament_path_canvas_set_hub_sensor(lv_obj_t* obj, bool has_sensor, bool triggered);
 
 /**
  * @brief Set nozzle heat active state

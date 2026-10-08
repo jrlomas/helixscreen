@@ -98,6 +98,7 @@ static void load_theme_sizes(FilamentPathData* data) {
     theme.hub_width = LV_MAX(50, space_md * 5);
     theme.border_radius = LV_MAX(4, space_xs);
     theme.extruder_scale = LV_MAX(8, space_md); // Extruder scales with space_md
+    theme.stub_length = theme_manager_get_spacing("space_xl") * 2;
 
     // Get responsive font from globals.xml (font_small → responsive variant)
     const char* font_name = lv_xml_get_const(nullptr, "font_small");
@@ -885,6 +886,15 @@ void ui_filament_path_canvas_set_hub_only(lv_obj_t* obj, bool hub_only) {
         spdlog::debug("[FilamentPath] Hub-only mode: {}", hub_only ? "on" : "off");
         layered_mark_dirty(obj);
     }
+}
+
+void ui_filament_path_canvas_set_hub_sensor(lv_obj_t* obj, bool has_sensor, bool triggered) {
+    auto* data = get_data(obj);
+    if (!data || (data->has_hub_sensor == has_sensor && data->hub_sensor_triggered == triggered))
+        return;
+    data->has_hub_sensor = has_sensor;
+    data->hub_sensor_triggered = triggered;
+    layered_mark_dirty(obj);
 }
 
 void ui_filament_path_canvas_set_heat_active(lv_obj_t* obj, bool active) {

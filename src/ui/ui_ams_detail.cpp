@@ -754,8 +754,13 @@ void ams_detail_setup_path_canvas(lv_obj_t* canvas, lv_obj_t* slot_grid, int uni
 
     helix::AmsSystemInfo info = backend->get_system_info();
 
-    // Hub-only mode: only draw slots -> hub, skip downstream
+    // Hub-only mode: slots -> hub and its output stub, skip downstream
     ui_filament_path_canvas_set_hub_only(canvas, hub_only);
+    if (unit_index >= 0 && unit_index < static_cast<int>(info.units.size())) {
+        const auto& unit = info.units[unit_index];
+        ui_filament_path_canvas_set_hub_sensor(canvas, unit.has_hub_sensor,
+                                               unit.hub_sensor_triggered);
+    }
 
     // Hide the bypass path for backends that don't support it (e.g. tool
     // changers) — and on AFC while bypass is disengaged, since AFC reports a

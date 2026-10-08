@@ -155,6 +155,7 @@ struct ThemeCache {
     int32_t hub_width = 60;
     int32_t border_radius = 6;
     int32_t extruder_scale = 10; // Scale unit for extruder (based on space_md)
+    int32_t stub_length = 40;    // hub_only output stub (space_xl * 2)
 
     const lv_font_t* label_font = nullptr;
 
@@ -294,6 +295,10 @@ struct FilamentPathData {
 
     // Rendering mode
     bool hub_only = false; // true = stop rendering at hub (skip downstream)
+    // The unit's hub (or selector) output sensor. In hub_only mode it decides
+    // the output stub's band and whether the stub carries filament.
+    bool has_hub_sensor = false;
+    bool hub_sensor_triggered = false;
     // Hub co-located with the toolhead: the merge box sits just above the
     // toolhead and the shared hub->nozzle run is a short stub (printers whose
     // combiner mounts on the print head; the per-lane tubes run the whole way).
