@@ -178,10 +178,15 @@ void invalidate_static(lv_display_t* disp, lv_area_t a, const lv_area_t& r, int3
 /// rounded corners and border, and its scrollbars.
 void invalidate_static_parts(lv_display_t* disp, lv_obj_t* obj, const lv_area_t& r, int32_t dy) {
     const lv_area_t& c = obj->coords;
-    int32_t edge = lv_obj_get_style_radius(obj, LV_PART_MAIN);
     int32_t bw = 0;
     if (lv_obj_get_style_border_opa(obj, LV_PART_MAIN) > LV_OPA_TRANSP)
         bw = lv_obj_get_style_border_width(obj, LV_PART_MAIN);
+    // Rounded corners stay put only where the scroller draws them: its own
+    // background or border, or a clip of its content to the corners.
+    int32_t edge = 0;
+    if (bw > 0 || lv_obj_get_style_bg_opa(obj, LV_PART_MAIN) > LV_OPA_TRANSP ||
+        lv_obj_get_style_clip_corner(obj, LV_PART_MAIN))
+        edge = lv_obj_get_style_radius(obj, LV_PART_MAIN);
     if (bw > edge)
         edge = bw;
     if (edge > 0) {

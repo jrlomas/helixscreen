@@ -382,3 +382,47 @@ TEST_CASE_METHOD(ScrollBlitFixture, "scroll blit handles a scroll that layout ma
     render();
     REQUIRE(mismatch() == "0 px differ");
 }
+
+namespace {
+std::vector<lv_area_t>* g_invalidated = nullptr;
+void record_invalidated(lv_event_t* e) {
+    if (g_invalidated)
+        g_invalidated->push_back(*static_cast<lv_area_t*>(lv_event_get_param(e)));
+}
+} // namespace
+
+TEST_CASE_METHOD(ScrollBlitFixture,
+                 "scroll blit redraws a scroller's rounded corners only where it draws them",
+                 "[scroll_blit]") {
+    lv_area_t c;
+    lv_obj_get_coords(list_, &c);
+    bool band_expected = false;
+    SECTION("nothing painted at the corners") {}
+    SECTION("an opaque background") {
+        lv_obj_set_style_bg_color(list_, lv_color_hex(0x283038), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(list_, LV_OPA_COVER, LV_PART_MAIN);
+        band_expected = true;
+    }
+    SECTION("content clipped to the corners") {
+        lv_obj_set_style_clip_corner(list_, true, LV_PART_MAIN);
+        band_expected = true;
+    }
+    render();
+
+    std::vector<lv_area_t> invalidated;
+    g_invalidated = &invalidated;
+    lv_display_add_event_cb(disp_, record_invalidated, LV_EVENT_INVALIDATE_AREA, nullptr);
+    lv_obj_scroll_by(list_, 0, -40, LV_ANIM_OFF);
+    render();
+    lv_display_remove_event_cb_with_user_data(disp_, record_invalidated, nullptr);
+    g_invalidated = nullptr;
+
+    // The radius rows along the top edge, which the upward scroll exposes nothing in.
+    const bool top_band =
+        std::any_of(invalidated.begin(), invalidated.end(), [&](const lv_area_t& a) {
+            return a.y1 == c.y1 && a.y2 < c.y1 + 8 &&
+                   lv_area_get_width(&a) > lv_area_get_width(&c) / 2;
+        });
+    CHECK(top_band == band_expected);
+    REQUIRE(mismatch() == "0 px differ");
+}
