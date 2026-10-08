@@ -408,6 +408,11 @@ the list. `kill "$pid"` is deliberately not blocked: a pid is a handle the test 
 holds, so it is scoped by construction, while a name reaches whatever else is running -
 another bats file's app, or yours.
 
+`jobpool` is on the list too, and the suite exports `JOBPOOL=0`, so a make a test runs
+passes straight through the host's jobpool shim and no test draws from or reads the
+machine's build pool. A test of pool handling names a fake through `HELIX_JOBPOOL` and
+unsets `JOBPOOL` (`test_helix_claim_jobs.bats`).
+
 To use one of those commands, mock it: `mock_command_script "killall" 'exit 0'` in
 `setup()`. A mock is found first, so the sandbox never sees the call.
 

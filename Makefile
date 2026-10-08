@@ -1203,8 +1203,9 @@ CXXFLAGS += -DHELIX_HAS_LABEL_PRINTER=$(HELIX_HAS_LABEL_PRINTER) \
 
 # Parallel build control
 # A make that picks its own -j (plain `make`, or unlimited `make -j`) takes
-# JOBS: this session's fair share of the box from `scripts/helix-claim jobs`,
-# which splits the cores between the trees building now. An explicit -jN passes
+# JOBS from `scripts/helix-claim jobs`: the jobpool's size when one is live,
+# else the cores capped by memory. A make under the jobpool shim already
+# carries the pool's jobserver and never reads JOBS. An explicit -jN passes
 # through unchanged. The two-phase re-invoke that applies it lives in
 # mk/rules.mk `all:` and mk/tests.mk `$(TEST_BIN)`.
 #

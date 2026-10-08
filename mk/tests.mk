@@ -53,9 +53,10 @@ SLOW_SHARDS ?= 16
 SLOW_ORDER ?= --order rand --rng-seed 1
 
 # How many shards RUN at once; the shard count itself never changes, because a
-# different count regroups the tests and surfaces cross-test contamination. An
-# idle box gets 3 per core, the same as NPROCS; a box other trees are building on
-# gets 3 per core of this tree's fair share. Asked once, when a sweep starts.
+# different count regroups the tests and surfaces cross-test contamination.
+# Three per slot of `helix-claim jobs` (the jobpool's size when one is live),
+# because a shard spends most of its time waiting. Shards take no pool tokens.
+# Asked once, when a sweep starts.
 SHARD_CONCURRENCY ?= $(eval SHARD_CONCURRENCY := $(shell j=$$(scripts/helix-claim jobs 2>/dev/null) && echo $$((j * 3)) || echo $(NPROCS)))$(SHARD_CONCURRENCY)
 
 # Run tests in parallel using Catch2 sharding

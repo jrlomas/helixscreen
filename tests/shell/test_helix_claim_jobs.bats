@@ -1,13 +1,16 @@
 #!/usr/bin/env bats
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# `helix-claim jobs` splits the cores between the trees building now. The
-# Makefile asks it from $(shell) while its own make is running, so a make that
-# is an ancestor of the caller must not count as a peer, or every build halves
-# its own share. A make that is NOT an ancestor is a peer whatever its tree.
+# `helix-claim jobs` is the -j a build takes when nothing else decides it: the
+# Makefile's JOBS, the unit sweep's shard concurrency, the commit hook's build
+# and the resource advisor all read it. With a jobpool daemon live it reports
+# the machine pool; without jobpool (CI, a Mac, a contributor's box) it reports
+# the cores capped by memory, and it always exits 0 with a usable number.
 #
-# pgrep is stubbed so the set of "running makes" is exactly what each test says.
+# The pool is always a fake named through HELIX_JOBPOOL; no test reaches the
+# real one.
 
+bats_require_minimum_version 1.5.0
 load helpers
 
 CLAIM="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)/scripts/helix-claim"
@@ -15,28 +18,141 @@ CLAIM="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)/scripts/helix-claim"
 setup() {
     export HELIX_CLAIM_DIR="$BATS_TEST_TMPDIR/claims"
     mkdir -p "$HELIX_CLAIM_DIR"
-    export MOCK_MAKE_PIDS="$BATS_TEST_TMPDIR/make.pids"
-    : > "$MOCK_MAKE_PIDS"
-    mock_command_script pgrep '[ "$2" = make ] && cat "$MOCK_MAKE_PIDS"; exit 0'
+    unset JOBPOOL
+    FAKE="$BATS_TEST_TMPDIR/fake-jobpool"
+    export HELIX_JOBPOOL="$FAKE"
 }
 
-teardown() {
-    [ -n "${PEER:-}" ] && kill "$PEER" 2>/dev/null
-    return 0
+# fake_pool TARGET AVAILABLE: a jobpool whose daemon is up with these numbers.
+fake_pool() {
+    cat > "$FAKE" <<FAKE_EOF
+#!/bin/sh
+case "\$1" in
+    ensure) echo /fake/fifo ;;
+    status) echo '{"running":true,"pid":1,"target":$1,"available":$2,"consumers":3,"holders":3,"outstanding":5,"last_reset":null}' ;;
+    *) exit 2 ;;
+esac
+FAKE_EOF
+    chmod +x "$FAKE"
 }
 
-@test "the make that called jobs is not counted as a peer" {
-    echo "$$" > "$MOCK_MAKE_PIDS"
-    run "$CLAIM" jobs -v
+# A PATH holding no jobpool at all, for the box that never installed it.
+path_without_jobpool() {
+    local d p=""
+    local IFS=:
+    for d in $PATH; do
+        [ -e "$d/jobpool" ] && continue
+        p=${p:+$p:}$d
+    done
+    printf '%s' "$p"
+}
+
+@test "a live pool is the answer, and -v names it" {
+    fake_pool 30 4
+    run --separate-stderr "$CLAIM" jobs -v
     [ "$status" -eq 0 ]
-    contains "peers=0" "$output"
+    [ "$output" = "30" ]
+    contains "pool target=30 available=4" "$stderr"
+    contains "-> -j30" "$stderr"
+    contains "availGB=" "$stderr"
 }
 
-@test "a make that is not an ancestor is a peer" {
-    (cd "$BATS_TEST_TMPDIR" && exec sleep 60) &
-    PEER=$!
-    echo "$PEER" > "$MOCK_MAKE_PIDS"
-    run "$CLAIM" jobs -v
+@test "JOBPOOL=0 bypasses the pool here as it does in the shim" {
+    fake_pool 999 4
+    JOBPOOL=0 run --separate-stderr "$CLAIM" jobs -v
     [ "$status" -eq 0 ]
-    contains "peers=1" "$output"
+    [ "$output" != "999" ]
+    contains "ncpu=" "$stderr"
+}
+
+@test "a pool that will not start falls back to the cores" {
+    printf '#!/bin/sh\nexit 1\n' > "$FAKE"; chmod +x "$FAKE"
+    run --separate-stderr "$CLAIM" jobs -v
+    [ "$status" -eq 0 ]
+    contains "ncpu=" "$stderr"
+    [ "$output" -ge 1 ]
+}
+
+@test "a status it cannot read falls back to the cores" {
+    printf '#!/bin/sh\necho not json\n' > "$FAKE"; chmod +x "$FAKE"
+    run --separate-stderr "$CLAIM" jobs -v
+    [ "$status" -eq 0 ]
+    contains "ncpu=" "$stderr"
+}
+
+@test "without jobpool installed it exits 0 with a sane -j" {
+    unset HELIX_JOBPOOL
+    unset -f jobpool 2>/dev/null || true
+    run --separate-stderr env -u JOBPOOL PATH="$(path_without_jobpool)" "$CLAIM" jobs -v
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+    [ "$output" -le "$(nproc)" ]
+    contains "ncpu=$(nproc) " "$stderr"
+    contains "-> -j$output" "$stderr"
+}
+
+@test "the fallback is bounded by the cores" {
+    mock_command nproc 3
+    JOBPOOL=0 run "$CLAIM" jobs
+    [ "$status" -eq 0 ]
+    [ "$output" -le 3 ]
+    [ "$output" -ge 2 ]
+}
+
+@test "a one-core box gets -j1, not the floor of 2" {
+    mock_command nproc 1
+    JOBPOOL=0 run "$CLAIM" jobs
+    [ "$status" -eq 0 ]
+    [ "$output" = "1" ]
+}
+
+# --- The callers read the same decision -------------------------------------
+
+REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
+
+qc_jobs() {
+    (cd "$REPO" && . scripts/qc/_lib.sh && qc_build_jobs)
+}
+
+@test "the commit hook's -j is the pool when one is live" {
+    fake_pool 30 4
+    run qc_jobs
+    [ "$status" -eq 0 ]
+    [ "$output" = "30" ]
+    HELIX_QC_JOBS=3 run qc_jobs
+    [ "$output" = "3" ]
+}
+
+@test "the commit hook's -j without jobpool installed is a sane number" {
+    unset HELIX_JOBPOOL
+    unset -f jobpool 2>/dev/null || true
+    PATH="$(path_without_jobpool)" run qc_jobs
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+    [ "$output" -le "$(nproc)" ]
+}
+
+# make, with no jobpool shim in front of it, printing what the sweep and the
+# build would size from.
+sizes() {
+    (cd "$REPO" && env PATH="$(path_without_jobpool)" make --no-print-directory \
+        --eval 'jp-sizes: ; @echo SHARDS=$(SHARD_CONCURRENCY) JOBS=$(JOBS)' jp-sizes)
+}
+
+@test "the sweep runs 3 shards per pool token when a pool is live" {
+    fake_pool 7 7
+    run sizes
+    [ "$status" -eq 0 ]
+    contains "SHARDS=21 JOBS=7" "$output"
+}
+
+@test "the sweep and the build size themselves without jobpool installed" {
+    unset HELIX_JOBPOOL
+    unset -f jobpool 2>/dev/null || true
+    run sizes
+    [ "$status" -eq 0 ]
+    local j=${output##*JOBS=}
+    [ "$j" -ge 1 ]
+    [ "$j" -le "$(nproc)" ]
+    contains "SHARDS=$((j * 3)) " "$output"
 }
