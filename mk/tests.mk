@@ -55,8 +55,10 @@ SLOW_ORDER ?= --order rand --rng-seed 1
 # How many shards RUN at once; the shard count itself never changes, because a
 # different count regroups the tests and surfaces cross-test contamination.
 # Three per slot of `helix-claim jobs` (the jobpool's size when one is live),
-# because a shard spends most of its time waiting. Shards take no pool tokens.
-# Asked once, when a sweep starts.
+# because a shard spends most of its time waiting. With a live pool the shards
+# also run in batches of three, each batch holding one pool token for its whole
+# life, so every sweep on the box together runs at most three shards per token
+# and shares the tokens with compiles. Asked once, when a sweep starts.
 SHARD_CONCURRENCY ?= $(eval SHARD_CONCURRENCY := $(shell j=$$(scripts/helix-claim jobs 2>/dev/null) && echo $$((j * 3)) || echo $(NPROCS)))$(SHARD_CONCURRENCY)
 
 # Run tests in parallel using Catch2 sharding
@@ -70,13 +72,30 @@ SHARD_CONCURRENCY ?= $(eval SHARD_CONCURRENCY := $(shell j=$$(scripts/helix-clai
 define run_tests_parallel
 	echo "$(CYAN)Running $(or $(2),$(NPROCS)) test shards, at most $(SHARD_CONCURRENCY) at once (timeout=$(SHARD_TIMEOUT)s)...$(RESET)"; \
 	shard_dir=$$(mktemp -d "$(SHARD_ARTIFACT_ROOT)/helix-shards-XXXXXX"); \
+	export shard_dir; \
+	run_shard() { \
+		(echo "=== shard $$1/$(or $(2),$(NPROCS)) host=$$(hostname) nproc=$$(nproc 2>/dev/null || echo '?') git=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) ts=$$(date -Iseconds) order=$(or $(3),decl seed=0)"; $(if $(TIMEOUT_CMD),$(TIMEOUT_CMD) $(SHARD_TIMEOUT)) $(TEST_BIN) $(1) $(3) --shard-count $(or $(2),$(NPROCS)) --shard-index $$1 2>&1; echo $$? > "$$shard_dir/$$1.exit") | \
+			tee "$$shard_dir/$$1.log" | sed "s/^/[shard $$1] /"; \
+	}; \
+	run_batch() { for s in "$$@"; do run_shard "$$s" & done; wait; }; \
+	shards=$(or $(2),$(NPROCS)); batch=1; jp=""; \
+	if scripts/helix-claim pool >/dev/null; then \
+		batch=3; jp=$${HELIX_JOBPOOL:-jobpool}; \
+		echo "$(CYAN)jobpool live: shards run in batches of $$batch, one pool token per batch$(RESET)"; \
+	fi; \
+	slots=$$(( ($(SHARD_CONCURRENCY) + batch - 1) / batch )); \
 	pids=""; \
-	for i in $$(seq 0 $$(($(or $(2),$(NPROCS))-1))); do \
-		while [ $$(jobs -rp | wc -l) -ge $(SHARD_CONCURRENCY) ]; do \
+	for ((i = 0; i < shards; i += batch)); do \
+		while [ $$(jobs -rp | wc -l) -ge $$slots ]; do \
 			wait -n 2>/dev/null || sleep 0.2; \
 		done; \
-		(echo "=== shard $$i/$(or $(2),$(NPROCS)) host=$$(hostname) nproc=$$(nproc 2>/dev/null || echo '?') git=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) ts=$$(date -Iseconds) order=$(or $(3),decl seed=0)"; $(if $(TIMEOUT_CMD),$(TIMEOUT_CMD) $(SHARD_TIMEOUT)) $(TEST_BIN) $(1) $(3) --shard-count $(or $(2),$(NPROCS)) --shard-index $$i 2>&1; echo $$? > "$$shard_dir/$$i.exit") | \
-			tee "$$shard_dir/$$i.log" | sed "s/^/[shard $$i] /" & \
+		last=$$(( i + batch - 1 < shards - 1 ? i + batch - 1 : shards - 1 )); \
+		if [ -n "$$jp" ]; then \
+			{ "$$jp" with-token -- bash -c "$$(declare -f run_shard run_batch)"'; touch "$$shard_dir/$$1.started"; run_batch "$$@"' batch $$(seq $$i $$last) || \
+				[ -e "$$shard_dir/$$i.started" ] || run_batch $$(seq $$i $$last); } & \
+		else \
+			run_shard $$i & \
+		fi; \
 		pids="$$pids $$!"; \
 	done; \
 	for pid in $$pids; do \
