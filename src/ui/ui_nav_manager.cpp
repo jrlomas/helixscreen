@@ -367,8 +367,10 @@ static int32_t overlay_slide_offset(lv_obj_t* panel, int32_t fallback) {
 void NavigationManager::overlay_animate_slide_in(lv_obj_t* panel) {
     const int32_t offset = overlay_slide_offset(panel, OVERLAY_SLIDE_OFFSET);
 
-    // Skip animation if disabled - show panel in final state
-    if (!DisplaySettingsManager::instance().get_animations_enabled()) {
+    // Final state when animations are off, or on a tier where a near-full-screen
+    // slide plus fade costs more than the frame budget
+    if (!DisplaySettingsManager::instance().get_animations_enabled() ||
+        !helix::ui::full_style_effects_active()) {
         lv_obj_set_style_translate_x(panel, 0, LV_PART_MAIN);
         lv_obj_set_style_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
         spdlog::trace("[NavigationManager] Animations disabled - showing overlay instantly");
@@ -411,8 +413,9 @@ void NavigationManager::overlay_animate_slide_out(lv_obj_t* panel) {
     lv_obj_remove_flag(panel, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(panel, LV_OBJ_FLAG_EVENT_BUBBLE);
 
-    // Skip animation if disabled - hide panel immediately and invoke callback
-    if (!DisplaySettingsManager::instance().get_animations_enabled()) {
+    // Same rule as overlay_animate_slide_in: hide immediately and retire
+    if (!DisplaySettingsManager::instance().get_animations_enabled() ||
+        !helix::ui::full_style_effects_active()) {
         lv_obj_add_flag(panel, LV_OBJ_FLAG_HIDDEN);
         reset_overlay_transform(panel);
         spdlog::trace("[NavigationManager] Animations disabled - hiding overlay instantly");
@@ -1715,11 +1718,7 @@ bool NavigationManager::go_back() {
 }
 
 void NavigationManager::build_under_loading_pill(const std::function<void()>& build) {
-    lv_subject_t* tier = lv_xml_get_subject(nullptr, "platform_tier");
-    const bool limited_tier =
-        tier && !helix::full_style_effects_allowed(
-                    static_cast<helix::PlatformTier>(lv_subject_get_int(tier)));
-    if (!limited_tier || nav_scrim_active_) {
+    if (helix::ui::full_style_effects_active() || nav_scrim_active_) {
         build();
         return;
     }

@@ -35,9 +35,8 @@ The retraction settings overlay is about as small as a real contribution gets: f
 | `include/ui_overlay_retraction_settings.h` | 162 | Class declaration, subject + widget references |
 | `src/ui/ui_overlay_retraction_settings.cpp` | 293 | Lifecycle, event handlers, G-code send |
 
-You'll also touch four *other* files to wire it into the app:
+You'll also touch three *other* files to wire it into the app:
 
-- `src/xml_registration.cpp` — register the XML component
 - `src/application/subject_initializer.cpp` — construct the global instance at boot
 - `ui_xml/settings_printing_overlay.xml` — add a row that opens the overlay
 - (optional) translation YAML if you added user-visible strings
@@ -272,17 +271,9 @@ Lazy-create on first open (fast boot), reuse thereafter. `NavigationManager::pus
 
 ### Step 4: Wire it into the app
 
-Four one-line edits:
+Three edits. The XML component itself needs no registration: `lv_xml_create("retraction_settings_overlay", ...)` loads `ui_xml/retraction_settings_overlay.xml` on first use.
 
-**4a. Register the XML component** — `src/xml_registration.cpp`:
-
-```cpp
-register_xml("retraction_settings_overlay.xml");
-```
-
-Without this, `lv_xml_create("retraction_settings_overlay", ...)` returns null. Put it near similar overlays, not at random.
-
-**4b. Construct the global instance at boot** — `src/application/subject_initializer.cpp`:
+**4a. Construct the global instance at boot** — `src/application/subject_initializer.cpp`:
 
 ```cpp
 init_global_retraction_settings(api);
@@ -290,7 +281,7 @@ init_global_retraction_settings(api);
 
 This is where every overlay's `init_global_*()` gets called during app startup. Order can matter if overlays depend on each other — follow the pattern of siblings.
 
-**4c. Add the row that opens it** — `ui_xml/settings_printing_overlay.xml`:
+**4b. Add the row that opens it** — `ui_xml/settings_printing_overlay.xml`:
 
 ```xml
 <lv_obj name="container_firmware_retraction" width="100%" style_pad_all="0" scrollable="false">
@@ -307,7 +298,7 @@ This is where every overlay's `init_global_*()` gets called during app startup. 
 
 The `<bind_flag_if_eq>` wrapper hides the row on printers that don't support firmware retraction — this is how you conditionally expose features without a runtime C++ check.
 
-**4d. Run it**
+**4c. Run it**
 
 ```bash
 make -j
@@ -330,7 +321,6 @@ src/ui/
   ui_overlay_retraction_settings.cpp     ← your impl
 
 src/
-  xml_registration.cpp                   ← edit to register_xml()
   application/subject_initializer.cpp    ← edit to call init_global_*()
 ```
 

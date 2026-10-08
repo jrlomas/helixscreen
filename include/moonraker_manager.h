@@ -35,6 +35,15 @@ class MoonrakerManagerTestAccess;
 // Need full enum definition for inline helper function
 #include "printer_state.h"
 
+namespace helix {
+/// Settle the saved printer type for a launch with HELIX_MOCK_PRINTER set.
+/// A persona that declares a type (PersonaEntry::saved_type) writes it; any
+/// other value, recognised or not, clears a stale saved type so detection
+/// re-resolves. nullptr or "" leaves config alone. Does not save: returns true
+/// when it changed config, and the caller saves.
+bool apply_mock_printer_identity(Config& config, const char* mock_printer_env);
+} // namespace helix
+
 /**
  * @brief Manages Moonraker client and API lifecycle
  *

@@ -677,7 +677,10 @@ class BuildUnavailable(RuntimeError):
 
 def build(root, jobs, log):
     t = time.time()
-    r = run(['make', f'-j{jobs}', 'test-build'], cwd=root)
+    # Under an inherited jobserver (a jobpool) make leaves the pool when its
+    # command line carries any -j, so the pool bounds the build instead.
+    jflag = [] if '--jobserver-auth=' in os.environ.get('MAKEFLAGS', '') else [f'-j{jobs}']
+    r = run(['make', *jflag, 'test-build'], cwd=root)
     log.write(r.stdout or '')
     return r.returncode == 0, time.time() - t
 

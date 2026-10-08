@@ -5,6 +5,8 @@
 
 #include "backdrop_blur.h"
 #include "display_settings_manager.h"
+#include "helix-xml/src/xml/lv_xml.h"
+#include "platform_capabilities.h"
 #include "theme_manager.h"
 
 #include <spdlog/spdlog.h>
@@ -262,6 +264,12 @@ void defocus_tree(lv_obj_t* obj) {
         defocus_tree(lv_obj_get_child(obj, i));
     }
     lv_group_remove_obj(obj);
+}
+
+bool full_style_effects_active() {
+    lv_subject_t* tier = lv_xml_get_subject(nullptr, "platform_tier");
+    return !tier || helix::full_style_effects_allowed(
+                        static_cast<helix::PlatformTier>(lv_subject_get_int(tier)));
 }
 
 } // namespace helix::ui

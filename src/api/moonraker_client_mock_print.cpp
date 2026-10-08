@@ -142,7 +142,7 @@ void register_print_handlers(std::unordered_map<std::string, MethodHandler>& reg
                 }
                 error_cb(err);
             }
-        } else if (success_cb) {
+        } else if (success_cb && !self->defer_cfs_script_ack(script, success_cb, error_cb)) {
             success_cb(json::object()); // Return empty success response
         }
         return true;

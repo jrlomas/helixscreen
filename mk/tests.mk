@@ -25,6 +25,20 @@ TIMEOUT_CMD := $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/
 # Must be generous: some shards with threading tests take 60-90s under load.
 SHARD_TIMEOUT := 300
 
+# Timeout for a single-process run of the binary on a tag or filter (`make t`),
+# which can be a whole tag rather than one shard's slice of the suite.
+TEST_TIMEOUT ?= 900
+# Timeout for a single-process run of the whole suite (test-serial, test-verbose).
+SUITE_TIMEOUT ?= 3600
+
+# Runs the rest of the line under a $(1)-second timeout. SIGTERM first, so
+# Catch2 can name the test that hung; SIGKILL $(TIMEOUT_KILL_AFTER)s later,
+# because a binary whose heap is corrupt can deadlock in Catch2's own signal
+# handler on the malloc lock and never act on SIGTERM. Exits 124 after SIGTERM,
+# 137 after SIGKILL.
+TIMEOUT_KILL_AFTER ?= 30
+timeout_run = $(if $(TIMEOUT_CMD),$(TIMEOUT_CMD) -k $(TIMEOUT_KILL_AFTER) $(1))
+
 # Where per-shard logs land. Kept (not deleted) whenever a shard fails, crashes,
 # or times out, so there is something to read afterwards — see diagnose_shards.
 # Override to collect artifacts elsewhere, e.g. SHARD_ARTIFACT_ROOT=$(PWD)/build
@@ -53,9 +67,12 @@ SLOW_SHARDS ?= 16
 SLOW_ORDER ?= --order rand --rng-seed 1
 
 # How many shards RUN at once; the shard count itself never changes, because a
-# different count regroups the tests and surfaces cross-test contamination. An
-# idle box gets 3 per core, the same as NPROCS; a box other trees are building on
-# gets 3 per core of this tree's fair share. Asked once, when a sweep starts.
+# different count regroups the tests and surfaces cross-test contamination.
+# Three per slot of `helix-claim jobs` (the jobpool's size when one is live),
+# because a shard spends most of its time waiting. With a live pool the shards
+# also run in batches of three, each batch holding one pool token for its whole
+# life, so every sweep on the box together runs at most three shards per token
+# and shares the tokens with compiles. Asked once, when a sweep starts.
 SHARD_CONCURRENCY ?= $(eval SHARD_CONCURRENCY := $(shell j=$$(scripts/helix-claim jobs 2>/dev/null) && echo $$((j * 3)) || echo $(NPROCS)))$(SHARD_CONCURRENCY)
 
 # Run tests in parallel using Catch2 sharding
@@ -69,13 +86,30 @@ SHARD_CONCURRENCY ?= $(eval SHARD_CONCURRENCY := $(shell j=$$(scripts/helix-clai
 define run_tests_parallel
 	echo "$(CYAN)Running $(or $(2),$(NPROCS)) test shards, at most $(SHARD_CONCURRENCY) at once (timeout=$(SHARD_TIMEOUT)s)...$(RESET)"; \
 	shard_dir=$$(mktemp -d "$(SHARD_ARTIFACT_ROOT)/helix-shards-XXXXXX"); \
+	export shard_dir; \
+	run_shard() { \
+		(echo "=== shard $$1/$(or $(2),$(NPROCS)) host=$$(hostname) nproc=$$(nproc 2>/dev/null || echo '?') git=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) ts=$$(date -Iseconds) order=$(or $(3),decl seed=0)"; $(call timeout_run,$(SHARD_TIMEOUT)) $(TEST_BIN) $(1) $(3) --shard-count $(or $(2),$(NPROCS)) --shard-index $$1 2>&1; echo $$? > "$$shard_dir/$$1.exit") | \
+			tee "$$shard_dir/$$1.log" | sed "s/^/[shard $$1] /"; \
+	}; \
+	run_batch() { for s in "$$@"; do run_shard "$$s" & done; wait; }; \
+	shards=$(or $(2),$(NPROCS)); batch=1; jp=""; \
+	if scripts/helix-claim pool >/dev/null; then \
+		batch=3; jp=$${HELIX_JOBPOOL:-jobpool}; \
+		echo "$(CYAN)jobpool live: shards run in batches of $$batch, one pool token per batch$(RESET)"; \
+	fi; \
+	slots=$$(( ($(SHARD_CONCURRENCY) + batch - 1) / batch )); \
 	pids=""; \
-	for i in $$(seq 0 $$(($(or $(2),$(NPROCS))-1))); do \
-		while [ $$(jobs -rp | wc -l) -ge $(SHARD_CONCURRENCY) ]; do \
+	for ((i = 0; i < shards; i += batch)); do \
+		while [ $$(jobs -rp | wc -l) -ge $$slots ]; do \
 			wait -n 2>/dev/null || sleep 0.2; \
 		done; \
-		(echo "=== shard $$i/$(or $(2),$(NPROCS)) host=$$(hostname) nproc=$$(nproc 2>/dev/null || echo '?') git=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) ts=$$(date -Iseconds) order=$(or $(3),decl seed=0)"; $(if $(TIMEOUT_CMD),$(TIMEOUT_CMD) $(SHARD_TIMEOUT)) $(TEST_BIN) $(1) $(3) --shard-count $(or $(2),$(NPROCS)) --shard-index $$i 2>&1; echo $$? > "$$shard_dir/$$i.exit") | \
-			tee "$$shard_dir/$$i.log" | sed "s/^/[shard $$i] /" & \
+		last=$$(( i + batch - 1 < shards - 1 ? i + batch - 1 : shards - 1 )); \
+		if [ -n "$$jp" ]; then \
+			{ "$$jp" with-token -- bash -c "$$(declare -f run_shard run_batch)"'; touch "$$shard_dir/$$1.started"; run_batch "$$@"' batch $$(seq $$i $$last) || \
+				[ -e "$$shard_dir/$$i.started" ] || run_batch $$(seq $$i $$last); } & \
+		else \
+			run_shard $$i & \
+		fi; \
 		pids="$$pids $$!"; \
 	done; \
 	for pid in $$pids; do \
@@ -153,7 +187,7 @@ define diagnose_shards
 		echo "  $(CYAN)re-running this shard sequentially x$(SHARD_RETRIES)…$(RESET)"; \
 		hits=0; last_rc=0; \
 		for attempt in $$(seq 1 $(SHARD_RETRIES)); do \
-			if $(if $(TIMEOUT_CMD),$(TIMEOUT_CMD) $(SHARD_TIMEOUT)) $(TEST_BIN) $(3) $(5) \
+			if $(call timeout_run,$(SHARD_TIMEOUT)) $(TEST_BIN) $(3) $(5) \
 					--shard-count $(4) --shard-index $$s > "$(1)/$$s.retry.log" 2>&1; then \
 				: ; \
 			else \
@@ -459,7 +493,11 @@ t:
 	exit 2
 else
 t: test-build
-	$(Q)$(TEST_BIN) "$(F)"
+	$(Q)rc=0; $(call timeout_run,$(TEST_TIMEOUT)) $(TEST_BIN) "$(F)" || rc=$$?; \
+	if [ $$rc -eq 124 ] || [ $$rc -eq 137 ]; then \
+		echo "$(RED)$(BOLD)✗ $(TEST_BIN) '$(F)' was killed after $(TEST_TIMEOUT)s: a hung test, or a deadlocked crash handler. TEST_TIMEOUT=<seconds> changes the limit.$(RESET)"; \
+	fi; \
+	exit $$rc
 endif
 
 # unit-sweep: every fast unit test, sharded across cores. Answers "did I break
@@ -540,7 +578,7 @@ dev-timing:
 test-serial: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running unit tests sequentially (excluding slow)...$(RESET)"
 	@START_TIME=$$(date +%s); \
-	$(TEST_BIN) "~[.] ~[slow]"; \
+	$(call timeout_run,$(SUITE_TIMEOUT)) $(TEST_BIN) "~[.] ~[slow]"; \
 	$(call report_test_result,Unit tests)
 
 # Run ALL tests including slow ones (for thorough validation)
@@ -588,7 +626,7 @@ HIDDEN_FILTER ?= [.]
 test-hidden: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running HIDDEN tests ($(HIDDEN_FILTER)) sequentially from $(CURDIR)...$(RESET)"
 	@START_TIME=$$(date +%s); \
-	cd $(CURDIR) && $(TEST_BIN) "$(HIDDEN_FILTER)"; \
+	cd $(CURDIR) && $(call timeout_run,$(TEST_TIMEOUT)) $(TEST_BIN) "$(HIDDEN_FILTER)"; \
 	$(call report_test_result,Hidden tests)
 
 # List the hidden set without running it — the inventory behind the tracker doc.
@@ -617,14 +655,23 @@ test-kiauh:
 # Shell/Bats Tests
 # ============================================================================
 
-# Run shell/bats tests for platform hooks and installer scripts
+# Run shell/bats tests for platform hooks and installer scripts. The parallel
+# run holds its -j as jobpool tokens (`helix-claim hold`), so it shares the
+# machine budget with compiles; without jobpool the -j is the cores. It waits
+# up to 60s for a third of the pool (`--min`): a third keeps the suite within
+# about 3x its full-pool time while leaving two thirds to compiles, and the
+# bounded wait turns a saturated pool into seconds of delay, never a serial
+# run. One slot runs serially: bats refuses --no-parallelize-within-files
+# below --jobs 2.
 test-shell:
 	$(ECHO) "$(CYAN)$(BOLD)Running shell tests (bats)...$(RESET)"
 	@if command -v bats >/dev/null 2>&1; then \
 		START_TIME=$$(date +%s); \
 		if command -v parallel >/dev/null 2>&1; then \
-			NPROC=$$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4); \
-			bats --jobs "$$NPROC" --no-parallelize-within-files tests/shell/; \
+			j=$$(scripts/helix-claim jobs 2>/dev/null || echo 3); \
+			scripts/helix-claim hold --min $$(( j / 3 > 0 ? j / 3 : 1 )) -- \
+				sh -c '[ "$$JOBPOOL_SLOTS" -gt 1 ] || exec bats "$$@"; \
+				exec bats --jobs "$$JOBPOOL_SLOTS" --no-parallelize-within-files "$$@"' bats tests/shell/; \
 		else \
 			bats tests/shell/; \
 		fi; \
@@ -692,7 +739,7 @@ test-xml:
 		echo "  Log: /tmp/helix_xml_cmake.log"; \
 		exit 1; \
 	}; \
-	cmake --build $(HELIX_XML_TEST_BUILD_DIR) -j $(NPROC) > /tmp/helix_xml_build.log 2>&1 || { \
+	scripts/helix-claim hold -n $(NPROC) -- sh -c 'exec cmake --build "$$0" -j "$$JOBPOOL_SLOTS"' $(HELIX_XML_TEST_BUILD_DIR) > /tmp/helix_xml_build.log 2>&1 || { \
 		cat /tmp/helix_xml_build.log; \
 		echo "$(RED)$(BOLD)✗ helix-xml test build failed$(RESET)"; \
 		echo "  Log: /tmp/helix_xml_build.log"; \
@@ -753,13 +800,13 @@ test-plugin:
 # Run tests with per-test timing (shows slow tests)
 test-verbose: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running tests with timing...$(RESET)"
-	$(Q)$(TEST_BIN) --durations yes --use-colour yes
+	$(Q)$(call timeout_run,$(SUITE_TIMEOUT)) $(TEST_BIN) --durations yes --use-colour yes
 
 # Run UI-related tests
 test-ui: test-build
 	$(ECHO) "$(CYAN)$(BOLD)Running UI tests...$(RESET)"
 	@START_TIME=$$(date +%s); \
-	$(TEST_BIN) "[navigation],[theme],[wizard]"; \
+	$(call timeout_run,$(TEST_TIMEOUT)) $(TEST_BIN) "[navigation],[theme],[wizard]"; \
 	$(call report_test_result,UI tests)
 
 # List all available test tags
@@ -866,12 +913,13 @@ $(TEST_BIN): FORCE
 	@if echo "$(MAKEFLAGS)" | grep -q 'jobserver'; then \
 		exec $(MAKE) _PARALLEL_GUARD=1 --no-print-directory $@; \
 	else \
+		j=$(JOBS_SH); \
 		if echo "$(MAKEFLAGS)" | grep -q 'j'; then \
 			echo ""; \
-			printf '\033[1;33m⚠️  make -j (unlimited) detected - auto-fixing to -j%s\033[0m\n' "$(JOBS)"; \
+			printf '\033[1;33m⚠️  make -j (unlimited) detected - auto-fixing to -j%s\033[0m\n' "$$j"; \
 			echo ""; \
 		fi; \
-		exec $(MAKE) _PARALLEL_GUARD=1 --no-print-directory -j$(JOBS) $@; \
+		exec $(MAKE) _PARALLEL_GUARD=1 --no-print-directory -j$$j $@; \
 	fi
 else
 # $(LIBHV_LIB) and $(LIBHV_JSON_HEADER) are prerequisites for the same reason

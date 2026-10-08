@@ -593,6 +593,10 @@ int Application::run(int argc, char** argv) {
         return 1;
     }
 
+    // init_display() forces the backlight to 100% so the panel is visible before
+    // any setting is loaded; the saved brightness exists only from here on.
+    m_display->ensure_display_on();
+
     get_printer_state().set_active_printer_name(m_config->get_active_printer_name());
 
     // Phase 9b: Initialize Moonraker (creates client + API)
@@ -1469,6 +1473,9 @@ bool Application::init_display() {
         // #1255.
         layout.init(w, h);
         theme_manager_refresh_layout_constants(disp);
+        // Components register with the tokens and layout variant of the moment;
+        // idle ones register again at the new geometry on their next use.
+        helix::unregister_idle_xml_components();
 
         // Overlays cache their root widget across show/hide cycles, so the
         // width applied at push time goes stale when the canvas changes size

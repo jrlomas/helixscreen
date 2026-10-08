@@ -50,6 +50,7 @@
 #include "wizard_step.h"
 #include "wizard_step_logic.h"
 #include "wizard_step_registry.h"
+#include "xml_registration.h"
 
 #include <spdlog/spdlog.h>
 
@@ -508,6 +509,8 @@ void ui_wizard_container_register_responsive_constants() {
     // Register to wizard_container scope (parent)
     lv_xml_component_scope_t* parent_scope = lv_xml_component_get_scope("wizard_container");
     register_constants_to_scope(parent_scope, constants);
+    if (parent_scope)
+        helix::keep_xml_component_registered("wizard_container");
 
     // Define child components that inherit this constant
     const char* children[] = {
@@ -533,6 +536,7 @@ void ui_wizard_container_register_responsive_constants() {
         lv_xml_component_scope_t* child_scope = lv_xml_component_get_scope(children[i]);
         if (child_scope) {
             register_constants_to_scope(child_scope, constants);
+            helix::keep_xml_component_registered(children[i]);
             child_count++;
         }
     }

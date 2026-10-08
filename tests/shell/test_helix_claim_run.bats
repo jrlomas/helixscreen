@@ -157,7 +157,7 @@ wait_for_file() {
     "$CLAIM" take device:x "hw" --pid "$OWNER" --note "192.0.2.7" >/dev/null
     ZEUS_HOST=zeus.invalid run timeout 10 "$CLAIM" resources
     [ "$status" -eq 0 ]
-    contains "fair share -j" "$output"
+    contains "cpus, build -j" "$output"
     contains "device:x" "$output"
     contains "192.0.2.7" "$output"
     contains "memory by command" "$output"

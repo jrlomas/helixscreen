@@ -769,12 +769,11 @@ If your XML used `extends="ui_card"`, simply change to `extends="ui_dialog"`. Th
    something shorter-lived than the dialog. Helper otherwise. This is a lifetime question,
    not a question of how many buttons the dialog has.
 2. **Create XML** in `ui_xml/` using `extends="ui_dialog"` and `modal_button_row`
-3. **Register XML** in `src/xml_registration.cpp` (components must be registered before they're used by other components)
-4. **Register callbacks** via `lv_xml_register_event_cb()` in your C++ code
-5. **If subclass**: Create header in `include/`, implement `get_name()` and `component_name()`
-6. **Wire buttons** in `on_show()` using `wire_ok_button()` / `wire_cancel_button()`
-7. **Store the modal** as a member (subclass) or in a `ModalGuard` (static API)
-8. **Test**: Modal should auto-hide when parent panel is destroyed
+3. **Register callbacks** via `lv_xml_register_event_cb()` in your C++ code (the XML itself registers on first use; no list to edit)
+4. **If subclass**: Create header in `include/`, implement `get_name()` and `component_name()`
+5. **Wire buttons** in `on_show()` using `wire_ok_button()` / `wire_cancel_button()`
+6. **Store the modal** as a member (subclass) or in a `ModalGuard` (static API)
+7. **Test**: Modal should auto-hide when parent panel is destroyed
 
 ---
 

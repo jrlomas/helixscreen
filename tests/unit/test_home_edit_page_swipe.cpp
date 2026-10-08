@@ -39,6 +39,7 @@
 #include "../test_helpers/grid_edit_mode_test_access.h"
 #include "../test_helpers/home_panel_test_access.h"
 #include "../test_helpers/mock_config_storage.h"
+#include "../test_helpers/scope_exit.h"
 #include "../test_helpers/scoped_animations_enabled.h"
 #include "../test_helpers/scoped_config_write_counter.h"
 #include "../test_helpers/scoped_pointer_indev.h"
@@ -4554,9 +4555,13 @@ TEST_CASE_METHOD(LVGLUITestFixture,
                  "[1638][edit-swipe][home]") {
     // build_carousel() creates every page and the next-page slot from these
     // components by name. EditHomeFixture registers them from file itself and
-    // the registry is process-wide, so the case starts from neither.
+    // the registry and component loader are process-wide, so the case starts
+    // from neither: the lookups below resolve only through what
+    // register_xml_components() installs.
     static constexpr std::array<const char*, 2> PAGE_COMPONENTS = {"home_page_container",
                                                                    "home_next_page_slot"};
+    lv_xml_set_component_loader(nullptr);
+    helix::test::ScopeExit restore_loader([] { helix::register_xml_on_first_use(); });
     for (const char* name : PAGE_COMPONENTS) {
         INFO(name);
         lv_xml_component_unregister(name);

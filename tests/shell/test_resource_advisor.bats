@@ -30,13 +30,13 @@ stub_jobs() {
     cat > "$HELIX_ADVISOR_JOBS_CMD" <<EOF
 #!/usr/bin/env bash
 touch "$JOBS_CALLED"
-echo "ncpu=32 peers=1(claimed+inferred) cc1plus=0 availGB=$avail -> -j$share$extra" >&2
+echo "ncpu=32 availGB=$avail -> -j$share$extra" >&2
 echo "$share"
 EOF
     chmod +x "$HELIX_ADVISOR_JOBS_CMD"
 }
 roomy() { stub_jobs 16 60; }
-tight_share() { stub_jobs 6 60; }
+narrow_share() { stub_jobs 6 60; }
 tight_memory() { stub_jobs 16 12; }
 
 advise() {
@@ -61,14 +61,14 @@ context() {
 }
 
 @test "a single-tag test run is not heavy" {
-    tight_share
+    tight_memory
     advise "make t F='[ams]'"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
 
 @test "a command already on zeus is left alone" {
-    tight_share
+    tight_memory
     advise "scripts/zeus-run.sh mutate --tests '[ams]'"
     [ -z "$output" ]
     advise "ssh zeus.local 'sudo -n docker exec helix-tsan make full-test-run'"
@@ -142,15 +142,15 @@ zeus_modes() {
 # Only when thelio is tight
 # ---------------------------------------------------------------------------
 
-@test "an explicit -j above the fair share is flagged" {
-    tight_share
+@test "an explicit -j above the box's -j is flagged" {
+    narrow_share
     advise "make -j24"
     contains '-j$(scripts/helix-claim jobs)' "$(context)"
     contains "-j6" "$(context)"
 }
 
-@test "an explicit -j at or under the fair share is not flagged" {
-    tight_share
+@test "an explicit -j at or under the box's -j is not flagged" {
+    narrow_share
     advise "make -j4 test"
     [ -z "$output" ]
 }
@@ -165,7 +165,7 @@ zeus_modes() {
 }
 
 @test "an idf build in docker is heavy when thelio is tight" {
-    tight_share
+    tight_memory
     advise "docker run --rm -v \$PWD:/src espressif/idf idf.py build"
     contains "zeus" "$(context)"
 }
@@ -253,7 +253,7 @@ zeus_modes() {
     export HELIX_ADVISOR_JOBS_CMD="$TEST_DIR/a b/jobs"
     stub_jobs 6 60
     advise "make -j40 x"
-    contains "fair share, -j6" "$(context)"
+    contains "above the -j6 this box takes" "$(context)"
 }
 
 # ---------------------------------------------------------------------------
@@ -261,20 +261,19 @@ zeus_modes() {
 # ---------------------------------------------------------------------------
 
 @test "-j equal to the share is fine and one above is flagged" {
-    tight_share
+    narrow_share
     advise "make -j6 x"
     [ -z "$output" ]
     advise "make -j7 x"
-    contains "fair share, -j6" "$(context)"
+    contains "above the -j6 this box takes" "$(context)"
 }
 
-@test "a share of 8 is tight and 9 is not" {
-    local loop='for i in 1 2; do ./build/bin/helix-tests x; done'
-    stub_jobs 8 60
-    advise "$loop"
-    contains "loop" "$(context)"
-    stub_jobs 9 60
-    advise "$loop"
+@test "with no pool a narrow -j alone is not tight" {
+    # Without a pool the -j is cores capped by memory, so memory already
+    # carries the signal; a small -j on a box with room is a small box.
+    stub_jobs 2 60
+    advise 'for i in 1 2; do ./build/bin/helix-tests x; done'
+    [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
 
@@ -346,7 +345,7 @@ zeus_modes() {
 }
 
 @test "every spelling of an oversized -j is flagged" {
-    tight_share
+    narrow_share
     # The advisor expands $(nproc) on the host, so pin it: a 4-core runner's
     # -j$(nproc) sits under the share of 6 and would not be oversized there.
     mkdir -p "$TEST_DIR/nproc-bin"
@@ -355,12 +354,12 @@ zeus_modes() {
     PATH="$TEST_DIR/nproc-bin:$PATH"
     for c in 'make -j$(nproc)' 'make -j 32 test' 'make --jobs=32' 'make --jobs 32'; do
         advise "$c"
-        contains "fair share, -j6" "$(context)" || fail "missed: $c"
+        contains "above the -j6 this box takes" "$(context)" || fail "missed: $c"
     done
 }
 
 @test "a computed or bare -j is left to its source" {
-    tight_share
+    narrow_share
     for c in 'make -j"$(scripts/helix-claim jobs)"' 'make -j$(scripts/helix-claim jobs) test' 'make -j'; do
         advise "$c"
         [ -z "$output" ] || fail "flagged: $c"
@@ -369,17 +368,17 @@ zeus_modes() {
 
 @test "an explicit -j above the share is flagged even on a roomy box" {
     advise "make -j24 test"
-    contains "fair share, -j16" "$(context)"
+    contains "above the -j16 this box takes" "$(context)"
 }
 
 @test "xargs over the test binary is a loop" {
-    tight_share
+    tight_memory
     advise "seq 200 | xargs -I{} ./build/bin/helix-tests '[x]'"
     contains "loop" "$(context)"
 }
 
 @test "a docker toolchain target is a container build" {
-    tight_share
+    tight_memory
     advise "make docker-toolchain-k1"
     contains "zeus" "$(context)"
 }
@@ -391,4 +390,87 @@ zeus_modes() {
     advise "$big"
     [ "$status" -eq 0 ]
     [ $((SECONDS - start)) -lt 5 ] || fail "took $((SECONDS - start))s"
+}
+
+# ---------------------------------------------------------------------------
+# With a jobpool: the make shim strips -j, and tightness is the pool's free tokens
+# ---------------------------------------------------------------------------
+
+stub_pool() {
+    local target="$1" free="$2" avail="$3"
+    cat > "$HELIX_ADVISOR_JOBS_CMD" <<EOF
+#!/usr/bin/env bash
+touch "$JOBS_CALLED"
+echo "pool target=$target available=$free availGB=$avail -> -j$target" >&2
+echo "$target"
+EOF
+    chmod +x "$HELIX_ADVISOR_JOBS_CMD"
+}
+
+@test "with a live pool an explicit -j says nothing, since the shim strips it" {
+    stub_pool 30 0 60
+    advise "make -j64"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "with a live pool a container build is tight when few tokens are free" {
+    stub_pool 30 3 60
+    advise "make pi-docker"
+    contains "the build pool has 3 of 30 tokens free" "$(context)"
+    contains "Container builds are heavy" "$(context)"
+}
+
+@test "with a live pool a heavy runner outside it is named, tight or not" {
+    stub_pool 30 20 60
+    advise "bats --jobs 32 --no-parallelize-within-files tests/shell/"
+    contains "bats --jobs sizes itself to the machine and runs outside the jobpool (20 of 30 tokens free)" "$(context)"
+    contains "scripts/helix-claim hold --" "$(context)"
+    advise "cd firmware && docker run --rm -v \$PWD:/src espressif/idf:v5.5.5 idf.py build"
+    contains "a docker run of idf.py sizes itself" "$(context)"
+    contains "scripts/pool-docker.sh" "$(context)"
+    advise "ninja -C build"
+    contains "ninja sizes itself" "$(context)"
+    advise "ls | parallel -j 8 gzip"
+    contains "GNU parallel sizes itself" "$(context)"
+}
+
+@test "a heavy runner already under the pool, or with no pool live, is silent" {
+    stub_pool 30 20 60
+    advise "scripts/helix-claim hold -- sh -c 'bats --jobs \"\$JOBPOOL_SLOTS\" tests/shell/'"
+    [ -z "$output" ]
+    advise "scripts/pool-docker.sh docker run --rm espressif/idf:v5.5.5 idf.py build"
+    [ -z "$output" ]
+    advise "bats tests/shell/test_foo.bats"
+    [ -z "$output" ]
+    roomy
+    advise "bats --jobs 32 tests/shell/"
+    [ -z "$output" ]
+}
+
+@test "with a live pool and tokens to spare a container build is silent" {
+    stub_pool 30 20 60
+    advise "make pi-docker"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "a pool with free tokens is still tight on memory" {
+    stub_pool 30 20 12
+    advise "for i in 1 2 3; do ./build/bin/helix-tests '[ams]'; done"
+    contains "12GB available" "$(context)"
+}
+
+@test "without jobpool installed the real helix-claim still judges -j" {
+    unset HELIX_ADVISOR_JOBS_CMD HELIX_JOBPOOL
+    unset -f jobpool 2>/dev/null || true
+    local d p=""
+    local IFS=:
+    for d in $PATH; do [ -e "$d/jobpool" ] || p=${p:+$p:}$d; done
+    unset IFS
+    local json
+    json=$(jq -cn --arg c "make -j9999" '{tool_name: "Bash", tool_input: {command: $c}}')
+    run env -u JOBPOOL PATH="$p" bash -c "printf '%s' \"\$1\" | $ADVISOR" _ "$json"
+    [ "$status" -eq 0 ]
+    contains "-j9999 is above the -j" "$(context)"
 }

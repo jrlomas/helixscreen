@@ -115,89 +115,49 @@ using namespace helix;
 // HELIX_MOCK_PRINTER authoritative-over-saved-type contract
 // ============================================================================
 // PrinterDetector::auto_detect_and_save() short-circuits when a printer type is
-// already persisted in config. Under HELIX_MOCK_PRINTER, MoonrakerManager::init()
-// clears the saved type (gated strictly on the env var) BEFORE detection runs so
-// the mock's reported identity re-resolves every launch. These tests pin that
-// clear-vs-preserve behavior against a real Config without spinning up the full
-// (LVGL-heavy) MoonrakerManager init path. They mirror exactly the production
-// guard in moonraker_manager.cpp::init().
+// already persisted in config, so MoonrakerManager::init() settles the saved
+// type from HELIX_MOCK_PRINTER before detection runs.
 
 #include "config.h"
 #include "wizard_config_paths.h"
 
-namespace {
-
-// Replays the production env-gated clear from MoonrakerManager::init(). Kept in
-// lockstep with that block — if the seam moves, update both.
-void apply_mock_printer_type_clear(Config& cfg) {
-    if (std::getenv("HELIX_MOCK_PRINTER")) {
-        const std::string type_path = cfg.df() + helix::wizard::PRINTER_TYPE;
-        const std::string prev = cfg.get<std::string>(type_path, "");
-        if (!prev.empty()) {
-            cfg.set<std::string>(type_path, "");
-        }
-    }
-}
-
-// RAII helper: set HELIX_MOCK_PRINTER for the scope, restore prior value after.
-struct ScopedMockPrinterEnv {
-    std::string saved;
-    bool had = false;
-    explicit ScopedMockPrinterEnv(const char* value) {
-        if (const char* prev = std::getenv("HELIX_MOCK_PRINTER")) {
-            saved = prev;
-            had = true;
-        }
-        if (value) {
-            setenv("HELIX_MOCK_PRINTER", value, 1);
-        } else {
-            unsetenv("HELIX_MOCK_PRINTER");
-        }
-    }
-    ~ScopedMockPrinterEnv() {
-        if (had) {
-            setenv("HELIX_MOCK_PRINTER", saved.c_str(), 1);
-        } else {
-            unsetenv("HELIX_MOCK_PRINTER");
-        }
-    }
-};
-
-} // namespace
-
-TEST_CASE("HELIX_MOCK_PRINTER clears a stale saved printer type",
-          "[application][mock_printer][regression]") {
-    // No active printer set → df() routes to the "default" section; the test
-    // only needs a single consistent path for the set/clear/get round-trip.
+TEST_CASE("apply_mock_printer_identity settles the saved type", "[application][mock_printer]") {
     Config cfg;
     const std::string type_path = cfg.df() + helix::wizard::PRINTER_TYPE;
 
-    // Simulate a stale persisted type from a previous (non-mock) run.
-    cfg.set<std::string>(type_path, "Voron 2.4");
-    REQUIRE(cfg.get<std::string>(type_path, "") == "Voron 2.4");
-
-    SECTION("Env set → saved type is cleared so detection re-resolves") {
-        ScopedMockPrinterEnv env("ad5m");
-        apply_mock_printer_type_clear(cfg);
-        REQUIRE(cfg.get<std::string>(type_path, "") == "");
+    SECTION("a detecting persona clears a stale type") {
+        cfg.set<std::string>(type_path, "Voron 2.4");
+        CHECK(helix::apply_mock_printer_identity(cfg, "ad5m"));
+        CHECK(cfg.get<std::string>(type_path, "x").empty());
     }
-
-    SECTION("Env unset → saved type is preserved (zero behavior change)") {
-        ScopedMockPrinterEnv env(nullptr);
-        apply_mock_printer_type_clear(cfg);
-        REQUIRE(cfg.get<std::string>(type_path, "") == "Voron 2.4");
+    SECTION("a declaring persona overwrites a stale type") {
+        cfg.set<std::string>(type_path, "Voron 2.4");
+        CHECK(helix::apply_mock_printer_identity(cfg, "k1max"));
+        CHECK(cfg.get<std::string>(type_path, "") == "Creality K1 Max");
     }
-}
-
-TEST_CASE("HELIX_MOCK_PRINTER clear is a no-op when no type is saved",
-          "[application][mock_printer][regression]") {
-    Config cfg;
-    const std::string type_path = cfg.df() + helix::wizard::PRINTER_TYPE;
-    REQUIRE(cfg.get<std::string>(type_path, "") == "");
-
-    ScopedMockPrinterEnv env("voron_24");
-    apply_mock_printer_type_clear(cfg);
-    REQUIRE(cfg.get<std::string>(type_path, "") == "");
+    SECTION("a declaring persona writes into an empty config") {
+        CHECK(helix::apply_mock_printer_identity(cfg, "k1"));
+        CHECK(cfg.get<std::string>(type_path, "") == "Creality K1C");
+    }
+    SECTION("snapmaker_u1 declares nothing and clears a stale type") {
+        cfg.set<std::string>(type_path, "Voron 2.4");
+        CHECK(helix::apply_mock_printer_identity(cfg, "snapmaker_u1"));
+        CHECK(cfg.get<std::string>(type_path, "x").empty());
+    }
+    SECTION("an unrecognised value still clears (it runs as voron_24)") {
+        cfg.set<std::string>(type_path, "Creality K1C");
+        CHECK(helix::apply_mock_printer_identity(cfg, "AD5M"));
+        CHECK(cfg.get<std::string>(type_path, "x").empty());
+    }
+    SECTION("unset and empty leave config alone") {
+        cfg.set<std::string>(type_path, "Voron 2.4");
+        CHECK_FALSE(helix::apply_mock_printer_identity(cfg, nullptr));
+        CHECK_FALSE(helix::apply_mock_printer_identity(cfg, ""));
+        CHECK(cfg.get<std::string>(type_path, "") == "Voron 2.4");
+    }
+    SECTION("nothing saved and nothing declared is no change") {
+        CHECK_FALSE(helix::apply_mock_printer_identity(cfg, "voron_24"));
+    }
 }
 
 TEST_CASE("should_start_print_collector - fresh print start", "[application][print_start]") {

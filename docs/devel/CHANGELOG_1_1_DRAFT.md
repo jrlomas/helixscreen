@@ -1062,6 +1062,7 @@ git log --no-merges --oneline 2ad32dc6e..main --not release/1.0
   users to a settings overlay that is gone.
 - The mock printer can be a named printer type (`HELIX_MOCK_PRINTER=snapmaker_u1`), so a
   `--test` run renders that printer's real pre-print options and hardware instead of the
-  generic persona.
+  generic persona. The Snapmaker U1 persona has four extruders and auto-detects from the
+  U1's own objects, with no saved printer type.
 - `helix-screen ctl click` on a checkable widget now flips its checked state and sends
   VALUE_CHANGED then CLICKED, the way a finger tap does, so it toggles an option tile.

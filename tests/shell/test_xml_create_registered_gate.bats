@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Meta-tests for scripts/check_xml_create_registered.py: every component name
-# src/ passes to lv_xml_create must be registered, or the call returns NULL.
+# src/ passes to lv_xml_create must be registrable, or the call returns NULL.
 
 load helpers
 
@@ -28,8 +28,30 @@ EOF
     contains "src/ui/panel.cpp:3" "$output"
 }
 
-@test "registering the component file passes the gate" {
-    echo 'void reg() { register_xml("demo_row.xml"); }' > "$ROOT/src/xml_registration.cpp"
+@test "a component file at the top of ui_xml passes the gate" {
+    mkdir -p "$ROOT/ui_xml"
+    echo '<component/>' > "$ROOT/ui_xml/demo_row.xml"
+    run python3 "$GATE" --root "$ROOT"
+    [ "$status" -eq 0 ]
+}
+
+@test "a component file under ui_xml/components passes the gate" {
+    mkdir -p "$ROOT/ui_xml/components"
+    echo '<component/>' > "$ROOT/ui_xml/components/demo_row.xml"
+    run python3 "$GATE" --root "$ROOT"
+    [ "$status" -eq 0 ]
+}
+
+@test "a component file in a layout variant directory alone does not pass" {
+    mkdir -p "$ROOT/ui_xml/portrait"
+    echo '<component/>' > "$ROOT/ui_xml/portrait/demo_row.xml"
+    run python3 "$GATE" --root "$ROOT"
+    [ "$status" -eq 1 ]
+}
+
+@test "registering the component file by path passes the gate" {
+    echo 'void reg() { lv_xml_register_component_from_file("A:extra/demo_row.xml"); }' \
+        > "$ROOT/src/demo_reg.cpp"
     run python3 "$GATE" --root "$ROOT"
     [ "$status" -eq 0 ]
 }
