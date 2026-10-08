@@ -584,6 +584,12 @@ class AmsBackendAce : public AmsSubscriptionBackend {
 
     [[nodiscard]] helix::printer::EndlessSpoolConfig endless_spool_config_locked() const;
 
+    /// Slots whose raw driver status is exactly "ready": the only swap targets
+    /// the driver's endless spool considers (our SlotStatus folds preload,
+    /// running, loaded and available into the same value).
+    std::set<int> driver_ready_slots_;
+    void note_driver_ready_locked(int global_index, const std::string& driver_status);
+
     /// The driver's endless-spool switch and match mode ("exact" | "material" |
     /// "next"), from the manager object. Unseen means the driver predates it.
     bool endless_spool_seen_ = false;

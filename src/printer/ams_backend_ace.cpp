@@ -34,6 +34,8 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <map>
 #include <tuple>
@@ -1040,6 +1042,8 @@ void AmsBackendAce::parse_ace_object(const json& data) {
                         slot_status_from_string(slot_json["status"].get<std::string>());
                     observed_present = slot_status_reports_filament(status);
                     slot.status = status;
+                    note_driver_ready_locked(slot.global_index,
+                                             slot_json["status"].get<std::string>());
                 }
 
                 // Parse color: ValgACE returns [r, g, b] array
@@ -1797,6 +1801,7 @@ bool AmsBackendAce::parse_slots_response(const json& data) {
             // empty/available/loaded-only mapping misclassified (#1069).
             SlotStatus status = slot_status_from_string(slot_json["status"].get<std::string>());
             observed_present = slot_status_reports_filament(status);
+            note_driver_ready_locked(slot.global_index, slot_json["status"].get<std::string>());
 
             if (status != slot.status) {
                 slot.status = status;
@@ -1986,25 +1991,47 @@ helix::printer::EndlessSpoolConfig AmsBackendAce::get_endless_spool_config() con
     return endless_spool_config_locked();
 }
 
+void AmsBackendAce::note_driver_ready_locked(int global_index, const std::string& driver_status) {
+    if (driver_status == "ready") {
+        driver_ready_slots_.insert(global_index);
+    } else {
+        driver_ready_slots_.erase(global_index);
+    }
+}
+
 helix::printer::EndlessSpoolConfig AmsBackendAce::endless_spool_config_locked() const {
-    // Mirrors the driver's find_exact_match: only ready slots take part, and
-    // the match mode decides what makes two of them interchangeable.
+    // Mirrors the driver's find_exact_match: only slots the driver calls
+    // "ready" are swap targets, materials compare case- and edge-space-
+    // insensitively, and an unknown material never matches in exact or
+    // material mode. The backend parses one ACE instance (unit 0), so slots on
+    // further instances are not offered.
     if (!endless_spool_seen_ || !endless_spool_on_ || system_info_.units.empty()) {
         return {};
     }
     const bool by_material = endless_spool_mode_ == "material";
     const bool by_next = endless_spool_mode_ == "next";
+    auto normalized = [](std::string m) {
+        auto not_space = [](unsigned char c) { return !std::isspace(c); };
+        m.erase(m.begin(), std::find_if(m.begin(), m.end(), not_space));
+        m.erase(std::find_if(m.rbegin(), m.rend(), not_space).base(), m.end());
+        std::transform(m.begin(), m.end(), m.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        return m;
+    };
     std::map<std::tuple<std::string, uint32_t>, int> ids;
     std::vector<int> group_ids;
     for (const auto& slot : system_info_.units[0].slots) {
-        if (slot.global_index < 0 ||
-            (slot.status != SlotStatus::AVAILABLE && slot.status != SlotStatus::LOADED)) {
+        if (slot.global_index < 0 || !driver_ready_slots_.count(slot.global_index)) {
+            continue;
+        }
+        const std::string material = normalized(slot.material);
+        if (!by_next && (material.empty() || material == "unknown")) {
             continue;
         }
         if (group_ids.size() <= static_cast<size_t>(slot.global_index)) {
             group_ids.resize(static_cast<size_t>(slot.global_index) + 1, -1);
         }
-        auto key = std::make_tuple(by_next ? std::string() : slot.material,
+        auto key = std::make_tuple(by_next ? std::string() : material,
                                    (by_next || by_material) ? 0u : slot.color_rgb);
         auto [it, inserted] = ids.try_emplace(key, static_cast<int>(ids.size()));
         group_ids[static_cast<size_t>(slot.global_index)] = it->second;

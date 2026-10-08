@@ -2974,3 +2974,55 @@ TEST_CASE("ACE endless spool device actions send the driver commands",
         helper.execute_device_action("ace_endless_spool_mode", std::string("bogus")).success());
     CHECK(helper.captured_gcodes.size() == 3);
 }
+
+TEST_CASE("ACE endless spool matches the driver's ready and material rules",
+          "[ams][ace][endless][1679]") {
+    AmsBackendAceTestHelper helper;
+    helper.set_running(true);
+
+    SECTION("a preload slot is not a swap target") {
+        auto inst = make_kobra_instance_object();
+        inst["slots"][3]["status"] = "preload";
+        AceTestAccess::parse_ace(helper, inst);
+        AceTestAccess::parse_ace(helper, kobra_manager_with_endless(true, "next"));
+        auto groups = endless_groups(helper);
+        REQUIRE(groups.size() == 1);
+        CHECK(groups[0] == std::vector<int>{0, 1, 2});
+    }
+
+    SECTION("material compares case- and edge-space-insensitively") {
+        auto inst = make_kobra_instance_object();
+        inst["slots"][3]["material"] = " pla ";
+        AceTestAccess::parse_ace(helper, inst);
+        AceTestAccess::parse_ace(helper, kobra_manager_with_endless(true, "material"));
+        auto groups = endless_groups(helper);
+        REQUIRE(groups.size() == 2);
+        CHECK(groups[0] == std::vector<int>{0, 3});
+    }
+
+    SECTION("unknown materials never group in material mode, but do in next") {
+        auto inst = make_kobra_instance_object();
+        inst["slots"][0]["material"] = "unknown";
+        inst["slots"][3]["material"] = "";
+        AceTestAccess::parse_ace(helper, inst);
+        AceTestAccess::parse_ace(helper, kobra_manager_with_endless(true, "material"));
+        auto groups = endless_groups(helper);
+        REQUIRE(groups.size() == 1);
+        CHECK(groups[0] == std::vector<int>{1, 2});
+
+        AceTestAccess::parse_ace(helper, kobra_manager_with_endless(true, "next"));
+        CHECK(endless_groups(helper)[0] == std::vector<int>{0, 1, 2, 3});
+    }
+
+    SECTION("a frame that omits the endless fields keeps the state") {
+        AceTestAccess::parse_ace(helper, make_kobra_instance_object());
+        AceTestAccess::parse_ace(helper, kobra_manager_with_endless(true, "material"));
+        AceTestAccess::parse_ace(helper, make_kobra_instance_object());
+        json delta = {{"current_index", -1}};
+        AceTestAccess::parse_ace(helper, delta);
+        CHECK(helper.get_endless_spool_capabilities().available());
+        CHECK(helper.get_endless_spool_capabilities().enabled ==
+              helix::printer::EndlessSpoolEnabled::On);
+        CHECK(endless_groups(helper).size() == 2);
+    }
+}
