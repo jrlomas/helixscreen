@@ -769,6 +769,14 @@ void begin_connection_failed(const std::string& title, const std::string& messag
 std::optional<DiscoveredPrinter> find_moved_printer(const std::vector<DiscoveredPrinter>& found,
                                                     const std::string& saved_host, int saved_port,
                                                     const std::vector<std::string>& identities) {
+#if defined(HELIX_PLATFORM_ESP32)
+    // The firmware never browses for a moved printer, and its libc has no inet_pton.
+    (void)found;
+    (void)saved_host;
+    (void)saved_port;
+    (void)identities;
+    return std::nullopt;
+#else
     // A saved name re-resolves to wherever the printer went; swapping it for the literal IP
     // mDNS reports would trade an address that heals for one that cannot.
     in_addr v4{};
@@ -799,6 +807,7 @@ std::optional<DiscoveredPrinter> find_moved_printer(const std::vector<Discovered
         return std::nullopt;
     }
     return *moved;
+#endif
 }
 
 void set_printer_rediscovery_source(std::function<std::unique_ptr<IMdnsDiscovery>()> source) {
