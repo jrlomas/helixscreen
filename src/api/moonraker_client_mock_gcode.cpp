@@ -1065,6 +1065,7 @@ int MoonrakerClientMock::gcode_script(const std::string& raw_gcode) {
     // after it see the same line.
     GcodeResult r;
 
+    gcode_skip_wrappers(g);
     if (is_mock_ifs_module() && (r = gcode_ifs_module(g))) {
         return *r;
     }

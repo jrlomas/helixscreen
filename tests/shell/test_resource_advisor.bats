@@ -474,3 +474,39 @@ EOF
     [ "$status" -eq 0 ]
     contains "-j9999 is above the -j" "$(context)"
 }
+
+# ---------------------------------------------------------------------------
+# `helix-claim jobs` is make's -j, never a size for other runners
+# ---------------------------------------------------------------------------
+
+@test "a non-make runner sized from helix-claim jobs is pointed at hold" {
+    for c in \
+        'docker run --rm --cpus $(scripts/helix-claim jobs) helixscreen/toolchain-pi make' \
+        'docker run --rm --cpus "$(helix-claim jobs)" img' \
+        'ninja -C build -j$(scripts/helix-claim jobs)' \
+        'ls | parallel -j "$(scripts/helix-claim jobs)" gzip' \
+        'find . -name x | xargs -P $(helix-claim jobs) -n1 gzip' \
+        'cd firmware && idf.py -j $(scripts/helix-claim jobs) build' \
+        'bats --jobs "$(scripts/helix-claim jobs)" tests/shell/'; do
+        advise "$c"
+        [ "$status" -eq 0 ] || fail "status $status: $c"
+        contains "is make's -j" "$(context)" || fail "missed: $c"
+        contains "scripts/helix-claim hold [--min M] --" "$(context)" || fail "no hold: $c"
+    done
+    advise 'docker run --rm --cpus $(scripts/helix-claim jobs) img'
+    contains "docker --cpus sized from it" "$(context)"
+    contains "scripts/pool-docker.sh" "$(context)"
+}
+
+@test "make sized from helix-claim jobs, and a mention of it, are silent" {
+    for c in \
+        'make -j$(scripts/helix-claim jobs)' \
+        'make -j"$(helix-claim jobs)" test' \
+        'make pi-docker NPROC_DOCKER_RUN=$(scripts/helix-claim jobs)' \
+        'git commit -m "never use docker --cpus $(helix-claim jobs)"' \
+        "grep -n 'ninja -j\$(helix-claim jobs)' notes.txt" \
+        'scripts/helix-claim jobs'; do
+        advise "$c"
+        [ -z "$output" ] || fail "flagged: $c"
+    done
+}

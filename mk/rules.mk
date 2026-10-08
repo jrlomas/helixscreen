@@ -207,23 +207,6 @@ define emit-compile-command
 		> $(4:.o=.ccj)
 endef
 
-# Precompiled header rule (must be built before any C++ compilation)
-# PCH only depends on its source header and external libraries (LVGL, spdlog)
-# Project headers are NOT included - changing app headers should not invalidate PCH
-# The PCH contains only stable, rarely-changing includes (see include/lvgl_pch.h)
-# CRITICAL: lv_conf.h must be listed - it controls LVGL feature flags
-# PATCHES_STAMP ensures LVGL patches are applied before PCH compilation
-$(PCH): $(PCH_HEADER) $(LIBHV_LIB) $(LIBHV_JSON_HEADER) lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) | $(PATCH_MARKER_STAMP)
-	$(Q)mkdir -p $(dir $@)
-	$(ECHO) "$(MAGENTA)$(BOLD)[PCH]$(RESET) $<"
-ifeq ($(V),1)
-	$(Q)echo "$(YELLOW)Command:$(RESET) $(CXX) $(CXXFLAGS) $(INCLUDES) $(LV_CONF) -x c++-header -c $< -o $@"
-endif
-	$(Q)$(CXX) $(CXXFLAGS) $(INCLUDES) $(LV_CONF) -x c++-header -c $< -o $@ || { \
-		echo "$(RED)$(BOLD)✗ PCH compilation failed:$(RESET) $<"; \
-		exit 1; \
-	}
-
 # Compile app C sources
 # Uses DEPFLAGS to generate .d files for header dependency tracking
 # Emits .ccj fragment for incremental compile_commands.json generation
@@ -277,31 +260,29 @@ $(shell mkdir -p $(OBJ_DIR))
 $(file >$(FLAGS_STAMP).new,$(CC) $(CFLAGS) $(CXX) $(CXXFLAGS) $(SUBMODULE_CXXFLAGS) $(SUBMODULE_CFLAGS) $(LVGL_C_CFLAGS))
 $(shell cmp -s $(FLAGS_STAMP).new $(FLAGS_STAMP) || mv -f $(FLAGS_STAMP).new $(FLAGS_STAMP); rm -f $(FLAGS_STAMP).new)
 
-# Compile app C++ sources (depend on libhv and PCH)
+# Compile app C++ sources (depend on libhv and the LVGL patch stamp)
 # Uses DEPFLAGS to generate .d files for header dependency tracking
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[CXX]$(RESET) $<"
 ifeq ($(V),1)
-	$(Q)echo "$(YELLOW)Command:$(RESET) $(CXX) $(CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@"
+	$(Q)echo "$(YELLOW)Command:$(RESET) $(CXX) $(CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@"
 endif
-	$(Q)$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \
+	$(Q)$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \
 		echo "$(RED)$(BOLD)✗ Compilation failed:$(RESET) $<"; \
-		echo "$(YELLOW)Command:$(RESET) $(CXX) $(CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@"; \
+		echo "$(YELLOW)Command:$(RESET) $(CXX) $(CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@"; \
 		exit 1; \
 	}
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Large-file support for the gcode reader. FileDataSource addresses gcode by
 # uint64_t but seeks with fseeko/ftello, whose off_t is 32-bit on our 32-bit
 # targets, so a file past 2 GB truncates. The define has to arrive on the command
-# line: $(PCH_FLAGS) force-includes lvgl_pch.h ahead of the source, so a #define
+# line: $(FORCED_INCLUDE) force-includes lvgl_pch.h ahead of the source, so a #define
 # inside the .cpp is read after the system headers have already latched the value.
 # Scoped to this one object because it widens off_t for the whole translation
 # unit; off_t crosses no TU boundary here (see the comment in the source).
-# Side effect: the flags no longer match $(PCH), so this object re-parses
-# lvgl_pch.h from source instead of using the precompiled copy.
 #
 # `override` is load-bearing: the sanitizer targets re-invoke make with CXXFLAGS
 # on the command line, and a command-line variable discards every makefile
@@ -318,18 +299,18 @@ $(OBJ_DIR)/system/helix_fs.o: override CXXFLAGS += -D_FILE_OFFSET_BITS=64
 # Compile app Objective-C++ sources (macOS .mm files)
 # Uses DEPFLAGS to generate .d files for header dependency tracking
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.mm $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PCH) $(ABI_STAMP) $(FLAGS_STAMP)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.mm $(LIBHV_LIB) $(LIBHV_JSON_HEADER) $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(BLUE)[OBJCXX]$(RESET) $<"
 ifeq ($(V),1)
-	$(Q)echo "$(YELLOW)Command:$(RESET) $(CXX) $(CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@"
+	$(Q)echo "$(YELLOW)Command:$(RESET) $(CXX) $(CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@"
 endif
-	$(Q)$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \
+	$(Q)$(CXX) $(CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \
 		echo "$(RED)$(BOLD)✗ Compilation failed:$(RESET) $<"; \
-		echo "$(YELLOW)Command:$(RESET) $(CXX) $(CXXFLAGS) $(DEPFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@"; \
+		echo "$(YELLOW)Command:$(RESET) $(CXX) $(CXXFLAGS) $(DEPFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF) -c $< -o $@"; \
 		exit 1; \
 	}
-	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(call emit-compile-command,$(CXX),$(CXXFLAGS) $(FORCED_INCLUDE) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Compile LVGL sources (use SUBMODULE_CFLAGS to suppress third-party warnings)
 # NOTE: No DEPFLAGS for internal LVGL headers - 600+ files whose deps bloat make startup.
@@ -369,21 +350,23 @@ $(OBJ_DIR)/helix-xml/%.o: $(HELIX_XML_DIR)/%.c lv_conf.h $(PATCHES_STAMP) $(ABI_
 	}
 	$(call emit-compile-command,$(CC),$(SUBMODULE_CFLAGS) $(INCLUDES) $(LV_CONF),$<,$@)
 
-# Compile LVGL C++ sources (ThorVG) - use SUBMODULE_CXXFLAGS and PCH
+# Compile LVGL C++ sources (ThorVG) - use SUBMODULE_CXXFLAGS
+# No forced include: lv_conf.h compiles ThorVG out (LV_USE_THORVG_INTERNAL 0),
+# so these TUs are nearly empty and parsing lvgl_pch.h would be most of their cost.
 # NOTE: No DEPFLAGS for internal headers - see C rule above for rationale.
 # lv_conf.h tracked explicitly as it controls LVGL feature flags.
 # Emits .ccj fragment for incremental compile_commands.json generation
-$(OBJ_DIR)/lvgl/%.o: $(LVGL_DIR)/%.cpp $(PCH) lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
+$(OBJ_DIR)/lvgl/%.o: $(LVGL_DIR)/%.cpp lv_conf.h $(PATCHES_STAMP) $(ABI_STAMP) $(FLAGS_STAMP) | $(PATCH_MARKER_STAMP)
 	$(Q)mkdir -p $(dir $@)
 	$(ECHO) "$(CYAN)[CXX]$(RESET) $<"
 ifeq ($(V),1)
-	$(Q)echo "$(YELLOW)Command:$(RESET) $(CXX) $(SUBMODULE_CXXFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@"
+	$(Q)echo "$(YELLOW)Command:$(RESET) $(CXX) $(SUBMODULE_CXXFLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@"
 endif
-	$(Q)$(CXX) $(SUBMODULE_CXXFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \
+	$(Q)$(CXX) $(SUBMODULE_CXXFLAGS) $(INCLUDES) $(LV_CONF) -c $< -o $@ || { \
 		echo "$(RED)$(BOLD)✗ Compilation failed:$(RESET) $<"; \
 		exit 1; \
 	}
-	$(call emit-compile-command,$(CXX),$(SUBMODULE_CXXFLAGS) $(PCH_FLAGS) $(INCLUDES) $(LV_CONF),$<,$@)
+	$(call emit-compile-command,$(CXX),$(SUBMODULE_CXXFLAGS) $(INCLUDES) $(LV_CONF),$<,$@)
 
 # Compile spdlog's own sources (SPDLOG_COMPILED_LIB), once for every binary
 $(OBJ_DIR)/spdlog/%.o: $(SPDLOG_DIR)/src/%.cpp $(ABI_STAMP) $(FLAGS_STAMP)

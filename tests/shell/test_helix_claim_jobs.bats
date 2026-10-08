@@ -64,10 +64,39 @@ path_without_jobpool() {
 @test "plain jobs asks only the pool's target, never status or ensure" {
     # status drains the FIFO to count it, and every make runs jobs.
     fake_pool 30 4
-    run "$CLAIM" jobs
+    run --separate-stderr "$CLAIM" jobs
     [ "$status" -eq 0 ]
     [ "$output" = "30" ]
     [ "$(cat "$FAKE_LOG")" = "target" ]
+}
+
+@test "jobs outside a make points other work at hold, and stdout stays the number" {
+    fake_pool 30 4
+    unset MAKEFLAGS
+    run --separate-stderr "$CLAIM" jobs
+    [ "$status" -eq 0 ]
+    [ "$output" = "30" ]
+    contains "jobs is make's -j (the whole pool, 30)" "$stderr"
+    contains "scripts/helix-claim hold" "$stderr"
+    contains "pool-docker.sh" "$stderr"
+}
+
+@test "jobs under a make's jobserver, with -v, or with no pool says nothing extra" {
+    fake_pool 30 4
+    MAKEFLAGS=" -j30 --jobserver-auth=fifo:/tmp/x" run --separate-stderr "$CLAIM" jobs
+    [ "$output" = "30" ]
+    [ -z "$stderr" ]
+    MAKEFLAGS="rR -- --jobserver-fds=3,4 -j" run --separate-stderr "$CLAIM" jobs
+    [ -z "$stderr" ]
+
+    unset MAKEFLAGS
+    run --separate-stderr "$CLAIM" jobs -v
+    [ "$output" = "30" ]
+    lacks "whole pool" "$stderr"
+
+    JOBPOOL=0 run --separate-stderr "$CLAIM" jobs
+    [ "$status" -eq 0 ]
+    [ -z "$stderr" ]
 }
 
 @test "jobs -v lets status finish when it is killed mid-count" {

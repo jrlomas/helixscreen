@@ -297,4 +297,10 @@ void MacroManager::update_files(SuccessCallback, ErrorCallback) {}
 
 void MacroManager::request_restart(SuccessCallback, ErrorCallback) {}
 
+bool MacroManager::stages_skips() const {
+    return false;
+}
+
+void MacroManager::remove_skips(SuccessCallback, ErrorCallback) {}
+
 } // namespace helix

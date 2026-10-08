@@ -370,6 +370,10 @@ bool AdvancedPanel::restart_helix_macros_when_idle() {
         return false;
     }
 
+    // Armed before the request: the restart can leave READY before its
+    // acknowledgement arrives, and the watch must see that.
+    skips_load_watch_ = helix::skip_wrappers::LoadWatch{};
+    skips_load_watching_ = macro_manager_->stages_skips();
     macro_manager_->request_restart(
         [this]() {
             spdlog::info("[{}] Klipper restart accepted; helper macros activating", get_name());
@@ -378,6 +382,7 @@ bool AdvancedPanel::restart_helix_macros_when_idle() {
         },
         [this](const MoonrakerError& err) {
             spdlog::error("[{}] Klipper restart request failed: {}", get_name(), err.message);
+            skips_load_watching_ = false;
             // The files are staged but unactivated: keep offering the restart.
             printer_state_.plugin_status_state().set_helix_macros_restart_pending(true);
             ToastManager::instance().show(ToastSeverity::ERROR, lv_tr("Failed to restart Klipper"),
@@ -437,8 +442,51 @@ void AdvancedPanel::wire_macro_restart_observer() {
             self->offer_helix_macros_restart();
         },
         printer_state_.get_subjects_lifetime());
+    skips_klippy_observer_ = helix::ui::observe<int>(
+        printer_state_.network_state().get_klippy_state_subject(), this,
+        [](AdvancedPanel* self, int state) { self->on_klippy_state_for_skips(state); },
+        printer_state_.get_subjects_lifetime());
     macro_observer_wired_ = true;
     spdlog::debug("[{}] Macro restart observer wired", get_name());
+}
+
+void AdvancedPanel::on_klippy_state_for_skips(int state) {
+    if (!skips_load_watching_ || !macro_manager_) {
+        return;
+    }
+    using Verdict = helix::skip_wrappers::LoadWatch::Verdict;
+    const Verdict verdict = skips_load_watch_.feed(state == static_cast<int>(KlippyState::READY),
+                                                   state == static_cast<int>(KlippyState::ERROR));
+    if (verdict == Verdict::Waiting) {
+        return;
+    }
+    skips_load_watching_ = false;
+    if (verdict == Verdict::Loaded) {
+        spdlog::info("[{}] Klipper is ready with the skip wrappers loaded", get_name());
+        return;
+    }
+
+    spdlog::error("[{}] Klipper reported an error after loading the skip wrappers; removing them",
+                  get_name());
+    auto on_error = [this](const MoonrakerError& err) {
+        spdlog::error("[{}] Removing the skip wrappers failed: {}", get_name(), err.message);
+        ToastManager::instance().show(
+            ToastSeverity::ERROR,
+            lv_tr("Klipper failed to start. Remove the helix_skips.cfg include from printer.cfg."),
+            6000);
+    };
+    macro_manager_->remove_skips(
+        [this, on_error]() {
+            macro_manager_->request_restart(
+                []() {
+                    ToastManager::instance().show(
+                        ToastSeverity::WARNING,
+                        lv_tr("Klipper failed to start with the skip macros, so they were removed"),
+                        6000);
+                },
+                on_error);
+        },
+        on_error);
 }
 
 // ============================================================================

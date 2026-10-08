@@ -5,6 +5,7 @@
 
 #include "data_root_resolver.h"
 #include "helix_regex.h"
+#include "preprint_skip_wrappers.h"
 #include "text_io.h"
 
 #include <spdlog/spdlog.h>
@@ -136,6 +137,79 @@ std::string printer_cfg_backup_name() {
     return std::string("printer.cfg.helixbak-") + stamp;
 }
 
+std::string include_line(const std::string& filename) {
+    return "[include " + filename + "]";
+}
+
+/// printer.cfg with the include placed after its last [include] line, or at
+/// the very top when it has none.
+std::string with_include_after_last(const std::string& content, const std::string& filename) {
+    std::istringstream input(content);
+    std::string line;
+    size_t last_include_end = 0;
+    size_t current_pos = 0;
+    while (std::getline(input, line)) {
+        current_pos += line.length() + 1; // +1 for newline
+        std::string lower_line = helix::text_io::to_lower(line);
+        if (lower_line.find("[include ") == 0 || lower_line.find("[include\t") == 0) {
+            last_include_end = current_pos;
+        }
+    }
+    if (last_include_end > 0) {
+        return content.substr(0, last_include_end) + include_line(filename) + "\n" +
+               content.substr(last_include_end);
+    }
+    return include_line(filename) + "\n" + content;
+}
+
+/// Whether printer.cfg has this include as a live line; a commented-out one
+/// does not count.
+bool has_include(const std::string& content, const std::string& filename) {
+    std::istringstream input(content);
+    std::string line;
+    while (std::getline(input, line)) {
+        if (helix::text_io::trim(line) == include_line(filename)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// printer.cfg with both includes the install needs. The skip wrappers go on
+/// the very first line: Klipper merges same-named macro sections with the later
+/// one winning, so every user macro must load after ours.
+std::string with_includes(const std::string& content, bool with_skips) {
+    std::string out = content;
+    if (!has_include(out, HELIX_MACROS_FILENAME)) {
+        out = with_include_after_last(out, HELIX_MACROS_FILENAME);
+    }
+    if (with_skips && !has_include(out, skip_wrappers::FILENAME)) {
+        out = include_line(skip_wrappers::FILENAME) + "\n" + out;
+    }
+    return out;
+}
+
+/// printer.cfg without the live include lines for these files. Other lines,
+/// commented-out includes among them, are kept byte for byte.
+std::string without_includes(const std::string& content, const std::vector<std::string>& files) {
+    std::string out;
+    size_t start = 0;
+    while (start < content.size()) {
+        size_t end = content.find('\n', start);
+        end = end == std::string::npos ? content.size() : end + 1;
+        const std::string_view line(content.data() + start, end - start);
+        const auto trimmed = helix::text_io::trim(line);
+        const bool drop = std::any_of(files.begin(), files.end(), [&](const std::string& f) {
+            return trimmed == include_line(f);
+        });
+        if (!drop) {
+            out.append(line);
+        }
+        start = end;
+    }
+    return out;
+}
+
 } // anonymous namespace
 
 // ============================================================================
@@ -182,6 +256,16 @@ MacroInstallStatus MacroManager::evaluate_status(const PrinterDiscovery& hardwar
 
     if (version_less(*installed_version, local_version)) {
         return MacroInstallStatus::OUTDATED;
+    }
+
+    // A step the skip wrappers could wrap but the loaded file does not: the
+    // file or its include is missing, or the printer has a leveling section the
+    // file lacks. Updating stages it.
+    const auto& active = hardware.skip_active();
+    for (auto op : hardware.skip_wrappable()) {
+        if (std::find(active.begin(), active.end(), op) == active.end()) {
+            return MacroInstallStatus::OUTDATED;
+        }
     }
 
     return MacroInstallStatus::INSTALLED;
@@ -232,18 +316,40 @@ void MacroManager::install_files(SuccessCallback on_success, ErrorCallback on_er
     // callbacks to main too (see the queue pin test), because the caller's
     // continuation touches LVGL-adjacent state.
     upload_macro_file(
+        HELIX_MACROS_FILENAME, get_macro_content(),
         [this, on_success, on_error]() {
-            spdlog::info("[HelixMacroManager] Macro file uploaded, adding include...");
-            // Step 2: Back up printer.cfg and add the include
-            add_include_to_config(on_success, on_error);
+            upload_skips_file(
+                [this, on_success, on_error]() {
+                    spdlog::info("[HelixMacroManager] Macro files uploaded, adding includes...");
+                    add_include_to_config(stages_skips(), on_success, on_error);
+                },
+                on_error);
         },
         on_error);
 }
 
 void MacroManager::update_files(SuccessCallback on_success, ErrorCallback on_error) {
-    spdlog::info("[HelixMacroManager] Staging macro update (file upload only)...");
+    spdlog::info("[HelixMacroManager] Staging macro update...");
 
-    upload_macro_file(on_success, on_error);
+    upload_macro_file(
+        HELIX_MACROS_FILENAME, get_macro_content(),
+        [this, on_success, on_error]() {
+            if (!stages_skips()) {
+                if (on_success) {
+                    on_success();
+                }
+                return;
+            }
+            // printer.cfg may still lack the helix_skips.cfg include.
+            upload_skips_file([this, on_success,
+                               on_error]() { add_include_to_config(true, on_success, on_error); },
+                              on_error);
+        },
+        on_error);
+}
+
+bool MacroManager::stages_skips() const {
+    return !hardware_.skip_wrappable().empty();
 }
 
 void MacroManager::request_restart(SuccessCallback on_success, ErrorCallback on_error) {
@@ -274,22 +380,37 @@ void MacroManager::uninstall(SuccessCallback on_success, ErrorCallback on_error)
 
     auto token = lifetime_.token();
 
-    // Step 1: Remove include from printer.cfg
     remove_include_from_config(
+        {HELIX_MACROS_FILENAME, skip_wrappers::FILENAME},
         [this, token, on_success, on_error]() {
             // L081 Mechanism C: defer chained this-> work to main thread
             // (remove_include cb fires on HTTP bg thread).
-            token.defer("MacroManager::uninstall_step2", [this, token, on_success, on_error]() {
-                // Step 2: Delete macro file
+            token.defer("MacroManager::uninstall_delete", [this, on_success, on_error]() {
                 delete_macro_file(
-                    [this, token, on_success, on_error]() {
-                        token.defer("MacroManager::uninstall_step3",
-                                    [this, on_success, on_error]() {
-                                        // Step 3: Restart Klipper
-                                        request_restart(on_success, on_error);
-                                    });
+                    HELIX_MACROS_FILENAME,
+                    [this, on_success, on_error]() {
+                        delete_macro_file(
+                            skip_wrappers::FILENAME,
+                            [this, on_success, on_error]() {
+                                request_restart(on_success, on_error);
+                            },
+                            on_error);
                     },
                     on_error);
+            });
+        },
+        on_error);
+}
+
+void MacroManager::remove_skips(SuccessCallback on_success, ErrorCallback on_error) {
+    spdlog::warn("[HelixMacroManager] Removing {} and its include", skip_wrappers::FILENAME);
+
+    auto token = lifetime_.token();
+    remove_include_from_config(
+        {skip_wrappers::FILENAME},
+        [this, token, on_success, on_error]() {
+            token.defer("MacroManager::remove_skips_delete", [this, on_success, on_error]() {
+                delete_macro_file(skip_wrappers::FILENAME, on_success, on_error);
             });
         },
         on_error);
@@ -316,14 +437,10 @@ std::vector<std::string> MacroManager::get_macro_names() {
 // Private Implementation
 // ============================================================================
 
-void MacroManager::upload_macro_file(SuccessCallback on_success, ErrorCallback on_error) {
-    spdlog::info("[HelixMacroManager] Uploading {} to printer config directory",
-                 HELIX_MACROS_FILENAME);
-
-    // Get the macro content to upload
-    std::string content = get_macro_content();
-
-    spdlog::debug("[HelixMacroManager] Macro content size: {} bytes", content.size());
+void MacroManager::upload_macro_file(const std::string& filename, const std::string& content,
+                                     SuccessCallback on_success, ErrorCallback on_error) {
+    spdlog::info("[HelixMacroManager] Uploading {} ({} bytes) to printer config directory",
+                 filename, content.size());
 
     // Upload to config root (not gcodes)
     // The path is "" because we upload directly to the config directory.
@@ -331,26 +448,37 @@ void MacroManager::upload_macro_file(SuccessCallback on_success, ErrorCallback o
     // install/update chains touches api_ state or LVGL-adjacent subjects, so
     // both callbacks hop to the main thread here.
     api_.transfers().upload_file_with_name(
-        "config", "", HELIX_MACROS_FILENAME, content,
+        "config", "", filename, content,
         lifetime_.bg_cb("MacroManager::upload_done",
-                        [on_success]() {
-                            spdlog::info("[HelixMacroManager] Successfully uploaded {}",
-                                         HELIX_MACROS_FILENAME);
+                        [on_success, filename]() {
+                            spdlog::info("[HelixMacroManager] Successfully uploaded {}", filename);
                             if (on_success) {
                                 on_success();
                             }
                         }),
-        lifetime_.bg_cb("MacroManager::upload_failed", [on_error](const MoonrakerError& err) {
-            spdlog::error("[HelixMacroManager] Failed to upload {}: {}", HELIX_MACROS_FILENAME,
-                          err.message);
-            if (on_error) {
-                on_error(err);
-            }
-        }));
+        lifetime_.bg_cb(
+            "MacroManager::upload_failed", [on_error, filename](const MoonrakerError& err) {
+                spdlog::error("[HelixMacroManager] Failed to upload {}: {}", filename, err.message);
+                if (on_error) {
+                    on_error(err);
+                }
+            }));
 }
 
-void MacroManager::add_include_to_config(SuccessCallback on_success, ErrorCallback on_error) {
-    spdlog::info("[HelixMacroManager] Adding include line to printer.cfg");
+void MacroManager::upload_skips_file(SuccessCallback on_success, ErrorCallback on_error) {
+    if (!stages_skips()) {
+        if (on_success) {
+            on_success();
+        }
+        return;
+    }
+    upload_macro_file(skip_wrappers::FILENAME, skip_wrappers::generate(hardware_.skip_wrappable()),
+                      on_success, on_error);
+}
+
+void MacroManager::add_include_to_config(bool with_skips, SuccessCallback on_success,
+                                         ErrorCallback on_error) {
+    spdlog::info("[HelixMacroManager] Adding include lines to printer.cfg");
 
     auto token = lifetime_.token();
 
@@ -360,49 +488,16 @@ void MacroManager::add_include_to_config(SuccessCallback on_success, ErrorCallba
         // Download success — runs on HTTP bg thread.
         // L081 Mechanism C: do pure parsing/construction locally on BG, then defer
         // the api_-> kick-off to main thread.
-        [this, token, on_success, on_error](const std::string& content) {
-            // Check if include line already exists
-            std::string include_line = "[include " + std::string(HELIX_MACROS_FILENAME) + "]";
-            if (content.find(include_line) != std::string::npos) {
-                spdlog::info("[HelixMacroManager] Include line already present in printer.cfg");
+        [this, token, with_skips, on_success, on_error](const std::string& content) {
+            std::string modified_content = with_includes(content, with_skips);
+            if (modified_content == content) {
+                spdlog::info("[HelixMacroManager] Include lines already present in printer.cfg");
                 token.defer("MacroManager::include_already_present", [on_success]() {
                     if (on_success) {
                         on_success();
                     }
                 });
                 return;
-            }
-
-            // Find the best place to insert the include line
-            // Strategy: Insert after the last existing [include ...] line, or at the very top
-            std::string modified_content;
-            std::istringstream input(content);
-            std::string line;
-            size_t last_include_end = 0;
-            size_t current_pos = 0;
-
-            // First pass: find the position after the last [include] line
-            while (std::getline(input, line)) {
-                current_pos += line.length() + 1; // +1 for newline
-                // Check for [include ...] pattern (case-insensitive for robustness)
-                std::string lower_line = line;
-                lower_line = helix::text_io::to_lower(lower_line);
-                if (lower_line.find("[include ") == 0 || lower_line.find("[include\t") == 0) {
-                    last_include_end = current_pos;
-                }
-            }
-
-            // Second pass: insert at the right position
-            if (last_include_end > 0) {
-                // Insert after last include line
-                modified_content = content.substr(0, last_include_end) + include_line + "\n" +
-                                   content.substr(last_include_end);
-                spdlog::debug("[HelixMacroManager] Inserted after existing includes at pos {}",
-                              last_include_end);
-            } else {
-                // No existing includes - add at the very beginning
-                modified_content = include_line + "\n" + content;
-                spdlog::debug("[HelixMacroManager] Inserted at beginning of file");
             }
 
             // Defer the upload kick-off to main thread (needs api_)
@@ -467,8 +562,9 @@ void MacroManager::add_include_to_config(SuccessCallback on_success, ErrorCallba
         }));
 }
 
-void MacroManager::remove_include_from_config(SuccessCallback on_success, ErrorCallback on_error) {
-    spdlog::info("[HelixMacroManager] Removing include line from printer.cfg");
+void MacroManager::remove_include_from_config(std::vector<std::string> filenames,
+                                              SuccessCallback on_success, ErrorCallback on_error) {
+    spdlog::info("[HelixMacroManager] Removing include lines from printer.cfg");
 
     auto token = lifetime_.token();
 
@@ -478,13 +574,11 @@ void MacroManager::remove_include_from_config(SuccessCallback on_success, ErrorC
         // Download success — runs on HTTP bg thread.
         // L081 Mechanism C: do pure parsing/construction locally on BG, then defer
         // the api_-> kick-off to main thread.
-        [this, token, on_success, on_error](const std::string& content) {
-            std::string include_line = "[include " + std::string(HELIX_MACROS_FILENAME) + "]";
-
-            // Check if include line exists
-            size_t pos = content.find(include_line);
-            if (pos == std::string::npos) {
-                spdlog::info("[HelixMacroManager] Include line not found in printer.cfg");
+        [this, token, filenames = std::move(filenames), on_success,
+         on_error](const std::string& content) {
+            std::string modified_content = without_includes(content, filenames);
+            if (modified_content == content) {
+                spdlog::info("[HelixMacroManager] Include lines not found in printer.cfg");
                 token.defer("MacroManager::include_not_found", [on_success]() {
                     if (on_success) {
                         on_success();
@@ -492,21 +586,6 @@ void MacroManager::remove_include_from_config(SuccessCallback on_success, ErrorC
                 });
                 return;
             }
-
-            // Find the full line to remove (including newline)
-            size_t line_start = pos;
-            size_t line_end = content.find('\n', pos);
-            if (line_end == std::string::npos) {
-                line_end = content.length();
-            } else {
-                line_end++; // Include the newline
-            }
-
-            // Build modified content without the include line
-            std::string modified_content = content.substr(0, line_start) + content.substr(line_end);
-
-            spdlog::debug("[HelixMacroManager] Removed include line at pos {}-{}", line_start,
-                          line_end);
 
             // Defer the upload kick-off to main thread (needs api_)
             token.defer("MacroManager::remove_include_upload", [this, on_success, on_error,
@@ -546,11 +625,12 @@ void MacroManager::remove_include_from_config(SuccessCallback on_success, ErrorC
                         }));
 }
 
-void MacroManager::delete_macro_file(SuccessCallback on_success, ErrorCallback on_error) {
+void MacroManager::delete_macro_file(const std::string& filename, SuccessCallback on_success,
+                                     ErrorCallback on_error) {
     // Use IMoonrakerAPI to delete the file. Both completions hop to main like
     // every other terminal callback in this class.
     api_.files().delete_file(
-        std::string("config/") + HELIX_MACROS_FILENAME,
+        "config/" + filename,
         lifetime_.bg_cb("MacroManager::delete_done",
                         [on_success]() {
                             if (on_success) {

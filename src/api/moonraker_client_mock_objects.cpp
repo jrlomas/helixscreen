@@ -410,6 +410,9 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
                 // Klipper lists every gcode_macro in settings too, with its gcode
                 // text; the macro call-graph analyzers read them from there.
                 status_obj["configfile"]["settings"].merge_patch(get_mock_gcode_macro_config());
+                const json skip_sections = self->skip_wrapper_sections();
+                status_obj["configfile"]["settings"].merge_patch(skip_sections);
+                status_obj["configfile"]["config"].merge_patch(skip_sections);
                 status_obj["configfile"]["config"].merge_patch(chamber_sections);
                 for (const auto& [name, settings] : self->extra_config_settings().items()) {
                     status_obj["configfile"]["settings"][name] = settings;
@@ -554,6 +557,13 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
 
             // LED effect objects (enabled state of the SET_LED_EFFECT model)
             append_led_effect_status(status_obj, objects, self);
+
+            // HELIX_MOCK_SKIP_WRAPPERS: the skip flags and leveling `applied`.
+            for (const auto& [name, status] : self->skip_wrapper_status().items()) {
+                if (objects.contains(name)) {
+                    status_obj[name] = status;
+                }
+            }
 
             // Test-set status objects (set_object_status()): served only when
             // the query asks for the object, like every branch above.
@@ -892,6 +902,13 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
             // LED effect objects (for tracking enabled state)
             append_led_effect_status(status_obj, objects, self);
 
+            // HELIX_MOCK_SKIP_WRAPPERS: the skip flags and leveling `applied`.
+            for (const auto& [name, status] : self->skip_wrapper_status().items()) {
+                if (objects.contains(name)) {
+                    status_obj[name] = status;
+                }
+            }
+
             // configfile (printer configuration)
             if (objects.contains("configfile")) {
                 // Build extruder settings based on HELIX_MOCK_KALICO env var
@@ -958,6 +975,9 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
                 // Klipper lists every gcode_macro in settings too, with its gcode
                 // text; the macro call-graph analyzers read them from there.
                 status_obj["configfile"]["settings"].merge_patch(get_mock_gcode_macro_config());
+                const json skip_sections = self->skip_wrapper_sections();
+                status_obj["configfile"]["settings"].merge_patch(skip_sections);
+                status_obj["configfile"]["config"].merge_patch(skip_sections);
                 status_obj["configfile"]["config"].merge_patch(chamber_sections);
                 for (const auto& [name, settings] : self->extra_config_settings().items()) {
                     status_obj["configfile"]["settings"][name] = settings;
