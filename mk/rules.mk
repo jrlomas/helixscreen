@@ -57,7 +57,8 @@ define check-toolchain-change
 			mkdir -p $(BUILD_DIR); \
 		fi; \
 	fi
-	@echo "$(CURRENT_TOOLCHAIN)" > "$(TOOLCHAIN_MARKER)"
+	@# Rewritten only on a change, so its mtime marks the last toolchain switch.
+	@[ "$$(cat "$(TOOLCHAIN_MARKER)" 2>/dev/null)" = "$(CURRENT_TOOLCHAIN)" ] || echo "$(CURRENT_TOOLCHAIN)" > "$(TOOLCHAIN_MARKER)"
 endef
 
 # Dependency check stamp file - created by check-deps, prevents re-checking
@@ -256,9 +257,21 @@ endif
 # Keyed on OBJ_DIR rather than BUILD_DIR, unlike $(ABI_STAMP): obj-asan, obj-tsan
 # and obj-cov share a BUILD_DIR while carrying different flags, and a single stamp
 # between them would ping-pong and rebuild everything on each alternation.
+#
+# A dry run (-n, -q) parses with whatever flags its caller passed and must not
+# write the stamp: a `make -n CROSS_COMPILE=...` would leave cross flags behind,
+# and the next real build writing native flags back bumps the mtime and
+# rebuilds every object over identical flags. Instead, a dry run whose flags
+# differ marks the stamp phony, so it still reports the objects that would
+# rebuild.
+FLAGS_STAMP_TEXT := $(CC) $(CFLAGS) $(CXX) $(CXXFLAGS) $(SUBMODULE_CXXFLAGS) $(SUBMODULE_CFLAGS) $(LVGL_C_CFLAGS)
+ifeq ($(findstring n,$(firstword -$(MAKEFLAGS)))$(findstring q,$(firstword -$(MAKEFLAGS))),)
 $(shell mkdir -p $(OBJ_DIR))
-$(file >$(FLAGS_STAMP).new,$(CC) $(CFLAGS) $(CXX) $(CXXFLAGS) $(SUBMODULE_CXXFLAGS) $(SUBMODULE_CFLAGS) $(LVGL_C_CFLAGS))
+$(file >$(FLAGS_STAMP).new,$(FLAGS_STAMP_TEXT))
 $(shell cmp -s $(FLAGS_STAMP).new $(FLAGS_STAMP) || mv -f $(FLAGS_STAMP).new $(FLAGS_STAMP); rm -f $(FLAGS_STAMP).new)
+else ifneq ($(file <$(FLAGS_STAMP)),$(FLAGS_STAMP_TEXT))
+.PHONY: $(FLAGS_STAMP)
+endif
 
 # Compile app C++ sources (depend on libhv and the LVGL patch stamp)
 # Uses DEPFLAGS to generate .d files for header dependency tracking
