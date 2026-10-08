@@ -129,14 +129,7 @@ bool PrinterSwitchFlow::switch_printer(const std::string& printer_id) {
         spdlog::error("[PrinterSwitchFlow] Failed to switch — unknown printer '{}'", printer_id);
         return false;
     }
-    // A user pick, of any printer, ends a connection hold left by a run of boot crashes
-    // (boot_crash_guard.h). Moving to another printer also starts a new crash run whose
-    // fallback is the printer left behind; re-picking the same one keeps both as they are.
-    m_config->set<bool>(BOOT_CONNECT_HOLD_KEY, false);
-    if (m_connected_printer_id != printer_id) {
-        m_config->set<std::string>(SWITCH_PREVIOUS_PRINTER_KEY, m_connected_printer_id);
-        m_config->set<int>(BOOT_CRASH_STREAK_KEY, 0);
-    }
+    record_switch_away(m_connected_printer_id, printer_id);
     // A switch the config does not remember would come back as the old printer after a
     // restart, so an unsaved switch does not happen.
     if (!save_or_report()) {
@@ -181,6 +174,7 @@ void PrinterSwitchFlow::add_printer_via_wizard() {
     nlohmann::json printer_data = {{"wizard_completed", false}};
     m_config->add_printer(new_id, printer_data);
     m_config->set_active_printer(new_id);
+    record_switch_away(m_connected_printer_id, new_id);
     if (!save_or_report()) {
         m_config->remove_printer(new_id);
         m_config->set_active_printer(previous_id);
@@ -229,6 +223,7 @@ void PrinterSwitchFlow::cancel_add_printer_wizard() {
 
     m_config->remove_printer(failed_id);
     m_config->set_active_printer(restore_id);
+    record_switch_away(failed_id, restore_id);
     // Unsaved, the abandoned entry reappears after a restart; the restore still runs.
     save_or_report();
     m_wizard_previous_printer_id.clear();
@@ -267,6 +262,14 @@ bool PrinterSwitchFlow::add_printer(const std::string& host, int port) {
         return false;
     }
     return request_switch(id);
+}
+
+void PrinterSwitchFlow::record_switch_away(const std::string& from_id, const std::string& to_id) {
+    m_config->set<bool>(BOOT_CONNECT_HOLD_KEY, false);
+    if (from_id != to_id) {
+        m_config->set<std::string>(SWITCH_PREVIOUS_PRINTER_KEY, from_id);
+        m_config->set<int>(BOOT_CRASH_STREAK_KEY, 0);
+    }
 }
 
 bool PrinterSwitchFlow::save_or_report() {

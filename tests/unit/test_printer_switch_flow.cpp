@@ -340,3 +340,35 @@ TEST_CASE_METHOD(SwitchFlowFixture,
     CHECK(Modal::get_top() == nullptr);
     CHECK(events_ == kFullRestart);
 }
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: adding a printer through the wizard records the one left",
+                 "[multi-printer][switch_flow]") {
+    cfg_->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, true);
+    cfg_->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
+
+    flow_.add_printer_via_wizard();
+    set_wizard_cancel_callback(nullptr);
+
+    CHECK_FALSE(cfg_->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, true));
+    CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == "alpha");
+    CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 0);
+}
+
+TEST_CASE_METHOD(SwitchFlowFixture,
+                 "Switch flow: cancelling the add-printer wizard records the abandoned entry",
+                 "[multi-printer][switch_flow]") {
+    flow_.add_printer_via_wizard();
+    set_wizard_cancel_callback(nullptr);
+    const std::string abandoned = cfg_->get_active_printer_id();
+    REQUIRE(abandoned != "alpha");
+    cfg_->set<bool>(helix::BOOT_CONNECT_HOLD_KEY, true);
+    cfg_->set<int>(helix::BOOT_CRASH_STREAK_KEY, 2);
+
+    flow_.cancel_add_printer_wizard();
+
+    CHECK(cfg_->get_active_printer_id() == "alpha");
+    CHECK_FALSE(cfg_->get<bool>(helix::BOOT_CONNECT_HOLD_KEY, true));
+    CHECK(cfg_->get<std::string>(helix::SWITCH_PREVIOUS_PRINTER_KEY, "") == abandoned);
+    CHECK(cfg_->get<int>(helix::BOOT_CRASH_STREAK_KEY, -1) == 0);
+}

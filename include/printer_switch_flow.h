@@ -99,6 +99,11 @@ class PrinterSwitchFlow {
 
     /// Saves the config, telling the user when it could not.
     bool save_or_report();
+
+    /// The boot-crash bookkeeping (boot_crash_guard.h) of a user's move to `to_id`, unsaved:
+    /// any move ends a connection hold, and a move to another printer starts a new crash run
+    /// whose fallback is `from_id`. Re-picking the same printer keeps both as they are.
+    void record_switch_away(const std::string& from_id, const std::string& to_id);
 };
 
 } // namespace helix
