@@ -6,7 +6,7 @@
 #include "ui_ams_context_menu.h"
 #include "ui_ams_edit_overlay.h"
 #include "ui_external_spool_menu.h"
-#include "ui_nav_manager.h"
+#include "ui_nav.h"
 
 #include "ams_backend.h"
 #include "ams_state.h"
@@ -32,9 +32,8 @@ std::optional<bool> sensed_presence() {
 /// The editor is still open while something (QR scanner, keyboard) covers it, and
 /// reopening it then would replace the edit in progress.
 bool editor_open() {
-    auto& nav = NavigationManager::instance();
     lv_obj_t* root = ui::get_ams_edit_overlay().get_root();
-    return root && (nav.is_panel_in_stack(root) || nav.is_push_pending(root));
+    return root && (nav::is_in_stack(root) || nav::is_push_pending(root));
 }
 
 } // namespace
