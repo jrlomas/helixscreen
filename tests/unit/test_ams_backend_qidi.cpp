@@ -108,6 +108,8 @@ TEST_CASE("QIDI Box parse_save_variables: enable_box=1 connects the unit", "[ams
     QidiBoxTestAccess::parse_vars(backend, json{{"enable_box", 1}});
 
     REQUIRE(backend.get_system_info().units[0].connected);
+    // The box publishes no toolhead sensor.
+    CHECK_FALSE(backend.get_system_info().units[0].has_toolhead_sensor);
 }
 
 // =====================================================================

@@ -1053,6 +1053,7 @@ void AmsBackendHappyHare::apply_mmu_sensors_locked(const happy_hare::MmuStatusDe
         // Update has_slot_sensors flag on units based on actual sensor data
         for (auto& unit : system_info_.units) {
             unit.has_slot_sensors = any_sensor || entry_sensor_objects_seen_;
+            unit.has_toolhead_sensor = sensors.has_toolhead_sensor;
         }
     }
 
@@ -1573,7 +1574,8 @@ void AmsBackendHappyHare::initialize_slots(int gate_count) {
         unit.first_slot_global_index = global_offset;
         unit.connected = true;
         unit.has_encoder = unit_supports_locked(u, happy_hare::UnitFeature::Encoder);
-        unit.has_toolhead_sensor = true;
+        // Unknown until the first sensors map arrives; apply_mmu_sensors_locked() sets it.
+        unit.has_toolhead_sensor = toolhead_sensor_fitted_.value_or(false);
         unit.topology = unit_is_type_b_locked(u) ? PathTopology::HUB : PathTopology::LINEAR;
         // has_slot_sensors starts false; updated when sensor data arrives in
         // apply_mmu_sensors_locked()

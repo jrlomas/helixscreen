@@ -1,11 +1,15 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "ui_panel_common.h"
 #include "ui_toast_manager.h"
 
 #include "../lvgl_test_fixture.h"
 #include "../lvgl_ui_test_fixture.h"
+#include "lvgl/src/core/lv_obj_draw_private.h"
+#include "lvgl/src/misc/lv_area_private.h"
 
 #include <string>
+#include <vector>
 
 #include "../catch_amalgamated.hpp"
 
@@ -230,4 +234,44 @@ TEST_CASE_METHOD(LVGLUITestFixture, "toast_notification renders without engine a
     CHECK(ScopedUnknownAttrCounter::count() == 0);
 
     lv_obj_delete(toast);
+}
+
+// The real ToastManager is not in the test link; the toast is built the way it
+// builds one, into a stack sized and anchored like its own.
+TEST_CASE_METHOD(LVGLUITestFixture, "A new toast redraws only the area it ends up in",
+                 "[toast][xml]") {
+    lv_obj_t* stack = lv_obj_create(lv_layer_top());
+    lv_obj_set_flex_flow(stack, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(stack, 0, LV_PART_MAIN);
+    lv_obj_set_size(stack, 460, LV_SIZE_CONTENT);
+    lv_obj_align(stack, LV_ALIGN_TOP_RIGHT, -24, 24);
+    lv_refr_now(nullptr);
+
+    std::vector<lv_area_t> invalidated;
+    lv_display_t* disp = lv_display_get_default();
+    const lv_event_cb_t record = [](lv_event_t* e) {
+        static_cast<std::vector<lv_area_t>*>(lv_event_get_user_data(e))
+            ->push_back(*static_cast<lv_area_t*>(lv_event_get_param(e)));
+    };
+    lv_display_add_event_cb(disp, record, LV_EVENT_INVALIDATE_AREA, &invalidated);
+
+    const char* attrs[] = {
+        "message", "Showing the 50 newest files. See more in the printer's web UI.", nullptr};
+    lv_obj_t* toast = helix::ui::create_xml_laid_out(stack, "toast_notification", attrs);
+    REQUIRE(toast != nullptr);
+    lv_obj_update_layout(stack);
+    lv_display_remove_event_cb_with_user_data(disp, record, &invalidated);
+
+    // What the toast draws, its shadow included.
+    lv_area_t drawn;
+    lv_obj_get_coords(toast, &drawn);
+    lv_area_increase(&drawn, lv_obj_get_ext_draw_size(toast), lv_obj_get_ext_draw_size(toast));
+    CHECK(lv_area_get_height(&drawn) < 200);
+    REQUIRE_FALSE(invalidated.empty());
+    for (const lv_area_t& a : invalidated) {
+        INFO(a.x1 << "," << a.y1 << "-" << a.x2 << "," << a.y2);
+        CHECK(lv_area_is_in(&a, &drawn, 0));
+    }
+
+    lv_obj_delete(stack);
 }

@@ -2994,6 +2994,25 @@ TEST_CASE_METHOD(AmsBackendHappyHareTestHelper, "EMU aggregate sensor format",
     }
 }
 
+TEST_CASE_METHOD(AmsBackendHappyHareTestHelper,
+                 "Happy Hare units report the toolhead sensor the sensors map says is fitted",
+                 "[ams][happy_hare][toolhead_sensor]") {
+    initialize_test_gates(4);
+
+    SECTION("fitted") {
+        test_parse_mmu_state({{"sensors", {{"mmu_pre_gate_0", true}, {"toolhead", false}}}});
+        CHECK(get_system_info().units[0].has_toolhead_sensor);
+    }
+    SECTION("absent") {
+        test_parse_mmu_state({{"sensors", {{"mmu_pre_gate_0", true}}}});
+        CHECK_FALSE(get_system_info().units[0].has_toolhead_sensor);
+    }
+    SECTION("disabled (null) on v4") {
+        test_parse_mmu_state({{"sensors", {{"mmu_pre_gate_0", true}, {"toolhead", nullptr}}}});
+        CHECK_FALSE(get_system_info().units[0].has_toolhead_sensor);
+    }
+}
+
 // ============================================================================
 // EMU gate_filament_name parsing — EMU sends filament names via
 // gate_filament_name instead of gate_name
