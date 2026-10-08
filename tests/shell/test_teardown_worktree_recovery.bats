@@ -363,3 +363,15 @@ stub_zeus_run() { # <exit code>
     contains "Teardown complete" "$output"
     [ ! -d "$MAIN/.worktrees/offline" ]
 }
+
+@test "a zeus that never answers cannot stall the teardown" {
+    make_worktree hung
+    mkdir -p "$MAIN/scripts"
+    printf '#!/bin/sh\nexec sleep 60\n' > "$MAIN/scripts/zeus-run.sh"
+    chmod +x "$MAIN/scripts/zeus-run.sh"
+    local t0=$SECONDS
+    HELIX_ZEUS_DROP_TIMEOUT=1 run "$SCRIPT" hung --into master
+    [ "$status" -eq 0 ]
+    [ $((SECONDS - t0)) -lt 15 ]
+    contains "zeus mirror" "$output"
+}

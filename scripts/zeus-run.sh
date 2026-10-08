@@ -63,12 +63,25 @@ TREES_HOST="${ZEUS_TREES_HOST:-/mnt/lagoon/home/pbrown/helix-tsan/trees}"  # on 
 TREES="${ZEUS_TREES:-/work/trees}"                        # TREES_HOST, in the container
 CCACHE="${ZEUS_CCACHE:-/work/ccache}"                     # in the container
 LOCK_DIR="${ZEUS_LOCK_DIR:-/tmp}"                         # on zeus
-SSH_OPTS=(-o ConnectTimeout=3 -o BatchMode=yes)
+# Locks in LOCK_DIR: <prefix>-<checkout>.lock (--commit), <prefix>.tree-<tree>.lock
+# (a mirror) and <prefix>.global.lock (no jobpool); the kinds cannot collide.
+LOCK_PREFIX=helix-zeus-run
+MANIFEST=.zeus-mirror-files                               # in each mirror: what the last sync sent
+RSYNC_PATH="sudo -n rsync"                                # the container writes mirrors as root
+# BatchMode: never a password prompt. The keepalives bound a link that dies
+# mid-run; ConnectTimeout bounds one that never answers.
+SSH_OPTS=(-o ConnectTimeout=3 -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+ORPHAN_POLL_SECS="${ZEUS_ORPHAN_POLL_SECS:-30}"           # how often to re-check an orphaned build
 
 # --probe: offloading pays when zeus is on the LAN, or when the bytes this run
 # would send cross the link in under PROBE_MAX_SYNC_SECS.
 PROBE_LAN_RTT_MS=5
 PROBE_MAX_SYNC_SECS=15
+PROBE_PAYLOAD_BYTES=1048576                               # what --probe times to measure the link
+
+# The sweep's shard count is thelio's 96: the count decides which tests share a
+# process, so zeus's own 216 would judge a grouping nobody runs locally.
+SWEEP_NPROCS=96
 
 # Submodules whose untracked files are source: lvgl, libhv and lua hold the
 # files their patches create, helix-xml is edited directly. Untracked files in
@@ -103,6 +116,12 @@ JOBPOOL_BIN="${ZEUS_JOBPOOL:-\$HOME/.local/bin/jobpool}"   # $HOME is zeus's
 
 usage() { awk 'NR > 1 && /^set -euo/ { exit } NR > 1' "$0" | sed 's/^# \?//'; exit 2; }
 
+# A tree name is spliced into scripts that run on zeus, so it is held to a
+# plain name: no quoting characters, no glob, no path.
+valid_tree_name() { # <name>
+    [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]] && [ "$1" != . ] && [ "$1" != .. ]
+}
+
 # The NUL-separated list of files a mirror holds, relative to the tree root:
 # tracked files through every submodule, plus untracked files that are not
 # ignored in the superproject and in SOURCE_SUBMODULES. build/, .worktrees/
@@ -126,32 +145,90 @@ mirror_file_list() {
 # --delete-missing-args because a tracked file deleted but not yet committed
 # is still listed. The container writes the mirror as root, so the far side
 # runs under sudo.
+# --force lets a directory give way to a file of the same name. Exit 24 is
+# files that vanished mid-transfer, which a tree being edited always risks: the
+# next sync settles them, so it is not a failure.
 sync_files() { # <list file> [rsync args...]
-    local list=$1; shift
-    rsync -a --mkpath --from0 --files-from="$list" --delete-missing-args \
-        --rsync-path="sudo -n rsync" "$@" ./ "$HOST:$TREES_HOST/$TREE/"
+    local list=$1 rc=0; shift
+    rsync -a --mkpath --force --from0 --files-from="$list" --delete-missing-args \
+        -e "ssh ${SSH_OPTS[*]}" --rsync-path="$RSYNC_PATH" "$@" ./ "$HOST:$TREES_HOST/$TREE/" || rc=$?
+    [ "$rc" -eq 24 ] && return 0
+    return "$rc"
+}
+
+# The remote snippet that starts the container when a NAS reboot left it
+# stopped. Starting is idempotent and costs nothing when it is already up.
+container_up() {
+    cat <<SNIPPET
+if ! sudo -n docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
+    echo "→ container $CONTAINER is not running; starting it"
+    sudo -n docker start "$CONTAINER" >/dev/null || {
+        echo "✗ could not start container $CONTAINER on \$(hostname)" >&2
+        exit 1
+    }
+fi
+SNIPPET
+}
+
+# The remote snippet that waits out any make whose cwd is in RUNDIR. A run
+# whose ssh side died leaves its build running in the container while the lock
+# is already released, and changing files under that build is the corruption
+# the lock exists to prevent; another tree's build is not ours to wait for.
+# Zombies are excluded: an interrupted run's make is reparented to the
+# container's PID 1, which never reaps it, so counting it would wait forever.
+orphan_wait() {
+    cat <<SNIPPET
+while sudo -n docker exec -w / "$CONTAINER" bash -lc 'for p in \$(pgrep -x -r R,S,D,T,t make); do case "\$(readlink /proc/\$p/cwd)" in $RUNDIR|$RUNDIR/*) exit 0 ;; esac; done; exit 1'; do
+    echo "→ orphaned build still running in $CONTAINER; waiting"
+    sleep $ORPHAN_POLL_SECS
+done
+SNIPPET
+}
+
+# Everything that changes the mirror before the sync, under the tree lock: the
+# orphan wait, then the delete of what the last sync sent and this one will not,
+# then the new list replaces the old. Stale paths go before rsync runs so a path
+# that changed kind (file to directory) is free for it. One that is already a
+# directory (a sync interrupted mid-way) fails its rm and is left for rsync's
+# --force. Interrupted anywhere, the list on zeus still names every file a sync
+# put there.
+prepare_mirror() { # <list file>
+    rsync -a -e "ssh ${SSH_OPTS[*]}" --mkpath --rsync-path="$RSYNC_PATH" "$1" "$HOST:$TREES_HOST/$TREE/$MANIFEST.new"
+    # shellcheck disable=SC2087  # the paths and snippets resolve here
+    ssh "${SSH_OPTS[@]}" "$HOST" bash -se <<REMOTE
+set -euo pipefail
+$(container_up)
+$(orphan_wait)
+cd "$TREES_HOST/$TREE"
+if [ -f $MANIFEST ]; then
+    comm -z -23 <(sort -z $MANIFEST) <(sort -z $MANIFEST.new) | sudo -n xargs -0 -r rm -f -- || true
+fi
+sudo -n mv $MANIFEST.new $MANIFEST
+REMOTE
 }
 
 # Removes mirrors under TREES_HOST: those named, or with no names, those whose
 # last sync is older than DAYS. A mirror whose lock is held is in use and stays.
 remove_mirrors() { # <days|-> [tree...]
-    local days=$1; shift
+    local days=$1 n; shift
+    for n in "$@"; do valid_tree_name "$n" || { echo "✗ '$n' is not a tree name" >&2; return 2; }; done
     # shellcheck disable=SC2087  # DAYS, the names and the paths resolve here
     ssh "${SSH_OPTS[@]}" "$HOST" bash -se <<REMOTE
 set -uo pipefail
-names="$*"
-[ -n "\$names" ] || names=\$(ls "$TREES_HOST" 2>/dev/null || true)
 rc=0
-for name in \$names; do
+if [ -n "$*" ]; then set -- $*; else set -- "$TREES_HOST"/*/; fi
+for d in "\$@"; do
+    name=\$(basename "\$d")
     d="$TREES_HOST/\$name"
     [ -d "\$d" ] || { [ -z "$*" ] || echo "→ no mirror \$name"; continue; }
     if [ "$days" != - ]; then
-        stamp="\$d/.zeus-mirror-files"; [ -e "\$stamp" ] || stamp="\$d"
+        stamp="\$d/$MANIFEST"; [ -e "\$stamp" ] || stamp="\$d"
         [ -n "\$(find "\$stamp" -maxdepth 0 -mmin +$(( ${days/-/0} * 1440 )))" ] || continue
     fi
-    exec 9>>"$LOCK_DIR/helix-zeus-run-\$name.lock"
+    lock="$LOCK_DIR/$LOCK_PREFIX.tree-\$name.lock"
+    exec 9>>"\$lock"
     if ! flock -n 9; then
-        echo "→ kept \$name: in use (\$(tail -n 1 "$LOCK_DIR/helix-zeus-run-\$name.lock"))"
+        echo "→ kept \$name: in use (\$(tail -n 1 "\$lock"))"
         [ -z "$*" ] || rc=1
     elif sudo -n rm -rf -- "\$d"; then
         echo "→ removed \$name"
@@ -168,12 +245,12 @@ REMOTE
 # the holder is a remote shell that waits for its stdin to close, which happens
 # when this process ends, however it ends. The lock has to cover the sync and
 # the job both, and they are two connections, so neither can hold it alone.
-take_lock() { # <name> <what it guards> <holder note>
-    coproc LOCKER { ssh "$HOST" bash -s 2>&1; }
+take_lock() { # <lock file name> <what it guards> <holder note>
+    coproc LOCKER { ssh "${SSH_OPTS[@]}" "$HOST" bash -s 2>&1; }
     cat >&"${LOCKER[1]}" <<LOCK
 set -eu
 mkdir -p "$LOCK_DIR"
-LOCK="$LOCK_DIR/helix-zeus-run-$1.lock"
+LOCK="$LOCK_DIR/$1"
 exec 9>>"\$LOCK"
 if ! flock -n 9; then
     echo "→ $2 busy: \$(tail -n 1 "\$LOCK" 2>/dev/null || echo another zeus-run job); waiting"
@@ -218,9 +295,9 @@ probe() {
     rate=${ZEUS_PROBE_BYTES_PER_SEC:-}
     if [ -z "$rate" ]; then
         t0=$(date +%s%N)
-        head -c 1048576 /dev/urandom | ssh "${SSH_OPTS[@]}" "$HOST" 'cat > /dev/null'
+        head -c "$PROBE_PAYLOAD_BYTES" /dev/urandom | ssh "${SSH_OPTS[@]}" "$HOST" 'cat > /dev/null'
         ns=$(( $(date +%s%N) - t0 ))
-        rate=$(( 1048576 * 1000000000 / (ns > 0 ? ns : 1) ))
+        rate=$(( PROBE_PAYLOAD_BYTES * 1000000000 / (ns > 0 ? ns : 1) ))
     fi
     est=$(( ${bytes:-0} / (rate > 0 ? rate : 1) ))
     if [ "$est" -lt "$PROBE_MAX_SYNC_SECS" ]; then
@@ -232,13 +309,16 @@ probe() {
 }
 
 MODE=mirror
+# --commit is a mode, not a make override, wherever it is written.
+_args=()
+for _a in "$@"; do if [ "$_a" = --commit ]; then MODE=commit; else _args+=("$_a"); fi; done
+set -- ${_args[@]+"${_args[@]}"}
 case "${1:-}" in
     --prune)  case "${2:-14}" in *[!0-9]*) echo "✗ --prune takes a number of days" >&2; exit 2 ;; esac
               remove_mirrors "${2:-14}"; exit ;;
-    --drop)   if [ -z "${2:-}" ] || [ "${2#*/}" != "$2" ]; then echo "✗ --drop needs a tree name" >&2; exit 2; fi
+    --drop)   valid_tree_name "${2:-}" || { echo "✗ --drop needs a tree name (letters, digits, . _ -)" >&2; exit 2; }
               remove_mirrors - "$2"; exit ;;
     --probe)  probe; exit ;;
-    --commit) MODE=commit; shift ;;
     -*)       usage ;;
 esac
 
@@ -260,16 +340,24 @@ if [ "$MODE" = commit ]; then
     fi
     RUNDIR=$WORKDIR
     TREE=""
-    LOCK_NAME=$(basename "$WORKDIR")
+    LOCK_FILE="$LOCK_PREFIX-$(basename "$WORKDIR").lock"
     LABEL=$SHORT
     PROVENANCE="$SHA (pushed)"
 else
     TOP=$(git rev-parse --show-toplevel)
     cd "$TOP"
     TREE=$(basename "$TOP")
+    valid_tree_name "$TREE" || { echo "✗ tree directory '$TREE' is not a plain name (letters, digits, . _ -)" >&2; exit 2; }
     RUNDIR=$TREES/$TREE
-    LOCK_NAME=$TREE
-    UNTRACKED=$(git ls-files -o --exclude-standard | wc -l)
+    LOCK_FILE="$LOCK_PREFIX.tree-$TREE.lock"
+    # Untracked files: the superproject's, and the edited submodule's (both are
+    # mirrored). A file that vanishes before it is hashed is not an error.
+    untracked() {
+        git ls-files -z -o --exclude-standard
+        [ ! -d "$EDITED_SUBMODULE" ] || git -C "$EDITED_SUBMODULE" ls-files -z -o --exclude-standard |
+            while IFS= read -r -d '' f; do printf '%s/%s\0' "$EDITED_SUBMODULE" "$f"; done
+    }
+    UNTRACKED=$(untracked | tr -cd '\0' | wc -c)
     if git diff HEAD --quiet --ignore-submodules=dirty &&
        { [ ! -d "$EDITED_SUBMODULE" ] || git -C "$EDITED_SUBMODULE" diff HEAD --quiet; } &&
        [ "$UNTRACKED" -eq 0 ]; then
@@ -279,7 +367,7 @@ else
         DIRTY=$( {
             git diff HEAD --binary --ignore-submodules=dirty
             [ ! -d "$EDITED_SUBMODULE" ] || git -C "$EDITED_SUBMODULE" diff HEAD --binary
-            git ls-files -z -o --exclude-standard | xargs -0 -r sha1sum
+            untracked | xargs -0 -r sha1sum 2>/dev/null || true
         } | sha1sum | cut -c1-10)
         LABEL="$TREE-$SHORT-dirty-$DIRTY"
         PROVENANCE="HEAD $SHA + dirty $DIRTY, $UNTRACKED untracked"
@@ -315,10 +403,8 @@ case "$WHAT" in
             GB_PER_JOB=1.5 ;;
     test)   CMD='make test $HELIX_JFLAG && ./build/bin/helix-tests "'"${1:-}"'"' ;;
     # Trailing args become make overrides, e.g. SHARD_CONCURRENCY=24.
-    # NPROCS pins the shard count to thelio's 96. The count decides which tests
-    # share a process, so zeus's own 216 would judge a grouping nobody runs
-    # locally; a trailing NPROCS= still overrides it.
-    sweep)  CMD='make unit-sweep NPROCS=96 $HELIX_JFLAG '"$*" ;;
+    # NPROCS pins the shard count (SWEEP_NPROCS); a trailing NPROCS= overrides it.
+    sweep)  CMD="make unit-sweep NPROCS=$SWEEP_NPROCS"' $HELIX_JFLAG '"$*" ;;
     asan-app|tsan-app)
         # RECIPE is the positional argument; --repeat N (default 25 in the
         # make target) widens the drive. Both map onto the make target's
@@ -354,17 +440,15 @@ echo "→ $HOST:$CONTAINER $RUNDIR @ $PROVENANCE, log $LOG"
 
 # One job per tree at a time: a second run would sync or reset files under the
 # first one's build. The lock covers the sync too, so it is taken first.
-take_lock "$LOCK_NAME" "$RUNDIR" "$WHAT $LABEL"
+take_lock "$LOCK_FILE" "$RUNDIR" "$WHAT $LABEL"
 
 if [ "$MODE" = mirror ]; then
     LIST="${TMPDIR:-/tmp}/zeus-mirror-$TREE.$$"
     trap 'rm -f "$LIST"' EXIT
     mirror_file_list > "$LIST"
     _t0=$(date +%s)
+    prepare_mirror "$LIST"
     sync_files "$LIST"
-    # The list itself goes too: the next sync deletes what this one sent and
-    # that one does not, and nothing else, so the mirror's build output stays.
-    rsync -a --rsync-path="sudo -n rsync" "$LIST" "$HOST:$TREES_HOST/$TREE/.zeus-mirror-files.new"
     echo "→ synced $(tr -cd '\0' < "$LIST" | wc -c) files to $HOST:$TREES_HOST/$TREE in $(( $(date +%s) - _t0 ))s"
 fi
 
@@ -374,18 +458,9 @@ fi
 # shellcheck disable=SC2087  # client-side expansion is the point: the sha, the
 # container name and the caller's arguments are resolved HERE, and the one value
 # that has to stay server-side ($1 in D) is escaped.
-ssh "$HOST" bash -se <<REMOTE | tee "$LOG"
+ssh "${SSH_OPTS[@]}" "$HOST" bash -se <<REMOTE | tee "$LOG"
 set -euo pipefail
 echo "→ $PROVENANCE"
-
-if [ "$MODE" = mirror ]; then
-    cd "$TREES_HOST/$TREE"
-    if [ -f .zeus-mirror-files ]; then
-        comm -z -23 <(sort -z .zeus-mirror-files) <(sort -z .zeus-mirror-files.new) |
-            sudo -n xargs -0 -r rm -f --
-    fi
-    sudo -n mv .zeus-mirror-files.new .zeus-mirror-files
-fi
 
 # --- jobpool: join zeus's machine pool when it is installed ------------------
 # The container sees the FIFO through whichever bind
@@ -410,7 +485,7 @@ fi
 # Without a pool, -j comes from MemAvailable at start, which only holds while
 # this is the only run allocating: runs of different trees take turns then.
 if [ -z "\$POOL_ENV" ]; then
-    exec 8>>"$LOCK_DIR/helix-zeus-run-global.lock"
+    exec 8>>"$LOCK_DIR/$LOCK_PREFIX.global.lock"
     if ! flock -n 8; then
         echo "→ no jobpool on \$(hostname): waiting for the run ahead, since -j is sized for one"
         flock 8
@@ -451,31 +526,15 @@ else
     echo "→ MemAvailable \$(awk '/^MemAvailable/{printf "%.0fGB", \$2/1048576}' /proc/meminfo), using -j\$HELIX_J"
 fi
 
-# The container is long-lived but has no restart policy, so it is stopped after
-# every NAS reboot and docker exec fails with a message about the container
-# not running, several steps before anything explains why. Starting it is
-# idempotent and costs nothing when it is already up.
-if ! sudo -n docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
-    echo "→ container $CONTAINER is not running; starting it"
-    sudo -n docker start "$CONTAINER" >/dev/null || {
-        echo "✗ could not start container $CONTAINER on \$(hostname)" >&2
-        exit 1
-    }
-fi
+# The container has no restart policy, so a NAS reboot leaves it stopped and
+# docker exec fails several steps before anything explains why.
+$(container_up)
 
 D() { sudo -n docker exec -w "$RUNDIR" -e CCACHE_DIR="$CCACHE" -e HELIX_J="\$HELIX_J" -e HELIX_JFLAG="\$HELIX_JFLAG" "$CONTAINER" bash -lc "\$1"; }
 
-# A run whose ssh side died leaves its build running in the container while
-# the lock is already released; resetting the tree under that build is the
-# corruption the lock exists to prevent. Wait out any make whose cwd is in
-# this run's tree before touching it; other trees' builds are theirs. The poll interval is the only knob: long enough not to spam the log
-# of a live box, overridable so tests can spin it fast. Zombies are excluded:
-# an interrupted run's make is reparented to the container's PID 1, which
-# never reaps it, so a bare pgrep -x make would wait on it forever.
-while D 'for p in \$(pgrep -x -r R,S,D,T,t make); do case "\$(readlink /proc/\$p/cwd)" in $RUNDIR|$RUNDIR/*) exit 0 ;; esac; done; exit 1'; do
-    echo "→ orphaned build still running in $CONTAINER; waiting"
-    sleep "${ZEUS_ORPHAN_POLL_SECS:-30}"
-done
+# Before git touches the --commit checkout. A mirror run waited before its sync;
+# this second wait costs one docker exec.
+$(orphan_wait)
 
 if [ "$MODE" = commit ]; then
     D 'git config --global --add safe.directory "*"' >/dev/null

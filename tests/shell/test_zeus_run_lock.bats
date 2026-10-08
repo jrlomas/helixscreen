@@ -34,8 +34,13 @@ setup() {
     export ZEUS_ARC_SYS_FREE="$BATS_TEST_TMPDIR/no-zfs/zfs_arc_sys_free"
     export ZEUS_ARC_MARK="$BATS_TEST_TMPDIR/arc-mark"
 
-    # ssh <host> bash -se: drop the host argument and run the heredoc locally.
-    mock_command_script ssh 'shift; exec "$@"'
+    # ssh [-o opt]... <host> bash -se: drop the options and the host, and run
+    # the heredoc locally.
+    mock_command_script ssh '
+while [ $# -gt 0 ]; do
+    case "$1" in -o) shift 2 ;; -*) shift ;; *) break ;; esac
+done
+shift; exec "$@"'
     # sudo -n <cmd>: plain passthrough.
     mock_command_script sudo 'shift; exec "$@"'
     # The three local git calls: identity and the is-it-pushed check. A fake

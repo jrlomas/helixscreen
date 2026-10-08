@@ -53,13 +53,22 @@ fi
 
 zlog="${TMPDIR:-/tmp}/full-test-run-zeus.$$.log"
 echo "→ unit sweep on zeus (output: $zlog), shell suite here"
-"$ZEUS_RUN" sweep >"$zlog" 2>&1 &
+# Its own process group, so one signal reaches its job ssh too: a background
+# job ignores the terminal's Ctrl-C, and a zeus run left behind keeps its
+# tree's lock and a build nobody is waiting for.
+if command -v setsid >/dev/null 2>&1; then
+    setsid "$ZEUS_RUN" sweep >"$zlog" 2>&1 &
+else
+    "$ZEUS_RUN" sweep >"$zlog" 2>&1 &
+fi
 zpid=$!
+trap 'kill -TERM -- "-$zpid" 2>/dev/null || kill -TERM "$zpid" 2>/dev/null; exit 130' INT TERM
 "$MAKE" --no-print-directory test-shell
 bats_rc=$?
 if kill -0 "$zpid" 2>/dev/null; then echo "→ shell suite done; waiting for the zeus sweep"; fi
 wait "$zpid"
 zeus_rc=$?
+trap - INT TERM
 
 verdict() { [ "$1" -eq 0 ] && echo passed || echo "FAILED (exit $1)"; }
 if [ "$zeus_rc" -ne 0 ]; then

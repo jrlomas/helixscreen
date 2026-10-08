@@ -313,13 +313,16 @@ if [[ -x "$MAIN_ABS/scripts/helix-claim" ]]; then
     run "$MAIN_ABS/scripts/helix-claim" release --force "worktree:$(basename "$WT_ABS")" >/dev/null 2>&1 || true
 fi
 
-# The tree's mirror on zeus (scripts/zeus-run.sh) goes with it. Best effort:
-# zeus being off or unreachable must never stop a teardown, and --prune
-# collects whatever this misses.
+# The tree's mirror on zeus (scripts/zeus-run.sh) goes with it. Best effort and
+# bounded: a slow or unreachable zeus must never stop or stall a teardown, and
+# --prune collects whatever this misses.
+ZEUS_DROP_TIMEOUT="${HELIX_ZEUS_DROP_TIMEOUT:-20}"
 if [[ -x "$MAIN_ABS/scripts/zeus-run.sh" ]]; then
+    _drop=("$MAIN_ABS/scripts/zeus-run.sh" --drop "$(basename "$WT_ABS")")
+    command -v timeout >/dev/null 2>&1 && _drop=(timeout -k 5 "$ZEUS_DROP_TIMEOUT" "${_drop[@]}")
     if (( DRY_RUN )); then
         say "  ${CYAN}would run:${RESET} scripts/zeus-run.sh --drop $(basename "$WT_ABS")"
-    elif ! "$MAIN_ABS/scripts/zeus-run.sh" --drop "$(basename "$WT_ABS")" >/dev/null 2>&1; then
+    elif ! "${_drop[@]}" >/dev/null 2>&1 </dev/null; then
         say "${YELLOW}! could not remove this tree's zeus mirror (zeus unreachable or busy); scripts/zeus-run.sh --prune collects it later.${RESET}"
     fi
 fi

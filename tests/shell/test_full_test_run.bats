@@ -96,3 +96,27 @@ esac'
     [ "$status" -eq 2 ]
     [ ! -e "$CALLS" ]
 }
+
+@test "an interrupted ZEUS=1 gate takes its zeus run down with it, ssh included" {
+    # The stand-in zeus-run.sh starts a child in place of its job ssh. A real
+    # background job ignores the terminal's Ctrl-C, so only the gate itself is
+    # signalled here: what stops the zeus run must be the gate's own cleanup.
+    mock_command_script fake-zeus-run '
+sleep 60 & echo $! > "$BATS_TEST_TMPDIR/child.pid"
+echo $$ > "$BATS_TEST_TMPDIR/zeus.pid"
+wait'
+    mock_command_script fake-make 'sleep 2'
+    ZEUS=1 "$GATE" > "$BATS_TEST_TMPDIR/out" 2>&1 &
+    local gate=$!
+    for _ in $(seq 1 200); do [ -s "$BATS_TEST_TMPDIR/child.pid" ] && break; sleep 0.05; done
+    [ -s "$BATS_TEST_TMPDIR/child.pid" ]
+    kill -TERM "$gate"
+    for _ in $(seq 1 200); do kill -0 "$gate" 2>/dev/null || break; sleep 0.05; done
+    local z c alive=0
+    z=$(cat "$BATS_TEST_TMPDIR/zeus.pid"); c=$(cat "$BATS_TEST_TMPDIR/child.pid")
+    for _ in $(seq 1 100); do kill -0 "$c" 2>/dev/null || break; sleep 0.05; done
+    kill -0 "$z" 2>/dev/null && alive=1
+    kill -0 "$c" 2>/dev/null && alive=1
+    kill "$z" "$c" 2>/dev/null || true
+    [ "$alive" -eq 0 ]
+}
