@@ -554,3 +554,59 @@ run_link_gate() {
     [ "$status" -eq 1 ]
     contains "against max-edges: 0" "$output"
 }
+
+@test "--link passes a call guarded by a flag only the native Makefile sets" {
+    build_link_fixture $'\n#ifdef HELIX_HAS_BUZZER\n    return only_excluded_defines();\n#endif\n    return 0;\n'
+    c++ -DHELIX_HAS_BUZZER -c "$ROOT/src/printer/compiled.cpp" -o "$ROOT/obj/printer/compiled.o"
+    printf 'CXXFLAGS += -DHELIX_HAS_BUZZER\n' > "$ROOT/Makefile"
+    run_link_gate
+    [ "$status" -eq 0 ]
+}
+
+@test "--link: a Makefile flag a header also #defines may be set on the firmware" {
+    build_link_fixture $'\n#ifdef HELIX_HAS_BUZZER\n    return only_excluded_defines();\n#endif\n    return 0;\n'
+    c++ -DHELIX_HAS_BUZZER -c "$ROOT/src/printer/compiled.cpp" -o "$ROOT/obj/printer/compiled.o"
+    printf 'CXXFLAGS += -DHELIX_HAS_BUZZER\n' > "$ROOT/Makefile"
+    printf '#define HELIX_HAS_BUZZER 1\n' > "$ROOT/src/printer/platform.h"
+    run_link_gate
+    [ "$status" -eq 1 ]
+    contains "$EDGE" "$output"
+}
+
+# The source never spells only_excluded_defines: the call comes from an inline
+# in the header it includes.
+build_inline_fixture() {
+    printf 'int only_excluded_defines();\ninline int wrap() { return only_excluded_defines(); }\n' \
+        > "$ROOT/src/printer/excluded_one.h"
+    printf '%s\nint caller() { return wrap(); }\n%s\n' "$1" "$2" > "$ROOT/src/printer/compiled.cpp"
+    c++ -DHELIX_HAS_CAMERA=1 -c "$ROOT/src/printer/compiled.cpp" -o "$ROOT/obj/printer/compiled.o"
+}
+
+@test "--link fails a header inline's reference when the header is included live" {
+    build_link_fixture 'return 0;'
+    build_inline_fixture '#include "excluded_one.h"' ''
+    run_link_gate
+    [ "$status" -eq 1 ]
+    contains "$EDGE" "$output"
+}
+
+@test "--link passes a header inline's reference when the header is included only in a dead branch" {
+    build_link_fixture 'return 0;'
+    build_inline_fixture $'#if HELIX_HAS_CAMERA\n#include "excluded_one.h"' '#endif'
+    run_link_gate
+    [ "$status" -eq 0 ]
+}
+
+@test "--link passes a member call when its class is named only in a dead branch" {
+    printf 'struct Pwm { void initialize(); };\n' > "$ROOT/src/printer/excluded_one.h"
+    printf '#include "excluded_one.h"\nvoid Pwm::initialize() {}\n' > "$ROOT/src/printer/excluded_one.cpp"
+    printf '#include "excluded_one.h"\nstatic void initialize() {}\nvoid caller() {\n    initialize();\n#if HELIX_HAS_CAMERA\n    Pwm p;\n    p.initialize();\n#endif\n}\n' \
+        > "$ROOT/src/printer/compiled.cpp"
+    mkdir -p "$ROOT/obj/printer" "$ROOT/fwroot"
+    c++ -DHELIX_HAS_CAMERA=1 -I"$ROOT/src/printer" -c "$ROOT/src/printer/compiled.cpp" -o "$ROOT/obj/printer/compiled.o"
+    c++ -I"$ROOT/src/printer" -c "$ROOT/src/printer/excluded_one.cpp" -o "$ROOT/obj/printer/excluded_one.o"
+    printf 'target_compile_definitions(${COMPONENT_LIB} PRIVATE\n    HELIX_HAS_CAMERA=0)\n' > "$ROOT/CMakeLists.txt"
+    printf 'max-edges: 0\n' > "$ROOT/link_baseline.txt"
+    run_link_gate
+    [ "$status" -eq 0 ]
+}

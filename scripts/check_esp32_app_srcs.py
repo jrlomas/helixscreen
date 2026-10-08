@@ -146,9 +146,36 @@ FIRMWARE_TOOLCHAIN_DEFINES = {"ESP_PLATFORM": "1"}
 FIRMWARE_UNDEFINED = {"__cpp_exceptions", "HELIX_ENABLE_MOCKS", "__APPLE__", "__ANDROID__"}
 
 
-def firmware_defines(cmake_text: str) -> dict[str, str]:
-    """NAME -> value for helixapp's PRIVATE compile definitions, plus the toolchain's."""
-    defines = dict(FIRMWARE_TOOLCHAIN_DEFINES)
+def native_only_flags(repo: Path, cmake_text: str) -> set[str]:
+    """HELIX_* names only the native Makefile's -D sets, which the firmware never sees.
+
+    The firmware's flags come from its CMake and sdkconfig alone, so a name the
+    Makefile passes, the CMake never mentions and no source #defines is undefined
+    there.
+    """
+    makefiles = [repo / "Makefile", *sorted((repo / "mk").glob("*.mk"))]
+    names = {n for m in makefiles if m.is_file()
+             for n in re.findall(r"-D\s*(HELIX_\w+)", m.read_text(errors="replace"))}
+    names = {n for n in names if not re.search(rf"\b{n}\b", cmake_text)}
+    if not names:
+        return names
+    hash_defined = re.compile(r"^\s*#\s*define\s+(HELIX_\w+)", re.M)
+    for d in ("include", "src", "firmware"):
+        for f in (repo / d).rglob("*"):
+            if f.suffix in (".h", ".hpp", ".c", ".cpp") and f.is_file():
+                names -= set(hash_defined.findall(f.read_text(errors="replace")))
+    return names
+
+
+def firmware_defines(cmake_text: str, repo: Path | None = None) -> dict[str, str | None]:
+    """NAME -> value for helixapp's PRIVATE compile definitions, plus the toolchain's.
+
+    A name mapped to None is known to be undefined on the firmware.
+    """
+    defines: dict[str, str | None] = dict.fromkeys(FIRMWARE_UNDEFINED)
+    if repo is not None:
+        defines.update(dict.fromkeys(native_only_flags(repo, cmake_text)))
+    defines.update(FIRMWARE_TOOLCHAIN_DEFINES)
     m = re.search(r"target_compile_definitions\(\$\{COMPONENT_LIB\} PRIVATE(.*?)\)\s*$",
                   cmake_text, re.S | re.M)
     if m:
@@ -163,9 +190,7 @@ def firmware_defines(cmake_text: str) -> dict[str, str]:
 def firmware_condition(directive: str, defines: dict[str, str]) -> bool | None:
     """Whether the firmware compiles the branch a #if/#ifdef/#ifndef opens; None if unknown."""
     def defined(name: str) -> bool | None:
-        if name in defines:
-            return True
-        return False if name in FIRMWARE_UNDEFINED else None
+        return defines[name] is not None if name in defines else None
 
     def negate(v: bool | None) -> bool | None:
         return None if v is None else not v
@@ -184,9 +209,8 @@ def firmware_condition(directive: str, defines: dict[str, str]) -> bool | None:
         if name.isdigit():
             value = int(name)
         elif name in defines:
-            value = int(defines[name]) if defines[name].lstrip("-").isdigit() else None
-        elif name in FIRMWARE_UNDEFINED:
-            value = 0
+            raw = defines[name]
+            value = 0 if raw is None else int(raw) if raw.lstrip("-").isdigit() else None
         else:
             return None
         if value is None:
@@ -199,11 +223,12 @@ def firmware_condition(directive: str, defines: dict[str, str]) -> bool | None:
     return None
 
 
-def firmware_code_lines(text: str, defines: dict[str, str]):
+def firmware_code_lines(text: str, defines: dict[str, str | None], includes: bool = False):
     """Yield (line, code) for each line in a branch the firmware compiles.
 
     Code is the line with string literals blanked and comments cut. A branch
-    whose condition this cannot evaluate counts as compiled.
+    whose condition this cannot evaluate counts as compiled. With `includes`,
+    compiled #include directives are yielded too.
     """
     stack, in_block_comment = [], False
     lines = text.splitlines()
@@ -241,6 +266,9 @@ def firmware_code_lines(text: str, defines: dict[str, str]):
                 frame[2] = frame[2] or frame[0] is None
             elif directive.startswith("endif") and stack:
                 stack.pop()
+            elif (includes and directive.startswith("include")
+                  and not any(frame[0] is False for frame in stack)):
+                yield lineno, stripped
             continue
         code = STRING_LITERAL.sub('""', line).split("//", 1)[0]
         if "/*" in code:
@@ -454,8 +482,8 @@ def compute(manifest: Path, exclusions: Path, src_root: Path) -> Findings:
     aborting_calls: list[tuple[str, int, str, str]] = []
     exception_constructs: list[tuple[str, int, str]] = []
     cmake = manifest.parent / "CMakeLists.txt"
-    defines = firmware_defines(cmake.read_text() if cmake.exists() else "")
     base = src_root.parent
+    defines = firmware_defines(cmake.read_text() if cmake.exists() else "", base)
     compiled = [f for f in sorted(included) if f.startswith("src/") and f in universe]
     # Every header, not only the ones a compiled file includes: any of them can
     # reach the firmware through an include, and tracing that graph here would be
@@ -507,6 +535,7 @@ def load_link_baseline(path: Path) -> tuple[set[tuple[str, str]], int | None]:
 
 
 IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
+QUOTED_INCLUDE = re.compile(r'^\s*#\s*include\s*"([^"]+)"', re.M)
 
 
 def object_path(obj_root: Path, rel: str) -> Path:
@@ -643,8 +672,8 @@ def compute_link(manifest: Path, exclusions: Path, src_root: Path, obj_root: Pat
 
     cmake = manifest.parent / "CMakeLists.txt"
     cmake_text = cmake.read_text() if cmake.exists() else ""
-    defines = firmware_defines(cmake_text)
     base = src_root.parent
+    defines = firmware_defines(cmake_text, base)
     include_dirs = [base / d for d in re.findall(r"\$\{REPO_ROOT\}/([\w./-]+)", cmake_text)]
     firmware_defined: set[str] = set()
     firmware_namespaces: set[str] = set()
@@ -664,6 +693,14 @@ def compute_link(manifest: Path, exclusions: Path, src_root: Path, obj_root: Pat
         for ns in re.findall(r"\bnamespace\s+([\w:]+)", code):
             firmware_namespaces |= set(ns.split("::"))
     firmware_classes = {d.split("::")[-2] for d in firmware_defined if "::" in d}
+    header_dirs = [base / "include", *include_dirs]
+    header_words: dict[Path, set[str]] = {}
+
+    def words_of(header: Path) -> set[str]:
+        if header not in header_words:
+            header_words[header] = set(IDENTIFIER.findall(header.read_text(errors="replace")))
+        return header_words[header]
+
     seen: set[tuple[str, str]] = set()
     for f in sorted(undefined):
         syms = sorted(undefined[f] & demangled.keys())
@@ -673,6 +710,24 @@ def compute_link(manifest: Path, exclusions: Path, src_root: Path, obj_root: Pat
         words = set(IDENTIFIER.findall(text))
         live_words = {w for _, c in firmware_code_lines(text, defines)
                       for w in IDENTIFIER.findall(c)}
+        live_includes = {h for _, c in firmware_code_lines(text, defines, includes=True)
+                         for h in QUOTED_INCLUDE.findall(c)}
+        headers = {h: hits[0] for h in QUOTED_INCLUDE.findall(text)
+                   if (hits := [d / h for d in ((base / f).parent, *header_dirs)
+                                if (d / h).is_file()])}
+
+        def dead(word: str) -> bool:
+            """Every mention of `word` sits in a branch the firmware does not compile.
+
+            A name the source never spells comes from an inline in a header it
+            includes directly; it is dead when each such header is included only
+            in a dead branch.
+            """
+            if word in words:
+                return word not in live_words
+            mentions = [h for h, path in headers.items() if word in words_of(path)]
+            return bool(mentions) and not live_includes.intersection(mentions)
+
         for sym in syms:
             parts = symbol_name(demangled[sym])
             if demangled[sym].startswith(("vtable for ", "typeinfo for ")):
@@ -680,8 +735,10 @@ def compute_link(manifest: Path, exclusions: Path, src_root: Path, obj_root: Pat
                     continue
             elif firmware_defines_symbol(parts, firmware_defined, firmware_namespaces):
                 continue
-            word = parts[-1].lstrip("~")
-            if word in words and word not in live_words:
+            # A member is dead when its own name or its class's is. Code that never
+            # names the class could still reach a member through `auto`; that
+            # case reads as dead here and is left to the firmware link.
+            if dead(parts[-1].lstrip("~")) or (len(parts) > 1 and dead(parts[-2])):
                 continue
             edge = (f, owner[sym])
             seen.add(edge)
