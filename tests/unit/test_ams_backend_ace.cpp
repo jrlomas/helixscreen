@@ -994,6 +994,75 @@ TEST_CASE("ACE mid-print toolchange draws the old lane retracting, then the new 
     }
 }
 
+// A feed that never reaches the hub: the driver pauses the print and names
+// the tool it was feeding as current, with both path sensors clear. The frames
+// are the reporter's capture, as the notify deltas Klipper sends.
+TEST_CASE("ACE paused failed feed does not draw the named tool at the nozzle",
+          "[ams][ace][segment][1678]") {
+    AmsBackendAceTestHelper helper;
+    helper.set_running(true);
+    AceTestAccess::parse_ace(helper, make_kobra_instance_object());
+    json seated = make_kobra_manager_object(0);
+    seated["target_index"] = 3;
+    AceTestAccess::parse_ace(helper, seated); // 13:26:55 cur0 tgt3 rdm1 th1
+    REQUIRE(helper.get_filament_segment() == PathSegment::TOOLHEAD);
+
+    notify_ace(helper, {{"toolhead_sensor", false}}); // 13:27:08
+    CHECK(helper.get_filament_segment() == PathSegment::OUTPUT);
+
+    notify_ace(helper, {{"rdm_sensor", false}}); // 13:27:26
+    CHECK(helper.get_filament_segment() == PathSegment::NONE);
+
+    // 13:27:42: paused, T3 named current, nothing on the path
+    notify_ace(helper, {{"current_index", 3}});
+    auto info = helper.get_test_system_info();
+    CHECK(info.current_tool == 3);
+    CHECK(info.current_slot == 3);
+    CHECK_FALSE(info.filament_loaded);
+    CHECK(info.units[0].slots[3].status != SlotStatus::LOADED);
+    CHECK_FALSE(helper.slot_is_actively_loaded(3));
+    CHECK(helper.get_filament_segment() == PathSegment::NONE);
+    CHECK(helper.get_slot_filament_segment(3) != PathSegment::NOZZLE);
+
+    // 13:31:14: the retry reaches the hub
+    notify_ace(helper, {{"rdm_sensor", true}});
+    CHECK(helper.get_filament_segment() == PathSegment::OUTPUT);
+    CHECK(helper.get_slot_filament_segment(3) != PathSegment::NOZZLE);
+
+    notify_ace(helper, {{"toolhead_sensor", true}}); // 13:31:34
+    CHECK(helper.get_filament_segment() == PathSegment::TOOLHEAD);
+
+    notify_ace(helper, {{"target_index", -1}}); // 13:31:45
+    info = helper.get_test_system_info();
+    CHECK(info.filament_loaded);
+    CHECK(info.current_slot == 3);
+    CHECK(info.units[0].slots[3].status == SlotStatus::LOADED);
+    CHECK(helper.slot_is_actively_loaded(3));
+    CHECK(helper.get_filament_segment() == PathSegment::NOZZLE);
+    CHECK(helper.get_slot_filament_segment(3) == PathSegment::NOZZLE);
+}
+
+TEST_CASE("ACE REST bridge publishes a seat with an empty path as not loaded", "[ams][ace][1678]") {
+    AmsBackendAceTestHelper helper;
+    helper.test_parse_slots_response({{"slots",
+                                       {{{"index", 0}, {"status", "ready"}},
+                                        {{"index", 1}, {"status", "ready"}},
+                                        {{"index", 2}, {"status", "ready"}},
+                                        {{"index", 3}, {"status", "ready"}}}}});
+    json status = make_kobra_rest_status_result();
+    status["ace_manager"] = make_kobra_manager_object(3);
+    REQUIRE(helper.test_parse_status_response(status));
+    REQUIRE(helper.get_test_system_info().filament_loaded);
+
+    status["ace_manager"]["rdm_sensor"] = false;
+    status["ace_manager"]["toolhead_sensor"] = false;
+    CHECK(helper.test_parse_status_response(status));
+    auto info = helper.get_test_system_info();
+    CHECK(info.current_slot == 3);
+    CHECK_FALSE(info.filament_loaded);
+    CHECK(helper.get_filament_segment() == PathSegment::NONE);
+}
+
 TEST_CASE("ACE target_index leaves an error and a screen-started load alone", "[ams][ace][1678]") {
     AmsBackendAceTestHelper helper;
     helper.set_running(true);

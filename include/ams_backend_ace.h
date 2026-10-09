@@ -550,7 +550,21 @@ class AmsBackendAce : public AmsSubscriptionBackend {
     /// "Loaded" meaning loaded-to-hub. slot_status_from_string() therefore
     /// stays as it is; the seated slot is whichever one parse_ace_object /
     /// parse_status_response arbitrated to, and a HUB backend has exactly one.
-    void apply_seated_slot_stamp_locked();
+    ///
+    /// Also publishes system_info_.filament_loaded from seat_loaded_, so the
+    /// seat and the stamp cannot disagree. Returns whether that flag changed.
+    bool apply_seated_slot_stamp_locked();
+
+    /// The seat reaches the nozzle: what the path draws, not what the driver names.
+    [[nodiscard]] bool seat_at_nozzle_locked() const;
+
+    /// The driver names a seated tool, idle, but both path sensors read clear.
+    [[nodiscard]] bool path_empty_under_seat_locked() const;
+
+    /// The tool the driver states is seated, before the path sensors are
+    /// weighed. system_info_.filament_loaded is the published answer, derived
+    /// from this by apply_seated_slot_stamp_locked().
+    bool seat_loaded_ = false;
 
     /// Slot index the LOADED stamp currently sits on, and the status the parse
     /// had written there before it was overwritten. -1 / UNKNOWN when no stamp

@@ -169,7 +169,7 @@ manager's `current_index` is the only seat signal.
 | `ace_instances` | Unit count (1 on the captured rig) |
 | `endless_spool_enabled`, `endless_spool_match_mode` | Endless-spool config (`false` / `"exact"` captured) |
 | `ace_pro_enabled` | Master switch; presence is the capability |
-| `toolhead_sensor`, `rdm_sensor` | Path sensors (toolhead, hub). With nothing seated, or during a driver-started swap, they place the strand: toolhead made = `TOOLHEAD`, hub only = `OUTPUT` (`#get_filament_segment`). A seated tool outside a swap answers `NOZZLE` |
+| `toolhead_sensor`, `rdm_sensor` | Path sensors (toolhead, hub). With nothing seated, or during a driver-started swap, they place the strand: toolhead made = `TOOLHEAD`, hub only = `OUTPUT` (`#get_filament_segment`). A seated tool outside a swap answers `NOZZLE` once `target_index` is `-1`; while the driver still targets it (a retried feed keeps `target_index` on the current tool) the sensors place the strand. A seated tool with both sensors clear is a feed the driver paused on: `current_tool`/`current_slot` keep naming it, but it is published as not loaded and its slot is not stamped LOADED (`#path_empty_under_seat_locked`) |
 
 **Unit — `ace_instance_N.get_status()`** (the captured rig exposes `ace_instance_0`):
 
