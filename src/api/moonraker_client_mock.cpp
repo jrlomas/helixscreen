@@ -1795,8 +1795,10 @@ nlohmann::json MoonrakerClientMock::openams_device_json(int unit) const {
             {"chamber_c", std::round(chamber * 10.0) / 10.0},
             {"remaining_s", running ? static_cast<int>(remaining) : 0}}}}},
         {"supported_actions",
-         {"clear_errors", "load", "unload", "follower", "dryer_start", "dryer_stop",
-          "clear_fault"}}};
+         running ? nlohmann::json::array(
+                       {"clear_errors", "load", "unload", "follower", "dryer_stop", "clear_fault"})
+                 : nlohmann::json::array({"clear_errors", "load", "unload", "follower",
+                                          "dryer_start", "dryer_stop", "clear_fault"})}};
     return device;
 }
 

@@ -526,9 +526,13 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
             }
 
             const json* capabilities = object_member(*device, "capabilities");
+            // A running cycle withdraws dryer_start and keeps dryer_stop, so each
+            // action is permitted on its own and the dryer stays offered while either
+            // is advertised.
+            dryer.can_start = advertises_action(*device, "dryer_start");
+            dryer.can_stop = advertises_action(*device, "dryer_stop");
             dryer.offered = capabilities && bool_member(*capabilities, "dryer", false) &&
-                            advertises_action(*device, "dryer_start") &&
-                            advertises_action(*device, "dryer_stop");
+                            (dryer.can_start || dryer.can_stop);
             if (!dryer.offered) {
                 continue;
             }
@@ -1243,6 +1247,11 @@ AmsError AmsBackendOpenAms::start_drying(float temp_c, int duration_min, int fan
             return AmsErrorHelper::not_supported("Dryer");
         }
         const UnitDryer& dryer = unit_dryers_[u];
+        if (!dryer.can_start) {
+            return AmsError(AmsResult::WRONG_STATE, "Dryer is not accepting a start",
+                            lv_tr("Dryer already running"),
+                            lv_tr("Stop the running cycle before starting another"));
+        }
         if (dryer.requires_unloaded && u < system_info_.units.size()) {
             for (const SlotInfo& slot : system_info_.units[u].slots) {
                 if (slot.status == SlotStatus::LOADED) {
@@ -1270,6 +1279,10 @@ AmsError AmsBackendOpenAms::stop_drying(int unit) {
         if (unit < 0 || u >= unit_dryers_.size() || !unit_dryers_[u].offered ||
             unit_oams_idx_.size() <= u || unit_oams_idx_[u] < 0) {
             return AmsErrorHelper::not_supported("Dryer");
+        }
+        if (!unit_dryers_[u].can_stop) {
+            return AmsError(AmsResult::WRONG_STATE, "Dryer is not accepting a stop",
+                            lv_tr("Dryer is not running"), lv_tr("There is no cycle to stop"));
         }
         gcode = fmt::format("OAMS_DRYER_STOP OAMS={}", unit_oams_idx_[u]);
         requested_dry_min_.erase(unit);

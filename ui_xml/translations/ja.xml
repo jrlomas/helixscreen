@@ -884,6 +884,8 @@
   <translation tag="Dry Filament" ja="フィラメントを乾燥"/>
   <translation tag="Dry Filament on the Bed" ja="ベッドでフィラメントを乾燥"/>
   <translation tag="Dry spools on the heated bed" ja="加熱ベッドでスプールを乾燥"/>
+  <translation tag="Dryer already running" ja="乾燥機はすでに動作中です"/>
+  <translation tag="Dryer is not running" ja="乾燥機は動作していません"/>
   <translation tag="Drying" ja="乾燥中"/>
   <translation tag="Drying is already running" ja="乾燥はすでに実行中です"/>
   <translation tag="Drying on the bed" ja="ベッドで乾燥中"/>
@@ -2891,6 +2893,7 @@
   <translation tag="Stop failed" ja="停止に失敗"/>
   <translation tag="Stop printing &quot;{}&quot;?&#10;&#10;This cannot be undone after 5 seconds." ja="&quot;{}&quot; の印刷を停止しますか？&#10;&#10;5秒後は取り消せません。"/>
   <translation tag="Stop the check?" ja="チェックを停止しますか？"/>
+  <translation tag="Stop the running cycle before starting another" ja="新しく開始する前に、実行中のサイクルを停止してください"/>
   <translation tag="Stopped" ja="停止しました"/>
   <translation tag="Stopped between Hub and Toolhead" ja="ハブとツールヘッドの間で停止"/>
   <translation tag="Stopped between Lane and Hub" ja="レーンとハブの間で停止"/>
@@ -3062,6 +3065,7 @@
   <translation tag="Theme changes apply after restart." ja="テーマの変更は再起動後に適用されます。"/>
   <translation tag="Theme reset to defaults" ja="テーマをデフォルトにリセットしました"/>
   <translation tag="Theme: " ja="テーマ: "/>
+  <translation tag="There is no cycle to stop" ja="停止するサイクルがありません"/>
   <translation tag="There is not enough free memory to run this test. Klipper&apos;s analysis would run out of memory and leave the printer stuck until it is power-cycled." ja="このテストを実行するための空きメモリが足りません。Klipperの解析でメモリが不足し、電源を入れ直すまでプリンターが停止したままになります。"/>
   <translation tag="These tools have a different filament grade loaded:" ja="次のツールには異なるフィラメントグレードが装填されています:"/>
   <translation tag="These tools have incompatible materials loaded:" ja="これらのツールには互換性のない素材がロードされています:"/>

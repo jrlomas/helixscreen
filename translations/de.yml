@@ -988,6 +988,8 @@ translations:
 
   Dry spools on the heated bed: Spulen auf dem Heizbett trocknen
 
+  Dryer already running: 'Trockner läuft bereits'
+  Dryer is not running: 'Trockner läuft nicht'
   Drying: Trocknen
   Drying is already running: Trocknung läuft bereits
 
@@ -3217,6 +3219,7 @@ translations:
   ? "Stop printing \"{}\"?\n\nThis cannot be undone after 5 seconds."
   : "Druck von \"{}\" stoppen?\n\nDies kann nach 5 Sekunden nicht rückgängig gemacht werden."
   Stop the check?: Prüfung beenden?
+  Stop the running cycle before starting another: 'Beenden Sie den laufenden Zyklus, bevor Sie einen neuen starten'
   Stopped: Gestoppt
   Stopped between Hub and Toolhead: Zwischen Hub und Werkzeugkopf gestoppt
   Stopped between Lane and Hub: Zwischen Spur und Hub gestoppt
@@ -3432,6 +3435,7 @@ translations:
   Theme changes apply after restart.: Themenänderungen werden nach dem Neustart wirksam.
   Theme reset to defaults: Thema auf Standardwerte zurückgesetzt
   'Theme: ': 'Design: '
+  There is no cycle to stop: 'Es gibt keinen Zyklus zum Beenden'
   ? There is not enough free memory to run this test. Klipper's analysis would run out of memory and leave the printer stuck until it is power-cycled.
   : "Für diesen Test ist nicht genug freier Speicher vorhanden. Die Auswertung von Klipper würde den Speicher erschöpfen und den Drucker blockieren, bis er aus- und wieder eingeschaltet wird."
   'These tools have a different filament grade loaded:': 'Bei diesen Werkzeugen ist eine andere Filamentklasse geladen:'

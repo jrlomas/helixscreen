@@ -983,6 +983,8 @@ translations:
 
   Dry spools on the heated bed: Secar carretéis na mesa aquecida
 
+  Dryer already running: 'O secador já está em funcionamento'
+  Dryer is not running: 'O secador não está em funcionamento'
   Drying: Secando
   Drying is already running: A secagem já está em andamento
 
@@ -3214,6 +3216,7 @@ translations:
   ? "Stop printing \"{}\"?\n\nThis cannot be undone after 5 seconds."
   : "Parar a impressão de \"{}\"?\n\nIsso não pode ser desfeito após 5 segundos."
   Stop the check?: Parar a verificação?
+  Stop the running cycle before starting another: 'Pare o ciclo em andamento antes de iniciar outro'
   Stopped: Parado
   Stopped between Hub and Toolhead: Parado entre o Hub e o cabeçote
   Stopped between Lane and Hub: Parado entre a Lane e o Hub
@@ -3428,6 +3431,7 @@ translations:
   Theme changes apply after restart.: Alterações de tema aplicam após reiniciar.
   Theme reset to defaults: Tema redefinido para os padrões
   'Theme: ': 'Tema: '
+  There is no cycle to stop: 'Não há ciclo para parar'
   ? There is not enough free memory to run this test. Klipper's analysis would run out of memory and leave the printer stuck until it is power-cycled.
   : "Não há memória livre suficiente para este teste. A análise do Klipper ficaria sem memória e deixaria a impressora travada até ser desligada e ligada."
   'These tools have a different filament grade loaded:': 'Estas ferramentas têm um grau de filamento diferente carregado:'

@@ -884,6 +884,8 @@
   <translation tag="Dry Filament" it="Essicca filamento"/>
   <translation tag="Dry Filament on the Bed" it="Essicca il filamento sul piano"/>
   <translation tag="Dry spools on the heated bed" it="Essicca le bobine sul piano riscaldato"/>
+  <translation tag="Dryer already running" it="L&apos;essiccatore è già in funzione"/>
+  <translation tag="Dryer is not running" it="L&apos;essiccatore non è in funzione"/>
   <translation tag="Drying" it="Essiccazione"/>
   <translation tag="Drying is already running" it="Un&apos;essiccazione è già in corso"/>
   <translation tag="Drying on the bed" it="Essiccazione sul piano"/>
@@ -2891,6 +2893,7 @@
   <translation tag="Stop failed" it="Arresto fallito"/>
   <translation tag="Stop printing &quot;{}&quot;?&#10;&#10;This cannot be undone after 5 seconds." it="Interrompere la stampa di &quot;{}&quot;?&#10;&#10;Non sarà possibile annullare dopo 5 secondi."/>
   <translation tag="Stop the check?" it="Fermare il controllo?"/>
+  <translation tag="Stop the running cycle before starting another" it="Interrompi il ciclo in corso prima di avviarne un altro"/>
   <translation tag="Stopped" it="Fermato"/>
   <translation tag="Stopped between Hub and Toolhead" it="Fermo tra Hub e testina"/>
   <translation tag="Stopped between Lane and Hub" it="Fermo tra corsia e Hub"/>
@@ -3062,6 +3065,7 @@
   <translation tag="Theme changes apply after restart." it="Le modifiche al tema si applicano dopo il riavvio."/>
   <translation tag="Theme reset to defaults" it="Tema ripristinato ai valori predefiniti"/>
   <translation tag="Theme: " it="Tema: "/>
+  <translation tag="There is no cycle to stop" it="Nessun ciclo da interrompere"/>
   <translation tag="There is not enough free memory to run this test. Klipper&apos;s analysis would run out of memory and leave the printer stuck until it is power-cycled." it="Non c&apos;è abbastanza memoria libera per questo test. L&apos;analisi di Klipper esaurirebbe la memoria e bloccherebbe la stampante finché non viene spenta e riaccesa."/>
   <translation tag="These tools have a different filament grade loaded:" it="Questi utensili hanno un filamento di grado diverso caricato:"/>
   <translation tag="These tools have incompatible materials loaded:" it="Questi strumenti hanno caricati materiali incompatibili:"/>

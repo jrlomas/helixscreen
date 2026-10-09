@@ -884,6 +884,8 @@
   <translation tag="Dry Filament" ru="Сушка филамента"/>
   <translation tag="Dry Filament on the Bed" ru="Сушка филамента на столе"/>
   <translation tag="Dry spools on the heated bed" ru="Сушка катушек на нагреваемом столе"/>
+  <translation tag="Dryer already running" ru="Сушилка уже работает"/>
+  <translation tag="Dryer is not running" ru="Сушилка не работает"/>
   <translation tag="Drying" ru="Сушка"/>
   <translation tag="Drying is already running" ru="Сушка уже идёт"/>
   <translation tag="Drying on the bed" ru="Сушка на столе"/>
@@ -2891,6 +2893,7 @@
   <translation tag="Stop failed" ru="Ошибка остановки"/>
   <translation tag="Stop printing &quot;{}&quot;?&#10;&#10;This cannot be undone after 5 seconds." ru="Остановить печать &quot;{}&quot;?&#10;&#10;Это нельзя будет отменить через 5 секунд."/>
   <translation tag="Stop the check?" ru="Остановить проверку?"/>
+  <translation tag="Stop the running cycle before starting another" ru="Остановите текущий цикл, прежде чем запускать новый"/>
   <translation tag="Stopped" ru="Остановлено"/>
   <translation tag="Stopped between Hub and Toolhead" ru="Остановка между хабом и печатающей головкой"/>
   <translation tag="Stopped between Lane and Hub" ru="Остановка между каналом и хабом"/>
@@ -3062,6 +3065,7 @@
   <translation tag="Theme changes apply after restart." ru="Изменения темы применяются после перезапуска."/>
   <translation tag="Theme reset to defaults" ru="Тема сброшена к настройкам по умолчанию"/>
   <translation tag="Theme: " ru="Тема: "/>
+  <translation tag="There is no cycle to stop" ru="Нет цикла для остановки"/>
   <translation tag="There is not enough free memory to run this test. Klipper&apos;s analysis would run out of memory and leave the printer stuck until it is power-cycled." ru="Для этого теста недостаточно свободной памяти. Анализу Klipper не хватит памяти, и принтер зависнет, пока его не выключат и снова не включат."/>
   <translation tag="These tools have a different filament grade loaded:" ru="В этих инструментах загружен филамент другой марки:"/>
   <translation tag="These tools have incompatible materials loaded:" ru="В этих инструментах загружены несовместимые материалы:"/>

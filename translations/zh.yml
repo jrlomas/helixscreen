@@ -910,6 +910,8 @@ translations:
 
   Dry spools on the heated bed: 在热床上烘干料盘
 
+  Dryer already running: '烘干机已在运行'
+  Dryer is not running: '烘干机未在运行'
   Drying: 烘干中
   Drying is already running: 烘干已在进行中
 
@@ -3000,6 +3002,7 @@ translations:
   ? "Stop printing \"{}\"?\n\nThis cannot be undone after 5 seconds."
   : "停止打印 \"{}\"？\n\n5秒后将无法撤销。"
   Stop the check?: 停止检查？
+  Stop the running cycle before starting another: '请先停止当前周期，再启动新的周期'
   Stopped: 已停止
   Stopped between Hub and Toolhead: 停在集线器与工具头之间
   Stopped between Lane and Hub: 停在耗材通道与集线器之间
@@ -3192,6 +3195,7 @@ translations:
   Theme changes apply after restart.: 主题更改在重启后生效。
   Theme reset to defaults: 主题已重置为默认值
   'Theme: ': '主题: '
+  There is no cycle to stop: '没有可停止的周期'
   ? There is not enough free memory to run this test. Klipper's analysis would run out of memory and leave the printer stuck until it is power-cycled.
   : "可用内存不足，无法运行此测试。Klipper 的分析会耗尽内存，使打印机卡住，直到断电重启。"
   'These tools have a different filament grade loaded:': 以下工具装载的耗材等级不同：

@@ -1273,7 +1273,10 @@ json dryer_device(bool ht, const std::string& state = "off", double target = 0.0
                   int remaining_s = 0, bool offer = true) {
     json actions = json::array({"load", "unload"});
     if (offer) {
-        actions.push_back("dryer_start");
+        // A running cycle withdraws dryer_start.
+        if (remaining_s == 0) {
+            actions.push_back("dryer_start");
+        }
         actions.push_back("dryer_stop");
     }
     return json{
@@ -1348,13 +1351,14 @@ TEST_CASE_METHOD(HelixTestFixture, "OpenAMS offers a dryer only where the unit a
     CHECK(backend.get_dryer_info(1).max_temp_c == Catch::Approx(65.0f));
     CHECK(ht.max_duration_min == 10080);
 
-    SECTION("no dryer_stop action withholds the dryer") {
-        json no_stop = dryer_device(true);
-        no_stop["supported_actions"] = json::array({"dryer_start"});
-        backend.feed(dryer_manager(-1, no_stop));
+    SECTION("neither action withholds the dryer") {
+        json none = dryer_device(true);
+        none["supported_actions"] = json::array({"load"});
+        backend.feed(dryer_manager(-1, none));
         CHECK_FALSE(backend.get_dryer_info(0).supported);
         CHECK(backend.get_dryer_info(1).supported);
         CHECK_FALSE(backend.start_drying(55.0f, 60, -1, 0).success());
+        CHECK_FALSE(backend.stop_drying(0).success());
     }
     SECTION("no dryer capability withholds the dryer") {
         json none = dryer_device(true);
@@ -1438,4 +1442,40 @@ TEST_CASE_METHOD(HelixTestFixture, "OpenAMS refuses to dry a unit that must be u
     backend.feed(dryer_manager(-1));
     REQUIRE(backend.start_drying(55.0f, 60, -1, 1).success());
     CHECK(backend.commands.back() == "OAMS_DRYER_START OAMS=2 TARGET=55 DURATION=3600");
+}
+
+TEST_CASE_METHOD(HelixTestFixture,
+                 "OpenAMS keeps a running dryer stoppable when only dryer_stop is advertised",
+                 "[ams][openams][dryer]") {
+    OpenAmsHarness backend;
+    // dryer_start is withdrawn for as long as the cycle runs.
+    backend.feed(
+        dryer_manager(-1, dryer_device(true), dryer_device(false, "timed_dry", 45.0, 3000)));
+
+    const DryerInfo running = backend.get_dryer_info(1);
+    CHECK(running.supported);
+    CHECK(running.active);
+    CHECK(backend.get_dryer_info(0).supported);
+    CHECK_FALSE(backend.get_dryer_info(0).active);
+
+    REQUIRE(backend.stop_drying(1).success());
+    CHECK(backend.commands.back() == "OAMS_DRYER_STOP OAMS=2");
+
+    const auto before = backend.commands.size();
+    const auto refused = backend.start_drying(55.0f, 60, -1, 1);
+    CHECK_FALSE(refused.success());
+    CHECK(refused.result == AmsResult::WRONG_STATE);
+    CHECK(backend.commands.size() == before);
+
+    SECTION("an idle unit with both actions still starts and stops") {
+        REQUIRE(backend.start_drying(55.0f, 60, -1, 0).success());
+        REQUIRE(backend.stop_drying(0).success());
+    }
+    SECTION("a unit offering only dryer_start cannot be stopped") {
+        json start_only = dryer_device(true);
+        start_only["supported_actions"] = json::array({"dryer_start"});
+        backend.feed(dryer_manager(-1, start_only));
+        CHECK(backend.get_dryer_info(0).supported);
+        CHECK_FALSE(backend.stop_drying(0).success());
+    }
 }

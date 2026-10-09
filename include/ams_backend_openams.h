@@ -184,7 +184,9 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
 
     /// What a unit publishes about its dryer. Parallel to system_info_.units.
     struct UnitDryer {
-        bool offered = false;           ///< capability plus dryer_start and dryer_stop
+        bool offered = false;           ///< capability plus dryer_start or dryer_stop
+        bool can_start = false;         ///< dryer_start is advertised now
+        bool can_stop = false;          ///< dryer_stop is advertised now
         bool requires_unloaded = false; ///< no bay may be loaded while it runs
         std::optional<EnvironmentData> environment;
         DryerInfo info;
