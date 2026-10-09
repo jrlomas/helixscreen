@@ -239,14 +239,24 @@ void MoonrakerFileTransferAPI::download_file(const std::string& root, const std:
 
 // The head-range sibling above is real because EspHttpLane::submit_get() asks
 // for a bounded prefix ("bytes=0-N"). A tail needs a suffix range ("bytes=-N"),
-// which the lane does not express, and nothing on this surface reads slicer
-// footers -- so this stays a stub rather than growing the lane an option with
-// no caller. Defining it is not optional even so: it is a non-pure virtual, so
+// which the lane does not express, so this stays a stub and
+// supports_tail_reads() says so: the detail view's footer read asks first and
+// skips it. Defining it is not optional even so: it is a non-pure virtual, so
 // MoonrakerFileTransferAPI's vtable references it and the link fails without a
 // definition.
 void MoonrakerFileTransferAPI::download_file_tail(const std::string&, const std::string&, size_t,
                                                   StringCallback, ErrorCallback on_error) {
     esp_rest_unimplemented_err("MoonrakerFileTransferAPI::download_file_tail", on_error);
+}
+
+// No file materialization on this transport (R3), so callers that want a local
+// copy ask supports_local_copies() first and never reach the stub.
+bool MoonrakerFileTransferAPI::supports_local_copies() const {
+    return false;
+}
+
+bool MoonrakerFileTransferAPI::supports_tail_reads() const {
+    return false;
 }
 
 void MoonrakerFileTransferAPI::download_file_to_path(const std::string&, const std::string&,

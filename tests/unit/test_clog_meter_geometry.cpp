@@ -348,3 +348,13 @@ TEST_CASE("buffer_status_token: neutral on target, warning off it, danger at an 
     CHECK(std::string(buffer_status_token(ClogMeterStatus::Warning)) == "warning");
     CHECK(std::string(buffer_status_token(ClogMeterStatus::Fault)) == "danger");
 }
+
+TEST_CASE("clog_meter_note: a trip reason outranks tangle prevention, which outranks silence",
+          "[clog_meter][note]") {
+    CHECK(clog_meter_note(true, true, true, true) == ClogNote::TripReason);
+    CHECK(clog_meter_note(true, false, true, true) == ClogNote::TangleBoosted);
+    CHECK(clog_meter_note(false, true, true, false) == ClogNote::TangleActive);
+    CHECK(clog_meter_note(false, false, true, false) == ClogNote::TangleActive);
+    CHECK(clog_meter_note(true, false, false, false) == ClogNote::None);
+    CHECK(clog_meter_note(false, false, false, false) == ClogNote::None);
+}

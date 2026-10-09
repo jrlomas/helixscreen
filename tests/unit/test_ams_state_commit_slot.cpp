@@ -376,6 +376,65 @@ TEST_CASE("commit_slot_edit clears server active spool on unlink", "[ams][spoolm
     REQUIRE(f.backend->get_slot_info(0).spoolman_id == 0);
 }
 
+TEST_CASE("commit_slot_edit leaves the active spool alone when the unlinked lane is not loaded",
+          "[ams][spoolman][commit][1717]") {
+    CommitFixture f;
+    // AFC-shaped, so no loaded-lane sync re-asserts the active spool and the
+    // check reads only what the commit itself did.
+    f.setup_manages_active_spool(169);
+    // Lane 0 is the loaded one, and its spool is the active spool.
+    REQUIRE(f.backend->slot_is_actively_loaded(0));
+    f.client.spoolman_mock().set_active_spool_id(169);
+
+    SlotInfo original = f.backend->get_slot_info(1);
+    original.spoolman_id = 147;
+    f.backend->sync_external_identity(1, original);
+    REQUIRE_FALSE(f.backend->slot_is_actively_loaded(1));
+
+    SlotInfo cleared = original;
+    cleared.spoolman_id = 0;
+    REQUIRE(AmsState::instance().commit_slot_edit(1, original, cleared).success());
+
+    CHECK(f.client.spoolman_mock().get_mock_active_spool_id() == 169);
+    CHECK(f.backend->get_slot_info(1).spoolman_id == 0);
+}
+
+TEST_CASE("commit_slot_edit leaves the active spool alone when linking a lane that is not loaded",
+          "[ams][spoolman][commit][1717]") {
+    CommitFixture f;
+    // AFC-shaped, so no loaded-lane sync re-asserts the active spool and the
+    // check reads only what the commit itself did.
+    f.setup_manages_active_spool(169);
+    REQUIRE(f.backend->slot_is_actively_loaded(0));
+    f.client.spoolman_mock().set_active_spool_id(169);
+
+    SlotInfo original = f.backend->get_slot_info(1);
+    original.spoolman_id = 0;
+    f.backend->sync_external_identity(1, original);
+    REQUIRE_FALSE(f.backend->slot_is_actively_loaded(1));
+
+    SlotInfo linked = original;
+    linked.spoolman_id = 147;
+    REQUIRE(AmsState::instance().commit_slot_edit(1, original, linked).success());
+
+    CHECK(f.client.spoolman_mock().get_mock_active_spool_id() == 169);
+    CHECK(f.backend->get_slot_info(1).spoolman_id == 147);
+}
+
+TEST_CASE("commit_slot_edit makes the spool active when linking the loaded lane",
+          "[ams][spoolman][commit][1717]") {
+    CommitFixture f;
+    f.setup_manages_active_spool(0);
+    REQUIRE(f.backend->slot_is_actively_loaded(0));
+
+    SlotInfo original = f.backend->get_slot_info(0);
+    SlotInfo linked = original;
+    linked.spoolman_id = 147;
+    REQUIRE(AmsState::instance().commit_slot_edit(0, original, linked).success());
+
+    CHECK(f.client.spoolman_mock().get_mock_active_spool_id() == 147);
+}
+
 TEST_CASE("commit_slot_edit leaves server active spool alone on a no-link clear",
           "[ams][spoolman][commit]") {
     CommitFixture f;
@@ -1157,22 +1216,27 @@ TEST_CASE("Clear Spool on a linked lane leaves nothing remembered and no catalog
     REQUIRE(slot.spoolman_id == 0);
     const auto sources = helix::ams::lane_sources(f.lane());
     // The clear drops the lane's whole user record, the unlink statement
-    // included. The unlink stays durable anyway: the commit wrote it to
-    // firmware (SET_SPOOL_ID with an empty id) and to the Spoolman server,
-    // which is what a restart reads instead of our record
-    // (prestonbrown/helixscreen#1661: a clear is not a declaration, so
-    // nothing of it stands on the lane).
+    // included: a clear is not a declaration, so nothing of it stands on the
+    // lane (prestonbrown/helixscreen#1661).
     CHECK_FALSE(sources.local_user.has_value());
     CHECK_FALSE(sources.remembered.has_value());
     CHECK_FALSE(helix::ams::resolve(sources).color_rgb.has_value());
     // The pick names a product of the material the clear just removed.
     CHECK(slot.catalog_id.empty());
     CHECK(slot.product_name.empty());
-    // And nothing reloads: the stored record is erased with the lane's, so
-    // the next start reads firmware and the server, both already cleared.
+    // And no identity reloads: the stored record keeps only the unlink, since
+    // a remember_spool lane restates the old id on the next start (#1717).
     {
         std::lock_guard<std::mutex> lock(AfcTestAccess::mutex(*f.afc));
-        CHECK(AfcTestAccess::overrides(*f.afc).find(0) == AfcTestAccess::overrides(*f.afc).end());
+        const auto& overrides = AfcTestAccess::overrides(*f.afc);
+        const auto kept = overrides.find(0);
+        REQUIRE(kept != overrides.end());
+        CHECK(kept->second.unlinked_spool_id == 42);
+        CHECK(kept->second.spoolman_id == 0);
+        CHECK(kept->second.material.empty());
+        CHECK_FALSE(kept->second.color_set);
+        CHECK(kept->second.catalog_id.empty());
+        CHECK_FALSE(kept->second.declared.any());
     }
 }
 

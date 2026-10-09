@@ -1250,13 +1250,23 @@ Where it is installed:
   three shards per token.
 - Runners that size themselves rather than join a jobserver hold their share
   through `scripts/helix-claim hold [-n N] -- CMD`, which exports
-  `JOBPOOL_SLOTS` (`jobpool hold`; without jobpool, `-n` or the cores):
-  `make test-shell` runs `bats --jobs "$JOBPOOL_SLOTS"`, and the helix-xml test
-  build its `cmake --build -j`.
+  `JOBPOOL_SLOTS` (`jobpool hold`; without jobpool, `-n` or the cores). The
+  helix-xml test build runs its `cmake --build -j` from it. `make test-shell`
+  asks for `--grow FILE` too, which a jobpool that has it keeps at the live slot
+  count while the suite runs; bats is handed `scripts/parallel-jobs-file.sh` as
+  its parallel, which gives GNU parallel that file (re-read about once a second)
+  in place of the number bats insists on. Without it the suite runs at the
+  start-time `JOBPOOL_SLOTS`.
 - Container builds go through `scripts/pool-docker.sh`: a container's make
   joins the pool (state dir mounted, FIFO opened inside, `-j` dropped, kept as
-  the fallback when the container cannot open the FIFO), and any other
-  container command (idf.py, the ustreamer script) holds tokens and gets
+  the fallback when the container cannot open the FIFO). An idf.py or ninja
+  command joins too: ninja 1.13 is a jobserver client in the FIFO form, so
+  `scripts/ninja-jobserver.sh` fetches the pinned upstream release once into
+  `~/.cache/helixscreen/` (sha256-checked; offline after that), pool-docker.sh
+  mounts it over the image's `/usr/bin/ninja`, names the FIFO in `MAKEFLAGS`
+  and empties `IDF_PY_BUILD_JOBS`, since idf.py passes it as `-j` and any `-j`
+  turns ninja's jobserver off. Any other container command (the ustreamer
+  script), or idf.py with no ninja 1.13 to be had, holds tokens and gets
   `JOBPOOL_SLOTS` and `IDF_PY_BUILD_JOBS`. The native cross targets (`make pi`
   and siblings) give their sub-make no `-j` while a pool is live.
 - `helix-claim resources` lists heavy runners (bats, GNU parallel, ninja,
@@ -1279,8 +1289,9 @@ Two kinds of remote machine help here, and both are optional:
   `tsan`, `mutate`) in a container: `scripts/test-host-run.sh`. It mirrors your
   working tree as it is on disk, uncommitted edits included, into a per-tree
   directory whose `build/` persists, so a warm run rebuilds only what changed.
-  `make full-test-run TEST_HOST=1` runs the C++ sweep there while bats runs
-  locally.
+  With one configured, `make full-test-run` runs the C++ sweep there while bats
+  runs locally whenever the link makes that pay (`TEST_HOST=1` forces it,
+  `TEST_HOST=0` or `HELIX_TEST_HOST_AUTO=0` keeps both local).
 - a **remote build host** builds natively or for the cross targets:
   `make remote-native`, `make remote-test`, `make remote-pi` and siblings
   (`mk/remote.mk`, `scripts/remote-build.sh`).
@@ -1292,13 +1303,24 @@ it:
 ${XDG_CONFIG_HOME:-$HOME/.config}/helixscreen/build-hosts.env
 ```
 
-`KEY=VALUE` lines and `#` comments, with no quotes and no spaces around `=`:
-the scripts parse it and make reads it with `-include`. A variable set in the
-environment wins over the file (`HELIX_BUILD_HOSTS_FILE` names a different
-file). Nothing has a host default: a command that needs a host you have not
+One parser reads it, `scripts/lib/build_hosts.sh`: the scripts source it, and
+make asks it for a value the first time a remote target needs one, so an
+ordinary `make` never reads the file at all. Its rules:
+
+- `KEY=VALUE` at the start of a line, no spaces around `=`; `#` starts a
+  comment only at the start of a line.
+- Only the keys in the table below; any other key is named and skipped.
+- Values are literal: no `$` expansion, nothing runs, a CRLF line ending is
+  fine. A value cannot hold whitespace or quotes, so a trailing comment or a
+  quoted value is named and skipped rather than half-read.
+- If a key appears twice, the last line wins.
+- A variable set in the environment (or on the make command line) wins over
+  the file. `HELIX_BUILD_HOSTS_FILE` names a different file.
+
+Nothing has a host default: a command that needs a host you have not
 configured stops with one line naming the variable and this file, and nothing
 ever connects to a host you did not name. `make full-test-run` with no test
-host simply runs both suites locally.
+host simply runs both suites locally, without a word.
 
 | Variable | Used by | Meaning (default) |
 |----------|---------|-------------------|
@@ -1309,9 +1331,10 @@ host simply runs both suites locally.
 | `HELIX_TEST_CCACHE` | same | ccache dir inside the container (`/work/ccache`) |
 | `HELIX_TEST_WORKDIR` | `test-host-run.sh --commit`, `mutate` | git checkout inside the container (`/work/helixscreen`) |
 | `HELIX_TEST_LOCK_DIR` | `test-host-run.sh` | lock directory on the host (`/tmp`) |
+| `HELIX_TEST_HOST_AUTO` | `full-test-run` | `0` keeps an unforced gate local even with a test host configured (`1`) |
 | `REMOTE_HOST`, `REMOTE_USER` | `mk/remote.mk`, `remote-build.sh` | remote build host and optional user (none) |
-| `REMOTE_DIR` | `mk/remote.mk` | rsync target on the remote for the cross targets (none) |
-| `REMOTE_BUILD_DIR` | `remote-build.sh` | its own clone on the remote (`~/helix-remote`); kept apart from `REMOTE_DIR` because the script hard-resets it |
+| `REMOTE_DIR` | `mk/remote.mk` | rsync target on the remote for the cross targets (none). `remote-sync` rsyncs `--delete` into it, so give it a directory of its own, never a checkout you work in |
+| `REMOTE_BUILD_DIR` | `remote-build.sh` | its own clone on the remote (`~/helix-remote`), which it hard-resets and cleans every run. It works only in a directory it created (marked `.helix-remote-build`) and refuses any other |
 
 An example file:
 
@@ -1321,7 +1344,7 @@ HELIX_TEST_CONTAINER=helix-test
 HELIX_TEST_TREES_HOST=/srv/helix-test/trees
 HELIX_TEST_TREES=/work/trees
 REMOTE_HOST=buildbox.local
-REMOTE_DIR=~/src/helixscreen
+REMOTE_DIR=~/helix-remote-sync
 ```
 
 **Setting up a test host.** Any Linux machine with Docker works, if you can ssh

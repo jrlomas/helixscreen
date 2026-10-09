@@ -258,6 +258,8 @@ void AmsState::init_subjects(bool register_xml) {
     INIT_SUBJECT_STRING(clog_meter_center_text, "", subjects_, register_xml);
     INIT_SUBJECT_STRING(clog_meter_label_left, "", subjects_, register_xml);
     INIT_SUBJECT_STRING(clog_meter_label_right, "", subjects_, register_xml);
+    INIT_SUBJECT_INT(clog_meter_note_kind, 0, subjects_, register_xml);
+    INIT_SUBJECT_STRING(clog_meter_note_text, "", subjects_, register_xml);
 
     // Filament buffer reading, system level
     INIT_SUBJECT_INT(buffer_present, 0, subjects_, register_xml);
@@ -680,6 +682,8 @@ void AmsState::register_xml_subject_names() {
     helix::xml::register_subject_in_current_scope("clog_meter_label_left", &clog_meter_label_left_);
     helix::xml::register_subject_in_current_scope("clog_meter_label_right",
                                                   &clog_meter_label_right_);
+    helix::xml::register_subject_in_current_scope("clog_meter_note_kind", &clog_meter_note_kind_);
+    helix::xml::register_subject_in_current_scope("clog_meter_note_text", &clog_meter_note_text_);
 
     // Filament buffer reading
     helix::xml::register_subject_in_current_scope("buffer_present", &buffer_present_);

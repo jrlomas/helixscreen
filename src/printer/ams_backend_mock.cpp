@@ -1506,6 +1506,11 @@ void AmsBackendMock::set_flowguard_info(FlowguardInfo info) {
                   info.max_tangle);
 }
 
+void AmsBackendMock::set_tangle_prevention(TanglePreventionInfo info) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    system_info_.tangle_prevention = info;
+}
+
 void AmsBackendMock::set_sync_feedback_bias(float bias) {
     std::lock_guard<std::mutex> lock(mutex_);
     system_info_.sync_feedback_bias = bias;

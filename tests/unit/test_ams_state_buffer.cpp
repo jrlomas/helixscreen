@@ -127,3 +127,30 @@ TEST_CASE_METHOD(LVGLTestFixture, "AmsState publishes the system-level buffer re
         CHECK(text_of(ams.get_buffer_label_subject()).empty());
     }
 }
+
+TEST_CASE_METHOD(LVGLTestFixture, "AmsState publishes the clog meter note",
+                 "[ams][clog_meter][note]") {
+    auto& ams = AmsState::instance();
+    ams.init_subjects(false);
+
+    AmsSystemInfo info;
+    info.flowguard_info.trigger = "TANGLE";
+    info.flowguard_info.reason = "no movement";
+    info.tangle_prevention.present = true;
+    info.tangle_prevention.active = true;
+    AmsStateTestAccess::sync_clog_meter(ams, info);
+    CHECK(subject_int(ams.get_clog_meter_note_kind_subject()) ==
+          static_cast<int>(helix::ui::ClogNote::TripReason));
+    CHECK(text_of(ams.get_clog_meter_note_text_subject()) == "no movement");
+
+    info.flowguard_info.trigger.clear();
+    info.tangle_prevention.boosted = true;
+    AmsStateTestAccess::sync_clog_meter(ams, info);
+    CHECK(subject_int(ams.get_clog_meter_note_kind_subject()) ==
+          static_cast<int>(helix::ui::ClogNote::TangleBoosted));
+    CHECK(text_of(ams.get_clog_meter_note_text_subject()).empty());
+
+    AmsStateTestAccess::sync_clog_meter(ams, AmsSystemInfo{});
+    CHECK(subject_int(ams.get_clog_meter_note_kind_subject()) == 0);
+    CHECK(text_of(ams.get_clog_meter_note_text_subject()).empty());
+}

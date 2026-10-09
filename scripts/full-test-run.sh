@@ -10,22 +10,23 @@
 #                costs the longer of the two, and fails if either fails. bats
 #                stays here because the test container is root with no shellcheck.
 #   TEST_HOST=0  both run here, sweep first.
-#   unset        automatic: with a test host configured and HELIX_TEST_HOST_AUTO=1,
-#                test-host-run.sh --probe decides from the link and prints the
-#                numbers. With no test host configured, both run here, silently.
+#   unset        automatic: with a test host configured, test-host-run.sh --probe
+#                decides from the link and prints the numbers
+#                (HELIX_TEST_HOST_AUTO=0 keeps it local). With no test host
+#                configured, both run here, silently.
 #
 # [.] and [slow] stay outside deliberately: quality-checks.sh runs [.] on any
 # staged code change, and nightly CI runs [slow].
 set -uo pipefail
 
-# Automatic offload stays off until a warm test-host sweep is measured finishing
-# before bats; turning it on is this one line.
-HELIX_TEST_HOST_AUTO=${HELIX_TEST_HOST_AUTO:-0}
-
 MAKE=${MAKE:-make}
 TEST_HOST_RUN=${TEST_HOST_RUN:-$(dirname "$0")/test-host-run.sh}
 # shellcheck source-path=SCRIPTDIR source=lib/build_hosts.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/build_hosts.sh"
+
+# A warm test-host sweep finishes before the local bats suite does, so the
+# split pays whenever the link does; the probe decides that.
+HELIX_TEST_HOST_AUTO=${HELIX_TEST_HOST_AUTO:-1}
 
 case "${TEST_HOST:-}" in
     1) require_build_host HELIX_TEST_HOST || exit 2
@@ -35,7 +36,7 @@ case "${TEST_HOST:-}" in
         if [ -z "${HELIX_TEST_HOST:-}" ]; then
             where=local
         elif [ "$HELIX_TEST_HOST_AUTO" != 1 ]; then
-            echo "→ unit sweep runs here (automatic test-host offload is off; HELIX_TEST_HOST_AUTO=1 turns it on, TEST_HOST=1 forces it)"
+            echo "→ unit sweep runs here (HELIX_TEST_HOST_AUTO=0; TEST_HOST=1 forces the test host)"
             where=local
         elif "$TEST_HOST_RUN" --probe; then
             where=remote
@@ -60,21 +61,22 @@ fi
 zlog="${TMPDIR:-/tmp}/full-test-run-sweep.$$.log"
 echo "→ unit sweep on $HELIX_TEST_HOST (output: $zlog), shell suite here"
 # Its own process group, so one signal reaches its job ssh too: a background
-# job ignores the terminal's Ctrl-C, and a sweep left behind keeps its
-# tree's lock and a build nobody is waiting for.
+# job ignores the terminal's Ctrl-C, setsid detaches it from the terminal's
+# hangup, and a sweep left behind keeps its tree's lock and a build nobody is
+# waiting for.
 if command -v setsid >/dev/null 2>&1; then
     setsid "$TEST_HOST_RUN" sweep >"$zlog" 2>&1 &
 else
     "$TEST_HOST_RUN" sweep >"$zlog" 2>&1 &
 fi
 zpid=$!
-trap 'kill -TERM -- "-$zpid" 2>/dev/null || kill -TERM "$zpid" 2>/dev/null; exit 130' INT TERM
+trap 'kill -TERM -- "-$zpid" 2>/dev/null || kill -TERM "$zpid" 2>/dev/null; exit 130' INT TERM HUP
 "$MAKE" --no-print-directory test-shell
 bats_rc=$?
 if kill -0 "$zpid" 2>/dev/null; then echo "→ shell suite done; waiting for the test-host sweep"; fi
 wait "$zpid"
 remote_rc=$?
-trap - INT TERM
+trap - INT TERM HUP
 
 verdict() { [ "$1" -eq 0 ] && echo passed || echo "FAILED (exit $1)"; }
 if [ "$remote_rc" -ne 0 ]; then

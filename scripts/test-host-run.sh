@@ -74,9 +74,12 @@ TREES_HOST="${HELIX_TEST_TREES_HOST:-helix-test/trees}"
 TREES="${HELIX_TEST_TREES:-/work/trees}"                 # TREES_HOST, in the container
 CCACHE="${HELIX_TEST_CCACHE:-/work/ccache}"              # in the container
 LOCK_DIR="${HELIX_TEST_LOCK_DIR:-/tmp}"                  # on the test host
-# Locks in LOCK_DIR: <prefix>-<checkout>.lock (--commit), <prefix>.tree-<tree>.lock
-# (a mirror) and <prefix>.global.lock (no jobpool); the kinds cannot collide.
+# Locks in LOCK_DIR: <prefix>.tree-<tree>.lock (a mirror) and <prefix>.global.lock
+# (no jobpool). --commit takes COMMIT_LOCK_PREFIX-<checkout>.lock instead, the
+# name zeus-run.sh (this script's former name, still in older worktrees) takes
+# for the same checkout: both reset it, so both must take one lock.
 LOCK_PREFIX=helix-test-host-run
+COMMIT_LOCK_PREFIX=helix-zeus-run
 MANIFEST=.helix-mirror-files                             # in each mirror: what the last sync sent
 RSYNC_PATH="sudo -n rsync"                               # the container writes mirrors as root
 # BatchMode: never a password prompt. The keepalives bound a link that dies
@@ -351,7 +354,7 @@ if [ "$MODE" = commit ]; then
     fi
     RUNDIR=$WORKDIR
     TREE=""
-    LOCK_FILE="$LOCK_PREFIX-$(basename "$WORKDIR").lock"
+    LOCK_FILE="$COMMIT_LOCK_PREFIX-$(basename "$WORKDIR").lock"
     LABEL=$SHORT
     PROVENANCE="$SHA (pushed)"
 else

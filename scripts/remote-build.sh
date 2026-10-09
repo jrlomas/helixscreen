@@ -104,14 +104,25 @@ TAR_BYTES=$(wc -c < "$WORK/untracked.tgz" | tr -d ' ')
 
 say "sending $((PATCH_BYTES / 1024)) KB patch + $((TAR_BYTES / 1024)) KB of $UNTRACKED_COUNT untracked file(s)"
 
+# The clone is resolved on the remote, where ~ means the remote user's home.
+# It is hard-reset and cleaned every run, so the script only ever touches a
+# directory it created itself, which carries MARKER; anything else is refused.
+MARKER=.helix-remote-build
+# shellcheck disable=SC2016  # expanded on the remote
+REMOTE_DIR_RESOLVE='DIR="'"$REMOTE_DIR"'"; case "$DIR" in "~") DIR=$HOME ;; "~/"*) DIR="$HOME/${DIR#\~/}" ;; esac'
+
 # One-time clone happens ON the remote, from GitHub — not over your link.
 ssh_ "$REMOTE_HOST" bash -se <<REMOTE_SETUP
 set -euo pipefail
-DIR="$REMOTE_DIR"
-if [ ! -d "\$DIR/.git" ]; then
+$REMOTE_DIR_RESOLVE
+if [ -e "\$DIR" ] && [ ! -e "\$DIR/$MARKER" ]; then
+    echo "✗ \$DIR exists but is not a clone this script made (no $MARKER): point --dir or REMOTE_BUILD_DIR at a scratch directory, or touch \$DIR/$MARKER if it is one" >&2
+    exit 1
+fi
+if [ ! -e "\$DIR" ]; then
     echo "→ first run: cloning on \$(hostname) from GitHub (not over your link)"
-    rm -rf "\$DIR"
     git clone --recurse-submodules "$ORIGIN_URL" "\$DIR"
+    touch "\$DIR/$MARKER"
 fi
 REMOTE_SETUP
 
@@ -123,7 +134,7 @@ scp -q "${SSH_OPTS[@]}" "$WORK/payload.tar" "$REMOTE_HOST:$PAYLOAD_REMOTE"
 
 ssh_ "$REMOTE_HOST" bash -se <<REMOTE_BUILD
 set -euo pipefail
-DIR="$REMOTE_DIR"
+$REMOTE_DIR_RESOLVE
 cd "\$DIR"
 
 TMP=\$(mktemp -d); trap 'rm -rf "\$TMP" "$PAYLOAD_REMOTE"' EXIT
@@ -138,7 +149,7 @@ git rev-parse --verify --quiet $BASE >/dev/null || {
 # modifications, and checkout refuses to discard those. This is a scratch clone
 # whose only content is what this script puts there.
 git reset --quiet --hard $BASE
-git clean -qfd -e build -e .ccache || true
+git clean -qfd -e build -e .ccache -e $MARKER || true
 
 while read -r path sha; do
     [ -n "\$path" ] || continue

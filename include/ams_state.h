@@ -1037,6 +1037,12 @@ class AmsState {
     lv_subject_t* get_clog_meter_label_right_subject() {
         return &clog_meter_label_right_;
     }
+    lv_subject_t* get_clog_meter_note_kind_subject() {
+        return &clog_meter_note_kind_;
+    }
+    lv_subject_t* get_clog_meter_note_text_subject() {
+        return &clog_meter_note_text_;
+    }
 
     /**
      * @brief The last minute of one buffer reading, for the trace beside a slider
@@ -2179,6 +2185,9 @@ class AmsState {
     char clog_meter_label_left_buf_[24]{};
     lv_subject_t clog_meter_label_right_{}; // Right endpoint label
     char clog_meter_label_right_buf_[24]{};
+    lv_subject_t clog_meter_note_kind_{}; // helix::ui::ClogNote; 0 hides the note line
+    lv_subject_t clog_meter_note_text_{};
+    char clog_meter_note_text_buf_[96]{}; // a firmware-supplied trip reason, or a translated phrase
 
     // Currently Loaded display subjects (reactive binding for "Currently Loaded" card)
     lv_subject_t current_material_text_{};
