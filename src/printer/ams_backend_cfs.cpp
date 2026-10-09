@@ -606,7 +606,7 @@ AmsBackendCfs::parse_stock_box_status(const nlohmann::json& box_json,
     //
     // Top-level box fields (auto_refill, filament, enable, filament_useup) are
     // documented as JSON ints, unlike the per-unit scalars further down, which are
-    // documented as strings (CREALITY_K2_SUPPORT.md § "Moonraker Object: box").
+    // documented as strings (CREALITY_CFS_K2_INTERNALS.md § "Moonraker Object: box").
     // safe_int is therefore belt-and-braces here rather than a known-shape fix:
     // .value("auto_refill", 0) still throws type_error.302 on a null or a string,
     // and that throw escapes parse_box_status and drops the entire box frame.
@@ -719,7 +719,7 @@ AmsBackendCfs::parse_stock_box_status(const nlohmann::json& box_json,
 
         const auto& unit_json = box_json[key];
         // safe_string, not .value(): the per-unit scalars below are documented as
-        // strings (CREALITY_K2_SUPPORT.md § "Per-Unit Fields"), but .value() with a
+        // strings (CREALITY_CFS_K2_INTERNALS.md § "Per-Unit Fields"), but .value() with a
         // string default THROWS type_error.302 on a JSON null or a numeric value,
         // and that throw escapes parse_box_status and drops the whole box frame.
         // safe_string returns the supplied default for null/wrong-type WITHOUT
@@ -776,7 +776,7 @@ AmsBackendCfs::parse_stock_box_status(const nlohmann::json& box_json,
         //
         // These four keys are array[4] on a connected unit, but a unit that drops
         // out reports the SCALAR sentinel "-1"/"None" for the very same keys
-        // (CREALITY_K2_SUPPORT.md § "Disconnected Units"; the sibling
+        // (CREALITY_CFS_K2_INTERNALS.md § "Disconnected Units"; the sibling
         // `filament_rack` object is documented with exactly that scalar form).
         // .value(key, json::array()) does not throw on a scalar — it round-trips
         // through get<json> and hands back the string — but a string json has
@@ -3004,7 +3004,7 @@ AmsError AmsBackendCfs::set_tool_mapping_impl(int tool_number, int slot_index) {
         // carrying the updated map ever arrives, which is why
         // reports_firmware_tool_mapping() stays false here. The optimistic local
         // update above is therefore the only confirmation the UI will get.
-        // See docs/devel/CREALITY_CFS_INTERNALS.md § Tool remap.
+        // See docs/devel/printer-research/CREALITY_CFS_K1_INTERNALS.md § Tool remap.
         spdlog::debug("[AMS CFS] K1 firmware: BOX_MODIFY_TN persists silently and applies to "
                       "the slicer's T0-T15 changes; no confirming box frame will follow.");
     }

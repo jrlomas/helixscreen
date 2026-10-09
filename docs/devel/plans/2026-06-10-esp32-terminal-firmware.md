@@ -1,13 +1,7 @@
 # ESP32-S3 Terminal Firmware (helix-terminal) Implementation Plan — Phase 1c
 
-> 🚧 **Work in flight (as of 2026-08-09) - coordinate before executing.**
->
-> Unchecked boxes here do NOT mean "not started". The ESP-IDF sources and build output live
-> in `firmware/` at the repo root, which is deliberately untracked, and the active work is on
-> the `esp32/port-4-app` branch. A grep of the tracked tree finds none of the symbols this
-> plan prescribes (`board.h`, `ota.h`, `provisioning.h`) and will wrongly suggest nothing has
-> happened. Check the branch and `firmware/` before concluding anything, and ask before
-> picking up a task.
+> **Deferred, not started.** The native ESP32 port (`firmware/helixscreen-esp32/`) took the
+> K-Touch instead; nothing in the tree implements this plan and no branch carries it.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >

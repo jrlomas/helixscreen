@@ -28,9 +28,9 @@ Both axes are decided **from the payload, never from `PrinterDetector`** — a c
 
 The command dialect is selected by the explicit `api_version == 1` field rather than inferred from the `Flat` status layout, so another firmware can use the same layout without inheriting this one's commands. It also cannot be detected with `has_macro("BOX_LOAD")`: the Fork commands are registered in Python, so they are not gcode_macros and never appear in `printer.objects.list`.
 
-A `Flat` box whose module we cannot identify still has its control paths refused by `reject_if_flat_schema()`. Full field mapping, command signatures and remaining gaps: `printers/CREALITY_K2_SUPPORT.md` § "Community Kalico port".
+A `Flat` box whose module we cannot identify still has its control paths refused by `reject_if_flat_schema()`. Full field mapping, command signatures and remaining gaps: `printer-research/CREALITY_CFS_K2_INTERNALS.md` § "Community Kalico port".
 
-[`Jacob10383/kalico`](https://github.com/Jacob10383/kalico) is the Kalico (Danger-Klipper) fork the port builds on — it is the firmware *base*, and it does **not** contain the CFS modules. box.py and its siblings are dropped in by the port's installer and are not committed to any public repo, so the repo link is context rather than a source for the command surface. To read the modules themselves, fetch them from the port's content-addressed firmware store: `printers/CREALITY_K2_SUPPORT.md` § "Getting the module source".
+[`Jacob10383/kalico`](https://github.com/Jacob10383/kalico) is the Kalico (Danger-Klipper) fork the port builds on — it is the firmware *base*, and it does **not** contain the CFS modules. box.py and its siblings are dropped in by the port's installer and are not committed to any public repo, so the repo link is context rather than a source for the command surface. To read the modules themselves, fetch them from the port's content-addressed firmware store: `printer-research/CREALITY_CFS_K2_INTERNALS.md` § "Getting the module source".
 
 ### Firmware requirements
 
@@ -108,7 +108,7 @@ present on both families and are now emitted on both.
 > `BOX_EXTRUDE_MATERIAL TNN=<physical>` directly, bypassing the mapping layer, so a remap we
 > write can never take effect. Whether K2's module behaves the same way is unverified — our
 > K2 remap may be inert for the same reason. Mechanism and options:
-> [CREALITY_CFS_INTERNALS.md § Tool remap](CREALITY_CFS_INTERNALS.md#tool-remap-box_modify_tn).
+> [CREALITY_CFS_K1_INTERNALS.md § Tool remap](printer-research/CREALITY_CFS_K1_INTERNALS.md#tool-remap-box_modify_tn).
 
 ### Implementation
 
@@ -223,7 +223,7 @@ persisted flag re-clears idempotently on the next boot).
 ### Known limitations on K1
 
 Full mechanism for each of these, with sources and evidence tiers:
-**[CREALITY_CFS_INTERNALS.md](CREALITY_CFS_INTERNALS.md)**.
+**[CREALITY_CFS_K1_INTERNALS.md](printer-research/CREALITY_CFS_K1_INTERNALS.md)**.
 
 The full `BOX_*` command surface has since been read directly out of the shipped extension in
 `CR4CU220812S11_ota_img_V2.3.5.34`, so the items below rest on the artifact rather than on
@@ -243,7 +243,7 @@ inference.
   whole sequence could return success while nothing moved. `finish_action()` now checks the
   toolhead filament switch against the operation's latched intent and raises a fault through
   `current_error()` when they disagree. Applies to every dialect — it reads physical state, not
-  macros. See [CREALITY_CFS_INTERNALS.md](CREALITY_CFS_INTERNALS.md#failures-are-deferred-not-raised--fixed-host-side-verification).
+  macros. See [CREALITY_CFS_K1_INTERNALS.md](printer-research/CREALITY_CFS_K1_INTERNALS.md#failures-are-deferred-not-raised--fixed-host-side-verification).
 
 **Still open:**
 
