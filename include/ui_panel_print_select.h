@@ -681,6 +681,8 @@ class PrintSelectPanel : public PanelBase {
 
     lv_subject_t selected_detail_thumbnail_subject_{}; ///< Full-res PNG for detail view
     char selected_detail_thumbnail_buffer_[256];
+    /// 1 when the detail view has an image to show, 0 for the placeholder glyph.
+    lv_subject_t selected_has_thumbnail_subject_{};
 
     lv_subject_t selected_print_time_subject_{};
     char selected_print_time_buffer_[32];
@@ -898,6 +900,11 @@ class PrintSelectPanel : public PanelBase {
     void release_esp_card_thumbnails();
     /// Cancels @p f's fetch, if one is queued or downloading.
     static void cancel_esp_fetch(PrintFileData& f);
+    /// The selected file's card thumbnail, held while the detail view shows it.
+    std::shared_ptr<helix::ui::EspPsramThumbnail> esp_detail_thumbnail_;
+    /// Shows @p filename's decoded card thumbnail in the detail view, which
+    /// scales it to fit; false when its card holds none.
+    bool show_esp_detail_thumbnail(const char* filename);
 #endif
 
     /// Navigation generation counter: incremented on each directory change.

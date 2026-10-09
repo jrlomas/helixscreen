@@ -256,6 +256,7 @@ void PrintSelectPanel::init_subjects() {
     // overlay creation doesn't hit LVGL's empty-buffer warning path (#990).
     lv_subject_set_pointer(&selected_detail_thumbnail_subject_,
                            thumbnail_subject_value(selected_detail_thumbnail_buffer_));
+    UI_MANAGED_SUBJECT_INT(selected_has_thumbnail_subject_, 0, "selected_has_thumbnail", subjects_);
 
     UI_MANAGED_SUBJECT_STRING(selected_print_time_subject_, selected_print_time_buffer_, "",
                               "selected_print_time", subjects_);
@@ -2023,7 +2024,6 @@ void PrintSelectPanel::set_selected_file(const char* filename, const char* thumb
                                          const char* filament_weight, const char* layer_count,
                                          const char* print_height, time_t modified_timestamp,
                                          const char* layer_height, const char* filament_type) {
-    // The thumbnail toggles below act on the detail view's widgets.
     create_detail_view();
     lv_subject_copy_string(&selected_filename_subject_, filename);
 
@@ -2076,43 +2076,21 @@ void PrintSelectPanel::set_selected_file(const char* filename, const char* thumb
             sizeof(selected_detail_thumbnail_buffer_) - 1);
     selected_detail_thumbnail_buffer_[sizeof(selected_detail_thumbnail_buffer_) - 1] = '\0';
     // Publish nullptr for the no-thumbnail sentinel: an empty buffer is misread by
-    // LVGL as a VARIABLE image source and warns/fails to decode (#990). The
-    // has_real block below handles the placeholder-icon/gradient UI toggle.
+    // LVGL as a VARIABLE image source and warns/fails to decode (#990).
     lv_subject_set_pointer(&selected_detail_thumbnail_subject_,
                            thumbnail_subject_value(selected_detail_thumbnail_buffer_));
-
-    // Toggle thumbnail image, no-thumbnail placeholder icon, and gradient background in detail view
-    if (detail_view_ && detail_view_->get_widget()) {
-        lv_obj_t* thumb_img = lv_obj_find_by_name(detail_view_->get_widget(), "detail_thumbnail");
-        lv_obj_t* no_thumb =
-            lv_obj_find_by_name(detail_view_->get_widget(), "detail_no_thumbnail_icon");
-        lv_obj_t* gradient = lv_obj_find_by_name(detail_view_->get_widget(), "gradient_bg");
-        bool has_real = thumbnail_src && thumbnail_src[0] != '\0' &&
-                        !helix::ui::PrintSelectCardView::is_placeholder_thumbnail(thumbnail_src);
-        if (has_real) {
-            if (thumb_img)
-                lv_obj_remove_flag(thumb_img, LV_OBJ_FLAG_HIDDEN);
-            if (no_thumb)
-                lv_obj_add_flag(no_thumb, LV_OBJ_FLAG_HIDDEN);
-            if (gradient)
-                lv_obj_set_style_image_opa(gradient, LV_OPA_COVER, 0);
-        } else {
-            // Hide the lv_image so nothing renders behind the cube icon,
-            // and clear the buffer so LVGL doesn't hold a stale src reference.
-            if (thumb_img)
-                lv_obj_add_flag(thumb_img, LV_OBJ_FLAG_HIDDEN);
-            if (no_thumb)
-                lv_obj_remove_flag(no_thumb, LV_OBJ_FLAG_HIDDEN);
-            // Notify with nullptr, not the buffer: lv_image_src_get_type
-            // classifies a buffer whose byte[0]<0x20 as LV_IMAGE_SRC_VARIABLE,
-            // and decoders then read the leftover bytes past the cleared first
-            // byte as if they were lv_image_dsc_t fields (SEGV in is_jpg).
-            selected_detail_thumbnail_buffer_[0] = '\0';
-            lv_subject_set_pointer(&selected_detail_thumbnail_subject_, nullptr);
-            if (gradient)
-                lv_obj_set_style_image_opa(gradient, LV_OPA_TRANSP, 0);
-        }
+    bool has_image = !detail_src.empty();
+#if defined(HELIX_PLATFORM_ESP32)
+    // No disk cache here: the card's decoded image is the only one there is.
+    has_image = has_image || show_esp_detail_thumbnail(filename);
+    if (!has_image) {
+        esp_detail_thumbnail_.reset(); // the subject was cleared above
     }
+#endif
+    // The placeholder glyph and the gradient behind the image bind to this in
+    // print_file_detail.xml, so a detail view rebuilt after it was freed on close
+    // shows the same thing as one that was already up.
+    lv_subject_set_int(&selected_has_thumbnail_subject_, has_image ? 1 : 0);
 
     lv_subject_copy_string(&selected_print_time_subject_, print_time);
     lv_subject_copy_string(&selected_filament_weight_subject_, filament_weight);
@@ -3792,6 +3770,14 @@ PrintSelectPanel::fetch_esp_thumbnail(size_t index, const std::string& filename,
                               if (card_view_) {
                                   card_view_->update_thumbnail(index, file_list_[index]);
                               }
+                              // A detail view opened before its card's image
+                              // arrived shows it now.
+                              if (detail_view_open_ &&
+                                  lv_subject_get_int(&selected_has_thumbnail_subject_) == 0 &&
+                                  filename == selected_filename_buffer_ &&
+                                  show_esp_detail_thumbnail(filename.c_str())) {
+                                  lv_subject_set_int(&selected_has_thumbnail_subject_, 1);
+                              }
                           }
                           sync_esp_thumbnails(esp_window_first_, esp_window_end_);
                       });
@@ -3847,7 +3833,26 @@ void PrintSelectPanel::cancel_esp_fetch(PrintFileData& f) {
     }
 }
 
+bool PrintSelectPanel::show_esp_detail_thumbnail(const char* filename) {
+    for (const PrintFileData& f : file_list_) {
+        if (f.esp_thumbnail && f.filename == filename) {
+            // Published before the old one is let go, so the image never
+            // points at a freed buffer.
+            lv_subject_set_pointer(&selected_detail_thumbnail_subject_,
+                                   const_cast<lv_image_dsc_t*>(f.esp_thumbnail->dsc()));
+            esp_detail_thumbnail_ = f.esp_thumbnail;
+            return true;
+        }
+    }
+    return false;
+}
+
 void PrintSelectPanel::release_esp_card_thumbnails() {
+    if (esp_detail_thumbnail_) {
+        lv_subject_set_pointer(&selected_detail_thumbnail_subject_, nullptr);
+        lv_subject_set_int(&selected_has_thumbnail_subject_, 0);
+        esp_detail_thumbnail_.reset();
+    }
     esp_window_first_ = 0;
     esp_window_end_ = 0;
     for (PrintFileData& f : file_list_) {
