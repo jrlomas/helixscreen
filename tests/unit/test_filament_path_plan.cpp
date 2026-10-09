@@ -318,8 +318,9 @@ TEST_CASE("FilamentPath plan: span_style", "[filament-path][plan]") {
     CHECK(s.wall == TubeWall::Error);
     CHECK_FALSE(s.filled);
 
+    // The error marks whichever lane it is given; lane_error() decides which.
     s = ss(PathSegment::OUTPUT, PathSegment::NOZZLE, false, PathSegment::OUTPUT);
-    CHECK(s.wall == TubeWall::Plain);
+    CHECK(s.wall == TubeWall::Error);
     CHECK(s.filled);
 }
 
@@ -654,8 +655,10 @@ TEST_CASE("FilamentPath plan: sixteen HUB lanes fit the segment and band budgets
           "[filament-path][plan]") {
     auto d = make_data(helix::PathTopology::HUB);
     d->slot_count = 16;
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < 16; i++) {
         d->slot_has_prep_sensor[i] = true;
+        d->slot_has_load_sensor[i] = true;
+    }
     d->buffer_present = true;
     load_active(*d, 1, PathSegment::NOZZLE);
     BaseGeometry g;
