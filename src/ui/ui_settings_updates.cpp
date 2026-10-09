@@ -20,6 +20,8 @@
 #include <spdlog/spdlog.h>
 
 #ifdef __ANDROID__
+#include "system/android_update_source.h"
+
 #include <SDL.h>
 #endif
 
@@ -129,15 +131,20 @@ void UpdatesSettingsOverlay::on_activate() {
 
 void UpdatesSettingsOverlay::show_update_download_modal(bool start_immediately) {
 #ifdef __ANDROID__
-    // On Android, we never download/install tarballs — Play Store is the update
-    // channel. Route all install intents (Install Update row and the in-app
-    // "New Version Available" notification) to the store listing.
+    // Android never runs the tarball updater. Every install intent (the Install
+    // Update row and the "New Version Available" notification) opens wherever this
+    // APK came from: the Play listing for a Play install, the GitHub release for a
+    // sideload.
     if (helix::is_android_platform()) {
-        spdlog::info("[UpdatesSettings] Opening Play Store for update");
-        int result = SDL_OpenURL("market://details?id=org.helixscreen.app");
-        if (result != 0) {
-            spdlog::warn("[UpdatesSettings] market:// failed, trying web URL: {}", SDL_GetError());
-            SDL_OpenURL("https://play.google.com/store/apps/details?id=org.helixscreen.app");
+        const std::string installer = helix::android::installer_package();
+        auto info = UpdateChecker::instance().get_cached_update();
+        const std::string url = helix::android::update_url(installer, info ? info->version : "");
+        spdlog::info("[UpdatesSettings] Installer '{}', opening {}", installer, url);
+        if (SDL_OpenURL(url.c_str()) != 0) {
+            spdlog::warn("[UpdatesSettings] Opening {} failed: {}", url, SDL_GetError());
+            if (url == helix::android::kPlayStoreMarketUrl) {
+                SDL_OpenURL(helix::android::kPlayStoreWebUrl);
+            }
         }
         (void)start_immediately;
         return;
