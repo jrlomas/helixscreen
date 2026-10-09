@@ -157,6 +157,30 @@ MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_openams_line(const s
         openams_fault_active_ = false;
         return 0;
     }
+    if (cmd == "OAMS_DRYER_START" || cmd == "OAMS_DRYER_STOP") {
+        auto field = [&gcode](const char* key) -> std::optional<double> {
+            const size_t pos = gcode.find(key);
+            if (pos == std::string::npos) {
+                return std::nullopt;
+            }
+            return std::atof(gcode.c_str() + pos + std::strlen(key));
+        };
+        const auto idx = field("OAMS=");
+        if (!openams_shared_lane_units() || !idx || (*idx != 1 && *idx != 2)) {
+            return std::nullopt;
+        }
+        OpenAmsDryerSim& sim = openams_dryers_[static_cast<int>(*idx) - 1];
+        if (cmd == "OAMS_DRYER_STOP") {
+            sim.target_c = 0.0;
+            sim.remaining_s = 0.0;
+            return 0;
+        }
+        // Clamped to the unit's range and to 1 s .. 7 days, as the plugin does.
+        const double max_c = *idx == 1 ? 80.0 : 65.0;
+        sim.target_c = std::clamp(field("TARGET=").value_or(45.0), 45.0, max_c);
+        sim.remaining_s = std::clamp(field("DURATION=").value_or(3600.0), 1.0, 604800.0);
+        return 0;
+    }
     if (cmd == "OPENAMS_UNLOAD" || cmd == "OAMSM_UNLOAD_FROM_TOOLHEAD") {
         openams_loaded_slot_ = -1;
         return 0;

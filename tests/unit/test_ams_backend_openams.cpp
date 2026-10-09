@@ -1262,3 +1262,180 @@ TEST_CASE_METHOD(HelixTestFixture, "OpenAMS shows no fault and resets as before 
     REQUIRE(backend.reset().success());
     CHECK(backend.commands == std::vector<std::string>{"OAMSM_CLEAR_ERRORS"});
 }
+
+// ============================================================================
+// Environment and dryer
+// ============================================================================
+
+namespace {
+
+json dryer_device(bool ht, const std::string& state = "off", double target = 0.0,
+                  int remaining_s = 0, bool offer = true) {
+    json actions = json::array({"load", "unload"});
+    if (offer) {
+        actions.push_back("dryer_start");
+        actions.push_back("dryer_stop");
+    }
+    return json{
+        {"capabilities",
+         {{"dryer", true},
+          {"dryer_target_min_c", 45.0},
+          {"dryer_target_max_c", ht ? 80.0 : 65.0},
+          {"dryer_requires_unloaded", !ht}}},
+        {"environment", {{"temp_c", ht ? 26.1 : 28.2}, {"rh_pct", ht ? 29.0 : 31.0}}},
+        {"dryer",
+         {{"state", state}, {"target_c", target}, {"remaining_s", remaining_s}, {"fan_pct", 60.0}}},
+        {"telemetry", {{"dryer", {{"chamber_c", 51.5}}}}},
+        {"supported_actions", actions}};
+}
+
+json dryer_manager(int loaded = -1, json ht = dryer_device(true), json ams2 = dryer_device(false)) {
+    json m = shared_manager(loaded, toolhead_commands(), true);
+    m["devices"] = {{"ams_ht", std::move(ht)}, {"ams2", std::move(ams2)}};
+    return m;
+}
+
+} // namespace
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS reads each unit's own temperature and humidity",
+                 "[ams][openams][environment]") {
+    OpenAmsHarness backend;
+    backend.feed(dryer_manager());
+
+    CHECK(backend.traits().has_environment_sensors);
+    const auto info = backend.get_system_info();
+    const auto ht = info.units[0].environment;
+    const auto pro = info.units[1].environment;
+    REQUIRE(ht.has_value());
+    REQUIRE(pro.has_value());
+    CHECK(ht->temperature_c == Catch::Approx(26.1f));
+    CHECK(ht->humidity_pct == Catch::Approx(29.0f));
+    CHECK(ht->has_humidity);
+    CHECK(pro->temperature_c == Catch::Approx(28.2f));
+    CHECK(pro->humidity_pct == Catch::Approx(31.0f));
+
+    SECTION("a reading without humidity says so") {
+        json ams2 = dryer_device(false);
+        ams2["environment"] = {{"temp_c", 30.0}};
+        backend.feed(dryer_manager(-1, dryer_device(true), ams2));
+        CHECK_FALSE(backend.get_system_info().units[1].environment->has_humidity);
+    }
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS publishes no environment or dryer without devices",
+                 "[ams][openams][environment][dryer]") {
+    // klipper_openams publishes no `devices`.
+    OpenAmsHarness backend;
+    backend.feed(shared_manager(-1, all_commands(), false));
+
+    CHECK_FALSE(backend.get_dryer_info(0).supported);
+    CHECK_FALSE(backend.traits().has_environment_sensors);
+    CHECK_FALSE(backend.get_system_info().units[0].environment.has_value());
+    CHECK_FALSE(backend.start_drying(55.0f, 60, -1, 0).success());
+    CHECK_FALSE(backend.stop_drying(0).success());
+    CHECK(backend.commands.empty());
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS offers a dryer only where the unit advertises it",
+                 "[ams][openams][dryer]") {
+    OpenAmsHarness backend;
+    backend.feed(dryer_manager());
+
+    const DryerInfo ht = backend.get_dryer_info(0);
+    CHECK(ht.supported);
+    CHECK(ht.min_temp_c == Catch::Approx(45.0f));
+    CHECK(ht.max_temp_c == Catch::Approx(80.0f));
+    CHECK(backend.get_dryer_info(1).max_temp_c == Catch::Approx(65.0f));
+    CHECK(ht.max_duration_min == 10080);
+
+    SECTION("no dryer_stop action withholds the dryer") {
+        json no_stop = dryer_device(true);
+        no_stop["supported_actions"] = json::array({"dryer_start"});
+        backend.feed(dryer_manager(-1, no_stop));
+        CHECK_FALSE(backend.get_dryer_info(0).supported);
+        CHECK(backend.get_dryer_info(1).supported);
+        CHECK_FALSE(backend.start_drying(55.0f, 60, -1, 0).success());
+    }
+    SECTION("no dryer capability withholds the dryer") {
+        json none = dryer_device(true);
+        none["capabilities"]["dryer"] = false;
+        backend.feed(dryer_manager(-1, none));
+        CHECK_FALSE(backend.get_dryer_info(0).supported);
+    }
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS maps the unit's dryer state", "[ams][openams][dryer]") {
+    OpenAmsHarness backend;
+    backend.feed(dryer_manager());
+    CHECK_FALSE(backend.get_dryer_info(0).active);
+    CHECK(backend.get_dryer_info(0).target_temp_c == Catch::Approx(0.0f));
+
+    backend.feed(dryer_manager(-1, dryer_device(true, "heating", 60.0, 5400)));
+    DryerInfo dry = backend.get_dryer_info(0);
+    CHECK(dry.active);
+    CHECK(dry.target_temp_c == Catch::Approx(60.0f));
+    CHECK(dry.remaining_min == 90);
+    CHECK(dry.current_temp_c == Catch::Approx(51.5f));
+    CHECK(dry.fan_pct == 60);
+    CHECK_FALSE(backend.get_dryer_info(1).active);
+
+    backend.feed(dryer_manager(-1, dryer_device(true, "holding", 60.0, 61)));
+    CHECK(backend.get_dryer_info(0).active);
+    CHECK(backend.get_dryer_info(0).remaining_min == 2);
+
+    backend.feed(dryer_manager(-1, dryer_device(true, "fault", 60.0, 100)));
+    CHECK_FALSE(backend.get_dryer_info(0).active);
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS starts and stops a unit's dryer, clamped to its range",
+                 "[ams][openams][dryer]") {
+    OpenAmsHarness backend;
+    backend.feed(dryer_manager());
+
+    REQUIRE(backend.start_drying(55.0f, 120, -1, 0).success());
+    CHECK(backend.commands.back() == "OAMS_DRYER_START OAMS=1 TARGET=55 DURATION=7200");
+
+    SECTION("the AMS 2 Pro addresses its own index and ceiling") {
+        REQUIRE(backend.start_drying(70.0f, 30, -1, 1).success());
+        CHECK(backend.commands.back() == "OAMS_DRYER_START OAMS=2 TARGET=65 DURATION=1800");
+    }
+    SECTION("a target below the floor rises to it") {
+        REQUIRE(backend.start_drying(30.0f, 60, -1, 0).success());
+        CHECK(backend.commands.back() == "OAMS_DRYER_START OAMS=1 TARGET=45 DURATION=3600");
+    }
+    SECTION("a duration is held to 1 s .. 7 days") {
+        REQUIRE(backend.start_drying(55.0f, 999999, -1, 0).success());
+        CHECK(backend.commands.back() == "OAMS_DRYER_START OAMS=1 TARGET=55 DURATION=604800");
+        REQUIRE(backend.start_drying(55.0f, 0, -1, 0).success());
+        CHECK(backend.commands.back() == "OAMS_DRYER_START OAMS=1 TARGET=55 DURATION=60");
+    }
+    SECTION("stop names the unit") {
+        REQUIRE(backend.stop_drying(1).success());
+        CHECK(backend.commands.back() == "OAMS_DRYER_STOP OAMS=2");
+    }
+    SECTION("an unknown unit is refused") {
+        const auto before = backend.commands.size();
+        CHECK_FALSE(backend.start_drying(55.0f, 60, -1, 7).success());
+        CHECK_FALSE(backend.stop_drying(-1).success());
+        CHECK(backend.commands.size() == before);
+    }
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS refuses to dry a unit that must be unloaded first",
+                 "[ams][openams][dryer]") {
+    OpenAmsHarness backend;
+    // Slot 2 belongs to the AMS 2 Pro; the AMS HT dryer has no such condition.
+    backend.feed(dryer_manager(2));
+
+    const auto refused = backend.start_drying(55.0f, 60, -1, 1);
+    CHECK_FALSE(refused.success());
+    CHECK(refused.result == AmsResult::WRONG_STATE);
+    CHECK(backend.commands.empty());
+
+    REQUIRE(backend.start_drying(55.0f, 60, -1, 0).success());
+    CHECK(backend.commands.size() == 1);
+
+    backend.feed(dryer_manager(-1));
+    REQUIRE(backend.start_drying(55.0f, 60, -1, 1).success());
+    CHECK(backend.commands.back() == "OAMS_DRYER_START OAMS=2 TARGET=55 DURATION=3600");
+}

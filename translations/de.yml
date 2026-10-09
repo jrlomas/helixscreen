@@ -3457,6 +3457,7 @@ translations:
   ? This device has very little RAM. Resonance calibration is memory-intensive and may cause a "Timer Too Close" error. Continue anyway?
   : Dieses Gerät hat sehr wenig RAM. Die Resonanzkalibrierung ist speicherintensiv und kann einen "Timer Too Close"-Fehler verursachen. Trotzdem fortfahren?
   This doesn't match the linked Spoolman spool. Add it as a new spool, or update the linked one to match?: Dies passt nicht zur verknüpften Spoolman-Spule. Als neue Spule hinzufügen oder die verknüpfte entsprechend aktualisieren?
+  This dryer cannot run while filament from the unit is loaded: 'Der Trockner kann nicht laufen, solange Filament aus der Einheit geladen ist'
   This feature requires different hardware or configuration: Diese Funktion erfordert andere Hardware oder Konfiguration
   This filament system does not report buffer or flow data.: Dieses Filamentsystem meldet keine Puffer- oder Flussdaten.
   This file was sliced for {} but {} is loaded.: Diese Datei wurde für {} gesliced,
@@ -3668,6 +3669,7 @@ translations:
   Unload from toolhead first: 'Entladen Sie zuerst aus dem Werkzeugkopf'
   Unload macro not configured: Entlade-Makro nicht konfiguriert
   Unload the CFS filament before enabling bypass: 'Entladen Sie das CFS-Filament, bevor Sie den Bypass aktivieren'
+  Unload this unit first: 'Entladen Sie zuerst diese Einheit'
   Unload...: Entladen...
   Unloaded: 'Entladen'
   Unloading: Entladen

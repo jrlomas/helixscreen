@@ -64,6 +64,35 @@ int int_member(const json& object, const char* key, int fallback) {
     return it != object.end() && it->is_number_integer() ? it->get<int>() : fallback;
 }
 
+std::optional<double> number_member(const json& object, const char* key) {
+    auto it = object.find(key);
+    if (it == object.end() || !it->is_number()) {
+        return std::nullopt;
+    }
+    return it->get<double>();
+}
+
+bool advertises_action(const json& device, const char* action) {
+    for (const auto& entry : array_member(device, "supported_actions")) {
+        if (entry.is_string() && entry.get<std::string>() == action) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The dryer states in which a cycle is under way. Anything the unit does not
+/// name as idle or failed counts as running, so a state a newer firmware adds
+/// still shows the cycle and offers Stop.
+bool dryer_state_is_running(const std::string& state) {
+    const std::string token = ams_normalize_state_token(state);
+    return !token.empty() && token != "off" && token != "idle" && token != "fault" &&
+           token != "none";
+}
+
+/// OAMS_DRYER_START takes its duration in whole seconds, 1 s to 7 days.
+constexpr int kMaxDryerSeconds = 604800;
+
 /// A command name is sent verbatim, so it must be one G-code word.
 bool command_name_is_safe(const std::string& command) {
     return !command.empty() && std::all_of(command.begin(), command.end(), [](unsigned char ch) {
@@ -244,6 +273,9 @@ void AmsBackendOpenAms::present_nothing_locked() {
     lane_loaded_slots_.clear();
     slot_lanes_.clear();
     unit_faults_.clear();
+    unit_dryers_.clear();
+    has_unit_climate_ = false;
+    requested_dry_min_.clear();
     unit_oams_idx_.clear();
     present_by_slot_id_.clear();
     remote_slot_ids_.clear();
@@ -470,6 +502,84 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
             }
         }
     }
+
+    // Environment and dryer, per unit (openams only, like the faults above).
+    std::vector<UnitDryer> next_dryers(next.units.size());
+    if (const json* devices = object_member(snapshot_, "devices")) {
+        for (std::size_t u = 0; u < next.units.size(); ++u) {
+            const json* device = object_member(*devices, next.units[u].display_name.c_str());
+            if (!device) {
+                continue;
+            }
+            UnitDryer& dryer = next_dryers[u];
+            if (const json* env = object_member(*device, "environment")) {
+                const auto temp = number_member(*env, "temp_c");
+                const auto humidity = number_member(*env, "rh_pct");
+                if (temp || humidity) {
+                    EnvironmentData reading;
+                    reading.temperature_c = temp ? static_cast<float>(*temp) : 0.0f;
+                    reading.humidity_pct = humidity ? static_cast<float>(*humidity) : 0.0f;
+                    reading.has_humidity = humidity.has_value();
+                    dryer.environment = reading;
+                    next.units[u].environment = reading;
+                }
+            }
+
+            const json* capabilities = object_member(*device, "capabilities");
+            dryer.offered = capabilities && bool_member(*capabilities, "dryer", false) &&
+                            advertises_action(*device, "dryer_start") &&
+                            advertises_action(*device, "dryer_stop");
+            if (!dryer.offered) {
+                continue;
+            }
+            dryer.requires_unloaded = bool_member(*capabilities, "dryer_requires_unloaded", false);
+            DryerInfo& info = dryer.info;
+            info.supported = true;
+            info.supports_fan_control = false;
+            info.min_temp_c = static_cast<float>(
+                number_member(*capabilities, "dryer_target_min_c").value_or(info.min_temp_c));
+            info.max_temp_c = static_cast<float>(
+                number_member(*capabilities, "dryer_target_max_c").value_or(info.max_temp_c));
+            info.max_duration_min = kMaxDryerSeconds / 60;
+            if (const json* state = object_member(*device, "dryer")) {
+                info.active = dryer_state_is_running(string_member(*state, "state"));
+                info.target_temp_c =
+                    info.active
+                        ? static_cast<float>(number_member(*state, "target_c").value_or(0.0))
+                        : 0.0f;
+                info.remaining_min =
+                    info.active
+                        ? static_cast<int>(
+                              (number_member(*state, "remaining_s").value_or(0.0) + 59.0) / 60.0)
+                        : 0;
+                info.fan_pct = static_cast<int>(number_member(*state, "fan_pct").value_or(0.0));
+            }
+            // The chamber probe is the reading that matters for a cycle; fall back to
+            // the unit's environment sensor when the dryer telemetry has none.
+            if (dryer.environment) {
+                info.current_temp_c = dryer.environment->temperature_c;
+            }
+            if (const json* telemetry = object_member(*device, "telemetry")) {
+                if (const json* td = object_member(*telemetry, "dryer")) {
+                    if (const auto chamber = number_member(*td, "chamber_c")) {
+                        info.current_temp_c = static_cast<float>(*chamber);
+                    }
+                }
+            }
+            const auto requested = requested_dry_min_.find(static_cast<int>(u));
+            if (info.active) {
+                info.duration_min =
+                    std::max(info.remaining_min,
+                             requested != requested_dry_min_.end() ? requested->second : 0);
+            }
+        }
+    }
+    for (auto it = requested_dry_min_.begin(); it != requested_dry_min_.end();) {
+        const auto u = static_cast<std::size_t>(it->first);
+        it = (u < next_dryers.size() && next_dryers[u].info.active) ? std::next(it)
+                                                                    : requested_dry_min_.erase(it);
+    }
+
     bool any_fault = false;
     for (std::size_t u = 0; u < next.units.size(); ++u) {
         AmsUnit& unit = next.units[u];
@@ -506,6 +616,9 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
     slot_groups_ = std::move(next_slot_groups);
     slot_lanes_ = std::move(next_slot_lanes);
     unit_faults_ = std::move(next_faults);
+    unit_dryers_ = std::move(next_dryers);
+    has_unit_climate_ = std::any_of(unit_dryers_.begin(), unit_dryers_.end(),
+                                    [](const UnitDryer& d) { return d.environment || d.offered; });
     unit_oams_idx_ = std::move(next_unit_idx);
     groups_ = std::move(next_groups);
     commands_ = std::move(next_commands);
@@ -1105,6 +1218,64 @@ AmsError AmsBackendOpenAms::clear_fault(int slot_index) {
 // ============================================================================
 // Slot identity
 // ============================================================================
+
+// ============================================================================
+// Dryer
+// ============================================================================
+
+DryerInfo AmsBackendOpenAms::get_dryer_info(int unit) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (unit < 0 || static_cast<std::size_t>(unit) >= unit_dryers_.size() ||
+        !unit_dryers_[static_cast<std::size_t>(unit)].offered) {
+        return DryerInfo{.supported = false};
+    }
+    return unit_dryers_[static_cast<std::size_t>(unit)].info;
+}
+
+AmsError AmsBackendOpenAms::start_drying(float temp_c, int duration_min, int fan_pct, int unit) {
+    (void)fan_pct;
+    std::string gcode;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto u = static_cast<std::size_t>(unit);
+        if (unit < 0 || u >= unit_dryers_.size() || !unit_dryers_[u].offered ||
+            unit_oams_idx_.size() <= u || unit_oams_idx_[u] < 0) {
+            return AmsErrorHelper::not_supported("Dryer");
+        }
+        const UnitDryer& dryer = unit_dryers_[u];
+        if (dryer.requires_unloaded && u < system_info_.units.size()) {
+            for (const SlotInfo& slot : system_info_.units[u].slots) {
+                if (slot.status == SlotStatus::LOADED) {
+                    return AmsError(
+                        AmsResult::WRONG_STATE, "Dryer needs every bay of this unit unloaded",
+                        lv_tr("Unload this unit first"),
+                        lv_tr("This dryer cannot run while filament from the unit is loaded"));
+                }
+            }
+        }
+        const float target = dryer.info.clamp_temp(temp_c);
+        const int seconds = std::clamp(duration_min, 1, kMaxDryerSeconds / 60) * 60;
+        gcode = fmt::format("OAMS_DRYER_START OAMS={} TARGET={:g} DURATION={}", unit_oams_idx_[u],
+                            target, seconds);
+        requested_dry_min_[unit] = seconds / 60;
+    }
+    return execute_gcode(gcode);
+}
+
+AmsError AmsBackendOpenAms::stop_drying(int unit) {
+    std::string gcode;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto u = static_cast<std::size_t>(unit);
+        if (unit < 0 || u >= unit_dryers_.size() || !unit_dryers_[u].offered ||
+            unit_oams_idx_.size() <= u || unit_oams_idx_[u] < 0) {
+            return AmsErrorHelper::not_supported("Dryer");
+        }
+        gcode = fmt::format("OAMS_DRYER_STOP OAMS={}", unit_oams_idx_[u]);
+        requested_dry_min_.erase(unit);
+    }
+    return execute_gcode(gcode);
+}
 
 AmsError AmsBackendOpenAms::apply_user_edit(int slot_index, const SlotInfo& info,
                                             const helix::ams::Observation& declared) {

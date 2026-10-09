@@ -1732,6 +1732,11 @@ nlohmann::json MoonrakerClientMock::openams_shared_status_json() const {
         } else {
             status["devices"] = {{"ams_ht", {{"faults", nlohmann::json::array()}}}};
         }
+        status["devices"]["ams_ht"].update(openams_device_json(0));
+        status["devices"]["ams2"] = openams_device_json(1);
+        if (!status["devices"]["ams2"].contains("faults")) {
+            status["devices"]["ams2"]["faults"] = nlohmann::json::array();
+        }
         status["lanes_by_fps"] = {{"fps",
                                    {{"op", loaded >= 0 ? "loaded" : "idle"},
                                     {"pressure", 0.79},
@@ -1744,6 +1749,75 @@ nlohmann::json MoonrakerClientMock::openams_shared_status_json() const {
                                 {"ams2", {{"idx", 2}, {"lane", "fps"}, {"bays", 4}}}}}};
     }
     return status;
+}
+
+nlohmann::json MoonrakerClientMock::openams_device_json(int unit) const {
+    // What the openams plugin publishes per unit: capabilities, the environment
+    // sensor, the dryer and the actions the unit advertises. The AMS 2 Pro's
+    // dryer needs every bay unloaded and tops out at 65 C.
+    const bool ht = unit == 0;
+    const OpenAmsDryerSim& sim = openams_dryers_[unit];
+    const double target = sim.target_c.load();
+    const double remaining = sim.remaining_s.load();
+    const double chamber = sim.chamber_c.load();
+    const bool running = remaining > 0.0 && target > 0.0;
+    const char* state = !running ? "off" : (chamber < target - 1.0 ? "heating" : "holding");
+    const int bays = ht ? 1 : 4;
+    nlohmann::json device = {
+        {"oams_idx", unit + 1},
+        {"connected", true},
+        {"capabilities",
+         {{"family", ht ? "ams_ht" : "ams2"},
+          {"display_name", ht ? "AMS HT" : "AMS 2 Pro"},
+          {"bays", bays},
+          {"dryer", true},
+          {"dryer_target_min_c", 45.0},
+          {"dryer_target_max_c", ht ? 80.0 : 65.0},
+          {"dryer_requires_unloaded", !ht},
+          {"heater_count", 1},
+          {"fan_count", 1}}},
+        {"environment",
+         {{"temp_c", std::round(chamber * 10.0) / 10.0},
+          {"rh_pct", running ? 18.0 : (ht ? 29.0 : 31.0)},
+          {"source", "firmware"}}},
+        {"dryer",
+         {{"state", state},
+          {"target_c", running ? target : 0.0},
+          {"remaining_s", running ? static_cast<int>(remaining) : 0},
+          {"heater_pct", !running ? 0.0 : (chamber < target - 1.0 ? 100.0 : 35.0)},
+          {"fan_pct", running ? 60.0 : 0.0},
+          {"fault", "none"},
+          {"adapter", nullptr}}},
+        {"telemetry",
+         {{"dryer",
+           {{"state_name", state},
+            {"target_c", running ? target : 0.0},
+            {"chamber_c", std::round(chamber * 10.0) / 10.0},
+            {"remaining_s", running ? static_cast<int>(remaining) : 0}}}}},
+        {"supported_actions",
+         {"clear_errors", "load", "unload", "follower", "dryer_start", "dryer_stop",
+          "clear_fault"}}};
+    return device;
+}
+
+void MoonrakerClientMock::service_openams_dryers(double dt_s) {
+    constexpr double kAmbientC = 27.7;
+    constexpr double kRateCPerS = 0.5;
+    for (OpenAmsDryerSim& sim : openams_dryers_) {
+        const double remaining = sim.remaining_s.load();
+        const double target = sim.target_c.load();
+        double chamber = sim.chamber_c.load();
+        if (remaining > 0.0 && target > 0.0) {
+            chamber = chamber < target ? std::min(target, chamber + kRateCPerS * dt_s) : target;
+            sim.remaining_s = std::max(0.0, remaining - dt_s);
+            if (sim.remaining_s.load() <= 0.0) {
+                sim.target_c = 0.0;
+            }
+        } else if (chamber > kAmbientC) {
+            chamber = std::max(kAmbientC, chamber - kRateCPerS * dt_s);
+        }
+        sim.chamber_c = chamber;
+    }
 }
 
 nlohmann::json MoonrakerClientMock::openams_status_json() const {
@@ -4382,6 +4456,9 @@ void MoonrakerClientMock::temperature_simulation_loop() {
 
         // Simulated time step covered by one real tick
         double effective_dt = sim_speed().accelerate_progress(base_dt);
+        if (is_mock_openams()) {
+            service_openams_dryers(effective_dt);
+        }
 
         // Get current temperature state
         double ext_temp = extruder_temp_.load();

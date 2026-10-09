@@ -201,8 +201,22 @@ OpenAMS reports no colour, material or spool identity, so identity is HelixScree
 | Bypass | No |
 | Endless spool | Not exposed |
 | Runout surface | No error hook, so the generic runout modal and toast remain (`runtime_config.cpp`) |
-| Environment sensors | No |
+| Environment sensors | Per unit from `devices.<unit>.environment` (`temp_c`, `rh_pct`), into `AmsUnit::environment`; openams only |
+| Dryer | Per unit, see below; openams only |
 | Filament pressure | Per lane, from `lanes[].pressure` and `set_point`; drawn as the FPS box with bias tint and the buffer slider |
+
+## Dryer
+
+A unit offers drying when `devices.<unit>.capabilities.dryer` is true and
+`supported_actions` holds both `dryer_start` and `dryer_stop`; `get_dryer_info(unit)` then
+reports the unit's range (`dryer_target_min_c` / `dryer_target_max_c`), whether it is running
+(any `dryer.state` other than off, idle or fault), its target, the time left, the chamber
+temperature (`telemetry.dryer.chamber_c`) and the fan. The generic environment indicator and
+overlay drive it per unit. Start clamps the target to the unit's range and the duration to
+1 s - 7 days and sends `OAMS_DRYER_START OAMS=<units[].id> TARGET=<C> DURATION=<s>`; stop sends
+`OAMS_DRYER_STOP OAMS=<idx>`. A unit with `dryer_requires_unloaded` (the AMS 2 Pro) refuses
+to start while any of its bays is loaded. klipper_openams publishes no `devices`, so it shows
+no climate readout and no dryer.
 
 ## Tests
 

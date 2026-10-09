@@ -3414,6 +3414,7 @@ translations:
   ? This device has very little RAM. Resonance calibration is memory-intensive and may cause a "Timer Too Close" error. Continue anyway?
   : На этом устройстве очень мало ОЗУ. Калибровка резонансов требует много памяти и может вызвать ошибку "Timer Too Close". Всё равно продолжить?
   This doesn't match the linked Spoolman spool. Add it as a new spool, or update the linked one to match?: Это не совпадает с привязанной катушкой Spoolman. Добавить как новую катушку или обновить привязанную?
+  This dryer cannot run while filament from the unit is loaded: 'Сушилка не может работать, пока загружен филамент из этого узла'
   This feature requires different hardware or configuration: Для этой функции требуется другое оборудование или конфигурация
   This filament system does not report buffer or flow data.: Эта система филамента не сообщает данные буфера и потока.
   This file was sliced for {} but {} is loaded.: Файл нарезан для {}, но загружен
@@ -3620,6 +3621,7 @@ translations:
   Unload from toolhead first: 'Сначала выгрузите из печатающей головки'
   Unload macro not configured: Макрос выгрузки не настроен
   Unload the CFS filament before enabling bypass: 'Выгрузите филамент CFS перед включением обхода'
+  Unload this unit first: 'Сначала выгрузите этот узел'
   Unload...: Выгрузить...
   Unloaded: 'Выгружен'
   Unloading: Выгрузка

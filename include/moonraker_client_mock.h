@@ -2268,6 +2268,16 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     /// A unit fault latched on the AMS HT (HELIX_MOCK_OPENAMS_FAULT=<code>) until
     /// OAMS_CLEAR_FAULT OAMS=1.
     std::atomic<bool> openams_fault_active_{false};
+    /// The two shared-lane units' dryers (index 0 = ams_ht, 1 = ams2), driven by
+    /// OAMS_DRYER_START / OAMS_DRYER_STOP and counted down by the simulation tick.
+    struct OpenAmsDryerSim {
+        std::atomic<double> target_c{0.0};
+        std::atomic<double> remaining_s{0.0};
+        std::atomic<double> chamber_c{27.7};
+    };
+    OpenAmsDryerSim openams_dryers_[2];
+    void service_openams_dryers(double dt_s);
+    [[nodiscard]] nlohmann::json openams_device_json(int unit) const;
 
     /// The `box` object frame, stock K1 shape (T1 unit, four bays).
     [[nodiscard]] nlohmann::json cfs_box_status_json() const;
