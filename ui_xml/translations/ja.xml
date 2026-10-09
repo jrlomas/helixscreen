@@ -819,6 +819,7 @@
   <translation tag="Deploy" ja="展開"/>
   <translation tag="Describe the issue (optional)" ja="問題の詳細（任意）"/>
   <translation tag="Detailed" ja="詳細"/>
+  <translation tag="Details" ja="詳細"/>
   <translation tag="Detect automatically" ja="自動検出"/>
   <translation tag="Detect filament tangles" ja="フィラメントの絡みを検出"/>
   <translation tag="Detecting plate..." ja="プレートを検出中..."/>
@@ -1792,6 +1793,7 @@
   <translation tag="Moonraker: " ja="Moonraker: "/>
   <translation tag="More points = more accurate, but takes longer." ja="ポイント数が多いほど精度が上がりますが、時間がかかります。"/>
   <translation tag="Motion" ja="動作"/>
+  <translation tag="Motion sensor stuck: filament is still at the feeder. Resume to feed it." ja="モーションセンサーが固着: フィラメントはまだフィーダーにあります。再開すると送り込みます。"/>
   <translation tag="Motor controller error" ja="モーターコントローラーのエラー"/>
   <translation tag="Motor parameter setup failed" ja="モーターパラメーターの設定に失敗しました"/>
   <translation tag="Motor speeds and acceleration" ja="モーター速度と加速度"/>
@@ -2111,6 +2113,7 @@
   <translation tag="Peak Freq" ja="ピーク周波数"/>
   <translation tag="Peak:" ja="ピーク:"/>
   <translation tag="Peaks {} Hz" ja="ピーク {} Hz"/>
+  <translation tag="Pending spool" ja="保留中のスプール"/>
   <translation tag="Performance" ja="パフォーマンス"/>
   <translation tag="Permission denied. Check printer configuration." ja="権限がありません。プリンターの設定を確認してください。"/>
   <translation tag="Phomemo (Bluetooth)" ja="Phomemo (Bluetooth)"/>
@@ -3158,6 +3161,7 @@
   <translation tag="Tool offsets (mm)" ja="ツールオフセット (mm)"/>
   <translation tag="Tool offsets saved" ja="ツールオフセットを保存しました"/>
   <translation tag="Tool swap" ja="ツール交換"/>
+  <translation tag="Toolchange purge" ja="ツール交換パージ"/>
   <translation tag="Toolhead" ja="ツールヘッド"/>
   <translation tag="Toolhead LED" ja="ツールヘッドLED"/>
   <translation tag="Toolhead Sensor" ja="ツールヘッドセンサー"/>
@@ -3559,6 +3563,7 @@
   <translation tag="{} filament" ja="フィラメント {}"/>
   <translation tag="{} filament sensors available" ja="{} 個のフィラメントセンサーが利用可能です"/>
   <translation tag="{} filament • {}" ja="フィラメント {} • {}"/>
+  <translation tag="{} firmware" ja="{} ファームウェア"/>
   <translation tag="{} heater turned off" ja="{} ヒーターをオフにしました"/>
   <translation tag="{} is asking to connect to this printer." ja="{} がこのプリンターへの接続を求めています。"/>
   <translation tag="{} is blocked — manual intervention required" ja="{} がブロックされています — 手動での対応が必要です"/>
@@ -3581,6 +3586,7 @@
   <translation tag="{} new hardware available" ja="{} 個の新しいハードウェアが利用可能です"/>
   <translation tag="{} new plugins available. Enable them in Settings &gt; Plugins." ja="{} 個の新しいプラグインが利用可能です。設定 &gt; プラグインで有効化してください。"/>
   <translation tag="{} preset{}" ja="{} 個のプリセット{}"/>
+  <translation tag="{} serial" ja="{} シリアル番号"/>
   <translation tag="{} set to {}" ja="{} を {} に設定しました"/>
   <translation tag="{} set to {} {}" ja="{} を {} {} に設定しました"/>
   <translation tag="{} slots" ja="{} スロット"/>

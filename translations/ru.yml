@@ -898,6 +898,7 @@ translations:
   Deploy: Развернуть
   Describe the issue (optional): Опишите проблему (необязательно)
   Detailed: Подробно
+  Details: 'Подробности'
   Detect automatically: 'Определить автоматически'
   'Detect filament tangles': 'Обнаруживать спутывание филамента'
   Detecting plate...: Обнаружение пластины...
@@ -1967,6 +1968,7 @@ translations:
   'Moonraker: ': 'Moonraker: '
   More points = more accurate, but takes longer.: Больше точек — точнее, но дольше.
   Motion: Движение
+  'Motion sensor stuck: filament is still at the feeder. Resume to feed it.': 'Датчик движения застрял: филамент всё ещё в фидере. Продолжите, чтобы подать его.'
   Motor controller error: Ошибка контроллера двигателя
   Motor parameter setup failed: Не удалась настройка параметров двигателя
   Motor speeds and acceleration: 'Скорости моторов и ускорение'
@@ -2310,6 +2312,7 @@ translations:
   Peak Freq: Пиковая частота
   'Peak:': 'Пик:'
   Peaks {} Hz: "Пики {} Гц"
+  Pending spool: 'Ожидающая катушка'
   Performance: Производительность
   Permission denied. Check printer configuration.: Доступ запрещён. Проверьте конфигурацию принтера.
   Phomemo (Bluetooth): Phomemo (Bluetooth)
@@ -3517,6 +3520,7 @@ translations:
   Tool offsets (mm): Смещения инструментов (мм)
   Tool offsets saved: Смещения инструментов сохранены
   Tool swap: Смена инструмента
+  Toolchange purge: 'Продувка при смене инструмента'
   Toolhead: 'Печатающая головка'
   Toolhead LED: 'LED печатающей головки'
   Toolhead Sensor: Датчик печатающей головки
@@ -3945,6 +3949,7 @@ translations:
   '{} filament': '{} филамента'
   '{} filament sensors available': 'Доступно датчиков филамента: {}'
   '{} filament • {}': '{} филамента • {}'
+  '{} firmware': 'Прошивка {}'
   '{} heater turned off': Нагреватель {} выключен
   '{} is asking to connect to this printer.': '{} запрашивает подключение к этому принтеру.'
   '{} is blocked — manual intervention required': '{}: блокировка — требуется ручное вмешательство'
@@ -3968,6 +3973,7 @@ translations:
   '{} new hardware available': 'Доступно нового оборудования: {}'
   '{} new plugins available. Enable them in Settings > Plugins.': 'Доступно новых плагинов: {}. Включите их в разделе Настройки > Плагины.'
   '{} preset{}': '{} пресет{}'
+  '{} serial': 'Серийный номер {}'
   '{} set to {}': '{} установлено на {}'
   '{} set to {} {}': '{} установлено на {} {}'
   '{} slots': '{} слотов'

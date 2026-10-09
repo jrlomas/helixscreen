@@ -915,6 +915,7 @@ translations:
   Deploy: Ausfahren
   Describe the issue (optional): Problem beschreiben (optional)
   Detailed: Detailliert
+  Details: 'Details'
   Detect automatically: 'Automatisch erkennen'
   'Detect filament tangles': 'Filamentverwicklungen erkennen'
   Detecting plate...: Platte erkennen...
@@ -1996,6 +1997,7 @@ translations:
   More points = more accurate, but takes longer.: Mehr Punkte = genauer, dauert aber
     länger.
   Motion: Bewegung
+  'Motion sensor stuck: filament is still at the feeder. Resume to feed it.': 'Bewegungssensor hängt: Filament liegt noch an der Zuführung. Fortsetzen, um es einzuziehen.'
   Motor controller error: Fehler der Motorsteuerung
   Motor parameter setup failed: Einrichten der Motorparameter fehlgeschlagen
   Motor speeds and acceleration: 'Motorgeschwindigkeiten und Beschleunigung'
@@ -2341,6 +2343,7 @@ translations:
   Peak Freq: Spitzenfreq.
   'Peak:': 'Spitze:'
   Peaks {} Hz: "Spitzen {} Hz"
+  Pending spool: 'Ausstehende Spule'
   Performance: Leistung
   Permission denied. Check printer configuration.: Zugriff verweigert. Prüfe die Druckerkonfiguration.
   Phomemo (Bluetooth): Phomemo (Bluetooth)
@@ -3563,6 +3566,7 @@ translations:
   Tool offsets (mm): Werkzeug-Offsets (mm)
   Tool offsets saved: Werkzeug-Offsets gespeichert
   Tool swap: Werkzeugwechsel
+  Toolchange purge: 'Werkzeugwechsel-Entlüftung'
   Toolhead: 'Werkzeugkopf'
   Toolhead LED: 'Werkzeugkopf-LED'
   Toolhead Sensor: Werkzeugkopfsensor
@@ -3997,6 +4001,7 @@ translations:
   '{} filament': '{} Filament'
   '{} filament sensors available': '{} Filamentsensoren verfügbar'
   '{} filament • {}': '{} Filament • {}'
+  '{} firmware': '{} Firmware'
   '{} heater turned off': '{}-Heizung ausgeschaltet'
   '{} is asking to connect to this printer.': '{} möchte sich mit diesem Drucker verbinden.'
   '{} is blocked — manual intervention required': '{} ist blockiert — manueller Eingriff erforderlich'
@@ -4021,6 +4026,7 @@ translations:
   '{} new hardware available': '{} neue Hardware verfügbar'
   '{} new plugins available. Enable them in Settings > Plugins.': '{} neue Plugins verfügbar. Aktivieren Sie sie unter Einstellungen > Plugins.'
   '{} preset{}': '{} Voreinstellung{}'
+  '{} serial': '{} Seriennummer'
   '{} set to {}': '{} auf {} gesetzt'
   '{} set to {} {}': '{} auf {} {} gesetzt'
   '{} slots': '{} Slots'

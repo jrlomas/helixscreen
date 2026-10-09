@@ -911,6 +911,7 @@ translations:
   Deploy: Desplegar
   Describe the issue (optional): Describa el problema (opcional)
   Detailed: Detallado
+  Details: 'Detalles'
   Detect automatically: 'Detectar automáticamente'
   'Detect filament tangles': 'Detectar enredos de filamento'
   Detecting plate...: Detectando placa...
@@ -1986,6 +1987,7 @@ translations:
   More points = more accurate, but takes longer.: Más puntos = más preciso, pero tarda
     más.
   Motion: Movimiento
+  'Motion sensor stuck: filament is still at the feeder. Resume to feed it.': 'Sensor de movimiento atascado: el filamento sigue en el alimentador. Reanuda para alimentarlo.'
   Motor controller error: Error del controlador del motor
   Motor parameter setup failed: Falló la configuración de los parámetros del motor
   Motor speeds and acceleration: 'Velocidades del motor y aceleración'
@@ -2332,6 +2334,7 @@ translations:
   Peak Freq: Frec Pico
   'Peak:': 'Pico:'
   Peaks {} Hz: "Picos {} Hz"
+  Pending spool: 'Bobina pendiente'
   Performance: Rendimiento
   Permission denied. Check printer configuration.: Permiso denegado. Comprueba la configuración de la impresora.
   Phomemo (Bluetooth): Phomemo (Bluetooth)
@@ -3556,6 +3559,7 @@ translations:
   Tool offsets (mm): Offsets de herramienta (mm)
   Tool offsets saved: Offsets de herramienta guardados
   Tool swap: Cambio de herramienta
+  Toolchange purge: 'Purga de cambio de herramienta'
   Toolhead: 'Cabezal'
   Toolhead LED: 'LED del cabezal'
   Toolhead Sensor: Sensor del Cabezal
@@ -3987,6 +3991,7 @@ translations:
   '{} filament': '{} de filamento'
   '{} filament sensors available': '{} sensores de filamento disponibles'
   '{} filament • {}': '{} de filamento • {}'
+  '{} firmware': 'Firmware de {}'
   '{} heater turned off': Calentador {} apagado
   '{} is asking to connect to this printer.': '{} quiere conectarse a esta impresora.'
   '{} is blocked — manual intervention required': '{}: bloqueo — se requiere intervención manual'
@@ -4010,6 +4015,7 @@ translations:
   '{} new hardware available': '{} nuevo hardware disponible'
   '{} new plugins available. Enable them in Settings > Plugins.': '{} nuevos plugins disponibles. Actívalos en Ajustes > Plugins.'
   '{} preset{}': '{} preajuste{}'
+  '{} serial': 'N.º de serie de {}'
   '{} set to {}': '{} ajustado a {}'
   '{} set to {} {}': '{} ajustado a {} {}'
   '{} slots': '{} ranuras'

@@ -819,6 +819,7 @@
   <translation tag="Deploy" pt="Implantar"/>
   <translation tag="Describe the issue (optional)" pt="Descreva o problema (opcional)"/>
   <translation tag="Detailed" pt="Detalhado"/>
+  <translation tag="Details" pt="Detalhes"/>
   <translation tag="Detect automatically" pt="Detectar automaticamente"/>
   <translation tag="Detect filament tangles" pt="Detectar emaranhados de filamento"/>
   <translation tag="Detecting plate..." pt="Detectando placa..."/>
@@ -1792,6 +1793,7 @@
   <translation tag="Moonraker: " pt="Moonraker: "/>
   <translation tag="More points = more accurate, but takes longer." pt="Mais pontos = mais preciso, mas demora mais."/>
   <translation tag="Motion" pt="Movimento"/>
+  <translation tag="Motion sensor stuck: filament is still at the feeder. Resume to feed it." pt="Sensor de movimento travado: o filamento ainda está no alimentador. Retome para alimentá-lo."/>
   <translation tag="Motor controller error" pt="Erro do controlador do motor"/>
   <translation tag="Motor parameter setup failed" pt="Falha na configuração dos parâmetros do motor"/>
   <translation tag="Motor speeds and acceleration" pt="Velocidades do motor e aceleração"/>
@@ -2111,6 +2113,7 @@
   <translation tag="Peak Freq" pt="Freq Pico"/>
   <translation tag="Peak:" pt="Pico:"/>
   <translation tag="Peaks {} Hz" pt="Picos {} Hz"/>
+  <translation tag="Pending spool" pt="Carretel pendente"/>
   <translation tag="Performance" pt="Desempenho"/>
   <translation tag="Permission denied. Check printer configuration." pt="Permissão negada. Verifique a configuração da impressora."/>
   <translation tag="Phomemo (Bluetooth)" pt="Phomemo (Bluetooth)"/>
@@ -3158,6 +3161,7 @@
   <translation tag="Tool offsets (mm)" pt="Offsets de ferramenta (mm)"/>
   <translation tag="Tool offsets saved" pt="Offsets de ferramenta salvos"/>
   <translation tag="Tool swap" pt="Troca de ferramenta"/>
+  <translation tag="Toolchange purge" pt="Purga de troca de ferramenta"/>
   <translation tag="Toolhead" pt="Cabeçote"/>
   <translation tag="Toolhead LED" pt="LED do cabeçote"/>
   <translation tag="Toolhead Sensor" pt="Sensor do Cabeçote"/>
@@ -3559,6 +3563,7 @@
   <translation tag="{} filament" pt="{} de filamento"/>
   <translation tag="{} filament sensors available" pt="{} sensores de filamento disponíveis"/>
   <translation tag="{} filament • {}" pt="{} de filamento • {}"/>
+  <translation tag="{} firmware" pt="Firmware de {}"/>
   <translation tag="{} heater turned off" pt="Aquecedor {} desligado"/>
   <translation tag="{} is asking to connect to this printer." pt="{} quer conectar-se a esta impressora."/>
   <translation tag="{} is blocked — manual intervention required" pt="{}: bloqueio — intervenção manual necessária"/>
@@ -3581,6 +3586,7 @@
   <translation tag="{} new hardware available" pt="{} novo hardware disponível"/>
   <translation tag="{} new plugins available. Enable them in Settings &gt; Plugins." pt="{} novos plugins disponíveis. Ative-os em Configurações &gt; Plugins."/>
   <translation tag="{} preset{}" pt="{} predefinição{}"/>
+  <translation tag="{} serial" pt="N.º de série de {}"/>
   <translation tag="{} set to {}" pt="{} definido para {}"/>
   <translation tag="{} set to {} {}" pt="{} definido para {} {}"/>
   <translation tag="{} slots" pt="{} slots"/>

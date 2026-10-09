@@ -819,6 +819,7 @@
   <translation tag="Deploy" ru="Развернуть"/>
   <translation tag="Describe the issue (optional)" ru="Опишите проблему (необязательно)"/>
   <translation tag="Detailed" ru="Подробно"/>
+  <translation tag="Details" ru="Подробности"/>
   <translation tag="Detect automatically" ru="Определить автоматически"/>
   <translation tag="Detect filament tangles" ru="Обнаруживать спутывание филамента"/>
   <translation tag="Detecting plate..." ru="Обнаружение пластины..."/>
@@ -1792,6 +1793,7 @@
   <translation tag="Moonraker: " ru="Moonraker: "/>
   <translation tag="More points = more accurate, but takes longer." ru="Больше точек — точнее, но дольше."/>
   <translation tag="Motion" ru="Движение"/>
+  <translation tag="Motion sensor stuck: filament is still at the feeder. Resume to feed it." ru="Датчик движения застрял: филамент всё ещё в фидере. Продолжите, чтобы подать его."/>
   <translation tag="Motor controller error" ru="Ошибка контроллера двигателя"/>
   <translation tag="Motor parameter setup failed" ru="Не удалась настройка параметров двигателя"/>
   <translation tag="Motor speeds and acceleration" ru="Скорости моторов и ускорение"/>
@@ -2111,6 +2113,7 @@
   <translation tag="Peak Freq" ru="Пиковая частота"/>
   <translation tag="Peak:" ru="Пик:"/>
   <translation tag="Peaks {} Hz" ru="Пики {} Гц"/>
+  <translation tag="Pending spool" ru="Ожидающая катушка"/>
   <translation tag="Performance" ru="Производительность"/>
   <translation tag="Permission denied. Check printer configuration." ru="Доступ запрещён. Проверьте конфигурацию принтера."/>
   <translation tag="Phomemo (Bluetooth)" ru="Phomemo (Bluetooth)"/>
@@ -3158,6 +3161,7 @@
   <translation tag="Tool offsets (mm)" ru="Смещения инструментов (мм)"/>
   <translation tag="Tool offsets saved" ru="Смещения инструментов сохранены"/>
   <translation tag="Tool swap" ru="Смена инструмента"/>
+  <translation tag="Toolchange purge" ru="Продувка при смене инструмента"/>
   <translation tag="Toolhead" ru="Печатающая головка"/>
   <translation tag="Toolhead LED" ru="LED печатающей головки"/>
   <translation tag="Toolhead Sensor" ru="Датчик печатающей головки"/>
@@ -3559,6 +3563,7 @@
   <translation tag="{} filament" ru="{} филамента"/>
   <translation tag="{} filament sensors available" ru="Доступно датчиков филамента: {}"/>
   <translation tag="{} filament • {}" ru="{} филамента • {}"/>
+  <translation tag="{} firmware" ru="Прошивка {}"/>
   <translation tag="{} heater turned off" ru="Нагреватель {} выключен"/>
   <translation tag="{} is asking to connect to this printer." ru="{} запрашивает подключение к этому принтеру."/>
   <translation tag="{} is blocked — manual intervention required" ru="{}: блокировка — требуется ручное вмешательство"/>
@@ -3581,6 +3586,7 @@
   <translation tag="{} new hardware available" ru="Доступно нового оборудования: {}"/>
   <translation tag="{} new plugins available. Enable them in Settings &gt; Plugins." ru="Доступно новых плагинов: {}. Включите их в разделе Настройки &gt; Плагины."/>
   <translation tag="{} preset{}" ru="{} пресет{}"/>
+  <translation tag="{} serial" ru="Серийный номер {}"/>
   <translation tag="{} set to {}" ru="{} установлено на {}"/>
   <translation tag="{} set to {} {}" ru="{} установлено на {} {}"/>
   <translation tag="{} slots" ru="{} слотов"/>
