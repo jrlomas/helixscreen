@@ -43,7 +43,7 @@ env:
   # No DWARF in CI builds. At -g2 the objects are ~99% debug info and an app +
   # test build overflows the 2G ccache, so every run recompiles what the last
   # one evicted. -g0 keeps the symbol table, so a crash still names functions;
-  # nothing here ships, and file:line debugging happens locally or on zeus.
+  # nothing here ships, and file:line debugging happens locally or on a test host.
   DBGLEVEL: "0"
 
 jobs:

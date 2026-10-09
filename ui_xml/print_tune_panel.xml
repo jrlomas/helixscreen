@@ -31,7 +31,7 @@
                   style_radius="#border_radius">
             <style name="styles.press_wash" selector="pressed"/>
             <event_cb trigger="clicked" callback="on_tune_units_toggle"/>
-            <text_small text="Print Speed" clickable="false" event_bubble="true"/>
+            <text_small text="Print Speed" style_max_width="32%" long_mode="dots" clickable="false" event_bubble="true"/>
             <text_heading name="speed_display" bind_text="tune_speed_display" clickable="false" event_bubble="true"/>
             <lv_obj height="1" flex_grow="1" style_pad_all="0" scrollable="false" clickable="false" event_bubble="true"/>
             <text_small name="actual_speed_display"
@@ -65,7 +65,7 @@
                   style_radius="#border_radius">
             <style name="styles.press_wash" selector="pressed"/>
             <event_cb trigger="clicked" callback="on_tune_units_toggle"/>
-            <text_small text="Flow Rate" clickable="false" event_bubble="true"/>
+            <text_small text="Flow Rate" style_max_width="32%" long_mode="dots" clickable="false" event_bubble="true"/>
             <text_heading name="flow_display" bind_text="tune_flow_display" clickable="false" event_bubble="true"/>
             <lv_obj height="1" flex_grow="1" style_pad_all="0" scrollable="false" clickable="false" event_bubble="true"/>
             <text_small name="actual_flow_display"

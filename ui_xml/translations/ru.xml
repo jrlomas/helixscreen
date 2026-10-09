@@ -273,6 +273,7 @@
   <translation tag="Automatic Heater Control Calibration" ru="Автоматическая калибровка нагревателя"/>
   <translation tag="Automatic LED Control" ru="Автоматическое управление LED"/>
   <translation tag="Automatic calibration" ru="Автоматическая калибровка"/>
+  <translation tag="Automatic slot swap on runout" ru="Автоматическая смена слота при окончании"/>
   <translation tag="Aux" ru="Доп"/>
   <translation tag="Available" ru="Доступен"/>
   <translation tag="Available Networks" ru="Доступные сети"/>
@@ -951,6 +952,7 @@
   <translation tag="Encoder" ru="Энкодер"/>
   <translation tag="Encoder Error" ru="Ошибка энкодера"/>
   <translation tag="Ended" ru="Завершено"/>
+  <translation tag="Endless Spool" ru="Бесконечная катушка"/>
   <translation tag="Endless spool failover cleared for every slot" ru="Резервные катушки очищены для всех слотов"/>
   <translation tag="Endless spool is turned off on this MMU" ru="Бесконечная катушка отключена на этом MMU"/>
   <translation tag="Ensure Happy Hare or AFC is installed and configured" ru="Убедитесь, что Happy Hare или AFC установлен и настроен"/>
@@ -1736,6 +1738,7 @@
   <translation tag="Marginal" ru="Допустимо"/>
   <translation tag="Mark a printer you enclosed yourself" ru="Отметить принтер, который вы закрыли сами"/>
   <translation tag="Master volume level" ru="Основной уровень громкости"/>
+  <translation tag="Match Mode" ru="Режим сопоставления"/>
   <translation tag="Match your typical print fan speed" ru="Настройте типичную скорость вентилятора печати"/>
   <translation tag="Matching printers" ru="Подходящие принтеры"/>
   <translation tag="Material" ru="Материал"/>
@@ -1776,6 +1779,7 @@
   <translation tag="Missing value" ru="Отсутствует значение"/>
   <translation tag="Mode" ru="Режим"/>
   <translation tag="Modified" ru="Изменён"/>
+  <translation tag="Modifying G-code is not available on this device. Printing original file." ru="Изменение G-code недоступно на этом устройстве. Будет напечатан исходный файл."/>
   <translation tag="Modifying G-code needs the HelixPrint plugin. Printing original file." ru="Для изменения G-code нужен плагин HelixPrint. Печатается исходный файл."/>
   <translation tag="Monitor for print abnormalities (K2 Plus camera-based)" ru="Отслеживание дефектов печати (на основе камеры K2 Plus)"/>
   <translation tag="Monitor for print abnormalities (camera-based)" ru="Отслеживание дефектов печати (на основе камеры)"/>
@@ -2116,6 +2120,7 @@
   <translation tag="Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there" ru="Телефон: 1 2 3 в верхнем ряду, калькулятор: 7 8 9"/>
   <translation tag="Pick" ru="Выбрать"/>
   <translation tag="Pick Color" ru="Выбрать цвет"/>
+  <translation tag="Pick how HelixScreen behaves. You can change any of these later in Settings." ru="Выберите, как будет вести себя HelixScreen. Всё это можно изменить позже в Настройках."/>
   <translation tag="Pick up tool" ru="Забрать инструмент"/>
   <translation tag="Picking up tool" ru="Захват инструмента"/>
   <translation tag="Pill" ru="Овал"/>
@@ -2156,6 +2161,7 @@
   <translation tag="Pre-heat the extruder first" ru="Сначала прогрейте экструдер"/>
   <translation tag="Pre-print command failed: {}" ru="Ошибка команды перед печатью: {}"/>
   <translation tag="Pre-print homing..." ru="Парковка перед печатью..."/>
+  <translation tag="Preferences" ru="Предпочтения"/>
   <translation tag="Preheat" ru="Преднагрев"/>
   <translation tag="Preheat %s" ru="Преднагрев %s"/>
   <translation tag="Preheat %s (%d/%d)" ru="Преднагрев %s (%d/%d)"/>
@@ -2419,6 +2425,7 @@
   <translation tag="Remaining (g)" ru="Осталось (г)"/>
   <translation tag="Remaining Weight (g)" ru="Оставшийся вес (г)"/>
   <translation tag="Remap Tool" ru="Переназначить инструмент"/>
+  <translation tag="Remapping G-code is not available on this device." ru="Переназначение G-code недоступно на этом устройстве."/>
   <translation tag="Remapping rewrites the job file before printing it. This printer&apos;s Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally." ru="Переназначение переписывает файл задания перед печатью. Moonraker этого принтера слишком старый, чтобы плагин HelixPrint потом восстановил исходное имя файла, поэтому выполненное задание отображается под изменённым именем. Само переназначение работает нормально."/>
   <translation tag="Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.&#10;&#10;Installing the plugin takes a moment and needs no restart." ru="Переназначение переписывает файл задания перед печатью. Без плагина HelixPrint в историю печати попадает изменённая копия, поэтому выполненные задания отображаются под именами вроде modified_1730824_benchy.gcode вместо выбранного файла.&#10;&#10;Установка плагина занимает немного времени и не требует перезапуска."/>
   <translation tag="Remap…" ru="Переназначить…"/>
@@ -2895,6 +2902,7 @@
   <translation tag="Suppress periodic temperature status lines" ru="Скрывать периодические строки статуса температуры"/>
   <translation tag="Suppress raw debug output from printer firmware modules" ru="Скрывать отладочный вывод модулей прошивки принтера"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." ru="Поверхности наследуют токены фона приложения для светлого и тёмного режимов."/>
+  <translation tag="Swap to another slot automatically when one runs out" ru="Автоматически переключаться на другой слот, когда в одном кончился пруток"/>
   <translation tag="Sweep" ru="Свип"/>
   <translation tag="Switch Printer" ru="Переключить принтер"/>
   <translation tag="Switch Sensors" ru="Датчики-переключатели"/>
@@ -2931,6 +2939,8 @@
   <translation tag="Tag Parts" ru="Отметить узлы"/>
   <translation tag="Tag parts" ru="Отметить узлы"/>
   <translation tag="Takes 3-5 min. Do not interrupt." ru="Занимает 3-5 мин. Не прерывайте."/>
+  <translation tag="Tangle prevention active" ru="Защита от спутывания активна"/>
+  <translation tag="Tangle prevention boosted" ru="Защита от спутывания усилена"/>
   <translation tag="Tangle sensitivity" ru="Чувствительность к спутыванию"/>
   <translation tag="Tap + to add" ru="Нажмите +, чтобы добавить"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" ru="Нажмите «Перезапуск прошивки» для восстановления. На K2 это также перезапускает мост MCU rpi"/>
@@ -3473,6 +3483,7 @@
   <translation tag="enable" ru="включить"/>
   <translation tag="enabled" ru="включено"/>
   <translation tag="error" ru="ошибка"/>
+  <translation tag="exact: same material and color. material: same material. next: any ready slot, even a different material" ru="exact: тот же материал и цвет. material: тот же материал. next: любой готовый слот, даже с другим материалом"/>
   <translation tag="extruder" ru="экструдер"/>
   <translation tag="extruder(s)" ru="экструдер(ы)"/>
   <translation tag="extruders" ru="экструдеры"/>
@@ -3558,6 +3569,7 @@
   <translation tag="{} is feeding the current print. Clear it after the print ends." ru="{}: подаёт филамент для текущей печати. Удалите катушку после завершения печати."/>
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." ru="{} установлен, но переключение на резервную катушку выключено, поэтому автоматической замены не будет."/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." ru="{} установлен, но прочитать его настройку резервной катушки не удалось - не рассчитывайте на автоматическую замену."/>
+  <translation tag="{} is not available on this device. Printing original file." ru="{} недоступно на этом устройстве. Будет напечатан исходный файл."/>
   <translation tag="{} is not set up on this printer" ru="{} не настроен на этом принтере"/>
   <translation tag="{} is still printing. The print keeps running after you switch." ru="{} ещё печатает. Печать продолжится после переключения."/>
   <translation tag="{} kept crashing the panel; pick a printer to connect" ru="{} постоянно вызывал сбой экрана; выберите принтер для подключения"/>

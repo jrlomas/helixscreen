@@ -22,6 +22,8 @@ fi
 # Where the installer writes systemd drop-ins. A test run as root (the CI and
 # zeus containers) would otherwise write into the real /etc/systemd/system.
 export HELIX_SYSTEMD_UNIT_DIR="$BATS_TEST_TMPDIR/etc/systemd/system"
+# A per-test build-hosts file (scripts/lib/build_hosts.sh), absent until a test writes it.
+export HELIX_BUILD_HOSTS_FILE="$BATS_TEST_TMPDIR/build-hosts.env"
 
 # Where the installer reads process ancestry. Absent until mock_proc fills it,
 # so the desktop session a developer runs bats from never reads as the

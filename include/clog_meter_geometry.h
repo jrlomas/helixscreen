@@ -66,6 +66,18 @@ enum class ClogMeterStatus : int {
 /// `value` is compared by magnitude so Flowguard's tangle side counts.
 ClogMeterStatus clog_meter_status(int mode, int value, int warning, int danger_pct);
 
+/// What the one-line note under the clog meter says. Ordered by precedence.
+enum class ClogNote : int {
+    None = 0,          ///< Nothing to say: the line is hidden
+    TripReason = 1,    ///< The detector tripped and gave a reason (shown verbatim)
+    TangleBoosted = 2, ///< Tangle prevention is boosting the gate stepper
+    TangleActive = 3,  ///< Tangle prevention is armed
+};
+
+/// A trip with a reason outranks tangle prevention, which outranks silence;
+/// a trip with no reason falls through, since there is nothing to show for it.
+ClogNote clog_meter_note(bool tripped, bool has_reason, bool tangle_active, bool tangle_boosted);
+
 /// Bands a filament buffer reading (`|bias| * 100`) is judged against: from
 /// kPressureWarningPct it has drifted off its target, from kPressureFaultPct
 /// the buffer is close to an end stop.

@@ -406,7 +406,7 @@ orphan() {
     ninja=$(orphan ninja)
     bats=$(orphan bats)
     held=$(orphan ninja JOBPOOL_SLOTS=4)
-    run "$CLAIM" resources --no-zeus
+    run "$CLAIM" resources --no-test-host
     kill "$ninja" "$bats" "$held" 2>/dev/null || true
     [ "$status" -eq 0 ]
     contains "unpooled heavy runners" "$output"

@@ -273,6 +273,7 @@
   <translation tag="Automatic Heater Control Calibration" de="Automatische Heizungsregelung Kalibrierung"/>
   <translation tag="Automatic LED Control" de="Automatische LED-Steuerung"/>
   <translation tag="Automatic calibration" de="Automatische Kalibrierung"/>
+  <translation tag="Automatic slot swap on runout" de="Automatischer Slot-Wechsel bei Filamentende"/>
   <translation tag="Aux" de="Aux"/>
   <translation tag="Available" de="Verfügbar"/>
   <translation tag="Available Networks" de="Verfügbare Netzwerke"/>
@@ -951,6 +952,7 @@
   <translation tag="Encoder" de="Encoder"/>
   <translation tag="Encoder Error" de="Encoder-Fehler"/>
   <translation tag="Ended" de="Beendet"/>
+  <translation tag="Endless Spool" de="Endlosspule"/>
   <translation tag="Endless spool failover cleared for every slot" de="Endlosspulen-Zuordnung für alle Slots gelöscht"/>
   <translation tag="Endless spool is turned off on this MMU" de="Die Endlosspule ist auf diesem MMU deaktiviert"/>
   <translation tag="Ensure Happy Hare or AFC is installed and configured" de="Stellen Sie sicher, dass Happy Hare oder AFC installiert und konfiguriert ist"/>
@@ -1736,6 +1738,7 @@
   <translation tag="Marginal" de="Grenzwertig"/>
   <translation tag="Mark a printer you enclosed yourself" de="Einen selbst eingehausten Drucker markieren"/>
   <translation tag="Master volume level" de="Hauptlautstärke"/>
+  <translation tag="Match Mode" de="Abgleichmodus"/>
   <translation tag="Match your typical print fan speed" de="Typische Drucklüftergeschwindigkeit einstellen"/>
   <translation tag="Matching printers" de="Passende Drucker"/>
   <translation tag="Material" de="Material"/>
@@ -1776,6 +1779,7 @@
   <translation tag="Missing value" de="Fehlender Wert"/>
   <translation tag="Mode" de="Modus"/>
   <translation tag="Modified" de="Geändert"/>
+  <translation tag="Modifying G-code is not available on this device. Printing original file." de="Das Ändern von G-Code ist auf diesem Gerät nicht verfügbar. Die Originaldatei wird gedruckt."/>
   <translation tag="Modifying G-code needs the HelixPrint plugin. Printing original file." de="Zum Ändern von G-Code wird das HelixPrint-Plugin benötigt. Die Originaldatei wird gedruckt."/>
   <translation tag="Monitor for print abnormalities (K2 Plus camera-based)" de="Überwacht auf Druckanomalien (K2 Plus kamerabasiert)"/>
   <translation tag="Monitor for print abnormalities (camera-based)" de="Überwacht auf Druckanomalien (kamerabasiert)"/>
@@ -2116,6 +2120,7 @@
   <translation tag="Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there" de="Telefon: 1 2 3 in der obersten Reihe, Taschenrechner: 7 8 9"/>
   <translation tag="Pick" de="Auswählen"/>
   <translation tag="Pick Color" de="Farbe wählen"/>
+  <translation tag="Pick how HelixScreen behaves. You can change any of these later in Settings." de="Wähle, wie sich HelixScreen verhält. Du kannst alles später in den Einstellungen ändern."/>
   <translation tag="Pick up tool" de="Werkzeug aufnehmen"/>
   <translation tag="Picking up tool" de="Werkzeug aufnehmen"/>
   <translation tag="Pill" de="Pille"/>
@@ -2156,6 +2161,7 @@
   <translation tag="Pre-heat the extruder first" de="Zuerst den Extruder vorheizen"/>
   <translation tag="Pre-print command failed: {}" de="Vor-Druck-Befehl fehlgeschlagen: {}"/>
   <translation tag="Pre-print homing..." de="Referenzieren vor dem Druck..."/>
+  <translation tag="Preferences" de="Vorlieben"/>
   <translation tag="Preheat" de="Vorheizen"/>
   <translation tag="Preheat %s" de="Vorheizen %s"/>
   <translation tag="Preheat %s (%d/%d)" de="Vorheizen %s (%d/%d)"/>
@@ -2419,6 +2425,7 @@
   <translation tag="Remaining (g)" de="Verbleibend (g)"/>
   <translation tag="Remaining Weight (g)" de="Restgewicht (g)"/>
   <translation tag="Remap Tool" de="Werkzeug zuordnen"/>
+  <translation tag="Remapping G-code is not available on this device." de="G-code kann auf diesem Gerät nicht neu zugeordnet werden."/>
   <translation tag="Remapping rewrites the job file before printing it. This printer&apos;s Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally." de="Die Neuzuordnung schreibt die Druckdatei vor dem Drucken um. Das Moonraker dieses Druckers ist zu alt, damit das HelixPrint-Plugin den ursprünglichen Dateinamen danach wiederherstellen kann; der abgeschlossene Auftrag wird daher unter dem umgeschriebenen Namen aufgeführt. Die Neuzuordnung selbst funktioniert normal."/>
   <translation tag="Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.&#10;&#10;Installing the plugin takes a moment and needs no restart." de="Die Neuzuordnung schreibt die Druckdatei vor dem Drucken um. Ohne das HelixPrint-Plugin landet die umgeschriebene Kopie in Ihrem Druckverlauf, sodass abgeschlossene Drucke unter Namen wie modified_1730824_benchy.gcode statt unter der gewählten Datei aufgelistet werden.&#10;&#10;Die Installation des Plugins dauert einen Moment und erfordert keinen Neustart."/>
   <translation tag="Remap…" de="Neu zuordnen…"/>
@@ -2895,6 +2902,7 @@
   <translation tag="Suppress periodic temperature status lines" de="Periodische Temperatur-Statuszeilen unterdrücken"/>
   <translation tag="Suppress raw debug output from printer firmware modules" de="Rohe Debug-Ausgaben von Drucker-Firmware-Modulen unterdrücken"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." de="Oberflächen erben App-Hintergrund-Tokens für Hell- und Dunkelmodus."/>
+  <translation tag="Swap to another slot automatically when one runs out" de="Bei Filamentende automatisch zu einem anderen Slot wechseln"/>
   <translation tag="Sweep" de="Sweep"/>
   <translation tag="Switch Printer" de="Drucker wechseln"/>
   <translation tag="Switch Sensors" de="Schalter-Sensoren"/>
@@ -2931,6 +2939,8 @@
   <translation tag="Tag Parts" de="Bauteile markieren"/>
   <translation tag="Tag parts" de="Bauteile markieren"/>
   <translation tag="Takes 3-5 min. Do not interrupt." de="Dauert 3-5 Min. Nicht unterbrechen."/>
+  <translation tag="Tangle prevention active" de="Verwicklungsschutz aktiv"/>
+  <translation tag="Tangle prevention boosted" de="Verwicklungsschutz verstärkt"/>
   <translation tag="Tangle sensitivity" de="Verwicklungsempfindlichkeit"/>
   <translation tag="Tap + to add" de="Zum Hinzufügen + tippen"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" de="Zum Wiederherstellen auf Firmware-Neustart tippen. Beim K2 wird dabei auch die rpi-MCU-Bridge neu gestartet"/>
@@ -3473,6 +3483,7 @@
   <translation tag="enable" de="aktivieren"/>
   <translation tag="enabled" de="aktiviert"/>
   <translation tag="error" de="Fehler"/>
+  <translation tag="exact: same material and color. material: same material. next: any ready slot, even a different material" de="exact: gleiches Material und gleiche Farbe. material: gleiches Material. next: beliebiger bereiter Slot, auch anderes Material"/>
   <translation tag="extruder" de="Extruder"/>
   <translation tag="extruder(s)" de="Extruder"/>
   <translation tag="extruders" de="Extruder"/>
@@ -3558,6 +3569,7 @@
   <translation tag="{} is feeding the current print. Clear it after the print ends." de="{}: versorgt den laufenden Druck. Erst nach Druckende löschen."/>
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." de="{} ist installiert, aber der Wechsel zur Ersatzspule ist ausgeschaltet, daher findet kein automatischer Wechsel statt."/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." de="{} ist installiert, aber die Ersatzspulen-Einstellung konnte nicht gelesen werden - verlasse dich nicht auf einen automatischen Wechsel."/>
+  <translation tag="{} is not available on this device. Printing original file." de="{} ist auf diesem Gerät nicht verfügbar. Die Originaldatei wird gedruckt."/>
   <translation tag="{} is not set up on this printer" de="{} ist auf diesem Drucker nicht eingerichtet"/>
   <translation tag="{} is still printing. The print keeps running after you switch." de="{} druckt noch. Der Druck läuft nach dem Wechsel weiter."/>
   <translation tag="{} kept crashing the panel; pick a printer to connect" de="{} hat den Bildschirm wiederholt abstürzen lassen; Drucker zum Verbinden auswählen"/>

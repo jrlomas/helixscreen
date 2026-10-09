@@ -100,6 +100,7 @@ FlowguardDelta read_flowguard(const nlohmann::json& fg) {
     d.level = ams::read_field<float>(fg, "level");
     d.max_clog = ams::read_field<float>(fg, "max_clog");
     d.max_tangle = ams::read_field<float>(fg, "max_tangle");
+    d.reason = ams::read_field<std::string>(fg, "reason");
     d.encoder_mode = ams::read_field<int>(fg, "encoder_mode");
     d.buffer_data = fg.contains("level") || fg.contains("trigger") || fg.contains("max_clog");
     return d;
@@ -621,6 +622,15 @@ MmuTelemetryDelta parse_telemetry(const nlohmann::json& mmu) {
     }
     if (mmu.contains("flowguard") && mmu["flowguard"].is_object()) {
         d.flowguard = read_flowguard(mmu["flowguard"]);
+    }
+    if (const auto it = mmu.find("tangle_prevention"); it != mmu.end() && it->is_object()) {
+        TanglePreventionDelta tp;
+        tp.enabled = ams::read_field<bool>(*it, "enabled");
+        tp.active = ams::read_field<bool>(*it, "active");
+        tp.boosted = ams::read_field<bool>(*it, "boosted");
+        tp.threshold = ams::read_field<float>(*it, "threshold");
+        tp.release = ams::read_field<float>(*it, "release");
+        d.tangle_prevention = tp;
     }
     if (mmu.contains("leds") && mmu["leds"].is_object()) {
         const auto& leds = mmu["leds"];

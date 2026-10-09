@@ -49,6 +49,16 @@ lv_color_t resolve_clog_tint(int mode, int value, int warning) {
     return lv_color_mix(theme_manager_get_color(t.a), theme_manager_get_color(t.b), t.mix_a);
 }
 
+ClogNote clog_meter_note(bool tripped, bool has_reason, bool tangle_active, bool tangle_boosted) {
+    if (tripped && has_reason) {
+        return ClogNote::TripReason;
+    }
+    if (tangle_boosted) {
+        return ClogNote::TangleBoosted;
+    }
+    return tangle_active ? ClogNote::TangleActive : ClogNote::None;
+}
+
 ClogMeterStatus clog_meter_status(int mode, int value, int warning, int danger_pct) {
     if (warning != 0) {
         return ClogMeterStatus::Fault;

@@ -38,6 +38,7 @@ class GcodePreviewFetcher {
         TooLarge,       ///< the file would not fit the device's memory to render
         MetadataFailed, ///< the size lookup failed and no cached copy could stand in
         NoGcode,        ///< a .3mf whose extracted G-code the printer does not expose
+        NoLocalCopies,  ///< the transport cannot write a local copy at all
         DownloadFailed
     };
 

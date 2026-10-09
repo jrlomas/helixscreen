@@ -276,6 +276,7 @@ translations:
   Automatic Heater Control Calibration: 自动加热控制校准
   Automatic LED Control: 自动 LED 控制
   Automatic calibration: '自动校准'
+  Automatic slot swap on runout: '耗尽时自动切换槽位'
   Aux: 辅助
   Available: 可用
   Available Networks: 可用网络
@@ -981,6 +982,7 @@ translations:
   Encoder: 编码器
   Encoder Error: '编码器错误'
   Ended: 已结束
+  Endless Spool: '无限料盘'
   Endless spool failover cleared for every slot: '已清除所有槽位的无限料盘设置'
   Endless spool is turned off on this MMU: '此 MMU 上的无限料盘已关闭'
   Ensure Happy Hare or AFC is installed and configured: 请确保已安装并配置 Happy Hare 或 AFC
@@ -1798,6 +1800,7 @@ translations:
   Mark a printer you enclosed yourself: 将自行加装机箱的打印机标记为封闭
 
   Master volume level: 主音量
+  Match Mode: '匹配模式'
   Match your typical print fan speed: 匹配您常用的打印风扇速度
   Matching printers: 匹配的打印机
   Material: 材料
@@ -2190,6 +2193,7 @@ translations:
   Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there: 电话布局第一行为 1 2 3，计算器布局第一行为 7 8 9
   Pick: 选取
   Pick Color: 选择颜色
+  Pick how HelixScreen behaves. You can change any of these later in Settings.: '选择 HelixScreen 的行为方式。以后可在“设置”中更改。'
   Pick up tool: 取出工具
   Picking up tool: 正在取用工具
   Pill: 胶囊
@@ -2234,6 +2238,7 @@ translations:
   Pre-heat the extruder first: 请先预热挤出机
   'Pre-print command failed: {}': '打印前命令失败: {}'
   Pre-print homing...: 打印前归位...
+  Preferences: 偏好
   Preheat: '预热'
   Preheat %s: '预热 %s'
   Preheat %s (%d/%d): '预热 %s (%d/%d)'
@@ -2503,6 +2508,7 @@ translations:
   Remaining (g): 剩余 (g)
   Remaining Weight (g): 剩余重量（克）
   Remap Tool: 重映射工具
+  Remapping G-code is not available on this device.: '此设备不支持重新映射 G-code。'
   ? Remapping rewrites the job file before printing it. This printer's Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally.
   : 重新映射会在打印前改写任务文件。此打印机的 Moonraker 版本过旧，HelixPrint 插件无法在之后恢复原始文件名，因此完成的任务将以改写后的名称显示。重新映射本身可正常工作。
   ? "Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.\n\nInstalling the plugin takes a moment and needs no restart."
@@ -3005,6 +3011,7 @@ translations:
   Suppress periodic temperature status lines: 抑制周期性温度状态行
   Suppress raw debug output from printer firmware modules: 抑制打印机固件模块的原始调试输出
   Surfaces inherit app background tokens for light and dark modes.: 表面继承应用背景色用于浅色和深色模式。
+  Swap to another slot automatically when one runs out: '某个槽位耗尽时自动切换到另一个槽位'
   Sweep: 扫频
   Switch Printer: 切换打印机
   Switch a power device on or off: 开启或关闭电源设备
@@ -3043,6 +3050,8 @@ translations:
   Tag Parts: 标记部件
   Tag parts: 标记部件
   Takes 3-5 min. Do not interrupt.: 需要 3-5 分钟。请勿中断。
+  Tangle prevention active: 防打结已启用
+  Tangle prevention boosted: 防打结已增强
   'Tangle sensitivity': '打结灵敏度'
   Tap + to add: 点击 + 添加
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: 点按“重启固件”以恢复。在 K2 上这也会重启 rpi MCU 桥接
@@ -3629,6 +3638,7 @@ translations:
   enable: 启用
   enabled: 已启用
   error: 错误
+  'exact: same material and color. material: same material. next: any ready slot, even a different material': 'exact：材料和颜色相同。material：材料相同。next：任意就绪槽位，即使材料不同'
   extruder: 挤出机
   extruder(s): 挤出机
   extruders: 挤出机
@@ -3664,6 +3674,7 @@ translations:
   'off': 关闭
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: AFC 的 remember_spool 会在固件中保留料盘信息；其优先级高于此开关
   AI detection: AI 检测
+  Modifying G-code is not available on this device. Printing original file.: '此设备不支持修改 G-code。将打印原始文件。'
   Modifying G-code needs the HelixPrint plugin. Printing original file.: 修改 G-code 需要 HelixPrint 插件。将打印原始文件。
   Monitor for print abnormalities (K2 Plus camera-based): 监测打印异常（基于 K2 Plus 摄像头）
   Monitor for print abnormalities (camera-based): '监测打印异常（基于摄像头）'
@@ -3720,6 +3731,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} 已安装，但其备用料盘切换已关闭，因此不会自动切换。'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} 已安装，但无法读取其备用料盘设置 - 请勿指望自动切换。'
   '{} is still printing. The print keeps running after you switch.': '{} 仍在打印。切换后打印会继续进行。'
+  '{} is not available on this device. Printing original file.': '此设备不支持{}。将打印原始文件。'
   '{} is not set up on this printer': '{} 未在此打印机上设置'
   '{} lines in helixscreen.env were ignored': 'helixscreen.env 中有 {} 行被忽略'
   '{} kept crashing the panel; switched back to {}': '{} 反复导致屏幕崩溃，已切换回 {}'

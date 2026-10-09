@@ -67,22 +67,22 @@ context() {
     [ -z "$output" ]
 }
 
-@test "a command already on zeus is left alone" {
+@test "a command already on the test host, or over ssh, is left alone" {
     tight_memory
-    advise "scripts/zeus-run.sh mutate --tests '[ams]'"
+    advise "scripts/test-host-run.sh mutate --tests '[ams]'"
     [ -z "$output" ]
-    advise "ssh zeus.local 'sudo -n docker exec helix-tsan make full-test-run'"
+    advise "ssh buildbox.invalid make full-test-run"
     [ -z "$output" ]
 }
 
 # ---------------------------------------------------------------------------
-# Always on zeus, however quiet thelio is
+# Always on the test host, however quiet thelio is
 # ---------------------------------------------------------------------------
 
-@test "addr2line against helix-tests is sent to zeus on a roomy box" {
+@test "addr2line against helix-tests is sent to the test host on a roomy box" {
     advise "addr2line -f -C -e build/bin/helix-tests 0x69125f5"
     [ "$status" -eq 0 ]
-    contains "zeus" "$(context)"
+    contains "test host" "$(context)"
     contains "addr2line" "$(context)"
 }
 
@@ -91,51 +91,78 @@ context() {
     contains "coredumpctl info" "$(context)"
 }
 
-# A zeus-run.sh stand-in offering exactly the modes named.
-zeus_modes() {
+# A test-host-run.sh stand-in offering exactly the modes named.
+host_modes() {
     { printf '#!/usr/bin/env bash\ncase "$1" in\n'
       for m in "$@"; do printf '    %s)\n        ;;\n' "$m"; done
-      printf 'esac\n'; } > "$TEST_DIR/zeus-run.sh"
-    export HELIX_ADVISOR_ZEUS_RUN="$TEST_DIR/zeus-run.sh"
+      printf 'esac\n'; } > "$TEST_DIR/test-host-run.sh"
+    export HELIX_ADVISOR_TEST_HOST_RUN="$TEST_DIR/test-host-run.sh"
 }
 
-@test "unit-sweep goes to zeus's sweep and says nothing about bats" {
-    zeus_modes sweep
+@test "unit-sweep goes to the test host's sweep and says nothing about bats" {
+    host_modes sweep
     advise "make unit-sweep"
-    contains "zeus-run.sh sweep" "$(context)"
+    contains "test-host-run.sh sweep" "$(context)"
     lacks "make test-shell" "$(context)"
 }
 
-@test "full-test-run sends the C++ half to zeus and keeps bats on thelio" {
-    zeus_modes sweep
+@test "full-test-run sends the C++ half to the test host and keeps bats on thelio" {
+    host_modes sweep
     advise "make -j full-test-run"
-    contains "zeus-run.sh sweep" "$(context)"
+    contains "test-host-run.sh sweep" "$(context)"
     contains "make test-shell" "$(context)"
-    lacks "zeus-run.sh full" "$(context)"
+    lacks "test-host-run.sh full" "$(context)"
+}
+
+# full-test-run offloads its own sweep when a test host is configured and
+# automatic offload is on; advice to move it would only send it twice.
+@test "full-test-run is left alone when it will offload its own sweep" {
+    host_modes sweep
+    echo "HELIX_TEST_HOST=testhost.invalid" > "$HELIX_BUILD_HOSTS_FILE"
+    advise "make full-test-run"
+    [ -z "$output" ]
+    HELIX_TEST_HOST=fromenv.invalid advise "make -j full-test-run"
+    [ -z "$output" ]
+}
+
+@test "full-test-run still gets the advice when it will not offload" {
+    host_modes sweep
+    echo "HELIX_TEST_HOST=testhost.invalid" > "$HELIX_BUILD_HOSTS_FILE"
+    HELIX_TEST_HOST_AUTO=0 advise "make full-test-run"
+    contains "test-host-run.sh sweep" "$(context)"
+    advise "make full-test-run TEST_HOST=0"
+    contains "test-host-run.sh sweep" "$(context)"
+}
+
+@test "a bare unit-sweep gets the advice even with a test host configured" {
+    host_modes sweep
+    echo "HELIX_TEST_HOST=testhost.invalid" > "$HELIX_BUILD_HOSTS_FILE"
+    advise "make unit-sweep"
+    contains "test-host-run.sh sweep" "$(context)"
 }
 
 @test "a sweep suggestion points at helix-claim resources" {
-    zeus_modes sweep
+    host_modes sweep
     advise "make unit-sweep"
     contains "scripts/helix-claim resources" "$(context)"
 }
 
-@test "a full gate is sent to zeus's sweep mode on a roomy box" {
-    zeus_modes sweep
+@test "a full gate is sent to the test host's sweep mode on a roomy box" {
+    host_modes sweep
     advise "make -j full-test-run"
-    contains "zeus-run.sh sweep" "$(context)"
-    contains "push the branch" "$(context)"
+    contains "test-host-run.sh sweep" "$(context)"
+    contains "mirrors this tree" "$(context)"
 }
 
-@test "a full gate is silent while zeus-run has no sweep mode" {
-    zeus_modes test
+@test "a full gate is silent while test-host-run has no sweep mode" {
+    host_modes test
     advise "make unit-sweep"
     [ -z "$output" ]
 }
 
-@test "a mutation run is sent to zeus" {
+@test "a mutation run is sent to the test host" {
     advise "make mutate-diff"
-    contains "zeus-run.sh mutate" "$(context)"
+    contains "test-host-run.sh mutate" "$(context)"
 }
 
 # ---------------------------------------------------------------------------
@@ -155,19 +182,19 @@ zeus_modes() {
     [ -z "$output" ]
 }
 
-@test "a docker cross build is sent to zeus only when thelio is tight" {
+@test "a docker cross build is sent to the test host only when thelio is tight" {
     advise "make snapmaker-u1-docker"
     [ -z "$output" ]
     tight_memory
     advise "make snapmaker-u1-docker"
-    contains "zeus" "$(context)"
+    contains "test host" "$(context)"
     contains "scripts/helix-claim resources" "$(context)"
 }
 
 @test "an idf build in docker is heavy when thelio is tight" {
     tight_memory
     advise "docker run --rm -v \$PWD:/src espressif/idf idf.py build"
-    contains "zeus" "$(context)"
+    contains "test host" "$(context)"
 }
 
 @test "a test binary in a loop is flagged only when thelio is tight" {
@@ -202,14 +229,14 @@ zeus_modes() {
     contains "-j6" "$(context)"
 }
 
-@test "a missing helix-claim still exits 0 and still sends symbolizers to zeus" {
+@test "a missing helix-claim still exits 0 and still sends symbolizers to the test host" {
     export HELIX_ADVISOR_JOBS_CMD="$TEST_DIR/does-not-exist"
     advise "make -j24"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
     advise "addr2line -e build/bin/helix-tests 0x1"
     [ "$status" -eq 0 ]
-    contains "zeus" "$(context)"
+    contains "test host" "$(context)"
 }
 
 @test "garbage on stdin exits 0 with no output" {
@@ -317,25 +344,25 @@ zeus_modes() {
 
 @test "a heavy command after a harmless one in the same line is caught" {
     advise "cd build && make -j mutate-diff"
-    contains "zeus-run.sh mutate" "$(context)"
+    contains "test-host-run.sh mutate" "$(context)"
 }
 
 # ---------------------------------------------------------------------------
 # Spellings of the real offenders
 # ---------------------------------------------------------------------------
 
-@test "a symbolizer by full path or eu- prefix is sent to zeus" {
+@test "a symbolizer by full path or eu- prefix is sent to the test host" {
     advise "/usr/bin/addr2line -e build/bin/helix-tests 0x1"
-    contains "zeus" "$(context)"
+    contains "test host" "$(context)"
     advise "eu-addr2line -e build/bin/helix-tests 0x1"
-    contains "zeus" "$(context)"
+    contains "test host" "$(context)"
 }
 
-@test "the native ASAN forms are sent to zeus" {
+@test "the native ASAN forms are sent to the test host" {
     advise "make SANITIZE=address test"
-    contains "zeus-run.sh asan" "$(context)"
+    contains "test-host-run.sh asan" "$(context)"
     advise "make test-asan"
-    contains "zeus-run.sh asan" "$(context)"
+    contains "test-host-run.sh asan" "$(context)"
 }
 
 @test "an ASAN build for another board is not an ASAN run here" {
@@ -380,7 +407,7 @@ zeus_modes() {
 @test "a docker toolchain target is a container build" {
     tight_memory
     advise "make docker-toolchain-k1"
-    contains "zeus" "$(context)"
+    contains "test host" "$(context)"
 }
 
 @test "a huge command returns quickly" {

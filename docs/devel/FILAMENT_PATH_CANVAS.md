@@ -350,6 +350,15 @@ toolhead glyph and badge over the painted tubes.
 
 ### The route plan
 
+The LINEAR/HUB frame (`compute_linear_hub_frame(data, g, glyph_top)`) fits the
+HUB box width with `pathgeo::merge_fan_width()`: the hub widens until
+neighbouring fan tubes clear the tube gauge, its halo and 2 px, clamped to the
+slot row (where a fan zone shorter than its two fillet legs leaves only
+vertical drops, as at the micro breakpoint). With three or more lanes it first
+borrows unused output-run height by lowering the hub. With the bypass hidden,
+the hub and buffer stack above the toolhead glyph (`glyph_top` is
+`toolhead_top_y()`), and the toolhead band sits in the gap above the glyph.
+
 `src/ui/ui_filament_path_plan.{h,cpp}`, pure apart from `paint_tubes` and
 `draw_sensor_band`, so `[filament-path][plan]` tests it without a display.
 

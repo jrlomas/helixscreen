@@ -33,12 +33,17 @@ recipe_of() {
     contains "unit-sweep" "$phony"
 }
 
+# The recipe hands off to scripts/full-test-run.sh, which runs the two targets
+# by name (tests/shell/test_full_test_run.bats drives it in each mode).
 @test "full-test-run invokes the bats shell suite" {
-    contains "test-shell" "$(recipe_of full-test-run)"
+    contains "scripts/full-test-run.sh" "$(recipe_of full-test-run)"
+    grep -q 'test-shell' "$BATS_TEST_DIRNAME/../../scripts/full-test-run.sh"
 }
 
 @test "full-test-run chains unit-sweep rather than duplicating its filter" {
-    grep -qE '^full-test-run:.*\bunit-sweep\b' "$GATE_DB"
+    grep -q '"\$MAKE" --no-print-directory unit-sweep' "$BATS_TEST_DIRNAME/../../scripts/full-test-run.sh"
+    run grep -F '[slow]' "$BATS_TEST_DIRNAME/../../scripts/full-test-run.sh"
+    lacks '~[slow]' "$output"
 }
 
 @test "unit-sweep excludes the hidden and slow sets" {

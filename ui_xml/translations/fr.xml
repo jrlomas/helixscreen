@@ -273,6 +273,7 @@
   <translation tag="Automatic Heater Control Calibration" fr="Calibration automatique du chauffage"/>
   <translation tag="Automatic LED Control" fr="Contrôle LED automatique"/>
   <translation tag="Automatic calibration" fr="Calibration automatique"/>
+  <translation tag="Automatic slot swap on runout" fr="Changement de slot automatique en fin de filament"/>
   <translation tag="Aux" fr="Aux"/>
   <translation tag="Available" fr="Disponible"/>
   <translation tag="Available Networks" fr="Réseaux disponibles"/>
@@ -951,6 +952,7 @@
   <translation tag="Encoder" fr="Encodeur"/>
   <translation tag="Encoder Error" fr="Erreur de l&apos;encodeur"/>
   <translation tag="Ended" fr="Terminé"/>
+  <translation tag="Endless Spool" fr="Bobine infinie"/>
   <translation tag="Endless spool failover cleared for every slot" fr="Bobine de secours effacée pour tous les slots"/>
   <translation tag="Endless spool is turned off on this MMU" fr="La bobine infinie est désactivée sur ce MMU"/>
   <translation tag="Ensure Happy Hare or AFC is installed and configured" fr="Vérifiez que Happy Hare ou AFC est installé et configuré"/>
@@ -1736,6 +1738,7 @@
   <translation tag="Marginal" fr="Marginal"/>
   <translation tag="Mark a printer you enclosed yourself" fr="Indiquer une imprimante que vous avez fermée vous-même"/>
   <translation tag="Master volume level" fr="Niveau de volume principal"/>
+  <translation tag="Match Mode" fr="Mode de correspondance"/>
   <translation tag="Match your typical print fan speed" fr="Correspondre à votre vitesse de ventilateur habituelle"/>
   <translation tag="Matching printers" fr="Imprimantes correspondantes"/>
   <translation tag="Material" fr="Matériau"/>
@@ -1776,6 +1779,7 @@
   <translation tag="Missing value" fr="Valeur manquante"/>
   <translation tag="Mode" fr="Mode"/>
   <translation tag="Modified" fr="Modifié"/>
+  <translation tag="Modifying G-code is not available on this device. Printing original file." fr="La modification du G-Code n&apos;est pas disponible sur cet appareil. Le fichier original sera imprimé."/>
   <translation tag="Modifying G-code needs the HelixPrint plugin. Printing original file." fr="Modifier le G-Code nécessite le plugin HelixPrint. Le fichier original sera imprimé."/>
   <translation tag="Monitor for print abnormalities (K2 Plus camera-based)" fr="Surveiller les anomalies d&apos;impression (caméra K2 Plus)"/>
   <translation tag="Monitor for print abnormalities (camera-based)" fr="Surveiller les anomalies d&apos;impression (caméra)"/>
@@ -2116,6 +2120,7 @@
   <translation tag="Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there" fr="Téléphone place 1 2 3 en haut, calculatrice place 7 8 9"/>
   <translation tag="Pick" fr="Choisir"/>
   <translation tag="Pick Color" fr="Choisir la couleur"/>
+  <translation tag="Pick how HelixScreen behaves. You can change any of these later in Settings." fr="Choisissez le comportement de HelixScreen. Vous pourrez tout modifier plus tard dans Paramètres."/>
   <translation tag="Pick up tool" fr="Prendre l&apos;outil"/>
   <translation tag="Picking up tool" fr="Prise de l&apos;outil"/>
   <translation tag="Pill" fr="Pilule"/>
@@ -2156,6 +2161,7 @@
   <translation tag="Pre-heat the extruder first" fr="Préchauffez d&apos;abord l&apos;extrudeur"/>
   <translation tag="Pre-print command failed: {}" fr="Échec de la commande pré-impression : {}"/>
   <translation tag="Pre-print homing..." fr="Référence pré-impression..."/>
+  <translation tag="Preferences" fr="Préférences"/>
   <translation tag="Preheat" fr="Préchauffage"/>
   <translation tag="Preheat %s" fr="Préchauffage %s"/>
   <translation tag="Preheat %s (%d/%d)" fr="Préchauffage %s (%d/%d)"/>
@@ -2419,6 +2425,7 @@
   <translation tag="Remaining (g)" fr="Restant (g)"/>
   <translation tag="Remaining Weight (g)" fr="Poids restant (g)"/>
   <translation tag="Remap Tool" fr="Réassigner l&apos;outil"/>
+  <translation tag="Remapping G-code is not available on this device." fr="Le remappage du G-Code n&apos;est pas disponible sur cet appareil."/>
   <translation tag="Remapping rewrites the job file before printing it. This printer&apos;s Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally." fr="Le remappage réécrit le fichier d&apos;impression avant de l&apos;imprimer. Le Moonraker de cette imprimante est trop ancien pour que le plugin HelixPrint restaure ensuite le nom de fichier original, donc le travail terminé est listé sous le nom réécrit. Le remappage lui-même fonctionne normalement."/>
   <translation tag="Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.&#10;&#10;Installing the plugin takes a moment and needs no restart." fr="Le remappage réécrit le fichier d&apos;impression avant de l&apos;imprimer. Sans le plugin HelixPrint, la copie réécrite est celle qui arrive dans votre historique d&apos;impression, donc les travaux terminés sont listés sous des noms comme modified_1730824_benchy.gcode au lieu du fichier choisi.&#10;&#10;L&apos;installation du plugin prend un instant et ne nécessite aucun redémarrage."/>
   <translation tag="Remap…" fr="Réaffecter…"/>
@@ -2895,6 +2902,7 @@
   <translation tag="Suppress periodic temperature status lines" fr="Supprimer les lignes d&apos;état périodiques de température"/>
   <translation tag="Suppress raw debug output from printer firmware modules" fr="Supprimer la sortie de débogage brute des modules du firmware de l&apos;imprimante"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." fr="Les surfaces héritent des jetons d&apos;arrière-plan de l&apos;application pour les modes clair et sombre."/>
+  <translation tag="Swap to another slot automatically when one runs out" fr="Passer automatiquement à un autre slot quand l&apos;un est épuisé"/>
   <translation tag="Sweep" fr="Balayage"/>
   <translation tag="Switch Printer" fr="Changer d&apos;imprimante"/>
   <translation tag="Switch Sensors" fr="Capteurs à interrupteur"/>
@@ -2931,6 +2939,8 @@
   <translation tag="Tag Parts" fr="Repérer les éléments"/>
   <translation tag="Tag parts" fr="Repérer les éléments"/>
   <translation tag="Takes 3-5 min. Do not interrupt." fr="Prend 3-5 min. Ne pas interrompre."/>
+  <translation tag="Tangle prevention active" fr="Anti-nœud actif"/>
+  <translation tag="Tangle prevention boosted" fr="Anti-nœud renforcé"/>
   <translation tag="Tangle sensitivity" fr="Sensibilité aux nœuds"/>
   <translation tag="Tap + to add" fr="Touchez + pour ajouter"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" fr="Appuyez sur Redémarrer le firmware pour récupérer. Sur la K2, cela redémarre aussi le pont MCU rpi"/>
@@ -3473,6 +3483,7 @@
   <translation tag="enable" fr="activer"/>
   <translation tag="enabled" fr="activé"/>
   <translation tag="error" fr="erreur"/>
+  <translation tag="exact: same material and color. material: same material. next: any ready slot, even a different material" fr="exact : même matière et même couleur. material : même matière. next : n&apos;importe quel slot prêt, même d&apos;une autre matière"/>
   <translation tag="extruder" fr="extrudeur"/>
   <translation tag="extruder(s)" fr="extrudeur(s)"/>
   <translation tag="extruders" fr="extrudeurs"/>
@@ -3558,6 +3569,7 @@
   <translation tag="{} is feeding the current print. Clear it after the print ends." fr="{} : alimente l&apos;impression en cours. Effacez la bobine une fois l&apos;impression terminée."/>
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." fr="{} est installé mais son passage à la bobine de secours est désactivé, aucun changement automatique n&apos;aura donc lieu."/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." fr="{} est installé, mais son réglage de bobine de secours n&apos;a pas pu être lu - ne comptez pas sur un changement automatique."/>
+  <translation tag="{} is not available on this device. Printing original file." fr="{} n&apos;est pas disponible sur cet appareil. Impression du fichier original."/>
   <translation tag="{} is not set up on this printer" fr="{} n&apos;est pas configuré sur cette imprimante"/>
   <translation tag="{} is still printing. The print keeps running after you switch." fr="{} imprime encore. L&apos;impression continue après le changement."/>
   <translation tag="{} kept crashing the panel; pick a printer to connect" fr="{} a planté l&apos;écran à plusieurs reprises ; choisissez une imprimante à connecter"/>

@@ -301,6 +301,7 @@ translations:
   Automatic Heater Control Calibration: Calibración Automática de Control de Calentador
   Automatic LED Control: Control Automático de LED
   Automatic calibration: 'Calibración automática'
+  Automatic slot swap on runout: 'Cambio automático de ranura al agotarse'
   Aux: Aux
   Available: Disponible
   Available Networks: Redes Disponibles
@@ -1057,6 +1058,7 @@ translations:
   Encoder: Encoder
   Encoder Error: 'Error del encoder'
   Ended: Terminado
+  Endless Spool: 'Bobina infinita'
   Endless spool failover cleared for every slot: 'Bobina de reserva borrada para todas las ranuras'
   Endless spool is turned off on this MMU: 'La bobina infinita está desactivada en este MMU'
   Ensure Happy Hare or AFC is installed and configured: Asegúrese de que Happy Hare o AFC esté instalado y configurado
@@ -1929,6 +1931,7 @@ translations:
   Mark a printer you enclosed yourself: Marca una impresora que cerraste tú mismo
 
   Master volume level: Nivel de volumen principal
+  Match Mode: 'Modo de coincidencia'
   Match your typical print fan speed: Ajuste a su velocidad típica de ventilador de
     impresión
   Matching printers: Impresoras coincidentes
@@ -2337,6 +2340,7 @@ translations:
   Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there: Teléfono pone 1 2 3 en la fila superior; calculadora, 7 8 9
   Pick: Elegir
   Pick Color: Elegir Color
+  Pick how HelixScreen behaves. You can change any of these later in Settings.: 'Elige cómo se comporta HelixScreen. Puedes cambiarlo más tarde en Ajustes.'
   Pick up tool: Recoger herramienta
   Picking up tool: Recogiendo herramienta
   Pill: Píldora
@@ -2385,6 +2389,7 @@ translations:
   Pre-heat the extruder first: Precaliente primero el extrusor
   'Pre-print command failed: {}': 'Error en comando pre-impresión: {}'
   Pre-print homing...: Posicionando antes de imprimir...
+  Preferences: Preferencias
   Preheat: 'Precalentar'
   Preheat %s: 'Precalentar %s'
   Preheat %s (%d/%d): 'Precalentar %s (%d/%d)'
@@ -2672,6 +2677,7 @@ translations:
   Remaining (g): Restante (g)
   Remaining Weight (g): Peso Restante (g)
   Remap Tool: Reasignar Herramienta
+  Remapping G-code is not available on this device.: 'Reasignar G-code no está disponible en este dispositivo.'
   ? Remapping rewrites the job file before printing it. This printer's Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally.
   : La reasignación reescribe el archivo de impresión antes de imprimirlo. El Moonraker de esta impresora es demasiado antiguo para que el plugin HelixPrint restaure después el nombre de archivo original, por lo que el trabajo terminado aparece con el nombre reescrito. La reasignación en sí funciona con normalidad.
   ? "Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.\n\nInstalling the plugin takes a moment and needs no restart."
@@ -3218,6 +3224,7 @@ translations:
     de módulos del firmware de la impresora
   Surfaces inherit app background tokens for light and dark modes.: Las superficies
     heredan los tokens de fondo de la aplicación para modos claro y oscuro.
+  Swap to another slot automatically when one runs out: 'Cambiar automáticamente a otra ranura cuando una se agota'
   Sweep: Barrido
   Switch Printer: Cambiar Impresora
   Switch a power device on or off: Encender o apagar un dispositivo
@@ -3257,6 +3264,8 @@ translations:
   Tag Parts: Marcar Componentes
   Tag parts: Marcar componentes
   Takes 3-5 min. Do not interrupt.: Tarda 3-5 min. No interrumpa.
+  Tangle prevention active: Prevención de enredos activa
+  Tangle prevention boosted: Prevención de enredos reforzada
   'Tangle sensitivity': 'Sensibilidad a enredos'
   Tap + to add: Toca + para añadir
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: Toque Reiniciar firmware para recuperar. En la K2 esto también reinicia el puente MCU rpi
@@ -3895,6 +3904,7 @@ translations:
   enable: habilitar
   enabled: activado
   error: error
+  'exact: same material and color. material: same material. next: any ready slot, even a different material': 'exact: mismo material y color. material: mismo material. next: cualquier ranura lista, aunque sea otro material'
   extruder: extrusor
   extruder(s): extrusor(es)
   extruders: extrusores
@@ -3930,6 +3940,7 @@ translations:
   'off': apagado
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: El parámetro remember_spool de AFC retiene la información de la bobina en el firmware; eso tiene prioridad sobre esta opción
   AI detection: Detección AI
+  Modifying G-code is not available on this device. Printing original file.: 'Modificar G-code no está disponible en este dispositivo. Se imprimirá el archivo original.'
   Modifying G-code needs the HelixPrint plugin. Printing original file.: Modificar G-code requiere el plugin HelixPrint. Se imprimirá el archivo original.
   Monitor for print abnormalities (K2 Plus camera-based): Monitorear anomalías de impresión (basado en cámara del K2 Plus)
   Monitor for print abnormalities (camera-based): 'Monitorear anomalías de impresión (basado en cámara)'
@@ -3987,6 +3998,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} está instalado pero su cambio a bobina de reserva está desactivado, así que no habrá ningún cambio automático.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} está instalado, pero no se pudo leer su ajuste de bobina de reserva - no cuentes con un cambio automático.'
   '{} is still printing. The print keeps running after you switch.': '{} sigue imprimiendo. La impresión continúa después de cambiar.'
+  '{} is not available on this device. Printing original file.': '{} no está disponible en este dispositivo. Se imprimirá el archivo original.'
   '{} is not set up on this printer': '{} no está configurado en esta impresora'
   '{} lines in helixscreen.env were ignored': '{} líneas de helixscreen.env fueron ignoradas'
   '{} kept crashing the panel; switched back to {}': '{} bloqueó la pantalla repetidamente; se volvió a {}'

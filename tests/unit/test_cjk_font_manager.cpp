@@ -110,6 +110,16 @@ TEST_CASE_METHOD(CjkFontManagerFixture, "CjkFontManager: baked glyphs resolve th
     }
 }
 
+// lv_binfont_create() reads a few bytes per lv_fs_read(). Without a driver
+// cache each one is a read() syscall, about six million per CJK load, which
+// takes half a minute on a host where a syscall costs a few microseconds.
+TEST_CASE_METHOD(CjkFontManagerFixture, "CjkFontManager: font drive reads through a cache",
+                 "[cjk_font]") {
+    lv_fs_drv_t* drv = lv_fs_get_drv(LV_FS_POSIX_LETTER);
+    REQUIRE(drv != nullptr);
+    CHECK(drv->cache_size >= 1024);
+}
+
 TEST_CASE_METHOD(CjkFontManagerFixture, "CjkFontManager: unload clears fallback on compiled fonts",
                  "[cjk_font]") {
     CjkFontManager::instance().on_language_changed("zh");

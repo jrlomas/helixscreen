@@ -273,6 +273,7 @@
   <translation tag="Automatic Heater Control Calibration" zh="自动加热控制校准"/>
   <translation tag="Automatic LED Control" zh="自动 LED 控制"/>
   <translation tag="Automatic calibration" zh="自动校准"/>
+  <translation tag="Automatic slot swap on runout" zh="耗尽时自动切换槽位"/>
   <translation tag="Aux" zh="辅助"/>
   <translation tag="Available" zh="可用"/>
   <translation tag="Available Networks" zh="可用网络"/>
@@ -951,6 +952,7 @@
   <translation tag="Encoder" zh="编码器"/>
   <translation tag="Encoder Error" zh="编码器错误"/>
   <translation tag="Ended" zh="已结束"/>
+  <translation tag="Endless Spool" zh="无限料盘"/>
   <translation tag="Endless spool failover cleared for every slot" zh="已清除所有槽位的无限料盘设置"/>
   <translation tag="Endless spool is turned off on this MMU" zh="此 MMU 上的无限料盘已关闭"/>
   <translation tag="Ensure Happy Hare or AFC is installed and configured" zh="请确保已安装并配置 Happy Hare 或 AFC"/>
@@ -1736,6 +1738,7 @@
   <translation tag="Marginal" zh="偏高"/>
   <translation tag="Mark a printer you enclosed yourself" zh="将自行加装机箱的打印机标记为封闭"/>
   <translation tag="Master volume level" zh="主音量"/>
+  <translation tag="Match Mode" zh="匹配模式"/>
   <translation tag="Match your typical print fan speed" zh="匹配您常用的打印风扇速度"/>
   <translation tag="Matching printers" zh="匹配的打印机"/>
   <translation tag="Material" zh="材料"/>
@@ -1776,6 +1779,7 @@
   <translation tag="Missing value" zh="缺少值"/>
   <translation tag="Mode" zh="模式"/>
   <translation tag="Modified" zh="已修改"/>
+  <translation tag="Modifying G-code is not available on this device. Printing original file." zh="此设备不支持修改 G-code。将打印原始文件。"/>
   <translation tag="Modifying G-code needs the HelixPrint plugin. Printing original file." zh="修改 G-code 需要 HelixPrint 插件。将打印原始文件。"/>
   <translation tag="Monitor for print abnormalities (K2 Plus camera-based)" zh="监测打印异常（基于 K2 Plus 摄像头）"/>
   <translation tag="Monitor for print abnormalities (camera-based)" zh="监测打印异常（基于摄像头）"/>
@@ -2116,6 +2120,7 @@
   <translation tag="Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there" zh="电话布局第一行为 1 2 3，计算器布局第一行为 7 8 9"/>
   <translation tag="Pick" zh="选取"/>
   <translation tag="Pick Color" zh="选择颜色"/>
+  <translation tag="Pick how HelixScreen behaves. You can change any of these later in Settings." zh="选择 HelixScreen 的行为方式。以后可在“设置”中更改。"/>
   <translation tag="Pick up tool" zh="取出工具"/>
   <translation tag="Picking up tool" zh="正在取用工具"/>
   <translation tag="Pill" zh="胶囊"/>
@@ -2156,6 +2161,7 @@
   <translation tag="Pre-heat the extruder first" zh="请先预热挤出机"/>
   <translation tag="Pre-print command failed: {}" zh="打印前命令失败: {}"/>
   <translation tag="Pre-print homing..." zh="打印前归位..."/>
+  <translation tag="Preferences" zh="偏好"/>
   <translation tag="Preheat" zh="预热"/>
   <translation tag="Preheat %s" zh="预热 %s"/>
   <translation tag="Preheat %s (%d/%d)" zh="预热 %s (%d/%d)"/>
@@ -2419,6 +2425,7 @@
   <translation tag="Remaining (g)" zh="剩余 (g)"/>
   <translation tag="Remaining Weight (g)" zh="剩余重量（克）"/>
   <translation tag="Remap Tool" zh="重映射工具"/>
+  <translation tag="Remapping G-code is not available on this device." zh="此设备不支持重新映射 G-code。"/>
   <translation tag="Remapping rewrites the job file before printing it. This printer&apos;s Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally." zh="重新映射会在打印前改写任务文件。此打印机的 Moonraker 版本过旧，HelixPrint 插件无法在之后恢复原始文件名，因此完成的任务将以改写后的名称显示。重新映射本身可正常工作。"/>
   <translation tag="Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.&#10;&#10;Installing the plugin takes a moment and needs no restart." zh="重新映射会在打印前改写任务文件。如果没有 HelixPrint 插件，进入打印历史的就是改写后的副本，因此完成的任务会以类似 modified_1730824_benchy.gcode 的名称显示，而不是您选择的文件。&#10;&#10;安装插件很快，无需重启。"/>
   <translation tag="Remap…" zh="重新映射……"/>
@@ -2895,6 +2902,7 @@
   <translation tag="Suppress periodic temperature status lines" zh="抑制周期性温度状态行"/>
   <translation tag="Suppress raw debug output from printer firmware modules" zh="抑制打印机固件模块的原始调试输出"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." zh="表面继承应用背景色用于浅色和深色模式。"/>
+  <translation tag="Swap to another slot automatically when one runs out" zh="某个槽位耗尽时自动切换到另一个槽位"/>
   <translation tag="Sweep" zh="扫频"/>
   <translation tag="Switch Printer" zh="切换打印机"/>
   <translation tag="Switch Sensors" zh="开关传感器"/>
@@ -2931,6 +2939,8 @@
   <translation tag="Tag Parts" zh="标记部件"/>
   <translation tag="Tag parts" zh="标记部件"/>
   <translation tag="Takes 3-5 min. Do not interrupt." zh="需要 3-5 分钟。请勿中断。"/>
+  <translation tag="Tangle prevention active" zh="防打结已启用"/>
+  <translation tag="Tangle prevention boosted" zh="防打结已增强"/>
   <translation tag="Tangle sensitivity" zh="打结灵敏度"/>
   <translation tag="Tap + to add" zh="点击 + 添加"/>
   <translation tag="Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge" zh="点按“重启固件”以恢复。在 K2 上这也会重启 rpi MCU 桥接"/>
@@ -3473,6 +3483,7 @@
   <translation tag="enable" zh="启用"/>
   <translation tag="enabled" zh="已启用"/>
   <translation tag="error" zh="错误"/>
+  <translation tag="exact: same material and color. material: same material. next: any ready slot, even a different material" zh="exact：材料和颜色相同。material：材料相同。next：任意就绪槽位，即使材料不同"/>
   <translation tag="extruder" zh="挤出机"/>
   <translation tag="extruder(s)" zh="挤出机"/>
   <translation tag="extruders" zh="挤出机"/>
@@ -3558,6 +3569,7 @@
   <translation tag="{} is feeding the current print. Clear it after the print ends." zh="{} 正在为当前打印供料。请在打印结束后清除。"/>
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." zh="{} 已安装，但其备用料盘切换已关闭，因此不会自动切换。"/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." zh="{} 已安装，但无法读取其备用料盘设置 - 请勿指望自动切换。"/>
+  <translation tag="{} is not available on this device. Printing original file." zh="此设备不支持{}。将打印原始文件。"/>
   <translation tag="{} is not set up on this printer" zh="{} 未在此打印机上设置"/>
   <translation tag="{} is still printing. The print keeps running after you switch." zh="{} 仍在打印。切换后打印会继续进行。"/>
   <translation tag="{} kept crashing the panel; pick a printer to connect" zh="{} 反复导致屏幕崩溃，请选择要连接的打印机"/>

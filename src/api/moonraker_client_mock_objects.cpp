@@ -201,7 +201,21 @@ json get_mock_mmu_status() {
             {"gate_material", {"PLA", "PETG", "ABS", "TPU"}},
             {"gate_vendor", {"Polymaker", "eSUN", "", "Overture"}},
             {"ttg_map", {0, 1, 2, 3}},
-            {"endless_spool_groups", {0, 0, 1, 1}}};
+            {"endless_spool_groups", {0, 0, 1, 1}},
+            {"flowguard",
+             {{"enabled", true},
+              {"active", true},
+              {"trigger", ""},
+              {"reason", ""},
+              {"level", 0.15},
+              {"max_clog", 0.2},
+              {"max_tangle", -0.3}}},
+            {"tangle_prevention",
+             {{"enabled", true},
+              {"active", false},
+              {"boosted", false},
+              {"threshold", 0.6},
+              {"release", 0.3}}}};
 }
 
 void register_object_handlers(std::unordered_map<std::string, MethodHandler>& registry) {
@@ -560,7 +574,8 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
             append_led_effect_status(status_obj, objects, self);
 
             // HELIX_MOCK_SKIP_WRAPPERS: the skip flags and leveling `applied`.
-            for (const auto& [name, status] : self->skip_wrapper_status().items()) {
+            const json wrapper_status = self->skip_wrapper_status();
+            for (const auto& [name, status] : wrapper_status.items()) {
                 if (objects.contains(name)) {
                     status_obj[name] = status;
                 }
@@ -904,7 +919,8 @@ void register_object_handlers(std::unordered_map<std::string, MethodHandler>& re
             append_led_effect_status(status_obj, objects, self);
 
             // HELIX_MOCK_SKIP_WRAPPERS: the skip flags and leveling `applied`.
-            for (const auto& [name, status] : self->skip_wrapper_status().items()) {
+            const json wrapper_status = self->skip_wrapper_status();
+            for (const auto& [name, status] : wrapper_status.items()) {
                 if (objects.contains(name)) {
                     status_obj[name] = status;
                 }

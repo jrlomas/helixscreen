@@ -277,6 +277,7 @@ translations:
   Automatic Heater Control Calibration: 自動ヒーター制御キャリブレーション
   Automatic LED Control: 自動LED制御
   Automatic calibration: '自動キャリブレーション'
+  Automatic slot swap on runout: 'フィラメント切れ時の自動スロット切り替え'
   Aux: 補助
   Available: 利用可能
   Available Networks: 利用可能なネットワーク
@@ -985,6 +986,7 @@ translations:
   Encoder: エンコーダー
   Encoder Error: 'エンコーダーエラー'
   Ended: 終了
+  Endless Spool: 'エンドレススプール'
   Endless spool failover cleared for every slot: 'すべてのスロットのエンドレススプール設定を消去しました'
   Endless spool is turned off on this MMU: 'この MMU ではエンドレススプールが無効です'
   Ensure Happy Hare or AFC is installed and configured: Happy Hare または AFC がインストールされ、設定されていることを確認してください
@@ -1804,6 +1806,7 @@ translations:
   Mark a printer you enclosed yourself: 自分で筐体を付けたプリンターとして設定
 
   Master volume level: マスター音量
+  Match Mode: '一致モード'
   Match your typical print fan speed: 通常の印刷ファン速度に合わせてください
   Matching printers: 一致するプリンター
   Material: 素材
@@ -2197,6 +2200,7 @@ translations:
   Phone puts 1 2 3 on the top row, calculator puts 7 8 9 there: 電話は上段が 1 2 3、計算機は上段が 7 8 9
   Pick: 選択
   Pick Color: 色を選択
+  Pick how HelixScreen behaves. You can change any of these later in Settings.: 'HelixScreen の動作を選択します。すべて後で「設定」から変更できます。'
   Pick up tool: ツールを取得
   Picking up tool: ツールを取得中
   Pill: ピル
@@ -2242,6 +2246,7 @@ translations:
   Pre-heat the extruder first: 先にエクストルーダーを予熱してください
   'Pre-print command failed: {}': '印刷前コマンドに失敗しました: {}'
   Pre-print homing...: 印刷前ホーミング中...
+  Preferences: 好みの設定
   Preheat: '予熱'
   Preheat %s: '予熱 %s'
   Preheat %s (%d/%d): '予熱 %s (%d/%d)'
@@ -2512,6 +2517,7 @@ translations:
   Remaining (g): 残量 (g)
   Remaining Weight (g): 残量（g）
   Remap Tool: ツールを再割当
+  Remapping G-code is not available on this device.: 'このデバイスでは G-code をリマップできません。'
   ? Remapping rewrites the job file before printing it. This printer's Moonraker is too old for the HelixPrint plugin to restore the original filename afterwards, so the finished job is listed under the rewritten name. Remapping itself works normally.
   : リマップは印刷前にジョブファイルを書き換えます。このプリンターのMoonrakerは旧バージョンのため、HelixPrintプラグインが後から元のファイル名を復元できず、完了したジョブは書き換え後の名前で表示されます。リマップ自体は正常に動作します。
   ? "Remapping rewrites the job file before printing it. Without the HelixPrint plugin the rewritten copy is what lands in your print history, so finished jobs are listed under names like modified_1730824_benchy.gcode instead of the file you picked.\n\nInstalling the plugin takes a moment and needs no restart."
@@ -3014,6 +3020,7 @@ translations:
   Suppress periodic temperature status lines: 定期的な温度ステータス行を抑制
   Suppress raw debug output from printer firmware modules: プリンターファームウェアモジュールからの生のデバッグ出力を抑制
   Surfaces inherit app background tokens for light and dark modes.: サーフェスはライトモードとダークモードのアプリ背景トークンを継承します。
+  Swap to another slot automatically when one runs out: 'スロットのフィラメントが切れたら自動で別のスロットに切り替えます'
   Sweep: スイープ
   Switch Printer: プリンターを切り替え
   Switch a power device on or off: 電源デバイスのオン/オフ切り替え
@@ -3051,6 +3058,8 @@ translations:
   Tag Parts: 部位をタグ付け
   Tag parts: 部位をタグ付け
   Takes 3-5 min. Do not interrupt.: 3〜5分かかります。中断しないでください。
+  Tangle prevention active: 絡み防止 動作中
+  Tangle prevention boosted: 絡み防止 強化中
   'Tangle sensitivity': '絡み検出の感度'
   Tap + to add: + をタップして追加
   Tap Firmware Restart to recover — on K2 this also bounces the rpi MCU bridge: 「ファームウェア再起動」をタップして復旧してください。K2 では rpi MCU ブリッジも再起動されます
@@ -3639,6 +3648,7 @@ translations:
   enable: 有効化
   enabled: 有効
   error: エラー
+  'exact: same material and color. material: same material. next: any ready slot, even a different material': 'exact: 同じ素材と同じ色。material: 同じ素材。next: 準備済みの任意のスロット (別の素材でも可)'
   extruder: エクストルーダー
   extruder(s): エクストルーダー
   extruders: エクストルーダー
@@ -3674,6 +3684,7 @@ translations:
   'off': オフ
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: AFC の remember_spool がファームウェア側でスプール情報を保持しているため、このトグル設定より優先されます
   AI detection: AI 検出
+  Modifying G-code is not available on this device. Printing original file.: 'このデバイスでは G-code を変更できません。元のファイルを印刷します。'
   Modifying G-code needs the HelixPrint plugin. Printing original file.: G-codeの変更にはHelixPrintプラグインが必要です。元のファイルを印刷します。
   Monitor for print abnormalities (K2 Plus camera-based): 印刷異常を監視 (K2 Plus カメラベース)
   Monitor for print abnormalities (camera-based): '印刷異常を監視 (カメラベース)'
@@ -3730,6 +3741,7 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} はインストールされていますが、予備スプールへの切り替えがオフになっているため、自動切り替えは行われません。'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} はインストールされていますが、予備スプールの設定を読み取れませんでした - 自動切り替えを当てにしないでください。'
   '{} is still printing. The print keeps running after you switch.': '{}は印刷中です。切り替えても印刷は続行されます。'
+  '{} is not available on this device. Printing original file.': 'このデバイスでは {} を利用できません。元のファイルを印刷します。'
   '{} is not set up on this printer': '{} はこのプリンターで設定されていません'
   '{} lines in helixscreen.env were ignored': 'helixscreen.env の{}行が無視されました'
   '{} kept crashing the panel; switched back to {}': '{} で画面のクラッシュが繰り返されたため、{} に戻しました'

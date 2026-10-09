@@ -6,6 +6,7 @@
 #include "ui_virtual_list.h"
 
 #include "../lvgl_test_fixture.h"
+#include "../test_helpers/scoped_pointer_indev.h"
 #include "lvgl/src/display/lv_display_private.h"
 #include "scroll_blit.h"
 
@@ -381,4 +382,173 @@ TEST_CASE_METHOD(ScrollBlitFixture, "scroll blit handles a scroll that layout ma
     REQUIRE(mismatch() == "0 px differ");
     render();
     REQUIRE(mismatch() == "0 px differ");
+}
+
+namespace {
+/// Every area the display is asked to redraw while it lives.
+struct InvalidationRecorder {
+    explicit InvalidationRecorder(lv_display_t* disp) : disp_(disp) {
+        lv_display_add_event_cb(disp_, record, LV_EVENT_INVALIDATE_AREA, this);
+    }
+    ~InvalidationRecorder() {
+        lv_display_remove_event_cb_with_user_data(disp_, record, this);
+    }
+    InvalidationRecorder(const InvalidationRecorder&) = delete;
+    InvalidationRecorder& operator=(const InvalidationRecorder&) = delete;
+
+    std::vector<lv_area_t> areas;
+
+  private:
+    static void record(lv_event_t* e) {
+        static_cast<InvalidationRecorder*>(lv_event_get_user_data(e))
+            ->areas.push_back(*static_cast<lv_area_t*>(lv_event_get_param(e)));
+    }
+    lv_display_t* disp_;
+};
+} // namespace
+
+TEST_CASE_METHOD(ScrollBlitFixture,
+                 "scroll blit redraws a scroller's rounded corners only where it draws them",
+                 "[scroll_blit]") {
+    lv_area_t c;
+    lv_obj_get_coords(list_, &c);
+    bool band_expected = false;
+    SECTION("nothing painted at the corners") {}
+    SECTION("an opaque background") {
+        lv_obj_set_style_bg_color(list_, lv_color_hex(0x283038), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(list_, LV_OPA_COVER, LV_PART_MAIN);
+        band_expected = true;
+    }
+    SECTION("content clipped to the corners") {
+        lv_obj_set_style_clip_corner(list_, true, LV_PART_MAIN);
+        band_expected = true;
+    }
+    render();
+
+    std::vector<lv_area_t> invalidated;
+    {
+        InvalidationRecorder recorder(disp_);
+        lv_obj_scroll_by(list_, 0, -40, LV_ANIM_OFF);
+        render();
+        invalidated = recorder.areas;
+    }
+
+    // The radius rows along the top edge, which the upward scroll exposes nothing in.
+    const bool top_band =
+        std::any_of(invalidated.begin(), invalidated.end(), [&](const lv_area_t& a) {
+            return a.y1 == c.y1 && a.y2 < c.y1 + 8 &&
+                   lv_area_get_width(&a) > lv_area_get_width(&c) / 2;
+        });
+    CHECK(top_band == band_expected);
+    REQUIRE(mismatch() == "0 px differ");
+}
+
+TEST_CASE_METHOD(ScrollBlitFixture, "scroll blit redraws a scrollbar's thumbs, not its tracks",
+                 "[scroll_blit]") {
+    lv_area_t c;
+    lv_obj_get_coords(list_, &c);
+    bool horizontal_bar = true;
+    SECTION("bars always on") {}
+    SECTION("bars only where the content overflows") {
+        lv_obj_set_scrollbar_mode(list_, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_scroll_dir(list_, LV_DIR_VER);
+        horizontal_bar = false;
+    }
+    render();
+
+    for (int32_t dy : {-40, -70, 30, 55}) {
+        CAPTURE(dy);
+        std::vector<lv_area_t> invalidated;
+        {
+            InvalidationRecorder recorder(disp_);
+            lv_obj_scroll_by(list_, 0, dy, LV_ANIM_OFF);
+            render();
+            invalidated = recorder.areas;
+        }
+        for (const lv_area_t& a : invalidated) {
+            INFO(a.x1 << "," << a.y1 << "-" << a.x2 << "," << a.y2);
+            const bool narrow = lv_area_get_width(&a) <= 12;
+            CHECK_FALSE((narrow && lv_area_get_height(&a) >= lv_area_get_height(&c) - 2));
+            if (!horizontal_bar) {
+                const bool bottom_row = a.y2 >= c.y2 - 12 && lv_area_get_height(&a) <= 12 &&
+                                        lv_area_get_width(&a) > lv_area_get_width(&c) / 2;
+                CHECK_FALSE(bottom_row);
+            }
+        }
+        REQUIRE(mismatch() == "0 px differ");
+    }
+}
+
+TEST_CASE_METHOD(ScrollBlitFixture,
+                 "scroll blit keeps a minimum-length thumb exact at both ends and past them",
+                 "[scroll_blit]") {
+    // 300 rows shrink the thumb below its minimum length, so it is clamped.
+    for (int i = 0; i < 270; i++)
+        plain_box(list_, 0, 0, 360, 40, 0x405060);
+    lv_obj_update_layout(lv_screen_active());
+    render();
+    auto step = [&](int32_t dy) {
+        CAPTURE(dy, lv_obj_get_scroll_y(list_));
+        lv_obj_scroll_by(list_, 0, dy, LV_ANIM_OFF);
+        render();
+        REQUIRE(mismatch() == "0 px differ");
+    };
+    for (int32_t dy : {30, -30, -40, -45}) // past the top and back down
+        step(dy);
+    lv_obj_scroll_to_y(list_, LV_COORD_MAX, LV_ANIM_OFF);
+    render();
+    REQUIRE(mismatch() == "0 px differ");
+    for (int32_t dy : {-40, 40, 60}) // past the bottom and back up
+        step(dy);
+}
+
+TEST_CASE_METHOD(ScrollBlitFixture,
+                 "scroll blit stays exact when a drag shows and hides an active scrollbar",
+                 "[scroll_blit]") {
+    lv_obj_set_scrollbar_mode(list_, LV_SCROLLBAR_MODE_ACTIVE);
+    render();
+    helix_test::ScopedPointerIndev pointer;
+    lv_area_t c;
+    lv_obj_get_coords(list_, &c);
+    const int32_t x = (c.x1 + c.x2) / 2;
+    int32_t y = c.y2 - 40;
+    pointer.press(x, y);
+    render();
+    for (int i = 0; i < 6; i++) {
+        CAPTURE(i);
+        y -= 25;
+        pointer.move(x, y);
+        render();
+        REQUIRE(mismatch() == "0 px differ");
+    }
+    REQUIRE(lv_obj_get_scroll_y(list_) > 0); // the drag scrolled
+    pointer.release(x, y);
+    render();
+    REQUIRE(mismatch() == "0 px differ");
+}
+
+TEST_CASE_METHOD(ScrollBlitFixture,
+                 "scroll blit redraws the whole track of a thumb with a styled length",
+                 "[scroll_blit]") {
+    lv_obj_set_style_length(list_, 60, LV_PART_SCROLLBAR);
+    render();
+    lv_area_t c;
+    lv_obj_get_coords(list_, &c);
+    for (int32_t dy : {-40, 30}) {
+        CAPTURE(dy);
+        std::vector<lv_area_t> invalidated;
+        {
+            InvalidationRecorder recorder(disp_);
+            lv_obj_scroll_by(list_, 0, dy, LV_ANIM_OFF);
+            render();
+            invalidated = recorder.areas;
+        }
+        const bool whole_track =
+            std::any_of(invalidated.begin(), invalidated.end(), [&](const lv_area_t& a) {
+                return lv_area_get_width(&a) <= 12 &&
+                       lv_area_get_height(&a) >= lv_area_get_height(&c) - 2;
+            });
+        CHECK(whole_track);
+        REQUIRE(mismatch() == "0 px differ");
+    }
 }

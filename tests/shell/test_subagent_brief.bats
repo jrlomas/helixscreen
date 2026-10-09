@@ -32,7 +32,7 @@ setup() {
     contains 'Plain `make`, never a fixed -j' "$output"
     contains "jobpool status" "$output"
     contains '-j$(scripts/helix-claim jobs)' "$output"
-    contains "zeus-run.sh" "$output"
+    contains "test-host-run.sh" "$output"
     contains "foreground" "$output"
     contains "pkill" "$output"
 }

@@ -209,6 +209,15 @@ void AmsState::sync_clog_meter_from_info(const AmsSystemInfo& info) {
     }
     publish(clog_meter_subjects(), r);
 
+    const auto& fg = info.flowguard_info;
+    const auto& tp = info.tangle_prevention;
+    const auto note = helix::ui::clog_meter_note(!fg.trigger.empty(), !fg.reason.empty(),
+                                                 tp.present && tp.active, tp.present && tp.boosted);
+    // Only the trip reason is data; the tangle phrases are translated in the XML.
+    const char* note_text = note == helix::ui::ClogNote::TripReason ? fg.reason.c_str() : "";
+    lv_subject_set_int(&clog_meter_note_kind_, static_cast<int>(note));
+    copy_string_if_changed(&clog_meter_note_text_, note_text);
+
     spdlog::trace("[AMS State] Synced clog meter - mode={}, value={}, warning={}", r.mode, r.value,
                   r.warning);
 }

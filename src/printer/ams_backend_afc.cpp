@@ -301,10 +301,6 @@ bool AmsBackendAfc::auto_unloads_after_print() const {
 // ============================================================================
 
 void AmsBackendAfc::on_started() {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        unlinked_spool_ids_.clear();
-    }
     // Version is informational only (see apply_afc_version_response) — nothing
     // below depends on the result, so this does not need to complete first.
     // Load persisted per-slot overrides BEFORE any status callback can parse a
@@ -2332,15 +2328,28 @@ void AmsBackendAfc::parse_afc_state(const nlohmann::json& afc_data,
 // ============================================================================
 
 bool AmsBackendAfc::restates_unlinked_spool(int slot_index, int firmware_id) {
-    const auto it = unlinked_spool_ids_.find(slot_index);
-    if (it == unlinked_spool_ids_.end()) {
+    const auto it = overrides_.find(slot_index);
+    if (it == overrides_.end() || it->second.unlinked_spool_id <= 0) {
         return false;
     }
-    if (it->second == firmware_id) {
+    if (it->second.unlinked_spool_id == firmware_id) {
         return true;
     }
-    unlinked_spool_ids_.erase(it);
+    set_unlinked_spool(slot_index, 0);
     return false;
+}
+
+void AmsBackendAfc::set_unlinked_spool(int slot_index, int spool_id) {
+    const auto it = overrides_.find(slot_index);
+    if (spool_id <= 0 && (it == overrides_.end() || it->second.unlinked_spool_id <= 0)) {
+        return;
+    }
+    helix::ams::FilamentSlotOverride& record = overrides_[slot_index];
+    record.unlinked_spool_id = spool_id;
+    if (override_store_) {
+        helix::ams::save_override_async(override_store_.get(), slot_index, record,
+                                        backend_log_tag(), "unlink");
+    }
 }
 
 void AmsBackendAfc::invalidate_broken_binding(int slot_index, int firmware_spool_id) {
@@ -2593,7 +2602,7 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
                 }
             }
         } else if (data["spool_id"].is_null()) {
-            unlinked_spool_ids_.erase(slot_index);
+            set_unlinked_spool(slot_index, 0);
             slot.spoolman_id = 0;
             lane_firmware_spool_id_[lane_name] = 0;
             firmware.cache.spoolman_id.reset();
@@ -2732,8 +2741,14 @@ void AmsBackendAfc::parse_afc_stepper(int slot_index, const std::string& lane_na
         slot.status == SlotStatus::LOADED || slot.status == SlotStatus::AVAILABLE;
     const bool filament_present_before = status_at_frame_start == SlotStatus::LOADED ||
                                          status_at_frame_start == SlotStatus::AVAILABLE;
+    // A remember_spool lane keeps its spool_id through an eject too, so the
+    // next spool inserted would inherit the unlinked id; only a lane AFC
+    // clears on eject ends the unlink here.
     if (filament_present_before && !filament_present_now) {
-        unlinked_spool_ids_.erase(slot_index);
+        const auto remembers = lane_remember_spool_.find(lane_name);
+        if (remembers == lane_remember_spool_.end() || !remembers->second) {
+            set_unlinked_spool(slot_index, 0);
+        }
     }
     if (filament_present_now && !filament_present_before) {
         maybe_reassert_retained_spool_link(slot_index, lane_name);
@@ -4022,7 +4037,7 @@ AmsBackendAfc::parse_configfile_topology(const nlohmann::json& response) {
             const std::string v = helix::text_io::to_lower(pin->get<std::string>());
             return !v.empty() && v != "buffer" && v != "none" && v != "unknown";
         };
-        // ponytail: one flag ORed across every AFC_extruder section, so on a
+        // One flag ORed across every AFC_extruder section, so on a
         // multi-extruder setup one fitted sensor marks every unit. Per-unit needs
         // the extruder-to-unit mapping rebuild_unit_map_from_klipper() derives.
         topo.toolhead_sensor_fitted = topo.toolhead_sensor_fitted.value_or(false) ||
@@ -4456,7 +4471,7 @@ void AmsBackendAfc::parse_lane_data(const nlohmann::json& lane_data) {
                     }
                 }
             } else if (lane["spool_id"].is_null()) {
-                unlinked_spool_ids_.erase(i);
+                set_unlinked_spool(i, 0);
                 slot.spoolman_id = 0;
                 firmware.cache.spoolman_id.reset();
             }
@@ -5763,18 +5778,17 @@ AmsError AmsBackendAfc::apply_user_edit(int slot_index, const SlotInfo& info,
             // unlink (id 0) erases the pending expectation instead.
             record_own_spool_write(slot_index, info.spoolman_id, old_spoolman_id);
             if (info.spoolman_id > 0) {
-                unlinked_spool_ids_.erase(slot_index);
-            }
-            if (info.spoolman_id > 0) {
                 execute_gcode(
                     fmt::format("SET_SPOOL_ID LANE={} SPOOL_ID={}", lane_name, info.spoolman_id));
             } else if (info.spoolman_id == 0 && old_spoolman_id > 0) {
                 // AFC keeps the id on a lane with remember_spool and restates
-                // it in every frame; hold that id as stale until the lane
-                // reports something else. Armed only when the clear is sent.
+                // it in every full snapshot; persist that id as unlinked until
+                // the lane reports something else. Armed only when the clear
+                // is sent. A link needs no call here: persist_override above
+                // already dropped the unlink from the record it staged.
                 const auto fw = lane_firmware_spool_id_.find(lane_name);
                 if (fw != lane_firmware_spool_id_.end() && fw->second > 0) {
-                    unlinked_spool_ids_[slot_index] = fw->second;
+                    set_unlinked_spool(slot_index, fw->second);
                     fw->second = 0;
                     lane_firmware_readings_[lane_name].cache.spoolman_id.reset();
                 }
