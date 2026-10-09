@@ -144,7 +144,7 @@ TEST_CASE("Overview plan: hub bands take the detail view's four states",
     }
     SECTION("Loaded: triggered on an inactive unit, in its loaded lane's color") {
         d->unit_hub_triggered[1] = true;
-        d->unit_lane_segment[1] = PathSegment::HUB;
+        d->unit_lane_segment[1] = PathSegment::OUTPUT;
         d->unit_lane_color[1] = OWL;
         const PathPlan& plan = plan_of(*d);
         const SensorBand* band = stem_band(plan, 300);
@@ -164,8 +164,8 @@ TEST_CASE("Overview plan: hub bands take the detail view's four states",
         CHECK(band->state == BandState::Loaded);
         CHECK(lv_color_eq(band->fill, IDLE));
     }
-    SECTION("Error: the system error is at the active unit's hub") {
-        d->error_segment = PathSegment::HUB;
+    SECTION("Error: the system error is at the active unit's hub output") {
+        d->error_segment = PathSegment::OUTPUT;
         const PathPlan& plan = plan_of(*d);
         CHECK(stem_band(plan, 100)->state == BandState::Error);
         // An error belongs to the active route only.
@@ -273,10 +273,10 @@ TEST_CASE_METHOD(LVGLTestFixture, "Overview canvas: the error setter reaches the
     REQUIRE(data != nullptr);
     CHECK(stem_band(plan_of(*data), 100)->state == BandState::Active);
 
-    ui_system_path_canvas_set_error_segment(canvas, static_cast<int>(PathSegment::HUB));
+    ui_system_path_canvas_set_error_segment(canvas, static_cast<int>(PathSegment::OUTPUT));
     CHECK(stem_band(plan_of(*data), 100)->state == BandState::Error);
 
-    ui_system_path_canvas_set_unit_lane(canvas, 1, static_cast<int>(PathSegment::HUB), OWL);
+    ui_system_path_canvas_set_unit_lane(canvas, 1, static_cast<int>(PathSegment::OUTPUT), OWL);
     ui_system_path_canvas_set_unit_hub_sensor(canvas, 1, true, true);
     const SensorBand* owl = stem_band(plan_of(*data), 300);
     REQUIRE(owl != nullptr);
@@ -284,4 +284,48 @@ TEST_CASE_METHOD(LVGLTestFixture, "Overview canvas: the error setter reaches the
     CHECK(lv_color_eq(owl->fill, lv_color_hex(OWL)));
 
     lv_obj_delete(canvas);
+}
+
+TEST_CASE("Overview plan: a MIXED unit's hub lanes pass through its box to the tool",
+          "[system_path][filament_path]") {
+    auto d = multi();
+    d->unit_count = 1;
+    d->unit_x_positions[0] = 200;
+    d->unit_topology[0] = 3;
+    d->unit_tool_count[0] = 3;
+    d->total_tools = 3;
+    d->active_tool = 2;
+    d->unit_has_hub_sensor[0] = true;
+    const SysLayout L = compute_sys_layout(*d, AREA);
+    PathPlan plan;
+    OverviewBoxes boxes;
+    plan_overview(*d, L, plan, boxes);
+    const HubInfo& box = boxes.hubs[0];
+    REQUIRE(box.valid);
+    const int32_t tool_x = calc_tool_x(2, 3, L.x_off, L.width);
+    CHECK(box.hub_x == tool_x);
+    const float top = (float)(box.mini_hub_y - box.mini_hub_h / 2);
+    const float bottom = (float)(box.mini_hub_y + box.mini_hub_h / 2);
+    const float nozzle_top = (float)(L.tools_y - small_tool_scale(*d) * 2);
+
+    // One route enters the box top, crosses it unpainted, and leaves the
+    // bottom for the nozzle, with the hub band at the box's output.
+    const Route* through = nullptr;
+    for (int i = 0; i < plan.route_count; i++)
+        if (on_route(plan.routes[i], {(float)tool_x, top}))
+            through = &plan.routes[i];
+    REQUIRE(through != nullptr);
+    CHECK(contiguous(through->path));
+    CHECK(on_route(*through, {(float)tool_x, bottom}));
+    CHECK(near(seg_end(through->path.segs[through->path.count - 1]), (float)tool_x, nozzle_top,
+               0.5f));
+    bool unpainted_inside = false;
+    for (int i = 0; i < through->path.count; i++)
+        unpainted_inside |= !through->style[i].painted &&
+                            near(seg_end(through->path.segs[i]), (float)tool_x, bottom, 0.5f);
+    CHECK(unpainted_inside);
+    REQUIRE(plan.band_count == 1);
+    CHECK(near(plan.bands[0].at, (float)tool_x, bottom, 0.5f));
+    CHECK(plan.bands[0].on_box_edge);
+    CHECK(plan.bands[0].state == BandState::Active);
 }

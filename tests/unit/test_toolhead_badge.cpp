@@ -66,9 +66,13 @@ TEST_CASE("Toolhead badge: the lower-right corner clears the tube on every style
                 const lv_area_t lr =
                     toolhead_badge_rect(g, b.w, b.h, INSET, BadgeCorner::LowerRight);
                 CHECK(badge_clears_tube(lr, 200, tube_end, TUBE_HALF));
-                // Inside the glyph's bottom edge, and on its right.
-                CHECK(lr.y2 == g.bottom - INSET);
-                CHECK(lr.x2 == g.right - INSET);
+                // Overhanging the corner, like the spool badge on its spool,
+                // and clear of the nozzle's center column.
+                CHECK(lr.x2 > g.right);
+                CHECK(lr.y2 > g.bottom);
+                CHECK(lr.x1 <= g.right);
+                CHECK(lr.y1 <= g.bottom);
+                CHECK(lr.x1 > (g.left + g.right) / 2);
 
                 const lv_area_t ul =
                     toolhead_badge_rect(g, b.w, b.h, INSET, BadgeCorner::UpperLeft);

@@ -50,7 +50,9 @@ enum class BadgeCorner : uint8_t { UpperLeft, LowerRight };
 /// narrower styles.
 inline constexpr BadgeCorner TOOLHEAD_BADGE_CORNER = BadgeCorner::LowerRight;
 
-/// The badge rect, @p inset inside @p corner of the glyph.
+/// The badge rect overhanging @p corner of the glyph: a third of its width and
+/// half its height over the glyph, kept @p inset clear of the glyph's center
+/// column.
 lv_area_t toolhead_badge_rect(const GlyphBounds& glyph, int32_t width, int32_t height,
                               int32_t inset, BadgeCorner corner = TOOLHEAD_BADGE_CORNER);
 
@@ -61,8 +63,9 @@ bool badge_clears_tube(const lv_area_t& badge, int32_t cx, int32_t tube_end_y, i
 /// Badge width for @p label: its text plus padding, at least the minimum width.
 int32_t tool_badge_width(const ToolBadgeLook& look, const char* label);
 
-/// Draw @p label's badge on the glyph's corner. Paint it after the glyph.
+/// Draw @p label's badge on the glyph's corner, at full opacity whatever the
+/// glyph's dim. Paint it after every glyph, so a neighbour never covers it.
 void draw_toolhead_badge(lv_layer_t* layer, const ToolBadgeLook& look, const GlyphBounds& glyph,
-                         const char* label, lv_opa_t opa = LV_OPA_COVER);
+                         const char* label);
 
 } // namespace helix::ui

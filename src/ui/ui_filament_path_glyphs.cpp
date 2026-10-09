@@ -363,10 +363,10 @@ int32_t toolhead_top_y(int32_t nozzle_y, int32_t extruder_scale) {
     return toolhead_glyph_bounds(0, nozzle_y, extruder_scale).top;
 }
 
-void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t scale, const char* label,
-                     lv_opa_t opa) {
+void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t scale,
+                     const char* label) {
     helix::ui::draw_toolhead_badge(ctx.layer, helix::ui::tool_badge_look(),
-                                   toolhead_glyph_bounds(cx, cy, scale), label, opa);
+                                   toolhead_glyph_bounds(cx, cy, scale), label);
 }
 
 } // namespace helix::ui::fpath

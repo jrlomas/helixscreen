@@ -468,10 +468,10 @@ helix::ui::GlyphBounds toolhead_glyph_bounds(int32_t cx, int32_t cy, int32_t sca
 /// shroud, above the nozzle inlet at nozzle_y - extruder_scale * 2).
 int32_t toolhead_top_y(int32_t nozzle_y, int32_t extruder_scale);
 
-/// The tool badge ("T0", "T1", …) on the corner of draw_toolhead()'s glyph.
-/// Paint it after the glyph.
-void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t scale, const char* label,
-                     lv_opa_t opa = LV_OPA_COVER);
+/// The tool badge ("T0", "T1", …) on the corner of draw_toolhead()'s glyph,
+/// at full opacity. Paint it after every glyph.
+void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t scale,
+                     const char* label);
 
 // ============================================================================
 // Animations (ui_filament_path_anim.cpp)

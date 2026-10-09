@@ -111,14 +111,18 @@ ToolBadgeLook tool_badge_look(bool is_override) {
 
 lv_area_t toolhead_badge_rect(const GlyphBounds& glyph, int32_t width, int32_t height,
                               int32_t inset, BadgeCorner corner) {
+    // Like the spool badge on its spool, the badge overhangs the corner: a
+    // third of its width and half its height over the glyph, never reaching
+    // the nozzle's center column.
+    const int32_t mid = (glyph.left + glyph.right) / 2;
     if (corner == BadgeCorner::UpperLeft) {
-        const int32_t x1 = glyph.left + inset;
-        const int32_t y1 = glyph.top + inset;
-        return {x1, y1, x1 + width - 1, y1 + height - 1};
+        const int32_t x2 = LV_MIN(glyph.left + width / 3, mid - inset - 1);
+        const int32_t y2 = glyph.top + height / 2;
+        return {x2 - width + 1, y2 - height + 1, x2, y2};
     }
-    const int32_t x2 = glyph.right - inset;
-    const int32_t y2 = glyph.bottom - inset;
-    return {x2 - width + 1, y2 - height + 1, x2, y2};
+    const int32_t x1 = LV_MAX(glyph.right - width / 3, mid + inset + 1);
+    const int32_t y1 = glyph.bottom - height / 2;
+    return {x1, y1, x1 + width - 1, y1 + height - 1};
 }
 
 bool badge_clears_tube(const lv_area_t& badge, int32_t cx, int32_t tube_end_y, int32_t tube_half) {
@@ -132,7 +136,7 @@ int32_t tool_badge_width(const ToolBadgeLook& look, const char* label) {
 }
 
 void draw_toolhead_badge(lv_layer_t* layer, const ToolBadgeLook& look, const GlyphBounds& glyph,
-                         const char* label, lv_opa_t opa) {
+                         const char* label) {
     if (!label || !label[0] || !look.font)
         return;
     const lv_area_t area =
@@ -141,14 +145,13 @@ void draw_toolhead_badge(lv_layer_t* layer, const ToolBadgeLook& look, const Gly
     lv_draw_fill_dsc_t fill;
     lv_draw_fill_dsc_init(&fill);
     fill.color = look.colors.bg;
-    fill.opa = (lv_opa_t)((look.bg_opa * opa) / LV_OPA_COVER);
+    fill.opa = look.bg_opa;
     fill.radius = look.radius;
     lv_draw_fill(layer, &fill, &area);
 
     lv_draw_label_dsc_t text;
     lv_draw_label_dsc_init(&text);
     text.color = look.colors.text;
-    text.opa = opa;
     text.font = look.font;
     text.align = LV_TEXT_ALIGN_CENTER;
     text.text = label;

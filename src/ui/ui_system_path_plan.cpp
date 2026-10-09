@@ -8,6 +8,7 @@
 #include "ui_toolhead_badge.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace helix::ui::syspath {
 
@@ -79,6 +80,14 @@ void append_fan(Route& r, const pg::MergeLaneOut& lane, fpath::SpanStyle s) {
     route_append(r, fan, s);
 }
 
+// X where the route currently ends.
+float seg_end_x(const Route& r) {
+    const pg::PathSeg& s = r.path.segs[r.path.count - 1];
+    if (s.type == pg::PathSeg::LINE)
+        return s.p1.x;
+    return s.center.x + s.radius * std::cos(s.start_angle + s.sweep);
+}
+
 // A new route, or nullptr when the plan is full.
 Route* try_new_route(PathPlan& plan) {
     if (plan.route_count >= fpath::MAX_ROUTES) {
@@ -102,6 +111,7 @@ struct GlobalRoute {
     int32_t end_y;
     int32_t dist; // absolute horizontal distance (for stagger ordering)
     bool is_hub;  // HUB topology route (lands on a mini hub)
+    bool via_box; // MIXED hub-group route: passes through its "H" box above the tool
 };
 
 // Where unit `unit_index` sits among the HUB units that feed the SAME physical
@@ -158,20 +168,32 @@ int collect_parallel_mixed_routes(const SystemPathData& data, const SysLayout& L
         int32_t tool_x = calc_tool_x(tool_idx, data.total_tools, L.x_off, L.width);
         int32_t start_x = start_x_of(t);
         int32_t dist = start_x > tool_x ? (start_x - tool_x) : (tool_x - start_x);
-        routes[n++] = {i, tool_idx, start_x, L.entry_y, tool_x, L.tools_y, dist, false};
+        routes[n++] = {i, tool_idx, start_x, L.entry_y, tool_x, L.tools_y, dist, false, false};
     }
 
-    // MIXED: the hub group's mini hub sits on its own stem, so hub_x == tool_x.
-    if (data.unit_topology[i] == TOPO_MIXED && tool_count > 1) {
-        int hub_tool_idx = first_tool + tool_count - 1;
-        int32_t hub_start_x = start_x_of(tool_count - 1);
-        int32_t mhw = data.hub_width * 2 / 5;
-        int32_t mhh = L.hub_h * 2 / 3;
-        int32_t mhy = L.entry_y + mhh / 2 + 4;
-        bool hub_has_filament =
-            i == data.active_unit && data.filament_loaded && data.active_tool == hub_tool_idx;
-        boxes.hubs[i] = {hub_start_x,  hub_start_x, mhy, mhw, mhh, hub_fill(data, hub_has_filament),
-                         hub_tool_idx, true};
+    // MIXED: the hub-routed lanes share the group's last tool. Its "H" box
+    // stands just above that tool, where its route is alone: the route enters
+    // the box top and leaves the bottom for the nozzle.
+    if (data.unit_topology[i] == TOPO_MIXED && tool_count > 1 && n > 0 &&
+        routes[n - 1].tool_idx == first_tool + tool_count - 1) {
+        GlobalRoute& hub_route = routes[n - 1];
+        hub_route.via_box = true;
+        const int32_t mhw = data.hub_width * 2 / 5;
+        const int32_t mhh = L.hub_h * 2 / 3;
+        const int32_t outlet = LV_MAX(10, 3 * data.tube_gauge);
+        const int32_t nozzle_top = L.tools_y - small_tool_scale(data) * 2;
+        const int32_t mhy = nozzle_top - outlet - mhh / 2;
+        const bool hub_has_filament =
+            i == data.active_unit && data.filament_loaded && data.active_tool == hub_route.tool_idx;
+        boxes.hubs[i] = {hub_route.end_x,
+                         hub_route.end_x,
+                         mhy,
+                         mhw,
+                         mhh,
+                         hub_fill(data, hub_has_filament),
+                         hub_route.tool_idx,
+                         true};
+        hub_route.end_y = mhy - mhh / 2;
     }
     return n;
 }
@@ -203,7 +225,7 @@ int collect_hub_route(const SystemPathData& data, const SysLayout& L, int i, Glo
     int32_t hub_merge_y = L.entry_y + (L.merge_y - L.entry_y) * 2 / 3;
     int32_t dist = unit_x > hub_x ? (unit_x - hub_x) : (hub_x - unit_x);
     routes[n++] = {i,    first_tool, unit_x, hub_merge_y, hub_x, mini_hub_y - mini_hub_h / 2,
-                   dist, true};
+                   dist, true,       false};
 
     bool hub_has_filament = i == data.active_unit && data.filament_loaded;
     boxes.hubs[i] = {hub_x,      tool_x,     mini_hub_y,
@@ -287,25 +309,44 @@ void plan_multi_tool(const SystemPathData& data, const SysLayout& L, PathPlan& p
             break;
 
         if (!route.is_hub) {
-            // A tool route carries filament only when it is the active tool's.
+            // A tool route carries filament only when it is the active tool's;
+            // a MIXED hub group's also when its hub sensor reads filament.
             Lane lane = unit_lane(data, route.unit_idx);
-            lane.on = tool_on;
             if (!tool_on) {
-                lane.reached = PathSegment::NONE;
-                lane.color = data.color_idle;
+                const bool hub_reads = route.via_box && data.unit_has_hub_sensor[route.unit_idx] &&
+                                       data.unit_hub_triggered[route.unit_idx];
+                lane = unit_lane(data, -1);
+                if (hub_reads) {
+                    lane.reached = PathSegment::OUTPUT;
+                    if (data.unit_lane_segment[route.unit_idx] != PathSegment::NONE)
+                        lane.color = lv_color_hex(data.unit_lane_color[route.unit_idx]);
+                }
             }
+            lane.on = tool_on;
             const fpath::SpanStyle s = lane.style(PathSegment::LANE);
+            // A hub-group route ends at its box top; the rest at the nozzle.
+            const int32_t end_y = route.via_box ? route.end_y : (int32_t)nozzle_top;
             const int32_t dx = route.end_x - route.start_x;
             if (LV_ABS(dx) <= data.tube_gauge) {
                 // Too close to bend into: drop straight onto the glyph.
                 append_line(*r, (float)route.start_x, (float)route.start_y, (float)route.start_x,
-                            nozzle_top, s);
+                            (float)end_y, s);
             } else {
                 int32_t horiz_y = par_bot_y - parallel_idx * par_step;
                 parallel_idx++;
-                horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, route.end_y - arc_r - 2);
-                append_harness(*r, route.start_x, route.start_y, route.end_x, (int32_t)nozzle_top,
-                               horiz_y, s);
+                horiz_y = LV_CLAMP(horiz_y, route.start_y + arc_r + 2, end_y - arc_r - 2);
+                append_harness(*r, route.start_x, route.start_y, route.end_x, end_y, horiz_y, s);
+            }
+            if (route.via_box) {
+                const HubInfo& hub = boxes.hubs[route.unit_idx];
+                const float x = seg_end_x(*r);
+                const float out_y = (float)(hub.mini_hub_y + hub.mini_hub_h / 2);
+                append_line(*r, x, (float)end_y, x, out_y, unpainted(lane.style(PathSegment::HUB)));
+                if (data.unit_has_hub_sensor[route.unit_idx]) {
+                    add_band_at_end(plan, BandKind::Lane, *r, lane.band(PathSegment::OUTPUT),
+                                    lane.color, /*on_box_edge=*/true);
+                }
+                append_line(*r, x, out_y, x, nozzle_top, lane.style(PathSegment::OUTPUT));
             }
             if (tool_on)
                 plan.active_route = plan.route_count - 1;
@@ -322,13 +363,14 @@ void plan_multi_tool(const SystemPathData& data, const SysLayout& L, PathPlan& p
         pg::MergeLaneOut fan;
         merge_fan(&in, 1, route.end_x, route.end_y, 0, &fan);
         append_fan(*r, fan, lane.style(PathSegment::HUB));
-        if (data.unit_has_hub_sensor[route.unit_idx]) {
-            add_band_at_end(plan, BandKind::Lane, *r, lane.band(PathSegment::HUB), lane.color,
-                            /*on_box_edge=*/true);
-        }
         const int32_t out_y = hub.mini_hub_y + hub.mini_hub_h / 2;
         append_line(*r, (float)hub.hub_x, (float)route.end_y, (float)hub.hub_x, (float)out_y,
                     unpainted(lane.style(PathSegment::HUB)));
+        // The hub sensor reads the hub's output.
+        if (data.unit_has_hub_sensor[route.unit_idx]) {
+            add_band_at_end(plan, BandKind::Lane, *r, lane.band(PathSegment::OUTPUT), lane.color,
+                            /*on_box_edge=*/true);
+        }
         if (hub.hub_x == hub.tool_x) {
             append_line(*r, (float)hub.hub_x, (float)out_y, (float)hub.tool_x, nozzle_top,
                         lane.style(PathSegment::OUTPUT));
@@ -416,13 +458,14 @@ void plan_single_tool(const SystemPathData& data, const SysLayout& L, PathPlan& 
             break;
         if (data.unit_has_hub_sensor[u]) {
             append_line(*r, x, (float)L.entry_y, x, (float)sensor_y, lane.style(PathSegment::LANE));
-            add_band_at_end(plan, BandKind::Lane, *r, lane.band(PathSegment::HUB), lane.color);
-            append_line(*r, x, (float)sensor_y, x, (float)L.merge_y, lane.style(PathSegment::HUB));
+            add_band_at_end(plan, BandKind::Lane, *r, lane.band(PathSegment::OUTPUT), lane.color);
+            append_line(*r, x, (float)sensor_y, x, (float)L.merge_y,
+                        lane.style(PathSegment::OUTPUT));
         } else {
             append_line(*r, x, (float)L.entry_y, x, (float)L.merge_y,
                         lane.style(PathSegment::LANE));
         }
-        append_fan(*r, fan[k], lane.style(PathSegment::HUB));
+        append_fan(*r, fan[k], lane.style(PathSegment::OUTPUT));
         if (!lane.on)
             continue;
         plan.active_route = plan.route_count - 1;
@@ -575,16 +618,16 @@ Lane unit_lane(const SystemPathData& data, int unit) {
         reached = data.filament_segment;
         if (reached == PathSegment::NONE && data.filament_loaded)
             reached = PathSegment::NOZZLE;
-        if (hub_reads && reached < PathSegment::HUB)
-            reached = PathSegment::HUB;
+        if (hub_reads && reached < PathSegment::OUTPUT)
+            reached = PathSegment::OUTPUT;
         color = lv_color_hex(data.active_color);
     } else if (unit >= 0 && unit < SystemPathData::MAX_UNITS) {
-        // Past its own hub, an inactive unit's filament would be in the shared
-        // path, which belongs to the active unit.
+        // Past its own hub output, an inactive unit's filament would be in the
+        // shared path, which belongs to the active unit.
         const PathSegment lane = data.unit_lane_segment[unit];
-        reached = LV_MIN(lane, PathSegment::HUB);
+        reached = LV_MIN(lane, PathSegment::OUTPUT);
         if (hub_reads)
-            reached = PathSegment::HUB;
+            reached = PathSegment::OUTPUT;
         if (lane != PathSegment::NONE)
             color = lv_color_hex(data.unit_lane_color[unit]);
     }

@@ -191,17 +191,20 @@ static void draw_mini_hubs(lv_layer_t* layer, const SystemPathData* data,
     }
 }
 
-// Tool nozzles along the bottom row, each badged on its corner.
+// Tool nozzles along the bottom row, then each one's corner badge.
 static void draw_tool_row(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
     const int32_t small_scale = small_tool_scale(*data);
     const lv_color_t active = lv_color_hex(data->active_color);
-    const helix::ui::ToolBadgeLook look = helix::ui::tool_badge_look();
-    for (int t = 0; t < data->total_tools && t < SystemPathData::MAX_TOOLS; ++t) {
+    const int tools = LV_MIN(data->total_tools, SystemPathData::MAX_TOOLS);
+    for (int t = 0; t < tools; ++t) {
         int32_t tool_x = calc_tool_x(t, data->total_tools, L.x_off, L.width);
         bool is_active_tool = (t == data->active_tool) && data->filament_loaded;
-
         draw_nozzle_for_style(layer, tool_x, L.tools_y,
                               is_active_tool ? std::optional(active) : std::nullopt, small_scale);
+    }
+    const helix::ui::ToolBadgeLook look = helix::ui::tool_badge_look();
+    for (int t = 0; t < tools; ++t) {
+        int32_t tool_x = calc_tool_x(t, data->total_tools, L.x_off, L.width);
         helix::ui::draw_toolhead_badge(
             layer, look,
             helix::ui::toolhead_bounds(data->toolhead_style, tool_x, L.tools_y, small_scale),

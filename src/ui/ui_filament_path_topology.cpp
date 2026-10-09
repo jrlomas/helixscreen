@@ -130,14 +130,26 @@ void warn_if_dropped(const PathPlan& plan) {
 // Tool changers have independent toolheads: each slot is a complete tool with
 // its own extruder, entry → sensor → own toolhead + badge.
 
-// One tool's toolhead glyph and badge, drawn over its planned tube.
+// The two paint passes over the planned tubes: every toolhead glyph, then
+// every tool badge, so a neighbouring glyph never covers a badge.
+enum class ToolPass : uint8_t { Glyph, Badge };
+
+// One tool's toolhead glyph or badge, drawn over its planned tube.
 void draw_parallel_tool(const RenderCtx& ctx, const SlotRenderStates& states, int i,
-                        const ParallelRows& rows) {
+                        const ParallelRows& rows, ToolPass pass) {
     const FilamentPathData* data = ctx.data;
     int32_t slot_x = ctx.geo.slot_x[i];
     const SlotRenderState& s = states[i];
     const int32_t toolhead_y = rows.toolhead_y;
     const int32_t tool_scale = rows.tool_scale;
+
+    if (pass == ToolPass::Badge) {
+        char tool_label[16];
+        int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
+        format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
+        draw_tool_badge(ctx, slot_x, toolhead_y, tool_scale, tool_label);
+        return;
+    }
 
     // Nozzle color only when filament actually reaches the nozzle
     std::optional<lv_color_t> noz_color;
@@ -151,11 +163,6 @@ void draw_parallel_tool(const RenderCtx& ctx, const SlotRenderStates& states, in
     // draw_animation_parallel (DRAW_POST) so per-frame ticks don't bust the
     // overlay canvas cache.
     draw_toolhead(ctx.layer, slot_x, toolhead_y, noz_color, tool_scale, toolhead_opa);
-
-    char tool_label[16];
-    int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
-    format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
-    draw_tool_badge(ctx, slot_x, toolhead_y, tool_scale, tool_label, toolhead_opa);
 }
 
 void render_parallel(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
@@ -167,8 +174,10 @@ void render_parallel(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
 
     const ParallelRows rows = parallel_rows(*data, ctx.geo);
     const SlotRenderStates states = compute_slot_render_states(data);
-    for (int i = 0; i < LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS); i++)
-        draw_parallel_tool(ctx, states, i, rows);
+    for (ToolPass pass : {ToolPass::Glyph, ToolPass::Badge}) {
+        for (int i = 0; i < LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS); i++)
+            draw_parallel_tool(ctx, states, i, rows, pass);
+    }
 }
 
 // ============================================================================
@@ -185,7 +194,7 @@ void render_parallel(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
 //     (T0)    (T2)       (T1)             nozzles + tool labels
 
 // The shared hub toolhead and its tool badge.
-void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f) {
+void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f, ToolPass pass) {
     const FilamentPathData* data = ctx.data;
     const ThemeCache& theme = data->theme;
 
@@ -213,34 +222,39 @@ void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f) {
         }
     }
 
+    if (pass == ToolPass::Badge) {
+        char tool_label[16];
+        format_tool_badge_label(data, hub_badge_lane, hub_tool, tool_label, sizeof(tool_label));
+        draw_tool_badge(ctx, f.hub_cx, f.toolhead_y, f.tool_scale, tool_label);
+        return;
+    }
+
     // Shared hub nozzle — always "mounted" visually (it's a shared output)
     std::optional<lv_color_t> noz_color;
     if (any_hub_at_nozzle)
         noz_color = hub_nozzle_color;
-    lv_opa_t hub_noz_opa = LV_OPA_COVER;
-    draw_toolhead(ctx.layer, f.hub_cx, f.toolhead_y, noz_color, f.tool_scale, hub_noz_opa);
-
-    char tool_label[16];
-    format_tool_badge_label(data, hub_badge_lane, hub_tool, tool_label, sizeof(tool_label));
-    draw_tool_badge(ctx, f.hub_cx, f.toolhead_y, f.tool_scale, tool_label, hub_noz_opa);
+    draw_toolhead(ctx.layer, f.hub_cx, f.toolhead_y, noz_color, f.tool_scale, LV_OPA_COVER);
 }
 
 // A direct lane's own nozzle and badge.
-void draw_mixed_direct_toolhead(const RenderCtx& ctx, const MixedFrame& f, int i) {
+void draw_mixed_direct_toolhead(const RenderCtx& ctx, const MixedFrame& f, int i, ToolPass pass) {
     const FilamentPathData* data = ctx.data;
     const SlotRenderState& s = f.states[i];
     int32_t slot_x = ctx.geo.slot_x[i];
+
+    if (pass == ToolPass::Badge) {
+        char tool_label[16];
+        int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
+        format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
+        draw_tool_badge(ctx, slot_x, f.toolhead_y, f.tool_scale, tool_label);
+        return;
+    }
 
     std::optional<lv_color_t> noz_color;
     if (s.at_nozzle)
         noz_color = s.color;
     lv_opa_t toolhead_opa = s.is_mounted ? LV_OPA_COVER : LV_OPA_40;
     draw_toolhead(ctx.layer, slot_x, f.toolhead_y, noz_color, f.tool_scale, toolhead_opa);
-
-    char tool_label[16];
-    int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
-    format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
-    draw_tool_badge(ctx, slot_x, f.toolhead_y, f.tool_scale, tool_label, toolhead_opa);
 }
 
 void render_mixed(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
@@ -258,11 +272,13 @@ void render_mixed(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
     }
     paint_box_bands(layer, plan, pal);
 
-    if (f.hub_count > 0)
-        draw_mixed_shared_toolhead(ctx, f);
-    for (int i = 0; i < LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS); i++) {
-        if (!data->slot_is_hub_routed[i])
-            draw_mixed_direct_toolhead(ctx, f, i);
+    for (ToolPass pass : {ToolPass::Glyph, ToolPass::Badge}) {
+        if (f.hub_count > 0)
+            draw_mixed_shared_toolhead(ctx, f, pass);
+        for (int i = 0; i < LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS); i++) {
+            if (!data->slot_is_hub_routed[i])
+                draw_mixed_direct_toolhead(ctx, f, i, pass);
+        }
     }
 }
 
