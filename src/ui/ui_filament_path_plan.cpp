@@ -390,7 +390,7 @@ void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFra
                   const FilamentPathData& data, bool bypass_on_trunk, const Lane* bypass_owner) {
     const float cx = (float)f.center_x;
     const float hub_bot = (float)f.output_y;
-    if (!data.hub_on_toolhead) {
+    if (!data.hub_on_toolhead && data.has_hub_sensor) {
         add_band(plan, BandKind::Trunk, {(float)f.output_x, hub_bot}, {0, 1},
                  lane.band(PathSegment::OUTPUT), lane.color, /*on_box_edge=*/true);
     }
@@ -606,19 +606,33 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
         } else {
             pg::PathPoint pts[4] = {f.hub_fan[i].pts[0], f.hub_fan[i].pts[1], f.hub_fan[i].pts[2],
                                     f.hub_fan[i].pts[3]};
+            // The lane's load sensor sits midway down its straight run below
+            // the prep sensor (to the selector, or to the fan's first bend).
+            const bool load_band = data.slot_has_load_sensor[i];
             if (on_head) {
                 const int32_t sel_top_px = f.selector_y - f.hub_h / 2;
                 const float sel_top = (float)sel_top_px;
-                append_line(r, x, (float)f.prep_y, x, sel_top, lane.style(PathSegment::LANE));
+                if (load_band) {
+                    const float load_y = ((float)f.prep_y + sel_top) / 2;
+                    append_line(r, x, (float)f.prep_y, x, load_y, lane.style(PathSegment::LANE));
+                    add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::LANE), s.color);
+                    append_line(r, x, load_y, x, sel_top, lane.style(PathSegment::LANE));
+                } else {
+                    append_line(r, x, (float)f.prep_y, x, sel_top, lane.style(PathSegment::LANE));
+                }
                 append_line(r, x, sel_top, x, pts[0].y, unpainted(lane.style(PathSegment::LANE)));
             } else {
                 pts[0].y = (float)f.prep_y;
+                if (load_band) {
+                    const float load_y = (pts[0].y + pts[1].y) / 2;
+                    append_line(r, x, pts[0].y, x, load_y, lane.style(PathSegment::LANE));
+                    add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::LANE), s.color);
+                    pts[0].y = load_y;
+                }
             }
             pg::FilamentPath fan;
             pg::route_polyline_filleted(fan, pts, 4, 8.0f);
             route_append(r, fan, lane.style(PathSegment::LANE));
-            add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::HUB), s.color,
-                            /*on_box_edge=*/true);
             if (!lane.on)
                 continue;
             append_line(r, pts[3].x, hub_top, cx, hub_bot, unpainted(lane.style(PathSegment::HUB)));

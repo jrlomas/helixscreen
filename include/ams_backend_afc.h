@@ -310,6 +310,7 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     [[nodiscard]] PathSegment get_slot_filament_segment(int slot_index) const override;
     [[nodiscard]] PathSegment infer_error_segment() const override;
     [[nodiscard]] bool slot_has_prep_sensor(int slot_index) const override;
+    [[nodiscard]] bool slot_has_load_sensor(int slot_index) const override;
 
     /// True when the extruder that names this lane as loaded has filament at
     /// either of its sensors. AFC_extruder carries tool_start_status /

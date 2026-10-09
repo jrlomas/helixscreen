@@ -279,6 +279,8 @@ struct FilamentPathData {
 
     // Per-slot prep sensor capability (true = slot has prep/pre-gate sensor)
     bool slot_has_prep_sensor[MAX_SLOTS] = {};
+    // Per-slot load sensor between prep and hub (AFC), read as LANE
+    bool slot_has_load_sensor[MAX_SLOTS] = {};
 
     // Per-slot tool mapping (actual AFC map values, not slot index)
     int mapped_tool[MAX_SLOTS];              // -1 = use slot index as fallback

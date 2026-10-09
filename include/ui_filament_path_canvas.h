@@ -263,6 +263,12 @@ int ui_filament_path_canvas_get_slot_filament(lv_obj_t* obj, int slot_index);
 void ui_filament_path_canvas_set_slot_prep_sensor(lv_obj_t* obj, int slot, bool has_sensor);
 
 /**
+ * @brief Set whether a slot has a load sensor between its prep sensor and the
+ *        hub (AFC's per-lane `load`); the HUB layout draws its band, read as LANE
+ */
+void ui_filament_path_canvas_set_slot_load_sensor(lv_obj_t* obj, int slot, bool has_sensor);
+
+/**
  * @brief Clear all per-slot filament states
  *
  * Resets all slots to show as idle (no filament installed).

@@ -166,8 +166,11 @@ std::unique_ptr<FilamentPathData> make_data(helix::PathTopology topo) {
     d->theme.color_error = lv_color_hex(0xFF0000);
     d->theme.color_bg = BG;
     d->theme.color_accent = lv_color_hex(0x2196F3);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         d->slot_has_prep_sensor[i] = true;
+        d->slot_has_load_sensor[i] = true;
+    }
+    d->has_hub_sensor = true;
     d->show_bypass = true;
     d->has_toolhead_sensor = true;
     d->bypass_color = BYPASS_COLOR;
@@ -189,6 +192,12 @@ BaseGeometry geometry() {
         g.slot_x[i] = 50 + 100 * i;
     g.center_x = 200;
     return g;
+}
+
+// Where a HUB lane's load sensor band sits: midway down its straight run from
+// the prep sensor (y 40) to its fan's first bend.
+float load_band_y(const FilamentPathData& d, int slot) {
+    return (40.0f + compute_linear_hub_frame(d, geometry(), GLYPH_TOP).hub_fan[slot].pts[1].y) / 2;
 }
 
 float hub_entry_x(const FilamentPathData& d, int slot) {
@@ -366,8 +375,7 @@ TEST_CASE("FilamentPath plan: HUB active route runs unbroken from spool to inlet
     CHECK(near(seg_start(r.path.segs[strokes[1].first]), 200, 140));
 
     REQUIRE(plan.band_count == 11);
-    const float entry_x = hub_entry_x(*d, 1);
-    const SensorBand* active[] = {band_at(plan, 150, 40), band_at(plan, entry_x, 100),
+    const SensorBand* active[] = {band_at(plan, 150, 40), band_at(plan, 150, load_band_y(*d, 1)),
                                   band_at(plan, 200, 140), band_at(plan, 200, 232),
                                   band_at(plan, 200, 272)};
     for (const SensorBand* b : active) {
@@ -389,9 +397,10 @@ TEST_CASE("FilamentPath plan: hub-edge bands are painted after the hub box",
     // paint_tubes paints the rest; render_linear_hub calls paint_box_bands
     // after draw_hub_section, so these clamp the tube over the box edge.
     for (int i = 0; i < 4; i++) {
-        const SensorBand* hub = band_at(plan, hub_entry_x(*d, i), 100);
-        REQUIRE(hub != nullptr);
-        CHECK(hub->on_box_edge);
+        CHECK(band_at(plan, hub_entry_x(*d, i), 100) == nullptr);
+        const SensorBand* load = band_at(plan, 50.0f + 100 * i, load_band_y(*d, i));
+        REQUIRE(load != nullptr);
+        CHECK_FALSE(load->on_box_edge);
     }
     const SensorBand* output = band_at(plan, 200, 140);
     REQUIRE(output != nullptr);
@@ -400,7 +409,7 @@ TEST_CASE("FilamentPath plan: hub-edge bands are painted after the hub box",
     int on_edge = 0;
     for (int i = 0; i < plan.band_count; i++)
         on_edge += plan.bands[i].on_box_edge;
-    CHECK(on_edge == 5);
+    CHECK(on_edge == 1);
     CHECK_FALSE(band_at(plan, 150, 40)->on_box_edge);
     CHECK_FALSE(band_at(plan, 200, 232)->on_box_edge);
     CHECK_FALSE(band_at(plan, 200, 272)->on_box_edge);
@@ -475,9 +484,11 @@ TEST_CASE("FilamentPath plan: a staged lane stays visible in its own color",
     REQUIRE(prep != nullptr);
     CHECK(prep->state == BandState::Loaded);
     CHECK(lv_color_eq(prep->fill, lv_color_hex(SLOT_COLORS[3])));
-    const SensorBand* hub = band_at(plan, end.x, end.y);
-    REQUIRE(hub != nullptr);
-    CHECK(hub->state == BandState::Empty);
+    // The load sensor reads it; no sensor sits at the hub entry.
+    const SensorBand* load = band_at(plan, 350, load_band_y(*d, 3));
+    REQUIRE(load != nullptr);
+    CHECK(load->state == BandState::Loaded);
+    CHECK(band_at(plan, end.x, end.y) == nullptr);
 }
 
 TEST_CASE("FilamentPath plan: fill and error follow the segment the filament reached",
@@ -493,7 +504,7 @@ TEST_CASE("FilamentPath plan: fill and error follow the segment the filament rea
                 return r.style[i];
         return SpanStyle{};
     };
-    const float entry_x = hub_entry_x(*d, 1);
+    const float load_y = load_band_y(*d, 1);
 
     SECTION("loaded to PREP: the entry run fills, the fan stays empty") {
         load_active(*d, 1, PathSegment::PREP);
@@ -502,9 +513,9 @@ TEST_CASE("FilamentPath plan: fill and error follow the segment the filament rea
         CHECK(entry_style(r).wall == TubeWall::Active);
         CHECK(fan_style(r).wall == TubeWall::Plain);
         CHECK_FALSE(fan_style(r).filled);
-        const SensorBand* hub = band_at(plan, entry_x, 100);
-        REQUIRE(hub != nullptr);
-        CHECK(hub->state == BandState::Empty);
+        const SensorBand* load = band_at(plan, 150, load_y);
+        REQUIRE(load != nullptr);
+        CHECK(load->state == BandState::Empty);
     }
     SECTION("error at PREP with the lane loaded: only the prep band is an error") {
         load_active(*d, 1, PathSegment::LANE);
@@ -658,7 +669,7 @@ TEST_CASE("FilamentPath plan: sixteen HUB lanes fit the segment and band budgets
     CHECK(plan.dropped == 0);
     for (int i = 0; i < plan.route_count; i++)
         CHECK(plan.routes[i].dropped == 0);
-    // 16 prep + 16 hub entry + output, merge, toolhead.
+    // 16 prep + 16 load + output, merge, toolhead.
     CHECK(plan.band_count == 35);
     CHECK(contiguous(plan.routes[plan.active_route].path));
 }
@@ -789,6 +800,33 @@ TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: hub_only drops the cached nozzl
     CHECK(d->path_cache.path.count == 0);
 }
 
+TEST_CASE("FilamentPath plan: sensor bands only where the unit reports the sensor",
+          "[filament-path][plan]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::NOZZLE);
+
+    SECTION("no load sensors: no band between prep and hub") {
+        for (int i = 0; i < 4; i++)
+            d->slot_has_load_sensor[i] = false;
+        const PathPlan& plan = plan_for(*d);
+        for (int i = 0; i < 4; i++)
+            CHECK(band_at(plan, 50.0f + 100 * i, load_band_y(*d, i)) == nullptr);
+        CHECK(contiguous(plan.routes[1].path));
+    }
+    SECTION("no hub sensor: no band on the hub outlet") {
+        d->has_hub_sensor = false;
+        const PathPlan& plan = plan_for(*d);
+        CHECK(band_at(plan, 200, 140) == nullptr);
+        CHECK(band_at(plan, 200, 272) != nullptr); // the toolhead sensor stays
+    }
+    SECTION("the load band reads LANE") {
+        load_active(*d, 1, PathSegment::LANE);
+        CHECK(band_at(plan_for(*d), 150, load_band_y(*d, 1))->state == BandState::Active);
+        load_active(*d, 1, PathSegment::PREP);
+        CHECK(band_at(plan_for(*d), 150, load_band_y(*d, 1))->state == BandState::Empty);
+    }
+}
+
 // ============================================================================
 // hub_only output stub
 // ============================================================================
@@ -830,6 +868,7 @@ TEST_CASE("FilamentPath plan: one unit of several ends in a fading output stub",
     }
 
     d->hub_only = true;
+    d->has_hub_sensor = false;
     const PathPlan& plan = plan_for(*d);
     REQUIRE(faded_routes(plan) == 1);
     const Route* r = stub_route(plan);

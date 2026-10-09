@@ -736,6 +736,17 @@ void ui_filament_path_canvas_set_slot_prep_sensor(lv_obj_t* obj, int slot, bool 
     }
 }
 
+void ui_filament_path_canvas_set_slot_load_sensor(lv_obj_t* obj, int slot, bool has_sensor) {
+    auto* data = get_data(obj);
+    if (!data || slot < 0 || slot >= FilamentPathData::MAX_SLOTS)
+        return;
+    if (data->slot_has_load_sensor[slot] != has_sensor) {
+        data->slot_has_load_sensor[slot] = has_sensor;
+        spdlog::trace("[FilamentPath] Slot {} load sensor: {}", slot, has_sensor);
+        layered_mark_dirty(obj);
+    }
+}
+
 void ui_filament_path_canvas_set_slot_mapped_tool(lv_obj_t* obj, int slot, int tool) {
     auto* data = get_data(obj);
     if (!data || slot < 0 || slot >= FilamentPathData::MAX_SLOTS)

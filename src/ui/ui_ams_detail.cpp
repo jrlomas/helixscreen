@@ -754,10 +754,18 @@ void ams_detail_setup_path_canvas(lv_obj_t* canvas, lv_obj_t* slot_grid, int uni
 
     // Hub-only mode: slots -> hub and its output stub, skip downstream
     ui_filament_path_canvas_set_hub_only(canvas, hub_only);
+    // A unit-scoped view asks its own unit; the all-units view any unit.
     if (unit_index >= 0 && unit_index < static_cast<int>(info.units.size())) {
         const auto& unit = info.units[unit_index];
         ui_filament_path_canvas_set_hub_sensor(canvas, unit.has_hub_sensor,
                                                unit.hub_sensor_triggered);
+    } else {
+        ui_filament_path_canvas_set_hub_sensor(
+            canvas,
+            std::any_of(info.units.begin(), info.units.end(),
+                        [](const helix::AmsUnit& u) { return u.has_hub_sensor; }),
+            std::any_of(info.units.begin(), info.units.end(),
+                        [](const helix::AmsUnit& u) { return u.hub_sensor_triggered; }));
     }
 
     // Hide the bypass path for backends that don't support it (e.g. tool
@@ -838,10 +846,12 @@ void ams_detail_setup_path_canvas(lv_obj_t* canvas, lv_obj_t* slot_grid, int uni
     helix::PathSegment error_seg = backend->infer_error_segment();
     ui_filament_path_canvas_set_error_segment(canvas, static_cast<int>(error_seg));
 
-    // Set per-slot prep sensor capability flags
+    // Set per-slot prep and load sensor capability flags
     for (int i = 0; i < slot_count; ++i) {
-        bool has_prep = backend->slot_has_prep_sensor(slot_offset + i);
-        ui_filament_path_canvas_set_slot_prep_sensor(canvas, i, has_prep);
+        ui_filament_path_canvas_set_slot_prep_sensor(
+            canvas, i, backend->slot_has_prep_sensor(slot_offset + i));
+        ui_filament_path_canvas_set_slot_load_sensor(
+            canvas, i, backend->slot_has_load_sensor(slot_offset + i));
     }
 
     // Plumb per-slot metadata (mapped_tool, extruder identity, hub routing) to

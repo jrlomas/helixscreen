@@ -3380,6 +3380,12 @@ bool AmsBackendMock::slot_has_prep_sensor(int slot_index) const {
     return slots_.is_valid_index(slot_index);
 }
 
+bool AmsBackendMock::slot_has_load_sensor(int slot_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    // An AFC-mode mock publishes AFC's per-lane load sensors
+    return afc_mode_ && slots_.is_valid_index(slot_index);
+}
+
 int AmsBackendMock::effective_dryer_speed_x() const {
     // The dryer's own multiplier composed over --sim-speed, so one flag carries
     // the drying cycle with it.

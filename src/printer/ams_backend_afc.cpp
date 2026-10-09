@@ -723,6 +723,12 @@ bool AmsBackendAfc::slot_has_prep_sensor(int slot_index) const {
     return slot_index >= 0 && slot_index < system_info_.total_slots;
 }
 
+bool AmsBackendAfc::slot_has_load_sensor(int slot_index) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    // Every AFC lane publishes its `load` sensor
+    return slot_index >= 0 && slot_index < system_info_.total_slots;
+}
+
 bool AmsBackendAfc::slot_has_filament_at_toolhead(int slot_index) const {
     std::lock_guard<std::mutex> lock(mutex_);
 
