@@ -156,6 +156,7 @@ TEST_CASE_METHOD(HelixTestFixture, "PrintPreparationManager: can_modify_gcode",
         CHECK(manager.can_modify_gcode());
 
         mock_printer.api.transfers_mock().mock_no_local_copies();
+        manager.set_dependencies(&mock_printer.api, &printer_state); // asks the transport
         CHECK_FALSE(manager.can_modify_gcode());
         manager.set_dependencies(nullptr, nullptr);
     }
@@ -201,6 +202,7 @@ TEST_CASE_METHOD(HelixTestFixture,
 
     SECTION("a transport without local copies") {
         mock_printer.api.transfers_mock().mock_no_local_copies();
+        manager.set_dependencies(&mock_printer.api, &mock_printer.state);
         REQUIRE(manager.gcode_rewrite_block() == helix::GcodeRewriteBlock::NoLocalCopies);
         CHECK(warned() ==
               "Modifying G-code is not available on this device. Printing original file.");
@@ -257,11 +259,45 @@ TEST_CASE_METHOD(HelixTestFixture,
 
     // The plugin changing republishes the count too.
     mock_printer.api.transfers_mock().mock_no_local_copies(false);
+    manager.set_dependencies(&mock_printer.api, &state);
     state.set_helix_plugin_installed(false);
-    helix::ui::UpdateQueue::instance().drain();
+    CHECK(card() == 0);
     state.set_helix_plugin_installed(true);
     CHECK(card() == 1);
     manager.set_dependencies(nullptr, nullptr);
+}
+
+TEST_CASE_METHOD(HelixTestFixture,
+                 "PrintPreparationManager: a queued plugin change after the API is freed reads "
+                 "nothing of it",
+                 "[print_preparation][preparation][lifecycle]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    auto device = std::make_unique<MockPrinter>();
+    PrintPreparationManager manager;
+    manager.set_dependencies(&device->api, &state);
+    helix::ui::UpdateQueue::instance().drain();
+
+    // The plugin answer lands through the queue, and its observer queues the
+    // option-count publish behind it. The owner frees the API in between.
+    state.set_helix_plugin_installed(true);
+    helix::ui::UpdateQueue::instance().drain();
+    device.reset();
+    for (int i = 0; i < 4; ++i) {
+        helix::ui::UpdateQueue::instance().drain();
+    }
+    CHECK(manager.gcode_rewrite_block() == helix::GcodeRewriteBlock::None);
+
+    // Clearing the dependencies drops the observer, so a later change queues
+    // nothing for this manager.
+    manager.set_dependencies(nullptr, nullptr);
+    state.set_helix_plugin_installed(false);
+    for (int i = 0; i < 4; ++i) {
+        helix::ui::UpdateQueue::instance().drain();
+    }
 }
 
 TEST_CASE("PrintPreparationManager: get_temp_directory", "[print_preparation][safety]") {
