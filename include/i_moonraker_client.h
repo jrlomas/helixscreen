@@ -61,6 +61,26 @@ inline constexpr const char* CACHED_SNAPSHOT_MARKER = "_helix_cached_snapshot";
 inline constexpr const char* WHOLE_OBJECTS_MARKER = "_helix_whole_objects";
 
 /**
+ * @brief Wrap a raw status object as the notify_status_update a client dispatches
+ *
+ * The inverse of parse_status_notification() (printer_state.h). A synthetic
+ * dispatch is not a Klipper frame, so its eventtime is 0.0 ("untimestamped") and
+ * provenance travels in the markers instead of being inferred from the clock.
+ */
+inline json make_status_notification(const json& status, bool from_cached_snapshot,
+                                     bool whole_objects) {
+    json notification = {{"method", "notify_status_update"},
+                         {"params", json::array({status, 0.0})}}; // [status, eventtime]
+    if (from_cached_snapshot) {
+        notification[CACHED_SNAPSHOT_MARKER] = true;
+    }
+    if (whole_objects) {
+        notification[WHOLE_OBJECTS_MARKER] = true;
+    }
+    return notification;
+}
+
+/**
  * @brief Abstract interface for the Moonraker WebSocket + JSON-RPC transport layer.
  *
  * Production and test consumers that only need polymorphic access to the Moonraker

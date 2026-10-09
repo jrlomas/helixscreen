@@ -1022,20 +1022,7 @@ void MoonrakerClient::dispatch_status_update(const json& status, bool from_cache
         }
     }
 
-    // Wrap raw status into notify_status_update format. There is no eventtime to
-    // carry — a synthetic dispatch is not a Klipper frame — so 0.0 stands for
-    // "untimestamped", which is why replay provenance has to be stated separately
-    // rather than inferred from the clock value.
-    json notification = {
-        {"method", "notify_status_update"},
-        {"params", json::array({status, 0.0})} // [status, eventtime]
-    };
-    if (from_cached_snapshot) {
-        notification[CACHED_SNAPSHOT_MARKER] = true;
-    }
-    if (whole_objects) {
-        notification[WHOLE_OBJECTS_MARKER] = true;
-    }
+    const json notification = make_status_notification(status, from_cached_snapshot, whole_objects);
 
     // Dispatch to all registered callbacks
     // Two-phase: copy under lock, invoke outside to avoid deadlock
