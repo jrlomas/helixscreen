@@ -90,7 +90,8 @@ struct SwitchTraceState {
     bool in_switch = false;
     bool awaiting_frame = false;
     int panel_id = -1;
-    lv_display_t* hooked = nullptr;
+    bool hooked = false;
+    bool after_rendered = false;
     SwitchClock::time_point t0{}, last{}, sync_end{}, refr_start{}, render_start{};
     bool rendering = false;
     SwitchTraceMark marks[kSwitchTraceMaxMarks]{};
@@ -121,21 +122,22 @@ class SwitchTrace {
         if (g_switch_trace.awaiting_frame) {
             finish(); // a switch before the previous one's first frame
         }
-        lv_display_t* hooked = g_switch_trace.hooked;
         g_switch_trace = SwitchTraceState{};
         g_switch_trace.in_switch = true;
         g_switch_trace.panel_id = panel_id;
         g_switch_trace.t0 = g_switch_trace.last = SwitchClock::now();
-        // Hooked once and left in place: removing a display event callback from
-        // inside its own dispatch would edit the list being walked.
-        g_switch_trace.hooked = hooked;
-        lv_display_t* disp = lv_display_get_default();
-        if (disp && disp != hooked) {
+        // Re-hooked on every switch, so a display created since the last one
+        // (even at the same address) is the one traced, and the hooks never
+        // stack. The callbacks stay in place between switches and return at
+        // once: removing one from inside its own dispatch, where finish() runs,
+        // would edit the list being walked.
+        if (lv_display_t* disp = lv_display_get_default()) {
+            lv_display_remove_event_cb_with_user_data(disp, on_display_event, nullptr);
             for (lv_event_code_t code :
                  {LV_EVENT_REFR_START, LV_EVENT_RENDER_START, LV_EVENT_REFR_READY}) {
                 lv_display_add_event_cb(disp, on_display_event, code, nullptr);
             }
-            g_switch_trace.hooked = disp;
+            g_switch_trace.hooked = true;
         }
     }
     ~SwitchTrace() {
@@ -193,6 +195,7 @@ class SwitchTrace {
             f.render_ms += ms(now - g_switch_trace.render_start);
             f.renders++;
             if (g_switch_trace.awaiting_frame && !g_switch_trace.in_switch) {
+                g_switch_trace.after_rendered = true;
                 g_switch_trace.to_after_ms = ms(now - g_switch_trace.sync_end);
                 finish();
             }
@@ -209,14 +212,20 @@ class SwitchTrace {
             phases +=
                 fmt::format(" {}={:.1f}", g_switch_trace.marks[i].name, g_switch_trace.marks[i].ms);
         }
-        const double sync_ms = ms(g_switch_trace.sync_end - g_switch_trace.t0);
+        const auto& t = g_switch_trace;
+        const double sync_ms = ms(t.sync_end - t.t0);
+        // start-to-frame runs from the switch's start: the tap's release for an
+        // inline switch, the UpdateQueue drain after it for a queued one.
+        const std::string next =
+            t.after_rendered ? fmt::format("next frame +{:.1f}ms layout={:.1f} render={:.1f} | "
+                                           "start-to-frame {:.1f}ms",
+                                           t.to_after_ms, t.after.layout_ms, t.after.render_ms,
+                                           sync_ms + t.to_after_ms)
+                             : std::string("no frame rendered after the switch");
         spdlog::info("[NavigationManager] Panel switch to {} took {:.1f}ms:{} | in-switch "
-                     "frames={} layout={:.1f} render={:.1f} | next frame +{:.1f}ms layout={:.1f} "
-                     "render={:.1f} | tap-to-frame {:.1f}ms",
-                     g_switch_trace.panel_id, sync_ms, phases, g_switch_trace.during.renders,
-                     g_switch_trace.during.layout_ms, g_switch_trace.during.render_ms,
-                     g_switch_trace.to_after_ms, g_switch_trace.after.layout_ms,
-                     g_switch_trace.after.render_ms, sync_ms + g_switch_trace.to_after_ms);
+                     "frames={} layout={:.1f} render={:.1f} | {}",
+                     t.panel_id, sync_ms, phases, t.during.renders, t.during.layout_ms,
+                     t.during.render_ms, next);
     }
 
     bool owns_;
