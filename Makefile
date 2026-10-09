@@ -1201,14 +1201,20 @@ CXXFLAGS += -DHELIX_HAS_LABEL_PRINTER=$(HELIX_HAS_LABEL_PRINTER) \
 #   - 'make' or 'make -j': No 'jobserver' in MAKEFLAGS
 #   - 'make -jN': MAKEFLAGS contains '--jobserver-fds=X,Y' or '--jobserver-auth'
 #
+# The shell text that asks helix-claim. Its answer is used only when it is one
+# positive integer, anything else (no answer, an error, a second line) falls
+# back to the cores, because make reads every extra word after -jN as a goal.
+JOBS_QUERY = j=$$(scripts/helix-claim jobs 2>/dev/null) && [ "$$j" -gt 0 ] 2>/dev/null && printf '%d\n' "$$j" || echo $(NPROC)
+
 # Asked once, and only when read, so a make under a bounded -jN never pays for it.
-JOBS ?= $(eval JOBS := $(shell scripts/helix-claim jobs 2>/dev/null || echo $(NPROC)))$(JOBS)
+JOBS_CLAIMED = $(eval JOBS_CLAIMED := $(shell $(JOBS_QUERY)))$(JOBS_CLAIMED)
+JOBS ?= $(JOBS_CLAIMED)
 
 # The same answer as shell text, for the re-invoke recipes. make expands a
 # recipe's whole logical line before the shell picks a branch, so $(JOBS) there
 # would ask helix-claim even when MAKEFLAGS already carries a jobserver. A JOBS
 # the caller set is used as given.
-JOBS_SH = $(if $(filter file,$(origin JOBS)),$$(scripts/helix-claim jobs 2>/dev/null || echo $(NPROC)),$(JOBS))
+JOBS_SH = $(if $(filter file,$(origin JOBS)),$$($(JOBS_QUERY)),$(JOBS))
 
 # Output synchronization for parallel builds (requires make 4.0+, ignored on 3.81).
 # Only a JOBS=1 the caller set means serial; reading the default here would ask
