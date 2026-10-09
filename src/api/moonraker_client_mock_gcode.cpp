@@ -166,7 +166,10 @@ MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_openams_line(const s
             return std::atof(gcode.c_str() + pos + std::strlen(key));
         };
         const auto idx = field("OAMS=");
-        if (!openams_shared_lane_units() || !idx || (*idx != 1 && *idx != 2)) {
+        const int max_idx = openams_fleet_lane_units()    ? kOpenAmsFleetUnits
+                            : openams_shared_lane_units() ? 2
+                                                          : 0;
+        if (!idx || *idx < 1 || *idx > max_idx || *idx != std::floor(*idx)) {
             return std::nullopt;
         }
         OpenAmsDryerSim& sim = openams_dryers_[static_cast<int>(*idx) - 1];
@@ -189,10 +192,15 @@ MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_openams_line(const s
         const size_t pos = gcode.find("GROUP=");
         const std::string group =
             pos == std::string::npos ? "" : gcode.substr(pos + 6, gcode.find(' ', pos) - pos - 6);
-        if (openams_shared_lane_units()) {
-            // Group Tn is slot n on the shared-lane shape.
-            if (group.size() == 2 && group[0] == 'T' && group[1] >= '0' && group[1] <= '4') {
-                openams_loaded_slot_ = group[1] - '0';
+        if (openams_shared_lane_units() || openams_fleet_lane_units()) {
+            // Group Tn is slot n on the multi-unit shapes.
+            const int max_slot = openams_fleet_lane_units() ? 44 : 4;
+            if (group.size() >= 2 && group[0] == 'T' &&
+                group.find_first_not_of("0123456789", 1) == std::string::npos) {
+                const int slot = std::atoi(group.c_str() + 1);
+                if (slot <= max_slot) {
+                    openams_loaded_slot_ = slot;
+                }
             }
         } else if (group == "T0") {
             openams_loaded_slot_ = 3;

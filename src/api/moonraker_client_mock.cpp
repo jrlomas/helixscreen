@@ -246,6 +246,24 @@ MoonrakerClientMock::MoonrakerClientMock(PrinterType type, double speedup_factor
                              {"helix_locked_color", true},
                              {"helix_locked_material", true}});
         }
+    } else if (is_mock_openams() && openams_fleet_lane_units()) {
+        // One bay loaded, on the third unit (slot 5); its spool is known to the store.
+        openams_loaded_slot_ = 5;
+        for (int i = 0; i < kOpenAmsFleetUnits; ++i) {
+            openams_dryers_[i].chamber_c = openams_ambient_c(i);
+        }
+        // The sixth unit is mid-cycle: 55 C, 3 h 25 min left.
+        openams_dryers_[5].target_c = 55.0;
+        openams_dryers_[5].remaining_s = 12300.0;
+        openams_dryers_[5].chamber_c = 48.0;
+        mock_db_set("lane_data", "lane6",
+                    json{{"lane", "5"},
+                         {"color", "#3CE05A"},
+                         {"color_name", "Green"},
+                         {"material", "PETG"},
+                         {"helix_material", "PETG"},
+                         {"helix_locked_color", true},
+                         {"helix_locked_material", true}});
     } else if (is_mock_openams()) {
         mock_db_set("lane_data", "lane3",
                     json{{"lane", "2"},
@@ -1657,57 +1675,87 @@ bool MoonrakerClientMock::openams_shared_lane_units() {
     return units && std::string(units) == "shared";
 }
 
+bool MoonrakerClientMock::openams_fleet_lane_units() {
+    const char* units = std::getenv("HELIX_MOCK_OPENAMS_UNITS");
+    return units && std::string(units) == "fleet";
+}
+
+double MoonrakerClientMock::openams_ambient_c(int unit) {
+    return openams_fleet_lane_units() ? 24.0 + 1.5 * (unit % 5) : 27.7;
+}
+
 nlohmann::json MoonrakerClientMock::openams_shared_status_json() const {
-    // A 1-bay AMS HT (slot 0) and a 4-bay AMS 2 Pro (slots 1-4) on ONE lane:
-    // one hub, one FPS, one extruder. Groups T0-T4 name a slot each; they are
-    // filament groups, not toolheads.
+    return openams_manager_status_json({{"ams_ht", "1", "fps", 0, 1}, {"ams2", "2", "fps", 1, 4}});
+}
+
+nlohmann::json MoonrakerClientMock::openams_fleet_status_json() const {
+    // An AMS HT then eleven AMS 2 Pro: 45 bays. Units 1-10 feed lane `fps`, the last
+    // two feed `fps2`; both lanes sit on the one mock extruder.
+    std::vector<OpenAmsUnitSpec> units = {{"ams_ht", "1", "fps", 0, 1}};
+    int first_slot = 1;
+    for (int i = 1; i < kOpenAmsFleetUnits; ++i) {
+        units.push_back({"ams2_" + std::to_string(i), std::to_string(i + 1),
+                         i < 10 ? "fps" : "fps2", first_slot, 4});
+        first_slot += 4;
+    }
+    return openams_manager_status_json(units);
+}
+
+nlohmann::json
+MoonrakerClientMock::openams_manager_status_json(const std::vector<OpenAmsUnitSpec>& specs) const {
+    // One slot per bay, ids global in unit order. Groups T<n> name slot n each; they
+    // are filament groups, not toolheads. Only the loaded slot's lane is "loaded".
     const int loaded = openams_loaded_slot_.load();
-    auto bay = [loaded](int id, int bay_index) {
-        return nlohmann::json{
-            {"id", id}, {"bay", bay_index}, {"ready", true}, {"loaded", id == loaded}};
-    };
-    nlohmann::json lane = {{"id", "fps"},
-                           {"state", loaded >= 0 ? "loaded" : "unloaded"},
-                           {"following", loaded >= 0},
-                           {"direction", 1},
-                           {"pressure", 0.79},
-                           {"set_point", 0.5}};
-    if (loaded >= 0) {
-        const std::string group =
-            "T" + std::to_string(loaded); // DISPLAY_NUMBERING_OK: OpenAMS group id
-        lane["current_group"] = group;
-        lane["current_slot"] = loaded;
-    } else {
-        lane["current_group"] = nullptr;
-        lane["current_slot"] = -1;
-    }
+    std::vector<std::string> lane_ids;
+    std::string loaded_lane;
+    nlohmann::json units = nlohmann::json::array();
     nlohmann::json groups = nlohmann::json::array();
-    for (int i = 0; i < 5; ++i) {
-        const std::string name = "T" + std::to_string(i); // DISPLAY_NUMBERING_OK: OpenAMS group id
-        groups.push_back({{"name", name}, {"lane", "fps"}, {"slots", {i}}});
+    for (const OpenAmsUnitSpec& spec : specs) {
+        if (std::find(lane_ids.begin(), lane_ids.end(), spec.lane) == lane_ids.end()) {
+            lane_ids.push_back(spec.lane);
+        }
+        nlohmann::json slots = nlohmann::json::array();
+        for (int b = 0; b < spec.bays; ++b) {
+            const int id = spec.first_slot + b;
+            slots.push_back({{"id", id}, {"bay", b}, {"ready", true}, {"loaded", id == loaded}});
+            const std::string group_name =
+                "T" + std::to_string(id); // DISPLAY_NUMBERING_OK: OpenAMS group id
+            groups.push_back({{"name", group_name}, {"lane", spec.lane}, {"slots", {id}}});
+            if (id == loaded) {
+                loaded_lane = spec.lane;
+            }
+        }
+        units.push_back({{"id", spec.id},
+                         {"name", spec.name},
+                         {"kind", "oams"},
+                         {"topology", "hub"},
+                         {"lane", spec.lane},
+                         {"connected", true},
+                         {"slots", slots}});
     }
-    nlohmann::json status = {
-        {"api_version", 1},
-        {"schema", "openams.manager"},
-        {"ready", true},
-        {"lanes", nlohmann::json::array({lane})},
-        {"units",
-         nlohmann::json::array(
-             {{{"id", "1"},
-               {"name", "ams_ht"},
-               {"kind", "oams"},
-               {"topology", "hub"},
-               {"lane", "fps"},
-               {"connected", true},
-               {"slots", nlohmann::json::array({bay(0, 0)})}},
-              {{"id", "2"},
-               {"name", "ams2"},
-               {"kind", "oams"},
-               {"topology", "hub"},
-               {"lane", "fps"},
-               {"connected", true},
-               {"slots", nlohmann::json::array({bay(1, 0), bay(2, 1), bay(3, 2), bay(4, 3)})}}})},
-        {"groups", groups}};
+    nlohmann::json lanes = nlohmann::json::array();
+    for (const std::string& id : lane_ids) {
+        const bool is_loaded = loaded >= 0 && id == loaded_lane;
+        nlohmann::json lane = {{"id", id},
+                               {"state", is_loaded ? "loaded" : "unloaded"},
+                               {"following", is_loaded},
+                               {"direction", 1},
+                               {"pressure", 0.79},
+                               {"set_point", 0.5}};
+        if (is_loaded) {
+            const std::string group =
+                "T" + std::to_string(loaded); // DISPLAY_NUMBERING_OK: OpenAMS group id
+            lane["current_group"] = group;
+            lane["current_slot"] = loaded;
+        } else {
+            lane["current_group"] = nullptr;
+            lane["current_slot"] = -1;
+        }
+        lanes.push_back(lane);
+    }
+    nlohmann::json status = {{"api_version", 1}, {"schema", "openams.manager"},
+                             {"ready", true},    {"lanes", lanes},
+                             {"units", units},   {"groups", groups}};
     // klipper_openams publishes nothing beyond the versioned core above and
     // advertises its macros; the openams plugin adds per-lane and topology views
     // and advertises the manager commands the Mainsail panel runs.
@@ -1722,34 +1770,35 @@ nlohmann::json MoonrakerClientMock::openams_shared_status_json() const {
                               {"unload", "OAMSM_UNLOAD_FROM_TOOLHEAD"},
                               {"cancel", "OAMSM_LOAD_FILAMENT_CANCEL"},
                               {"reset", "OAMSM_CLEAR_ERRORS"}};
-        if (openams_fault_active_.load()) {
-            const char* code = std::getenv("HELIX_MOCK_OPENAMS_FAULT");
-            status["devices"] = {{"ams_ht",
-                                  {{"faults",
-                                    {{{"severity", "stop"},
-                                      {"code", code && *code ? code : "motor_drive_fault"},
-                                      {"text", code && *code ? code : "motor_drive_fault"},
-                                      {"bay", nullptr},
-                                      {"actions", {"clear_fault"}},
-                                      {"source", "firmware"}}}}}}};
-        } else {
-            status["devices"] = {{"ams_ht", {{"faults", nlohmann::json::array()}}}};
+        status["devices"] = nlohmann::json::object();
+        for (size_t i = 0; i < specs.size(); ++i) {
+            nlohmann::json device = openams_device_json(static_cast<int>(i));
+            device["faults"] = nlohmann::json::array();
+            if (i == 0 && openams_fault_active_.load()) {
+                const char* code = std::getenv("HELIX_MOCK_OPENAMS_FAULT");
+                device["faults"].push_back({{"severity", "stop"},
+                                            {"code", code && *code ? code : "motor_drive_fault"},
+                                            {"text", code && *code ? code : "motor_drive_fault"},
+                                            {"bay", nullptr},
+                                            {"actions", {"clear_fault"}},
+                                            {"source", "firmware"}});
+            }
+            status["devices"][specs[i].name] = device;
         }
-        status["devices"]["ams_ht"].update(openams_device_json(0));
-        status["devices"]["ams2"] = openams_device_json(1);
-        if (!status["devices"]["ams2"].contains("faults")) {
-            status["devices"]["ams2"]["faults"] = nlohmann::json::array();
+        status["lanes_by_fps"] = nlohmann::json::object();
+        nlohmann::json oams = nlohmann::json::object();
+        for (const std::string& id : lane_ids) {
+            const bool is_loaded = loaded >= 0 && id == loaded_lane;
+            status["lanes_by_fps"][id] = {{"op", is_loaded ? "loaded" : "idle"},
+                                          {"pressure", 0.79},
+                                          {"set_point", 0.5},
+                                          {"extruder", "extruder"}};
         }
-        status["lanes_by_fps"] = {{"fps",
-                                   {{"op", loaded >= 0 ? "loaded" : "idle"},
-                                    {"pressure", 0.79},
-                                    {"set_point", 0.5},
-                                    {"extruder", "extruder"}}}};
-        status["topology"] = {{"schema_version", 1},
-                              {"fps", {"fps"}},
-                              {"oams",
-                               {{"ams_ht", {{"idx", 1}, {"lane", "fps"}, {"bays", 1}}},
-                                {"ams2", {{"idx", 2}, {"lane", "fps"}, {"bays", 4}}}}}};
+        for (const OpenAmsUnitSpec& spec : specs) {
+            oams[spec.name] = {
+                {"idx", std::stoi(spec.id)}, {"lane", spec.lane}, {"bays", spec.bays}};
+        }
+        status["topology"] = {{"schema_version", 1}, {"fps", lane_ids}, {"oams", oams}};
     }
     return status;
 }
@@ -1781,7 +1830,9 @@ nlohmann::json MoonrakerClientMock::openams_device_json(int unit) const {
           {"fan_count", 1}}},
         {"environment",
          {{"temp_c", std::round(chamber * 10.0) / 10.0},
-          {"rh_pct", running ? 18.0 : (ht ? 29.0 : 31.0)},
+          {"rh_pct", running                      ? 18.0
+                     : openams_fleet_lane_units() ? 22.0 + (unit * 7) % 30
+                                                  : (ht ? 29.0 : 31.0)},
           {"source", "firmware"}}},
         {"dryer",
          {{"state", state},
@@ -1806,9 +1857,10 @@ nlohmann::json MoonrakerClientMock::openams_device_json(int unit) const {
 }
 
 void MoonrakerClientMock::service_openams_dryers(double dt_s) {
-    constexpr double kAmbientC = 27.7;
     constexpr double kRateCPerS = 0.5;
-    for (OpenAmsDryerSim& sim : openams_dryers_) {
+    for (int unit = 0; unit < kOpenAmsFleetUnits; ++unit) {
+        OpenAmsDryerSim& sim = openams_dryers_[unit];
+        const double kAmbientC = openams_ambient_c(unit);
         const double remaining = sim.remaining_s.load();
         const double target = sim.target_c.load();
         double chamber = sim.chamber_c.load();
@@ -1828,6 +1880,9 @@ void MoonrakerClientMock::service_openams_dryers(double dt_s) {
 nlohmann::json MoonrakerClientMock::openams_status_json() const {
     if (openams_shared_lane_units()) {
         return openams_shared_status_json();
+    }
+    if (openams_fleet_lane_units()) {
+        return openams_fleet_status_json();
     }
     // One hub unit, four bays, one FPS lane. Only bays 2 and 3 hold spools;
     // the lane's current slot follows openams_loaded_slot_.

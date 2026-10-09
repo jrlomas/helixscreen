@@ -402,6 +402,7 @@ Select the mock AMS topology/type.
 
 | Variable | Value | Effect |
 |----------|-------|--------|
+| `HELIX_MOCK_OPENAMS_UNITS` | `fleet` | Twelve units: one AMS HT (1 bay) then eleven AMS 2 Pro (4 bays), 45 bays, groups `T0`-`T44` one bay each. Units 1-10 feed lane `fps`, units 11-12 feed `fps2` (two hubs; both lanes name the one mock extruder). Every unit publishes its own `devices.<unit>` environment (varied temperature and humidity), unit 6 is mid dryer cycle (55 C, 3 h 25 min left), and the first bay of unit 3 (slot 5) is loaded. `OAMS_DRYER_START OAMS=<1-12>` works on every unit. Same `HELIX_MOCK_OPENAMS_API` / `HELIX_MOCK_OPENAMS_FAULT` behavior as `shared` |
 | `HELIX_MOCK_OPENAMS_UNITS` | `shared` | An AMS HT (1 bay, slot 0) and an AMS 2 Pro (4 bays, slots 1-4) on ONE `fps` lane, groups `T0`-`T4` one slot each, slot 0 loaded: the shape of the reference printer. The overview draws one hub, one FPS and one toolhead. Advertises `OAMSM_LOAD_TO_TOOLHEAD` / `OAMSM_UNLOAD_FROM_TOOLHEAD` and adds the openams plugin's `lanes_by_fps` and `topology` |
 | `HELIX_MOCK_OPENAMS_API` | `legacy` | With `shared`: the klipper_openams shape. Only `api_version`, `schema`, `ready`, `commands` (`OPENAMS_LOAD` / `OPENAMS_UNLOAD`), `lanes`, `units`, `groups` |
 | `HELIX_MOCK_OPENAMS_FAULT` | fault code, e.g. `motor_drive_fault` | With `shared` (not `legacy`): the AMS HT publishes that unit fault in `devices.ams_ht.faults[]` until `OAMS_CLEAR_FAULT OAMS=1` is sent |
@@ -411,6 +412,9 @@ Select the mock AMS topology/type.
 ```bash
 # Two OpenAMS units on one lane, klipper_openams shape
 HELIX_MOCK_AMS=openams HELIX_MOCK_OPENAMS_UNITS=shared HELIX_MOCK_OPENAMS_API=legacy ./build/bin/helix-screen --test
+
+# Twelve OpenAMS units on two hubs (multi-unit paging)
+HELIX_MOCK_AMS=openams HELIX_MOCK_OPENAMS_UNITS=fleet ./build/bin/helix-screen --test
 
 # Simulate AFC Box Turtle
 HELIX_MOCK_AMS=afc ./build/bin/helix-screen --test
