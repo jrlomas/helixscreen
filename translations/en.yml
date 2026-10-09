@@ -116,6 +116,7 @@ translations:
   = Tighten: = Tighten
   A: A
   A few minutes, nearly all of it heating. You judge nothing by eye.: 'A few minutes, nearly all of it heating. You judge nothing by eye.'
+  "A macro printed stray template text '{}': check its Jinja tags": "A macro printed stray template text '{}': check its Jinja tags"
   A motor IO pin couldn't be restored. Power-cycle the printer to recover: A motor IO pin couldn't be restored. Power-cycle the printer to recover
   A motor's parameters couldn't be written. Power-cycle the printer to retry: A motor's parameters couldn't be written. Power-cycle the printer to retry
   A newer version of the helper macros is available: A newer version of the helper macros is available

@@ -121,6 +121,7 @@ translations:
   = Tighten: = Затянуть
   A: A
   A few minutes, nearly all of it heating. You judge nothing by eye.: 'Несколько минут, почти всё время нагрев. Ничего не нужно оценивать на глаз.'
+  "A macro printed stray template text '{}': check its Jinja tags": 'Макрос вывел лишний текст шаблона «{}»: проверьте его теги Jinja'
   A motor IO pin couldn't be restored. Power-cycle the printer to recover: Не удалось восстановить вывод ввода-вывода двигателя. Выключите и включите принтер
   A motor's parameters couldn't be written. Power-cycle the printer to retry: Не удалось записать параметры двигателя. Выключите и включите принтер и повторите попытку
   A newer version of the helper macros is available: 'Доступна более новая версия вспомогательных макросов'

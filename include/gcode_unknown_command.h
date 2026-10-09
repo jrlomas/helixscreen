@@ -59,4 +59,12 @@ namespace helix {
     return line.substr(i + 1, close - i - 1);
 }
 
+/// Pure: true when a name parse_unknown_command() returned is leftover Jinja syntax
+/// (`%}`, `{`, `}}`) rather than a command anyone could define. A malformed tag in
+/// a macro renders as its own G-code line; Klipper reports it as unknown and runs
+/// the rest of the macro, so the macro did not stop and no command is missing.
+[[nodiscard]] inline bool is_template_residue(std::string_view name) {
+    return name.find_first_of("{}%") != std::string_view::npos;
+}
+
 } // namespace helix

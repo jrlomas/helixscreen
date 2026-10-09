@@ -2368,6 +2368,12 @@ class BedMeshProgressCollector : public std::enable_shared_from_this<BedMeshProg
         // line rather than an error and carries on with the script, so this line is
         // the only sign that a step of the calibration never ran.
         if (auto missing = helix::parse_unknown_command(line)) {
+            if (helix::is_template_residue(*missing)) {
+                spdlog::warn("[BedMeshProgressCollector] A macro rendered stray template text "
+                             "'{}'; Klipper skipped that line and carried on",
+                             *missing);
+                return;
+            }
             const bool calibrate_missing = missing->rfind("BED_MESH_CALIBRATE", 0) == 0;
             if (calibrate_missing || unknown_command_fails_) {
                 complete_error(

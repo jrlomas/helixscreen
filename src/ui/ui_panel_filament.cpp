@@ -30,6 +30,7 @@
 #include "filament_op_router.h"
 #include "filament_op_slot_resolver.h"
 #include "filament_sensor_manager.h"
+#include "gcode_unknown_command.h"
 #include "i_moonraker_api.h"
 #include "lvgl/src/others/translation/lv_translation.h"
 #include "macro_executor.h"
@@ -1502,6 +1503,13 @@ void FilamentPanel::handle_operation_timeout() {
 void FilamentPanel::fail_op_on_unknown_command(const std::string& command) {
     if (!op_showing_busy_) {
         return; // nothing on screen to invalidate
+    }
+    if (helix::is_template_residue(command)) {
+        // Klipper ran the rest of the macro, so the op stands; the macro's own
+        // template is what the user has to fix.
+        NOTIFY_WARNING(lv_tr("A macro printed stray template text '{}': check its Jinja tags"),
+                       command);
+        return;
     }
     const FilamentOp op = *op_showing_busy_;
 
