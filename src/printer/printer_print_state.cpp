@@ -376,7 +376,7 @@ bool PrinterPrintState::status_indicates_active_print(const nlohmann::json& stat
     return printer_has_job(parse_print_job_state(st.c_str()));
 }
 
-void PrinterPrintState::update_from_status(const nlohmann::json& status) {
+void PrinterPrintState::update_from_status(const nlohmann::json& status, bool whole_objects) {
     // Layer tracking has two sources within a single status update:
     //   primary  — print_stats.info.{current_layer,total_layer} (slicer
     //              SET_PRINT_STATS_INFO; authoritative when present)
@@ -497,8 +497,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
                 // RAW_PRINT_STATE_OK: same handler, same reason as above. The
                 // previous-state arm asks the wire question - printer_has_job() -
                 // because a preparing job the printer never took set no M117.
-                if (new_state == PrintJobState::COMPLETE || new_state == PrintJobState::CANCELLED ||
-                    new_state == PrintJobState::ERROR ||
+                if (job_has_ended(new_state) ||
                     (new_state == PrintJobState::STANDBY && printer_has_job(current_state))) {
                     lv_subject_copy_string(&display_message_, "");
                     update_display_message_visible();
@@ -721,17 +720,23 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
                 spdlog::info("[PrinterPrintState] Slicer progress active (M73 detected)");
             }
         }
-        if (display.contains("message")) {
-            if (display["message"].is_string()) {
-                const auto& msg = display["message"].get_ref<const std::string&>();
-                if (strcmp(lv_subject_get_string(&display_message_), msg.c_str()) != 0) {
-                    lv_subject_copy_string(&display_message_, msg.c_str());
-                }
-            } else {
-                // null or non-string — clear the message
-                if (strcmp(lv_subject_get_string(&display_message_), "") != 0) {
-                    lv_subject_copy_string(&display_message_, "");
-                }
+        // Klipper keeps the last M117 after a job ends, so a subscription response for
+        // an ended job usually carries a PRINT_START message that the live path
+        // cleared at the end edge. A whole-object payload cannot say whether its text
+        // came before or after the end, and a replayed one may be older than the live
+        // frames, so it leaves the shown message alone. print_stats is parsed above,
+        // so this is the state the frame reports.
+        const bool job_ended =
+            job_has_ended(static_cast<PrintJobState>(lv_subject_get_int(&print_state_enum_)));
+        if (display.contains("message") && whole_objects && job_ended) {
+            spdlog::debug("[PrinterPrintState] Subscription response for an ended job: "
+                          "display message left as shown");
+        } else if (display.contains("message")) {
+            const char* msg = display["message"].is_string()
+                                  ? display["message"].get_ref<const std::string&>().c_str()
+                                  : ""; // null or non-string clears the message
+            if (strcmp(lv_subject_get_string(&display_message_), msg) != 0) {
+                lv_subject_copy_string(&display_message_, msg);
             }
             update_display_message_visible();
         }
@@ -899,9 +904,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
                 lv_subject_get_int(&print_duration_) > 0) {
                 auto current_state =
                     static_cast<PrintJobState>(lv_subject_get_int(&print_state_enum_));
-                bool is_terminal_state = (current_state == PrintJobState::COMPLETE ||
-                                          current_state == PrintJobState::CANCELLED ||
-                                          current_state == PrintJobState::ERROR);
+                bool is_terminal_state = job_has_ended(current_state);
                 if (!is_terminal_state && file_progress_pct > 0) {
                     int total = lv_subject_get_int(&print_layer_total_);
                     if (total > 0) {
@@ -966,9 +969,7 @@ void PrinterPrintState::update_from_status(const nlohmann::json& status) {
     if (!printer_reports_layers_ && layer_height_ > 0.0 && have_gcode_z_ &&
         lv_subject_get_int(&print_duration_) > 0) {
         auto current_state = static_cast<PrintJobState>(lv_subject_get_int(&print_state_enum_));
-        bool is_terminal_state =
-            (current_state == PrintJobState::COMPLETE ||
-             current_state == PrintJobState::CANCELLED || current_state == PrintJobState::ERROR);
+        bool is_terminal_state = job_has_ended(current_state);
         int total = lv_subject_get_int(&print_layer_total_);
         if (!is_terminal_state && total > 0) {
             int derived = static_cast<int>(std::lround((last_gcode_z_mm_ - first_layer_height_) /

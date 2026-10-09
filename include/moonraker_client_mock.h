@@ -536,7 +536,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
      * registrants too (plugin subscriptions among them), so the mock's
      * synthetic status updates must reach those listeners as well.
      */
-    void dispatch_status_update(const json& status, bool from_cached_snapshot = false) override;
+    void dispatch_status_update(const json& status, bool from_cached_snapshot = false,
+                                bool whole_objects = false) override;
 
     /**
      * @brief Set heaters list for testing

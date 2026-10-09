@@ -125,6 +125,12 @@ constexpr bool printer_has_job(PrintJobState state) {
     return state == PrintJobState::PRINTING || state == PrintJobState::PAUSED;
 }
 
+/// True when the printer reports how its last job ended: complete, cancelled or error.
+constexpr bool job_has_ended(PrintJobState state) {
+    return state == PrintJobState::COMPLETE || state == PrintJobState::CANCELLED ||
+           state == PrintJobState::ERROR;
+}
+
 /**
  * @brief Terminal outcome of a print job (for UI persistence)
  *
@@ -188,6 +194,7 @@ struct StatusFrame {
     const json* status = nullptr; ///< params[0], the printer objects that changed
     double eventtime = 0.0;       ///< params[1]; 0 when the frame was synthesized
     bool from_cached_snapshot = false;
+    bool whole_objects = false; ///< every field of each object, not only the changed ones
 };
 
 /**
@@ -196,7 +203,8 @@ struct StatusFrame {
  * params[1] is Klipper's eventtime. It is monotonic-clock derived, so it survives
  * a Klipper restart and only rewinds on a host reboot: a usable freshness key
  * within one connection. CACHED_SNAPSHOT_MARKER says the frame is a replay of an
- * earlier snapshot rather than current traffic.
+ * earlier snapshot rather than current traffic; WHOLE_OBJECTS_MARKER says it is a
+ * subscription response rather than a delta.
  *
  * @return The frame, or nullopt for anything that is not a notify_status_update
  */
@@ -275,10 +283,14 @@ class PrinterState {
      *        being replayed (the discovery subscription response). Provenance is
      *        STATED, never inferred from a zero eventtime — the mock client also
      *        dispatches untimestamped status, and those ARE current.
+     * @param frame_epoch klippy connection epoch the frame belongs to, when known
+     * @param whole_objects true when this payload is a subscription response,
+     *        carrying every field of each object rather than only the changed ones
      */
     void update_from_status(const json& status, double eventtime = 0.0,
                             bool from_cached_snapshot = false,
-                            std::optional<uint64_t> frame_epoch = std::nullopt);
+                            std::optional<uint64_t> frame_epoch = std::nullopt,
+                            bool whole_objects = false);
 
     //
     // Domain components. Each owns its subjects and the state behind them;

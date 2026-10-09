@@ -225,9 +225,7 @@ class MoonrakerManager {
         // pre-print phase tracking. Gating on prev==STANDBY fixes that while still
         // skipping the real boot-into-active-print case (which presents as
         // STANDBY -> PRINTING).
-        bool prev_is_terminal = (prev_state == helix::PrintJobState::COMPLETE ||
-                                 prev_state == helix::PrintJobState::CANCELLED ||
-                                 prev_state == helix::PrintJobState::ERROR);
+        bool prev_is_terminal = helix::job_has_ended(prev_state);
         if (is_initial_transition && !prev_is_terminal &&
             (current_progress > 0 || current_print_duration > 0)) {
             return false; // App joined mid-print (booted into a running print), skip collector

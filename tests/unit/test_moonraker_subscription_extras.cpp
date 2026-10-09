@@ -392,6 +392,37 @@ TEST_CASE("the refresh response reaches status callbacks", "[moonraker][subscrip
     CHECK(saw_app_object.load() >= 1);
 }
 
+TEST_CASE("the refresh response is dispatched as whole objects, not a cached snapshot",
+          "[moonraker][subscription]") {
+    LVGLTestFixture fixture;
+    ProviderValue pv;
+    RecordingClient client(MoonrakerClientMock::PrinterType::VORON_24);
+    REQUIRE(with_provider(client, pv).discover_real());
+
+    std::mutex mutex;
+    std::vector<json> frames;
+    client.register_notify_update([&](const json& msg) {
+        if (msg.contains("params") && msg["params"].is_array() && !msg["params"].empty() &&
+            msg["params"][0].contains("webhooks")) {
+            std::lock_guard<std::mutex> lock(mutex);
+            frames.push_back(msg);
+        }
+    });
+
+    pv.set({{"temperature_sensor spark", nullptr}});
+    client.refresh_subscription();
+    helix::ui::UpdateQueue::instance().drain();
+
+    std::lock_guard<std::mutex> lock(mutex);
+    REQUIRE_FALSE(frames.empty());
+    for (const json& msg : frames) {
+        auto frame = helix::parse_status_notification(msg);
+        REQUIRE(frame);
+        CHECK(frame->whole_objects);
+        CHECK_FALSE(frame->from_cached_snapshot);
+    }
+}
+
 TEST_CASE("plugin-only objects and fields in a status frame leave app state alone",
           "[moonraker][subscription]") {
     LVGLTestFixture fixture;

@@ -292,12 +292,13 @@ std::optional<StatusFrame> helix::parse_status_notification(const json& notifica
     }
     frame.from_cached_snapshot =
         helix::json_util::safe_bool(notification, helix::CACHED_SNAPSHOT_MARKER);
+    frame.whole_objects = helix::json_util::safe_bool(notification, helix::WHOLE_OBJECTS_MARKER);
     return frame;
 }
 
 void PrinterState::update_from_status(const json& state, double eventtime,
                                       bool from_cached_snapshot,
-                                      std::optional<uint64_t> frame_epoch) {
+                                      std::optional<uint64_t> frame_epoch, bool whole_objects) {
     // Debug: Check if we're in render phase (this should never be true)
     LV_DEBUG_RENDER_STATE();
 
@@ -330,7 +331,7 @@ void PrinterState::update_from_status(const json& state, double eventtime,
         helix::preprint_prefs::read_persisted_defaults(discovery_, state));
 
     // Delegate print updates to print state component
-    print_domain_.update_from_status(state);
+    print_domain_.update_from_status(state, whole_objects);
 
     // A loaded mesh and an applied level are what offer the skip toggles.
     if (helix::skip_wrappers::update_gates(skip_gates_, state)) {

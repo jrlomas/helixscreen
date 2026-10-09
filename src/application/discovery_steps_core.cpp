@@ -95,7 +95,8 @@ void temp_graph_seed_step(DiscoveryContext& ctx) {
 // this replay must not walk a liveness signal (klippy state) backwards.
 void status_dispatch_step(DiscoveryContext& ctx) {
     if (!ctx.status.empty()) {
-        ctx.client.dispatch_status_update(ctx.status, /*from_cached_snapshot=*/true);
+        ctx.client.dispatch_status_update(ctx.status, /*from_cached_snapshot=*/true,
+                                          /*whole_objects=*/true);
     }
 }
 

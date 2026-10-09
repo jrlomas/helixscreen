@@ -12,6 +12,8 @@
 #include "../test_helpers/printer_state_test_access.h"
 #include "../ui_test_utils.h"
 #include "app_globals.h"
+#include "i_moonraker_client.h"
+#include "printer_state.h"
 
 #include "../catch_amalgamated.hpp"
 
@@ -238,6 +240,152 @@ TEST_CASE("Display message: normal end-of-print sequence leaves the END_PRINT "
     REQUIRE(std::string(lv_subject_get_string(state.print_state().get_display_message_subject())) ==
             "Print complete - remove part");
     REQUIRE(lv_subject_get_int(state.print_state().get_display_message_visible_subject()) == 1);
+}
+
+// ============================================================================
+// Subscription responses for an ended job
+// ============================================================================
+
+namespace {
+std::string shown_message(PrinterState& state) {
+    return lv_subject_get_string(state.print_state().get_display_message_subject());
+}
+int message_visible(PrinterState& state) {
+    return lv_subject_get_int(state.print_state().get_display_message_visible_subject());
+}
+json ended_frame(const char* end_state, const char* message) {
+    return {{"print_stats", {{"state", end_state}, {"filename", "cover_ASA_7h44m.gcode"}}},
+            {"display_status", {{"progress", 0.0}, {"message", message}}}};
+}
+
+enum class Subscription { DiscoveryReplay, Refresh };
+
+/// Delivers @p status the way a dispatched printer.objects.subscribe response
+/// reaches PrinterState: as a notification carrying the provenance markers.
+void apply_subscription(PrinterState& state, const json& status, Subscription kind) {
+    json notification = {{"method", "notify_status_update"},
+                         {"params", json::array({status, 0.0})},
+                         {WHOLE_OBJECTS_MARKER, true}};
+    if (kind == Subscription::DiscoveryReplay) {
+        notification[CACHED_SNAPSHOT_MARKER] = true;
+    }
+    auto frame = parse_status_notification(notification);
+    REQUIRE(frame);
+    state.update_from_status(*frame->status, frame->eventtime, frame->from_cached_snapshot,
+                             std::nullopt, frame->whole_objects);
+}
+} // namespace
+
+TEST_CASE("Display message: a subscription response for an ended job does not show its "
+          "leftover M117",
+          "[print][display_message]") {
+    lv_init_safe();
+
+    auto run = [](const char* end_state, Subscription kind) {
+        PrinterState& state = get_printer_state();
+        PrinterStateTestAccess::reset(state);
+        state.init_subjects(false);
+
+        // Klipper still holds PRINT_START's M117 after the job ended.
+        apply_subscription(state, ended_frame(end_state, "Print starting..."), kind);
+
+        REQUIRE(shown_message(state).empty());
+        REQUIRE(message_visible(state) == 0);
+
+        // A message the printer sets afterwards is live and shows.
+        state.update_from_status({{"display_status", {{"message", "Bed cooled"}}}});
+        REQUIRE(shown_message(state) == "Bed cooled");
+        REQUIRE(message_visible(state) == 1);
+    };
+
+    SECTION("cancelled, discovery replay") {
+        run("cancelled", Subscription::DiscoveryReplay);
+    }
+    SECTION("complete, discovery replay") {
+        run("complete", Subscription::DiscoveryReplay);
+    }
+    SECTION("error, discovery replay") {
+        run("error", Subscription::DiscoveryReplay);
+    }
+    SECTION("cancelled, subscription refresh") {
+        run("cancelled", Subscription::Refresh);
+    }
+}
+
+TEST_CASE("Display message: a subscription refresh after connect keeps the leftover hidden",
+          "[print][display_message]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    apply_subscription(state, ended_frame("cancelled", "Print starting..."),
+                       Subscription::DiscoveryReplay);
+    REQUIRE(shown_message(state).empty());
+
+    // A plugin subscribing an extra object re-sends every app object in full.
+    json refresh = ended_frame("cancelled", "Print starting...");
+    refresh["temperature_sensor plugin_x"] = {{"temperature", 24.0}};
+    apply_subscription(state, refresh, Subscription::Refresh);
+
+    REQUIRE(shown_message(state).empty());
+    REQUIRE(message_visible(state) == 0);
+}
+
+TEST_CASE("Display message: a reconnect replay keeps the message shown live",
+          "[print][display_message]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    state.update_from_status({{"print_stats", {{"state", "printing"}}}});
+    state.update_from_status({{"print_stats", {{"state", "cancelled"}}}});
+    state.update_from_status({{"display_status", {{"message", "Print cancelled"}}}});
+    REQUIRE(shown_message(state) == "Print cancelled");
+
+    SECTION("replay carrying the same message") {
+        apply_subscription(state, ended_frame("cancelled", "Print cancelled"),
+                           Subscription::DiscoveryReplay);
+    }
+    SECTION("replay captured before the live message landed") {
+        apply_subscription(state, ended_frame("cancelled", "Print starting..."),
+                           Subscription::DiscoveryReplay);
+    }
+
+    REQUIRE(shown_message(state) == "Print cancelled");
+    REQUIRE(message_visible(state) == 1);
+}
+
+TEST_CASE("Display message: the subscription rule is limited to ended jobs",
+          "[print][display_message]") {
+    lv_init_safe();
+    PrinterState& state = get_printer_state();
+    PrinterStateTestAccess::reset(state);
+    state.init_subjects(false);
+
+    SECTION("live frame ending the job together with a farewell M117") {
+        state.update_from_status({{"print_stats", {{"state", "printing"}}}});
+        state.update_from_status(ended_frame("cancelled", "Print cancelled"));
+        REQUIRE(shown_message(state) == "Print cancelled");
+        REQUIRE(message_visible(state) == 1);
+    }
+    SECTION("subscription response for an idle printer") {
+        apply_subscription(
+            state,
+            {{"print_stats", {{"state", "standby"}}}, {"display_status", {{"message", "Ready"}}}},
+            Subscription::DiscoveryReplay);
+        REQUIRE(shown_message(state) == "Ready");
+        REQUIRE(message_visible(state) == 1);
+    }
+    SECTION("subscription response for a running print") {
+        apply_subscription(state,
+                           {{"print_stats", {{"state", "printing"}}},
+                            {"display_status", {{"message", "Layer 3/120"}}}},
+                           Subscription::Refresh);
+        REQUIRE(shown_message(state) == "Layer 3/120");
+        REQUIRE(message_visible(state) == 1);
+    }
 }
 
 // ============================================================================

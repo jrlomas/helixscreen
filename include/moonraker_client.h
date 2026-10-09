@@ -670,7 +670,8 @@ class MoonrakerClient : public hv::WebSocketClient, public IMoonrakerClient {
      * @param from_cached_snapshot true when replaying a snapshot captured earlier
      *        (see IMoonrakerClient::dispatch_status_update)
      */
-    void dispatch_status_update(const json& status, bool from_cached_snapshot = false) override;
+    void dispatch_status_update(const json& status, bool from_cached_snapshot = false,
+                                bool whole_objects = false) override;
 
     void set_subscription_extras_provider(std::function<json()> provider) override {
         discovery_.set_extras_provider(std::move(provider));

@@ -2895,8 +2895,7 @@ void on_print_state_changed_for_telemetry(lv_observer_t* observer, lv_subject_t*
     // wire question is the right one: a preparing job that never confirms is
     // retired by PrinterPrintState and must not emit an outcome event here.
     bool was_active = printer_has_job(s_telemetry_prev_state);
-    bool is_terminal = (current == PrintJobState::COMPLETE || current == PrintJobState::CANCELLED ||
-                        current == PrintJobState::ERROR);
+    bool is_terminal = job_has_ended(current);
 
     if (was_active && is_terminal) {
         // Map PrintJobState to telemetry outcome string
