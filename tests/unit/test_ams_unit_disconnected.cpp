@@ -110,14 +110,15 @@ TEST_CASE_METHOD(LVGLUITestFixture, "A disconnected unit publishes its own subje
         CHECK(subject_int("ams_viewed_unit_disconnected") == 0);
     }
 
-    SECTION("the unit card is disabled and shows its chip") {
+    SECTION("the unit card fades, stays tappable and shows its chip") {
         const std::string absent = AmsState::unit_absent_subject_name(1);
         const std::string disc = AmsState::unit_disconnected_subject_name(1);
         const char* attrs[] = {"absent",     absent.c_str(), "disconnected",
                                disc.c_str(), nullptr,        nullptr};
         auto* card = static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "ams_unit_card", attrs));
         REQUIRE(card != nullptr);
-        CHECK(lv_obj_has_state(card, LV_STATE_DISABLED));
+        CHECK_FALSE(lv_obj_has_state(card, LV_STATE_DISABLED));
+        CHECK(lv_obj_get_style_opa(card, LV_PART_MAIN) < LV_OPA_COVER);
         lv_obj_t* chip = lv_obj_find_by_name(card, "unit_disconnected_chip");
         REQUIRE(chip != nullptr);
         CHECK_FALSE(lv_obj_has_flag(chip, LV_OBJ_FLAG_HIDDEN));
@@ -135,6 +136,7 @@ TEST_CASE_METHOD(LVGLUITestFixture, "A disconnected unit publishes its own subje
         auto* card = static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "ams_unit_card", attrs));
         REQUIRE(card != nullptr);
         CHECK_FALSE(lv_obj_has_state(card, LV_STATE_DISABLED));
+        CHECK(lv_obj_get_style_opa(card, LV_PART_MAIN) == LV_OPA_COVER);
         lv_obj_t* chip = lv_obj_find_by_name(card, "unit_disconnected_chip");
         REQUIRE(chip != nullptr);
         CHECK(lv_obj_has_flag(chip, LV_OBJ_FLAG_HIDDEN));

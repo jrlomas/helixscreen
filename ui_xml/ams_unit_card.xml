@@ -11,7 +11,7 @@
     <!-- 1 while the unit is an absent placeholder: a box address held for a box
          that is not on the bus. The card shows disabled and says so. -->
     <prop name="absent" type="subject" default="ams_env_ind_off_flag"/>
-    <!-- 1 while a present unit is reported offline: drawn disabled, with a chip. -->
+    <!-- 1 while a present unit is reported offline: drawn faded, with a chip. -->
     <prop name="disconnected" type="subject" default="ams_env_ind_off_flag"/>
     <prop name="temp_text" type="subject" default="ams_env_ind_0_temp_text"/>
     <prop name="humidity_text" type="subject" default="ams_env_ind_0_humidity_text"/>
@@ -21,6 +21,9 @@
     <prop name="drying_active" type="subject" default="ams_env_ind_0_drying_active"/>
     <prop name="drying_text" type="subject" default="ams_env_ind_0_drying_text"/>
   </api>
+  <styles>
+    <style name="unit_offline" opa="128"/>
+  </styles>
   <view name="ams_unit_card"
         extends="lv_obj" height="content" scrollable="false" flex_flow="column" style_flex_main_place="start"
         style_flex_cross_place="center" style_bg_color="#elevated_bg" style_bg_opa="255" style_radius="#border_radius"
@@ -29,7 +32,8 @@
         clickable="true">
     <style name="styles.press_wash" selector="pressed"/>
     <bind_state_if_eq subject="$absent" state="disabled" ref_value="1"/>
-    <bind_state_if_eq subject="$disconnected" state="disabled" ref_value="1"/>
+    <!-- Offline reads faded but stays tappable: its detail still shows what it last reported -->
+    <bind_style_if_eq name="unit_offline" subject="$disconnected" ref_value="1"/>
     <!-- Unit header: logo + name (clickable=false + event_bubble so clicks reach card) -->
     <lv_obj width="100%"
             height="content" scrollable="false" clickable="false" event_bubble="true" flex_flow="row"
