@@ -1030,7 +1030,7 @@ TEST_CASE("ACE paused failed feed does not draw the named tool at the nozzle",
     CHECK(helper.get_slot_filament_segment(3) != PathSegment::NOZZLE);
 
     notify_ace(helper, {{"toolhead_sensor", true}}); // 13:31:34
-    CHECK(helper.get_filament_segment() == PathSegment::TOOLHEAD);
+    CHECK(helper.get_filament_segment() == PathSegment::NOZZLE);
 
     notify_ace(helper, {{"target_index", -1}}); // 13:31:45
     info = helper.get_test_system_info();
@@ -1040,6 +1040,29 @@ TEST_CASE("ACE paused failed feed does not draw the named tool at the nozzle",
     CHECK(helper.slot_is_actively_loaded(3));
     CHECK(helper.get_filament_segment() == PathSegment::NOZZLE);
     CHECK(helper.get_slot_filament_segment(3) == PathSegment::NOZZLE);
+}
+
+// The driver persists target_index and leaves it set when a toolchange raises,
+// so it can name the seated tool indefinitely. The toolhead sensor ends it.
+TEST_CASE("ACE latched target_index on a seated tool still reads at the nozzle",
+          "[ams][ace][segment][1678]") {
+    AmsBackendAceTestHelper helper;
+    helper.set_running(true);
+    AceTestAccess::parse_ace(helper, make_kobra_instance_object());
+    json latched = make_kobra_manager_object(3);
+    latched["target_index"] = 3;
+    AceTestAccess::parse_ace(helper, latched); // cur3 tgt3 rdm1 th1
+
+    for (int frame = 0; frame < 3; ++frame) {
+        notify_ace(helper, {{"rdm_sensor", true}, {"toolhead_sensor", true}});
+        const auto info = helper.get_test_system_info();
+        CHECK(info.filament_loaded);
+        CHECK(info.action == AmsAction::IDLE);
+        CHECK(info.units[0].slots[3].status == SlotStatus::LOADED);
+        CHECK(helper.slot_is_actively_loaded(3));
+        CHECK(helper.get_filament_segment() == PathSegment::NOZZLE);
+        CHECK(helper.get_slot_filament_segment(3) == PathSegment::NOZZLE);
+    }
 }
 
 TEST_CASE("ACE REST bridge publishes a seat with an empty path as not loaded", "[ams][ace][1678]") {
@@ -3011,6 +3034,24 @@ TEST_CASE("ACE endless spool groups follow the match mode", "[ams][ace][endless]
         REQUIRE(groups.size() == 1);
         CHECK(groups[0] == std::vector<int>{0, 1, 2});
     }
+}
+
+// A ValgACE `ace` delta with no slots array is read as the manager half of the
+// frame; it is still the primary object and must land once, leaving the slots.
+TEST_CASE("ACE slotless ValgACE delta keeps the slots and applies its fields", "[ams][ace][1679]") {
+    AmsBackendAceTestHelper helper;
+    helper.set_running(true);
+    notify_ace(helper, make_ace_slot_payload("ready", 0xFF5500, "PLA"));
+    REQUIRE(helper.get_slot_info(0).status == SlotStatus::AVAILABLE);
+
+    notify_ace(helper, {{"status", "ready"}, {"temp", 41}});
+    const auto slot = helper.get_slot_info(0);
+    CHECK(slot.status == SlotStatus::AVAILABLE);
+    CHECK(slot.color_rgb == 0xFF5500u);
+    CHECK(slot.material == "PLA");
+    CHECK(helper.get_test_system_info().action == AmsAction::IDLE);
+    CHECK(helper.get_test_system_info().total_slots == 1);
+    CHECK(helper.get_test_dryer_info().current_temp_c == Catch::Approx(41.0f));
 }
 
 // Klipper batches every object that changed into one notify frame, so a

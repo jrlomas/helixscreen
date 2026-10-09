@@ -268,11 +268,12 @@ PathTopology AmsBackendAce::get_topology() const {
 bool AmsBackendAce::seat_at_nozzle_locked() const {
     // Caller holds mutex_. A seated tool outranks the sensors: both are still
     // made with filament in the nozzle. Not while the driver swaps it out (the
-    // seat stands until the new tool is in), and not while it still names a
-    // target: a feed it is retrying keeps target_index on the seated tool, and
-    // the strand is wherever the sensors say until the target clears.
+    // seat stands until the new tool is in), and not while a feed it is
+    // retrying keeps target_index on the seated tool short of the toolhead
+    // sensor. The sensor ends that, because the driver persists target_index
+    // and can leave it set on a tool that is loaded.
     return system_info_.filament_loaded && !driver_action_ &&
-           !(path_sensors_seen_ && target_index_ >= 0);
+           !(path_sensors_seen_ && target_index_ >= 0 && !toolhead_sensor_);
 }
 
 bool AmsBackendAce::path_empty_under_seat_locked() const {
