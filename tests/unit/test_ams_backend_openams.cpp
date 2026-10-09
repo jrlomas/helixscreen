@@ -1135,3 +1135,130 @@ TEST_CASE_METHOD(LVGLUITestFixture, "OpenAMS shows a spool link written to lane_
     CHECK(info.color_rgb == 0x1F3A93);
     CHECK(info.material == "PETG");
 }
+
+// ============================================================================
+// Unit faults
+// ============================================================================
+
+namespace {
+
+json fault_entry(const std::string& code, const std::string& text, json actions,
+                 const std::string& severity = "stop", json bay = nullptr) {
+    return json{{"severity", severity}, {"code", code},       {"text", text},
+                {"bay", bay},           {"actions", actions}, {"source", "firmware"}};
+}
+
+/// shared_manager() with `devices.<unit>.faults` set.
+json faulted_manager(const json& ams_ht_faults, const json& ams2_faults = json::array(),
+                     json commands = toolhead_commands()) {
+    json m = shared_manager(-1, std::move(commands), true);
+    m["devices"] = {{"ams_ht", {{"faults", ams_ht_faults}}}, {"ams2", {{"faults", ams2_faults}}}};
+    return m;
+}
+
+const std::string kClearHt = "OAMS_CLEAR_FAULT OAMS=1\nOAMSM_CLEAR_ERRORS";
+
+} // namespace
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS surfaces a latched unit fault in plain words",
+                 "[ams][openams][fault]") {
+    OpenAmsHarness backend;
+    backend.feed(faulted_manager(
+        json::array({fault_entry("motor_drive_fault", "motor_drive_fault", {"clear_fault"})})));
+
+    const auto info = backend.get_system_info();
+    CHECK(info.action == AmsAction::ERROR);
+    CHECK(info.operation_detail == "ams_ht: Motor drive fault");
+    REQUIRE(info.units[0].slots[0].error.has_value());
+    CHECK(info.units[0].slots[0].error->message == "Motor drive fault");
+    CHECK(info.units[0].has_any_error());
+    CHECK_FALSE(info.units[1].has_any_error());
+
+    const auto event = backend.current_error();
+    REQUIRE(event.has_value());
+    CHECK(event->detail == "ams_ht: Motor drive fault");
+    REQUIRE(event->recovery_actions.size() == 1);
+    CHECK(event->recovery_actions[0].gcode == kClearHt);
+
+    SECTION("motion_timeout reads in words, an unknown code reads as the unit's text") {
+        backend.feed(faulted_manager(json::array(
+            {fault_entry("motion_timeout", "x", {"clear_fault"}),
+             fault_entry("odd_code", "Spool jammed at the gate", json::array(), "pause")})));
+        const auto detail = backend.get_system_info().operation_detail;
+        CHECK(detail.find("Motion timed out") != std::string::npos);
+        CHECK(detail.find("Spool jammed at the gate") != std::string::npos);
+    }
+
+    SECTION("a bay fault marks only that bay") {
+        backend.feed(
+            faulted_manager(json::array({fault_entry("unload failed", "Spool unloading failed",
+                                                     json::array({"clear_errors"}), "pause", 0)})));
+        CHECK(backend.get_system_info().units[0].slots[0].error.has_value());
+        CHECK_FALSE(backend.get_system_info().units[1].has_any_error());
+    }
+
+    SECTION("clearing the fault retires the error") {
+        backend.feed(faulted_manager(json::array()));
+        CHECK(backend.get_system_info().action == AmsAction::IDLE);
+        CHECK_FALSE(backend.current_error().has_value());
+        CHECK_FALSE(backend.get_system_info().units[0].has_any_error());
+    }
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS clears each faulted unit, then resets the manager",
+                 "[ams][openams][fault]") {
+    SECTION("openams shape: unit clears first, in unit order, then commands.reset") {
+        OpenAmsHarness backend;
+        backend.feed(
+            faulted_manager(json::array({fault_entry("motor_drive_fault", "m", {"clear_fault"})}),
+                            json::array({fault_entry("motion_timeout", "t", {"clear_fault"})})));
+        REQUIRE(backend.reset().success());
+        CHECK(backend.commands ==
+              std::vector<std::string>{"OAMS_CLEAR_FAULT OAMS=1\nOAMS_CLEAR_FAULT OAMS=2\n"
+                                       "OAMSM_CLEAR_ERRORS"});
+    }
+
+    SECTION("only the faulted unit is cleared") {
+        OpenAmsHarness backend;
+        backend.feed(faulted_manager(
+            json::array(), json::array({fault_entry("motor_drive_fault", "m", {"clear_fault"})})));
+        REQUIRE(backend.recover().success());
+        CHECK(backend.commands ==
+              std::vector<std::string>{"OAMS_CLEAR_FAULT OAMS=2\nOAMSM_CLEAR_ERRORS"});
+    }
+
+    SECTION("a fault the unit offers no clear_fault for resets the manager only") {
+        OpenAmsHarness backend;
+        backend.feed(
+            faulted_manager(json::array({fault_entry("unload failed", "Spool unloading failed",
+                                                     json::array({"clear_errors"}), "pause", 0)})));
+        REQUIRE(backend.reset().success());
+        CHECK(backend.commands == std::vector<std::string>{"OAMSM_CLEAR_ERRORS"});
+        CHECK(backend.current_error().has_value());
+    }
+
+    SECTION("clear_fault clears the latched unit fault, and sends nothing without one") {
+        OpenAmsHarness backend;
+        backend.feed(
+            faulted_manager(json::array({fault_entry("motor_drive_fault", "m", {"clear_fault"})})));
+        REQUIRE(backend.clear_fault(-1).success());
+        CHECK(backend.commands == std::vector<std::string>{kClearHt});
+
+        OpenAmsHarness quiet;
+        quiet.feed(shared_manager(-1, toolhead_commands()));
+        REQUIRE(quiet.clear_fault(-1).success());
+        CHECK(quiet.commands.empty());
+    }
+}
+
+TEST_CASE_METHOD(HelixTestFixture, "OpenAMS shows no fault and resets as before without devices",
+                 "[ams][openams][fault]") {
+    // klipper_openams publishes no `devices`.
+    OpenAmsHarness backend;
+    backend.feed(shared_manager(-1, all_commands(), false));
+
+    CHECK(backend.get_system_info().action == AmsAction::IDLE);
+    CHECK_FALSE(backend.current_error().has_value());
+    REQUIRE(backend.reset().success());
+    CHECK(backend.commands == std::vector<std::string>{"OAMSM_CLEAR_ERRORS"});
+}

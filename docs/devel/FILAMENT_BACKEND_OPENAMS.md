@@ -136,6 +136,23 @@ unload. While `ready` is false, every action is refused.
   expose it.
 - **Homing** is the macro's job, so none is added (`skip_homing`).
 
+## Unit faults
+
+The openams plugin publishes `oams_manager.devices.<unit>.faults[]` (severity, code, text,
+bay, actions); klipper_openams publishes no `devices`, so it never raises one. The
+subscription asks for `devices` and ignores it when absent. A `stop` or `pause` fault
+puts the system in `AmsAction::ERROR`, marks the unit's slots (the one bay for a bay
+fault) with a `SlotError`, and fills `operation_detail`, so the overview shows the unit's
+error dot and the sidebar text. `current_error()` (channel B of the AMS error model)
+turns it into the recovery dialog with one **Reset** action. Codes read in plain
+words (`motor_drive_fault`, `motion_timeout`); any other code reads as the unit's own text.
+
+Reset, the recovery dialog and `clear_fault()` send one script: `OAMS_CLEAR_FAULT
+OAMS=<unit id>` for each unit that has a fault advertising `clear_fault`, in unit order,
+then `commands.reset`. A firmware fault is not cleared by `OAMSM_CLEAR_ERRORS`, and while
+it is latched the unit refuses all motion. With no unit fault the script is `commands.reset`
+alone, as before.
+
 ## Shared hub
 
 `units[].lane` is the unit's hub: units naming the same lane feed one hub, one FPS and one

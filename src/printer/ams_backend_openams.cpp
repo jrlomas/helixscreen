@@ -6,11 +6,13 @@
 #include "ui_insert_notice.h"
 #include "ui_update_queue.h"
 
+#include "ams_fault_event.h"
 #include "i_moonraker_api.h"
 #include "lane_apply.h"
 #include "lane_legacy_migration.h"
 #include "lane_source_store.h"
 #include "lane_translation.h"
+#include "lvgl/src/others/translation/lv_translation.h"
 #include "openams_api.h"
 #include "printer_discovery.h"
 
@@ -18,6 +20,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <set>
 #include <utility>
 
@@ -68,6 +71,18 @@ bool command_name_is_safe(const std::string& command) {
     });
 }
 
+/// A fault code in plain words; an unfamiliar code reads as the unit's own text.
+std::string describe_fault(const std::string& code, const std::string& text) {
+    if (code == "motor_drive_fault") {
+        return "Motor drive fault"; // i18n: do not translate - firmware fault name
+    }
+    if (code == "motion_timeout") {
+        return "Motion timed out"; // i18n: do not translate - firmware fault name
+    }
+    return !text.empty() ? text
+                         : (!code.empty() ? code : std::string(lv_tr("Filament System Error")));
+}
+
 /// Tool number a `T<n>` group stands for, or -1 for any other group name.
 int tool_from_group(const std::string& group) {
     if (group.size() < 2 || group.size() > 4 || group.front() != 'T') {
@@ -109,8 +124,8 @@ void write_filament_fields(SlotInfo& slot, const SlotInfo& info) {
 json AmsBackendOpenAms::required_status_objects(const PrinterDiscovery& hw) {
     json objects = json::object();
     if (hw.mmu_type() == AmsType::OPENAMS) {
-        objects[openams::kManagerObject] =
-            json::array({"api_version", "schema", "ready", "commands", "lanes", "units", "groups"});
+        objects[openams::kManagerObject] = json::array(
+            {"api_version", "schema", "ready", "commands", "lanes", "units", "groups", "devices"});
     }
     return objects;
 }
@@ -228,6 +243,8 @@ void AmsBackendOpenAms::present_nothing_locked() {
     lane_ids_.clear();
     lane_loaded_slots_.clear();
     slot_lanes_.clear();
+    unit_faults_.clear();
+    unit_oams_idx_.clear();
     present_by_slot_id_.clear();
     remote_slot_ids_.clear();
     slot_groups_.clear();
@@ -282,6 +299,7 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
     std::unordered_map<int, int> remote_to_global;
     std::set<PathTopology> topologies;
     std::vector<std::string> unit_lanes;
+    std::vector<int> next_unit_idx;
 
     for (const auto& unit_json : array_member(snapshot_, "units")) {
         if (!unit_json.is_object()) {
@@ -333,6 +351,12 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
         }
         unit.slot_count = static_cast<int>(unit.slots.size());
         unit.hub_id = string_member(unit_json, "lane");
+        {
+            const std::string id = string_member(unit_json, "id");
+            char* end = nullptr;
+            const long idx = id.empty() ? -1 : std::strtol(id.c_str(), &end, 10);
+            next_unit_idx.push_back(end && *end == '\0' ? static_cast<int>(idx) : -1);
+        }
         unit_lanes.push_back(unit.hub_id);
         next.units.push_back(std::move(unit));
     }
@@ -417,6 +441,54 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
         }
     }
 
+    // Faults the units publish (openams only; klipper_openams publishes no
+    // `devices`, so nothing is ever raised there).
+    std::vector<std::vector<UnitFault>> next_faults(next.units.size());
+    if (const json* devices = object_member(snapshot_, "devices")) {
+        for (std::size_t u = 0; u < next.units.size(); ++u) {
+            const json* device = object_member(*devices, next.units[u].display_name.c_str());
+            if (!device) {
+                continue;
+            }
+            for (const auto& fault_json : array_member(*device, "faults")) {
+                if (!fault_json.is_object()) {
+                    continue;
+                }
+                UnitFault fault;
+                fault.severity = string_member(fault_json, "severity");
+                fault.code = string_member(fault_json, "code");
+                fault.text = string_member(fault_json, "text");
+                fault.bay = int_member(fault_json, "bay", -1);
+                for (const auto& action : array_member(fault_json, "actions")) {
+                    if (action.is_string() && action.get<std::string>() == "clear_fault") {
+                        fault.clearable = true;
+                    }
+                }
+                if (fault.severity == "stop" || fault.severity == "pause") {
+                    next_faults[u].push_back(std::move(fault));
+                }
+            }
+        }
+    }
+    bool any_fault = false;
+    for (std::size_t u = 0; u < next.units.size(); ++u) {
+        AmsUnit& unit = next.units[u];
+        for (const UnitFault& fault : next_faults[u]) {
+            any_fault = true;
+            SlotError error;
+            error.message = describe_fault(fault.code, fault.text);
+            error.severity = SlotError::ERROR;
+            for (auto& slot : unit.slots) {
+                if (fault.bay < 0 || fault.bay == slot.slot_index) {
+                    slot.error = error;
+                }
+            }
+        }
+    }
+    if (any_fault && reported_action_ != AmsAction::ERROR) {
+        reported_action_ = AmsAction::ERROR;
+    }
+
     for (std::size_t u = 0; u < next.units.size(); ++u) {
         auto fps = lane_fps.find(unit_lanes[u]);
         if (fps != lane_fps.end()) {
@@ -433,6 +505,8 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
     remote_slot_ids_ = std::move(next_remote_ids);
     slot_groups_ = std::move(next_slot_groups);
     slot_lanes_ = std::move(next_slot_lanes);
+    unit_faults_ = std::move(next_faults);
+    unit_oams_idx_ = std::move(next_unit_idx);
     groups_ = std::move(next_groups);
     commands_ = std::move(next_commands);
     manager_ready_ = bool_member(snapshot_, "ready", false);
@@ -510,6 +584,9 @@ void AmsBackendOpenAms::parse_snapshot_locked() {
     next.action = pending_action_ != AmsAction::IDLE ? pending_action_ : reported_action_;
     next.operation_detail = failure_detail_;
     system_info_ = std::move(next);
+    if (system_info_.operation_detail.empty() && any_fault) {
+        system_info_.operation_detail = fault_detail_locked();
+    }
 }
 
 AmsAction AmsBackendOpenAms::action_from_lane_state(const std::string& state) {
@@ -902,19 +979,77 @@ AmsError AmsBackendOpenAms::do_change_tool(int tool_number) {
 // Recovery
 // ============================================================================
 
+std::string AmsBackendOpenAms::clear_script_locked() const {
+    std::string script;
+    for (std::size_t u = 0; u < unit_faults_.size() && u < unit_oams_idx_.size(); ++u) {
+        const bool clearable = std::any_of(unit_faults_[u].begin(), unit_faults_[u].end(),
+                                           [](const UnitFault& f) { return f.clearable; });
+        if (clearable && unit_oams_idx_[u] >= 0) {
+            script += "OAMS_CLEAR_FAULT OAMS=" + std::to_string(unit_oams_idx_[u]) + "\n";
+        }
+    }
+    const std::string reset = command_locked(kReset);
+    script += reset;
+    if (reset.empty() && !script.empty()) {
+        script.pop_back(); // the trailing newline
+    }
+    return script;
+}
+
+bool AmsBackendOpenAms::has_clearable_fault_locked() const {
+    return std::any_of(unit_faults_.begin(), unit_faults_.end(), [](const auto& faults) {
+        return std::any_of(faults.begin(), faults.end(),
+                           [](const UnitFault& f) { return f.clearable; });
+    });
+}
+
+std::string AmsBackendOpenAms::fault_detail_locked() const {
+    std::string detail;
+    for (std::size_t u = 0; u < unit_faults_.size() && u < system_info_.units.size(); ++u) {
+        for (const UnitFault& fault : unit_faults_[u]) {
+            if (!detail.empty()) {
+                detail += "; ";
+            }
+            const AmsUnit& unit = system_info_.units[u];
+            detail += (unit.display_name.empty() ? unit.name : unit.display_name) + ": " +
+                      describe_fault(fault.code, fault.text);
+        }
+    }
+    return detail;
+}
+
+std::optional<helix::ErrorEvent> AmsBackendOpenAms::current_error() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const std::string detail = fault_detail_locked();
+    if (detail.empty()) {
+        return std::nullopt;
+    }
+    std::vector<helix::RecoveryAction> actions;
+    const std::string script = clear_script_locked();
+    if (!script.empty()) {
+        actions.push_back({lv_tr("Reset"), script, "openams::clear_fault", "primary"});
+    } else {
+        // A critical event with no action is a button-less dialog the user
+        // cannot close; an empty gcode is the dismiss spelling.
+        actions.push_back({lv_tr("OK"), "", "openams::dismiss", ""});
+    }
+    return helix::make_ams_fault_event(helix::ErrorSource::OPENAMS, lv_tr("Filament System Error"),
+                                       detail, std::move(actions));
+}
+
 AmsError AmsBackendOpenAms::reset() {
-    std::string command;
+    std::string script;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!api_supported_) {
             return AmsErrorHelper::not_supported("OpenAMS without its UI API");
         }
-        command = command_locked(kReset);
+        script = clear_script_locked();
     }
-    if (command.empty()) {
+    if (script.empty()) {
         return AmsErrorHelper::not_supported("OpenAMS reset");
     }
-    return execute_gcode(command);
+    return execute_gcode(script);
 }
 
 AmsError AmsBackendOpenAms::recover() {
@@ -949,12 +1084,21 @@ bool AmsBackendOpenAms::can_cancel_operation() const {
 
 AmsError AmsBackendOpenAms::clear_fault(int slot_index) {
     (void)slot_index;
+    std::string script;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         failure_detail_.clear();
         system_info_.operation_detail.clear();
+        // Only a latched unit fault is cleared from here; lane errors stay
+        // with Reset.
+        if (has_clearable_fault_locked()) {
+            script = clear_script_locked();
+        }
     }
     emit_event(EVENT_STATE_CHANGED);
+    if (!script.empty()) {
+        return execute_gcode(script);
+    }
     return AmsErrorHelper::success();
 }
 

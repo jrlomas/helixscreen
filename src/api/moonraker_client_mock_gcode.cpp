@@ -153,6 +153,10 @@ MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_openams(const std::s
 MoonrakerClientMock::GcodeResult MoonrakerClientMock::gcode_openams_line(const std::string& gcode) {
     const size_t token_end = gcode.find_first_of(" \t");
     const std::string cmd = gcode.substr(0, token_end);
+    if (cmd == "OAMS_CLEAR_FAULT") {
+        openams_fault_active_ = false;
+        return 0;
+    }
     if (cmd == "OPENAMS_UNLOAD" || cmd == "OAMSM_UNLOAD_FROM_TOOLHEAD") {
         openams_loaded_slot_ = -1;
         return 0;

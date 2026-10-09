@@ -231,6 +231,7 @@ MoonrakerClientMock::MoonrakerClientMock(PrinterType type, double speedup_factor
     // N = 1-based global slot; inner "lane" is 0-based).
     if (is_mock_openams() && openams_shared_lane_units()) {
         openams_loaded_slot_ = 0;
+        openams_fault_active_ = std::getenv("HELIX_MOCK_OPENAMS_FAULT") != nullptr;
         // Every spool is known to the override store as it would be on a real
         // printer; the shared-lane shape seeds the first three.
         static const char* const COLORS[] = {"#E8E8E8", "#3CE05A", "#303030"};
@@ -1718,6 +1719,19 @@ nlohmann::json MoonrakerClientMock::openams_shared_status_json() const {
                               {"unload", "OAMSM_UNLOAD_FROM_TOOLHEAD"},
                               {"cancel", "OAMSM_LOAD_FILAMENT_CANCEL"},
                               {"reset", "OAMSM_CLEAR_ERRORS"}};
+        if (openams_fault_active_.load()) {
+            const char* code = std::getenv("HELIX_MOCK_OPENAMS_FAULT");
+            status["devices"] = {{"ams_ht",
+                                  {{"faults",
+                                    {{{"severity", "stop"},
+                                      {"code", code && *code ? code : "motor_drive_fault"},
+                                      {"text", code && *code ? code : "motor_drive_fault"},
+                                      {"bay", nullptr},
+                                      {"actions", {"clear_fault"}},
+                                      {"source", "firmware"}}}}}}};
+        } else {
+            status["devices"] = {{"ams_ht", {{"faults", nlohmann::json::array()}}}};
+        }
         status["lanes_by_fps"] = {{"fps",
                                    {{"op", loaded >= 0 ? "loaded" : "idle"},
                                     {"pressure", 0.79},

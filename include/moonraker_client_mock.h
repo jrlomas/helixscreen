@@ -2265,6 +2265,9 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     std::atomic<int> openams_loaded_slot_{3};
     [[nodiscard]] nlohmann::json openams_shared_status_json() const;
     void service_openams_late_links(uint32_t tick);
+    /// A unit fault latched on the AMS HT (HELIX_MOCK_OPENAMS_FAULT=<code>) until
+    /// OAMS_CLEAR_FAULT OAMS=1.
+    std::atomic<bool> openams_fault_active_{false};
 
     /// The `box` object frame, stock K1 shape (T1 unit, four bays).
     [[nodiscard]] nlohmann::json cfs_box_status_json() const;

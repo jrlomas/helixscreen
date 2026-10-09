@@ -63,6 +63,8 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
 
     /// Unload is offered only where the manager advertises a command for it.
     [[nodiscard]] bool can_unload_from_toolhead(int slot_index) const override;
+    [[nodiscard]] std::optional<helix::ErrorEvent> current_error() const override;
+
     /// A load needs the lane cleared only when another slot on the TARGET's
     /// lane is loaded; slots on other lanes share nothing with it.
     [[nodiscard]] bool needs_unload_before_load(const AmsSystemInfo& info,
@@ -141,6 +143,15 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
   private:
     friend class OpenAmsTestAccess;
 
+    /// One entry of a unit's published fault list.
+    struct UnitFault {
+        std::string severity; ///< "stop", "pause", ...
+        std::string code;
+        std::string text;
+        int bay = -1;           ///< unit-local bay, -1 for the whole unit
+        bool clearable = false; ///< the unit advertises clear_fault for it
+    };
+
     /// One `groups[]` entry, with its members as global slot indices.
     struct Group {
         std::string name;
@@ -155,6 +166,17 @@ class AmsBackendOpenAms : public AmsSubscriptionBackend {
     void refresh_lane_records();
     void apply_lane_records(int backend_block,
                             const std::unordered_map<int, helix::ams::LaneDataRecord>& records);
+
+    /// Parallel to system_info_.units.
+    std::vector<std::vector<UnitFault>> unit_faults_;
+    std::vector<int> unit_oams_idx_; ///< `units[].id` as a number, -1 when it is not one
+
+    /// The gcode that clears everything the manager and the units hold: a
+    /// firmware fault clear for each unit that offers one, then the manager's
+    /// own reset. Empty when there is nothing to send. Caller holds mutex_.
+    [[nodiscard]] std::string clear_script_locked() const;
+    [[nodiscard]] bool has_clearable_fault_locked() const;
+    [[nodiscard]] std::string fault_detail_locked() const;
 
     void parse_snapshot_locked();
     void present_nothing_locked();
