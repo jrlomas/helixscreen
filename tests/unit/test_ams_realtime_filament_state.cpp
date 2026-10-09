@@ -706,7 +706,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "AmsState publishes per-slot error state and s
               static_cast<int>(SlotError::Severity::INFO));
     }
 
-    SECTION("a BLOCKED lane without an error object still publishes has_error=1") {
+    SECTION("a BLOCKED lane without an error object publishes an error") {
         // force_slot_status, not apply_user_edit: status is firmware-derived and
         // apply_user_edit deliberately ignores it, like every real backend.
         backend_ptr->force_slot_status(0, SlotStatus::BLOCKED);
@@ -716,7 +716,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "AmsState publishes per-slot error state and s
 
         CHECK(lv_subject_get_int(ams.get_slot_has_error_subject(0)) == 1);
         CHECK(lv_subject_get_int(ams.get_slot_error_severity_subject(0)) ==
-              static_cast<int>(SlotError::Severity::INFO));
+              static_cast<int>(SlotError::Severity::ERROR));
     }
 
     SECTION("the single-slot fast path publishes the same state") {

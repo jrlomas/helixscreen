@@ -136,6 +136,14 @@ TEST_CASE("ams_draw::worst_unit_severity returns INFO for no errors", "[ams_draw
     REQUIRE(ams_draw::worst_unit_severity(unit) == SlotError::INFO);
 }
 
+TEST_CASE("ams_draw::worst_unit_severity reads a BLOCKED lane as ERROR", "[ams_draw][severity]") {
+    AmsUnit unit;
+    SlotInfo jammed;
+    jammed.status = SlotStatus::BLOCKED;
+    unit.slots.push_back(jammed);
+    REQUIRE(ams_draw::worst_unit_severity(unit) == SlotError::ERROR);
+}
+
 TEST_CASE("ams_draw::worst_unit_severity finds ERROR among warnings", "[ams_draw][severity]") {
     AmsUnit unit;
     unit.slots.resize(4);

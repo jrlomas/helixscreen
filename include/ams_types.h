@@ -1018,6 +1018,21 @@ struct SlotInfo {
     // Error state
     std::optional<SlotError> error; ///< Per-slot error state (nullopt = no error)
 
+    /// Whether the lane needs attention: a carried error, or a lane its unit
+    /// reports jammed (BLOCKED) without one.
+    [[nodiscard]] bool has_fault() const {
+        return status == SlotStatus::BLOCKED || error.has_value();
+    }
+
+    /// Severity to draw has_fault() in. A jam stops the lane, so it is an error
+    /// whatever the carried error says.
+    [[nodiscard]] SlotError::Severity fault_severity() const {
+        if (status == SlotStatus::BLOCKED) {
+            return SlotError::ERROR;
+        }
+        return error.has_value() ? error->severity : SlotError::INFO;
+    }
+
     // Length-based remaining filament (CFS measuring wheel, etc.)
     float remaining_length_m = 0.0f; ///< Remaining filament in meters (0 = unknown)
 
@@ -1288,7 +1303,7 @@ struct AmsUnit {
      */
     [[nodiscard]] bool has_any_error() const {
         return std::any_of(slots.begin(), slots.end(),
-                           [](const SlotInfo& s) { return s.error.has_value(); });
+                           [](const SlotInfo& s) { return s.has_fault(); });
     }
 
     /**
