@@ -29,7 +29,7 @@ memory cap, and repeated errors disable the plugin while the app keeps running
 
 Deliberately out of scope: plugin-implemented capability backends (the binding design
 leaves room; none is built), multi-instance plugin widgets, plugin-to-plugin calls, raw
-`lv_obj` access, nav bar panels, and a plugin catalog, signing or install-from-URL.
+`lv_obj` access, nav bar panels, and a plugin catalog, signing or install-from-URL (§3 covers sharing).
 
 ## 2. Quick start
 
@@ -73,6 +73,12 @@ Settings > Plugins (`src/application/printer_session.cpp#on_plugin_sync`).
 A plugin over a sync limit is skipped whole and keeps its previous installed version
 (`include/plugin_source.h`): at most 128 files, 8 MB per plugin, 4 MB per file, and 32
 plugins in one listing.
+
+To share a plugin, or to find ones other people wrote, use the `#plugin-showcase` channel
+on the [HelixScreen Discord](https://discord.gg/RZCT2StKhr). Plugins posted there come from
+the community and are not reviewed by the HelixScreen project: read a plugin's
+`manifest.json` permissions and its Lua before you enable it. There is no in-app catalog
+(prestonbrown/helixscreen#1771).
 
 ## 4. Naming
 

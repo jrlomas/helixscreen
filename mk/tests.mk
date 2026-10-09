@@ -73,7 +73,7 @@ SLOW_ORDER ?= --order rand --rng-seed 1
 # also run in batches of three, each batch holding one pool token for its whole
 # life, so every sweep on the box together runs at most three shards per token
 # and shares the tokens with compiles. Asked once, when a sweep starts.
-SHARD_CONCURRENCY ?= $(eval SHARD_CONCURRENCY := $(shell j=$$(scripts/helix-claim jobs 2>/dev/null) && echo $$((j * 3)) || echo $(NPROCS)))$(SHARD_CONCURRENCY)
+SHARD_CONCURRENCY ?= $(eval SHARD_CONCURRENCY := $(shell echo $$(($(JOBS_CLAIMED) * 3))))$(SHARD_CONCURRENCY)
 
 # Run tests in parallel using Catch2 sharding
 # Args: $(1) = test filter (e.g., "~[.] ~[slow]"), $(2) = shard count (default NPROCS),
@@ -917,7 +917,7 @@ $(TEST_BIN): FORCE
 			printf '\033[1;33m⚠️  make -j (unlimited) detected - auto-fixing to -j%s\033[0m\n' "$$j"; \
 			echo ""; \
 		fi; \
-		exec $(MAKE) _PARALLEL_GUARD=1 --no-print-directory -j$$j $@; \
+		exec $(MAKE) _PARALLEL_GUARD=1 --no-print-directory -j"$$j" $@; \
 	fi
 else
 # $(LIBHV_LIB) and $(LIBHV_JSON_HEADER) are prerequisites for the same reason
