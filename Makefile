@@ -1204,7 +1204,7 @@ CXXFLAGS += -DHELIX_HAS_LABEL_PRINTER=$(HELIX_HAS_LABEL_PRINTER) \
 # The shell text that asks helix-claim. Its answer is used only when it is one
 # positive integer, anything else (no answer, an error, a second line) falls
 # back to the cores, because make reads every extra word after -jN as a goal.
-JOBS_QUERY = j=$$(scripts/helix-claim jobs 2>/dev/null) && [ "$$j" -gt 0 ] 2>/dev/null && printf '%d\n' "$$j" || echo $(NPROC)
+JOBS_QUERY = j=$$(scripts/helix-claim jobs 2>/dev/null) && [ "$$j" -gt 0 ] 2>/dev/null && echo $$j || echo $(NPROC)
 
 # Asked once, and only when read, so a make under a bounded -jN never pays for it.
 JOBS_CLAIMED = $(eval JOBS_CLAIMED := $(shell $(JOBS_QUERY)))$(JOBS_CLAIMED)
