@@ -439,10 +439,9 @@ struct RenderCtx {
 // ============================================================================
 
 /// Labeled rounded box (HUB / SELECTOR / BUF). Text color, font and corner
-/// radius come from the theme cache in ctx. Returns the number of pixels the
-/// interactive gear badge extends to the RIGHT of the box's right edge (0 when
-/// the gear fits inside, or when not interactive) — callers recording a click
-/// hit-rect widen it by this amount.
+/// radius come from the theme cache in ctx. An interactive box carries a gear
+/// inside its right edge and grows about @p cx until the label and gear fit.
+/// Returns the width drawn, for the caller's click hit-rect.
 int32_t draw_hub_box(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t width, int32_t height,
                      lv_color_t bg_color, lv_color_t border_color, const char* label,
                      lv_opa_t bg_opa = LV_OPA_COVER, bool interactive = false);

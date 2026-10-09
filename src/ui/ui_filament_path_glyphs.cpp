@@ -71,6 +71,28 @@ int32_t draw_hub_box(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t width
     const lv_font_t* font = ctx.data->theme.label_font;
     int32_t radius = ctx.data->theme.border_radius;
 
+    // Tappable affordance: a small gear glyph inside the box's right edge,
+    // vertically centered with the label, signals that the box opens a context
+    // menu. The box grows, about its center, until the centered label and the
+    // gear both fit inside.
+    const lv_font_t* icon_font = interactive ? theme_manager_get_font("icon_font_sm") : nullptr;
+    constexpr int32_t GEAR_PAD = 2;
+    int32_t gear_w = 0;
+    int32_t gear_h = 0;
+    if (icon_font) {
+        gear_h = lv_font_get_line_height(icon_font);
+        lv_point_t gear_sz;
+        lv_text_get_size(&gear_sz, ICON_SETTINGS, icon_font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        gear_w = gear_sz.x > 0 ? gear_sz.x : gear_h; // defensive fallback
+        int32_t label_w = 0;
+        if (label && label[0] && font) {
+            lv_point_t lbl_sz;
+            lv_text_get_size(&lbl_sz, label, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            label_w = lbl_sz.x;
+        }
+        width = LV_MAX(width, label_w + 2 * (gear_w + 2 * GEAR_PAD));
+    }
+
     // Background
     lv_draw_fill_dsc_t fill_dsc;
     lv_draw_fill_dsc_init(&fill_dsc);
@@ -103,62 +125,19 @@ int32_t draw_hub_box(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t width
         lv_draw_label(layer, &label_dsc, &label_area);
     }
 
-    // Tappable affordance: a small gear glyph signals that the box opens a
-    // context menu when tapped. Preferred placement is the right edge INSIDE
-    // the box, vertically centered with the label (the top corner is where the
-    // rightmost lane's entry dot lands), but when the label + gear + padding don't fit the box
-    // width the gear would overlap the label — so draw it immediately OUTSIDE
-    // the box's right edge, vertically centered.
-    int32_t gear_overflow = 0;
-    if (interactive) {
-        const lv_font_t* icon_font = theme_manager_get_font("icon_font_sm");
-        if (icon_font) {
-            int32_t gear_h = lv_font_get_line_height(icon_font);
-            lv_point_t gear_sz;
-            lv_text_get_size(&gear_sz, ICON_SETTINGS, icon_font, 0, 0, LV_COORD_MAX,
-                             LV_TEXT_FLAG_NONE);
-            int32_t gear_w = gear_sz.x > 0 ? gear_sz.x : gear_h; // defensive fallback
-            const int32_t pad = 2;
-
-            // Measure the label so we know whether the gear fits beside it.
-            int32_t label_w = 0;
-            if (label && label[0] && font) {
-                lv_point_t lbl_sz;
-                lv_text_get_size(&lbl_sz, label, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-                label_w = lbl_sz.x;
-            }
-            // The label is centered; the gear needs the gap between the label's
-            // right edge and the box's right edge: (width - label_w)/2.
-            int32_t right_gap = (width - label_w) / 2;
-            bool fits_inside = (right_gap >= gear_w + pad * 2);
-
-            lv_draw_label_dsc_t gear_dsc;
-            lv_draw_label_dsc_init(&gear_dsc);
-            gear_dsc.color = text_color;
-            gear_dsc.font = icon_font;
-            gear_dsc.opa = LV_OPA_COVER;
-            gear_dsc.text = ICON_SETTINGS;
-
-            if (fits_inside) {
-                gear_dsc.align = LV_TEXT_ALIGN_RIGHT;
-                lv_area_t gear_area = {box_area.x1, cy - gear_h / 2, box_area.x2 - pad,
-                                       cy + gear_h / 2};
-                lv_draw_label(layer, &gear_dsc, &gear_area);
-            } else {
-                // Badge style: center the gear on the box's lower-right corner
-                // (half over the box, half outside), like the pencil-edit
-                // badges used elsewhere — reads as part of the box instead of
-                // a detached icon floating beside it.
-                gear_dsc.align = LV_TEXT_ALIGN_LEFT;
-                int32_t gx1 = box_area.x2 - gear_w / 2;
-                int32_t gy1 = box_area.y2 - gear_h / 2;
-                lv_area_t gear_area = {gx1, gy1, gx1 + gear_w, gy1 + gear_h};
-                lv_draw_label(layer, &gear_dsc, &gear_area);
-                gear_overflow = gear_w / 2;
-            }
-        }
+    if (icon_font) {
+        lv_draw_label_dsc_t gear_dsc;
+        lv_draw_label_dsc_init(&gear_dsc);
+        gear_dsc.color = text_color;
+        gear_dsc.font = icon_font;
+        gear_dsc.opa = LV_OPA_COVER;
+        gear_dsc.text = ICON_SETTINGS;
+        gear_dsc.align = LV_TEXT_ALIGN_RIGHT;
+        lv_area_t gear_area = {box_area.x1, cy - gear_h / 2, box_area.x2 - GEAR_PAD,
+                               cy + gear_h / 2};
+        lv_draw_label(layer, &gear_dsc, &gear_area);
     }
-    return gear_overflow;
+    return width;
 }
 
 // The buffer box's border in the buffer bands' token (neutral on target,

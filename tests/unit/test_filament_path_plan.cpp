@@ -741,7 +741,7 @@ TEST_CASE("FilamentPath plan: an idle trunk still shows an OUTPUT error", "[fila
     CHECK_FALSE(t.style[0].filled);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: a gear outside the hub box widens its hit rect",
+TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: a narrow hub box grows to hold its gear",
                  "[filament-path][plan][hits]") {
     lv_obj_t* w = make_canvas(test_screen(), static_cast<int>(helix::PathTopology::HUB));
     ui_filament_path_canvas_set_slot_count(w, 2);
@@ -760,11 +760,13 @@ TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: a gear outside the hub box wide
     lv_point_t gear, label;
     lv_text_get_size(&gear, ICON_SETTINGS, icon, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     lv_text_get_size(&label, "HUB", d->theme.label_font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    REQUIRE((hub_w - label.x) / 2 < gear.x + 4); // the gear sits outside the box
+    REQUIRE((hub_w - label.x) / 2 < gear.x + 4); // the frame's box is too narrow for it
 
+    // The box drawn, and recorded, holds the centered label and the gear.
+    const int32_t drawn_w = label.x + 2 * (gear.x + 4);
     REQUIRE(d->hits.hub_valid);
-    CHECK(d->hits.hub.x1 == cx - hub_w / 2);
-    CHECK(d->hits.hub.x2 == cx + hub_w / 2 + gear.x / 2);
+    CHECK(d->hits.hub.x1 == cx - drawn_w / 2);
+    CHECK(d->hits.hub.x2 == cx + drawn_w / 2);
 }
 
 TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: on-toolhead records the selector as the hub hit",
