@@ -165,6 +165,10 @@ SpanStyle span_style(PathSegment span, PathSegment reached, bool on_active_route
                      PathSegment error_seg, lv_color_t filament, lv_color_t bg);
 BandState band_state(PathSegment sensor, PathSegment reached, bool on_active_route,
                      PathSegment error_seg);
+/// The error a lane shows: the system's on the active route, else the lane's
+/// own at the point its filament reached (its spool when none did), else none.
+/// span_style()/band_state() mark the span and band at the error they are given.
+PathSegment lane_error(const SlotRenderState& s, bool on_active_route, PathSegment system_error);
 
 // What one route carries: how far its filament reached, whether it is the
 // active route (or the idle trunk, which shows errors like one), its color.

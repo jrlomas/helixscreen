@@ -281,6 +281,11 @@ struct FilamentPathData {
     bool slot_has_prep_sensor[MAX_SLOTS] = {};
     // Per-slot load sensor between prep and hub (AFC), read as LANE
     bool slot_has_load_sensor[MAX_SLOTS] = {};
+    // Per-slot error the slot reports (SlotInfo::error at ERROR severity)
+    bool slot_has_error[MAX_SLOTS] = {};
+    // How much of the bowden (OUTPUT) tube a load or unload has filled, in
+    // percent from the hub end; -1 when the backend reports no progress.
+    int bowden_fill = -1;
 
     // Per-slot tool mapping (actual AFC map values, not slot index)
     int mapped_tool[MAX_SLOTS];              // -1 = use slot index as fallback
@@ -391,6 +396,7 @@ struct SlotRenderState {
     bool is_mounted = false;
     bool at_sensor = false; // segment >= TOOLHEAD (consumed by PARALLEL/MIXED)
     bool at_nozzle = false; // segment >= NOZZLE
+    bool has_error = false; // the slot reports an error of its own
 };
 
 using SlotRenderStates = std::array<SlotRenderState, FilamentPathData::MAX_SLOTS>;

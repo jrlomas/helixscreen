@@ -91,6 +91,7 @@ SlotRenderStates compute_slot_render_states(const FilamentPathData* data) {
             s.segment = static_cast<PathSegment>(data->filament_segment);
         }
 
+        s.has_error = data->slot_has_error[i];
         s.at_sensor = s.has_filament && (s.segment >= PathSegment::TOOLHEAD);
         s.at_nozzle = s.has_filament && (s.segment >= PathSegment::NOZZLE);
     }

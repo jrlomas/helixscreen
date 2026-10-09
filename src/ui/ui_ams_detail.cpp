@@ -531,6 +531,27 @@ void ams_detail_destroy_slots(AmsDetailWidgets& w, lv_obj_t* slot_widgets[], int
     helix::ui::safe_delete_deferred(condemned);
 }
 
+bool helix::ui::ams_detail_error_in_view(const helix::AmsSystemInfo& info, int unit_index) {
+    if (unit_index < 0 || unit_index >= static_cast<int>(info.units.size()))
+        return true;
+    const auto& unit = info.units[unit_index];
+    auto in_unit = [&](int global) {
+        return global >= unit.first_slot_global_index &&
+               global < unit.first_slot_global_index + unit.slot_count;
+    };
+    if (info.current_slot >= 0)
+        return in_unit(info.current_slot);
+    if (info.units.size() == 1)
+        return true;
+    // No lane is loaded: the error is this unit's if one of its slots reports one.
+    for (int s = 0; s < unit.slot_count; ++s) {
+        const helix::SlotInfo* slot = info.get_slot_global(unit.first_slot_global_index + s);
+        if (slot && slot->error.has_value())
+            return true;
+    }
+    return false;
+}
+
 AmsSlotLayout helix::ui::ams_detail_slot_layout(int32_t available_width, int slot_count) {
     auto* backend = helix::AmsState::instance().get_backend(0);
     if (backend && !backend->has_physical_tray())
@@ -843,7 +864,22 @@ void ams_detail_setup_path_canvas(lv_obj_t* canvas, lv_obj_t* slot_grid, int uni
     helix::PathSegment segment = backend->get_filament_segment();
     ui_filament_path_canvas_set_filament_segment(canvas, static_cast<int>(segment));
 
+    // Bowden progress fills the output tube from the hub: as far as a load has
+    // pushed, or what an unload has yet to pull back.
+    {
+        const int progress = backend->get_bowden_progress();
+        int fill = -1;
+        if (progress >= 0 && action == helix::AmsAction::LOADING)
+            fill = progress;
+        else if (progress >= 0 && action == helix::AmsAction::UNLOADING)
+            fill = 100 - progress;
+        ui_filament_path_canvas_set_bowden_fill(canvas, fill);
+    }
+
+    // The system's error, only when it belongs to this view's unit.
     helix::PathSegment error_seg = backend->infer_error_segment();
+    if (!helix::ui::ams_detail_error_in_view(info, unit_index))
+        error_seg = helix::PathSegment::NONE;
     ui_filament_path_canvas_set_error_segment(canvas, static_cast<int>(error_seg));
 
     // Set per-slot prep and load sensor capability flags
@@ -852,6 +888,9 @@ void ams_detail_setup_path_canvas(lv_obj_t* canvas, lv_obj_t* slot_grid, int uni
             canvas, i, backend->slot_has_prep_sensor(slot_offset + i));
         ui_filament_path_canvas_set_slot_load_sensor(
             canvas, i, backend->slot_has_load_sensor(slot_offset + i));
+        const auto& err = backend->get_slot_info(slot_offset + i).error;
+        ui_filament_path_canvas_set_slot_error(
+            canvas, i, err.has_value() && err->severity == helix::SlotError::ERROR);
     }
 
     // Plumb per-slot metadata (mapped_tool, extruder identity, hub routing) to

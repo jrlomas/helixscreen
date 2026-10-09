@@ -747,6 +747,18 @@ void ui_filament_path_canvas_set_slot_load_sensor(lv_obj_t* obj, int slot, bool 
     }
 }
 
+// NAMESPACE_OK: the widget's C setter API, beside its siblings
+void ui_filament_path_canvas_set_slot_error(lv_obj_t* obj, int slot, bool has_error) {
+    auto* data = get_data(obj);
+    if (!data || slot < 0 || slot >= FilamentPathData::MAX_SLOTS)
+        return;
+    if (data->slot_has_error[slot] != has_error) {
+        data->slot_has_error[slot] = has_error;
+        spdlog::trace("[FilamentPath] Slot {} error: {}", slot, has_error);
+        layered_mark_dirty(obj);
+    }
+}
+
 void ui_filament_path_canvas_set_slot_mapped_tool(lv_obj_t* obj, int slot, int tool) {
     auto* data = get_data(obj);
     if (!data || slot < 0 || slot >= FilamentPathData::MAX_SLOTS)
@@ -898,6 +910,16 @@ void ui_filament_path_canvas_set_hub_only(lv_obj_t* obj, bool hub_only) {
         spdlog::debug("[FilamentPath] Hub-only mode: {}", hub_only ? "on" : "off");
         layered_mark_dirty(obj);
     }
+}
+
+// NAMESPACE_OK: the widget's C setter API, beside its siblings
+void ui_filament_path_canvas_set_bowden_fill(lv_obj_t* obj, int percent) {
+    auto* data = get_data(obj);
+    const int fill = percent < 0 ? -1 : LV_MIN(percent, 100);
+    if (!data || data->bowden_fill == fill)
+        return;
+    data->bowden_fill = fill;
+    layered_mark_dirty(obj);
 }
 
 void ui_filament_path_canvas_set_hub_sensor(lv_obj_t* obj, bool has_sensor, bool triggered) {

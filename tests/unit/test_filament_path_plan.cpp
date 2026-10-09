@@ -9,10 +9,12 @@
 // x = 50, 150, 250, 350, center 200; entry -48, prep 40, hub 120 (h 40, top
 // 100), output 140, buffer 184, merge 232, toolhead 272, nozzle 328, inlet 308.
 
+#include "ui_ams_detail.h"
 #include "ui_filament_path_canvas.h"
 #include "ui_fonts.h"
 
 #include "../lvgl_test_fixture.h"
+#include "../test_fixtures.h"
 #include "ams_types.h"
 #include "filament_path_test_helpers.h"
 #include "lvgl/lvgl.h"
@@ -825,6 +827,153 @@ TEST_CASE("FilamentPath plan: sensor bands only where the unit reports the senso
         load_active(*d, 1, PathSegment::PREP);
         CHECK(band_at(plan_for(*d), 150, load_band_y(*d, 1))->state == BandState::Empty);
     }
+}
+
+TEST_CASE("FilamentPath plan: filament stuck in the hub with no lane fills the idle trunk",
+          "[filament-path][plan][stuck]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    REQUIRE(d->active_slot < 0);
+
+    SECTION("the hub sensor reads filament: filled as far as the hub output, plain walls") {
+        d->hub_sensor_triggered = true;
+        const PathPlan& plan = plan_for(*d);
+        REQUIRE(plan.trunk_route >= 0);
+        const Route& t = plan.routes[plan.trunk_route];
+        CHECK(t.style[0].filled);
+        CHECK(t.style[0].wall == TubeWall::Plain);
+        CHECK_FALSE(t.style[t.path.count - 1].filled); // not into the toolhead
+        const SensorBand* out = band_at(plan, 200, 140);
+        REQUIRE(out != nullptr);
+        CHECK(out->state == BandState::Loaded);
+        CHECK(band_at(plan, 200, 272)->state == BandState::Empty);
+    }
+    SECTION("nothing read: an empty trunk") {
+        const PathPlan& plan = plan_for(*d);
+        CHECK_FALSE(plan.routes[plan.trunk_route].style[0].filled);
+        CHECK(band_at(plan, 200, 140)->state == BandState::Empty);
+    }
+}
+
+TEST_CASE("FilamentPath plan: a lane's own error shows off the active route",
+          "[filament-path][plan][lane_error]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::NOZZLE);
+    d->slot_filament_states[3] = {PathSegment::LANE, SLOT_COLORS[3]};
+    d->slot_has_error[3] = true;
+    d->slot_has_error[2] = true; // no filament in it
+    const PathPlan& plan = plan_for(*d);
+
+    // Lane 3 stopped at its load sensor: that band and the LANE spans are errors.
+    const SensorBand* load = band_at(plan, 350, load_band_y(*d, 3));
+    REQUIRE(load != nullptr);
+    CHECK(load->state == BandState::Error);
+    CHECK(band_at(plan, 350, 40)->state == BandState::Loaded);
+    bool lane_error_wall = false;
+    for (int i = 0; i < plan.routes[3].path.count; i++)
+        lane_error_wall |= plan.routes[3].style[i].wall == TubeWall::Error;
+    CHECK(lane_error_wall);
+    // Lane 2 has no filament: the error marks its spool run.
+    CHECK(plan.routes[2].style[0].wall == TubeWall::Error);
+    // The active route carries no error.
+    const Route& active = plan.routes[plan.active_route];
+    for (int i = 0; i < active.path.count; i++)
+        CHECK(active.style[i].wall != TubeWall::Error);
+}
+
+TEST_CASE("FilamentPath: the system error belongs to the unit that owns it",
+          "[filament-path][plan][lane_error]") {
+    helix::AmsSystemInfo info;
+    info.units.resize(2);
+    info.units[0].slot_count = 4;
+    info.units[0].first_slot_global_index = 0;
+    info.units[1].slot_count = 2;
+    info.units[1].first_slot_global_index = 4;
+    for (int u = 0; u < 2; u++) {
+        info.units[u].slots.resize(info.units[u].slot_count);
+        for (int s = 0; s < info.units[u].slot_count; s++)
+            info.units[u].slots[s].global_index = info.units[u].first_slot_global_index + s;
+    }
+
+    info.current_slot = 5;
+    CHECK(helix::ui::ams_detail_error_in_view(info, 1));
+    CHECK_FALSE(helix::ui::ams_detail_error_in_view(info, 0));
+    CHECK(helix::ui::ams_detail_error_in_view(info, -1));
+
+    info.current_slot = -1;
+    CHECK_FALSE(helix::ui::ams_detail_error_in_view(info, 0));
+    info.units[0].slots[2].error = helix::SlotError{"jam", helix::SlotError::ERROR};
+    CHECK(helix::ui::ams_detail_error_in_view(info, 0));
+    CHECK_FALSE(helix::ui::ams_detail_error_in_view(info, 1));
+}
+
+TEST_CASE_METHOD(XMLTestFixture, "FilamentPath: a lane of unknown color still reads as loaded",
+                 "[filament-path][plan][lane_error]") {
+    // The tube is filled, and its band's gray stands apart from the empty wall
+    // in both themes.
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::NOZZLE);
+    d->slot_filament_states[3] = {PathSegment::LANE, helix::AMS_DEFAULT_SLOT_COLOR};
+    const PathPlan& plan = plan_for(*d);
+    CHECK(plan.routes[3].style[0].filled);
+    CHECK_FALSE(lv_color_eq(plan.routes[3].style[0].bore, BG));
+    CHECK_FALSE(plan.routes[2].style[0].filled);
+    const SensorBand* load = band_at(plan, 350, load_band_y(*d, 3));
+    REQUIRE(load != nullptr);
+    CHECK(load->state == BandState::Loaded);
+
+    const lv_color_t gray = lv_color_hex(helix::AMS_DEFAULT_SLOT_COLOR);
+    for (const char* wall : {"filament_idle_dark", "filament_idle_light"}) {
+        CAPTURE(wall);
+        const lv_color_t w = theme_manager_get_color(wall);
+        const int dist = std::abs(w.red - gray.red) + std::abs(w.green - gray.green) +
+                         std::abs(w.blue - gray.blue);
+        CHECK(dist >= 60);
+    }
+}
+
+TEST_CASE("FilamentPath geometry: split_path cuts a path where asked", "[filament-path][plan]") {
+    pg::FilamentPath p;
+    pg::route_orthogonal(p, 100, 0, 200, 100, 12.0f);
+    const float total = pg::path_length(p);
+    for (float frac : {0.0f, 0.3f, 0.5f, 0.8f, 1.0f}) {
+        CAPTURE(frac);
+        pg::FilamentPath head, tail;
+        pg::split_path(p, total * frac, head, tail);
+        CHECK(pg::path_length(head) == Catch::Approx(total * frac).margin(0.05));
+        CHECK(pg::path_length(tail) == Catch::Approx(total * (1 - frac)).margin(0.05));
+        if (head.count > 0 && tail.count > 0) {
+            const pg::PathPoint a = seg_end(head.segs[head.count - 1]);
+            CHECK(near(seg_start(tail.segs[0]), a.x, a.y, 0.05f));
+        }
+    }
+}
+
+TEST_CASE("FilamentPath plan: bowden progress fills the output tube in proportion",
+          "[filament-path][plan][bowden]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::OUTPUT);
+
+    // The hub bottom (200, 140) to the bypass merge (200, 232).
+    auto filled_end_y = [&](int fill) {
+        d->bowden_fill = fill;
+        const PathPlan& plan = plan_for(*d);
+        const Route& r = plan.routes[plan.active_route];
+        CHECK(contiguous(r.path));
+        const pg::FilamentPath f = filled_prefix(r);
+        REQUIRE(f.count > 0);
+        return seg_end(f.segs[f.count - 1]).y;
+    };
+    CHECK(filled_end_y(-1) == Catch::Approx(232).margin(0.5));
+    CHECK(filled_end_y(100) == Catch::Approx(232).margin(0.5));
+    CHECK(filled_end_y(50) == Catch::Approx(186).margin(0.5));
+    CHECK(filled_end_y(25) == Catch::Approx(163).margin(0.5));
+
+    // Past the bowden the progress no longer applies.
+    load_active(*d, 1, PathSegment::NOZZLE);
+    d->bowden_fill = 10;
+    const PathPlan& plan = plan_for(*d);
+    const pg::FilamentPath f = filled_prefix(plan.routes[plan.active_route]);
+    CHECK(seg_end(f.segs[f.count - 1]).y > 232);
 }
 
 // ============================================================================

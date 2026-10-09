@@ -133,6 +133,11 @@ void ams_detail_pre_show_env_indicator(AmsDetailWidgets& w, int unit_index);
 namespace helix {
 namespace ui {
 
+/// Whether the system's filament error belongs to the view of @p unit_index
+/// (the all-units view is every unit's): the loaded lane is in the unit, or with
+/// none loaded, one of its slots reports an error.
+bool ams_detail_error_in_view(const AmsSystemInfo& info, int unit_index);
+
 /// Slot sizing for the detail view: in a box, spools stand at the tray pitch
 /// (ams_tray_projection.h) instead of spreading across the width.
 AmsSlotLayout ams_detail_slot_layout(int32_t available_width, int slot_count);

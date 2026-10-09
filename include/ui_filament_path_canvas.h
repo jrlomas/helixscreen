@@ -269,6 +269,12 @@ void ui_filament_path_canvas_set_slot_prep_sensor(lv_obj_t* obj, int slot, bool 
 void ui_filament_path_canvas_set_slot_load_sensor(lv_obj_t* obj, int slot, bool has_sensor);
 
 /**
+ * @brief Set whether a slot reports an error of its own. A lane off the active
+ *        route shows it at the point its filament reached.
+ */
+void ui_filament_path_canvas_set_slot_error(lv_obj_t* obj, int slot, bool has_error);
+
+/**
  * @brief Clear all per-slot filament states
  *
  * Resets all slots to show as idle (no filament installed).
@@ -352,6 +358,15 @@ void ui_filament_path_canvas_set_hub_only(lv_obj_t* obj, bool hub_only);
  * @param triggered Whether that sensor reads filament
  */
 void ui_filament_path_canvas_set_hub_sensor(lv_obj_t* obj, bool has_sensor, bool triggered);
+
+/**
+ * @brief Set how much of the bowden (output) tube a load or unload has filled,
+ *        in percent from the hub end, or -1 when the backend reports none
+ *
+ * While the active lane's filament is in the bowden, only that share of the
+ * tube is drawn filled.
+ */
+void ui_filament_path_canvas_set_bowden_fill(lv_obj_t* obj, int percent);
 
 /**
  * @brief Set nozzle heat active state

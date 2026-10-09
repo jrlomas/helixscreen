@@ -299,7 +299,7 @@ pg::FilamentPath filled_prefix(const Route& r) {
 
 SpanStyle span_style(PathSegment span, PathSegment reached, bool on_active_route,
                      PathSegment error_seg, lv_color_t filament, lv_color_t bg) {
-    const bool error = on_active_route && span == error_seg;
+    const bool error = span == error_seg;
     if (!is_segment_active(span, reached))
         return {error ? TubeWall::Error : TubeWall::Plain, bg, false, true};
     const TubeWall wall =
@@ -309,7 +309,7 @@ SpanStyle span_style(PathSegment span, PathSegment reached, bool on_active_route
 
 BandState band_state(PathSegment sensor, PathSegment reached, bool on_active_route,
                      PathSegment error_seg) {
-    if (on_active_route && sensor == error_seg)
+    if (sensor == error_seg)
         return BandState::Error;
     if (!is_segment_active(sensor, reached))
         return BandState::Empty;
@@ -400,9 +400,21 @@ void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFra
     const float jog_end = f.has_buffer ? (float)f.buf_fil_top : output_end;
     pg::FilamentPath piece;
     pg::route_orthogonal(piece, (float)f.output_x, hub_bot, cx, jog_end, FILLET_RADIUS);
-    route_append(r, piece, lane.style(PathSegment::OUTPUT));
     if (jog_end < output_end)
-        append_line(r, cx, jog_end, cx, output_end, lane.style(PathSegment::OUTPUT));
+        piece.add_line(cx, jog_end, cx, output_end);
+    if (lane.on && lane.reached == PathSegment::OUTPUT && data.bowden_fill >= 0) {
+        // Mid-load or mid-unload: filament fills the bowden only as far as the
+        // backend's progress says.
+        Lane short_of = lane;
+        short_of.reached = PathSegment::HUB;
+        pg::FilamentPath filled, empty;
+        pg::split_path(piece, pg::path_length(piece) * (float)data.bowden_fill / 100.0f, filled,
+                       empty);
+        route_append(r, filled, lane.style(PathSegment::OUTPUT));
+        route_append(r, empty, short_of.style(PathSegment::OUTPUT));
+    } else {
+        route_append(r, piece, lane.style(PathSegment::OUTPUT));
+    }
 
     if (bypass_on_trunk) {
         if (bypass_owner) {
@@ -468,11 +480,22 @@ void total_dropped(PathPlan& out) {
         out.dropped += out.routes[i].dropped;
 }
 
+namespace {} // namespace
+
+PathSegment lane_error(const SlotRenderState& s, bool on_active_route, PathSegment system_error) {
+    if (on_active_route)
+        return system_error;
+    if (!s.has_error)
+        return PathSegment::NONE;
+    return s.has_filament ? s.segment : PathSegment::SPOOL;
+}
+
 namespace {
 
 // A lane's own state: how far its filament reached, mounted or not.
 Lane lane_of(const SlotRenderState& s, PathSegment error, lv_color_t bg) {
-    return {s.has_filament ? s.segment : PathSegment::NONE, s.is_mounted, error, s.color, bg};
+    return {s.has_filament ? s.segment : PathSegment::NONE, s.is_mounted,
+            lane_error(s, s.is_mounted, error), s.color, bg};
 }
 
 // Spool entry down to the lane's sensor, with its band. The sensor reads
@@ -537,7 +560,8 @@ void plan_mixed(const MixedFrame& f, const FilamentPathData& data, const BaseGeo
         // lane is the mounted one.
         const bool direct_mounted = data.active_slot >= 0 && data.active_slot < n &&
                                     !data.slot_is_hub_routed[data.active_slot];
-        Lane trunk{PathSegment::NONE, !direct_mounted, error, f.states[f.first_hub_lane].color, bg};
+        Lane trunk{PathSegment::NONE, !direct_mounted, direct_mounted ? PathSegment::NONE : error,
+                   f.states[f.first_hub_lane].color, bg};
         for (int j = 0; j < n; j++) {
             if (data.slot_is_hub_routed[j] && f.states[j].segment >= PathSegment::NOZZLE) {
                 trunk = lane_of(f.states[j], error, bg);
@@ -569,8 +593,8 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
     // The bypass filament reached the nozzle; on its own route it takes the
     // same error rules as an AMS lane.
     const Lane bypass_lane{data.bypass_active ? PathSegment::NOZZLE : PathSegment::NONE,
-                           data.bypass_active, f.error_seg, lv_color_hex(data.bypass_color),
-                           data.theme.color_bg};
+                           data.bypass_active, data.bypass_active ? f.error_seg : PathSegment::NONE,
+                           lv_color_hex(data.bypass_color), data.theme.color_bg};
     const Lane* bypass_owner = bypass_owns ? &bypass_lane : nullptr;
     // One unit of several: its hub's output leaves as a stub, the toolhead
     // belongs to the overview.
@@ -588,8 +612,8 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
 
     for (int i = 0; i < n; i++) {
         const SlotRenderState& s = f.states[i];
-        const Lane lane{s.has_filament ? s.segment : PathSegment::NONE, i == active, f.error_seg,
-                        s.color, bg};
+        const Lane lane{s.has_filament ? s.segment : PathSegment::NONE, i == active,
+                        lane_error(s, i == active, f.error_seg), s.color, bg};
         const float x = (float)g.slot_x[i];
         Route& r = new_route(out);
 
@@ -655,8 +679,12 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
     }
 
     if (trunk && active < 0) {
-        // Nothing loaded owns the trunk. It still shows an error at its sensors.
-        const Lane idle{PathSegment::NONE, true, f.error_seg, f.idle_color, bg};
+        // Nothing loaded owns the trunk. It still shows an error at its
+        // sensors, and filament the hub sensor reads with no lane to own it
+        // (stuck after a failed unload) fills it as far as the hub output.
+        const bool parked = data.has_hub_sensor && data.hub_sensor_triggered;
+        const Lane idle{parked ? PathSegment::OUTPUT : PathSegment::NONE, false, f.error_seg,
+                        f.idle_color, bg};
         out.trunk_route = out.route_count;
         Route& r = new_route(out);
         append_trunk(out, r, idle, f, data, bypass_on_trunk, bypass_owner);

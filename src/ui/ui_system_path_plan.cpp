@@ -432,8 +432,9 @@ void plan_single_tool(const SystemPathData& data, const SysLayout& L, PathPlan& 
 
     const bool bypass_owns = data.has_bypass && data.bypass_active;
     const Lane bypass_lane{data.bypass_active ? PathSegment::NOZZLE : PathSegment::NONE,
-                           data.bypass_active, data.error_segment, lv_color_hex(data.bypass_color),
-                           data.color_bg};
+                           data.bypass_active,
+                           data.bypass_active ? data.error_segment : PathSegment::NONE,
+                           lv_color_hex(data.bypass_color), data.color_bg};
     const Lane* bypass_owner = bypass_owns ? &bypass_lane : nullptr;
 
     int units[SystemPathData::MAX_UNITS];
@@ -631,7 +632,7 @@ Lane unit_lane(const SystemPathData& data, int unit) {
         if (lane != PathSegment::NONE)
             color = lv_color_hex(data.unit_lane_color[unit]);
     }
-    return {reached, on, data.error_segment, color, data.color_bg};
+    return {reached, on, on ? data.error_segment : PathSegment::NONE, color, data.color_bg};
 }
 
 void plan_overview(const SystemPathData& data, const SysLayout& L, PathPlan& plan,

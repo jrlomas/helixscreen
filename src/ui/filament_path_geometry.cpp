@@ -78,6 +78,35 @@ float path_length(const FilamentPath& p) {
     return total;
 }
 
+void split_path(const FilamentPath& p, float d, FilamentPath& head, FilamentPath& tail) {
+    head.clear();
+    tail.clear();
+    float accum = 0.0f;
+    for (int i = 0; i < p.count; ++i) {
+        const PathSeg& s = p.segs[i];
+        const float len = seg_length(s);
+        if (accum + len <= d) {
+            head.segs[head.count++] = s;
+        } else if (accum >= d) {
+            tail.segs[tail.count++] = s;
+        } else {
+            const float into = d - accum;
+            if (s.type == PathSeg::LINE) {
+                const float t = into / len;
+                const PathPoint cut{s.p0.x + (s.p1.x - s.p0.x) * t, s.p0.y + (s.p1.y - s.p0.y) * t};
+                head.add_line(s.p0.x, s.p0.y, cut.x, cut.y);
+                tail.add_line(cut.x, cut.y, s.p1.x, s.p1.y);
+            } else {
+                const float sgn = (s.sweep >= 0.0f) ? 1.0f : -1.0f;
+                const float a = sgn * into / s.radius;
+                head.add_arc(s.center.x, s.center.y, s.radius, s.start_angle, a);
+                tail.add_arc(s.center.x, s.center.y, s.radius, s.start_angle + a, s.sweep - a);
+            }
+        }
+        accum += len;
+    }
+}
+
 PathPoint path_point_at(const FilamentPath& p, float d, PathPoint* tangent_out) {
     if (p.count <= 0) {
         if (tangent_out)
