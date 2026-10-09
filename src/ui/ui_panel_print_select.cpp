@@ -30,6 +30,7 @@
 #include "ui_subject_registry.h"
 #include "ui_toast_manager.h"
 #include "ui_update_queue.h"
+#include "ui_utils.h"
 
 #include "ams_backend.h"
 #include "ams_remap.h"
@@ -178,14 +179,10 @@ PrintSelectPanel::~PrintSelectPanel() {
     if (lv_is_initialized()) {
         // The containers can outlive this panel, or die before it; the callbacks
         // carrying `this` must not outlive the panel.
-        if (card_view_container_ && lv_obj_is_valid(card_view_container_)) {
-            lv_obj_remove_event_cb_with_user_data(card_view_container_, on_scroll_static, this);
-            lv_obj_remove_event_cb_with_user_data(card_view_container_,
-                                                  on_card_container_resized_static, this);
-        }
-        if (list_rows_container_ && lv_obj_is_valid(list_rows_container_)) {
-            lv_obj_remove_event_cb_with_user_data(list_rows_container_, on_scroll_static, this);
-        }
+        helix::ui::remove_event_cb_if_alive(card_view_container_, on_scroll_static, this);
+        helix::ui::remove_event_cb_if_alive(card_view_container_, on_card_container_resized_static,
+                                            this);
+        helix::ui::remove_event_cb_if_alive(list_rows_container_, on_scroll_static, this);
 
         // Delete pending timers
         if (refresh_timer_) {
