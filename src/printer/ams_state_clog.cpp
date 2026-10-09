@@ -126,9 +126,8 @@ ClogReading detector_reading(const AmsSystemInfo& info, int source_override) {
             if (use_afc && unit.buffer_health && unit.buffer_health->fault_detection_enabled) {
                 r.mode = 3;
                 float dist = unit.buffer_health->distance_to_fault;
-                float max_dist = unit.buffer_health->fault_threshold();
 
-                const bool tracking = (dist >= 0 && dist <= max_dist);
+                const bool tracking = unit.buffer_health->is_tracking();
                 if (!tracking) {
                     // Negative = fault timer stopped, counter stale (normal operation)
                     // Above max = just reset or not yet tracking
@@ -142,7 +141,7 @@ ClogReading detector_reading(const AmsSystemInfo& info, int source_override) {
 
                 snprintf(r.mode_text, sizeof(r.mode_text), "%s", lv_tr("AFC buffer"));
 
-                r.danger_pct = 75;
+                r.danger_pct = BufferHealth::kWarningDangerPct;
                 r.peak_pct = r.value;
                 // Not tracking leaves the centre empty, which is the state
                 // clog_meter_is_safe() stands the check icon in for.

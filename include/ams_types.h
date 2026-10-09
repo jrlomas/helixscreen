@@ -938,9 +938,18 @@ struct BufferHealth {
         return std::clamp(v, 0, 100);
     }
 
+    /// danger_value() from which the fault is close enough to warn about.
+    static constexpr int kWarningDangerPct = 75;
+
     /// Whether the danger level warrants a warning indicator
     bool is_warning() const {
-        return danger_value() > 75;
+        return danger_value() > kWarningDangerPct;
+    }
+
+    /// Whether distance_to_fault is a live countdown. Negative means the fault
+    /// timer is stopped; above the threshold it has just reset.
+    bool is_tracking() const {
+        return distance_to_fault >= 0 && distance_to_fault <= fault_threshold();
     }
 };
 
