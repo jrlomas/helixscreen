@@ -802,6 +802,11 @@ struct EnvironmentData {
     float temperature_c = 0.0f; ///< Temperature in Celsius
     float humidity_pct = 0.0f;  ///< Relative humidity percentage (0-100)
     bool has_humidity = false;  ///< true when backend provides humidity sensor
+
+    /// A reading with no temperature source carries 0 (humidity-only sensors).
+    [[nodiscard]] bool has_temperature() const {
+        return temperature_c > 0.0f;
+    }
 };
 
 /// Error targeting level for multi-level error reporting

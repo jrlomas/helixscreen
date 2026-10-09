@@ -254,10 +254,29 @@ static void apply_lane_humidity(AmsSlotData* data, AmsBackend* backend) {
     char text[16] = "--";
     const AmsSystemInfo info = backend->get_system_info();
     const SlotInfo* slot = info.get_slot_global(data->slot_index);
-    if (slot && slot->environment && slot->environment->has_humidity)
-        snprintf(text, sizeof(text), "%d%%", (int)std::lround(slot->environment->humidity_pct));
+    const EnvironmentData* env = (slot && slot->environment) ? &*slot->environment : nullptr;
+    if (env && env->has_humidity)
+        snprintf(text, sizeof(text), "%d%%", (int)std::lround(env->humidity_pct));
     // DECLARATIVE_OK: per-slot reading with no per-slot humidity subject
     lv_label_set_text(data->lane_humidity_text, text);
+
+    if (!data->lane_temp_icon || !data->lane_temp_text)
+        return;
+    const bool has_temp = env && env->has_temperature();
+    char temp[16] = "";
+    if (has_temp)
+        snprintf(temp, sizeof(temp),
+                 "%d\xC2\xB0"
+                 "C",
+                 (int)std::lround(env->temperature_c));
+    // DECLARATIVE_OK: per-slot reading with no per-slot temperature subject
+    lv_label_set_text(data->lane_temp_text, temp);
+    for (lv_obj_t* o : {data->lane_temp_icon, data->lane_temp_text}) {
+        if (has_temp)
+            lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 /// Re-apply the material label from the live per-slot material subject.
@@ -696,6 +715,9 @@ static void setup_slot_observers(AmsSlotData* data) {
     if (material_subject && data->material_observer) {
         apply_material_label(data, lv_subject_get_string(material_subject));
     }
+    apply_lane_remaining(data, remaining_subject && data->remaining_observer
+                                   ? lv_subject_get_string(remaining_subject)
+                                   : "");
 
     // Update tool badge from the slot's own backend. Material and the error dot are NOT read
     // here - material flows from the per-slot material subject via the observer
@@ -706,9 +728,6 @@ static void setup_slot_observers(AmsSlotData* data) {
         SlotInfo slot = backend->get_slot_info(data->slot_index);
         apply_tool_badge(data, slot.mapped_tool, slot.tool_mapping_override);
     }
-    apply_lane_remaining(data, remaining_subject && data->remaining_observer
-                                   ? lv_subject_get_string(remaining_subject)
-                                   : "");
 
     spdlog::trace("[AmsSlot] Created observers for slot {}", data->slot_index);
 }
