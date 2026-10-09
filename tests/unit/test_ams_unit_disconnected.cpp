@@ -110,7 +110,8 @@ TEST_CASE_METHOD(LVGLUITestFixture, "A disconnected unit publishes its own subje
         CHECK(subject_int("ams_viewed_unit_disconnected") == 0);
     }
 
-    SECTION("the unit card fades, stays tappable and shows its chip") {
+    SECTION(
+        "the unit card fades its contents, stays tappable and shows its chip at full contrast") {
         const std::string absent = AmsState::unit_absent_subject_name(1);
         const std::string disc = AmsState::unit_disconnected_subject_name(1);
         const char* attrs[] = {"absent",     absent.c_str(), "disconnected",
@@ -118,10 +119,18 @@ TEST_CASE_METHOD(LVGLUITestFixture, "A disconnected unit publishes its own subje
         auto* card = static_cast<lv_obj_t*>(lv_xml_create(test_screen(), "ams_unit_card", attrs));
         REQUIRE(card != nullptr);
         CHECK_FALSE(lv_obj_has_state(card, LV_STATE_DISABLED));
-        CHECK(lv_obj_get_style_opa(card, LV_PART_MAIN) < LV_OPA_COVER);
+        CHECK(lv_obj_get_style_opa(card, LV_PART_MAIN) == LV_OPA_COVER);
+        lv_obj_t* bars = lv_obj_find_by_name(card, "bars_container");
+        REQUIRE(bars != nullptr);
+        CHECK(lv_obj_get_style_opa(bars, LV_PART_MAIN) < LV_OPA_COVER);
+        lv_obj_t* header = lv_obj_find_by_name(card, "unit_header");
+        REQUIRE(header != nullptr);
+        CHECK(lv_obj_get_style_opa(header, LV_PART_MAIN) < LV_OPA_COVER);
         lv_obj_t* chip = lv_obj_find_by_name(card, "unit_disconnected_chip");
         REQUIRE(chip != nullptr);
         CHECK_FALSE(lv_obj_has_flag(chip, LV_OBJ_FLAG_HIDDEN));
+        CHECK(lv_obj_get_style_opa(chip, LV_PART_MAIN) == LV_OPA_COVER);
+        CHECK(lv_obj_get_style_opa(lv_obj_get_parent(chip), LV_PART_MAIN) == LV_OPA_COVER);
         lv_obj_t* count = lv_obj_find_by_name(card, "slot_count");
         REQUIRE(count != nullptr);
         CHECK(lv_obj_has_flag(count, LV_OBJ_FLAG_HIDDEN));
@@ -137,6 +146,9 @@ TEST_CASE_METHOD(LVGLUITestFixture, "A disconnected unit publishes its own subje
         REQUIRE(card != nullptr);
         CHECK_FALSE(lv_obj_has_state(card, LV_STATE_DISABLED));
         CHECK(lv_obj_get_style_opa(card, LV_PART_MAIN) == LV_OPA_COVER);
+        lv_obj_t* bars = lv_obj_find_by_name(card, "bars_container");
+        REQUIRE(bars != nullptr);
+        CHECK(lv_obj_get_style_opa(bars, LV_PART_MAIN) == LV_OPA_COVER);
         lv_obj_t* chip = lv_obj_find_by_name(card, "unit_disconnected_chip");
         REQUIRE(chip != nullptr);
         CHECK(lv_obj_has_flag(chip, LV_OBJ_FLAG_HIDDEN));

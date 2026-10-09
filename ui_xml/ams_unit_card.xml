@@ -32,13 +32,15 @@
         clickable="true">
     <style name="styles.press_wash" selector="pressed"/>
     <bind_state_if_eq subject="$absent" state="disabled" ref_value="1"/>
-    <!-- Offline reads faded but stays tappable: its detail still shows what it last reported -->
-    <bind_style_if_eq name="unit_offline" subject="$disconnected" ref_value="1"/>
+    <!-- Offline fades the header, bars and readout, but not the card itself: it stays
+         tappable (its detail still shows what it last reported) and the chip keeps full
+         contrast, since a parent's opa would fade it too. -->
     <!-- Unit header: logo + name (clickable=false + event_bubble so clicks reach card) -->
-    <lv_obj width="100%"
-            height="content" scrollable="false" clickable="false" event_bubble="true" flex_flow="row"
+    <lv_obj name="unit_header"
+            width="100%" height="content" scrollable="false" clickable="false" event_bubble="true" flex_flow="row"
             style_flex_main_place="center" style_flex_cross_place="center" style_pad_all="0" style_pad_gap="#space_xs"
             style_bg_opa="0" style_border_width="0">
+      <bind_style_if_eq name="unit_offline" subject="$disconnected" ref_value="1"/>
       <!-- The logo is the first thing to go when the cards are width-starved: on a
            5-unit rig it costs ~28px of a ~102px card, and the unit's NAME is what
            the row is for. No inline hidden="" here - an inline attr would outrank
@@ -72,7 +74,9 @@
         <lv_obj name="bars_container"
                 width="100%" height="#ams_bars_height" scrollable="false" clickable="false" event_bubble="true"
                 flex_flow="row" style_flex_main_place="center" style_flex_cross_place="end" style_pad_all="0"
-                style_pad_column="#space_xxs" style_bg_opa="0" style_border_width="0"/>
+                style_pad_column="#space_xxs" style_bg_opa="0" style_border_width="0">
+          <bind_style_if_eq name="unit_offline" subject="$disconnected" ref_value="1"/>
+        </lv_obj>
         <!-- Slot count label -->
         <text_small name="slot_count" text="0 slots" event_bubble="true">
           <bind_flag_if_eq subject="$absent" flag="hidden" ref_value="1"/>
@@ -93,7 +97,9 @@
       <ams_environment_indicator name="env_indicator"
                                  event_bubble="true" temp_text="$temp_text" humidity_text="$humidity_text"
                                  humidity_status="$humidity_status" humidity_visible="$humidity_visible"
-                                 visible="$visible" drying_active="$drying_active" drying_text="$drying_text"/>
+                                 visible="$visible" drying_active="$drying_active" drying_text="$drying_text">
+        <bind_style_if_eq name="unit_offline" subject="$disconnected" ref_value="1"/>
+      </ams_environment_indicator>
     </lv_obj>
   </view>
 </component>
