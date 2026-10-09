@@ -724,15 +724,13 @@ void PrintSelectPanel::setup(lv_obj_t* panel, lv_obj_t* parent_screen) {
     if (connection_subject) {
         connection_observer_ = observe<int>(
             connection_subject, this,
-            [](PrintSelectPanel* self, int state) {
+            [previous = -1](PrintSelectPanel* self, int state) mutable {
+                const bool reconnected = helix::connection_change_should_refresh(previous, state);
+                previous = state;
                 if (state == static_cast<int>(ConnectionState::CONNECTED)) {
-                    // Always refresh on (re)connect to pick up files uploaded while
-                    // disconnected. The previous guard (file_list_.empty()) silently
-                    // skipped refresh after reconnects on unreliable hardware like
-                    // CB1, leaving newly-uploaded files invisible (#577).
                     bool is_printer_source =
                         !self->usb_source_ || !self->usb_source_->is_usb_active();
-                    if (is_printer_source) {
+                    if (is_printer_source && reconnected) {
                         spdlog::info(
                             "[{}] Connection (re)established, refreshing file list (existing={})",
                             self->get_name(), self->file_list_.size());
