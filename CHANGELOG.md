@@ -5,6 +5,247 @@ All notable changes to HelixScreen will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0-beta.7] - 2026-10-08
+
+<!-- whatsnew
+The seventh beta of 1.1.
+
+- Redrawn filament path for AMS units, with a dry-box look and spool glow
+- Skip bed mesh, QGL and Z-tilt per print
+- AFC, OpenAMS, ACE and Happy Hare 4 additions
+- Faster startup and Print Files
+- K-Touch: boots safe after a crash loop, fits more printers
+- GPU rotation on DRM/EGL displays
+- K2 filament cuts no longer drive the toolhead into the frame
+-->
+
+The seventh beta of 1.1. The filament path diagram was redrawn: hubs, buffers, sensors and
+routes follow what each AMS unit really has, and dry-box units get a lid and spools sitting
+on the box floor. You can also skip bed mesh, quad gantry leveling and Z tilt per print from
+the file details, and AFC, OpenAMS, ACE and Happy Hare 4 each pick up something new. Startup,
+Print Files and the Macros screen do less work, the app falls back to a safe layout when it
+crash-loops, and the K-Touch gets a run of printer-switching and memory fixes.
+
+**Upgrading from beta.6?**
+
+- **Per-print leveling skips need one macro file.** Install or update from the Macros screen
+  stages `helix_skips.cfg` and adds one include line at the top of printer.cfg (one backup is
+  made, with a one-time rollback). Nothing changes if your printer has no wrappable bed mesh,
+  QGL or Z tilt step.
+- **Opening the slot editor on a new spool is off by default.** Turn it on in Settings >
+  Printing > Filament.
+
+### Added
+
+**Filament systems**
+
+- **Redrawn filament path for AMS units** - every unit type paints one route from spool to
+  toolhead with sensor bands on the tubes, PTFE-style tubes with an accent glow on the active
+  route, a hub sized to its tubes, and hub and buffer stacked above the toolhead. Parallel
+  and mixed rigs show their routes too, a toolhead sensor band appears only when the unit
+  has a toolhead sensor, and the bypass route follows the same error colours as the rest.
+  The system overview uses the same painter, the tool label is a badge on the toolhead's
+  corner, and one unit of several ends in a short fading output stub. Bands follow the
+  sensors each unit actually reports.
+- **Lane details on the AMS screen** - a lane that measures its remaining filament length
+  shows it under the spool and on the loaded card, and a lane that reports its temperature
+  shows it above its humidity. A unit its backend reports offline shows Disconnected, fades
+  but stays tappable, and the header keeps its title and chip in view. Device operations
+  lists unit firmware and serial, toolchange purge, Spoolman mode and the pending spool.
+- **Dry-box units look like boxes** - spools sit on the box floor under a glass lid, with
+  humidity and the material label kept clear of the spools. The current spool glows around
+  its own outline (no slot box) and pulses during a load.
+- **Open the slot editor when filament is inserted** (#1335) - optional, off by default
+  (Settings > Printing > Filament). Loading filament into an empty lane, or into a printer
+  with no AMS or with bypass engaged, opens the slot or external-spool editor. It stays
+  quiet while printing, during a filament operation, and right after startup or reconnect.
+- **AFC TD-1 scans in the slot editor** (#1151) - when the lane has a TD-1 scan, the editor
+  shows its colour and TD with a Use scan button.
+- **OpenAMS temperature and humidity** (#1150) - shown on the unit, taken from the sensor the
+  unit's config names.
+- **ACE Endless Spool** (#1679) - ACE shows the driver's Endless Spool groups. Only ready
+  slots count as swap targets, and materials compare ignoring case and stray spaces.
+- **Happy Hare 4 clog detail** (#1755) - the clog bar shows the FlowGuard trip reason or the
+  tangle prevention state on one line under the bar. Happy Hare 4's gate vendor shows as the
+  lane brand and edits write back.
+
+**Printing**
+
+- **Skip bed mesh, QGL and Z tilt per print** - the file details screen gets a toggle for each
+  of these steps your printer's start macro runs, next to the other print options. Needs no
+  plugin.
+- **Spaghetti detection shows the camera frame** (#1506) - the alert dialog includes the
+  latest frame, using the camera widget's source, rotation and flips.
+
+**Settings and setup**
+
+- **Wizard preferences page** (#1336) - a new step before the summary with taste-only toggles
+  (UI sounds, and the AMS options when your printer has one) so you do not have to find them
+  in Settings later.
+- **Safe mode after a crash loop** (#1315) - three restarts inside two minutes now start the
+  app with plugins off and the shipped default Home layout, and layout edits are refused so
+  the saved layout is not overwritten.
+- **LED settings warn about macros that set LEDs** - if PRINT_START or PRINT_END reaches an
+  LED command, directly or through other macros, LED settings says so.
+- **Rotation on DRM/EGL displays runs on the GPU** - any angle works, touch follows the
+  rotation, and a DSI panel with no rotation-capable plane no longer needs the framebuffer
+  fallback.
+- **Wi-Fi link log** (#1190) - the app records signal and link changes and includes a network
+  section in debug bundles, for chasing dropouts.
+
+**BTT K-Touch (alpha)**
+
+- **Falls back off a printer that crashes the panel at boot** (#1750) - after repeated boot
+  crashes the K-Touch holds off connecting until you pick a printer.
+- **Adventurer 5M and 5M Pro images** are in the K-Touch printer picture set.
+
+**Connection**
+
+- **A moved printer is offered its new address** (#1217) - when a connect fails, one quick
+  network scan runs, and if a single Moonraker carries the saved printer's hostname you are
+  offered its new address.
+
+**Android**
+
+- **Targets Android API 36 for Google Play** (#1639).
+- **The Android Update button opens the GitHub release** for a sideloaded install, instead of a
+  Play Store listing that does not exist yet.
+
+### Fixed
+
+**Filament systems**
+
+- **K2 filament cuts no longer crash the toolhead** - a K2 Pro's toolhead hit the frame when
+  an unload, swap or bypass cut ran from the purge chute. Every K2 cut now uses the
+  firmware's positioned cut, which moves to the cutter first. The K2 debug bundle platform
+  is labelled Creality K2, so a K2 Pro no longer reads as a mismatch.
+- **AFC unlink survives reconnects** (#1717) - unlinking a spool on a lane that remembers its
+  spool no longer comes back after a reconnect or when the lane restates its spool, Clear
+  Spool leaves another lane's active spool alone, only the loaded lane sets Spoolman's active
+  spool, and an eject keeps the unlink.
+- **Toolhead sensor reporting** - AFC decides per unit from its own extruders, repaints when
+  the toolhead-sensor answer in the config changes, and units report one only if the
+  hardware has one. OpenAMS environment readings
+  attach only to a matched unit, and false path error highlights are gone.
+- **Happy Hare 4 and ACE** - the clog note follows the language and clears a stale reason
+  (#1755), and the spool picker shows each spool's name on large screens.
+- **A different slot grid repaints the filament path**, a secondary filament system's
+  ams_slot shows that system's tool badge, and the path paints once per open at its final
+  size instead of flashing a spinner and rebuilding.
+- **The AMS screen no longer acts after it is closed**, and a reopened one keeps a single
+  operation stepper (#1761).
+- **Switching printers drops unsaved spool changes** - spool assignments are kept per printer,
+  survive a switch race, a failed load or an unreadable file, and one printer's spools never
+  seed another's.
+- **Default ABS preset reads ABS/ASA**, since the two share a temperature range.
+- **Path errors show where they happen** - a jammed (BLOCKED) lane reads as an error on every
+  screen, a buffer fault tints the buffer box instead of the hub, AFC's buffer fault shows
+  as a countdown, and a lane off the active route shows its own error. Filament stuck at
+  the hub after a failed unload now shows in the trunk, and Happy Hare's bowden progress
+  fills the output tube during a load or unload.
+- **Theme colours** - the filament path, the overview and the dry-box tray follow a theme or
+  dark-mode switch while open, including tube and overview colours in the light theme.
+- **Unit detail layout** - the box, its readout and the tubes below are centered, and the
+  remaining length no longer pushes the material label away.
+- **AntHead on the K-Touch** draws the default toolhead glyph, since the AntHead image is
+  not shipped there.
+
+**Printing**
+
+- **Stray template text in a macro no longer fails a filament operation** - a malformed Jinja
+  tag that Klipper reports as an unknown command now shows a warning and the load or unload
+  carries on.
+- **Pre-print progress** - a purge during filament load counts once, QGL and Z tilt are
+  recognised from configured probe points and stationary purges from motion, macros that
+  narrate gantry leveling, Z tilt and purging are picked up by the generic profile, and
+  Klipper's empty bed mesh reads as no mesh (so mesh clearing is detected on every printer).
+- **Print options card** - the PRINT OPTIONS card is hidden when no row would show (a Voron
+  whose START_PRINT always runs QGL and mesh no longer gets an empty card), and macro rows
+  vanish right away when a reconnect or Klipper restart clears the analysis.
+- **Option tiles show on and off clearly** - an unchecked tile has an empty box and a muted
+  label.
+- **Print status Light button** drives your light rather than the first
+  NeoPixel, so a Voron with a BoxTurtle no longer toggles the corner indicators.
+- **Starting a modified print on the K-Touch** - starting a print with a stripped step or a
+  tool remap no longer fails with an empty "Failed to download G-code" toast; the original
+  file prints, and a remap is refused with a reason. The file detail view also skips what
+  the K-Touch cannot fetch.
+- **Home print card after a cancelled job** - the leftover "Print starting..." message no
+  longer shows after a cancel, or after a plugin subscribes to more printer objects.
+- **Runout with filament at the feeder** - an autofeed runout where filament is still at the
+  feeder now says the motion sensor is stuck.
+- **Spoolman QR codes** (#1744) with `web+spoolman:` in any letter case are recognised.
+
+**Printer switching and connection**
+
+- **A switch covers the screen until the new printer connects** - a "Switching to X" card
+  shows during the rebuild, then Connecting, and it drops when no connect starts. The
+  spinner holds still on limited displays.
+- **Printer list and switch details** - a picked printer's confirmation opens after the list
+  closes, a printer not yet connected is named by its host rather than an id, renaming starts
+  from the saved name, and About shows the display name. Wizard paths record a switch
+  away like the picker does (#1750).
+- **A real client with no saved host connects to the local Moonraker** instead of an empty
+  address.
+- **Moonraker restart after a plugin install or uninstall works** - the app now asks Moonraker
+  to restart itself, so the UI no longer marks a plugin installed while Moonraker never
+  loaded it.
+- **Z-Mod is no longer reported on stock Creator 5 and 5 Pro** (#1754), whose part fan is
+  named fanM106.
+- **Stock U1 SSH starts at boot** when the stock Root Access setting is on.
+
+**Screens and display**
+
+- **Saved brightness applies at startup** - a saved 42% no longer comes up at 100%.
+- **Long translations stay inside buttons and labels** (#1307) - print tune speed and flow,
+  PID fan hint, filament status line, history stat cards and fan names are limited in width,
+  and the print status speed and flow row wraps.
+- **480x320 overflow** (#1309) in LED swatches, About paths and the theme preview.
+- **Scroll bars and gutters** - the gutter attaches when a list overflows after the screen
+  opens, hidden lists skip the late re-walk, and a styled thumb length redraws its whole
+  track.
+- **Macros screen** (#1748) - a held press is dropped when rows rebind, rows grow when the
+  list gets taller, and the scroll position is clamped after the list shrinks.
+- **Toasts redraw only the area they land in**, and overlays and panel sweeps leave open
+  modals visible.
+- **Limited displays skip fades and slides** - overlays and modals open and close without the
+  slide, fade and scale, and the loading pill shows only on those displays, translated.
+- **Thumbnails** - the old thumbnail is kept while the source switches, every cache writer
+  sniffs the real image format, and a file list refresh no longer holds every card's decoded
+  image on the K-Touch.
+- **A gradient canvas that cannot resize** no longer references the freed buffer.
+- **Heavy CJK font loads** read the font in large blocks instead of millions of tiny reads.
+- **Framebuffer crash reports** - fbdev crashes resolve to readable
+  backtraces.
+
+**BTT K-Touch (alpha)**
+
+- **Four or more printers fit in the saved settings** - the settings file is written compact,
+  so a 3-printer K-Touch no longer runs out of flash blocks and fails every save, and no
+  pre-migration copy is kept.
+- **Materials table works** - preset buttons show their materials instead of `---`.
+- **Fewer memory and startup problems** - the first Moonraker connect runs on the UI thread,
+  discovery, auto-detect, safety limits and light buttons run as on desktop, WLED discovery
+  no longer logs an error on every connect, and large static data moved out of internal RAM.
+  Print Files stops holding every thumbnail.
+- **Settings bindings the firmware left unresolved** are registered.
+- **Add and switch cycles the connection once** instead of twice.
+
+### Changed
+
+- **Startup does less work** - screens' XML is loaded the first time it is needed instead of
+  all at boot (#1756), and a printer switch, resize and hot reload keep working with that.
+- **Print Files is faster** - cards are built while the listing arrives, a refresh repaints
+  only the rows whose data changed, cards carry fewer objects, and the shared gradient is
+  drawn 1:1.
+- **The Macros screen scrolls with a recycled row list** (#1748), so long macro lists open
+  and scroll faster.
+- **Scrolling redraws less** - a scroll redraws a scroll bar's thumbs rather than their tracks,
+  and rounded corners are only repainted where a scroller draws them.
+- **AMS screens stay built between opens**, so reopening them is quicker, and the first open
+  shows the loading pill.
+- **The K-Touch connect and switch path is shared with desktop**, so one fix covers both.
+
 ## [1.1.0-beta.6] - 2026-10-07
 
 <!-- whatsnew
@@ -8662,6 +8903,7 @@ Initial tagged release. Foundation for all subsequent development.
 - Automated GitHub Actions release pipeline
 - One-liner installation script with platform auto-detection
 
+[1.1.0-beta.7]: https://github.com/prestonbrown/helixscreen/compare/v1.1.0-beta.6...v1.1.0-beta.7
 [1.1.0-beta.6]: https://github.com/prestonbrown/helixscreen/compare/v1.1.0-beta.5...v1.1.0-beta.6
 [1.1.0-beta.5]: https://github.com/prestonbrown/helixscreen/compare/v1.1.0-beta.4...v1.1.0-beta.5
 [1.1.0-beta.4]: https://github.com/prestonbrown/helixscreen/compare/v1.1.0-beta.3...v1.1.0-beta.4
