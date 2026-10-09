@@ -177,7 +177,9 @@ unverified). The switch renders the cached state, and has no value until a frame
 reported one. A send becomes the cached state once Klipper reports the command complete,
 because the box never confirms a value it already held; a send that errors (the flat fork
 registers no `BOX_ENABLE_AUTO_REFILL`, Klipper not ready, a box rejection) leaves the cache
-alone. `on_started()` forgets the bit, so a restart reads `Unknown` until the box reports it
+alone. On the identified fork dialect the same action sends `_BOX_SET_RUNOUT_SWAP ENABLE=1|0`,
+the module's own setter for `runout_swap_enabled`; an unidentified flat module is refused like
+every other control path. `on_started()` forgets the bit, so a restart reads `Unknown` until the box reports it
 again. It is not an endless-spool *edit* in the
 `set_endless_spool_backup()` sense, which is why editability stays `ReadOnly`.
 

@@ -5715,6 +5715,30 @@ TEST_CASE("CFS auto-refill toggle: a send Klipper does not complete changes noth
     CHECK(*on);
 }
 
+TEST_CASE("CFS auto-refill toggle speaks the box module's dialect",
+          "[ams][cfs][flat][endless_spool]") {
+    CfsAutoRefillHelper backend;
+    backend.mark_running();
+
+    SECTION("the identified fork sends its runout-swap setter") {
+        CfsTestAccess::handle_status(backend, make_cfs_notification(make_flat_fork_box()));
+        backend.captured.clear();
+        REQUIRE(backend.execute_device_action("toggle_auto_refill", std::any(false)).success());
+        CHECK(backend.captured == std::vector<std::string>{"_BOX_SET_RUNOUT_SWAP ENABLE=0"});
+        drain_calib_queue();
+        CHECK(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::Off);
+    }
+
+    SECTION("an unidentified flat module is refused and sent nothing") {
+        json box = make_flat_fork_box();
+        box.erase("api_version");
+        CfsTestAccess::handle_status(backend, make_cfs_notification(box));
+        backend.captured.clear();
+        CHECK_FALSE(backend.execute_device_action("toggle_auto_refill", std::any(true)).success());
+        CHECK(backend.captured.empty());
+    }
+}
+
 TEST_CASE("CFS endless spool: a backend restart forgets the enable bit",
           "[ams][cfs][endless_spool]") {
     CfsRemapHelper backend;

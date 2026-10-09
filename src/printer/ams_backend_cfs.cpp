@@ -4304,6 +4304,9 @@ AmsError AmsBackendCfs::execute_device_action(const std::string& action_id, cons
     }
 
     if (action_id == "toggle_auto_refill") {
+        if (auto err = reject_if_flat_schema("Auto-refill"); !err.success()) {
+            return err;
+        }
         // Setter, not a toggle: the handler reads ENABLE via gcmd.get_int, and
         // Creality's own master-server sends an explicit ENABLE=1/0 on both
         // families ([A]: string tables in CR4CU220812S11 V2.3.5.34 and
@@ -4318,16 +4321,18 @@ AmsError AmsBackendCfs::execute_device_action(const std::string& action_id, cons
             std::lock_guard<std::mutex> lock(mutex_);
             enable = !system_info_.endless_spool_enabled;
         }
+        // The fork registers its own setter for the same flag.
+        const std::string setter = macro_variant_ == CfsMacroVariant::Fork
+                                       ? "_BOX_SET_RUNOUT_SWAP ENABLE="
+                                       : "BOX_ENABLE_AUTO_REFILL ENABLE=";
         // Recorded only once Klipper has run it: a dispatch proves nothing, and
         // a dialect without the command or a rejected send must leave the
         // cache on the box's last word.
         auto token = lifetime_.token();
-        return execute_gcode(enable ? "BOX_ENABLE_AUTO_REFILL ENABLE=1"
-                                    : "BOX_ENABLE_AUTO_REFILL ENABLE=0",
-                             [this, token, enable]() {
-                                 token.defer("AmsBackendCfs::auto_refill_sent",
-                                             [this, enable]() { record_auto_refill_sent(enable); });
-                             });
+        return execute_gcode(setter + (enable ? "1" : "0"), [this, token, enable]() {
+            token.defer("AmsBackendCfs::auto_refill_sent",
+                        [this, enable]() { record_auto_refill_sent(enable); });
+        });
     }
 
     if (action_id == "nozzle_clean") {
