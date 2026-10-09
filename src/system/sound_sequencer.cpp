@@ -39,9 +39,18 @@ void SoundSequencer::stop() {
 }
 
 void SoundSequencer::set_external_tick(std::function<void(float dt_ms)> fn) {
+    {
+        // Blocks while the sequencer thread is inside the old callback.
+        std::lock_guard<std::mutex> lock(external_tick_mutex_);
+        external_tick_ = std::move(fn);
+    }
     std::lock_guard<std::mutex> lock(queue_mutex_);
-    external_tick_ = std::move(fn);
     queue_cv_.notify_one();
+}
+
+bool SoundSequencer::has_external_tick() {
+    std::lock_guard<std::mutex> lock(external_tick_mutex_);
+    return static_cast<bool>(external_tick_);
 }
 
 bool SoundSequencer::is_playing() const {
@@ -110,7 +119,7 @@ void SoundSequencer::sequencer_loop() {
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
 
-            if (!playing_.load() && request_queue_.empty() && !external_tick_) {
+            if (!playing_.load() && request_queue_.empty() && !has_external_tick()) {
                 // Nothing playing, nothing queued — wait for a signal.
                 // Suspend the backend device so it stops running its render
                 // callback over silence (Android AudioTrack churn + idle CPU).
@@ -146,11 +155,7 @@ void SoundSequencer::sequencer_loop() {
 
         // External tick routing (for TrackerPlayer) and SFX playback.
         // Both can run concurrently on PCM-capable backends (SDL, ALSA).
-        std::function<void(float)> ext_tick;
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            ext_tick = external_tick_;
-        }
+        const bool ext_tick = has_external_tick();
 
         bool has_work = ext_tick || playing_.load();
         if (has_work) {
@@ -172,7 +177,12 @@ void SoundSequencer::sequencer_loop() {
             dt_ms = std::min(dt_ms, 500.0f);
 
             if (ext_tick) {
-                ext_tick(dt_ms);
+                // Held across the call so set_external_tick() cannot return, and
+                // its caller free what the callback points at, mid-tick.
+                std::lock_guard<std::mutex> lock(external_tick_mutex_);
+                if (external_tick_) {
+                    external_tick_(dt_ms);
+                }
             }
             if (playing_.load()) {
                 tick(dt_ms);

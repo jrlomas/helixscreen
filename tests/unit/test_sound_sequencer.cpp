@@ -1124,3 +1124,50 @@ TEST_CASE("SoundSequencer: wakes the device to play and parks it again after",
 
     seq.shutdown();
 }
+
+// ============================================================================
+// External tick handover
+// ============================================================================
+//
+// SoundManager frees the TrackerPlayer the tick callback points at as soon as
+// set_external_tick(nullptr) returns, so the call must not return while the
+// sequencer thread is still inside the old callback.
+
+TEST_CASE("SoundSequencer: clearing the external tick waits out a tick in flight",
+          "[sound][sequencer][threading]") {
+    auto backend = std::make_shared<MockBackend>();
+    SoundSequencer seq(backend);
+    seq.start();
+
+    std::atomic<bool> in_tick{false};
+    std::atomic<bool> release{false};
+    std::atomic<bool> tick_done{false};
+    seq.set_external_tick([&](float) {
+        if (tick_done.load()) {
+            return;
+        }
+        in_tick.store(true);
+        while (!release.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        tick_done.store(true);
+    });
+    REQUIRE(UITest::wait_until([&] { return in_tick.load(); }));
+
+    std::atomic<bool> cleared{false};
+    std::atomic<bool> done_when_cleared{false};
+    std::thread clearer([&] {
+        seq.set_external_tick(nullptr);
+        done_when_cleared.store(tick_done.load());
+        cleared.store(true);
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    CHECK_FALSE(cleared.load());
+
+    release.store(true);
+    clearer.join();
+    CHECK(done_when_cleared.load());
+
+    seq.shutdown();
+}
