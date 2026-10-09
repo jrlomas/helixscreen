@@ -245,6 +245,17 @@ void layered_on_draw(lv_obj_t* obj, FilamentPathData* data) {
 // Create the canvas child, configure styles, schedule the first render. The
 // canvas starts on the empty placeholder: its buffer is allocated by the first
 // refresh that sees the widget's laid-out size.
+namespace {
+
+// REFR_EXT_DRAW_SIZE on the widget and on its container: room for the
+// overlay canvas's overhang above the widget (user data = the widget).
+void overhang_ext_draw_cb(lv_event_t* e) {
+    auto* widget = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
+    lv_event_set_ext_draw_size(e, layered_overhang(lv_obj_get_height(widget)));
+}
+
+} // namespace
+
 bool layered_setup_canvases(lv_obj_t* obj, FilamentPathData* data) {
     int32_t w = lv_obj_get_width(obj);
     int32_t h = lv_obj_get_height(obj);
@@ -255,9 +266,14 @@ bool layered_setup_canvases(lv_obj_t* obj, FilamentPathData* data) {
     int32_t overhang = layered_overhang(h);
     int32_t total_h = h + overhang;
 
-    // Canvases extend above the widget — needs OVERFLOW_VISIBLE on parent so
-    // LVGL doesn't clip them to the widget's bounds.
+    // Canvases extend above the widget, into the spool box above it: LVGL
+    // draws a child outside its parent only within the parent's ext draw size,
+    // so the widget and its (overflow-visible) container both report the
+    // overhang.
     lv_obj_add_flag(obj, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    lv_obj_add_event_cb(obj, overhang_ext_draw_cb, LV_EVENT_REFR_EXT_DRAW_SIZE, obj);
+    if (lv_obj_t* parent = lv_obj_get_parent(obj))
+        lv_obj_add_event_cb(parent, overhang_ext_draw_cb, LV_EVENT_REFR_EXT_DRAW_SIZE, obj);
 
     lv_obj_t* c = lv_canvas_create(obj);
     if (!c) {
@@ -291,6 +307,9 @@ void layered_size_changed_cb(lv_event_t* e) {
     lv_obj_t* obj = lv_event_get_target_obj(e);
     if (lv_obj_get_width(obj) <= 0 || lv_obj_get_height(obj) <= 0)
         return;
+    lv_obj_refresh_ext_draw_size(obj);
+    if (lv_obj_t* parent = lv_obj_get_parent(obj))
+        lv_obj_refresh_ext_draw_size(parent);
     layered_mark_dirty(obj);
 }
 
@@ -299,7 +318,8 @@ void layered_size_changed_cb(lv_event_t* e) {
 // LVGL as the parent tears down. ~LayerState cancels the timers too — this is the
 // explicit half of the pair, so teardown order stays readable at the call site.
 void layered_teardown(lv_obj_t* obj, FilamentPathData* data) {
-    LV_UNUSED(obj);
+    if (lv_obj_t* parent = lv_obj_get_parent(obj))
+        lv_obj_remove_event_cb_with_user_data(parent, overhang_ext_draw_cb, obj);
     data->layers.refresh_timer.cancel();
     data->layers.alloc_retry_timer.cancel();
     layered_destroy_buffers(data);

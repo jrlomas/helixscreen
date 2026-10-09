@@ -27,6 +27,8 @@ struct LinearHubFrame {
     // Vertical layout (absolute display coords)
     int32_t entry_y = 0;
     int32_t prep_y = 0;
+    int32_t prep_band_y = 0;       // the prep sensor's band: prep_y, or the box edge
+    bool prep_on_box_edge = false; // lanes enter at the spool box's front edge
     int32_t hub_y = 0;
     int32_t hub_h = 0;
     int32_t output_y = 0;

@@ -56,6 +56,11 @@ BaseGeometry compute_base_geometry(lv_obj_t* obj, const FilamentPathData* data) 
     for (int i = 0; i < count; i++) {
         g.slot_x[i] = g.x_off + get_slot_x(data, i, g.x_off);
     }
+    if (data->slot_grid && data->lane_entry_offset != INT32_MIN) {
+        lv_area_t grid;
+        lv_obj_get_coords(data->slot_grid, &grid);
+        g.lane_entry_y = grid.y1 + data->lane_entry_offset;
+    }
 
     // Center X: prefer midpoint of slot bounds so hub/selector/nozzle stay
     // aligned with the spool grid even when the grid is narrower than the
@@ -395,7 +400,6 @@ void draw_hub_section(const RenderCtx& ctx, const LinearHubFrame& f) {
 
     // On-toolhead mode draws the passthrough selector first, in its classic
     // spot under the lanes, full slot width like LINEAR's selector.
-    int32_t selector_gear_overflow = 0;
     if (data->hub_on_toolhead) {
         int32_t sel_w = data->theme.hub_width;
         if (data->slot_count > 1) {
@@ -404,30 +408,26 @@ void draw_hub_section(const RenderCtx& ctx, const LinearHubFrame& f) {
             int32_t slot_pad = LV_MAX(data->slot_width, f.sensor_r * 4);
             sel_w = (last_slot_x - first_slot_x) + slot_pad;
         }
-        selector_gear_overflow =
-            draw_hub_box(ctx, f.center_x, f.selector_y, sel_w, f.hub_h, hub_bg_tinted,
-                         hub_border_final, "SELECTOR", LV_OPA_60,
-                         /*interactive=*/data->hub_callback != nullptr);
+        sel_w = draw_hub_box(ctx, f.center_x, f.selector_y, sel_w, f.hub_h, hub_bg_tinted,
+                             hub_border_final, "SELECTOR", LV_OPA_60,
+                             /*interactive=*/data->hub_callback != nullptr);
         // The unit's own box is the management target; the hub on the head is
         // not a separate control.
         data->hits.hub = {f.center_x - sel_w / 2, f.selector_y - f.hub_h / 2,
-                          f.center_x + sel_w / 2 + selector_gear_overflow,
-                          f.selector_y + f.hub_h / 2};
+                          f.center_x + sel_w / 2, f.selector_y + f.hub_h / 2};
         data->hits.hub_valid = true;
     }
 
-    int32_t gear_overflow =
-        draw_hub_box(ctx, f.center_x, f.hub_y, hub_w, f.hub_h, hub_bg_tinted, hub_border_final,
-                     hub_label, hub_opa, /*interactive=*/data->hub_callback != nullptr);
+    hub_w = draw_hub_box(ctx, f.center_x, f.hub_y, hub_w, f.hub_h, hub_bg_tinted, hub_border_final,
+                         hub_label, hub_opa,
+                         /*interactive=*/data->hub_callback != nullptr);
 
     // Single source of truth for the selector/hub hit-test: record the exact
-    // box we just drew (absolute display coords). When the gear is drawn
-    // OUTSIDE the box's right edge (label too wide to fit it inside), extend
-    // the hit rect rightward so the gear stays tappable. On-toolhead mode
-    // recorded the SELECTOR box above; the head hub is not a control.
+    // box we just drew (absolute display coords), gear included. On-toolhead
+    // mode recorded the SELECTOR box above; the head hub is not a control.
     if (!data->hub_on_toolhead) {
-        data->hits.hub = {f.center_x - hub_w / 2, f.hub_y - f.hub_h / 2,
-                          f.center_x + hub_w / 2 + gear_overflow, f.hub_y + f.hub_h / 2};
+        data->hits.hub = {f.center_x - hub_w / 2, f.hub_y - f.hub_h / 2, f.center_x + hub_w / 2,
+                          f.hub_y + f.hub_h / 2};
         data->hits.hub_valid = true;
     }
 }

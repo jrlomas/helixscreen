@@ -44,6 +44,16 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
 
     f.entry_y = g.y_off + (int32_t)(g.height * ENTRY_Y_RATIO);
     f.prep_y = g.y_off + (int32_t)(g.height * PREP_Y_RATIO);
+    f.prep_band_y = f.prep_y;
+    // The lanes leave the spool box at its front edge, through their prep
+    // sensors, when that edge stands clear above the lane run: two tube gauges
+    // and a band of empty tube before the load sensor's row.
+    if (g.lane_entry_y != INT32_MIN &&
+        g.lane_entry_y <= f.prep_y - 2 * data.theme.tube_gauge - BAND_THICKNESS) {
+        f.entry_y = g.lane_entry_y;
+        f.prep_band_y = g.lane_entry_y;
+        f.prep_on_box_edge = true;
+    }
     f.hub_y = g.y_off + (int32_t)(g.height * HUB_Y_RATIO);
     f.hub_h = (int32_t)(g.height * HUB_HEIGHT_RATIO);
     f.toolhead_y = g.y_off + (int32_t)(g.height * TOOLHEAD_Y_RATIO);
@@ -430,6 +440,11 @@ void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFra
     append_line(r, cx, (float)f.toolhead_y, cx, (float)f.inlet_y, lane.style(PathSegment::NOZZLE));
 }
 
+// The load sensor sits midway down the lane's straight run below the prep row.
+float load_band_y(const LinearHubFrame& f, float run_end) {
+    return ((float)f.prep_y + run_end) / 2;
+}
+
 // The hub_only output stub: a short tube leaving the hub (or selector) bottom
 // that fades out over its last third, so it reads as continuing elsewhere. It
 // carries filament once the lane is past the hub or the hub sensor reads it.
@@ -479,8 +494,6 @@ void total_dropped(PathPlan& out) {
     for (int i = 0; i < out.route_count; i++)
         out.dropped += out.routes[i].dropped;
 }
-
-namespace {} // namespace
 
 PathSegment lane_error(const SlotRenderState& s, bool on_active_route, PathSegment system_error) {
     if (on_active_route)
@@ -617,9 +630,13 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
         const float x = (float)g.slot_x[i];
         Route& r = new_route(out);
 
-        append_line(r, x, (float)f.entry_y, x, (float)f.prep_y, lane.style(PathSegment::SPOOL));
-        if (data.slot_has_prep_sensor[i])
-            add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::PREP), s.color);
+        append_line(r, x, (float)f.entry_y, x, (float)f.prep_band_y,
+                    lane.style(PathSegment::SPOOL));
+        if (data.slot_has_prep_sensor[i]) {
+            add_band(out, BandKind::Lane, {x, (float)f.prep_band_y}, {0, 1},
+                     lane.band(PathSegment::PREP), s.color, f.prep_on_box_edge);
+        }
+        append_line(r, x, (float)f.prep_band_y, x, (float)f.prep_y, lane.style(PathSegment::LANE));
 
         if (linear) {
             append_line(r, x, (float)f.prep_y, x, hub_top, lane.style(PathSegment::LANE));
@@ -637,7 +654,7 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
                 const int32_t sel_top_px = f.selector_y - f.hub_h / 2;
                 const float sel_top = (float)sel_top_px;
                 if (load_band) {
-                    const float load_y = ((float)f.prep_y + sel_top) / 2;
+                    const float load_y = load_band_y(f, sel_top);
                     append_line(r, x, (float)f.prep_y, x, load_y, lane.style(PathSegment::LANE));
                     add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::LANE), s.color);
                     append_line(r, x, load_y, x, sel_top, lane.style(PathSegment::LANE));
@@ -648,7 +665,7 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
             } else {
                 pts[0].y = (float)f.prep_y;
                 if (load_band) {
-                    const float load_y = (pts[0].y + pts[1].y) / 2;
+                    const float load_y = load_band_y(f, pts[1].y);
                     append_line(r, x, pts[0].y, x, load_y, lane.style(PathSegment::LANE));
                     add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::LANE), s.color);
                     pts[0].y = load_y;

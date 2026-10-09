@@ -271,6 +271,8 @@ struct FilamentPathData {
     // Live slot position measurement: slot_grid pointer + cached spool_container
     // pointers for pixel-perfect lane alignment at any screen size.
     lv_obj_t* slot_grid = nullptr;
+    // The spool box's front edge below slot_grid's top, INT32_MIN when none.
+    int32_t lane_entry_offset = INT32_MIN;
     static constexpr int MAX_SLOTS = 16;
     lv_obj_t* spool_containers[MAX_SLOTS] = {};
 
@@ -383,6 +385,9 @@ struct BaseGeometry {
     int slot_count = 0;
     int32_t slot_x[FilamentPathData::MAX_SLOTS] = {}; // absolute X per slot
     int32_t center_x = 0; // midpoint between first and last slot, or canvas mid
+    // The spool box's front edge, where the lanes enter the path; INT32_MIN
+    // when no box is drawn above the canvas.
+    int32_t lane_entry_y = INT32_MIN;
 };
 
 BaseGeometry compute_base_geometry(lv_obj_t* obj, const FilamentPathData* data);
@@ -434,10 +439,9 @@ struct RenderCtx {
 // ============================================================================
 
 /// Labeled rounded box (HUB / SELECTOR / BUF). Text color, font and corner
-/// radius come from the theme cache in ctx. Returns the number of pixels the
-/// interactive gear badge extends to the RIGHT of the box's right edge (0 when
-/// the gear fits inside, or when not interactive) — callers recording a click
-/// hit-rect widen it by this amount.
+/// radius come from the theme cache in ctx. An interactive box carries a gear
+/// inside its right edge and grows about @p cx until the label and gear fit.
+/// Returns the width drawn, for the caller's click hit-rect.
 int32_t draw_hub_box(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t width, int32_t height,
                      lv_color_t bg_color, lv_color_t border_color, const char* label,
                      lv_opa_t bg_opa = LV_OPA_COVER, bool interactive = false);

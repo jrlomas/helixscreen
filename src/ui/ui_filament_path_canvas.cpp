@@ -913,6 +913,15 @@ void ui_filament_path_canvas_set_hub_only(lv_obj_t* obj, bool hub_only) {
 }
 
 // NAMESPACE_OK: the widget's C setter API, beside its siblings
+void ui_filament_path_canvas_set_lane_entry(lv_obj_t* obj, int32_t offset_from_slot_grid) {
+    auto* data = get_data(obj);
+    if (!data || data->lane_entry_offset == offset_from_slot_grid)
+        return;
+    data->lane_entry_offset = offset_from_slot_grid;
+    layered_mark_dirty(obj);
+}
+
+// NAMESPACE_OK: the widget's C setter API, beside its siblings
 void ui_filament_path_canvas_set_bowden_fill(lv_obj_t* obj, int percent) {
     auto* data = get_data(obj);
     const int fill = percent < 0 ? -1 : LV_MIN(percent, 100);

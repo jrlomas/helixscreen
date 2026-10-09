@@ -832,6 +832,7 @@ void AmsPanel::create_slots(int count) {
 
     // Update tray
     ams_detail_update_tray(detail_widgets_, slot_widgets_, result.slot_count, ALL_UNITS);
+    helix::ui::ams_detail_sync_lane_entry(path_canvas_, slot_grid_);
 }
 
 void AmsPanel::setup_slot_path_observers(int slot_count) {
