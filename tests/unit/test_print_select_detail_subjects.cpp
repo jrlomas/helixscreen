@@ -271,6 +271,70 @@ TEST_CASE_METHOD(LVGLUITestFixture, "rows come from the macro analysis when the 
     CHECK(states.at("qgl") == true);
 }
 
+// A row whose skip rewrites the job hides when no rewrite can run, and the
+// transport alone can be the reason.
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "a rewrite-gated row hides on a transport that keeps no local copy",
+                 "[print_select][detail_view][pre_print_options][macro_rows]") {
+    CacheDirGuard guard;
+
+    register_xml_callbacks({
+        {"on_print_select_detail_backdrop", detail_noop_cb},
+        {"on_print_select_print_button", detail_noop_cb},
+        {"on_print_select_delete_button", detail_noop_cb},
+        {"on_print_detail_back_clicked", detail_noop_cb},
+        {"on_toggle_sliced_colors", detail_noop_cb},
+        {"on_print_select_detail_objects", detail_noop_cb},
+    });
+
+    const bool local_copies = GENERATE(true, false);
+    CAPTURE(local_copies);
+    // The view answers for the printer it was handed, not the app's: the
+    // app's reads plugin-absent here, the injected one plugin-present.
+    MockPrinter device;
+    device.api.transfers_mock().mock_no_local_copies(!local_copies);
+    PrinterStateTestAccess::set_option_set(device.state, PrePrintOptionSet{});
+    device.state.set_helix_plugin_installed(true);
+    get_printer_state().set_helix_plugin_installed(false);
+    helix::ui::UpdateQueue::instance().drain();
+
+    helix::ui::PrintSelectDetailView view;
+    view.set_dependencies(&device.api, &device.state);
+    view.init_subjects();
+    lv_obj_t* const root = view.create(test_screen());
+    REQUIRE(root != nullptr);
+
+    struct CloseOnExit {
+        helix::ui::PrintSelectDetailView& v;
+        ~CloseOnExit() {
+            v.hide();
+            helix::ui::UpdateQueue::instance().drain();
+            lv_timer_handler(); // the close callback runs on the next tick
+            v.set_dependencies(nullptr, &get_printer_state());
+        }
+    } closer{view};
+
+    // A MacroParam skip with no pre-start block: disabling it rewrites the job.
+    helix::PrintStartAnalysis analysis;
+    analysis.found = true;
+    analysis.macro_name = "PRINT_START";
+    helix::PrintStartOperation qgl;
+    qgl.name = "QUAD_GANTRY_LEVEL";
+    qgl.category = helix::PrintStartOpCategory::QGL;
+    qgl.has_skip_param = true;
+    qgl.skip_param_name = "SKIP_QGL";
+    analysis.operations.push_back(qgl);
+    REQUIRE(view.get_prep_manager() != nullptr);
+    view.get_prep_manager()->set_macro_analysis(analysis);
+
+    view.show("wrapped.gcode", "", "PLA");
+    helix::ui::UpdateQueue::instance().drain();
+
+    lv_obj_t* const row = lv_obj_find_by_name(root, "option_tile_qgl");
+    REQUIRE(row != nullptr);
+    CHECK(lv_obj_has_flag(row, LV_OBJ_FLAG_HIDDEN) == !local_copies);
+}
+
 // An open view follows the analysis as it lands, adding rows and dropping stale ones.
 TEST_CASE_METHOD(LVGLUITestFixture, "an open detail view rebuilds its rows when an analysis lands",
                  "[print_select][detail_view][pre_print_options][macro_rows]") {

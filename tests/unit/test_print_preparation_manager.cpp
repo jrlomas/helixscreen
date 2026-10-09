@@ -213,6 +213,57 @@ TEST_CASE_METHOD(HelixTestFixture,
     manager.set_dependencies(nullptr, nullptr);
 }
 
+TEST_CASE_METHOD(HelixTestFixture,
+                 "PrintPreparationManager: rewrite-gated macro rows do not show the options card "
+                 "on a transport without local copies",
+                 "[print_preparation][safety]") {
+    lv_init_safe();
+    MockPrinter mock_printer;
+    PrinterState& state = mock_printer.state;
+    PrintPreparationManager manager;
+    manager.set_dependencies(&mock_printer.api, &state);
+    state.set_helix_plugin_installed(true);
+    helix::ui::UpdateQueue::instance().drain();
+
+    // A generic profile whose PRINT_START offers one skip, a MacroParam with no
+    // pre-start block: disabling it rewrites the job.
+    PrintStartAnalysis analysis;
+    analysis.found = true;
+    analysis.macro_name = "PRINT_START";
+    PrintStartOperation op;
+    op.name = "BED_MESH_CALIBRATE";
+    op.category = PrintStartOpCategory::BED_MESH;
+    op.has_skip_param = true;
+    op.skip_param_name = "SKIP_BED_MESH";
+    op.param_semantic = ParameterSemantic::OPT_OUT;
+    analysis.operations.push_back(op);
+
+    auto card = [&state]() {
+        // The plugin lands through the queue and its observer queues the count.
+        for (int i = 0; i < 4; ++i) {
+            helix::ui::UpdateQueue::instance().drain();
+        }
+        return lv_subject_get_int(
+            state.composite_visibility_state().get_has_any_preprint_options_subject());
+    };
+
+    manager.set_macro_analysis(analysis);
+    REQUIRE(card() == 1);
+
+    // The row hides on this transport, so the card has nothing to show.
+    mock_printer.api.transfers_mock().mock_no_local_copies();
+    manager.set_dependencies(&mock_printer.api, &state);
+    CHECK(card() == 0);
+
+    // The plugin changing republishes the count too.
+    mock_printer.api.transfers_mock().mock_no_local_copies(false);
+    state.set_helix_plugin_installed(false);
+    helix::ui::UpdateQueue::instance().drain();
+    state.set_helix_plugin_installed(true);
+    CHECK(card() == 1);
+    manager.set_dependencies(nullptr, nullptr);
+}
+
 TEST_CASE("PrintPreparationManager: get_temp_directory", "[print_preparation][safety]") {
     PrintPreparationManager manager;
 

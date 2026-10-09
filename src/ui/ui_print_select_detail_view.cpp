@@ -1796,7 +1796,10 @@ helix::printer::RemapBlock PrintSelectDetailView::current_remap_block() const {
 }
 
 helix::GcodeRewriteBlock PrintSelectDetailView::rewrite_block() const {
-    return PrintPreparationManager::gcode_rewrite_block_for(&get_printer_state(), api_);
+    // Before set_analysis_dependencies() the view reads the app's printer, as
+    // the rest of the card's remap answer does.
+    return PrintPreparationManager::gcode_rewrite_block_for(
+        printer_state_ ? printer_state_ : &get_printer_state(), api_);
 }
 
 void PrintSelectDetailView::publish_rewrite_availability() {
@@ -2664,8 +2667,8 @@ static void update_prep_time_label() {
 //
 // Per-row visibility: the renderer's `VisibilitySubjectLookup` callback is
 // invoked for each option; returning nullptr leaves the row unconditionally
-// visible. Today only the plugin-gated predicate returns a non-null subject
-// (the helix_plugin_installed tri-state); macro-gated options are filtered
+// visible. Only the rewrite-gated predicate returns a non-null subject
+// (gcode_rewrite_available_, a tri-state); macro-gated options are filtered
 // out of the set BEFORE populate() is called (see
 // filter_macro_gated_options), so the lookup never sees them.
 

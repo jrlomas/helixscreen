@@ -187,6 +187,12 @@ void PrintPreparationManager::set_dependencies(IMoonrakerAPI* api, PrinterState*
             [](PrintPreparationManager* self, int) { self->reset_pending_skips(); },
             printer_state_->get_subjects_lifetime());
         printer_state_->set_skip_pending_handler([this]() { reset_pending_skips(); });
+        // Whether rewrite-gated macro rows render turns on the plugin and the
+        // transport. Observing fires once now, which covers a new transport.
+        plugin_observer_ = helix::ui::observe<int>(
+            printer_state_->plugin_status_state().get_helix_plugin_installed_subject(), this,
+            [](PrintPreparationManager* self, int) { self->publish_macro_option_count(); },
+            printer_state_->get_subjects_lifetime());
     }
 }
 
@@ -535,9 +541,19 @@ void PrintPreparationManager::publish_macro_option_count() {
     if (!printer_state_) {
         return;
     }
-    const size_t displayed = displayed_options().options.size();
-    const size_t declared = get_cached_options().options.size();
-    printer_state_->set_macro_option_count(displayed - declared);
+    const PrePrintOptionSet displayed = displayed_options();
+    const PrePrintOptionSet& declared = get_cached_options();
+    size_t macro_rows = displayed.options.size() - declared.options.size();
+    // A row the detail view hides for want of a rewrite never renders, so it
+    // cannot be what makes the options card worth showing.
+    if (helix::gcode_rewrite_available(gcode_rewrite_block()) == 0) {
+        for (const auto& opt : displayed.options) {
+            if (!declared.find(opt.id) && disabling_option_requires_plugin(opt)) {
+                --macro_rows;
+            }
+        }
+    }
+    printer_state_->set_macro_option_count(macro_rows);
 }
 
 void PrintPreparationManager::set_cached_scan_result(const gcode::ScanResult& scan,

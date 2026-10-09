@@ -511,7 +511,9 @@ class PrintPreparationManager {
     [[nodiscard]] bool is_print_in_progress() const;
 
   private:
-    /// Tell PrinterState how many rows the macro analysis adds to displayed_options().
+    /// Tell PrinterState how many of the rows the macro analysis adds to
+    /// displayed_options() will render: rewrite-gated rows hide while a rewrite
+    /// cannot run.
     void publish_macro_option_count();
 
     friend class ::PrintPreparationManagerTestAccess;
@@ -595,6 +597,7 @@ class PrintPreparationManager {
     /// a frame landing after the release or a reconnect still clears it and
     /// the next print, started from anywhere, runs every step.
     ObserverGuard job_holds_observer_;
+    ObserverGuard plugin_observer_;
     bool skip_reset_sent_ = false; ///< One reset per pending skip, until it reads clear
     void reset_pending_skips();
 
