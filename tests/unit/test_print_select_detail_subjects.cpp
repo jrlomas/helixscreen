@@ -1970,8 +1970,8 @@ TEST_CASE_METHOD(LVGLUITestFixture, "A scan answering after cleanup never reache
     CHECK(d.view.exclude_objects().get_defined_objects().size() == 3);
 }
 
-// Only the explicit teardown nulls the viewer pointer, so a tree deleted any
-// other way must not leave cleanup() pausing and disarming a freed viewer.
+// A tree deleted by anything but destroy_overlay_ui() must not leave queued
+// observers or cleanup() reaching a freed viewer.
 TEST_CASE_METHOD(LVGLUITestFixture, "cleanup after the tree is deleted forgets the dead viewer",
                  "[print_select][detail_view]") {
     CacheDirGuard guard;
@@ -1992,8 +1992,8 @@ TEST_CASE_METHOD(LVGLUITestFixture, "cleanup after the tree is deleted forgets t
     REQUIRE(PrintSelectDetailViewTestAccess::gcode_viewer(view) != nullptr);
 
     lv_obj_delete(root);
+    CHECK(PrintSelectDetailViewTestAccess::gcode_viewer(view) == nullptr);
     helix::ui::UpdateQueue::instance().drain();
 
     view.cleanup();
-    CHECK(PrintSelectDetailViewTestAccess::gcode_viewer(view) == nullptr);
 }

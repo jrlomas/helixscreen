@@ -673,6 +673,35 @@ class PrintSelectDetailView : public OverlayBase {
   private:
     friend class ::PrintSelectDetailViewTestAccess;
 
+    /**
+     * @brief LV_EVENT_DELETE hook on the detail root: the only notice this view
+     *        gets when the tree is deleted by anything other than
+     *        destroy_overlay_ui()
+     *
+     * Queued observers, timers and load callbacks would otherwise reach the
+     * freed children through the cached pointers. Drops them via
+     * forget_cached_widgets() and does nothing else.
+     */
+    static void on_root_deleted(lv_event_t* e);
+
+    /**
+     * @brief Drop every cached pointer to a child of the detail tree
+     *
+     * Idempotent, and touches no LVGL object, so it is safe from inside LVGL's
+     * delete event. Called by on_root_deleted() and on_ui_destroyed(). Leaves
+     * overlay_root_ to OverlayBase, whose next show() notices the deleted root
+     * and runs the full on_ui_destroyed().
+     */
+    void forget_cached_widgets();
+
+    /// Take the delete hook off delete_hook_root_, if that widget is still alive.
+    void uninstall_root_delete_hook();
+
+    /// The root on_root_deleted() is installed on. Cleared only by the hook firing
+    /// or by uninstall_root_delete_hook(), so a replaced root's late delete event
+    /// is told apart from the live tree's.
+    lv_obj_t* delete_hook_root_ = nullptr;
+
     // === Dependencies ===
     IMoonrakerAPI* api_ = nullptr;
     PrinterState* printer_state_ = nullptr;

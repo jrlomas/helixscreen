@@ -101,6 +101,9 @@ PrintSelectDetailView::~PrintSelectDetailView() {
 
     spdlog::trace("[DetailView] Destroyed");
 
+    // The tree can outlive this view; its delete event must not reach a freed `this`.
+    uninstall_root_delete_hook();
+
     // Cancel the pre-flight readiness safety timer if still armed (LVGL is known
     // initialized here — checked above).
     if (preflight_ready_timeout_timer_) {
@@ -290,6 +293,13 @@ lv_obj_t* PrintSelectDetailView::create(lv_obj_t* parent_screen) {
         NOTIFY_ERROR(lv_tr("Failed to load file details"));
         return nullptr;
     }
+
+    // A rebuilt view can reach here with the hook still on its previous root,
+    // whose deletion is deferred; take it off before tracking the new one.
+    uninstall_root_delete_hook();
+    // DECLARATIVE_OK: LV_EVENT_DELETE cleanup has no declarative equivalent.
+    lv_obj_add_event_cb(overlay_root_, on_root_deleted, LV_EVENT_DELETE, this);
+    delete_hook_root_ = overlay_root_;
 
     // Set responsive padding for content area
     lv_obj_t* content_container = find_required(overlay_root_, "content_container", get_name());
@@ -975,12 +985,6 @@ void PrintSelectDetailView::disarm_viewer_callbacks() {
 void PrintSelectDetailView::cleanup() {
     spdlog::debug("[DetailView] cleanup()");
 
-    // Only on_ui_destroyed() nulls gcode_viewer_; a tree deleted any other way
-    // leaves it pointing at a freed widget.
-    if (gcode_viewer_ && !(lv_is_initialized() && lv_obj_is_valid(gcode_viewer_))) {
-        gcode_viewer_ = nullptr;
-    }
-
     // Pause viewer before subject cleanup to avoid rendering with freed subjects.
     if (gcode_viewer_) {
         ui_gcode_viewer_set_paused(gcode_viewer_, true);
@@ -1028,8 +1032,57 @@ void PrintSelectDetailView::cleanup() {
 // Destroy-on-close support
 // ============================================================================
 
+void PrintSelectDetailView::on_root_deleted(lv_event_t* e) {
+    auto* self = static_cast<PrintSelectDetailView*>(lv_event_get_user_data(e));
+    if (!self) {
+        return;
+    }
+    // A replaced root is deleted after create() has pointed the view at its
+    // successor; clearing the pointers then would blank a live tree.
+    if (lv_event_get_current_target(e) != self->delete_hook_root_) {
+        return;
+    }
+    self->delete_hook_root_ = nullptr;
+    self->forget_cached_widgets();
+}
+
+void PrintSelectDetailView::forget_cached_widgets() {
+    print_button_ = nullptr;
+    gcode_viewer_ = nullptr;
+
+    // Pre-print option checkboxes (kept as inert fields; see create()).
+    bed_mesh_checkbox_ = nullptr;
+    qgl_checkbox_ = nullptr;
+    z_tilt_checkbox_ = nullptr;
+    nozzle_clean_checkbox_ = nullptr;
+    purge_line_checkbox_ = nullptr;
+    timelapse_checkbox_ = nullptr;
+
+    pre_print_options_container_ = nullptr;
+    // The scroll area, the preview card and the content container (whose
+    // LAYOUT_CHANGED feeds fit_portrait_preview) are children of overlay_root_;
+    // their event callbacks die with them.
+    options_scroll_ = nullptr;
+    detail_card_ = nullptr;
+
+    filament_mapping_card_.on_ui_destroyed();
+
+    history_status_row_ = nullptr;
+    history_status_icon_ = nullptr;
+    history_status_label_ = nullptr;
+}
+
+void PrintSelectDetailView::uninstall_root_delete_hook() {
+    helix::ui::remove_event_cb_if_alive(delete_hook_root_, on_root_deleted, this);
+    delete_hook_root_ = nullptr;
+}
+
 void PrintSelectDetailView::on_ui_destroyed() {
     spdlog::debug("[DetailView] on_ui_destroyed() - nulling widget pointers");
+
+    // The base class only condemns the tree; its delete event comes later and
+    // must not reach a view that may be gone by then.
+    uninstall_root_delete_hook();
 
     // Its widgets live in the tree being torn down.
     exclude_mode_.hide();
@@ -1071,33 +1124,16 @@ void PrintSelectDetailView::on_ui_destroyed() {
         reclaim_download(canonical_gcode_path());
     }
 
-    // Null all child widget pointers (widget tree already deleted by base class)
     // Note: parent_screen_ is NOT nulled — it's the parent screen (not a child
     // widget) and is needed for lazy re-creation in show().
     confirmation_dialog_widget_ = nullptr;
-    print_button_ = nullptr;
-    gcode_viewer_ = nullptr;
-
-    // Pre-print option checkboxes (kept as inert fields; see create()).
-    bed_mesh_checkbox_ = nullptr;
-    qgl_checkbox_ = nullptr;
-    z_tilt_checkbox_ = nullptr;
-    nozzle_clean_checkbox_ = nullptr;
-    purge_line_checkbox_ = nullptr;
-    timelapse_checkbox_ = nullptr;
+    forget_cached_widgets();
 
     // The dynamic option rows were children of overlay_root_, which has been
     // destroyed by the base class. Drop the renderer's row state and force a
     // rebuild on next show(). Subjects inside the renderer are heap-owned —
     // their observers were attached to the now-deleted row widgets, so
     // dropping the subjects here is safe.
-    pre_print_options_container_ = nullptr;
-    // The scroll area, the preview card and the content container (whose
-    // LAYOUT_CHANGED feeds fit_portrait_preview) were children of
-    // overlay_root_, already destroyed by the base class; their event
-    // callbacks died with them.
-    options_scroll_ = nullptr;
-    detail_card_ = nullptr;
     // The invalidate above drops a queued fit without running it; the flag
     // must not survive into the next create() cycle.
     fit_pending_ = false;
@@ -1109,14 +1145,6 @@ void PrintSelectDetailView::on_ui_destroyed() {
     if (prep_manager_) {
         prep_manager_->set_option_state_provider(nullptr);
     }
-
-    // Filament mapping card
-    filament_mapping_card_.on_ui_destroyed();
-
-    // History status display
-    history_status_row_ = nullptr;
-    history_status_icon_ = nullptr;
-    history_status_label_ = nullptr;
 
     // Note: prep_manager_ is NOT reset — it holds no widget references and
     // retains its callbacks (scan_complete, macro_analysis) set by PrintSelectPanel.
@@ -2562,6 +2590,10 @@ void PrintSelectDetailView::load_gcode_for_preview() {
 }
 
 void PrintSelectDetailView::begin_viewer_load(const std::string& path) {
+    // Reached from a download callback, after which the tree may have died.
+    if (!gcode_viewer_) {
+        return;
+    }
     viewer_file_ = current_filename_;
     // Set up the (single) load callback, then load the file. The body was
     // identical in the former cached-file and post-download paths.
