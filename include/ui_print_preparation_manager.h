@@ -475,6 +475,8 @@ class PrintPreparationManager {
     /// Whether the transport can write the local copy a rewrite streams through.
     [[nodiscard]] bool transport_keeps_local_copies() const;
     [[nodiscard]] static bool keeps_local_copies(IMoonrakerAPI* api);
+    [[nodiscard]] static GcodeRewriteBlock rewrite_block_with(PrinterState* printer_state,
+                                                              bool local_copies);
 
     /**
      * @brief Get the pre-print time estimate subject (seconds)
@@ -598,6 +600,8 @@ class PrintPreparationManager {
     /// the next print, started from anywhere, runs every step.
     ObserverGuard job_holds_observer_;
     ObserverGuard plugin_observer_;
+    /// keeps_local_copies(api_), answered by set_dependencies().
+    bool keeps_local_copies_ = true;
     bool skip_reset_sent_ = false; ///< One reset per pending skip, until it reads clear
     void reset_pending_skips();
 

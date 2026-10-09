@@ -172,6 +172,12 @@ PrePrintOptionState PrintPreparationManager::get_option_state(const std::string&
 void PrintPreparationManager::set_dependencies(IMoonrakerAPI* api, PrinterState* printer_state) {
     api_ = api;
     printer_state_ = printer_state;
+    // Answered now, while the API is known alive: a queued observer handler can
+    // run after its owner has freed it.
+    keeps_local_copies_ = keeps_local_copies(api);
+    if (!printer_state_) {
+        plugin_observer_.reset(); // nothing left to publish to
+    }
 
     if (printer_state_) {
         connection_observer_ = helix::ui::observe<int>(
@@ -756,11 +762,16 @@ bool PrintPreparationManager::can_modify_gcode() const {
 }
 
 GcodeRewriteBlock PrintPreparationManager::gcode_rewrite_block() const {
-    return gcode_rewrite_block_for(printer_state_, api_);
+    return rewrite_block_with(printer_state_, keeps_local_copies_);
 }
 
 GcodeRewriteBlock PrintPreparationManager::gcode_rewrite_block_for(PrinterState* printer_state,
                                                                    IMoonrakerAPI* api) {
+    return rewrite_block_with(printer_state, keeps_local_copies(api));
+}
+
+GcodeRewriteBlock PrintPreparationManager::rewrite_block_with(PrinterState* printer_state,
+                                                              bool local_copies) {
     // Pre-print modifications rewrite the job file, and the plugin is what puts
     // the original filename back in Moonraker's history afterwards. Without it
     // finished jobs are listed as ".helix_temp/modified_1766807545p_name.gcode",
@@ -768,7 +779,7 @@ GcodeRewriteBlock PrintPreparationManager::gcode_rewrite_block_for(PrinterState*
     // the plugin absent.
     const int plugin =
         printer_state ? printer_state->plugin_status_state().helix_plugin_state() : 0;
-    return helix::gcode_rewrite_block(plugin, keeps_local_copies(api));
+    return helix::gcode_rewrite_block(plugin, local_copies);
 }
 
 bool PrintPreparationManager::keeps_local_copies(IMoonrakerAPI* api) {
@@ -777,7 +788,7 @@ bool PrintPreparationManager::keeps_local_copies(IMoonrakerAPI* api) {
 }
 
 bool PrintPreparationManager::transport_keeps_local_copies() const {
-    return keeps_local_copies(api_);
+    return keeps_local_copies_;
 }
 
 // ============================================================================
