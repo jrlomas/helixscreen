@@ -7,6 +7,7 @@
 #include "../test_helpers/panel_widget_manager_test_access.h"
 #include "../test_helpers/process_async_timers.h"
 #include "../ui_test_utils.h"
+#include "ams_state.h"
 #include "config.h"
 #include "grid_layout.h"
 #include "helix-xml/src/xml/lv_xml.h"
@@ -18,6 +19,8 @@
 #include "panel_widget_manager.h"
 #include "panel_widget_registry.h"
 #include "printer_state.h"
+
+extern "C" void lv_xml_component_init(void);
 
 #include "../catch_amalgamated.hpp"
 
@@ -673,6 +676,59 @@ TEST_CASE_METHOD(HelixTestFixture,
 
     // Clean up so the cached "home" config doesn't leak the temp printers into
     // later tests sharing the process-wide cache.
+    mgr.clear_all_panel_configs();
+}
+
+// A default layout built before any lane was known holds the Filament Sensor
+// widget. The gate observer on ams_slot_count is where the first lanes arrive,
+// so it must swap the Multi-Filament widget in before the panel rebuilds.
+TEST_CASE_METHOD(HelixTestFixture,
+                 "PanelWidgetManager: the first AMS lanes swap the Multi-Filament widget in",
+                 "[panel_widget][manager][ams]") {
+    helix::init_widget_registrations();
+    auto* cfg = Config::get_instance();
+    auto& mgr = PanelWidgetManager::instance();
+
+    if (!lv_xml_component_get_scope("globals"))
+        lv_xml_component_init();
+    helix::AmsState::instance().init_subjects(true);
+    lv_subject_t* lanes = lv_xml_get_subject(nullptr, "ams_slot_count");
+    REQUIRE(lanes != nullptr);
+    lv_subject_set_int(lanes, 0);
+
+    nlohmann::json widgets =
+        nlohmann::json::array({{{"id", "filament"}, {"enabled", true}, {"col", 12}, {"row", 0}},
+                               {{"id", "ams"}, {"enabled", false}, {"col", -1}, {"row", -1}}});
+    nlohmann::json root;
+    root["pages"] = nlohmann::json::array({{{"id", "main"}, {"widgets", std::move(widgets)}}});
+    root["main_page_index"] = 0;
+    root["next_page_id"] = 1;
+    root["ams_unseen"] = true;
+
+    cfg->add_printer("printer-ams", nlohmann::json::object());
+    cfg->set<nlohmann::json>("/printers/printer-ams/panel_widgets/home", std::move(root));
+    REQUIRE(cfg->set_active_printer("printer-ams"));
+    mgr.clear_all_panel_configs();
+
+    int rebuilds = 0;
+    mgr.setup_gate_observers("home", [&rebuilds]() { ++rebuilds; });
+    auto& q = helix::ui::UpdateQueue::instance();
+    q.drain();
+    process_async_timers();
+    REQUIRE(mgr.get_widget_config("home").is_enabled("filament"));
+
+    lv_subject_set_int(lanes, 5);
+    q.drain();
+    process_async_timers();
+
+    auto& wc = mgr.get_widget_config("home");
+    REQUIRE(wc.is_enabled("ams"));
+    REQUIRE_FALSE(wc.is_enabled("filament"));
+    REQUIRE(rebuilds >= 1);
+
+    mgr.clear_gate_observers("home");
+    lv_subject_set_int(lanes, 0);
+    q.drain();
     mgr.clear_all_panel_configs();
 }
 

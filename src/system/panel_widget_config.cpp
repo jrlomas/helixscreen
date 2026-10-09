@@ -205,6 +205,7 @@ void PanelWidgetConfig::load() {
     main_page_index_ = 0;
     next_page_id_ = 1;
     pending_anchors_ = false;
+    ams_unseen_ = false;
     grid_signature_.clear();
     parked_grids_ = json::object();
     legacy_units_ = false;
@@ -279,6 +280,7 @@ void PanelWidgetConfig::load() {
         // key being absent, which is every layout that predates this — reads as
         // "already placed" and is left alone.
         pending_anchors_ = helix::json_util::safe_string(saved, "anchors") == "pending";
+        ams_unseen_ = helix::json_util::safe_bool(saved, "ams_unseen", false);
 
         // Which grid `pages` counts against, and the arrangements parked for
         // other grids. Absent on every layout written before per-grid storage,
@@ -604,6 +606,9 @@ void PanelWidgetConfig::write_to(const std::string& panel_path) {
     // dropping the tag here would make an unanchored default look arranged.
     if (pending_anchors_) {
         root["anchors"] = "pending";
+    }
+    if (ams_unseen_) {
+        root["ams_unseen"] = true;
     }
     // Survives a save that happens before the port has run — the placement
     // engine writes back auto-placed positions on every populate, so dropping
@@ -1007,6 +1012,11 @@ void collect_disabled(const nlohmann::json& table, UiBreakpoint breakpoint,
 
 } // namespace
 
+int PanelWidgetConfig::current_ams_slot_count() {
+    lv_subject_t* subj = lv_xml_get_subject(nullptr, "ams_slot_count");
+    return subj ? lv_subject_get_int(subj) : 0;
+}
+
 std::vector<PanelWidgetEntry> PanelWidgetConfig::build_default_grid(int grid_cols, int grid_rows) {
     const auto& defs = get_all_widget_defs();
 
@@ -1267,18 +1277,10 @@ std::vector<PanelWidgetEntry> PanelWidgetConfig::build_default_grid(int grid_col
         }
     }
 
-    bool ams_present = false;
-    int ams_slot_count = 0;
-    {
-        lv_subject_t* ams_subj = lv_xml_get_subject(nullptr, "ams_slot_count");
-        if (ams_subj) {
-            ams_slot_count = lv_subject_get_int(ams_subj);
-            if (ams_slot_count > 0)
-                ams_present = true;
-        }
-        spdlog::debug("[PanelWidgetConfig] build_default_grid: ams_slot_count={} ({})",
-                      ams_slot_count, ams_present ? "AMS widget" : "filament widget");
-    }
+    const int ams_slot_count = current_ams_slot_count();
+    const bool ams_present = ams_slot_count > 0;
+    spdlog::debug("[PanelWidgetConfig] build_default_grid: ams_slot_count={} ({})", ams_slot_count,
+                  ams_present ? "AMS widget" : "filament widget");
 
     // Filament/AMS swap: the AMS widget subsumes the role of the filament sensor
     // widget on printers with multi-material hardware, so enable one or the other.
@@ -1496,8 +1498,44 @@ void PanelWidgetConfig::apply_pending_anchors(int grid_cols, int grid_rows) {
                  panel_id_, grid_cols, grid_rows, anchored, pages_[0].widgets.size());
 
     pending_anchors_ = false;
+    // These defaults chose the Filament Sensor widget because no multi-filament
+    // hardware was known yet. Backends that report their lanes after the first
+    // Home build (OpenAMS, any printer that is still discovering) arrive later,
+    // and adopt_ams_after_discovery() swaps the widget in when they do.
+    ams_unseen_ = panel_id_ == "home" && current_ams_slot_count() == 0;
     grid_signature_ = std::to_string(grid_cols) + "x" + std::to_string(grid_rows);
     save();
+}
+
+bool PanelWidgetConfig::adopt_ams_after_discovery() {
+    if (!ams_unseen_ || current_ams_slot_count() <= 0) {
+        return false;
+    }
+    ams_unseen_ = false;
+    for (auto& page : pages_) {
+        for (auto& entry : page.widgets) {
+            if (entry.id == "ams" && !entry.enabled) {
+                entry.enabled = true;
+                entry.col = -1;
+                entry.row = -1;
+            }
+        }
+    }
+    migrate_stuck_ams_filament_swap();
+    // An unplaced Filament Sensor has no cell for the AMS widget to take over;
+    // the multi-filament system replaces it, as build_default_grid() does.
+    for (auto& page : pages_) {
+        for (auto& entry : page.widgets) {
+            if (entry.id == "filament" && entry.enabled && !entry.is_placed()) {
+                entry.disable_and_unplace();
+            }
+        }
+    }
+    spdlog::info("[PanelWidgetConfig] '{}': multi-filament hardware appeared after the default "
+                 "layout was built; showing the AMS widget",
+                 panel_id_);
+    save();
+    return true;
 }
 
 } // namespace helix

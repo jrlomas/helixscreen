@@ -282,6 +282,15 @@ class PanelWidgetConfig {
         return pending_anchors_;
     }
 
+    /// Swap the Filament Sensor widget for the Multi-Filament widget once AMS
+    /// hardware is reported, when the default layout was built before it was.
+    ///
+    /// One-shot: the tag is written only by apply_pending_anchors() on a layout
+    /// that was defaulted with no lanes known, and cleared here on the first
+    /// sighting, so an arrangement the user has since made is never revisited.
+    /// Returns true when the layout changed (the caller rebuilds the panel).
+    bool adopt_ams_after_discovery();
+
     /// Grid signature the saved coordinates are expressed in ("6x14"), or ""
     /// when the layout predates per-grid storage and has not been stamped yet.
     const std::string& grid_signature() const {
@@ -363,6 +372,9 @@ class PanelWidgetConfig {
     void clear_legacy_units();
 
   private:
+    /// Lane count AmsState publishes, 0 when it has not registered yet.
+    static int current_ams_slot_count();
+
     std::string panel_id_;
     Config& config_;
     std::vector<PageConfig> pages_;
@@ -370,6 +382,7 @@ class PanelWidgetConfig {
     int next_page_id_ = 1;
     bool loaded_ = false;
     bool pending_anchors_ = false;
+    bool ams_unseen_ = false;
     std::string grid_signature_;
     /// Arrangements for grids that are not active, keyed by signature. Each
     /// value has the same shape as the active layout's persisted form.

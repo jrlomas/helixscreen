@@ -1,12 +1,17 @@
 // Copyright (C) 2025-2026 356C LLC
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "ui_update_queue.h"
+
 #include "../test_helpers/config_dir_guard.h"
 #include "../test_helpers/config_test_access.h"
 #include "../test_helpers/scoped_breakpoint.h"
 #include "../test_helpers/scoped_runtime_config.h"
+#include "ams_state.h"
 #include "config.h"
 #include "data_root_resolver.h"
+#include "helix-xml/src/xml/lv_xml.h"
+#include "helix-xml/src/xml/lv_xml_component.h"
 #include "panel_widget_config.h"
 #include "panel_widget_registry.h"
 #include "theme_manager.h"
@@ -3056,4 +3061,128 @@ TEST_CASE_METHOD(PanelWidgetConfigFixture,
     const auto saved = get_saved_page0_widgets();
     CHECK(std::none_of(saved.begin(), saved.end(),
                        [&](const json& item) { return item["id"] == off_def->id; }));
+}
+
+// ============================================================================
+// adopt_ams_after_discovery — lanes reported after the default layout was built
+// ============================================================================
+
+extern "C" void lv_xml_component_init(void);
+
+namespace {
+
+/// Drives AmsState's own ams_slot_count subject, the one the layout reads.
+class AmsLaneCountGuard {
+  public:
+    AmsLaneCountGuard() {
+        if (!lv_xml_component_get_scope("globals"))
+            lv_xml_component_init();
+        helix::AmsState::instance().init_subjects(true);
+        subject_ = lv_xml_get_subject(nullptr, "ams_slot_count");
+        REQUIRE(subject_ != nullptr);
+        lv_subject_set_int(subject_, 0);
+    }
+    ~AmsLaneCountGuard() {
+        lv_subject_set_int(subject_, 0);
+        helix::ui::UpdateQueue::instance().drain();
+    }
+    void set(int lanes) {
+        lv_subject_set_int(subject_, lanes);
+    }
+    AmsLaneCountGuard(const AmsLaneCountGuard&) = delete;
+    AmsLaneCountGuard& operator=(const AmsLaneCountGuard&) = delete;
+
+  private:
+    lv_subject_t* subject_ = nullptr;
+};
+
+} // namespace
+
+TEST_CASE_METHOD(PanelWidgetConfigFixture,
+                 "PanelWidgetConfig: lanes reported after the default layout swap in the AMS "
+                 "widget",
+                 "[panel_widget][widget_config][ams]") {
+    AmsLaneCountGuard lanes;
+    setup_empty_config();
+
+    PanelWidgetConfig wc("home", config);
+    wc.load();
+    wc.apply_pending_anchors(16, 10);
+
+    const auto* fil = find_entry(wc.entries(), "filament");
+    REQUIRE(fil);
+    REQUIRE(fil->enabled);
+    REQUIRE(fil->is_placed());
+    const int fil_col = fil->col;
+    const int fil_row = fil->row;
+    REQUIRE_FALSE(find_entry(wc.entries(), "ams")->enabled);
+
+    lanes.set(5);
+    REQUIRE(wc.adopt_ams_after_discovery());
+
+    const auto* ams = find_entry(wc.entries(), "ams");
+    fil = find_entry(wc.entries(), "filament");
+    REQUIRE(ams->enabled);
+    REQUIRE(ams->col == fil_col);
+    REQUIRE(ams->row == fil_row);
+    REQUIRE_FALSE(fil->enabled);
+
+    // One-shot: a second sighting changes nothing.
+    REQUIRE_FALSE(wc.adopt_ams_after_discovery());
+}
+
+TEST_CASE_METHOD(PanelWidgetConfigFixture,
+                 "PanelWidgetConfig: the swap waits for lanes and survives a reload",
+                 "[panel_widget][widget_config][ams]") {
+    AmsLaneCountGuard lanes;
+    setup_empty_config();
+    {
+        PanelWidgetConfig wc("home", config);
+        wc.load();
+        wc.apply_pending_anchors(16, 10);
+        REQUIRE_FALSE(wc.adopt_ams_after_discovery()); // still no lanes
+    }
+
+    PanelWidgetConfig wc("home", config);
+    wc.load();
+    lanes.set(5);
+    REQUIRE(wc.adopt_ams_after_discovery());
+    REQUIRE(find_entry(wc.entries(), "ams")->enabled);
+    REQUIRE_FALSE(find_entry(wc.entries(), "filament")->enabled);
+}
+
+TEST_CASE_METHOD(PanelWidgetConfigFixture,
+                 "PanelWidgetConfig: a layout defaulted with lanes known is not swapped again",
+                 "[panel_widget][widget_config][ams]") {
+    AmsLaneCountGuard lanes;
+    lanes.set(4);
+    setup_empty_config();
+
+    PanelWidgetConfig wc("home", config);
+    wc.load();
+    wc.apply_pending_anchors(16, 10);
+
+    REQUIRE(find_entry(wc.entries(), "ams")->enabled);
+    REQUIRE_FALSE(wc.adopt_ams_after_discovery());
+}
+
+TEST_CASE_METHOD(PanelWidgetConfigFixture,
+                 "PanelWidgetConfig: a saved arrangement keeps its Filament Sensor when lanes "
+                 "appear",
+                 "[panel_widget][widget_config][ams]") {
+    AmsLaneCountGuard lanes;
+    json widgets = json::array({
+        {{"id", "ams"}, {"enabled", false}, {"col", -1}, {"row", -1}},
+        {{"id", "filament"}, {"enabled", true}, {"col", 12}, {"row", 0}},
+        {{"id", "printer_image"}, {"enabled", true}, {"col", 0}, {"row", 0}},
+    });
+    setup_with_pages({{"main", widgets}});
+
+    PanelWidgetConfig wc("home", config);
+    wc.load();
+    lanes.set(5);
+
+    REQUIRE_FALSE(wc.adopt_ams_after_discovery());
+    REQUIRE(find_entry(wc.entries(), "filament")->enabled);
+    REQUIRE_FALSE(find_entry(wc.entries(), "ams")->enabled);
 }

@@ -1877,6 +1877,12 @@ void PanelWidgetManager::setup_gate_observers(const std::string& panel_id,
                 spdlog::debug("[PanelWidgetManager] gate '{}' -> {} (rebuild)", name, value);
                 crash_handler::breadcrumb::note("gate", name, value);
 
+                // A default layout built before the lanes were known holds the
+                // Filament Sensor widget; the first lanes reported swap it.
+                if (value > 0 && std::strcmp(name, "ams_slot_count") == 0 && panel_id == "home") {
+                    self->get_widget_config(panel_id).adopt_ams_after_discovery();
+                }
+
                 // Look up the stable per-panel slot. If the panel was torn
                 // down between subscription and firing, skip — the gate
                 // observer may have been pending in the UpdateQueue when
