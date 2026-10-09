@@ -6,6 +6,7 @@
 #include "ui_ams_lane_spool.h"
 #include "ui_fonts.h"
 #include "ui_observer_guard.h"
+#include "ui_toolhead_badge.h"
 #include "ui_update_queue.h"
 #include "ui_utils.h"
 
@@ -447,23 +448,12 @@ static void apply_tool_badge(AmsSlotData* data, int mapped_tool, bool is_overrid
         lv_label_set_text(data->tool_badge, tool_text.c_str());
         lv_obj_remove_flag(data->tool_badge_bg, LV_OBJ_FLAG_HIDDEN);
 
-        // Use warning color for user overrides, muted for firmware defaults
-        if (is_override) {
-            lv_color_t warn_color = theme_manager_get_color("warning");
-            lv_obj_set_style_bg_color(data->tool_badge_bg, warn_color, LV_PART_MAIN);
-        } else {
-            lv_color_t muted_color = theme_manager_get_color("text_muted");
-            lv_obj_set_style_bg_color(data->tool_badge_bg, muted_color, LV_PART_MAIN);
-        }
-
-        // Both fills are accents, so the label starts from the palette text colour and
-        // shifts toward its pole as 4:1 needs
-        if (data->tool_badge) {
-            lv_color_t bg = lv_obj_get_style_bg_color(data->tool_badge_bg, LV_PART_MAIN);
-            lv_color_t text_color =
-                theme_manager_get_contrast_adjusted_text(theme_manager_get_color("text"), bg);
-            lv_obj_set_style_text_color(data->tool_badge, text_color, LV_PART_MAIN);
-        }
+        // Warning for user overrides, muted for firmware defaults; the toolhead
+        // badge takes the same colors.
+        const helix::ui::ToolBadgeColors colors = helix::ui::tool_badge_colors(is_override);
+        lv_obj_set_style_bg_color(data->tool_badge_bg, colors.bg, LV_PART_MAIN);
+        if (data->tool_badge)
+            lv_obj_set_style_text_color(data->tool_badge, colors.text, LV_PART_MAIN);
         spdlog::trace("[AmsSlot] Slot {} tool badge: {} (override={})", data->slot_index, tool_text,
                       is_override);
     } else {

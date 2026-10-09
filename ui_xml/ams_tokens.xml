@@ -74,6 +74,27 @@
     <px name="ams_slot_tool_badge_min_w_medium" value="22"/>
     <px name="ams_slot_tool_badge_min_w_large" value="22"/>
 
+    <!-- Tool badge shape: the spool's tool badge and the toolhead's corner badge
+         (ui_toolhead_badge.cpp) read these same tokens. inset = offset from the
+         corner it sits in; opa = background opacity. -->
+    <px name="ams_slot_tool_badge_radius_micro" value="4"/>
+    <px name="ams_slot_tool_badge_radius_tiny" value="4"/>
+    <px name="ams_slot_tool_badge_radius_small" value="4"/>
+    <px name="ams_slot_tool_badge_radius_medium" value="4"/>
+    <px name="ams_slot_tool_badge_radius_large" value="4"/>
+
+    <px name="ams_slot_tool_badge_inset_micro" value="2"/>
+    <px name="ams_slot_tool_badge_inset_tiny" value="2"/>
+    <px name="ams_slot_tool_badge_inset_small" value="2"/>
+    <px name="ams_slot_tool_badge_inset_medium" value="2"/>
+    <px name="ams_slot_tool_badge_inset_large" value="2"/>
+
+    <px name="ams_slot_tool_badge_opa_micro" value="200"/>
+    <px name="ams_slot_tool_badge_opa_tiny" value="200"/>
+    <px name="ams_slot_tool_badge_opa_small" value="200"/>
+    <px name="ams_slot_tool_badge_opa_medium" value="200"/>
+    <px name="ams_slot_tool_badge_opa_large" value="200"/>
+
     <!-- ===================================================================== -->
     <!-- AMS Overview Card Sizes (consumed by ams_unit_card.xml + ams_overview_panel.xml) -->
     <!-- ===================================================================== -->

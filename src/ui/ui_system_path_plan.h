@@ -16,6 +16,7 @@
 #include "ui_filament_path_plan.h"
 
 #include "ams_types.h"
+#include "settings_manager.h"
 
 namespace helix::ui::syspath {
 
@@ -82,6 +83,8 @@ struct SystemPathData {
     lv_color_t color_bg;
     lv_color_t color_accent;
 
+    ToolheadStyle toolhead_style = ToolheadStyle::DEFAULT; // effective style, read each draw
+
     // Theme-derived sizes
     int32_t tube_gauge = 5;
     int32_t sensor_radius = 5;
@@ -93,13 +96,12 @@ struct SystemPathData {
     const lv_font_t* label_font = nullptr;
 };
 
-// Layout ratios (as fraction of widget height)
-inline constexpr float ENTRY_Y_RATIO = 0.05f;    // Top entry points for unit outputs
-inline constexpr float MERGE_Y_RATIO = 0.25f;    // Where unit lines converge to center
-inline constexpr float HUB_Y_RATIO = 0.40f;      // Hub center
-inline constexpr float HUB_HEIGHT_RATIO = 0.10f; // Hub box height
-inline constexpr float TOOLS_Y_RATIO = 0.62f;    // Tool nozzle row (multi-tool mode)
-inline constexpr float NOZZLE_Y_RATIO = 0.72f;   // Nozzle center (well below hub, above bottom)
+// Vertical layout. The unit stems start at ENTRY_Y_RATIO of the height, and the
+// toolhead glyphs stand on the GLYPH_BOTTOM line; everything between sits a
+// fixed fraction of the way down that run.
+inline constexpr float ENTRY_Y_RATIO = 0.05f;
+inline constexpr float SINGLE_GLYPH_BOTTOM_RATIO = 0.93f; // the one nozzle
+inline constexpr float MULTI_GLYPH_BOTTOM_RATIO = 0.80f;  // the tool row
 
 // Per-draw layout shared by the planner and the canvas.
 struct SysLayout {

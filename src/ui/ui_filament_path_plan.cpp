@@ -163,19 +163,46 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
     return f;
 }
 
-// MIXED layout ratios: more vertical spread than PARALLEL to fit hub + nozzles.
+namespace {
+
+// The Y @p fraction of the way from @p top to @p bottom.
+int32_t row_between(int32_t top, int32_t bottom, float fraction) {
+    return top + (int32_t)((bottom - top) * fraction);
+}
+
+// The toolhead center whose glyph's bottom lands on @p bottom_y.
+int32_t toolhead_standing_on(int32_t bottom_y, int32_t scale) {
+    return bottom_y - toolhead_glyph_bounds(0, 0, scale).bottom;
+}
+
+} // namespace
+
+ParallelRows parallel_rows(const FilamentPathData& data, const BaseGeometry& g) {
+    ParallelRows r;
+    r.tool_scale = LV_MAX(6, data.theme.extruder_scale * 2 / 3);
+    r.entry_y = g.y_off + (int32_t)(g.height * ENTRY_Y_RATIO);
+    r.toolhead_y = toolhead_standing_on(g.y_off + (int32_t)(g.height * PARALLEL_GLYPH_BOTTOM_RATIO),
+                                        r.tool_scale);
+    r.sensor_y = row_between(r.entry_y, r.toolhead_y, PARALLEL_SENSOR_FRACTION);
+    return r;
+}
+
+// MIXED layout: the toolhead glyphs stand on a line near the bottom; the lane
+// sensors and the hub sit fixed fractions of the way down to the toolheads.
 MixedFrame compute_mixed_frame(const FilamentPathData& data, const BaseGeometry& g) {
     MixedFrame f;
-    constexpr float SENSOR_Y = 0.15f;
-    constexpr float HUB_Y = 0.32f;
-    constexpr float HUB_H = 0.08f;
-    constexpr float TOOLHEAD_Y = 0.62f;
+    constexpr float GLYPH_BOTTOM_Y = 0.80f;
+    constexpr float SENSOR_FRACTION = 0.36f;
+    constexpr float HUB_FRACTION = 0.59f;
+    constexpr float HUB_H_FRACTION = 0.11f;
 
     f.entry_y = g.y_off + (int32_t)(g.height * ENTRY_Y_RATIO);
-    f.sensor_y = g.y_off + (int32_t)(g.height * SENSOR_Y);
-    f.hub_h = LV_MAX(16, (int32_t)(g.height * HUB_H));
-    f.toolhead_y = g.y_off + (int32_t)(g.height * TOOLHEAD_Y);
     f.tool_scale = LV_MAX(6, data.theme.extruder_scale * 2 / 3);
+    f.toolhead_y =
+        toolhead_standing_on(g.y_off + (int32_t)(g.height * GLYPH_BOTTOM_Y), f.tool_scale);
+    const int32_t run = f.toolhead_y - f.entry_y;
+    f.sensor_y = row_between(f.entry_y, f.toolhead_y, SENSOR_FRACTION);
+    f.hub_h = LV_MAX(16, (int32_t)(run * HUB_H_FRACTION));
     if (data.hub_on_toolhead) {
         // Combiner on the print head: the box hugs the toolhead over a short
         // stub of shared tube, measured from the nozzle glyph's top so the two
@@ -185,7 +212,7 @@ MixedFrame compute_mixed_frame(const FilamentPathData& data, const BaseGeometry&
         f.hub_bottom = nozzle_top - stub;
         f.hub_cy = f.hub_bottom - f.hub_h / 2;
     } else {
-        f.hub_cy = g.y_off + (int32_t)(g.height * HUB_Y);
+        f.hub_cy = row_between(f.entry_y, f.toolhead_y, HUB_FRACTION);
         f.hub_bottom = f.hub_cy + f.hub_h / 2;
     }
 
@@ -461,11 +488,10 @@ Route& start_lane(PathPlan& out, const Lane& lane, float x, int32_t entry_y, int
 
 void plan_parallel(const FilamentPathData& data, const BaseGeometry& g, PathPlan& out) {
     reset_plan(out);
-    const int32_t entry_y = g.y_off + (int32_t)(g.height * ENTRY_Y_RATIO);
-    const int32_t sensor_y = g.y_off + (int32_t)(g.height * PARALLEL_SENSOR_Y_RATIO);
-    const int32_t toolhead_y = g.y_off + (int32_t)(g.height * PARALLEL_TOOLHEAD_Y_RATIO);
-    const int32_t tool_scale = LV_MAX(6, data.theme.extruder_scale * 2 / 3);
-    const float nozzle_top = (float)(toolhead_y - tool_scale * 2);
+    const ParallelRows rows = parallel_rows(data, g);
+    const int32_t entry_y = rows.entry_y;
+    const int32_t sensor_y = rows.sensor_y;
+    const float nozzle_top = (float)(rows.toolhead_y - rows.tool_scale * 2);
     const PathSegment error = static_cast<PathSegment>(data.error_segment);
     const SlotRenderStates states = compute_slot_render_states(&data);
 

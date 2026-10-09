@@ -326,11 +326,23 @@ void draw_flow_dots_path(lv_layer_t* layer, const pg::FilamentPath& path, lv_col
 
 // The A4T glyph is drawn 6/5 larger than the others at every call site in this
 // widget, so the boost is folded in here.
+namespace {
+
+int32_t drawn_scale(helix::ToolheadStyle style, int32_t scale) {
+    return style == helix::ToolheadStyle::A4T ? scale * 6 / 5 : scale;
+}
+
+} // namespace
+
 void draw_toolhead(lv_layer_t* layer, int32_t cx, int32_t cy, std::optional<lv_color_t> filament,
                    int32_t scale, lv_opa_t opa) {
-    bool a4t = helix::SettingsManager::instance().get_effective_toolhead_style() ==
-               helix::ToolheadStyle::A4T;
-    draw_nozzle_for_style(layer, cx, cy, filament, a4t ? scale * 6 / 5 : scale, opa);
+    const auto style = helix::SettingsManager::instance().get_effective_toolhead_style();
+    draw_nozzle_for_style(layer, cx, cy, filament, drawn_scale(style, scale), opa);
+}
+
+helix::ui::GlyphBounds toolhead_glyph_bounds(int32_t cx, int32_t cy, int32_t scale) {
+    const auto style = helix::SettingsManager::instance().get_effective_toolhead_style();
+    return helix::ui::toolhead_bounds(style, cx, cy, drawn_scale(style, scale));
 }
 
 // Nozzle tip Y for the configured style — anchors the heat glow halo.
@@ -347,82 +359,14 @@ int32_t toolhead_tip_y(int32_t nozzle_y, int32_t extruder_scale) {
     }
 }
 
-// Topmost drawn Y of the toolhead glyph for the configured style. Each case
-// restates its renderer's top edge (src/rendering/nozzle_renderer_*.cpp) at the
-// same effective scale draw_toolhead() passes it: the polygon styles map their
-// highest design coordinate, the isometric bodies add their cap and iso-top
-// offset above the body, and AntHead is the scaled image's top (the default
-// glyph's on ESP32, which draws that glyph in its place).
 int32_t toolhead_top_y(int32_t nozzle_y, int32_t extruder_scale) {
-    // Default body plus its raised cap and bevel (each a tenth of the body).
-    auto default_top = [&]() {
-        const int32_t body_height = extruder_scale * 4;
-        const int32_t cap_height = body_height / 10;
-        const int32_t body_depth = (extruder_scale * 6) / 10;
-        return nozzle_y - body_height / 2 - 2 * cap_height - body_depth / 2;
-    };
-    switch (helix::SettingsManager::instance().get_effective_toolhead_style()) {
-    case helix::ToolheadStyle::A4T: {
-        const float scale = (float)(extruder_scale * 6 / 5 * 10) / 2000.0f;
-        return nozzle_y + (int32_t)((0 - 630) * scale);
-    }
-    case helix::ToolheadStyle::STEALTHBURNER: {
-        const float scale = (float)(extruder_scale * 10) / 1000.0f;
-        return nozzle_y + (int32_t)((78 - 500) * scale);
-    }
-    case helix::ToolheadStyle::JABBERWOCKY: {
-        const float scale = (float)(extruder_scale * 10) / 2400.0f;
-        return nozzle_y + (int32_t)((2 - 687) * scale);
-    }
-    case helix::ToolheadStyle::ANTHEAD:
-#if defined(HELIX_PLATFORM_ESP32)
-        return default_top(); // the default glyph stands in for the unshipped image
-#else
-        return nozzle_y - (81 * ((extruder_scale * 65) / 10)) / 163;
-#endif
-    case helix::ToolheadStyle::CREALITY_K1:
-        return nozzle_y - (extruder_scale * 48) / 10 / 2 - (extruder_scale * 6) / 10 / 2;
-    case helix::ToolheadStyle::CREALITY_K2:
-        return nozzle_y - (extruder_scale * 48) / 10 / 2 - (extruder_scale * 5) / 10 / 2;
-    default:
-        return default_top();
-    }
+    return toolhead_glyph_bounds(0, nozzle_y, extruder_scale).top;
 }
 
-// Tool badge (T0, T1, …) below a nozzle — matches system_path_canvas style.
-void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t badge_top, const char* label,
-                     lv_color_t text_color, lv_opa_t opa) {
-    const ThemeCache& theme = ctx.data->theme;
-    if (!theme.label_font || !label || !label[0])
-        return;
-
-    int32_t font_h = lv_font_get_line_height(theme.label_font);
-    int32_t label_len = (int32_t)strlen(label);
-    int32_t badge_w = LV_MAX(24, label_len * (font_h * 3 / 5) + 6);
-    int32_t badge_h = font_h + 4;
-    int32_t badge_left = cx - badge_w / 2;
-
-    // Badge background (rounded rect)
-    lv_area_t badge_area = {badge_left, badge_top, badge_left + badge_w, badge_top + badge_h};
-    lv_draw_fill_dsc_t fill_dsc;
-    lv_draw_fill_dsc_init(&fill_dsc);
-    fill_dsc.color = theme.color_idle;
-    fill_dsc.opa = (lv_opa_t)LV_MIN(200, opa);
-    fill_dsc.radius = 4;
-    lv_draw_fill(ctx.layer, &fill_dsc, &badge_area);
-
-    // Badge text
-    lv_draw_label_dsc_t label_dsc;
-    lv_draw_label_dsc_init(&label_dsc);
-    label_dsc.color = text_color;
-    label_dsc.opa = opa;
-    label_dsc.font = theme.label_font;
-    label_dsc.align = LV_TEXT_ALIGN_CENTER;
-    label_dsc.text = label;
-    label_dsc.text_local = 1;
-
-    lv_area_t text_area = {badge_left, badge_top + 2, badge_left + badge_w, badge_top + 2 + font_h};
-    lv_draw_label(ctx.layer, &label_dsc, &text_area);
+void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t scale, const char* label,
+                     lv_opa_t opa) {
+    helix::ui::draw_toolhead_badge(ctx.layer, helix::ui::tool_badge_look(),
+                                   toolhead_glyph_bounds(cx, cy, scale), label, opa);
 }
 
 } // namespace helix::ui::fpath

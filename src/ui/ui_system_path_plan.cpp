@@ -5,6 +5,8 @@
 
 #include "ui_system_path_plan.h"
 
+#include "ui_toolhead_badge.h"
+
 #include <algorithm>
 
 namespace helix::ui::syspath {
@@ -473,13 +475,23 @@ SysLayout compute_sys_layout(const SystemPathData& data, const lv_area_t& obj_co
     L.x_off = obj_coords.x1;
     L.y_off = obj_coords.y1;
     L.multi_tool = data.total_tools > 1;
-
     L.entry_y = L.y_off + (int32_t)(L.height * ENTRY_Y_RATIO);
-    L.merge_y = L.y_off + (int32_t)(L.height * MERGE_Y_RATIO);
-    L.hub_y = L.y_off + (int32_t)(L.height * HUB_Y_RATIO);
-    L.hub_h = (int32_t)(L.height * HUB_HEIGHT_RATIO);
-    L.tools_y = L.y_off + (int32_t)(L.height * TOOLS_Y_RATIO);
-    L.nozzle_y = L.y_off + (int32_t)(L.height * NOZZLE_Y_RATIO);
+
+    // The toolheads stand on their glyph-bottom line; the stems converge, and
+    // the combiner sits, fixed fractions of the run down to them.
+    const float bottom_ratio = L.multi_tool ? MULTI_GLYPH_BOTTOM_RATIO : SINGLE_GLYPH_BOTTOM_RATIO;
+    const int32_t scale = L.multi_tool ? small_tool_scale(data) : data.extruder_scale;
+    const int32_t toolhead_y = L.y_off + (int32_t)(L.height * bottom_ratio) -
+                               helix::ui::toolhead_bounds(data.toolhead_style, 0, 0, scale).bottom;
+    const int32_t run = toolhead_y - L.entry_y;
+    const float merge = L.multi_tool ? 0.35f : 0.30f;
+    const float hub = L.multi_tool ? 0.61f : 0.52f;
+    const float hub_h = L.multi_tool ? 0.175f : 0.15f;
+    L.merge_y = L.entry_y + (int32_t)(run * merge);
+    L.hub_y = L.entry_y + (int32_t)(run * hub);
+    L.hub_h = (int32_t)(run * hub_h);
+    L.tools_y = toolhead_y;
+    L.nozzle_y = toolhead_y;
     L.center_x = L.x_off + L.width / 2;
     // The hub and toolhead shift ~10% left to make room for the bypass path.
     if (data.has_bypass && !L.multi_tool)
@@ -511,10 +523,10 @@ BypassGeometry compute_bypass_geometry(const SystemPathData& data, const lv_area
     // bypass merge line (single-tool, has_bypass).
     int32_t center_x = x_off + width / 2 - width / 10;
 
-    int32_t hub_y = y_off + (int32_t)(height * HUB_Y_RATIO);
-    int32_t hub_h = (int32_t)(height * HUB_HEIGHT_RATIO);
-    int32_t nozzle_y = y_off + (int32_t)(height * NOZZLE_Y_RATIO);
-    int32_t merge_y = (hub_y + hub_h / 2) + (nozzle_y - (hub_y + hub_h / 2)) / 3;
+    const SysLayout L = compute_sys_layout(data, obj_coords);
+    const int32_t hub_bottom = L.hub_y + L.hub_h / 2;
+    const int32_t nozzle_y = L.nozzle_y;
+    int32_t merge_y = hub_bottom + (nozzle_y - hub_bottom) / 3;
 
     // Comfortable gap between the rightmost toolhead and the bypass spool.
     int32_t comfort = LV_MAX(data.space_md, 8);

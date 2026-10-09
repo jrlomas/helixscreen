@@ -202,9 +202,10 @@ static void filament_path_click_cb(lv_event_t* e) {
     // For PARALLEL topology (tool changers), accept clicks on toolheads AND the
     // filament line/spool area (top half of canvas, above the sensor dots)
     if (data->topology == static_cast<int>(helix::PathTopology::PARALLEL) && data->slot_callback) {
-        int32_t toolhead_y = y_off + (int32_t)(height * PARALLEL_TOOLHEAD_Y_RATIO);
-        int32_t sensor_y = y_off + (int32_t)(height * PARALLEL_SENSOR_Y_RATIO);
-        int32_t tool_scale = LV_MAX(6, data->theme.extruder_scale * 2 / 3);
+        const ParallelRows rows = parallel_rows(*data, compute_base_geometry(obj, data));
+        int32_t toolhead_y = rows.toolhead_y;
+        int32_t sensor_y = rows.sensor_y;
+        int32_t tool_scale = rows.tool_scale;
 
         // Toolhead click area (bottom half)
         int32_t hit_radius_y = tool_scale * 4;

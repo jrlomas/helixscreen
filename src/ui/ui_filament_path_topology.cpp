@@ -132,12 +132,12 @@ void warn_if_dropped(const PathPlan& plan) {
 
 // One tool's toolhead glyph and badge, drawn over its planned tube.
 void draw_parallel_tool(const RenderCtx& ctx, const SlotRenderStates& states, int i,
-                        int32_t toolhead_y) {
+                        const ParallelRows& rows) {
     const FilamentPathData* data = ctx.data;
-    const ThemeCache& theme = data->theme;
     int32_t slot_x = ctx.geo.slot_x[i];
     const SlotRenderState& s = states[i];
-    int32_t tool_scale = LV_MAX(6, theme.extruder_scale * 2 / 3);
+    const int32_t toolhead_y = rows.toolhead_y;
+    const int32_t tool_scale = rows.tool_scale;
 
     // Nozzle color only when filament actually reaches the nozzle
     std::optional<lv_color_t> noz_color;
@@ -152,15 +152,10 @@ void draw_parallel_tool(const RenderCtx& ctx, const SlotRenderStates& states, in
     // overlay canvas cache.
     draw_toolhead(ctx.layer, slot_x, toolhead_y, noz_color, tool_scale, toolhead_opa);
 
-    // Tool badge (E0/T0, …) below nozzle — matches system_path_canvas style
-    if (theme.label_font) {
-        char tool_label[16];
-        int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
-        format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
-        lv_color_t text = s.is_mounted ? theme.color_success : theme.color_text;
-        draw_tool_badge(ctx, slot_x, toolhead_y + tool_scale * 4 + 6, tool_label, text,
-                        toolhead_opa);
-    }
+    char tool_label[16];
+    int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
+    format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
+    draw_tool_badge(ctx, slot_x, toolhead_y, tool_scale, tool_label, toolhead_opa);
 }
 
 void render_parallel(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
@@ -170,11 +165,10 @@ void render_parallel(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
     warn_if_dropped(plan);
     paint_tubes(layer, plan, tube_palette(*data));
 
-    const int32_t toolhead_y =
-        ctx.geo.y_off + (int32_t)(ctx.geo.height * PARALLEL_TOOLHEAD_Y_RATIO);
+    const ParallelRows rows = parallel_rows(*data, ctx.geo);
     const SlotRenderStates states = compute_slot_render_states(data);
     for (int i = 0; i < LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS); i++)
-        draw_parallel_tool(ctx, states, i, toolhead_y);
+        draw_parallel_tool(ctx, states, i, rows);
 }
 
 // ============================================================================
@@ -226,19 +220,14 @@ void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f) {
     lv_opa_t hub_noz_opa = LV_OPA_COVER;
     draw_toolhead(ctx.layer, f.hub_cx, f.toolhead_y, noz_color, f.tool_scale, hub_noz_opa);
 
-    // Tool label below shared hub nozzle
-    if (theme.label_font) {
-        char tool_label[16];
-        format_tool_badge_label(data, hub_badge_lane, hub_tool, tool_label, sizeof(tool_label));
-        draw_tool_badge(ctx, f.hub_cx, f.toolhead_y + f.tool_scale * 4 + 6, tool_label,
-                        theme.color_text, hub_noz_opa);
-    }
+    char tool_label[16];
+    format_tool_badge_label(data, hub_badge_lane, hub_tool, tool_label, sizeof(tool_label));
+    draw_tool_badge(ctx, f.hub_cx, f.toolhead_y, f.tool_scale, tool_label, hub_noz_opa);
 }
 
 // A direct lane's own nozzle and badge.
 void draw_mixed_direct_toolhead(const RenderCtx& ctx, const MixedFrame& f, int i) {
     const FilamentPathData* data = ctx.data;
-    const ThemeCache& theme = data->theme;
     const SlotRenderState& s = f.states[i];
     int32_t slot_x = ctx.geo.slot_x[i];
 
@@ -248,15 +237,10 @@ void draw_mixed_direct_toolhead(const RenderCtx& ctx, const MixedFrame& f, int i
     lv_opa_t toolhead_opa = s.is_mounted ? LV_OPA_COVER : LV_OPA_40;
     draw_toolhead(ctx.layer, slot_x, f.toolhead_y, noz_color, f.tool_scale, toolhead_opa);
 
-    // Tool label below direct nozzle
-    if (theme.label_font) {
-        char tool_label[16];
-        int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
-        format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
-        lv_color_t text = s.is_mounted ? theme.color_success : theme.color_text;
-        draw_tool_badge(ctx, slot_x, f.toolhead_y + f.tool_scale * 3 + 4, tool_label, text,
-                        toolhead_opa);
-    }
+    char tool_label[16];
+    int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
+    format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
+    draw_tool_badge(ctx, slot_x, f.toolhead_y, f.tool_scale, tool_label, toolhead_opa);
 }
 
 void render_mixed(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
@@ -595,8 +579,9 @@ void draw_animation_parallel(lv_layer_t* layer, const BaseGeometry& g,
                              const SlotRenderStates& states, const FilamentPathData* data) {
     if (!data->anim.flow_active)
         return;
-    int32_t entry_y = g.y_off + static_cast<int32_t>(g.height * -0.12f);
-    int32_t sensor_y = g.y_off + static_cast<int32_t>(g.height * PARALLEL_SENSOR_Y_RATIO);
+    const ParallelRows rows = parallel_rows(*data, g);
+    int32_t entry_y = rows.entry_y;
+    int32_t sensor_y = rows.sensor_y;
     int32_t sensor_r = data->theme.sensor_radius;
     bool reverse = (data->anim.direction == AnimDirection::UNLOADING);
     int count = LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS);

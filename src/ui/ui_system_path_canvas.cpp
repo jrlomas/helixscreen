@@ -6,6 +6,7 @@
 #include "ui_filament_path_plan.h"
 #include "ui_fonts.h"
 #include "ui_system_path_plan.h"
+#include "ui_toolhead_badge.h"
 
 #include "display_numbering.h"
 #include "filament_tube_stroker.h"
@@ -74,6 +75,7 @@ static void load_theme_colors(SystemPathData* data) {
     data->color_error = theme_manager_get_color("filament_error");
     data->color_bg = theme_manager_get_color("card_bg");
     data->color_accent = helix::ui::tube_accent();
+    data->toolhead_style = helix::SettingsManager::instance().get_effective_toolhead_style();
 }
 
 // Sizes and the label font are bound to the breakpoint, not the theme, so they
@@ -130,58 +132,6 @@ static void draw_hub_box(lv_layer_t* layer, int32_t cx, int32_t cy, int32_t widt
         lv_area_t label_area = {cx - width / 2, cy - font_h / 2, cx + width / 2, cy + font_h / 2};
         lv_draw_label(layer, &label_dsc, &label_area);
     }
-}
-
-/**
- * @brief Draw a tool badge (rounded rect + "Tn" label) beneath a nozzle
- *
- * Replicates the tool_badge style from ams_slot_view.xml using draw primitives.
- * Used for both multi-tool nozzle labels and single-nozzle virtual tool display.
- *
- * @param layer Draw layer
- * @param cx Center X of the nozzle above
- * @param nozzle_y Center Y of the nozzle
- * @param nozzle_scale Scale of the nozzle icon (determines vertical offset)
- * @param label Pre-formatted label string (must remain valid through draw cycle)
- * @param font Label font
- * @param bg_color Badge background color
- * @param text_color Badge text color
- */
-static void draw_tool_badge(lv_layer_t* layer, int32_t cx, int32_t nozzle_y, int32_t nozzle_scale,
-                            const char* label, const lv_font_t* font, lv_color_t bg_color,
-                            lv_color_t text_color) {
-    if (!label || !label[0] || !font)
-        return;
-
-    const char* tool_label = label;
-
-    int32_t font_h = lv_font_get_line_height(font);
-    int32_t label_len = (int32_t)strlen(tool_label);
-    // Approximate width: ~60% of font height per character for small labels
-    int32_t badge_w = LV_MAX(24, label_len * (font_h * 3 / 5) + 6);
-    int32_t badge_h = font_h + 4;
-    int32_t badge_top = nozzle_y + nozzle_scale * 4 + 6;
-    int32_t badge_left = cx - badge_w / 2;
-
-    // Badge background (rounded rect)
-    lv_area_t badge_area = {badge_left, badge_top, badge_left + badge_w, badge_top + badge_h};
-    lv_draw_fill_dsc_t fill_dsc;
-    lv_draw_fill_dsc_init(&fill_dsc);
-    fill_dsc.color = bg_color;
-    fill_dsc.opa = 200;
-    fill_dsc.radius = 4;
-    lv_draw_fill(layer, &fill_dsc, &badge_area);
-
-    // Badge text
-    lv_draw_label_dsc_t label_dsc;
-    lv_draw_label_dsc_init(&label_dsc);
-    label_dsc.color = text_color;
-    label_dsc.font = font;
-    label_dsc.align = LV_TEXT_ALIGN_CENTER;
-    label_dsc.text = tool_label;
-
-    lv_area_t text_area = {badge_left, badge_top + 2, badge_left + badge_w, badge_top + 2 + font_h};
-    lv_draw_label(layer, &label_dsc, &text_area);
 }
 
 // ============================================================================
@@ -241,25 +191,25 @@ static void draw_mini_hubs(lv_layer_t* layer, const SystemPathData* data,
     }
 }
 
-// Tool nozzles + badges along the bottom row.
+// Tool nozzles along the bottom row, each badged on its corner.
 static void draw_tool_row(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
     const int32_t small_scale = small_tool_scale(*data);
     const lv_color_t active = lv_color_hex(data->active_color);
+    const helix::ui::ToolBadgeLook look = helix::ui::tool_badge_look();
     for (int t = 0; t < data->total_tools && t < SystemPathData::MAX_TOOLS; ++t) {
         int32_t tool_x = calc_tool_x(t, data->total_tools, L.x_off, L.width);
         bool is_active_tool = (t == data->active_tool) && data->filament_loaded;
 
         draw_nozzle_for_style(layer, tool_x, L.tools_y,
                               is_active_tool ? std::optional(active) : std::nullopt, small_scale);
-        if (data->label_font) {
-            draw_tool_badge(layer, tool_x, L.tools_y, small_scale, data->tool_labels[t],
-                            data->label_font, data->color_idle,
-                            is_active_tool ? active : data->color_text);
-        }
+        helix::ui::draw_toolhead_badge(
+            layer, look,
+            helix::ui::toolhead_bounds(data->toolhead_style, tool_x, L.tools_y, small_scale),
+            data->tool_labels[t]);
     }
 }
 
-// The single nozzle and its virtual tool badge.
+// The single nozzle, badged with its virtual tool.
 static void draw_single_nozzle(lv_layer_t* layer, SystemPathData* data, const SysLayout& L) {
     const bool unit_active = data->active_unit >= 0 && data->filament_loaded;
     const bool bp_active = data->bypass_active && data->filament_loaded;
@@ -269,11 +219,12 @@ static void draw_single_nozzle(lv_layer_t* layer, SystemPathData* data, const Sy
                           (unit_active || bp_active) ? std::optional(noz_color) : std::nullopt,
                           data->extruder_scale);
 
-    // Virtual tool badge beneath nozzle — only when multiple slots feed one toolhead
-    if (data->total_tools <= 1 && data->current_tool >= 0 && data->label_font) {
-        lv_color_t badge_text = (unit_active || bp_active) ? noz_color : data->color_text;
-        draw_tool_badge(layer, L.center_x, L.nozzle_y, data->extruder_scale,
-                        data->current_tool_label, data->label_font, data->color_idle, badge_text);
+    // Only when multiple slots feed one toolhead
+    if (data->total_tools <= 1 && data->current_tool >= 0) {
+        helix::ui::draw_toolhead_badge(layer, helix::ui::tool_badge_look(),
+                                       helix::ui::toolhead_bounds(data->toolhead_style, L.center_x,
+                                                                  L.nozzle_y, data->extruder_scale),
+                                       data->current_tool_label);
     }
 }
 

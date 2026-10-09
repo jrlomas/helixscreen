@@ -42,6 +42,7 @@
 
 #include "ui_coalesced_timer.h"
 #include "ui_filament_path_canvas.h"
+#include "ui_toolhead_badge.h"
 
 #include "ams_types.h"
 #include "filament_path_geometry.h"
@@ -85,10 +86,12 @@ inline constexpr float BYPASS_MERGE_Y_RATIO = 0.58f;
 // Buffer element position (between hub output and bypass merge)
 inline constexpr float BUFFER_Y_RATIO = 0.46f;
 
-// PARALLEL topology (tool changer) Y ratios. Shared by the PARALLEL renderer
-// and the PARALLEL branch of the click hit-test so the two never drift.
-inline constexpr float PARALLEL_SENSOR_Y_RATIO = 0.38f;   // Toolhead entry sensor
-inline constexpr float PARALLEL_TOOLHEAD_Y_RATIO = 0.55f; // Nozzle/toolhead per slot
+// PARALLEL topology (tool changer): the toolhead glyphs stand on this line,
+// and each tool's entry sensor sits this fraction of the way from the lane
+// entries down to its toolhead. parallel_rows() turns them into Ys for the
+// renderer and the click hit-test alike.
+inline constexpr float PARALLEL_GLYPH_BOTTOM_RATIO = 0.74f;
+inline constexpr float PARALLEL_SENSOR_FRACTION = 0.75f;
 
 // Slot-entry click hit-test padding (click handler only; no renderer
 // counterpart — these widen the entry band so taps near the spool grid still
@@ -458,13 +461,17 @@ void draw_toolhead(lv_layer_t* layer, int32_t cx, int32_t cy, std::optional<lv_c
 
 /// Y of the nozzle tip for the configured toolhead style (heat glow anchor).
 int32_t toolhead_tip_y(int32_t nozzle_y, int32_t extruder_scale);
+/// Drawn bounds of draw_toolhead()'s glyph at (@p cx, @p cy) for the
+/// configured style, at the same base scale.
+helix::ui::GlyphBounds toolhead_glyph_bounds(int32_t cx, int32_t cy, int32_t scale);
 /// Topmost drawn Y of the toolhead glyph for the configured style (its cap or
 /// shroud, above the nozzle inlet at nozzle_y - extruder_scale * 2).
 int32_t toolhead_top_y(int32_t nozzle_y, int32_t extruder_scale);
 
-/// Tool badge ("T0", "T1", …) beneath a nozzle: rounded rect + centered label.
-void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t badge_top, const char* label,
-                     lv_color_t text_color, lv_opa_t opa);
+/// The tool badge ("T0", "T1", …) on the corner of draw_toolhead()'s glyph.
+/// Paint it after the glyph.
+void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t scale, const char* label,
+                     lv_opa_t opa = LV_OPA_COVER);
 
 // ============================================================================
 // Animations (ui_filament_path_anim.cpp)

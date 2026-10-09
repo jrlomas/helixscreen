@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The multi-unit overview's route plan. Single-tool cases run on a 400x400
-// frame with unit stems at x = 100 and 300: entry 20, hub sensor 68, merge
-// 100, hub 160 (h 40), nozzle 288 (top 268).
+// frame with unit stems at x = 100 and 300 and the default glyph at extruder
+// scale 10: entry 20, hub sensor 78, merge 117, hub 189 (h 48, bottom 213),
+// nozzle 346 (top 326, glyph bottom 372).
 
 #include "ui_system_path_canvas.h"
 
@@ -101,7 +102,7 @@ TEST_CASE("Overview plan: each unit's route is continuous with a clamp band on i
 
     // The active route runs on, unbroken, to the nozzle top.
     const Route& active = plan.routes[0];
-    CHECK(near(seg_end(active.path.segs[active.path.count - 1]), 200, 268, 0.5f));
+    CHECK(near(seg_end(active.path.segs[active.path.count - 1]), 200, 326, 0.5f));
     for (int i = 0; i < active.path.count; i++) {
         CAPTURE(i);
         if (!active.style[i].painted)
@@ -113,6 +114,22 @@ TEST_CASE("Overview plan: each unit's route is continuous with a clamp band on i
     // The inactive unit is an empty tube.
     for (int i = 0; i < plan.routes[1].path.count; i++)
         CHECK_FALSE(plan.routes[1].style[i].filled);
+}
+
+TEST_CASE("Overview layout: the toolheads stand on their glyph-bottom line",
+          "[system_path][filament_path]") {
+    auto d = multi();
+    const SysLayout single = compute_sys_layout(*d, AREA);
+    CHECK(single.nozzle_y == 346);
+    CHECK(single.hub_y + single.hub_h / 2 == 213);
+    CHECK(single.merge_y == 117);
+
+    d->total_tools = 3;
+    const SysLayout row = compute_sys_layout(*d, AREA);
+    REQUIRE(row.multi_tool);
+    // The tool row's glyphs (scale 7, bottom 19 below center) stand on 320.
+    CHECK(small_tool_scale(*d) == 7);
+    CHECK(row.tools_y == 320 - 19);
 }
 
 TEST_CASE("Overview plan: hub bands take the detail view's four states",
@@ -178,8 +195,8 @@ TEST_CASE("Overview plan: an idle system keeps an idle trunk with its toolhead b
     REQUIRE(plan.trunk_route == 2);
     const Route& trunk = plan.routes[2];
     CHECK(contiguous(trunk.path));
-    CHECK(near(seg_start(trunk.path.segs[0]), 200, 180, 0.5f));
-    CHECK(near(seg_end(trunk.path.segs[trunk.path.count - 1]), 200, 268, 0.5f));
+    CHECK(near(seg_start(trunk.path.segs[0]), 200, 213, 0.5f));
+    CHECK(near(seg_end(trunk.path.segs[trunk.path.count - 1]), 200, 326, 0.5f));
     REQUIRE(plan.band_count == 3);
     CHECK(plan.bands[2].state == BandState::Empty);
     CHECK(on_route(trunk, plan.bands[2].at));
@@ -204,7 +221,7 @@ TEST_CASE("Overview plan: an active bypass joins the trunk at the merge",
     const pg::PathPoint merge = seg_end(trunk.path.segs[trunk.path.count - 1]);
     CHECK(on_route(bypass, merge));
     CHECK(near(merge, (float)L.center_x, merge.y));
-    CHECK(near(seg_end(bypass.path.segs[bypass.path.count - 1]), (float)L.center_x, 268, 0.5f));
+    CHECK(near(seg_end(bypass.path.segs[bypass.path.count - 1]), (float)L.center_x, 326, 0.5f));
     CHECK(bypass.style[bypass.path.count - 1].filled);
     CHECK(lv_color_eq(bypass.style[bypass.path.count - 1].bore, lv_color_hex(OWL)));
 }

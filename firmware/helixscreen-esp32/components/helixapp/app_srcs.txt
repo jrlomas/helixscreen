@@ -600,6 +600,7 @@ src/ui/ui_swatch.cpp
 src/ui/ui_switch.cpp
 src/ui/ui_system_path_canvas.cpp
 src/ui/ui_system_path_plan.cpp
+src/ui/ui_toolhead_badge.cpp
 src/ui/ui_temp_display.cpp
 src/ui/ui_temp_graph.cpp
 src/ui/ui_temperature_utils.cpp

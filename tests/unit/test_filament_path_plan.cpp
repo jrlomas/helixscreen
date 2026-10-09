@@ -897,9 +897,10 @@ TEST_CASE("FilamentPath plan: the stub fills only past the hub", "[filament-path
 // ============================================================================
 // PARALLEL and MIXED
 // ============================================================================
-// Same 400x400 frame. PARALLEL: entry -48, sensor 152, toolhead 220, nozzle top
-// 208. MIXED: sensor 60, hub 128 (h 32, top 112, bottom 144) at x 300 for hub
-// lanes 2 and 3, toolhead 248, nozzle top 236.
+// Same 400x400 frame, default glyph at tool scale 6 (bottom 16 below its
+// center). PARALLEL: entry -48, sensor 198, toolhead 280 (glyph bottom 296),
+// nozzle top 268. MIXED: sensor 78, hub 159 (h 38, top 140, bottom 178) at
+// x 300 for hub lanes 2 and 3, toolhead 304 (glyph bottom 320), nozzle top 292.
 
 namespace {
 
@@ -925,13 +926,13 @@ TEST_CASE("FilamentPath plan: idle PARALLEL tools are one stroke each through th
 
     REQUIRE(plan.route_count == 4);
     CHECK(plan.active_route == -1);
-    const float sensor_y = 400 * PARALLEL_SENSOR_Y_RATIO;
+    const float sensor_y = 198;
     for (int i = 0; i < 4; i++) {
         const Route& r = plan.routes[i];
         Stroke strokes[16];
         CHECK(coalesce(r, strokes, 16) == 1);
         CHECK(near(seg_start(r.path.segs[0]), 50.0f + 100 * i, -48));
-        CHECK(near(seg_end(r.path.segs[r.path.count - 1]), 50.0f + 100 * i, 208));
+        CHECK(near(seg_end(r.path.segs[r.path.count - 1]), 50.0f + 100 * i, 268));
         CHECK(has_boundary(r.path, 50.0f + 100 * i, sensor_y));
     }
     REQUIRE(plan.band_count == 4);
@@ -948,7 +949,7 @@ TEST_CASE("FilamentPath plan: the mounted PARALLEL tool is one active stroke",
     load_active(*d, 2, PathSegment::NOZZLE);
     d->slot_filament_states[0] = {PathSegment::TOOLHEAD, SLOT_COLORS[0]};
     const PathPlan& plan = parallel_plan(*d);
-    const float sensor_y = 400 * PARALLEL_SENSOR_Y_RATIO;
+    const float sensor_y = 198;
 
     REQUIRE(plan.active_route == 2);
     Stroke strokes[16];
@@ -978,17 +979,17 @@ TEST_CASE("FilamentPath plan: MIXED direct lanes and the hub trunk reach a nozzl
         const Route& r = plan.routes[i];
         REQUIRE(r.path.count > 0);
         CHECK(contiguous(r.path));
-        at_nozzle += std::fabs(seg_end(r.path.segs[r.path.count - 1]).y - 236) < 0.01f;
+        at_nozzle += std::fabs(seg_end(r.path.segs[r.path.count - 1]).y - 292) < 0.01f;
     }
     CHECK(at_nozzle == 3);
     for (int i : {2, 3}) {
         const Route& r = plan.routes[i];
-        CHECK(seg_end(r.path.segs[r.path.count - 1]).y == Catch::Approx(112));
+        CHECK(seg_end(r.path.segs[r.path.count - 1]).y == Catch::Approx(140));
     }
     REQUIRE(plan.trunk_route >= 0);
     const Route& t = plan.routes[plan.trunk_route];
-    CHECK(near(seg_start(t.path.segs[0]), 300, 144));
-    CHECK(near(seg_end(t.path.segs[t.path.count - 1]), 300, 236));
+    CHECK(near(seg_start(t.path.segs[0]), 300, 178));
+    CHECK(near(seg_end(t.path.segs[t.path.count - 1]), 300, 292));
     CHECK(plan.band_count == 4);
 }
 
@@ -1032,7 +1033,7 @@ TEST_CASE("FilamentPath plan: a MIXED direct lane short of the nozzle fills to i
     REQUIRE(r.path.count == 2);
     CHECK(r.style[0].filled);
     CHECK_FALSE(r.style[1].filled);
-    CHECK(near(seg_end(r.path.segs[1]), 50, 236));
+    CHECK(near(seg_end(r.path.segs[1]), 50, 292));
 }
 
 TEST_CASE("FilamentPath plan: PARALLEL and MIXED show an error on the mounted lane",

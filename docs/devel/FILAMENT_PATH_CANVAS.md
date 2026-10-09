@@ -328,8 +328,17 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
 ```
 
 PARALLEL and MIXED take the same shape with `plan_parallel` and `plan_mixed`
-(MIXED from `compute_mixed_frame`), then draw the MIXED hub box and every
-toolhead glyph and badge over the painted tubes.
+(rows from `parallel_rows()`, MIXED from `compute_mixed_frame`), then draw the
+MIXED hub box and every toolhead glyph over the painted tubes. Their toolheads
+stand on a glyph-bottom line near the canvas bottom; the sensors and the hub
+sit fixed fractions of the run down to them.
+
+Each toolhead carries its tool label as a corner badge (`ui_toolhead_badge.h`):
+the spool tool badge's look from the shared `ams_slot_tool_badge_*` tokens and
+`tool_badge_colors()`, in the glyph's lower-right corner for every nozzle style
+(`TOOLHEAD_BADGE_CORNER`), clear of the tube entering at the top center.
+`toolhead_bounds()` gives each style's drawn extent. The overview uses the
+same badge.
 
 ### The route plan
 
@@ -538,6 +547,7 @@ use the LVGL test fixture.
 | `tests/unit/test_filament_path_geometry.cpp` | `[filament-path][geometry]` | `seg_length`, `path_length`, `path_point_at`, `route_orthogonal`, `route_polyline_filleted`, `build_merge_fan` — pure math, no LVGL |
 | `tests/unit/test_filament_path_mixed_render.cpp` | `[filament-path][mixed][topology]`, `[filament-path][parallel][topology]` | MIXED/PARALLEL produce opaque overlay pixels once laid out; `SIZE_CHANGED` reschedules the async refresh post-layout |
 | `tests/unit/test_filament_path_plan.cpp` | `[filament-path][plan]`, `[filament-path][plan][hits]` | LINEAR/HUB frame, route plan (contiguity, ownership, span styles, bands, coalesce), and the hub/buffer/bypass hit rects of a rendered canvas |
+| `tests/unit/test_toolhead_badge.cpp` | `[toolhead_badge]` | Glyph bounds against drawn pixels per style; the badge corner clears the tube |
 | `tests/unit/test_system_path_plan.cpp` | `[system_path]` | The overview's plan: continuous unit routes, hub bands in all four states, dumb hubs, idle trunk, bypass merge, toolchanger routes |
 | `tests/unit/test_filament_path_canvas.cpp` | `[canvas][hit_test]`, `[filament-path][canvas]` | Hit-rect tests (hub box dead-center / argument order), SIZE_CHANGED handler |
 
@@ -564,6 +574,7 @@ run without a display and assert exact arc tangents and lane separation.
 | `src/ui/ui_filament_path_topology.cpp` | The three topology renderers + phase functions + DRAW_POST `render_animation_overlay()` |
 | `src/ui/ui_filament_path_plan.h`, `.cpp` | LINEAR/HUB and MIXED frames, route plans for all three topologies, span styles, sensor bands, layered `paint_tubes()` |
 | `src/ui/ui_filament_path_glyphs.cpp` | Hub box, buffer coil, filament tip, nozzle, toolhead, badges |
+| `include/ui_toolhead_badge.h`, `src/ui/ui_toolhead_badge.cpp` | Toolhead glyph bounds per style, the tool badge's look and corner rect |
 | `src/ui/ui_filament_path_anim.cpp` | The five `lv_anim`-driven animation systems |
 | `src/ui/ui_system_path_plan.h`, `.cpp` | AMS overview state, layout and `plan_overview()` onto the shared route plan |
 | `src/ui/ui_system_path_canvas.cpp` | AMS overview canvas: widget, setters, boxes and toolheads over the painted plan |
