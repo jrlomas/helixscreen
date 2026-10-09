@@ -115,6 +115,7 @@
   <translation tag="= Tighten" ja="= 締める"/>
   <translation tag="A" ja="A"/>
   <translation tag="A few minutes, nearly all of it heating. You judge nothing by eye." ja="数分かかりますが、そのほとんどは加熱です。目視での判断は不要です。"/>
+  <translation tag="A macro printed stray template text &apos;{}&apos;: check its Jinja tags" ja="マクロが不要なテンプレート文字列 &apos;{}&apos; を出力しました: Jinja タグを確認してください"/>
   <translation tag="A motor IO pin couldn&apos;t be restored. Power-cycle the printer to recover" ja="モーターのIOピンを復元できませんでした。プリンターの電源を入れ直してください"/>
   <translation tag="A motor&apos;s parameters couldn&apos;t be written. Power-cycle the printer to retry" ja="モーターのパラメーターを書き込めませんでした。プリンターの電源を入れ直して再試行してください"/>
   <translation tag="A newer version of the helper macros is available" ja="ヘルパーマクロの新しいバージョンが利用可能です"/>

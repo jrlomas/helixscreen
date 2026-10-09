@@ -122,6 +122,7 @@ translations:
   = Tighten: = Apertar
   A: A
   A few minutes, nearly all of it heating. You judge nothing by eye.: 'Alguns minutos, quase todo aquecendo. Você não julga nada a olho.'
+  "A macro printed stray template text '{}': check its Jinja tags": "Uma macro imprimiu texto de modelo solto '{}': verifique as tags Jinja"
   A motor IO pin couldn't be restored. Power-cycle the printer to recover: Não foi possível restaurar um pino de E/S do motor. Desligue e ligue a impressora para recuperar
   A motor's parameters couldn't be written. Power-cycle the printer to retry: Não foi possível gravar os parâmetros de um motor. Desligue e ligue a impressora para tentar novamente
   A newer version of the helper macros is available: 'Uma versão mais recente das macros de ajuda está disponível'
