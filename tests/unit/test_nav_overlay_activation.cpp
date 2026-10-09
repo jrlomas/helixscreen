@@ -359,6 +359,31 @@ TEST_CASE_METHOD(OverlayActivationFixture,
             std::string::npos);
 }
 
+TEST_CASE_METHOD(OverlayActivationFixture, "Switch trace splits each switch path into its phases",
+                 "[navigation][lifecycle][switch_trace]") {
+    auto& nav = NavigationManager::instance();
+    helix::TextLogCapture log;
+
+    nav.set_active(PanelId::Controls);
+    lv_refr_now(nullptr);
+    const std::string direct = last_line_with(log.get_captured(), "Panel switch to 2 took");
+    for (const char* phase : {" build=", " deactivate=", " show=", " activate="}) {
+        CAPTURE(phase, direct);
+        REQUIRE(direct.find(phase) != std::string::npos);
+    }
+
+    // The navbar path clears overlays first and charges set_active's phases to
+    // its own line.
+    REQUIRE(nav.request_panel(PanelId::Home, NavigationManager::SwitchDispatch::Inline) ==
+            NavigationManager::PanelRequest::Switched);
+    nav.set_active(PanelId::Controls); // writes the Home switch's line
+    const std::string navbar = last_line_with(log.get_captured(), "Panel switch to 0 took");
+    for (const char* phase : {" build=", " overlays=", " deactivate=", " show=", " activate="}) {
+        CAPTURE(phase, navbar);
+        REQUIRE(navbar.find(phase) != std::string::npos);
+    }
+}
+
 // ============================================================================
 // Navbar close path — the other way an overlay goes away
 // ============================================================================
