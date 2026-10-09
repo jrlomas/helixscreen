@@ -435,21 +435,19 @@ class PrintSelectPanel : public PanelBase {
      * @brief Set selected file data and update subjects
      *
      * @param filename File name
-     * @param thumbnail_src Pre-scaled thumbnail path for cards (.bin)
-     * @param original_url Moonraker thumbnail URL (for detail view PNG lookup)
+     * @param thumbnail_src Pre-scaled thumbnail path for cards (.bin), which the
+     *        detail view shows too
      * @param print_time Formatted print time
      * @param filament_weight Formatted filament weight
      * @param layer_count Formatted layer count (or "--" if unknown)
      * @param print_height Formatted print height (or "--" if unknown)
-     * @param modified_timestamp File modification time (for cache validation)
      * @param layer_height Formatted layer height string (e.g., "0.24 mm")
      * @param filament_type Filament type/name (e.g., "ABS" or "PolyMaker PolyLite ABS")
      */
-    void set_selected_file(const char* filename, const char* thumbnail_src,
-                           const char* original_url, const char* print_time,
+    void set_selected_file(const char* filename, const char* thumbnail_src, const char* print_time,
                            const char* filament_weight, const char* layer_count,
-                           const char* print_height, time_t modified_timestamp,
-                           const char* layer_height = "", const char* filament_type = "");
+                           const char* print_height, const char* layer_height = "",
+                           const char* filament_type = "");
 
     /**
      * @brief Show detail view overlay for selected file
@@ -701,6 +699,8 @@ class PrintSelectPanel : public PanelBase {
 
     lv_subject_t selected_detail_thumbnail_subject_{}; ///< Full-res PNG for detail view
     char selected_detail_thumbnail_buffer_[256];
+    /// 1 when the detail view has an image to show, 0 for the placeholder glyph.
+    lv_subject_t selected_has_thumbnail_subject_{};
 
     lv_subject_t selected_print_time_subject_{};
     char selected_print_time_buffer_[32];
@@ -918,6 +918,15 @@ class PrintSelectPanel : public PanelBase {
     void release_esp_card_thumbnails();
     /// Cancels @p f's fetch, if one is queued or downloading.
     static void cancel_esp_fetch(PrintFileData& f);
+    /// The selected file's card thumbnail, held while the detail view shows it.
+    std::shared_ptr<helix::ui::EspPsramThumbnail> esp_detail_thumbnail_;
+    /// Shows @p filename's decoded card thumbnail in the detail view, which
+    /// scales it to fit; false when its card holds none.
+    bool show_esp_detail_thumbnail(const char* filename);
+    /// Publishes @p next as the detail image and holds it, releasing the old one.
+    void publish_esp_detail_thumbnail(std::shared_ptr<helix::ui::EspPsramThumbnail> next);
+    /// Frees the detail view's hold: a slot the card planner does not count.
+    void release_esp_detail_thumbnail();
 #endif
 
     /// Navigation generation counter: incremented on each directory change.
