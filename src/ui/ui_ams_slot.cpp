@@ -103,7 +103,7 @@ struct AmsSlotData {
     lv_obj_t* container = nullptr;       // The ams_slot widget itself
     lv_obj_t* lane_humidity = nullptr;   // Droplet + value row, under a per-lane lid
     lv_obj_t* lane_humidity_text = nullptr; // The row's value
-    lv_obj_t* lane_temp_icon = nullptr;     // Thermometer, beside the humidity
+    lv_obj_t* lane_temp_row = nullptr;      // Thermometer + value, above the humidity
     lv_obj_t* lane_temp_text = nullptr;
     lv_obj_t* lane_remaining = nullptr; // Measured remaining length, under the material
     bool show_lane_humidity = false;
@@ -260,7 +260,7 @@ static void apply_lane_humidity(AmsSlotData* data, AmsBackend* backend) {
     // DECLARATIVE_OK: per-slot reading with no per-slot humidity subject
     lv_label_set_text(data->lane_humidity_text, text);
 
-    if (!data->lane_temp_icon || !data->lane_temp_text)
+    if (!data->lane_temp_row || !data->lane_temp_text)
         return;
     const bool has_temp = env && env->has_temperature();
     char temp[16] = "";
@@ -271,12 +271,10 @@ static void apply_lane_humidity(AmsSlotData* data, AmsBackend* backend) {
                  (int)std::lround(env->temperature_c));
     // DECLARATIVE_OK: per-slot reading with no per-slot temperature subject
     lv_label_set_text(data->lane_temp_text, temp);
-    for (lv_obj_t* o : {data->lane_temp_icon, data->lane_temp_text}) {
-        if (has_temp)
-            lv_obj_remove_flag(o, LV_OBJ_FLAG_HIDDEN);
-        else
-            lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
-    }
+    if (has_temp)
+        lv_obj_remove_flag(data->lane_temp_row, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(data->lane_temp_row, LV_OBJ_FLAG_HIDDEN);
 }
 
 /// Re-apply the material label from the live per-slot material subject.
@@ -772,7 +770,7 @@ static void* ams_slot_xml_create(lv_xml_parser_state_t* state, const char** attr
     data->tool_badge = helix::ui::find_required(obj, "tool_badge_label", "AmsSlot");
     data->lane_humidity = lv_obj_find_by_name(obj, "lane_humidity");
     data->lane_humidity_text = lv_obj_find_by_name(obj, "lane_humidity_text");
-    data->lane_temp_icon = lv_obj_find_by_name(obj, "lane_temp_icon");
+    data->lane_temp_row = lv_obj_find_by_name(obj, "lane_temp_row");
     data->lane_temp_text = lv_obj_find_by_name(obj, "lane_temp_text");
     data->lane_remaining = lv_obj_find_by_name(obj, "lane_remaining");
 

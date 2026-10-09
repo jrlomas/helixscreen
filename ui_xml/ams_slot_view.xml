@@ -35,17 +35,28 @@
     <style name="styles.press_wash" selector="pressed"/>
 
     <!-- Material label at top (PLA, PETG, etc.) -->
-    <!-- Per-lane humidity under a per-lane lid: the droplet says it is humidity, not
-         filament remaining. Shown and moved with the material label by the AMS detail view. -->
+    <!-- Per-lane climate under a per-lane lid: the droplet says it is humidity, not
+         filament remaining. Temperature stacks above it, since side by side the pair
+         is wider than a lane. Shown and moved with the material label by the AMS detail view. -->
     <lv_obj name="lane_humidity"
-            width="content" height="content" flex_flow="row" style_flex_cross_place="center" style_pad_all="0"
-            style_pad_gap="#space_xxs" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false"
+            width="content" height="content" flex_flow="column" style_flex_cross_place="center" style_pad_all="0"
+            style_pad_gap="0" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false"
             event_bubble="true" hidden="true">
-      <icon name="lane_temp_icon"
-            src="thermometer" size="sm" variant="secondary" hidden="true" clickable="false" event_bubble="true"/>
-      <text_small name="lane_temp_text" text="" translation_tag="" hidden="true" clickable="false" event_bubble="true"/>
-      <icon name="lane_humidity_icon" src="water" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
-      <text_small name="lane_humidity_text" text="" clickable="false" event_bubble="true"/>
+      <lv_obj name="lane_temp_row"
+              width="content" height="content" flex_flow="row" style_flex_cross_place="center" style_pad_all="0"
+              style_pad_gap="#space_xxs" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false"
+              event_bubble="true" hidden="true">
+        <icon name="lane_temp_icon"
+              src="thermometer" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
+        <text_small name="lane_temp_text" text="" translation_tag="" clickable="false" event_bubble="true"/>
+      </lv_obj>
+      <lv_obj name="lane_humidity_row"
+              width="content" height="content" flex_flow="row" style_flex_cross_place="center" style_pad_all="0"
+              style_pad_gap="#space_xxs" style_bg_opa="0" style_border_width="0" scrollable="false" clickable="false"
+              event_bubble="true">
+        <icon name="lane_humidity_icon" src="water" size="sm" variant="secondary" clickable="false" event_bubble="true"/>
+        <text_small name="lane_humidity_text" text="" clickable="false" event_bubble="true"/>
+      </lv_obj>
     </lv_obj>
 
     <text_small name="material_label"
