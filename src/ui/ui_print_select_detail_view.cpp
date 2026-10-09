@@ -975,6 +975,12 @@ void PrintSelectDetailView::disarm_viewer_callbacks() {
 void PrintSelectDetailView::cleanup() {
     spdlog::debug("[DetailView] cleanup()");
 
+    // Only on_ui_destroyed() nulls gcode_viewer_; a tree deleted any other way
+    // leaves it pointing at a freed widget.
+    if (gcode_viewer_ && !(lv_is_initialized() && lv_obj_is_valid(gcode_viewer_))) {
+        gcode_viewer_ = nullptr;
+    }
+
     // Pause viewer before subject cleanup to avoid rendering with freed subjects.
     if (gcode_viewer_) {
         ui_gcode_viewer_set_paused(gcode_viewer_, true);

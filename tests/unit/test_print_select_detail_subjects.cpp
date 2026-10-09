@@ -1397,6 +1397,9 @@ class PrintSelectDetailViewTestAccess {
     static void begin_viewer_load(helix::ui::PrintSelectDetailView& view, const std::string& path) {
         view.begin_viewer_load(path);
     }
+    static lv_obj_t* gcode_viewer(const helix::ui::PrintSelectDetailView& view) {
+        return view.gcode_viewer_;
+    }
 };
 
 namespace {
@@ -1965,4 +1968,32 @@ TEST_CASE_METHOD(LVGLUITestFixture, "A scan answering after cleanup never reache
     d.view.get_prep_manager()->scan_file_for_operations("other.gcode", "", "");
     OpenDetail::settle();
     CHECK(d.view.exclude_objects().get_defined_objects().size() == 3);
+}
+
+// Only the explicit teardown nulls the viewer pointer, so a tree deleted any
+// other way must not leave cleanup() pausing and disarming a freed viewer.
+TEST_CASE_METHOD(LVGLUITestFixture, "cleanup after the tree is deleted forgets the dead viewer",
+                 "[print_select][detail_view]") {
+    CacheDirGuard guard;
+    register_xml_callbacks({
+        {"on_print_select_detail_backdrop", detail_noop_cb},
+        {"on_print_select_print_button", detail_noop_cb},
+        {"on_print_select_delete_button", detail_noop_cb},
+        {"on_print_detail_back_clicked", detail_noop_cb},
+        {"on_toggle_sliced_colors", detail_noop_cb},
+        {"on_print_select_detail_objects", detail_noop_cb},
+    });
+
+    helix::ui::PrintSelectDetailView view;
+    view.set_dependencies(nullptr, &get_printer_state());
+    view.init_subjects();
+    lv_obj_t* const root = view.create(test_screen());
+    REQUIRE(root != nullptr);
+    REQUIRE(PrintSelectDetailViewTestAccess::gcode_viewer(view) != nullptr);
+
+    lv_obj_delete(root);
+    helix::ui::UpdateQueue::instance().drain();
+
+    view.cleanup();
+    CHECK(PrintSelectDetailViewTestAccess::gcode_viewer(view) == nullptr);
 }
