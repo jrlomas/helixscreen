@@ -27,6 +27,7 @@ struct LinearHubFrame {
     // Vertical layout (absolute display coords)
     int32_t entry_y = 0;
     int32_t prep_y = 0;
+    int32_t prep_band_y = 0;       // the prep sensor's band: prep_y, or the box edge
     bool prep_on_box_edge = false; // lanes enter at the spool box's front edge
     int32_t hub_y = 0;
     int32_t hub_h = 0;
@@ -68,9 +69,6 @@ struct LinearHubFrame {
 /// a HUB with the bypass hidden stacks its hub and buffer above it.
 LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const BaseGeometry& g,
                                         int32_t glyph_top);
-
-/// How far below the prep sensor a lane's load sensor band sits.
-int32_t load_band_gap(const LinearHubFrame& f);
 
 /// The hub/selector box's fill and border: the error color for an error at
 /// the hub, else a filament tint when it holds filament, else the theme's.

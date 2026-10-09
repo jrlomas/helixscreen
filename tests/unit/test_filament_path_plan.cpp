@@ -196,11 +196,10 @@ BaseGeometry geometry() {
     return g;
 }
 
-// Where a HUB lane's load sensor band sits: 3 sensor radii below the prep
-// sensor (y 40), or midway to its fan's first bend when that is nearer.
+// Where a HUB lane's load sensor band sits: midway down its straight run from
+// the prep row (y 40) to its fan's first bend.
 float load_band_y(const FilamentPathData& d, int slot) {
-    const float bend = compute_linear_hub_frame(d, geometry(), GLYPH_TOP).hub_fan[slot].pts[1].y;
-    return 40.0f + std::min((bend - 40.0f) / 2, 3.0f * d.theme.sensor_radius);
+    return (40.0f + compute_linear_hub_frame(d, geometry(), GLYPH_TOP).hub_fan[slot].pts[1].y) / 2;
 }
 
 float hub_entry_x(const FilamentPathData& d, int slot) {
@@ -1025,9 +1024,10 @@ TEST_CASE("FilamentPath plan: the lanes enter at the spool box's front edge",
         REQUIRE(prep != nullptr);
         CHECK(prep->on_box_edge);
         // The load band just below it.
-        const float bend = f.hub_fan[i].pts[1].y;
-        const float load_y = -20 + std::min((bend + 20) / 2, 3.0f * d->theme.sensor_radius);
-        CHECK(load_y > -20);
+        // The load band stays on the lane run, clear of the prep band by two
+        // tube gauges.
+        const float load_y = (40.0f + f.hub_fan[i].pts[1].y) / 2;
+        CHECK(load_y - (-20) >= 2 * d->theme.tube_gauge);
         const SensorBand* load = band_at(plan, 50.0f + 100 * i, load_y);
         REQUIRE(load != nullptr);
         CHECK_FALSE(load->on_box_edge);

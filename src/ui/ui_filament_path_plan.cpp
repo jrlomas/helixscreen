@@ -33,10 +33,6 @@ TubePalette tube_palette(const FilamentPathData& data) {
     return {t.color_idle, t.color_accent, pulsed_error_color(data), t.color_bg, t.tube_gauge};
 }
 
-int32_t load_band_gap(const LinearHubFrame& f) {
-    return 3 * f.sensor_r;
-}
-
 // Layout mirrors the ratios at the top of ui_filament_path_internal.h; LINEAR
 // butts the selector against the prep sensors and slides the output exit under
 // the active slot.
@@ -48,11 +44,14 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
 
     f.entry_y = g.y_off + (int32_t)(g.height * ENTRY_Y_RATIO);
     f.prep_y = g.y_off + (int32_t)(g.height * PREP_Y_RATIO);
-    if (g.lane_entry_y != INT32_MIN) {
-        // The lanes leave the spool box at its front edge, through their prep
-        // sensors.
+    f.prep_band_y = f.prep_y;
+    // The lanes leave the spool box at its front edge, through their prep
+    // sensors, when that edge stands clear above the lane run: two tube gauges
+    // and a band of empty tube before the load sensor's row.
+    if (g.lane_entry_y != INT32_MIN &&
+        g.lane_entry_y <= f.prep_y - 2 * data.theme.tube_gauge - BAND_THICKNESS) {
         f.entry_y = g.lane_entry_y;
-        f.prep_y = g.lane_entry_y;
+        f.prep_band_y = g.lane_entry_y;
         f.prep_on_box_edge = true;
     }
     f.hub_y = g.y_off + (int32_t)(g.height * HUB_Y_RATIO);
@@ -441,11 +440,9 @@ void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFra
     append_line(r, cx, (float)f.toolhead_y, cx, (float)f.inlet_y, lane.style(PathSegment::NOZZLE));
 }
 
-// The load sensor sits just past the prep sensor: the lane entrance, then just
-// past the drive gear. Midway to @p run_end when that is nearer.
+// The load sensor sits midway down the lane's straight run below the prep row.
 float load_band_y(const LinearHubFrame& f, float run_end) {
-    const float prep = (float)f.prep_y;
-    return prep + LV_MIN((run_end - prep) / 2, (float)load_band_gap(f));
+    return ((float)f.prep_y + run_end) / 2;
 }
 
 // The hub_only output stub: a short tube leaving the hub (or selector) bottom
@@ -633,11 +630,13 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
         const float x = (float)g.slot_x[i];
         Route& r = new_route(out);
 
-        append_line(r, x, (float)f.entry_y, x, (float)f.prep_y, lane.style(PathSegment::SPOOL));
+        append_line(r, x, (float)f.entry_y, x, (float)f.prep_band_y,
+                    lane.style(PathSegment::SPOOL));
         if (data.slot_has_prep_sensor[i]) {
-            add_band(out, BandKind::Lane, {x, (float)f.prep_y}, {0, 1},
+            add_band(out, BandKind::Lane, {x, (float)f.prep_band_y}, {0, 1},
                      lane.band(PathSegment::PREP), s.color, f.prep_on_box_edge);
         }
+        append_line(r, x, (float)f.prep_band_y, x, (float)f.prep_y, lane.style(PathSegment::LANE));
 
         if (linear) {
             append_line(r, x, (float)f.prep_y, x, hub_top, lane.style(PathSegment::LANE));
