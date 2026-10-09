@@ -4,8 +4,8 @@ How the CI pipeline ships `helix-screen` to Google Play, and the one-time manual
 
 ## Where to pick up - 2026-10-09
 
-**HelixScreen 1.0.4 is in Google review as a closed test.** Everything in Play Console up to
-that point is done; what remains is testers and time.
+**HelixScreen 1.0.4 is live as a closed test.** Google approved it the night it was submitted
+(2026-10-08). What remains is testers and time.
 
 | Item | State |
 |------|-------|
@@ -14,9 +14,10 @@ that point is done; what remains is testers and time.
 | App record | Created 2026-10-08 (app ID `4976272994970005350`) |
 | Declarations | All saved: see "Play Console declarations" below for the answers as filed |
 | Store listing | Text, icon, feature graphic and the 8 screenshots uploaded; category Tools; contact `privacy@helixscreen.org`, website `https://helixscreen.org` |
-| Closed testing track | "Closed testing - Alpha": release `1.0.4` (versionCode `100000499`, target SDK 36, min API 28), 178 countries, email list "HelixScreen testers" (Preston only), feedback URL = GitHub issues |
-| Review | 15 changes sent for review 2026-10-08 23:47 EDT. Managed publishing is **off**, so approval publishes the closed test without another click |
-| Opt-in link | `https://play.google.com/apps/testing/org.helixscreen.app`. Works only after approval, and only for accounts on the track's tester list or group |
+| Closed testing track | "Closed testing - Alpha", **Active**: release `1.0.4` (versionCode `100000499`, target SDK 36, min API 28), 178 countries, testers = Google Group `helixscreen-testers@googlegroups.com` (the switch from the old one-person email list was sent for review 2026-10-08), feedback URL = GitHub issues |
+| Tester group | `https://groups.google.com/g/helixscreen-testers` on `preston.brown@gmail.com`: searchable by anyone, anyone can join, owners post, managers see the member list |
+| Managed publishing | **Off**: an approved change publishes without another click |
+| Opt-in link | `https://play.google.com/apps/testing/org.helixscreen.app`. Admits only members of the tester group |
 | `PLAY_SERVICE_ACCOUNT_JSON` | Still unset, so `publish-android` skips on every tag |
 
 **The production gate.** A personal developer account cannot apply for production until a closed
@@ -27,12 +28,8 @@ personal account is the one we publish from.
 
 **Next, in order:**
 
-1. **Tester group.** Create the Google Group `helixscreen-testers@googlegroups.com` on
-   `preston.brown@gmail.com`: searchable by anyone on the web, anyone can join, posting limited to
-   owners, member list visible to managers only. Add it to the closed track (Testers tab → Google
-   Groups) and save. Group members then qualify for the opt-in link without anyone collecting emails.
-2. **Announce on Discord** once Google approves the release: the group link, the opt-in link, and
-   the sideload warning below.
+1. **Announce on Discord**: the group link, the opt-in link, and the sideload warning below.
+2. **Count opted-in testers** on the dashboard's production card until it shows 12.
 3. **Wait out 14 days with 12+ opted-in testers**, then use "Apply for production" on the dashboard.
 4. **Play App Signing.** The 1.0.4 upload did not show an enrollment prompt. Open Test and release →
    App integrity → App signing, confirm Google's app signing key exists, and register its SHA-256 as
