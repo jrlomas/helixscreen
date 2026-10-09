@@ -39,6 +39,12 @@ void SoundSequencer::stop() {
 }
 
 void SoundSequencer::set_external_tick(std::function<void(float dt_ms)> fn) {
+    // From inside the callback this would wait on the call it is part of.
+    if (std::this_thread::get_id() == loop_thread_id_.load()) {
+        spdlog::error(
+            "[SoundSequencer] set_external_tick() called from the tick callback; ignored");
+        return;
+    }
     {
         // Blocks while the sequencer thread is inside the old callback.
         std::lock_guard<std::mutex> lock(external_tick_mutex_);
@@ -81,6 +87,7 @@ void SoundSequencer::shutdown() {
 
 void SoundSequencer::sequencer_loop() {
     psram_thread_entered("sound_seq");
+    loop_thread_id_.store(std::this_thread::get_id());
     spdlog::debug("[SoundSequencer] sequencer loop started");
 
     // Park the device before the first tick. The backend opened it during

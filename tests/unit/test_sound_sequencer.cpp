@@ -1171,3 +1171,27 @@ TEST_CASE("SoundSequencer: clearing the external tick waits out a tick in flight
 
     seq.shutdown();
 }
+
+TEST_CASE("SoundSequencer: setting the external tick from inside it is refused",
+          "[sound][sequencer][threading]") {
+    auto backend = std::make_shared<MockBackend>();
+    SoundSequencer seq(backend);
+    seq.start();
+
+    std::atomic<int> ticks{0};
+    std::atomic<bool> inner_call_returned{false};
+    seq.set_external_tick([&](float) {
+        if (ticks.fetch_add(1) == 0) {
+            seq.set_external_tick(nullptr);
+            inner_call_returned.store(true);
+        }
+    });
+
+    REQUIRE(UITest::wait_until([&] { return inner_call_returned.load(); }, 2000));
+    // The refused call left the callback installed: it keeps ticking.
+    const int after_inner = ticks.load();
+    CHECK(UITest::wait_until([&] { return ticks.load() > after_inner; }, 2000));
+
+    seq.set_external_tick(nullptr);
+    seq.shutdown();
+}
