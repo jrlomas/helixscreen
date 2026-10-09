@@ -656,8 +656,8 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// Applies the endless-spool enable bit, then replaces the unit list, tool
     /// map and grouping with the parse.
     void apply_box_units_locked(BoxFrame& frame);
-    /// Records a BOX_ENABLE_AUTO_REFILL the transport accepted as the current
-    /// state and announces it. Takes mutex_ itself.
+    /// Records a BOX_ENABLE_AUTO_REFILL Klipper completed as the current state
+    /// and announces it. Takes mutex_ itself; main thread.
     void record_auto_refill_sent(bool enable);
     /// Bypass capability and the cross-UI drop of a stale declaration.
     void converge_box_bypass_locked(BoxFrame& frame);

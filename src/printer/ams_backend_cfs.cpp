@@ -393,12 +393,14 @@ bool AmsBackendCfs::owns_filament_sensor(const std::string& bare_name,
 void AmsBackendCfs::on_started() {
     spdlog::info("[AMS CFS] Backend started — querying initial box state");
 
-    // A start is a new session: the merged stock frames and the first-frame
-    // mirror sort describe the last one.
+    // A start is a new session: the merged stock frames, the first-frame
+    // mirror sort and whether the auto-refill bit has been seen describe the
+    // last one.
     stock_box_state_ = nlohmann::json::object();
     {
         std::lock_guard<std::mutex> lock(mutex_);
         mirrors_sorted_ = false;
+        endless_spool_enable_reported_ = false;
     }
 
     // Restore the persisted stock-dialect bypass declaration. The
@@ -4316,12 +4318,16 @@ AmsError AmsBackendCfs::execute_device_action(const std::string& action_id, cons
             std::lock_guard<std::mutex> lock(mutex_);
             enable = !system_info_.endless_spool_enabled;
         }
-        AmsError result = execute_gcode(enable ? "BOX_ENABLE_AUTO_REFILL ENABLE=1"
-                                               : "BOX_ENABLE_AUTO_REFILL ENABLE=0");
-        if (result.success()) {
-            record_auto_refill_sent(enable);
-        }
-        return result;
+        // Recorded only once Klipper has run it: a dispatch proves nothing, and
+        // a dialect without the command or a rejected send must leave the
+        // cache on the box's last word.
+        auto token = lifetime_.token();
+        return execute_gcode(enable ? "BOX_ENABLE_AUTO_REFILL ENABLE=1"
+                                    : "BOX_ENABLE_AUTO_REFILL ENABLE=0",
+                             [this, token, enable]() {
+                                 token.defer("AmsBackendCfs::auto_refill_sent",
+                                             [this, enable]() { record_auto_refill_sent(enable); });
+                             });
     }
 
     if (action_id == "nozzle_clean") {

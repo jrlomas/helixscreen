@@ -174,8 +174,11 @@ The user-facing on/off control is the `toggle_auto_refill` device action, which 
 argument, mirroring Creality's own master-server (string tables in both OTA images; a bare
 call leaves the handler's `gcmd.get_int` without its argument, whose behavior is
 unverified). The switch renders the cached state, and has no value until a frame has
-reported one. A send the transport accepts becomes the cached state at once, because the box
-never confirms a value it already held. It is not an endless-spool *edit* in the
+reported one. A send becomes the cached state once Klipper reports the command complete,
+because the box never confirms a value it already held; a send that errors (the flat fork
+registers no `BOX_ENABLE_AUTO_REFILL`, Klipper not ready, a box rejection) leaves the cache
+alone. `on_started()` forgets the bit, so a restart reads `Unknown` until the box reports it
+again. It is not an endless-spool *edit* in the
 `set_endless_spool_backup()` sense, which is why editability stays `ReadOnly`.
 
 ### Bypass / external spool

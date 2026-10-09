@@ -433,12 +433,32 @@ TEST_CASE("CFS bypass: stock dialect declaration + sensor derivation", "[ams][cf
     }
 }
 
+// Auto-refill sends ack through the on_complete overload, which the plain
+// capture helper does not intercept. Completion fires inline where the real
+// client fires it from the WebSocket thread; `reject` withholds it, as a
+// command Klipper refuses (unregistered on the flat fork, NOT_READY, a box
+// error) answers on_error instead.
+class CfsAutoRefillHelper : public CfsRemapHelper {
+  public:
+    using CfsRemapHelper::execute_gcode;
+
+    AmsError execute_gcode(const std::string& gcode, std::function<void()> on_complete) override {
+        captured.push_back(gcode);
+        if (!reject && on_complete) {
+            on_complete();
+        }
+        return AmsErrorHelper::success();
+    }
+
+    bool reject = false;
+};
+
 TEST_CASE("CFS auto-refill device action sends an explicit ENABLE", "[ams][cfs]") {
     // BOX_ENABLE_AUTO_REFILL is a setter, not a toggle: the handler reads
     // ENABLE via gcmd.get_int, and Creality's own master-server sends
     // ENABLE=1/0 explicitly on both families. The device action must invert
     // the last box-reported flag and send the spelled-out command.
-    CfsRemapHelper backend;
+    CfsAutoRefillHelper backend;
     backend.mark_running();
     backend.captured.clear();
 
@@ -5625,7 +5645,7 @@ TEST_CASE("CFS auto-refill toggle shows the box-reported state", "[ams][cfs][end
 }
 
 TEST_CASE("CFS auto-refill toggle sends the switch's value", "[ams][cfs][endless_spool]") {
-    CfsRemapHelper backend;
+    CfsAutoRefillHelper backend;
     backend.mark_running();
 
     SECTION("switch on while the box reports on sends ENABLE=1") {
@@ -5649,13 +5669,14 @@ TEST_CASE("CFS auto-refill toggle: the sent state is what the status and switch 
           "[ams][cfs][endless_spool]") {
     // The box resends auto_refill only when it changes, so nothing else will
     // tell the status line about a send.
-    CfsRemapHelper backend;
+    CfsAutoRefillHelper backend;
     backend.mark_running();
     const json full = make_runout_box(0);
     CfsTestAccess::handle_status(backend, make_cfs_notification(full));
     REQUIRE(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::On);
 
     REQUIRE(backend.execute_device_action("toggle_auto_refill", std::any(false)).success());
+    drain_calib_queue();
     CHECK(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::Off);
     {
         const auto toggle = find_action(backend, "toggle_auto_refill");
@@ -5672,6 +5693,36 @@ TEST_CASE("CFS auto-refill toggle: the sent state is what the status and switch 
     // The box's own report still wins over the optimistic value.
     CfsTestAccess::handle_status(backend, make_cfs_notification(json{{"auto_refill", 1}}));
     CHECK(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::On);
+}
+
+TEST_CASE("CFS auto-refill toggle: a send Klipper does not complete changes nothing",
+          "[ams][cfs][endless_spool]") {
+    CfsAutoRefillHelper backend;
+    backend.mark_running();
+    backend.reject = true;
+    CfsTestAccess::handle_status(backend, make_cfs_notification(make_runout_box(0)));
+    REQUIRE(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::On);
+
+    REQUIRE(backend.execute_device_action("toggle_auto_refill", std::any(false)).success());
+    drain_calib_queue();
+    REQUIRE(backend.captured.back() == "BOX_ENABLE_AUTO_REFILL ENABLE=0");
+
+    CHECK(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::On);
+    const auto toggle = find_action(backend, "toggle_auto_refill");
+    REQUIRE(toggle.has_value());
+    const bool* on = std::any_cast<bool>(&toggle->current_value);
+    REQUIRE(on != nullptr);
+    CHECK(*on);
+}
+
+TEST_CASE("CFS endless spool: a backend restart forgets the enable bit",
+          "[ams][cfs][endless_spool]") {
+    CfsRemapHelper backend;
+    CfsTestAccess::handle_status(backend, make_cfs_notification(make_runout_box(0)));
+    REQUIRE(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::On);
+
+    CfsTestAccess::call_on_started(backend);
+    CHECK(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::Unknown);
 }
 
 // ===========================================================================
