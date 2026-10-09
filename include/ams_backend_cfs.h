@@ -653,8 +653,12 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// readings; takes mutex_ itself.
     void file_box_readings(const AmsSystemInfo& new_info);
     void apply_box_frame_locked(BoxFrame& frame);
-    /// Replaces the unit list, tool map and endless-spool state with the parse.
+    /// Applies the endless-spool enable bit, then replaces the unit list, tool
+    /// map and grouping with the parse.
     void apply_box_units_locked(BoxFrame& frame);
+    /// Records a BOX_ENABLE_AUTO_REFILL the transport accepted as the current
+    /// state and announces it. Takes mutex_ itself.
+    void record_auto_refill_sent(bool enable);
     /// Bypass capability and the cross-UI drop of a stale declaration.
     void converge_box_bypass_locked(BoxFrame& frame);
     /// The runout latch; true when the frame carried the field.
@@ -924,6 +928,11 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// omitting `runout` keeps it, an explicit null clears it, a stock frame
     /// clears it. Guarded by mutex_.
     std::optional<std::vector<int>> flat_backup_edges_;
+
+    /// True once a frame carried the auto-refill enable bit, so
+    /// AmsSystemInfo::endless_spool_enabled holds the firmware's answer rather
+    /// than its constructed default. Guarded by mutex_.
+    bool endless_spool_enable_reported_ = false;
 
     /// The slot number a command names for @p bay. A bay's global index is the
     /// firmware's own slot number on every dialect; -1 for a bay in an absent

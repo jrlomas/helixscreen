@@ -1794,6 +1794,19 @@ void AmsBackendCfs::apply_box_units_locked(BoxFrame& f) {
     const bool is_flat = f.is_flat;
     AmsSystemInfo& new_info = f.new_info;
 
+    // Presence-gated, and independent of whether any unit is up. The box sends
+    // the enable bit with its first full frame, often before a unit has
+    // answered, and never again while it is unchanged, so a frame that drops
+    // it here leaves the firmware's answer unread for good. A frame without
+    // the bit says nothing about it: Moonraker subscribes `box: null`, and a
+    // frame that changed only a slot omits the bit while both parsers default
+    // it to off. Stock spells it auto_refill, the flat schema
+    // runout_swap_enabled.
+    if (box.contains("auto_refill") || (is_flat && box.contains("runout_swap_enabled"))) {
+        system_info_.endless_spool_enabled = new_info.endless_spool_enabled;
+        endless_spool_enable_reported_ = true;
+    }
+
     if (!new_info.units.empty()) {
         system_info_.units = std::move(new_info.units);
         system_info_.total_slots = new_info.total_slots;
@@ -1826,16 +1839,6 @@ void AmsBackendCfs::apply_box_units_locked(BoxFrame& f) {
             it != overrides_.end() && it->second.external_mirror &&
             system_info_.slot_exists(it->first)) {
             make_bay_record_locked(it->first, it->second);
-        }
-        // Presence-gated like filament_runout below. Moonraker
-        // subscribes `box: null`, so a frame that changed only a slot
-        // carries no enable bit at all, and both parsers default it to
-        // off — copying that default would turn endless spool off under
-        // a user whose firmware still has it on, on every such delta.
-        // Stock spells the bit auto_refill, the flat schema
-        // runout_swap_enabled.
-        if (box.contains("auto_refill") || (is_flat && box.contains("runout_swap_enabled"))) {
-            system_info_.endless_spool_enabled = new_info.endless_spool_enabled;
         }
         system_info_.tool_to_slot_map = std::move(new_info.tool_to_slot_map);
         // Presence-gated like filament_runout below: a stock delta
@@ -4096,18 +4099,13 @@ helix::printer::EndlessSpoolCapabilities AmsBackendCfs::get_endless_spool_capabi
     std::lock_guard<std::mutex> lock(mutex_);
     using namespace helix::printer;
 
-    // No box frame has been merged yet, so endless_spool_enabled is still its
-    // constructed default. Answering Off from that default states "will not
-    // switch spools on runout" on no evidence, and the real frame a couple of
-    // seconds later then contradicts it — the user watches the line appear and
-    // vanish. Unknown says we do not know and NotReady says why, same as
-    // AmsBackendHappyHare::get_endless_spool_capabilities.
-    //
-    // units is the readiness signal because it is the same guard the merge
-    // uses: handle_status writes the enable bit only inside
-    // `if (!new_info.units.empty())`, so an empty units vector is exactly the
-    // state in which that bit cannot have come from firmware.
-    if (system_info_.units.empty()) {
+    // No frame has carried the enable bit yet, so endless_spool_enabled is
+    // still its constructed default. Answering Off from that default states
+    // "will not switch spools on runout" on no evidence, and the real frame
+    // then contradicts it. Unknown says we do not know and NotReady says why,
+    // same as AmsBackendHappyHare::get_endless_spool_capabilities. A unit
+    // being up is no proxy: the box sends units and the bit independently.
+    if (!endless_spool_enable_reported_) {
         return {.availability = EndlessSpoolAvailability::Available,
                 .enabled = EndlessSpoolEnabled::Unknown,
                 .editability = EndlessSpoolEditability::ReadOnly,
@@ -4147,6 +4145,19 @@ helix::printer::EndlessSpoolConfig AmsBackendCfs::get_endless_spool_config() con
         return {};
     }
     return endless_spool_config_from_edges(*flat_backup_edges_);
+}
+
+void AmsBackendCfs::record_auto_refill_sent(bool enable) {
+    // The box resends the bit only when it changes, so a send it accepts as
+    // a no-op is never confirmed, and the status line and switch would go on
+    // showing the old value. A later frame that carries the bit overrides
+    // this.
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        system_info_.endless_spool_enabled = enable;
+        endless_spool_enable_reported_ = true;
+    }
+    emit_event(EVENT_STATE_CHANGED);
 }
 
 std::vector<int> AmsBackendCfs::get_tool_mapping() const {
@@ -4222,11 +4233,20 @@ std::vector<helix::printer::DeviceSection> AmsBackendCfs::get_device_sections() 
 
 std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() const {
     using DA = helix::printer::DeviceAction;
+    // No value until a frame has reported the bit: an unchecked switch would
+    // claim off.
+    std::any auto_refill;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (endless_spool_enable_reported_) {
+            auto_refill = system_info_.endless_spool_enabled;
+        }
+    }
     std::vector<DA> actions = {
         DA::button("refresh_rfid", "Refresh RFID", "maintenance", "",
                    "Re-read spool RFID tags and remaining length"),
-        DA::toggle("toggle_auto_refill", "Toggle Auto-Refill", "maintenance", {}, "",
-                   "Enable/disable automatic backup spool switching"),
+        DA::toggle("toggle_auto_refill", "Toggle Auto-Refill", "maintenance",
+                   std::move(auto_refill), "", "Enable/disable automatic backup spool switching"),
         DA::button("nozzle_clean", "Clean Nozzle", "maintenance", "",
                    "Wipe nozzle on silicone cleaning strip"),
         DA::button("comm_test", "Communication Test", "maintenance", "",
@@ -4253,8 +4273,7 @@ std::vector<helix::printer::DeviceAction> AmsBackendCfs::get_device_actions() co
     return actions;
 }
 
-AmsError AmsBackendCfs::execute_device_action(const std::string& action_id,
-                                              const std::any& /*value*/) {
+AmsError AmsBackendCfs::execute_device_action(const std::string& action_id, const std::any& value) {
     if (action_id == "refresh_rfid") {
         // Probe every connected CFS unit's RFID tags. Inserting a spool does NOT
         // auto-read its tag: the box reports vender/color/material as sentinels
@@ -4288,14 +4307,21 @@ AmsError AmsBackendCfs::execute_device_action(const std::string& action_id,
         // families ([A]: string tables in CR4CU220812S11 V2.3.5.34 and
         // CR0CN240110C10 V1.1.4.11). A bare call leaves the argument absent;
         // whether the wrapper then throws or defaults is unverified, so send
-        // the state we want — the inverse of the last box-reported flag.
+        // the state we want: the switch's, or with no switch value the
+        // inverse of the cached flag.
         bool enable;
-        {
+        if (const bool* requested = std::any_cast<bool>(&value)) {
+            enable = *requested;
+        } else {
             std::lock_guard<std::mutex> lock(mutex_);
             enable = !system_info_.endless_spool_enabled;
         }
-        return execute_gcode(enable ? "BOX_ENABLE_AUTO_REFILL ENABLE=1"
-                                    : "BOX_ENABLE_AUTO_REFILL ENABLE=0");
+        AmsError result = execute_gcode(enable ? "BOX_ENABLE_AUTO_REFILL ENABLE=1"
+                                               : "BOX_ENABLE_AUTO_REFILL ENABLE=0");
+        if (result.success()) {
+            record_auto_refill_sent(enable);
+        }
+        return result;
     }
 
     if (action_id == "nozzle_clean") {

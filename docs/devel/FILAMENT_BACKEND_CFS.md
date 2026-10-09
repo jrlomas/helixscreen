@@ -147,6 +147,11 @@ CFS reports `Available` + `ReadOnly` + `FirmwareManaged`, with `enabled` derived
 old two-bool struct could not express - it hardcoded `supported = true` and buried the real
 state in an untranslated `description`.
 
+The bit is applied from any frame that carries it, whether or not a unit is up yet. The box
+sends it once, in its first full frame (often while every unit still reads `state=None`), and
+resends it only when it changes, so a bare `{"auto_refill": n}` frame counts as a full update.
+Until a frame has carried it, `enabled` is `Unknown` with restriction `NotReady`.
+
 When auto-refill is on AND the frame carried `same_material` AND no group pairs two or more
 lanes, `enabled` is `OnWithoutBackup` instead of `On` (#1391): the firmware swaps between
 identical spools, and with every group a singleton a runout stops the print despite the
@@ -164,11 +169,13 @@ name, and the per-lane group ordinals (`AmsSystemInfo::endless_spool_group_ids`)
 `OnWithoutBackup` derivation above. Nothing is pushed back to the firmware on its basis.
 
 The user-facing on/off control is the `toggle_auto_refill` device action, which emits
-`BOX_ENABLE_AUTO_REFILL ENABLE=1|0` — a setter, not a toggle: it inverts the last
-box-reported `endless_spool_enabled` and sends the explicit argument, mirroring
-Creality's own master-server (string tables in both OTA images; a bare call leaves the
-handler's `gcmd.get_int` without its argument, whose behavior is unverified). It is not
-an endless-spool *edit* in the
+`BOX_ENABLE_AUTO_REFILL ENABLE=1|0` — a setter, not a toggle: it sends the switch's value
+(or, called with no value, the inverse of the cached `endless_spool_enabled`) as the explicit
+argument, mirroring Creality's own master-server (string tables in both OTA images; a bare
+call leaves the handler's `gcmd.get_int` without its argument, whose behavior is
+unverified). The switch renders the cached state, and has no value until a frame has
+reported one. A send the transport accepts becomes the cached state at once, because the box
+never confirms a value it already held. It is not an endless-spool *edit* in the
 `set_endless_spool_backup()` sense, which is why editability stays `ReadOnly`.
 
 ### Bypass / external spool
