@@ -11,6 +11,8 @@
     <!-- 1 while the unit is an absent placeholder: a box address held for a box
          that is not on the bus. The card shows disabled and says so. -->
     <prop name="absent" type="subject" default="ams_env_ind_off_flag"/>
+    <!-- 1 while a present unit is reported offline: drawn disabled, with a chip. -->
+    <prop name="disconnected" type="subject" default="ams_env_ind_off_flag"/>
     <prop name="temp_text" type="subject" default="ams_env_ind_0_temp_text"/>
     <prop name="humidity_text" type="subject" default="ams_env_ind_0_humidity_text"/>
     <prop name="humidity_status" type="subject" default="ams_env_ind_0_humidity_status"/>
@@ -27,6 +29,7 @@
         clickable="true">
     <style name="styles.press_wash" selector="pressed"/>
     <bind_state_if_eq subject="$absent" state="disabled" ref_value="1"/>
+    <bind_state_if_eq subject="$disconnected" state="disabled" ref_value="1"/>
     <!-- Unit header: logo + name (clickable=false + event_bubble so clicks reach card) -->
     <lv_obj width="100%"
             height="content" scrollable="false" clickable="false" event_bubble="true" flex_flow="row"
@@ -69,7 +72,9 @@
         <!-- Slot count label -->
         <text_small name="slot_count" text="0 slots" event_bubble="true">
           <bind_flag_if_eq subject="$absent" flag="hidden" ref_value="1"/>
+          <bind_flag_if_eq subject="$disconnected" flag="hidden" ref_value="1"/>
         </text_small>
+        <ams_disconnected_chip name="unit_disconnected_chip" disconnected="$disconnected"/>
         <text_small name="unit_absent_label" text="Not connected" event_bubble="true">
           <bind_flag_if_eq subject="$absent" flag="hidden" ref_value="0"/>
         </text_small>

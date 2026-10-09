@@ -401,8 +401,11 @@ void AmsOverviewPanel::create_unit_cards(const AmsSystemInfo& info, helix::ui::L
         // which, since it owns the cap and the registrations.
         const AmsState::EnvIndicatorSubjectNames s = AmsState::env_indicator_subject_names(i);
         const std::string absent = AmsState::unit_absent_subject_name(i);
+        const std::string disconnected = AmsState::unit_disconnected_subject_name(i);
         const char* attrs[] = {"absent",
                                absent.c_str(),
+                               "disconnected",
+                               disconnected.c_str(),
                                "temp_text",
                                s.temp_text.c_str(),
                                "humidity_text",
@@ -878,6 +881,7 @@ void AmsOverviewPanel::show_unit_detail(int unit_index) {
     }
 
     detail_unit_index_ = unit_index;
+    AmsState::instance().set_viewed_unit(unit_index);
     const AmsUnit& unit = info.units[unit_index];
 
     spdlog::info("[{}] Showing detail for unit {} ({})", get_name(), unit_index, unit.name);
@@ -957,6 +961,7 @@ void AmsOverviewPanel::show_overview() {
     spdlog::info("[{}] Returning to overview mode", get_name());
 
     detail_unit_index_ = -1;
+    AmsState::instance().set_viewed_unit(-1);
 
     // Restore header to overview mode: show title, hide detail elements
     lv_obj_t* title = helix::ui::find_required(panel_, "header_title", get_name());

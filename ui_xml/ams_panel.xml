@@ -47,6 +47,7 @@
                           bind_text="ams_system_name" text_transform="uppercase" long_mode="dots" clickable="false"
                           event_bubble="true" scrollable="false"/>
           </lv_obj>
+          <ams_disconnected_chip name="system_disconnected_chip" disconnected="ams_all_units_disconnected"/>
         </lv_obj>
       </lv_obj>
       <!-- Left column content (unit visualization + path canvas) -->

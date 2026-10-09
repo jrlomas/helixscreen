@@ -1264,7 +1264,10 @@ struct AmsUnit {
     std::vector<SlotInfo> slots; ///< Slot information
 
     // Unit-level status
-    bool connected = false; ///< Unit communication status
+    /// False only when the backend reports the unit offline or switched off.
+    /// A backend that publishes no connection state leaves it true, so a unit
+    /// never reads disconnected before its first report.
+    bool connected = true;
     /// An address no unit answers from, below one that does. Firmware that
     /// numbers bays by box address keeps the gap's indices reserved, so this
     /// stands in for the missing box: its bays are EMPTY, nothing may be sent
