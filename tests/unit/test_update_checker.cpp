@@ -1760,7 +1760,7 @@ TEST_CASE("display_name returns correct strings for known platforms",
     REQUIRE(helix::platform::display_name("ad5x") == "FlashForge Adventurer 5X");
     REQUIRE(helix::platform::display_name("mips") == "MIPS (K1 series / AD5X)");
     REQUIRE(helix::platform::display_name("k1") == "Creality K1");
-    REQUIRE(helix::platform::display_name("k2") == "Creality K2 Plus");
+    REQUIRE(helix::platform::display_name("k2") == "Creality K2");
     REQUIRE(helix::platform::display_name("cc1") == "Elegoo Centauri Carbon");
     REQUIRE(helix::platform::display_name("snapmaker-u1") == "Snapmaker U1");
     REQUIRE(helix::platform::display_name("esp32") == "BTT K-Touch");
