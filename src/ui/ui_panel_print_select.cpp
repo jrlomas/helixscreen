@@ -176,13 +176,15 @@ PrintSelectPanel::~PrintSelectPanel() {
     // CRITICAL: During static destruction (app exit), LVGL may already be gone.
     // We check if LVGL is still initialized before calling any LVGL functions.
     if (lv_is_initialized()) {
-        // Remove scroll event callbacks to prevent use-after-free
-        if (card_view_container_) {
-            lv_obj_remove_event_cb(card_view_container_, on_scroll_static);
-            lv_obj_remove_event_cb(card_view_container_, on_card_container_resized_static);
+        // The containers can outlive this panel, or die before it; the callbacks
+        // carrying `this` must not outlive the panel.
+        if (card_view_container_ && lv_obj_is_valid(card_view_container_)) {
+            lv_obj_remove_event_cb_with_user_data(card_view_container_, on_scroll_static, this);
+            lv_obj_remove_event_cb_with_user_data(card_view_container_,
+                                                  on_card_container_resized_static, this);
         }
-        if (list_rows_container_) {
-            lv_obj_remove_event_cb(list_rows_container_, on_scroll_static);
+        if (list_rows_container_ && lv_obj_is_valid(list_rows_container_)) {
+            lv_obj_remove_event_cb_with_user_data(list_rows_container_, on_scroll_static, this);
         }
 
         // Delete pending timers
