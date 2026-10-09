@@ -184,7 +184,9 @@ manager's `current_index` is the only seat signal.
 **How the backend reads it** (`src/printer/ams_backend_ace.cpp#on_started`,
 `#handle_status`): the slot-bearing `ace_instance_N` object is parsed first
 (`select_ace_object`), then a manager-shaped `ace` riding the same query response
-or notify frame is parsed after it — slots land first, the seat stamps onto them. A
+or notify frame is parsed after it — slots land first, the seat stamps onto them. Any
+non-empty `ace` without slots counts as the manager, since its deltas name `current_index`
+only when the seat moved (`#manager_ace_object`). A
 manager-only notify frame (e.g. `current_index` flipping to `-1` on a TR) is parsed on its
 own and clears the seat. Notify frames carry per-object deltas: a frame carrying any
 `ace_instance_N` key resolves to the lowest such instance (the one the display is

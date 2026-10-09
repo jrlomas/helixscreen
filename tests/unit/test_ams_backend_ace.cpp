@@ -3013,6 +3013,56 @@ TEST_CASE("ACE endless spool groups follow the match mode", "[ams][ace][endless]
     }
 }
 
+// Klipper batches every object that changed into one notify frame, so a
+// manager delta naming no current_index rides beside an instance delta (#1679).
+TEST_CASE_METHOD(LVGLTestFixture, "ACE endless spool changes at runtime reach AmsState",
+                 "[ams][ace][endless][1679]") {
+    using helix::printer::EndlessSpoolStatusKind;
+    auto& ams = helix::AmsState::instance();
+    ams.init_subjects(true);
+    helix::test::RegisteredBackend<AmsBackendAceTestHelper> reg;
+    AmsBackendAceTestHelper& helper = *reg;
+    helper.set_running(true);
+
+    auto send = [&](const json& frame) {
+        helper.test_handle_status_update({{"params", json::array({frame, 4242.0})}});
+        helix::ui::UpdateQueue::instance().drain();
+    };
+    auto endless_kind = [&] {
+        return static_cast<EndlessSpoolStatusKind>(
+            lv_subject_get_int(ams.get_endless_state_subject()));
+    };
+
+    send({{"ace_instance_0", make_kobra_instance_object()},
+          {"ace", kobra_manager_with_endless(true, "exact")}});
+    REQUIRE(endless_kind() == EndlessSpoolStatusKind::OnWithoutBackup);
+
+    SECTION("a match mode change beside an instance delta") {
+        send({{"ace_instance_0", {{"temp", 35}}},
+              {"ace", {{"endless_spool_match_mode", "material"}}}});
+        CHECK(endless_kind() == EndlessSpoolStatusKind::On);
+        CHECK(endless_groups(helper) == std::vector<std::vector<int>>{{0, 3}, {1, 2}});
+    }
+
+    SECTION("a match mode change on its own") {
+        send({{"ace", {{"endless_spool_match_mode", "material"}}}});
+        CHECK(endless_kind() == EndlessSpoolStatusKind::On);
+    }
+
+    SECTION("the switch turned off beside an instance delta") {
+        send({{"ace_instance_0", {{"temp", 35}}}, {"ace", {{"endless_spool_enabled", false}}}});
+        CHECK(endless_kind() == EndlessSpoolStatusKind::Off);
+    }
+
+    SECTION("a slot reloaded with a matching spool") {
+        json slots = make_kobra_slots_array();
+        slots[3]["color"] = json::array({0, 230, 118}); // green PLA, as slot 0
+        send({{"ace_instance_0", {{"slots", slots}}}});
+        CHECK(endless_kind() == EndlessSpoolStatusKind::On);
+        CHECK(endless_groups(helper) == std::vector<std::vector<int>>{{0, 3}});
+    }
+}
+
 TEST_CASE("ACE endless spool device actions send the driver commands",
           "[ams][ace][endless][1679]") {
     AmsBackendAceTestHelper helper;

@@ -382,7 +382,8 @@ class AmsBackendAce : public AmsSubscriptionBackend {
      * `ace_instance_N`, while the top-level `ace` is a manager whose only
      * seat signal is `current_index` (#1069). A slot-bearing `ace` (ValgACE)
      * is NOT a manager — returning null for it keeps the caller from parsing
-     * the same object twice.
+     * the same object twice. Any other non-empty `ace` is one: its notify
+     * deltas omit `current_index` whenever the seat did not change.
      *
      * @param status A printer.objects.query result.status object, or one
      *        notify_status_update frame's status object

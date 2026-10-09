@@ -1349,19 +1349,20 @@ AmsBackendAce::lowest_ace_instance_key(const json& status,
 }
 
 const json* AmsBackendAce::manager_ace_object(const json& status) {
-    // The fork's manager carries current_index and nothing parseable beyond
-    // it; anything else shaped like this (an `ace` with no slots and no
-    // current_index) has nothing the seat logic could read, so it is not
-    // worth a parse pass.
+    // Any slotless `ace` is the manager's half of the frame. A notify delta
+    // carries only the fields that changed, so one stating just the endless
+    // spool mode, a sensor or target_index names no current_index, and it
+    // arrives beside whatever instance delta Klipper batched with it
+    // (prestonbrown/helixscreen#1679).
     if (!status.is_object() || !status.contains("ace") || !status["ace"].is_object()) {
         return nullptr;
     }
     const json& ace = status["ace"];
+    if (ace.empty()) {
+        return nullptr;
+    }
     if (ace.contains("slots") && ace["slots"].is_array() && !ace["slots"].empty()) {
         return nullptr; // slot-bearing ValgACE `ace` — the primary, not a manager
-    }
-    if (!ace.contains("current_index") || !ace["current_index"].is_number_integer()) {
-        return nullptr;
     }
     return &ace;
 }
