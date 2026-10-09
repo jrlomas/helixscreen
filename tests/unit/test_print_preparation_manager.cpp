@@ -175,6 +175,44 @@ TEST_CASE_METHOD(HelixTestFixture, "PrintPreparationManager: can_modify_gcode",
     }
 }
 
+TEST_CASE_METHOD(HelixTestFixture,
+                 "PrintPreparationManager: dropped modifications name the device, not the plugin, "
+                 "when the transport keeps no copy",
+                 "[print_preparation][safety]") {
+    lv_init_safe();
+    MockPrinter mock_printer;
+    PrintPreparationManager manager;
+    manager.set_dependencies(&mock_printer.api, &mock_printer.state);
+    mock_printer.state.set_helix_plugin_installed(true);
+    helix::ui::UpdateQueue::instance().drain();
+
+    std::vector<std::string> shown;
+    set_test_notification_warning_hook([&shown](const std::string& m) { shown.push_back(m); });
+    struct HookReset {
+        ~HookReset() {
+            set_test_notification_warning_hook(nullptr);
+        }
+    } reset;
+    auto warned = [&manager, &shown]() {
+        shown.clear();
+        manager.warn_modifications_dropped({});
+        return shown.size() == 1 ? shown[0] : std::string();
+    };
+
+    SECTION("a transport without local copies") {
+        mock_printer.api.transfers_mock().mock_no_local_copies();
+        REQUIRE(manager.gcode_rewrite_block() == helix::GcodeRewriteBlock::NoLocalCopies);
+        CHECK(warned() ==
+              "Modifying G-code is not available on this device. Printing original file.");
+    }
+    SECTION("a missing plugin, for contrast") {
+        mock_printer.state.set_helix_plugin_installed(false);
+        helix::ui::UpdateQueue::instance().drain();
+        CHECK(warned() == "Modifying G-code needs the HelixPrint plugin. Printing original file.");
+    }
+    manager.set_dependencies(nullptr, nullptr);
+}
+
 TEST_CASE("PrintPreparationManager: get_temp_directory", "[print_preparation][safety]") {
     PrintPreparationManager manager;
 

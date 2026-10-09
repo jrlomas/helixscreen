@@ -31,6 +31,7 @@
 
 #include "../lvgl_ui_test_fixture.h"
 #include "../test_helpers/mock_bypass.h"
+#include "../test_helpers/mock_printer.h"
 #include "../test_helpers/printer_state_test_access.h"
 #include "../test_helpers/scoped_portrait_layout.h"
 #include "../test_helpers/update_queue_test_access.h"
@@ -1042,6 +1043,34 @@ TEST_CASE_METHOD(LVGLUITestFixture, "The tap chevron tracks the card, and the ba
         CHECK(lv_subject_get_int(remappable) == 1);
         CHECK(lv_subject_get_int(needs_setup) == 0);
         CHECK(lv_subject_get_int(help_visible) == 0);
+    }
+
+    SECTION("GcodeRewrite on a transport without local copies is simply not offered") {
+        // The plugin is installed, so nothing here can be fixed by the user:
+        // no greyed card, no Set up, no help icon, and the rewrite-gated option
+        // rows read the same refusal.
+        MockPrinter device;
+        device.api.transfers_mock().mock_no_local_copies();
+        view.set_analysis_dependencies(&device.api, &get_printer_state());
+        ams.backend->set_remap_strategy(helix::AmsBackend::RemapStrategy::GcodeRewrite);
+        get_printer_state().set_helix_plugin_installed(true);
+        helix::ui::UpdateQueue::instance().drain();
+        view.show("two_tools.gcode", "sub", "PLA", two_colors, two_materials, kSize, kMtime);
+
+        CHECK(view.current_remap_block() == helix::printer::RemapBlock::NotOnThisDevice);
+        CHECK(lv_subject_get_int(remappable) == 0);
+        CHECK(lv_subject_get_int(needs_setup) == 0);
+        CHECK(lv_subject_get_int(help_visible) == 0);
+        lv_subject_t* const rewrite = lv_xml_get_subject(nullptr, "detail_gcode_rewrite_available");
+        REQUIRE(rewrite != nullptr);
+        CHECK(lv_subject_get_int(rewrite) == 0);
+
+        device.api.transfers_mock().mock_no_local_copies(false);
+        view.set_analysis_dependencies(&device.api, &get_printer_state());
+        CHECK(lv_subject_get_int(rewrite) == 1);
+        view.hide();
+        helix::ui::UpdateQueue::instance().drain();
+        view.set_analysis_dependencies(nullptr, &get_printer_state());
     }
 
     SECTION("an unfinished plugin probe greys nothing") {

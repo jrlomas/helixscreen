@@ -736,19 +736,32 @@ std::string PrintPreparationManager::get_temp_directory() const {
 }
 
 bool PrintPreparationManager::can_modify_gcode() const {
+    return gcode_rewrite_block() == GcodeRewriteBlock::None;
+}
+
+GcodeRewriteBlock PrintPreparationManager::gcode_rewrite_block() const {
+    return gcode_rewrite_block_for(printer_state_, api_);
+}
+
+GcodeRewriteBlock PrintPreparationManager::gcode_rewrite_block_for(PrinterState* printer_state,
+                                                                   IMoonrakerAPI* api) {
     // Pre-print modifications rewrite the job file, and the plugin is what puts
     // the original filename back in Moonraker's history afterwards. Without it
     // finished jobs are listed as ".helix_temp/modified_1766807545p_name.gcode",
-    // so we decline rather than clutter the history. The rewrite also streams
-    // through a local copy, which some transports cannot keep.
-    return printer_state_ != nullptr &&
-           printer_state_->plugin_status_state().service_has_helix_plugin() &&
-           transport_keeps_local_copies();
+    // so we decline rather than clutter the history. No printer state reads as
+    // the plugin absent.
+    const int plugin =
+        printer_state ? printer_state->plugin_status_state().helix_plugin_state() : 0;
+    return helix::gcode_rewrite_block(plugin, keeps_local_copies(api));
+}
+
+bool PrintPreparationManager::keeps_local_copies(IMoonrakerAPI* api) {
+    // No API is refused where a download would start, not here.
+    return api == nullptr || api->transfers().supports_local_copies();
 }
 
 bool PrintPreparationManager::transport_keeps_local_copies() const {
-    // No API is refused where a download would start, not here.
-    return api_ == nullptr || api_->transfers().supports_local_copies();
+    return keeps_local_copies(api_);
 }
 
 // ============================================================================
@@ -1092,7 +1105,7 @@ void PrintPreparationManager::warn_modifications_dropped(
     // Name the features being dropped: "Cannot modify G-code" alone leaves the
     // user guessing which of the print dialog's controls it refers to (#1269).
     const std::string dropped = describe_dropped_modifications(ops_to_disable);
-    if (!transport_keeps_local_copies()) {
+    if (gcode_rewrite_block() == GcodeRewriteBlock::NoLocalCopies) {
         // Installing the plugin would change nothing here, so it goes unnamed.
         spdlog::warn("[PrintPreparationManager] Transport keeps no local copy - skipping "
                      "modification, printing original file");

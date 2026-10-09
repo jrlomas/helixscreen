@@ -860,6 +860,10 @@ class PrintSelectDetailView : public OverlayBase {
     // the copy is chosen when the icon is tapped, not when it is published.
     lv_subject_t color_card_remap_help_visible_{};
     lv_subject_t empty_tools_warning_{}; // 1 = at least one used tool's slot is empty
+    // Whether a job rewrite can run, in the tri-state the pre-print option rows
+    // that need one bind their visibility to: 1 yes, 0 no, -1 not known yet.
+    // Published by publish_rewrite_availability().
+    lv_subject_t gcode_rewrite_available_{};
     // Cached backend-agnostic pre-flight validation result for the current file.
     // Computed in try_extract_gcode_colors() once the gcode is parsed; the single
     // source of truth driving filament_mismatch_ + empty_tools_warning_ (works
@@ -1226,6 +1230,9 @@ class PrintSelectDetailView : public OverlayBase {
      * backfill, a fresh used-tool set) must run `update()` BEFORE this.
      */
     void publish_card_visibility();
+    /// Why a job rewrite cannot run right now, or None.
+    [[nodiscard]] helix::GcodeRewriteBlock rewrite_block() const;
+    void publish_rewrite_availability();
 
     /**
      * @brief Render the authoritative chip state for a known used-tool set.

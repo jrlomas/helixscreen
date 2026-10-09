@@ -194,6 +194,8 @@ void PrintSelectDetailView::init_subjects() {
     // FilamentMappingCard::should_show() after each update(); XML binds
     // via bind_flag_if_eq in print_file_detail.xml.
     UI_MANAGED_SUBJECT_INT(filament_mapping_visible_, 0, "filament_mapping_visible", subjects_);
+    UI_MANAGED_SUBJECT_INT(gcode_rewrite_available_, -1, "detail_gcode_rewrite_available",
+                           subjects_); // SUBJECT_OK: option rows bind it via the renderer lookup
 
     // Whether a tap on the filament card opens the remap picker (0=no,
     // 1=yes). Binds the card's chevron AND its clickable flag in
@@ -237,7 +239,10 @@ void PrintSelectDetailView::init_subjects() {
     // Without these the card keeps whatever it decided before either was known.
     plugin_installed_observer_ = observe<int>(
         get_printer_state().plugin_status_state().get_helix_plugin_installed_subject(), this,
-        [](PrintSelectDetailView* self, int /*state*/) { self->publish_card_visibility(); },
+        [](PrintSelectDetailView* self, int /*state*/) {
+            self->publish_rewrite_availability();
+            self->publish_card_visibility();
+        },
         get_printer_state().get_subjects_lifetime());
     moonraker_degraded_observer_ = observe<int>(
         get_printer_state().versions_state().get_moonraker_history_degraded_subject(), this,
@@ -261,6 +266,7 @@ void PrintSelectDetailView::init_subjects() {
         get_printer_state().get_subjects_lifetime());
 
     subjects_initialized_ = true;
+    publish_rewrite_availability();
     spdlog::debug("[DetailView] Initialized pre-print option subjects");
 }
 
@@ -432,6 +438,7 @@ void PrintSelectDetailView::set_analysis_dependencies(IMoonrakerAPI* api,
     api_ = api;
     gcode_fetcher_.set_api(api);
     printer_state_ = printer_state;
+    publish_rewrite_availability(); // the transport is half the answer
 
     // Not tied to the widget tree: the panel wires dependencies at setup, before
     // any file opens, so the PRINT_START analysis starts on connect, and the
@@ -1784,9 +1791,19 @@ helix::printer::RemapBlock PrintSelectDetailView::current_remap_block() const {
     if (backend == nullptr) {
         return helix::printer::RemapBlock::NoStrategy;
     }
-    return helix::printer::remap_block(
-        *backend, get_printer_state().plugin_status_state().helix_plugin_state(),
-        static_cast<int>(get_used_tool_info().size()));
+    return helix::printer::remap_block(*backend, rewrite_block(),
+                                       static_cast<int>(get_used_tool_info().size()));
+}
+
+helix::GcodeRewriteBlock PrintSelectDetailView::rewrite_block() const {
+    return PrintPreparationManager::gcode_rewrite_block_for(&get_printer_state(), api_);
+}
+
+void PrintSelectDetailView::publish_rewrite_availability() {
+    if (!subjects_initialized_) {
+        return; // init_subjects() publishes once the subject exists
+    }
+    lv_subject_set_int(&gcode_rewrite_available_, helix::gcode_rewrite_available(rewrite_block()));
 }
 
 void PrintSelectDetailView::on_color_card_clicked() {
@@ -2708,12 +2725,12 @@ void PrintSelectDetailView::populate_option_rows() {
                       option_set.options.size() - rendered.options.size(), current_type);
     }
 
-    // Plugin-gated visibility: HIDE a toggle only when DISABLING it would
-    // require the HelixPrint plugin (see
+    // Rewrite-gated visibility: HIDE a toggle only when DISABLING it would
+    // require rewriting the job (see
     // PrintPreparationManager::disabling_option_requires_plugin). For those
-    // options we bind the row to the helix_plugin_installed tri-state subject;
-    // the renderer hides the row when it reads 0 (plugin confirmed absent) and
-    // keeps it visible at -1 (still checking, startup window) and 1 (present).
+    // options we bind the row to gcode_rewrite_available_; the renderer hides
+    // the row when it reads 0 (no plugin, or a transport that keeps no local
+    // copy) and keeps it visible at -1 (still checking, startup window) and 1.
     //
     // CAUTION — do NOT hide options the printer handles natively without the
     // plugin. K2 Plus bed_mesh is a MacroParam whose START_PRINT/PRINT_PREPARED
@@ -2726,7 +2743,7 @@ void PrintSelectDetailView::populate_option_rows() {
         }
         const PrePrintOption* opt = rendered.find(id);
         if (opt && prep_manager_->disabling_option_requires_plugin(*opt)) {
-            return printer_state_->plugin_status_state().get_helix_plugin_installed_subject();
+            return &gcode_rewrite_available_;
         }
         return nullptr; // Not plugin-dependent: always visible for declared options.
     };
