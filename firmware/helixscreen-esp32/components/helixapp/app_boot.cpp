@@ -624,7 +624,6 @@ void setup_discovery_callbacks_esp(MoonrakerManager& manager) {
 // down), matching net_hil.cpp's "process-lifetime singleton, leaked on
 // purpose" precedent for the same reason.
 helix::AsyncLifetimeGuard s_net_lifetime;
-std::atomic<bool> s_moonraker_connect_kicked{false};
 // The first connect waits for app_net's exit as well as WiFi; see
 // BootConnectHandoff for why.
 helix::BootConnectHandoff s_connect_handoff;
@@ -633,22 +632,17 @@ SemaphoreHandle_t s_wifi_up_sem = nullptr;
 std::atomic<bool> s_connect_poll_armed{false};
 constexpr uint32_t CONNECT_POLL_MS = 20;
 
-// One-shot handoff to the Moonraker connect, callable from either the bounded
-// wait below or the state observer that resolves a later connection. The
-// atomic exchange guarantees mgr->connect() fires exactly once regardless of
-// which caller wins the race.
-void kick_moonraker_connect_once() {
-    bool expected = false;
-    if (!s_moonraker_connect_kicked.compare_exchange_strong(expected, true)) {
-        return;
-    }
+// The boot's Moonraker connect. Its one caller is the connect poll below, which
+// runs it once, on the UI thread.
+void start_moonraker_connect() {
     if (!g_boot_auto_connect) {
         ESP_LOGW(TAG, "app_net: not connecting after repeated crashes; pick a printer");
         return;
     }
     // The connect creates the print-start collector, whose observers and API hooks
-    // belong to the UI thread, so the whole connect runs there; it only starts the
-    // WebSocket task, so the hop costs one UI tick.
+    // belong to the UI thread. It runs from the UpdateQueue drain, like every other
+    // connect, rather than inside the poll's own lv_timer callback; the hop costs
+    // one UI tick.
     helix::ui::queue_update("app_net::connect", [] {
         // Task 12 R2: read the effective host from Config, not Kconfig directly —
         // app_boot_ui()'s Phase 1 seed guarantees a value is present (either the
@@ -660,7 +654,7 @@ void kick_moonraker_connect_once() {
         // "ws://:7125/websocket" would hand the websocket client an unresolvable URL
         // and spin the auto-reconnect loop forever. Leave the not-ready UI up
         // instead; ChangeHostModal connects directly once a host is entered, so no
-        // reboot is needed. Logged once — the one-shot latch above is already taken.
+        // reboot is needed. Logged once: the poll answers Connect once.
         if (host.empty()) {
             ESP_LOGI(TAG, "app_net: no Moonraker host configured — set it in Settings");
             return;
@@ -685,7 +679,7 @@ void arm_connect_poll() {
                 case helix::BootConnectHandoff::Step::Wait:
                     return;
                 case helix::BootConnectHandoff::Step::Connect:
-                    kick_moonraker_connect_once();
+                    start_moonraker_connect();
                     break;
                 case helix::BootConnectHandoff::Step::Done:
                     break;
@@ -704,12 +698,10 @@ void note_wifi_up() {
     arm_connect_poll();
 }
 
-// R4: bounded wait for the FIRST post-boot association, replacing the old
-// portMAX_DELAY park (which held this thread's stack forever against a
-// never-associating network — the Task 9 backlog item now due). 20s covers
-// the historical successful-assoc case with margin; the backend's own
-// assoc-timeout + bounded backoff retry (wifi_backend_esp.cpp) keep trying
-// underneath regardless of whether this wait succeeds.
+// Bounded wait for the first post-boot association, so this thread's stack is
+// never held against a network that does not associate. 20s covers a successful
+// association with margin; the backend's own assoc-timeout and bounded backoff
+// retry (wifi_backend_esp.cpp) keep trying underneath either way.
 constexpr int BOOT_BOUNDED_WAIT_MS = 20000;
 
 // The connect thread's stack, one contiguous internal-RAM block claimed after
@@ -730,9 +722,9 @@ void* app_net_thread_main(void*) {
 
     auto wifi = helix::get_wifi_manager();
 
-    // Register the handoff BEFORE waiting: a CONNECTED that lands after the
-    // bounded wait below (weak signal, slow AP) still triggers the Moonraker
-    // connect exactly once, with no thread parked waiting for it.
+    // Registered before the wait: the observer wakes it, and a CONNECTED that
+    // lands after it (weak signal, slow AP) still arms the connect poll, with no
+    // thread parked waiting for it.
     wifi->add_state_observer(s_net_lifetime.token(), [wifi]() {
         if (wifi->is_connected()) {
             note_wifi_up();
@@ -762,6 +754,9 @@ void* app_net_thread_main(void*) {
         helix::provisioning_run_portal();
     }
 
+    // The semaphore can hold a give from an association that has since dropped,
+    // so the wait can end at once with WiFi down: log what was actually waited.
+    const int64_t wait_start_us = esp_timer_get_time();
     if (!wifi->is_connected() && s_wifi_up_sem) {
         xSemaphoreTake(s_wifi_up_sem, pdMS_TO_TICKS(BOOT_BOUNDED_WAIT_MS));
     }
@@ -769,9 +764,9 @@ void* app_net_thread_main(void*) {
     const bool connected = wifi->is_connected();
     if (!connected) {
         ESP_LOGW(TAG,
-                 "app_net: no association after %dms — UI stays not-ready; backend keeps "
-                 "retrying in the background",
-                 BOOT_BOUNDED_WAIT_MS);
+                 "app_net: not associated after waiting %lldms — UI stays not-ready; backend "
+                 "keeps retrying in the background",
+                 (long long)((esp_timer_get_time() - wait_start_us) / 1000));
     }
     // Exit either way, freeing this thread's stack (R4: no permanent park). The
     // connect starts once the stack is gone, from the poll the observer armed or
