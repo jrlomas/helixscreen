@@ -1412,6 +1412,9 @@ void PrintStatusPanel::on_root_deleted(lv_event_t* e) {
 
 void PrintStatusPanel::forget_cached_widgets() {
     preview_.detach_widgets();
+    if (exclude_manager_) {
+        exclude_manager_->detach_gcode_viewer();
+    }
     overlay_root_ = nullptr;
     progress_bar_ = nullptr;
     preparing_progress_bar_ = nullptr;
