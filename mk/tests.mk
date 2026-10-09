@@ -1105,8 +1105,14 @@ TSAN_OBJ_DIR := $(BUILD_DIR)/obj-tsan
 # stable means $(TEST_ASAN_BIN) resolves to the same path in both makes.
 ASAN_MAKE_OVERRIDES := OBJ_DIR=$(ASAN_OBJ_DIR) \
 	CXXFLAGS='$(CXXFLAGS) $(ASAN_FLAGS)' LDFLAGS='$(LDFLAGS) $(ASAN_FLAGS)'
+# TSan also instruments the submodules. LVGL's draw-task handshake is C atomics in
+# lv_draw.c and lv_draw_sw.c; left uninstrumented, TSan sees none of that ordering
+# but still sees the memcpy and free interceptors either side of it, and reports
+# the render thread's read of a task against the main thread freeing it.
 TSAN_MAKE_OVERRIDES := OBJ_DIR=$(TSAN_OBJ_DIR) \
-	CXXFLAGS='$(CXXFLAGS) $(TSAN_FLAGS)' LDFLAGS='$(LDFLAGS) $(TSAN_FLAGS)'
+	CXXFLAGS='$(CXXFLAGS) $(TSAN_FLAGS)' LDFLAGS='$(LDFLAGS) $(TSAN_FLAGS)' \
+	SUBMODULE_CFLAGS='$(SUBMODULE_CFLAGS) $(TSAN_FLAGS)' \
+	SUBMODULE_CXXFLAGS='$(SUBMODULE_CXXFLAGS) $(TSAN_FLAGS)'
 
 # Patterns that mean "the sanitizer reported something". Kept as variables so
 # the four sanitizer recipes share one definition. No commas — these are passed
