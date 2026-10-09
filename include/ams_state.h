@@ -193,7 +193,8 @@ class AmsState {
     [[nodiscard]] static std::string unit_disconnected_subject_name(int unit_index);
 
     /// Name the unit a per-unit view is showing (-1: none), so
-    /// `ams_viewed_unit_disconnected` describes it. Main thread only.
+    /// `ams_viewed_unit_disconnected` describes it. Works for any unit index,
+    /// not only those below MAX_UNITS. Main thread only.
     void set_viewed_unit(int unit_index);
 
     /// @name Dryer Constants
@@ -2233,7 +2234,7 @@ class AmsState {
     // int: 1 = units exist and every present one is disconnected
     lv_subject_t all_units_disconnected_{};
     int viewed_unit_ = -1;
-    void publish_viewed_unit_disconnected();
+    void publish_viewed_unit_disconnected(const AmsSystemInfo* info);
 
     // Per-unit environment indicator display subjects (formatted text for XML binding)
     static constexpr int ENV_IND_TEXT_BUF_SIZE = 16;
@@ -2269,10 +2270,26 @@ class AmsState {
     char env_ind_detail_drying_text_buf_[ENV_IND_DRYING_BUF_SIZE]{};
     int detail_env_unit_ = 0;
 
-    /// Mirror the detail_env_unit_'s per-unit env indicator subjects into the
-    /// dedicated ams_env_ind_detail_* subjects consumed by the statically
-    /// embedded detail-view indicator (see Task 9 brief).
-    void mirror_detail_env_subjects();
+    /// One unit's environment indicator, ready to publish.
+    struct UnitEnvIndicator {
+        std::string temp_text;
+        std::string humidity_text;
+        int humidity_status = 0; // 0=ok, 1=warn, 2=danger
+        bool humidity_visible = false;
+        bool visible = false;
+        bool drying_active = false;
+        std::string drying_text;
+    };
+
+    /// The single computation behind both the per-unit ams_env_ind_<n>_* subjects
+    /// and the detail mirror.
+    static UnitEnvIndicator compute_unit_env_indicator(AmsBackend* backend, const AmsUnit& unit);
+    void publish_unit_env_indicator(int idx, const UnitEnvIndicator& indicator);
+
+    /// Publish the detail_env_unit_'s indicator into the ams_env_ind_detail_*
+    /// subjects, computed from @p info directly so any unit index works. A null
+    /// backend or info publishes the empty indicator.
+    void mirror_detail_env_subjects(AmsBackend* backend, const AmsSystemInfo* info);
 };
 
 } // namespace helix
