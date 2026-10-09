@@ -1105,7 +1105,8 @@ endif
 #   note fallback is measured against a running print on the hardware.
 # ad5x: tracker on. The jz_pwm backend drives the tracker's PC-speaker path with
 #   per-note buffers, so no PCM render loop is involved.
-# K1/K2/MIPS: no audio hardware at all
+# K1, MIPS and AD5X: tone SFX via the PWM/jz_pwm backend (HELIX_HAS_SOUND).
+# K2, cc1, snapmaker-u1 and yocto match no branch below: no sound flags at all.
 SOUND_CXXFLAGS :=
 TRACKER_CXXFLAGS :=
 ifneq (,$(filter pi pi-fbdev pi-both pi32 pi32-fbdev pi32-both x86 x86-fbdev x86-both,$(PLATFORM_TARGET)))
@@ -1124,8 +1125,7 @@ else ifeq ($(PLATFORM_TARGET),native)
     SOUND_CXXFLAGS := -DHELIX_HAS_SOUND
     TRACKER_CXXFLAGS := -DHELIX_HAS_TRACKER
 endif
-# K1, K2, MIPS — no sound at all
-CXXFLAGS += $(SOUND_CXXFLAGS) $(TRACKER_CXXFLAGS) $(PWM_SOUND_CXXFLAGS) $(PWM_AUTO_EXPORT_CXXFLAGS) $(JZ_PWM_CXXFLAGS)
+CXXFLAGS +=$(SOUND_CXXFLAGS) $(TRACKER_CXXFLAGS) $(PWM_SOUND_CXXFLAGS) $(PWM_AUTO_EXPORT_CXXFLAGS) $(JZ_PWM_CXXFLAGS)
 
 # Feature gates — default ON for all platforms.
 # Disabled per-platform in mk/cross.mk for memory-constrained targets.

@@ -104,7 +104,7 @@ Before your first change, get the whole-app picture: one pattern everywhere —
 subsystem" table. It lives in one place, the router:
 
 → **[ARCHITECTURE.md](ARCHITECTURE.md)** — the 15-minute model, routing into the
-15-chapter [architecture guide](architecture/README.md).
+17-chapter [architecture guide](architecture/README.md).
 
 ## Workflow Tips
 
@@ -124,7 +124,7 @@ subsystem" table. It lives in one place, the router:
   — an annotated walkthrough of a real settings overlay, plus a pattern tour for
   bigger features.
 - **Rather explore by subsystem?** → [architecture/README.md](architecture/README.md)
-  — the "I want to work on..." index into the 15-chapter architecture guide.
+  — the "I want to work on..." index into the 17-chapter architecture guide.
 - **Looking for an issue?** Browse the [open issues](https://github.com/prestonbrown/helixscreen/issues)
   and pick one that looks approachable. Debug/fix work is a fast way to get familiar
   with the codebase and its patterns — no specific ticket required, just find

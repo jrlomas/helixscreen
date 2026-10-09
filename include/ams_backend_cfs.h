@@ -101,7 +101,7 @@ class CfsErrorDecoder {
 /// replaces Creality's closed one. `T<n>` and `BOX_UNLOAD` are high-level and
 /// self-contained: box.py owns the whole feed/purge/park sequence, so
 /// HelixScreen sends no stock envelope. Detected by `api_version` in the box
-/// payload. See docs/devel/printers/CREALITY_K2_SUPPORT.md §
+/// payload. See docs/devel/printer-research/CREALITY_CFS_K2_INTERNALS.md §
 /// "Community Kalico port".
 enum class CfsMacroVariant {
     K2,
@@ -527,7 +527,7 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// acceptance therefore proves only that Klipper parsed our text. The
     /// toolhead filament switch is the one independent physical witness, and
     /// this is the rule that reads it. See
-    /// docs/devel/CREALITY_CFS_INTERNALS.md § "Failures are deferred".
+    /// docs/devel/printer-research/CREALITY_CFS_K1_INTERNALS.md § "Failures are deferred".
     ///
     /// Pure: no locking, no member access, so the policy is testable on its
     /// own. `op` is the latched intent (`PhaseTracker::intent`), never
@@ -569,7 +569,7 @@ class AmsBackendCfs : public AmsSubscriptionBackend {
     /// every `key8xx` code (including key840's "Reset CFS" action) exactly as
     /// before — that separation is what stops a runout double-surfacing.
     ///
-    /// See docs/devel/printers/CREALITY_K2_SUPPORT.md § "Runout and auto-refill"
+    /// See docs/devel/printer-research/CREALITY_CFS_K2_INTERNALS.md § "Runout and auto-refill"
     /// for the firmware sequence these strings come from.
     [[nodiscard]] std::optional<helix::ErrorEvent>
     classify_error(const std::string& raw_line, const helix::ClassifyContext& ctx) const override;

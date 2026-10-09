@@ -4654,7 +4654,7 @@ TEST_CASE("FillUnsetOnly mirror does not overwrite user-locked fields",
 // respond_info line. Those give-up lines are the only runout signal HelixScreen
 // gets, and they arrive as `// `-prefixed responses, not `!!`.
 //
-// See docs/devel/printers/CREALITY_K2_SUPPORT.md § "Runout and auto-refill".
+// See docs/devel/printer-research/CREALITY_CFS_K2_INTERNALS.md § "Runout and auto-refill".
 // ============================================================================
 
 namespace {
@@ -5160,7 +5160,7 @@ TEST_CASE("CFS runout: 'no tray with ingredients found' raises one runout fault"
     CfsRemapHelper backend;
 
     // The third give-up path, documented in the K1 wrapper RE notes
-    // (docs/devel/CREALITY_CFS_INTERNALS.md): a same_material group DOES exist
+    // (docs/devel/printer-research/CREALITY_CFS_K1_INTERNALS.md): a same_material group DOES exist
     // for the exhausted slot, but none of its members currently has material
     // sensor presence. Distinct cause from "no identical supplies", which means
     // no compatible group exists at all.
@@ -5302,7 +5302,7 @@ TEST_CASE("CFS endless spool: auto-refill on and off are distinguishable",
         json box = make_runout_box(0);
         // make_runout_box colors: T1A=0FFFFFF, T1B/T1C/T1D=01A1A1A, all
         // material 101001. T1B+T1C form one real pairing; the live-K2 shape
-        // from CREALITY_K2_SUPPORT.md § "Top-Level Fields".
+        // from CREALITY_CFS_K2_INTERNALS.md § "Top-Level Fields".
         box["same_material"] =
             json::array({json::array({"101001", "01A1A1A", json::array({"T1B", "T1C"}), "PLA"}),
                          json::array({"101001", "0FFFFFF", json::array({"T1A"}), "PLA"}),
