@@ -389,6 +389,37 @@ TEST_CASE_METHOD(LVGLUITestFixture, "unknown-command abort survives the macro's 
     CHECK(TA::op_extrude_state(*h.panel) == 0); // still idle, never 2/done
 }
 
+TEST_CASE_METHOD(LVGLUITestFixture, "template residue warns and leaves the running op alone",
+                 "[ui_integration][filament][unknown_command]") {
+    // `// Unknown command:"%}"` is a malformed tag in the macro's own template.
+    // Klipper skips that line and runs the rest, so the op is still live and no
+    // command is missing.
+    TimeoutHarness h(*this);
+
+    int errors = 0;
+    std::string warning;
+    helix::ui::set_test_notification_error_hook([&](const std::string&) { ++errors; });
+    helix::ui::set_test_notification_warning_hook([&](const std::string& m) { warning = m; });
+
+    {
+        auto freeze = helix::ui::UpdateQueue::instance().scoped_freeze("template-residue-test");
+
+        TA::execute_extrude(*h.panel);
+        REQUIRE(TA::op_extrude_state(*h.panel) == 1);
+
+        h.panel->fail_op_on_unknown_command("%}");
+
+        CHECK(TA::op_extrude_state(*h.panel) == 1); // still spinning
+        CHECK(TA::operation_active(*h.panel));
+        CHECK(errors == 0);
+        CHECK(warning.find("%}") != std::string::npos);
+    }
+
+    helix::ui::set_test_notification_error_hook(nullptr);
+    helix::ui::set_test_notification_warning_hook(nullptr);
+    process_lvgl(20);
+}
+
 TEST_CASE_METHOD(LVGLUITestFixture, "unknown-command response with no op in flight is inert",
                  "[ui_integration][filament][unknown_command]") {
     // An unknown-command line can come from any client on the same printer. With

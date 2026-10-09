@@ -43,7 +43,7 @@ If something goes wrong, **Update Failed** offers **Retry** to try again or **Cl
 
 > **Caution:** Once installing starts, leave the printer on until HelixScreen restarts by itself. Cutting power during an install can leave HelixScreen broken.
 
-On Android, installing opens the Play Store.
+On Android, installing opens the Play Store listing if you installed from Google Play. Otherwise it opens the GitHub release page, where you download the new APK and install it over the old one.
 
 ---
 

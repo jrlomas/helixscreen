@@ -115,6 +115,7 @@
   <translation tag="= Tighten" zh="= 拧紧"/>
   <translation tag="A" zh="辅"/>
   <translation tag="A few minutes, nearly all of it heating. You judge nothing by eye." zh="需要几分钟，几乎全是加热时间。你无需用肉眼判断任何东西。"/>
+  <translation tag="A macro printed stray template text &apos;{}&apos;: check its Jinja tags" zh="宏输出了多余的模板文本 &apos;{}&apos;：请检查其 Jinja 标签"/>
   <translation tag="A motor IO pin couldn&apos;t be restored. Power-cycle the printer to recover" zh="无法恢复电机 IO 引脚。请重新为打印机上电以恢复"/>
   <translation tag="A motor&apos;s parameters couldn&apos;t be written. Power-cycle the printer to retry" zh="无法写入电机参数。请重新为打印机上电后重试"/>
   <translation tag="A newer version of the helper macros is available" zh="有更新版本的帮助宏可用"/>

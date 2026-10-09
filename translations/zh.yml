@@ -117,6 +117,7 @@ translations:
   = Tighten: = 拧紧
   A: 辅
   A few minutes, nearly all of it heating. You judge nothing by eye.: '需要几分钟，几乎全是加热时间。你无需用肉眼判断任何东西。'
+  "A macro printed stray template text '{}': check its Jinja tags": "宏输出了多余的模板文本 '{}'：请检查其 Jinja 标签"
   A motor IO pin couldn't be restored. Power-cycle the printer to recover: 无法恢复电机 IO 引脚。请重新为打印机上电以恢复
   A motor's parameters couldn't be written. Power-cycle the printer to retry: 无法写入电机参数。请重新为打印机上电后重试
   A newer version of the helper macros is available: '有更新版本的帮助宏可用'

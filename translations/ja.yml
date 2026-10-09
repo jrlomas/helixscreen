@@ -118,6 +118,7 @@ translations:
   = Tighten: = 締める
   A: A
   A few minutes, nearly all of it heating. You judge nothing by eye.: '数分かかりますが、そのほとんどは加熱です。目視での判断は不要です。'
+  "A macro printed stray template text '{}': check its Jinja tags": "マクロが不要なテンプレート文字列 '{}' を出力しました: Jinja タグを確認してください"
   A motor IO pin couldn't be restored. Power-cycle the printer to recover: モーターのIOピンを復元できませんでした。プリンターの電源を入れ直してください
   A motor's parameters couldn't be written. Power-cycle the printer to retry: モーターのパラメーターを書き込めませんでした。プリンターの電源を入れ直して再試行してください
   A newer version of the helper macros is available: 'ヘルパーマクロの新しいバージョンが利用可能です'

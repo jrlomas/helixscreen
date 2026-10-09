@@ -115,6 +115,7 @@
   <translation tag="= Tighten" es="= Apretar"/>
   <translation tag="A" es="A"/>
   <translation tag="A few minutes, nearly all of it heating. You judge nothing by eye." es="Unos minutos, casi todo calentando. No juzgas nada a ojo."/>
+  <translation tag="A macro printed stray template text &apos;{}&apos;: check its Jinja tags" es="Una macro imprimió texto de plantilla sobrante &apos;{}&apos;: revisa sus etiquetas Jinja"/>
   <translation tag="A motor IO pin couldn&apos;t be restored. Power-cycle the printer to recover" es="No se pudo restaurar un pin de E/S del motor. Apague y encienda la impresora para recuperarla"/>
   <translation tag="A motor&apos;s parameters couldn&apos;t be written. Power-cycle the printer to retry" es="No se pudieron escribir los parámetros de un motor. Apague y encienda la impresora para reintentar"/>
   <translation tag="A newer version of the helper macros is available" es="Hay una versión más reciente de las macros de ayuda disponible"/>

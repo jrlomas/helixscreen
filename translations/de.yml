@@ -124,6 +124,7 @@ translations:
   = Tighten: = Anziehen
   A: A
   A few minutes, nearly all of it heating. You judge nothing by eye.: 'Ein paar Minuten, fast alles Aufheizen. Du beurteilst nichts mit dem Auge.'
+  "A macro printed stray template text '{}': check its Jinja tags": "Ein Makro hat überzähligen Vorlagentext '{}' ausgegeben: Jinja-Tags prüfen"
   A motor IO pin couldn't be restored. Power-cycle the printer to recover: Ein Motor-IO-Pin konnte nicht wiederhergestellt werden. Drucker aus- und einschalten, um fortzufahren
   A motor's parameters couldn't be written. Power-cycle the printer to retry: Die Parameter eines Motors konnten nicht geschrieben werden. Drucker aus- und einschalten und erneut versuchen
   A newer version of the helper macros is available: 'Eine neuere Version der Hilfsmakros ist verfügbar'

@@ -291,6 +291,20 @@ TEST_CASE("parse_unknown_command extracts the missing command", "[afc][narration
     CHECK_FALSE(parse_unknown_command("").has_value());
 }
 
+TEST_CASE("is_template_residue tells a malformed Jinja tag from a missing command",
+          "[afc][narration][corpus]") {
+    // A stray `%}` from a macro's template is reported exactly like a missing command.
+    CHECK(is_template_residue("%}"));
+    CHECK(is_template_residue("{%"));
+    CHECK(is_template_residue("}}"));
+    CHECK(is_template_residue("{"));
+    CHECK(is_template_residue(*parse_unknown_command("// Unknown command:\"%}\"")));
+
+    CHECK_FALSE(is_template_residue("STATUS_PURGING"));
+    CHECK_FALSE(is_template_residue("M600"));
+    CHECK_FALSE(is_template_residue("_IFS_VARS"));
+}
+
 TEST_CASE("parse_unknown_command reads a whole console line, prefix and all",
           "[afc][narration][corpus]") {
     // Collectors see the raw notify_gcode_response line, `//` included.
