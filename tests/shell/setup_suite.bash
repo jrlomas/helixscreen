@@ -88,9 +88,8 @@ SHIM
     # reach a test: not their config file, and not variables they exported. A
     # test that wants a host names a fake one.
     export HELIX_BUILD_HOSTS_FILE="${BATS_RUN_TMPDIR:-/tmp}/no-build-hosts.env"
-    unset HELIX_TEST_HOST HELIX_TEST_CONTAINER HELIX_TEST_WORKDIR HELIX_TEST_TREES_HOST \
-        HELIX_TEST_TREES HELIX_TEST_CCACHE HELIX_TEST_LOCK_DIR \
-        REMOTE_HOST REMOTE_USER REMOTE_DIR REMOTE_BUILD_DIR
+    # shellcheck disable=SC2046  # one key per word, from the parser's allowlist
+    unset $("$repo/scripts/lib/build_hosts.sh" --keys)
 
     # The function layer, which exists for the case where PATH no longer holds
     # the shim. bash resolves a function before PATH, so it would otherwise

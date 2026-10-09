@@ -79,13 +79,13 @@
           <ui_card name="card_print_time"
                    width="48%" height="content" style_radius="#border_radius" style_pad_all="#space_xs"
                    flex_flow="column" style_flex_cross_place="start">
-            <text_small text="Print Time"/>
+            <text_small width="100%" text="Print Time" long_mode="dots"/>
             <text_heading name="stat_print_time" text="0h" bind_text="stat_print_time"/>
           </ui_card>
           <ui_card name="card_filament"
                    width="48%" height="content" style_radius="#border_radius" style_pad_all="#space_xs"
                    flex_flow="column" style_flex_cross_place="start">
-            <text_small text="Filament Used"/>
+            <text_small width="100%" text="Filament Used" long_mode="dots"/>
             <text_heading name="stat_filament" text="0m" bind_text="stat_filament"/>
           </ui_card>
         </lv_obj>

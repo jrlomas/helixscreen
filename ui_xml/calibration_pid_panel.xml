@@ -226,7 +226,8 @@
                             width="40" text="0%" style_text_font="#font_small" style_text_align="right"
                             bind_text="cal_fan_speed_text"/>
                 </lv_obj>
-                <text_small text="Match your typical print fan speed" style_text_color="#text_muted"/>
+                <text_small width="100%"
+                            text="Match your typical print fan speed" long_mode="wrap" style_text_color="#text_muted"/>
               </lv_obj>
               <!-- Fan Calibration (MPC + extruder only) -->
               <lv_obj name="fan_calibration_section"

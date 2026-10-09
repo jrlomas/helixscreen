@@ -210,6 +210,16 @@ class DelayedFileTransfers : public MoonrakerFileTransferAPIMock {
     bool hold_partials = false;
     bool fail_tail_reads = false;
 
+    /// A transport that writes no local copies and reads no tails, as on the ESP32.
+    bool local_copies = true;
+    bool tail_reads = true;
+    bool supports_local_copies() const override {
+        return local_copies;
+    }
+    bool supports_tail_reads() const override {
+        return tail_reads;
+    }
+
     /// How many footer reads the view has asked for. The tools-used cache
     /// persists only the used-tool set, so a cache hit must NOT suppress the
     /// read that also answers the palette and the per-tool grams.
@@ -1065,5 +1075,29 @@ TEST_CASE_METHOD(DetailDownloadFixture,
 
     release.set_value();
     REQUIRE(wait_until([this]() { return ready(); }, 15000));
+    pop_and_drain();
+}
+
+TEST_CASE_METHOD(DetailDownloadFixture,
+                 "A transport without local copies or tail reads is asked for neither",
+                 "[print_select][detail_view][gcode_footer]") {
+    CacheDirGuard guard;
+    const std::string asset = find_test_asset("u1_4color_ring.gcode");
+    REQUIRE_FALSE(asset.empty());
+    const auto size = static_cast<size_t>(std::filesystem::file_size(asset));
+    transfers_.local_copies = false;
+    transfers_.tail_reads = false;
+
+    view_.show("u1_4color_ring.gcode", "", "PLA", {}, {}, size, 4242, size - 30'000);
+    drain_queue_chain();
+
+    CHECK(transfers_.download_count == 0);
+    CHECK(transfers_.tail_read_count == 0);
+    // The operations scan reads the file's head, which such a transport serves.
+    CHECK(transfers_.partial_read_count >= 1);
+    // The palette question is settled as unknown instead of left waiting.
+    CHECK(ready());
+    CHECK(subject_int("detail_gcode_viewer_mode") == helix::ui::PREVIEW_MODE_THUMBNAIL);
+
     pop_and_drain();
 }

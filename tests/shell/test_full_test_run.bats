@@ -24,8 +24,8 @@ esac'
     mock_command_script fake-test-host-run '
 echo "host-run $*" >> "$CALLS"
 case "$1" in
-    sweep) echo "test-host sweep output"; exit "${HELIX_TEST_SWEEP_RC:-0}" ;;
-    --probe) exit "${HELIX_TEST_PROBE_RC:-1}" ;;
+    sweep) echo "test-host sweep output"; exit "${HOST_SWEEP_RC:-0}" ;;
+    --probe) exit "${HOST_PROBE_RC:-1}" ;;
 esac'
     export MAKE=fake-make TEST_HOST_RUN=fake-test-host-run
     export HELIX_TEST_HOST=testhost.invalid
@@ -43,7 +43,7 @@ esac'
 }
 
 @test "TEST_HOST=1: a red test-host sweep with green bats fails the gate" {
-    TEST_HOST=1 HELIX_TEST_SWEEP_RC=1 run "$GATE"
+    TEST_HOST=1 HOST_SWEEP_RC=1 run "$GATE"
     [ "$status" -ne 0 ]
     contains "test-host unit sweep: FAILED" "$output"
     contains "local shell suite: passed" "$output"
@@ -58,7 +58,7 @@ esac'
 }
 
 @test "TEST_HOST=0 runs both suites here and never asks the test host" {
-    TEST_HOST=0 HELIX_TEST_HOST_AUTO=1 HELIX_TEST_PROBE_RC=0 run "$GATE"
+    TEST_HOST=0 HELIX_TEST_HOST_AUTO=1 HOST_PROBE_RC=0 run "$GATE"
     [ "$status" -eq 0 ]
     grep -qx "make unit-sweep" "$CALLS"
     grep -qx "make test-shell" "$CALLS"
@@ -71,25 +71,32 @@ esac'
     refute_grep "make test-shell" "$CALLS"
 }
 
-@test "unset TEST_HOST with automatic offload off stays local without probing" {
-    HELIX_TEST_PROBE_RC=0 run "$GATE"
+@test "unset TEST_HOST with automatic offload switched off stays local without probing" {
+    HELIX_TEST_HOST_AUTO=0 HOST_PROBE_RC=0 run "$GATE"
     [ "$status" -eq 0 ]
     grep -qx "make unit-sweep" "$CALLS"
     refute_grep "host-run" "$CALLS"
-    contains "HELIX_TEST_HOST_AUTO=1" "$output"
+    contains "HELIX_TEST_HOST_AUTO=0" "$output"
 }
 
-@test "unset TEST_HOST with automatic offload on follows the probe" {
-    HELIX_TEST_HOST_AUTO=1 HELIX_TEST_PROBE_RC=0 run "$GATE"
+@test "unset TEST_HOST follows the probe by default" {
+    HOST_PROBE_RC=0 run "$GATE"
     [ "$status" -eq 0 ]
     grep -qx "host-run --probe" "$CALLS"
     grep -qx "host-run sweep" "$CALLS"
 
     : > "$CALLS"
-    HELIX_TEST_HOST_AUTO=1 HELIX_TEST_PROBE_RC=1 run "$GATE"
+    HOST_PROBE_RC=1 run "$GATE"
     [ "$status" -eq 0 ]
     grep -qx "make unit-sweep" "$CALLS"
     refute_grep "host-run sweep" "$CALLS"
+}
+
+@test "the build-hosts file can switch automatic offload off" {
+    echo "HELIX_TEST_HOST_AUTO=0" > "$HELIX_BUILD_HOSTS_FILE"
+    HOST_PROBE_RC=0 run "$GATE"
+    [ "$status" -eq 0 ]
+    refute_grep "host-run" "$CALLS"
 }
 
 @test "a TEST_HOST value other than 1, 0 or empty is refused" {
@@ -98,10 +105,11 @@ esac'
     [ ! -e "$CALLS" ]
 }
 
-@test "an interrupted TEST_HOST=1 gate takes its test-host run down with it, ssh included" {
-    # The stand-in test-host-run.sh starts a child in place of its job ssh. A real
-    # background job ignores the terminal's Ctrl-C, so only the gate itself is
-    # signalled here: what stops the test-host run must be the gate's own cleanup.
+# The stand-in test-host-run.sh starts a child in place of its job ssh. A real
+# background job ignores the terminal's Ctrl-C and, once setsid has detached
+# it, the terminal's hangup too, so only the gate itself is signalled here:
+# what stops the test-host run must be the gate's own cleanup.
+gate_signal_takes_the_run_down() { # <signal>
     mock_command_script fake-test-host-run '
 sleep 60 & echo $! > "$BATS_TEST_TMPDIR/child.pid"
 echo $$ > "$BATS_TEST_TMPDIR/host.pid"
@@ -111,7 +119,7 @@ wait'
     local gate=$!
     for _ in $(seq 1 200); do [ -s "$BATS_TEST_TMPDIR/child.pid" ] && break; sleep 0.05; done
     [ -s "$BATS_TEST_TMPDIR/child.pid" ]
-    kill -TERM "$gate"
+    kill "-$1" "$gate"
     for _ in $(seq 1 200); do kill -0 "$gate" 2>/dev/null || break; sleep 0.05; done
     local z c alive=0
     z=$(cat "$BATS_TEST_TMPDIR/host.pid"); c=$(cat "$BATS_TEST_TMPDIR/child.pid")
@@ -120,6 +128,14 @@ wait'
     kill -0 "$c" 2>/dev/null && alive=1
     kill "$z" "$c" 2>/dev/null || true
     [ "$alive" -eq 0 ]
+}
+
+@test "an interrupted TEST_HOST=1 gate takes its test-host run down with it, ssh included" {
+    gate_signal_takes_the_run_down TERM
+}
+
+@test "a TEST_HOST=1 gate whose terminal hangs up takes its test-host run down too" {
+    gate_signal_takes_the_run_down HUP
 }
 
 @test "TEST_HOST=1 with no test host configured refuses in one line, naming the file" {

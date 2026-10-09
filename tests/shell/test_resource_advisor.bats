@@ -114,6 +114,33 @@ host_modes() {
     lacks "test-host-run.sh full" "$(context)"
 }
 
+# full-test-run offloads its own sweep when a test host is configured and
+# automatic offload is on; advice to move it would only send it twice.
+@test "full-test-run is left alone when it will offload its own sweep" {
+    host_modes sweep
+    echo "HELIX_TEST_HOST=testhost.invalid" > "$HELIX_BUILD_HOSTS_FILE"
+    advise "make full-test-run"
+    [ -z "$output" ]
+    HELIX_TEST_HOST=fromenv.invalid advise "make -j full-test-run"
+    [ -z "$output" ]
+}
+
+@test "full-test-run still gets the advice when it will not offload" {
+    host_modes sweep
+    echo "HELIX_TEST_HOST=testhost.invalid" > "$HELIX_BUILD_HOSTS_FILE"
+    HELIX_TEST_HOST_AUTO=0 advise "make full-test-run"
+    contains "test-host-run.sh sweep" "$(context)"
+    advise "make full-test-run TEST_HOST=0"
+    contains "test-host-run.sh sweep" "$(context)"
+}
+
+@test "a bare unit-sweep gets the advice even with a test host configured" {
+    host_modes sweep
+    echo "HELIX_TEST_HOST=testhost.invalid" > "$HELIX_BUILD_HOSTS_FILE"
+    advise "make unit-sweep"
+    contains "test-host-run.sh sweep" "$(context)"
+}
+
 @test "a sweep suggestion points at helix-claim resources" {
     host_modes sweep
     advise "make unit-sweep"

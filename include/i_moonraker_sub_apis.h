@@ -506,6 +506,17 @@ class ITransfersAPI {
                                        ErrorCallback on_error,
                                        ProgressCallback on_progress = nullptr) = 0;
 
+    /// Whether download_file_to_path() can write a local copy. A transport with
+    /// nowhere to keep one answers false, and callers skip the request.
+    virtual bool supports_local_copies() const {
+        return true;
+    }
+
+    /// Whether download_file_tail() can fetch a file's last bytes.
+    virtual bool supports_tail_reads() const {
+        return true;
+    }
+
     virtual void download_thumbnail(const std::string& thumbnail_path,
                                     const std::string& cache_path, StringCallback on_success,
                                     ErrorCallback on_error) = 0;

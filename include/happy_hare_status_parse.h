@@ -81,11 +81,21 @@ struct FlowguardDelta {
     std::optional<float> level;
     std::optional<float> max_clog;
     std::optional<float> max_tangle;
+    std::optional<std::string> reason; ///< v4: why the last trip fired
     std::optional<int> encoder_mode;
     /// The object carries buffer FlowGuard's own readings (level, trigger,
     /// max_clog). An encoder-only v4 unit publishes just {active, enabled,
     /// encoder_mode}: the encoder's clog detection, not buffer FlowGuard.
     bool buffer_data = false;
+};
+
+/// v4 `tangle_prevention` object.
+struct TanglePreventionDelta {
+    std::optional<bool> enabled;
+    std::optional<bool> active;
+    std::optional<bool> boosted;
+    std::optional<float> threshold;
+    std::optional<float> release;
 };
 
 /// The v4 extended status: eSpooler, sync feedback, clog detection, counters.
@@ -101,6 +111,7 @@ struct MmuTelemetryDelta {
     std::optional<int> clog_detection_enabled;
     std::optional<EncoderDelta> encoder;
     std::optional<FlowguardDelta> flowguard;
+    std::optional<TanglePreventionDelta> tangle_prevention;
     std::optional<std::string> led_exit_effect; ///< leds.unit0.exit_effect
     std::optional<float> sync_feedback_flow_rate;
     std::optional<float> toolchange_purge_volume;

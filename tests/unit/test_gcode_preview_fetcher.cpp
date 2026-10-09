@@ -373,3 +373,21 @@ TEST_CASE_METHOD(FetcherFixture, "Fetcher: a .3mf streams its extracted G-code f
     CHECK(transfers_.release(expected));
     drain();
 }
+
+TEST_CASE_METHOD(FetcherFixture,
+                 "Fetcher: a transport that keeps no local copies is not asked for one",
+                 "[gcode_preview_fetcher]") {
+    transfers_.local_copies = false;
+    std::vector<GcodePreviewFetcher::Unavailable> reasons;
+    for (int i = 0; i < 2; ++i) {
+        fetcher_.ensure_local(
+            "gcodes", REMOTE, local_, 0, [](const std::string&, GcodePreviewFetcher::Source) {},
+            [&](GcodePreviewFetcher::Unavailable why) { reasons.push_back(why); });
+    }
+    drain();
+
+    CHECK(transfers_.held_count() == 0);
+    CHECK_FALSE(fetcher_.is_downloading(local_));
+    CHECK(reasons == std::vector<GcodePreviewFetcher::Unavailable>(
+                         2, GcodePreviewFetcher::Unavailable::NoLocalCopies));
+}

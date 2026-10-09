@@ -190,6 +190,14 @@ fi
 if [ -n "$want_asan" ]; then
     emit "ASAN produces no output on thelio (ld.so.preload loads its runtime second) and exits 0. Run it on the test host: \`scripts/test-host-run.sh asan '[tag]'\` (it mirrors this tree, uncommitted edits included)."
 fi
+# full-test-run sends its own sweep to the test host when one is configured and
+# automatic offload is on (scripts/full-test-run.sh); advice to move it would
+# only move it twice. A bare unit-sweep, or a gate kept local, still gets it.
+if [ "$want_sweep" = full ] && ! [[ "$cmd" =~ TEST_HOST=0 ]]; then
+    # shellcheck source-path=SCRIPTDIR source=lib/build_hosts.sh
+    . "$here/lib/build_hosts.sh" 2>/dev/null
+    [ -n "${HELIX_TEST_HOST:-}" ] && [ "${HELIX_TEST_HOST_AUTO:-1}" != 0 ] && exit 0
+fi
 if [ -n "$want_sweep" ]; then
     if grep -qE '^[[:space:]]*sweep\)' "$host_run" 2>/dev/null; then
         bats=""
