@@ -79,7 +79,7 @@
           <!-- Path Canvas - shows filament routing from slots through hub to nozzle -->
           <lv_obj name="detail_path_container"
                   width="100%" flex_grow="1" style_pad_all="0" flex_flow="column" style_flex_main_place="start"
-                  scrollable="false">
+                  overflow_visible="true" scrollable="false">
             <filament_path_canvas name="detail_path_canvas" width="100%" flex_grow="1"/>
           </lv_obj>
         </lv_obj>

@@ -33,6 +33,10 @@ TubePalette tube_palette(const FilamentPathData& data) {
     return {t.color_idle, t.color_accent, pulsed_error_color(data), t.color_bg, t.tube_gauge};
 }
 
+int32_t load_band_gap(const LinearHubFrame& f) {
+    return 3 * f.sensor_r;
+}
+
 // Layout mirrors the ratios at the top of ui_filament_path_internal.h; LINEAR
 // butts the selector against the prep sensors and slides the output exit under
 // the active slot.
@@ -44,6 +48,13 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
 
     f.entry_y = g.y_off + (int32_t)(g.height * ENTRY_Y_RATIO);
     f.prep_y = g.y_off + (int32_t)(g.height * PREP_Y_RATIO);
+    if (g.lane_entry_y != INT32_MIN) {
+        // The lanes leave the spool box at its front edge, through their prep
+        // sensors.
+        f.entry_y = g.lane_entry_y;
+        f.prep_y = g.lane_entry_y;
+        f.prep_on_box_edge = true;
+    }
     f.hub_y = g.y_off + (int32_t)(g.height * HUB_Y_RATIO);
     f.hub_h = (int32_t)(g.height * HUB_HEIGHT_RATIO);
     f.toolhead_y = g.y_off + (int32_t)(g.height * TOOLHEAD_Y_RATIO);
@@ -430,6 +441,13 @@ void append_trunk(PathPlan& plan, Route& r, const Lane& lane, const LinearHubFra
     append_line(r, cx, (float)f.toolhead_y, cx, (float)f.inlet_y, lane.style(PathSegment::NOZZLE));
 }
 
+// The load sensor sits just past the prep sensor: the lane entrance, then just
+// past the drive gear. Midway to @p run_end when that is nearer.
+float load_band_y(const LinearHubFrame& f, float run_end) {
+    const float prep = (float)f.prep_y;
+    return prep + LV_MIN((run_end - prep) / 2, (float)load_band_gap(f));
+}
+
 // The hub_only output stub: a short tube leaving the hub (or selector) bottom
 // that fades out over its last third, so it reads as continuing elsewhere. It
 // carries filament once the lane is past the hub or the hub sensor reads it.
@@ -479,8 +497,6 @@ void total_dropped(PathPlan& out) {
     for (int i = 0; i < out.route_count; i++)
         out.dropped += out.routes[i].dropped;
 }
-
-namespace {} // namespace
 
 PathSegment lane_error(const SlotRenderState& s, bool on_active_route, PathSegment system_error) {
     if (on_active_route)
@@ -618,8 +634,10 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
         Route& r = new_route(out);
 
         append_line(r, x, (float)f.entry_y, x, (float)f.prep_y, lane.style(PathSegment::SPOOL));
-        if (data.slot_has_prep_sensor[i])
-            add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::PREP), s.color);
+        if (data.slot_has_prep_sensor[i]) {
+            add_band(out, BandKind::Lane, {x, (float)f.prep_y}, {0, 1},
+                     lane.band(PathSegment::PREP), s.color, f.prep_on_box_edge);
+        }
 
         if (linear) {
             append_line(r, x, (float)f.prep_y, x, hub_top, lane.style(PathSegment::LANE));
@@ -637,7 +655,7 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
                 const int32_t sel_top_px = f.selector_y - f.hub_h / 2;
                 const float sel_top = (float)sel_top_px;
                 if (load_band) {
-                    const float load_y = ((float)f.prep_y + sel_top) / 2;
+                    const float load_y = load_band_y(f, sel_top);
                     append_line(r, x, (float)f.prep_y, x, load_y, lane.style(PathSegment::LANE));
                     add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::LANE), s.color);
                     append_line(r, x, load_y, x, sel_top, lane.style(PathSegment::LANE));
@@ -648,7 +666,7 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
             } else {
                 pts[0].y = (float)f.prep_y;
                 if (load_band) {
-                    const float load_y = (pts[0].y + pts[1].y) / 2;
+                    const float load_y = load_band_y(f, pts[1].y);
                     append_line(r, x, pts[0].y, x, load_y, lane.style(PathSegment::LANE));
                     add_band_at_end(out, BandKind::Lane, r, lane.band(PathSegment::LANE), s.color);
                     pts[0].y = load_y;

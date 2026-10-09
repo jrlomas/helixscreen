@@ -369,6 +369,13 @@ void ui_filament_path_canvas_set_hub_sensor(lv_obj_t* obj, bool has_sensor, bool
 void ui_filament_path_canvas_set_bowden_fill(lv_obj_t* obj, int percent);
 
 /**
+ * @brief Set where the spool box's front edge sits, in pixels below the slot
+ *        grid's top (INT32_MIN for no box): the lanes enter the path there and
+ *        their prep sensor bands clamp that edge
+ */
+void ui_filament_path_canvas_set_lane_entry(lv_obj_t* obj, int32_t offset_from_slot_grid);
+
+/**
  * @brief Set nozzle heat active state
  *
  * When heat is active, draws a pulsing orange/red glow around the nozzle tip

@@ -56,6 +56,11 @@ BaseGeometry compute_base_geometry(lv_obj_t* obj, const FilamentPathData* data) 
     for (int i = 0; i < count; i++) {
         g.slot_x[i] = g.x_off + get_slot_x(data, i, g.x_off);
     }
+    if (data->slot_grid && data->lane_entry_offset != INT32_MIN) {
+        lv_area_t grid;
+        lv_obj_get_coords(data->slot_grid, &grid);
+        g.lane_entry_y = grid.y1 + data->lane_entry_offset;
+    }
 
     // Center X: prefer midpoint of slot bounds so hub/selector/nozzle stay
     // aligned with the spool grid even when the grid is narrower than the

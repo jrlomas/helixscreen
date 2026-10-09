@@ -196,10 +196,11 @@ BaseGeometry geometry() {
     return g;
 }
 
-// Where a HUB lane's load sensor band sits: midway down its straight run from
-// the prep sensor (y 40) to its fan's first bend.
+// Where a HUB lane's load sensor band sits: 3 sensor radii below the prep
+// sensor (y 40), or midway to its fan's first bend when that is nearer.
 float load_band_y(const FilamentPathData& d, int slot) {
-    return (40.0f + compute_linear_hub_frame(d, geometry(), GLYPH_TOP).hub_fan[slot].pts[1].y) / 2;
+    const float bend = compute_linear_hub_frame(d, geometry(), GLYPH_TOP).hub_fan[slot].pts[1].y;
+    return 40.0f + std::min((bend - 40.0f) / 2, 3.0f * d.theme.sensor_radius);
 }
 
 float hub_entry_x(const FilamentPathData& d, int slot) {
@@ -1000,6 +1001,37 @@ TEST_CASE("FilamentPath plan: a buffer fault tints the buffer box, not the hub",
     d->error_segment = static_cast<int>(PathSegment::HUB);
     const LinearHubFrame fe = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
     CHECK(lv_color_eq(resolve_hub_tint(*d, fe, true).border, fe.error_color));
+}
+
+TEST_CASE("FilamentPath plan: the lanes enter at the spool box's front edge",
+          "[filament-path][plan][lane_entry]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::NOZZLE);
+    BaseGeometry g = geometry();
+    g.lane_entry_y = -20; // the box front, above the canvas top
+    const LinearHubFrame f = compute_linear_hub_frame(*d, g, GLYPH_TOP);
+    REQUIRE(f.prep_on_box_edge);
+    static PathPlan plan;
+    plan_linear_hub(f, *d, g, plan);
+
+    for (int i = 0; i < 4; i++) {
+        CAPTURE(i);
+        const Route& r = plan.routes[i];
+        // The tube starts at the box edge, and the prep band clamps that edge
+        // after the box is drawn.
+        CHECK(near(seg_start(r.path.segs[0]), 50.0f + 100 * i, -20));
+        CHECK(contiguous(r.path));
+        const SensorBand* prep = band_at(plan, 50.0f + 100 * i, -20);
+        REQUIRE(prep != nullptr);
+        CHECK(prep->on_box_edge);
+        // The load band just below it.
+        const float bend = f.hub_fan[i].pts[1].y;
+        const float load_y = -20 + std::min((bend + 20) / 2, 3.0f * d->theme.sensor_radius);
+        CHECK(load_y > -20);
+        const SensorBand* load = band_at(plan, 50.0f + 100 * i, load_y);
+        REQUIRE(load != nullptr);
+        CHECK_FALSE(load->on_box_edge);
+    }
 }
 
 // ============================================================================

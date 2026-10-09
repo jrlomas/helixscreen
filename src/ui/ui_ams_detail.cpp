@@ -68,6 +68,7 @@ struct TrayColors {
 /// singletons and each shows one unit), so one copy serves both.
 struct TrayState {
     bool valid = false;
+    lv_obj_t* container = nullptr; // slot_container the geometry is relative to
     tray::TrayBox box{};
     tray::LidMode lid = tray::LidMode::None;
     float lid_h = 0;
@@ -531,6 +532,19 @@ void ams_detail_destroy_slots(AmsDetailWidgets& w, lv_obj_t* slot_widgets[], int
     helix::ui::safe_delete_deferred(condemned);
 }
 
+void helix::ui::ams_detail_sync_lane_entry(lv_obj_t* canvas, lv_obj_t* slot_grid) {
+    if (!canvas)
+        return;
+    int32_t offset = INT32_MIN;
+    if (slot_grid && s_tray.valid && s_tray.container == lv_obj_get_parent(slot_grid)) {
+        lv_area_t c, g;
+        lv_obj_get_coords(s_tray.container, &c);
+        lv_obj_get_coords(slot_grid, &g);
+        offset = c.y1 + (int32_t)std::lround(s_tray.box.fb) - g.y1;
+    }
+    ui_filament_path_canvas_set_lane_entry(canvas, offset);
+}
+
 bool helix::ui::ams_detail_error_in_view(const helix::AmsSystemInfo& info, int unit_index) {
     if (unit_index < 0 || unit_index >= static_cast<int>(info.units.size()))
         return true;
@@ -672,6 +686,7 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
     s_tray.lane_half = half;
     s_tray.lane_count = n;
     s_tray.box = box;
+    s_tray.container = container;
     s_tray.valid = true;
 
     // Labels sit space_md above the unit's top, lane humidity above them.
@@ -828,6 +843,7 @@ void ams_detail_setup_path_canvas(lv_obj_t* canvas, lv_obj_t* slot_grid, int uni
     // at render time — avoids setup-vs-draw timing mismatches across breakpoints.
     if (slot_grid) {
         ui_filament_path_canvas_set_slot_grid(canvas, slot_grid);
+        helix::ui::ams_detail_sync_lane_entry(canvas, slot_grid);
 
         // Still set slot_width/overlap as fallback for get_slot_x() computed positions
         lv_obj_t* slot_area = lv_obj_get_parent(slot_grid);
