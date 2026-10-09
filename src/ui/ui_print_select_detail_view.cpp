@@ -801,8 +801,12 @@ void PrintSelectDetailView::ensure_gcode_downloaded(
             }
             cb(true, local);
         },
-        [this, path, cb](helix::ui::GcodePreviewFetcher::Unavailable) {
-            spdlog::warn("[DetailView] Shared G-code download failed");
+        [this, path, cb](helix::ui::GcodePreviewFetcher::Unavailable why) {
+            if (why == helix::ui::GcodePreviewFetcher::Unavailable::NoLocalCopies) {
+                spdlog::debug("[DetailView] No local G-code copy on this transport");
+            } else {
+                spdlog::warn("[DetailView] Shared G-code download failed");
+            }
             // Drop any partial file the failed transfer left behind so a later
             // open doesn't mistake it for a complete cached copy.
             reclaim_download(path);
@@ -2267,6 +2271,10 @@ void PrintSelectDetailView::start_tail_summary_scan(LifetimeToken tok, std::set<
         return;
     }
 
+    if (!api_->transfers().supports_tail_reads()) {
+        fall_back("the transport reads no file tails");
+        return;
+    }
     api_->transfers().download_file_tail(
         "gcodes", file_path, window, [on_tail](const std::string& tail) mutable { on_tail(tail); },
         [fall_back](const MoonrakerError& error) mutable {

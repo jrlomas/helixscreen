@@ -187,6 +187,15 @@ class AmsState {
     /// the always-0 placeholder.
     [[nodiscard]] static std::string unit_absent_subject_name(int unit_index);
 
+    /// The int subject that says a present unit is disconnected (1): on the bus
+    /// map but reported offline (AmsUnit::connected false). An absent unit is
+    /// 0 here; it has its own subject. Past MAX_UNITS, the always-0 placeholder.
+    [[nodiscard]] static std::string unit_disconnected_subject_name(int unit_index);
+
+    /// Name the unit a per-unit view is showing (-1: none), so
+    /// `ams_viewed_unit_disconnected` describes it. Main thread only.
+    void set_viewed_unit(int unit_index);
+
     /// @name Dryer Constants
     /// @{
     static constexpr int DEFAULT_DRYER_TEMP_C = 55;        ///< Default dryer temp (PETG)
@@ -1027,6 +1036,12 @@ class AmsState {
     }
     lv_subject_t* get_clog_meter_label_right_subject() {
         return &clog_meter_label_right_;
+    }
+    lv_subject_t* get_clog_meter_note_kind_subject() {
+        return &clog_meter_note_kind_;
+    }
+    lv_subject_t* get_clog_meter_note_text_subject() {
+        return &clog_meter_note_text_;
     }
 
     /**
@@ -2170,6 +2185,9 @@ class AmsState {
     char clog_meter_label_left_buf_[24]{};
     lv_subject_t clog_meter_label_right_{}; // Right endpoint label
     char clog_meter_label_right_buf_[24]{};
+    lv_subject_t clog_meter_note_kind_{}; // helix::ui::ClogNote; 0 hides the note line
+    lv_subject_t clog_meter_note_text_{};
+    char clog_meter_note_text_buf_[96]{}; // a firmware-supplied trip reason, or a translated phrase
 
     // Currently Loaded display subjects (reactive binding for "Currently Loaded" card)
     lv_subject_t current_material_text_{};
@@ -2181,7 +2199,7 @@ class AmsState {
     lv_subject_t current_slot_text_{};
     char current_slot_text_buf_[64];
     lv_subject_t current_weight_text_{};
-    char current_weight_text_buf_[16];
+    char current_weight_text_buf_[32];
     lv_subject_t current_has_weight_{};
     lv_subject_t current_color_{};
 
@@ -2206,9 +2224,16 @@ class AmsState {
     lv_subject_t slot_error_severity_[MAX_SLOTS]{};   // int: SlotError::Severity (INFO when none)
 
     // Per-unit environment subjects (CFS temp/humidity)
-    lv_subject_t unit_temp_[MAX_UNITS]{};     // int: tenths of C (270 = 27.0C), 0 = no data
-    lv_subject_t unit_humidity_[MAX_UNITS]{}; // int: percentage, 0 = no data
-    lv_subject_t unit_absent_[MAX_UNITS]{};   // int: 1 = AmsUnit::absent
+    lv_subject_t unit_temp_[MAX_UNITS]{};         // int: tenths of C (270 = 27.0C), 0 = no data
+    lv_subject_t unit_humidity_[MAX_UNITS]{};     // int: percentage, 0 = no data
+    lv_subject_t unit_absent_[MAX_UNITS]{};       // int: 1 = AmsUnit::absent
+    lv_subject_t unit_disconnected_[MAX_UNITS]{}; // int: 1 = present but !connected
+    // int: 1 = the unit set_viewed_unit() names is disconnected
+    lv_subject_t viewed_unit_disconnected_{};
+    // int: 1 = units exist and every present one is disconnected
+    lv_subject_t all_units_disconnected_{};
+    int viewed_unit_ = -1;
+    void publish_viewed_unit_disconnected();
 
     // Per-unit environment indicator display subjects (formatted text for XML binding)
     static constexpr int ENV_IND_TEXT_BUF_SIZE = 16;

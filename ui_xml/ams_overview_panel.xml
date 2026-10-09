@@ -38,6 +38,7 @@
           <text_heading name="detail_unit_name"
                         text="" hidden="true" text_transform="uppercase" long_mode="dots" clickable="false"
                         event_bubble="true" scrollable="false"/>
+          <ams_disconnected_chip name="detail_disconnected_chip" disconnected="ams_viewed_unit_disconnected"/>
         </lv_obj>
       </lv_obj>
       <!-- Left column content (cards + canvas OR detail slot view) -->

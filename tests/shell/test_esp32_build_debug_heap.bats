@@ -60,8 +60,10 @@ FAKE
     [ ! -f "$DOCKER_ARGS_FILE" ] || fail "docker ran without an asset image"
 }
 
-@test "with a jobpool the idf.py build's ninja -j is the pool's share" {
+@test "with a jobpool that cannot mount, the idf.py build's ninja -j is the pool's share" {
     echo image > "$FW/build/storage_frogfs.bin"
+    export HELIX_NINJA_CACHE="$BATS_TEST_TMPDIR/ninja-cache"
+    export HELIX_NINJA_URL="file://$BATS_TEST_TMPDIR/no-such-ninja.zip"
     export HELIX_JOBPOOL="$BATS_TEST_TMPDIR/fake-jobpool"
     printf '#!/bin/sh\n[ "$1" = hold ] || exit 2\nshift; [ "$1" = -- ] && shift\nJOBPOOL_SLOTS=6 exec "$@"\n' > "$HELIX_JOBPOOL"
     chmod +x "$HELIX_JOBPOOL"

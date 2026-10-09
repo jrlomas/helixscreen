@@ -24,21 +24,19 @@
 # Remote Build Configuration
 # =============================================================================
 
-# The build-hosts file is KEY=VALUE, readable by make and the shell alike. A
-# value the environment already holds wins over the file, as it does in the
-# scripts; one on the make command line wins over both.
-BUILD_HOSTS_FILE := $(or $(HELIX_BUILD_HOSTS_FILE),$(or $(XDG_CONFIG_HOME),$(HOME)/.config)/helixscreen/build-hosts.env)
-BUILD_HOSTS_VARS := REMOTE_HOST REMOTE_USER REMOTE_DIR
-$(foreach v,$(BUILD_HOSTS_VARS),$(if $(filter environment,$(origin $(v))),$(eval _env_$(v) := $(value $(v)))))
--include $(BUILD_HOSTS_FILE)
-$(foreach v,$(BUILD_HOSTS_VARS),$(if $(filter file,$(origin _env_$(v))),$(eval $(v) := $(_env_$(v)))))
+# The build-hosts file has one parser, scripts/lib/build_hosts.sh, and make
+# asks it rather than reading the file itself. Each variable is read on first
+# use and remembered, so a make that uses no remote host never runs the parser
+# and a broken file cannot stop it. A value from the environment or the make
+# command line wins: ?= leaves it alone, and the parser puts the environment
+# first too.
+BUILD_HOSTS_FILE = $(or $(HELIX_BUILD_HOSTS_FILE),$(or $(XDG_CONFIG_HOME),$(HOME)/.config)/helixscreen/build-hosts.env)
+define build_host_lazy
+$(1) ?= $$(eval $(1) := $$(shell scripts/lib/build_hosts.sh --make $(1)))$$($(1))
+endef
+$(foreach v,REMOTE_HOST REMOTE_USER REMOTE_DIR,$(eval $(call build_host_lazy,$(v))))
 
-# Build SSH target string
-ifdef REMOTE_USER
-    REMOTE_SSH_TARGET := $(REMOTE_USER)@$(REMOTE_HOST)
-else
-    REMOTE_SSH_TARGET := $(REMOTE_HOST)
-endif
+REMOTE_SSH_TARGET = $(if $(REMOTE_USER),$(REMOTE_USER)@)$(REMOTE_HOST)
 
 # A remote target with no host stops before anything runs, in one line naming
 # the file. REMOTE_DIR is checked for every target that uses it: rsync --delete

@@ -108,7 +108,7 @@ void SettingsPanel::init_subjects() {
                            "show_network_settings", subjects_);
 
     // Update checker runs on all platforms — on Android, "Install Update"
-    // redirects to the Play Store instead of self-updating.
+    // opens the store or release page the APK came from instead of self-updating.
     //
     // Checking and installing are gated SEPARATELY. Only a firmware opt-out hides
     // the "Check for Updates" row, because checking is a network fetch that a

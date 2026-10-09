@@ -1686,7 +1686,7 @@ nlohmann::json MoonrakerClientMock::cfs_box_status_json() const {
         "map": {"T1A": "T1A", "T1B": "T1B", "T1C": "T1C", "T1D": "T1D"},
         "T1": {"state": "connect", "filament": "None",
                "vender": ["Creality", "none", "none", "none"],
-               "remain_len": ["1000000", "-1", "-1", "-1"],
+               "remain_len": ["212", "-1", "-1", "-1"],
                "color_value": ["0E8E4F", "-1", "-1", "-1"],
                "material_type": ["000003", "-1", "-1", "-1"]}
     })");
@@ -4172,16 +4172,13 @@ void MoonrakerClientMock::dispatch_method_callback(const std::string& method, co
     }
 }
 
-void MoonrakerClientMock::dispatch_status_update(const json& status, bool from_cached_snapshot) {
-    MoonrakerClient::dispatch_status_update(status, from_cached_snapshot);
+void MoonrakerClientMock::dispatch_status_update(const json& status, bool from_cached_snapshot,
+                                                 bool whole_objects) {
+    MoonrakerClient::dispatch_status_update(status, from_cached_snapshot, whole_objects);
 
-    // The wrapping matches MoonrakerClient::dispatch_status_update exactly, so
-    // a method-callback registrant sees the same frame a live one would.
-    json msg = {{"method", "notify_status_update"}, {"params", json::array({status, 0.0})}};
-    if (from_cached_snapshot) {
-        msg[helix::CACHED_SNAPSHOT_MARKER] = true;
-    }
-    dispatch_method_callback("notify_status_update", msg);
+    dispatch_method_callback(
+        "notify_status_update",
+        helix::make_status_notification(status, from_cached_snapshot, whole_objects));
 }
 
 bool MoonrakerClientMock::led_effect_enabled(const std::string& object_name) const {

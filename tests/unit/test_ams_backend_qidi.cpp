@@ -90,8 +90,9 @@ TEST_CASE("QIDI Box default system_info shape", "[ams][qidi_box]") {
     REQUIRE(info.units.size() == 1);
     REQUIRE(info.units[0].slot_count == 4);
     REQUIRE(info.units[0].topology == PathTopology::HUB);
-    // Unit must report as disconnected until enable_box=1 arrives.
-    REQUIRE_FALSE(info.units[0].connected);
+    // Only an explicit enable_box=0 disconnects the unit; one that has not
+    // reported yet reads connected, so the UI does not flash "Disconnected".
+    REQUIRE(info.units[0].connected);
 }
 
 // =====================================================================
@@ -101,8 +102,10 @@ TEST_CASE("QIDI Box default system_info shape", "[ams][qidi_box]") {
 // 0 as "Box installed but disabled" / 1 as "Box active." Mirror that
 // onto AmsUnit::connected so the UI can show the right state.
 
-TEST_CASE("QIDI Box parse_save_variables: enable_box=1 connects the unit", "[ams][qidi_box]") {
+TEST_CASE("QIDI Box parse_save_variables: enable_box drives the unit's connection",
+          "[ams][qidi_box]") {
     AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::parse_vars(backend, json{{"enable_box", 0}});
     REQUIRE_FALSE(backend.get_system_info().units[0].connected);
 
     QidiBoxTestAccess::parse_vars(backend, json{{"enable_box", 1}});
@@ -268,6 +271,7 @@ TEST_CASE("QIDI Box parse_save_variables: value_t<N>=slot<M> maps tool N to slot
 
 TEST_CASE("QIDI Box handle_status_update applies save_variables changes", "[ams][qidi_box]") {
     AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::parse_vars(backend, json{{"enable_box", 0}});
     REQUIRE_FALSE(backend.get_system_info().units[0].connected);
 
     QidiBoxTestAccess::handle_status(backend, make_save_variables_notification(json{
@@ -289,7 +293,7 @@ TEST_CASE("QIDI Box handle_status_update ignores unrelated keys", "[ams][qidi_bo
     QidiBoxTestAccess::handle_status(backend,
                                      json{{"toolhead", {{"position", json::array({0, 0, 0, 0})}}}});
 
-    REQUIRE_FALSE(backend.get_system_info().units[0].connected);
+    REQUIRE(backend.get_system_info().units[0].connected);
     REQUIRE(backend.get_system_info().total_slots == 4);
 }
 
@@ -506,6 +510,7 @@ TEST_CASE("QIDI Box humidity is read from any matched box object", "[ams][qidi_b
 
 TEST_CASE("QIDI Box apply_query_response unwraps result.status and parses", "[ams][qidi_box]") {
     AmsBackendQidi backend(nullptr, nullptr);
+    QidiBoxTestAccess::parse_vars(backend, json{{"enable_box", 0}});
     REQUIRE_FALSE(backend.get_system_info().units[0].connected);
 
     json response = json{
@@ -530,6 +535,7 @@ TEST_CASE("QIDI Box apply_query_response unwraps result.status and parses", "[am
 TEST_CASE("QIDI Box apply_query_response handles missing result gracefully", "[ams][qidi_box]") {
     AmsBackendQidi backend(nullptr, nullptr);
 
+    QidiBoxTestAccess::parse_vars(backend, json{{"enable_box", 0}});
     // Wrong-shape response — must not crash, must not mutate state.
     QidiBoxTestAccess::apply_query(backend, json{{"error", "timed out"}});
 

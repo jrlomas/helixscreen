@@ -26,7 +26,8 @@ const std::vector<Info> kPlatforms = {
     {"ad5x", "FlashForge Adventurer 5X", true, ELF32, LE, EM_MIPS_, kZmodDiagnosticFiles},
     {"mips", "MIPS (K1 series / AD5X)", true, ELF32, LE, EM_MIPS_, kZmodDiagnosticFiles},
     {"k1", "Creality K1", true, ELF32, LE, EM_MIPS_, {}},
-    {"k2", "Creality K2 Plus", true, ELF32, LE, EM_ARM_, {}},
+    // One build serves the K2, K2 Pro and K2 Plus, so the name covers all three.
+    {"k2", "Creality K2", true, ELF32, LE, EM_ARM_, {}},
     {"cc1", "Elegoo Centauri Carbon", true, ELF32, LE, EM_ARM_, {}},
     {"snapmaker-u1", "Snapmaker U1", true, ELF64, LE, EM_AARCH64_, {}},
     // The K-Touch ships a firmware image, never an ELF release zip.

@@ -324,8 +324,12 @@ if [[ -n "${HELIX_TEST_HOST:-}" && -x "$MAIN_ABS/scripts/test-host-run.sh" ]]; t
     command -v timeout >/dev/null 2>&1 && _drop=(timeout -k 5 "$DROP_TIMEOUT" "${_drop[@]}")
     if (( DRY_RUN )); then
         say "  ${CYAN}would run:${RESET} scripts/test-host-run.sh --drop $(basename "$WT_ABS")"
-    elif ! "${_drop[@]}" >/dev/null 2>&1 </dev/null; then
-        say "${YELLOW}! could not remove this tree's mirror on $HELIX_TEST_HOST (unreachable or busy); scripts/test-host-run.sh --prune collects it later.${RESET}"
+    else
+        # Exit 2 is a name test-host-run.sh refuses: no mirror can exist under it.
+        _rc=0; "${_drop[@]}" >/dev/null 2>&1 </dev/null || _rc=$?
+        if (( _rc != 0 && _rc != 2 )); then
+            say "${YELLOW}! could not remove this tree's mirror on $HELIX_TEST_HOST (unreachable or busy); scripts/test-host-run.sh --prune collects it later.${RESET}"
+        fi
     fi
 fi
 

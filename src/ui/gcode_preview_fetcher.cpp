@@ -268,6 +268,11 @@ void GcodePreviewFetcher::ensure_local(const RequestPtr& req, const std::string&
         std::remove(req->temp_path.c_str());
     }
 
+    // Nothing to join or reuse, and this transport cannot make a copy.
+    if (api_ && !api_->transfers().supports_local_copies()) {
+        give_up(req, Unavailable::NoLocalCopies);
+        return;
+    }
     in_flight_[req->temp_path].push_back(req);
 
     if (!owned_path_.empty() && owned_path_ != req->temp_path) {

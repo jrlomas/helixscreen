@@ -253,7 +253,7 @@ class FakeMoonrakerClient : public helix::IMoonrakerClient {
     bool unsubscribe_notify_update(helix::SubscriptionId) override {
         return false;
     }
-    void dispatch_status_update(const nlohmann::json&, bool) override {}
+    void dispatch_status_update(const nlohmann::json&, bool, bool) override {}
     void set_subscription_extras_provider(std::function<nlohmann::json()>) override {}
     void refresh_subscription() override {}
     helix::ConnectionState get_connection_state() const override {

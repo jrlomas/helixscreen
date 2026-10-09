@@ -15,6 +15,7 @@
 #include "ams_tray_projection.h"
 #include "app_globals.h" // get_printer_state: the print lifecycle the clear guard reads
 #include "buffer_reading.h"
+#include "clog_meter_geometry.h"
 #include "display_numbering.h"
 #include "filament_op_dispatch.h"      // EXTERNAL_SPOOL_SLOT: the bypass sentinel
 #include "filament_op_slot_resolver.h" // clear_spool_blocked_by_print: the print guard
@@ -1009,13 +1010,7 @@ BufferBoxState ams_detail_buffer_box(const AmsSystemInfo& info, int unit_index) 
         } else if (h.state == "Trailing") {
             box.state = 2;
         }
-        if (h.fault_detection_enabled && h.distance_to_fault >= 0.0f) {
-            if (h.distance_to_fault >= 50.0f) {
-                box.fault = 2; // at or past the fault threshold
-            } else if (h.distance_to_fault > 0.0f) {
-                box.fault = 1; // approaching it
-            }
-        }
+        box.fault = static_cast<int>(buffer_fault_status(h));
     }
     if (!box.present && info.type == AmsType::HAPPY_HARE) {
         const auto& sf = info.sync_feedback_state;

@@ -1376,15 +1376,16 @@ class AmsBackendAfc : public AmsSubscriptionBackend {
     std::unordered_map<std::string, std::string> unit_oams_names_;
     std::atomic<bool> has_unit_environment_{false};
 
-    /// Slot -> the firmware spool id HelixScreen just unlinked. AFC keeps the
-    /// id on a lane with remember_spool, so every later frame restates it; a
-    /// frame naming this id is stale for the lane. Ends when the lane reports
-    /// any other id or null, when its filament leaves, and on start.
-    std::unordered_map<int, int> unlinked_spool_ids_;
-
-    /// True when @p firmware_id is the id unlinked on @p slot_index. Any other
-    /// id ends the guard. @pre mutex_ held.
+    /// True when @p firmware_id is the id the user unlinked from @p slot_index,
+    /// which AFC keeps on a lane with remember_spool and restates on every
+    /// full status snapshot. The unlink lives in the slot's persisted override
+    /// (FilamentSlotOverride::unlinked_spool_id) so it survives a reconnect and
+    /// a restart; any other id ends it. @pre mutex_ held.
     bool restates_unlinked_spool(int slot_index, int firmware_id);
+
+    /// Record (@p spool_id > 0) or end (0) the unlink on @p slot_index and
+    /// persist it. @pre mutex_ held.
+    void set_unlinked_spool(int slot_index, int spool_id);
 
     /// What AFC itself has said about a lane, per observation source, built up
     /// field by field across status frames and keyed by lane name the way the

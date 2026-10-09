@@ -190,7 +190,9 @@ class FilamentPanel : public PanelBase {
      * checkmark for a macro that did nothing. Called from GcodeNarrationRouter,
      * which is the only component that sees the `// Unknown command:"X"` response.
      *
-     * No-op when no operation is showing its spinner. Main thread only.
+     * No-op when no operation is showing its spinner. A name that is template
+     * residue (helix::is_template_residue) warns instead and leaves the op
+     * running, because Klipper carried on with the macro. Main thread only.
      *
      * @param command The command name Klipper reported as unknown; it is the
      *                actionable part of the message, so it reaches the toast.

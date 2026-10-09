@@ -7,6 +7,10 @@
 
 #include <cstdint>
 
+namespace helix {
+struct BufferHealth;
+}
+
 namespace helix::ui {
 
 /// The presentations `clog_meter_mode` selects between. Populated by
@@ -65,6 +69,23 @@ enum class ClogMeterStatus : int {
 /// tripped yet, which is the whole point of showing a threshold at all.
 /// `value` is compared by magnitude so Flowguard's tangle side counts.
 ClogMeterStatus clog_meter_status(int mode, int value, int warning, int danger_pct);
+
+/// Severity of an AFC buffer's fault countdown, the decision the clog meter
+/// and the path canvas's buffer box both draw. Ok while fault detection is off
+/// or the countdown is not tracking.
+ClogMeterStatus buffer_fault_status(const BufferHealth& health);
+
+/// What the one-line note under the clog meter says. Ordered by precedence.
+enum class ClogNote : int {
+    None = 0,          ///< Nothing to say: the line is hidden
+    TripReason = 1,    ///< The detector tripped and gave a reason (shown verbatim)
+    TangleBoosted = 2, ///< Tangle prevention is boosting the gate stepper
+    TangleActive = 3,  ///< Tangle prevention is armed
+};
+
+/// A trip with a reason outranks tangle prevention, which outranks silence;
+/// a trip with no reason falls through, since there is nothing to show for it.
+ClogNote clog_meter_note(bool tripped, bool has_reason, bool tangle_active, bool tangle_boosted);
 
 /// Bands a filament buffer reading (`|bias| * 100`) is judged against: from
 /// kPressureWarningPct it has drifted off its target, from kPressureFaultPct

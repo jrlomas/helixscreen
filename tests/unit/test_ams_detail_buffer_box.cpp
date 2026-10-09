@@ -49,12 +49,42 @@ TEST_CASE("buffer box: no set point draws the FPS box untinted", "[ams][buffer][
     CHECK(box.fault == -1);
 }
 
-TEST_CASE("buffer box: an AFC fault distance outranks a calm reading", "[ams][buffer][path]") {
+// distance_to_fault counts DOWN to a fault: small is danger, negative is a
+// stopped timer. Values are the HELIX_MOCK_BUFFER_STATE table's.
+static int afc_box_fault(float distance, float sensitivity = 7.0f) {
     AmsSystemInfo info = test::fps_units({0.5f});
     auto& h = *info.units[0].buffer_health;
     h.fault_detection_enabled = true;
-    h.distance_to_fault = 60.0f;
-    CHECK(ams_detail_buffer_box(info, -1).fault == 2);
+    h.error_sensitivity = sensitivity;
+    h.distance_to_fault = distance;
+    return ams_detail_buffer_box(info, -1).fault;
+}
+
+TEST_CASE("buffer box: the AFC fault countdown tints like the clog meter", "[ams][buffer][path]") {
+    CHECK(afc_box_fault(-100.0f) == 0); // timer stopped
+    CHECK(afc_box_fault(40.0f) == 0);   // at the 40mm threshold: 0% danger
+    CHECK(afc_box_fault(25.0f) == 0);   // 37.5%, below the meter's danger mark
+    CHECK(afc_box_fault(10.0f) == 1);   // 75%: on the danger mark
+    CHECK(afc_box_fault(5.0f) == 2);    // 87.5%: fault imminent
+    CHECK(afc_box_fault(60.0f) == 0);   // just reset, above the threshold
+}
+
+TEST_CASE("buffer box: error_sensitivity moves the AFC threshold", "[ams][buffer][path]") {
+    // The threshold is (11 - sensitivity) * 10 mm: 40mm at 7, 100mm at 1.
+    CHECK(afc_box_fault(15.0f, 1.0f) == 2); // 100mm threshold: 85% danger
+    CHECK(afc_box_fault(15.0f, 7.0f) == 0); // 40mm threshold: 62.5%
+}
+
+TEST_CASE("buffer box: AFC fault detection off draws no fault", "[ams][buffer][path]") {
+    AmsSystemInfo info = test::fps_units({0.5f});
+    auto& h = *info.units[0].buffer_health;
+    h.fault_detection_enabled = false;
+    h.distance_to_fault = 1.0f;
+    CHECK(ams_detail_buffer_box(info, -1).fault == 0);
+}
+
+TEST_CASE("buffer box: an AFC fault outranks a calm pressure reading", "[ams][buffer][path]") {
+    CHECK(afc_box_fault(2.0f) == 2);
 }
 
 TEST_CASE("buffer box: Happy Hare sync feedback", "[ams][buffer][path]") {

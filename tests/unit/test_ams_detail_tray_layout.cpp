@@ -193,10 +193,23 @@ TEST_CASE_METHOD(AmsTrayPanelFixture, "AMS per-lane sensors: each lane's humidit
         lv_obj_t* row = ui_ams_slot_get_lane_humidity(slot(i));
         REQUIRE(row != nullptr);
         CHECK_FALSE(lv_obj_has_flag(row, LV_OBJ_FLAG_HIDDEN));
-        REQUIRE(lv_obj_get_child_count(row) == 2);
+        // Temperature above, then the droplet and humidity.
+        lv_obj_t* temp_row = lv_obj_find_by_name(row, "lane_temp_row");
+        lv_obj_t* hum_row = lv_obj_find_by_name(row, "lane_humidity_row");
+        REQUIRE(temp_row != nullptr);
+        REQUIRE(hum_row != nullptr);
+        CHECK_FALSE(lv_obj_has_flag(temp_row, LV_OBJ_FLAG_HIDDEN));
+        CHECK(lv_obj_get_index(temp_row) < lv_obj_get_index(hum_row));
+        CHECK(std::strcmp(lv_obj_get_name(lv_obj_get_child(temp_row, 0)), "lane_temp_icon") == 0);
+        const char* temp = lv_label_get_text(lv_obj_get_child(temp_row, 1));
+        REQUIRE(temp != nullptr);
+        CHECK(std::strstr(temp, "\xC2\xB0"
+                                "C") != nullptr);
+        REQUIRE(lv_obj_get_child_count(hum_row) == 2);
         // The droplet comes first, then the value.
-        CHECK(std::strcmp(lv_obj_get_name(lv_obj_get_child(row, 0)), "lane_humidity_icon") == 0);
-        const char* value = lv_label_get_text(lv_obj_get_child(row, 1));
+        CHECK(std::strcmp(lv_obj_get_name(lv_obj_get_child(hum_row, 0)), "lane_humidity_icon") ==
+              0);
+        const char* value = lv_label_get_text(lv_obj_get_child(hum_row, 1));
         REQUIRE(value != nullptr);
         CHECK(std::strchr(value, '%') != nullptr);
 

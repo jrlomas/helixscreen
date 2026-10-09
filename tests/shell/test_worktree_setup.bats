@@ -659,3 +659,67 @@ mark_tree() {
     [ "$(stat -c %Y "$wt_head")" = "$(stat -c %Y "$main_head")" ] || fail "HEAD has a fresh mtime"
     rm -rf "$tmp"
 }
+
+# --- seeding build/obj ----------------------------------------------------------
+#
+# make links every object it finds. An object whose source this branch does not
+# have (or a source it adds) has no fresh mtime to force a rebuild, so it would
+# be linked into a binary that matches neither branch.
+
+@test "build/obj is not cloned when the base's source set differs from the main tree's" {
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    main="$tmp/main"
+    git -C "$main" branch rel
+    mkdir -p "$main/src" "$main/build/obj"
+    echo 'int only_on_main;' > "$main/src/only_on_main.c"
+    git -C "$main" add src/only_on_main.c
+    git -C "$main" commit -qm "main-only source"
+    : > "$main/build/obj/only_on_main.o"
+
+    run bash "$main/scripts/setup-worktree.sh" --base rel --no-build feat/stale
+    [ "$status" -eq 0 ] || fail "setup failed: $output"
+    [ ! -e "$main/.worktrees/stale/build/obj/only_on_main.o" ] \
+        || fail "main's object was seeded into a branch without its source"
+    rm -rf "$tmp"
+}
+
+@test "build/obj is cloned when the base has the same source set as the main tree" {
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    main="$tmp/main"
+    git -C "$main" branch rel
+    mkdir -p "$main/build/obj"
+    : > "$main/build/obj/seeded.o"
+    # A change to an existing source is not a reason to skip the clone.
+    echo '# touched' >> "$main/scripts/setup-worktree.sh"
+    git -C "$main" commit -qam "edit"
+
+    run bash "$main/scripts/setup-worktree.sh" --base rel --no-build feat/seeded
+    [ "$status" -eq 0 ] || fail "setup failed: $output"
+    [ -e "$main/.worktrees/seeded/build/obj/seeded.o" ] || fail "object was not cloned: $output"
+    rm -rf "$tmp"
+}
+
+@test "build/obj is not cloned when a lib/ submodule is pinned at another revision" {
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    main="$tmp/main"
+    printf 'reapply-patches:\n\t@true\n' > "$main/Makefile"
+    git -C "$main" add Makefile
+    git -C "$main" commit -qm stub
+    git -C "$main" branch rel
+    git -C "$main/lib/lvgl" -c user.name=t -c user.email=t@t commit -q --allow-empty -m bump
+    git -C "$main" commit -qam "bump lvgl pin"
+    mkdir -p "$main/build/obj"
+    : > "$main/build/obj/lvgl_obj.o"
+
+    run bash "$main/scripts/setup-worktree.sh" --base rel --no-build feat/pin
+    [ "$status" -eq 0 ] || fail "setup failed: $output"
+    [ ! -e "$main/.worktrees/pin/build/obj/lvgl_obj.o" ] \
+        || fail "objects built against another lvgl revision were seeded"
+    rm -rf "$tmp"
+}

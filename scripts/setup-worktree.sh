@@ -57,7 +57,8 @@ usage() {
     echo "  - Adopts the main tree's mtimes for byte-identical files (so the cloned"
     echo "    objects are not all invalidated by the fresh checkout timestamp)"
     echo "  - Configures ccache for cross-worktree reuse (no cold rebuild per worktree)"
-    echo "  - Clones build/obj/ from main tree (APFS copy-on-write — instant, zero disk)"
+    echo "  - Clones build/obj/ from main tree (APFS copy-on-write — instant, zero disk),"
+    echo "    unless this branch adds or removes a .c/.cpp relative to the main tree"
     echo "  - Symlinks the unpatched lib/ submodules from the main tree (sources +"
     echo "    generated headers), and gives lvgl/libhv/lua/helix-xml a PRIVATE checkout"
     echo "    copied from it, so this branch's patches/ stay inside this worktree"
@@ -838,6 +839,16 @@ if [[ -d "$MAIN_OBJ" ]]; then
     OBJ_COUNT=$(find "$WORKTREE_OBJ" -name "*.o" 2>/dev/null | wc -l | tr -d ' ')
     if [[ "$OBJ_COUNT" -gt 10 ]]; then
         echo -e "  build/obj: ${GREEN}already populated ($OBJ_COUNT objects)${RESET}"
+    elif [[ -n "$(git -C "$WORKTREE_PATH" diff --no-renames --diff-filter=AD --name-only \
+            HEAD "$(git -C "$MAIN_TREE" rev-parse HEAD)" -- '*.cpp' '*.c' 2>/dev/null | head -n1)" ||
+            -n "$(git -C "$WORKTREE_PATH" diff --raw HEAD "$(git -C "$MAIN_TREE" rev-parse HEAD)" -- lib 2>/dev/null | head -n1)" ]]; then
+        # A source added or removed between this branch and the main tree leaves an
+        # object with no matching source here (or none for a new one), and a lib/
+        # submodule pinned elsewhere makes its objects describe other code under a
+        # fresh-looking mtime. make links every object it finds, so a stale one lands
+        # in the binary. Changed sources are fine: the mtime sync leaves them fresh
+        # and they rebuild.
+        echo -e "  build/obj: ${YELLOW}not cloned: this branch's source set differs from the main tree's (ccache covers the rebuild)${RESET}"
     else
         echo -e "${CYAN}Cloning build objects from main tree...${RESET}"
         # Clone all build artifacts (.o, .d, .ccj) from main tree.

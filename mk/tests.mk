@@ -647,25 +647,33 @@ test-kiauh:
 
 # Run shell/bats tests for platform hooks and installer scripts. The parallel
 # run holds its -j as jobpool tokens (`helix-claim hold`), so it shares the
-# machine budget with compiles; without jobpool the -j is the cores. It waits
-# up to 60s for a third of the pool (`--min`): a third keeps the suite within
-# about 3x its full-pool time while leaving two thirds to compiles, and the
-# bounded wait turns a saturated pool into seconds of delay, never a serial
-# run. One slot runs serially: bats refuses --no-parallelize-within-files
-# below --jobs 2.
+# machine budget with compiles; without jobpool the -j is the cores. The hold
+# waits briefly for a third of the pool (helix-claim hold's default floor), so
+# a saturated pool delays the suite instead of running it serially.
+# A jobpool with `hold --grow` also keeps the live slot count in a file that
+# grows and shrinks with the pool. bats checks --jobs as a number, so it gets
+# one (2: it refuses --no-parallelize-within-files below that) and
+# scripts/parallel-jobs-file.sh as its parallel, which hands GNU parallel the
+# file instead; parallel re-reads it as the suite runs. With no file, one
+# slot runs serially and more run at the fixed count.
 test-shell:
 	$(ECHO) "$(CYAN)$(BOLD)Running shell tests (bats)...$(RESET)"
 	@if command -v bats >/dev/null 2>&1; then \
 		START_TIME=$$(date +%s); \
 		if command -v parallel >/dev/null 2>&1; then \
-			j=$$(scripts/helix-claim jobs 2>/dev/null || echo 3); \
-			scripts/helix-claim hold --min $$(( j / 3 > 0 ? j / 3 : 1 )) -- \
-				sh -c '[ "$$JOBPOOL_SLOTS" -gt 1 ] || exec bats "$$@"; \
+			jobs_dir=$$(mktemp -d); \
+			HELIX_JOBS_FILE=$$jobs_dir/slots scripts/helix-claim hold --grow "$$jobs_dir/slots" -- \
+				sh -c 'if [ -f "$$HELIX_JOBS_FILE" ]; then \
+					exec bats --jobs 2 --parallel-binary-name "$$PWD/scripts/parallel-jobs-file.sh" \
+						--no-parallelize-within-files "$$@"; fi; \
+				[ "$$JOBPOOL_SLOTS" -gt 1 ] || exec bats "$$@"; \
 				exec bats --jobs "$$JOBPOOL_SLOTS" --no-parallelize-within-files "$$@"' bats tests/shell/; \
+			STATUS=$$?; \
+			rm -f "$$jobs_dir"/*; rmdir "$$jobs_dir"; \
 		else \
 			bats tests/shell/; \
+			STATUS=$$?; \
 		fi; \
-		STATUS=$$?; \
 		END_TIME=$$(date +%s); \
 		DURATION=$$((END_TIME - START_TIME)); \
 		if [ $$STATUS -ne 0 ]; then \

@@ -94,6 +94,7 @@ static EncoderClogInfo encoder_at(float headroom, float min_headroom) {
 static void clear_clog_sources(AmsBackendMock& mock) {
     mock.set_encoder_clog_info(EncoderClogInfo{}, /*detection_mode_flag=*/0);
     mock.set_flowguard_info(FlowguardInfo{});
+    mock.set_tangle_prevention(TanglePreventionInfo{});
     mock.set_sync_feedback_bias(-2.0f);
     for (int u = 0; u < 4; ++u) {
         mock.set_unit_buffer_health(u, std::nullopt);
@@ -164,6 +165,24 @@ static std::vector<MockScenario> clog_scenarios() {
                      });
                  }});
 
+    s.push_back({"flowguard_tangle_boosted", "Tangle prevention boosting the gate stepper", []() {
+                     apply_clog_state([](AmsBackendMock& m) {
+                         clear_clog_sources(m);
+                         FlowguardInfo fg;
+                         fg.enabled = true;
+                         fg.active = true;
+                         fg.level = -0.45f;
+                         fg.max_clog = 0.20f;
+                         fg.max_tangle = -0.62f;
+                         m.set_flowguard_info(fg);
+                         TanglePreventionInfo tp;
+                         tp.present = tp.enabled = tp.active = tp.boosted = true;
+                         tp.threshold = 0.6f;
+                         tp.release = 0.3f;
+                         m.set_tangle_prevention(tp);
+                     });
+                 }});
+
     s.push_back({"flowguard_clog", "Flowguard tripped at the clog end", []() {
                      apply_clog_state([](AmsBackendMock& m) {
                          clear_clog_sources(m);
@@ -174,6 +193,7 @@ static std::vector<MockScenario> clog_scenarios() {
                          // A non-empty trigger is what sets warning=1, which is
                          // what turns the indicator red whatever the mode.
                          fg.trigger = "CLOG";
+                         fg.reason = "No filament movement for 12.0mm";
                          fg.max_clog = 0.86f;
                          fg.max_tangle = -0.10f;
                          m.set_flowguard_info(fg);

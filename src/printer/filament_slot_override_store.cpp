@@ -450,6 +450,8 @@ nlohmann::json to_lane_data_record(int slot_index, const FilamentSlotOverride& o
         j["helix_fingerprint"] = o.fingerprint;
     if (o.external_mirror)
         j["helix_external"] = true;
+    if (o.unlinked_spool_id > 0)
+        j["helix_unlinked_spool_id"] = o.unlinked_spool_id;
     return j;
 }
 
@@ -535,6 +537,7 @@ std::optional<std::pair<int, FilamentSlotOverride>> from_lane_data_record(const 
     // rule, so the default empty string is the correct reading of its absence.
     o.fingerprint = helix::json_util::safe_string(j, "helix_fingerprint");
     o.external_mirror = helix::json_util::safe_bool(j, "helix_external", false);
+    o.unlinked_spool_id = helix::json_util::safe_int(j, "helix_unlinked_spool_id", 0);
     // Last, because the rule reads what was parsed above: a lock key counts
     // only on an unlinked record, and a colour or material declaration only
     // over a value. The legacy rule for a record with no helix_declared key
@@ -602,6 +605,7 @@ nlohmann::json to_json(const FilamentSlotOverride& o) {
         {"bed_temp", o.bed_temp},
         {"nozzle_temp", o.nozzle_temp},
         {"fingerprint", o.fingerprint},
+        {"unlinked_spool_id", o.unlinked_spool_id},
         {"updated_at", format_iso8601(o.updated_at)},
     };
 }
@@ -641,6 +645,7 @@ FilamentSlotOverride from_json(const nlohmann::json& j) {
     o.bed_temp = helix::json_util::safe_int(j, "bed_temp", 0);
     o.nozzle_temp = helix::json_util::safe_int(j, "nozzle_temp", 0);
     o.fingerprint = helix::json_util::safe_string(j, "fingerprint");
+    o.unlinked_spool_id = helix::json_util::safe_int(j, "unlinked_spool_id", 0);
     if (j.contains("updated_at") && j["updated_at"].is_string()) {
         o.updated_at = parse_iso8601(j["updated_at"].get<std::string>());
     }
@@ -731,6 +736,9 @@ FilamentSlotOverride user_override_from_slot_info(const Observation& declaration
     // it from the one it replaces and an edit cannot strand the lane without
     // one.
     ovr.fingerprint = prior != nullptr ? prior->fingerprint : std::string{};
+    // A link made here ends the unlink; any other edit leaves it standing.
+    ovr.unlinked_spool_id =
+        prior != nullptr && edited.spoolman_id <= 0 ? prior->unlinked_spool_id : 0;
     // updated_at left default: save_async stamps a fresh value.
     return ovr;
 }

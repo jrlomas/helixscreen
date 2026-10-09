@@ -404,6 +404,9 @@ class AmsBackendMock : public AmsBackend {
      */
     void set_flowguard_info(FlowguardInfo info);
 
+    /// Publish a tangle-prevention state (the clog meter's note line reads it).
+    void set_tangle_prevention(TanglePreventionInfo info);
+
     /**
      * @brief Set the Happy Hare sync-feedback bias (-1..+1; -2 = none).
      *

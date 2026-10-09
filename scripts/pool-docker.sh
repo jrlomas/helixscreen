@@ -14,10 +14,18 @@
 # -j makes make leave a jobserver. If the container cannot open the FIFO
 # (a remapped uid, a VM that cannot share a FIFO) that make keeps its -j.
 #
-# Any other command (ninja under idf.py, a build script) cannot join, so it
-# runs under `helix-claim hold`, which holds tokens for the container's life
-# and passes their count in as JOBPOOL_SLOTS and IDF_PY_BUILD_JOBS (idf.py's
-# ninja -j).
+# An idf.py or ninja command joins too, through ninja 1.13's jobserver client,
+# so its jobs grow and shrink with the pool for the whole build: the state dir
+# is mounted, scripts/ninja-jobserver.sh's ninja (fetched once, then cached) is
+# mounted over the image's /usr/bin/ninja, MAKEFLAGS names the FIFO, and
+# IDF_PY_BUILD_JOBS is emptied, since idf.py passes it as -j and any -j turns
+# ninja's jobserver off. The container's root, or the -u uid, must be able to
+# open the FIFO; one that cannot leaves ninja at its own default parallelism.
+#
+# Any other command (a build script), or idf.py when no ninja 1.13 can be had,
+# cannot join, so it runs under `helix-claim hold`, which holds tokens for the
+# container's life and passes their count in as JOBPOOL_SLOTS and
+# IDF_PY_BUILD_JOBS (idf.py's ninja -j).
 #
 # Without jobpool (CI, a Mac, a fresh clone), with JOBPOOL=0, or when the pool
 # will not start, the command runs exactly as given.
@@ -36,7 +44,15 @@ while [ $# -gt 0 ] && [ "$1" != make ]; do
     shift
 done
 
+dir=/run/jobpool
 if [ $# -eq 0 ]; then
+    ninja_cmd='(^|[[:space:];&|(])(idf\.py|ninja)([[:space:]]|$)'
+    if [[ " ${opts[*]} " =~ $ninja_cmd ]] && mount=$("$jp" docker-args "$dir" 2>/dev/null) &&
+        ninja=$("$here/ninja-jobserver.sh"); then
+        exec env -u MAKEFLAGS -u MFLAGS "$jp" exec -- "$docker" run "$mount" \
+            "--volume=$ninja:/usr/bin/ninja:ro" \
+            -e "MAKEFLAGS= -j --jobserver-auth=fifo:$dir/fifo" -e IDF_PY_BUILD_JOBS= "${opts[@]}"
+    fi
     # shellcheck disable=SC2016  # expanded by the inner sh, under the hold
     exec "$here/helix-claim" hold -- sh -c \
         'exec "$0" run -e JOBPOOL_SLOTS -e IDF_PY_BUILD_JOBS="$JOBPOOL_SLOTS" "$@"' \
@@ -44,7 +60,6 @@ if [ $# -eq 0 ]; then
 fi
 
 shift
-dir=/run/jobpool
 mount=$("$jp" docker-args "$dir" 2>/dev/null) || exec "$docker" run "${opts[@]}" make "$@"
 join=$("$jp" container-env "$dir") || exec "$docker" run "${opts[@]}" make "$@"
 args=() jflags=""

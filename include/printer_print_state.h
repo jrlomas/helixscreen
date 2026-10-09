@@ -75,8 +75,12 @@ class PrinterPrintState {
     /**
      * @brief Update print state from Moonraker status JSON
      * @param status JSON object containing print_stats, virtual_sdcard data
+     * @param whole_objects true when @p status is a printer.objects.subscribe
+     *        response (the discovery replay or a subscription refresh), which
+     *        carries every field of each object whether or not it changed, rather
+     *        than a delta naming only the fields that did.
      */
-    void update_from_status(const nlohmann::json& status);
+    void update_from_status(const nlohmann::json& status, bool whole_objects = false);
 
     /// True if a Moonraker status object indicates an active (printing or paused) print.
     /// Pure: depends only on status["print_stats"]["state"]. Used by both the

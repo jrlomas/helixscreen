@@ -24,6 +24,7 @@
 #include "observer_factory.h"
 #include "settings_manager.h"
 #include "static_panel_registry.h"
+#include "ui/ams_drawing_utils.h"
 #include "ui/ui_widget_helpers.h"
 
 #include <spdlog/fmt/fmt.h>
@@ -94,6 +95,9 @@ void AmsDeviceOperationsOverlay::init_subjects() {
         UI_MANAGED_SUBJECT_INT(can_reset_endless_spool_subject_, 0,
                                "ams_device_ops_can_reset_endless_spool", subjects_);
         UI_MANAGED_SUBJECT_INT(can_abort_subject_, 0, "ams_device_ops_can_abort", subjects_);
+        UI_MANAGED_SUBJECT_STRING(details_subject_, details_buf_, "", "ams_device_ops_details",
+                                  subjects_);
+        UI_MANAGED_SUBJECT_INT(has_details_subject_, 0, "ams_device_ops_has_details", subjects_);
     });
 }
 
@@ -278,6 +282,36 @@ void AmsDeviceOperationsOverlay::on_ui_destroyed() {
     bypass_toggle_.cancel_pending();
 }
 
+std::vector<DeviceDetailRow> ams_device_detail_rows(const AmsSystemInfo& info) {
+    std::vector<DeviceDetailRow> rows;
+    for (size_t i = 0; i < info.units.size(); ++i) {
+        const AmsUnit& unit = info.units[i];
+        if (unit.absent) {
+            continue;
+        }
+        const std::string name = ams_draw::get_unit_display_name(unit, static_cast<int>(i));
+        if (!unit.firmware_version.empty()) {
+            rows.push_back(
+                {fmt::format(fmt::runtime(lv_tr("{} firmware")), name), unit.firmware_version});
+        }
+        if (!unit.serial_number.empty()) {
+            rows.push_back(
+                {fmt::format(fmt::runtime(lv_tr("{} serial")), name), unit.serial_number});
+        }
+    }
+    if (info.toolchange_purge_volume > 0.0f) {
+        rows.push_back({lv_tr("Toolchange purge"),
+                        fmt::format("{:.0f} mm\xC2\xB3", info.toolchange_purge_volume)});
+    }
+    if (info.spoolman_mode != SpoolmanMode::OFF) {
+        rows.push_back({lv_tr("Spoolman"), lv_tr(spoolman_mode_to_string(info.spoolman_mode))});
+    }
+    if (info.pending_spool_id >= 0) {
+        rows.push_back({lv_tr("Pending spool"), fmt::format("#{}", info.pending_spool_id)});
+    }
+    return rows;
+}
+
 void AmsDeviceOperationsOverlay::refresh() {
     if (!overlay_) {
         return;
@@ -316,6 +350,9 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
         lv_subject_set_int(&is_qidi_subject_, 0);
         lv_subject_set_int(&can_reset_endless_spool_subject_, 0);
         lv_subject_set_int(&can_abort_subject_, 0);
+        details_buf_[0] = '\0';
+        lv_subject_copy_string(&details_subject_, details_buf_);
+        lv_subject_set_int(&has_details_subject_, 0);
         system_info_buf_[0] = '\0';
         lv_subject_copy_string(&system_info_subject_, system_info_buf_);
         snprintf(status_buf_, sizeof(status_buf_), "%s",
@@ -345,6 +382,18 @@ void AmsDeviceOperationsOverlay::update_from_backend() {
                  info.type_name.c_str(), info.version.c_str());
     }
     lv_subject_copy_string(&system_info_subject_, system_info_buf_);
+
+    std::string details;
+    for (const DeviceDetailRow& row : ams_device_detail_rows(info)) {
+        if (!details.empty()) {
+            details += '\n';
+        }
+        details += row.label + ": " + row.value;
+    }
+    snprintf(details_buf_, sizeof(details_buf_), "%s", details.c_str());
+    lv_subject_copy_string(&details_subject_, details_buf_);
+    lv_subject_set_int(&has_details_subject_, details.empty() ? 0 : 1);
+
     lv_subject_set_int(&supports_bypass_subject_,
                        helix::bypass_available_for(info.supports_bypass) ? 1 : 0);
     lv_subject_set_int(&fw_supports_bypass_subject_, info.supports_bypass ? 1 : 0);

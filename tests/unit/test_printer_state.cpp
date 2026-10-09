@@ -2114,6 +2114,28 @@ TEST_CASE("parse_status_notification: reads eventtime and the replay marker",
     CHECK(untimed->eventtime == 0.0);
 }
 
+TEST_CASE("make_status_notification round-trips through parse_status_notification",
+          "[state][klippy][freshness]") {
+    const nlohmann::json status = {{"print_stats", {{"state", "cancelled"}}},
+                                   {"display_status", {{"message", "Print starting..."}}}};
+
+    for (bool cached : {false, true}) {
+        for (bool whole : {false, true}) {
+            CAPTURE(cached, whole);
+            const nlohmann::json notification = make_status_notification(status, cached, whole);
+            auto frame = parse_status_notification(notification);
+            REQUIRE(frame);
+            CHECK(*frame->status == status);
+            CHECK(frame->eventtime == 0.0);
+            CHECK(frame->from_cached_snapshot == cached);
+            CHECK(frame->whole_objects == whole);
+            // A marker is present only when set: live frames carry neither key.
+            CHECK(notification.contains(CACHED_SNAPSHOT_MARKER) == cached);
+            CHECK(notification.contains(WHOLE_OBJECTS_MARKER) == whole);
+        }
+    }
+}
+
 TEST_CASE("PrinterPrintState: update_from_status handles null print_stats fields",
           "[state][regression][subscription-null]") {
     lv_init_safe();

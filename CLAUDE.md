@@ -106,8 +106,9 @@ scripts/test-host-run.sh sweep                   # make unit-sweep on the test h
 #   a per-tree mirror (/work/trees/<tree>) whose build/ persists, so a warm run
 #   rebuilds only what changed, and different trees run at once. The output says
 #   HEAD + clean or + dirty <hash>. `--commit` runs the pushed HEAD instead, for a
-#   verdict others must reproduce (mutate always does). `make full-test-run
-#   TEST_HOST=1` runs the sweep there while bats runs here. On a ZFS host keep
+#   verdict others must reproduce (mutate always does). `make full-test-run`
+#   runs the sweep there while bats runs here when the link pays (TEST_HOST=1
+#   forces it, TEST_HOST=0 keeps both local). On a ZFS host keep
 #   build headroom with the zfs_arc_sys_free tunable (zeus keeps 64 GiB). The
 #   container joins the host's jobpool when one is installed there, else sizes
 #   -j from MemAvailable.

@@ -172,6 +172,34 @@ TEST_CASE("AmsUnit::has_any_error with mixed error states", "[ams][error_state]"
     REQUIRE(unit.has_any_error());
 }
 
+TEST_CASE("A BLOCKED lane is an error-severity fault", "[ams][error_state]") {
+    SlotInfo slot;
+    slot.status = SlotStatus::BLOCKED;
+    CHECK(slot.has_fault());
+    CHECK(slot.fault_severity() == SlotError::ERROR);
+
+    SECTION("even when it carries an info-level error") {
+        slot.error = SlotError{"Jam", SlotError::INFO};
+        CHECK(slot.fault_severity() == SlotError::ERROR);
+    }
+    SECTION("a carried error keeps its own severity on a lane that is not jammed") {
+        slot.status = SlotStatus::AVAILABLE;
+        slot.error = SlotError{"Slow", SlotError::WARNING};
+        CHECK(slot.fault_severity() == SlotError::WARNING);
+    }
+}
+
+TEST_CASE("AmsUnit::has_any_error counts a BLOCKED lane", "[ams][error_state]") {
+    AmsUnit unit;
+    for (int i = 0; i < 4; ++i) {
+        SlotInfo slot;
+        slot.slot_index = i;
+        slot.status = (i == 2) ? SlotStatus::BLOCKED : SlotStatus::AVAILABLE;
+        unit.slots.push_back(slot);
+    }
+    CHECK(unit.has_any_error());
+}
+
 TEST_CASE("AmsUnit::has_any_error with empty slots vector", "[ams][error_state]") {
     AmsUnit unit;
     unit.unit_index = 0;

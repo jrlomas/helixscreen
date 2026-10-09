@@ -1278,9 +1278,13 @@ linear modes** (only Flowguard's two directions mean different faults).
 
 **Mock scenarios:** `helix-screen ctl scenario <name>` drives the mock *backend*,
 so the whole derivation runs — `clog_healthy`, `clog_warning`, `clog_blocked`,
-`flowguard_neutral`, `flowguard_tangle`, `flowguard_clog`, `buffer_safe`,
+`flowguard_neutral`, `flowguard_tangle`, `flowguard_tangle_boosted`, `flowguard_clog`, `buffer_safe`,
 `buffer_fault`, `clog_off`. The buffer-reading scenarios are listed under
 [Filament buffer reading](#filament-buffer-reading).
+
+**Note line.** The bar carries one line under its reading (`clog_meter_note_text`, hidden by
+`clog_meter_note_kind`): a tripped FlowGuard's reason, else tangle prevention active or boosted.
+`helix::ui::clog_meter_note()` holds the precedence.
 
 ### AFC buffers: switched vs FPS_PSF
 
