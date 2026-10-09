@@ -109,6 +109,30 @@ PathPlan& plan_scratch() {
     return plan;
 }
 
+// Hub box tint priority: error at hub > loaded-filament tint > plain theme
+// colors. A buffer fault is the buffer box's to show: it sits downstream.
+BoxColors resolve_hub_tint(const FilamentPathData& data, const LinearHubFrame& f,
+                           bool has_filament) {
+    if (f.has_error && f.error_seg == PathSegment::HUB) {
+        // Error at hub — red tint with pulsing error color
+        return {ph_blend(f.hub_bg, f.error_color, 0.40f), f.error_color};
+    }
+    if (!has_filament)
+        return {f.hub_bg, f.hub_border};
+    // Healthy — subtle filament color tint (use first loaded slot's color)
+    lv_color_t tint_color = f.active_color;
+    if (data.active_slot < 0) {
+        // No active slot — find first slot loaded to hub for tint
+        for (int i = 0; i < data.slot_count; i++) {
+            if (f.states[i].segment >= PathSegment::HUB) {
+                tint_color = f.states[i].color;
+                break;
+            }
+        }
+    }
+    return {ph_blend(f.hub_bg, tint_color, 0.33f), f.hub_border};
+}
+
 namespace {
 
 void warn_if_dropped(const PathPlan& plan) {
@@ -341,53 +365,16 @@ bool hub_has_filament(const FilamentPathData* data, const LinearHubFrame& f) {
     return false;
 }
 
-// Hub box tint priority: error at hub > buffer fault > buffer warning >
-// loaded-filament tint > plain theme colors.
-void resolve_hub_tint(const RenderCtx& ctx, const LinearHubFrame& f, bool has_filament,
-                      lv_color_t* bg_out, lv_color_t* border_out) {
-    FilamentPathData* data = ctx.data;
-    lv_color_t hub_bg_tinted = f.hub_bg;
-    lv_color_t hub_border_final = f.hub_border;
-    if (f.has_error && f.error_seg == PathSegment::HUB) {
-        // Error at hub — red tint with pulsing error color
-        hub_bg_tinted = ph_blend(f.hub_bg, f.error_color, 0.40f);
-        hub_border_final = f.error_color;
-    } else if (data->buffer_fault_state == 2) {
-        // Fault detected — red tint
-        hub_bg_tinted = ph_blend(f.hub_bg, data->theme.color_error, 0.50f);
-        hub_border_final = data->theme.color_error;
-    } else if (data->buffer_fault_state == 1) {
-        // Approaching fault — yellow/warning tint
-        lv_color_t warning = lv_color_hex(0xFFA500);
-        hub_bg_tinted = ph_blend(f.hub_bg, warning, 0.40f);
-        hub_border_final = warning;
-    } else if (has_filament) {
-        // Healthy — subtle filament color tint (use first loaded slot's color)
-        lv_color_t tint_color = f.active_color;
-        if (data->active_slot < 0) {
-            // No active slot — find first slot loaded to hub for tint
-            for (int i = 0; i < data->slot_count; i++) {
-                if (f.states[i].segment >= PathSegment::HUB) {
-                    tint_color = f.states[i].color;
-                    break;
-                }
-            }
-        }
-        hub_bg_tinted = ph_blend(f.hub_bg, tint_color, 0.33f);
-    }
-    *bg_out = hub_bg_tinted;
-    *border_out = hub_border_final;
-}
-
 // Hub/selector box: state-tinted fill, label, optional gear affordance and
 // the recorded hub hit rect.
 void draw_hub_section(const RenderCtx& ctx, const LinearHubFrame& f) {
     FilamentPathData* data = ctx.data;
     const BaseGeometry& g = ctx.geo;
 
-    // Hub box - tint based on error state, buffer fault state, or filament color
-    lv_color_t hub_bg_tinted, hub_border_final;
-    resolve_hub_tint(ctx, f, hub_has_filament(data, f), &hub_bg_tinted, &hub_border_final);
+    // Hub box - tint based on an error at the hub, or filament color
+    const BoxColors hub_tint = resolve_hub_tint(*data, f, hub_has_filament(data, f));
+    const lv_color_t hub_bg_tinted = hub_tint.bg;
+    const lv_color_t hub_border_final = hub_tint.border;
 
     const char* hub_label = (data->topology == 0) ? "SELECTOR" : "HUB";
 

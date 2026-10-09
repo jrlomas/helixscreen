@@ -68,6 +68,11 @@ struct LinearHubFrame {
 LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const BaseGeometry& g,
                                         int32_t glyph_top);
 
+/// The hub/selector box's fill and border: the error color for an error at
+/// the hub, else a filament tint when it holds filament, else the theme's.
+BoxColors resolve_hub_tint(const FilamentPathData& data, const LinearHubFrame& f,
+                           bool has_filament);
+
 // MIXED (HTLF) layout: some lanes run direct to their own nozzle, the rest fan
 // into a shared hub feeding one nozzle.
 struct MixedFrame {

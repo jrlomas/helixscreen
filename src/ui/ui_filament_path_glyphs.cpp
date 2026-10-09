@@ -161,23 +161,14 @@ int32_t draw_hub_box(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t width
     return gear_overflow;
 }
 
-// Draw buffer box element: a labeled box like HUB/SELECTOR, its border in the
-// buffer bands' token (neutral on target, warning, danger)
-void draw_buffer_coil(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t hub_h,
-                      bool has_filament, lv_color_t filament_color) {
-    const ThemeCache& theme = ctx.data->theme;
-    int buffer_fault_state = ctx.data->buffer_fault_state;
-    float buffer_bias = ctx.data->buffer_bias;
-    lv_color_t bg_color = theme.color_bg;
-
-    // Slightly smaller than hub box — fits "BUF" with comfortable padding
-    int32_t box_w = theme.hub_width * 4 / 5;
-    int32_t box_h = hub_h;
-    if (box_w < 36)
-        box_w = 36;
-    if (box_h < 16)
-        box_h = 16;
-
+// The buffer box's border in the buffer bands' token (neutral on target,
+// warning, danger), its fill tinted by the fault or the filament.
+BoxColors buffer_box_colors(const FilamentPathData& data, bool has_filament,
+                            lv_color_t filament_color) {
+    const ThemeCache& theme = data.theme;
+    const int buffer_fault_state = data.buffer_fault_state;
+    const float buffer_bias = data.buffer_bias;
+    const lv_color_t bg_color = theme.color_bg;
     // Border color based on fault state and proportional bias
     lv_color_t border_color;
     lv_color_t buf_bg = bg_color;
@@ -205,7 +196,25 @@ void draw_buffer_coil(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t hub_
         }
     }
 
-    draw_hub_box(ctx, cx, cy, box_w, box_h, buf_bg, border_color, ctx.data->buffer_label);
+    return {buf_bg, border_color};
+}
+
+// Draw buffer box element: a labeled box like HUB/SELECTOR, its border in the
+// buffer bands' token (neutral on target, warning, danger)
+void draw_buffer_coil(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t hub_h,
+                      bool has_filament, lv_color_t filament_color) {
+    const ThemeCache& theme = ctx.data->theme;
+
+    // Slightly smaller than hub box — fits "BUF" with comfortable padding
+    int32_t box_w = theme.hub_width * 4 / 5;
+    int32_t box_h = hub_h;
+    if (box_w < 36)
+        box_w = 36;
+    if (box_h < 16)
+        box_h = 16;
+
+    const BoxColors colors = buffer_box_colors(*ctx.data, has_filament, filament_color);
+    draw_hub_box(ctx, cx, cy, box_w, box_h, colors.bg, colors.border, ctx.data->buffer_label);
 }
 
 // Draw animated filament tip (a glowing dot that moves along the path)

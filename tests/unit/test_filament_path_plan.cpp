@@ -979,6 +979,29 @@ TEST_CASE("FilamentPath plan: bowden progress fills the output tube in proportio
     CHECK(seg_end(f.segs[f.count - 1]).y > 232);
 }
 
+TEST_CASE("FilamentPath plan: a buffer fault tints the buffer box, not the hub",
+          "[filament-path][plan][hub_tint]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    d->theme.color_hub_bg = lv_color_hex(0x303030);
+    d->theme.color_hub_border = lv_color_hex(0x707070);
+    d->theme.color_buffer[2] = lv_color_hex(0xD03030);
+    d->buffer_present = true;
+    d->buffer_fault_state = 2;
+    load_active(*d, 1, PathSegment::NOZZLE);
+    const LinearHubFrame f = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
+
+    const BoxColors hub = resolve_hub_tint(*d, f, true);
+    CHECK(lv_color_eq(hub.border, d->theme.color_hub_border));
+    CHECK(lv_color_eq(hub.bg, ph_blend(f.hub_bg, lv_color_hex(SLOT_COLORS[1]), 0.33f)));
+    const BoxColors buffer = buffer_box_colors(*d, true, lv_color_hex(SLOT_COLORS[1]));
+    CHECK(lv_color_eq(buffer.border, d->theme.color_buffer[2]));
+
+    // An error at the hub is the hub's.
+    d->error_segment = static_cast<int>(PathSegment::HUB);
+    const LinearHubFrame fe = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
+    CHECK(lv_color_eq(resolve_hub_tint(*d, fe, true).border, fe.error_color));
+}
+
 // ============================================================================
 // hub_only output stub
 // ============================================================================

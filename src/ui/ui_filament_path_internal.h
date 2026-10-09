@@ -469,6 +469,13 @@ void draw_toolhead(lv_layer_t* layer, int32_t cx, int32_t cy, std::optional<lv_c
 
 /// Y of the nozzle tip for the configured toolhead style (heat glow anchor).
 int32_t toolhead_tip_y(int32_t nozzle_y, int32_t extruder_scale);
+struct BoxColors {
+    lv_color_t bg, border;
+};
+/// The buffer box's fill and border for its fault state and bias.
+BoxColors buffer_box_colors(const FilamentPathData& data, bool has_filament,
+                            lv_color_t filament_color);
+
 /// Drawn bounds of draw_toolhead()'s glyph at (@p cx, @p cy) for the
 /// configured style, at the same base scale.
 helix::ui::GlyphBounds toolhead_glyph_bounds(int32_t cx, int32_t cy, int32_t scale);
