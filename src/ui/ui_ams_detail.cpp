@@ -662,22 +662,13 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
             lv_obj_t* label = lv_obj_find_by_name(slot_widgets[i], "material_label");
             if (!label)
                 continue;
-            // The remaining length, when shown, is the lowest label line.
-            lv_obj_t* remaining = lv_obj_find_by_name(slot_widgets[i], "lane_remaining");
-            lv_obj_t* lowest =
-                remaining && !lv_obj_has_flag(remaining, LV_OBJ_FLAG_HIDDEN) ? remaining : label;
             lv_obj_set_style_translate_y(label, 0, LV_PART_MAIN);
-            if (remaining)
-                lv_obj_set_style_translate_y(remaining, 0, LV_PART_MAIN);
-            lv_obj_update_layout(lowest);
+            lv_obj_update_layout(label);
             lv_area_t la;
-            lv_obj_get_coords(lowest, &la);
-            const int32_t dy = label_bottom - la.y2;
-            lv_obj_set_style_translate_y(label, dy, LV_PART_MAIN);
-            if (remaining)
-                lv_obj_set_style_translate_y(remaining, dy, LV_PART_MAIN);
+            lv_obj_get_coords(label, &la);
+            lv_obj_set_style_translate_y(label, label_bottom - la.y2, LV_PART_MAIN);
             if (lv_obj_t* row = ui_ams_slot_get_lane_humidity(slot_widgets[i]))
-                lv_obj_set_style_translate_y(row, dy, LV_PART_MAIN);
+                lv_obj_set_style_translate_y(row, label_bottom - la.y2, LV_PART_MAIN);
         }
     } else if (w.labels_layer) {
         lv_obj_set_style_translate_y(w.labels_layer, 0, LV_PART_MAIN);

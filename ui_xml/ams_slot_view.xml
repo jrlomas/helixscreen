@@ -12,7 +12,7 @@
     - material_label: text_small showing material type (PLA, PETG, etc.)
     - lane_humidity: per-lane climate under a per-lane lid: thermometer +
       lane_temp_text when the lane reports a temperature, droplet + lane_humidity_text
-    - lane_remaining: measured remaining length, under the material label
+    - lane_remaining: measured remaining length, under the spool
     - spool_container: holds the lane spool widget and the badges
     - lane_spool: ams_lane_spool widget (spool graphic, empty placeholder,
       error dot; renders itself from AmsState's per-slot subjects - C++ only
@@ -50,10 +50,6 @@
 
     <text_small name="material_label"
                 text="--" style_text_color="#text" style_text_letter_space="1" clickable="true" event_bubble="true"/>
-    <!-- Measured remaining length (CFS measuring wheel), hidden while the lane has none -->
-    <text_small name="lane_remaining"
-                text="" translation_tag="" style_text_color="#text_muted" hidden="true" clickable="false"
-                event_bubble="true"/>
 
     <!-- Spool container - holds the lane spool widget and the badges -->
     <!-- Size is set dynamically in C++ based on space_lg token -->
@@ -97,5 +93,10 @@
       </lv_obj>
 
     </lv_obj>
+    <!-- Measured remaining length (CFS measuring wheel), on the tray front under its
+         spool; hidden while the lane has none -->
+    <text_small name="lane_remaining"
+                text="" translation_tag="" style_text_color="#text_muted" hidden="true" clickable="false"
+                event_bubble="true"/>
   </view>
 </component>
