@@ -68,6 +68,11 @@ struct LinearHubFrame {
 LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const BaseGeometry& g,
                                         int32_t glyph_top);
 
+/// The hub/selector box's fill and border: the error color for an error at
+/// the hub, else a filament tint when it holds filament, else the theme's.
+BoxColors resolve_hub_tint(const FilamentPathData& data, const LinearHubFrame& f,
+                           bool has_filament);
+
 // MIXED (HTLF) layout: some lanes run direct to their own nozzle, the rest fan
 // into a shared hub feeding one nozzle.
 struct MixedFrame {
@@ -94,6 +99,12 @@ struct MixedFrame {
 
 MixedFrame compute_mixed_frame(const FilamentPathData& data, const BaseGeometry& g);
 
+// PARALLEL rows: the lane entries, each tool's entry sensor, and its toolhead.
+struct ParallelRows {
+    int32_t entry_y, sensor_y, toolhead_y, tool_scale;
+};
+ParallelRows parallel_rows(const FilamentPathData& data, const BaseGeometry& g);
+
 enum class TubeWall : uint8_t { Plain, Active, Error };
 
 struct SpanStyle {
@@ -101,6 +112,7 @@ struct SpanStyle {
     lv_color_t bore;     // filament color, or the background when empty
     bool filled = false; // filament is in this span
     bool painted = true; // false inside an opaque box: recorded, never stroked
+    uint8_t fade = 0;    // 0..255 toward the background; ignored under reduced effects
 };
 bool operator==(const SpanStyle& a, const SpanStyle& b);
 
@@ -158,6 +170,56 @@ SpanStyle span_style(PathSegment span, PathSegment reached, bool on_active_route
                      PathSegment error_seg, lv_color_t filament, lv_color_t bg);
 BandState band_state(PathSegment sensor, PathSegment reached, bool on_active_route,
                      PathSegment error_seg);
+/// The error a lane shows: the system's on the active route, else the lane's
+/// own at the point its filament reached (its spool when none did), else none.
+/// span_style()/band_state() mark the span and band at the error they are given.
+PathSegment lane_error(const SlotRenderState& s, bool on_active_route, PathSegment system_error);
+
+// What one route carries: how far its filament reached, whether it is the
+// active route (or the idle trunk, which shows errors like one), its color.
+struct Lane {
+    PathSegment reached;
+    bool on;
+    PathSegment error;
+    lv_color_t color;
+    lv_color_t bg;
+    SpanStyle style(PathSegment tag) const {
+        return span_style(tag, reached, on, error, color, bg);
+    }
+    BandState band(PathSegment tag) const {
+        return band_state(tag, reached, on, error);
+    }
+};
+
+// Plan building blocks shared by every planner, the detail views' and the
+// system overview's.
+
+/// Lane bands (prep, hub entry) stop short of the last few slots, so a full
+/// band table drops a lane band and never the trunk's output, merge or
+/// toolhead band.
+inline constexpr int TRUNK_BANDS = 3;
+enum class BandKind : uint8_t { Lane, Trunk };
+
+void reset_plan(PathPlan& out);
+/// Adds every route's dropped segments to PathPlan::dropped; call once, last.
+void total_dropped(PathPlan& out);
+Route& new_route(PathPlan& plan);
+void append_line(Route& r, float x0, float y0, float x1, float y1, SpanStyle s);
+SpanStyle unpainted(SpanStyle s);
+void add_band(PathPlan& plan, BandKind kind, pg::PathPoint at, pg::PathPoint tangent,
+              BandState state, lv_color_t fill, bool on_box_edge = false);
+/// A band where the route currently ends, across its last segment.
+void add_band_at_end(PathPlan& plan, BandKind kind, const Route& r, BandState state,
+                     lv_color_t fill, bool on_box_edge = false);
+
+/// The one plan every canvas renders through. About 14 KB: kept off the stack,
+/// which on the ESP32 is the LVGL task's, and out of internal DRAM, which the
+/// WiFi driver needs for its RX buffers. Rendering is single-threaded and not
+/// re-entrant, and nothing DMA- or ISR-side touches it.
+PathPlan& plan_scratch();
+
+/// Outer tube width, walls included, for a theme's space_xs.
+int32_t tube_gauge_for_spacing(int32_t space_xs);
 
 void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, const BaseGeometry& g,
                      PathPlan& out);

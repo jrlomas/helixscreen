@@ -210,12 +210,14 @@ TEST_CASE("tray projection: any climate data gets glass", "[ams][tray]") {
     }
 }
 
-TEST_CASE("slot layout: a pitch cap holds up to four slots at the left", "[ams][tray]") {
+TEST_CASE("slot layout: a pitch cap holds up to four slots, centered", "[ams][tray]") {
     const AmsSlotLayout capped = calculate_ams_slot_layout(470, 4, 72);
     CHECK(capped.slot_width == 72);
-    CHECK(capped.centering_offset == 0);
+    CHECK(capped.centering_offset == (470 - 4 * 72) / 2);
+    CHECK(calculate_ams_slot_layout(470, 1, 72).centering_offset == (470 - 72) / 2);
     const AmsSlotLayout narrow = calculate_ams_slot_layout(200, 4, 72);
     CHECK(narrow.slot_width == 50);
+    CHECK(narrow.centering_offset == 0);
     // Five or more overlap as before; the cap does not apply.
     CHECK(calculate_ams_slot_layout(470, 8, 72).slot_width ==
           calculate_ams_slot_layout(470, 8).slot_width);

@@ -97,6 +97,14 @@ TrayColors load_tray_colors(bool dark) {
             tray_token("tray_glass_edge", dark)};
 }
 
+// Read on every draw, so a theme or dark-mode switch repaints the tray in the
+// new colors.
+void load_tray_look() {
+    const bool dark = theme_manager_is_dark_mode();
+    s_tray.color = load_tray_colors(dark);
+    s_tray.opa = dark ? DARK_OPA : LIGHT_OPA;
+}
+
 lv_point_precise_t to_screen(lv_point_t origin, tray::PointF p) {
     return {static_cast<lv_value_precise_t>(origin.x + p.x),
             static_cast<lv_value_precise_t>(origin.y + p.y)};
@@ -208,6 +216,7 @@ void tray_back_draw_cb(lv_event_t* e) {
     lv_layer_t* layer = lv_event_get_layer(e);
     if (!layer || !s_tray.valid)
         return;
+    load_tray_look();
     const lv_point_t o = container_origin(lv_event_get_target_obj(e));
     const tray::TrayFaces f = tray::tray_faces(s_tray.box);
     const TrayColors& c = s_tray.color;
@@ -265,6 +274,7 @@ void tray_front_draw_cb(lv_event_t* e) {
     lv_layer_t* layer = lv_event_get_layer(e);
     if (!layer || !s_tray.valid)
         return;
+    load_tray_look();
     const lv_point_t o = container_origin(lv_event_get_target_obj(e));
     const tray::TrayFaces f = tray::tray_faces(s_tray.box);
     const TrayColors& c = s_tray.color;
@@ -445,10 +455,8 @@ AmsDetailSlotResult ams_detail_create_slots(AmsDetailWidgets& w, lv_obj_t* slot_
     lv_obj_set_style_pad_column(w.slot_grid, result.layout.overlap > 0 ? -result.layout.overlap : 0,
                                 LV_PART_MAIN);
 
-    // Center slots within the tray by adding left padding for the rounding remainder
-    if (result.layout.centering_offset > 0) {
-        lv_obj_set_style_pad_left(w.slot_grid, result.layout.centering_offset, LV_PART_MAIN);
-    }
+    // Center the row (and the box around it) in the slot container
+    lv_obj_set_style_pad_left(w.slot_grid, result.layout.centering_offset, LV_PART_MAIN);
 
     for (int i = 0; i < count; ++i) {
         if (slot_widgets[i]) {
@@ -524,6 +532,27 @@ void ams_detail_destroy_slots(AmsDetailWidgets& w, lv_obj_t* slot_widgets[], int
     helix::ui::safe_delete_deferred(condemned);
 }
 
+bool helix::ui::ams_detail_error_in_view(const helix::AmsSystemInfo& info, int unit_index) {
+    if (unit_index < 0 || unit_index >= static_cast<int>(info.units.size()))
+        return true;
+    const auto& unit = info.units[unit_index];
+    auto in_unit = [&](int global) {
+        return global >= unit.first_slot_global_index &&
+               global < unit.first_slot_global_index + unit.slot_count;
+    };
+    if (info.current_slot >= 0)
+        return in_unit(info.current_slot);
+    if (info.units.size() == 1)
+        return true;
+    // No lane is loaded: the error is this unit's if one of its slots reports one.
+    for (int s = 0; s < unit.slot_count; ++s) {
+        const helix::SlotInfo* slot = info.get_slot_global(unit.first_slot_global_index + s);
+        if (slot && slot->error.has_value())
+            return true;
+    }
+    return false;
+}
+
 AmsSlotLayout helix::ui::ams_detail_slot_layout(int32_t available_width, int slot_count) {
     auto* backend = helix::AmsState::instance().get_backend(0);
     if (backend && !backend->has_physical_tray())
@@ -532,12 +561,12 @@ AmsSlotLayout helix::ui::ams_detail_slot_layout(int32_t available_width, int slo
     if (spool <= 0)
         return calculate_ams_slot_layout(available_width, slot_count);
     // The box reaches past the outer slots: its first lid starts S/4 - 1 left of
-    // the row (for any pitch), and its right side face ends S/4 right of it,
-    // where the readout stands space_md further on. Spools stand at the tray's
-    // pitch rather than spreading across the width.
+    // the row (for any pitch), and its right side face ends S/4 right of it.
+    // The readout's gap is its own margin in the row. Spools stand at the
+    // tray's pitch rather than spreading across the width, centered with the box.
     const float skew = tray::DEPTH_SKEW * tray::box_depth(spool);
     const int32_t lead = (int32_t)std::ceil(std::max(0.0f, skew / 4 - 1));
-    const int32_t tail = (int32_t)std::ceil(skew / 4) + theme_manager_get_spacing("space_md");
+    const int32_t tail = (int32_t)std::ceil(skew / 4);
     AmsSlotLayout layout =
         calculate_ams_slot_layout(std::max<int32_t>(0, available_width - lead - tail), slot_count,
                                   (int32_t)tray::spool_pitch(spool));
@@ -644,9 +673,6 @@ void ams_detail_update_tray(AmsDetailWidgets& w, lv_obj_t* const slot_widgets[],
     s_tray.lane_half = half;
     s_tray.lane_count = n;
     s_tray.box = box;
-    const bool dark = theme_manager_is_dark_mode();
-    s_tray.color = load_tray_colors(dark);
-    s_tray.opa = dark ? DARK_OPA : LIGHT_OPA;
     s_tray.valid = true;
 
     // Labels sit space_md above the unit's top, lane humidity above them.
@@ -748,8 +774,21 @@ void ams_detail_setup_path_canvas(lv_obj_t* canvas, lv_obj_t* slot_grid, int uni
 
     helix::AmsSystemInfo info = backend->get_system_info();
 
-    // Hub-only mode: only draw slots -> hub, skip downstream
+    // Hub-only mode: slots -> hub and its output stub, skip downstream
     ui_filament_path_canvas_set_hub_only(canvas, hub_only);
+    // A unit-scoped view asks its own unit; the all-units view any unit.
+    if (unit_index >= 0 && unit_index < static_cast<int>(info.units.size())) {
+        const auto& unit = info.units[unit_index];
+        ui_filament_path_canvas_set_hub_sensor(canvas, unit.has_hub_sensor,
+                                               unit.hub_sensor_triggered);
+    } else {
+        ui_filament_path_canvas_set_hub_sensor(
+            canvas,
+            std::any_of(info.units.begin(), info.units.end(),
+                        [](const helix::AmsUnit& u) { return u.has_hub_sensor; }),
+            std::any_of(info.units.begin(), info.units.end(),
+                        [](const helix::AmsUnit& u) { return u.hub_sensor_triggered; }));
+    }
 
     // Hide the bypass path for backends that don't support it (e.g. tool
     // changers) — and on AFC while bypass is disengaged, since AFC reports a
@@ -826,13 +865,33 @@ void ams_detail_setup_path_canvas(lv_obj_t* canvas, lv_obj_t* slot_grid, int uni
     helix::PathSegment segment = backend->get_filament_segment();
     ui_filament_path_canvas_set_filament_segment(canvas, static_cast<int>(segment));
 
+    // Bowden progress fills the output tube from the hub: as far as a load has
+    // pushed, or what an unload has yet to pull back.
+    {
+        const int progress = backend->get_bowden_progress();
+        int fill = -1;
+        if (progress >= 0 && action == helix::AmsAction::LOADING)
+            fill = progress;
+        else if (progress >= 0 && action == helix::AmsAction::UNLOADING)
+            fill = 100 - progress;
+        ui_filament_path_canvas_set_bowden_fill(canvas, fill);
+    }
+
+    // The system's error, only when it belongs to this view's unit.
     helix::PathSegment error_seg = backend->infer_error_segment();
+    if (!helix::ui::ams_detail_error_in_view(info, unit_index))
+        error_seg = helix::PathSegment::NONE;
     ui_filament_path_canvas_set_error_segment(canvas, static_cast<int>(error_seg));
 
-    // Set per-slot prep sensor capability flags
+    // Set per-slot prep and load sensor capability flags
     for (int i = 0; i < slot_count; ++i) {
-        bool has_prep = backend->slot_has_prep_sensor(slot_offset + i);
-        ui_filament_path_canvas_set_slot_prep_sensor(canvas, i, has_prep);
+        ui_filament_path_canvas_set_slot_prep_sensor(
+            canvas, i, backend->slot_has_prep_sensor(slot_offset + i));
+        ui_filament_path_canvas_set_slot_load_sensor(
+            canvas, i, backend->slot_has_load_sensor(slot_offset + i));
+        const auto& err = backend->get_slot_info(slot_offset + i).error;
+        ui_filament_path_canvas_set_slot_error(
+            canvas, i, err.has_value() && err->severity == helix::SlotError::ERROR);
     }
 
     // Plumb per-slot metadata (mapped_tool, extruder identity, hub routing) to

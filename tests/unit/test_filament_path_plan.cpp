@@ -9,11 +9,14 @@
 // x = 50, 150, 250, 350, center 200; entry -48, prep 40, hub 120 (h 40, top
 // 100), output 140, buffer 184, merge 232, toolhead 272, nozzle 328, inlet 308.
 
+#include "ui_ams_detail.h"
 #include "ui_filament_path_canvas.h"
 #include "ui_fonts.h"
 
 #include "../lvgl_test_fixture.h"
+#include "../test_fixtures.h"
 #include "ams_types.h"
+#include "filament_path_test_helpers.h"
 #include "lvgl/lvgl.h"
 #include "src/ui/ui_filament_path_internal.h"
 #include "src/ui/ui_filament_path_plan.h"
@@ -27,6 +30,7 @@
 #include "../catch_amalgamated.hpp"
 
 using namespace helix::ui::fpath;
+using namespace fpath_test;
 
 namespace {
 
@@ -164,8 +168,11 @@ std::unique_ptr<FilamentPathData> make_data(helix::PathTopology topo) {
     d->theme.color_error = lv_color_hex(0xFF0000);
     d->theme.color_bg = BG;
     d->theme.color_accent = lv_color_hex(0x2196F3);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         d->slot_has_prep_sensor[i] = true;
+        d->slot_has_load_sensor[i] = true;
+    }
+    d->has_hub_sensor = true;
     d->show_bypass = true;
     d->has_toolhead_sensor = true;
     d->bypass_color = BYPASS_COLOR;
@@ -189,6 +196,12 @@ BaseGeometry geometry() {
     return g;
 }
 
+// Where a HUB lane's load sensor band sits: midway down its straight run from
+// the prep sensor (y 40) to its fan's first bend.
+float load_band_y(const FilamentPathData& d, int slot) {
+    return (40.0f + compute_linear_hub_frame(d, geometry(), GLYPH_TOP).hub_fan[slot].pts[1].y) / 2;
+}
+
 float hub_entry_x(const FilamentPathData& d, int slot) {
     return compute_linear_hub_frame(d, geometry(), GLYPH_TOP).hub_fan[slot].pts[3].x;
 }
@@ -198,33 +211,6 @@ PathPlan& plan_for(const FilamentPathData& d) {
     const BaseGeometry g = geometry();
     plan_linear_hub(compute_linear_hub_frame(d, g, GLYPH_TOP), d, g, plan);
     return plan;
-}
-
-pg::PathPoint seg_start(const pg::PathSeg& s) {
-    if (s.type == pg::PathSeg::LINE)
-        return s.p0;
-    return {s.center.x + s.radius * std::cos(s.start_angle),
-            s.center.y + s.radius * std::sin(s.start_angle)};
-}
-
-pg::PathPoint seg_end(const pg::PathSeg& s) {
-    if (s.type == pg::PathSeg::LINE)
-        return s.p1;
-    const float a = s.start_angle + s.sweep;
-    return {s.center.x + s.radius * std::cos(a), s.center.y + s.radius * std::sin(a)};
-}
-
-bool near(pg::PathPoint p, float x, float y, float eps = 0.01f) {
-    return std::fabs(p.x - x) <= eps && std::fabs(p.y - y) <= eps;
-}
-
-bool contiguous(const pg::FilamentPath& p) {
-    for (int i = 1; i < p.count; i++) {
-        const pg::PathPoint a = seg_end(p.segs[i - 1]);
-        if (!near(seg_start(p.segs[i]), a.x, a.y))
-            return false;
-    }
-    return true;
 }
 
 // A segment of the route ends exactly at (x, y).
@@ -332,8 +318,9 @@ TEST_CASE("FilamentPath plan: span_style", "[filament-path][plan]") {
     CHECK(s.wall == TubeWall::Error);
     CHECK_FALSE(s.filled);
 
+    // The error marks whichever lane it is given; lane_error() decides which.
     s = ss(PathSegment::OUTPUT, PathSegment::NOZZLE, false, PathSegment::OUTPUT);
-    CHECK(s.wall == TubeWall::Plain);
+    CHECK(s.wall == TubeWall::Error);
     CHECK(s.filled);
 }
 
@@ -391,8 +378,7 @@ TEST_CASE("FilamentPath plan: HUB active route runs unbroken from spool to inlet
     CHECK(near(seg_start(r.path.segs[strokes[1].first]), 200, 140));
 
     REQUIRE(plan.band_count == 11);
-    const float entry_x = hub_entry_x(*d, 1);
-    const SensorBand* active[] = {band_at(plan, 150, 40), band_at(plan, entry_x, 100),
+    const SensorBand* active[] = {band_at(plan, 150, 40), band_at(plan, 150, load_band_y(*d, 1)),
                                   band_at(plan, 200, 140), band_at(plan, 200, 232),
                                   band_at(plan, 200, 272)};
     for (const SensorBand* b : active) {
@@ -414,9 +400,10 @@ TEST_CASE("FilamentPath plan: hub-edge bands are painted after the hub box",
     // paint_tubes paints the rest; render_linear_hub calls paint_box_bands
     // after draw_hub_section, so these clamp the tube over the box edge.
     for (int i = 0; i < 4; i++) {
-        const SensorBand* hub = band_at(plan, hub_entry_x(*d, i), 100);
-        REQUIRE(hub != nullptr);
-        CHECK(hub->on_box_edge);
+        CHECK(band_at(plan, hub_entry_x(*d, i), 100) == nullptr);
+        const SensorBand* load = band_at(plan, 50.0f + 100 * i, load_band_y(*d, i));
+        REQUIRE(load != nullptr);
+        CHECK_FALSE(load->on_box_edge);
     }
     const SensorBand* output = band_at(plan, 200, 140);
     REQUIRE(output != nullptr);
@@ -425,7 +412,7 @@ TEST_CASE("FilamentPath plan: hub-edge bands are painted after the hub box",
     int on_edge = 0;
     for (int i = 0; i < plan.band_count; i++)
         on_edge += plan.bands[i].on_box_edge;
-    CHECK(on_edge == 5);
+    CHECK(on_edge == 1);
     CHECK_FALSE(band_at(plan, 150, 40)->on_box_edge);
     CHECK_FALSE(band_at(plan, 200, 232)->on_box_edge);
     CHECK_FALSE(band_at(plan, 200, 272)->on_box_edge);
@@ -500,9 +487,11 @@ TEST_CASE("FilamentPath plan: a staged lane stays visible in its own color",
     REQUIRE(prep != nullptr);
     CHECK(prep->state == BandState::Loaded);
     CHECK(lv_color_eq(prep->fill, lv_color_hex(SLOT_COLORS[3])));
-    const SensorBand* hub = band_at(plan, end.x, end.y);
-    REQUIRE(hub != nullptr);
-    CHECK(hub->state == BandState::Empty);
+    // The load sensor reads it; no sensor sits at the hub entry.
+    const SensorBand* load = band_at(plan, 350, load_band_y(*d, 3));
+    REQUIRE(load != nullptr);
+    CHECK(load->state == BandState::Loaded);
+    CHECK(band_at(plan, end.x, end.y) == nullptr);
 }
 
 TEST_CASE("FilamentPath plan: fill and error follow the segment the filament reached",
@@ -518,7 +507,7 @@ TEST_CASE("FilamentPath plan: fill and error follow the segment the filament rea
                 return r.style[i];
         return SpanStyle{};
     };
-    const float entry_x = hub_entry_x(*d, 1);
+    const float load_y = load_band_y(*d, 1);
 
     SECTION("loaded to PREP: the entry run fills, the fan stays empty") {
         load_active(*d, 1, PathSegment::PREP);
@@ -527,9 +516,9 @@ TEST_CASE("FilamentPath plan: fill and error follow the segment the filament rea
         CHECK(entry_style(r).wall == TubeWall::Active);
         CHECK(fan_style(r).wall == TubeWall::Plain);
         CHECK_FALSE(fan_style(r).filled);
-        const SensorBand* hub = band_at(plan, entry_x, 100);
-        REQUIRE(hub != nullptr);
-        CHECK(hub->state == BandState::Empty);
+        const SensorBand* load = band_at(plan, 150, load_y);
+        REQUIRE(load != nullptr);
+        CHECK(load->state == BandState::Empty);
     }
     SECTION("error at PREP with the lane loaded: only the prep band is an error") {
         load_active(*d, 1, PathSegment::LANE);
@@ -666,8 +655,10 @@ TEST_CASE("FilamentPath plan: sixteen HUB lanes fit the segment and band budgets
           "[filament-path][plan]") {
     auto d = make_data(helix::PathTopology::HUB);
     d->slot_count = 16;
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < 16; i++) {
         d->slot_has_prep_sensor[i] = true;
+        d->slot_has_load_sensor[i] = true;
+    }
     d->buffer_present = true;
     load_active(*d, 1, PathSegment::NOZZLE);
     BaseGeometry g;
@@ -683,7 +674,7 @@ TEST_CASE("FilamentPath plan: sixteen HUB lanes fit the segment and band budgets
     CHECK(plan.dropped == 0);
     for (int i = 0; i < plan.route_count; i++)
         CHECK(plan.routes[i].dropped == 0);
-    // 16 prep + 16 hub entry + output, merge, toolhead.
+    // 16 prep + 16 load + output, merge, toolhead.
     CHECK(plan.band_count == 35);
     CHECK(contiguous(plan.routes[plan.active_route].path));
 }
@@ -814,12 +805,316 @@ TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: hub_only drops the cached nozzl
     CHECK(d->path_cache.path.count == 0);
 }
 
+TEST_CASE("FilamentPath plan: sensor bands only where the unit reports the sensor",
+          "[filament-path][plan]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::NOZZLE);
+
+    SECTION("no load sensors: no band between prep and hub") {
+        for (int i = 0; i < 4; i++)
+            d->slot_has_load_sensor[i] = false;
+        const PathPlan& plan = plan_for(*d);
+        for (int i = 0; i < 4; i++)
+            CHECK(band_at(plan, 50.0f + 100 * i, load_band_y(*d, i)) == nullptr);
+        CHECK(contiguous(plan.routes[1].path));
+    }
+    SECTION("no hub sensor: no band on the hub outlet") {
+        d->has_hub_sensor = false;
+        const PathPlan& plan = plan_for(*d);
+        CHECK(band_at(plan, 200, 140) == nullptr);
+        CHECK(band_at(plan, 200, 272) != nullptr); // the toolhead sensor stays
+    }
+    SECTION("the load band reads LANE") {
+        load_active(*d, 1, PathSegment::LANE);
+        CHECK(band_at(plan_for(*d), 150, load_band_y(*d, 1))->state == BandState::Active);
+        load_active(*d, 1, PathSegment::PREP);
+        CHECK(band_at(plan_for(*d), 150, load_band_y(*d, 1))->state == BandState::Empty);
+    }
+}
+
+TEST_CASE("FilamentPath plan: filament stuck in the hub with no lane fills the idle trunk",
+          "[filament-path][plan][stuck]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    REQUIRE(d->active_slot < 0);
+
+    SECTION("the hub sensor reads filament: filled as far as the hub output, plain walls") {
+        d->hub_sensor_triggered = true;
+        const PathPlan& plan = plan_for(*d);
+        REQUIRE(plan.trunk_route >= 0);
+        const Route& t = plan.routes[plan.trunk_route];
+        CHECK(t.style[0].filled);
+        CHECK(t.style[0].wall == TubeWall::Plain);
+        CHECK_FALSE(t.style[t.path.count - 1].filled); // not into the toolhead
+        const SensorBand* out = band_at(plan, 200, 140);
+        REQUIRE(out != nullptr);
+        CHECK(out->state == BandState::Loaded);
+        CHECK(band_at(plan, 200, 272)->state == BandState::Empty);
+    }
+    SECTION("nothing read: an empty trunk") {
+        const PathPlan& plan = plan_for(*d);
+        CHECK_FALSE(plan.routes[plan.trunk_route].style[0].filled);
+        CHECK(band_at(plan, 200, 140)->state == BandState::Empty);
+    }
+}
+
+TEST_CASE("FilamentPath plan: a lane's own error shows off the active route",
+          "[filament-path][plan][lane_error]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::NOZZLE);
+    d->slot_filament_states[3] = {PathSegment::LANE, SLOT_COLORS[3]};
+    d->slot_has_error[3] = true;
+    d->slot_has_error[2] = true; // no filament in it
+    const PathPlan& plan = plan_for(*d);
+
+    // Lane 3 stopped at its load sensor: that band and the LANE spans are errors.
+    const SensorBand* load = band_at(plan, 350, load_band_y(*d, 3));
+    REQUIRE(load != nullptr);
+    CHECK(load->state == BandState::Error);
+    CHECK(band_at(plan, 350, 40)->state == BandState::Loaded);
+    bool lane_error_wall = false;
+    for (int i = 0; i < plan.routes[3].path.count; i++)
+        lane_error_wall |= plan.routes[3].style[i].wall == TubeWall::Error;
+    CHECK(lane_error_wall);
+    // Lane 2 has no filament: the error marks its spool run.
+    CHECK(plan.routes[2].style[0].wall == TubeWall::Error);
+    // The active route carries no error.
+    const Route& active = plan.routes[plan.active_route];
+    for (int i = 0; i < active.path.count; i++)
+        CHECK(active.style[i].wall != TubeWall::Error);
+}
+
+TEST_CASE("FilamentPath: the system error belongs to the unit that owns it",
+          "[filament-path][plan][lane_error]") {
+    helix::AmsSystemInfo info;
+    info.units.resize(2);
+    info.units[0].slot_count = 4;
+    info.units[0].first_slot_global_index = 0;
+    info.units[1].slot_count = 2;
+    info.units[1].first_slot_global_index = 4;
+    for (int u = 0; u < 2; u++) {
+        info.units[u].slots.resize(info.units[u].slot_count);
+        for (int s = 0; s < info.units[u].slot_count; s++)
+            info.units[u].slots[s].global_index = info.units[u].first_slot_global_index + s;
+    }
+
+    info.current_slot = 5;
+    CHECK(helix::ui::ams_detail_error_in_view(info, 1));
+    CHECK_FALSE(helix::ui::ams_detail_error_in_view(info, 0));
+    CHECK(helix::ui::ams_detail_error_in_view(info, -1));
+
+    info.current_slot = -1;
+    CHECK_FALSE(helix::ui::ams_detail_error_in_view(info, 0));
+    info.units[0].slots[2].error = helix::SlotError{"jam", helix::SlotError::ERROR};
+    CHECK(helix::ui::ams_detail_error_in_view(info, 0));
+    CHECK_FALSE(helix::ui::ams_detail_error_in_view(info, 1));
+}
+
+TEST_CASE_METHOD(XMLTestFixture, "FilamentPath: a lane of unknown color still reads as loaded",
+                 "[filament-path][plan][lane_error]") {
+    // The tube is filled, and its band's gray stands apart from the empty wall
+    // in both themes.
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::NOZZLE);
+    d->slot_filament_states[3] = {PathSegment::LANE, helix::AMS_DEFAULT_SLOT_COLOR};
+    const PathPlan& plan = plan_for(*d);
+    CHECK(plan.routes[3].style[0].filled);
+    CHECK_FALSE(lv_color_eq(plan.routes[3].style[0].bore, BG));
+    CHECK_FALSE(plan.routes[2].style[0].filled);
+    const SensorBand* load = band_at(plan, 350, load_band_y(*d, 3));
+    REQUIRE(load != nullptr);
+    CHECK(load->state == BandState::Loaded);
+
+    const lv_color_t gray = lv_color_hex(helix::AMS_DEFAULT_SLOT_COLOR);
+    for (const char* wall : {"filament_idle_dark", "filament_idle_light"}) {
+        CAPTURE(wall);
+        const lv_color_t w = theme_manager_get_color(wall);
+        const int dist = std::abs(w.red - gray.red) + std::abs(w.green - gray.green) +
+                         std::abs(w.blue - gray.blue);
+        CHECK(dist >= 60);
+    }
+}
+
+TEST_CASE("FilamentPath geometry: split_path cuts a path where asked", "[filament-path][plan]") {
+    pg::FilamentPath p;
+    pg::route_orthogonal(p, 100, 0, 200, 100, 12.0f);
+    const float total = pg::path_length(p);
+    for (float frac : {0.0f, 0.3f, 0.5f, 0.8f, 1.0f}) {
+        CAPTURE(frac);
+        pg::FilamentPath head, tail;
+        pg::split_path(p, total * frac, head, tail);
+        CHECK(pg::path_length(head) == Catch::Approx(total * frac).margin(0.05));
+        CHECK(pg::path_length(tail) == Catch::Approx(total * (1 - frac)).margin(0.05));
+        if (head.count > 0 && tail.count > 0) {
+            const pg::PathPoint a = seg_end(head.segs[head.count - 1]);
+            CHECK(near(seg_start(tail.segs[0]), a.x, a.y, 0.05f));
+        }
+    }
+}
+
+TEST_CASE("FilamentPath plan: bowden progress fills the output tube in proportion",
+          "[filament-path][plan][bowden]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    load_active(*d, 1, PathSegment::OUTPUT);
+
+    // The hub bottom (200, 140) to the bypass merge (200, 232).
+    auto filled_end_y = [&](int fill) {
+        d->bowden_fill = fill;
+        const PathPlan& plan = plan_for(*d);
+        const Route& r = plan.routes[plan.active_route];
+        CHECK(contiguous(r.path));
+        const pg::FilamentPath f = filled_prefix(r);
+        REQUIRE(f.count > 0);
+        return seg_end(f.segs[f.count - 1]).y;
+    };
+    CHECK(filled_end_y(-1) == Catch::Approx(232).margin(0.5));
+    CHECK(filled_end_y(100) == Catch::Approx(232).margin(0.5));
+    CHECK(filled_end_y(50) == Catch::Approx(186).margin(0.5));
+    CHECK(filled_end_y(25) == Catch::Approx(163).margin(0.5));
+
+    // Past the bowden the progress no longer applies.
+    load_active(*d, 1, PathSegment::NOZZLE);
+    d->bowden_fill = 10;
+    const PathPlan& plan = plan_for(*d);
+    const pg::FilamentPath f = filled_prefix(plan.routes[plan.active_route]);
+    CHECK(seg_end(f.segs[f.count - 1]).y > 232);
+}
+
+TEST_CASE("FilamentPath plan: a buffer fault tints the buffer box, not the hub",
+          "[filament-path][plan][hub_tint]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    d->theme.color_hub_bg = lv_color_hex(0x303030);
+    d->theme.color_hub_border = lv_color_hex(0x707070);
+    d->theme.color_buffer[2] = lv_color_hex(0xD03030);
+    d->buffer_present = true;
+    d->buffer_fault_state = 2;
+    load_active(*d, 1, PathSegment::NOZZLE);
+    const LinearHubFrame f = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
+
+    const BoxColors hub = resolve_hub_tint(*d, f, true);
+    CHECK(lv_color_eq(hub.border, d->theme.color_hub_border));
+    CHECK(lv_color_eq(hub.bg, ph_blend(f.hub_bg, lv_color_hex(SLOT_COLORS[1]), 0.33f)));
+    const BoxColors buffer = buffer_box_colors(*d, true, lv_color_hex(SLOT_COLORS[1]));
+    CHECK(lv_color_eq(buffer.border, d->theme.color_buffer[2]));
+
+    // An error at the hub is the hub's.
+    d->error_segment = static_cast<int>(PathSegment::HUB);
+    const LinearHubFrame fe = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
+    CHECK(lv_color_eq(resolve_hub_tint(*d, fe, true).border, fe.error_color));
+}
+
+// ============================================================================
+// hub_only output stub
+// ============================================================================
+
+namespace {
+
+// Routes whose spans fade: the stub's tail, and nothing else.
+int faded_routes(const PathPlan& plan) {
+    int n = 0;
+    for (int ri = 0; ri < plan.route_count; ri++) {
+        const Route& r = plan.routes[ri];
+        bool faded = false;
+        for (int i = 0; i < r.path.count; i++)
+            faded |= r.style[i].fade > 0;
+        n += faded;
+    }
+    return n;
+}
+
+// The route carrying the stub, and the stub's span index range in it.
+const Route* stub_route(const PathPlan& plan) {
+    for (int ri = 0; ri < plan.route_count; ri++) {
+        const Route& r = plan.routes[ri];
+        if (r.path.count > 0 && r.style[r.path.count - 1].fade > 0)
+            return &r;
+    }
+    return nullptr;
+}
+
+} // namespace
+
+TEST_CASE("FilamentPath plan: one unit of several ends in a fading output stub",
+          "[filament-path][plan][stub]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    const LinearHubFrame f = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
+
+    SECTION("a single-unit system draws its trunk and no stub") {
+        CHECK(faded_routes(plan_for(*d)) == 0);
+    }
+
+    d->hub_only = true;
+    d->has_hub_sensor = false;
+    const PathPlan& plan = plan_for(*d);
+    REQUIRE(faded_routes(plan) == 1);
+    const Route* r = stub_route(plan);
+    REQUIRE(r != nullptr);
+    CHECK(contiguous(r->path));
+    // It leaves the hub bottom and goes down, fading progressively.
+    const pg::PathSeg& last = r->path.segs[r->path.count - 1];
+    CHECK(near(seg_end(last), (float)f.output_x, (float)(f.output_y + d->theme.stub_length), 0.5f));
+    const bool starts_at_hub =
+        has_boundary(r->path, (float)f.output_x, (float)f.output_y) ||
+        near(seg_start(r->path.segs[0]), (float)f.output_x, (float)f.output_y);
+    CHECK(starts_at_hub);
+    uint8_t prev = 0;
+    for (int i = 0; i < r->path.count; i++) {
+        CHECK(r->style[i].fade >= prev);
+        prev = r->style[i].fade;
+    }
+    // No hub sensor, no band anywhere below the hub.
+    CHECK(band_at(plan, (float)f.output_x, (float)f.output_y) == nullptr);
+}
+
+TEST_CASE("FilamentPath plan: the stub fills only past the hub", "[filament-path][plan][stub]") {
+    auto d = make_data(helix::PathTopology::HUB);
+    d->hub_only = true;
+    d->has_hub_sensor = true;
+    const LinearHubFrame f = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
+
+    SECTION("idle: an empty plain tube with an empty band") {
+        const PathPlan& plan = plan_for(*d);
+        const Route* r = stub_route(plan);
+        REQUIRE(r != nullptr);
+        CHECK_FALSE(r->style[r->path.count - 1].filled);
+        CHECK(r->style[r->path.count - 1].wall == TubeWall::Plain);
+        const SensorBand* band = band_at(plan, (float)f.output_x, (float)f.output_y);
+        REQUIRE(band != nullptr);
+        CHECK(band->on_box_edge);
+        CHECK(band->state == BandState::Empty);
+    }
+    SECTION("the hub sensor reads filament: filled, accent walls") {
+        d->hub_sensor_triggered = true;
+        const PathPlan& plan = plan_for(*d);
+        const Route* r = stub_route(plan);
+        REQUIRE(r != nullptr);
+        CHECK(r->style[0].filled);
+        CHECK(r->style[0].wall == TubeWall::Active);
+        CHECK(band_at(plan, (float)f.output_x, (float)f.output_y)->state == BandState::Active);
+    }
+    SECTION("a mounted lane short of the hub output leaves it empty") {
+        load_active(*d, 1, PathSegment::HUB);
+        const Route* r = stub_route(plan_for(*d));
+        REQUIRE(r != nullptr);
+        CHECK_FALSE(r->style[r->path.count - 1].filled);
+    }
+    SECTION("a mounted lane past the hub continues into a filled stub") {
+        load_active(*d, 1, PathSegment::NOZZLE);
+        const PathPlan& plan = plan_for(*d);
+        const Route* r = stub_route(plan);
+        REQUIRE(r == &plan.routes[plan.active_route]);
+        CHECK(contiguous(r->path));
+        CHECK(r->style[r->path.count - 1].filled);
+        CHECK(lv_color_eq(r->style[r->path.count - 1].bore, lv_color_hex(SLOT_COLORS[1])));
+    }
+}
+
 // ============================================================================
 // PARALLEL and MIXED
 // ============================================================================
-// Same 400x400 frame. PARALLEL: entry -48, sensor 152, toolhead 220, nozzle top
-// 208. MIXED: sensor 60, hub 128 (h 32, top 112, bottom 144) at x 300 for hub
-// lanes 2 and 3, toolhead 248, nozzle top 236.
+// Same 400x400 frame, default glyph at tool scale 6 (bottom 16 below its
+// center). PARALLEL: entry -48, sensor 198, toolhead 280 (glyph bottom 296),
+// nozzle top 268. MIXED: sensor 78, hub 159 (h 38, top 140, bottom 178) at
+// x 300 for hub lanes 2 and 3, toolhead 304 (glyph bottom 320), nozzle top 292.
 
 namespace {
 
@@ -845,13 +1140,13 @@ TEST_CASE("FilamentPath plan: idle PARALLEL tools are one stroke each through th
 
     REQUIRE(plan.route_count == 4);
     CHECK(plan.active_route == -1);
-    const float sensor_y = 400 * PARALLEL_SENSOR_Y_RATIO;
+    const float sensor_y = 198;
     for (int i = 0; i < 4; i++) {
         const Route& r = plan.routes[i];
         Stroke strokes[16];
         CHECK(coalesce(r, strokes, 16) == 1);
         CHECK(near(seg_start(r.path.segs[0]), 50.0f + 100 * i, -48));
-        CHECK(near(seg_end(r.path.segs[r.path.count - 1]), 50.0f + 100 * i, 208));
+        CHECK(near(seg_end(r.path.segs[r.path.count - 1]), 50.0f + 100 * i, 268));
         CHECK(has_boundary(r.path, 50.0f + 100 * i, sensor_y));
     }
     REQUIRE(plan.band_count == 4);
@@ -868,7 +1163,7 @@ TEST_CASE("FilamentPath plan: the mounted PARALLEL tool is one active stroke",
     load_active(*d, 2, PathSegment::NOZZLE);
     d->slot_filament_states[0] = {PathSegment::TOOLHEAD, SLOT_COLORS[0]};
     const PathPlan& plan = parallel_plan(*d);
-    const float sensor_y = 400 * PARALLEL_SENSOR_Y_RATIO;
+    const float sensor_y = 198;
 
     REQUIRE(plan.active_route == 2);
     Stroke strokes[16];
@@ -898,17 +1193,17 @@ TEST_CASE("FilamentPath plan: MIXED direct lanes and the hub trunk reach a nozzl
         const Route& r = plan.routes[i];
         REQUIRE(r.path.count > 0);
         CHECK(contiguous(r.path));
-        at_nozzle += std::fabs(seg_end(r.path.segs[r.path.count - 1]).y - 236) < 0.01f;
+        at_nozzle += std::fabs(seg_end(r.path.segs[r.path.count - 1]).y - 292) < 0.01f;
     }
     CHECK(at_nozzle == 3);
     for (int i : {2, 3}) {
         const Route& r = plan.routes[i];
-        CHECK(seg_end(r.path.segs[r.path.count - 1]).y == Catch::Approx(112));
+        CHECK(seg_end(r.path.segs[r.path.count - 1]).y == Catch::Approx(140));
     }
     REQUIRE(plan.trunk_route >= 0);
     const Route& t = plan.routes[plan.trunk_route];
-    CHECK(near(seg_start(t.path.segs[0]), 300, 144));
-    CHECK(near(seg_end(t.path.segs[t.path.count - 1]), 300, 236));
+    CHECK(near(seg_start(t.path.segs[0]), 300, 178));
+    CHECK(near(seg_end(t.path.segs[t.path.count - 1]), 300, 292));
     CHECK(plan.band_count == 4);
 }
 
@@ -952,7 +1247,7 @@ TEST_CASE("FilamentPath plan: a MIXED direct lane short of the nozzle fills to i
     REQUIRE(r.path.count == 2);
     CHECK(r.style[0].filled);
     CHECK_FALSE(r.style[1].filled);
-    CHECK(near(seg_end(r.path.segs[1]), 50, 236));
+    CHECK(near(seg_end(r.path.segs[1]), 50, 292));
 }
 
 TEST_CASE("FilamentPath plan: PARALLEL and MIXED show an error on the mounted lane",

@@ -77,6 +77,11 @@ float path_length(const FilamentPath& p);
  */
 PathPoint path_point_at(const FilamentPath& p, float d, PathPoint* tangent_out = nullptr);
 
+/// Split @p p at arc-length @p d (clamped to the path): @p head gets the part
+/// before it, @p tail the rest, each continuing where the other stops. A
+/// segment the cut falls inside becomes one piece on either side.
+void split_path(const FilamentPath& p, float d, FilamentPath& head, FilamentPath& tail);
+
 /**
  * @brief Orthogonal lane routing from (x0,y0) DOWN to (x1,y1), y1 > y0.
  *

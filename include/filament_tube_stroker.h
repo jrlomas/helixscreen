@@ -94,47 +94,5 @@ int lane_passes(const LaneStyle& style, TubePass* out, bool simple = reduced_eff
 /// it reads blue rather than navy against the card.
 lv_color_t tube_accent();
 
-/// Draw a path with a style, painting Halo, Wall, Bore in order. Optionally
-/// append the path's segments to @p record so a flow-dot / tip animation walks
-/// exactly what was drawn.
-void draw_lane(lv_layer_t* layer, const pg::FilamentPath& path, const LaneStyle& style,
-               pg::FilamentPath* record = nullptr);
-
-/// Convenience: vertical tube run from (x,y0) to (x,y1). Only records forward
-/// (downward) verticals into @p record (preserves the legacy guard).
-void draw_lane_vline(lv_layer_t* layer, int32_t x, int32_t y0, int32_t y1, const LaneStyle& style,
-                     pg::FilamentPath* record = nullptr);
-
-/// Convenience: orthogonal route (vertical -> fillet -> horizontal -> fillet ->
-/// vertical) from (x0,y0) down to (x1,y1).
-void draw_lane_route(lv_layer_t* layer, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
-                     float fillet_r, const LaneStyle& style, pg::FilamentPath* record = nullptr);
-
-/// Convenience: horizontal tube run from (x0,y) to (x1,y).
-void draw_lane_hline(lv_layer_t* layer, int32_t x0, int32_t x1, int32_t y, const LaneStyle& style,
-                     pg::FilamentPath* record = nullptr);
-
-// One lane in a hub merge fan: its source column / diagonal-start height, draw
-// style, and an optional active-path record sink. Used by draw_merge_fan.
-struct MergeFanLane {
-    int32_t slot_x;
-    int32_t start_y;
-    LaneStyle style;
-    pg::FilamentPath* record = nullptr; // append the drawn path here (active lane)
-};
-
-// Shared hub-merge renderer: parallel diagonals per side, separation by
-// construction (see pathgeo::build_merge_fan). Computes widened hub-top entries
-// + one common slope per side so no two lanes ever overlap or pinch, then routes
-// and draws each lane. Consumed by BOTH AMS path canvases (detail HUB renderer,
-// detail mixed-topology, overview multi-tool routes, overview single-tool hub
-// convergence). @p hub_top is the verticals' final destination; @p fillet_r is
-// the corner-fillet radius (8 on the detail panel, 9 on the overview).
-//
-// If @p entry_x_out is non-null it receives each lane's computed hub-top entry x
-// (size >= n) so the caller can place sensor dots exactly where the tubes land.
-void draw_merge_fan(lv_layer_t* layer, const MergeFanLane* lanes, int n, int32_t hub_cx,
-                    int32_t hub_top, int32_t hub_w, float fillet_r, int32_t* entry_x_out = nullptr);
-
 } // namespace ui
 } // namespace helix

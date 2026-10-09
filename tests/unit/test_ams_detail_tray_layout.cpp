@@ -17,9 +17,14 @@
 #include "ams_backend_mock.h"
 #include "ams_state.h"
 #include "ams_tray_projection.h"
+#include "filament_tube_stroker.h"
+#include "helix-xml/src/xml/lv_xml.h"
+#include "src/ui/ui_filament_path_internal.h"
 #include "theme_manager.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 
@@ -215,5 +220,98 @@ TEST_CASE_METHOD(AmsTrayPanelFixture, "AMS per-lane sensors: each lane's humidit
         lv_obj_get_coords(row, &ra);
         lv_obj_get_coords(label, &la);
         CHECK(ra.y2 <= la.y1);
+    }
+}
+
+TEST_CASE_METHOD(AmsTrayPanelFixture,
+                 "AMS tray: a dark-mode switch repaints the box in the new colors",
+                 "[ams][tray][theme][ui_integration]") {
+    build("off");
+    REQUIRE(lid_ == tray::LidMode::None);
+    REQUIRE_FALSE(helix::ui::reduced_effects());
+
+    // A point on the back wall just under its top edge, midway along it:
+    // between the two middle spools.
+    const tray::TrayFaces f = tray::tray_faces(box_);
+    const int x = (int)std::lround((f.back_wall[0].x + f.back_wall[1].x) / 2);
+    const int y = (int)std::lround((f.back_wall[0].y + f.back_wall[1].y) / 2) + 4;
+
+    auto back_pixel = [&]() {
+        lv_draw_buf_t* snap = lv_snapshot_take(container_, LV_COLOR_FORMAT_ARGB8888);
+        REQUIRE(snap != nullptr);
+        const uint8_t* px = snap->data + y * snap->header.stride + x * 4;
+        const lv_color_t c = lv_color_make(px[2], px[1], px[0]);
+        lv_draw_buf_destroy(snap);
+        return c;
+    };
+    auto back_token = [](bool dark) {
+        const char* hex = lv_xml_get_const(lv_xml_component_get_scope("ams_unit_detail"),
+                                           dark ? "tray_back_dark" : "tray_back_light");
+        REQUIRE(hex != nullptr);
+        return theme_manager_parse_hex_color(hex);
+    };
+    auto near = [](lv_color_t a, lv_color_t b) {
+        return std::abs(a.red - b.red) <= 2 && std::abs(a.green - b.green) <= 2 &&
+               std::abs(a.blue - b.blue) <= 2;
+    };
+
+    const bool dark = theme_manager_is_dark_mode();
+    REQUIRE_FALSE(near(back_token(dark), back_token(!dark)));
+    REQUIRE(near(back_pixel(), back_token(dark)));
+
+    theme_manager_toggle_dark_mode();
+    process_lvgl(20);
+    CHECK(near(back_pixel(), back_token(!dark)));
+
+    theme_manager_toggle_dark_mode();
+    process_lvgl(20);
+}
+
+TEST_CASE_METHOD(AmsTrayPanelFixture,
+                 "AMS unit detail: the unit is centered and its tubes drop from the spools",
+                 "[ams][tray][ui_integration]") {
+    const char* mode = GENERATE("passive", "off");
+    CAPTURE(mode);
+    build(mode);
+
+    // The unit: the box's faces, plus the readout standing beside it.
+    const tray::TrayFaces f = tray::tray_faces(box_);
+    float lo = 1e9f, hi = -1e9f;
+    for (const auto* face : {f.back_wall, f.floor, f.left_wall, f.front, f.right_side}) {
+        for (int k = 0; k < 4; k++) {
+            lo = std::min(lo, face[k].x);
+            hi = std::max(hi, face[k].x);
+        }
+    }
+    int32_t left = origin_.x + (int32_t)std::lround(lo);
+    int32_t right = origin_.x + (int32_t)std::lround(hi);
+    lv_obj_t* readout = lv_obj_find_by_name(panel_obj_, "env_indicator");
+    REQUIRE(readout != nullptr);
+    if (!lv_obj_has_flag(readout, LV_OBJ_FLAG_HIDDEN)) {
+        lv_area_t ra;
+        lv_obj_get_coords(readout, &ra);
+        right = std::max(right, (int32_t)ra.x2);
+    }
+    lv_obj_t* row = lv_obj_get_parent(container_);
+    lv_area_t rc;
+    lv_obj_get_content_coords(row, &rc);
+    INFO("unit " << left << ".." << right << " in row " << rc.x1 << ".." << rc.x2);
+    CHECK(std::abs((left - rc.x1) - (rc.x2 - right)) <= 4);
+
+    // The path canvas reads the laid-out spools, so each lane sits under its spool.
+    lv_obj_t* canvas = lv_obj_find_by_name(panel_obj_, "path_canvas");
+    REQUIRE(canvas != nullptr);
+    const auto* data = helix::ui::fpath::get_data(canvas);
+    REQUIRE(data != nullptr);
+    lv_area_t cc;
+    lv_obj_get_coords(canvas, &cc);
+    for (int i = 0; i < 4; ++i) {
+        CAPTURE(i);
+        lv_obj_t* spool = lv_obj_find_by_name(slot(i), "spool_graphic");
+        REQUIRE(spool != nullptr);
+        lv_area_t a;
+        lv_obj_get_coords(spool, &a);
+        const int32_t lane_x = cc.x1 + helix::ui::fpath::get_slot_x(data, i, cc.x1);
+        CHECK(std::abs(lane_x - (a.x1 + a.x2) / 2) <= 2);
     }
 }

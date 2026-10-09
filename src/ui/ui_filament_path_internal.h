@@ -42,6 +42,7 @@
 
 #include "ui_coalesced_timer.h"
 #include "ui_filament_path_canvas.h"
+#include "ui_toolhead_badge.h"
 
 #include "ams_types.h"
 #include "filament_path_geometry.h"
@@ -85,10 +86,12 @@ inline constexpr float BYPASS_MERGE_Y_RATIO = 0.58f;
 // Buffer element position (between hub output and bypass merge)
 inline constexpr float BUFFER_Y_RATIO = 0.46f;
 
-// PARALLEL topology (tool changer) Y ratios. Shared by the PARALLEL renderer
-// and the PARALLEL branch of the click hit-test so the two never drift.
-inline constexpr float PARALLEL_SENSOR_Y_RATIO = 0.38f;   // Toolhead entry sensor
-inline constexpr float PARALLEL_TOOLHEAD_Y_RATIO = 0.55f; // Nozzle/toolhead per slot
+// PARALLEL topology (tool changer): the toolhead glyphs stand on this line,
+// and each tool's entry sensor sits this fraction of the way from the lane
+// entries down to its toolhead. parallel_rows() turns them into Ys for the
+// renderer and the click hit-test alike.
+inline constexpr float PARALLEL_GLYPH_BOTTOM_RATIO = 0.74f;
+inline constexpr float PARALLEL_SENSOR_FRACTION = 0.75f;
 
 // Slot-entry click hit-test padding (click handler only; no renderer
 // counterpart — these widen the entry band so taps near the spool grid still
@@ -155,8 +158,14 @@ struct ThemeCache {
     int32_t hub_width = 60;
     int32_t border_radius = 6;
     int32_t extruder_scale = 10; // Scale unit for extruder (based on space_md)
+    int32_t stub_length = 40;    // hub_only output stub (space_xl * 2)
 
     const lv_font_t* label_font = nullptr;
+
+    // Which theme the colors above were read from (refresh_theme_colors()).
+    bool colors_loaded = false;
+    int generation = 0;
+    bool dark_mode = false;
 };
 
 // State of the five lv_anim-driven animation systems
@@ -270,6 +279,13 @@ struct FilamentPathData {
 
     // Per-slot prep sensor capability (true = slot has prep/pre-gate sensor)
     bool slot_has_prep_sensor[MAX_SLOTS] = {};
+    // Per-slot load sensor between prep and hub (AFC), read as LANE
+    bool slot_has_load_sensor[MAX_SLOTS] = {};
+    // Per-slot error the slot reports (SlotInfo::error at ERROR severity)
+    bool slot_has_error[MAX_SLOTS] = {};
+    // How much of the bowden (OUTPUT) tube a load or unload has filled, in
+    // percent from the hub end; -1 when the backend reports no progress.
+    int bowden_fill = -1;
 
     // Per-slot tool mapping (actual AFC map values, not slot index)
     int mapped_tool[MAX_SLOTS];              // -1 = use slot index as fallback
@@ -289,6 +305,10 @@ struct FilamentPathData {
 
     // Rendering mode
     bool hub_only = false; // true = stop rendering at hub (skip downstream)
+    // The unit's hub (or selector) output sensor. In hub_only mode it decides
+    // the output stub's band and whether the stub carries filament.
+    bool has_hub_sensor = false;
+    bool hub_sensor_triggered = false;
     // Hub co-located with the toolhead: the merge box sits just above the
     // toolhead and the shared hub->nozzle run is a short stub (printers whose
     // combiner mounts on the print head; the per-lane tubes run the whole way).
@@ -376,6 +396,7 @@ struct SlotRenderState {
     bool is_mounted = false;
     bool at_sensor = false; // segment >= TOOLHEAD (consumed by PARALLEL/MIXED)
     bool at_nozzle = false; // segment >= NOZZLE
+    bool has_error = false; // the slot reports an error of its own
 };
 
 using SlotRenderStates = std::array<SlotRenderState, FilamentPathData::MAX_SLOTS>;
@@ -448,13 +469,24 @@ void draw_toolhead(lv_layer_t* layer, int32_t cx, int32_t cy, std::optional<lv_c
 
 /// Y of the nozzle tip for the configured toolhead style (heat glow anchor).
 int32_t toolhead_tip_y(int32_t nozzle_y, int32_t extruder_scale);
+struct BoxColors {
+    lv_color_t bg, border;
+};
+/// The buffer box's fill and border for its fault state and bias.
+BoxColors buffer_box_colors(const FilamentPathData& data, bool has_filament,
+                            lv_color_t filament_color);
+
+/// Drawn bounds of draw_toolhead()'s glyph at (@p cx, @p cy) for the
+/// configured style, at the same base scale.
+helix::ui::GlyphBounds toolhead_glyph_bounds(int32_t cx, int32_t cy, int32_t scale);
 /// Topmost drawn Y of the toolhead glyph for the configured style (its cap or
 /// shroud, above the nozzle inlet at nozzle_y - extruder_scale * 2).
 int32_t toolhead_top_y(int32_t nozzle_y, int32_t extruder_scale);
 
-/// Tool badge ("T0", "T1", …) beneath a nozzle: rounded rect + centered label.
-void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t badge_top, const char* label,
-                     lv_color_t text_color, lv_opa_t opa);
+/// The tool badge ("T0", "T1", …) on the corner of draw_toolhead()'s glyph,
+/// at full opacity. Paint it after every glyph.
+void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t scale,
+                     const char* label);
 
 // ============================================================================
 // Animations (ui_filament_path_anim.cpp)
@@ -474,6 +506,10 @@ void start_output_x_animation(lv_obj_t* obj, FilamentPathData* data, int32_t fro
 /// Delete every lv_anim this widget may have running (widget teardown).
 void delete_all_animations(lv_obj_t* obj);
 
+/// Re-read the theme-derived colors when the theme or dark mode changed since
+/// they were last read. Returns true when they were re-read.
+bool refresh_theme_colors(FilamentPathData* data);
+
 // ============================================================================
 // Layered canvas machinery (ui_filament_path_layers.cpp)
 // ============================================================================
@@ -484,6 +520,10 @@ bool layered_setup_canvases(lv_obj_t* obj, FilamentPathData* data);
 /// Mark which layered surfaces need a repaint and schedule an async refresh.
 /// Use this from setters instead of bare lv_obj_invalidate().
 void layered_mark_dirty(lv_obj_t* obj);
+
+/// Flag the canvas for a repaint and schedule the refresh, without invalidating
+/// the widget: safe to call from inside its draw event.
+void layered_schedule_repaint(lv_obj_t* obj, FilamentPathData* data);
 
 // Called from the widget's draw: runs a refresh that was deferred while the
 // widget could not be seen.

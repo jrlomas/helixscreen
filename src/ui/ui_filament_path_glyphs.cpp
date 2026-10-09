@@ -161,23 +161,14 @@ int32_t draw_hub_box(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t width
     return gear_overflow;
 }
 
-// Draw buffer box element: a labeled box like HUB/SELECTOR, its border in the
-// buffer bands' token (neutral on target, warning, danger)
-void draw_buffer_coil(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t hub_h,
-                      bool has_filament, lv_color_t filament_color) {
-    const ThemeCache& theme = ctx.data->theme;
-    int buffer_fault_state = ctx.data->buffer_fault_state;
-    float buffer_bias = ctx.data->buffer_bias;
-    lv_color_t bg_color = theme.color_bg;
-
-    // Slightly smaller than hub box — fits "BUF" with comfortable padding
-    int32_t box_w = theme.hub_width * 4 / 5;
-    int32_t box_h = hub_h;
-    if (box_w < 36)
-        box_w = 36;
-    if (box_h < 16)
-        box_h = 16;
-
+// The buffer box's border in the buffer bands' token (neutral on target,
+// warning, danger), its fill tinted by the fault or the filament.
+BoxColors buffer_box_colors(const FilamentPathData& data, bool has_filament,
+                            lv_color_t filament_color) {
+    const ThemeCache& theme = data.theme;
+    const int buffer_fault_state = data.buffer_fault_state;
+    const float buffer_bias = data.buffer_bias;
+    const lv_color_t bg_color = theme.color_bg;
     // Border color based on fault state and proportional bias
     lv_color_t border_color;
     lv_color_t buf_bg = bg_color;
@@ -205,7 +196,25 @@ void draw_buffer_coil(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t hub_
         }
     }
 
-    draw_hub_box(ctx, cx, cy, box_w, box_h, buf_bg, border_color, ctx.data->buffer_label);
+    return {buf_bg, border_color};
+}
+
+// Draw buffer box element: a labeled box like HUB/SELECTOR, its border in the
+// buffer bands' token (neutral on target, warning, danger)
+void draw_buffer_coil(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t hub_h,
+                      bool has_filament, lv_color_t filament_color) {
+    const ThemeCache& theme = ctx.data->theme;
+
+    // Slightly smaller than hub box — fits "BUF" with comfortable padding
+    int32_t box_w = theme.hub_width * 4 / 5;
+    int32_t box_h = hub_h;
+    if (box_w < 36)
+        box_w = 36;
+    if (box_h < 16)
+        box_h = 16;
+
+    const BoxColors colors = buffer_box_colors(*ctx.data, has_filament, filament_color);
+    draw_hub_box(ctx, cx, cy, box_w, box_h, colors.bg, colors.border, ctx.data->buffer_label);
 }
 
 // Draw animated filament tip (a glowing dot that moves along the path)
@@ -326,11 +335,23 @@ void draw_flow_dots_path(lv_layer_t* layer, const pg::FilamentPath& path, lv_col
 
 // The A4T glyph is drawn 6/5 larger than the others at every call site in this
 // widget, so the boost is folded in here.
+namespace {
+
+int32_t drawn_scale(helix::ToolheadStyle style, int32_t scale) {
+    return style == helix::ToolheadStyle::A4T ? scale * 6 / 5 : scale;
+}
+
+} // namespace
+
 void draw_toolhead(lv_layer_t* layer, int32_t cx, int32_t cy, std::optional<lv_color_t> filament,
                    int32_t scale, lv_opa_t opa) {
-    bool a4t = helix::SettingsManager::instance().get_effective_toolhead_style() ==
-               helix::ToolheadStyle::A4T;
-    draw_nozzle_for_style(layer, cx, cy, filament, a4t ? scale * 6 / 5 : scale, opa);
+    const auto style = helix::SettingsManager::instance().get_effective_toolhead_style();
+    draw_nozzle_for_style(layer, cx, cy, filament, drawn_scale(style, scale), opa);
+}
+
+helix::ui::GlyphBounds toolhead_glyph_bounds(int32_t cx, int32_t cy, int32_t scale) {
+    const auto style = helix::SettingsManager::instance().get_effective_toolhead_style();
+    return helix::ui::toolhead_bounds(style, cx, cy, drawn_scale(style, scale));
 }
 
 // Nozzle tip Y for the configured style — anchors the heat glow halo.
@@ -347,75 +368,14 @@ int32_t toolhead_tip_y(int32_t nozzle_y, int32_t extruder_scale) {
     }
 }
 
-// Topmost drawn Y of the toolhead glyph for the configured style. Each case
-// restates its renderer's top edge (src/rendering/nozzle_renderer_*.cpp) at the
-// same effective scale draw_toolhead() passes it: the polygon styles map their
-// highest design coordinate, the isometric bodies add their cap and iso-top
-// offset above the body, and AntHead is the scaled image's top.
 int32_t toolhead_top_y(int32_t nozzle_y, int32_t extruder_scale) {
-    switch (helix::SettingsManager::instance().get_effective_toolhead_style()) {
-    case helix::ToolheadStyle::A4T: {
-        const float scale = (float)(extruder_scale * 6 / 5 * 10) / 2000.0f;
-        return nozzle_y + (int32_t)((0 - 630) * scale);
-    }
-    case helix::ToolheadStyle::STEALTHBURNER: {
-        const float scale = (float)(extruder_scale * 10) / 1000.0f;
-        return nozzle_y + (int32_t)((78 - 500) * scale);
-    }
-    case helix::ToolheadStyle::JABBERWOCKY: {
-        const float scale = (float)(extruder_scale * 10) / 2400.0f;
-        return nozzle_y + (int32_t)((2 - 687) * scale);
-    }
-    case helix::ToolheadStyle::ANTHEAD:
-        return nozzle_y - (81 * ((extruder_scale * 65) / 10)) / 163;
-    case helix::ToolheadStyle::CREALITY_K1:
-        return nozzle_y - (extruder_scale * 48) / 10 / 2 - (extruder_scale * 6) / 10 / 2;
-    case helix::ToolheadStyle::CREALITY_K2:
-        return nozzle_y - (extruder_scale * 48) / 10 / 2 - (extruder_scale * 5) / 10 / 2;
-    default: {
-        // Default body plus its raised cap and bevel (each a tenth of the body).
-        const int32_t body_height = extruder_scale * 4;
-        const int32_t cap_height = body_height / 10;
-        const int32_t body_depth = (extruder_scale * 6) / 10;
-        return nozzle_y - body_height / 2 - 2 * cap_height - body_depth / 2;
-    }
-    }
+    return toolhead_glyph_bounds(0, nozzle_y, extruder_scale).top;
 }
 
-// Tool badge (T0, T1, …) below a nozzle — matches system_path_canvas style.
-void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t badge_top, const char* label,
-                     lv_color_t text_color, lv_opa_t opa) {
-    const ThemeCache& theme = ctx.data->theme;
-    if (!theme.label_font || !label || !label[0])
-        return;
-
-    int32_t font_h = lv_font_get_line_height(theme.label_font);
-    int32_t label_len = (int32_t)strlen(label);
-    int32_t badge_w = LV_MAX(24, label_len * (font_h * 3 / 5) + 6);
-    int32_t badge_h = font_h + 4;
-    int32_t badge_left = cx - badge_w / 2;
-
-    // Badge background (rounded rect)
-    lv_area_t badge_area = {badge_left, badge_top, badge_left + badge_w, badge_top + badge_h};
-    lv_draw_fill_dsc_t fill_dsc;
-    lv_draw_fill_dsc_init(&fill_dsc);
-    fill_dsc.color = theme.color_idle;
-    fill_dsc.opa = (lv_opa_t)LV_MIN(200, opa);
-    fill_dsc.radius = 4;
-    lv_draw_fill(ctx.layer, &fill_dsc, &badge_area);
-
-    // Badge text
-    lv_draw_label_dsc_t label_dsc;
-    lv_draw_label_dsc_init(&label_dsc);
-    label_dsc.color = text_color;
-    label_dsc.opa = opa;
-    label_dsc.font = theme.label_font;
-    label_dsc.align = LV_TEXT_ALIGN_CENTER;
-    label_dsc.text = label;
-    label_dsc.text_local = 1;
-
-    lv_area_t text_area = {badge_left, badge_top + 2, badge_left + badge_w, badge_top + 2 + font_h};
-    lv_draw_label(ctx.layer, &label_dsc, &text_area);
+void draw_tool_badge(const RenderCtx& ctx, int32_t cx, int32_t cy, int32_t scale,
+                     const char* label) {
+    helix::ui::draw_toolhead_badge(ctx.layer, helix::ui::tool_badge_look(),
+                                   toolhead_glyph_bounds(cx, cy, scale), label);
 }
 
 } // namespace helix::ui::fpath

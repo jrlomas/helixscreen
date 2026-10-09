@@ -12,6 +12,7 @@
 #include "ui_filament_path_canvas.h"
 
 #include "ui_filament_path_internal.h"
+#include "ui_filament_path_plan.h"
 #include "ui_fonts.h"
 
 #include "clog_meter_geometry.h"
@@ -47,12 +48,19 @@ FilamentPathData* get_data(lv_obj_t* obj) {
 
 } // namespace helix::ui::fpath
 
-// Load theme-aware colors, fonts, and sizes
-static void load_theme_colors(FilamentPathData* data) {
-    bool dark_mode = theme_manager_is_dark_mode();
-    ThemeCache& theme = data->theme;
+namespace helix::ui::fpath {
 
-    // Use theme tokens with dark/light mode awareness
+bool refresh_theme_colors(FilamentPathData* data) {
+    ThemeCache& theme = data->theme;
+    lv_subject_t* changed = theme_manager_get_changed_subject();
+    const int generation = changed ? lv_subject_get_int(changed) : 0;
+    const bool dark_mode = theme_manager_is_dark_mode();
+    if (theme.colors_loaded && theme.generation == generation && theme.dark_mode == dark_mode)
+        return false;
+    theme.colors_loaded = true;
+    theme.generation = generation;
+    theme.dark_mode = dark_mode;
+
     theme.color_idle =
         theme_manager_get_color(dark_mode ? "filament_idle_dark" : "filament_idle_light");
     theme.color_error = theme_manager_get_color("filament_error");
@@ -68,26 +76,33 @@ static void load_theme_colors(FilamentPathData* data) {
         theme.color_buffer[s] = theme_manager_get_color(
             helix::ui::buffer_status_token(static_cast<helix::ui::ClogMeterStatus>(s)));
     }
+    spdlog::trace("[FilamentPath] Theme colors loaded (dark={}, generation={})", dark_mode,
+                  generation);
+    return true;
+}
 
-    // Get responsive sizing from theme
+} // namespace helix::ui::fpath
+
+// Sizes and the label font are bound to the breakpoint, not the theme, so a
+// theme switch leaves them as read at creation.
+static void load_theme_sizes(FilamentPathData* data) {
+    ThemeCache& theme = data->theme;
     int32_t space_xs = theme_manager_get_spacing("space_xs");
     int32_t space_md = theme_manager_get_spacing("space_md");
 
     // Scale line widths based on spacing (responsive)
     theme.line_width_idle = LV_MAX(2, space_xs / 2);
     theme.line_width_active = LV_MAX(3, space_xs - 3);
-    theme.tube_gauge = theme.line_width_active + 2;
+    theme.tube_gauge = tube_gauge_for_spacing(space_xs);
     theme.sensor_radius = LV_MAX(4, space_xs);
     theme.hub_width = LV_MAX(50, space_md * 5);
     theme.border_radius = LV_MAX(4, space_xs);
     theme.extruder_scale = LV_MAX(8, space_md); // Extruder scales with space_md
+    theme.stub_length = theme_manager_get_spacing("space_xl") * 2;
 
     // Get responsive font from globals.xml (font_small → responsive variant)
     const char* font_name = lv_xml_get_const(nullptr, "font_small");
     theme.label_font = font_name ? lv_xml_get_font(nullptr, font_name) : &noto_sans_12;
-
-    spdlog::trace("[FilamentPath] Theme colors loaded (dark={}, font={})", dark_mode,
-                  font_name ? font_name : "fallback");
 }
 
 // ============================================================================
@@ -159,6 +174,10 @@ static void filament_path_draw_cb(lv_event_t* e) {
     if (!data)
         return;
 
+    // A theme or dark-mode switch invalidates the screen; the first draw after
+    // it repaints the canvas, whose tubes still hold the old colors.
+    if (refresh_theme_colors(data))
+        layered_schedule_repaint(obj, data);
     layered_on_draw(obj, data);
     render_animation_overlay(obj, layer, data);
 }
@@ -183,9 +202,10 @@ static void filament_path_click_cb(lv_event_t* e) {
     // For PARALLEL topology (tool changers), accept clicks on toolheads AND the
     // filament line/spool area (top half of canvas, above the sensor dots)
     if (data->topology == static_cast<int>(helix::PathTopology::PARALLEL) && data->slot_callback) {
-        int32_t toolhead_y = y_off + (int32_t)(height * PARALLEL_TOOLHEAD_Y_RATIO);
-        int32_t sensor_y = y_off + (int32_t)(height * PARALLEL_SENSOR_Y_RATIO);
-        int32_t tool_scale = LV_MAX(6, data->theme.extruder_scale * 2 / 3);
+        const ParallelRows rows = parallel_rows(*data, compute_base_geometry(obj, data));
+        int32_t toolhead_y = rows.toolhead_y;
+        int32_t sensor_y = rows.sensor_y;
+        int32_t tool_scale = rows.tool_scale;
 
         // Toolhead click area (bottom half)
         int32_t hit_radius_y = tool_scale * 4;
@@ -306,8 +326,8 @@ static lv_obj_t* create_widget(lv_obj_t* parent) {
     s_registry[obj] = data_ptr.get();
     auto* data = data_ptr.release();
 
-    // Load theme-aware colors, fonts, and sizes
-    load_theme_colors(data);
+    refresh_theme_colors(data);
+    load_theme_sizes(data);
 
     // Configure object
     lv_obj_set_size(obj, DEFAULT_WIDTH, DEFAULT_HEIGHT);
@@ -716,6 +736,29 @@ void ui_filament_path_canvas_set_slot_prep_sensor(lv_obj_t* obj, int slot, bool 
     }
 }
 
+void ui_filament_path_canvas_set_slot_load_sensor(lv_obj_t* obj, int slot, bool has_sensor) {
+    auto* data = get_data(obj);
+    if (!data || slot < 0 || slot >= FilamentPathData::MAX_SLOTS)
+        return;
+    if (data->slot_has_load_sensor[slot] != has_sensor) {
+        data->slot_has_load_sensor[slot] = has_sensor;
+        spdlog::trace("[FilamentPath] Slot {} load sensor: {}", slot, has_sensor);
+        layered_mark_dirty(obj);
+    }
+}
+
+// NAMESPACE_OK: the widget's C setter API, beside its siblings
+void ui_filament_path_canvas_set_slot_error(lv_obj_t* obj, int slot, bool has_error) {
+    auto* data = get_data(obj);
+    if (!data || slot < 0 || slot >= FilamentPathData::MAX_SLOTS)
+        return;
+    if (data->slot_has_error[slot] != has_error) {
+        data->slot_has_error[slot] = has_error;
+        spdlog::trace("[FilamentPath] Slot {} error: {}", slot, has_error);
+        layered_mark_dirty(obj);
+    }
+}
+
 void ui_filament_path_canvas_set_slot_mapped_tool(lv_obj_t* obj, int slot, int tool) {
     auto* data = get_data(obj);
     if (!data || slot < 0 || slot >= FilamentPathData::MAX_SLOTS)
@@ -867,6 +910,25 @@ void ui_filament_path_canvas_set_hub_only(lv_obj_t* obj, bool hub_only) {
         spdlog::debug("[FilamentPath] Hub-only mode: {}", hub_only ? "on" : "off");
         layered_mark_dirty(obj);
     }
+}
+
+// NAMESPACE_OK: the widget's C setter API, beside its siblings
+void ui_filament_path_canvas_set_bowden_fill(lv_obj_t* obj, int percent) {
+    auto* data = get_data(obj);
+    const int fill = percent < 0 ? -1 : LV_MIN(percent, 100);
+    if (!data || data->bowden_fill == fill)
+        return;
+    data->bowden_fill = fill;
+    layered_mark_dirty(obj);
+}
+
+void ui_filament_path_canvas_set_hub_sensor(lv_obj_t* obj, bool has_sensor, bool triggered) {
+    auto* data = get_data(obj);
+    if (!data || (data->has_hub_sensor == has_sensor && data->hub_sensor_triggered == triggered))
+        return;
+    data->has_hub_sensor = has_sensor;
+    data->hub_sensor_triggered = triggered;
+    layered_mark_dirty(obj);
 }
 
 void ui_filament_path_canvas_set_heat_active(lv_obj_t* obj, bool active) {

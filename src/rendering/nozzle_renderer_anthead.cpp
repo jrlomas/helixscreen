@@ -3,11 +3,10 @@
 
 #include "nozzle_renderer_anthead.h"
 
-// The AntHead is one selectable toolhead-visualization style. On ESP32 (v1
-// size cut) the image is not staged and nothing loads it: draw_nozzle_anthead becomes
-// a no-op so the dispatch (nozzle_renderer_dispatch.h) still links, and a user who selects the
-// AntHead style sees no toolhead glyph (every other style renders normally). Firmware-only; desktop
-// keeps the image.
+// The AntHead is one selectable toolhead-visualization style. ESP32 does not
+// ship the image, so there draw_nozzle_anthead draws the default toolhead glyph
+// instead, and toolhead_top_y() (ui_filament_path_glyphs.cpp) reports that
+// glyph's top for ANTHEAD. Every other platform draws the image.
 #if !defined(HELIX_PLATFORM_ESP32)
 
 #include "data_root_resolver.h"
@@ -80,7 +79,11 @@ void draw_nozzle_anthead(lv_layer_t* layer, int32_t cx, int32_t cy,
 
 #else // HELIX_PLATFORM_ESP32 - AntHead image not shipped (see top of file)
 
-void draw_nozzle_anthead(lv_layer_t*, int32_t, int32_t, std::optional<lv_color_t>, int32_t,
-                         lv_opa_t) {}
+#include "nozzle_renderer_bambu.h"
+
+void draw_nozzle_anthead(lv_layer_t* layer, int32_t cx, int32_t cy,
+                         std::optional<lv_color_t> filament, int32_t scale_unit, lv_opa_t opa) {
+    draw_nozzle_bambu(layer, cx, cy, filament, scale_unit, opa);
+}
 
 #endif // !HELIX_PLATFORM_ESP32

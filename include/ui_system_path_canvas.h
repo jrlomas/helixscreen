@@ -25,10 +25,8 @@ extern "C" {
  *   - Single output line down from hub
  *   - Simplified nozzle icon at bottom
  *
- * Visual states:
- *   - Inactive unit: Thin gray dashed line
- *   - Active unit: Thick line in filament color
- *   - Filament loaded: Color path from active unit through hub to nozzle
+ * The tubes and sensor bands are planned into the same route plan as the
+ * detail views and painted by the same painter (ui_system_path_plan.h).
  *
  * XML usage:
  * @code{.xml}
@@ -150,16 +148,37 @@ void ui_system_path_canvas_set_unit_hub_sensor(lv_obj_t* obj, int unit_index, bo
                                                bool triggered);
 
 /**
- * @brief Set toolhead sensor state
+ * @brief Set whether the system has a toolhead sensor
  *
- * The toolhead sensor sits on the output line between hub and nozzle.
+ * The toolhead sensor's band sits on the output line between hub and nozzle;
+ * its state follows the filament segment.
  *
  * @param obj The system_path_canvas widget
  * @param has_toolhead_sensor Whether the system has a toolhead entry sensor
- * @param toolhead_sensor_triggered Whether filament is detected at the toolhead sensor
  */
-void ui_system_path_canvas_set_toolhead_sensor(lv_obj_t* obj, bool has_toolhead_sensor,
-                                               bool toolhead_sensor_triggered);
+void ui_system_path_canvas_set_toolhead_sensor(lv_obj_t* obj, bool has_toolhead_sensor);
+
+/**
+ * @brief Set how far the active filament has reached (a PathSegment value)
+ */
+void ui_system_path_canvas_set_filament_segment(lv_obj_t* obj, int segment);
+
+/**
+ * @brief Set where the system reports a filament error (a PathSegment value, 0 = none)
+ *
+ * The error marks the active route's span and sensor band at that segment.
+ */
+void ui_system_path_canvas_set_error_segment(lv_obj_t* obj, int segment);
+
+/**
+ * @brief Set a unit's furthest-loaded lane: how far it reached (a PathSegment
+ *        value) and its filament color (0xRRGGBB)
+ *
+ * An inactive unit whose hub sensor reads filament draws its route and hub
+ * band in this color.
+ */
+void ui_system_path_canvas_set_unit_lane(lv_obj_t* obj, int unit_index, int segment,
+                                         uint32_t color);
 
 /**
  * @brief Set per-unit tool routing info

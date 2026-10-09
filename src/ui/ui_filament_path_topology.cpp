@@ -91,6 +91,7 @@ SlotRenderStates compute_slot_render_states(const FilamentPathData* data) {
             s.segment = static_cast<PathSegment>(data->filament_segment);
         }
 
+        s.has_error = data->slot_has_error[i];
         s.at_sensor = s.has_filament && (s.segment >= PathSegment::TOOLHEAD);
         s.at_nozzle = s.has_filament && (s.segment >= PathSegment::NOZZLE);
     }
@@ -103,16 +104,36 @@ bool is_segment_active(PathSegment segment, PathSegment filament_segment) {
            filament_segment != PathSegment::NONE;
 }
 
-namespace {
-
-// One plan for whichever topology is rendering. About 14 KB: kept off the
-// stack, which on the ESP32 is the LVGL task's, and out of internal DRAM,
-// which the WiFi driver needs for its RX buffers. Rendering is single-threaded
-// and not re-entrant, and nothing DMA- or ISR-side touches it.
 PathPlan& plan_scratch() {
     static HELIX_PSRAM_BSS PathPlan plan;
     return plan;
 }
+
+// Hub box tint priority: error at hub > loaded-filament tint > plain theme
+// colors. A buffer fault is the buffer box's to show: it sits downstream.
+BoxColors resolve_hub_tint(const FilamentPathData& data, const LinearHubFrame& f,
+                           bool has_filament) {
+    if (f.has_error && f.error_seg == PathSegment::HUB) {
+        // Error at hub — red tint with pulsing error color
+        return {ph_blend(f.hub_bg, f.error_color, 0.40f), f.error_color};
+    }
+    if (!has_filament)
+        return {f.hub_bg, f.hub_border};
+    // Healthy — subtle filament color tint (use first loaded slot's color)
+    lv_color_t tint_color = f.active_color;
+    if (data.active_slot < 0) {
+        // No active slot — find first slot loaded to hub for tint
+        for (int i = 0; i < data.slot_count; i++) {
+            if (f.states[i].segment >= PathSegment::HUB) {
+                tint_color = f.states[i].color;
+                break;
+            }
+        }
+    }
+    return {ph_blend(f.hub_bg, tint_color, 0.33f), f.hub_border};
+}
+
+namespace {
 
 void warn_if_dropped(const PathPlan& plan) {
     if (plan.dropped <= 0)
@@ -134,14 +155,26 @@ void warn_if_dropped(const PathPlan& plan) {
 // Tool changers have independent toolheads: each slot is a complete tool with
 // its own extruder, entry → sensor → own toolhead + badge.
 
-// One tool's toolhead glyph and badge, drawn over its planned tube.
+// The two paint passes over the planned tubes: every toolhead glyph, then
+// every tool badge, so a neighbouring glyph never covers a badge.
+enum class ToolPass : uint8_t { Glyph, Badge };
+
+// One tool's toolhead glyph or badge, drawn over its planned tube.
 void draw_parallel_tool(const RenderCtx& ctx, const SlotRenderStates& states, int i,
-                        int32_t toolhead_y) {
+                        const ParallelRows& rows, ToolPass pass) {
     const FilamentPathData* data = ctx.data;
-    const ThemeCache& theme = data->theme;
     int32_t slot_x = ctx.geo.slot_x[i];
     const SlotRenderState& s = states[i];
-    int32_t tool_scale = LV_MAX(6, theme.extruder_scale * 2 / 3);
+    const int32_t toolhead_y = rows.toolhead_y;
+    const int32_t tool_scale = rows.tool_scale;
+
+    if (pass == ToolPass::Badge) {
+        char tool_label[16];
+        int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
+        format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
+        draw_tool_badge(ctx, slot_x, toolhead_y, tool_scale, tool_label);
+        return;
+    }
 
     // Nozzle color only when filament actually reaches the nozzle
     std::optional<lv_color_t> noz_color;
@@ -155,16 +188,6 @@ void draw_parallel_tool(const RenderCtx& ctx, const SlotRenderStates& states, in
     // draw_animation_parallel (DRAW_POST) so per-frame ticks don't bust the
     // overlay canvas cache.
     draw_toolhead(ctx.layer, slot_x, toolhead_y, noz_color, tool_scale, toolhead_opa);
-
-    // Tool badge (E0/T0, …) below nozzle — matches system_path_canvas style
-    if (theme.label_font) {
-        char tool_label[16];
-        int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
-        format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
-        lv_color_t text = s.is_mounted ? theme.color_success : theme.color_text;
-        draw_tool_badge(ctx, slot_x, toolhead_y + tool_scale * 4 + 6, tool_label, text,
-                        toolhead_opa);
-    }
 }
 
 void render_parallel(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
@@ -174,11 +197,12 @@ void render_parallel(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
     warn_if_dropped(plan);
     paint_tubes(layer, plan, tube_palette(*data));
 
-    const int32_t toolhead_y =
-        ctx.geo.y_off + (int32_t)(ctx.geo.height * PARALLEL_TOOLHEAD_Y_RATIO);
+    const ParallelRows rows = parallel_rows(*data, ctx.geo);
     const SlotRenderStates states = compute_slot_render_states(data);
-    for (int i = 0; i < LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS); i++)
-        draw_parallel_tool(ctx, states, i, toolhead_y);
+    for (ToolPass pass : {ToolPass::Glyph, ToolPass::Badge}) {
+        for (int i = 0; i < LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS); i++)
+            draw_parallel_tool(ctx, states, i, rows, pass);
+    }
 }
 
 // ============================================================================
@@ -195,7 +219,7 @@ void render_parallel(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
 //     (T0)    (T2)       (T1)             nozzles + tool labels
 
 // The shared hub toolhead and its tool badge.
-void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f) {
+void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f, ToolPass pass) {
     const FilamentPathData* data = ctx.data;
     const ThemeCache& theme = data->theme;
 
@@ -223,44 +247,39 @@ void draw_mixed_shared_toolhead(const RenderCtx& ctx, const MixedFrame& f) {
         }
     }
 
+    if (pass == ToolPass::Badge) {
+        char tool_label[16];
+        format_tool_badge_label(data, hub_badge_lane, hub_tool, tool_label, sizeof(tool_label));
+        draw_tool_badge(ctx, f.hub_cx, f.toolhead_y, f.tool_scale, tool_label);
+        return;
+    }
+
     // Shared hub nozzle — always "mounted" visually (it's a shared output)
     std::optional<lv_color_t> noz_color;
     if (any_hub_at_nozzle)
         noz_color = hub_nozzle_color;
-    lv_opa_t hub_noz_opa = LV_OPA_COVER;
-    draw_toolhead(ctx.layer, f.hub_cx, f.toolhead_y, noz_color, f.tool_scale, hub_noz_opa);
-
-    // Tool label below shared hub nozzle
-    if (theme.label_font) {
-        char tool_label[16];
-        format_tool_badge_label(data, hub_badge_lane, hub_tool, tool_label, sizeof(tool_label));
-        draw_tool_badge(ctx, f.hub_cx, f.toolhead_y + f.tool_scale * 4 + 6, tool_label,
-                        theme.color_text, hub_noz_opa);
-    }
+    draw_toolhead(ctx.layer, f.hub_cx, f.toolhead_y, noz_color, f.tool_scale, LV_OPA_COVER);
 }
 
 // A direct lane's own nozzle and badge.
-void draw_mixed_direct_toolhead(const RenderCtx& ctx, const MixedFrame& f, int i) {
+void draw_mixed_direct_toolhead(const RenderCtx& ctx, const MixedFrame& f, int i, ToolPass pass) {
     const FilamentPathData* data = ctx.data;
-    const ThemeCache& theme = data->theme;
     const SlotRenderState& s = f.states[i];
     int32_t slot_x = ctx.geo.slot_x[i];
+
+    if (pass == ToolPass::Badge) {
+        char tool_label[16];
+        int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
+        format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
+        draw_tool_badge(ctx, slot_x, f.toolhead_y, f.tool_scale, tool_label);
+        return;
+    }
 
     std::optional<lv_color_t> noz_color;
     if (s.at_nozzle)
         noz_color = s.color;
     lv_opa_t toolhead_opa = s.is_mounted ? LV_OPA_COVER : LV_OPA_40;
     draw_toolhead(ctx.layer, slot_x, f.toolhead_y, noz_color, f.tool_scale, toolhead_opa);
-
-    // Tool label below direct nozzle
-    if (theme.label_font) {
-        char tool_label[16];
-        int tool = (data->mapped_tool[i] >= 0) ? data->mapped_tool[i] : i;
-        format_tool_badge_label(data, i, tool, tool_label, sizeof(tool_label));
-        lv_color_t text = s.is_mounted ? theme.color_success : theme.color_text;
-        draw_tool_badge(ctx, slot_x, f.toolhead_y + f.tool_scale * 3 + 4, tool_label, text,
-                        toolhead_opa);
-    }
 }
 
 void render_mixed(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
@@ -278,11 +297,13 @@ void render_mixed(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data) {
     }
     paint_box_bands(layer, plan, pal);
 
-    if (f.hub_count > 0)
-        draw_mixed_shared_toolhead(ctx, f);
-    for (int i = 0; i < LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS); i++) {
-        if (!data->slot_is_hub_routed[i])
-            draw_mixed_direct_toolhead(ctx, f, i);
+    for (ToolPass pass : {ToolPass::Glyph, ToolPass::Badge}) {
+        if (f.hub_count > 0)
+            draw_mixed_shared_toolhead(ctx, f, pass);
+        for (int i = 0; i < LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS); i++) {
+            if (!data->slot_is_hub_routed[i])
+                draw_mixed_direct_toolhead(ctx, f, i, pass);
+        }
     }
 }
 
@@ -344,53 +365,16 @@ bool hub_has_filament(const FilamentPathData* data, const LinearHubFrame& f) {
     return false;
 }
 
-// Hub box tint priority: error at hub > buffer fault > buffer warning >
-// loaded-filament tint > plain theme colors.
-void resolve_hub_tint(const RenderCtx& ctx, const LinearHubFrame& f, bool has_filament,
-                      lv_color_t* bg_out, lv_color_t* border_out) {
-    FilamentPathData* data = ctx.data;
-    lv_color_t hub_bg_tinted = f.hub_bg;
-    lv_color_t hub_border_final = f.hub_border;
-    if (f.has_error && f.error_seg == PathSegment::HUB) {
-        // Error at hub — red tint with pulsing error color
-        hub_bg_tinted = ph_blend(f.hub_bg, f.error_color, 0.40f);
-        hub_border_final = f.error_color;
-    } else if (data->buffer_fault_state == 2) {
-        // Fault detected — red tint
-        hub_bg_tinted = ph_blend(f.hub_bg, data->theme.color_error, 0.50f);
-        hub_border_final = data->theme.color_error;
-    } else if (data->buffer_fault_state == 1) {
-        // Approaching fault — yellow/warning tint
-        lv_color_t warning = lv_color_hex(0xFFA500);
-        hub_bg_tinted = ph_blend(f.hub_bg, warning, 0.40f);
-        hub_border_final = warning;
-    } else if (has_filament) {
-        // Healthy — subtle filament color tint (use first loaded slot's color)
-        lv_color_t tint_color = f.active_color;
-        if (data->active_slot < 0) {
-            // No active slot — find first slot loaded to hub for tint
-            for (int i = 0; i < data->slot_count; i++) {
-                if (f.states[i].segment >= PathSegment::HUB) {
-                    tint_color = f.states[i].color;
-                    break;
-                }
-            }
-        }
-        hub_bg_tinted = ph_blend(f.hub_bg, tint_color, 0.33f);
-    }
-    *bg_out = hub_bg_tinted;
-    *border_out = hub_border_final;
-}
-
 // Hub/selector box: state-tinted fill, label, optional gear affordance and
 // the recorded hub hit rect.
 void draw_hub_section(const RenderCtx& ctx, const LinearHubFrame& f) {
     FilamentPathData* data = ctx.data;
     const BaseGeometry& g = ctx.geo;
 
-    // Hub box - tint based on error state, buffer fault state, or filament color
-    lv_color_t hub_bg_tinted, hub_border_final;
-    resolve_hub_tint(ctx, f, hub_has_filament(data, f), &hub_bg_tinted, &hub_border_final);
+    // Hub box - tint based on an error at the hub, or filament color
+    const BoxColors hub_tint = resolve_hub_tint(*data, f, hub_has_filament(data, f));
+    const lv_color_t hub_bg_tinted = hub_tint.bg;
+    const lv_color_t hub_border_final = hub_tint.border;
 
     const char* hub_label = (data->topology == 0) ? "SELECTOR" : "HUB";
 
@@ -599,8 +583,9 @@ void draw_animation_parallel(lv_layer_t* layer, const BaseGeometry& g,
                              const SlotRenderStates& states, const FilamentPathData* data) {
     if (!data->anim.flow_active)
         return;
-    int32_t entry_y = g.y_off + static_cast<int32_t>(g.height * -0.12f);
-    int32_t sensor_y = g.y_off + static_cast<int32_t>(g.height * PARALLEL_SENSOR_Y_RATIO);
+    const ParallelRows rows = parallel_rows(*data, g);
+    int32_t entry_y = rows.entry_y;
+    int32_t sensor_y = rows.sensor_y;
     int32_t sensor_r = data->theme.sensor_radius;
     bool reverse = (data->anim.direction == AnimDirection::UNLOADING);
     int count = LV_MIN(data->slot_count, FilamentPathData::MAX_SLOTS);

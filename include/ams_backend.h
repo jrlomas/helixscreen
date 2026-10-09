@@ -885,6 +885,20 @@ class AmsBackend {
         return false;
     }
 
+    /**
+     * @brief Check if a slot has its own load sensor, between its prep sensor
+     *        and the hub (AFC's per-lane `load`)
+     *
+     * A filament_segment of LANE on such a slot is that sensor's reading. The
+     * path canvas draws a band for it only where this answers true.
+     *
+     * Default implementation returns false (no load sensor).
+     */
+    [[nodiscard]] virtual bool slot_has_load_sensor(int slot_index) const {
+        (void)slot_index;
+        return false;
+    }
+
     // ========================================================================
     // Filament Operations
     // ========================================================================
