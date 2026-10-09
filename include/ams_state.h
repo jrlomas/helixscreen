@@ -2190,7 +2190,7 @@ class AmsState {
     lv_subject_t current_slot_text_{};
     char current_slot_text_buf_[64];
     lv_subject_t current_weight_text_{};
-    char current_weight_text_buf_[16];
+    char current_weight_text_buf_[32];
     lv_subject_t current_has_weight_{};
     lv_subject_t current_color_{};
 

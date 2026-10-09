@@ -1686,7 +1686,7 @@ nlohmann::json MoonrakerClientMock::cfs_box_status_json() const {
         "map": {"T1A": "T1A", "T1B": "T1B", "T1C": "T1C", "T1D": "T1D"},
         "T1": {"state": "connect", "filament": "None",
                "vender": ["Creality", "none", "none", "none"],
-               "remain_len": ["1000000", "-1", "-1", "-1"],
+               "remain_len": ["212", "-1", "-1", "-1"],
                "color_value": ["0E8E4F", "-1", "-1", "-1"],
                "material_type": ["000003", "-1", "-1", "-1"]}
     })");

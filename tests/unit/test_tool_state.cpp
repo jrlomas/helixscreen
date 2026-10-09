@@ -1755,7 +1755,6 @@ TEST_CASE_METHOD(
     ams.sync_from_backend();
     helix::ui::UpdateQueueTestAccess::drain_all(helix::ui::UpdateQueue::instance());
     REQUIRE(lv_subject_get_int(ams.get_slot_fill_subject(0)) != 75);
-    REQUIRE(std::string(lv_subject_get_string(ams.get_slot_remaining_subject(0))).empty());
 
     ts.assign_spool(0, 42, "Red PLA", 750.0f, 1000.0f);
     ams.sync_from_backend();
@@ -1767,7 +1766,6 @@ TEST_CASE_METHOD(
     // Read with no drain in between, so these are the pass's own writes and not
     // an update the backend's slot event queued.
     CHECK(lv_subject_get_int(ams.get_slot_fill_subject(0)) == 75);
-    CHECK(std::string(lv_subject_get_string(ams.get_slot_remaining_subject(0))) == "750g");
 
     ams.set_backend(nullptr);
     ams.deinit_subjects();

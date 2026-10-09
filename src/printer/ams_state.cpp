@@ -1239,9 +1239,9 @@ bool AmsState::write_slot_subjects(AmsBackend& backend, int slot_index, const Sl
         changed = true;
     }
 
-    // Remaining filament string: length when measured, weight as the fallback,
-    // "" when neither.
-    std::string remaining = slot.remaining_display();
+    // Measured remaining length, "" when the backend publishes none. The slot
+    // shows it under its material; weight has its own surfaces.
+    std::string remaining = slot.remaining_length_display();
     if (strcmp(lv_subject_get_string(&slot_remaining_[slot_index]), remaining.c_str()) != 0) {
         lv_subject_copy_string(&slot_remaining_[slot_index], remaining.c_str());
     }
@@ -1891,12 +1891,11 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
             set_current_slot_header(*loaded_backend, slot_index);
         }
 
-        // Show remaining weight if available (from Spoolman or backend)
-        if (slot_info.total_weight_g > 0.0f && slot_info.remaining_weight_g >= 0.0f) {
-            char wt[32];
-            snprintf(wt, sizeof(wt), "%.0fg", slot_info.remaining_weight_g);
-            if (strcmp(lv_subject_get_string(&current_weight_text_), wt) != 0) {
-                lv_subject_copy_string(&current_weight_text_, wt);
+        // Remaining weight (Spoolman or backend) and measured length, either or both
+        const std::string remaining = slot_info.remaining_summary();
+        if (!remaining.empty()) {
+            if (strcmp(lv_subject_get_string(&current_weight_text_), remaining.c_str()) != 0) {
+                lv_subject_copy_string(&current_weight_text_, remaining.c_str());
             }
             lv_subject_set_int(&current_has_weight_, 1);
         } else {

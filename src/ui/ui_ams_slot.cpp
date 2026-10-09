@@ -69,6 +69,7 @@ struct AmsSlotData {
     ObserverGuard status_observer;     ///< Per-slot status -> badge color
     ObserverGuard lane_state_observer; ///< Per-slot lane_state -> label text + ghost
     ObserverGuard material_observer;   ///< Per-slot material type label (static subject)
+    ObserverGuard remaining_observer;  ///< Per-slot remaining length (primary backend)
     ObserverGuard current_slot_observer;
     ObserverGuard filament_loaded_observer;
     ObserverGuard active_loaded_observer; ///< Per-slot active-loaded (single highlight source)
@@ -102,6 +103,9 @@ struct AmsSlotData {
     lv_obj_t* container = nullptr;       // The ams_slot widget itself
     lv_obj_t* lane_humidity = nullptr;   // Droplet + value row, under a per-lane lid
     lv_obj_t* lane_humidity_text = nullptr; // The row's value
+    lv_obj_t* lane_temp_icon = nullptr;     // Thermometer, beside the humidity
+    lv_obj_t* lane_temp_text = nullptr;
+    lv_obj_t* lane_remaining = nullptr; // Measured remaining length, under the material
     bool show_lane_humidity = false;
 
     // Pulsing state - when true, highlight updates are skipped to preserve animation
@@ -155,6 +159,7 @@ static void unregister_slot_data(lv_obj_t* obj) {
             data->status_observer.reset();
             data->lane_state_observer.reset();
             data->material_observer.reset();
+            data->remaining_observer.reset();
             data->current_slot_observer.reset();
             data->filament_loaded_observer.reset();
             data->active_loaded_observer.reset();
@@ -185,6 +190,7 @@ static void cleanup_all_slot_data() {
         data->status_observer.release();
         data->lane_state_observer.release();
         data->material_observer.release();
+        data->remaining_observer.release();
         data->current_slot_observer.release();
         data->filament_loaded_observer.release();
         data->active_loaded_observer.release();
@@ -226,8 +232,22 @@ static void apply_material_label(AmsSlotData* data, const char* material) {
     lv_label_set_text(data->material_label, text);
 }
 
-/// The lane's own humidity reading, or "--" while its sensor has none. Read
-/// from the system info, which is where backends publish per-lane climate.
+/// The measured remaining length ("212m"), hidden while the lane has none.
+static void apply_lane_remaining(AmsSlotData* data, const char* text) {
+    if (!data || !data->lane_remaining)
+        return;
+    const bool has = text && text[0] != '\0';
+    // DECLARATIVE_OK: per-slot subject whose index arrives after view creation
+    lv_label_set_text(data->lane_remaining, has ? text : "");
+    if (has)
+        lv_obj_remove_flag(data->lane_remaining, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_add_flag(data->lane_remaining, LV_OBJ_FLAG_HIDDEN);
+}
+
+/// The lane's own climate: humidity, or "--" while its sensor has none, and
+/// the temperature beside it when the lane reports one. Read from the system
+/// info, which is where backends publish per-lane climate.
 static void apply_lane_humidity(AmsSlotData* data, AmsBackend* backend) {
     if (!data->show_lane_humidity || !data->lane_humidity_text || !backend)
         return;
@@ -571,6 +591,18 @@ static void setup_slot_observers(AmsSlotData* data) {
             data->material_lifetime);
     }
 
+    // Only the primary backend publishes the per-slot remaining subject.
+    lv_subject_t* remaining_subject =
+        backend_idx == 0 ? state.get_slot_remaining_subject(data->slot_index) : nullptr;
+    if (remaining_subject) {
+        data->remaining_observer = helix::ui::observe<const char*>(
+            remaining_subject, obj,
+            [](lv_obj_t* o, const char* text) { apply_lane_remaining(get_slot_data(o), text); },
+            state.get_subjects_lifetime());
+    } else {
+        data->remaining_observer.reset();
+    }
+
     if (current_slot_subject) {
         data->current_slot_observer = observe<int>(
             current_slot_subject, obj,
@@ -674,6 +706,9 @@ static void setup_slot_observers(AmsSlotData* data) {
         SlotInfo slot = backend->get_slot_info(data->slot_index);
         apply_tool_badge(data, slot.mapped_tool, slot.tool_mapping_override);
     }
+    apply_lane_remaining(data, remaining_subject && data->remaining_observer
+                                   ? lv_subject_get_string(remaining_subject)
+                                   : "");
 
     spdlog::trace("[AmsSlot] Created observers for slot {}", data->slot_index);
 }
@@ -718,6 +753,9 @@ static void* ams_slot_xml_create(lv_xml_parser_state_t* state, const char** attr
     data->tool_badge = helix::ui::find_required(obj, "tool_badge_label", "AmsSlot");
     data->lane_humidity = lv_obj_find_by_name(obj, "lane_humidity");
     data->lane_humidity_text = lv_obj_find_by_name(obj, "lane_humidity_text");
+    data->lane_temp_icon = lv_obj_find_by_name(obj, "lane_temp_icon");
+    data->lane_temp_text = lv_obj_find_by_name(obj, "lane_temp_text");
+    data->lane_remaining = lv_obj_find_by_name(obj, "lane_remaining");
 
     // Validate required children were found
     if (!data->spool_container || !data->lane_spool) {

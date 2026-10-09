@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -1227,24 +1228,22 @@ struct SlotInfo {
     }
 
     /**
-     * @brief The slot's remaining-filament display string: length when it is
-     *        a measurement, weight when only the weight is known, "" when
+     * @brief Everything known about what is left on the spool: weight when a
+     *        total is known, then measured length ("750g · 212m"), "" when
      *        neither.
-     *
-     * The length-then-weight fallback lives here so every push site renders
-     * the same string: the length helper already hides the CFS sentinels
-     * (#1387), and the weight carries the display when it yields nothing.
-     * A weight <= 0 is the "unknown" default, not a measurement.
      */
-    [[nodiscard]] std::string remaining_display() const {
-        std::string length = remaining_length_display();
-        if (!length.empty()) {
-            return length;
+    [[nodiscard]] std::string remaining_summary() const {
+        std::string weight;
+        if (total_weight_g > 0.0f && remaining_weight_g >= 0.0f) {
+            char buf[24];
+            snprintf(buf, sizeof(buf), "%.0fg", remaining_weight_g);
+            weight = buf;
         }
-        if (remaining_weight_g > 0) {
-            return std::to_string(static_cast<int>(remaining_weight_g)) + "g";
+        const std::string length = remaining_length_display();
+        if (weight.empty() || length.empty()) {
+            return weight.empty() ? length : weight;
         }
-        return {};
+        return weight + " \xC2\xB7 " + length;
     }
 };
 
