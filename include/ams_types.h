@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -801,6 +802,11 @@ struct EnvironmentData {
     float temperature_c = 0.0f; ///< Temperature in Celsius
     float humidity_pct = 0.0f;  ///< Relative humidity percentage (0-100)
     bool has_humidity = false;  ///< true when backend provides humidity sensor
+
+    /// A reading with no temperature source carries 0 (humidity-only sensors).
+    [[nodiscard]] bool has_temperature() const {
+        return temperature_c > 0.0f;
+    }
 };
 
 /// Error targeting level for multi-level error reporting
@@ -938,9 +944,18 @@ struct BufferHealth {
         return std::clamp(v, 0, 100);
     }
 
+    /// danger_value() from which the fault is close enough to warn about.
+    static constexpr int kWarningDangerPct = 75;
+
     /// Whether the danger level warrants a warning indicator
     bool is_warning() const {
-        return danger_value() > 75;
+        return danger_value() > kWarningDangerPct;
+    }
+
+    /// Whether distance_to_fault is a live countdown. Negative means the fault
+    /// timer is stopped; above the threshold it has just reset.
+    bool is_tracking() const {
+        return distance_to_fault >= 0 && distance_to_fault <= fault_threshold();
     }
 };
 
@@ -1008,6 +1023,21 @@ struct SlotInfo {
 
     // Error state
     std::optional<SlotError> error; ///< Per-slot error state (nullopt = no error)
+
+    /// Whether the lane needs attention: a carried error, or a lane its unit
+    /// reports jammed (BLOCKED) without one.
+    [[nodiscard]] bool has_fault() const {
+        return status == SlotStatus::BLOCKED || error.has_value();
+    }
+
+    /// Severity to draw has_fault() in. A jam stops the lane, so it is an error
+    /// whatever the carried error says.
+    [[nodiscard]] SlotError::Severity fault_severity() const {
+        if (status == SlotStatus::BLOCKED) {
+            return SlotError::ERROR;
+        }
+        return error.has_value() ? error->severity : SlotError::INFO;
+    }
 
     // Length-based remaining filament (CFS measuring wheel, etc.)
     float remaining_length_m = 0.0f; ///< Remaining filament in meters (0 = unknown)
@@ -1203,24 +1233,22 @@ struct SlotInfo {
     }
 
     /**
-     * @brief The slot's remaining-filament display string: length when it is
-     *        a measurement, weight when only the weight is known, "" when
+     * @brief Everything known about what is left on the spool: weight when a
+     *        total is known, then measured length ("750g · 212m"), "" when
      *        neither.
-     *
-     * The length-then-weight fallback lives here so every push site renders
-     * the same string: the length helper already hides the CFS sentinels
-     * (#1387), and the weight carries the display when it yields nothing.
-     * A weight <= 0 is the "unknown" default, not a measurement.
      */
-    [[nodiscard]] std::string remaining_display() const {
-        std::string length = remaining_length_display();
-        if (!length.empty()) {
-            return length;
+    [[nodiscard]] std::string remaining_summary() const {
+        std::string weight;
+        if (total_weight_g > 0.0f && remaining_weight_g >= 0.0f) {
+            char buf[24];
+            snprintf(buf, sizeof(buf), "%.0fg", remaining_weight_g);
+            weight = buf;
         }
-        if (remaining_weight_g > 0) {
-            return std::to_string(static_cast<int>(remaining_weight_g)) + "g";
+        const std::string length = remaining_length_display();
+        if (weight.empty() || length.empty()) {
+            return weight.empty() ? length : weight;
         }
-        return {};
+        return weight + " \xC2\xB7 " + length;
     }
 };
 
@@ -1240,7 +1268,10 @@ struct AmsUnit {
     std::vector<SlotInfo> slots; ///< Slot information
 
     // Unit-level status
-    bool connected = false; ///< Unit communication status
+    /// False only when the backend reports the unit offline or switched off.
+    /// A backend that publishes no connection state leaves it true, so a unit
+    /// never reads disconnected before its first report.
+    bool connected = true;
     /// An address no unit answers from, below one that does. Firmware that
     /// numbers bays by box address keeps the gap's indices reserved, so this
     /// stands in for the missing box: its bays are EMPTY, nothing may be sent
@@ -1279,7 +1310,7 @@ struct AmsUnit {
      */
     [[nodiscard]] bool has_any_error() const {
         return std::any_of(slots.begin(), slots.end(),
-                           [](const SlotInfo& s) { return s.error.has_value(); });
+                           [](const SlotInfo& s) { return s.has_fault(); });
     }
 
     /**

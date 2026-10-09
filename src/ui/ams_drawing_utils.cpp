@@ -56,8 +56,8 @@ lv_color_t severity_color(helix::SlotError::Severity severity) {
 helix::SlotError::Severity worst_unit_severity(const helix::AmsUnit& unit) {
     helix::SlotError::Severity worst = helix::SlotError::INFO;
     for (const auto& slot : unit.slots) {
-        if (slot.error.has_value() && slot.error->severity > worst) {
-            worst = slot.error->severity;
+        if (slot.has_fault() && slot.fault_severity() > worst) {
+            worst = slot.fault_severity();
         }
     }
     return worst;

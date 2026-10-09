@@ -410,7 +410,7 @@ TEST_CASE_METHOD(PublishedToolChanger, "a meter tick on a tool changer reaches t
 
     CHECK(lv_subject_get_int(ams.get_slot_fill_subject(0)) == metered.display_fill_pct());
     CHECK(std::string(lv_subject_get_string(ams.get_slot_remaining_subject(0))) ==
-          metered.remaining_display());
+          metered.remaining_length_display());
     char loaded_weight[32];
     snprintf(loaded_weight, sizeof(loaded_weight), "%.0fg", metered.remaining_weight_g);
     CHECK(std::string(lv_subject_get_string(ams.get_current_weight_text_subject())) ==

@@ -373,6 +373,12 @@ void AmsState::init_subjects(bool register_xml) {
         subjects_.register_subject(&unit_absent_[i], register_xml ? name_buf : nullptr);
         if (register_xml)
             helix::xml::register_subject_in_current_scope(name_buf, &unit_absent_[i]);
+
+        lv_subject_init_int(&unit_disconnected_[i], 0);
+        snprintf(name_buf, sizeof(name_buf), "ams_unit_%d_disconnected", i);
+        subjects_.register_subject(&unit_disconnected_[i], register_xml ? name_buf : nullptr);
+        if (register_xml)
+            helix::xml::register_subject_in_current_scope(name_buf, &unit_disconnected_[i]);
     }
 
     // Per-unit environment indicator display subjects (formatted text for XML binding)
@@ -425,6 +431,19 @@ void AmsState::init_subjects(bool register_xml) {
         if (register_xml)
             helix::xml::register_subject_in_current_scope(name_buf, &env_ind_drying_text_[i]);
     }
+
+    lv_subject_init_int(&viewed_unit_disconnected_, 0);
+    subjects_.register_subject(&viewed_unit_disconnected_,
+                               register_xml ? "ams_viewed_unit_disconnected" : nullptr);
+    if (register_xml)
+        helix::xml::register_subject_in_current_scope("ams_viewed_unit_disconnected",
+                                                      &viewed_unit_disconnected_);
+    lv_subject_init_int(&all_units_disconnected_, 0);
+    subjects_.register_subject(&all_units_disconnected_,
+                               register_xml ? "ams_all_units_disconnected" : nullptr);
+    if (register_xml)
+        helix::xml::register_subject_in_current_scope("ams_all_units_disconnected",
+                                                      &all_units_disconnected_);
 
     // Always-off placeholders for units past MAX_UNITS. A rig with more units
     // than we allocate subjects for still gets a card per unit; its environment
@@ -718,7 +737,13 @@ void AmsState::register_xml_subject_names() {
         helix::xml::register_subject_in_current_scope(name_buf, &unit_humidity_[i]);
         snprintf(name_buf, sizeof(name_buf), "ams_unit_%d_absent", i);
         helix::xml::register_subject_in_current_scope(name_buf, &unit_absent_[i]);
+        snprintf(name_buf, sizeof(name_buf), "ams_unit_%d_disconnected", i);
+        helix::xml::register_subject_in_current_scope(name_buf, &unit_disconnected_[i]);
     }
+    helix::xml::register_subject_in_current_scope("ams_viewed_unit_disconnected",
+                                                  &viewed_unit_disconnected_);
+    helix::xml::register_subject_in_current_scope("ams_all_units_disconnected",
+                                                  &all_units_disconnected_);
 
     // Per-unit environment indicator display subjects
     for (int i = 0; i < MAX_UNITS; ++i) {
@@ -977,6 +1002,15 @@ AmsState::EnvIndicatorSubjectNames AmsState::env_indicator_subject_names(int uni
     names.drying_active = expand("drying_active");
     names.drying_text = expand("drying_text");
     return names;
+}
+
+std::string AmsState::unit_disconnected_subject_name(int unit_index) {
+    if (unit_index < 0 || unit_index >= MAX_UNITS) {
+        return ENV_IND_OFF_FLAG_SUBJECT;
+    }
+    char buf[40];
+    snprintf(buf, sizeof(buf), "ams_unit_%d_disconnected", unit_index);
+    return buf;
 }
 
 std::string AmsState::unit_absent_subject_name(int unit_index) {

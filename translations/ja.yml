@@ -842,6 +842,7 @@ translations:
   Deploy: 展開
   Describe the issue (optional): 問題の詳細（任意）
   Detailed: 詳細
+  Details: '詳細'
   Detect automatically: '自動検出'
   'Detect filament tangles': 'フィラメントの絡みを検出'
   Detecting plate...: プレートを検出中...
@@ -1859,6 +1860,7 @@ translations:
   'Moonraker: ': 'Moonraker: '
   More points = more accurate, but takes longer.: ポイント数が多いほど精度が上がりますが、時間がかかります。
   Motion: 動作
+  'Motion sensor stuck: filament is still at the feeder. Resume to feed it.': 'モーションセンサーが固着: フィラメントはまだフィーダーにあります。再開すると送り込みます。'
   Motor controller error: モーターコントローラーのエラー
   Motor parameter setup failed: モーターパラメーターの設定に失敗しました
   Motor speeds and acceleration: 'モーター速度と加速度'
@@ -2192,6 +2194,7 @@ translations:
   Peak Freq: ピーク周波数
   'Peak:': 'ピーク:'
   Peaks {} Hz: "ピーク {} Hz"
+  Pending spool: '保留中のスプール'
   Performance: パフォーマンス
   Permission denied. Check printer configuration.: 権限がありません。プリンターの設定を確認してください。
   Phomemo (Bluetooth): Phomemo (Bluetooth)
@@ -3319,6 +3322,7 @@ translations:
   Tool offsets (mm): ツールオフセット (mm)
   Tool offsets saved: ツールオフセットを保存しました
   Tool swap: ツール交換
+  Toolchange purge: 'ツール交換パージ'
   Toolhead: 'ツールヘッド'
   Toolhead LED: 'ツールヘッドLED'
   Toolhead Sensor: ツールヘッドセンサー
@@ -3734,6 +3738,7 @@ translations:
   '{} filament': 'フィラメント {}'
   '{} filament sensors available': '{} 個のフィラメントセンサーが利用可能です'
   '{} filament • {}': 'フィラメント {} • {}'
+  '{} firmware': '{} ファームウェア'
   '{} heater turned off': '{} ヒーターをオフにしました'
   '{} is asking to connect to this printer.': '{} がこのプリンターへの接続を求めています。'
   '{} is blocked — manual intervention required': '{} がブロックされています — 手動での対応が必要です'
@@ -3757,6 +3762,7 @@ translations:
   '{} new hardware available': '{} 個の新しいハードウェアが利用可能です'
   '{} new plugins available. Enable them in Settings > Plugins.': '{} 個の新しいプラグインが利用可能です。設定 > プラグインで有効化してください。'
   '{} preset{}': '{} 個のプリセット{}'
+  '{} serial': '{} シリアル番号'
   '{} set to {}': '{} を {} に設定しました'
   '{} set to {} {}': '{} を {} {} に設定しました'
   '{} slots': '{} スロット'

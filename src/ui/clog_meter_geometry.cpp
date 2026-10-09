@@ -3,6 +3,7 @@
 
 #include "clog_meter_geometry.h"
 
+#include "ams_types.h"
 #include "theme_manager.h"
 
 #include <algorithm>
@@ -72,6 +73,14 @@ ClogMeterStatus clog_meter_status(int mode, int value, int warning, int danger_p
         return ClogMeterStatus::Warning;
     }
     return ClogMeterStatus::Ok;
+}
+
+ClogMeterStatus buffer_fault_status(const BufferHealth& health) {
+    if (!health.fault_detection_enabled || !health.is_tracking()) {
+        return ClogMeterStatus::Ok;
+    }
+    return clog_meter_status(static_cast<int>(ClogMeterMode::Buffer), health.danger_value(),
+                             health.is_warning() ? 1 : 0, BufferHealth::kWarningDangerPct);
 }
 
 ClogMeterStatus pressure_status_of_bias(float bias) {

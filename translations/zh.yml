@@ -840,6 +840,7 @@ translations:
   Deploy: 部署
   Describe the issue (optional): 描述问题（可选）
   Detailed: 详细
+  Details: '详情'
   Detect automatically: '自动检测'
   'Detect filament tangles': '检测耗材打结'
   Detecting plate...: 正在检测热床板...
@@ -1853,6 +1854,7 @@ translations:
   'Moonraker: ': 'Moonraker: '
   More points = more accurate, but takes longer.: 点数越多越精确，但耗时更长。
   Motion: 运动
+  'Motion sensor stuck: filament is still at the feeder. Resume to feed it.': '运动传感器卡住：耗材仍在送料器中。继续即可送入。'
   Motor controller error: 电机控制器错误
   Motor parameter setup failed: 电机参数设置失败
   Motor speeds and acceleration: '电机速度与加速度'
@@ -2185,6 +2187,7 @@ translations:
   Peak Freq: 峰值频率
   'Peak:': 峰值：
   Peaks {} Hz: "峰值 {} Hz"
+  Pending spool: '待分配料盘'
   Performance: 性能
   Permission denied. Check printer configuration.: 权限被拒绝。请检查打印机配置。
   Phomemo (Bluetooth): Phomemo（蓝牙）
@@ -3310,6 +3313,7 @@ translations:
   Tool offsets (mm): 工具偏移 (mm)
   Tool offsets saved: 工具偏移已保存
   Tool swap: 工具切换
+  Toolchange purge: '换刀排料'
   Toolhead: '工具头'
   Toolhead LED: '工具头 LED'
   Toolhead Sensor: 工具头传感器
@@ -3724,6 +3728,7 @@ translations:
   '{} filament': '耗材 {}'
   '{} filament sensors available': '{} 个耗材传感器可用'
   '{} filament • {}': '耗材 {} • {}'
+  '{} firmware': '{} 固件'
   '{} heater turned off': '{} 加热器已关闭'
   '{} is asking to connect to this printer.': '{} 请求连接到此打印机。'
   '{} is blocked — manual intervention required': '{} 被阻塞 — 需要手动干预'
@@ -3747,6 +3752,7 @@ translations:
   '{} new hardware available': '{} 个新硬件可用'
   '{} new plugins available. Enable them in Settings > Plugins.': '{} 个新插件可用。请在设置 > 插件中启用。'
   '{} preset{}': '{} 个预设{}'
+  '{} serial': '{} 序列号'
   '{} set to {}': '{} 已设为 {}'
   '{} set to {} {}': '{} 已设为 {} {}'
   '{} slots': '{} 个槽位'

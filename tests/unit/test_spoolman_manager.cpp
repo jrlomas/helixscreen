@@ -1252,7 +1252,6 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
     REQUIRE(backend->get_slot_info(0).remaining_weight_g == 700.0F);
 
     CHECK(lv_subject_get_int(ams.get_slot_fill_subject(0)) == 70);
-    CHECK(std::string(lv_subject_get_string(ams.get_slot_remaining_subject(0))) == "700g");
 }
 
 TEST_CASE_METHOD(SpoolmanLaneFixture,
@@ -1316,10 +1315,10 @@ TEST_CASE_METHOD(SpoolmanLaneFixture,
         server_spool(1).remaining_weight_g = remaining;
         poll();
         // No full sync runs in this loop, and only update_slot writes the
-        // remaining subject outside one, so each poll reached update_slot.
+        // fill subject outside one, so each poll reached update_slot.
         REQUIRE(backend->get_slot_info(0).remaining_weight_g == static_cast<float>(remaining));
-        REQUIRE(std::string(lv_subject_get_string(ams.get_slot_remaining_subject(0))) ==
-                std::to_string(static_cast<int>(remaining)) + "g");
+        REQUIRE(lv_subject_get_int(ams.get_slot_fill_subject(0)) ==
+                backend->get_slot_info(0).display_fill_pct());
     }
 
     CHECK(client.call_count("server.database.post_item") == saves_after_link);

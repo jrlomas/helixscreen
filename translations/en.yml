@@ -878,6 +878,7 @@ translations:
   Deploy: Deploy
   Describe the issue (optional): Describe the issue (optional)
   Detailed: Detailed
+  Details: Details
   Detect automatically: Detect automatically
   'Detect filament tangles': 'Detect filament tangles'
   'Detecting plate...': 'Detecting plate...'
@@ -1927,6 +1928,7 @@ translations:
   More points = more accurate, but takes longer.: More points = more accurate, but
     takes longer.
   Motion: Motion
+  'Motion sensor stuck: filament is still at the feeder. Resume to feed it.': 'Motion sensor stuck: filament is still at the feeder. Resume to feed it.'
   Motor controller error: Motor controller error
   Motor parameter setup failed: Motor parameter setup failed
   Motor speeds and acceleration: Motor speeds and acceleration
@@ -2265,6 +2267,7 @@ translations:
   Peak Freq: Peak Freq
   'Peak:': 'Peak:'
   Peaks {} Hz: Peaks {} Hz
+  Pending spool: Pending spool
   Performance: Performance
   Permission denied. Check printer configuration.: Permission denied. Check printer configuration.
   Phomemo (Bluetooth): Phomemo (Bluetooth)
@@ -3450,6 +3453,7 @@ translations:
   Tool offsets (mm): Tool offsets (mm)
   Tool offsets saved: Tool offsets saved
   Tool swap: Tool swap
+  Toolchange purge: Toolchange purge
   Toolhead: Toolhead
   Toolhead LED: Toolhead LED
   Toolhead Sensor: Toolhead Sensor
@@ -3872,6 +3876,7 @@ translations:
   '{} filament': '{} filament'
   '{} filament sensors available': '{} filament sensors available'
   '{} filament • {}': '{} filament • {}'
+  '{} firmware': '{} firmware'
   '{} heater turned off': '{} heater turned off'
   '{} is asking to connect to this printer.': '{} is asking to connect to this printer.'
   '{} is blocked — manual intervention required': '{} is blocked — manual intervention required'
@@ -3896,6 +3901,7 @@ translations:
   '{} new hardware available': '{} new hardware available'
   '{} new plugins available. Enable them in Settings > Plugins.': '{} new plugins available. Enable them in Settings > Plugins.'
   '{} preset{}': '{} preset{}'
+  '{} serial': '{} serial'
   '{} set to {}': '{} set to {}'
   '{} set to {} {}': '{} set to {} {}'
   '{} slots': '{} slots'

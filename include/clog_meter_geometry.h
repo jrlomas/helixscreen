@@ -7,6 +7,10 @@
 
 #include <cstdint>
 
+namespace helix {
+struct BufferHealth;
+}
+
 namespace helix::ui {
 
 /// The presentations `clog_meter_mode` selects between. Populated by
@@ -65,6 +69,11 @@ enum class ClogMeterStatus : int {
 /// tripped yet, which is the whole point of showing a threshold at all.
 /// `value` is compared by magnitude so Flowguard's tangle side counts.
 ClogMeterStatus clog_meter_status(int mode, int value, int warning, int danger_pct);
+
+/// Severity of an AFC buffer's fault countdown, the decision the clog meter
+/// and the path canvas's buffer box both draw. Ok while fault detection is off
+/// or the countdown is not tracking.
+ClogMeterStatus buffer_fault_status(const BufferHealth& health);
 
 /// What the one-line note under the clog meter says. Ordered by precedence.
 enum class ClogNote : int {

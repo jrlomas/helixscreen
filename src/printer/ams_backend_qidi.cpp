@@ -109,7 +109,9 @@ AmsUnit make_qidi_unit(int unit_index) {
     unit.display_name = unit.name;
     unit.slot_count = QIDI_SLOTS_PER_BOX;
     unit.first_slot_global_index = unit_index * QIDI_SLOTS_PER_BOX;
-    unit.connected = false;
+    // Connected until enable_box says otherwise: a box that has not reported
+    // yet must not read as switched off.
+    unit.connected = true;
     unit.topology = PathTopology::HUB;
     unit.hub_tool_label = 0; // every box feeds the one extruder
     // The box publishes no toolhead filament sensor, and none is subscribed.

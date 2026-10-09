@@ -916,6 +916,7 @@ translations:
   Deploy: Déployer
   Describe the issue (optional): Décrivez le problème (optionnel)
   Detailed: Détaillé
+  Details: 'Détails'
   Detect automatically: 'Détecter automatiquement'
   'Detect filament tangles': 'Détecter les nœuds de filament'
   Detecting plate...: Détection du plateau...
@@ -2001,6 +2002,7 @@ translations:
   More points = more accurate, but takes longer.: Plus de points = plus précis, mais
     prend plus de temps.
   Motion: Mouvement
+  'Motion sensor stuck: filament is still at the feeder. Resume to feed it.': 'Capteur de mouvement bloqué : le filament est toujours dans l''alimentateur. Reprenez pour l''alimenter.'
   Motor controller error: Erreur du contrôleur de moteur
   Motor parameter setup failed: Échec de la configuration des paramètres moteur
   Motor speeds and acceleration: 'Vitesses moteur et accélération'
@@ -2347,6 +2349,7 @@ translations:
   Peak Freq: Fréq. pic
   'Peak:': 'Pic :'
   Peaks {} Hz: "Pics {} Hz"
+  Pending spool: 'Bobine en attente'
   Performance: Performance
   Permission denied. Check printer configuration.: Permission refusée. Vérifiez la configuration de l'imprimante.
   Phomemo (Bluetooth): Phomemo (Bluetooth)
@@ -3590,6 +3593,7 @@ translations:
   Tool offsets (mm): Offsets d'outil (mm)
   Tool offsets saved: Offsets d'outil enregistrés
   Tool swap: Changement d'outil
+  Toolchange purge: 'Purge au changement d''outil'
   Toolhead: 'Tête d''outil'
   Toolhead LED: 'LED de la tête d''outil'
   Toolhead Sensor: Capteur de tête d'outil
@@ -4026,6 +4030,7 @@ translations:
   '{} filament': '{} de filament'
   '{} filament sensors available': '{} capteurs de filament disponibles'
   '{} filament • {}': '{} de filament • {}'
+  '{} firmware': 'Firmware {}'
   '{} heater turned off': Chauffage {} désactivé
   '{} is asking to connect to this printer.': '{} demande à se connecter à cette imprimante.'
   '{} is blocked — manual intervention required': '{} : blocage — intervention manuelle requise'
@@ -4051,6 +4056,7 @@ translations:
   '{} new hardware available': '{} nouveau matériel disponible'
   '{} new plugins available. Enable them in Settings > Plugins.': '{} nouveaux plugins disponibles. Activez-les dans Paramètres > Plugins.'
   '{} preset{}': '{} préréglage{}'
+  '{} serial': 'N° de série {}'
   '{} set to {}': '{} réglé sur {}'
   '{} set to {} {}': '{} réglé sur {} {}'
   '{} slots': '{} slots'

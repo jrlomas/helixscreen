@@ -819,6 +819,7 @@
   <translation tag="Deploy" zh="部署"/>
   <translation tag="Describe the issue (optional)" zh="描述问题（可选）"/>
   <translation tag="Detailed" zh="详细"/>
+  <translation tag="Details" zh="详情"/>
   <translation tag="Detect automatically" zh="自动检测"/>
   <translation tag="Detect filament tangles" zh="检测耗材打结"/>
   <translation tag="Detecting plate..." zh="正在检测热床板..."/>
@@ -1793,6 +1794,7 @@
   <translation tag="Moonraker: " zh="Moonraker: "/>
   <translation tag="More points = more accurate, but takes longer." zh="点数越多越精确，但耗时更长。"/>
   <translation tag="Motion" zh="运动"/>
+  <translation tag="Motion sensor stuck: filament is still at the feeder. Resume to feed it." zh="运动传感器卡住：耗材仍在送料器中。继续即可送入。"/>
   <translation tag="Motor controller error" zh="电机控制器错误"/>
   <translation tag="Motor parameter setup failed" zh="电机参数设置失败"/>
   <translation tag="Motor speeds and acceleration" zh="电机速度与加速度"/>
@@ -2112,6 +2114,7 @@
   <translation tag="Peak Freq" zh="峰值频率"/>
   <translation tag="Peak:" zh="峰值："/>
   <translation tag="Peaks {} Hz" zh="峰值 {} Hz"/>
+  <translation tag="Pending spool" zh="待分配料盘"/>
   <translation tag="Performance" zh="性能"/>
   <translation tag="Permission denied. Check printer configuration." zh="权限被拒绝。请检查打印机配置。"/>
   <translation tag="Phomemo (Bluetooth)" zh="Phomemo（蓝牙）"/>
@@ -3162,6 +3165,7 @@
   <translation tag="Tool offsets (mm)" zh="工具偏移 (mm)"/>
   <translation tag="Tool offsets saved" zh="工具偏移已保存"/>
   <translation tag="Tool swap" zh="工具切换"/>
+  <translation tag="Toolchange purge" zh="换刀排料"/>
   <translation tag="Toolhead" zh="工具头"/>
   <translation tag="Toolhead LED" zh="工具头 LED"/>
   <translation tag="Toolhead Sensor" zh="工具头传感器"/>
@@ -3563,6 +3567,7 @@
   <translation tag="{} filament" zh="耗材 {}"/>
   <translation tag="{} filament sensors available" zh="{} 个耗材传感器可用"/>
   <translation tag="{} filament • {}" zh="耗材 {} • {}"/>
+  <translation tag="{} firmware" zh="{} 固件"/>
   <translation tag="{} heater turned off" zh="{} 加热器已关闭"/>
   <translation tag="{} is asking to connect to this printer." zh="{} 请求连接到此打印机。"/>
   <translation tag="{} is blocked — manual intervention required" zh="{} 被阻塞 — 需要手动干预"/>
@@ -3586,6 +3591,7 @@
   <translation tag="{} new hardware available" zh="{} 个新硬件可用"/>
   <translation tag="{} new plugins available. Enable them in Settings &gt; Plugins." zh="{} 个新插件可用。请在设置 &gt; 插件中启用。"/>
   <translation tag="{} preset{}" zh="{} 个预设{}"/>
+  <translation tag="{} serial" zh="{} 序列号"/>
   <translation tag="{} set to {}" zh="{} 已设为 {}"/>
   <translation tag="{} set to {} {}" zh="{} 已设为 {} {}"/>
   <translation tag="{} slots" zh="{} 个槽位"/>

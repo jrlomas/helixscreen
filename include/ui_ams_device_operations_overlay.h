@@ -34,6 +34,17 @@ class AmsBackend;
 
 namespace helix::ui {
 
+/// One read-only fact about the filament system, already translated.
+struct DeviceDetailRow {
+    std::string label;
+    std::string value;
+};
+
+/// The facts a backend publishes beyond its controls: each unit's firmware and
+/// serial, the toolchange purge volume, the Spoolman mode and a pending spool.
+/// A row appears only when its value is published.
+std::vector<DeviceDetailRow> ams_device_detail_rows(const AmsSystemInfo& info);
+
 /**
  * @class AmsDeviceOperationsOverlay
  * @brief Progressive disclosure overlay for AMS device operations
@@ -217,6 +228,11 @@ class AmsDeviceOperationsOverlay : public OverlayBase {
     /// AmsBackend::can_cancel_operation() on refresh and on every AMS action
     /// change, since what the backend can cancel follows what it is running.
     lv_subject_t can_abort_subject_{};
+
+    /// ams_device_detail_rows() as "Label: value" lines, "" when there are none.
+    lv_subject_t details_subject_{};
+    char details_buf_[512] = {};
+    lv_subject_t has_details_subject_{}; ///< 1 when details_subject_ is non-empty
 
     /// AMS action observer that keeps can_abort_subject_ current while the
     /// overlay exists.

@@ -819,6 +819,7 @@
   <translation tag="Deploy" en="Deploy"/>
   <translation tag="Describe the issue (optional)" en="Describe the issue (optional)"/>
   <translation tag="Detailed" en="Detailed"/>
+  <translation tag="Details" en="Details"/>
   <translation tag="Detect automatically" en="Detect automatically"/>
   <translation tag="Detect filament tangles" en="Detect filament tangles"/>
   <translation tag="Detecting plate..." en="Detecting plate..."/>
@@ -1793,6 +1794,7 @@
   <translation tag="Moonraker: " en="Moonraker: "/>
   <translation tag="More points = more accurate, but takes longer." en="More points = more accurate, but takes longer."/>
   <translation tag="Motion" en="Motion"/>
+  <translation tag="Motion sensor stuck: filament is still at the feeder. Resume to feed it." en="Motion sensor stuck: filament is still at the feeder. Resume to feed it."/>
   <translation tag="Motor controller error" en="Motor controller error"/>
   <translation tag="Motor parameter setup failed" en="Motor parameter setup failed"/>
   <translation tag="Motor speeds and acceleration" en="Motor speeds and acceleration"/>
@@ -2112,6 +2114,7 @@
   <translation tag="Peak Freq" en="Peak Freq"/>
   <translation tag="Peak:" en="Peak:"/>
   <translation tag="Peaks {} Hz" en="Peaks {} Hz"/>
+  <translation tag="Pending spool" en="Pending spool"/>
   <translation tag="Performance" en="Performance"/>
   <translation tag="Permission denied. Check printer configuration." en="Permission denied. Check printer configuration."/>
   <translation tag="Phomemo (Bluetooth)" en="Phomemo (Bluetooth)"/>
@@ -3162,6 +3165,7 @@
   <translation tag="Tool offsets (mm)" en="Tool offsets (mm)"/>
   <translation tag="Tool offsets saved" en="Tool offsets saved"/>
   <translation tag="Tool swap" en="Tool swap"/>
+  <translation tag="Toolchange purge" en="Toolchange purge"/>
   <translation tag="Toolhead" en="Toolhead"/>
   <translation tag="Toolhead LED" en="Toolhead LED"/>
   <translation tag="Toolhead Sensor" en="Toolhead Sensor"/>
@@ -3563,6 +3567,7 @@
   <translation tag="{} filament" en="{} filament"/>
   <translation tag="{} filament sensors available" en="{} filament sensors available"/>
   <translation tag="{} filament • {}" en="{} filament • {}"/>
+  <translation tag="{} firmware" en="{} firmware"/>
   <translation tag="{} heater turned off" en="{} heater turned off"/>
   <translation tag="{} is asking to connect to this printer." en="{} is asking to connect to this printer."/>
   <translation tag="{} is blocked — manual intervention required" en="{} is blocked — manual intervention required"/>
@@ -3586,6 +3591,7 @@
   <translation tag="{} new hardware available" en="{} new hardware available"/>
   <translation tag="{} new plugins available. Enable them in Settings &gt; Plugins." en="{} new plugins available. Enable them in Settings &gt; Plugins."/>
   <translation tag="{} preset{}" en="{} preset{}"/>
+  <translation tag="{} serial" en="{} serial"/>
   <translation tag="{} set to {}" en="{} set to {}"/>
   <translation tag="{} set to {} {}" en="{} set to {} {}"/>
   <translation tag="{} slots" en="{} slots"/>

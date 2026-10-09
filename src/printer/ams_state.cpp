@@ -420,11 +420,15 @@ void AmsState::reset_backend_subjects() {
     lv_subject_set_int(&path_topology_, static_cast<int>(PathTopology::HUB));
     lv_subject_set_int(&path_filament_segment_, static_cast<int>(PathSegment::NONE));
 
+    lv_subject_set_int(&all_units_disconnected_, 0);
+    lv_subject_set_int(&viewed_unit_disconnected_, 0);
+
     // Per-unit environment and its indicator.
     for (int i = 0; i < MAX_UNITS; ++i) {
         lv_subject_set_int(&unit_temp_[i], 0);
         lv_subject_set_int(&unit_humidity_[i], 0);
         lv_subject_set_int(&unit_absent_[i], 0);
+        lv_subject_set_int(&unit_disconnected_[i], 0);
         lv_subject_copy_string(&env_ind_temp_text_[i], "");
         lv_subject_copy_string(&env_ind_humidity_text_[i], "");
         lv_subject_set_int(&env_ind_humidity_status_[i], 0);
@@ -972,12 +976,37 @@ bool AmsState::sync_tool_spools(AmsBackend* backend, const AmsSystemInfo& info) 
     return any_slot_changed;
 }
 
+void AmsState::set_viewed_unit(int unit_index) {
+    assert_main_thread("set_viewed_unit");
+    viewed_unit_ = unit_index;
+    publish_viewed_unit_disconnected();
+}
+
+void AmsState::publish_viewed_unit_disconnected() {
+    const bool viewed = viewed_unit_ >= 0 && viewed_unit_ < MAX_UNITS &&
+                        lv_subject_get_int(&unit_disconnected_[viewed_unit_]) != 0;
+    lv_subject_set_int(&viewed_unit_disconnected_, viewed ? 1 : 0);
+}
+
 void AmsState::sync_unit_environment(AmsBackend* backend, const AmsSystemInfo& info) {
+    // Every present unit offline is the whole system offline; absent
+    // placeholders say nothing either way.
+    bool any_present = false;
+    bool all_disconnected = true;
+    for (const auto& unit : info.units) {
+        if (!unit.absent) {
+            any_present = true;
+            all_disconnected = all_disconnected && !unit.connected;
+        }
+    }
+    lv_subject_set_int(&all_units_disconnected_, (any_present && all_disconnected) ? 1 : 0);
+
     // Update per-unit environment subjects (CFS temperature/humidity)
     for (const auto& unit : info.units) {
         int idx = unit.unit_index;
         if (idx >= 0 && idx < MAX_UNITS) {
             lv_subject_set_int(&unit_absent_[idx], unit.absent ? 1 : 0);
+            lv_subject_set_int(&unit_disconnected_[idx], (!unit.absent && !unit.connected) ? 1 : 0);
             if (unit.environment.has_value()) {
                 int temp_tenths = static_cast<int>(unit.environment->temperature_c * 10.0f);
                 int humidity = static_cast<int>(unit.environment->humidity_pct);
@@ -995,7 +1024,9 @@ void AmsState::sync_unit_environment(AmsBackend* backend, const AmsSystemInfo& i
         lv_subject_set_int(&unit_temp_[i], 0);
         lv_subject_set_int(&unit_humidity_[i], 0);
         lv_subject_set_int(&unit_absent_[i], 0);
+        lv_subject_set_int(&unit_disconnected_[i], 0);
     }
+    publish_viewed_unit_disconnected();
 
     // Update per-unit environment indicator display subjects (formatted text for XML).
     // The dryer is fetched per-unit below so each box's indicator reflects its own
@@ -1209,9 +1240,9 @@ bool AmsState::write_slot_subjects(AmsBackend& backend, int slot_index, const Sl
         changed = true;
     }
 
-    // Remaining filament string: length when measured, weight as the fallback,
-    // "" when neither.
-    std::string remaining = slot.remaining_display();
+    // Measured remaining length, "" when the backend publishes none. The slot
+    // shows it under its material; weight has its own surfaces.
+    std::string remaining = slot.remaining_length_display();
     if (strcmp(lv_subject_get_string(&slot_remaining_[slot_index]), remaining.c_str()) != 0) {
         lv_subject_copy_string(&slot_remaining_[slot_index], remaining.c_str());
     }
@@ -1861,12 +1892,11 @@ void AmsState::sync_current_loaded_from_backend(const AmsSystemInfo& primary_inf
             set_current_slot_header(*loaded_backend, slot_index);
         }
 
-        // Show remaining weight if available (from Spoolman or backend)
-        if (slot_info.total_weight_g > 0.0f && slot_info.remaining_weight_g >= 0.0f) {
-            char wt[32];
-            snprintf(wt, sizeof(wt), "%.0fg", slot_info.remaining_weight_g);
-            if (strcmp(lv_subject_get_string(&current_weight_text_), wt) != 0) {
-                lv_subject_copy_string(&current_weight_text_, wt);
+        // Remaining weight (Spoolman or backend) and measured length, either or both
+        const std::string remaining = slot_info.remaining_summary();
+        if (!remaining.empty()) {
+            if (strcmp(lv_subject_get_string(&current_weight_text_), remaining.c_str()) != 0) {
+                lv_subject_copy_string(&current_weight_text_, remaining.c_str());
             }
             lv_subject_set_int(&current_has_weight_, 1);
         } else {

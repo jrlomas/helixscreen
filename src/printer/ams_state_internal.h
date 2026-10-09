@@ -33,12 +33,10 @@ using helix::ui::copy_string_if_changed;
 
 /// The error state a lane bar's status line draws from: the same derivation
 /// both current consumers (AMS overview mini bars, mini status) compute from
-/// SlotInfo. has_error covers a carried SlotError AND a BLOCKED lane;
-/// severity falls back to INFO when no error object is carried.
+/// SlotInfo, through SlotInfo::has_fault() and fault_severity().
 inline void slot_error_state(const SlotInfo& slot, bool& has_error, int& severity) {
-    has_error = (slot.status == SlotStatus::BLOCKED || slot.error.has_value());
-    severity =
-        static_cast<int>(slot.error.has_value() ? slot.error->severity : SlotError::Severity::INFO);
+    has_error = slot.has_fault();
+    severity = static_cast<int>(slot.fault_severity());
 }
 
 } // namespace helix::ams_state_detail
