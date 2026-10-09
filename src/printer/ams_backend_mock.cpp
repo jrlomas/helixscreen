@@ -377,6 +377,21 @@ AmsError AmsBackendMock::start() {
             }
             emit_event(EVENT_SLOT_CHANGED);
             spdlog::info("[AMS Mock] Applied initial state scenario: grade (all lanes -> PLA-CF)");
+        } else if (scenario == "blocked") {
+            // A jammed lane with no error object, as the QIDI Box reports one.
+            force_slot_status(1, SlotStatus::BLOCKED);
+            emit_event(EVENT_SLOT_CHANGED);
+            spdlog::info("[AMS Mock] Applied initial state scenario: blocked (slot 1)");
+        } else if (scenario == "disconnected") {
+            // The last unit is on the bus map but reports itself offline.
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (!system_info_.units.empty()) {
+                    system_info_.units.back().connected = false;
+                }
+            }
+            emit_event(EVENT_STATE_CHANGED);
+            spdlog::info("[AMS Mock] Applied initial state scenario: disconnected (last unit)");
         } else if (scenario == "unaccounted") {
             // Filament at the toolhead with no lane accounting for it — drives
             // the unaccounted_toolhead_filament print-start gate (hand-fed /
