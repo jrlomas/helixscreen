@@ -2136,9 +2136,6 @@ void PrintSelectPanel::discard_pending_queued_start_on_back_out() {
 void PrintSelectPanel::hide_detail_view() {
     // Clear detail view open flag (on_activate will check files_changed_while_detail_open_)
     detail_view_open_ = false;
-#if defined(HELIX_PLATFORM_ESP32)
-    release_esp_detail_thumbnail();
-#endif
 
     discard_pending_queued_start_on_back_out();
 
@@ -2155,6 +2152,10 @@ void PrintSelectPanel::hide_detail_view() {
             detail_view_->hide();
         }
     }
+#if defined(HELIX_PLATFORM_ESP32)
+    // After the hide, so the closing view does not flash the placeholder.
+    release_esp_detail_thumbnail();
+#endif
 }
 
 void PrintSelectPanel::show_delete_confirmation() {
@@ -3746,7 +3747,9 @@ PrintSelectPanel::fetch_esp_thumbnail(size_t index, const std::string& filename,
                               }
                               // A detail view opened before its card's image
                               // arrived shows it now.
-                              if (detail_view_open_ &&
+                              // Visibility, not detail_view_open_: Back pops the
+                              // overlay without clearing that flag.
+                              if (detail_view_ && detail_view_->is_visible() &&
                                   lv_subject_get_int(&selected_has_thumbnail_subject_) == 0 &&
                                   filename == selected_filename_buffer_ &&
                                   show_esp_detail_thumbnail(filename.c_str())) {
