@@ -1673,7 +1673,9 @@ nlohmann::json MoonrakerClientMock::openams_shared_status_json() const {
                            {"pressure", 0.79},
                            {"set_point", 0.5}};
     if (loaded >= 0) {
-        lane["current_group"] = "T" + std::to_string(loaded);
+        const std::string group =
+            "T" + std::to_string(loaded); // DISPLAY_NUMBERING_OK: OpenAMS group id
+        lane["current_group"] = group;
         lane["current_slot"] = loaded;
     } else {
         lane["current_group"] = nullptr;
@@ -1681,7 +1683,8 @@ nlohmann::json MoonrakerClientMock::openams_shared_status_json() const {
     }
     nlohmann::json groups = nlohmann::json::array();
     for (int i = 0; i < 5; ++i) {
-        groups.push_back({{"name", "T" + std::to_string(i)}, {"lane", "fps"}, {"slots", {i}}});
+        const std::string name = "T" + std::to_string(i); // DISPLAY_NUMBERING_OK: OpenAMS group id
+        groups.push_back({{"name", name}, {"lane", "fps"}, {"slots", {i}}});
     }
     nlohmann::json status = {
         {"api_version", 1},
