@@ -217,6 +217,9 @@ void SoundSequencer::sequencer_loop() {
         backend_->suspend();
         device_active_ = false;
     }
+    // A joined thread's id can be handed to a new thread, which must not be
+    // mistaken for this loop.
+    loop_thread_id_.store(std::thread::id{});
 }
 
 void SoundSequencer::apply_step_voices(const SoundStep& step, float freq, float amplitude,
