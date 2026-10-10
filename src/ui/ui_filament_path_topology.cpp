@@ -64,8 +64,11 @@ BaseGeometry compute_base_geometry(lv_obj_t* obj, const FilamentPathData* data) 
 
     // Center X: prefer midpoint of slot bounds so hub/selector/nozzle stay
     // aligned with the spool grid even when the grid is narrower than the
-    // canvas (e.g. environment indicator present).
-    if (g.slot_count >= 2) {
+    // canvas (e.g. environment indicator present). A fixed hub stands on the
+    // widget's own center line instead, which no unit's box or chip can move.
+    if (data->fixed_hub_lanes > 0) {
+        g.center_x = g.x_off + g.width / 2;
+    } else if (g.slot_count >= 2) {
         g.center_x = (g.slot_x[0] + g.slot_x[g.slot_count - 1]) / 2;
     } else if (g.slot_count == 1) {
         g.center_x = g.slot_x[0];
@@ -388,13 +391,7 @@ void draw_hub_section(const RenderCtx& ctx, const LinearHubFrame& f) {
     // side to cover the full visual extent of the outermost slots.
     // For HUB topology, use the widened entry-spread width from the frame so
     // the merge tubes land cleanly on the box.
-    int32_t hub_w = (data->topology == 1) ? f.hub_box_w : data->theme.hub_width;
-    if (data->topology == 0 && data->slot_count > 1) {
-        int32_t first_slot_x = g.slot_x[0];
-        int32_t last_slot_x = g.slot_x[data->slot_count - 1];
-        int32_t slot_pad = LV_MAX(data->slot_width, f.sensor_r * 4);
-        hub_w = (last_slot_x - first_slot_x) + slot_pad;
-    }
+    int32_t hub_w = hub_box_width(*data, g, f);
 
     lv_opa_t hub_opa = (data->topology == 0) ? LV_OPA_60 : LV_OPA_COVER;
 
@@ -501,6 +498,7 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
 
     const TubePalette pal = tube_palette(*data);
     paint_tubes(layer, plan, pal);
+    draw_offpage_stubs(ctx, f);
 
     draw_hub_section(ctx, f);
     if (!data->hub_only && f.has_buffer)

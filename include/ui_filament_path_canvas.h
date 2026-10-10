@@ -338,14 +338,59 @@ void ui_filament_path_canvas_set_buffer_callback(lv_obj_t* obj, filament_path_bu
  *
  * When enabled, draws slots → prep sensors → hub and a short output stub
  * leaving the hub that fades out. Skips everything further downstream:
- * bypass, toolhead sensor, nozzle. Used in the
- * overview panel's inline detail view where system-level routing is shown
- * separately by the system_path_canvas.
+ * bypass, toolhead sensor, nozzle.
  *
  * @param obj The filament_path_canvas widget
  * @param hub_only true to stop rendering at the hub
  */
 void ui_filament_path_canvas_set_hub_only(lv_obj_t* obj, bool hub_only);
+
+/**
+ * @brief Set the units of this unit's hub that sit on other pages of a paging screen
+ *
+ * On a HUB layout each non-zero side draws one dashed stub on the hub: a hint of a lane
+ * running outward, labeled "N units", with a drying glyph before the label when one of
+ * them is drying. The hub box is widened to hold the stubs' entries.
+ *
+ * @param before units on earlier pages (the stub left of the hub); 0 for none
+ * @param before_drying one of those is drying
+ * @param after units on later pages (the stub right of the hub); 0 for none
+ * @param after_drying one of those is drying
+ */
+void ui_filament_path_canvas_set_offpage_units(lv_obj_t* obj, int before, bool before_drying,
+                                               int after, bool after_drying);
+
+/**
+ * @brief Keep the hub where it is from one unit to the next
+ *
+ * For a screen that pages through the units of one hub. With @p lanes > 0 the hub, buffer
+ * and toolhead stand on the widget's center line (not the center of the shown unit's
+ * spools) and the hub box is sized for @p lanes lanes at @p lane_pitch px apart (0 takes
+ * the shown unit's own pitch), so the box is the same whichever unit is shown and swapping
+ * the unit swaps its lanes and nothing downstream. 0 lanes centers the hub on the spools
+ * and sizes it for the unit.
+ */
+void ui_filament_path_canvas_set_fixed_hub(lv_obj_t* obj, int lanes, int32_t lane_pitch = 0);
+
+/**
+ * @brief Keep @p px columns clear at both ends of the widget, over a band of rows
+ *
+ * Controls overlaid on the widget's edges (the paging arrows) sit there; the off-page
+ * stubs and their labels stop short of them wherever they would share rows with a
+ * control. @p y_top and @p y_bottom are the rows the controls span, in absolute display
+ * coordinates; with @p y_bottom <= @p y_top the reserve holds on every row. 0 px clears
+ * nothing.
+ */
+void ui_filament_path_canvas_set_edge_reserve(lv_obj_t* obj, int32_t px, int32_t y_top = 0,
+                                              int32_t y_bottom = 0);
+
+/**
+ * @brief Where the hub (or selector) box is, in absolute display coordinates
+ *
+ * Computed from the same frame the renderer draws, so it is right before the first paint.
+ * False for a layout with no such box (MIXED, PARALLEL) or before the widget has a size.
+ */
+bool ui_filament_path_canvas_get_hub_box(lv_obj_t* obj, lv_area_t* area_out);
 
 /**
  * @brief Set the unit's hub (or selector) output sensor
