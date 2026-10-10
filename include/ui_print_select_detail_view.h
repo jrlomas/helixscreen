@@ -680,17 +680,32 @@ class PrintSelectDetailView : public OverlayBase {
      *
      * Queued observers, timers and load callbacks would otherwise reach the
      * freed children through the cached pointers. Drops them via
-     * forget_cached_widgets() and does nothing else.
+     * forget_cached_widgets() and marks the tree dead; the teardown proper
+     * waits for reclaim_deleted_tree(), outside LVGL's delete event.
      */
     static void on_root_deleted(lv_event_t* e);
+
+    /**
+     * @brief Finish the teardown of a tree on_root_deleted() marked dead
+     *
+     * Drops the navigation registration and overlay_root_, then runs
+     * on_ui_destroyed(), so the next show() re-creates the tree. A no-op while
+     * the tree is alive. show(), hide() and cleanup() call it first.
+     */
+    void reclaim_deleted_tree();
+
+    /// overlay_root_ is set and still names a live tree.
+    [[nodiscard]] bool tree_alive() const {
+        return overlay_root_ != nullptr && !tree_deleted_;
+    }
 
     /**
      * @brief Drop every cached pointer to a child of the detail tree
      *
      * Idempotent, and touches no LVGL object, so it is safe from inside LVGL's
      * delete event. Called by on_root_deleted() and on_ui_destroyed(). Leaves
-     * overlay_root_ to OverlayBase, whose next show() notices the deleted root
-     * and runs the full on_ui_destroyed().
+     * overlay_root_ alone: reclaim_deleted_tree() needs it to drop the
+     * navigation registration keyed on it.
      */
     void forget_cached_widgets();
 
@@ -701,6 +716,10 @@ class PrintSelectDetailView : public OverlayBase {
     /// or by uninstall_root_delete_hook(), so a replaced root's late delete event
     /// is told apart from the live tree's.
     lv_obj_t* delete_hook_root_ = nullptr;
+
+    /// Set by on_root_deleted(): overlay_root_ names freed memory until
+    /// reclaim_deleted_tree() runs.
+    bool tree_deleted_ = false;
 
     // === Dependencies ===
     IMoonrakerAPI* api_ = nullptr;

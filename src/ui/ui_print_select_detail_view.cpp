@@ -118,6 +118,13 @@ PrintSelectDetailView::~PrintSelectDetailView() {
 
     disarm_viewer_callbacks();
 
+    // A tree deleted externally leaves overlay_root_ naming freed memory.
+    if (tree_deleted_) {
+        helix::nav::clear_on_close(overlay_root_);
+        helix::nav::unregister_overlay(overlay_root_);
+        overlay_root_ = nullptr;
+    }
+
     // Unregister from NavigationManager (fallback if cleanup() wasn't called)
     if (overlay_root_) {
         helix::nav::unregister_overlay(overlay_root_);
@@ -487,6 +494,8 @@ void PrintSelectDetailView::show(const std::string& filename, const std::string&
                                  const std::vector<std::string>& filament_materials,
                                  size_t file_size_bytes, time_t modified_timestamp,
                                  uint64_t gcode_end_byte, const std::string& local_path) {
+    reclaim_deleted_tree();
+
     // Lazy re-create widget tree if it was destroyed by destroy-on-close
     if (!overlay_root_ && parent_screen_) {
         spdlog::info("[DetailView] Re-creating widget tree (destroy-on-close recovery)");
@@ -647,6 +656,7 @@ void PrintSelectDetailView::show(const std::string& filename, const std::string&
 }
 
 void PrintSelectDetailView::hide() {
+    reclaim_deleted_tree();
     if (!overlay_root_) {
         return;
     }
@@ -984,6 +994,7 @@ void PrintSelectDetailView::disarm_viewer_callbacks() {
 
 void PrintSelectDetailView::cleanup() {
     spdlog::debug("[DetailView] cleanup()");
+    reclaim_deleted_tree();
 
     // Pause viewer before subject cleanup to avoid rendering with freed subjects.
     if (gcode_viewer_) {
@@ -1043,7 +1054,20 @@ void PrintSelectDetailView::on_root_deleted(lv_event_t* e) {
         return;
     }
     self->delete_hook_root_ = nullptr;
+    self->tree_deleted_ = true;
     self->forget_cached_widgets();
+}
+
+void PrintSelectDetailView::reclaim_deleted_tree() {
+    if (!tree_deleted_) {
+        return;
+    }
+    tree_deleted_ = false;
+    spdlog::debug("[DetailView] Widget tree was deleted externally - releasing it");
+    helix::nav::clear_on_close(overlay_root_);
+    helix::nav::unregister_overlay(overlay_root_);
+    overlay_root_ = nullptr;
+    on_ui_destroyed();
 }
 
 void PrintSelectDetailView::forget_cached_widgets() {
@@ -1200,7 +1224,7 @@ void PrintSelectDetailView::hide_delete_confirmation() {
 // ============================================================================
 
 void PrintSelectDetailView::handle_resize(lv_obj_t* parent_screen) {
-    if (!overlay_root_ || !parent_screen) {
+    if (!tree_alive() || !parent_screen) {
         return;
     }
 
@@ -1389,7 +1413,7 @@ void PrintSelectDetailView::show_gcode_viewer(bool show) {
     // no-thumbnail placeholder glyph must not sit on top of it. (When the
     // viewer is inactive the print-select panel's has-thumbnail logic owns
     // whether the placeholder shows.)
-    if (mode > 0 && overlay_root_) {
+    if (mode > 0 && tree_alive()) {
         lv_obj_t* no_thumb =
             helix::ui::find_required(overlay_root_, "detail_no_thumbnail_icon", get_name());
         if (no_thumb) {
@@ -2031,7 +2055,7 @@ void PrintSelectDetailView::toggle_exclude_mode() {
         exclude_mode_.hide();
         return;
     }
-    if (!overlay_root_) {
+    if (!tree_alive()) {
         return;
     }
     helix::ui::ExcludeModeTargets targets;

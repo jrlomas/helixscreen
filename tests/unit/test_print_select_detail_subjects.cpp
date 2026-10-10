@@ -1997,3 +1997,28 @@ TEST_CASE_METHOD(LVGLUITestFixture, "cleanup after the tree is deleted forgets t
 
     view.cleanup();
 }
+
+// The detail view's own show() is the only path back after a tree deleted
+// outside destroy_overlay_ui(): it must build a fresh tree, with exclude mode's
+// side list and viewer gone along with the old one.
+TEST_CASE_METHOD(LVGLUITestFixture, "show after the tree is deleted externally re-creates it",
+                 "[print_select][detail_view][pre_start_exclude]") {
+    ExcludeObjectHardware hw(true);
+    OpenDetail d(test_screen(), "parts.gcode", kThreeParts);
+    d.view.toggle_exclude_mode();
+    OpenDetail::settle();
+    process_lvgl(50);
+    REQUIRE(d.view.is_exclude_mode_open());
+
+    lv_obj_delete(d.view.get_widget());
+    OpenDetail::settle();
+    CHECK_FALSE(d.view.is_exclude_mode_open());
+
+    d.view.show("parts.gcode", "", "PLA");
+    OpenDetail::settle();
+    lv_obj_t* const root = d.view.get_widget();
+    REQUIRE(root != nullptr);
+    CHECK(lv_obj_is_valid(root));
+    CHECK(lv_obj_find_by_name(root, "print_button") != nullptr);
+    CHECK(PrintSelectDetailViewTestAccess::gcode_viewer(d.view) != nullptr);
+}
