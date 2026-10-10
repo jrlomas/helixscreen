@@ -156,9 +156,14 @@ becomes one row of the plugin's settings screen
 
 In Lua, `helix.settings.get(key)` returns the stored value if it still fits the
 declaration, else the default (`src/plugin/lua_bind_io.cpp#effective_setting`).
-`helix.settings.on_change(key, fn)` calls `fn(value)` after each accepted change; several
-handlers per key are allowed. An `action` row reaches its handler through the same path
-as a `plugin_event`.
+`helix.settings.set(key, value)` writes one of the plugin's own declared settings
+through the same validation, persistence and `on_change` notification the generated
+settings screen uses, so a plugin's own overlay can be the control surface; an
+undeclared key, a read-only `action`/`info` row, or a value the declaration rejects
+(min/max, enum membership, string size) raises.
+`helix.settings.on_change(key, fn)` calls `fn(value)` after each accepted change, from
+either path; several handlers per key are allowed. An `action` row reaches its handler
+through the same path as a `plugin_event`.
 
 Enable state and settings are shared across printers: enabling a plugin once enables it
 on every printer that ships it, under the same permission check.
