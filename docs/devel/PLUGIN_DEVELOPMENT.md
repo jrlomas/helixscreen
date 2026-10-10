@@ -5,10 +5,13 @@ add home-panel tiles, overlays and settings without compiling anything: an autho
 text editor and the plugin folder, nothing else. This guide is the contract; every rule in
 it is enforced by code, cited so it can be verified against the source.
 
-Two complete plugins ship in the repository:
+Three complete plugins ship in the repository:
 
 - `examples/plugins/temp-spark` - a heater sparkline tile. No permissions.
 - `examples/plugins/led-effects` - an LED effect toggle. The `gcode` permission.
+- `examples/plugins/maintenance-meter` - consumable hour meters as an adaptive
+  tile. The `storage` permission; the step-by-step build of it is
+  `docs/devel/PLUGIN_TUTORIAL.md`.
 
 ## 1. What a plugin is
 
