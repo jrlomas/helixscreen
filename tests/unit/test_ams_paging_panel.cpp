@@ -772,9 +772,12 @@ TEST_CASE_METHOD(PagingFixture, "Unit view: a change in the system keeps the sho
 
 TEST_CASE_METHOD(PagingFixture, "Unit view: Back returns to the overview, and Back again leaves",
                  "[ams][pages][panel][overview]") {
+    install([](PagedFleet& f) { f.specs[2].connected = false; });
     open_at(2);
     lv_obj_t* panel_root = root();
     REQUIRE(helix::nav::is_showing(panel_root));
+    // The unit on screen is the disconnected one.
+    REQUIRE(subject(lv_xml_get_subject(nullptr, "ams_viewed_unit_disconnected")) == 1);
 
     tap(named("back_button"));
     CHECK(helix::nav::is_showing(panel_root));
