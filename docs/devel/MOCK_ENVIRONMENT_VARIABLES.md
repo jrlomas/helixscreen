@@ -413,7 +413,8 @@ Select the mock AMS topology/type.
 # Two OpenAMS units on one lane, klipper_openams shape
 HELIX_MOCK_AMS=openams HELIX_MOCK_OPENAMS_UNITS=shared HELIX_MOCK_OPENAMS_API=legacy ./build/bin/helix-screen --test
 
-# Twelve OpenAMS units on two hubs (multi-unit paging)
+# Twelve OpenAMS units on two hubs: the overview's cards row scrolls, and a tapped card opens
+# the unit view on that unit's page (both hubs' stubs, the drying glyph)
 HELIX_MOCK_AMS=openams HELIX_MOCK_OPENAMS_UNITS=fleet ./build/bin/helix-screen --test
 
 # Simulate AFC Box Turtle
