@@ -197,6 +197,39 @@ class AmsState {
     /// not only those below MAX_UNITS. Main thread only.
     void set_viewed_unit(int unit_index);
 
+    /// @name Unit paging
+    /// What the overview's unit view shows: which page of how many, and the unit on it.
+    /// Published for its XML as ams_unit_view_active (1 while the unit view is on screen),
+    /// ams_page_count, ams_page_current (0-based), ams_page_has_prev / ams_page_has_next
+    /// (1 only when a neighboring page exists), ams_page_unit_name and ams_page_unit_logo.
+    /// Main thread only.
+    /// @{
+    /// @p current is clamped into [0, count - 1]; with no pages everything reads 0.
+    void set_unit_page(int count, int current);
+    /// The shown unit's display name and logo image path (null or empty: no logo).
+    void set_unit_page_header(const std::string& name, const char* logo_path);
+    /// Whether the overview shows its unit view instead of its unit cards.
+    void set_unit_view_active(bool active);
+    lv_subject_t* get_ams_unit_view_active_subject() {
+        return &ams_unit_view_active_;
+    }
+    lv_subject_t* get_ams_page_count_subject() {
+        return &ams_page_count_;
+    }
+    lv_subject_t* get_ams_page_current_subject() {
+        return &ams_page_current_;
+    }
+    lv_subject_t* get_ams_page_has_prev_subject() {
+        return &ams_page_has_prev_;
+    }
+    lv_subject_t* get_ams_page_has_next_subject() {
+        return &ams_page_has_next_;
+    }
+    lv_subject_t* get_ams_page_unit_name_subject() {
+        return &ams_page_unit_name_;
+    }
+    /// @}
+
     /// @name Dryer Constants
     /// @{
     static constexpr int DEFAULT_DRYER_TEMP_C = 55;        ///< Default dryer temp (PETG)
@@ -1491,6 +1524,15 @@ class AmsState {
     [[nodiscard]] lv_subject_t* get_env_ind_detail_temp_text_subject() {
         return &env_ind_detail_temp_text_;
     }
+    [[nodiscard]] lv_subject_t* get_env_ind_detail_humidity_text_subject() {
+        return &env_ind_detail_humidity_text_;
+    }
+
+    /// Bumps whenever the set of units with a running dryer changes. The unit view's
+    /// off-page stubs read it: a unit on another page has no subject of its own to watch.
+    [[nodiscard]] lv_subject_t* get_units_dryer_version_subject() {
+        return &ams_units_dryer_version_;
+    }
 
     // ========================================================================
     // Direct State Update (called by backend event handler)
@@ -2235,6 +2277,21 @@ class AmsState {
     lv_subject_t all_units_disconnected_{};
     int viewed_unit_ = -1;
     void publish_viewed_unit_disconnected(const AmsSystemInfo* info);
+
+    // Unit paging (set_unit_page)
+    lv_subject_t ams_unit_view_active_{};
+    lv_subject_t ams_page_count_{};
+    lv_subject_t ams_page_current_{};
+    lv_subject_t ams_page_has_prev_{};
+    lv_subject_t ams_page_has_next_{};
+    lv_subject_t ams_page_unit_name_{};
+    char page_unit_name_buf_[48]{};
+    lv_subject_t ams_page_unit_logo_{};
+    char page_unit_logo_buf_[64]{};
+
+    /// Which units' dryers ran at the last sync, one character per unit position.
+    std::string units_drying_signature_;
+    lv_subject_t ams_units_dryer_version_{};
 
     // Per-unit environment indicator display subjects (formatted text for XML binding)
     static constexpr int ENV_IND_TEXT_BUF_SIZE = 16;

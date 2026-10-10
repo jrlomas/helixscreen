@@ -422,6 +422,9 @@ void AmsState::reset_backend_subjects() {
 
     lv_subject_set_int(&all_units_disconnected_, 0);
     lv_subject_set_int(&viewed_unit_disconnected_, 0);
+    set_unit_page(0, 0);
+    set_unit_page_header("", nullptr);
+    units_drying_signature_.clear();
 
     // Per-unit environment and its indicator.
     for (int i = 0; i < MAX_UNITS; ++i) {
@@ -984,6 +987,41 @@ void AmsState::set_viewed_unit(int unit_index) {
     }
 }
 
+void AmsState::set_unit_page(int count, int current) {
+    assert_main_thread("set_unit_page");
+    count = std::max(0, count);
+    current = count > 0 ? std::clamp(current, 0, count - 1) : 0;
+    // Only a change is published, so a refresh that finds the same page wakes nobody.
+    auto set_if_changed = [](lv_subject_t* subject, int value) {
+        if (lv_subject_get_int(subject) != value)
+            lv_subject_set_int(subject, value);
+    };
+    set_if_changed(&ams_page_count_, count);
+    set_if_changed(&ams_page_current_, current);
+    set_if_changed(&ams_page_has_prev_, current > 0 ? 1 : 0);
+    set_if_changed(&ams_page_has_next_, current + 1 < count ? 1 : 0);
+}
+
+void AmsState::set_unit_page_header(const std::string& name, const char* logo_path) {
+    assert_main_thread("set_unit_page_header");
+    if (name != lv_subject_get_string(&ams_page_unit_name_))
+        lv_subject_copy_string(&ams_page_unit_name_, name.c_str());
+    const char* logo = logo_path ? logo_path : "";
+    if (strcmp(page_unit_logo_buf_, logo) != 0) {
+        strncpy(page_unit_logo_buf_, logo, sizeof(page_unit_logo_buf_) - 1);
+        page_unit_logo_buf_[sizeof(page_unit_logo_buf_) - 1] = '\0';
+        lv_subject_set_pointer(&ams_page_unit_logo_,
+                               page_unit_logo_buf_[0] ? page_unit_logo_buf_ : nullptr);
+    }
+}
+
+void AmsState::set_unit_view_active(bool active) {
+    assert_main_thread("set_unit_view_active");
+    const int value = active ? 1 : 0;
+    if (lv_subject_get_int(&ams_unit_view_active_) != value)
+        lv_subject_set_int(&ams_unit_view_active_, value);
+}
+
 void AmsState::publish_viewed_unit_disconnected(const AmsSystemInfo* info) {
     // Read from the unit's own data, so the flag is right for any unit index.
     bool disconnected = false;
@@ -1037,6 +1075,20 @@ void AmsState::sync_unit_environment(AmsBackend* backend, const AmsSystemInfo& i
         lv_subject_set_int(&unit_disconnected_[i], 0);
     }
     publish_viewed_unit_disconnected(&info);
+
+    // Which dryers run. A unit on another page of the unit view has no subject of its
+    // own, so a change in the set bumps one version the view watches.
+    std::string drying(info.units.size(), '0');
+    for (size_t k = 0; k < info.units.size(); ++k) {
+        const DryerInfo dryer = backend->get_dryer_info(info.units[k].unit_index);
+        if (dryer.supported && dryer.active)
+            drying[k] = '1';
+    }
+    if (drying != units_drying_signature_) {
+        units_drying_signature_ = std::move(drying);
+        lv_subject_set_int(&ams_units_dryer_version_,
+                           lv_subject_get_int(&ams_units_dryer_version_) + 1);
+    }
 
     // Indicator values are computed once per unit (compute_unit_env_indicator) and
     // published to the per-unit subjects below and to the detail mirror.
