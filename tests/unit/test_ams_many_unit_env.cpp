@@ -7,6 +7,8 @@
  *        unit they name for ANY unit index, not only those with per-unit subjects.
  */
 
+#include "ui_ams_environment_overlay.h"
+#include "ui_nav_manager.h"
 #include "ui_update_queue.h"
 
 #include "../lvgl_ui_test_fixture.h"
@@ -14,6 +16,7 @@
 #include "ams_state.h"
 #include "ams_types.h"
 #include "helix-xml/src/xml/lv_xml.h"
+#include "static_panel_registry.h"
 
 #include <lvgl/lvgl.h>
 
@@ -166,5 +169,35 @@ TEST_CASE_METHOD(LVGLUITestFixture, "The viewed unit's disconnected flag covers 
         CHECK(subject_int("ams_viewed_unit_disconnected") == 0);
     }
 
+    AmsState::instance().deinit_subjects();
+}
+
+TEST_CASE_METHOD(LVGLUITestFixture,
+                 "The environment overlay of a unit past the per-unit subjects stays live",
+                 "[ams][pages][env]") {
+    FleetMock* mock = install();
+    auto& ams = AmsState::instance();
+    // The unit view points the env chip's mirror at the unit on screen, and its overlay
+    // opens for that unit.
+    ams.set_detail_env_unit(10);
+    helix::ui::UpdateQueue::instance().drain();
+
+    StaticPanelRegistry::instance().destroy_all();
+    helix::ui::UpdateQueue::instance().drain();
+    auto& overlay = helix::ui::get_ams_environment_overlay();
+    overlay.show_zone(test_screen(), mock->get_environment_zones(10), 0, false);
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(10);
+    REQUIRE(subject_str("ams_env_overlay_temp_text").rfind("30", 0) == 0);
+
+    mock->bump = 5.0f;
+    ams.sync_from_backend();
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(10);
+    CHECK(subject_str("ams_env_overlay_temp_text").rfind("35", 0) == 0);
+
+    NavigationManager::instance().go_back();
+    helix::ui::UpdateQueue::instance().drain();
+    process_lvgl(10);
     AmsState::instance().deinit_subjects();
 }
