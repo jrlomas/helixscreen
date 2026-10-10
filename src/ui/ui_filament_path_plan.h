@@ -143,7 +143,6 @@ struct SpanStyle {
     lv_color_t bore;     // filament color, or the background when empty
     bool filled = false; // filament is in this span
     bool painted = true; // false inside an opaque box: recorded, never stroked
-    uint8_t fade = 0;    // 0..255 toward the background; ignored under reduced effects
 };
 bool operator==(const SpanStyle& a, const SpanStyle& b);
 

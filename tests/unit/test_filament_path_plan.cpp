@@ -108,20 +108,6 @@ TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: HUB hit rects match the drawn b
     CHECK(d->hits.origin.y == c.y1);
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: hub_only records the hub and nothing below it",
-                 "[filament-path][plan][hits]") {
-    lv_obj_t* w = make_canvas(test_screen(), static_cast<int>(helix::PathTopology::HUB));
-    ui_filament_path_canvas_set_buffer_info(w, true, 0);
-    ui_filament_path_canvas_set_show_bypass(w, true);
-    ui_filament_path_canvas_set_hub_only(w, true);
-    render(*this, w);
-
-    const FilamentPathData* d = get_data(w);
-    CHECK(d->hits.hub_valid);
-    CHECK_FALSE(d->hits.buffer_valid);
-    CHECK_FALSE(d->hits.bypass_valid);
-}
-
 TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: LINEAR selector hit rect spans the slot row",
                  "[filament-path][plan][hits]") {
     lv_obj_t* w = make_canvas(test_screen(), static_cast<int>(helix::PathTopology::LINEAR));
@@ -790,23 +776,6 @@ TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: on-toolhead records the selecto
                   {cx - sel_w / 2, sel_y - hub_h / 2, cx + sel_w / 2, sel_y + hub_h / 2}));
 }
 
-TEST_CASE_METHOD(LVGLTestFixture, "FilamentPath: hub_only drops the cached nozzle path",
-                 "[filament-path][plan]") {
-    lv_obj_t* w = make_canvas(test_screen(), static_cast<int>(helix::PathTopology::HUB));
-    ui_filament_path_canvas_set_active_slot(w, 1);
-    ui_filament_path_canvas_set_filament_segment(w, static_cast<int>(PathSegment::NOZZLE));
-    render(*this, w);
-    const FilamentPathData* d = get_data(w);
-    REQUIRE(d->path_cache.valid);
-    const int before = d->layers.render_count;
-
-    ui_filament_path_canvas_set_hub_only(w, true);
-    process_lvgl(120);
-    REQUIRE(d->layers.render_count > before);
-    CHECK_FALSE(d->path_cache.valid);
-    CHECK(d->path_cache.path.count == 0);
-}
-
 TEST_CASE("FilamentPath plan: sensor bands only where the unit reports the sensor",
           "[filament-path][plan]") {
     auto d = make_data(helix::PathTopology::HUB);
@@ -1033,112 +1002,6 @@ TEST_CASE("FilamentPath plan: the lanes enter at the spool box's front edge",
         const SensorBand* load = band_at(plan, 50.0f + 100 * i, load_y);
         REQUIRE(load != nullptr);
         CHECK_FALSE(load->on_box_edge);
-    }
-}
-
-// ============================================================================
-// hub_only output stub
-// ============================================================================
-
-namespace {
-
-// Routes whose spans fade: the stub's tail, and nothing else.
-int faded_routes(const PathPlan& plan) {
-    int n = 0;
-    for (int ri = 0; ri < plan.route_count; ri++) {
-        const Route& r = plan.routes[ri];
-        bool faded = false;
-        for (int i = 0; i < r.path.count; i++)
-            faded |= r.style[i].fade > 0;
-        n += faded;
-    }
-    return n;
-}
-
-// The route carrying the stub, and the stub's span index range in it.
-const Route* stub_route(const PathPlan& plan) {
-    for (int ri = 0; ri < plan.route_count; ri++) {
-        const Route& r = plan.routes[ri];
-        if (r.path.count > 0 && r.style[r.path.count - 1].fade > 0)
-            return &r;
-    }
-    return nullptr;
-}
-
-} // namespace
-
-TEST_CASE("FilamentPath plan: one unit of several ends in a fading output stub",
-          "[filament-path][plan][stub]") {
-    auto d = make_data(helix::PathTopology::HUB);
-    const LinearHubFrame f = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
-
-    SECTION("a single-unit system draws its trunk and no stub") {
-        CHECK(faded_routes(plan_for(*d)) == 0);
-    }
-
-    d->hub_only = true;
-    d->has_hub_sensor = false;
-    const PathPlan& plan = plan_for(*d);
-    REQUIRE(faded_routes(plan) == 1);
-    const Route* r = stub_route(plan);
-    REQUIRE(r != nullptr);
-    CHECK(contiguous(r->path));
-    // It leaves the hub bottom and goes down, fading progressively.
-    const pg::PathSeg& last = r->path.segs[r->path.count - 1];
-    CHECK(near(seg_end(last), (float)f.output_x, (float)(f.output_y + d->theme.stub_length), 0.5f));
-    const bool starts_at_hub =
-        has_boundary(r->path, (float)f.output_x, (float)f.output_y) ||
-        near(seg_start(r->path.segs[0]), (float)f.output_x, (float)f.output_y);
-    CHECK(starts_at_hub);
-    uint8_t prev = 0;
-    for (int i = 0; i < r->path.count; i++) {
-        CHECK(r->style[i].fade >= prev);
-        prev = r->style[i].fade;
-    }
-    // No hub sensor, no band anywhere below the hub.
-    CHECK(band_at(plan, (float)f.output_x, (float)f.output_y) == nullptr);
-}
-
-TEST_CASE("FilamentPath plan: the stub fills only past the hub", "[filament-path][plan][stub]") {
-    auto d = make_data(helix::PathTopology::HUB);
-    d->hub_only = true;
-    d->has_hub_sensor = true;
-    const LinearHubFrame f = compute_linear_hub_frame(*d, geometry(), GLYPH_TOP);
-
-    SECTION("idle: an empty plain tube with an empty band") {
-        const PathPlan& plan = plan_for(*d);
-        const Route* r = stub_route(plan);
-        REQUIRE(r != nullptr);
-        CHECK_FALSE(r->style[r->path.count - 1].filled);
-        CHECK(r->style[r->path.count - 1].wall == TubeWall::Plain);
-        const SensorBand* band = band_at(plan, (float)f.output_x, (float)f.output_y);
-        REQUIRE(band != nullptr);
-        CHECK(band->on_box_edge);
-        CHECK(band->state == BandState::Empty);
-    }
-    SECTION("the hub sensor reads filament: filled, accent walls") {
-        d->hub_sensor_triggered = true;
-        const PathPlan& plan = plan_for(*d);
-        const Route* r = stub_route(plan);
-        REQUIRE(r != nullptr);
-        CHECK(r->style[0].filled);
-        CHECK(r->style[0].wall == TubeWall::Active);
-        CHECK(band_at(plan, (float)f.output_x, (float)f.output_y)->state == BandState::Active);
-    }
-    SECTION("a mounted lane short of the hub output leaves it empty") {
-        load_active(*d, 1, PathSegment::HUB);
-        const Route* r = stub_route(plan_for(*d));
-        REQUIRE(r != nullptr);
-        CHECK_FALSE(r->style[r->path.count - 1].filled);
-    }
-    SECTION("a mounted lane past the hub continues into a filled stub") {
-        load_active(*d, 1, PathSegment::NOZZLE);
-        const PathPlan& plan = plan_for(*d);
-        const Route* r = stub_route(plan);
-        REQUIRE(r == &plan.routes[plan.active_route]);
-        CHECK(contiguous(r->path));
-        CHECK(r->style[r->path.count - 1].filled);
-        CHECK(lv_color_eq(r->style[r->path.count - 1].bore, lv_color_hex(SLOT_COLORS[1])));
     }
 }
 

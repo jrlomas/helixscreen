@@ -100,7 +100,6 @@ static void load_theme_sizes(FilamentPathData* data) {
     theme.hub_width = LV_MAX(50, space_md * 5);
     theme.border_radius = LV_MAX(4, space_xs);
     theme.extruder_scale = LV_MAX(8, space_md); // Extruder scales with space_md
-    theme.stub_length = theme_manager_get_spacing("space_xl") * 2;
 
     // Get responsive font from globals.xml (font_small → responsive variant)
     const char* font_name = lv_xml_get_const(nullptr, "font_small");
@@ -267,7 +266,7 @@ static void filament_path_click_cb(lv_event_t* e) {
     // Check if bypass spool box was clicked (right side) — check before entry area.
     // The renderer records the exact hit region in data->hits.bypass;
     // bypass_valid is set only when the bypass section was
-    // actually drawn (!hub_only && show_bypass), keeping the hit-test in lockstep
+    // actually drawn (show_bypass), keeping the hit-test in lockstep
     // with visibility. The rect's half-extents already encode the original
     // full-extent bounds (sensor_r*3 / sensor_r*4), so read with margin 0.
     if (data->show_bypass && data->bypass_callback && data->hits.bypass_valid) {
@@ -415,9 +414,6 @@ static void filament_path_xml_apply(lv_xml_parser_state_t* state, const char** a
             needs_redraw = true;
         } else if (strcmp(name, "show_bypass") == 0) {
             data->show_bypass = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
-            needs_redraw = true;
-        } else if (strcmp(name, "hub_only") == 0) {
-            data->hub_only = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
             needs_redraw = true;
         }
     }
@@ -902,18 +898,6 @@ void ui_filament_path_canvas_set_buffer_callback(lv_obj_t* obj, filament_path_bu
     }
 }
 
-void ui_filament_path_canvas_set_hub_only(lv_obj_t* obj, bool hub_only) {
-    auto* data = get_data(obj);
-    if (!data)
-        return;
-
-    if (data->hub_only != hub_only) {
-        data->hub_only = hub_only;
-        spdlog::debug("[FilamentPath] Hub-only mode: {}", hub_only ? "on" : "off");
-        layered_mark_dirty(obj);
-    }
-}
-
 // NAMESPACE_OK: the widget's C setter API, beside its siblings
 void ui_filament_path_canvas_set_lane_entry(lv_obj_t* obj, int32_t offset_from_slot_grid) {
     auto* data = get_data(obj);
@@ -1097,7 +1081,7 @@ bool ui_filament_path_canvas_get_hub_box(lv_obj_t* obj, lv_area_t* area_out) {
 
 bool ui_filament_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out, int32_t* cy_out) {
     auto* data = get_data(obj);
-    if (!data || data->hub_only || !data->show_bypass) {
+    if (!data || !data->show_bypass) {
         return false;
     }
     lv_obj_update_layout(obj);

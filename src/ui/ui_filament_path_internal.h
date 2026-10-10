@@ -160,7 +160,6 @@ struct ThemeCache {
     int32_t hub_width = 60;
     int32_t border_radius = 6;
     int32_t extruder_scale = 10; // Scale unit for extruder (based on space_md)
-    int32_t stub_length = 40;    // hub_only output stub (space_xl * 2)
 
     const lv_font_t* label_font = nullptr;
 
@@ -231,7 +230,7 @@ struct LayerState {
 // what was drawn, wherever the widget has moved since. The LINEAR selector's Y
 // is butted against the prep sensors and its width spans the slot row; the
 // buffer box internally clamps its size; the bypass rect tracks the visibility
-// gate (!hub_only && show_bypass). Any re-derivation in the click handler
+// gate (show_bypass). Any re-derivation in the click handler
 // would drift from the visible geometry. Single source of truth: render
 // writes, click reads. valid flags reset each render.
 struct HitRects {
@@ -324,10 +323,7 @@ struct FilamentPathData {
     // The lane pitch of that widest unit, 0 to take the shown unit's own.
     int32_t fixed_hub_pitch = 0;
 
-    // Rendering mode
-    bool hub_only = false; // true = stop rendering at hub (skip downstream)
-    // The unit's hub (or selector) output sensor. In hub_only mode it decides
-    // the output stub's band and whether the stub carries filament.
+    // The unit's hub (or selector) output sensor.
     bool has_hub_sensor = false;
     bool hub_sensor_triggered = false;
     // Hub co-located with the toolhead: the merge box sits just above the

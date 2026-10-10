@@ -227,7 +227,7 @@ LinearHubFrame compute_linear_hub_frame(const FilamentPathData& data, const Base
     // giving the lane fan the height they would otherwise occupy. The stack
     // only ever moves them down; a canvas too short for it keeps the ratio
     // layout.
-    if (!linear && !data.hub_on_toolhead && !data.show_bypass && !data.hub_only) {
+    if (!linear && !data.hub_on_toolhead && !data.show_bypass) {
         // Equal clearance above and below the buffer box (or above the glyph
         // when there is none): hub bottom, buffer and glyph top evenly spaced.
         const int32_t gap = f.hub_h / 2 + 2 * f.sensor_r;
@@ -471,7 +471,7 @@ MixedFrame compute_mixed_frame(const FilamentPathData& data, const BaseGeometry&
 
 bool operator==(const SpanStyle& a, const SpanStyle& b) {
     return a.wall == b.wall && lv_color_eq(a.bore, b.bore) && a.filled == b.filled &&
-           a.painted == b.painted && a.fade == b.fade;
+           a.painted == b.painted;
 }
 
 bool route_append(Route& r, const pg::FilamentPath& piece, SpanStyle s) {
@@ -652,34 +652,6 @@ float load_band_y(const LinearHubFrame& f, float run_end) {
     return ((float)f.prep_y + run_end) / 2;
 }
 
-// The hub_only output stub: a short tube leaving the hub (or selector) bottom
-// that fades out over its last third, so it reads as continuing elsewhere. It
-// carries filament once the lane is past the hub or the hub sensor reads it.
-void append_output_stub(PathPlan& plan, Route& r, Lane lane, const LinearHubFrame& f,
-                        const FilamentPathData& data, float max_y) {
-    if (data.hub_sensor_triggered && lane.reached < PathSegment::OUTPUT)
-        lane.reached = PathSegment::OUTPUT;
-    const float x = (float)f.output_x;
-    const float top = (float)f.output_y;
-    if (data.has_hub_sensor) {
-        add_band(plan, BandKind::Trunk, {x, top}, {0, 1}, lane.band(PathSegment::OUTPUT),
-                 lane.color, /*on_box_edge=*/true);
-    }
-    const float len = LV_MIN((float)data.theme.stub_length, max_y - top);
-    if (len <= 0)
-        return;
-    const SpanStyle s = lane.style(PathSegment::OUTPUT);
-    const float solid = len * 2 / 3;
-    append_line(r, x, top, x, top + solid, s);
-    constexpr int FADE_STEPS = 4;
-    const float step = (len - solid) / FADE_STEPS;
-    for (int k = 0; k < FADE_STEPS; k++) {
-        SpanStyle faded = s;
-        faded.fade = (uint8_t)(255 * (k + 1) / (FADE_STEPS + 1));
-        append_line(r, x, top + solid + step * k, x, top + solid + step * (k + 1), faded);
-    }
-}
-
 } // namespace
 
 // ============================================================================
@@ -805,8 +777,7 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
     const bool on_head = data.hub_on_toolhead && !linear;
     const int n = LV_MIN(data.slot_count, FilamentPathData::MAX_SLOTS);
     const int active = (data.active_slot >= 0 && data.active_slot < n) ? data.active_slot : -1;
-    const bool trunk = !data.hub_only;
-    const bool bypass = trunk && data.show_bypass;
+    const bool bypass = data.show_bypass;
     // On-toolhead the merge point sits above the head hub, off the trunk.
     const bool bypass_on_trunk = bypass && !on_head;
     const bool bypass_owns = bypass_on_trunk && data.bypass_active;
@@ -816,10 +787,6 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
                            data.bypass_active, data.bypass_active ? f.error_seg : PathSegment::NONE,
                            lv_color_hex(data.bypass_color), data.theme.color_bg};
     const Lane* bypass_owner = bypass_owns ? &bypass_lane : nullptr;
-    // One unit of several: its hub's output leaves as a stub, the toolhead
-    // belongs to the overview.
-    const bool stub = data.hub_only && !on_head;
-    const float stub_end = (float)(g.y_off + g.height - 2);
     // Box edges in whole pixels, as the boxes are drawn.
     const int32_t hub_top_px = f.hub_y - f.hub_h / 2;
     const float hub_top = (float)hub_top_px;
@@ -887,22 +854,10 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
         }
 
         out.active_route = i;
-        if (trunk)
-            append_trunk(out, r, lane, f, data, bypass_on_trunk, bypass_owner);
-        else if (stub)
-            append_output_stub(out, r, lane, f, data, stub_end);
+        append_trunk(out, r, lane, f, data, bypass_on_trunk, bypass_owner);
     }
 
-    if (stub && active < 0) {
-        // No lane of this unit is mounted: the stub is the unit's own, idle
-        // unless its hub sensor reads filament.
-        const Lane idle{PathSegment::NONE, true, f.error_seg, f.idle_color, bg};
-        out.trunk_route = out.route_count;
-        Route& r = new_route(out);
-        append_output_stub(out, r, idle, f, data, stub_end);
-    }
-
-    if (trunk && active < 0) {
+    if (active < 0) {
         // Nothing loaded owns the trunk. It still shows an error at its
         // sensors, and filament the hub sensor reads with no lane to own it
         // (stuck after a failed unload) fills it as far as the hub output.
@@ -942,25 +897,17 @@ void plan_linear_hub(const LinearHubFrame& f, const FilamentPathData& data, cons
 
 namespace {
 
-// A faded span is pre-blended toward the background, so its strokes stay opaque
-// and overlapping caps never double-blend.
-LaneStyle lane_style_for(const SpanStyle& s, const TubePalette& pal, bool simple) {
-    lv_color_t wall = s.wall == TubeWall::Active  ? pal.accent
-                      : s.wall == TubeWall::Error ? pal.error
-                                                  : pal.idle_wall;
-    lv_color_t bore = s.bore;
-    if (s.fade > 0 && !simple) {
-        const float t = s.fade / 255.0f;
-        wall = ph_blend(wall, pal.bg, t);
-        bore = ph_blend(bore, pal.bg, t);
-    }
-    return {wall, bore, pal.bg, pal.gauge, s.wall == TubeWall::Active};
+LaneStyle lane_style_for(const SpanStyle& s, const TubePalette& pal) {
+    const lv_color_t wall = s.wall == TubeWall::Active  ? pal.accent
+                            : s.wall == TubeWall::Error ? pal.error
+                                                        : pal.idle_wall;
+    return {wall, s.bore, pal.bg, pal.gauge, s.wall == TubeWall::Active};
 }
 
 void stroke_layer(lv_layer_t* layer, const Route& r, const Stroke& st, const TubePalette& pal,
                   TubeLayer which, bool simple) {
     TubePass passes[2];
-    const int n = build_passes(lane_style_for(st.style, pal, simple), which, passes, simple);
+    const int n = build_passes(lane_style_for(st.style, pal), which, passes, simple);
     if (n == 0)
         return;
     pg::FilamentPath sub;

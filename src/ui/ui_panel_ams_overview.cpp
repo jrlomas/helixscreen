@@ -1257,8 +1257,7 @@ void AmsOverviewPanel::update_path_canvas() {
     if (!detail_path_canvas_ || shown_unit_pos_ < 0)
         return;
     // The whole path: lanes, hub, buffer, toolhead and bypass, as AmsPanel draws it.
-    ams_detail_setup_path_canvas(detail_path_canvas_, detail_widgets_.slot_grid, shown_unit_pos_,
-                                 /*hub_only=*/false);
+    ams_detail_setup_path_canvas(detail_path_canvas_, detail_widgets_.slot_grid, shown_unit_pos_);
     refresh_page_bypass();
 }
 

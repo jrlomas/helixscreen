@@ -288,7 +288,7 @@ void ui_filament_path_canvas_clear_slot_filaments(lv_obj_t* obj);
  *
  * When false, the bypass spool, label, path line, and merge sensor are
  * all suppressed.  Used for tool changers where bypass is not a thing.
- * Default: true (bypass drawn when not in hub_only mode).
+ * Default: true.
  *
  * @param obj The filament_path_canvas widget
  * @param show true to draw bypass elements, false to hide them
@@ -332,18 +332,6 @@ void ui_filament_path_canvas_set_bypass_callback(lv_obj_t* obj, filament_path_by
 typedef void (*filament_path_buffer_cb_t)(void* user_data);
 void ui_filament_path_canvas_set_buffer_callback(lv_obj_t* obj, filament_path_buffer_cb_t cb,
                                                  void* user_data);
-
-/**
- * @brief Set hub-only rendering mode
- *
- * When enabled, draws slots → prep sensors → hub and a short output stub
- * leaving the hub that fades out. Skips everything further downstream:
- * bypass, toolhead sensor, nozzle.
- *
- * @param obj The filament_path_canvas widget
- * @param hub_only true to stop rendering at the hub
- */
-void ui_filament_path_canvas_set_hub_only(lv_obj_t* obj, bool hub_only);
 
 /**
  * @brief Set the units of this unit's hub that sit on other pages of a paging screen
@@ -395,8 +383,8 @@ bool ui_filament_path_canvas_get_hub_box(lv_obj_t* obj, lv_area_t* area_out);
 /**
  * @brief Set the unit's hub (or selector) output sensor
  *
- * In hub-only mode the hub's output stub carries a clamp band when the unit
- * has the sensor, and carries filament when it reads triggered.
+ * With the sensor the hub's output edge carries a clamp band, and filament the sensor
+ * reads with no lane to own it fills the trunk as far as the hub's output.
  *
  * @param obj The filament_path_canvas widget
  * @param has_sensor Whether the unit reports a hub/output sensor
@@ -489,8 +477,8 @@ void ui_filament_path_canvas_set_bypass_has_spool(lv_obj_t* obj, bool has_spool)
  * @brief Compute where the bypass tube terminates (absolute screen coords).
  *
  * The owning panel anchors its shared BypassSpoolWidgets overlay at this
- * point. Returns false when bypass isn't enabled (`show_bypass=false`,
- * hub-only mode) or the canvas hasn't been laid out yet.
+ * point. Returns false when bypass isn't enabled (`show_bypass=false`) or the canvas hasn't been
+ * laid out yet.
  */
 bool ui_filament_path_canvas_get_bypass_merge_pos(lv_obj_t* obj, int32_t* cx_out, int32_t* cy_out);
 

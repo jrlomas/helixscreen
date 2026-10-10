@@ -501,15 +501,10 @@ void render_linear_hub(lv_obj_t* obj, lv_layer_t* layer, FilamentPathData* data)
     draw_offpage_stubs(ctx, f);
 
     draw_hub_section(ctx, f);
-    if (!data->hub_only && f.has_buffer)
+    if (f.has_buffer)
         draw_buffer_section(ctx, f, plan);
     // Bands on the hub/selector edges clamp the tube where it enters the box.
     paint_box_bands(layer, plan, pal);
-    if (data->hub_only) {
-        // Nothing below the hub is drawn: no nozzle to glow, no path to replay.
-        data->path_cache = PathCache{};
-        return;
-    }
     if (data->show_bypass)
         record_bypass_hit(ctx, f);
     draw_nozzle_glyph(ctx, f);
@@ -540,7 +535,7 @@ void draw_animation_linear_hub(lv_layer_t* layer, FilamentPathData* data) {
     auto& path = data->path_cache.path;
 
     // Flow particles along the active filament path.
-    if (data->anim.flow_active && data->active_slot >= 0 && !data->hub_only) {
+    if (data->anim.flow_active && data->active_slot >= 0) {
         bool reverse = (data->anim.direction == AnimDirection::UNLOADING);
         draw_flow_dots_path(layer, path, active_color, data->anim.flow_offset, reverse);
     }
@@ -552,7 +547,7 @@ void draw_animation_linear_hub(lv_layer_t* layer, FilamentPathData* data) {
     }
 
     // Segment transition tip — interpolated along the path.
-    if (data->anim.segment_active && data->active_slot >= 0 && !data->hub_only && path.count > 0) {
+    if (data->anim.segment_active && data->active_slot >= 0 && path.count > 0) {
         PathSegment prev_seg = static_cast<PathSegment>(data->anim.prev_segment);
         PathSegment fil_seg = static_cast<PathSegment>(data->filament_segment);
         float progress_factor = data->anim.progress / 100.0f;

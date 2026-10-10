@@ -897,13 +897,13 @@ void AmsPanel::setup_path_canvas() {
     ui_filament_path_canvas_set_buffer_callback(path_canvas_, on_buffer_clicked, this);
 
     // Configure from backend using shared helper
-    ams_detail_setup_path_canvas(path_canvas_, slot_grid_, ALL_UNITS, false);
+    ams_detail_setup_path_canvas(path_canvas_, slot_grid_, ALL_UNITS);
 
     spdlog::debug("[{}] Path canvas setup complete", get_name());
 }
 
 void AmsPanel::update_path_canvas_from_backend() {
-    ams_detail_setup_path_canvas(path_canvas_, slot_grid_, ALL_UNITS, false);
+    ams_detail_setup_path_canvas(path_canvas_, slot_grid_, ALL_UNITS);
 }
 
 void AmsPanel::setup_bypass_spool() {
