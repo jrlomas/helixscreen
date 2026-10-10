@@ -329,3 +329,185 @@ TEST_CASE("Overview plan: a MIXED unit's hub lanes pass through its box to the t
     CHECK(plan.bands[0].on_box_edge);
     CHECK(plan.bands[0].state == BandState::Active);
 }
+
+// ----------------------------------------------------------------------------
+// The mini-hub row: boxes of HUB units never overlap each other or a route.
+// ----------------------------------------------------------------------------
+
+namespace {
+
+// A HUB unit feeding toolhead `tool`.
+void hub_unit(SystemPathData& d, int u, int tool, int32_t stem_x) {
+    d.unit_x_positions[u] = stem_x;
+    d.unit_topology[u] = 1;
+    d.unit_tool_count[u] = 1;
+    d.unit_first_tool[u] = tool;
+}
+
+std::unique_ptr<SystemPathData> hub_row_data(int units, int tools) {
+    auto d = multi();
+    d->unit_count = units;
+    d->total_tools = tools;
+    d->active_unit = -1;
+    d->filament_loaded = false;
+    d->hub_width = 70;
+    d->tube_gauge = 5;
+    return d;
+}
+
+struct HubRowPlan {
+    SysLayout L;
+    PathPlan plan;
+    OverviewBoxes boxes;
+};
+
+std::unique_ptr<HubRowPlan> plan_hub_row(const SystemPathData& d, int32_t width) {
+    auto out = std::make_unique<HubRowPlan>();
+    const lv_area_t area = {0, 0, width - 1, 399};
+    out->L = compute_sys_layout(d, area);
+    plan_overview(d, out->L, out->plan, out->boxes);
+    return out;
+}
+
+// The StealthChanger overview: an ACE straight to T0-T3, then hub units on T4,
+// T5 and (two of them) T6.
+std::unique_ptr<SystemPathData> stealth_row() {
+    auto d = hub_row_data(5, 7);
+    d->unit_x_positions[0] = 60;
+    d->unit_topology[0] = 2;
+    d->unit_tool_count[0] = 4;
+    d->unit_first_tool[0] = 0;
+    hub_unit(*d, 1, 4, 200);
+    hub_unit(*d, 2, 5, 330);
+    hub_unit(*d, 3, 6, 460);
+    hub_unit(*d, 4, 6, 560);
+    return d;
+}
+
+int32_t box_left(const HubInfo& h) {
+    return h.hub_x - h.mini_hub_w / 2;
+}
+int32_t box_right(const HubInfo& h) {
+    return h.hub_x + h.mini_hub_w / 2;
+}
+
+// Hub boxes of units [first, last], in unit order.
+void check_row_clear(const SystemPathData& d, const HubRowPlan& p, int first, int last) {
+    const int32_t gap = LV_MAX(4, d.tube_gauge);
+    for (int u = first; u <= last; ++u) {
+        CAPTURE(u);
+        const HubInfo& a = p.boxes.hubs[u];
+        REQUIRE(a.valid);
+        CHECK(box_left(a) >= p.L.x_off);
+        CHECK(box_right(a) <= p.L.x_off + p.L.width);
+        for (int v = u + 1; v <= last; ++v) {
+            CAPTURE(v);
+            const HubInfo& b = p.boxes.hubs[v];
+            const bool a_first = a.hub_x <= b.hub_x;
+            const int32_t clear = a_first ? box_left(b) - box_right(a) : box_left(a) - box_right(b);
+            CHECK(clear >= gap);
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("Overview plan: the StealthChanger hub row has no overlapping boxes",
+          "[system_path][hub_row]") {
+    auto d = stealth_row();
+    auto p = plan_hub_row(*d, 580);
+    check_row_clear(*d, *p, 1, 4);
+
+    // None of the boxes covers the vertical drop of a direct route to T0-T3.
+    for (int t = 0; t < 4; ++t) {
+        const int32_t tx = calc_tool_x(t, 7, p->L.x_off, p->L.width);
+        for (int u = 1; u <= 4; ++u) {
+            CAPTURE(t, u);
+            CHECK((tx < box_left(p->boxes.hubs[u]) || tx > box_right(p->boxes.hubs[u])));
+        }
+    }
+    // Every hub route lands on its box.
+    for (int u = 1; u <= 4; ++u) {
+        bool landed = false;
+        for (int r = 0; r < p->plan.route_count; ++r)
+            landed |= on_route(p->plan.routes[r],
+                               {(float)p->boxes.hubs[u].hub_x,
+                                (float)(p->boxes.hubs[u].mini_hub_y -
+                                        p->boxes.hubs[u].mini_hub_h / 2)});
+        CHECK(landed);
+    }
+}
+
+TEST_CASE("Overview plan: two units sharing a toolhead clear the neighbor's hub",
+          "[system_path][hub_row]") {
+    auto d = hub_row_data(4, 3);
+    hub_unit(*d, 0, 0, 60);
+    hub_unit(*d, 1, 1, 150);
+    hub_unit(*d, 2, 1, 200);
+    hub_unit(*d, 3, 2, 260);
+    auto p = plan_hub_row(*d, 300);
+    check_row_clear(*d, *p, 0, 3);
+    // The pair still straddles its nozzle: the rank order is kept.
+    CHECK(p->boxes.hubs[1].hub_x < p->boxes.hubs[2].hub_x);
+}
+
+TEST_CASE("Overview plan: a hub row too wide for the canvas narrows, then says H",
+          "[system_path][hub_row]") {
+    auto d = hub_row_data(8, 8);
+    for (int u = 0; u < 8; ++u)
+        hub_unit(*d, u, u, 40 + u * 40);
+    auto narrow = plan_hub_row(*d, 400);
+    check_row_clear(*d, *narrow, 0, 7);
+    CHECK(narrow->boxes.hubs[0].mini_hub_w < d->hub_width * 2 / 3);
+    CHECK(narrow->boxes.hubs[0].mini_hub_w >= d->hub_width / 2);
+    CHECK_FALSE(narrow->boxes.hubs[0].short_label);
+
+    auto tight = plan_hub_row(*d, 300);
+    check_row_clear(*d, *tight, 0, 7);
+    CHECK(tight->boxes.hubs[0].short_label);
+    CHECK(tight->boxes.hubs[0].mini_hub_w == d->hub_width * 2 / 5);
+}
+
+TEST_CASE("Overview plan: a hub row that fits keeps its boxes on their toolheads",
+          "[system_path][hub_row]") {
+    auto d = hub_row_data(2, 2);
+    hub_unit(*d, 0, 0, 100);
+    hub_unit(*d, 1, 1, 400);
+    auto p = plan_hub_row(*d, 580);
+    for (int u = 0; u < 2; ++u) {
+        CAPTURE(u);
+        const HubInfo& h = p->boxes.hubs[u];
+        CHECK(h.hub_x == h.tool_x);
+        CHECK(h.mini_hub_w == d->hub_width * 2 / 3);
+        CHECK_FALSE(h.short_label);
+    }
+
+    // A shared nozzle fans its pair by one box pitch, as before.
+    auto s = hub_row_data(2, 2);
+    hub_unit(*s, 0, 0, 100);
+    hub_unit(*s, 1, 0, 400);
+    auto sp = plan_hub_row(*s, 580);
+    const int32_t pitch = s->hub_width * 2 / 3 + 5;
+    CHECK(sp->boxes.hubs[1].hub_x - sp->boxes.hubs[0].hub_x == pitch);
+    CHECK(sp->boxes.hubs[0].mini_hub_w == s->hub_width * 2 / 3);
+}
+
+TEST_CASE("Overview plan: a crowded hub row steps around a direct route's drop",
+          "[system_path][hub_row]") {
+    // Four hubs on the left nozzle fan across the middle nozzle's vertical run.
+    auto d = hub_row_data(5, 3);
+    d->unit_x_positions[0] = 150;
+    d->unit_topology[0] = 2;
+    d->unit_tool_count[0] = 1;
+    d->unit_first_tool[0] = 1;
+    for (int u = 1; u < 5; ++u)
+        hub_unit(*d, u, 0, 40 + u * 20);
+    auto p = plan_hub_row(*d, 300);
+    check_row_clear(*d, *p, 1, 4);
+    const int32_t drop_x = calc_tool_x(1, 3, p->L.x_off, p->L.width);
+    for (int u = 1; u <= 4; ++u) {
+        CAPTURE(u);
+        CHECK((drop_x < box_left(p->boxes.hubs[u]) - d->tube_gauge / 2 ||
+               drop_x > box_right(p->boxes.hubs[u]) + d->tube_gauge / 2));
+    }
+}

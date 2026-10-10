@@ -136,6 +136,7 @@ struct HubInfo {
     lv_color_t hub_bg_color;
     int first_tool;
     bool valid;
+    bool short_label = false; // too narrow for "Hub": draw "H"
 };
 
 // What the canvas draws on top of the planned tubes.
